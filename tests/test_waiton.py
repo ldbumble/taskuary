@@ -113,11 +113,11 @@ class RailTests(unittest.TestCase):
         self.assertEqual(concierge.chips_for(self.s, card)[0]['verb'], 'continue')
 
     def test_the_wake_moves_the_tasks_revision(self):
-        from taskuary import advisor
-        was = advisor.revision(self.s, 'task', self.tid)
+        from taskuary import rulebook
+        was = rulebook.revision(self.s, 'task', self.tid)
         mid = mail(self.s, 'RE: PTO import', who='Paula Vance', email=PAULA, hours=1, tid=self.tid, conv='c1', body='It is the 8/17 file.')
         waiton.arrived(self.s, self.tid, self.s.get_message(mid), mid)
-        self.assertNotEqual(advisor.revision(self.s, 'task', self.tid), was)
+        self.assertNotEqual(rulebook.revision(self.s, 'task', self.tid), was)
 
     def test_someone_elses_line_is_news_but_no_wake(self):
         mail(self.s, 'RE: PTO import', who='Gail Moreno', email=GAIL, hours=1, tid=self.tid, conv='c1', body='Any news?')

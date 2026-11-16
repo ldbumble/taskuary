@@ -26,7 +26,6 @@ import { useFoldBar } from "./foldBar.js";
 import { SlotPicker } from "./CalendarPick.jsx";
 import { ROW_LOOK } from "./ButtonBar.jsx";
 import { foldRow, heldOff, onPressing, press, sectionsOf, taskButtons, useSpineAll, useSpineVerbs, useVerbs } from "./actionRow.js";
-import { notePress, pagePress } from "./pressLog.js";
 import { choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
 import { PRIORITIES, level } from "./priority.js";
 import BlockIcon from "@mui/icons-material/Block";
@@ -2437,11 +2436,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     });
     return () => cancelAnimationFrame(f);
   }, [agentUp, t?.TaskId]);
-  // EVERY PRESS ON THE TASKS TAB IS KEPT (phase B, 2026-10-23): it was never recorded - only the desk's row was. This view draws its own
-  // buttons, so a press is heard here, before it runs: a button known by its one name (pressLog.pagePress), what was filled on the page
-  // and what else could be pressed. The canvas's copy is the desk's row, recorded there
-  const pageRef = useRef(null), recRef = useRef(null);
-  recRef.current = detail?.task?.TaskId === selected ? detail?.recommended || null : null;
+  const pageRef = useRef(null);
   // WHAT THE ASSISTANT IS TOLD OF THIS TASK when the owner asks about it (pageView.js, 2026-10-30): the task, and its title as a field it may
   // rewrite - the task tool's own update (task.update), the road every owner act on this page takes. Its boxes (the draft) and its row's
   // buttons are read off the page
@@ -2453,17 +2448,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       loadDetail(t.TaskId); onListChanged?.(); onChanged?.();
     } }],
   } : {});
-  useEffect(() => {
-    const el = pageRef.current;
-    if (canvas || !active || !el) return undefined;
-    const heard = (e) => {
-      const b = e.target?.closest?.("button");
-      const got = selRef.current && b && !b.disabled && el.contains(b) ? pagePress(el, b) : null;
-      if (got) notePress(api, { key: `task:${selRef.current}`, surface: "task", ...got, advised: recRef.current?.verb || null });
-    };
-    el.addEventListener("click", heard, true);
-    return () => el.removeEventListener("click", heard, true);
-  }, [canvas, active]);
   const [remindAt, setRemindAt] = useState(null);
   // `saidDay`: the day the owner typed for Remind me (assistantLight's light.day), kept at the press - the light goes out as it is pressed
   // (a ref: the row's registered verbs can hold an older render's closure)

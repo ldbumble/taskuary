@@ -242,13 +242,6 @@ def _rule_replied(s):
     s.add_message({'ConversationId': 'email:newsletter@vendor.example:2', 'Channel': 'email', 'Subject': 'Re: Weekly digest 2', 'FromEmail': OWNER,
                    'SentAt': at(d=1), 'BodyText': 'please unsubscribe me', 'Status': 'context', 'Direction': 'out'})
 def _rule_under(s): _ignored(s, 'newsletter@vendor.example', 7)
-def _rule_pressed(s):
-    """Only the press log: Not ours pressed on each of their mails while the Advisor's line was shown."""
-    for i in range(9):
-        s.add_message({'ConversationId': f'email:promo:{i}', 'Channel': 'email', 'Subject': f'Offer {i}', 'FromEmail': 'promo@vendor.example',
-                       'SentAt': at(d=1 + i), 'BodyText': 'x', 'Status': 'filed', 'SenderClass': 'bulk'})
-        s._exec('INSERT INTO advice_press (Key, Pressed, Sender, SenderDomain, Thread, CreatedAt) VALUES (?,?,?,?,?,?)',
-                (f'msg:{i}', 'not_ours', 'promo@vendor.example', 'vendor.example', f'email:promo:{i}', at(d=i)))
 def _rule_notes(s):
     """Only the owner's put-downs: the ignore route Not a task writes on each mail (the notes table is gone, 2026-10-27)."""
     for i in range(8):
@@ -333,7 +326,6 @@ CASES = [
     ('idea', 'a fourth newsletter idea after three were said no to', False, _said_no_to_newsletters, None),
     # rule: a learned pattern clear-cut enough to be a rule (promote.py)
     ('rule', 'twelve mails put down, none taken up', True, _rule_plus, None),
-    ('rule', 'Not ours pressed on nine mails (the press log only)', True, _rule_pressed, None),
     ('rule', "eight Not a task notes (LEARNED.md's evidence only)", True, _rule_notes, None),
     ('rule', 'every task from them marked urgent by hand', True, _rule_urgent, None),
     ('rule', 'marked urgent every time, and the owner answers them', True, _rule_urgent_answered, None),

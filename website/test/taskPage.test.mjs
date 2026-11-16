@@ -138,14 +138,14 @@ test("the task's own recommended move fills the Tasks tab's bar and a narrow win
   assert.match(page, /variant=\{filled\("close"\) \? "contained" : "outlined"\}/);
   for (const v of ["remove", "forward", "split"]) assert.match(page, new RegExp(`variant=\\{filled\\("${v}"\\) \\? "contained" : "outlined"\\}`), v);
   assert.match(page, /<RemindMe task=\{t\} sx=\{filled\("defer"\) \? primaryBtn : barBtn\} lit=\{filled\("defer"\)\}/);
-  // ...a narrow window's row at the view's foot, with no line over it (2026-10-26, as the desk): only the Advisor's own row - an idea -
-  // joins a move the row lacks
-  assert.match(item, /\{phone && <div className="tq-docked">\s*\{isIdea\(card\) && <AdvisorNext advice=\{noAi \? null : advised\} onPropose=\{onPropose\} \/>\}\s*<ActionRow inline advised=\{pick\}( says=\{.*?\})? \/><\/div>\}/);
+  // ...a narrow window's row at the view's foot, with no line over it (2026-10-26, as the desk), and nothing joined to it (2026-11-15)
+  assert.match(item, /\{phone && <div className="tq-docked">\s*<ActionRow inline advised=\{pick\}( says=\{.*?\})? \/><\/div>\}/);
+  assert.doesNotMatch(item, /AdvisorNext/);
   assert.match(item, /const advised = lit \? null : adviceShown\(read, \{ key: card\.key, lane: card\.lane \}, busy\)/);
   // ...lit by the page's own read of the same item (a narrowed window kept its lit move), and it asks nothing of its own
   assert.match(item, /const read = phone && advice\?\.for === card\.key \? advice : null;/);
   assert.doesNotMatch(item, /useItemAdvice|Thinking about this one|AdviceNone/);
-  assert.match(src("AssistantView.jsx"), /onPropose=\{actions\.pressAdvice\} \/>/);
+  assert.doesNotMatch(src("AssistantView.jsx"), /<CanvasItem[^>]*onPropose=/, "nothing joins a narrow window's row for an Advisor (2026-11-15)");
 });
 
 test("a chat reply that promises a file leads with replying by email, and sending the words alone says so (U17)", () => {

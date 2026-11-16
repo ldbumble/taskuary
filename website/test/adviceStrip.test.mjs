@@ -60,9 +60,9 @@ test("no line is still an answer: only no AI is a sentence, and every other sile
   assert.doesNotMatch(read("assistantView.css"), /\.tq-strip/);
   // ...and no Connect an AI joins the row for it either (the owner, 2026-10-26: "if you don't get through ai setup the whole thing doesn't work")
   for (const f of ["AssistantView.jsx", "CanvasItem.jsx"]) assert.doesNotMatch(read(f), /noai:connect/, f);
-  // ...and the dead-end walk holds the page to all of it (STILL, STRIP, REREAD, LIT)
+  // ...and the dead-end walk holds the page to all of it (STILL, STRIP, LIT)
   const walk = fs.readFileSync(path.join(process.cwd(), "deadend_check.mjs"), "utf8");
-  for (const rule of ["STILL", "STRIP", "REREAD", "LIT"]) assert.ok(walk.includes(`note("${rule}"`), rule);
+  for (const rule of ["STILL", "STRIP", "LIT"]) assert.ok(walk.includes(`note("${rule}"`), rule);
   // ...and setup's own line, the one .tq-next the dock still draws, is one line tall (30px since the owner's 2026-10-26 laptop)
   assert.match(read("assistantView.css"), /\.tq-dock \.tq-next \{ margin: 0; min-height: 30px;/);
 });
@@ -106,44 +106,9 @@ test("a move greyed only by the owner's own press in flight is not said to be of
   assert.doesNotMatch(read("ActionRow.jsx"), /is off - /);
 });
 
-// THE STRIP'S LINES, SORTED (the owner, 2026-10-26: "maybe keep the box but remove the advisor?", then "an advisor section on the task itself
-// part of the agent thing but separate"): the lines that matter stand in the task's Advisor section; every other one the task or the lit
-// button already says, and with none there is no section
-test("an important line lands in the task's Advisor section, and every other strip line is dropped", async () => {
-  const { taskNote } = await import("../src/advice.js");
-  const d = (state, line, extra = {}) => ({ key: "task:7", for: "task:7", verb: "reply", label: "Reply", state, line, by: "rule", ...extra });
-  // the draft promising what nothing backs, pointing at the draft
-  assert.deepEqual((({ line, draft }) => ({ line, draft }))(taskNote(d("draft_ready", "The draft promises what nothing here shows.", { verb: "redraft", label: "Redraft", by: "model" }))),
-    { line: "The draft promises what nothing here shows.", draft: true });
-  // late against the learned usual, the same ask as another task, a model's reason the lit button is not the obvious one
-  // ...never how fast the owner answers (the owner, 2026-11-13: a count of his reply times is no use - what it means is learned instead)
-  assert.equal(taskNote(d("asked_late", "You usually answer Erin within the hour; this is 3h.")), null);
-  for (const n of [d("waiting_late_usual", "Erin usually answers in a day; this is 4 days.", { verb: "chase" }),
-    d("duplicate", "Same ask as TQ-0012.", { verb: "remove" }), d("asked", "TQ-0012 may already cover this - an agent is on it.", { verb: "defer", by: "model" }),
-    // ...and who and how late, where Chase is lit (the Advisor audit's judge, 2026-10-26)
-    d("waiting_late", "Erin Blake: 4 days, no answer.", { verb: "chase" }), d("goal_late", "Pick the vendor: 3 days late.", { verb: "chase" })])
-    assert.equal(taskNote(n)?.line, n.line, n.state);
-  // ...NO DEFAULT VERB (the owner, 2026-10-28): Mark done says its reason, and the finish check's dropped ball carries its fix - even where the
-  // row cannot light it (a general agent's Continue is the section's own button)
-  for (const n of [d("answered", "Your reply went at 10:02; nothing since.", { verb: "close" }), d("stopped_done", "Finished at 9:40; nothing since.", { verb: "close" }),
-    d("agent_done", "Finished yesterday; nothing since.", { verb: "close" }), d("done_list", "All 4 to-dos ticked.", { verb: "close" }),
-    d("stopped", "Attach the March export it said it would", { verb: "continue", by: "check" }),
-    d("stopped", "Attach the March export it said it would", { verb: null, by: "check", fix: { verb: "continue", label: "Continue with this", note: "x" } })])
-    assert.equal(taskNote(n)?.line, n.line, `${n.state} ${n.by}`);
-  assert.equal(taskNote(d("stopped", "Attach it", { verb: null, by: "check" })), null, "a line with no action to press is no line");
-  // ...said by the task already, or narration of the lit button: no section
-  for (const [state, line] of [["failed", "Failed: no AI is connected"], ["failed_cause", "Failed: the run stopped"], ["report_failed", "Report failed: timeout"],
-    ["invite_clash", "Clashes with Quarter-end planning 9:00-12:00."], ["invite_free", "Free then."], ["stranger", "First mail from vendor.example."],
-    ["stopped", "Stopped 2 hours ago."], ["unpushed", "Changes ready - not pushed."], ["waiting_overdue", "Ray Colton: 2 days late."],
-    ["asked", "Erin Blake asked 2 hours ago."]])
-    assert.equal(taskNote(d(state, line)), null, state);
-  assert.equal(taskNote(d("draft_ready", "")), null, "a silent decision says nothing anywhere");
-  assert.equal(taskNote({ none: "no_ai", for: "task:7" }), null, "no AI is no line at all");
-  // ...NO SECTION ON THE TASK ANY MORE (the owner, 2026-11-05: "remove the advisor line from the chat ... the agent is the advisor"): every task
-  // is its chat now (2026-11-06), so the line lights a button and is said on the draft it is about and on the Agent's tab - never a block
-  // ...AND NO ADVISOR'S LINE ON A TASK AT ALL (the owner, 2026-11-09: "assistant/advisor should only be on rail"): taskNote filters the
-  // notes of the Advisor's own row - an idea - in the past-chats menu; the task page reads none, and beside a waiting draft's Send stands
-  // what leaves with it, a fact of the draft served as its move's why
+// NO ADVISOR'S LINE ON A TASK (the owner, 2026-11-09: "assistant/advisor should only be on rail"; 2026-11-15: no Advisor fills a button at
+// all): the task page reads none, and beside a waiting draft's Send stands what leaves with it, a fact of the draft served as its move's why
+test("the task page reads no Advisor's line, and a draft's Send says what leaves with it", () => {
   const page = read("TaskPage.jsx");
   assert.doesNotMatch(page, /taskNote|taskAdvice|const warn = /, "the task page reads no Advisor's line");
   assert.doesNotMatch(page, /<AdvisorNote |advisorNote|adviceIn/, "no Advisor block on the task page");

@@ -1,31 +1,6 @@
-// The Advisor's line on the item on the table (spec 2026-10-12, build step 3): the pure piece, so it can be tested without a
-// browser. The rest is wiring in AssistantView.jsx: it lights a button on the row (ActionRow), and the few lines that warn are drawn
-// on the draft whose button it lit (taskNote) - no line stands over the row any more (2026-10-26), and no Advisor section in the task (2026-11-05).
-
-/* Which key to re-read advice for when an `advice` live event lands: the event carries the target's legacy key
-   (task:N / msg:N) while the table holds the rail's key (processing:... in a real install) - a card's aliases bridge
-   the two. Returns the table's key, or null when the event is about something else. */
-import { sameTarget } from "./tableState.js";
-export function adviceKeyFor(ev, cur) {
-  // ...and an event for several reads (live._merged `items`: the table's and the two read ahead, in one window) is about each of them
-  if (ev?.items?.length) return ev.items.map((x) => adviceKeyFor(x, cur)).find(Boolean) || null;
-  const k = ev?.key;
-  if (!k || !cur) return null;
-  if (typeof cur === "string") return k === cur ? cur : null;
-  if (!cur.key) return null;
-  return k === cur.key || (cur.aliases || []).includes(k) || sameTarget(ev, cur) ? cur.key : null;
-}
-
-/* The suggestion as the strip says it: the Advisor's sentence without its verb in front ("Reply: Gail is asking..." -> "Gail is
-   asking...") - the filled button below already names the move (the owner, 2026-10-13: "it should not say NEXT Reply - just give
-   suggestion"). Only a lead-in that IS the move's own word goes; any other sentence is kept whole. */
-export function suggestion(line, label, verb) {
-  const l = String(line || "").trim();
-  const names = [label, verb, String(verb || "").replace(/_/g, " ")].filter(Boolean).map((w) => String(w).trim().toLowerCase());
-  const m = l.match(/^["“]?([^:"”]{1,40}?)["”]?\s*(?::|\s[-–—]|\s+because\b)\s*(.+)$/i);
-  if (!m || !names.includes(m[1].trim().toLowerCase())) return l;
-  return m[2].charAt(0).toUpperCase() + m[2].slice(1);
-}
+// The filled button of the item on the table (spec 2026-10-12; the task's own recommended move since 2026-11-09, never the Advisor's since
+// 2026-11-15): the pure piece, so it can be tested without a browser. The rest is wiring in AssistantView.jsx: it lights a button on the row
+// (ActionRow) - no line stands over the row (2026-10-26), and no Advisor section in the task (2026-11-05).
 
 /* WHEN THE STRIP SPEAKS (the owner, 2026-10-13: "there should not be an updated advisor comment when it's refreshing ... not while
    waiting or walking through things"). Only the decision read for the item on the table NOW - a line read for the item before it stood
@@ -38,40 +13,13 @@ export function adviceShown(advice, item, busy) {
 }
 
 /* WHAT THE STRIP SAYS AND WHAT THE ROW LIGHTS, ONE DECISION (the UI audit's C2, 2026-10-21; the design's phase A, 2026-10-23): the
-   Advisor's one decision (advisor.decide) is what every surface lights. Only one reason for lighting nothing is said - no AI connected,
-   where the move needs one (`needs_ai`, or the server's {none: "no_ai"}) - with its way out lit; any other answer with no verb (a key
-   nothing is decided on, the Advisor switched off) lights Next and says nothing. An agent at work outranks a missing AI.
-   `shown`/`lit`: the Advisor's decision and the Assistant's light, already read for the item on the table; `aiOff`: caps.ai === false. */
+   one decision (rulebook.decide) is what every surface lights. Only one reason for lighting nothing is said - no AI connected, where the
+   move needs one (`needs_ai`) - with its way out lit; any other answer with no verb (a key nothing is decided on, an idea row) lights Next
+   and says nothing. An agent at work outranks a missing AI.
+   `shown`/`lit`: the decision and the Assistant's light, already read for the item on the table; `aiOff`: caps.ai === false. */
 export function stripWord({ speaks, busy, shown = null, lit = null, aiOff = false, advice = null, key = "", lane = "" } = {}) {
   const working = lane === "working", mine = !!advice && advice.for === key;
   const noAi = !!speaks && !busy && !lit && !working && mine && (advice.none === "no_ai" || (aiOff && !!advice.needs_ai));
   const quiet = !!speaks && !busy && !lit && !noAi && !shown && ((mine && !!advice.none) || working) ? { verb: "next", line: "", for: key } : null;
   return { noAi, pick: lit || (noAi ? { none: "no_ai", for: key } : shown || quiet) };
-}
-
-/* THE STRIP IS GONE, ITS LIT BUTTON STAYS (the owner, 2026-10-26: "maybe keep the box but remove the advisor? not sure the advisor is
-   really useful"), AND WHAT IT SAYS THAT MATTERS HAS A SECTION OF ITS OWN ON THE TASK (the same day: "advisor lines that are important
-   show on the task ... it will be hard to differentiate between task description and the advisor"): the draft promising what nothing
-   backs (`draft`, with a pointer to it), late against the owner's learned usual, the same ask as another task, and a reason the model
-   wrote for a lit button you would not guess (a duplicate an agent is on, what the owner's memory says). Every other line the task
-   already says or the lit button does - a failure is the Result's first line, a clash is in the invite's summary, a stranger in Came
-   from, a bare age on the rail, a stopped or unpushed agent on its own heading - so: null, and no section. */
-// ...AND WHEN CHASE IS LIT, WHO AND HOW LATE (the Advisor audit's judge, 2026-10-26): a goal lit Chase with its "2 days late" dropped, so
-// the page said only that a step slipped - a late step and a quiet wait say it here; a wait past its due day is the header's own line
-// ("Waiting on Ray. Due Oct 24, 2 days late."), counted on the same clock, so it is not said twice
-// ...AND MARK DONE'S REASON, AND WHAT THE FINISH CHECK FOUND (NO DEFAULT VERB, the owner 2026-10-28: "it should RECOMMEND ACTION"): Mark
-// done is lit only with its reason ("Your reply went at 10:02; nothing since."), so the reason is said; a dropped ball the check found
-// (`by` "check") carries its fix - Continue with this / Redraft with this
-const SHOWN = new Set(["draft_ready", "duplicate", "waiting_late_usual", "waiting_late", "goal_late",
-  "answered", "agent_done", "stopped_done", "done_list"]);
-const SAID = new Set(["failed", "failed_cause", "report_failed", "invite_clash", "invite_free", "stranger", "working", "closed", "agent_asking", "waiting_overdue"]);
-// ...and with nothing to add, the menu's notes name the button in the owner's words: "Nothing to add - Copy is the lit button." read the
-// app's own word back to him (the owner, 2026-10-23, over "Lit Mark done": "what the heck is Lit"; the overnight walk, 2026-10-26)
-export const nothingToAdd = (advice) => (advice?.label && advice.verb !== "next" ? `Nothing to add - ${advice.label} is the next move.` : "Nothing to add on this one.");
-export function taskNote(advice) {
-  const line = String(advice?.line || "").trim();
-  // ...a fix the row cannot light (a general agent's Continue) is the section's own button, so its line stands with no lit verb
-  if (!line || (!advice.verb && !advice.fix?.verb) || advice.verb === "next" || SAID.has(advice.state)) return null;
-  if (!SHOWN.has(advice.state) && advice.by !== "model" && advice.by !== "check") return null;
-  return { line: suggestion(line, advice.label, advice.verb), draft: advice.state === "draft_ready", advice };
 }

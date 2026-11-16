@@ -14,7 +14,7 @@ def test_private_fixture_edits_preserve_all_production_demo_refusals(tmp_path, m
     monkeypatch.setenv('TASKUARY_HOME', str(tmp_path))
     # Record the original function so pytest restores it after fixture installation.
     monkeypatch.setattr(demo, 'refuse', demo.refuse)
-    # ...and every other function of the app the fixture swaps for a scripted one (advisor.decide, browserview.state, browsergate._run):
+    # ...and every other function of the app the fixture swaps for a scripted one (rulebook.decide, browserview.state, browsergate._run):
     # it is written to live as long as its own process, and left in place here the scripted ones answered whichever test files shared
     # this run - /api/advice failed in two of them on an argument the script had never heard of (2026-11-10).
     for name, mod in list(sys.modules.items()):

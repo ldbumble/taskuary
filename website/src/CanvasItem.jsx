@@ -8,10 +8,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Box } from "@mui/material";
 import TaskPage from "./TaskPage.jsx";
-import ActionRow, { AdvisorNext } from "./ActionRow.jsx";
+import ActionRow from "./ActionRow.jsx";
 import { adviceShown, stripWord } from "./advice.js";
 import { TableVerbs, useHost, useVerbs } from "./actionRow.js";
-import { isIdea } from "./tableState.js";
 import { rowWhy } from "./railStatus.js";
 import { hint as btnHint, label as btnLabel } from "./buttons.js";
 
@@ -76,7 +75,7 @@ export const showsTask = (card, kind) => !!card?.tid && !["proposal", "setup", "
 // arrow - full screen, and still never a resize: the box it pins is measured in place, the same width and height.
 export const phoneItemHeight = (innerHeight) => Math.max(420, Math.round((innerHeight || 0) - 16));
 
-export default function CanvasItem({ card, height, expanded, onExpand, onNext, busy, onFold, onWalkLeave, onLeave, onStay, onListChanged, onChanged, onOpenTask, onReminded, phone = false, lit = null, advice = null, onPropose = null }) {
+export default function CanvasItem({ card, height, expanded, onExpand, onNext, busy, onFold, onWalkLeave, onLeave, onStay, onListChanged, onChanged, onOpenTask, onReminded, phone = false, lit = null, advice = null }) {
   // a task opened "and start it" or "with this dialog up" (TaskHubPage.openTask): once, then it is spent
   const [auto, setAuto] = useState(card.autostart ? { taskId: card.tid, ...card.autostart } : null);
   const [act, setAct] = useState(card.act ? { taskId: card.tid, act: card.act } : null);
@@ -114,7 +113,7 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
   // the Assistant's lit button outranks it, as it does over the composer (assistantLight.js)
   const advised = lit ? null : adviceShown(read, { key: card.key, lane: card.lane }, busy);
   // ...and the strip's word and the button it lights are ONE decision, the dock's (advice.stripWord, the UI audit's C2)
-  const { noAi, pick } = stripWord({ speaks: true, busy, shown: advised, lit, advice: read, key: card.key, lane: card.lane });
+  const { pick } = stripWord({ speaks: true, busy, shown: advised, lit, advice: read, key: card.key, lane: card.lane });
   // ...and with no AI the strip's own Connect an AI went with it, not onto the row (the owner, 2026-10-26: "if you don't get through ai
   // setup the whole thing doesn't work"): a no_ai pick lights nothing there
   return (
@@ -175,9 +174,8 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
           draws them. On a phone the same row rides at the view's foot instead, in both states - the pinned full-screen view covers
           the dock, and the box is sized once, so Expand must not add or take away a row. */}
       {/* ...and NO LINE OVER IT, as on the desk (the owner, 2026-10-26: "remove the advisor"): the pick is the lit button, a missing AI
-          the row's own Connect an AI. Only the Advisor's own row - an idea - joins a move the row lacks (AdvisorNext), as on the desk */}
+          the row's own Connect an AI - and an idea's row fills none (the owner, 2026-11-15) */}
       {phone && <div className="tq-docked">
-        {isIdea(card) && <AdvisorNext advice={noAi ? null : advised} onPropose={onPropose} />}
         <ActionRow inline advised={pick} says={lit ? "" : rowWhy({ recommended: read })} /></div>}
     </Box>
     </>

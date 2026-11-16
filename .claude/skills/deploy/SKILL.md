@@ -69,7 +69,6 @@ The turn that ran a release is not finished until both are true: the version is 
 
 Run it in the background and report when it ends; do not babysit runs by hand.
 
-Its last step prints the **Advisor agreement** (lit button vs what the owner did, read-only on `~/.taskuary`) - report it with the release; `tools/advisor_agreement.py --replay` breaks it down.
 
 ## Rules that each cost hours on 2026-10-27
 

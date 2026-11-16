@@ -8,7 +8,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import advisor, concierge, demo, faults, server, terminal, workerstate
+from taskuary import concierge, demo, faults, server, terminal, workerstate
 from taskuary.store import SQLiteStore
 
 # world state -> (the task list's and Board's key, the rail's lane)
@@ -21,7 +21,7 @@ class AgentStatesAgreeTests(unittest.TestCase):
     def setUpClass(cls):
         cls.before = dict(terminal.SESSIONS)
         cls.s = SQLiteStore(os.path.join(tempfile.mkdtemp(), 'world.db'))   # a file: the rail reads it on its own connection
-        with mock.patch.dict(os.environ, {faults.ENV: '1', 'TASKUARY_HOME': tempfile.mkdtemp()}), mock.patch.object(advisor, 'notice'):
+        with mock.patch.dict(os.environ, {faults.ENV: '1', 'TASKUARY_HOME': tempfile.mkdtemp()}):
             demo.seed(cls.s); cls.w = faults.world(cls.s)
         from taskuary import processing_startup
         processing_startup.initialize(cls.s)             # the rail reads the processing inventory, as the app's startup turns it on

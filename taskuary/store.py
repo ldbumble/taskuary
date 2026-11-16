@@ -1378,38 +1378,11 @@ class SQLiteStore:
             self.cx.execute('CREATE TABLE IF NOT EXISTS outcome (Id INTEGER PRIMARY KEY, Kind TEXT, TargetKind TEXT, TargetId INTEGER, '
                             'Actor TEXT, At TEXT, FactsJson TEXT, NextMove TEXT, NextAt TEXT, Outcome TEXT, ResolvedAt TEXT, Verdict TEXT)')
             self.cx.execute('CREATE INDEX IF NOT EXISTS outcome_target ON outcome(TargetKind, TargetId)')
-            # THE ADVISOR'S ADVICE (spec 2026-10-12, build step 3): one row per item per revision - the line, the verb, the
-            # evidence ids, what was dropped. The rail never reads it (test_the_rail_is_the_same_with_and_without_advice).
-            self.cx.execute('CREATE TABLE IF NOT EXISTS advice (Id INTEGER PRIMARY KEY, TargetKind TEXT, TargetId INTEGER, Key TEXT, Event TEXT, '
-                            'Revision TEXT, Tier INTEGER, Line TEXT, Verb TEXT, Label TEXT, CountJson TEXT, EvidenceJson TEXT, Model TEXT, '
-                            'Dropped TEXT, CreatedAt TEXT)')
-            self.cx.execute('CREATE INDEX IF NOT EXISTS advice_target ON advice(TargetKind, TargetId)')
-            # ...the KIND of reason the model gave (late, same_ask, draft_caution, ...): what the check after it reads, never its words
-            cols = {r[1] for r in self.cx.execute('PRAGMA table_info(advice)')}
-            if 'Kind' not in cols: self.cx.execute('ALTER TABLE advice ADD COLUMN Kind TEXT')
-            # ...and what the memory it cites SAYS, in the model's own field: a line citing a memory with this empty is not shown (hollow)
-            if 'MemorySays' not in cols: self.cx.execute('ALTER TABLE advice ADD COLUMN MemorySays TEXT')
-            # ...AND THE ONE DECISION EVERY SURFACE READS (the Advisor audit's judge, 2026-10-26): the item's lit verb, line and what it rests
-            # on, stored per key with the stamp it was made at - the section, the clock menu, the phone and the row read this, never their own.
-            # A duplicate pair's survivor is kept here too (Key pair:<a>:<b>), so the pair is decided once
+            # THE ADVISOR LIGHTS NO BUTTON (the owner, 2026-11-15: "remove the entire advisor from buttons thing"): its judgements (advice) and
+            # the press log that measured them (advice_press) are dropped from every home; advice_decision keeps a duplicate pair's survivor alone
+            self.cx.execute('DROP TABLE IF EXISTS advice'); self.cx.execute('DROP TABLE IF EXISTS advice_press')
             self.cx.execute('CREATE TABLE IF NOT EXISTS advice_decision (Key TEXT PRIMARY KEY, Stamp TEXT, Json TEXT, At TEXT)')
-            # ...AND WHAT THE OWNER PRESSED while it was shown (the deep dive, 2026-10-20): nothing recorded whether the lit button was the
-            # one pressed. One row per press - advised and pressed verb, whether they matched, and what kind of item from whom - a record
-            # only: nothing in LEARNED.md is learned from a press (the owner, 2026-10-25)
-            self.cx.execute('CREATE TABLE IF NOT EXISTS advice_press (Id INTEGER PRIMARY KEY, Key TEXT, TargetKind TEXT, TargetId INTEGER, '
-                            'Revision TEXT, Advised TEXT, Pressed TEXT, Match INTEGER, ItemKind TEXT, Channel TEXT, Sender TEXT, '
-                            'SenderDomain TEXT, Scope TEXT, Thread TEXT, Stale INTEGER, CreatedAt TEXT)')
-            # ...ON EVERY SURFACE, LIT OR NOT (the Advisor and memory design, phase B, 2026-10-23): only desk presses under a line were kept.
-            # Surface: desk / task (the Tasks tab) / phone. Lit: the button filled on THAT surface (Advised stays the Advisor's own verb).
-            # Live: the other buttons that could be pressed, JSON. Choice: 1 when one was there - a press with no other button is no choice
-            # and no evidence. Repo: a code item's repository, named apart from the sender's domain. State, By: the rule state and who lit it
-            # (rule / model) of the decision kept for the item at that revision - what tools/advisor_agreement.py breaks agreement down by
-            # (advice_decision keeps only an item's latest decision, 2026-10-28). Greyed: the buttons drawn but disabled at the press, JSON -
-            # a lit button among them is one the owner could not press (trust audit A4, 2026-10-28)
-            apcols = {r[1] for r in self.cx.execute('PRAGMA table_info(advice_press)')}
-            for col, typ in (('Surface', 'TEXT'), ('Lit', 'TEXT'), ('Live', 'TEXT'), ('Choice', 'INTEGER'), ('Repo', 'TEXT'), ('State', 'TEXT'), ('By', 'TEXT'), ('Greyed', 'TEXT')):
-                if col not in apcols: self.cx.execute(f'ALTER TABLE advice_press ADD COLUMN {col} {typ}')
-            self.cx.execute('CREATE INDEX IF NOT EXISTS advice_press_at ON advice_press(CreatedAt)')
+            self.cx.execute("DELETE FROM advice_decision WHERE Key NOT LIKE 'pair:%'")
             # ...and each learned line's SECTION (Reader holds its slug now), whom it is about (Subject: the address in a people line)
             # and when it stopped being true (ValidTo, status closed) - a fact that ended is closed, never deleted (2026-10-25)
             llcols = {r[1] for r in self.cx.execute('PRAGMA table_info(learned_line)')}
@@ -5841,7 +5814,7 @@ class SQLiteStore:
         self._exec('UPDATE review SET DraftError=?, DraftNeeds=NULL WHERE ReviewId=?', (by_sentence(error) or None, rid))
         # ...and WHEN, as an act on its task: the error had no time, so the Advisor read it as the newest failure whatever failed after
         # it - Send to agent failed with its error on the card, and the line still said the reply could not be drafted (the matrix,
-        # 2026-10-20). advisor.failure reads the draft's error only while nothing newer failed.
+        # 2026-10-20). rulebook.failure reads the draft's error only while nothing newer failed.
         rv = self.get_review(rid) or {}
         if error and rv.get('TaskId'):
             self.add_operation({'OpId': uuid.uuid4().hex[:12], 'Kind': 'message.reply', 'TargetKind': 'task', 'TargetId': int(rv['TaskId']), 'ParamsJson': '{}',

@@ -358,11 +358,11 @@ def test_a_mark_made_after_the_asker_left_lands_on_its_row_and_opens_no_new_one(
 
 def test_the_inner_asker_names_the_call_and_a_named_function_names_its_own():
     s = MemoryStore(); brain = _poll_brain(s)
-    @aiusage.named('advisor.judge')
+    @aiusage.named('advisor.idea')
     def judge(): return brain('sys', 'is this worth raising?')
     with aiusage.asking('reports.judge'): judge(); brain('sys', 'what came back')
-    assert sorted(r['Caller'] for r in s.brain_routes(None, limit=50)) == ['advisor.judge', 'reports.judge']
-    assert aiusage.asked() is None and {'advisor.judge', 'reports.judge', 'triage.classify'} <= set(aiusage.CALLERS)
+    assert sorted(r['Caller'] for r in s.brain_routes(None, limit=50)) == ['advisor.idea', 'reports.judge']
+    assert aiusage.asked() is None and {'advisor.idea', 'reports.judge', 'triage.classify'} <= set(aiusage.CALLERS)
 
 
 def test_every_name_a_call_site_gives_is_on_the_one_list():

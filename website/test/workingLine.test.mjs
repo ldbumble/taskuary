@@ -27,7 +27,7 @@ test("the count rides beside the dots only where Stop does: a typed ask's real a
 });
 
 test("its clock is its own: the per-second state never reaches AssistantView", () => {
-  const fn = src.slice(src.indexOf("function WorkingFor()"), src.indexOf("function AdvisorNotes"));
+  const fn = src.slice(src.indexOf("function WorkingFor()"), src.indexOf("export default function AssistantView"));
   assert.match(fn, /setInterval\(\(\) => setNow\(Date\.now\(\)\), 1000\)/);
   assert.match(fn, /clearInterval/);
   const view = src.slice(src.indexOf("export default function AssistantView"));

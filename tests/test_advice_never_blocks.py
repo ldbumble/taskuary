@@ -76,37 +76,6 @@ def test_all_read_next_with_the_cache_emptied_and_a_build_running(world):
     assert out['item']['key'] == below
 
 
-def test_the_advisor_never_reads_the_rail_through_its_lock(world):
-    from taskuary import advisor, funnel
-    s, src = world
-    funnel.pile(s)
-    key = walkworld.key_of(s, src, 'T1')
-    with mock.patch.object(advisor, 'notice', return_value=None):
-        d = run_with_build_running(lambda: advisor.status(s, key))
-        rid = run_with_build_running(lambda: advisor.press(s, key, None, 'next', surface='desk'))
-    assert d.get('key') == key or d.get('none'), d
-    assert rid, 'the press is kept'
-
-
-def test_a_look_at_one_idea_asks_about_no_other(world):
-    """The owner, 2026-11-11: "advisor should not be looking ahead ever". A look at one idea also judged the ideas among the next
-    two rows of the walk, each a model call for a row nobody had opened."""
-    from taskuary import advisor, funnel
-    s, src = world
-    ids = [s.upsert_idea({'key': f'idea:ledger-{n}', 'kind': 'idea', 'sig': f's{n}', 'text': f'The ledger check {n} repeats monthly - worth a routine?',
-                          'action': {}}, '2026-11-10 09:00:00')['IdeaId'] for n in range(3)]
-    funnel.pile(s)
-    rail = funnel.known(s)['items']
-    on = next(i for i in rail if (advisor.target_of(s, i['key']) or ('',))[0] == 'idea')        # the idea on the table, as the rail holds it
-    mine = advisor.target_of(s, on['key'])[1]
-    after = [{'key': f'idea:{i}'} for i in ids if i != mine][:2]                                    # ...and two more ideas next on the walk
-    judged = []
-    with mock.patch.object(advisor, 'BACKGROUND', True), mock.patch.object(advisor, 'judge', side_effect=lambda st, ev, tk, ti, *a, **k: judged.append(ti)), \
-         mock.patch.object(funnel, 'known', lambda store: {'items': [on, *after]}), \
-         mock.patch.object(advisor.threading, 'Thread', side_effect=lambda target, **k: mock.Mock(start=target)):
-        advisor.decide(s, on['key'])
-    assert judged == [mine], f'only the idea on the table is read: {judged}'
-
 
 def test_readers_queued_behind_one_build_share_the_next_one():
     """A tab, the Advisor and a press queued behind a build while an agent kept writing each rebuilt in turn. A read that waited out a

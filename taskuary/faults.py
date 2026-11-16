@@ -42,7 +42,7 @@ def active() -> bool: return bool(os.environ.get(ENV)) and scratch_home()
 def install(app) -> bool:
     """Patch the three boundaries and add the switch. False, and nothing touched, outside a walk."""
     if not active(): return False
-    from . import advisor, agents, concierge, general, llm, outbound, terminal
+    from . import agents, concierge, general, llm, outbound, terminal
 
     def send(*a, **kw):
         f = NOW['fault']
@@ -58,7 +58,7 @@ def install(app) -> bool:
     general.start_session = start
     agents.coding_ready = lambda *a, **kw: NOW['fault'] in START     # the coding agent is offered only where its start is the test
     agents.cli_ready = lambda *a, **kw: NOW['fault'] in START        # ...and its CLI counts as connected, past server._brainless
-    for m in (llm, advisor): m.build_llm = lambda *a, **kw: None     # no AI: the walk never calls a real model
+    llm.build_llm = lambda *a, **kw: None                          # no AI: the walk never calls a real model
     concierge.brain = lambda *a, **kw: None
 
     from fastapi import HTTPException
@@ -84,23 +84,14 @@ def install(app) -> bool:
     return True
 
 
-# ── THE ADVISOR MATRIX'S WORLD (website/advisor_matrix.mjs, 2026-10-19) ──────────────────────────────────────────────────────────
+# ── THE STATE MATRIX'S WORLD (2026-10-19) ──────────────────────────────────────────────────────────
 # The owner: "did you test every single advisor interaction matches what's on the screen?" The demo world holds the states a morning
-# happens to leave; this adds every state the Advisor can see - a reply owed with no draft, sent with nothing back, sent then written
+# happens to leave; this adds every state a task's filled button is read from - a reply owed with no draft, sent with nothing back, sent then written
 # again, a send that failed; agents of both kinds working, asking, finished, failed and stopped with a saved conversation; a goal with
 # no news, a meeting soon and one later, a task put off, one with every todo ticked, one reopened by mail. Invented Northwind people
-# only. Called by the matrix's launcher after demo.seed, with the demo's scripted Advisor wired in (scripted) - never by the app.
+# only. Called by the matrix's launcher after demo.seed - never by the app.
 ERIN, GAIL, PAULA, RAY = (('Erin Blake', 'erin@northwind.example'), ('Gail Moreno', 'gail@northwind.example'),
                           ('Paula Vance', 'paula@northwind.example'), ('Ray Colton', 'ray@northwind.example'))
-
-
-def scripted() -> bool:
-    """The Advisor answers from the demo's script while drafting and the chat still have no AI: the faults world had no Advisor at
-    all, so no failure was ever walked with a line over it (the Advisor group's verify, 2026-10-19)."""
-    if not active(): return False
-    from . import advisor, demo
-    advisor.build_llm = lambda *a, **kw: demo.brain()
-    return True
 
 
 def world(store) -> dict:
@@ -110,8 +101,6 @@ def world(store) -> dict:
     from . import assistant, demo, terminal, workerstate
     from .testing import Factory
     if not active(): return {}
-    from . import advisor
-    store.set_setting(advisor.CAP_KEY, '100000', 'walk')      # every moment judged: the hour's cap read "no suggestion" over most of them
     f, out = Factory(store), {}
     f.actor = 'triage'
     at = lambda h=0: (datetime.now() - timedelta(hours=h)).strftime('%Y-%m-%d %H:%M:%S')

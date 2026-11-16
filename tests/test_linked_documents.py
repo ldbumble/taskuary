@@ -10,7 +10,7 @@ from unittest import mock
 
 import pytest
 
-from taskuary import advisor, attachtext, channels, concierge, context, ingest, linkdocs, responder, server, sharepoint, sheets
+from taskuary import attachtext, channels, concierge, context, ingest, linkdocs, responder, server, sharepoint, sheets
 from taskuary.store import MemoryStore
 
 SHEET_ID = 'Bills2026AbCdEfGhIjKlMnOp_q'
@@ -243,19 +243,6 @@ def test_the_bills_sheet_reaches_triage_as_rows_then_the_agent_reads_every_row(w
     assert 'Outstanding bills - Northwind (Google Sheet) - read, 75 rows' in line and "proposal for the owner's yes" in line
     assert 'DOCUMENTS ON IT' in concierge.facts(s, {'kind': 'task', 'lane': 'now', 'title': 'Bills', 'tid': tid})
 
-
-def test_the_drafter_and_the_advisor_see_the_sheet_once_however_often_it_is_quoted(world):
-    s, _ = world
-    tid = s.create_task({'Title': 'Outstanding bills', 'Summary': 's', 'Kind': 'reply', 'Source': 'email'}, 'router')
-    for i, body in enumerate([f'The bills: {SHEET}', f'Any news?\n\n> The bills: {SHEET}']):
-        s.add_message({'TaskId': tid, 'Channel': 'email', 'FromName': 'Accounts', 'FromEmail': 'accounts@vendor.example', 'ConversationId': 'c-b',
-                       'Subject': 'Bills', 'SentAt': f'2026-10-1{i} 10:00:00', 'BodyText': body, 'Status': 'routed'})
-    assert len(linkdocs.of_task(s, tid)) == 1
-    got = advisor.attached(s, 'task', tid)
-    assert got.count('Outstanding bills - Northwind (Google Sheet)') == 1 and 'INV-1000' in got
-    mids = [m['MessageId'] for m in s.list_messages(tid)][::-1]
-    b = responder.files_block(s, mids)
-    assert b.count('(Google Sheet)') == 1 and 'Invoice,Date,Vendor,Amount,Status' in b
 
 
 # ── what cannot be read says why, with the card that fixes it ─────────────────────────────────────

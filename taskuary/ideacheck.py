@@ -39,17 +39,14 @@ def _model(s) -> bool: return str(s.get('key') or '').startswith('idea:') and (s
 
 
 def touched(store, act: dict, hours: int = TOUCHED_H) -> str:
-    """What the owner did on the line's task or mail in the last `hours` ('' when nothing): a press, a reply, a close, a typed turn."""
+    """What the owner did on the line's task or mail in the last `hours` ('' when nothing): a reply, a close, a typed turn - the outcome ledger's own acts."""
     tid, mid = act.get('tid'), act.get('mid')
     if not tid and mid: tid = (store.get_message(int(mid)) or {}).get('TaskId')
     if not tid: return ''
     since = _ago(hours)
     r = store._one("SELECT Kind FROM outcome WHERE TargetKind='task' AND TargetId=? AND Actor IN ('owner','you') AND At>=? ORDER BY Id DESC LIMIT 1",
                    (int(tid), since))
-    if r: return r['Kind']
-    r = store._one("SELECT Pressed FROM advice_press WHERE TargetKind='task' AND TargetId=? AND CreatedAt>=? AND Pressed NOT IN ('next','back') "
-                   "ORDER BY Id DESC LIMIT 1", (int(tid), since))
-    return f"pressed {r['Pressed']}" if r else ''
+    return r['Kind'] if r else ''
 
 
 def _last_acts(store, act: dict, n: int = 4) -> str:

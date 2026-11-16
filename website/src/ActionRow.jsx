@@ -1,44 +1,13 @@
 // THE ONE ROW ABOVE THE CHAT LINE (layout B): whatever is on the table, its verbs are here - the decision first, the session's verbs
 // next, the rare ones behind More; Nav - Back and Next - is FIRST (the owner, 2026-09-30; Back beside Next 2026-10-27). The card registers them (actionRow.js); this only draws. Centred over the composer,
-// ONE filled button at most - the Advisor's pick, and none before it answers - and a greyed decision says why it is greyed.
+// ONE filled button at most - the task's own recommended move - and a greyed decision says why it is greyed.
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Menu, MenuItem, useMediaQuery } from "@mui/material";
-import { NAV, ROW_HOLD_MS, ROW_STUCK_MS, TYPES, advisedAny, fitRow, navShort, press, shortParts, putSpineVerbs, rowOf, lightOnCard, sameRow, heldOff, heldRow, splitRow, laidOf, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { NAV, ROW_HOLD_MS, ROW_STUCK_MS, TYPES, fitRow, navShort, press, shortParts, putSpineVerbs, rowOf, lightOnCard, sameRow, heldOff, heldRow, splitRow, laidOf, useHosted, useRowVerbs } from "./actionRow.js";
 import { adviceNone } from "./words.js";
 import { label } from "./buttons.js";
 const shortNext = (w) => (w === label("next", "batch") ? label("next", "batch_short") : w);   // a squeezed desk bar's word for a batch's Next
 import { CONNECT_AI } from "./ConnectAi.jsx";
-
-// what a refused proposal says on the line: the item moved under the Advisor (409) is not the owner's mistake - the page reads
-// the advice again, and the line says the suggestion is the new one
-export const proposeFailed = (e) => (e?.response?.status === 409 ? "This changed - here's the updated suggestion."
-  : e?.response?.data?.detail || "That did not go through - try again.");
-
-// THE ADVISOR'S PICK, ON THE ROW AND NOWHERE ELSE (the owner, 2026-10-26: "maybe keep the box but remove the advisor? not sure the advisor
-// is really useful"): the strip that said its line over the row is gone - the lit button does the talking, and the few lines that warn
-// are drawn in the task beside what they are about (advice.taskNote, AdvisorNote). What stays here is the move the row has no button
-// for, joined to the row so it can be lit, and a hidden mark the walks read to tell a decided item from one still being read.
-export function AdvisorNext({ advice, onPropose, onErr = null }) {
-  const verbs = useRowVerbs();
-  const [going, setGoing] = useState(false);
-  // A MOVE THE ROW HAS NO BUTTON FOR (Not ours, Take it myself, Chase, Let it go) was hidden, and then got a button of its own beside
-  // the line (2026-10-15) - a second row of buttons. The row owns every button (the owner, 2026-10-16: "the advisor should just
-  // highlight the button in the button row not add new ones"): the move joins the row in its type, on the proposal road the pill
-  // takes, stamped with the revision it was judged at, and the row fills it like any advised button
-  const theirs = verbs.list.filter((v) => !String(v.id).startsWith("advice:"));
-  const lacks = !!(advice?.verb && advice.verb !== "next" && onPropose) && !advisedAny(theirs, advice);
-  useEffect(() => { setGoing(false); }, [advice?.for || advice?.key]);
-  // ...a refusal is said where the page says what went wrong (onErr: the chat's error line) - there is no strip to say it on
-  const run = async (e, anchor) => {
-    setGoing(true);
-    try { await onPropose(advice, anchor || e?.currentTarget || null); } catch (err) { onErr?.(proposeFailed(err)); } finally { setGoing(false); }
-  };
-  // ...it IS the advice, so it is the dark one (rowOf fills it like any advised verb)
-  // ...at the END of its type (group "more"): in front, it pushed the type's own second button into ▾ when the advice landed (2026-10-19)
-  useVerbs("advice", lacks ? [{ id: `advice:${advice.verb}`, label: advice.label, group: "more", tone: "p", disabled: going,
-    title: "What the Advisor suggests", run }] : [], lacks);
-  return advice?.verb ? <div hidden data-tq-advice="" data-tq-silent="" data-tq-advice-verb={advice.verb} /> : null;
-}
 
 // ONE PILL: the moves the width holds, and its own ▾ for the rest (foldsOf) - the move pill unlabelled, Change with its one quiet word
 const PILL = { move: "What to do", change: "Change the task", more: "More" };

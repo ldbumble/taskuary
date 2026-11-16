@@ -296,11 +296,11 @@ class Run:
         return next(c for c in reversed(self.cards()) if c['status'] == 'pending' and (kind is None or c['kind'] == kind))
 
     def snap(self, label):
-        from taskuary import advisor, funnel, general, rulebook, taskstate
+        from taskuary import funnel, general, rulebook, taskstate
         p = self.payload()
         try:          # ...the rail as the app builds it (processing_unread, one builder): the row's one lit move and its line
             funnel.pile(self.s, force=True, quiet=True)
-            it = advisor._item(self.s, 'task', self.tid, build=False) or {}
+            it = rulebook._item(self.s, 'task', self.tid, build=False) or {}
             rec = {**(rulebook.recommended(self.s, it, unlit=True) or {}), 'lane': it.get('lane')}
         except Exception as e: rec = {'error': str(e)}
         t = self.s.get_task(self.tid) or {}

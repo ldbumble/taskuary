@@ -23,25 +23,21 @@ test("a press refused as changed reads the advice again, and the row lights the 
   const press = view.slice(view.indexOf("const pressAdvice"), view.indexOf("// Get me ready for this meeting"));
   assert.match(press, /status !== 409\) throw e/);
   assert.match(press, /await readAdvice\(key\)/);
-  // ...said by no strip since 2026-10-26: the row relights; the Advisor's own button says it on the chat's error line (ActionRow onErr)
+  // ...said by no strip since 2026-10-26: the row relights
   assert.doesNotMatch(view, /This changed - reading it again/);
-  assert.match(read("ActionRow.jsx"), /This changed - here's the updated suggestion\./);
-  assert.match(view, /if \(c\.revision\) await pressAdvice\(/, "a pressed chip carrying the Advisor's stamp takes the same road");
+  assert.match(view, /if \(c\.revision\) await pressAdvice\(/, "a pressed chip carrying its decision's stamp takes the same road");
 });
 
-test("an Advisor press presses the row's REAL button when the row has it - only a verb it lacks is proposed (the walk's INLINE)", () => {
+test("a decided press presses the row's REAL button when the row has it - only a verb it lacks is proposed (the walk's INLINE)", () => {
   const press = view.slice(view.indexOf("const pressAdvice"), view.indexOf("// ANSWER IT has nothing to send"));
   assert.match(press, /const real = advisedIn\(rowNow\(\)\.list\.filter\(\(v\) => !String\(v\.id\)\.startsWith\("advice:"\)\), a\);\n\s+if \(real\) \{ pressRow\(real\.id, null, anchor\); return null; \}/);
   assert.ok(press.indexOf("pressRow(real.id") < press.indexOf("proposeDirect("), "the row's button first, the proposal road last");
-  assert.match(read("ActionRow.jsx"), /await onPropose\(advice, anchor \|\| e\?\.currentTarget \|\| null\)/, "the press carries its anchor, so Remind me opens its picker there");
 });
 
 test("every item put on the table goes through putOnTable, which pins its card to the top and keeps it there (B15, SEEN)", () => {
   // ONE road: the turn's landing, the Board's open, a browse card, an unfold - none sets Current on its own any more
   assert.match(view, /const putOnTable = useCallback\(\(card, how = "pile", ahead = false\) => \{/);
   assert.match(view, /\n\s+putOnTable\(card, "pile", !!below && card\?\.key === below\.key\);\n[^\n]*\n\s+say\(data\.say\);/, "landed");
-  // ...the answer filling in the row its press drew keeps the press's stamp: its Advisor read, sent at the press, is not made again
-  assert.match(view, /if \(!ahead\) itemAt\.current = \+\+readClock\.current;/, "the row drawn ahead");
   assert.match(view, /pull\(`task:\$\{req\.tid\}`\); return;/, "the Board's open goes the rail's road - no bare card for a walk on the phone (2026-10-23)");
   assert.match(view, /putOnTable\(null, "view"\);\s+\/\/ its top in view/, "a browse card");
   assert.match(view, /if \(onTable\) \{ setFoldedKey\(null\); browseDown\(\); putOnTable\(null, "view"\); \}/, "the folded item opened again");
@@ -82,11 +78,10 @@ test("the chat's one AI picker is the composer's - no header picker, nothing her
   assert.match(view, /api\.post\("\/api\/concierge\/chat-ai"/);
 });
 
-test("plain words: the Advisor's notes and the FYI rows (J)", () => {
+test("plain words: the FYI rows (J)", () => {
   assert.doesNotMatch(view, /Your coding tool's AI is the default/);
   assert.doesNotMatch(view, /`dropped: \$\{r\.dropped\}/, "a raw drop reason");
   assert.doesNotMatch(view, /r\.event, r\.tier/, "an event id like item.shown");
-  assert.match(view, /No AI connected yet - connect one under Connections, AI\./);
   assert.match(cards, />\{btn\("regular_agent"\)\}<\/Button>/);
   assert.doesNotMatch(cards, /regular agent/i);
 });

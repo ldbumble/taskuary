@@ -250,11 +250,11 @@ def test_the_rows_recommended_move_reads_the_agents_own_word():
 
 
 def test_a_pending_draft_is_not_nothing_left():
-    from taskuary import advisor, rulebook
+    from taskuary import rulebook
     s = MemoryStore(); tid = task(s)
     turn(s, tid, f'Done.\n{block(on_you=[], nothing_left=True)}')
     s.add_review({'TaskId': tid, 'Kind': 'reply', 'Status': 'pending', 'DraftText': 'Hi Gail'})
-    with mock.patch.object(advisor, 'unconnected', return_value=False), mock.patch.object(advisor, 'pressable', return_value=''):
+    with mock.patch.object(rulebook, 'unconnected', return_value=False), mock.patch.object(rulebook, 'pressable', return_value=''):
         assert rulebook.recommended_task(s, tid)['verb'] in ('send_close', 'approve'), 'the draft that waits is the move, not Mark done'
 
 

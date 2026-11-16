@@ -3,7 +3,7 @@ something a What you care about line says the owner does not care about may have
 owner's, and runs the report's own pause - the report stays under Reports, switched off. Invented Northwind names only."""
 import json
 from unittest import mock
-from taskuary import advisor, buttons, concierge, learned_cut as lc, rulebook, toolcatalog
+from taskuary import buttons, concierge, learned_cut as lc, rulebook, toolcatalog
 from taskuary.store import MemoryStore
 
 CARE = 'You no longer care about the legacy vendor export job - it was retired'
@@ -38,7 +38,7 @@ def test_the_row_carries_it_only_over_a_report_still_switched_on():
 
 def test_a_good_run_fills_nothing_and_carries_its_pause():
     s = MemoryStore(); _, it = _report(s); _care(s)
-    verbs = advisor.offered(s, it)
+    verbs = rulebook.offered(s, it)
     assert 'report_off' in {v['verb'] for v in verbs}
     assert rulebook.facts(s, it, verbs) == {'state': 'report_ok', 'line': ''} and rulebook.recommended(s, it, verbs) is None
     # ...and a run that failed is named so

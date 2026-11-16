@@ -187,7 +187,6 @@ OWNER_ONLY = (
     (r'POST', r'^/api/concierge/chats/\d+/continue$', "continuing an earlier Assistant chat is the owner's own conversation"),
     (r'POST', r'^/api/concierge/chat-ai$', "which AI answers one Assistant chat is the owner's choice for their own conversation"),
     (r'PATCH', r'^/api/tasks/\d+/checklist/[^/]+/note$', "a note on one of a task's to-dos is the owner's (the agent writes through its own task tools)"),
-    (r'POST', r'^/api/advice/press$', "the owner's own press, recorded against what the Advisor lit (presses.py)"),
     (r'POST', r'^/api/launch-key$', "a launch key opens a page that carries the owner token (launchkey.py, R29)"),
     (r'POST', r'^/api/window$', "bringing the app's window to the front is Taskuary started again by the owner (desktop.show_running)"),
     (r'PUT', r'^/api/tasks/\d+/workstream$', "which of the owner's workstreams a task belongs to is the owner's word - it teaches where its people belong"),

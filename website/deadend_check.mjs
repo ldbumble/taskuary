@@ -38,7 +38,6 @@
 //   STRIP     the Advisor's strip under the item on the table says nothing AND nothing is lit - an obvious move is an empty strip
 //             with its one button lit (the owner, 2026-10-23), never an empty strip over an unlit row - save a decision that lights
 //             nothing on purpose ([data-tq-unlit]: an agent asking is answered in its pane)
-//   REREAD    a press on the row and no fresh read of the advice after it (2026-10-19: "waiting on you" stood over a sent reply)
 //   LIT       the Advisor's lit button is off the screen or covered, a screen away from the line that names it
 //   AGAIN     a lit press refused or failed, and the line read again still lights it (2026-10-19: Send lit over "Not sent" and the demo's no)
 //   PLACE     a link's card or setting is not on the screen - followed on a fresh page, and again with its page already open (the
@@ -294,10 +293,8 @@ async function pageOn(srv, phase) {
   page.step = phase;
   page.on("pageerror", (e) => note("CRASH", page.step, e.message));
   page.expect = new Set();                                           // an /api path whose failure the step forced on purpose
-  page.adviceReads = [];                                             // when each read of the Advisor's line went out (REREAD)
   page.posts = [];                                                   // when each act went to the server, and where (a press that landed)
-  page.on("request", (r) => { const u = new URL(r.url()).pathname; if (u === "/api/advice") page.adviceReads.push(Date.now());
-    else if (r.method() === "POST") page.posts.push([Date.now(), u]); });
+  page.on("request", (r) => { if (r.method() === "POST") page.posts.push([Date.now(), new URL(r.url()).pathname]); });
   page.on("response", async (r) => {
     const u = new URL(r.url());
     if (!u.pathname.startsWith("/api/") || r.status() < 400 || u.pathname === "/api/test/fault") return;
@@ -396,9 +393,9 @@ const readPage = (page) => page.evaluate(() => {
     status: e.querySelector(".tq-mark")?.getAttribute("data-tq-status") || "" }));
   const table = [...document.querySelectorAll("[data-tq-rail] *")].find((e) => e.children.length === 0 && e.innerText?.trim() === "ON THE TABLE");
   const ref = (table?.closest("[data-tq-key]")?.innerText.match(/TQ-\d+/) || [])[0] || ((card?.innerText || "").match(/TQ-\d+/) || [])[0] || "";
-  const adviceEl = document.querySelector('[data-tq-advice]:not([data-tq-advice="no_ai"])');
+  const adviceEl = document.querySelector('[data-tq-recommended]:not([data-tq-recommended=""])');
   // ...the Advisor DECIDED: a line, a silent decision's mark (an obvious move lit and said by nothing), or no AI with its Connect lit
-  const decided = !!document.querySelector("[data-tq-advice]");
+  const decided = !!document.querySelector("[data-tq-recommended]");
   // THE ADVISOR'S STRIP AND ITS LIT BUTTON: the strip is empty only if nothing in it speaks; the lit button must be on the screen
   // and the thing under its own centre
   // ...the dock's strip takes no room while it is silent (2026-10-26), so a silent one is read where it is, unseen
@@ -420,11 +417,11 @@ const readPage = (page) => page.evaluate(() => {
   const quoted = card ? [...card.querySelectorAll("[data-tq-from], [data-tq-from-line], [data-tq-quoted], [data-tq-tab-line]")]
     .filter((el) => !el.hasAttribute("data-tq-tab-line") || el.innerText.includes("“")).map((el) => el.innerText).filter(Boolean) : [];
   const own = quoted.reduce((t, q) => t.split(q).join(" "), card?.innerText || "");
-  const read = [own, row?.innerText || "", adviceEl?.innerText || "", ...errs].join("\n");
+  const read = [own, row?.innerText || "", adviceEl?.getAttribute("data-tq-recommended") || "", ...errs].join("\n");
   const pops = [...document.querySelectorAll('.MuiPopover-paper, [role="dialog"], .MuiDrawer-paper')].filter(vis).map((p) => p.innerText.replace(/\s+/g, " ").slice(0, 80));
   const msgs = chat ? [...chat.querySelectorAll(".tq-msg")] : [];
   const tail = msgs.slice(-8);                       // a receipt stays a few lines up once the walk has brought the next item
-  return { verbs, moves, cardBtns, advice: !!adviceEl, decided, adv: adviceEl?.innerText || "", errs, rail, ref, read, chat: chat?.innerText || "", pops, lit, opened,
+  return { verbs, moves, cardBtns, advice: !!adviceEl, decided, adv: adviceEl?.getAttribute("data-tq-recommended") || "", errs, rail, ref, read, chat: chat?.innerText || "", pops, lit, opened,
     swap: (window.__swap || []).splice(0),
     strip: strip ? { empty: !strip.querySelector(".tq-next"), busy: strip.getAttribute("data-tq-strip") === "busy", unlit: !!strip.querySelector("[data-tq-unlit]") } : null,
     undoSaid: tail.some((m) => /Undo: |confirm below/i.test(m.innerText || "")),
@@ -540,7 +537,7 @@ const rowAt = (page) => page.evaluate(() => {
   const at = row ? Object.fromEntries([...row.querySelectorAll("button[data-tq-verb], button[data-tq-next]")].filter((b) => b.getBoundingClientRect().width > 0)
     // a button is known by its act, not the card that registered it: a chat's `chat:mine` and the walk's `w:mine` are one button
     .map((b) => [String(b.getAttribute("data-tq-verb") || "next").split(":").pop(), Math.round(b.getBoundingClientRect().left)])) : {};
-  return { item: document.querySelector("[data-tq-canvas-item]")?.getAttribute("data-tq-canvas-item") || "", advice: !!document.querySelector('[data-tq-advice=""]'), at };
+  return { item: document.querySelector("[data-tq-canvas-item]")?.getAttribute("data-tq-canvas-item") || "", advice: !!document.querySelector('[data-tq-recommended]:not([data-tq-recommended=""])'), at };
 });
 async function settle(page, at, ms = 5000) {
   let quiet = null;
@@ -557,10 +554,6 @@ async function settle(page, at, ms = 5000) {
     await wait(250);
   }
 }
-// REREAD: after a press on the row the advice is read again for the item as the act left it - a GET /api/advice within 2.5 s of the press
-// ...counted from the click itself (page.pressedAt): from before the ▾ menus were searched for Send, the search ate the 2.5 s on CI (0.3.9.50)
-const reread = (page, t0, at) => { if (!page.adviceReads.some((t) => t > t0 && t - t0 < 2500)) note("REREAD", at, "a press on the row and no fresh read of the Advisor's line after it"); };
-
 // AGAIN: a press of the lit button that was refused or failed - the advice is read again, and its new line must light the way past it,
 // never the press that just failed. Up to 8 s for the line to change; whatever it lights then is what the owner is sent to.
 const again = async (page, before, t0, words, at) => {
@@ -582,7 +575,7 @@ async function walk() {
     if (s.verbs.some((v) => v.word === label("walk"))) break;
     const before = s, has = (verb) => s.verbs.some((v) => verbOfId(v.id) === verb), t0 = Date.now();
     if (!did.has("approve") && (has("approve") || cardSends(s)) && ((await pressVerb(page, "approve")) || (await pressCardSend(page)))) {
-      did.add("approve"); await wait(2600); reread(page, page.pressedAt || t0, at); await again(page, before, page.pressedAt || t0, sendWords, at);
+      did.add("approve"); await wait(2600); await again(page, before, page.pressedAt || t0, sendWords, at);
     }
     else if (!did.has("close") && has("close")) {
       did.add("close"); await pressVerb(page, "close"); await wait(1200);

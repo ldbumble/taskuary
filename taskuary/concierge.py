@@ -1104,7 +1104,7 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     # A REPORT THAT FAILED says "run it again" - so Run it again leads, where there is a report to run (B7)
     if item.get('kind') == 'report' and item.get('bad') and item.get('source_id'): verbs = ['rerun'] + [v for v in verbs if v != 'rerun']
     first = canon_verb(first) if first else first             # an old word typed (Later, Handled) promotes the button it became
-    # ...never the fix: it is the failed send's own button, with the place it opens (advisor.offered), not a word to promote
+    # ...never the fix: it is the failed send's own button, with the place it opens (rulebook.offered), not a word to promote
     # ...nor, on the desk, "Answer it": what the model said it would tell the agent went to it already, and the agent's own card in its task
     # is where it waits (the owner, 2026-11-10: "yes remove that button ... Never need that button"); the phone keeps it as a numbered choice
     if first and first in CHIP_WORDS and first not in ('next', 'fix') and not (first == 'answer_agent' and routes()):
@@ -1985,25 +1985,24 @@ WHAT_ABOUT = ('WHAT THEIR WORDS ARE ABOUT, in this order: the item on the table 
 
 
 def _advice_block(store, item: dict | None, d: dict | None = None) -> str:
-    """Why the item on the table has the button it fills (advisor.block): a task's own recommended move - its agent's turn and its facts -
-    or, on an idea row, the Advisor's line. 'why?' is answered from it, never recomputed here. `d`: already read (_decision)."""
+    """Why the item on the table has the button it fills (rulebook.block): a task's own recommended move - its agent's turn and its facts.
+    'why?' is answered from it, never recomputed here. `d`: already read (_decision)."""
     if not item: return ''
     try:
-        from . import advisor
-        return advisor.block(store, item, d)
+        from . import rulebook
+        return rulebook.block(store, item, d)
     except Exception as e:
         logger.debug(f'concierge: no advice block - {e}'); return ''
 
 
 def _decision(store, item: dict | None) -> dict:
-    """The filled button of the item on the table, or {} - read once per turn: a task's recommended move (rulebook.recommended, in
-    advisor.decide's shape), an idea row's Advisor decision."""
+    """The filled button of the item on the table, or {} - read once per turn: a task's recommended move (rulebook.decide)."""
     if not item or not item.get('key'): return {}
     try:
-        from . import advisor
-        return advisor.decide(store, item['key'], off=False) or {}
+        from . import rulebook
+        return rulebook.decide(store, item['key']) or {}
     except Exception as e:
-        logger.debug(f'concierge: no advisor decision - {e}'); return {}
+        logger.debug(f'concierge: no decision - {e}'); return {}
 
 
 # THE CANVAS, FIRST (the owner, 2026-10-26: "the context for the assistant should be everything in the canvas, so if task is open the status
@@ -3188,7 +3187,7 @@ def read_chars(kind: str) -> int:
 
 
 def look_rounds(store, item: dict | None, call: dict | None, ask, rounds: int = READ_ROUNDS, may=None, on_read=None) -> tuple:
-    """THE LOOK-UP ROUND - one engine for the pop-up Assistant's turn and the Advisor (advisor.judge): while the model's answer names a look-up
+    """THE LOOK-UP ROUND - one engine for the pop-up Assistant's turn: while the model's answer names a look-up
     it may run (`may`, toolcatalog.runs_now by default), run it at once (read_op: it changes nothing) and hand what it says back with
     `ask(call, found, last)`, which returns the model's next (answer, call). At most `rounds` - the last one says so (`last`) - never an open
     crawl. (answer, call, reads): the answer None when nothing was read; a look-up still asked for when the rounds ran out is the caller's."""

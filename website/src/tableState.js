@@ -34,9 +34,8 @@ export function tableWords(table, ref = "") {
     name: !has ? `Ask ${ASSISTANT_NAME}` : under ? `Ask ${ASSISTANT_NAME} about this page` : `Tell ${ASSISTANT_NAME} what to do with ${ref || "this one"}` };
 }
 
-// What an /api/advice answer (advisor.status) means for the strip: the Advisor's ONE decision - a lit verb, its line '' when the move is
-// obvious - or why nothing is lit. There is no "Thinking..." any more (the owner, 2026-10-23): the rule's button is lit at once, and
-// the model's answer, where it reads one, arrives by the `advice` event. A decision that lights nothing (an agent asking) is kept too.
+// What a decision (rulebook.status's shape) means for the strip: ONE decision - a lit verb, its line '' when the move is obvious - or why
+// nothing is lit. There is no "Thinking..." (the owner, 2026-10-23): the button is lit at once. A decision that lights nothing is kept too.
 export function adviceRead(data, key) {
   if (!data || !key) return { advice: null };
   return { advice: data.verb || data.none || data.state ? { ...data, for: key } : null };
@@ -51,15 +50,6 @@ export const ownPick = (rec, key) => (rec?.verb && key
   ? { verb: rec.verb, label: rec.label || "", state: rec.state || "", why: rec.why || "", line: "", by: "agent", for: key, key }
   // ...and with nothing lit, the state's own sentence alone (railStatus.unlitWhy): no verb, so nothing is filled - the row says it
   : unlitWhy(rec) && key ? { verb: "", label: "", state: rec.state || "", why: unlitWhy(rec), line: "", by: "agent", for: key, key } : null);
-
-// THE ADVISOR'S EVENT NAMES ITS ITEM BY THE RAIL'S KEY, and a task opened by name sits on the table as `task:N` - so the line for a
-// Board-opened task landed and was never read (re-audit: "a task opened by name never gets its Advisor line"). The event's own
-// target says which task it is.
-export function sameTarget(ev, cur) {
-  const m = /^task:(\d+)$/.exec(cur?.key || "");
-  const tid = m ? Number(m[1]) : cur?.tid;
-  return ev?.target_kind === "task" && tid != null && Number(ev.target_id) === Number(tid);
-}
 
 // THE TASK YOU WERE WORKING ON (the owner, 2026-11-09: "there should always be a button on top corner when you are in settings or reports to
 // go back to the main task you were working on"): the last task in view, however it came - the walk, the rail, a link, the Board or an

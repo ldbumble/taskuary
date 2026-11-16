@@ -19,7 +19,7 @@ happened. Parsing addresses, times and weekdays is fact, not meaning: no word li
                and the note they closed a task with (Close with a note), on its close
     never      navigation - Next, open, focus: "Next" is "not now, in this walk", never a judgement (Shown is not acted on); and never
                an agent's own summary, lesson or outcome: what an agent concluded is not a fact about the owner (the owner, 2026-11-13)
-    excluded   personal mailboxes (presses.personal), agents' own acts, auto-replies
+    excluded   personal mailboxes (personal), agents' own acts, auto-replies
 
 Evidence ids: msg (a reply to an inbound message, by its id), rv (a review decision), fs (a task put off, by the task's id), task (an
 owner act on a task), idea (an Advisor idea's fate), sv (a promise in sent mail, by the sent message's id), say (a line the owner typed
@@ -67,10 +67,30 @@ def _mine(store) -> set:
     return ({own} if own else set()) | owner_addresses(store)
 
 
+def personal(store, item: dict | None, m: dict | None = None) -> bool:
+    """Mail from a mailbox the owner marked personal ({"personal": true} on its source) teaches nothing (the owner, 2026-10-23:
+    "nothing learned from personal mail"). The app has no other mark of personal mail: a mailbox is work unless marked."""
+    m = m or {}
+    # ...nor anything under a PERSONAL WORKSTREAM, whichever mailbox or chat it came by (workstreams.py, the owner 2026-11-01)
+    try:
+        from . import workstreams
+        if workstreams.is_personal(store, tid=(item or {}).get('tid'), m=m or None): return True
+    except Exception: pass
+    name, ch = str(m.get('SourceName') or '').lower(), str(m.get('Channel') or (item or {}).get('channel') or '').lower()
+    if not name: return False
+    try: srcs = store.list_sources(active_only=False)
+    except Exception: return False
+    for s in srcs:
+        if str(s.get('Address') or '').lower() != name or (ch and str(s.get('Channel') or '').lower() not in (ch, '')): continue
+        try: cfg = json.loads(s.get('ConfigJson') or '{}') or {}
+        except ValueError: cfg = {}
+        if cfg.get('personal'): return True
+    return False
+
+
 def _skip(store, m: dict) -> bool:
     """Personal mail, an auto-reply: nothing is learned from either."""
     from .autoreply import is_auto
-    from .presses import personal
     return bool(not m or is_auto(m) or personal(store, None, m))
 
 

@@ -678,8 +678,8 @@ def reflect_if_due(store) -> bool:
     return reflect(store)
 
 
-# THE PRESS LOG IS RAW DATA, NOT A LESSON (2026-10-25): the moves - "On asks from X, presses Next (n of m)" - are gone (the owner:
-# stop learning from presses). Every press is still kept (presses.py) as a record; its one reader here had no caller and went (2026-10-27).
+# NO LESSON FROM A PRESS (2026-10-25): the moves - "On asks from X, presses Next (n of m)" - are gone (the owner: stop learning from
+# presses), and the press log itself went with the Advisor's lit button (2026-11-15).
 
 
 def _intro(head: str) -> str:

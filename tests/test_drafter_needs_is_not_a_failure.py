@@ -4,7 +4,7 @@ drew a red app failure cut mid-word at 240/300 characters, and the Advisor lit "
 The writer is the owner's own press now (Draft with AI / Redraft): nothing drafts at arrival - the reply is the task's agent's."""
 from unittest import mock
 
-from taskuary import advisor, responder, rulebook
+from taskuary import responder, rulebook
 from taskuary.store import MemoryStore, by_sentence
 from taskuary.testing import Factory
 
@@ -31,7 +31,7 @@ def test_it_is_kept_whole_as_needs_never_as_a_failure():
     rv = s.get_review(rid)
     assert not rv.get('DraftError') and rv['DraftNeeds'].startswith('not drafted - it needs the October invoice run')
     assert 'nothing here can settle the number they are asking about' in rv['DraftNeeds']          # never cut at 240
-    assert advisor.failure(s, {'tid': tid, 'rid': rid}) is None
+    assert rulebook.failure(s, {'tid': tid, 'rid': rid}) is None
     assert not [o for o in s.operations_for(tid, []) if o.get('Status') == 'error']
 
 
@@ -41,7 +41,7 @@ def test_the_facts_name_it_needs_an_agent_and_say_nothing_the_card_shows():
     verbs = [{'verb': v} for v in ('reply', 'regular_agent', 'mine', 'next')]
     assert rulebook.facts(s, item, verbs) == {'state': 'needs_agent', 'line': ''}, 'the reason is on the card; the move is the model\'s'
     assert 'reply writer did not draft it' in rulebook.RULES['needs_agent']['is']
-    assert 'new_task' not in {v['verb'] for v in advisor.offered(s, item)}
+    assert 'new_task' not in {v['verb'] for v in rulebook.offered(s, item)}
 
 
 def test_a_draft_written_after_clears_it():

@@ -23,7 +23,7 @@ def of(facts: dict) -> str:
 
 
 def parts(key: str) -> dict:
-    """The stage's parts - main, shows, drawer, lit, advisor, verbs - or {} for no such stage."""
+    """The stage's parts - main, shows, drawer, lit, verbs - or {} for no such stage."""
     return STAGE.get(key) or {}
 
 

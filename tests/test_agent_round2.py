@@ -201,14 +201,14 @@ class CheckBackTests(unittest.TestCase):
         """Ray has not answered the W-9 for a week (the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible. it
         shoudl prompt you"): nothing woke the task's agent. Now the reminders' clock hands it one turn saying who is late on what - once per
         lateness, through the check-back road - and never where the owner's own line could not wake it (the switch, no conversation)."""
-        from taskuary import advisor, rulebook
+        from taskuary import rulebook
         s = MemoryStore(); tid = owner_task(s, 'Vendor W-9', Status='waiting')
         s._exec("UPDATE task SET WaitingOn='ray.colton@northwind.example' WHERE TaskId=?", (tid,))
         s.add_message({'TaskId': tid, 'Direction': 'out', 'Subject': 'W-9?', 'Body': 'Could you send the W-9?', 'Channel': 'email',
                        'SentAt': f'{datetime.now() - timedelta(days=7):%Y-%m-%d %H:%M:%S}', 'Status': 'routed'})
         it = {'key': f'task:{tid}', 'kind': 'todo', 'lane': 'theirs', 'tid': tid}
         fired = []
-        with mock.patch.object(advisor, '_item', lambda *a, **k: it), mock.patch.object(checkback, 'fire', side_effect=lambda st, t, what: fired.append((t, what))), \
+        with mock.patch.object(rulebook, '_item', lambda *a, **k: it), mock.patch.object(checkback, 'fire', side_effect=lambda st, t, what: fired.append((t, what))), \
              mock.patch('taskuary.ingest._spawn', lambda fn, *a: fn(*a)), mock.patch('taskuary.ingest.has_room', return_value=True), \
              mock.patch.object(general, 'provider_options', return_value=[{'pick': 'api:x', 'type': 'api'}]):
             with mock.patch.object(general, 'history', return_value=[{'role': 'user', 'text': 'x'}]):
@@ -222,7 +222,7 @@ class CheckBackTests(unittest.TestCase):
     def test_a_late_answer_starts_a_first_agent_where_none_has_worked(self):
         """The same lateness on a task no agent has worked (the owner, 2026-11-10: "yes"): it starts the task's first agent with the same turn,
         through the start check every start passes - the switch off says why once on the task and leaves Chase lit; a full house queues it."""
-        from taskuary import advisor, ingest, rulebook
+        from taskuary import ingest, rulebook
         def late_task(title):
             tid = owner_task(s, title, Status='waiting')
             s._exec("UPDATE task SET WaitingOn='ray.colton@northwind.example' WHERE TaskId=?", (tid,))
@@ -231,7 +231,7 @@ class CheckBackTests(unittest.TestCase):
             return tid, {'key': f'task:{tid}', 'kind': 'todo', 'lane': 'theirs', 'tid': tid}
         s = MemoryStore(); tid, it = late_task('Vendor W-9')
         fired, room = [], [True]
-        with mock.patch.object(advisor, '_item', lambda st, k, t, **kw: {**it, 'key': f'task:{t}', 'tid': t}), \
+        with mock.patch.object(rulebook, '_item', lambda st, k, t, **kw: {**it, 'key': f'task:{t}', 'tid': t}), \
              mock.patch.object(checkback, 'fire', side_effect=lambda st, t, what: fired.append((t, what))), \
              mock.patch('taskuary.ingest._spawn', lambda fn, *a: fn(*a)), mock.patch('taskuary.ingest.has_room', side_effect=lambda *a: room[0]), \
              mock.patch.object(general, 'provider_options', return_value=[{'pick': 'api:x', 'type': 'api'}]):

@@ -577,7 +577,7 @@ ENDED_WANT = {'type': 'object', 'properties': {'unfinished': {'type': 'boolean'}
               'required': ['unfinished']}
 SECRET = '(asks for a sign-in)'      # the judge's word for an answer that asked the owner for a password: its agent is told how a sign-in is done
 _ENDED, _ENDED_MAX = {}, 256          # (sid, sha of the words) -> what it still waits on or '' - a Stop the spool replays costs nothing
-BACKGROUND = True          # the suite turns the read off its own thread (tests/conftest.py), as advisor.BACKGROUND; `wait` still reads
+BACKGROUND = True          # the suite turns the read off its own thread (tests/conftest.py); `wait` still reads
 
 
 def waits_on(why: str) -> str:

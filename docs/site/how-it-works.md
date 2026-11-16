@@ -197,7 +197,7 @@ person deliver and when, did the ignored sender's mail become work anyway. No mo
 sweep. What the facts mean is reflection's: it reads the resolved rows as evidence (`out` ids,
 beside the `mem`, `rv` and `task` ids above) and writes what you do into `LEARNED.md` with the same
 grammar and the same decay - "a green PR from the coding agent is merged as it stands". A derived line never
-acts on its own: the Advisor weighs it when it picks a button and words a proposal, and deleting it
+acts on its own: the Advisor weighs it when it words an idea or a proposal, and deleting it
 from `LEARNED.md` is the whole undo. The whole of it - every input, the two clocks, the ledger's
 row kinds and verdicts - is on [The Advisor](advisor).
 

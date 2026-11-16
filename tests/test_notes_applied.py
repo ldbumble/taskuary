@@ -92,17 +92,6 @@ def test_a_correction_on_a_topic_alike_in_meaning_is_evidence_and_one_unlike_is_
         assert operations.evidence_lines(s, msg) == [], 'no embedder: only the same sender or the very same topic'
 
 
-def test_the_advisor_names_an_open_task_alike_in_meaning_as_a_possible_duplicate():
-    from taskuary import advisor
-    s = MemoryStore()
-    a = s.create_task({'Title': 'Refund the Payworth overpayment', 'Status': 'open'}, 'owner')
-    b = s.create_task({'Title': 'Payworth wants its money back', 'Summary': 'a refund for the overpayment', 'Status': 'open'}, 'owner')
-    c = s.create_task({'Title': 'Book the offsite room', 'Status': 'open'}, 'owner')
-    item = {'title': 'Refund the Payworth overpayment', 'key': f'task:{a}'}
-    with fake_embed.meaning({'refund': ['refund']}):
-        line = advisor.related_line(s, item, 'task', a)
-    assert f'TQ-{b:04d}' in line and f'TQ-{c:04d}' not in line and f'TQ-{a:04d}' not in line, line
-
 
 def test_note_ids_are_read_from_the_line_and_nothing_else():
     assert triage.note_id('[lrn42] Payworth refunds are for AP.') == 'lrn42'

@@ -8,17 +8,19 @@ agent's state, a failure, the calendar, the days waited, the lane - never the wo
 `advice_rule`: an age, a clash, a failure, a promise nothing backs).
 
 And ONE move read off them (recommended, 2026-11-09: "the agents while running should recommend actions, no assistant"): the button a
-task's row fills comes from its agent's own turn and these facts - no model, no Advisor. The Advisor judges only its own idea rows.
+task's row fills comes from its agent's own turn and these facts - no model, no Advisor; an idea row fills none (the owner, 2026-11-15:
+"remove the entire advisor from buttons thing"). The row's real buttons (offered), what failed on it (failure) and the one decision every
+surface reads (decide) live here too, at the end.
 
 A sentence is only a checkable fact the card does not show, never one explaining a button ("buttons do the talking", the owner)."""
-import json, re
+import contextlib, contextvars, hashlib, json, re
 from datetime import date, datetime, timedelta
 from loguru import logger
-from . import words
+from . import buttons, concierge, words
 
 RULES = words.ADVICE_RULE
 CHASE_DAYS = 3           # a wait past 3 working days is late (waiting_late): its agent is woken to chase (checkback.late), else Chase is lit
-# a failure is the fact whatever is lit: its sentence stands on the strip where the model's own line is empty (advisor._out)
+# a failure is the fact whatever is lit: its sentence stands on the strip beside it (decide)
 FAILED = frozenset({'failed', 'failed_cause', 'report_failed'})
 EV = '_evidence'         # a fact's own ids (usual.py), carried beside the line's facts and handed on as the decision's evidence
 
@@ -77,9 +79,8 @@ def _cut(s, n: int) -> str:
 
 
 def _inbound(store, item) -> list:
-    from . import advisor
     tk = 'task' if item.get('tid') else 'message'
-    try: ms = advisor._msgs(store, item, tk, item.get('tid') or item.get('mid'))
+    try: ms = _msgs(store, item, tk, item.get('tid') or item.get('mid'))
     except Exception: ms = []
     return [m for m in ms if m and str(m.get('Direction') or 'in') != 'out' and m.get('Status') not in ('context',)]
 
@@ -191,7 +192,7 @@ def late_step(store, t: dict) -> tuple | None:
 def state(store, item: dict, verbs: list) -> tuple:
     """(state, facts for its sentence) - the first that holds, in the order a careful assistant would read the item. A name for where the
     item stands, never a move: the model reads it beside everything else and decides."""
-    from . import advisor, concierge
+    from . import concierge
     it, offered = item or {}, {v['verb'] for v in verbs or []}
     kind, lane, tid = str(it.get('kind') or ''), str(it.get('lane') or ''), it.get('tid')
     t = (store.get_task(int(tid)) or {}) if tid else {}
@@ -200,14 +201,14 @@ def state(store, item: dict, verbs: list) -> tuple:
     # which lit nothing over the Approve it waited on (the 2026-11-02 audit) - its Approve is lit
     from . import proposals
     if tid and (h := proposals.held_pending(store, tid)): return 'action_held', {'what': h['what'], EV: [f"rv{h['rid']}"]}
-    if lane == 'working' or (tid and advisor._at_work(store, 'task', tid)): return 'working', {}
+    if lane == 'working' or (tid and _at_work(store, 'task', tid)): return 'working', {}
     if kind == 'agent' and (it.get('asking') or lane == 'blocked'): return 'agent_asking', {}
     # ...and a run that ENDED on a question to the owner - a restart cut it off at "go ahead?" - is still asking, not stopped: the finish
     # check read it as stopped work and lit Reply to the sender over the agent's ask (the owner, 2026-11-03)
     if tid and (kind in ('agent', 'agentdone', 'wrapup') or lane in ('stopped', 'saved')):
         from . import workerstate
         if workerstate.left_asking(store, tid): return 'agent_asking', {}
-    try: f = advisor.failure(store, it)
+    try: f = failure(store, it)
     except Exception: f = None
     # ...WHAT THE DEMO REFUSED DID NOT FAIL (the walk, 2026-11-15): its tour says "press Send - nothing leaves the demo", and the row then
     # read "Failed: This is the demo - nothing is sent" in the words of a real fault. The item is as it was; the press's own line said why
@@ -223,7 +224,7 @@ def state(store, item: dict, verbs: list) -> tuple:
     if wb == 'quiet': return 'watch_quiet', {}
     # THE WRITER SAID WHAT IT NEEDS (store.set_review_draft_needs): no failure - the work is an agent's, so Continue the one that worked it,
     # else Send to agent. Its reason is on the card already, so nothing is said (walk 2026-10-29: it lit "New task to fix this")
-    if advisor.draft_needs(store, it) or advisor.reply_unwritten(store, it): return 'needs_agent', {}
+    if draft_needs(store, it) or reply_unwritten(store, it): return 'needs_agent', {}
     # A DASHBOARD's refresh lands under Reports like a report run and Next walks past it (the owner, 2026-10-23): looked at, never acted
     # on - so silent, Next lit. Its Share (and a report's) is on the row for the Advisor to SEE, never the move a rule lights: sending a
     # result somewhere is the owner's own idea, not the obvious next step
@@ -233,7 +234,7 @@ def state(store, item: dict, verbs: list) -> tuple:
     if kind == 'connection': return 'connection', {}
     if lane == 'unjudged': return 'unsorted', {}
     tk = 'task' if tid else 'message'
-    try: draft = advisor._draft(store, it, tk, tid or it.get('mid')) if (tid or it.get('mid')) else None
+    try: draft = _draft(store, it, tk, tid or it.get('mid')) if (tid or it.get('mid')) else None
     except Exception: draft = None
     if draft or it.get('closeout') or kind == 'action':
         if 'approve' not in offered: return 'unsendable', {}
@@ -273,7 +274,7 @@ def state(store, item: dict, verbs: list) -> tuple:
     if lane == 'forgotten':
         who, days = slipped(store, it, t)
         return 'waiting_late', {'who': who, 'days': days}
-    if kind.startswith('goal') or (t and advisor.is_goal(t)):
+    if kind.startswith('goal') or (t and is_goal(t)):
         late = late_step(store, t) if t else None
         return ('goal_late', {'step': late[0], 'days': late[1]}) if late else ('goal', {})
     if lane == 'theirs' and t:
@@ -312,7 +313,7 @@ def state(store, item: dict, verbs: list) -> tuple:
         # offered to say twice what was said
         if (went := answered(store, it, ins[-1])): return 'answered', {'when': when(went)}
         return 'asked', {'who': _name(ins[-1]), 'ago': ago(ins[-1].get('SentAt') or ins[-1].get('CreatedAt'))}
-    if t and (cl := advisor._checklist(t)) and all(c.get('done') for c in cl): return 'done_list', {'n': len(cl)}
+    if t and (cl := _checklist(t)) and all(c.get('done') for c in cl): return 'done_list', {'n': len(cl)}
     return 'own', {}
 
 
@@ -334,10 +335,10 @@ def recipients(store, rv: dict) -> list:
 
 def leaving(store, item: dict, rv: dict) -> str:
     """'' or the line: who on the draft is new to its thread, and the files it sends."""
-    from . import advisor, learned_cut
+    from . import learned_cut
     from .ingest import owner_addresses, own_addresses
     tk, ti = ('task', item['tid']) if item.get('tid') else ('message', rv.get('MessageId') or item.get('mid'))
-    known = {a for m in advisor._msgs(store, item, tk, ti) for a in learned_cut.people_of(m)} | owner_addresses(store) | own_addresses(store)
+    known = {a for m in _msgs(store, item, tk, ti) for a in learned_cut.people_of(m)} | owner_addresses(store) | own_addresses(store)
     new = [a for a in dict.fromkeys(recipients(store, rv)) if a not in known]
     try: files = [f.get('name') for f in (json.loads(rv.get('Deliver') or '{}') or {}).get('attachments') or [] if isinstance(f, dict) and f.get('name')]
     except (TypeError, ValueError, AttributeError): files = []
@@ -358,11 +359,10 @@ def last_word(store, tid):
 def answered(store, item: dict, last_in: dict):
     """When the owner's own reply - one sent from here (its review) or typed anywhere (an outgoing message) - went after `last_in`, the
     newest such; None when none did."""
-    from . import advisor
     tid, mid = item.get('tid'), item.get('mid')
     try: r = store.sent_reply(task_id=int(tid)) if tid else store.sent_reply(message_id=int(mid)) if mid else None
     except Exception: r = None
-    try: outs = [m for m in advisor._msgs(store, item, 'task' if tid else 'message', tid or mid) if str(m.get('Direction') or 'in') == 'out']
+    try: outs = [m for m in _msgs(store, item, 'task' if tid else 'message', tid or mid) if str(m.get('Direction') or 'in') == 'out']
     except Exception: outs = []
     last = _dt(last_in.get('SentAt') or last_in.get('CreatedAt'))
     ats = [_dt((r or {}).get('DecidedAt') or (r or {}).get('CreatedAt'))] + [_dt(m.get('SentAt') or m.get('CreatedAt')) for m in outs]
@@ -437,33 +437,33 @@ def landing_asks(store, tid) -> bool:
 def agent_word(store, tid) -> str | None:
     """What the agent's newest turn summary (general.SUMMARY_TYPE) leaves the owner: 'on_you' while a step of its list is theirs,
     'nothing_left' where it said so, '' where it said neither - and None with no summary (no agent ran, or one that writes none)."""
-    from . import advisor, general
+    from . import general
     try:
         last = next((c for c in reversed(store.list_comments(int(tid), internal=True)) if c.get('ActorType') == general.SUMMARY_TYPE), None)
         summ = json.loads(last['Body']) if last else None
     except (TypeError, ValueError, KeyError): summ = None
     if not isinstance(summ, dict): return None
-    if any(c.get('on_you') and not c.get('done') and c.get('text') for c in advisor._checklist(store.get_task(int(tid)))): return 'on_you'
+    if any(c.get('on_you') and not c.get('done') and c.get('text') for c in _checklist(store.get_task(int(tid)))): return 'on_you'
     return 'nothing_left' if summ.get('nothing_left') else ''
 
 
 def _recommended(store, it: dict, verbs: list | None, f: dict | None, unlit: bool = False) -> dict | None:
-    from . import advisor, checkback
+    from . import checkback
     if it.get('kind') == 'idea': return None                # an idea is the Advisor's own row, and its light the Advisor's
-    verbs = advisor.offered(store, it) if verbs is None else verbs
+    verbs = offered(store, it) if verbs is None else verbs
     f = f or facts(store, it, verbs)
     st, tid, lead = f['state'], it.get('tid'), (verbs[0]['verb'] if verbs else '')
-    pick = lambda *vs: next((v for v in vs if not advisor.pressable(store, it, v, verbs)), None)
+    pick = lambda *vs: next((v for v in vs if not pressable(store, it, v, verbs)), None)
     why = f.get('line') or ''
     if st in QUIET: v = None
     # ...a reply owed that nothing has written, on a task no agent started on by itself (the setting, a stranger held, no room): the
     # agent writes it now, so its start is the move - the one that worked it before, else Send to agent (the owner, 2026-11-10)
     elif st == 'needs_agent': v = pick('continue', 'regular_agent')
-    elif st == 'action_held': v = None if advisor.unconnected(store, it) else pick('approve', 'send_close')
+    elif st == 'action_held': v = None if unconnected(store, it) else pick('approve', 'send_close')
     # ...what failed is never sent again as it stood: its own fix or Try again where the row leads with one, else nothing
     elif lead == 'fix' or st in FAILED: v = pick(lead) if lead in ('fix', 'continue') else None
     elif st == 'draft_ready' or ((w := store.waiting_on_owner(int(tid)) if tid else None) and (w.get('FinalText') or w.get('DraftText'))):
-        v = None if advisor.unconnected(store, it) else pick('send_close', 'approve')
+        v = None if unconnected(store, it) else pick('send_close', 'approve')
     # ...a late answer no agent was woken for is chased from the row (the owner, 2026-11-10: "job of agent is to be helpful and do as much as
     # possible") - over an older turn's word too; one that was woken says itself what it did about it
     elif st in LATE and not (tid and checkback.woke(store, tid)): v = pick('chase')
@@ -471,19 +471,18 @@ def _recommended(store, it: dict, verbs: list | None, f: dict | None, unlit: boo
     elif tid and (said := agent_word(store, tid)) is not None: v, why = (pick('close'), NOTHING_LEFT) if said == 'nothing_left' else (None, '')
     # ...and with no word of an agent's over it, the move the state's own fact names (MOVES)
     else: v = pick('close') if st in OVER else None if st == 'unpushed' and landing_asks(store, tid) else pick(*MOVES.get(st, ()))
-    if v: return {'verb': v, 'label': advisor._label(verbs, v, it), 'why': why, 'state': st}
+    if v: return {'verb': v, 'label': _label(verbs, v, it), 'why': why, 'state': st}
     # ...and A ROW WITH NOTHING LIT SAYS WHY, on the desk as on the phone (the owner, 2026-11-10: "if it's consistent do it"): `unlit` asks for
-    # the state's own sentence with no verb - the very line advisor.decide says for it, read off the same facts
+    # the state's own sentence with no verb - the very line decide says for it, read off the same facts
     return {'verb': None, 'label': '', 'why': f['line'], 'state': st} if unlit and f.get('line') else None
 
 
 def recommended(store, item: dict, verbs: list = None, f: dict = None, unlit: bool = False) -> dict | None:
     """{verb, label, why, state} - the one move the item's row fills - or None for nothing filled. `verbs`: the row's buttons where the
-    caller read them already (advisor.offered); `f`: its facts; `unlit`: a row with nothing filled still comes back with its state's line
+    caller read them already (offered); `f`: its facts; `unlit`: a row with nothing filled still comes back with its state's line
     (verb None) where it has one - what a row draws. Never raises: a row that cannot be read fills nothing."""
-    from . import advisor
     try:
-        with advisor.reading(): return _recommended(store, item or {}, verbs, f, unlit) if item else None
+        with reading(): return _recommended(store, item or {}, verbs, f, unlit) if item else None
     except Exception as e:
         logger.warning(f"rulebook: no recommended move for {(item or {}).get('key')} - {e}"); return None
 
@@ -492,12 +491,11 @@ def recommended_task(store, tid, known: dict = None) -> dict | None:
     """The same for a task by its id (the task page's own payload): its card as the rail last stood, never a rail build. `known`: what
     the page's read holds of the task already (concierge._shows, and its `messages`) - that read is made on every live write while an
     agent works."""
-    from . import advisor
     known = dict(known or {})
-    with advisor.reading({int(tid): known.pop('messages')} if 'messages' in known else None):
+    with reading({int(tid): known.pop('messages')} if 'messages' in known else None):
         try:
-            item = advisor._item(store, 'task', int(tid), build=False)
-            verbs = advisor.offered(store, item, known) if item and item.get('kind') != 'idea' else None
+            item = _item(store, 'task', int(tid), build=False)
+            verbs = offered(store, item, known) if item and item.get('kind') != 'idea' else None
         except Exception as e:
             logger.debug(f'rulebook: no card for task {tid} - {e}'); item = verbs = None
         return recommended(store, item, verbs, unlit=True)
@@ -513,7 +511,7 @@ def chase_thread(store, item: dict) -> dict | None:
     tid = it.get('tid')
     t = store.get_task(int(tid)) if tid else None
     if not t: return None
-    if str(it.get('kind') or '').startswith('goal') or advisor_goal(t):
+    if str(it.get('kind') or '').startswith('goal') or is_goal(t):
         today, best = date.today(), None
         for x in store.goal_steps(int(t['TaskId'])):
             c = x.get('child') or {}
@@ -534,11 +532,6 @@ def chase_thread(store, item: dict) -> dict | None:
     who = str((m or {}).get('FromEmail') or held or '').lower()
     return {'tid': tid, 'who': who, 'mid': int(m['MessageId']) if m else None} if '@' in who else None
 
-
-def advisor_goal(t: dict) -> bool:
-    from . import advisor
-    try: return bool(advisor.is_goal(t))
-    except Exception: return False
 
 
 def _plain_why(*said, default: str = 'it stopped without saying why') -> str:
@@ -565,3 +558,414 @@ def adds(store, item: dict) -> list:
     if lane not in ('theirs', 'forgotten') and not kind.startswith('goal'): return []
     try: return ['chase'] if lane == 'forgotten' or chase_thread(store, it) else []
     except Exception: return []
+
+
+# ── THE ROW'S REAL BUTTONS AND THE ONE DECISION EVERY SURFACE READS (moved from advisor.py, 2026-11-15) ──────────────────────────────────
+def key_of(target_kind: str, target_id) -> str:
+    return f"{'task' if target_kind == 'task' else 'idea' if target_kind == 'idea' else 'msg'}:{int(target_id)}"
+def target_of(store, key: str):
+    """A rail key -> (target kind, id), or None for a key with nothing to advise on (a connection, a meeting, a batch). An idea - the
+    Advisor's own line, a slipped follow-up - is a target of its own: it was None, so no idea ever had a line (the deep dive, 2026-10-20)."""
+    m = re.match(r'^(task|agent|wrap|msg|report|idea):(\d+)$', str(key or ''))
+    if m: return ('task' if m.group(1) in ('task', 'agent', 'wrap') else 'idea' if m.group(1) == 'idea' else 'message', int(m.group(2)))
+    # a draft waiting for your yes is keyed by its review (funnel's review:N, in a bare store and the demo): advised as the
+    # task it answers for, else the message - read as "nothing to advise on", every draft on the demo's rail had an empty bar
+    m = re.match(r'^review:(\d+)$', str(key or ''))
+    if m:
+        r = store.get_review(int(m.group(1))) or {}
+        return ('task', int(r['TaskId'])) if r.get('TaskId') else ('message', int(r['MessageId'])) if r.get('MessageId') else None
+    if str(key or '').startswith('processing:'):
+        # the inventory's key names an ITEM; its members say what it is made of (a task outranks its mail rows)
+        try:
+            with store._processing_read() as cur:
+                hit = store._processing_read_target(cur, key)
+                rows = cur.execute("SELECT EntityKind, LocalId FROM processing_member WHERE ItemId=? AND RetiredAt IS NULL", (hit[0],)).fetchall() if hit else []
+        except Exception: rows = []
+        for kind in ('task', 'message', 'idea'):
+            m = next((r for r in rows if r['EntityKind'] == kind), None)
+            if m: return (kind, int(m['LocalId']))
+    return None
+
+
+def revision(store, target_kind: str, target_id) -> str:
+    """The stamp advice is pinned to: the proposal's own context revision (messages and status) joined with what that
+    revision leaves out and an event changes - the task's state and the newest word its agent said."""
+    from .operations import context_revision
+    base = context_revision(store, target_kind, target_id)
+    if target_kind == 'idea':                         # an idea moves with its own state and words, and the thread it is about
+        i = store.get_idea(int(target_id)) or {}
+        try: a = json.loads(i.get('ActionJson') or '{}') or {}
+        except ValueError: a = {}
+        base = f"{i.get('Status')}|{i.get('LastSaid')}|{i.get('Text')}|{i.get('ActionJson')}"
+        if a.get('mid'): base += '|' + context_revision(store, 'message', int(a['mid']))
+        if a.get('tid'): base += '|' + context_revision(store, 'task', int(a['tid']))
+    if target_kind == 'task':
+        t = store.get_task(target_id) or {}
+        ev = store._one('SELECT MAX(Id) AS Id FROM worker_event WHERE TaskId=?', (int(target_id),)) or {}
+        base += f"|{t.get('Status')}|{t.get('Assignee')}|{t.get('DueAt')}|{ev.get('Id')}|{t.get('WaitingOn')}|{t.get('WokeMid')}"
+    # ...and every act on it: a line judged "Send" before the send failed stood over the failure, advising the same Send (2026-10-18);
+    # one judged "Reply" before the reply WENT stood over "Sent" on the close-out, still saying the sender was waiting (2026-10-19)
+    base += f"|{_acted(store, target_kind, target_id)}"
+    return hashlib.sha1(base.encode()).hexdigest()[:16]
+
+
+def _acted(store, target_kind, target_id) -> str:
+    """What the owner's acts left on the target: each draft - there or not, how it was decided, whether it went - and the newest
+    operation that ran on it, done, failed or declined (a chat's proposed operation still waiting for its yes is no act yet - but a step
+    held for the owner's Approve is a pending review, so it is in the reviews read here, and the revision moves when one lands: the
+    2026-11-02 audit). DeliveryState alone skipped every NULL, so a reply sent with no delivery receipt (Status approved, DeliveryState
+    NULL) changed nothing it saw."""
+    col = 'TaskId' if target_kind == 'task' else 'MessageId'
+    if target_kind == 'idea':                         # an idea carries no draft; its acts are its own operations
+        op = store._one("SELECT OpId, Status FROM operation WHERE TargetKind='idea' AND TargetId=? AND Status<>'proposed' ORDER BY rowid DESC LIMIT 1", (int(target_id),)) or {}
+        return f"/{op.get('OpId') or ''}:{op.get('Status') or ''}"
+    # ...and whether its draft could not be written: a Reply whose draft failed left the line it was judged before standing (2026-10-19)
+    # ...and THE DRAFT'S OWN WORDS: a redraft keeps its review, so "Redraft: it promises an invite" stood over the redraft that had
+    # already dropped the promise - the draft was never read again (walk 2026-10-29). The revision is hashed, so the text costs nothing
+    rv = store._one(f"SELECT GROUP_CONCAT(ReviewId || ':' || IFNULL(Status,'') || ':' || IFNULL(DeliveryState,'') || ':' || (IFNULL(DraftError,'')<>'') || (IFNULL(DraftNeeds,'')<>'')"
+                    f" || ':' || IFNULL(FinalText, IFNULL(DraftText,'')), ',') AS d FROM (SELECT * FROM review WHERE {col}=? ORDER BY ReviewId)", (int(target_id),)) or {}
+    op = store._one("SELECT OpId, Status FROM operation WHERE TargetKind=? AND TargetId=? AND Status<>'proposed' ORDER BY rowid DESC LIMIT 1",
+                    (target_kind, int(target_id))) or {}
+    return f"{rv.get('d') or ''}/{op.get('OpId') or ''}:{op.get('Status') or ''}"
+
+
+# ADVICE IS KEYED TO ITS ITEM: one task can stand on the rail twice - its draft (review:N) and its agent (agent:N) - and a line
+# written for one, with a verb only that one's row carries, stood over the other (2026-10-18). A row belongs to the item it was
+# judged as: its rail key, or a key that names that same item (its aliases: task:N for the processing inventory's key).
+def keys_of(item: dict | None, key: str = None) -> set:
+    return {k for k in (key, *((item or {}).get('key'), *((item or {}).get('aliases') or []))) if k}
+
+
+def _item(store, target_kind, target_id, key: str = None, build: bool = True):
+    """The card the rail would show for this target - the one keyed `key` when asked for an item (keys_of), else found by its task
+    or message id, since the rail's key spelling is the processing inventory's (`processing:...`) in a real install and a legacy
+    alias in a bare store.
+    `build=False`: a task's own read (rulebook.recommended_task), made again on every live write while its agent works - the rail as it
+    last stood, else the card built from the task's own rows; never a build of any size, since even the keyed one takes the rail's lock
+    and opening a task waited 15 s behind a restart's first build (stage G, 2026-11-10)."""
+    from . import funnel
+    if target_kind == 'task':
+        t = store.get_task(target_id) or {}
+        if not t or (t.get('Status') in ('done', 'dropped') and not store.resumable_session(target_id)): return None
+    # NEVER A RAIL BUILD, NEVER A WAIT FOR ONE (2026-11-09): this read funnel.pile, so every look and every press waited behind whatever
+    # build was running and built again after any write - with an agent busy beside it, GET /api/advice took 84 s and a press 72 s.
+    # The rail as last built - its cache, or the build a write emptied it of since (funnel.known); built here only when there has never been
+    # one and nobody is building it; else the card the rail would show, built for this one key (no lock, a few rows)
+    full, pile = funnel.full_items(store), funnel.cached_pile(store)
+    if pile is None: full, pile = funnel.known_full(store), funnel.known(store)
+    if pile is None and build and not funnel.building():
+        try: pile, full = funnel.pile(store, quiet=True), funnel.full_items(store)
+        except Exception as e: logger.debug(f'rulebook: no rail for {key} - {e}')
+    items = [*(full or ()), *((pile or {}).get('items') or ())]        # read items kept: the one on the table is often read
+    f = 'tid' if target_kind == 'task' else 'idea' if target_kind == 'idea' else 'mid'
+    mine = [i for i in items if i.get(f) == int(target_id)]
+    hit = next((i for i in mine if key and key in keys_of(i)), None) or next(iter(mine), None)
+    if hit or not build: return hit or funnel.item_for_key(store, key_of(target_kind, target_id))
+    # (the window's keyed build only - next_item's full-history fallback reads every root, seconds on a big home)
+    k = key or key_of(target_kind, target_id)
+    try:
+        pool = funnel.build(store, keep_surfaced=True, keys=[k])['items'] if not str(k).startswith('fyis:') else []
+        hit = next((i for i in pool if i['key'] == k or k in i.get('aliases', [])), None)
+        hit = funnel.shut(store, funnel._present_one(store, hit)) if hit else None
+    except Exception as e: logger.debug(f'rulebook: no keyed card for {key} - {e}'); hit = None
+    return hit or funnel.item_for_key(store, key_of(target_kind, target_id))
+
+
+
+def _one(s, n: int) -> str: return ' '.join(str(s or '').split())[:n]
+
+
+_READ = contextvars.ContextVar('rulebook_reading', default=None)
+
+
+@contextlib.contextmanager
+def reading(seed: dict = None):
+    """One look at an item reads its task's messages once: {tid: messages} for the block. rulebook.state asked for them three times a
+    look - 1,000 lines each on a long chat, most of what the look cost. `seed`: what the caller holds already (a task's own read)."""
+    if _READ.get() is not None and not seed: yield; return
+    tok = _READ.set({**(_READ.get() or {}), **(seed or {})})
+    try: yield
+    finally: _READ.reset(tok)
+
+
+def _msgs(store, item, target_kind, target_id) -> list:
+    """The item's messages, oldest first: the task's own, else the message's thread - any channel, a chat's as much as a mail's."""
+    if target_kind == 'task':
+        held, tid = _READ.get(), int(target_id)
+        ms = held[tid] if held is not None and tid in held else store.list_messages(tid)
+        if held is not None: held[tid] = ms
+    else:
+        m = store.get_message(int(target_id)) or {}
+        try: ms = store.thread_messages(m['ConversationId'], m.get('Subject'), limit=12) if m.get('ConversationId') else [m]
+        except Exception: ms = [m]
+    return sorted([m for m in ms if m], key=lambda m: str(m.get('SentAt') or m.get('CreatedAt') or ''))
+
+
+def _draft(store, item, target_kind, target_id):
+    """The draft waiting for the owner's yes on this item, or None."""
+    r = store.get_review(int(item['rid'])) if item.get('rid') else None
+    if not r and target_kind == 'task': r = store.pending_review(int(target_id))
+    if not r and target_kind == 'message': r = store._one("SELECT * FROM review WHERE MessageId=? AND Status='pending' ORDER BY ReviewId DESC LIMIT 1", (int(target_id),))
+    return r if r and r.get('Status') in ('pending', 'held') and (r.get('FinalText') or r.get('DraftText')) else None
+
+
+def _unwritten(store, item) -> dict:
+    "The item's review still waiting with no draft on it - {} when it has one, or none waits."
+    r = (store.get_review(int(item['rid'])) if item.get('rid') else None) or (store.pending_review(int(item['tid']), live_only=False) if item.get('tid') else None) or {}
+    return {} if r.get('Status') not in ('pending', 'held') or str(r.get('DraftText') or '').strip() else r
+
+
+def draft_needs(store, item) -> str:
+    """What the reply writer said it NEEDS on the item's pending review, with no draft on it - '' when it drafted, or never said."""
+    return str(_unwritten(store, item).get('DraftNeeds') or '').strip()
+
+
+# A REPLY OWED THAT NOTHING HAS WRITTEN is the task's agent's to write (ingest.reply_to_agent; the owner, 2026-11-10: "no more triage
+# creates draft. agent should be doing it"). Where its agent did not start by itself - the setting, a stranger held - the move is the
+# owner's Send to agent, as it was when the old writer said what it needed
+def reply_unwritten(store, item) -> bool:
+    r = _unwritten(store, item)
+    return r.get('Kind') == 'draft' and not str(r.get('FinalText') or '').strip()
+
+
+
+def is_goal(t) -> bool:
+    from .store import is_goal as g
+    return g(t)
+
+def _checklist(t: dict) -> list:
+    try: return [c for c in json.loads((t or {}).get('Checklist') or '[]') if isinstance(c, dict)]
+    except (TypeError, ValueError): return []
+
+
+
+def failure(store, item: dict) -> dict | None:
+    """What last failed on the item - {what, why, fix, unknown, kind} - or None: a draft whose send failed or never answered, else the
+    newest act on it that ended in an error. The Advisor was never told, so it advised the Send that had just failed (2026-10-18)."""
+    ok = lambda f: f if isinstance(f, dict) and f.get('label') and f.get('href') else None
+    r = (store.get_review(int(item['rid'])) if item.get('rid') else None) or (store.pending_review(int(item['tid'])) if item.get('tid') else None) or {}
+    try: ops = store.operations_for(item.get('tid'), [item['mid']] if item.get('mid') else [])
+    except Exception: ops = []
+    last = ops[-1] if ops else {}
+    try: out = json.loads(last.get('OutcomeJson') or '{}') or {}
+    except (TypeError, ValueError): out = {}
+    out = out if isinstance(out, dict) else {}
+    drafted_wrong = r.get('Status') == 'pending' and r.get('DraftError')
+    # ...WHICHEVER FAILED LAST (the matrix, 2026-10-20): a failure newer than the draft's error is what the screen shows now
+    newer = last.get('Status') in ('error', 'refused') and out.get('source') != 'draft'
+    # A DRAFT THAT COULD NOT BE WRITTEN is what failed (2026-10-19): with no AI to write it, Reply left an empty box and an error, and
+    # the Advisor - never told - read the box with no Send as a chat's draft and said "copy it ... then mark it done" over an email
+    if drafted_wrong and not newer:
+        from .failures import classify
+        c = classify(str(r['DraftError']))
+        return {'what': 'the reply could not be drafted', 'why': c['sentence'], 'fix': ok(c['fix']), 'unknown': False, 'kind': 'draft'}
+    if r.get('DeliveryState') in ('failed', 'unknown'):
+        try: env = json.loads(r.get('Deliver') or '{}') or {}
+        except (TypeError, ValueError): env = {}
+        why = re.sub(r'^Not sent:\s*', '', str(r.get('Reason') or '')).rstrip('.')
+        return {'what': 'the reply was not sent' if r['DeliveryState'] == 'failed' else 'the reply may not have gone',
+                'why': why, 'fix': ok(env.get('fix')) if isinstance(env, dict) else None, 'unknown': r['DeliveryState'] == 'unknown', 'kind': 'send'}
+    # ...and a report's card or a connection's row has no task: its failure lives on the report or the connector (failures.standing)
+    from . import failures
+    if (on := failures.target_of(item)) and (f := failures.standing(store, *on)): return f
+    # ...and AN AGENT'S RUN THAT FAILED (the deep dive, 2026-10-20): it reached the prompt only as "run ended (failed)", so the line said
+    # "it stopped partway - pick it up" and lit Continue into the same unreachable database. An act that failed since outranks it.
+    if last.get('Status') not in ('error', 'refused') and (ran := agent_failed(store, item)): return ran
+    # ...and an act the demo refused (demo.refused): it went nowhere, so the Send just refused is not advised again (2026-10-19)
+    if last.get('Status') not in ('error', 'refused'): return None
+    if out.get('source') == 'draft': return None          # a draft written since cleared it
+    # the record's own words lead (failures.record - the workflow runner's step says which step stopped); else the act, described
+    if out.get('what'): what = str(out['what'])
+    else:
+        try:
+            from . import operations
+            what = f'"{concierge.describe_op(store, operations.get(store, last["OpId"]))[0]}" did not happen'
+        except Exception: what = f'"{last.get("Kind") or "the last action"}" did not happen'
+    from .failures import area_fix
+    return {'what': what, 'why': str(last.get('Error') or ''), 'fix': ok(out.get('fix')) or area_fix(out.get('area')),
+            'unknown': out.get('delivery') == 'unknown', 'kind': last.get('Kind'), 'source': out.get('source') or 'app',
+            'cause': out.get('cause') or 'taskuary'}
+
+
+def agent_failed(store, item: dict) -> dict | None:
+    """The task's agent run, when its last state is failed: {what, why, ...} in failure()'s shape, its why the run's own last words."""
+    if not item.get('tid'): return None
+    from . import workerstate
+    try: st = workerstate.status(store, int(item['tid']))
+    except Exception: return None
+    if st.get('state') != 'failed': return None
+    last = next((e for e in reversed(workerstate.events(store, int(item['tid']), st.get('sid'))) if e['Kind'] == 'failed'), {})
+    # ...in plain words, with the place that fixes it (failures.classify): an agent with no AI to run on is fixed by connecting one -
+    # it lit "New task to fix this" and turned connecting an AI into another task (owner-approved, 2026-10-21)
+    from .failures import classify
+    c = classify(_one(st.get('result') or last.get('Text'), 300) or 'it stopped without saying why', tid=int(item['tid']))
+    return {'what': "the agent's run failed", 'why': c['sentence'], 'fix': c['fix'], 'unknown': False,
+            'kind': 'agent', 'source': 'agent', 'cause': 'taskuary'}
+
+
+def _retryable_agent(store, item: dict) -> bool:
+    """Can the failed run be tried again from its step: a general agent's saved conversation, with nothing live on it."""
+    tid = item.get('tid')
+    if not tid: return False
+    from . import workerstate
+    return workerstate._live(int(tid)) is None and concierge._general(store, item)
+
+
+def fix_task(store, item: dict, f: dict) -> dict:
+    """The task "New task to fix this" makes: what failed, why, and on what - in the owner's words, for an agent or for them."""
+    on = ' '.join(filter(None, (item.get('ref'), item.get('title'))))
+    return {'title': f"Fix: {f['what']}"[:120], 'text': f"{f['what'][:1].upper()}{f['what'][1:]} on {on or 'an item'}. What came back: "
+            f"{f['why'] or 'no reason was given'}. Find why, and fix it so it does not fail again."}
+
+
+def delivery_fix(store, item: dict) -> dict | None:
+    """{label, href} of the place that fixes the item's failed send - the draft's envelope (Deliver.fix, kept across a reload),
+    else the newest act on the item when it failed with one (OutcomeJson.fix). None when nothing failed, or it named no place."""
+    ok = lambda f: f if isinstance(f, dict) and f.get('label') and f.get('href') else None
+    r = (store.get_review(int(item['rid'])) if item.get('rid') else None) or {}
+    try: env = json.loads(r.get('Deliver') or '{}') or {}
+    except (TypeError, ValueError): env = {}
+    if isinstance(env, dict) and (r.get('DeliveryState') or env.get('delivery')) == 'failed' and ok(env.get('fix')): return ok(env['fix'])
+    try: ops = store.operations_for(item.get('tid'), [item['mid']] if item.get('mid') else [])
+    except Exception: ops = []
+    last = ops[-1] if ops else {}
+    try: out = json.loads(last.get('OutcomeJson') or '{}') if last.get('Status') == 'error' else {}
+    except (TypeError, ValueError): out = {}
+    return ok((out or {}).get('fix')) if isinstance(out, dict) else None
+
+
+NOT_MOVES = frozenset({'priority', 'change_kind', 'pick_repo', 'attach', 'close_note', 'next'})
+
+
+def offered(store, item: dict, known: dict = None) -> list:
+    """THE ITEM'S REAL BUTTONS, AND NOTHING IT CANNOT DO: the verbs its row carries minus Next - chips_for, which already drops
+    what this install cannot do (capabilities.py: no Send on a draft whose channel cannot send, no coding agent with no
+    coding tool) - plus the row's own fix when a send failed and named the place that fixes it, under that place's own name.
+    An agent waiting on the owner carries Answer it there (chips_for) - its card once offered only End and Remind me, which the
+    prompt forbids for someone waiting, so the Advisor stood silent (2026-10-17 audit). Not added here: a paused, stalled or
+    stopped agent has nobody listening, and the row knows which is which.
+    THE BUTTONS THE ROW ACTUALLY DRAWS (the design, phase A, 2026-10-23): the verbs came from chips_for while the row drew row_buttons -
+    why Review changes, Chase and Accept could never be lit, and why "Not ours" was picked on a task whose row has no Not ours. Only
+    the row's moves count: its pickers (who does it, priority, assignee, the code's place), Attach and Close with a note set a field or
+    add to a move, and are never the move. Chase joins on a wait with somebody to write to (rulebook.adds); Next is added by the callers."""
+    verbs = [buttons.chip(b['verb']) | {'label': b['label']} for b in concierge.row_buttons(store, item, known) if b['verb'] not in NOT_MOVES]
+    # ...in the item's own order (its vocabulary, chips_for - a draft's Send first), the row's other moves after it
+    first = [c['verb'] for c in concierge.chips_for(store, item)]
+    verbs.sort(key=lambda v: first.index(v['verb']) if v['verb'] in first else len(first))
+    verbs += [buttons.chip(v) for v in adds(store, item) if v not in {x['verb'] for x in verbs}]
+    try: fix = delivery_fix(store, item)
+    except Exception as e:
+        logger.debug(f'rulebook: no fix read for {item.get("key")} - {e}'); fix = None
+    # the fix leads: a send that failed is fixed before it is sent again (ReviewDecision.jsx draws it as '<rid>:fix')
+    lead = [buttons.chip('fix') | {'label': fix['label'], 'href': fix['href']}] if fix else []
+    # A FAILURE NOTHING HERE FIXES (no fix named, not a send that may yet have gone) can still be made somebody's work: New task, in its
+    # "fix" state, carrying what failed (the owner, 2026-10-18: "if it's a more complicated fix, the assistant should create a task")
+    try: f = failure(store, item)
+    except Exception: f = None
+    if not fix and f and f.get('fix'): fix = f['fix']; lead = [buttons.chip('fix') | {'label': fix['label'], 'href': fix['href']}]
+    if fix and f and f.get('cause') != 'step' and f.get('source') != 'workflow': f = None      # a fix is the way on; no task besides it
+    # ...except a workflow run, which already IS a task: a second one to fix it would be the same work twice - it carries Report
+    # this bug instead (agreed with the workflow runner, taskhub-ca, 2026-10-18)
+    # ...and nothing for what the demo refused: no task or bug report makes the demo send
+    if f and f.get('cause') == 'demo': pass
+    elif f and (f.get('cause') == 'step' or f.get('source') == 'workflow'): lead.append(buttons.chip('report_bug'))
+    # ...and A GENERAL AGENT'S RUN THAT FAILED with nothing named to fix is tried again from its saved conversation - the step's own
+    # Continue, said as Try again (owner-approved, 2026-10-21). A coding agent's keeps New task: Continue reopened it into the same
+    # unreachable database (the 2026-10-20 deep dive)
+    # ...when it can start again from here: with no brain to run on, Try again is greyed on the page, and New task stands in for it (the
+    # Advisor audit's judge, 2026-10-26 - a lit Try again nobody could press left nothing lit at all)
+    elif f and f.get('kind') == 'agent' and _retryable_agent(store, item) and not _agent_ready(store, item):
+        lead.append(buttons.chip('continue') | {'label': buttons.label('try_again'), 'hint': buttons.hint('try_again')})
+    elif f and not f.get('unknown'): lead.append(buttons.chip('new_task', 'fix') | {'task': fix_task(store, item, f)})
+    return lead + verbs
+
+
+
+def _at_work(store, target_kind: str, target_id) -> bool:
+    """An agent at work on the task is nothing for the owner to do. Its continue writes no event the revision sees until the
+    prompt lands, so "the agent stopped and is waiting on you" stood over an agent already continued (the owner, 2026-10-13)."""
+    if target_kind != 'task': return False
+    from . import workerstate
+    try: return workerstate.status(store, int(target_id)).get('state') == 'working'
+    except Exception: return False
+
+
+
+def _label(verbs: list, verb: str, item: dict) -> str:
+    if verb == 'next': return buttons.label('next', 'batch') if (item or {}).get('kind') == 'fyis' else buttons.label('next')
+    return next((v['label'] for v in verbs if v['verb'] == verb), None) or buttons.label(verb) or verb
+def decide(store, key: str) -> dict:
+    """The one filled button of the item keyed `key`, in the shape every surface reads: {key, state, verb, label, line, by, revision, ...};
+    `verb` None lights nothing, `line` '' says nothing. {} for a key with nothing to decide on, an idea row among them: nothing lights a
+    button over the owner's own choice there (the owner, 2026-11-15). A task or a message: its own recommended move (recommended, `by`
+    'agent') - plain code off its agent's turn and its facts, no model."""
+    tgt = target_of(store, key)
+    if not tgt or tgt[0] == 'idea': return {}
+    item = _item(store, *tgt, key=key)
+    if not item: return {}
+    verbs = offered(store, item) + [buttons.chip('next')]
+    r = facts(store, item, verbs)
+    v = (recommended(store, item, verbs, r) or {}).get('verb')
+    # ...two facts are said beside it: what failed, and what leaves with a draft beside its Send (the design rev 2: "a line on top") - and A
+    # ROW WITH NOTHING LIT SAYS WHY in its state's one sentence (the owner, 2026-11-10): plain buttons and no word stood over a wait gone late
+    says = bool(r.get('line')) and (not v or r['state'] in FAILED or (r['state'] == 'draft_ready' and v in SENDS))
+    lbl, ev = _label(verbs, v, item) if v else '', list(r.get('evidence') or []) if says else []
+    out = {'key': key, 'state': r['state'], 'verb': v, 'label': lbl, 'line': r['line'] if says else '', 'by': 'agent', 'revision': revision(store, *tgt),
+           'pill': lbl, 'evidence': ev, 'ask': True, 'needs_ai': True, 'kind': 'other'}
+    # a fix is a place, not a proposal: the page opens its href where the row has no '<rid>:fix' of its own to press (a failed act with
+    # no draft on the table) - read live, so a fix already made carries no stale link; and the task "New task to fix this" makes, the same way
+    if v == 'fix':
+        try: fx = delivery_fix(store, item) or (failure(store, item) or {}).get('fix')
+        except Exception: fx = None
+        if fx: out['href'] = fx['href']
+    if v == 'new_task':
+        try: f = failure(store, item)
+        except Exception: f = None
+        if f: out['task'] = fix_task(store, item, f)
+    return out
+
+
+AGENT_VERBS = frozenset({'continue', 'regular_agent', 'run_another', 'strong_again'})
+SENDS = frozenset({'approve', 'send_close'})      # the draft's two sends under it in the chat: Send, and Send and close
+AGENT_CHECK = True       # the suite turns this off (tests/conftest.py): a bare store has no brain, and its agents' buttons are not the subject
+
+
+def _agent_ready(store, item: dict) -> str:
+    """'' when an agent can start on the item from here, else why not - the page's own check (capabilities.cannotStart: an AI, and a brain a
+    general hand-off can choose), so no button is filled that the page greys."""
+    if not AGENT_CHECK: return ''
+    from . import capabilities, general, agents as ha
+    try:
+        if not capabilities.has_ai(store): return 'no AI is connected'
+        brains = dict(ha.connection_brains(store))
+        ok = any(o.get('type') != 'cli' or ha.runs_here(brains.get(o['pick'][4:])) for o in general.provider_options(store))
+        return '' if ok else 'no brain an agent can run on'
+    except Exception as e: logger.debug(f'rulebook: no agent check for {item.get("key")} - {e}'); return ''
+
+
+def pressable(store, item: dict, verb: str, verbs: list) -> str:
+    """'' when the row carries `verb` and it can be pressed now, else why not."""
+    if not verb or verb == 'next': return ''
+    if verb not in {v['verb'] for v in verbs}: return 'not on the row'
+    return _agent_ready(store, item) if verb in AGENT_VERBS else ''
+
+
+def unconnected(store, item: dict) -> bool:
+    "Whether the card waiting on the item says Connect <X> instead of its Send."
+    from . import outbound
+    r = (store.get_review(int(item['rid'])) if item.get('rid') else None) or (store.waiting_on_owner(int(item['tid'])) if item.get('tid') else None)
+    return bool(r) and r.get('Status') == 'pending' and bool(outbound.review_connect(store, r))
+
+
+def status(store, key: str) -> dict:
+    "decide, or {'none': 'nothing'} for a key nothing is decided on (an idea, a meeting row, a connection): the page lights Next, silent."
+    return decide(store, key) or {'none': 'nothing'}
+
+
+def block(store, item: dict, d: dict | None = None) -> str:
+    """The filled button's reason for the chat's system prompt, so 'why?' is answered from it - a lookup, not a think. `d`: the decision
+    already read for the item (the chat's CANVAS reads it once for its lit button and this line)."""
+    if d is None: d = decide(store, (item or {}).get('key') or '') if item else {}
+    if not d.get('verb'): return ''
+    return (f"THE TASK'S RECOMMENDED MOVE (read off its agent's own latest turn and the task's facts - if the owner asks why a button is "
+            f"filled, this is the answer): {d['label']}" + (f" - {d['line']}" if d.get('line') else '') + '.')

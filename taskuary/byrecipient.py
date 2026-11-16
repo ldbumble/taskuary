@@ -76,16 +76,37 @@ def keep_instruction(store, rid: int, said: str):
     note_instruction(store, rid, said)
 
 
+def instructions(store, to: str = None, domain: str = None, since: str = None) -> list:
+    """THE OWNER'S WORDS FOR DRAFTS, kept on each review (review.Instructions): [{rid, tid, mid, to, domain, text, at}], oldest first -
+    to whom the reply was going, so the second time the same is said to the same person can become a style line. Narrow by
+    `to` (an address) or `domain`."""
+    import json
+    from .episodes import personal
+    out = []
+    for r in store._rows("SELECT ReviewId, TaskId, MessageId, Deliver, Instructions FROM review WHERE IFNULL(Instructions,'')<>'' ORDER BY ReviewId"):
+        try: said = json.loads(r['Instructions'] or '[]') or []
+        except ValueError: continue
+        m = store.get_message(int(r['MessageId'])) if r.get('MessageId') else None
+        try: d = json.loads(r.get('Deliver') or '{}') or {}
+        except ValueError: d = {}
+        who = str((m or {}).get('FromEmail') or next(iter(d.get('to') or []), '') or '').lower()
+        if personal(store, None, m): continue
+        dom = who.rsplit('@', 1)[1] if '@' in who else ''
+        if (to and who != to.lower()) or (domain and dom != domain.lower()): continue
+        out += [{'rid': r['ReviewId'], 'tid': r.get('TaskId'), 'mid': r.get('MessageId'), 'to': who, 'domain': dom, 'text': s.get('text') or '',
+                 'at': s.get('at') or ''} for s in said if (s.get('text') or '').strip() and (not since or str(s.get('at') or '') >= since)]
+    return sorted(out, key=lambda x: x['at'])
+
+
 def note_instruction(store, rid: int, instruction: str) -> str:
-    """The owner's words for a draft are kept on its review (presses.instructions, phase B); said INSTR_AT times for one person - on
+    """The owner's words for a draft are kept on its review (instructions, phase B); said INSTR_AT times for one person - on
     their own drafts, any surface - they become that person's STYLE.md line, which every later draft to them reads. Returns the line
     when one was written, else ''. Never raises - the draft itself already happened."""
     try:
-        from . import presses
         said, n = ' '.join(str(instruction or '').split()), _norm(instruction)
-        mine = next((i for i in presses.instructions(store) if i['rid'] == int(rid)), None)
+        mine = next((i for i in instructions(store) if i['rid'] == int(rid)), None)
         if not said or not mine or not mine['to']: return ''
-        k = len({i['rid'] for i in presses.instructions(store, to=mine['to']) if _norm(i['text']) == n})
+        k = len({i['rid'] for i in instructions(store, to=mine['to']) if _norm(i['text']) == n})
         return said if k >= INSTR_AT and add(store, mine['to'], said) else ''
     except Exception as e:
         from loguru import logger

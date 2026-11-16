@@ -1,24 +1,23 @@
-"""WHERE AN ITEM STANDS, AS FACTS - AND THE MODEL'S ONE DECISION (the Advisor design, phase A, 2026-10-23; the owner, 2026-11-02: "never
-ever use hard coded rules, let the ai see everything"). rulebook.facts names each state from facts the app keeps and says its fact; the
-model reads that, every verb the row offers and the owner's record, and decides every light - read the same by every surface: the desk
+"""WHERE AN ITEM STANDS, AS FACTS - AND ITS ONE FILLED BUTTON (the Advisor design, phase A, 2026-10-23; the owner, 2026-11-09 and
+2026-11-15: no model lights a button). rulebook.facts names each state from facts the app keeps and says its fact; rulebook.recommended
+reads the move off it - read the same by every surface: the desk
 canvas (the rail's key), the Tasks tab (task:N), a phone chat (remote_assistant.primary and the card's line). The desk at phone width is the
 page's (website/test/rulebookMatrix.test.mjs). Invented Northwind people only."""
 import json
 from datetime import date, datetime, timedelta
 from unittest import mock
 import pytest
-from taskuary import advisor, assistant, calwrite, concierge, faults, funnel, lanes, remote_assistant, rulebook, terminal, words
+from taskuary import assistant, calwrite, concierge, faults, funnel, lanes, remote_assistant, rulebook, terminal, words
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
-from tests import advisor_cases as C
+from tests import state_world as C
 
 
 @pytest.fixture(autouse=True)
 def _mailbox_connected(monkeypatch):
     """These drafts go by email in a world with no mailbox card: as if one were connected, so the Send is what is judged (a card that says
-    Connect email lights nothing - advisor.unconnected, tests/test_agent_lights.py)."""
-    from taskuary import advisor as _adv
-    monkeypatch.setattr(_adv, 'unconnected', lambda store, item: False)
+    Connect email lights nothing - rulebook.unconnected, tests/test_agent_lights.py)."""
+    monkeypatch.setattr(rulebook, 'unconnected', lambda store, item: False)
 
 ERIN, RAY = ('Erin Blake', 'erin@northwind.example'), ('Ray Colton', 'ray@northwind.example')
 def at(d=0, h=0): return (datetime.now() - timedelta(days=d, hours=h)).strftime('%Y-%m-%d %H:%M:%S')
@@ -31,7 +30,6 @@ def world():
     # carries the world's two meetings ("clear the vendor report" cleared a Vendor review in test_triage_urgent)
     sessions, agenda = dict(terminal.SESSIONS), dict(assistant._AGENDA)
     with mock.patch.object(faults, 'scratch_home', lambda: True): s, by, syn = C.world()
-    s.set_setting('advisor_event_cap', '1000', 'test')          # every case is the model's now: the hour's cap is not the subject
     yield s, by, syn
     for sid in [k for k in terminal.SESSIONS if k not in sessions]: terminal.SESSIONS.pop(sid, None)
     assistant._AGENDA.clear(); assistant._AGENDA.update(agenda); funnel.invalidate()
@@ -39,11 +37,9 @@ def world():
 
 def _decide(s, syn, item, key=None):
     """The decision as every surface reads it: the task's own recommended move (rulebook.recommended) - and no model is built to read it."""
-    orig = advisor._item
-    def no_model(*a, **kw): raise AssertionError('no model reads a task or a message')
-    with mock.patch.object(advisor, '_item', lambda store, tk, ti, key=None: syn.get(key) or (item if key == item.get('key') else orig(store, tk, ti, key))), \
-         mock.patch.object(advisor, 'build_llm', no_model):
-        return advisor.decide(s, key or item['key'])
+    orig = rulebook._item
+    with mock.patch.object(rulebook, '_item', lambda store, tk, ti, key=None: syn.get(key) or (item if key == item.get('key') else orig(store, tk, ti, key))):
+        return rulebook.decide(s, key or item['key'])
 
 
 # (case, the state the facts name, the one move its row fills, whether a line is said beside it). NO MODEL DECIDES ANY OF IT (the owner,
@@ -82,7 +78,7 @@ def test_each_state_is_one_decision_on_every_surface(world, case, state, verb, s
     assert len(d.get('line') or '') <= 64, 'a line is read whole on a phone'
     assert not words.jargon_in(d.get('line') or ''), d['line']
     # ONLY A BUTTON THE ROW DRAWS IS FILLED (offered: row_buttons, plus Chase on a wait)
-    if verb: assert verb in [v['verb'] for v in advisor.offered(s, syn.get(item['key']) or item)]
+    if verb: assert verb in [v['verb'] for v in rulebook.offered(s, syn.get(item['key']) or item)]
     # THE PHONE READS THE SAME DECISION: its lead is that verb wherever its chips carry it
     chips = concierge.chips_for(s, syn.get(item['key']) or item)
     lead = remote_assistant.primary({'chips': chips, 'item': item}, d)
@@ -274,7 +270,7 @@ def test_a_dashboard_is_named_so_and_share_is_on_its_row_for_the_model_to_see(s)
     assert buttons.label('report_off', 'dashboard') == 'Pause this dashboard' and buttons.label('report_off') == 'Pause this report'
     assert 'dashboard' in buttons.hint('report_off', 'dashboard')
     assert 'share_result' not in [b['verb'] for b in concierge.row_buttons(s, {**rep, 'bad': True})], 'a failed run has nothing to share'
-    assert 'share_result' in [v['verb'] for v in advisor.offered(s, dash)], 'the Advisor sees the row has Share'
+    assert 'share_result' in [v['verb'] for v in rulebook.offered(s, dash)], 'the Advisor sees the row has Share'
     assert rulebook.facts(s, dash, _verbs(*have)) == {'state': 'dashboard', 'line': ''}
     assert rulebook.facts(s, rep, _verbs(*have))['state'] == 'report_ok'
     assert 'share_result' not in [c['verb'] for c in concierge.chips_for(s, dash)], "the phone's chips have no Share menu"
@@ -305,7 +301,7 @@ def test_what_leaves_stands_beside_the_drafts_send(s):
     t, m, it = _asked(s, 'Q3 accruals')
     Factory(s).review(t, m, draft='Here are the Q3 accruals.', Deliver=json.dumps({'kind': 'reply', 'to': ['erin@northwind.example'], 'cc': ['dana@vendor.example']}))
     s.reconcile_processing_membership(); s.activate_processing_reads(fixed_now=datetime.now().isoformat(), live_state=[]); funnel.invalidate()
-    d = advisor.decide(s, f'task:{t}')
+    d = rulebook.decide(s, f'task:{t}')
     assert (d['state'], d['verb'], d['line']) == ('draft_ready', 'send_close', 'Goes to dana@vendor.example - new to this thread.'), d
 
 
@@ -334,11 +330,9 @@ def test_a_close_out_or_a_playbook_is_no_held_action(s):
     assert proposals.held_pending(s, t) is None
 
 
-def test_a_held_action_moves_the_revision_and_reaches_the_advisors_prompt(s):
+def test_a_held_action_moves_the_revision(s):
     t = Factory(s).task(title='Ship the ledger fix', kind='code', status='in_progress')
-    before = advisor.revision(s, 'task', t)
+    before = rulebook.revision(s, 'task', t)
     from taskuary import proposals
     proposals.queue(s, t, {'action': 'shell_act', 'sid': 'run1', 'command': 'git push', 'shell': 'Bash', 'what': 'push your commits to the code host'}, 'agent')
-    assert advisor.revision(s, 'task', t) != before
-    p = advisor._prompt(s, advisor.SHOWN, {'key': f'task:{t}', 'kind': 'agent', 'tid': t, 'title': 'Ship the ledger fix'}, _verbs('approve'), 1, 'task', t)
-    assert 'AN ACTION WAITS FOR YOUR YES: push your commits to the code host' in p
+    assert rulebook.revision(s, 'task', t) != before

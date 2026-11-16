@@ -3,9 +3,8 @@ not new buttons but from the list"). A known fix is the row's `fix`; anything el
 move past it; nothing here can fix it - New task, in its "fix" state, makes the task that will."""
 import json, smtplib, unittest
 from unittest import mock
-from taskuary import advisor, buttons, operations, outbound
+from taskuary import buttons, operations, outbound, rulebook
 from taskuary.store import MemoryStore
-from tests.test_advisor import brain_saying
 from tests.test_capabilities import draft
 
 
@@ -35,37 +34,28 @@ class SignInAgainTests(unittest.TestCase):
 
 
 class TheAdvisorIsToldWhatFailedTests(unittest.TestCase):
-    def test_a_failed_send_reaches_the_prompt_with_its_reason(self):
-        s = MemoryStore(); it = failed_send(s)
-        f = advisor.failure(s, it)
-        self.assertEqual((f['what'], f['why'], f['unknown']), ('the reply was not sent', 'graph sendMail failed (401): token expired', False))
-        llm = brain_saying({'verb': None, 'line': '', 'evidence': []})
-        with mock.patch.object(advisor, '_item', return_value=it):
-            advisor.judge(s, advisor.SHOWN, 'task', it['tid'], advisor.revision(s, 'task', it['tid']), 2, llm, key=it['key'])
-        self.assertIn('WHAT FAILED: the reply was not sent - graph sendMail failed (401)', llm.calls[0][1])
-        self.assertIn('Never advise the act that failed again', llm.calls[0][0])
 
     def test_a_send_nobody_knows_went_is_said_so_and_never_made_a_task(self):
         s = MemoryStore(); it = failed_send(s, why='the provider did not answer', state='unknown')
-        self.assertTrue(advisor.failure(s, it)['unknown'])
-        self.assertNotIn('new_task', [v['verb'] for v in advisor.offered(s, it)])
+        self.assertTrue(rulebook.failure(s, it)['unknown'])
+        self.assertNotIn('new_task', [v['verb'] for v in rulebook.offered(s, it)])
 
     def test_a_failure_moves_the_revision_so_an_old_send_line_is_judged_again(self):
         s = MemoryStore(); it = draft(s, 'email')
-        before = advisor.revision(s, 'task', it['tid'])
+        before = rulebook.revision(s, 'task', it['tid'])
         failed_act(s, it)
-        self.assertNotEqual(advisor.revision(s, 'task', it['tid']), before)
+        self.assertNotEqual(rulebook.revision(s, 'task', it['tid']), before)
 
     def test_nothing_failed_is_no_failure(self):
         s = MemoryStore(); it = draft(s, 'email')
-        self.assertIsNone(advisor.failure(s, it))
-        self.assertNotIn('new_task', [v['verb'] for v in advisor.offered(s, it)])
+        self.assertIsNone(rulebook.failure(s, it))
+        self.assertNotIn('new_task', [v['verb'] for v in rulebook.offered(s, it)])
 
 
 class MakeATaskToFixThisTests(unittest.TestCase):
     def test_a_failure_with_no_fix_offers_the_list_s_own_button_in_its_fix_state(self):
         s = MemoryStore(); it = draft(s, 'email'); failed_act(s, it)
-        nt = next(v for v in advisor.offered(s, it) if v['verb'] == 'new_task')
+        nt = next(v for v in rulebook.offered(s, it) if v['verb'] == 'new_task')
         self.assertEqual(nt['label'], buttons.label('new_task', 'fix'))
         self.assertIn(nt['label'], buttons.labels(), 'a state of a listed button - never a new word')
         self.assertIn('the repository could not be reached', nt['task']['text'])
@@ -73,7 +63,7 @@ class MakeATaskToFixThisTests(unittest.TestCase):
 
     def test_a_failure_with_a_fix_offers_the_fix_not_a_task(self):
         s = MemoryStore(); it = failed_send(s, fix={'label': 'Sign in again', 'href': outbound.MAIL[1]})
-        verbs = [v['verb'] for v in advisor.offered(s, it)]
+        verbs = [v['verb'] for v in rulebook.offered(s, it)]
         self.assertEqual(verbs[0], 'fix'); self.assertNotIn('new_task', verbs)
 
     def test_the_task_it_makes_runs_on_the_tool_the_assistant_uses(self):
@@ -138,9 +128,9 @@ class OneFailureShapeTests(unittest.TestCase):
         s = MemoryStore(); it = draft(s, 'email')
         failures.record(s, task_id=it['tid'], kind='report.run', error=RuntimeError('the site changed its layout'),
                         what='the Monday invoices workflow stopped at step 3', source='workflow', step=3)
-        f = advisor.failure(s, it)
+        f = rulebook.failure(s, it)
         self.assertEqual((f['what'], f['why'], f['source']), ('the Monday invoices workflow stopped at step 3', 'the site changed its layout', 'workflow'))
-        verbs = [v['verb'] for v in advisor.offered(s, it)]
+        verbs = [v['verb'] for v in rulebook.offered(s, it)]
         self.assertIn('report_bug', verbs); self.assertNotIn('new_task', verbs)       # a workflow run already IS a task
 
     def test_a_confirmed_act_that_throws_keeps_the_shape(self):
@@ -216,7 +206,7 @@ class CauseAndAreaTests(unittest.TestCase):
         s = MemoryStore(); it = draft(s, 'email')
         failures.record(s, task_id=it['tid'], kind='report.run', error='the export page changed', what='step 2 stopped', cause='step',
                         fix={'label': 'Open the run', 'href': f"#task={it['tid']}"})
-        verbs = [v['verb'] for v in advisor.offered(s, it)]
+        verbs = [v['verb'] for v in rulebook.offered(s, it)]
         self.assertEqual(verbs[:2], ['fix', 'report_bug']); self.assertNotIn('new_task', verbs)
 
     def test_an_app_failure_in_a_known_area_opens_that_place(self):
@@ -224,7 +214,7 @@ class CauseAndAreaTests(unittest.TestCase):
         s = MemoryStore(); it = draft(s, 'email')
         failures.record(s, task_id=it['tid'], kind='report.run', error='the connection refused the request', what='the run stopped',
                         area={'area': 'connection', 'name': 'Payworth'})
-        self.assertEqual(advisor.offered(s, it)[0]['href'], words.href('connections'))
+        self.assertEqual(rulebook.offered(s, it)[0]['href'], words.href('connections'))
         self.assertEqual(json.loads(s.operations_for(it['tid'])[-1]['OutcomeJson'])['cause'], 'taskuary')
 
 
@@ -248,9 +238,9 @@ class AReportOrConnectionFailureHasAHomeTests(unittest.TestCase):
         s.add_report_run(sid, {'at': '2026-10-18 06:00:00', 'title': 'Payworth AR', 'failed': True, 'error': 'graph (401): token expired'})
         failures.record_on(s, 'source', sid, kind='report.run', error='graph (401): token expired', what='Payworth AR did not run', name='Payworth AR')
         it = {'key': 'report:7', 'kind': 'report', 'lane': 'broken', 'title': 'Payworth AR', 'source_id': sid, 'mid': 7, 'bad': True}
-        f = advisor.failure(s, it)
+        f = rulebook.failure(s, it)
         self.assertEqual((f['what'], f['fix']['label']), ('Payworth AR did not run', 'Sign in again'))
-        self.assertEqual(advisor.offered(s, it)[0]['label'], 'Sign in again')
+        self.assertEqual(rulebook.offered(s, it)[0]['label'], 'Sign in again')
         self.assertIn('WHAT FAILED: Payworth AR did not run', concierge.facts(s, it))
         self.assertEqual(next(r for r in appfacts.reports(s) if r['source_id'] == sid)['fix'], 'Sign in again')
         s.add_report_run(sid, {'at': '2099-01-01 06:00:00', 'title': 'Payworth AR', 'failed': False, 'summary': 'ok'})
@@ -271,6 +261,6 @@ class AReportOrConnectionFailureHasAHomeTests(unittest.TestCase):
         cid = s.save_connector({'Type': 'github', 'Name': 'Northwind GitHub', 'Active': 1, 'ConfigJson': '{}'}, 't')
         s.touch_connector(cid, 'unreachable'); failures.record_on(s, 'connector', cid, kind='connection.test', error='unreachable',
                                                                   what='Northwind GitHub failed its test', name='Northwind GitHub')
-        self.assertEqual(advisor.failure(s, {'key': f'conn:{cid}', 'kind': 'connection'})['fix']['href'], words.href('connections'))
+        self.assertEqual(rulebook.failure(s, {'key': f'conn:{cid}', 'kind': 'connection'})['fix']['href'], words.href('connections'))
         s.touch_connector(cid)
         self.assertIsNone(failures.standing(s, 'connector', cid))

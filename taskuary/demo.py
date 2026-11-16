@@ -79,7 +79,6 @@ ALLOWED_WRITES = (
     r'^/api/board/notes',                              # the wall
     r'^/api/(hub|handbook)',                           # durable Hub posts and compatibility route
     r'^/api/settings$',                                # display preferences
-    r'^/api/advice/press$',                            # what was lit and what was pressed: a row in the demo's own database
     r'^/api/dashboards/tile$',                         # a sentence turned into a tile: nothing saved, only Taskuary's own tables read
     # the checklist's "leave me alone", and the scripted walk - a tour of the app that touches
     # nothing real, which is what a visitor is here for. Its writes are two settings in the demo's
@@ -174,9 +173,9 @@ def refuse_op(op) -> str:
     return OFF
 
 
-# A REFUSAL IS AN ACT ON THE ITEM (2026-10-19): the demo said "nothing is sent" and left no trace, so the Advisor's revision never moved
-# and its line kept advising the Send just refused, Send lit. It is left as that act's own row - Status 'refused', the sentence its
-# Error - which advisor.revision covers and advisor.failure says to the model; nothing here can make it go, so it carries no fix.
+# A REFUSAL IS AN ACT ON THE ITEM (2026-10-19): the demo said "nothing is sent" and left no trace, so the item's revision never moved
+# and the Send just refused stayed lit. It is left as that act's own row - Status 'refused', the sentence its Error - which
+# rulebook.revision covers and rulebook.failure reads; nothing here can make it go, so it carries no fix.
 _ACTS = ((r'^/api/reviews?/(\d+)/(?:send|decide)$', 'review', 'review.approve', 'the reply was not sent'),
          (r'^/api/messages/(\d+)/send$', 'message', 'review.approve', 'the reply was not sent'),
          (r'^/api/tasks/(\d+)/clarify$', 'task', 'task.clarify', 'the question was not sent'),
@@ -269,130 +268,6 @@ def _list_line(store) -> str:
     return f"{_n(yours, 'thing is', 'things are')} on you - they lead your rail, under {funnel.SECTION_WORDS['task'].upper()}."
 
 
-# THE ADVISOR, SCRIPTED (B17, 2026-10-17): its prompt says JSON, so it got triage's {"intent": "fyi"} and dropped every answer as
-# "nothing to say" - the demo, where newcomers first meet it, never showed a suggestion. It names the first offered verb that
-# someone waiting makes right, with a plain line - and like the real one says nothing on a newsletter: "Make a task" over an
-# fyi is the wrong suggestion that is worse than none.
-# NOTHING HERE READS WHAT A MESSAGE OR A DRAFT MEANS (the owner, 2026-10-28: never decide what words mean with a word list). What an item
-# itself calls for - a draft promising a file nothing attaches, an issue an agent can take, an address that bounced - is its verdict
-# STORED with the fixture (VERDICTS, beside the world below); the rest is the item's state, read off the labelled lines advisor._prompt writes.
-VERBS_OFFERED, THE_ITEM, WHAT_FAILED = 'VERBS OFFERED', 'THE ITEM', 'WHAT FAILED'
-# EACH LINE IS A FACT, NEVER THE BUTTON EXPLAINED (the owner, 2026-10-23: "buttons do the talking"; at most 60 characters) - and where the
-# script's verb is the rule's own, the strip says the rule's fact and drops this one (advisor.decide)
-ADVICE = {'approve': '',
-          'reply': 'Someone is waiting on an answer from you.', 'continue': 'The agent stopped partway.'}
-# ...and like the real one it reads what was already done: a reply that went, with nothing written since, is closed, not answered
-# again - the scripted "Someone is waiting on an answer" stood over a close-out reading Sent (2026-10-19)
-SENT = {'close': 'Your reply went; nothing has come back since.',
-        'defer': 'Your reply went; nothing has come back since.'}
-
-# ...and like the real one, WHEN SOMETHING FAILED (a WHAT FAILED line) it offers the way past it and never the act that just failed: after
-# a refused send the scripted line still said "read it, then send it" over "Not sent", with Send lit (2026-10-19). The fix the failure
-# names leads, then the draft written again, then a task to fix it.
-# ...each line naming WHAT failed: "That did not go through" stood over a card whose error had gone, saying nothing of which act it meant
-# (the advisor matrix, 2026-10-19)
-FAILED = {'fix': '{what}: {why}.', 'redraft': '{what}: {why}.', 'new_task': '{what}: {why}.', 'report_bug': 'That step stopped: {why}.',
-          'close': '{what}: {why}.'}
-# ...a send nobody can confirm is checked first, never sent again blind
-CHECK = {'approve': 'Nobody can say whether it went.', **FAILED}
-# ...and what the demo itself refused goes nowhere here, whatever is pressed: "redraft it" would loop the visitor through a canned brain
-# that writes no drafts - the item is closed or put off instead
-REFUSED = {'close': 'This is the demo - nothing goes out from it.',
-           'defer': 'This is the demo - nothing goes out from it.'}
-# ...and A DRAFT ITS CHANNEL ANSWERS WHERE IT CAME FROM (a chat: no Send offered) is copied there and closed - with no line the strip
-# said "nothing needs a move" over a question nobody had answered (2026-10-19). Read off the item's channel, never the verbs alone: an
-# email whose draft could not be written offers no Send either, and was told to copy it (the advisor matrix, 2026-10-19)
-COPIED = {'close': 'It cannot be sent from here - copy it to the chat.'}
-
-# ...and like the real one it reads what is over: an agent whose run finished, a task with every todo ticked, is closed once nobody
-# waits on a reply (the advisor matrix, 2026-10-19: both stood under "No suggestion")
-DONE = {'approve': ADVICE['approve'], 'reply': ADVICE['reply'], 'close': 'The work on it is done.'}
-
-# ...and like the real one (advisor.SYSTEM's rules, the deep dive 2026-10-20): an agent's failed run is made a task, never continued
-# blind; someone quiet past their day is chased.
-# ...a general agent's run is tried again (advisor.offered's Try again - it is offered no New task); a coding agent's is made a task
-AGENT_RAN = {'fix': "{what}: {why}.", 'new_task': "{what}: {why}.", 'continue': "{what}: {why}."}
-CHASED = {'chase': 'They are quiet past their day.'}
-IDEA = {'mine': '', 'defer': ''}
-# ...and like the real one it reads THE STATE line (advisor.state_line - every state is the model's since 2026-11-02, so the demo's script
-# answers for all of them): where nothing needs reading, the state's plain move, its fact said beside it. A script is the demo's stand-in for
-# a model, so this table is ITS reading, never the app's - [] lights nothing
-PLAY = {'working': ['next'], 'report_ok': ['next'], 'dashboard': ['next'], 'fyi_batch': ['next'], 'meeting': ['next'], 'invite_no_cal': ['next'],
-        'goal': ['next'], 'fyi': ['next'], 'own': ['next'], 'connection': ['test_connection'], 'unsorted': ['retriage'],
-        'invite_free': ['accept_invite'], 'invite_clash': ['propose_time'], 'unpushed': ['review_changes'], 'fyi_danger': ['not_ours'],
-        'action_held': ['approve'], 'needs_agent': ['continue', 'regular_agent'], 'unsendable': ['copy', 'close'], 'duplicate': ['split', 'remove'],
-        'watch_quiet': ['chase', 'let_go'], 'stopped_done': ['close'], 'done_list': ['close'], 'watch_handled': ['close'],
-        'agent_asking': [], 'waiting': [], 'stopped': [], 'closed': []}
-LATE = ('waiting_late', 'waiting_overdue', 'waiting_late_usual', 'goal_late', 'watch_quiet')
-_STATE = re.compile(r"^THE STATE \([^)]*\): (\w+) - .*?(?:; the fact: (.*))?$", re.M)
-DEMO_SAYS = 'This is the demo - '                     # every refusal sentence above starts so (SENDS, STARTS, OFF, REFUSALS)
-
-
-def _field(text: str, label: str) -> str:
-    """One labelled line of a prompt (advisor._prompt's `LABEL: value`), by its label."""
-    return next((l[len(label) + 2:] for l in text.splitlines() if l.startswith(label + ': ')), '')
-
-def _offered(verbs: str) -> dict:
-    """VERBS OFFERED as {verb: label}: advisor._prompt joins them as `verb (Label), verb (Label)`."""
-    return dict(p.removesuffix(')').split(' (', 1) for p in verbs.split('), ') if ' (' in p)
-
-def _on_it(text: str) -> str:
-    """The ref of a possible duplicate an agent is already on (advisor's own `- TQ-n ... - an agent is on it` row), else ''."""
-    if 'POSSIBLE DUPLICATES' not in text: return ''
-    rows = text.split('POSSIBLE DUPLICATES', 1)[1].split('\n\n', 1)[0].splitlines()[1:]
-    return next((l.split()[1] for l in rows if l.startswith('- TQ-') and l.endswith('an agent is on it')), '')
-
-
-def _advice(text: str) -> str:
-    from . import buttons
-    offered = _offered(_field(text, VERBS_OFFERED))
-    failed = _field(text, WHAT_FAILED)
-    try: item = json.loads(_field(text, THE_ITEM) or '{}') or {}
-    except ValueError: item = {}
-    chat = str(item.get('channel') or 'email').lower() != 'email'
-    what = failed.split(' - ')[0].strip() or 'That did not go through'
-    why = failed.split(' - ', 1)[1].rstrip('.') if ' - ' in failed else 'no reason was given'
-    say = lambda said, verb: said[verb].format(label=offered[verb], what=what[:1].upper() + what[1:], why=why) if verb else ''
-    # the fixture's own verdict, at the state it was written for: a failure's (on='failed') only over a failure, the rest only without one
-    v = VERDICTS.get(str(item.get('title') or ''))
-    stored = {k: v['line'] for k in v['verbs']} if v and bool(failed) == (v.get('on') == 'failed') else None
-    st = _STATE.search(text)
-    state, fact = (st.group(1), (st.group(2) or '').strip()) if st else ('', '')
-    said = (None if DEMO_SAYS in failed
-            else AGENT_RAN if failed.startswith("the agent's run failed")
-            else stored if stored
-            else None if failed
-            else CHASED if 'chase' in offered and state in LATE
-            else IDEA if 'THE IDEA' in text
-            else None)
-    if said is None and not failed and state in PLAY:
-        verb = next((v for v in PLAY[state] if v in offered), None)
-        return json.dumps({'verb': verb, 'line': fact if verb else '', 'evidence': []})
-    if said:
-        verb = next((v for v in said if v in offered), None)
-        return json.dumps({'verb': verb, 'line': say(said, verb), 'evidence': []})
-    said = (REFUSED if DEMO_SAYS in failed
-            else CHECK if 'nobody knows whether it went' in failed else FAILED if failed
-            else SENT if 'A REPLY WAS ALREADY SENT' in text and 'NOTHING HAS COME IN SINCE IT WENT' in text
-            else COPIED if chat and 'redraft' in offered and 'approve' not in offered
-            else DONE if "THE AGENT'S RUN ENDED (finished)" in text or 'EVERY TODO ON THE TASK IS TICKED' in text else ADVICE)
-    # Send is offered as Check delivery only on a send nobody can confirm: the scripted line never says "check" over a plain Send
-    # ...and Redraft only gets past a failed REPLY: after Send to agent failed on a chat with a draft, the line said "redraft it, then send
-    # it again" over an agent that had not started (the advisor matrix, 2026-10-19)
-    redo = not failed or failed.startswith('the reply')
-    fits = lambda v: v in offered and (redo or v != 'redraft') and (said is not CHECK or v != 'approve' or offered[v] == buttons.label('approve', 'check'))
-    verb = next((v for v in said if fits(v)), None)
-    # ...and where THE STATE handed it a fact (an age past the owner's usual), that is its line, as the real one is told to say it
-    line = fact if fact and verb and said is ADVICE else say(said, verb)
-    # ...and like the real one it reads the tasks that may already cover the ask: an agent already on one is said, never a second answer blind
-    # ...and the button agrees with the line (advisor.SYSTEM): never Reply over "it may already be covered" - Remind me, to look again once
-    # that agent is done, else nothing (the UI audit's C2, 2026-10-21)
-    if verb == 'reply' and (dup := _on_it(text)):
-        verb = 'defer' if 'defer' in offered else None
-        line = f'{dup} may already cover this - an agent is on it.' if verb else ''
-    return json.dumps({'verb': verb, 'line': line, 'evidence': []})
-
-
 # THE DEMO CHAT ANSWERS ITS OWN SUGGESTIONS, AND ONLY THOSE (the owner, 2026-10-28: never decide what typed words mean with a word
 # list). A script cannot read what a visitor types, and the keyword router that pretended to (a ref, a name, "remind me", "chase") misread
 # as often as it read. So the chat is driven by what the demo SHOWS: the item's own buttons, and these suggestions - each a chip that
@@ -453,6 +328,11 @@ def _answer(asked: str, store) -> str:
     return said
 
 
+def _field(text: str, label: str) -> str:
+    "One labelled line of a prompt (`LABEL: value`), by its label."
+    return next((l[len(label) + 2:] for l in text.splitlines() if l.startswith(label + ': ')), '')
+
+
 # A DRAFT IS A REPLY, never the assistant's chat line (2026-10-19 UI walk): the responder's prompt was answered from CANNED, and TQ-0001's
 # draft read "I looked at your list. 25 things are on it...". A thread the world wrote a draft for gets it; any other gets a holding line
 def _draft(user: str) -> str:
@@ -470,7 +350,6 @@ def brain(seed: int = 0, store=None):
     pick = random.Random(seed)
     def llm(system, user, max_tokens=None, images=None, **kw):
         text = str(user or '')
-        if _field(text, VERBS_OFFERED): return _advice(text)
         if str(system or '').startswith(TILE_SAYS): return _tile(text)
         if str(system or '').startswith('You ARE '): return _draft(text)       # responder.SYSTEM: the owner's own reply
         # ...a report asked for (issue.draft): the tool's own words say where its button is - the canned lines are about the list
@@ -628,22 +507,6 @@ DRAFTS = {
     'did the overnight import finish? the dashboard still says yesterday':
         'It finished at 04:10 - the dashboard catches up on its 7:00 refresh.',
     'Invoice 88213 - past due': "Thanks Tom - it is approved and goes out in Friday's payment run.",
-}
-
-# THE ADVISOR'S VERDICT, WRITTEN WITH THE ITEM it is about (the owner, 2026-10-28): the scripted Advisor (_advice) never reads a draft or a
-# mail for what it means - what an item calls for is part of the world, like its sender and its draft. Keyed by the item's title as the
-# rail shows it; `verbs` in order of preference (the first one offered lights), `on: 'failed'` for a verdict on a failure the item carries.
-PROMISED = 'The draft promises what nothing here shows.'
-VERDICTS = {
-    # the draft says the payment run and the pack go out, and nothing on the item shows either: written again, never sent
-    'Invoice 88213 - past due': {'verbs': ('redraft', 'reply'), 'line': PROMISED},
-    'Can you resend the Q3 numbers?': {'verbs': ('redraft', 'reply'), 'line': PROMISED},
-    # an issue with a traceback in it: work an agent can take
-    'northwind/importers#214 - census sync fails when a site has no manager': {'verbs': ('regular_agent',), 'line': 'An issue with a traceback in it.'},
-    # the advisor matrix's world (faults.world): a reply the mail server bounced for its address - fixed at the address, never redrafted
-    'Lease renewal for the Elm Street office': {'verbs': ('fix', 'new_task'), 'line': 'The address was refused: {why}.', 'on': 'failed'},
-    # the tour (TOUR, below): nobody wrote it, so nobody waits on a reply - the scripted "Someone is waiting on an answer" lit Reply over it
-    'Start here - what Taskuary can do': {'verbs': ('next',), 'line': 'A tour of the demo - nobody is waiting on it.'},
 }
 
 # EACH AGENT ITS OWN WORK (B23, 2026-10-17): every agent task replayed the month-end transcript, so the census issue's

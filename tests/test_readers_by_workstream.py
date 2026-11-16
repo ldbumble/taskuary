@@ -3,7 +3,7 @@ JOB.md, so a second workstream's section never reached it; an agent read every h
 agents read the item's own section whole, the others left out, and triage and the memory's reflection read every section first, cut.
 Invented people only (CLAUDE.md)."""
 import pytest
-from taskuary import advisor, brief, triage, workstreams as W
+from taskuary import brief, triage, workstreams as W
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -24,16 +24,6 @@ def s():
 def _task(s, who):
     f = Factory(s); t = f.task(title='Export greyed'); f.message(task_id=t, channel='email', from_email=who); return t
 
-
-def test_the_advisor_reads_the_items_own_section_whole_and_not_the_other_hats(s):
-    t = _task(s, OMAR)
-    line = advisor.owner_line(s, ('task', t))
-    assert "This item is under Ledger app" in line and 'fixed in code, never answered by mail' in line
-    assert 'budget asks are answered the same day' not in line
-    assert "the owner's workstreams: Northwind finance systems, Ledger app" in line
-    # ...and an item under no workstream reads the opening, as before
-    plain = advisor.owner_line(s, ('task', _task(s, 'stranger@nowhere.example')))
-    assert 'JOB.md (its opening)' in plain and 'This item is under' not in plain
 
 
 def test_an_agent_reads_its_tasks_section_and_not_the_others(s):

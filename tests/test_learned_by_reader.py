@@ -7,7 +7,8 @@ takes the ones that help it (learned_cut.READS): triage what you care about, the
 work and your promises, the agents the people on their own task, what you care about and your promises, the Assistant all of it.
 Each within its budget, every read with a receipt, and hand edits stick."""
 import pytest
-from taskuary import advisor, assistantblocks, byrecipient, context, ingest, learn, learned_cut, learnedgraph, learnedlines, since
+from tests import memory_cases as MC
+from taskuary import assistantblocks, byrecipient, context, ingest, learn, learned_cut, learnedgraph, learnedlines, since
 from taskuary.store import MemoryStore
 
 CARE_LINE = '- Vendor statements from vendor.example are fyi, never a task. [s:5 | ev: mem1, mem2, mem3 | seen: 2026-10-20 | k: vendor statements]'
@@ -184,8 +185,6 @@ def test_the_drafter_reads_the_people_lines_about_whoever_it_writes_to():
 
 def test_each_reader_reads_the_sections_of_the_matrix():
     s = full()
-    adv = advisor._learned(s)
-    assert all(x in adv for x in ('Erin Blake', 'Vendor statements', 'Vendor renewals', 'headcount sheet every Monday')) and 'Newsletter' not in adv
     told, _ = assistantblocks._learned(s, {})
     assert all(x in told for x in ('Erin Blake', 'Vendor statements', 'Vendor renewals', 'every Monday', 'Newsletter'))
 
@@ -447,3 +446,18 @@ def test_a_word_and_its_plural_are_one_word_to_the_ranking_and_a_rare_shared_wor
     near = learned_cut.nearness(ls, about)
     assert near[1] > near[0] > near[2] == 0, 'payroll is in one line, Payworth in two: the rarer word is the nearer line'
     assert learned_cut.cut(ls, 40, about)[0] == ['- Payroll is checked on Fridays']
+
+
+_RAY = '- Ray Colton (ray@northwind.example) runs payroll for you; you hand payroll asks to him [s:5 | ev: out12, out13 | seen: 2026-10-19 | k: ray payroll]'
+_GAIL_PROMISE = '- You told Gail Moreno (gail@northwind.example) the headcount sheet reaches her every Monday [s:4 | ev: out60, out71 | seen: 2026-10-18 | k: gail monday sheet]'
+
+
+def test_people_lines_rank_by_who_is_on_the_item_then_its_subject():
+    ls = [(_RAY, 'ray payroll'), (MC.ERIN_LINE, 'erin blake manager answer'), (_GAIL_PROMISE, 'gail monday sheet')]
+    one = max(len(learned_cut.said(r)) for r, _ in ls) + 1
+    # every colleague shares the domain: by domain alone, the document's first line won the budget
+    assert learned_cut.cut(ls, one, {'domain': 'northwind.example'})[0] == [_RAY]
+    assert learned_cut.cut(ls, one, {'domain': 'northwind.example', 'people': ['gail@northwind.example']})[0] == [_GAIL_PROMISE]
+    assert learned_cut.cut(ls, one, {'domain': 'northwind.example', 'people': ['erin blake']})[0] == [MC.ERIN_LINE]
+    assert learned_cut.cut(ls, one, {'topic': 'Weekly headcount sheet for Monday'})[0] == [_GAIL_PROMISE]
+    assert learned_cut.cut(ls, one, {'sender_name': 'erin blake', 'people': ['gail@northwind.example']})[0] == [MC.ERIN_LINE], 'the sender first'

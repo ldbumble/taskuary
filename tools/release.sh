@@ -70,16 +70,6 @@ PY
     git push -q origin HEAD:master && break; git fetch -q origin && git rebase -q origin/master || { git rebase --abort; break; }; done \
     || say "pill push failed - bump asof= by hand"
 
-  # THE NUMBER THAT MATTERS (the owner, 2026-10-28: measure the agreement rate after each release): how often the lit button was the
-  # one pressed, over the release this one replaces and the last week - read-only on the owner's home, never fatal
-  local OH="${OWNER_HOME:-$HOME/.taskuary}" PREV
-  if [ -f "$OH/taskuary.db" ]; then
-    say "Advisor agreement ($OH, read-only)"
-    PREV=$(git tag --sort=-creatordate | grep -v "^v$V$" | head -1 || true)
-    [ -n "$PREV" ] && python tools/advisor_agreement.py --home "$OH" --line --since "$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M:%S' "$PREV")" || true
-    python tools/advisor_agreement.py --home "$OH" --line --days 7 || true
-  fi
-
   # THE RELEASE IS OUT; MASTER MUST STILL END GREEN (the owner, 2026-11-10: "i want it released fully as long as tests pass and you just
   # rerun the failure one. But then after release rerun ci since it's fixed and get it green.. don't hold up releases but make sure it's
   # green. 2 things.."). A release tagged on the targeted road never waited for the full suite - so the full ci.yml on master's head is

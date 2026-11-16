@@ -23,8 +23,6 @@ class TheStages(unittest.TestCase):
         for k, p in stages.STAGE.items():
             self.assertIn(p['main'], ('task', 'work'), k)
             self.assertTrue(p['shows'] and p['drawer'] and p['word'], k)
-            self.assertIn(p['advisor'], (None, 'main', 'drawer'), k)
-            if p['advisor']: self.assertEqual(p['advisor'], 'main' if p['main'] == 'work' else 'drawer', k)
             if p['lit']: self.assertEqual(p['main'], 'task', f'{k}: only the right drawer is lit')
             self.assertTrue(p['verbs'] and all(v in buttons.VERBS for v in p['verbs']), k)
         self.assertEqual(set(stages.KEYS), {'to_start', 'to_reply', 'todo', 'agent_working', 'agent_result', 'to_send', 'waiting', 'closed_by_agent', 'done'})

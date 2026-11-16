@@ -1,8 +1,8 @@
-// The pure piece of the Advisor's line (website/src/advice.js): which live event is about the item on the table.
+// The pure piece of the filled button (website/src/advice.js): what the strip lights for the item on the table.
 // A real function under test, not a source regex.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { adviceKeyFor, nothingToAdd, stripWord } from "../src/advice.js";
+import { stripWord } from "../src/advice.js";
 
 // C2 (the UI audit, 2026-10-21): the strip's word and the lit button are one decision (advice.stripWord)
 test("a working agent lights Next and says nothing, even with no AI connected", () => {
@@ -19,20 +19,6 @@ test("a working agent lights Next and says nothing, even with no AI connected", 
   const s = { verb: "reply", line: "x" };
   assert.equal(stripWord({ speaks: true, shown: s, key: "k", lane: "asked" }).pick, s, "a decision lights its verb");
   assert.deepEqual(stripWord({ speaks: true, advice: { none: "off", for: "k" }, key: "k", lane: "asked" }).pick, { verb: "next", line: "", for: "k" }, "any other none: Next, silent");
-});
-
-test("an advice event is about the item on the table when it names its key or one of its aliases", () => {
-  const cur = { key: "processing:pi_1", aliases: ["msg:3", "agent:1", "task:1"] };
-  assert.equal(adviceKeyFor({ key: "task:1" }, cur), "processing:pi_1");          // the event carries the legacy key, the table the rail's
-  assert.equal(adviceKeyFor({ key: "processing:pi_1" }, cur), "processing:pi_1");
-  assert.equal(adviceKeyFor({ key: "task:2" }, cur), null);
-  assert.equal(adviceKeyFor({ key: "task:1" }, "task:1"), "task:1");               // a bare key still works
-  assert.equal(adviceKeyFor({ key: "task:1" }, null), null);
-  assert.equal(adviceKeyFor({}, cur), null);
-  // ...and one event for several reads in one window (live._merged `items`) is about each - the last key alone lost the table's own read
-  const ev = { key: "processing:pi_9", items: [{ key: "processing:pi_1", target_kind: "task", target_id: 1 }, { key: "processing:pi_9" }] };
-  assert.equal(adviceKeyFor(ev, cur), "processing:pi_1");
-  assert.equal(adviceKeyFor({ ...ev, items: [{ key: "processing:pi_9" }] }, cur), null);
 });
 
 // WHEN THE STRIP SPEAKS (the owner, 2026-10-13: "not while waiting or walking through things"): only the decision read for the
@@ -54,7 +40,7 @@ test("the strip speaks only for the item on the table, at rest, and an agent at 
 test("the page draws the gated line, starts each item with none, and drops a read the table outran", async () => {
   const fs = await import("node:fs"), path = await import("node:path");
   const src = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
-  assert.match(src, /<AdvisorNext advice=\{shownAdvice\} onPropose=\{pressAdvice\} onErr=\{setErr\} \/>/);
+  assert.doesNotMatch(src, /<AdvisorNext/, "nothing joins the row for an Advisor (the owner, 2026-11-15)");
   // ...and a move the server runs at once (Not ours) runs at once from the Advisor's copy too - never a proposal card with Cancel
   // ...and every press runs where it is proposed (the 2026-10-25 sweep): proposeDirect runs it, so no caller runs it a second time
   assert.match(src, /try \{ return await proposeDirect\(a\.verb, key, true, a\.revision\); \}/);
@@ -67,9 +53,7 @@ test("the page draws the gated line, starts each item with none, and drops a rea
   const refusedPress = eval(src.match(/const refusedPress = ([^\n]+);\n/)[1]);
   assert.equal(refusedPress("Nothing to send yet.").response.data.detail, "Nothing to send yet.", "the row's line (errText, failOf) reads the server's reason");
   assert.match(src, /advised=\{stripPick \|\| setupLit\}/);
-  assert.doesNotMatch(src, /<AdvisorNext advice=\{advice\}/);
   assert.match(src, /if \(!keep\) setAdvice\(null\)/);
-  assert.match(src, /if \(n !== adviceAsk\.current\) return;[\s\S]{0,400}?setAdvice\(got\);/);
   // the read is for the key ON THE TABLE - the walk's item or a task opened by name - and shown only for it
   assert.match(src, /useEffect\(\(\) => \{ readAdvice\(onTable\); setChanged\(null\); \}, \[onTable, readAdvice\]\);/);
   assert.match(src, /table\.speaks && !litNow \? adviceShown\(advice, \{ key: table\.key, lane: currentItem\?\.lane \}, busy\) : null/);
@@ -78,10 +62,3 @@ test("the page draws the gated line, starts each item with none, and drops a rea
   assert.doesNotMatch(src, /picks up where it left off, and comes back here/, "the continue receipt is gone");
 });
 
-// the menu's Advisor notes with nothing to add (the overnight walk, 2026-10-26): "Copy is the lit button." - never the app's word "lit"
-test("nothing to add names the button in plain words", () => {
-  assert.equal(nothingToAdd({ label: "Copy", verb: "copy" }), "Nothing to add - Copy is the next move.");
-  assert.equal(nothingToAdd({ label: "Next", verb: "next" }), "Nothing to add on this one.");
-  assert.equal(nothingToAdd({}), "Nothing to add on this one.");
-  assert.doesNotMatch(nothingToAdd({ label: "Send", verb: "approve" }), /\blit\b/i);
-});

@@ -44,7 +44,7 @@ class EndingTheRunTests(unittest.TestCase):
         # ...as the reply owed, the agent's to write: no words on it, the same shape as one owed at arrival, so its agent's start is lit
         self.assertEqual((rv.get('Kind'), rv.get('DraftText') or ''), ('draft', ''))
         self.assertIn("Dana is owed - it is the agent's to write", rv.get('Reason'))
-        from taskuary import advisor; self.assertTrue(advisor.reply_unwritten(self.s, {'tid': tid}))
+        from taskuary import rulebook; self.assertTrue(rulebook.reply_unwritten(self.s, {'tid': tid}))
         told.assert_not_called()                    # ...and the owner's Stop is not undone: the agent they ended is not reopened for it
 
     def test_ending_it_WITH_the_task_still_closes_it(self):

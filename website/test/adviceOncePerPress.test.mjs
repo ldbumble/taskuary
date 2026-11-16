@@ -21,5 +21,5 @@ test("...nor on a narrow window, whose row is handed the page's own read and ask
 });
 
 test("a revision or lane move re-reads only the SAME item - a new key is read by the table's own effect", () => {
-  assert.match(src, /const k = currentItem\?\.key \|\| null, was = revFor\.current; revFor\.current = k;\n\s+const sent = adviceSent\.current;\n\s+if \(onTable && k && k === was && !\(sent\.key === onTable && sent\.at > itemAt\.current\)\) readAdvice\(onTable, true\);\n\s+\}, \[currentItem\?\.key, currentItem\?\.view_revision, currentItem\?\.lane\]\);/);
+  assert.match(src, /const k = currentItem\?\.key \|\| null, was = revFor\.current; revFor\.current = k;\n\s+if \(onTable && k && k === was\) readAdvice\(onTable, true\);\n\s+\}, \[currentItem\?\.key, currentItem\?\.view_revision, currentItem\?\.lane\]\);/);
 });

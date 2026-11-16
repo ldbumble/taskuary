@@ -8,18 +8,16 @@ from datetime import datetime, timedelta
 from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
-from taskuary import advisor, concierge, funnel, general, rulebook, server, terminal
+from taskuary import concierge, funnel, general, rulebook, server, terminal
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
 
-def no_model(*a, **kw): raise AssertionError('no model reads a task')
 
 
 @pytest.fixture
 def s(monkeypatch):
     monkeypatch.setattr(terminal, 'live_sessions', lambda tail=0: []); monkeypatch.setattr(funnel, '_agenda', lambda _s, **kw: [])
-    monkeypatch.setattr(advisor, 'build_llm', no_model)
     st = MemoryStore(); st.set_setting('calendar_enabled', '0', 'test'); funnel.invalidate()
     yield st
     funnel.invalidate()
@@ -54,9 +52,9 @@ def test_a_draft_that_waits_fills_its_send_whoever_wrote_it(s):
     f = Factory(s)
     plain = f.task(title='Q3 accruals', kind='reply'); f.review(plain, f.message(plain), draft='Here are the Q3 accruals.')
     agent = agent_task(s, summary={'about': 'Gail asked', 'did': 'Drafted the answer', 'nothing_left': True}); f.review(agent, f.message(agent), draft='Friday.')
-    with mock.patch.object(advisor, 'unconnected', return_value=False), mock.patch.object(advisor, 'pressable', return_value=''):
+    with mock.patch.object(rulebook, 'unconnected', return_value=False), mock.patch.object(rulebook, 'pressable', return_value=''):
         assert rec(s, plain) == rec(s, agent) == 'send_close'
-    with mock.patch.object(advisor, 'unconnected', return_value=True), mock.patch.object(advisor, 'pressable', return_value=''):
+    with mock.patch.object(rulebook, 'unconnected', return_value=True), mock.patch.object(rulebook, 'pressable', return_value=''):
         assert rec(s, plain) is None and rec(s, agent) is None, 'its card says Connect: no Send is filled'
 
 
@@ -162,8 +160,8 @@ def test_a_row_with_nothing_lit_says_why_in_its_states_one_sentence(s):
     (the owner, 2026-11-10): the line was dropped unless something failed or a draft was ready. Wherever nothing is lit it is said now."""
     tid, it = late_wait(s)
     s.audit('task', tid, 'check_back', 'late', 'agent', {'state': 'waiting_late'})
-    with mock.patch.object(advisor, '_item', lambda *a, **k: it):
-        d = advisor.decide(s, f'task:{tid}')
+    with mock.patch.object(rulebook, '_item', lambda *a, **k: it):
+        d = rulebook.decide(s, f'task:{tid}')
     assert d['verb'] is None and d['state'] == 'waiting_late' and d['line'].startswith('Ray Colton: ') and d['line'].endswith('no answer.')
     assert not hasattr(rulebook, 'UNTOUCHED_DAYS') and 'untouched' not in rulebook.RULES, 'a state with no line, no move and no wake is gone'
 
@@ -171,7 +169,7 @@ def test_a_row_with_nothing_lit_says_why_in_its_states_one_sentence(s):
 def test_a_failed_run_fills_its_own_way_past_it_and_never_the_send_that_failed(s):
     tid = agent_task(s, kind='coding')
     failed = {'state': 'failed_cause', 'line': 'Failed: the test database was not reachable'}
-    with mock.patch.object(rulebook, 'facts', return_value=failed), mock.patch.object(advisor, 'pressable', return_value=''):
+    with mock.patch.object(rulebook, 'facts', return_value=failed), mock.patch.object(rulebook, 'pressable', return_value=''):
         assert rulebook.recommended(s, item(tid), verbs('continue', 'close'))['verb'] == 'continue', 'Try again leads its row'
         assert rulebook.recommended(s, item(tid), verbs('fix', 'send_close', 'close'))['verb'] == 'fix', 'the place that fixes it'
         assert rulebook.recommended(s, item(tid), verbs('new_task', 'send_close', 'close')) is None, 'what failed is not sent again as it stood'
@@ -180,31 +178,22 @@ def test_a_failed_run_fills_its_own_way_past_it_and_never_the_send_that_failed(s
 
 def test_a_held_action_fills_its_approve(s):
     tid = agent_task(s, kind='coding')
-    with mock.patch.object(rulebook, 'facts', return_value={'state': 'action_held', 'line': ''}), mock.patch.object(advisor, 'pressable', return_value=''):
+    with mock.patch.object(rulebook, 'facts', return_value={'state': 'action_held', 'line': ''}), mock.patch.object(rulebook, 'pressable', return_value=''):
         assert rulebook.recommended(s, item(tid), verbs('approve', 'stop_agent'))['verb'] == 'approve'
 
 
 def test_only_a_button_the_owner_can_press_is_filled_and_an_unreadable_row_fills_nothing(s):
     tid = agent_task(s, summary={'about': 'x', 'did': 'y', 'nothing_left': True})
-    with mock.patch.object(advisor, 'pressable', return_value='greyed'): assert rec(s, tid) is None
+    with mock.patch.object(rulebook, 'pressable', return_value='greyed'): assert rec(s, tid) is None
     assert rulebook.recommended(s, None) is None and rulebook.recommended(None, {'key': 'task:9', 'tid': 9}) is None, 'never raises'
     assert rulebook.recommended(s, {'key': 'idea:1', 'kind': 'idea'}) is None, "an idea is the Advisor's own row"
 
 
 # ── nothing of the Advisor's reads a task ───────────────────────────────────────────────────────────────────────────────────────────
-def test_no_event_on_a_task_or_a_message_reaches_the_advisors_model(s):
-    tid = agent_task(s, summary={'about': 'x', 'did': 'y', 'nothing_left': True})
-    for ev, kind in (('agent.stopped', 'task'), ('reply.arrived', 'task'), ('task.closed', 'task'), (advisor.SHOWN, 'message')):
-        assert advisor.notice(s, ev, kind, tid, tier=2, wait=True, llm=no_model) is None
-    assert not s._one('SELECT 1 x FROM advice'), 'nothing was judged, and nothing written'
-    d = advisor.decide(s, f'task:{tid}')
-    assert (d['verb'], d['label'], d['by'], d['line']) == ('close', 'Mark done', 'agent', ''), 'the old shape, for the surfaces that still ask here'
-    assert not hasattr(advisor, 'finish_check') and not hasattr(advisor, 'fix_of') and not hasattr(advisor, 'CHECK_SYSTEM')
-
 
 def test_the_assistants_turn_reads_the_tasks_own_move_not_an_advisors_pick(s):
     tid = agent_task(s, summary={'about': 'x', 'did': 'y', 'nothing_left': True})
-    block = advisor.block(s, {'key': f'task:{tid}', 'tid': tid})
+    block = rulebook.block(s, {'key': f'task:{tid}', 'tid': tid})
     assert "THE TASK'S RECOMMENDED MOVE" in block and 'Mark done' in block and 'ADVISOR' not in block.upper().replace("THE TASK'S", '')
 
 
@@ -217,7 +206,7 @@ def test_the_task_page_and_the_rails_item_on_the_table_carry_the_same_field(s, m
     c = TestClient(server.app)
     assert c.get(f'/api/tasks/{tid}').json()['recommended']['verb'] == 'close'
     assert c.get(f'/api/tasks/{quiet}').json()['recommended'] is None, 'present and empty: the page fills nothing and asks nobody'
-    key = advisor._item(s, 'task', tid)['key']
+    key = rulebook._item(s, 'task', tid)['key']
     cur = c.get('/api/funnel/pile', params={'current': key}).json()['current']
     assert cur['key'] == key and cur['recommended']['verb'] == 'close'
     assert all('recommended' not in i for i in funnel.pile(s)['items']), 'a copy carries it - never the cached card'
@@ -226,7 +215,7 @@ def test_the_task_page_and_the_rails_item_on_the_table_carry_the_same_field(s, m
 # ── the walk onto a row whose task has an agent ──────────────────────────────────────────────────────────────────────────────────────
 def test_the_walk_asks_the_assistant_for_no_line_about_a_task_with_an_agent(s):
     tid = agent_task(s, summary={'about': 'x', 'did': 'y', 'nothing_left': True})
-    it = advisor._item(s, 'task', tid)
+    it = rulebook._item(s, 'task', tid)
     assert concierge.agent_row(s, it), 'an agent took a turn on it'
     asked = []
     out = concierge.present_turn(s, it, llm=lambda *a, **k: asked.append(a) or 'The agent finished the post.', record=True)
@@ -239,7 +228,7 @@ def test_the_walk_asks_the_assistant_for_no_line_about_a_task_with_an_agent(s):
 
 def test_a_row_with_no_agent_is_walked_as_before(s):
     f = Factory(s); tid = f.task(title='Badge access for the new AP clerk', kind='reply'); f.message(tid)
-    it = advisor._item(s, 'task', tid)
+    it = rulebook._item(s, 'task', tid)
     assert not concierge.agent_row(s, it)
     asked = []
     concierge.present_turn(s, it, llm=lambda *a, **k: asked.append(a) or 'Erin wants badge access.', record=True)
@@ -248,12 +237,12 @@ def test_a_row_with_no_agent_is_walked_as_before(s):
 
 def test_a_row_with_nothing_lit_carries_the_line_the_phone_says(s):
     """A row with nothing lit says why on the desk too (the owner, 2026-11-10: "if it's consistent do it"): what the desk's row reads
-    (the task's own read, the rail's item on the table) carries the very sentence advisor.decide gives the phone, with no verb."""
+    (the task's own read, the rail's item on the table) carries the very sentence rulebook.decide gives the phone, with no verb."""
     tid = agent_task(s, kind='coding')
     line = 'Stopped mid-work: the test database was not reachable.'
     with mock.patch.object(rulebook, 'facts', return_value={'state': 'stopped', 'line': line}), \
-         mock.patch.object(advisor, 'offered', return_value=verbs('close', 'reply')):
-        phone = advisor.decide(s, f'task:{tid}', off=False)
+         mock.patch.object(rulebook, 'offered', return_value=verbs('close', 'reply')):
+        phone = rulebook.decide(s, f'task:{tid}')
         assert (phone['verb'], phone['line']) == (None, line)
         assert rulebook.recommended(s, item(tid)) is None, 'the plain read still fills nothing'
         desk = rulebook.recommended(s, item(tid), unlit=True)
@@ -273,5 +262,5 @@ def test_review_changes_stays_on_the_row_after_the_session_is_gone(s):
             (tid, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
     assert rulebook.changes_waiting(s, tid) and not s.resumable_session(tid)
     assert concierge._shows(s, it, 'review_changes'), 'offered with no session open'
-    assert 'review_changes' in [v['verb'] for v in advisor.offered(s, it)]
+    assert 'review_changes' in [v['verb'] for v in rulebook.offered(s, it)]
     assert (rulebook.recommended(s, it) or {}).get('verb') == 'review_changes', 'and lit'

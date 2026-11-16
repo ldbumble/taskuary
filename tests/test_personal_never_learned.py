@@ -3,7 +3,7 @@ An ask in it is an FYI, never a task; nothing in it teaches a memory line, an ep
 no idea about it. Invented people only (CLAUDE.md)."""
 import json
 import pytest
-from taskuary import episodes, ingest, memorylines, presses, workstreams as W
+from taskuary import episodes, ingest, memorylines, workstreams as W
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -29,7 +29,7 @@ def test_what_is_personal_is_read_from_the_item_its_message_and_any_evidence_id(
     assert not W.is_personal(s, tid=work) and not W.is_personal(s, src=f'msg{wmid}') and not W.is_personal(s, src='mem3')
     i = s.upsert_idea({'key': 'idea:car', 'kind': 'idea', 'text': 'x', 'action': {'tid': t}}, '2026-11-01 09:00:00')
     assert W.is_personal(s, src=f"idea{i['IdeaId']}")
-    assert presses.personal(s, {'tid': t}, s.get_message(mid)) and not presses.personal(s, {'tid': work}, s.get_message(wmid))
+    assert episodes.personal(s, {'tid': t}, s.get_message(mid)) and not episodes.personal(s, {'tid': work}, s.get_message(wmid))
 
 
 def test_a_personal_ask_is_an_fyi_whatever_triage_said(s):

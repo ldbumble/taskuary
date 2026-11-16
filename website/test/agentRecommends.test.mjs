@@ -40,23 +40,22 @@ test("every read of a task keeps its recommended move, and the view on the table
   assert.equal(recRead(7), null);
 });
 
-test("a task's row asks the Advisor nothing: the page reads the field, and only an idea row reads /api/advice", () => {
+test("no row asks the Advisor anything: the page reads the field, and an idea row fills nothing (the owner, 2026-11-15)", () => {
   const view = src("AssistantView.jsx");
-  assert.equal((view.match(/api\.get\("\/api\/advice"/g) || []).length, 2, "the idea row's read and its notes in the past-chats menu");
-  const at = view.indexOf("if (!ideaOn(key)) {"), end = view.indexOf('adviceSent.current = { key, at: ++readClock.current };', at);
+  assert.equal((view.match(/api\.get\("\/api\/advice"/g) || []).length, 0, "nothing reads /api/advice");
+  assert.match(view, /setAdvice\(adviceRead\(\{ none: "nothing" \}, key\)\.advice\); setReadFor\(\{ key, round: r \}\);/, "an idea's row: nothing lit, nothing asked");
+  const at = view.indexOf("if (!ideaOn(key)) {"), end = view.indexOf("// AN ADVISOR IDEA'S ROW FILLS NO BUTTON", at);
   assert.ok(at > 0 && end > at);
   const own = view.slice(at, end);
   assert.doesNotMatch(own, /api\/advice/);
   assert.match(own, /if \(it && "recommended" in it\) noteOwn\(key, it\.recommended, seenAt\(it\)\);/, "the rail's item on the table carries it");
   assert.match(own, /const h = tid && heldTask\(tid\) \? recRead\(tid\) : null;\s+if \(h\) noteOwn\(key, h\.rec, h\.at\);/, "and a read of its task");
-  assert.match(own, /return;\s+\}\s+let got = null;\s*$/, "nothing below is reached");
+  assert.match(own, /return;\s+\}\s*$/, "nothing below is reached");
   assert.match(view, /useEffect\(\(\) => watchRecs\(\(tid, r\) => \{/, "the task view's own read is the newest word");
-  // ...nothing of the Advisor's is mounted over a task's row - only the mark of what is filled; its own row keeps AdvisorNext and its notes
+  // ...nothing of the Advisor's is mounted over any row - only the mark of what is filled
   assert.match(view, /&& <div hidden data-tq-recommended=\{shownAdvice\?\.verb \|\| ""\} \/>\}/);
   assert.match(view, /const ideaOn = \(key\) => isIdea\(currentRef\.current\?\.key === key \? currentRef\.current : key\);/, "the item on the table says its kind");
-  assert.match(view, /const ideaRow = isIdea\(currentItem\?\.key === table\.key \? currentItem : table\.key\);/);
-  assert.match(view, /ideaRow && <>\s*<AdvisorNext advice=\{shownAdvice\} onPropose=\{pressAdvice\} onErr=\{setErr\} \/>/);
-  assert.match(view, /\{current && ideaRow && <AdvisorNotes keyOnTable=\{current\} \/>\}/);
+  assert.doesNotMatch(view, /AdvisorNext|AdvisorNotes|data-tq-advice/);
   // ...and neither task view reads it for itself
   for (const f of ["TaskPage.jsx", "CanvasItem.jsx"]) assert.doesNotMatch(src(f), /api\.get\("\/api\/advice"|useItemAdvice|readTaskAdvice/, f);
 });

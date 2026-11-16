@@ -10,7 +10,7 @@ Now the ended run's open question is a fact every reader takes: wrapup.unanswere
 what an ended run left asking, the Advisor's state is the agent asking (no finish check over it, and on a coding agent nothing lit but its
 answer), and the task's detail carries the question for the page. Invented Northwind data only (CLAUDE.md)."""
 import pytest
-from taskuary import advisor, funnel, rulebook, terminal, workerstate as ws, wrapup
+from taskuary import funnel, rulebook, terminal, workerstate as ws, wrapup
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -68,23 +68,6 @@ def test_a_cut_off_run_reads_as_the_agent_asking_and_its_row_fills_nothing(s):
         assert st == 'agent_asking', item
         assert st in rulebook.QUIET, 'nothing is filled over an agent that waits on the owner: its own pane is the way on'
 
-
-@pytest.mark.parametrize('verb', ['continue', 'reply', 'next', 'close'])
-def test_on_a_coding_agent_left_asking_nothing_may_light(s, verb):
-    t = cut_off_asking(s)
-    it = {'key': f'task:{t}', 'kind': 'task', 'lane': 'stopped', 'tid': t}
-    vs = [{'verb': v, 'label': v} for v in ('continue', 'reply', 'close', 'answer_agent')]
-    d = advisor.checked(s, it, vs, {'key': it['key'], 'state': 'agent_asking', 'verb': verb, 'line': 'Reply to Gail about the download', 'evidence': []})
-    assert d['verb'] is None and d['line'] == '', d
-    # ...not even its "Answer it", a button no more (the owner, 2026-11-10: "the agent itself asks that question. Never need that button")
-    assert advisor.checked(s, it, vs, {'key': it['key'], 'state': 'agent_asking', 'verb': 'answer_agent', 'line': ''})['verb'] is None
-
-
-def test_a_general_agent_left_asking_is_still_the_models_call(s):
-    t = cut_off_asking(s, kind='general')
-    it = {'key': f'task:{t}', 'kind': 'task', 'lane': 'stopped', 'tid': t}
-    vs = [{'verb': 'close', 'label': 'Mark done'}]
-    assert advisor.checked(s, it, vs, {'key': it['key'], 'state': 'agent_asking', 'verb': 'close', 'line': ''})['verb'] == 'close'
 
 
 def test_the_tasks_detail_carries_the_question_for_the_page(s, monkeypatch):

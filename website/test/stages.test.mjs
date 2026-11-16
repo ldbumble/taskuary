@@ -11,9 +11,6 @@ test("every stage names its parts, and every move is a button by its one name", 
     assert.ok(["task", "work"].includes(s.main), `${k}: main`);
     assert.ok(s.shows && s.drawer && s.word, `${k}: shows, drawer, word`);
     assert.equal(typeof s.lit, "boolean", `${k}: lit`);
-    assert.ok([null, "main", "drawer"].includes(s.advisor), `${k}: advisor`);
-    // the Advisor stands over the work where the work is the page, in the right drawer where the task is
-    if (s.advisor) assert.equal(s.advisor, s.main === "work" ? "main" : "drawer", k);
     assert.ok(s.verbs.length && s.verbs.every((v) => v in VERBS), `${k}: verbs`);
     // ...and the section of the two it opens on - Came from or the chat (2026-11-06: no Close out), where its first move is
     assert.ok(SECTION_KEYS.includes(s.section), `${k}: section`);
@@ -60,7 +57,6 @@ test("a closed task is done, opens on how it closed, and has no Advisor section"
     assert.equal(stage, "done");
     assert.equal(mainView({ stage }), "work");
   }
-  assert.equal(STAGE.done.advisor, null);
   assert.equal(stageOf({ focus: null, closed: true }), "agent_working", "a session continued on it");
 });
 
@@ -69,7 +65,6 @@ test("a task its agent closed opens on the Agent section", () => {
   const stage = stageOf({ focus: "reply", closed: true, agentClosed: true });
   assert.equal(stage, "closed_by_agent");
   assert.equal(sectionOf(stage), "agent");
-  assert.equal(STAGE[stage].advisor, null);
   assert.equal(stageOf({ focus: "reply", closed: true }), "done", "closed by the owner: the chat, how it closed");
   assert.equal(stageOf({ focus: "reply", agentClosed: true }), "to_reply", "an open task is never closed by its agent");
 });

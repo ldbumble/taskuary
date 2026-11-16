@@ -259,50 +259,15 @@ def run_priority(llm_for=ideal) -> list:
     return out
 
 
-# ── the same domain, different context ─────────────────────────────────────────────────────────────────────────────────────────────
-SAME_DOMAIN = [('Statement for October', 'Statement attached for your records.', ('Vendor Desk', 'desk@vendor.example')),
-               ('Card declined - payroll run blocked', 'Your card on file was declined, so the payroll run is on hold until it is updated today.',
-                ('Accounts Payable', 'ap@vendor.example'))]
-
-
-def same_domain() -> dict:
-    """{'moved': bool, 'by': [...], 'verbs': [...]} - after three Mark done presses on vendor.example asks from two people, whether the press
-    history moved the lit button on two new asks from that domain that differ in everything but the domain. The press count says
-    "On asks from vendor.example, presses Mark done" and lights Mark done on both; context, not a domain, should decide."""
-    from taskuary import advisor, funnel, terminal
-    from taskuary.store import MemoryStore
-    from taskuary.testing import Factory
-    def ask(s, title, body, who):
-        f = Factory(s); t = f.task(title=title, kind='task')
-        f.message(task_id=t, subject=title, body=body, from_name=who[0], from_email=who[1], conversation_id=f'email:{title}')
-        return f'task:{t}'
-    def verbs(presses: bool):
-        s = MemoryStore(); s.set_setting('calendar_enabled', '0', 'test'); funnel.invalidate()
-        if presses:
-            for i, who in enumerate((('Vendor Desk', 'desk@vendor.example'), ('Accounts Payable', 'ap@vendor.example'), ('Vendor Desk', 'desk@vendor.example'))):
-                k = ask(s, f'Remittance {i}', 'Remittance advice attached.', who)
-                it = advisor._item(s, *advisor.target_of(s, k), key=k)
-                advisor.press(s, k, None, 'done', surface='desk', lit='', live=[v['verb'] for v in advisor.offered(s, it)] + ['next'])
-        ds = [advisor.decide(s, ask(s, *c)) for c in SAME_DOMAIN]
-        funnel.invalidate()
-        return [d.get('verb') for d in ds], [d.get('by') for d in ds]
-    with mock.patch.object(terminal, 'live_sessions', lambda tail=0: []), mock.patch.object(funnel, '_agenda', lambda _s, **kw: []), \
-         mock.patch.object(advisor, 'notice', lambda *a, **k: None):
-        bare, _ = verbs(False)
-        got, by = verbs(True)
-    return {'moved': got != bare, 'by': by, 'verbs': got, 'bare': bare}
-
-
 def advisors() -> dict:
-    """The Advisor evals' grades as they stand (tests/advisor_cases.py, tests/rail_advisor_cases.py) - each held whole by its own test;
-    recorded here so the baseline says what the memory redesign started from."""
+    """The rail Advisor eval's grades as they stand (tests/rail_advisor_cases.py) - held whole by its own test; recorded here so the
+    baseline says what the memory redesign started from."""
     from collections import Counter
-    from taskuary import advisor, faults
-    from tests import advisor_cases, rail_advisor_cases
-    advisor.BACKGROUND = False
+    from taskuary import faults
+    from tests import rail_advisor_cases
     with mock.patch.object(faults, 'scratch_home', lambda: True):
-        a, r = Counter(x['grade'] for x in advisor_cases.run()), Counter(x['out'] for x in rail_advisor_cases.run_all())
-    return {'advisor_cases': dict(a), 'rail_advisor_cases': dict(r)}
+        r = Counter(x['out'] for x in rail_advisor_cases.run_all())
+    return {'rail_advisor_cases': dict(r)}
 
 
 # ── E1: does a reflection over the world recover what was planted? ──────────────────────────────────────────────────────────────
@@ -335,12 +300,10 @@ def e1(llm, judge=None) -> dict:
 def yardstick(full: bool = False) -> dict:
     """The numbers later slices are held to; `full` adds the Advisor evals' grades (a minute of scripted runs)."""
     pr = run_priority()
-    sd = same_domain()
     s, facts = world()
     return {'priority': {'n': len(pr), 'right': sum(r['got'] == r['want'] for r in pr),
                          'needs_met': sum(not r['needs_missing'] for r in pr),
                          'intent_right': sum(r['intent_got'] == r['intent'] for r in pr), 'rows': pr},
-            'same_domain': {'press_history_moves_the_button': sd['moved'], 'by': sd['by']},
             'world': {'traits': len(TRAITS), 'planted': {k: len(v) for k, v in facts.items()},
                       'messages': s._one('SELECT COUNT(*) n FROM message')['n']}, **(advisors() if full else {})}
 
@@ -351,8 +314,8 @@ if __name__ == '__main__':
     y = yardstick(full='--baseline' in sys.argv)
     for r in y['priority']['rows']:
         print(f"{'ok  ' if r['got'] == r['want'] else 'MISS'} {r['id']:28} want {r['want']:9} got {r['got']:9}" + (f"  prompt lacks {r['needs_missing']}" if r['needs_missing'] else ''))
-    print('priority', {k: v for k, v in y['priority'].items() if k != 'rows'}, '| same domain', y['same_domain'], '| world', y['world'],
-          *([y['advisor_cases'], y['rail_advisor_cases']] if 'advisor_cases' in y else []))
+    print('priority', {k: v for k, v in y['priority'].items() if k != 'rows'}, '| world', y['world'],
+          *([y['rail_advisor_cases']] if 'rail_advisor_cases' in y else []))
     if '--baseline' in sys.argv:
         BASELINE.parent.mkdir(parents=True, exist_ok=True)
         BASELINE.write_text(json.dumps({'written': datetime.now().strftime('%Y-%m-%d'), **y}, indent=1) + '\n', encoding='utf-8')

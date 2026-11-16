@@ -395,7 +395,7 @@ POWERS = [
     Q('help', 'what changed in the last update', None, [c('docs.search', query='what changed'), 'The help pages ship with the app now.'], 'read:docs.search', freq=3),
     Q('help', 'how does Watch it work?', None, [c('docs.search', query='watch it'), 'The task stays open under Watching, still walked, until the thread moves.'],
       'read:docs.search', freq=2),
-    Q('help', 'what is the Advisor?', None, [c('docs.search', query='advisor'), 'It lights the button it thinks you will press.'], 'read:docs.search', freq=2),
+    Q('help', 'what is the Advisor?', None, [c('docs.search', query='advisor'), 'It raises ideas on its own rows under Advisor - it lights no button.'], 'read:docs.search', freq=2),
     # ── work that is an agent's, never done in the chat (the owner, 2026-11-01: "probably should have put agent on it") ──
     Q('agentwork', 'make me an image of the AP ageing as a bar chart', None,
       c('task.create_from_text', kind='general', text='a bar chart image of the AP ageing report', title='AP ageing chart'), 'did:task.create_from_text', freq=3),

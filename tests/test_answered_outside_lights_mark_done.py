@@ -6,7 +6,7 @@ more - every task is Came from and its one chat, and the chat holds Mark done (t
 import re
 from datetime import datetime, timedelta
 from unittest import mock
-from taskuary import advisor, rulebook
+from taskuary import rulebook
 from taskuary.channels import ingest_own_message
 from taskuary.store import MemoryStore
 
@@ -32,7 +32,7 @@ def teams_task(s, answered=True, again=False):
 
 def read(s, tid):
     def no_model(*a, **kw): raise AssertionError('no model reads a task')
-    with mock.patch.object(advisor, 'build_llm', no_model): return advisor.decide(s, f'task:{tid}')
+    return rulebook.decide(s, f'task:{tid}')
 
 
 def test_mark_done_is_lit_where_the_owner_answered_in_teams():
@@ -55,8 +55,8 @@ def test_nothing_answered_or_asked_again_is_not_over_and_names_no_section():
 def test_the_facts_say_the_answer_and_name_no_section():
     """The answered state's facts are its line alone - no page section rides with them, lit move or not."""
     s = MemoryStore(); tid = teams_task(s)
-    item = advisor._item(s, 'task', tid, key=f'task:{tid}')
-    r = rulebook.facts(s, item, advisor.offered(s, item))
+    item = rulebook._item(s, 'task', tid, key=f'task:{tid}')
+    r = rulebook.facts(s, item, rulebook.offered(s, item))
     assert r['state'] in ('answered', 'agent_done') and 'section' not in r and '{' not in r['line'] and 'verb' not in r
     assert not hasattr(rulebook, 'SEC')
     assert read(s, tid).get('section') is None

@@ -1,7 +1,7 @@
 """ONE FAILURE SHAPE (general fix 1, 2026-10-18). A send, a confirmed act, an agent start and a workflow step each failed their own
 way - a raw "[Errno 2] ... 'claude'" on one card, a Connect a mailbox on another, nothing on a third - so every surface read its own
 story. Every failure is now said one way: `classify` turns any exception into {sentence, fix, retry, unknown}, and `record` leaves it
-on the task as the agreed op row (shared with the workflow runner, taskhub-ca), which advisor.failure, concierge.recover and the
+on the task as the agreed op row (shared with the workflow runner, taskhub-ca), which rulebook.failure, concierge.recover and the
 cards all read. A fix is a place from words.json under the button `fix` - never a new button, never "go to X" text."""
 import json, re, smtplib, uuid
 from . import outbound, redact, words
@@ -130,7 +130,7 @@ def record_on(store, target_kind: str, target_id, *, kind: str, error, what: str
 
 def _stamp(s) -> str: return str(s or '').replace('T', ' ')[:19]
 def standing(store, target_kind: str, target_id) -> dict | None:
-    """The newest run or test failure on a report or connector that nothing since has cleared, in advisor.failure's shape."""
+    """The newest run or test failure on a report or connector that nothing since has cleared, in rulebook.failure's shape."""
     if target_kind not in ON or not target_id: return None
     kinds = ON[target_kind][1]
     r = store._one(f"SELECT * FROM operation WHERE TargetKind=? AND TargetId=? AND Kind IN ({','.join('?' * len(kinds))}) "

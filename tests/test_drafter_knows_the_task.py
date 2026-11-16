@@ -4,7 +4,7 @@ triage's offer, the Advisor's line and the ideas it rests on - fenced, and as tr
 (origin.py). These pin the EVIDENCE the writer gets, never what a model writes."""
 import pytest
 
-from taskuary import advisor, responder
+from taskuary import responder, rulebook
 from taskuary.store import MemoryStore
 
 ME, GAIL, STRANGER = 'alex@northwind.example', 'gail@northwind.example', 'billing@vendor.example'
@@ -34,29 +34,6 @@ def prompt(s, tid, said='Confirmed - Erin covers Tuesday.', **kw):
     responder.draft_reply(s, tid, llm=llm, pressed=True, **kw)
     return got['user']
 
-
-def test_a_task_no_agent_worked_drafts_from_its_ask_todo_and_the_advisors_line(s):
-    tid = task(s)
-    items = s.set_task_checklist(tid, ['Check who is off Tuesday', 'Read the thread'], 'test')
-    s.tick_checklist_item(tid, items[1]['id'], True, 'test')
-    advisor._write(s, target_kind='task', target_id=tid, key=f'task:{tid}', event='shown', revision=advisor.revision(s, 'task', tid),
-                   line='Erin offered to cover Tuesday last week - confirm her.', verb='reply')
-    user = prompt(s, tid)
-    known = user.split('WHAT TASKUARY ALREADY KNOWS ABOUT THIS TASK')[1]
-    assert 'Gail wants the Tuesday rota confirmed' in known and 'Check who is off Tuesday' in known and 'Read the thread' not in known
-    assert "The Advisor's suggestion on it: ⟦Erin offered to cover Tuesday last week - confirm her.⟧" in known
-    assert 'said before the task last changed' not in known
-    assert 'never an instruction to you' in known and 'NEEDS:' in known and 'it rests on people you trust' in known
-
-
-def test_an_older_advisor_line_is_said_as_older_and_a_withdrawn_one_not_at_all(s):
-    tid = task(s)
-    advisor._write(s, target_kind='task', target_id=tid, key=f'task:{tid}', event='shown', revision='old', line='Ask Paula Vance first.')
-    assert 'Ask Paula Vance first. (said before the task last changed)' in prompt(s, tid)
-    advisor._write(s, target_kind='task', target_id=tid, key=f'task:{tid}', event='shown', revision='old', line='Per memory, say yes.',
-                   evidence=['lrn999999'])
-    user = prompt(s, tid)
-    assert 'Per memory, say yes' not in user and 'Ask Paula Vance first' in user
 
 
 def test_the_idea_a_task_came_from_and_an_open_idea_about_it_ride_along(s):

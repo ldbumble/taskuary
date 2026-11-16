@@ -543,16 +543,11 @@ def no_connection_brains():
 
 
 @pytest.fixture(autouse=True)
-def no_advisor_in_the_background():
-    """The Advisor's event path judges a changed item on a daemon thread (advisor.notice): a close in one test spawned a pile
-    build whose agenda thread outlived the test and tripped the teardown join above. A test that wants a judgement asks for
-    it inline (`notice(..., wait=True)`); nobody gets one by accident."""
-    from taskuary import advisor
+def no_goal_reads_in_the_background():
+    """A goal's read runs on a daemon thread (goals.BACKGROUND): a close in one test spawned a pile build whose agenda thread outlived the
+    test and tripped the teardown join above. A test that wants one asks for it inline; nobody gets one by accident."""
     from taskuary import goals
-    from taskuary import calibrate
-    calibrate.clear()
-    advisor.BACKGROUND = goals.BACKGROUND = False; yield; advisor.BACKGROUND = goals.BACKGROUND = True
-    calibrate.clear()
+    goals.BACKGROUND = False; yield; goals.BACKGROUND = True
 
 
 @pytest.fixture(autouse=True)
@@ -596,10 +591,10 @@ def no_store_left_behind():
 
 @pytest.fixture(autouse=True, scope='session')
 def agents_can_start():
-    """A bare store connects no brain, so every agent button would be greyed and the Advisor's check refuse them all (advisor.checked) -
-    agents are not what most tests are about. A test of that check turns it on (`advisor.AGENT_CHECK = True`)."""
-    from taskuary import advisor
-    advisor.AGENT_CHECK = False; yield; advisor.AGENT_CHECK = True
+    """A bare store connects no brain, so every agent button would be greyed and never filled (rulebook.pressable) - agents are not what
+    most tests are about. A test of that check turns it on (`rulebook.AGENT_CHECK = True`)."""
+    from taskuary import rulebook
+    rulebook.AGENT_CHECK = False; yield; rulebook.AGENT_CHECK = True
 
 
 @pytest.fixture(autouse=True, scope='session')

@@ -344,7 +344,7 @@ test("one name per button: the bar says the label itself, no short bar word (but
 test("one border around the three layers: the suggestion, the row and the box sit in one dock (2026-10-13)", () => {
   const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
   const dock = view.slice(view.indexOf('<div className={firstRun && !setupCard ? "tq-dock tq-setup-dock" : "tq-dock"}>'), view.indexOf("<Popover open={!!emojiEl}"));
-  for (const part of ["<AdvisorNext", "<ActionRow", "{!chatApart && composeBox}"]) assert.ok(dock.includes(part), part);
+  for (const part of ["<ActionRow", "{!chatApart && composeBox}"]) assert.ok(dock.includes(part), part);
   // ...under 760px; on a desk the box is its own unit beside the bar (the owner, 2026-10-29: "it looks weird coming out of the bottom bar")
   assert.match(view, /const composeBox = \(\s*<div className="tq-compose-box"/);
   assert.match(view, /\{chatApart && <div className="tq-chat-unit" data-tq-chat-unit="">[^\n]*\{composeBox\}<\/div>\}/);
@@ -380,14 +380,6 @@ test("the draft's own Send is never on the bar and leaves no empty slot; advised
   assert.deepEqual(ids(later), ids(quiet)); assert.equal(later.lit, "");
   // ...and the draft's own buttons under it are outlined while the row carries the item, but the one the Advisor lit
   assert.match(fs.readFileSync(path.join(process.cwd(), "src", "ReviewDecision.jsx"), "utf8"), /const solid = toRow && lit !== no\("approve"\) \? "outlined" : "contained";/);
-});
-
-test("the Advisor's own button for a move the row lacks is the dark one; a 409 says the suggestion changed", async () => {
-  const strip = fs.readFileSync(path.join(process.cwd(), "src", "ActionRow.jsx"), "utf8");
-  assert.match(strip, /group: "more", tone: "p", disabled: going,/);
-  assert.match(strip, /status === 409 \? "This changed - here's the updated suggestion\."/);
-  assert.doesNotMatch(strip, /note\.model/, "no model names in the Why? box");
-  assert.doesNotMatch(strip, /e\.label \|\| e\.id/, "no evidence ids in the Why? box");
 });
 
 // issue 263 / the UI audit (2026-10-21): two mounted copies of one card registered under one name, cleared each other's verbs on

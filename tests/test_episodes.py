@@ -33,9 +33,7 @@ def test_an_episode_carries_who_what_they_are_what_was_done_and_how_soon(w):
 
 def test_navigation_personal_mail_agents_and_auto_replies_are_never_episodes(w):
     s, facts = w
-    from taskuary import advisor
-    t = s.create_task({'Title': 'A press', 'Status': 'open'}, 'owner')
-    s._exec("INSERT INTO advice_press (Key,TargetKind,TargetId,Pressed,CreatedAt) VALUES (?,?,?,?,?)", (f'task:{t}', 'task', t, 'next', C._stamp(datetime.now())))
+    t = s.create_task({'Title': 'An agent hand-off', 'Status': 'open'}, 'owner')
     s.save_source({'Channel': 'email', 'Address': 'alex.home@personal.example', 'Active': 1, 'ConfigJson': json.dumps({'personal': True})}, 'owner')
     m = s.add_message({'ExternalId': 'p1', 'ConversationId': 'email:p1', 'Channel': 'email', 'Subject': 'Dinner', 'FromEmail': 'friend@personal.example',
                        'SourceName': 'alex.home@personal.example', 'SentAt': C._stamp(datetime.now() - timedelta(hours=3)), 'BodyText': 'x', 'Status': 'filed'})
@@ -47,7 +45,7 @@ def test_navigation_personal_mail_agents_and_auto_replies_are_never_episodes(w):
                    'SentAt': C._stamp(datetime.now() - timedelta(hours=1)), 'BodyText': 'x', 'Status': 'sent'})
     s.audit('task', t, 'handoff', 'agent:coding', 'agent', {'to': 'ray@northwind.example'})
     ids = {e[0] for e in episodes.build(s, _since())}
-    assert not any(i.startswith('pr') for i in ids) and f'msg{m}' not in ids and f'msg{a}' not in ids and f'task{t}' not in ids
+    assert f'msg{m}' not in ids and f'msg{a}' not in ids and f'task{t}' not in ids
 
 
 def test_the_block_is_capped_and_says_what_it_left_out(w):

@@ -1,7 +1,7 @@
 """What About you saved reaches the agents, and the Advisor reads the saved signature as known-true, not invented."""
 import unittest
 from taskuary.store import MemoryStore
-from taskuary import advisor, brief
+from taskuary import brief
 
 
 def _owner(s):
@@ -16,12 +16,6 @@ class OwnerFactsKnownTests(unittest.TestCase):
         self.assertIn('Job title: Operations Director', bg)
         self.assertIn('Company: Northwind', bg)
 
-    def test_the_advisor_is_told_the_signature_is_the_saved_one(self):
-        s = MemoryStore(); _owner(s)
-        line = advisor.known_owner_line(s)
-        self.assertIn('KNOWN TRUE', line)
-        self.assertIn('job title: Operations Director', line)
-        self.assertIn('Alex Doyle / Operations Director, Northwind', line)
 
     def test_nothing_saved_says_nothing(self):
         s = MemoryStore(); s.set_setting('email_signature_on', '0', 'owner')

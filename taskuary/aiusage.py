@@ -24,7 +24,7 @@ _METER = contextvars.ContextVar('tq_ai_meter', default=None)
 _ASKED = contextvars.ContextVar('tq_ai_asked', default=None)
 # the fixed names, one per asker - a new one is added here, so the breakdown's lines are a closed list
 CALLERS = ('triage.classify', 'triage.report', 'triage.idea', 'triage.title', 'triage.proof', 'triage.eval', 'triage.reread', 'triage.repomap',
-           'advisor.judge', 'advisor.idea', 'advisor.think', 'advisor.propose', 'advisor.check', 'advisor.run',
+           'advisor.idea', 'advisor.think', 'advisor.propose', 'advisor.check', 'advisor.run',
            'reports.judge', 'reports.summary', 'reports.agent','sent.judge', 'draft.reply', 'summary.report', 'summary.pause', 'memory.learn', 'memory.reflect', 'rank.rerank')
 
 

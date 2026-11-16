@@ -48,7 +48,7 @@
     "search":            {"name": "Search", "href": ""}
   },
   "advice_none": {
-    "_": "WHEN THE ADVISOR LIGHTS NOTHING (advisor.status {none: why}). The owner, 2026-10-23: an obvious move is an EMPTY strip and one lit button - \"No suggestion...\", \"Nothing to decide...\", \"Thinking...\" and every other sentence explaining a silence went, so only the one reason that has a way out is said: no AI connected, where the move needs one. `move` is what the row lights for it (`ai`: the row's own Connect an AI, else the strip's). Any other reason is silent, and Next is lit.",
+    "_": "WHEN THE ADVISOR LIGHTS NOTHING (rulebook.status {none: why}). The owner, 2026-10-23: an obvious move is an EMPTY strip and one lit button - \"No suggestion...\", \"Nothing to decide...\", \"Thinking...\" and every other sentence explaining a silence went, so only the one reason that has a way out is said: no AI connected, where the move needs one. `move` is what the row lights for it (`ai`: the row's own Connect an AI, else the strip's). Any other reason is silent, and Next is lit.",
     "no_ai":      {"line": "Connect an AI.", "move": "ai"}
   },
   "advice_rule": {

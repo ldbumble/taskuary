@@ -84,13 +84,6 @@
    }
   ]
  },
- "same_domain": {
-  "press_history_moves_the_button": true,
-  "by": [
-   "habit",
-   "habit"
-  ]
- },
  "world": {
   "traits": 8,
   "planted": {
@@ -104,9 +97,6 @@
    "newsletter_ideas": 3
   },
   "messages": 44
- },
- "advisor_cases": {
-  "right": 36
  },
  "rail_advisor_cases": {
   "hit": 19,

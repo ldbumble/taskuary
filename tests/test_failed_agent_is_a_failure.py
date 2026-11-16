@@ -8,7 +8,7 @@ reads: the step says "Failed - <why>", Try again picks it back up, and with no A
 import time, unittest
 from unittest import mock
 
-from taskuary import advisor, funnel, general, taskstate, terminal, workerstate as ws
+from taskuary import funnel, general, taskstate, terminal, workerstate as ws, rulebook
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -41,7 +41,7 @@ class FailedAgent(unittest.TestCase):
         self.assertTrue(story['line'].startswith('Failed - No AI is connected'), story['line'])
         self.assertNotRegex(story['line'], r'CLI agent|AI provider')
         self.assertEqual(story['fix']['label'], 'Connect an AI')
-        self.assertEqual(advisor.agent_failed(self.s, {'tid': self.tid})['fix']['label'], 'Connect an AI')
+        self.assertEqual(rulebook.agent_failed(self.s, {'tid': self.tid})['fix']['label'], 'Connect an AI')
 
     def test_with_no_ai_the_owners_words_are_kept_and_nothing_says_it_started(self):
         sess = self.fail()
@@ -78,7 +78,7 @@ class FailedAgent(unittest.TestCase):
         story = funnel.agent_story(self.s, self.tid)
         self.assertEqual((story['kind'], story['line']), ('failed', 'Failed - The test database was not reachable.'))
         self.assertIsNone(story['fix'])
-        lead = advisor.offered(self.s, {'tid': self.tid, 'kind': 'task', 'key': f'task:{self.tid}'})[0]
+        lead = rulebook.offered(self.s, {'tid': self.tid, 'kind': 'task', 'key': f'task:{self.tid}'})[0]
         self.assertEqual((lead['verb'], lead['label']), ('continue', 'Try again'))
 
     def test_a_stopped_turn_is_not_a_failure(self):
@@ -95,3 +95,14 @@ class FailedAgent(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+def test_an_agents_failed_run_is_what_failed_and_offers_the_task_to_fix_it():
+    s = MemoryStore(); t = s.create_task({'Title': 'Fix the export', 'Status': 'in_progress', 'Kind': 'coding'}, 'owner')
+    ws.record(s, t, 'r1', 'working'); ws.record(s, t, 'r1', 'failed', text='the test database was not reachable')
+    item = {'key': f'agent:{t}', 'kind': 'agent', 'lane': 'stopped', 'tid': t, 'title': 'Fix the export'}
+    f = rulebook.failure(s, item)
+    assert f['what'] == "the agent's run failed" and 'not reachable' in f['why']
+    assert 'new_task' in [v['verb'] for v in rulebook.offered(s, item)]
+    ws.record(s, t, 'r2', 'working'); ws.record(s, t, 'r2', 'finished', text='done')
+    assert rulebook.failure(s, item) is None, 'a run that finished since is no failure'

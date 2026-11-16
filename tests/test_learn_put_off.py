@@ -5,7 +5,7 @@ senders only."""
 from datetime import datetime, timedelta
 from unittest import mock
 import pytest
-from taskuary import advisor, funnel, learn, learnedgraph as lg, terminal, usual
+from taskuary import funnel, learn, learnedgraph as lg, terminal, usual
 from tests import memory_cases as C
 from tests.memory_cases import put_off, reflected
 
@@ -14,8 +14,7 @@ KEY = 'put off renewals@payworth.example'
 
 @pytest.fixture
 def w():
-    with mock.patch.object(terminal, 'live_sessions', lambda tail=0: []), mock.patch.object(funnel, '_agenda', lambda _s, **kw: []), \
-         mock.patch.object(advisor, 'notice', lambda *a, **k: None):
+    with mock.patch.object(terminal, 'live_sessions', lambda tail=0: []), mock.patch.object(funnel, '_agenda', lambda _s, **kw: []):
         s, facts = C.world(); funnel.invalidate()
         yield s, facts
         funnel.invalidate()

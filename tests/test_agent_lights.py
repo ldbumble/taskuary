@@ -5,7 +5,7 @@ turn said it waits on (its summary's `after_press`) starts its next turn, once. 
 import json
 from unittest import mock
 
-from taskuary import advisor, capabilities, concierge, general, selfclose, verdicts
+from taskuary import capabilities, concierge, general, selfclose, verdicts, rulebook
 from taskuary.store import MemoryStore
 
 
@@ -18,7 +18,7 @@ def agent_task(s, summary=None):
 
 def lit(s, tid):
     def no_model(*a, **kw): raise AssertionError('no model reads an agent task')
-    with mock.patch.object(advisor, 'build_llm', no_model): return advisor.decide(s, f'task:{tid}')
+    return rulebook.decide(s, f'task:{tid}')
 
 
 def test_the_agents_nothing_left_lights_mark_done_and_no_model_reads_it():
@@ -36,8 +36,8 @@ def test_a_post_whose_network_is_not_connected_lights_nothing():
     s = MemoryStore(); tid = agent_task(s, {'about': 'a post', 'did': 'Wrote the post'})
     s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'a LinkedIn post',
                   'DraftText': json.dumps({'action': 'run_tool', 'type': 'linkedin_post', 'text': 'A year without a lost-time injury.'})})
-    with mock.patch.object(advisor, 'pressable', return_value=''): assert lit(s, tid)['verb'] is None
-    with mock.patch('taskuary.outbound.connect_fix', return_value=None), mock.patch.object(advisor, 'pressable', return_value=''):
+    with mock.patch.object(rulebook, 'pressable', return_value=''): assert lit(s, tid)['verb'] is None
+    with mock.patch('taskuary.outbound.connect_fix', return_value=None), mock.patch.object(rulebook, 'pressable', return_value=''):
         assert lit(s, tid)['verb'] in ('approve', 'send_close'), 'connected, its Send is the move'
 
 
@@ -79,4 +79,4 @@ def test_an_agents_email_draft_with_no_mailbox_lights_nothing():
     mid = s.add_message({'ExternalId': 'e2', 'Channel': 'email', 'Subject': 'Overtime', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
                          'BodyText': 'September overtime?', 'Status': 'routed', 'TaskId': tid})
     s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Erin, 2,140 hours.'})
-    with mock.patch.object(advisor, 'pressable', return_value=''): assert lit(s, tid)['verb'] is None
+    with mock.patch.object(rulebook, 'pressable', return_value=''): assert lit(s, tid)['verb'] is None

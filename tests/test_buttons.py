@@ -5,7 +5,7 @@ import json, re, unittest
 from pathlib import Path
 from unittest import mock
 
-from taskuary import advisor, buttons, concierge, counsel, funnel, proposals, toolcatalog
+from taskuary import buttons, concierge, counsel, funnel, proposals, toolcatalog, rulebook
 from taskuary.store import MemoryStore
 
 LABELS = buttons.labels()
@@ -96,22 +96,6 @@ class EveryLabelIsOnTheList(unittest.TestCase):
         for kind, p in ops: self.assertIn(concierge.op_label(kind, p), LABELS, (kind, p))
         self.assertTrue(concierge.op_label('task.defer', {'until': 'monday'}).startswith(buttons.label('defer')))
 
-    def test_advice(self):
-        with mock.patch.object(concierge, '_agent_running', return_value=False):
-            for it in ITEMS:
-                for v in advisor.offered(None, it): self.assertIn(v['label'], LABELS, (it['kind'], v))
-        row = {'Key': 'task:1', 'Line': 'Take it on.', 'Verb': 'mine', 'Label': 'Take it myself', 'CountJson': '[0,0]', 'EvidenceJson': '[]',
-               'Revision': 'r', 'Tier': 1, 'CreatedAt': ''}
-        self.assertEqual(advisor._payload(row)['label'], buttons.label('mine'))           # judged under an old wording, shown as today's
-        self.assertEqual(advisor._payload({**row, 'Verb': 'approve', 'Label': 'Approve'})['label'], 'Approve')   # a state's name is kept
-        gone = advisor._payload({**row, 'Verb': 'prep', 'Label': 'Prep me'})
-        self.assertFalse(gone['line'])                                                      # its button is gone: no line points at it
-
-    def test_the_prompt_names_buttons_by_label(self):
-        self.assertFalse(dropped_in(advisor.SYSTEM))
-        for v in ('reply', 'close', 'let_go', 'continue'): self.assertIn(buttons.label(v), advisor.SYSTEM)
-        self.assertNotIn(buttons.label('answer_agent'), advisor.SYSTEM)      # no such button on any row (2026-10-20)
-
 
 class NoRemovedButton(unittest.TestCase):
     def test_nowhere(self):
@@ -123,7 +107,7 @@ class NoRemovedButton(unittest.TestCase):
         with mock.patch.object(concierge, '_agent_running', return_value=False):
             for it in ITEMS:
                 self.assertFalse({c['verb'] for c in chips(it)} & set(buttons.REMOVED), it['kind'])
-                self.assertFalse({v['verb'] for v in advisor.offered(None, it)} & set(buttons.REMOVED), it['kind'])
+                self.assertFalse({v['verb'] for v in rulebook.offered(None, it)} & set(buttons.REMOVED), it['kind'])
                 # an old word typed promotes the button it became - never itself
                 self.assertFalse({c['verb'] for c in concierge.chips_for(None, it, first='later')} & set(buttons.REMOVED))
             self.assertEqual(concierge.chips_for(None, ITEMS[13], first='later')[0]['verb'], 'defer')
@@ -288,6 +272,6 @@ class AVerbOnlyWhereItBelongs(unittest.TestCase):
         self.assertTrue(concierge.cannot(batch, 'not_ours_kind'))
         self.assertEqual(concierge.cannot(idea, 'not_ours_kind'), '')
         self.assertNotIn('not_ours_kind', {c['verb'] for c in concierge.chips_for(None, batch, first='not_ours_kind')})
-        self.assertNotIn('not_ours_kind', {c['verb'] for c in advisor.offered(None, batch)})
+        self.assertNotIn('not_ours_kind', {c['verb'] for c in rulebook.offered(None, batch)})
 
 if __name__ == '__main__': unittest.main()

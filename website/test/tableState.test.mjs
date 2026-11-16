@@ -3,8 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { adviceRead, overChat, sameTarget, tableOf, tableWords } from "../src/tableState.js";
-import { adviceKeyFor } from "../src/advice.js";
+import { adviceRead, overChat, tableOf, tableWords } from "../src/tableState.js";
 
 const src = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
 
@@ -53,15 +52,6 @@ test("the Advisor's decision is read whole, silent or not, and nothing is ever a
   assert.equal(adviceRead({ verb: null, state: "agent_asking", line: "" }, "task:7").advice.state, "agent_asking", "nothing lit is an answer too");
   for (const why of ["no_ai", "off", "nothing"]) assert.equal(adviceRead({ none: why }, "task:7").advice.none, why, why);
   assert.deepEqual(adviceRead({}, "task:7"), { advice: null });
-});
-
-test("a task opened by name hears the Advisor's event, which names it by the rail's key", () => {
-  const ev = { key: "processing:abc", target_kind: "task", target_id: 12 };
-  assert.ok(sameTarget(ev, { key: "task:12" }));
-  assert.equal(adviceKeyFor(ev, { key: "task:12" }), "task:12");
-  assert.equal(adviceKeyFor(ev, { key: "task:13" }), null);
-  assert.equal(adviceKeyFor({ key: "msg:4", target_kind: "message", target_id: 4 }, { key: "task:4" }), null, "a message is not task 4");
-  assert.equal(adviceKeyFor(ev, { key: "review:3", tid: 12 }), "review:3", "the walk's item knows its task too");
 });
 
 test("the page wires the record: the strip, the box's subject, the folded line and the ring", () => {

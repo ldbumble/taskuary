@@ -49,7 +49,7 @@ test("the row is never hidden while it waits: the old one stays up, and the hold
 
 test("a decision that lights nothing on purpose leaves a hidden mark, never a word", () => {
   const view = src("AssistantView.jsx");
-  assert.match(view, /advice\?\.state && !advice\.verb && !advice\.none && <div hidden data-tq-advice="" data-tq-silent="" data-tq-unlit=\{advice\.state\} \/>/);
+  assert.match(view, /&& <div hidden data-tq-recommended=\{shownAdvice\?\.verb \|\| ""\} \/>\}/);
 });
 
 // THE OWNER, 2026-11-09: "I thought it's greyed out until you can click it again" - a second Mark done while the next task loaded did nothing

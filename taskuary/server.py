@@ -7002,26 +7002,10 @@ def concierge_chips(key: str):
 
 @app.get('/api/advice')
 def advice_for(key: str):
-    """The filled button of the item keyed `key` (advisor.status): on an IDEA row the Advisor's decision at its current revision; on a
-    task or a message its own recommended move (rulebook.recommended, by 'agent') for a card with no rail item to carry it - or
-    {"none": why} where nothing is lit."""
-    from . import advisor
-    return advisor.status(store, key)
-
-
-class AdvicePressBody(BaseModel):
-    key: str; pressed: str; advised: str | None = None; revision: str | None = None
-    surface: str = 'desk'; lit: str | None = None; live: list[str] | None = None; greyed: list[str] | None = None
-
-@app.post('/api/advice/press')
-def advice_press(body: AdvicePressBody):
-    """EVERY PRESS on the desk's row or card and on the Tasks tab, lit or not (phase B, 2026-10-23): the surface, what it had lit, what
-    else was live, what was pressed (advisor.press; the phone records in-process). Never fails the press it rides on - a lost row
-    costs one observation."""
-    from . import advisor
-    try: return {'id': advisor.press(store, body.key, body.advised, body.pressed, body.revision, surface=body.surface, lit=body.lit,
-                                     live=body.live, greyed=body.greyed)}
-    except Exception as e: logger.warning(f'advice press on {body.key} not recorded: {e}'); return {'id': 0}
+    """The filled button of the item keyed `key` (rulebook.status): a task's or a message's own recommended move (rulebook.recommended,
+    by 'agent') - or {"none": why} where nothing is lit (an idea row among them)."""
+    from . import rulebook
+    return rulebook.status(store, key)
 
 
 class ConciergeProposeBody(BaseModel):
@@ -7035,11 +7019,11 @@ class ConciergeProposeBody(BaseModel):
 def concierge_propose(body: ConciergeProposeBody):
     """A card's own button on one entry: the same proposal the words would make (PW-151), confirmed the same way."""
     from . import concierge
-    if body.revision:                                   # the Advisor's pill carries the stamp it was judged at: a moved item refuses it
-        from . import advisor
-        tgt = advisor.target_of(store, body.key)
-        if tgt and advisor.revision(store, *tgt) != body.revision:
-            raise HTTPException(409, 'That one changed since the Advisor looked at it - read it again before pressing.')
+    if body.revision:                                   # a filled button carries the stamp it was decided at: a moved item refuses it
+        from . import rulebook
+        tgt = rulebook.target_of(store, body.key)
+        if tgt and rulebook.revision(store, *tgt) != body.revision:
+            raise HTTPException(409, 'That one changed since its button was filled - read it again before pressing.')
     picks = {'agent': body.agent, 'brain': body.brain, 'pick': body.pick, 'model': body.model}
     try: return concierge.propose_direct(store, body.verb, body.key, body.text or '', ACTOR, table=body.table, exact=body.exact, picks=picks, press=body.press)
     except ValueError as e: raise HTTPException(422, str(e))

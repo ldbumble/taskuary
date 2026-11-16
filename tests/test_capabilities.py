@@ -3,7 +3,7 @@ no Send on a draft that cannot leave, the failed send's fix under its own name, 
 import json, unittest
 from unittest import mock
 from fastapi.testclient import TestClient
-from taskuary import advisor, agents, capabilities, concierge
+from taskuary import agents, capabilities, concierge, rulebook
 from taskuary.store import MemoryStore
 
 
@@ -66,8 +66,8 @@ class OfferedTests(unittest.TestCase):
     def test_a_draft_that_cannot_send_is_offered_no_send(self):
         s = MemoryStore()
         teams, email = draft(s, 'teams'), draft(s, 'email')
-        self.assertNotIn('approve', [v['verb'] for v in advisor.offered(s, teams)])
-        self.assertIn('approve', [v['verb'] for v in advisor.offered(s, email)])
+        self.assertNotIn('approve', [v['verb'] for v in rulebook.offered(s, teams)])
+        self.assertIn('approve', [v['verb'] for v in rulebook.offered(s, email)])
         # ...and the chat's own buttons agree: the same gate (concierge.cannot), so the Advisor and the chips never differ
         self.assertNotIn('approve', [c['verb'] for c in concierge.chips_for(s, teams)])
         self.assertIn('cannot be sent from here', concierge.cannot(teams, 'approve', s))
@@ -76,42 +76,32 @@ class OfferedTests(unittest.TestCase):
         s = MemoryStore()
         fix = {'label': 'Connect a mailbox', 'href': '#connections=Email'}
         it = draft(s, 'email', deliver={'kind': 'reply', 'delivery': 'failed', 'fix': fix})
-        verbs = advisor.offered(s, it)
+        verbs = rulebook.offered(s, it)
         self.assertEqual((verbs[0]['verb'], verbs[0]['label'], verbs[0]['href']), ('fix', 'Connect a mailbox', '#connections=Email'))
-        # the Advisor may pick it, and its line keeps the fix's own name - never the generic button word
-        with mock.patch.object(advisor, '_item', return_value=it):
-            rev = advisor.revision(s, 'task', it['tid'])
-            advisor.judge(s, advisor.SHOWN, 'task', it['tid'], rev, 2,
-                          brain_saying({'verb': 'fix', 'line': 'The send failed because no mailbox is connected.', 'evidence': []}), key=it['key'])
-            got = advisor.for_key(s, it['key'])
-        # ...and its place, so a page with no '<rid>:fix' on the row still opens it rather than proposing a verb nobody runs
+        # ...and it is the filled button, with its place, so a page with no '<rid>:fix' on the row still opens it
+        with mock.patch.object(rulebook, '_item', return_value=it):
+            got = rulebook.decide(s, it['key'])
         self.assertEqual((got['verb'], got['label'], got['href']), ('fix', 'Connect a mailbox', '#connections=Email'))
 
     def test_a_failed_act_names_its_fix_too(self):
         s = MemoryStore(); it = draft(s, 'email')
         s.add_operation({'OpId': 'op1', 'Kind': 'review.approve', 'TargetKind': 'task', 'TargetId': it['tid'], 'Status': 'error',
                          'OutcomeJson': json.dumps({'fix': {'label': 'Turn replies on', 'href': '#settings=config&group=Replies'}})})
-        self.assertEqual(advisor.delivery_fix(s, it), {'label': 'Turn replies on', 'href': '#settings=config&group=Replies'})
+        self.assertEqual(rulebook.delivery_fix(s, it), {'label': 'Turn replies on', 'href': '#settings=config&group=Replies'})
         s.add_operation({'OpId': 'op2', 'Kind': 'review.approve', 'TargetKind': 'task', 'TargetId': it['tid'], 'Status': 'done'})
-        self.assertIsNone(advisor.delivery_fix(s, it), 'a later act that worked: nothing is left to fix')
+        self.assertIsNone(rulebook.delivery_fix(s, it), 'a later act that worked: nothing is left to fix')
 
     def test_no_failure_no_fix(self):
         s = MemoryStore()
-        self.assertNotIn('fix', [v['verb'] for v in advisor.offered(s, draft(s, 'email'))])
+        self.assertNotIn('fix', [v['verb'] for v in rulebook.offered(s, draft(s, 'email'))])
 
 
 class KeyedTests(unittest.TestCase):
-    def test_a_judgement_is_written_under_the_item_it_judged(self):
-        s = MemoryStore(); it = draft(s, 'email')
-        with mock.patch.object(advisor, '_item', return_value=it):
-            rid = advisor.judge(s, advisor.SHOWN, 'task', it['tid'], advisor.revision(s, 'task', it['tid']), 2,
-                                brain_saying({'verb': 'approve', 'line': 'Erin is waiting on this answer.', 'evidence': []}), key=it['key'])
-        self.assertEqual(s._one('SELECT Key FROM advice WHERE Id=?', (rid,))['Key'], it['key'])
 
     def test_a_review_key_names_its_task(self):
         s = MemoryStore(); it = draft(s, 'email')
-        self.assertEqual(advisor.target_of(s, it['key']), ('task', it['tid']))
-        self.assertIsNone(advisor.target_of(s, 'review:99999'))
+        self.assertEqual(rulebook.target_of(s, it['key']), ('task', it['tid']))
+        self.assertIsNone(rulebook.target_of(s, 'review:99999'))
 
 
 if __name__ == '__main__':

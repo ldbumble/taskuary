@@ -25,8 +25,6 @@ IGNORE_AT, SKIP_AT, ESCALATE_AT = 8, 20, 5
 DOMAIN_SENDERS, DOMAIN_AT = 3, 12
 GROW = 3                   # a refused question comes back only once the evidence is this many times what it was refused at
 DAYS = 90                  # how far back the evidence is read
-DOWN = ('not_ours', 'not_ours_sender', 'block_sender')                 # presses that put an item down
-NEUTRAL = ('next', 'close', 'defer', 'not_ours_kind', 'later', '')     # presses that say nothing about the sender
 AUTOMATED = ('automated', 'bulk')
 URGENT_ACTION = 'priority'  # the audit row server.update_task writes when the owner changes a task's priority
 
@@ -58,7 +56,7 @@ def _by_sender(store, q: str, senders) -> list:
 
 def evidence(store, days: int = DAYS) -> dict:
     """{sender: {'down': {thread}, 'up': {thread}, 'urgent': {task}, 'threads': {thread}, 'auto': bool}} - what the owner did,
-    per sender and per THREAD (three replies on one thread are one episode), from the route log, the press log
+    per sender and per THREAD (three replies on one thread are one episode), from the route log, the threads
     and the audit trail."""
     since, out = _since(days), {}
     def row(em): return out.setdefault(em, {'down': set(), 'up': set(), 'urgent': set(), 'threads': set(), 'auto': None})
@@ -70,12 +68,6 @@ def evidence(store, days: int = DAYS) -> dict:
     for m in store._rows("SELECT lower(m.FromEmail) em, m.ConversationId cid, m.MessageId FROM route r JOIN message m ON m.MessageId=r.MessageId "
                          "WHERE r.RoutedBy='owner' AND r.Decision='ignore' AND m.FromEmail LIKE '%_@_%' AND r.CreatedAt>=?", (since,)):
         row(m['em'])['down'].add(m['cid'] or f"m{m['MessageId']}")
-    try: presses = store._rows("SELECT lower(Sender) em, Thread, Pressed, Id FROM advice_press WHERE Sender LIKE '%_@_%' AND IFNULL(Choice,1)=1 AND CreatedAt>=?", (since,))
-    except Exception: presses = []
-    for p in presses:
-        k = p['Thread'] or f"pr{p['Id']}"
-        if p['Pressed'] in DOWN: row(p['em'])['down'].add(k)
-        elif p['Pressed'] not in NEUTRAL: row(p['em'])['up'].add(k)
     # the owner's own moves the other way: a filed mail made a task, a message put on a working road (server._learn_promotion,
     # reclassify_message) - an owner route that opens work or a reply. The verdicts used to be counted off the notes table (gone, 2026-10-27)
     for m in store._rows("SELECT lower(m.FromEmail) em, m.ConversationId cid, m.MessageId FROM route r JOIN message m ON m.MessageId=r.MessageId "

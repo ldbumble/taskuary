@@ -71,7 +71,7 @@ def woke(store, tid, actor: str = 'late') -> bool:
 
 def late(store, now: datetime = None) -> int:
     "Each open wait, goal or quiet watch the rail reads as late, set due now for its agent - once per lateness. Run with the reminders."
-    from . import advisor, ingest, rulebook
+    from . import ingest, rulebook
     n = 0
     for t in store._rows("SELECT TaskId FROM task WHERE Status NOT IN ('done','dropped') AND IFNULL(CheckBackAt,'')='' "
                          "AND (Status='waiting' OR IFNULL(WatchBack,'')='quiet' OR IFNULL(DoneWhen,'')<>'')"):
@@ -82,8 +82,8 @@ def late(store, now: datetime = None) -> int:
         # task, and Chase stays lit (woke is False) - with the same turn; a full house queues it as a carry-on turn waits (ingest.queue_turn)
         first = ingest.code_of(why := ingest.wake_why(store, tid, {}, None, None, own=True)) == 'no_conversation'
         if why and not first: continue
-        it = advisor._item(store, 'task', tid, build=False)
-        f = rulebook.facts(store, it, advisor.offered(store, it)) if it else {}
+        it = rulebook._item(store, 'task', tid, build=False)
+        f = rulebook.facts(store, it, rulebook.offered(store, it)) if it else {}
         if f.get('state') not in rulebook.LATE or not f.get('line'): continue
         what = LATE.format(line=f['line'].rstrip('.'))[:WHAT_CHARS]
         if first:

@@ -220,26 +220,6 @@ class TheScriptedBrainTests(unittest.TestCase):
         out = json.loads(demo.brain()('Answer ONLY with JSON: {"intent": ...}', 'a message'))
         self.assertIn(out['intent'], ('fyi', 'task', 'reply_only'))
 
-    def test_the_advisor_gets_one_offered_verb_and_a_plain_line(self):
-        """B17 (2026-10-17): the Advisor's prompt says JSON, so it got triage's {"intent": "fyi"} and the demo never showed one
-        suggestion. It names an offered verb someone waiting makes right - and on a newsletter, like the real one, nothing."""
-        import json
-        ask = lambda verbs: json.loads(demo.brain()('Answer with JSON only', f'EVENT: item.shown\n\nVERBS OFFERED: {verbs}'))
-        out = ask('close (Mark done), reply (Reply), defer (Remind me)')
-        self.assertEqual(out['verb'], 'reply'); self.assertLessEqual(len(out['line']), 80); self.assertTrue(out['line'])
-        self.assertEqual(ask('mine (Make a task), regular_agent (Send to agent), not_ours (Not ours)')['verb'], None)
-
-    def test_the_advisors_verdict_on_an_item_is_the_one_stored_with_it_never_read_from_its_words(self):
-        """The owner, 2026-10-28: what a draft promises or an issue holds is the fixture's own verdict (demo.VERDICTS) - the same words
-        under another title are judged by state alone, and the stored item is judged the same whatever its draft says."""
-        import json
-        ask = lambda title, extra='': json.loads(demo.brain()('JSON', '\n\n'.join(['EVENT: item.shown', 'THE ITEM: ' + json.dumps({'title': title}),
-                                                                                    'VERBS OFFERED: approve (Send), redraft (Redraft), close (Mark done)', extra])))
-        promise = 'THE DRAFT WAITING FOR THE OWNER\'S YES: "Sending the Q3 pack now."\nATTACHED TO THE DRAFT: nothing'
-        self.assertEqual(ask('Can you resend the Q3 numbers?')['verb'], 'redraft')
-        self.assertEqual(ask('Can you resend the Q3 numbers?')['line'], demo.PROMISED)
-        self.assertEqual(ask('Something else entirely', promise)['verb'], 'approve', 'no stored verdict: the words decide nothing')
-        for title, v in demo.VERDICTS.items(): self.assertTrue(v['verbs'] and v['line'], title)
 
     def test_the_canned_count_is_the_rails_own(self):
         """B23: "Three things are waiting on you" stood beside a rail of nine - and "25 things are on it, and 5 are waiting" beside an
@@ -317,17 +297,15 @@ class TheDemoChatAnswersItsSuggestionsTests(unittest.TestCase):
 
 class TheAdvisorSpeaksInTheDemoTests(unittest.TestCase):
     def test_an_item_on_the_table_gets_a_verb(self):
-        """The demo is where newcomers first meet the Advisor: an item on the table is decided at once, never pending - and NO DEFAULT
-        VERB (the owner, 2026-10-28): a button is lit only beside its fact, so the scripted line that only explains the button lights none."""
-        from taskuary import advisor, funnel, rulebook
+        """An item on the table is decided at once, never pending - and NO DEFAULT VERB (the owner, 2026-10-28): a button is lit only
+        beside its fact or as the move its state names."""
+        from taskuary import funnel, rulebook
         s = MemoryStore(); demo.seed(s)
         with on(), mock.patch('taskuary.terminal.live_sessions', lambda tail=0: []):
             funnel.invalidate()
             keys = [i['key'] for i in funnel.pile(s, force=True)['items'] if i.get('lane') == 'approve' or i.get('kind') in ('asked', 'todo')]
             self.assertTrue(keys)
-            tgt = advisor.target_of(s, keys[0])
-            advisor.judge(s, advisor.SHOWN, *tgt, advisor.revision(s, *tgt), tier=2, key=keys[0])
-            got = advisor.for_key(s, keys[0])
+            got = rulebook.status(s, keys[0])
         funnel.invalidate()
         self.assertTrue(got.get('state'), got); self.assertNotIn('pending', got)
         # ...or the move the state's own fact names (rulebook.MOVES: an ask no agent took lights Send to agent - the owner, 2026-11-10)

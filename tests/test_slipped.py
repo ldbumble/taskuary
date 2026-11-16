@@ -134,18 +134,6 @@ def test_a_chase_with_no_thread_is_refused_plainly(s):
     r = run(s, 'task.chase', card)
     assert r.json()['status'] == 'error' and 'task page' in r.text               # refused, never a draft on nothing
 
-def test_the_advisor_counts_chases_from_the_ledger(s):
-    for k, ans in enumerate((1.0, None, 2.0)):
-        t = s.create_task({'Title': f'x{k}'}, 'owner')
-        i = outcomes.record(s, 'reply.sent', 'task', t, facts={'cid': f'w{k}', 'mid': 1, 'verb': 'approve', 'who': RAY, 'cc': [], 'chase': True, **({'answer_days': ans} if ans else {})}, at=ago(days=9))
-        outcomes.settle(s, i, 'x', 'settled')
-    from taskuary import advisor
-    t = s.create_task({'Title': 'Budget'}, 'owner')
-    mid = s.add_message({'Channel': 'email', 'Subject': 'Budget', 'FromEmail': RAY, 'BodyText': 'q', 'Status': 'filed', 'TaskId': t})
-    # counted for the sender's domain, never over everything (the deep dive, 2026-10-20)
-    assert advisor.habit(s, 'chase', {'tid': t, 'mid': mid}) == (2, 3, 'with northwind.example')
-    assert advisor.habit(s, 'chase', {})[:2] == (0, 0)
-
 
 def test_the_followup_line_names_the_persons_day(s):
     t = s.create_task({'Title': 'Budget'}, 'owner')

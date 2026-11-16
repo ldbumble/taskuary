@@ -6,16 +6,15 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from taskuary import buttons, concierge, funnel, operations, terminal as term, toolcatalog
+from taskuary import buttons, concierge, funnel, operations, rulebook, terminal as term, toolcatalog
 from tests import test_assistant_router as desk, test_chat_proposals as phone
 import pytest
 
 @pytest.fixture(autouse=True)
 def _mailbox_connected(monkeypatch):
     """These drafts go by email in a world with no mailbox card: as if one were connected, so the Send is what is judged (a card that says
-    Connect email lights nothing - advisor.unconnected, tests/test_agent_lights.py)."""
-    from taskuary import advisor as _adv
-    monkeypatch.setattr(_adv, 'unconnected', lambda store, item: False)
+    Connect email lights nothing - rulebook.unconnected, tests/test_agent_lights.py)."""
+    monkeypatch.setattr(rulebook, 'unconnected', lambda store, item: False)
 
 
 SENT = {'channel': 'email', 'to': ['erin@vendor.example'], 'cc': []}
@@ -194,19 +193,15 @@ class Assistant(unittest.TestCase):
         self.assertEqual(s.get_task(out['task_id'])['Status'], 'open')
 
 
-class Advisor(unittest.TestCase):
-    """THE ADVISOR'S SEND IN CLOSE OUT IS SEND AND CLOSE (the owner, 2026-11-03): a model that says send lights Send and close on a draft on a
-    task - its Close out - and Send where the row has no Send and close."""
+class Decided(unittest.TestCase):
+    """THE SEND IN CLOSE OUT IS SEND AND CLOSE (the owner, 2026-11-03): a draft on a task lights Send and close - its Close out - and Send
+    where the row has no Send and close."""
     def decide(self, s, item, verb, offered=None):
-        import json
         from contextlib import nullcontext
-        from taskuary import advisor
-        llm = lambda system, user, **kw: json.dumps({'verb': verb, 'line': '', 'evidence': []})
+        from taskuary import rulebook
         with mock.patch.object(term, 'live_sessions', return_value=[]), \
-             (mock.patch.object(advisor, 'offered', lambda _s, _it: [buttons.chip(v) for v in offered]) if offered else nullcontext()):
-            tgt = advisor.target_of(s, item['key'])
-            advisor.notice(s, advisor.SHOWN, tgt[0], tgt[1], tier=2, wait=True, llm=llm, key=item['key'])
-            with mock.patch.object(advisor, 'notice'): return advisor.decide(s, item['key'])
+             (mock.patch.object(rulebook, 'offered', lambda _s, _it: [buttons.chip(v) for v in offered]) if offered else nullcontext()):
+            return rulebook.decide(s, item['key'])
 
     def test_a_draft_on_a_task_lights_send_and_close(self):
         s = desk.store(); tid, rid, item = drafted(s)

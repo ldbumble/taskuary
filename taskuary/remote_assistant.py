@@ -1057,7 +1057,6 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
                 send(store, channel, chat, 'Go ahead - type your question.', connector_id)
                 return
             if act:
-                note_pick(store, act, item, offered, acts)
                 send(store, channel, chat, run_act(store, act, item), connector_id)
                 return
             # ...and on an fyi batch a number names one of the lines we printed: open that one - the item on
@@ -1095,7 +1094,6 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
                 hit = next((w for w in offered if str(w).strip().lower() == said and w in acts), None)
                 if hit:
                     forget_offered(store, channel, chat)
-                    note_pick(store, acts[hit], item, offered, acts)
                     send(store, channel, chat, run_act(store, acts[hit], item), connector_id)
                     return
                 if said.lstrip('#').isdigit() and offered:
@@ -1644,32 +1642,6 @@ def send_files(store, act: dict, actor: str = 'owner') -> str:
     except Exception: dock = None
     again = [(buttons.label('try_again'), {'t': 'files', 'tid': tid, 'paths': failed})] if failed else []
     return turn_text({'say': '\n'.join(said), 'item': None}, store=store, extra=again + _way_on(store, dock))
-
-
-# A PICK IS A PRESS (phase B, 2026-10-23): the phone's taps were never kept, so a habit formed on WhatsApp was invisible to what the
-# app learns. Only a pick that IS a button on the item - its verbs, Next, Mark done under a receipt, Trust them - is one; a page of
-# choices, the menu, a Cancel or the second step of a question (the day for Remind me, the words for Redraft) is not
-_PICK_VERB = {'next': 'next', 'close': 'close', 'trust': 'trust_start'}
-
-
-def pick_verb(act: dict | None) -> str:
-    """The button a numbered pick stands for, or '' for a pick that is not a press on the item."""
-    t = (act or {}).get('t')
-    return str(act.get('verb') or '') if t in ('verb', 'alt') else _PICK_VERB.get(t, '')
-
-
-def note_pick(store, act: dict, item: dict | None, offered: list, acts: dict) -> int:
-    """Keep one pick (advisor.press, surface phone): lit is button 1 - the card's lead - and live is every other button offered."""
-    got = pick_verb(act)
-    tid = str(act.get('tid') or '')
-    key = act.get('key') or (f'task:{int(tid)}' if act.get('t') in ('close', 'trust') and tid.isdigit() else '') or (item or {}).get('key') or ''
-    if not got or not key: return 0
-    verbs = [pick_verb(acts.get(w)) for w in offered or []]
-    from . import advisor
-    try: return advisor.press(store, key, None, got, surface='phone', lit=verbs[0] if verbs else '', live=[v for v in verbs if v],
-                              item=item if (item or {}).get('key') == key else None)
-    except Exception as e:
-        logger.warning(f'the phone pick {got} was not kept: {e}'); return 0
 
 
 def passed_read(item: dict | None) -> str:
@@ -2312,22 +2284,22 @@ def stranger_held(store, item: dict | None) -> bool:
 
 
 def decision(store, item: dict | None) -> dict:
-    """THE ADVISOR'S ONE DECISION for the item on this card (advisor.decide) - the button the desk lights and the line its strip says, so
-    the phone reads the same move (the design, phase A: Send led here on a draft the desk said not to send). {} with nothing to read."""
+    """THE ONE DECISION for the item on this card (rulebook.decide) - the button the desk lights and the line its strip says, so the phone
+    reads the same move (the design, phase A: Send led here on a draft the desk said not to send). {} with nothing to read."""
     key = (item or {}).get('key')
     if store is None or not key: return {}
-    from . import advisor
-    try: return advisor.decide(store, key) or {}
+    from . import rulebook
+    try: return rulebook.decide(store, key) or {}
     except Exception as e:
-        logger.debug(f'the phone could not read the Advisor for {key}: {e}'); return {}
+        logger.debug(f'the phone could not read the decision for {key}: {e}'); return {}
 
 
 def primary(out: dict, said: dict = None) -> dict | None:
-    """The card's verb: THE ADVISOR'S, when it lit one of the chips here (`said`, decision()) - the same button as the desk - and, only
+    """The card's verb: THE ONE DECISION'S, when it lit one of the chips here (`said`, decision()) - the same button as the desk - and, only
     while it has nothing, the fixed rule: the first word that DOES the thing - a reply with no draft yet leads with drafting it, not with
     closing the task (the vocabulary lists close first for a waiting draft).
     ...and the move's own verb where the card names one: "who should take it?" is answered by handing it over,
-    never by a reply (the desktop's button there is Hand to agent, 2026-09-28). {'verb': 'next'} when the Advisor's move is Next."""
+    never by a reply (the desktop's button there is Hand to agent, 2026-09-28). {'verb': 'next'} when the decision's move is Next."""
     chips = [c for c in (out.get('chips') or []) if isinstance(c, dict) and c.get('verb') and c.get('verb') != 'next']
     it = out.get('item') or {}
     ours = bool(said) and said.get('key') == it.get('key')
@@ -2349,7 +2321,7 @@ def primary(out: dict, said: dict = None) -> dict | None:
 
 
 def advice_line(out: dict, said: dict) -> str:
-    """The Advisor's line, as the desk's strip says it - a fact the card does not show, or nothing. The "then" line that explained the
+    """The decision's line, as the desk's strip says it - a fact the card does not show, or nothing. The "then" line that explained the
     first word ("Send: sends the draft above, in your name...") went (the design, phase A: buttons do the talking, the owner 2026-10-22)
     - and only under a CARD: under the model's own answer ("Yes to what?") it read as a hint about nothing on screen (F12)."""
     it = out.get('item') or {}
@@ -2816,7 +2788,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     trusting = bool(held_on and str(held_on.get('tid') or '').isdigit() and held_on.get('kind') not in ('review', 'action', 'agent'))
     if held_on: out = _recast(out, drop=set(_HAND))
     out, leads = _after_the_run(store, out, item)
-    said = decision(store, item) if item else {}             # the Advisor's one decision: the desk's lit button and line, here too
+    said = decision(store, item) if item else {}             # the one decision: the desk's lit button and line, here too
     say = _TASK_LINK.sub(r'\1', str(out.get('say') or '')).strip()
     mark = funnel.mark_for(item)
     if say and mark: say = f'{mark} {say}'
@@ -2904,7 +2876,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         asked_for = next((c['label'] for c in out.get('chips') or [] if isinstance(c, dict) and out.get('first') and c.get('verb') == out['first']), None)
         pick = None if asked_for else primary(out, said)
         lead_word = asked_for or (pick or {}).get('label')
-        # ...and the Advisor's Next is Next first, as the desk lights it: nothing here needs a move from the owner
+        # ...and the decision's Next is Next first, as the desk lights it: nothing here needs a move from the owner
         first_ = [] if item.get('kind') in _LEADS_WITH_NEXT or (pick or {}).get('verb') == 'next' else [w for w in rest if w == lead_word][:1] or rest[:1]
         # ...and the draft's own other word rides with it, ahead of Next - the screen draws Redraft beside the send, under the draft
         # (the owner, 2026-10-06: "on whatsapp" the same order)

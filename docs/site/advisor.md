@@ -111,46 +111,18 @@ the reply says so. Answer one of them and ask again. With no AI connected, nothi
 Asking for a pass also restarts the day's count, so the next scheduled pass comes a day after
 this one.
 
-**On the event.** The same brain also runs when one item changes: an agent stops or asks (or was cut
-off by Taskuary closing, which the next launch reports), a reply arrives on a watched thread, a mail is attached to a task, a pull request opens, a task closes, a
-due day is missed, a report lands - and every item the walk or the chat puts on the table, an email,
-a chat line from WhatsApp or Teams, a task, a goal or one of the assistant's own ideas, when no event
-has judged it yet. One small prompt on the light model answers with one verb from the actions the
-item's row already draws and one line, or nothing. Code checks the verb is one the row offers; a
-verb it does not is dropped and noted. What the prompt carries, each part bounded and the whole
-capped at 9,000 characters (whole sections drop from the end, the item and its verbs never):
+**It lights no button.** The Advisor speaks on its own rows under **Advisor**, and nowhere else: it
+never fills a button - not on a task's row, not on its own idea rows, not on the Tasks tab or the phone.
+A task's one filled button is the task's own, read in plain code off its agent's latest turn and the
+task's facts: a draft waiting for your yes fills **Send**, an agent that said nothing is left fills
+**Mark done**, a failed send fills the place that fixes it, a late wait no agent was woken for fills
+**Chase**. An idea's row fills nothing; its buttons are yours to press.
 
-| Part | What it is |
-|---|---|
-| The item | Its title, who, when, why, channel and where it stands - and the task's due date, priority, remind date and done-when |
-| The verbs offered | The row's own buttons, the fix for a failed send under the name of the place it opens, and New task to fix this when nothing here fixes a failure |
-| What failed | A send refused or unconfirmed, a draft that could not be written, an act that errored, an agent run that failed - in plain words, with its reason |
-| The draft | The draft waiting for your yes, word for word, and what is attached to it |
-| The thread | The last three messages on it, theirs and yours, any channel |
-| Possible duplicates | Other open tasks with the same sender, thread or subject - and whether an agent is already on one |
-| Your notes | Standing notes and past verdicts about the sender or topic, and your corrections of triage there - the same evidence triage is handed |
-| The agent | What it last said, what it is asking, how its run ended, and mail that came in since its last turn |
-| The goal or the idea | A goal's open steps, who holds each, its day and how late, and when anything last moved. An idea's words, and for a follow-up how long the person has been quiet against their own day |
-| `LEARNED.md` | `## Your people`, `## What you care about`, `## How you work` and `## Promises` - the lines in use, closest to this sender first, within its budget |
-| The ledger | Outcome rows on the item, and what came of each verb offered with this sender before - evidence it weighs, never a line it says |
-| The playbook, `SOUL.md`, `JOB.md` | The matching playbook, and the opening of each document |
-| The bigger read | For the item on the table: what the hub knows about the people on it, and the month's outcomes |
+What it knows about how you work still sets up a few buttons, each counted from what you did:
 
-Its rules name the moments it used to get wrong: an agent run that failed is a failure, never a
-Continue into the same wall; a send refused for its address is fixed at the address, never
-redrafted; a draft that promises what nothing shows (a payment date, a file that is not attached)
-is not sent; work an agent can do, like an issue with a traceback, goes to an agent; someone quiet
-past their day is chased, where the row draws Chase.
-
-What it knows about how you work is a reason too, said in the same one line beside the lit button,
-and only when it is a fact it can show. Each is counted from what you did, and **Why?** lists the
-acts it rests on:
-
-- **Whom you hand that kind of ask to.** The Advisor reads whom you handed a sender's asks to before;
-  when this ask is the same kind of work, it lights **Hand it to a person** with *Ray handles payroll
-  for you.* What the ask is about is the model's to read, never a count's. Once you have handed a
-  sender's asks to the same person twice, **Hand it to a person** opens with that person already in
-  To, saying whose usual they are. They are chosen, not sent: nothing goes until you press **Send it**.
+- **Whom you hand that kind of ask to.** Once you have handed a sender's asks to the same person twice,
+  **Hand it to a person** opens with that person already in To, saying whose usual they are. They are
+  chosen, not sent: nothing goes until you press **Send it**.
 - **The day you put it off to.** When you keep putting a sender's mail off to the same weekday, the
   memory writes it as a line under **How you work** in LEARNED.md, such as *You put mail from
   renewals@payworth.example off to Friday*. It climbs the same ladder as any other line: it waits in
@@ -158,26 +130,16 @@ acts it rests on:
   line. It opens with that day first, filled, saying whose habit it is, and the line shows on hover.
   Reword the day in the line and Remind me follows. Delete the line, or mark it Wrong, and there is no
   learned day. Nothing is set until you press it.
-- **A person's own day.** Chase lights after three working days; once three of someone's answers say
-  how soon they answer, it lights on their day instead: *Gail usually answers in a day; this is 3 days.*
+- **A person's own day.** A wait is late after three working days; once three of someone's answers say
+  how soon they answer, it is late on their day instead: *Gail usually answers in a day; this is 3 days.*
 
-Those findings are never rows. They attach to the item at its revision and show when the walk
-reaches it, as one line in the strip at the foot of the canvas, above the action row, and the
-advised button on the row is the one dark button - the row's own, pressed through its own handler.
-**Why?** beside the line says what it rests on. A changed item drops its old line by one comparison.
-The rail's order does not read advice, by construction: the test that pins it builds the rail with
-and without advice and asks for the same order. Two settings govern it, in Settings → Advisor: the
-switch, and a cap on judgements per hour.
-
-**What you pressed.** Every press on the row, and Next, is kept: the move it lit, the one you
-pressed, and what kind of item it was from whom. It is a record, and nothing is learned from it: a
-button press is not a fact about how you work, and a count of them once lit the same button on two
-asks from one domain that had nothing else in common. What `LEARNED.md` knows comes from what you
-did and wrote, in context - who wrote, what they are to you, how soon you answered, what you put off
-and until when, whom you handed it to, what you closed without a reply, what you typed to an agent.
-It keeps what that means, never the number: answering someone within minutes, again and again, is
-written as *that person matters*, and a kind of mail you close without a reply as *not yours to
-answer* - and triage reads both on the next arrival. What an agent concluded is never a fact about you.
+**What it learns from.** No button press is kept or learned from: a press is not a fact about how you
+work. What `LEARNED.md` knows comes from what you did and wrote, in context - who wrote, what they are
+to you, how soon you answered, what you put off and until when, whom you handed it to, what you closed
+without a reply, what you typed to an agent. It keeps what that means, never the number: answering
+someone within minutes, again and again, is written as *that person matters*, and a kind of mail you
+close without a reply as *not yours to answer* - and triage reads both on the next arrival. What an
+agent concluded is never a fact about you.
 
 **What it brings up is yours to teach.** The clock reads what you took up and what you said no
 to: the ideas you dismissed, and **What to bring up** in `LEARNED.md`. An idea of a kind you said no
@@ -196,20 +158,12 @@ because of it. An adopted one has **Not right**, which takes it back for good; o
 marks the adopted ones seen, and the row goes once nothing in it is open. The Assistant answers the
 same row in words: "adopt the second one", "the one about sign-in help is not right".
 
-**How it is tested.** `tests/advisor_cases.py` is the eval: every state the demo and the advisor
-matrix hold, plus a few they lack, each with the moves that are right there, the ones that never
-are, and what its prompt must carry. It runs in the suite against the demo's scripted Advisor.
-`tests/rail_advisor_cases.py` is the clock's: every kind of idea it puts on the rail (a follow-up, a
+**How it is tested.** `tests/rail_advisor_cases.py` is the eval: every kind of idea it puts on the rail (a follow-up, a
 promise, work gone quiet, the app's health, a system worth connecting, its own idea, a rule worth
 making), each in a world where it should fire and in worlds where it should not, plus the demo
 world five days on, checked twice with every line put down between. A line that fires where it
 should not, or fires and is not useful - about automated mail, back after a No, too early, the
 wrong person, stale, over an agent at work - fails the suite with its reason.
-
-**Seeing what it did.** The clock menu on the stage opens the Advisor's notes for the item on the
-table: a receipt, not a transcript. Each entry says the event, what it decided (the pill and the
-line) or what it dropped and why (nothing to say, a verb the item did not carry, the hour's cap,
-no brain), and the evidence it cited by id - what it cited, not everything it read. "Why?" in the chat is answered from the same line.
 
 ## What was not followed up
 

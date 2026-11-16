@@ -1204,7 +1204,7 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, fresh: dict = None, 
 # ...AND THE AGENT IS ASKED FOR IT, ONCE. An agent that ended its run itself (`taskuary --done`) without the reply it owes is told so, by the
 # road every Taskuary word to an agent takes (general.tell) - write it, or say none is needed. Once per reply owed, kept on the review's own
 # audit: an agent that ends again without writing it is not told twice (no loop), and the reply waits as owed, its agent's start lit
-# (advisor.reply_unwritten). A run the owner ended - Stop and save, Done - is not reopened for it: the same reply owed waits for their start.
+# (rulebook.reply_unwritten). A run the owner ended - Stop and save, Done - is not reopened for it: the same reply owed waits for their start.
 OWED = ('TASKUARY: your run ended and {who} is owed a reply that nobody has written. Write only that reply now (propose_reply, or '
         '`taskuary --reply "<text>"`), or if none is needed say why (reply_not_needed, or `taskuary --reply-not-needed "<why>"`). The work '
         'itself is done - nothing else.')

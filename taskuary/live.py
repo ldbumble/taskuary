@@ -14,9 +14,7 @@ FEED, INGEST, TASK, RUN = 'feed-changed', 'ingest-status', 'task-changed', 'run-
 CHAT = 'chat-changed'
 # the startup catch-up finished (or outlived its wait) with a greeting held for it: the page asks for the greeting again (welcome.py)
 ARRIVE = 'arrive'
-# the Advisor's line landed on an item (advisor.judge): the prompt box fills for that key, nothing on the rail moves
-ADVICE = 'advice'
-KINDS = (FEED, INGEST, TASK, RUN, CHAT, ARRIVE, ADVICE)
+KINDS = (FEED, INGEST, TASK, RUN, CHAT, ARRIVE)
 
 # WHICH WRITES A READ HAS SEEN (the load-once pass, 2026-10-27). Every wake-up about a durable write is stamped `seq` (stamp(), taken
 # once the write committed) and a read is stamped with seq() as it begins: a read whose stamp is at least an event's began after that
@@ -50,7 +48,7 @@ _pending = {}          # kind -> payload (last writer wins for that kind)
 _timers = {}           # kind -> Timer
 # run-tail is a screen you watch, so it can wait a beat to fold pty bursts; the other two
 # are "something landed" and should reach the tab before the next glance.
-_DELAY = {RUN: 0.25, FEED: 0.08, INGEST: 0.08, TASK: 0.08, CHAT: 0.05, ARRIVE: 0.05, ADVICE: 0.05}
+_DELAY = {RUN: 0.25, FEED: 0.08, INGEST: 0.08, TASK: 0.08, CHAT: 0.05, ARRIVE: 0.05}
 
 
 def bind(loop):
@@ -94,11 +92,6 @@ def _merged(prev: dict, payload: dict) -> dict:
         if 'seq' in prev and 'seq' in payload: msg['seq'] = max(prev['seq'], payload['seq'])
         else: msg.pop('seq', None)
         if prev.get('by') != payload.get('by'): msg.pop('by', None)
-        # ...nor for WHICH ITEMS the Advisor read (ADVICE): the item on the table and the two read ahead of it answered in one 50 ms window,
-        # the event named only the last, and the table's own light never came - its read was over and nothing said so (CI, 2026-11-02)
-        if 'key' in payload:
-            one = lambda d: {k: d[k] for k in ('key', 'target_kind', 'target_id') if k in d}
-            msg['items'] = [*(prev.get('items') or ([one(prev)] if 'key' in prev else [])), one(payload)]
     if not prev or 'task_id' not in msg: return msg
     a = prev.get('task_ids') or ([prev['task_id']] if prev.get('task_id') is not None else None)
     b = [payload['task_id']] if payload.get('task_id') is not None else None

@@ -309,28 +309,47 @@ def _everywhere(store, pick: str, cli: str = ''):
 
 
 # THREE TIERS ON EVERY AI CARD (the owner, 2026-11-09): a card set up with its model boxes blank ran everything on the gateway's
-# default alias and never stepped up. Set up or tested, each EMPTY box is filled from the models the card lists - read off the
-# names' family words, never a price list: the top family is the strong tier, the mid one normal, the quick cheap one light. Claude
-# leads normal and strong where it is listed (the owner's ask), flash leads light; newest version first. A box the owner filled is kept.
+# default alias and never stepped up. Set up or tested, each EMPTY box is filled from the models the card lists - read off the ids, never a
+# price list. Claude leads where it is listed (the owner's ask); otherwise the NEWEST GENERATION leads (the owner, 2026-11-15: an old
+# generation's "pro" - Gemini 2.5 Pro - is "way overpriced for its intelligence" next to Gemini 4): the generation is the version number in
+# the id, compared within a family. A quick model (flash, lite..) is the agent only where no full model of its generation or newer is listed;
+# at the same generation the plain model is the agent and the one named stronger (pro, opus, carbon..) the strong tier. The quick tier comes
+# from the family the agent tier leads with - one vendor for one card's work, never a stranger's flash because its number is higher.
+# The tier words, the one table of names here:
 _LIGHT = re.compile(r'(?:^|[-_./:])(?:lite|flash|haiku|nano|mini|small)(?:$|[-_./:])', re.I)
-_STRONG = re.compile(r'(?:^|[-_./:])(?:opus|pro|ultra|large)(?:$|[-_./:])|gpt-?5', re.I)
+_STRONG = re.compile(r'(?:^|[-_./:])(?:opus|pro|ultra|large|carbon)(?:$|[-_./:])|gpt-?5', re.I)
+_LEAD = ('claude', 'hydrogen')     # at one generation and tier, these lead: Claude (the owner's ask), Gemini 4 Hydrogen (his price/speed pick)
 TIER_BOX = {'azure_openai': 'deployment'}          # the card's normal model is the box its requests name
 
 
 def _tier(m: str) -> str: return 'light' if _LIGHT.search(m) else 'strong' if _STRONG.search(m) else 'normal'
 def _ver(m: str) -> tuple: return tuple(int(x) for x in re.findall(r'\d+', m))
+def _gen(m: str) -> tuple:
+    "The generation in an id: 'gemini-2.5-pro' (2, 5), 'claude-sonnet-5-5' (5, 5), 'gpt-5-2025-08-07' (5,) - a date is not a minor version."
+    v = re.search(r'(\d+)(?:[.-](\d{1,2})(?!\d))?', m.rsplit('/', 1)[-1])
+    return tuple(int(x) for x in v.groups() if x) if v else ()
+def _family(m: str) -> str:
+    from .llm import _FAMILY
+    f = _FAMILY.search(m); return f[0].lower() if f else re.split(r'[-_./:]', m.lower())[0]
 
 
 def tier_models(models, alias: str = '') -> dict:
     """{model, light_model, strong_model} from a card's model ids - '' where no distinct model fits that tier."""
     real = list(dict.fromkeys(str(m).strip() for m in models or [] if str(m).strip() and str(m).strip() != alias))
-    best = lambda tier, pref: max((m for m in real if _tier(m) == tier), key=lambda m: (pref in m.lower(), _ver(m), -len(m)), default='')
-    model = best('normal', 'claude') or best('strong', 'claude') or best('light', 'flash')
-    strong, light = best('strong', 'claude'), best('light', 'flash')
+    full = [m for m in real if _tier(m) != 'light']
+    # a quick model stands with the full ones only where every full model listed is an older one of its own family
+    sunk = lambda m: _tier(m) == 'light' and any(_family(f) != _family(m) or _gen(f) >= _gen(m) for f in full)
+    lead = lambda m: next((len(_LEAD) - i for i, w in enumerate(_LEAD) if w in m.lower()), 0)
+    rank = lambda m, up: ('claude' in m.lower(), not sunk(m), _gen(m), (_tier(m) == 'strong') == up, lead(m), _ver(m), -len(m))
+    model = max(real, key=lambda m: rank(m, False), default='')
+    # the strong tier is a step up: never an older generation of the agent's own family
+    strong = max((m for m in full if _family(m) != _family(model) or _gen(m) >= _gen(model)), key=lambda m: rank(m, True), default='')
+    by = {f: i for i, f in reversed(list(enumerate(_family(m) for m in sorted(full, key=lambda m: rank(m, False), reverse=True))))}
+    light = max((m for m in real if _tier(m) == 'light'), key=lambda m: (-by.get(_family(m), len(full)), 'flash' in m.lower(), _gen(m), _ver(m), -len(m)), default='')
     return {'model': model, 'light_model': '' if light == model else light, 'strong_model': '' if strong == model else strong}
 
 
-# ...AND THE AGENT'S MODEL IS ONE THAT ANSWERS (the owner, 2026-11-15: agents on 2.5 Pro where Claude does not answer, Flash for the quick
+# ...AND THE AGENT'S MODEL IS ONE THAT ANSWERS (the owner, 2026-11-15: agents on the newest generation where Claude does not answer, Flash for the quick
 # work): a gateway lists Claude whether or not its quota lets it answer - LiteLLM then answers with another model under Claude's name. The
 # model and strong tiers are each asked once (answers); one that fails, or that another model answers for, is passed over for the next
 def answers(c: dict, conf: dict, model: str) -> bool:
@@ -393,34 +412,47 @@ def models_by_job(store, cfg: dict, cid: int, only_blank: bool = False) -> dict:
     return {'fast': fast, 'agent': agent}
 
 
-# ...AND AN INSTALL FROM BEFORE IT, ONCE (the owner, 2026-11-15): a card whose agents still run its untouched default - the gateway's
-# alias, a blank box, a quick model Taskuary saved for them - moves to the model tier above; a model the owner chose by hand is never changed.
-# Untouched: a blank box or the card's default where that default is a gateway's alias or a quick model - and the agents' model where
-# Taskuary saved the alias or a quick one, never the owner
-AGENT_TIER_DONE = 'agent_tier_moved'
+# ...AND AN INSTALL FROM BEFORE IT, ONCE A RULE CHANGES (the owner, 2026-11-15): a card still on a default Taskuary chose - the gateway's
+# alias, a blank box, a quick model saved for the agents, a tier Taskuary itself wrote (the Gemini 2.5 Pro the rule before this one picked) -
+# moves to the tiers above; a model the owner chose by hand is never changed. AGENT_TIER_V counts the rule: a new one moves them again
+AGENT_TIER_DONE, AGENT_TIER_V = 'agent_tier_moved', '2'
+def _ours(store, cid: int, box: str, now: str) -> bool:
+    "Is `now` in the card's `box` what Taskuary itself wrote there last (fill_tiers, this move) - not what the owner saved since?"
+    for a in store.list_audit('connector', cid, 200):
+        try: d = json.loads(a.get('Detail') or '{}')
+        except ValueError: continue
+        if not isinstance(d, dict): continue
+        if a.get('Action') in ('fill_tiers', 'agent_tier') and box in d: return str(d[box] or '') == now
+        if box in (d.get('config_keys') or ()): return False
+    return False
+
+
 def move_agent_tier(store, cfg: dict) -> list:
-    "Once per install, each active AI card's untouched agent model to its model tier; [(card, from, to)]. Not marked done where a card could not be read."
+    "Once per rule, each active AI card's untouched tiers to the tiers it lists now; [(card, from, to)]. Not marked done where a card could not be read."
     from . import llm
-    if store.get_setting(AGENT_TIER_DONE): return []
+    if store.get_setting(AGENT_TIER_DONE) == AGENT_TIER_V: return []
     moved, unread = [], False
     for row in store.list_connectors():
         if row['Type'] not in llm.AI_TYPES or not row['Active'] or not row.get('HasSecret'): continue
         cid, box = row['ConnectorId'], TIER_BOX.get(row['Type'], 'model')
         c, conf, tiers = card_tiers(store, cid)
         if tiers is None: unread = True; continue
-        alias, now, new = (llm.OPENAI_COMPATIBLE.get(row['Type']) or ('', ''))[1], str(conf.get(box) or '').strip(), tiers['model']
+        alias, new = (llm.OPENAI_COMPATIBLE.get(row['Type']) or ('', ''))[1], tiers['model']
         if not new or _tier(new) == 'light': continue
-        # ...only where the blank box runs a gateway's alias (no model family in its name) or a quick model: a provider's own default
-        # model is a choice its card says
-        if now in ('', alias) and new != now and alias and (not llm._FAMILY.search(alias) or _tier(alias) == 'light'):
-            store.merge_connector_config(cid, {box: new}); store.audit('connector', cid, 'agent_tier', 'migration', detail={box: new, 'was': now})
-            moved.append((cid, now, new))
+        # a blank box runs the gateway's alias: untouched where that alias names no model family or a quick one - a provider's own
+        # default model is a choice its card says
+        blank = alias and (not llm._FAMILY.search(alias) or _tier(alias) == 'light')
+        for k, to in ((box, new), ('light_model', tiers['light_model']), ('strong_model', tiers['strong_model'])):
+            now = str(conf.get(k) or '').strip()
+            if now == to or not (blank if k == box and now in ('', alias) else _ours(store, cid, k, now)): continue
+            store.merge_connector_config(cid, {k: to or None}); store.audit('connector', cid, 'agent_tier', 'migration', detail={k: to, 'was': now})
+            moved.append((cid, now, to))
         # ...and the agents' own model, where Taskuary saved one for this card (never the owner's own pick)
         pick, m = f'connector:{cid}', str(store.get_setting('assistant_model') or '').strip()
-        if store.get_setting('assistant_ai') == pick and m and store.setting_writer('assistant_model') != 'owner' and (m == alias or _tier(m) == 'light'):
+        if store.get_setting('assistant_ai') == pick and m and m != new and store.setting_writer('assistant_model') != 'owner':
             from . import aidefaults
             aidefaults.apply(store, cfg, 'assistant_ai', None, new, actor='migration'); moved.append((cid, m, new))
-    if not unread: store.set_setting(AGENT_TIER_DONE, '1', 'migration')
+    if not unread: store.set_setting(AGENT_TIER_DONE, AGENT_TIER_V, 'migration')
     return moved
 
 

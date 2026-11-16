@@ -49,6 +49,8 @@ class ModelsByJobTests(unittest.TestCase):
     """Turning the card on fills each job's model from the gateway's own list (the owner, 2026-10-16: "pull the models available,
     then use lowest quickest for triage/assistant/advisor, and then ... sonnet default for agent work")."""
     MODELS = ['hipaa-ai', 'claude-opus-5-5', 'gemini-2.5-pro', 'claude-sonnet-5-5', 'gemini-3.8-flash']
+    # what the gateway listed on 2026-11-15: Claude listed but over its quota, a new Gemini generation, a stranger's flash
+    GATEWAY = ['gemini-3.8-flash', 'claude-sonnet-5-5', 'claude-opus-5-5', 'gemini-2.5-pro', 'gemini-4-hydrogen', 'deepseek-v4.1-flash', 'hipaa-ai']
 
     def test_the_fastest_model_for_triage_and_the_assistant_and_sonnet_for_the_agent(self):
         from taskuary import firstrun
@@ -57,19 +59,21 @@ class ModelsByJobTests(unittest.TestCase):
         self.assertEqual(tiers(['x-pro', 'x-flash']), ('x-flash', 'x-pro'))
         self.assertEqual(tiers([]), ('', ''))
 
-    def test_where_claude_does_not_answer_the_agents_get_2_5_pro_and_flash_keeps_the_quick_work(self):
-        """The owner, 2026-11-15: agents on a HIPAA AI card default to Gemini 2.5 Pro, Flash stays for triage and the Assistant. The gateway lists
+    def test_where_claude_does_not_answer_the_agents_get_the_newest_generation_and_flash_keeps_the_quick_work(self):
+        """The owner, 2026-11-15: where Claude does not answer, agents on a HIPAA AI card run the newest Gemini generation - not 2.5 Pro, "way
+        overpriced for its intelligence" - and Gemini Flash stays for triage and the Assistant, never another vendor's flash. The gateway lists
         Claude whether or not its quota lets it answer (LiteLLM then answers with Gemini under Claude's name): each agent tier is asked once."""
         from taskuary import firstrun
         s = MemoryStore(); cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']
         s.save_connector({'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1, 'ConfigJson': json.dumps({'base_url': 'https://ai.northwind.example/v1'})}, 'owner')
         asked = []
         def answers(c, conf, m): asked.append(m); return 'claude' not in m
-        with mock.patch('taskuary.llm.list_models', return_value=self.MODELS), mock.patch('taskuary.firstrun.answers', side_effect=answers):
+        with mock.patch('taskuary.llm.list_models', return_value=self.GATEWAY), mock.patch('taskuary.firstrun.answers', side_effect=answers):
             firstrun.fill_tiers(s, cid); out = firstrun.models_by_job(s, {}, cid)      # as setup does: its boxes, then its jobs
-        self.assertEqual(out, {'fast': 'gemini-3.8-flash', 'agent': 'gemini-2.5-pro'})
-        self.assertEqual(s.get_setting('assistant_model'), 'gemini-2.5-pro'); self.assertEqual(s.get_setting('concierge_model'), 'gemini-3.8-flash')
-        conf = json.loads(s.get_connector(cid)['ConfigJson']); self.assertEqual((conf['model'], conf['light_model']), ('gemini-2.5-pro', 'gemini-3.8-flash'))
+        self.assertEqual(out, {'fast': 'gemini-3.8-flash', 'agent': 'gemini-4-hydrogen'})
+        self.assertEqual(s.get_setting('assistant_model'), 'gemini-4-hydrogen'); self.assertEqual(s.get_setting('concierge_model'), 'gemini-3.8-flash')
+        conf = json.loads(s.get_connector(cid)['ConfigJson'])
+        self.assertEqual((conf['model'], conf['light_model'], conf.get('strong_model')), ('gemini-4-hydrogen', 'gemini-3.8-flash', None), 'no step "up" to 2.5 Pro')
         self.assertEqual(len(asked), len(set(asked)) * 2, 'each model asked once a pass, never again within it')
         # ...and a fallback the gateway made is not an answer: another model answered under the one asked for
         def post(url, headers=None, json=None, timeout=None):
@@ -85,19 +89,41 @@ class ModelsByJobTests(unittest.TestCase):
             s.save_connector({'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1,
                               'ConfigJson': json.dumps({'base_url': 'https://ai.northwind.example/v1', 'model': box})}, 'owner')
             s.set_setting('assistant_ai', f'connector:{cid}', 'migration')
-            with mock.patch('taskuary.llm.list_models', return_value=['hipaa-ai', 'gemini-2.5-pro', 'gemini-3.8-flash']):
+            with mock.patch('taskuary.llm.list_models', return_value=['hipaa-ai', 'gemini-2.5-pro', 'gemini-4-hydrogen', 'gemini-3.8-flash']):
                 firstrun.move_agent_tier(s, {})
-                self.assertEqual(json.loads(s.get_connector(cid)['ConfigJson'])['model'], 'gemini-2.5-pro' if moved else box, box)
+                self.assertEqual(json.loads(s.get_connector(cid)['ConfigJson'])['model'], 'gemini-4-hydrogen' if moved else box, box)
                 s.merge_connector_config(cid, {'model': 'hipaa-ai'})
                 self.assertEqual(firstrun.move_agent_tier(s, {}), [], 'once')
         # ...and the agents' own model: a quick one Taskuary saved moves, the one the owner picked by hand stays
-        for writer, want in (('migration', 'gemini-2.5-pro'), ('owner', 'gemini-3.8-flash')):
+        for writer, want in (('migration', 'gemini-4-hydrogen'), ('owner', 'gemini-3.8-flash')):
             s = MemoryStore(); cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']
             s.save_connector({'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1,
-                              'ConfigJson': json.dumps({'base_url': 'https://ai.northwind.example/v1', 'model': 'gemini-2.5-pro'})}, 'owner')
+                              'ConfigJson': json.dumps({'base_url': 'https://ai.northwind.example/v1', 'model': 'gemini-4-hydrogen'})}, 'owner')
             s.set_setting('assistant_ai', f'connector:{cid}', writer); s.set_setting('assistant_model', 'gemini-3.8-flash', writer)
-            with mock.patch('taskuary.llm.list_models', return_value=['gemini-2.5-pro', 'gemini-3.8-flash']): firstrun.move_agent_tier(s, {})
+            with mock.patch('taskuary.llm.list_models', return_value=['gemini-4-hydrogen', 'gemini-3.8-flash']): firstrun.move_agent_tier(s, {})
             self.assertEqual(s.get_setting('assistant_model'), want, writer)
+
+    def test_the_2_5_pro_taskuary_chose_moves_to_the_new_generation_and_the_owners_own_2_5_pro_stays(self):
+        """The rule before (b781bce82) set agents to Gemini 2.5 Pro and its move ran once on that rule. A new rule moves again: a tier Taskuary
+        wrote - its fill, its move, the agents' model it saved - goes to the newest generation; a 2.5 Pro the owner typed in stays."""
+        from taskuary import firstrun
+        listed = ['hipaa-ai', 'gemini-2.5-pro', 'gemini-4-hydrogen', 'gemini-3.8-flash']
+        for by_owner in (False, True):
+            s = MemoryStore(); cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']
+            s.save_connector({'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1, 'ConfigJson': json.dumps({'base_url': 'https://ai.northwind.example/v1'})}, 'owner')
+            # as the rule before left it: its fill, its once-done mark, the agents on 2.5 Pro
+            fill = {'model': 'gemini-2.5-pro', 'strong_model': 'gemini-2.5-pro', 'light_model': 'gemini-3.8-flash'}
+            s.merge_connector_config(cid, fill); s.audit('connector', cid, 'fill_tiers', 'system', detail=fill)
+            s.set_setting('agent_tier_moved', '1', 'migration')
+            s.set_setting('assistant_ai', f'connector:{cid}', 'migration'); s.set_setting('assistant_model', 'gemini-2.5-pro', 'owner' if by_owner else 'migration')
+            if by_owner: s.audit('connector', cid, 'edit', 'owner', detail={'ConnectorId': cid, 'config_keys': ['model']})
+            with mock.patch('taskuary.llm.list_models', return_value=listed): firstrun.move_agent_tier(s, {})
+            conf = json.loads(s.get_connector(cid)['ConfigJson'])
+            want = 'gemini-2.5-pro' if by_owner else 'gemini-4-hydrogen'
+            self.assertEqual((conf['model'], s.get_setting('assistant_model'), conf['light_model']), (want, want, 'gemini-3.8-flash'), by_owner)
+            self.assertIsNone(conf.get('strong_model'), "Taskuary's 2.5 Pro is no step up from Gemini 4")
+            with mock.patch('taskuary.llm.list_models', return_value=listed + ['gemini-4-carbon']):
+                self.assertEqual(firstrun.move_agent_tier(s, {}), [], 'once per rule')
 
     def test_turning_it_on_sets_each_job_and_only_blank_ones_when_asked(self):
         from taskuary import firstrun, aidefaults
@@ -167,9 +193,22 @@ class CardTiersTests(unittest.TestCase):
     def test_the_ranking_reads_the_family_words(self):
         from taskuary import firstrun
         self.assertEqual(firstrun.tier_models(self.MODELS, 'hipaa-ai'), self.OWNERS)
-        self.assertEqual(firstrun.tier_models(['gpt-5', 'gpt-5-mini', 'gpt-4.1']), {'model': 'gpt-4.1', 'light_model': 'gpt-5-mini', 'strong_model': 'gpt-5'})
+        self.assertEqual(firstrun.tier_models(['gpt-5', 'gpt-5-mini', 'gpt-4.1']), {'model': 'gpt-5', 'light_model': 'gpt-5-mini', 'strong_model': ''})
         self.assertEqual(firstrun.tier_models(['only-one']), {'model': 'only-one', 'light_model': '', 'strong_model': ''})
         self.assertEqual(firstrun.tier_models([]), {'model': '', 'light_model': '', 'strong_model': ''})
+
+    def test_the_newest_generation_leads_over_an_old_pro_and_a_quick_model_never_leads_a_full_one(self):
+        """The owner, 2026-11-15: the generation in the id ranks, not the word "pro" - Gemini 4 over Gemini 2.5 Pro. At one generation the plain
+        model is the agent (Hydrogen, his price/speed pick) and the one named stronger (Carbon) the strong tier; the quick tier is the agent's
+        family's flash, never another vendor's because its number is higher; a flash is the agent only over its own family's older ones."""
+        from taskuary import firstrun
+        t = lambda ms: firstrun.tier_models(ms, 'hipaa-ai')
+        listed = ['gemini-3.8-flash', 'gemini-2.5-pro', 'gemini-4-hydrogen', 'deepseek-v4.1-flash', 'hipaa-ai']
+        self.assertEqual(t(listed), {'model': 'gemini-4-hydrogen', 'light_model': 'gemini-3.8-flash', 'strong_model': ''})
+        self.assertEqual(t(listed + ['gemini-4-carbon', 'gemini-4-argon']), {'model': 'gemini-4-hydrogen', 'light_model': 'gemini-3.8-flash', 'strong_model': 'gemini-4-carbon'})
+        self.assertEqual(t(listed + ['claude-sonnet-5-5', 'claude-opus-5-5']), {'model': 'claude-sonnet-5-5', 'light_model': 'gemini-3.8-flash', 'strong_model': 'claude-opus-5-5'})
+        self.assertEqual(t(['gemini-1.5-pro', 'gemini-3.8-flash']), {'model': 'gemini-3.8-flash', 'light_model': '', 'strong_model': ''})
+        self.assertEqual(t(['gemini-3.8-pro', 'gemini-3.8-flash'])['model'], 'gemini-3.8-pro')
 
     def test_the_gateway_card_gets_exactly_the_owners_three(self):
         from taskuary import firstrun
@@ -196,7 +235,7 @@ class CardTiersTests(unittest.TestCase):
         s, cid = self._card({'endpoint': 'https://az.example', 'deployment': 'mine'}, 'azure_openai')
         with mock.patch('taskuary.llm.list_models', return_value=['gpt-4.1', 'gpt-5', 'gpt-5-mini']): firstrun.fill_tiers(s, cid)
         c = self._conf(s, cid)
-        self.assertEqual((c['deployment'], c['strong_model'], c['light_model'], c.get('model')), ('mine', 'gpt-5', 'gpt-5-mini', None))
+        self.assertEqual((c['deployment'], c.get('strong_model'), c['light_model'], c.get('model')), ('mine', None, 'gpt-5-mini', None))
 
     def test_the_cards_test_and_save_fill_it(self):
         from fastapi.testclient import TestClient

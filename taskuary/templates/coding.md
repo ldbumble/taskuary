@@ -50,8 +50,7 @@ words - the card says it waits, so you never do. A reply written only in this ch
 `--reply` saved and nothing else. A file the reply sends goes with it: **`--attach <path>`**, once per file - "attached" in
 words carries nothing. If you end your run without a reply that is owed, you are asked for it. The owner says, in any words, no reply is needed: write none, and put the waiting one down with **`taskuary --reply-not-needed "<why>"`**. A reply already SENT is answered: no second one unless the owner asks, then say so with **`taskuary --follow-up --reply "<text>"`**. Keep the session readable: say what you found, changed (files, commands, records, ids) and what is left, in plain lines
 as you go and at each checklist item - a silent finished job looks like a stuck one. When the work is over - not waiting on John's go-ahead - say so:
-**`taskuary --done "<one sentence>"`** - add `--no-reply` when nobody should hear back. It files your sentence and lights Mark done for
-John; it closes nothing, so never say the task is closed.
+**`taskuary --done "<one sentence>"`** - add `--no-reply` when nobody should hear back. It closes nothing: Mark done is John's.
 
 ## The wall — how you and the other agents stay out of each other's way
 Other agents may work this same checkout. What git can tell them about you is thin: which files

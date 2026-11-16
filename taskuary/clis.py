@@ -23,9 +23,10 @@ KNOWN = [
      'resume_args': ['--resume']},
     {'name': 'codex', 'cmd': 'codex', 'label': 'OpenAI Codex CLI',
      # ...and the hooks we install at user scope run untrusted: Codex skips a hook silently until
-     # someone approves it inside the TUI, which a pty session never can. The flag adds nothing the
-     # sandbox bypass beside it has not already granted (hooks.py, 2026-09-20).
-     'args': ['exec', '--dangerously-bypass-approvals-and-sandbox', '--dangerously-bypass-hook-trust']},
+     # someone approves it inside the TUI, which a pty session never can (hooks.py, 2026-09-20).
+     # NO SANDBOX BYPASS (the owner, 2026-11-16): an agent's work on Codex goes over ACP, where it asks (llm `held_only`); what is
+     # left on its command line - a verdict, a report - runs read-only (READONLY), and a pane in Codex's own approvals
+     'args': ['exec', '--dangerously-bypass-hook-trust']},
     # gemini and cursor keep their sessions in files and hand out no id (sessionfiles.SOURCES goes
     # and finds it): ~/.gemini/tmp/<sha256 of the project root>/chats, and ~/.cursor/chats/**/<id>.
     # Read from their documentation, not from a machine that ran them - see sessionfiles.

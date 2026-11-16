@@ -431,6 +431,13 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
             if resume and resume != store.get_setting(f'stranger_sid:{task_id}'): resume = None
     if not no_hands: prof.setdefault('acp_ok', True)
     else: prof['acp_ok'] = False         # a run with every tool off has nothing to permit, whatever a saved profile says
+    # AN AGENT'S CHAT ON A CLI WHOSE READS NO COMMAND LINE CAN KEEP (clis.confines - codex: even its read-only sandbox reads the whole disk,
+    # and its only way to act alone is the bypass) works on the held road, its look and its hands alike (the owner, 2026-11-16: Codex quick
+    # work listed his Documents folder without asking): over ACP every read outside the task asks and every gated act holds (acpgate), and
+    # where that road cannot start nothing runs on the command line instead (agents.run_cli, `held_only`)
+    from . import clis as clis_mod
+    if task_id and keep and stranger_mode not in ('auto', 'look') and not clis_mod.confines(prof['cmd']) and clis_mod.acp_adapter(prof['cmd']):
+        prof['acp_ok'] = prof['held_only'] = True
     if extra_args:
         from .clis import preset_args
         prof['args'] = list(prof.get('args') or preset_args(prof['cmd']) or ['-p']) + list(extra_args)

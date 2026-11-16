@@ -1649,6 +1649,10 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         elif not ok: clipool.drop(keep, conv)          # a turn that failed part-way is never sent again on that connection (MID_TURN)
 
 
+HELD_ONLY = ("{cli} did not start on the road where it asks before it reads or acts ({why}), so nothing ran - its command line would read "
+             "and act without asking. Send the line again in a moment, or pick another AI for this task")
+
+
 def _fell_back(name: str, why, trace):
     "An ACP start that failed: said once in the log per CLI, and on this run's launch line; the run goes on over argv."
     if name not in _FELL_BACK:
@@ -1686,7 +1690,12 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     # nothing ran), said once in the log. See docs/acp-transport.md.
     if _acp_road(profile, store):
         try: return run_acp(profile, prompt, trace, resume=resume, cancel=cancel, extra_env=extra_env, store=store)
-        except acp_mod.ACPStartError as e: _fell_back(str(profile.get('cmd') or ''), e, trace)
+        except acp_mod.ACPStartError as e:
+            if profile.get('held_only'): raise RuntimeError(HELD_ONLY.format(cli=_cli_name(str(profile.get('cmd') or '')).capitalize(), why=str(e)[:200])) from e
+            _fell_back(str(profile.get('cmd') or ''), e, trace)
+    # ...a run that may only go held (llm.make_cli_llm `held_only`) never takes the command line: there it would read and act unasked
+    elif profile.get('held_only'):
+        raise RuntimeError(HELD_ONLY.format(cli=_cli_name(str(profile.get('cmd') or '')).capitalize(), why="'Run CLI agents over ACP' is off in Settings, Agents"))
     profile = with_cmd(profile, store); name = profile['cmd']
     family = _cli_name(name)
     args = list(profile.get('args') or preset_args(name) or ['-p'])

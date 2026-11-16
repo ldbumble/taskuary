@@ -826,23 +826,6 @@ def interactive_args(args) -> list:
     return out
 
 
-def _codex_windows_auto(argv: list) -> list:
-    """codex's workspace-write sandbox needs a helper exe most Windows installs lack
-    (codex-windows-sandbox-setup.exe) - without it EVERY command dies before running ('the
-    Windows sandbox helper executable is missing'), so an auto session can read but never act.
-    When the helper is absent, full-auto degrades to codex's own bypass flag: the exact trust
-    the claude preset already ships (--dangerously-skip-permissions) - a watched session, no
-    sandbox. Only the TRANSLATED quad is touched; flags the owner typed are theirs."""
-    AUTO = ['--sandbox', 'workspace-write', '--ask-for-approval', 'never']
-    if os.name != 'nt': return argv
-    exe = next((a for a in argv if 'codex' in os.path.basename(str(a)).lower()), None)
-    if not exe: return argv
-    i = next((j for j in range(len(argv) - 3) if argv[j:j + 4] == AUTO), None)
-    if i is None: return argv
-    if os.path.exists(os.path.join(os.path.dirname(str(exe)), 'codex-windows-sandbox-setup.exe')): return argv
-    return argv[:i] + ['--dangerously-bypass-approvals-and-sandbox'] + argv[i + 4:]
-
-
 def _codex_browser_tui(argv: list) -> list:
     """Keep Codex's composer responsive inside xterm.js.
 
@@ -957,7 +940,7 @@ def agent_argv(profile: dict, model: str = None) -> list:
     from .climodels import effort_args, split_pick
     m, eff = split_pick(model or profile.get('model'))
     argv += ([profile.get('model_arg') or '--model', str(m)] if m else []) + effort_args(cli_named(profile), eff)
-    return _codex_hook_trust(_codex_windows_auto(_codex_browser_tui(argv)))
+    return _codex_hook_trust(_codex_browser_tui(argv))
 
 
 # THE PANE'S PALETTE IS CLAUDE'S THEME. Claude Code paints with its OWN colours, not the terminal's: its dark theme

@@ -41,7 +41,7 @@ def world(tmp_path, monkeypatch):
         if Path(str(cmd)).name in w['installed']: return [str(cmd)]
         raise FileNotFoundError(f'{cmd} not found on PATH')
     def run_cli(prof, prompt, trace, resume=None, cancel=None, extra_env=None):
-        w['ran'].append({'cmd': prof.get('cmd'), 'args': list(prof.get('args') or [])})
+        w['ran'].append({'cmd': prof.get('cmd'), 'args': list(prof.get('args') or []), 'held': bool(prof.get('held_only'))})
         if prof.get('cmd') in w['signed_out']: raise RuntimeError(agents.signed_out_msg('assistant', 'Not logged in', prof['cmd']))
         return 'Here is what I found.', 'sid-1', ''
     def make_llm(typ, conf, secret):
@@ -103,6 +103,7 @@ def test_an_untested_claude_does_not_outrank_the_codex_that_passed(world):
     assert [r['cmd'] for r in world['ran']] == ['codex']
 
 
+@pytest.mark.acp                       # the adapters kept: whether codex has a held road decides how it runs
 def test_the_owner_s_own_job_is_not_a_stranger_s_task_and_runs_on_codex_with_its_tools(world):
     world['installed'] |= {'codex'}
     s, cfg = _home(('codex',), tests={'codex': True}, settings={'default_brain': 'codex', 'assistant_ai': 'cli:codex'})
@@ -111,7 +112,8 @@ def test_the_owner_s_own_job_is_not_a_stranger_s_task_and_runs_on_codex_with_its
     said = _run(s, cfg, tid)
     assert not said.startswith('error'), said
     assert [r['cmd'] for r in world['ran']] == ['codex']
-    assert '--dangerously-bypass-approvals-and-sandbox' in world['ran'][0]['args']      # the owner's work launches as it always did
+    # ...on the held road, never its sandbox bypass: over ACP a read outside the task asks (the owner, 2026-11-16)
+    assert world['ran'][0]['held'] and '--dangerously-bypass-approvals-and-sandbox' not in world['ran'][0]['args']
 
 
 def test_a_refusal_never_names_another_tool(world):

@@ -147,23 +147,6 @@ class SeedArgvTests(unittest.TestCase):
         t.seeding, t.accepted = False, None                  # gave up (a trust dialog is up): the owner IS needed
         self.assertFalse(terminal.prompt_pending(t))
 
-    def test_codex_auto_degrades_when_the_windows_sandbox_helper_is_missing(self):
-        """Without codex-windows-sandbox-setup.exe next to codex, workspace-write kills every
-        command before it runs - full-auto degrades to codex's bypass flag, the same trust the
-        claude preset ships. With the helper present the sandbox stays."""
-        import tempfile
-        auto = ['--sandbox', 'workspace-write', '--ask-for-approval', 'never']
-        d = tempfile.mkdtemp()
-        exe = os.path.join(d, 'codex.EXE'); open(exe, 'w').close()
-        if os.name == 'nt':
-            self.assertEqual(terminal._codex_windows_auto([exe] + auto),
-                             [exe, '--dangerously-bypass-approvals-and-sandbox'])
-            open(os.path.join(d, 'codex-windows-sandbox-setup.exe'), 'w').close()
-            self.assertEqual(terminal._codex_windows_auto([exe] + auto), [exe] + auto)
-        else:
-            self.assertEqual(terminal._codex_windows_auto([exe] + auto), [exe] + auto)   # posix sandboxes fine
-        self.assertEqual(terminal._codex_windows_auto(['claude'] + auto), ['claude'] + auto)
-
 
 class InteractiveArgsTests(unittest.TestCase):
     def test_codex_full_auto_translates_to_interactive_auto(self):

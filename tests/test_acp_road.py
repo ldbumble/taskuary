@@ -370,3 +370,35 @@ def test_a_closed_connection_takes_its_whole_process_tree_on_windows():
         c.close()
     assert r.call_args[0][0][:2] == ['taskkill', '/PID'] and '/T' in r.call_args[0][0]
     c.p.kill()
+
+
+# ── a CLI whose reads no command line can keep works only on the held road (the owner, 2026-11-16) ────────────────────────────
+# Codex quick work - a look with no hands, on `codex exec` - listed the owner's Documents folder and nobody was asked: even its read-only
+# sandbox reads the whole disk, and its only way to act alone was --dangerously-bypass-approvals-and-sandbox
+@pytest.mark.parametrize('how', [dict(research=True), dict(cli_tools=True)])
+def test_codex_quick_and_full_work_on_a_task_go_held_and_claude_s_look_keeps_its_confined_road(how):
+    from taskuary import llm
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'List my Documents folder', 'Kind': 'general', 'Source': 'manual', 'OriginBase': 'owner'}, 'owner')
+    seen = {}
+    for name in ('codex', 'claude'):
+        s.upsert_agent(name, 'general', 'cli', json.dumps({'cmd': name}))
+        brain = llm.make_cli_llm(s, name, task_id=tid, keep=f'general:{tid}', **how)
+        with mock.patch.object(agents, 'run_cli', side_effect=lambda prof, *a, **k: (seen.update({prof['cmd']: prof}), ('ok', 'sid', None))[1]):
+            brain('sys', 'list my Documents folder')
+    assert seen['codex'].get('held_only') and agents._acp_road(seen['codex'], s)
+    assert '--dangerously-bypass-approvals-and-sandbox' not in clis.preset_args('codex')
+    assert not seen['claude'].get('held_only')                                   # its reads are kept by its own permission rules
+
+
+def test_a_held_only_run_that_cannot_start_over_acp_runs_nothing_and_says_so():
+    s = MemoryStore()
+    real_popen = agents.spawn.popen
+    def popen(cmd, **kw):
+        if '-p' in cmd: raise AssertionError('the command line must never be reached')
+        return real_popen(cmd, **kw)
+    with mock.patch.object(agents.spawn, 'popen', side_effect=popen):
+        with pytest.raises(RuntimeError, match='nothing ran'): run(profile(args=['-p'], held_only=True), env={'FAKE_ACP_FAIL': 'init'}, store=s)
+    s.set_setting(agents.ACP_SETTING, '0', 'owner')                              # ...nor with the owner's ACP switch off
+    with mock.patch.object(agents, 'run_acp', side_effect=AssertionError('off')), mock.patch.object(agents.spawn, 'popen', side_effect=popen):
+        with pytest.raises(RuntimeError, match="Run CLI agents over ACP"): run(profile(args=['-p'], held_only=True), store=s)

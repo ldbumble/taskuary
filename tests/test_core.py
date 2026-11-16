@@ -755,7 +755,7 @@ class CoreTests(unittest.TestCase):
             # the two TUI flags come from _codex_browser_tui: inline mode and no decorative
             # animations, so the composer stays responsive over ConPTY -> websocket -> xterm
             self.assertEqual(agent_argv({'cmd': 'codex', 'model_arg': '-m', 'model': 'gpt-5-codex'}),
-                             ['codex', '--dangerously-bypass-approvals-and-sandbox', '--dangerously-bypass-hook-trust',
+                             ['codex', '--dangerously-bypass-hook-trust',
                               '-m', 'gpt-5-codex', '--no-alt-screen', '-c', 'tui.animations=false'])
             self.assertEqual(agent_argv({'cmd': 'gemini', 'interactive_args': ['chat']}), ['gemini', 'chat'])
             self.assertEqual(agent_argv({'cmd': 'copilot'}, 'gpt-5.4')[-2:], ['--model', 'gpt-5.4'])

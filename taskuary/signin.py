@@ -564,13 +564,22 @@ def by_owner(store, tok, user, pw, keep: bool, fill=None, key: str = '') -> dict
     return {'site': site, 'task': tid, 'saved': kept == 'saved', 'kept': kept, 'told': told}
 
 
+# WHO SIGNED IN IS SAID, to the agent and on the task alike (the browser round, 2026-11-15): told only "Signed in to <site> - continue." after
+# the saved sign-in went in unseen, the agent wrote "which I read after you signed in" to an owner who had touched nothing
+def signed_in_words(site: str, actor: str, code: bool = False) -> tuple[str, str]:
+    "(the task's receipt, what the agent is told) for a sign-in that went in - by Taskuary from the saved sign-in, or by the owner on the page."
+    if actor == 'owner': return f'Signed in to {site}', f'{DONE} to {site} - continue. The owner signed in on the page themselves.'
+    how = f"the owner's saved sign-in{' and its authenticator code' if code else ''}"
+    return (f'Signed in to {site} with the saved sign-in{" and its authenticator code" if code else ""}',
+            f'{DONE} to {site} - continue. Taskuary signed in with {how}; the owner did nothing on the page.')
+
+
 def _continue(store, tid, rid, site, actor, code=False):
     """Tell the agent - the words it was promised, nothing else - and close the ask. Not workerstate.answer: that answers a pty's
     question with choices by its NUMBER, and "1" typed into a CLI's prompt is not "you are signed in"."""
     from . import terminal as term, workerstate as ws
-    sess, said = ws._live(tid), f'{DONE} to {site} - continue.'
     # the receipt (2026-10-25): that a code went in too, so the owner knows the vault answered the site's second question
-    did = f"Signed in to {site}{' with the saved sign-in' if actor != 'owner' else ''}{' and its authenticator code' if code else ''}"
+    sess, (did, said) = ws._live(tid), signed_in_words(site, actor, code)
     from . import browserview
     if sess and getattr(sess, 'sid', None): browserview.keep_soon(sess.sid)     # past the sign-in: what the site set is kept now (keep)
     if not sess:

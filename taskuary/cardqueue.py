@@ -77,13 +77,15 @@ def _units(store, tid: int, past: set) -> list:
     return out
 
 
-def _going_on(store, tid: int, since: float) -> bool:
-    "Is the agent still going on from a press made after `since` - at work on it, or woken a moment ago and not yet begun?"
+def _going_on(store, tid: int, since: float, own=()) -> bool:
+    """Is the agent still going on from a press made after `since` on ANOTHER card - at work on it, or woken a moment ago and not yet begun?
+    A press on the front itself (`own`: a Send that did not go, which still waits on its card) holds nothing back: it never left its place."""
     from . import general
     from .conversation import ep
-    pressed = max([ep(r['at']) for r in store._rows("SELECT DecidedAt AS at FROM review WHERE TaskId=? AND DecidedAt IS NOT NULL", (int(tid),))] or [0.])
+    pressed = max([ep(r['at']) for r in store._rows("SELECT ReviewId, DecidedAt AS at FROM review WHERE TaskId=? AND DecidedAt IS NOT NULL", (int(tid),))
+                   if r['ReviewId'] not in own] or [0.])
     from . import landing
-    pressed = max(pressed, ep((landing.record(store, int(tid)).get('landed') or {}).get('at')))
+    if LAND not in own: pressed = max(pressed, ep((landing.record(store, int(tid)).get('landed') or {}).get('at')))
     if pressed < since: return False
     last = ep(general._last_answer(store, int(tid)))
     if not last or last >= pressed: return False
@@ -106,7 +108,7 @@ def _state(store, tid: int) -> dict:
     i = us.index(front); n = 1
     while i - n >= 0 and us[i - n + 1]['at'] <= (us[i - n]['done'] or float('inf')) + 1: n += 1
     held = [x for u in waiting[1:] for x in u['rids']]
-    live = [] if _going_on(store, tid, front['at']) else front['rids']
+    live = [] if _going_on(store, tid, front['at'], set(front['rids'])) else front['rids']
     if not live: held = front['rids'] + held
     return {'live': live, 'held': held, 'n': n, 'of': n + len(waiting) - 1, 'next': what(store, waiting[1]) if len(waiting) > 1 else '', 'units': waiting, 'past': past}
 

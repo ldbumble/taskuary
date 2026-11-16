@@ -16,10 +16,10 @@ from loguru import logger
 from .kinds import SHOWN, shown as shown_agent   # who the owner sees at work: Taskuary, never the profile (kinds.json `shown_`)
 
 KINDS = ('working', 'turn_end', 'background', 'input_needed', 'approval_needed', 'stalled', 'answered', 'finished', 'failed', 'disconnected', 'stopped',
-         'floor_denied')
+         'floor_denied', 'idled')
 # A NOTE on the run, not a state of it: the floor refused one call of a stranger's session (floor.py) and the agent carries on,
-# so the run's state is still read off the event before it
-NOTES = ('floor_denied',)
+# so the run's state is still read off the event before it - and `idled`: its process closed quietly while it rested (idled, below)
+NOTES = ('floor_denied', 'idled')
 # A `stalled` request is a turn that DIED on a wall - a rate limit, a token ceiling, an API error - with the
 # CLI alive at its prompt. On the screen that looks exactly like a question. It is not terminal (Claude can
 # auto-resume; the owner can retry), so it is a request: open until the run speaks again (hooks.py).
@@ -103,6 +103,14 @@ def current_sid(store, tid: int):
     if s: return str(s.sid)
     evs = store.worker_events(tid)
     return str(evs[-1]['Sid']) if evs else None
+
+
+def idled(store, tid: int, sid: str):
+    """A session closed QUIETLY while it rested (general.idle_out, acpcoding.ACPCoding.idle_out): said on its record, so every reader - after a
+    restart too - tells it from a walk-out (taskstate.left: the transcript it filed is no "left without finishing"). Nothing in the chat."""
+    store.audit('task', tid, 'agent_idled_out', 'assistant', 'agent', {'sid': sid})
+    try: record(store, tid, sid, 'idled', source='taskuary')
+    except Exception as e: logger.debug(f'task {tid}: its quiet close was not recorded - {e}')
 
 
 def record(store, tid: int, sid: str, kind: str, request_id: str = None, text: str = '', choices: list = None,

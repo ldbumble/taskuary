@@ -155,8 +155,11 @@ class TaskState:
         interrupted / needs you, and the rail said "handed to an agent, not started yet" (2026-09-17). Never over news: what is open
         then is the message, not the session that went before it."""
         if self.news or self.live: return ''
+        # ...but a transcript filed by a session that IDLED OUT is no walk-out (recorded on the real CLI, 2026-11-16: a coding agent answered,
+        # idled out, and read "ran on this and left without finishing it" under its answer): its run's newest word is that quiet close
         return funnel.left_by_facts(self.t.get('Tags'), self.runs) or (
-            'stopped' if self.end in workerstate.TERMINAL or (bool(self.transcript) and not self.finished) else '')
+            'stopped' if self.end in workerstate.TERMINAL or (bool(self.transcript) and not self.finished
+                                                              and (self.last() or {}).get('Kind') != 'idled') else '')
 
     @cached_property
     def idle(self) -> dict:

@@ -104,7 +104,7 @@ def _agent_runs(store, days):
     rows = store._rows("""SELECT e.TaskId, e.Sid, e.Started, l.Kind, t.Assignee,
         (SELECT tr.Agent FROM transcript tr WHERE tr.Sid=e.Sid AND IFNULL(tr.Agent,'')<>'' ORDER BY tr.TranscriptId DESC LIMIT 1) Agent,
         (julianday(l.CreatedAt)-julianday(e.Started))*1440 Mins
-        FROM (SELECT TaskId, Sid, MIN(CreatedAt) Started, MAX(Id) LastId FROM worker_event WHERE CreatedAt>=? AND Kind<>'floor_denied'
+        FROM (SELECT TaskId, Sid, MIN(CreatedAt) Started, MAX(Id) LastId FROM worker_event WHERE CreatedAt>=? AND Kind NOT IN ('floor_denied', 'idled')
               GROUP BY TaskId, Sid) e JOIN worker_event l ON l.Id=e.LastId LEFT JOIN task t ON t.TaskId=e.TaskId
         ORDER BY e.Started DESC LIMIT ?""", (since, ROWS))
     out = []

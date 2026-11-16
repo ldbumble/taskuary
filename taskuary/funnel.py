@@ -676,6 +676,11 @@ def idle_state(store, tid, st=None) -> dict:
     # a parked one fell through every fact below to "Not started yet" - and NOT "LEFT" EITHER (the audit, 2026-11-10): a coding session parked
     # over its reply read "ran on this and left without finishing it" off the transcript an earlier session of it filed
     if (live := live_session_state(tid, agent)): return out('live', *live)
+    # ...NOR ONE THAT IDLED OUT AT REST (recorded on the real CLI, 2026-11-16: a coding agent answered, its session closed quietly, and its chat
+    # ended "ran on this and left without finishing it" under the answer): it waits on you as it did live (taskstate.left reads the close)
+    from . import workerstate
+    if not st.left and (workerstate.newest(store, tid, st.events) or {}).get('Kind') == 'idled' and workerstate.at_rest(store, tid, st.events):
+        return out('live', f'Waiting for you. {_cap(agent)} finished its turn and waits on you.', 'waiting on you')
     # A RUN THAT FAILED SAYS SO, with its reason in plain words (owner-approved, 2026-10-21): it read "Not started yet. Nothing has
     # started the assistant on this." under a chip saying stopped, while the run's own last word was why it failed
     if (f := st.failed): return out('failed', f"Failed - {f['sentence']}", f"failed - {f['sentence'][:1].lower()}{f['sentence'][1:]}")

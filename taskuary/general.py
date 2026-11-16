@@ -3307,7 +3307,8 @@ class GeneralSession:
         for loop, q in list(self.subs):
             try: loop.call_soon_threadsafe(q.put_nowait, None)
             except RuntimeError: pass
-        self.store.audit('task', self.task_id, 'agent_idled_out', 'assistant', 'agent', {'sid': self.sid})
+        from . import workerstate
+        workerstate.idled(self.store, self.task_id, self.sid)
         logger.info(f'task {self.task_id}: its agent was idle for {int(idle_for())}s and closed quietly - the next input starts it again')
         handraise.moved(self.task_id)
         return True

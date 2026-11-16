@@ -64,6 +64,22 @@ class StateTests(unittest.TestCase):
             self.assertEqual((st.key, st.left), ('approve', ''))
             self.assertEqual(funnel.idle_state(s, t)['kind'], 'live', funnel.idle_state(s, t))       # ...never "left without finishing it"
 
+    def test_a_coding_agent_that_answered_and_idled_out_never_left_without_finishing(self):
+        """Recorded on the real CLI, 2026-11-16: a coding agent answered, its session idled out (quiet when idle), and its chat's last line
+        and its row said "The coding agent ran on this and left without finishing it" - over the answer it had just finished. An agent at rest
+        by its own last word (a turn's end) waits on you, as it did live; only one whose record says it stopped is "left"."""
+        from unittest import mock
+        from taskuary import funnel, workerstate
+        s = MemoryStore(); t = task(s, Assignee='agent:coding')
+        s.add_transcript(t, 'acp-1', 'Agent: total() adds tax as an amount', 'coding', '.', 'ext-1', brain='claude')
+        workerstate.record(s, t, 'acp-1', 'turn_end', text='total() adds tax as an amount')
+        workerstate.idled(s, t, 'acp-1')                     # ...its process closed quietly, as ACPCoding.idle_out closes it
+        with mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+            got = funnel.idle_state(s, t)
+            self.assertNotEqual(got['kind'], 'left', got)
+            self.assertNotIn('without finishing', got['line'])
+            self.assertIn('finished its turn', got['line'])
+
     def test_a_done_task_continued_is_live_work_but_a_stale_terminal_is_not(self):
         s = MemoryStore(); t = task(s); s.update_task(t, {'Status': 'done'}, 'owner')
         closed = s.get_task(t)['ClosedAt']

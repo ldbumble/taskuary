@@ -68,7 +68,7 @@ class IdleOut(unittest.TestCase):
 
     def test_an_idle_session_closes_quietly_after_the_period(self):
         s, tid = self.s, self.tid
-        before = (chat(s, tid), len(s.list_comments(tid)), len(s.worker_events(tid)), s.get_task(tid)['Status'],
+        before = (chat(s, tid), len(s.list_comments(tid)), len([e for e in s.worker_events(tid) if e["Kind"] not in ws.NOTES]), s.get_task(tid)['Status'],
                   s._rows('SELECT ReviewId, Status FROM review WHERE TaskId=?', (tid,)), s.get_task(tid)['Tags'])
         self.assertEqual(general.idle_sweep(self.ses.last + 30), [])            # not yet: half the period
         with mock.patch.object(clipool, 'close') as closed, mock.patch('taskuary.general.report_note') as report, \
@@ -79,9 +79,11 @@ class IdleOut(unittest.TestCase):
         self.assertIsNone(general.session_for(tid))                                # no agent running...
         self.assertNotIn(self.sid, terminal.SESSIONS)
         self.assertTrue(general.idled(tid, s))
-        after = (chat(s, tid), len(s.list_comments(tid)), len(s.worker_events(tid)), s.get_task(tid)['Status'],
+        after = (chat(s, tid), len(s.list_comments(tid)), len([e for e in s.worker_events(tid) if e["Kind"] not in ws.NOTES]), s.get_task(tid)['Status'],
                  s._rows('SELECT ReviewId, Status FROM review WHERE TaskId=?', (tid,)), s.get_task(tid)['Tags'])
         self.assertEqual(after, before)                                            # ...and nothing else changed: chat, events, state, drafts
+        # ...but its record says how it rests (workerstate.idled, a note every state reader skips): its transcript is no walk-out (taskstate.left)
+        self.assertEqual([e['Kind'] for e in s.worker_events(tid)][-1], 'idled')
 
     def test_an_idled_task_reads_as_the_task_never_stopped_or_saved(self):
         "The stress run, 2026-11-05: the page said 'agent stopped' and the rail 'the assistant's conversation ... is saved' over an idled agent."

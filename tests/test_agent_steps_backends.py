@@ -16,7 +16,10 @@ KEEP = ('tool_call', 'tool_result', 'progress', 'live', 'error')
 
 def recorder():
     ev = []
-    return ev, lambda kind, name, detail: ev.append({'type': kind, 'name': name, 'detail': detail}) if kind in KEEP else None
+    # ...never the snapshots of a thought or an answer being written (agents.ACPSteps._live): they go by the clock, about once a second, so a
+    # recorded trace cannot hold them - test_session_record's own test pins them on a fixed clock
+    return ev, lambda kind, name, detail: ev.append({'type': kind, 'name': name, 'detail': detail}) if kind in KEEP and not (
+        kind == 'live' and name in ('thinking', 'writing')) else None
 
 
 def same(case, backend, ev):

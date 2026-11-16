@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startHarness, clickNav } from "./harness.mjs";
 
-test("the built-in voice card selects Windows and tests it without an AI provider", { timeout: 300000 }, async (t) => {
+test("the built-in voice card selects Windows and its mic toggles Windows voice typing on the test box", { timeout: 300000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
   const page = await harness.newPage();
@@ -13,11 +13,10 @@ test("the built-in voice card selects Windows and tests it without an AI provide
     const url = new URL(q.url());
     const ok = (data) => q.respond({ status: 200, contentType: "application/json", body: JSON.stringify(data) });
     if (url.pathname === "/api/voice/status") return ok({ ready: true, label: "Existing voice card", vocabulary: [],
-      builtin: { engine: "windows_voice_typing", label: "Windows speech", live: true } });
+      builtin: { engine: "windows_voice_typing", label: "Windows voice typing", keys: true } });
     if (url.pathname === "/api/voice/transcribe") { hit.push("cloud"); return ok({ text: "wrong route" }); }
-    if (url.pathname === "/api/voice/listen") { hit.push("windows"); return ok({ id: "abc123" }); }
-    if (url.pathname.endsWith("/abc123/stop")) return ok({ said: [], done: true });
-    if (url.pathname.endsWith("/abc123")) return ok({ said: url.searchParams.get("since") === "0" ? ["Test built-in dictation"] : [], done: false });
+    // Win+H (voice.toggle_voice_typing): what the box had focused when the chord went is where Windows' own bar types
+    if (url.pathname === "/api/voice/keys") { page.evaluate(() => document.activeElement?.closest("[data-tq-builtin-voice]") && document.activeElement.tagName).then((t) => hit.push(`windows:${t}`)); return ok({ toggled: true }); }
     return page.fixtureRequestGuard(q);
   });
   await page.setViewport({ width: 1600, height: 900 });
@@ -36,13 +35,8 @@ test("the built-in voice card selects Windows and tests it without an AI provide
   const mic = '[data-tq-builtin-voice] button[data-tq-mic]';
   await page.waitForSelector(`${mic}:not([disabled])`);
   await page.click(mic);
-  try {
-    await page.waitForFunction(() => [...document.querySelectorAll('[data-tq-builtin-voice] textarea')].some((e) => e.value.includes("Test built-in dictation")), { timeout: 10000 });
-  } catch (error) {
-    throw new Error(`Microphone test did not receive text: ${JSON.stringify({ hit, errors, card: await page.$eval('[data-tq-builtin-voice]', (e) => e.innerText) })}`, { cause: error });
-  }
-  await page.click('[data-tq-builtin-voice] button[aria-label="stop recording"]');
-  assert.deepEqual(hit, ["windows"]);
+  for (let i = 0; i < 50 && !hit.length; i++) await new Promise((r) => setTimeout(r, 100));
+  assert.deepEqual(hit, ["windows:TEXTAREA"], "Win+H went with the card's test box focused, and nothing went to a voice AI");
   assert.equal(await page.evaluate(() => localStorage.getItem("taskuary-microphone-provider")), "windows");
   assert.deepEqual(errors, []);
 });

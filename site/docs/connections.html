@@ -862,22 +862,19 @@ run; <strong>Local Whisper</strong> runs on this computer with no key, and the a
 to the S3 bucket named on the card, a job transcribes it, and the clip and its transcript are both
 deleted once read. With no voice card a voice note still lands, filed with a line
 saying it was not transcribed and why, its audio attached so one click transcribes it later.</p>
-<p><strong>With nothing set up, the mic still works.</strong> The Taskuary window records the microphone like any
-other app and the clip is transcribed by, in order: a voice card; the OpenAI or Gemini connection you
-already have (its own speech endpoint, same key); or <strong>Local Whisper</strong>. With none of those, the
-first press of the mic offers <strong>Set up Local Whisper</strong>: one press downloads it and its model in the
-background (a few hundred MB, once), the mic says so while it does, and from then on what you say
-is turned into text on this computer and never leaves it. Nothing is installed until you press.</p>
+<p><strong>On Windows the mic is Windows voice typing.</strong> With no voice card, pressing the mic puts the cursor in
+the box and opens Windows&#39; own voice typing bar (the same as pressing Win+H), which types what you say
+straight into the box; press the mic again, or the bar&#39;s own stop, to end. Nothing is recorded by
+Taskuary. If Windows needs a setting turned on, its bar asks. A voice card, when you set one up, is
+used instead.</p>
 <p>Open <strong>Windows / browser voice</strong> under <strong>AI · voice</strong> to choose and test built-in dictation.
 <strong>Browser speech recognition</strong> uses the current tab&#39;s speech service where supported, such as
-Chrome. Edge carries the same speech API, but its service often hears the speech and sends back
-no words (or answers &quot;network&quot; while online); when that happens the mic says so in one line, with a
-button that switches it to your voice card, or sets up Local Whisper. The Windows app&#39;s embedded
-browser has no browser speech service. <strong>Windows speech recognition</strong> (Windows voice typing) is used
-only when you choose it here: it needs <strong>Online speech recognition</strong> under Settings &gt; Privacy &amp;
-security &gt; Speech, and on some managed PCs it cannot run at all. An explicit choice applies to
-microphone buttons in this browser or app window and overrides a connected voice AI card for
-dictation. <strong>Automatic</strong> uses a connected card first, then browser speech, then offers Local Whisper.</p>
+Chrome; on a Mac or Linux it is what a tab uses with no card. Edge carries the same speech API, but
+its service often hears the speech and sends back no words (or answers &quot;network&quot; while online); when
+that happens the mic says so in one line, with a button that switches it to your voice card or to
+Windows voice typing. An explicit choice applies to microphone buttons in this browser or app window
+and overrides a connected voice AI card for dictation. <strong>Automatic</strong> uses a connected card first,
+then Windows voice typing, then browser speech.</p>
 <p>The microphone test keeps its words on the card. On a Mac, click in the box and press the Dictation
 key (or Fn twice).</p>
 <h2 id="a-vendors-own-mcp-server">A vendor&#39;s own MCP server<a class="anchor" href="#a-vendors-own-mcp-server" aria-label="Link to this section">#</a></h2>

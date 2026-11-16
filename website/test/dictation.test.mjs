@@ -184,6 +184,8 @@ test("a mic failure names its fix: the Windows page it points at, else the voice
   assert.equal(micFix("Taskuary needs Windows' online speech recognition for dictation, and it is off on this computer.").settings, "speech");
   assert.equal(micFix("This browser cannot dictate here - set up a voice AI instead").voice, true);
   assert.equal(micFix("transcription failed"), null);
+  assert.equal(micFix("Windows voice typing did not start - Windows refused the Win+H key press. Click in the box and press Win+H yourself, or set up a voice AI").voice, true,
+    "a refused chord has the voice shelf as its way past");
 });
 
 test("a browser speech service failure offers the computer's other voice, else the voice shelf", async () => {
@@ -194,7 +196,4 @@ test("a browser speech service failure offers the computer's other voice, else t
     assert.equal(micFix(dictationError(c)).voice, true, c);
   }
   assert.equal(micFix(dictationError("network"), { label: "Groq", choice: "auto" }).settings, undefined, "never Windows' speech settings for a browser's service");
-  assert.deepEqual(micFix(dictationError("blank"), { label: "Local Whisper", choice: "auto", local: true }), { label: "Set up Local Whisper", choose: "auto", local: true },
-    "with no voice card, Local Whisper in one press");
-  assert.deepEqual(micFix("Local Whisper could not be set up - pip could not reach the internet"), { label: "Try Local Whisper again", choose: "auto", local: true });
 });

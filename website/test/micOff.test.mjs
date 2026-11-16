@@ -13,7 +13,7 @@ const mic = ui.slice(ui.indexOf("export const MicButton"), ui.indexOf("export co
 test("with no voice AI and no voice found the mic is crossed out, and its press asks instead of recording", () => {
   assert.match(mic, /const off = !!\(voice && route !== "connector" && !viaBrowser && !viaBuiltin\)/);
   assert.match(mic, /off \? <MicOffIcon/);
-  assert.match(mic, /const press = \(e\) => \{ setErr\(""\); if \(getting\) return flash\(voice\.local\.line\); if \(!off && !\(viaBuiltin && speechAsk\)\) return start\(\); setAsk\(e\.currentTarget\)/);
+  assert.match(mic, /const press = \(e\) => \{ setErr\(""\); if \(!off\) return start\(\); setAsk\(e\.currentTarget\)/);
 });
 
 test("a browser recogniser or the computer's own is used at once, with no opt-in to press", () => {
@@ -28,9 +28,9 @@ test("a browser recogniser or the computer's own is used at once, with no opt-in
 // A DEAD BROWSER SERVICE OFFERS THE OTHER VOICE (the owner, 2026-11-16: "the browser's own speech recognition was not working"): one road -
 // the line says the service is down and its button switches the mic to the voice card, else Windows voice typing; no silent hand-over
 test("a tab whose speech service will not answer offers this computer's other voice as its button", () => {
-  assert.match(mic, /const other = voice\?\.ready \? \{ label: voice\.label \|\| "the voice AI", choice: "auto" \} : \{ label: "Local Whisper", choice: "auto", local: true \}/);
+  assert.match(mic, /const other = voice\?\.ready \? \{ label: voice\.label \|\| "the voice AI", choice: "auto" \} : voice\?\.builtin \? \{ label: voice\.builtin\.label, choice: "windows" \} : null/);
   assert.match(mic, /const fix = micFix\(err, other\)/);
-  assert.match(mic, /fix\.local \? setUpLocal\(\) : fix\.choose \? \(setErr\(""\), chooseVoice\(fix\.choose\)\)/);
+  assert.match(mic, /fix\.choose \? \(setErr\(""\), chooseVoice\(fix\.choose\)\)/);
   assert.doesNotMatch(mic, /srDown/, "the session-only hand-over is gone");
 });
 
@@ -41,30 +41,19 @@ test("the popup opens the voice section of Connections, and that link lands ther
   assert.deepEqual([r.area, r.state], ["connections", { section: "AI — voice", open: null }]);
 });
 
-// Windows voice typing first (the owner, 2026-11-02: "do the changes to use desktop if the machine has it"): it hears the microphone
-// itself, so the mic holds a session on the server instead of recording a clip; a Mac's crossed-out mic points at its Dictation key.
-test("Windows voice typing is a session the server holds, from one press to the next", () => {
-  assert.match(mic, /const viaLive = !!\(viaBuiltin && builtin\.live && !speechAsk\)/);
-  assert.match(mic, /if \(viaLive\) return listen\(\);/);
-  assert.match(mic, /api\.post\("\/api\/voice\/listen"\)/);
-  assert.match(mic, /api\.get\(`\/api\/voice\/listen\/\$\{id\}`, \{ params: \{ since: seen \} \}\)/, "each settled phrase, once");
-  assert.match(mic, /api\.post\(`\/api\/voice\/listen\/\$\{id\}\/stop`/, "the stop lets a phrase still being said land");
-  assert.match(mic, /if \(!viaBrowser && !viaLive\) setRec\(null\)/);
+// WINDOWS VOICE TYPING, AS EVERY OTHER APP GETS IT (the owner, 2026-11-16: "I don't want Local Whisper. Use the Windows voice rec"): the
+// press focuses the box the mic belongs to and the server sends Win+H, so Windows' own bar types into it; nothing listens or records here
+test("on Windows the press focuses the box and toggles Windows voice typing with Win+H, and nothing records", () => {
+  assert.match(mic, /if \(viaBuiltin\) return keys\(\);/);
+  assert.match(mic, /const box = boxNear\(anchor\.current\); box\?\.focus\(\);\s+try \{ await api\.post\("\/api\/voice\/keys"\); \}/, "the box first, then the chord");
+  assert.match(mic, /onMouseDown=\{\(e\) => viaBuiltin && e\.preventDefault\(\)\}/, "pressing the mic does not take the focus from the box");
+  assert.match(mic, /catch \(e\) \{ flash\(e\?\.response\?\.data\?\.detail \|\| "Windows voice typing did not start/, "a refused chord says so in one line");
+  assert.doesNotMatch(ui, /\/api\/voice\/listen|\/api\/voice\/speech-on|\/api\/deps\/local-whisper|setUpLocal|Set up Local Whisper/, "the WinRT session and the Local Whisper offer are gone");
 });
 
 test("a Mac with no voice is pointed at its own Dictation key", () => {
   assert.match(mic, /\/Mac\/\.test\(navigator\.platform/);
   assert.match(mic, /Dictation key/);
-});
-
-// NOTHING THAT DOES NOT WORK (TQ-1283, the owner, 2026-11-03: "trigger the question if you want to turn that on"): voice typing with its
-// speech setting off ASKS - a yes turns it on and starts listening; nothing falls back to worse dictation.
-test("voice typing with its setting off asks to turn it on, and a yes turns it on and listens", () => {
-  assert.match(mic, /const speechAsk = !!builtin\?\.ask/);
-  assert.match(mic, /api\.post\("\/api\/voice\/speech-on"\); setAsk\(null\); voice\.recheck\(\); listen\(\);/);
-  assert.match(mic, /Turn on speech recognition\?/);
-  assert.match(mic, /data-tq-speech-on="" onClick=\{turnOn\}/);
-  assert.match(mic, /if \(viaBuiltin\) return;/, "nothing records a clip for the computer's own any more");
 });
 
 // A MIC THAT HEARD NOTHING SAYS WHY (the owner, 2026-11-09: "you start it and end it and no words show up???"): every road that ends with
@@ -74,9 +63,6 @@ test("a failed or empty transcription shows a reason, never silence", () => {
   assert.match(mic, /if \(data\.text\) live\.current\.onText\?\.\(data\.text\); else flash\(heardNothing\(/, "an empty transcript names who heard nothing");
   assert.doesNotMatch(mic, /flash\("nothing audible"\)/);
   assert.match(mic, /catch \(e\) \{ flash\(e\?\.response\?\.data\?\.detail \|\| "transcription failed"\); \}/, "a failed one says the server's reason");
-  assert.match(mic, /heard \|\|= said\.length > 0/);
-  assert.match(mic, /if \(error \|\| !heard\) flash\(error \|\| heardNothing\("Windows voice typing"\)\)/, "a voice typing session that heard nothing says so");
-  assert.doesNotMatch(mic, /catch \{ end\(""\); \}/, "a failed stop is not a silent end");
 });
 
 test("a refused microphone in the Taskuary window points at Windows' setting, not an address bar it does not have", () => {
@@ -107,16 +93,5 @@ test("a mic failure stays said beside the mic with its fix as a button, never on
   assert.match(mic, /fix\.settings \? openSettings\(fix\.settings\)/);
   assert.match(mic, /api\.post\("\/api\/voice\/open-settings", null, \{ params: \{ which \} \}\)/);
   assert.match(mic, /window\.addEventListener\("focus", back\)/, "back from Windows' settings, the mic checks again");
-  assert.match(mic, /data-tq-speech-settings=""/, "the speech ask also opens Windows' own page");
 });
 
-// LOCAL WHISPER IN ONE PRESS (the owner, 2026-11-16: "all other apps work ... Need this to work"): with nothing that hears, the mic's press
-// offers Local Whisper - one press sets it up in the background (POST /api/deps/local-whisper), the mic says so and looks again until it hears
-test("with nothing that hears, the press offers Local Whisper set up in one press, and the mic says so while it sets up", () => {
-  assert.match(mic, /data-tq-voice-local="" onClick=\{setUpLocal\}/);
-  assert.match(mic, /await api\.post\("\/api\/deps\/local-whisper"\)/);
-  assert.match(mic, /const getting = voice\?\.local\?\.state === "getting"/);
-  assert.match(mic, /setInterval\(\(\) => voice\.recheck\(\), 3000\)/, "it looks again until Local Whisper hears");
-  assert.match(mic, /voice\?\.local\?\.state === "failed" \? "Try Local Whisper again"/, "a failed setup says why and can be pressed again");
-  assert.match(mic, /settingUp\.current = false; flash\(voice\?\.local\?\.state === "failed" \? voice\.local\.line : ""\)/, "the setting-up line goes once it hears, or says why it could not");
-});

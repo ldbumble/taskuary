@@ -538,6 +538,9 @@ export const levelMeter = (stream, AC = typeof window !== "undefined" && (window
   } };
 };
 
+// the prompt box a mic belongs to: the nearest text box in the mic's own surroundings, for Windows voice typing to type into
+export const boxNear = (el) => { for (let p = el?.parentElement; p; p = p.parentElement) { const b = p.querySelector("textarea, input[type=text], [contenteditable=true]"); if (b) return b; } return null; };
+
 // One mic. Press to record, press again to stop; the clip goes to /api/voice/transcribe as its
 // raw bytes and the text lands through onText - into a prompt box, or straight into a session.
 export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) => {
@@ -559,7 +562,7 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
   const flash = (s) => setErr(s || "");
   React.useEffect(() => () => { recRef.current?.cancel?.(); }, []);
   // the voice this computer has besides the browser's: the voice card, else Windows voice typing - a dead browser service offers it as the fix
-  const other = voice?.ready ? { label: voice.label || "the voice AI", choice: "auto" } : { label: "Local Whisper", choice: "auto", local: true };
+  const other = voice?.ready ? { label: voice.label || "the voice AI", choice: "auto" } : voice?.builtin ? { label: voice.builtin.label, choice: "windows" } : null;
   const fix = micFix(err, other);
   const openSettings = async (which) => {
     try { await api.post("/api/voice/open-settings", null, { params: { which } }); }
@@ -572,41 +575,22 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
   // to configure voice ai before it will activate") - ...UNLESS A VOICE IS FOUND, AND THEN NO PRESS TO TURN IT ON (the owner, 2026-11-01:
   // "local voice using microsoft edge is not working. it should be built in without having to turn it on if it finds it"). The mic stayed
   // crossed out until "use this browser's own" was pressed, and in the desktop window there was nothing to press. Now, with no card: a
-  // tab's own recogniser (Edge and Chrome ship the Web Speech API) is used at once; else the computer's own (voice.py builtin - Windows'
-  // dictation, behind the desktop window too); only with neither is the mic crossed out and its press asks. A card still wins, and is
+  // computer's own: Windows voice typing, toggled with its own Win+H on the box (voice.py builtin), in the desktop window and in a tab on
+  // this computer alike; else a tab's own recogniser (the Web Speech API); only with none is the mic crossed out and its press asks. A card still wins, and is
   // still what transcribes a voice-note FILE. A tab whose speech service will not answer says so, with the other voice as its button (micFix).
   const SR = browserRecogniser(), route = micRoute(voice, SR, voice?.choice);
   const builtin = route !== "connector" ? voice?.builtin : null;
-  // ...AND NOTHING THAT DOES NOT WORK (TQ-1283, the owner, 2026-11-03: "you can't use something that doesn't work ... trigger the
-  // question if you want to turn that on"): Windows voice typing with its speech setting off is not a fallback to worse dictation -
-  // the press asks to turn it on, and a yes turns it on and starts listening
-  const speechAsk = !!builtin?.ask;
   const viaBrowser = !!(voice && route === "browser");
   const viaBuiltin = !!(builtin && route === "windows");
-  const viaLive = !!(viaBuiltin && builtin.live && !speechAsk);     // Windows voice typing hears the microphone itself: a session, not a clip
   const off = !!(voice && route !== "connector" && !viaBrowser && !viaBuiltin);
-  // LOCAL WHISPER IN ONE PRESS (voice.set_up_local): while it sets itself up the mic says so and looks again every few seconds
-  const getting = voice?.local?.state === "getting";
-  React.useEffect(() => { if (!getting) return; const t = setInterval(() => voice.recheck(), 3000); return () => clearInterval(t); }, [getting]);   // eslint-disable-line react-hooks/exhaustive-deps
-  // ...and the setting-up line goes when it hears, or turns into why it could not (with Try again)
-  const settingUp = React.useRef(false);
-  React.useEffect(() => {
-    if (!settingUp.current || getting) return;
-    settingUp.current = false; flash(voice?.local?.state === "failed" ? voice.local.line : "");
-  }, [getting, voice?.local?.state]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const setUpLocal = async () => {
-    setAsk(null); chooseVoice("auto");
-    try { const { data } = await api.post("/api/deps/local-whisper"); settingUp.current = data?.state === "getting"; flash(data?.line || ""); }
-    catch (e) { flash(e?.response?.data?.detail || "Local Whisper could not be set up"); }
-    voice?.recheck();
-  };
-  const press = (e) => { setErr(""); if (getting) return flash(voice.local.line); if (!off && !(viaBuiltin && speechAsk)) return start(); setAsk(e.currentTarget); voice.recheck(); };
-  const [turning, setTurning] = React.useState(false);
-  const turnOn = async () => {
-    setTurning(true);
-    try { await api.post("/api/voice/speech-on"); setAsk(null); voice.recheck(); listen(); }
-    catch (e) { setAsk(null); flash(e?.response?.data?.detail || "Windows would not turn on speech recognition"); }
-    setTurning(false);
+  const press = (e) => { setErr(""); if (!off) return start(); setAsk(e.currentTarget); voice.recheck(); };
+  // WINDOWS VOICE TYPING, AS EVERY OTHER APP GETS IT (the owner, 2026-11-16: "Use the Windows voice rec"): the box nearest the mic takes the
+  // focus and the server sends Win+H (voice.toggle_voice_typing), so Windows' own bar types into it; the next press - or the bar's own
+  // stop - closes it. Nothing here listens or records: the words arrive as typing.
+  const keys = async () => {
+    const box = boxNear(anchor.current); box?.focus();
+    try { await api.post("/api/voice/keys"); }
+    catch (e) { flash(e?.response?.data?.detail || "Windows voice typing did not start - click in the box and press Win+H yourself, or set up a voice AI"); }
   };
   // set up in the meantime (the popup's own button, or another tab): the mic is live the moment the status says so
   React.useEffect(() => { if (ask && voice?.ready) setAsk(null); }, [ask, voice?.ready]);
@@ -630,8 +614,7 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
       } catch { flash("This browser cannot dictate here - set up a voice AI instead"); }
       return;
     }
-    if (viaLive) return listen();
-    if (viaBuiltin) return;     // nothing else on this computer hears dictation well enough to use (TQ-1283)
+    if (viaBuiltin) return keys();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const type = window.MediaRecorder?.isTypeSupported?.("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : undefined;
@@ -654,47 +637,19 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
       mr.start(); setRec(mr);
     } catch (e) { flash(micRefused(e?.name)); }
   };
-  // WINDOWS VOICE TYPING (voice.py LIVE; the owner, 2026-11-02: "use desktop if the machine has it"): the server listens on this
-  // computer's microphone from the press to the next one. Each phrase lands as it settles - one by one into the chat box (onInterim),
-  // all at the stop elsewhere, as the browser's dictation does - and the stop waits for a phrase still being said
-  const listen = async () => {
-    setBusy(true);
-    let id, seen = 0, all = "", timer = null, over = false, heard = false;
-    const take = (said = []) => { seen += said.length; heard ||= said.length > 0; for (const t of said) { if (live.current.onInterim) live.current.onText?.(t); else all = all ? `${all} ${t}` : t; } };
-    const end = (error) => {
-      if (over) return; over = true; clearInterval(timer); setRec(null); setBusy(false); if (ctl) ctl.current = null;
-      if (all) live.current.onText?.(all);
-      if (error || !heard) flash(error || heardNothing("Windows voice typing"));
-    };
-    try { id = (await api.post("/api/voice/listen")).data.id; }
-    catch (e) { setBusy(false); flash(e?.response?.data?.detail || "Windows voice typing would not start"); return; }
-    timer = setInterval(async () => {
-      try { const { data } = await api.get(`/api/voice/listen/${id}`, { params: { since: seen } }); take(data.said); if (data.done) end(data.error); }
-      catch { end("Windows voice typing stopped"); }
-    }, 400);
-    const session = {
-      stop: async () => {
-        clearInterval(timer); setBusy(true);
-        try { const { data } = await api.post(`/api/voice/listen/${id}/stop`, null, { params: { since: seen } }); take(data.said); end(data.error); }
-        catch (e) { end(e?.response?.data?.detail || "Windows voice typing stopped before it said what it heard - press the mic again"); }
-      },
-      cancel: () => { if (!over) { over = true; clearInterval(timer); api.post(`/api/voice/listen/${id}/stop`).catch(() => {}); } },
-    };
-    setRec(session); setBusy(false); if (ctl) ctl.current = { cancel: session.cancel };
-  };
-  const stop = () => { rec?.stop(); if (!viaBrowser && !viaLive) setRec(null); };   // the browser's dictation and voice typing report back themselves
-  const title = err || (!voice ? "" : getting ? voice.local.line
+  const stop = () => { rec?.stop(); if (!viaBrowser) setRec(null); };   // the browser's dictation reports back itself
+  const title = err || (!voice ? ""
     : rec ? "Stop and transcribe"
     : route === "connector" ? `Dictate (${voice.label || voice.provider})`
     : viaBrowser ? `Dictate — your browser's own recogniser. A voice AI (${placeName("voice")}) is more accurate and reads voice notes.`
-    : viaLive ? `Dictate — ${builtin.label}. A voice AI (${placeName("voice")}) also reads voice notes.`
-    : viaBuiltin ? "Dictate — turn on Windows' speech recognition first (press to say yes)"
+    : viaBuiltin ? `Dictate — ${builtin.label} (Win+H): its bar types into the box; press again, or its own stop, to end`
     : voice.choice !== "auto" ? "The selected built-in speech service is unavailable here — check Windows / browser voice in Connections"
     : "Voice is off — no voice AI is set up yet");
   return (<>
     <MuiTooltip title={ask || err ? "" : title} open={!ask && !err && hover && !!title}
       onOpen={() => setHover(true)} onClose={() => setHover(false)}><span ref={anchor}>
       <MuiIconButton size="small" onClick={rec ? stop : press} disabled={busy || !voice} sx={sx} data-tq-mic={off ? "off" : "on"}
+        onMouseDown={(e) => viaBuiltin && e.preventDefault()}
         aria-label={rec ? "stop recording" : off ? "voice is off - set up a voice AI" : "dictate"}>
         {busy ? <CircularProgress size={size - 4} /> : rec ? <StopCircleIcon sx={{ fontSize: size, color: "var(--tq-danger, #8a3646)" }} />
           : off ? <MicOffIcon sx={{ fontSize: size, opacity: 0.7 }} /> : <MicIcon sx={{ fontSize: size }} />}
@@ -705,8 +660,8 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
         border: "1px solid var(--tq-edge-red, #e3c9ce)", borderRadius: 1.5, boxShadow: "0 4px 14px rgba(0,0,0,.08)" }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography sx={{ fontSize: 12.5, color: INK, lineHeight: 1.45 }}>{err}</Typography>
-          {fix && <Button size="small" variant="contained" disableElevation data-tq-mic-fix={fix.settings || (fix.local ? "local" : fix.choose) || "voice"} sx={{ textTransform: "none", mt: 0.75 }}
-            onClick={() => fix.settings ? openSettings(fix.settings) : fix.local ? setUpLocal() : fix.choose ? (setErr(""), chooseVoice(fix.choose)) : (setErr(""), openAppLink(place("voice").href))}>{fix.label}</Button>}
+          {fix && <Button size="small" variant="contained" disableElevation data-tq-mic-fix={fix.settings || fix.choose || "voice"} sx={{ textTransform: "none", mt: 0.75 }}
+            onClick={() => fix.settings ? openSettings(fix.settings) : fix.choose ? (setErr(""), chooseVoice(fix.choose)) : (setErr(""), openAppLink(place("voice").href))}>{fix.label}</Button>}
         </Box>
         <MuiIconButton size="small" aria-label="dismiss" onClick={() => setErr("")} sx={{ p: 0.25, mt: -0.25 }}><CloseIcon sx={{ fontSize: 15 }} /></MuiIconButton>
       </Box>
@@ -714,36 +669,23 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
     <Popover open={!!ask} anchorEl={ask} onClose={() => setAsk(null)} data-tq-voice-ask
       anchorOrigin={{ vertical: "top", horizontal: "center" }} transformOrigin={{ vertical: "bottom", horizontal: "center" }}
       slotProps={{ paper: { sx: { p: 1.75, maxWidth: 320, borderRadius: 2, mt: -0.75 } } }}>
-      {viaBuiltin && speechAsk ? <>
-        <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: INK }}>Turn on speech recognition?</Typography>
-        <Typography data-tq-speech-ask="" sx={{ fontSize: 12.5, color: DIM, mt: 0.5, lineHeight: 1.5 }}>{builtin.ask}</Typography>
-        <Typography sx={{ fontSize: 12.5, color: DIM, mt: 0.75, lineHeight: 1.5 }}>
-          Or pick a voice AI under {placeName("voice")} instead - it also reads voice notes.
-        </Typography>
-      </> : voice?.choice !== "auto" ? <>
+      {voice?.choice !== "auto" ? <>      </> : voice?.choice !== "auto" ? <>
         <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: INK }}>Built-in speech is unavailable here</Typography>
         <Typography sx={{ fontSize: 12.5, color: DIM, mt: 0.5, lineHeight: 1.5 }}>
           Open Windows / browser voice under {placeName("voice")} to check availability or choose another built-in service.
         </Typography>
       </> : <>
         <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: INK }}>Set up voice to talk instead of type</Typography>
-        <Typography data-tq-voice-local-ask="" sx={{ fontSize: 12.5, color: DIM, mt: 0.5, lineHeight: 1.5 }}>
-          {voice?.local?.state === "failed" ? `${voice.local.line}. ` : ""}Local Whisper hears you on this computer - free, no key, and what you
-          say never leaves it (a one-time download of a few hundred MB). Or pick a voice AI under {placeName("voice")}.
+        <Typography sx={{ fontSize: 12.5, color: DIM, mt: 0.5, lineHeight: 1.5 }}>
+          Pick a voice AI under {placeName("voice")}.
         </Typography>
       </>}
-      {/* a Mac's own voice typing takes any box with the cursor in it - this window cannot call it, the owner can (voice.py LIVE) */}
+      {/* a Mac's own voice typing takes any box with the cursor in it - this window cannot call it, the owner can */}
       {/Mac/.test(navigator.platform || navigator.userAgent || "") && <Typography sx={{ fontSize: 12.5, color: DIM, mt: 0.75, lineHeight: 1.5 }}>
         Or use the Mac's own Dictation: click in the box and press the Dictation key (🎤), or Fn twice.
       </Typography>}
       <Box sx={{ display: "flex", gap: 1, mt: 1.5, flexWrap: "wrap" }}>
-        {viaBuiltin && speechAsk && <Button size="small" variant="contained" disableElevation sx={{ textTransform: "none" }} disabled={turning}
-          data-tq-speech-on="" onClick={turnOn}>{turning ? "Turning it on…" : "Turn it on"}</Button>}
-        {viaBuiltin && speechAsk && <Button size="small" variant="text" sx={{ textTransform: "none" }} data-tq-speech-settings=""
-          onClick={() => { setAsk(null); openSettings("speech"); }}>Open speech settings</Button>}
-        {!viaBuiltin && voice?.choice === "auto" && <Button size="small" variant="contained" disableElevation sx={{ textTransform: "none" }}
-          data-tq-voice-local="" onClick={setUpLocal}>{voice?.local?.state === "failed" ? "Try Local Whisper again" : "Set up Local Whisper"}</Button>}
-        <Button size="small" variant={(viaBuiltin && speechAsk) || voice?.choice === "auto" ? "text" : "contained"} disableElevation sx={{ textTransform: "none" }}
+        <Button size="small" variant="contained" disableElevation sx={{ textTransform: "none" }}
           onClick={() => { setAsk(null); openAppLink(place("voice").href); }}>{voice?.choice !== "auto" ? "Voice settings" : "Set up voice AI"}</Button>
       </Box>
     </Popover>

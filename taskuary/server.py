@@ -7888,15 +7888,6 @@ def deps_install(body: dict):
     return out
 
 
-@app.post('/api/deps/local-whisper')
-def deps_local_whisper():
-    """The mic's "Set up Local Whisper": faster-whisper, its model and the card, in the background (voice.set_up_local). Under /api/deps/,
-    so guard.DENIED keeps it the owner's press."""
-    from . import voice
-    store.audit('connector', 0, 'local_whisper_setup', ACTOR)
-    return voice.set_up_local(store)
-
-
 def _failed_test(cid: int, name: str, out: dict):
     """A test that failed, left on the connector (failures.record_on): the card said it once, and nothing could read it after."""
     try: failures.record_on(store, 'connector', cid, kind='connection.test', error=out.get('detail') or 'the test failed', what=f'{name} failed its test', name=name)
@@ -8049,31 +8040,20 @@ def task_reason_ask(tid: int, payload: dict):
 def voice_status(request: Request, builtin: bool = False, refresh: bool = False):
     from . import voice
     out = voice.ready(store)
-    if builtin and refresh: out['builtin'] = voice.builtin(refresh=True)
-    elif builtin and out['ready']: out['builtin'] = voice.builtin()
-    # Windows voice typing hears THIS computer's microphone: a page on another device never gets it
-    if (out.get('builtin') or {}).get('live') and not _is_loopback(request.client.host if request.client else ''): out['builtin'] = None
+    if builtin and out['ready']: out['builtin'] = voice.builtin()
+    # Windows voice typing types on THIS computer's desktop: a page on another device never gets it
+    if out.get('builtin') and not _is_loopback(request.client.host if request.client else ''): out['builtin'] = None
     return out
 
-def _live_voice(request: Request):
+@app.post('/api/voice/keys')
+def voice_keys(request: Request):
+    """The mic's press in a page on this computer: Win+H, so Windows voice typing opens on the box the page just focused - or closes."""
     from . import voice
-    if not _is_loopback(request.client.host if request.client else ''): raise HTTPException(409, f"{voice.LIVE['label']} listens only on the computer Taskuary runs on")
-    return voice
-
-@app.post('/api/voice/listen')
-def voice_listen(request: Request):
-    """Windows voice typing (voice.py LIVE): the mic's press starts a session on this computer's microphone."""
-    voice = _live_voice(request)
-    try: return {'id': voice.listen_start()}
+    if not voice.builtin() or not _is_loopback(request.client.host if request.client else ''):
+        raise HTTPException(409, "Windows voice typing works only in Taskuary on the Windows computer it runs on - set up a voice AI to dictate here")
+    try: voice.toggle_voice_typing()
     except (RuntimeError, OSError) as e: raise HTTPException(409, str(e))
-
-@app.post('/api/voice/speech-on')
-def voice_speech_on(request: Request):
-    """The owner's yes at the mic (TQ-1283): Online speech recognition on for this Windows user, so voice typing can hear them."""
-    voice = _live_voice(request)
-    if not voice.turn_on_speech(): raise HTTPException(409, "Windows would not turn on speech recognition - turn on Online speech recognition in Windows' speech privacy settings, then press the mic again")
-    store.audit('setting', 0, 'voice_online_speech', ACTOR, detail={'on': True})
-    return voice.ready(store)
+    return {'toggled': True}
 
 # THE FIX IS A BUTTON (the owner, 2026-11-09: "just request the permission like a normal app and they can hit approve"): a mic that
 # Windows' privacy settings keep from hearing opens the very page, on this computer only - a page on another device has no Windows here
@@ -8089,18 +8069,6 @@ def voice_open_settings(request: Request, which: str = 'speech'):
     except OSError as e: raise HTTPException(409, f'Windows would not open its settings: {str(e)[:120]}')
     store.audit('setting', 0, 'voice_open_settings', ACTOR, detail={'which': which})
     return {'opened': which}
-
-@app.get('/api/voice/listen/{sid}')
-def voice_listen_poll(sid: str, request: Request, since: int = 0):
-    out = _live_voice(request).listen_poll(sid, since)
-    if out is None: raise HTTPException(404, 'that listening session has ended')
-    return out
-
-@app.post('/api/voice/listen/{sid}/stop')
-def voice_listen_stop(sid: str, request: Request, since: int = 0):
-    out = _live_voice(request).listen_stop(sid, since)
-    if out is None: raise HTTPException(404, 'that listening session has ended')
-    return out
 
 @app.get('/api/voice/vocabulary')
 def voice_vocabulary():

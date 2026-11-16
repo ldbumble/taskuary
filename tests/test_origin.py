@@ -91,3 +91,18 @@ def test_a_chat_line_is_trusted_unless_the_owner_turned_chat_trust_off():
     s.add_message({'Channel': 'teams', 'ConversationId': 'teams:dm', 'FromName': 'Alex Doyle', 'BodyText': 'y', 'Status': 'context', 'Direction': 'out'})
     assert origin.of_task(s, t)[0] == 'trusted'
     s.set_setting('trust_non_email', '0', 't'); assert origin.of_task(s, t)[0] == 'stranger'
+
+
+def test_a_turn_judges_its_tasks_origin_once():
+    """Timed on a long task, 2026-11-16: a turn asked its task's origin twelve times before its CLI was reached, each judging all sixty mails'
+    senders again - 3 s of every turn. Inside one reading (every send_prompt) it is judged once; outside, every ask reads afresh."""
+    from unittest import mock
+    from taskuary import general, origin
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = s.create_task({'Title': 'Rollout', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    with mock.patch.object(origin, '_judge', wraps=origin._judge) as judged:
+        with origin.one_reading():
+            for _ in range(5): origin.of_task(s, tid)
+        assert judged.call_count == 1
+        origin.of_task(s, tid); assert judged.call_count == 2
+    assert general.GeneralSession.send_prompt.__name__ == 'send_prompt' and hasattr(general.GeneralSession.send_prompt, '__wrapped__')

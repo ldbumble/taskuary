@@ -2323,6 +2323,16 @@ def page_needs_owner(store, tid: int) -> str:
     return ''
 
 
+def _one_reading(f):
+    "A turn reads its task's origin once (origin.one_reading): every check it makes before and while it runs agrees, and none judges again."
+    import functools
+    @functools.wraps(f)
+    def turn(*a, **k):
+        from . import origin
+        with origin.one_reading(): return f(*a, **k)
+    return turn
+
+
 class GeneralSession:
     """A connector-backed conversation with the live-session contract used by the terminal."""
     mode = 'assistant'
@@ -2579,6 +2589,7 @@ class GeneralSession:
             if ch >= ' ':
                 self._input += ch; self._emit(ch)
 
+    @_one_reading
     def send_prompt(self, text: str, attachments=None, connector_id=None, model=None, echo=True,
                     pick=None, trace=None, cancel=None, as_owner=True,
                     delivery_instructions: str = None, kept: bool = False, brief: bool = False, waiting: int = None, line_id: str = None, mails=(),

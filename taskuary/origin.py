@@ -3,7 +3,7 @@
 Computed ON READ from the task's messages, worst wins - so a road that attaches a message without passing ingest
 (attach_message, a split, a batch) cannot skip it. Only the owner raises it (raise_to), and only through the messages
 it has seen: a stranger who writes afterwards lowers it again."""
-import functools, json, os, re, subprocess
+import contextlib, contextvars, functools, json, os, re, subprocess
 from . import senders
 from .store import cited_mids
 
@@ -38,8 +38,29 @@ def of_message(store, row: dict, memo: dict = None, seen: dict = None) -> tuple:
 # the owner's, or its example mail's sender's when that is worse.
 OWNER_REFS = ('assistant:setup', 'assistant:handoff', 'assistant:agent')
 
+# ...ONE READING A TURN (timed on a long task, 2026-11-16: a turn asked a task's origin twelve times before its CLI was reached, each judging
+# all sixty of its mails' senders again - 3 s of every turn): inside `one_reading()` a task's origin is judged once and the answer kept. A
+# Trust press, a new mail, the agent's own tool calls on their own threads - all read afresh, outside it
+_READING: contextvars.ContextVar = contextvars.ContextVar('origin_reading', default=None)
+
+@contextlib.contextmanager
+def one_reading():
+    tok = _READING.set({}) if _READING.get() is None else None
+    try: yield
+    finally:
+        if tok is not None: _READING.reset(tok)
+
+
 def of_task(store, tid: int, msgs=None) -> tuple:
     "(origin, why) for a task, refreshing the card's cache. `msgs`: its messages when already read, in list_messages' order."
+    kept = _READING.get()
+    if kept is not None and (id(store), tid) in kept: return kept[(id(store), tid)]
+    o, why = _of_task(store, tid, msgs)
+    if kept is not None: kept[(id(store), tid)] = (o, why)
+    return o, why
+
+
+def _of_task(store, tid: int, msgs=None) -> tuple:
     o, why, t = _judge(store, tid, msgs, {}, {})
     # a bare UPDATE: a read must not move UpdatedAt/UpdatedBy and reorder the lists
     if (t.get('Origin'), t.get('OriginWhy')) != (o, why): store._exec('UPDATE task SET Origin=?, OriginWhy=? WHERE TaskId=?', (o, why, tid))

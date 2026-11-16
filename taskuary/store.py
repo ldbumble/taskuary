@@ -6589,7 +6589,7 @@ class SQLiteStore:
     def owner(self) -> dict:
         """Who this hub belongs to, from one setting. Falls back to whatever SOUL.md says so an
         existing document keeps working before the owner has ever touched the field."""
-        st = self.get_settings()
+        st = {k: self.get_setting(k) for k in ('owner_name', 'owner_email')}      # ...two rows, never the whole table: read per mail judged
         soul_name = owner_from_soul(self.get_doc('soul') or '')
         if soul_name == 'John Smith': soul_name = None            # the shipped example, not a person
         name = (st.get('owner_name') or '').strip() or soul_name or 'the owner'

@@ -11,6 +11,7 @@ Set in its environment, for the tests that need more:
   FAKE_ACP_THINK=<secs>  each turn takes that long before its first word, as a model thinking does
   FAKE_ACP_FAIL=turn     its first turn answers with an error after a word, as an overloaded model's does
   FAKE_ACP_RESUME=1      it offers session/resume (no replay) beside session/load
+  FAKE_ACP_GONE=1        it no longer has the session it is asked to reopen, as the CLI after its own cleanup says
   FAKE_ACP_ASK=<command> the permission it asks for is to run that shell command (kind execute)
   FAKE_ACP_CODE=<file>   a coding turn: a plan, an edit of that file asked for (kind edit, its location) and, once allowed, made -
                          a comment line on top, sent back as a diff - then `git status` run, its output streamed as terminal deltas
@@ -110,6 +111,8 @@ for line in sys.stdin:
         # the cwd we were given is echoed back so a test can prove the run was placed correctly
         os.environ['FAKE_ACP_CWD'] = str(msg['params'].get('cwd') or '')
         reply(mid, {'sessionId': SID, 'configOptions': options()})
+    elif method in ('session/load', 'session/resume') and os.environ.get('FAKE_ACP_GONE') == '1':
+        send({'jsonrpc': '2.0', 'id': mid, 'error': {'code': -32603, 'message': f"No conversation found with session ID: {msg['params'].get('sessionId')}"}})
     elif method == 'session/load':
         update('agent_message_chunk', content={'type': 'text', 'text': 'replayed'})
         update('tool_call', toolCallId='old_1', title='an earlier turn', kind='read', status='completed', rawInput={'path': 'old.txt'})

@@ -236,7 +236,8 @@ class ACPCoding:
         try:
             prof, launch, env = self._launch()
             self._out(f"\x1b[1;36m{self.cli} over ACP\x1b[0m \x1b[2m{launch['adapter'] or launch['cmd'][0]} - {self.cwd}\x1b[0m\r\n")
-            self.client = agents._acp_open(name, launch, agents._long(self.cwd), env, self.resumed_from or None, None, self._say)
+            self.client = agents._acp_open(name, launch, agents._long(self.cwd), env, self.resumed_from or None, None, self._say, fresh_if_gone=True)
+            if getattr(self.client, 'fresh_from', None): self._carry_over()
             if launch['adapter']: agents._acp_gears(self.client, prof, name, self._say)
         except Exception as e:
             return self._fell_back(e)
@@ -254,6 +255,17 @@ class ACPCoding:
                 self._q = []
             if items: self._turn(items)
             elif self.busy and self.client and not self._take_waiting(): self._idle(turn=False)      # reopened with nothing to say: back at its prompt
+
+    def _carry_over(self):
+        """ITS OLD CONVERSATION WAS GONE (agents.GONE_LINE): the fresh one is told the task and where the work stopped - the seed and the handover a
+        fresh session gets (waitroom.reopen_coding), ahead of what was waiting for it - and the chat says it in one plain line, never the CLI's error."""
+        from . import agents, continuity, sessionrecord, terminal as term
+        try: told = '\n\n'.join(x for x in (term.seed_text(self.store, self.task_id, cwd=self.cwd, cli=self.cli), continuity.RESUME_PROMPT) if x)
+        except Exception as e: logger.debug(f'acp coding {self.sid}: no seed for the fresh conversation - {e}'); told = continuity.RESUME_PROMPT
+        with self._qlock: self._q.insert(0, (told, True, [], None))
+        self.resumed_from = ''
+        try: self.store.add_comment(self.task_id, sessionrecord.NOTE_ACTOR, general.ASSISTANT_TYPE, agents.GONE_LINE)
+        except Exception as e: logger.debug(f'acp coding {self.sid}: the fresh start was not said - {e}')
 
     def _take_waiting(self) -> bool:
         """REOPENED FOR THE OWNER'S LINE, IT GOES STRAIGHT ON TO IT (the owner, 2026-11-10: "the agnt thing should show right away working"): an

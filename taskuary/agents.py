@@ -1509,7 +1509,12 @@ def _acp_sig(launch: dict, cwd, env: dict) -> tuple:
     return (tuple(launch['cmd']), str(cwd or ''), hash(tuple(sorted(env))), json.dumps(launch['meta'], sort_keys=True, default=str), launch['mode'])
 
 
-def _acp_open(name: str, launch: dict, cwd, env: dict, resume, timeout, trace):
+# ...A CONVERSATION THE CLI NO LONGER HAS IS STARTED AFRESH (the owner's coding task, 2026-11-16: after a restart cut its turn, his next line drew
+# only the CLI's own "No conversation found with session ID: ..." and the turn never ran): where the caller can carry the task over to a fresh
+# one (`fresh_if_gone`), a resume the agent refuses opens a new conversation, said in one plain line, and the client says so (`fresh_from`)
+GONE_LINE = 'Started a fresh session - the old one was gone.'
+
+def _acp_open(name: str, launch: dict, cwd, env: dict, resume, timeout, trace, fresh_if_gone: bool = False):
     """A connected session, ready for a prompt: started, initialized, the conversation opened (resumed where there is one),
     its mode, model and effort set. ACPStartError for anything before the session exists - nothing has run, so run_cli takes
     the argv road instead."""
@@ -1520,7 +1525,12 @@ def _acp_open(name: str, launch: dict, cwd, env: dict, resume, timeout, trace):
     try:
         caps = client.connect()
         try:
-            if resume and (caps.get('loadSession') or client.can_resume()): client.load_session(resume, cwd, meta=launch['meta'])
+            if resume and (caps.get('loadSession') or client.can_resume()):
+                try: client.load_session(resume, cwd, meta=launch['meta'])
+                except acp_mod.ACPAgentError as e:
+                    if not fresh_if_gone or _SIGNED_OUT.search(str(e)): raise
+                    logger.info(f'acp: {name} could not reopen {resume} ({str(e)[:160]}) - a fresh conversation instead')
+                    trace('progress', 'acp', GONE_LINE); client.new_session(cwd, meta=launch['meta']); client.fresh_from = resume
             else:
                 if resume: trace('progress', 'acp', f'{name} cannot reload a session; starting a fresh one')
                 client.new_session(cwd, meta=launch['meta'])

@@ -714,3 +714,18 @@ def test_a_coding_turn_a_restart_cut_says_so_under_his_line_and_the_line_that_wa
     _restart(s, tid, t2); _restart(s, tid, t2)
     notes = [x['text'] for x in conversation.items(s, tid)['items'] if x['kind'] == 'note']
     assert notes == [general.CUT_ON.strip('_'), general.CUT.strip('_')] and general.CARRY_ON in notes[-1], notes
+
+
+def test_a_conversation_the_cli_no_longer_has_starts_afresh_with_the_task_never_its_error(world, monkeypatch):
+    """The owner's coding task, 2026-11-16: after a restart cut a turn short, his next line drew only "No conversation found with session ID:
+    ..." - the CLI's own resume error - and the turn never ran. A conversation the agent no longer has opens fresh, told the task and where it
+    stopped, his line answered in it, and the chat says it in one plain line."""
+    from taskuary import agents
+    s, tid, repo = world
+    monkeypatch.setenv('FAKE_ACP_RESUME', '1'); monkeypatch.setenv('FAKE_ACP_GONE', '1')
+    t = open_(s, tid, repo, seed='carry on with the totals', resume='sess_gone_1')
+    assert idle(t) and t.alive, 'the turn ran on its ACP session, no terminal fallback'
+    said = [x for k, x in t.history if k == 'said'][-1]
+    assert 'heard:' in said and 'carry on with the totals' in said and 'resumed=' not in said
+    notes = [c['Body'] for c in s.list_comments(tid)]
+    assert agents.GONE_LINE in notes and not any('No conversation found' in n or 'did not start over ACP' in n for n in notes)

@@ -644,7 +644,7 @@ class OneGoalTests(unittest.TestCase):
         s = self._store(); plain = general_task(s); mailed = general_task(s); self._mail(s, mailed)
         for tid in (plain, mailed):
             system = general._prompt(s, tid)[0]
-            for want in ("off the owner's hands", 'only what you cannot find', 're-plan', 'never send', 'goes only in the reply you draft',
+            for want in ("off the owner's hands", 'look with your tools first', 're-plan', 'never send', 'goes only in the reply you draft',
                          selfclose.SUMMARY_OPEN, selfclose.SUMMARY_LINE, general.SHORT_LINE):
                 self.assertIn(want, system, (tid, want))
             self.assertNotIn('into the conversation or a draft', system)
@@ -659,7 +659,7 @@ class OneGoalTests(unittest.TestCase):
         s.cx.execute("UPDATE task SET OriginBase='stranger' WHERE TaskId=?", (tid,)); s.cx.commit()
         s.upsert_agent('assistant', 'general', 'cli', json.dumps({'kind': 'general'}))     # PROFILE RULES (the file ASSISTANT.md) ride as on an install
         system, user = general._prompt(s, tid)
-        for want in ("off the owner's hands", 'only what you cannot find', 're-plan', 'never send'): self.assertIn(want, system, want)
+        for want in ("off the owner's hands", 'look with your tools first', 're-plan', 'never send'): self.assertIn(want, system, want)
         self.assertIn('PROFILE RULES (the file ASSISTANT.md)', system)
         flat = ' '.join(f'{system}\n{user}'.split())
         for gone in ('put it in the reply you draft', 'goes only in the reply you draft', 'A login or secret', 'A login or key',

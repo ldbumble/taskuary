@@ -54,3 +54,14 @@ def test_the_draft_tools_answer_says_the_same_one_sentence():
     from taskuary import cli
     src = inspect.getsource(cli)
     assert 'saved on the task. {CARD_SAID}' in src and 'saved on the task, waiting on the owner' not in src
+
+
+def test_a_draft_is_never_retold_in_other_words():
+    """The real CLI, 2026-11-15: told to say none of the card's words, the agent wrote two venues, each one's room size and price note, its
+    pick and its caveat in the chat - every one of them the draft's own content, paraphrased - over the card that showed them. Paraphrase is
+    named: the card is the result, and its content is never retold in other words - in the guide, in the tools' answer, and to every worker."""
+    from pathlib import Path
+    from taskuary import agenttools
+    agent = ' '.join((Path(selfclose.__file__).parent / 'templates' / 'agent.md').read_text(encoding='utf-8').split())
+    for said in (selfclose.CARD_SAID, agent): assert 'never retell its content in other words' in said
+    assert agenttools.said_once({'ok': True, 'review_id': 7})['shown'] == selfclose.CARD_SAID

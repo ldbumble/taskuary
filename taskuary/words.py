@@ -30,12 +30,11 @@ def link(pid: str) -> str:
 # ONE WAY TO BRING A PAGE UP, for the dock and every task agent (the owner, 2026-11-07): a task agent said "you can connect your books here"
 # in prose while the dock linked the real card. Each address is one canvasLinks.js opens in place, and the `show` tool's button takes the
 # same ones (viewspec.LINK); #connector=<type> is the form that opens ONE card - #connections=<section> opens a section, its cards closed.
-LINK_LINE = ('BRINGING THINGS UP: when the owner should see or set something themselves, link it - a markdown link opens that screen in '
-             'the app, in place - never a direction in prose. A task: [TQ-0001](#task=1), with its real id. One connection\'s card, by its '
-             'type: [Connect QuickBooks](#connector=quickbooks) (intacct, outlook, gmail, linkedin, sharepoint, github, jira ...; add &step=1 '
-             'to light its first step); all connections: #connections. A settings page: #settings=<page> (#settings=policies, '
-             '#settings=updates); a report: #report=<id>, a new one #report=new, the list #report=reports. One link and a few words '
-             'beside it - what to do there, never what the screen shows.')
+LINK_LINE = ('BRINGING THINGS UP: when the owner should see or set something, link it - a markdown link opens that screen in place - '
+             'never directions in prose: a task [TQ-0001](#task=1) by its real id; a connection\'s card by type, [Connect QuickBooks]'
+             '(#connector=quickbooks) (intacct, outlook, gmail, github, jira ...; &step=1 lights its first step), all at #connections; '
+             'settings #settings=<page> (#settings=policies, #settings=updates); a report #report=<id>, a new one #report=new, the list #report=reports. One '
+             'link and a few words on what to do there, never what the screen shows.')
 
 
 def card(title: str) -> str:

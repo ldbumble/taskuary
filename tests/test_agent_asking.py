@@ -43,8 +43,11 @@ class RegularAgentQuestionTests(unittest.TestCase):
             self.assertEqual(got['text'], 'Where are you flying from? (+3 more)')
             self.assertEqual(got['questions'], qs)
         self.assertEqual(len(ws.question_group(s, fake)), 4)
-        self.assertIn('one question, with your recommended answer', general.WORK_LINE)     # one a turn (2026-11-09), no longer "all of it in one"
-        self.assertIn('Never end a turn with only questions', general.WORK_LINE)
+        # one a turn (2026-11-09), no longer "all of it in one" - said once, in AGENT.md's When to ask (every worker), and the turn goes on
+        from pathlib import Path
+        rules = (Path(general.__file__).parent / 'templates' / 'agent.md').read_text(encoding='utf-8')
+        self.assertIn('one question a turn', rules); self.assertIn('with your recommended answer', rules)
+        self.assertIn('never end on only questions', general.WORK_LINE)
 
 
 if __name__ == '__main__': unittest.main()

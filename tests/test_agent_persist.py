@@ -33,7 +33,7 @@ def test_the_brief_carries_the_ladder_the_work_line_and_the_override():
     s.save_doc('agent', (s.doc('agent') or '') + '\n- When the work is over, run `taskuary --done "<one sentence>"`.', 'owner')
     system = general._prompt(s, task(s))[0]
     for want in (general.WORK_LINE, general.GENERAL_OVER, 'more than twice', 'three genuinely different ways', 'one line per way you tried',
-                 'WHILE A QUESTION WAITS, KEEP WORKING', 'CHECK EACH STEP BEFORE THE NEXT', 'DONE MEANS THE GOAL IS MET AND CHECKED'):
+                 'A TURN THAT ASKS STILL DOES THE WORK', 'CHECK EACH STEP', 'DONE MEANS THE GOAL IS MET AND CHECKED'):
         assert want in system, want
     assert '"answer_is_result"' in selfclose.SUMMARY_LINE and 'true only when the goal is met and you checked it' in selfclose.SUMMARY_LINE
 

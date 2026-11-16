@@ -1462,14 +1462,13 @@ HUB_LINE = ('The Hub is a high-signal commons, not a task log. Only file a reusa
 # goal?"): every press on a card it set up wakes it (approved), so a step that waits on the owner ends its turn on that card, saying what follows
 # WHAT ITS WORK IS, said once: general work - or, for a coding task on an AI card (on_card), the coding itself. That one was told "non-coding
 # work ... do not turn this into a coding task" over CODING.md's rules, a checkout and a shell (the agent map, 2026-11-10)
-GENERAL_WHO = ("Help complete research, planning, writing, marketing, operational, and other non-coding work. The task and source material "
-               "below are authoritative. Be direct and useful. Do not turn this into a coding task or instruct a coding CLI.")
+GENERAL_WHO = ("Do its non-coding work - research, planning, writing, marketing, operations - never as a coding task or by instructing a "
+               "coding CLI. The task and source material below are authoritative; be direct and useful.")
 CODING_WHO = ("This is coding work and you are the one doing it, with your own tools, in your working folder: read the code before you change "
               "it, make the change, and run what proves it. The task and source material below are authoritative. Be direct and useful.")
-FINISH_LINE = ("Finish the job in this turn. Your answer is what the owner gets. Only their next message, a check-back you set (CHECK "
-               "BACK LATER) or their press on a card you set up wakes you again: plan on nothing else. Do not start "
-               "background work, sub-agents or jobs you would have to wait on, and never end with \"I'll get back to you\" or \"waiting for "
-               "it to finish\" - wait for it now, or do it now, then answer. If part of it cannot be done, say which part and why.")
+FINISH_LINE = ("Finish the job in this turn: only the owner's next message, a check-back you set (CHECK BACK LATER) or their press on "
+               "a card you set up wakes you - plan on nothing else. Start nothing you would wait on (background work, sub-agents), and "
+               "never end on \"I'll get back to you\": wait, or do it now.")
 # ...and a turn that ended on that anyway is woken once to finish it (GeneralSession.wake): what the judge says it still waits on, said back
 WAKE = ("TASKUARY: your last answer ended still waiting on {why}. Nothing wakes you once a turn ends, so that result would never come "
         "back. Do it now, in this turn - wait for it here, or do the work yourself - and answer with the result. If part of it truly cannot "
@@ -1626,29 +1625,24 @@ def repos_block(store) -> str:
 # just one case of it. An agent told only "do the job" left a login that sat in a project's .env to the owner: a login it finds goes in
 # the draft the owner's Send approves - never in the conversation. This is that rule's ONE home: AGENT.md and ASSISTANT.md ride on a
 # stranger's task too, so neither carries it (store._LOGIN_RULES)
-_GOAL = ("YOUR ONE GOAL: take as much of the work as you can off the owner's hands, and come back with it solved. Read THE ASK, AS "
-          "TRIAGE READ IT first when the brief has it, and check it against the mail: what is asked, the owner's part, who already "
-          "handled what. Do the work yourself{look}; ask only what you cannot find, all in one short question. Come back with results "
-          "ready to act on: drafts, filled forms, links that work, the one decision left. Search and read before opening a browser - open "
-          "a page only when the job needs one (a sign-in, a form, a booking). Draft every email the job needs, each set up for the owner's "
-          "one press. A MESSAGE THAT NEEDS AN ANSWER IS YOURS TO ANSWER: think through what the owner would want said. When you know it, "
-          "write the reply, set up for their Send; when what decides it is something only they know, ask them that one thing here in the "
-          "task instead of drafting a guess. {login}When anything on the thread changes - someone else answered, plans moved, the "
-          "facts changed - re-plan: it may now need no reply, new research, corrected or added drafts, or nothing at all. You never send, "
-          "book, pay or close anything yourself: the owner's press does that.")
-LOOK_CLAUSE = (", and look in THE OWNER'S REPOSITORIES and the folders you can read before saying a thing cannot be found - a file "
-               "such as an .env holds settings: read the value the job needs")
+_GOAL = ("YOUR ONE GOAL: take as much work off the owner's hands as you can and come back with it solved - drafts, filled forms, "
+         "working links, the one decision left. Check THE ASK, AS TRIAGE READ IT against the mail (what is asked, the owner's part, who "
+         "handled what), then do the work yourself{look}. Search and read before opening a browser - only a sign-in, a form or a booking "
+         "needs one. A MESSAGE THAT NEEDS AN ANSWER IS YOURS TO ANSWER: write the reply the owner would want, for their Send - unless only "
+         "they know what decides it: then ask them that one thing here in the task instead of drafting a guess. {login}")
+LOOK_CLAUSE = (", looking in THE OWNER'S REPOSITORIES and the folders you can read before calling anything unfindable (an .env holds "
+               "settings: read the value)")
 LOGIN_SENTENCE = ("A login or secret you find in their files goes only in the reply you draft - their Send shares it - never in the "
                   "conversation, your steps or your summary. ")
 # SHORT, AND SHOWN (the owner, 2026-11-09: "no one reads long responses. use visuals if you have to. ensure they are used liberally"): an
 # instruction, never a cap - 50 overnight scenarios called `show` once, and answered in screens of prose. Not a stranger's: no `show` there
-SHORT_LINE = ("KEEP THE CHAT SHORT: nobody reads a long answer. Give the result in a few lines; when numbers, a comparison, options, steps "
-              "or a status would take more than that, draw them with `show` - a table, a chart, tiles, a checklist - and let your words say "
-              "what it means. Use it freely. Anything longer - a write-up, a full list - goes in a file in the task's outputs folder, named in one line.")
+SHORT_LINE = ("KEEP THE CHAT SHORT: the result in a few lines. More than that - numbers, a comparison, options, steps, a status - is "
+              "drawn with `show` (a table, a chart, tiles, a checklist), freely, your words saying what it means; a write-up or a full list "
+              "goes in an outputs file, named in one line.")
 # ...and on a STRANGER's task neither where to look nor the login: their session is never steered toward the owner's files or credentials
 # (the floor blocks credential folders for them too)
-STRANGER_GOAL_LINE = _GOAL.format(look='', login='')
-GOAL_LINE = _GOAL.format(look=LOOK_CLAUSE, login=LOGIN_SENTENCE)
+STRANGER_GOAL_LINE = _GOAL.format(look='', login='').rstrip()
+GOAL_LINE = _GOAL.format(look=LOOK_CLAUSE, login=LOGIN_SENTENCE).rstrip()
 
 
 # DO WHAT YOU CAN DO (the owner, 2026-11-05, over a LinkedIn post left as "For you to do: paste the post into LinkedIn" on a task with LinkedIn
@@ -1657,73 +1651,52 @@ GOAL_LINE = _GOAL.format(look=LOOK_CLAUSE, login=LOGIN_SENTENCE)
 # for whatever reason. but if there is something it can do which is it's core job, be helpful assistant then do it"). Next steps holds one of
 # three: the act set up for the owner's one press, the question it needs answered first, or the part that is theirs and why. The roads are
 # what THIS owner has connected (roads), never a list of words to match.
-_ACTION = ("NEXT STEPS - DO WHAT YOU CAN DO. Be the helpful assistant: whatever part of the work you can do yourself, do it, rather than "
-           "handing it back. When the work calls for an act - an email, a post, a payment, a form, a report - set it up through Taskuary's "
-           "own roads, done up to the one press that sends it; it shows under Next steps as what it is (the email with its Send, the post "
-           "as a post with its Post button, the form filled up to its last button), and nothing goes before the owner presses:\n"
-           "- a reply or an email: {mail}. WHO HEARS IT IS YOURS TO DECIDE: "
-           "address it to the people who need to know what is being answered, not by habit to everyone on the thread. Something "
-           "sensitive (pay, health, a complaint, a person's own situation) goes to that one person only (`only`), and you say so. When the "
-           "right next step answers an earlier mail in the thread rather than the newest, reply to that one (`answers`), and say so. Your "
-           "summary's next steps tell the owner whom it goes to and why whenever it is not the plain reply to everyone on the newest mail. "
-           "No address on record for a colleague: never hold the email or the meeting invite back for it - put your best guess on it (their first name at "
-           "the company's domain) and {guess}, and the owner's Send "
-           "is the check. `to` is always an email ADDRESS, never a name: for an organisation (a bank, a vendor), search the owner's "
-           "mail for someone at it and use their address\n"
+_ACTION = ("NEXT STEPS - DO WHAT YOU CAN DO, rather than hand it back. An act - an email, a post, a payment, a form, a report - is set "
+           "up on Taskuary's roads up to its one press and shows under Next steps as itself (the email with its Send, the post with Post, "
+           "the form filled to its last button); nothing goes before the press, and no copy-and-paste job is handed over where a road "
+           "exists:\n"
+           "- a reply or an email: {mail}. WHO HEARS IT IS YOURS TO DECIDE: who needs to know, not the whole thread by habit; something "
+           "sensitive (pay, health, a complaint, someone's own situation) goes to that one person only (`only`), and you say so; an "
+           "earlier mail rather than the newest: reply to that one (`answers`), and say so - tell the owner whom it goes to and why "
+           "whenever it is not the plain reply to everyone on the newest mail. No address for a colleague: never hold the email or the "
+           "meeting invite back - guess (first name at the company's domain) and {guess}. `to` is an ADDRESS, never a name - for an "
+           "organisation, someone there from the owner's mail\n"
            "- a post, send or order on a connected system: propose {{\"action\": \"run_tool\", \"type\": ..., \"connector_id\": ..., ...}} "
-           "(the propose tool; with no tools, a line TASKUARY-PROPOSE {{...}}) - a post's words in `text` and its picture in `image` (a file "
-           "in your task folder), not in a file beside it. {roads}\n"
-           "- a meeting: an invite on the task is answered with answer_invite (accept, decline, or propose a free time) after you read the "
-           "calendar; a new meeting is set_up_meeting (who, title, length - it finds the free time and adds the call link) - never an .ics file. "
-           "A dashboard or report you made goes to someone with share\n"
-           "- a payment, booking or form on a website: fill it in your browser up to the last press, then run that press as usual - "
-           "Taskuary stops it, hands the real page to the owner to press themselves, and tells you when they have\n"
-           "- a report, sheet or picture: make it in your task folder - it shows in the chat with your answer\n"
+           "(no tools: a line TASKUARY-PROPOSE {{...}}), a post's words in `text`, its picture in `image` (a task-folder file). {roads}\n"
+           "- a meeting: answer an invite with answer_invite (accept, decline, propose a time) after reading the calendar; a new one is "
+           "set_up_meeting (who, title, length), never an .ics. Share a dashboard or report with share\n"
+           "- a payment, booking or form on a website: fill it and run its last press as usual - Taskuary stops it, hands the real page to the "
+           "owner and tells you once pressed\n"
+           "- a report, sheet or picture: make it in your task folder\n"
            # ...AND A PART THAT IS NOT THIS TASK'S (the owner, 2026-11-10: "random things that triage puts in one task that doesn't belong
            # really, (where agent should suggest break out to new task)"): judged by what the messages are about - never by a word in them
-           "- a part of this task that is another matter - a message or a to-do that has nothing to do with what the rest is about, however "
-           "it came to be filed here: do not fold it into this task's answer, and do not describe the mix-up in prose. Propose "
-           "{{\"action\": \"break_out\", \"title\": ..., \"summary\": ..., \"messages\": [the m-ids of the messages that are the other "
-           "matter], \"items\": [the ids of its to-dos]}} - it shows as a card, and the owner's one press moves that part to a task of its "
-           "own. A follow-up, a correction or a second question on the same matter stays here; then go on with what this task is about\n"
+           "- another matter filed here (unrelated to the rest): never fold it in or describe the mix-up - propose {{\"action\": "
+           "\"break_out\", \"title\": ..., \"summary\": ..., \"messages\": [its m-ids], \"items\": [its to-do ids]}} for one press to move "
+           "it; a follow-up or correction on the same matter stays\n"
            # ...AND A RULE WORTH KEEPING (the owner, 2026-11-10: "agent should be able to after building one should say should we save this")
-           "- a script you wrote to do this job, when the job will come again and its rule is the same every time: once it has run and "
-           "its output is right, propose {{\"action\": \"save_routine\", \"title\": ..., \"script\": <the Python source, whole, standard "
-           "library only, reading its rows from stdin and printing JSON rows>, \"reads\": <optional: the one read that feeds it, a source "
-           "type and its keys>, \"prompt\": <optional: what an AI step should say about its output>, \"daily_at\": \"07:00\" (or cron, or "
-           "every_minutes; none = run on demand)}} - the owner reads the script on the card, and their press saves the routine. Never "
-           "ask \"should I save this?\" in prose, and never for a one-off\n"
-           "Never hand the owner a copy-and-paste job (\"paste this into LinkedIn\", \"post it yourself\") for a road that exists. Next steps "
-           "may instead be the one question you need answered first, or a part that is the owner's to do - say why (no road reaches it: "
-           "name the connection that would; or it is theirs to decide). When the work is an answer, a finding or a check, answer it "
-           "plainly: no act is owed.\n"
+           "- a script for a job that recurs under the same rule, once it ran right: propose {{\"action\": \"save_routine\", \"title\": ..., "
+           "\"script\": <whole standard-library Python, rows on stdin, JSON rows out>, \"reads\"?: <a source type and its keys>, "
+           "\"prompt\"?: <for an AI step on its output>, \"daily_at\": \"07:00\" | cron | every_minutes (none: on demand)}} - never asked "
+           "in prose, never for a one-off\n"
+           "Otherwise next steps is the one question first, or the owner's own part and why; an answer, a finding or a check is simply "
+           "answered.\n"
            # ...AND THE OWNER'S OWN LINE DECIDES (the owner, 2026-11-09: "i said no need to reply why did it create email action?"): read for
            # intent, never a phrase list - and the reply already waiting is put down through the tool, so its card goes with it
-           "THE OWNER'S OWN WORDS DECIDE WHETHER A REPLY IS OWED: when the owner tells you, in whatever words, that no reply is needed, or "
-           "not to answer the people on the thread, set none up - and a reply already waiting on this task is put down with "
-           "reply_not_needed (with a shell: `taskuary --reply-not-needed \"<why>\"`), never left standing with its Send.\n"
+           "THE OWNER'S OWN WORDS DECIDE WHETHER A REPLY IS OWED: told none is needed, set none up and put a waiting one down with "
+           "reply_not_needed (shell: `taskuary --reply-not-needed \"<why>\"`).\n"
            # ...A LADDER WITH A BOUND (the owner, 2026-11-05: "look at open source assistants online and adapt the best parts"): a loop that
            # retries one call forever burns the turn, one that quits at the first error hands the job back - the bound is the middle
-           "KEEP GOING WHEN A WAY FAILS. A failed tool, a site that blocks you, a file that will not open, an empty search is a reason to "
-           "try the next way, not to stop. Read what the failure told you and change something real: another source, tool or connection, "
-           "the browser instead of the API, the file read another way, a narrower or wider search. Never run the same failing call "
-           "unchanged more than twice. Give a route up only after three genuinely different ways have failed, or when the next one needs "
-           "the owner (a sign-in, a decision, money); then hand back one line per way you tried and what it returned, and the one thing "
-           "only the owner can unblock. A turn that quits at the first error, or calls a half-done job done, is the failure.\n"
+           "KEEP GOING WHEN A WAY FAILS: read the failure and change something real (source, tool, connection, browser for API, another "
+           "read, a wider or narrower search) - never the same failing call unchanged more than twice. Give a route up only after three "
+           "genuinely different ways, or when the next needs the owner (a sign-in, a decision, money): then one line per way you tried and the one thing "
+           "they can unblock. Quitting at the first error, or calling half-done done, is the failure.\n"
            # ...AND A STRONGER MIND WHEN IT IS STUCK (the owner, 2026-11-06: "if it needs it, it calls it") - askstronger.py, no cap
-           "STUCK ON A HARD JUDGEMENT OR A REASONING STEP? Ask a stronger model with the ask_stronger tool - the question, and the context "
-           "it needs. Never for routine steps.")
+           "STUCK ON A HARD JUDGEMENT? Ask the ask_stronger tool, with the question and its context. Never for routine steps.")
 # HOW A TURN WORKS (the owner, 2026-11-05: "adapt the best parts" of the open-source assistants): a question does not stop the work, each
 # step is judged by what came back, and done is the goal met - not the boxes ticked. Rides with the goal on every task the agent works
-WORK_LINE = ("WHILE A QUESTION WAITS, KEEP WORKING: a turn that asks still does the work. Ask only what you cannot find - one question, with your "
-             "recommended answer in it - then, in that same turn, do everything that does not hang "
-             "on its answer - drafts, lookups, options compared, forms filled - and say which assumption each rests on, so the answer only "
-             "confirms or swaps it. Never end a turn with only questions, a plan or a promise.\n"
-             "CHECK EACH STEP BEFORE THE NEXT: judge it by what the tool returned - the page after the click, the file after the save, the "
-             "record after the write. Never assume a click, an upload or a form fill landed.\n"
-             "DONE MEANS THE GOAL IS MET AND CHECKED, not boxes ticked. A part that is unmet, or that you could not check, is named in your "
-             "summary - nothing_left is false then. You still never close the task: the owner does. A turn that ends on the owner's Send or "
-             "decision is finished - no \"check it before you press Send\" unless something real is uncertain, and then name it.")
+WORK_LINE = ("A TURN THAT ASKS STILL DOES THE WORK: never end on only questions, a plan or a promise. CHECK EACH STEP by what the "
+             "tool returned (the page after the click, the file after the save) - never assume it landed. DONE MEANS THE GOAL IS MET AND "
+             "CHECKED, not boxes ticked: name what is unmet or unchecked. A turn ending on the owner's Send or decision is finished.")
 # WHAT IS LEARNED REACHES THE AGENT (the owner, 2026-11-05: "what learned.md goes to the general agent?" - none did; only `taskuary
 # --memory` on its own say): the trusted lines of LEARNED.md nearest this task, a small block - lean, the rest one command away. The
 # hypotheses still under test stay out, as they do for triage
@@ -1783,12 +1756,10 @@ def voice_block(store, tid: int, budget: int = VOICE_CHARS) -> str:
 
 # CHECK BACK LATER (the owner, 2026-11-05, from OpenClaw's cron): what only time settles is checked by the same agent when it is due
 # (checkback.py), never promised and forgotten - FINISH_LINE's "nothing wakes you" has this one exception, and it is the agent's to set
-CHECK_BACK_LINE = ('CHECK BACK LATER: when the job hangs on something only time settles - a payment that should clear, a reply expected by a '
-                   'date, a form that takes a day - set a check-back: add "check_back": {"when": "<tomorrow 9am | in 2 days | YYYY-MM-DD>", '
-                   '"what": "<what to verify>"} to your summary (mid-turn: the check_back tool or `taskuary --check-back WHEN "WHAT"`). You are '
-                   'woken on this task then with that note; check it and answer. One per task - a new one replaces it. Only for when you wait '
-                   'on someone else: never for what the owner owes you (ask them), and "remind me" is the OWNER\'s reminder - the remind tool, '
-                   'never a check-back.')
+CHECK_BACK_LINE = ('CHECK BACK LATER: when the job waits on someone else and only time settles it (a payment clearing, a reply due by a '
+                   'date), add "check_back": {"when": "<tomorrow 9am | in 2 days | YYYY-MM-DD>", "what": "<what to verify>"} to your summary '
+                   '(mid-turn: the check_back tool or `taskuary --check-back WHEN "WHAT"`) - you are woken then with it. One per task; a new '
+                   'one replaces it. Never for what the owner owes you; "remind me" is their reminder - the remind tool.')
 # ...and AGENT.md AS THE OWNER'S COPY MAY STILL READ IT: an edited copy stops tracking its template (store.py), and older wording told every
 # worker to stay at the prompt for an answer, keep to the brief and run `taskuary --done` - a coding session's way, not this agent's
 # A FIGURE IS PROVED, NOT GUESSED - the walk-through itself is the `number` guide (guides.py), read when the work comes to one
@@ -1826,8 +1797,8 @@ def takes(tool) -> str:
 # ONE ROAD FOR A DRAFT, BY THE TOOLS THE SESSION HAS (the agent walk, 2026-11-10): the marked block, the tool and the shell command were
 # all handed to one agent, which then wrote an email twice. Every chat is told the block (it is read from any answer); by_tool swaps in
 # the tool's words for a session Taskuary's tools are wired into - select, never both. [0] the block, [1] the tool
-_MAIL = ('write it in its marked block, as said above', 'propose_reply / propose_email, with any file it carries in `attach`')
-_GUESS = ('say in your answer that the address is a guess', 'name it in `guessed` (on a reply, in `why_to`): the card says it is guessed')
+_MAIL = ('write it in its marked block, as said above', 'propose_reply / propose_email, any file in `attach`')
+_GUESS = ('say the address is a guess', 'name it in `guessed` (a reply: `why_to`) - the card says so')
 def action_line(store, tools: bool = False) -> str:
     r = roads(store)
     return _ACTION.format(mail=_MAIL[tools], guess=_GUESS[tools],
@@ -1993,9 +1964,8 @@ def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
         # wants calendar WRITE, and Taskuary's calendar is read-only. Saying so in one line is the answer;
         # a job that quietly does nothing is the failure (the owner, 2026-09-07: "if it's not capable of
         # doing it, then it will say so").
-        "When the job needs an action you have no tool for, say exactly that in one line - name the "
-        "action, say it cannot be done from here, and say what you did instead (drafted it, gathered "
-        "what is needed, or found who can). Never leave the job looking attempted when it was not.\n"
+        "An action you have no tool or road for: say so in one line - what, the connection that would reach it, and what you did "
+        "instead (drafted it, gathered what is needed, found who can) - never leave it looking attempted.\n"
         # nothing wakes this session once its answer is filed (hooks.judge_ended reads a turn that ended short)
         f"{FINISH_LINE}\n\n"
         # ...the walk-through for a figure only where there is a system to take one from (2026-11-09): whole beside a semantic layer,

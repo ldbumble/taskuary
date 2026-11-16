@@ -273,11 +273,11 @@ def test_every_worker_is_told_to_show_files_through_the_tool_and_never_claim_an_
     from taskuary import brief, selfclose, terminal
     rules = terminal.with_fence_rule(brief.rules(MemoryStore(), 'agent', terminal.AGENT_CHARS))      # the coding road's cut, the template's copy
     for said in ('call the `show` tool with its path in `files`', 'Never open a viewer, a browser or an app on the computer',
-                 'unless the show tool returned it', 'Never claim an effect you did not verify - opened, sent, pushed, deployed, on screen'):
+                 'unless the show tool returned it', 'Never claim an effect you did not verify'):
         assert said in rules, said
     old = terminal.with_fence_rule('Honest reporting: say what you did.')        # an owner's AGENT.md from before it hears both too
     assert agenttools.SHOW_RULE in old and agenttools.VERIFY_RULE in old
     assert rules.count('unless the show tool returned it') == 1                  # ...and the template's own copy is not said twice
-    assert 'never say it is on the owner\'s screen' in selfclose.SHOW_LINE and '`show` tool\'s `files`' in selfclose.SHOW_LINE
+    assert "show's `files`" in selfclose.SHOW_LINE      # ...the screen and the viewer are AGENT.md's to say (above), once
     desc = agenttools.TOOLS['show'][1]
     assert '`files`' in desc and 'never open a viewer' in desc and 'unless this tool said it was shown' in desc

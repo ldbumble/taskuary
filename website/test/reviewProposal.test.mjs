@@ -231,3 +231,13 @@ test("the section says Also waiting on you only under something else that waits"
   assert.match(page, /\$\{asksBelow \? "Also waiting on you" : "Waiting on you"\}\$\{liveAsks > 1 \? ` · \$\{liveAsks\}` : ""\}/);
   assert.match(page, /const asksBelow = !!\(pendingReview \|\| moreDrafts\.length \|\| owesEmails/);
 });
+
+test("an act whose press failed is a settled card with its error, never a waiting one to press again", async () => {
+  // the owner, 2026-11-16: no Try again - the card says what happened, its agent is woken with it (general.failed) and sets up what goes next
+  const { decidedAsk, failedAsk } = await import("../src/reviewProposal.js");
+  const rv = { Kind: "action", Status: "superseded", ActError: "attempt to write a readonly database. The agent was told and goes on from there.",
+    DraftText: JSON.stringify({ action: "run_tool", type: "database", query: "INSERT INTO ledger VALUES (3)" }) };
+  assert.equal(failedAsk(rv), true); assert.equal(decidedAsk(rv), true);
+  assert.equal(failedAsk({ ...rv, ActError: "" }), false, "a draft set aside is no failure");
+  assert.equal(failedAsk({ ...rv, Status: "pending" }), false);
+});

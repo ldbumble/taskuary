@@ -351,15 +351,15 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
     from .browsergate import _tell, NEXT
     args = list(p.get('args') or [])
     if not args: raise RuntimeError('this held act names no desktop command')
-    if not on(store): raise RuntimeError('Agent Desktop is off on this computer now - nothing was done. Turn it on under Connections, '
-                                         'or Dismiss this.')
+    if not on(store): raise RuntimeError('Agent Desktop is off on this computer now - nothing was done. Turn it on under Connections, and '
+                                         'the agent holds the step anew.')
     rc, said = (run or (lambda a: _run(a, 60, 'act')))(args)
     env = _envelope(said)
     if rc != 0 or env.get('ok') is False:
         err = env.get('error') or {}
         if err.get('code') in ('STALE_REF', 'AMBIGUOUS_TARGET', 'APP_NOT_FOUND', 'WINDOW_NOT_FOUND'):
-            raise RuntimeError(f"the app has changed since this was held ({err.get('code')}) - nothing was done. Dismiss this, and ask "
-                               'the agent to look again - it will be held for you again.')
+            raise RuntimeError(f"the app has changed since this was held ({err.get('code')}) - nothing was done. Nothing on this card waits "
+                               'now: the agent looks again and holds the step anew.')
         raise RuntimeError(f"agent-desktop refused it: {(err.get('message') or ' '.join(str(said or '').split()))[-300:]}")
     _tell(store, tid, f"The owner approved it and Taskuary ran `{p.get('command')}`. It said: {' '.join(str(said).split())[-300:] or 'done'}. "
                       'Snapshot the app again, then ' + NEXT[0].lower() + NEXT[1:], wake=True)

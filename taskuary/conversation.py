@@ -313,7 +313,7 @@ def _card(r) -> dict:
     from .proposals import passed
     from .shellgate import FAILED, NOT_RUN
     from .wrapup import WITHDRAWN
-    failed = r['Status'] == 'superseded' and r.get('DecideNote') in (FAILED, NOT_RUN)
+    failed = r['Status'] == 'superseded' and (r.get('DecideNote') in (FAILED, NOT_RUN) or bool(r.get('ActError')))   # ...any act's press that failed
     # ...A DRAFT ITS AGENT TOOK BACK STAYS WHERE IT STOOD, greyed, with its words (the owner's live task, 2026-11-12: he wrote again, the agent
     # withdrew its reply in the turn that answered him, and the card went from the chat - no page draws a draft "closed unsent")
     # ...and one set aside as he wrote past it (proposals.set_aside_drafts) the same way: a draft is its words, which the page draws greyed

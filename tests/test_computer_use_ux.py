@@ -214,7 +214,7 @@ class TheHeldActInWords(unittest.TestCase):
     def test_a_dead_approve_says_the_way_on(self):
         with mock.patch.object(browserview, 'state', return_value={'open': False}):
             with self.assertRaises(RuntimeError) as e: bg.perform(MemoryStore(), 1, {'sid': 'r1', 'args': ['click', '@e1']})
-        self.assertIn('Dismiss this, and ask the agent to open the page again', str(e.exception))
+        self.assertIn('the agent opens the page again and holds the step anew', str(e.exception))
 
 
 class ThePaneSaysWhatIsHappening(unittest.TestCase):

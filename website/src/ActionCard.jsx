@@ -36,7 +36,7 @@ export default function ActionCard({ row, tid, live = true, onChanged }) {
   const max = fields.find((f) => f.key === tk)?.max, over = max && text.length > max;
   const go = done?.url ?? st.url, gone = !!done || st.done;
   // ...a press that failed before this card was drawn is still said on it: the review keeps it (store.review_act_failed), not the press
-  const failed = err || (!busy && !gone && row?.Status === "pending" && row?.ActError) || "";
+  const failed = err || (!busy && !gone && ["pending", "superseded"].includes(row?.Status) && row?.ActError) || "";
   const decide = async (verb) => {
     setBusy(verb); setErr("");
     // ...the one press (press.js): it said "nothing was posted. Try again" after two minutes with no answer, over a post still going up;

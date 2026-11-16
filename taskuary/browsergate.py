@@ -48,7 +48,7 @@ TYPES, KEY_TYPES = frozenset('fill type'.split()), frozenset('type inserttext'.s
 SNAP_MAX = 6000                 # the page as the model reads it: the interactive elements, enough for a checkout or a settings page
 JUDGE_WAIT = 45.0
 HELD = 'Taskuary held this for the owner'
-AGAIN = 'Dismiss this, and ask the agent to open the page again - it will be held for you again.'
+AGAIN = 'Nothing on this card waits now: the agent opens the page again and holds the step anew.'     # ...its press is over (verdicts, the owner 2026-11-16)
 
 
 # A LINE BREAK IN THE COMMAND may be inside the typed text: _segments reads every newline as `;`, so "a\nb" in quotes came back as

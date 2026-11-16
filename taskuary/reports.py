@@ -59,6 +59,9 @@ def rows_out(rows, limit, unit='rows', mine=True):
     """(headline, body) from executor rows, SAYING SO when the result was cut. A silent cap
     made the AI describe 20 rows of a TOP 500 query as 'all of them' - fetch one extra row
     and the headline can tell the truth instead."""
+    # ...a write's one row is its count (db.odbc_rows): "1 row" over an approved INSERT read as one row back, whatever it changed
+    if len(rows) == 1 and isinstance(rows[0], dict) and set(rows[0]) == {'rows_affected'}:
+        n = rows[0]['rows_affected']; return f"{n} row{'s' * (n != 1)} changed", json.dumps(rows[0])
     more = len(rows) > limit
     rows = rows[:limit]
     why = (f'capped at {limit}' if mine else f'capped at the default {limit}') + ' — set "max rows" on this source to see more'

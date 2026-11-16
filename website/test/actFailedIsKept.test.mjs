@@ -21,7 +21,8 @@ test("an act that failed is said on its card after a reload, as its own sentence
   for (const x of [{ ...r, Status: "approved" }, { ...r, Status: "rejected" }, { ...r, DeliveryClaim: "p1" }, { ...r, ActError: null }]) assert.equal(savedSendFailure(x), null);
   // ...and a send that failed still reads as a send
   assert.equal(savedSendFailure({ Status: "pending", DeliveryState: "failed", Reason: "Not sent: refused.", ActError: WHY }).message, "refused.");
-  assert.match(read("ActionCard.jsx"), /row\?\.Status === "pending" && row\?\.ActError/, "a connector's act card reads it off its row");
+  // ...waiting (a close-out) or settled by the failure (the owner, 2026-11-16: no Try again - its agent sets up what goes next)
+  assert.match(read("ActionCard.jsx"), /\["pending", "superseded"\]\.includes\(row\?\.Status\) && row\?\.ActError/, "a connector's act card reads it off its row");
 });
 
 test("a held step that failed says which, and the card still waits with Approve", () => {

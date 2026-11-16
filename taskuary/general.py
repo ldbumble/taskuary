@@ -773,9 +773,10 @@ def owner_did(store, tid: int) -> list:
     out = [(at, what) for _, at, what, *_r in presses(store, tid, since)]
     out += [(r['DecidedAt'], _decided(store, r))
             for r in store._rows(f"SELECT * FROM review WHERE TaskId=? AND DecidedBy IN ({who}) AND DecidedAt>?", (tid, *OWNER_ACTORS, since))
-            if ((r['Status'] in DECIDED and r.get('DecideNote') != DROPPED) or (r['Status'] == 'pending' and (r.get('DeliveryState') in NOT_GONE or r.get('ActError'))))
+            if ((r['Status'] in DECIDED and r.get('DecideNote') != DROPPED) or (r['Status'] == 'pending' and (r.get('DeliveryState') in NOT_GONE or r.get('ActError'))) or failed_act(r))
             # ...ONCE: a yes its agent was already handed in Taskuary's words (approved) is not said a second time here (the owner's rules, part 3)
-            and not store._one("SELECT 1 AS x FROM audit WHERE EntityType='review' AND EntityId=? AND Action=?", (r['ReviewId'], TOLD))]
+            # ...as it stands now: a no after a failure it was handed is still news
+            and not store._one("SELECT 1 AS x FROM audit WHERE EntityType='review' AND EntityId=? AND Action=? AND CreatedAt>=?", (r['ReviewId'], TOLD, r['DecidedAt'] or ''))]
     return [f'{clock_of(at)}: {what}' for at, what in sorted(out, key=lambda x: str(x[0]))]
 # WHAT BECAME OF A SEND IS THE AGENT'S TO KNOW, AS IT ENDED (the agent walk, 2026-11-09): a send the server refused was not told to it at
 # all, one that went on the second press was told as "approved (Not sent: ...)" - it answered "not sent" and offered to set the mail up
@@ -783,14 +784,17 @@ def owner_did(store, tid: int) -> list:
 NOT_GONE = {'failed': 'pressed Send on {n} and IT DID NOT GO ({why}) - it still waits for their Send; never set it up again',
             'unknown': 'pressed Send on {n} and it MAY have gone ({why}) - never send it or set it up again unless they ask'}
 # ...and an ACT whose press failed (store.review_act_failed): the agent that set it up heard nothing, and read its card as still unpressed
-ACT_FAILED = 'pressed the button on {n} and IT FAILED ({why}) - it still waits on its card for their press; never do it another way unless they ask'
+ACT_FAILED = ('pressed Approve on {n} and IT FAILED ({why}) - nothing of it was done{left}. Where it is still needed, set the corrected one up '
+              'as a new card for their press; never do it another way')
+def failed_act(r) -> bool: return r.get('Kind') == 'action' and r['Status'] == 'superseded' and bool(r.get('ActError'))
 # ...and one that WENT is said as done: an approved merge, post or split read "approved (sent, if it sends)" - a letter's words for an act that
 # sends nothing, leaving its agent to guess whether it had run (the stress round, 2026-11-10)
 ACT_DONE = 'pressed Approve on {n} and it was done'
 def _decided(store, r) -> str:
     "One review the owner pressed, in words for its agent: what became of it - and what went, when they changed its text first."
     n, state, why = f"rv{r['ReviewId']}", r.get('DeliveryState') or '', ' '.join(str(r.get('Reason') or '').split())[:160]
-    if r['Status'] == 'pending' and state not in NOT_GONE: return ACT_FAILED.format(n=n, why=' '.join(str(r.get('ActError') or '').split())[:200])
+    if failed_act(r) or (r['Status'] == 'pending' and state not in NOT_GONE):
+        return ACT_FAILED.format(n=n, why=' '.join(str(r.get('ActError') or '').split())[:200], left='' if failed_act(r) else ' and its card still waits for their press')
     if r['Status'] == 'pending': return NOT_GONE[state].format(n=n, why=why or 'no reason was given')
     if r.get('Kind') == 'action' and r['Status'] in ('approved', 'edited'): return ACT_DONE.format(n=n) + (f' ({why[:120]})' if why else '')
     return f"{'approved and sent' if state == 'sent' and r['Status'] == 'approved' else DECIDED[r['Status']]} {n}" + (f' ({why[:120]})' if why else '') + _changed(store, r)
@@ -849,6 +853,20 @@ def approved(store, tid: int, press: str, what: str, actor: str = 'owner', revie
     r = store.get_review(int(review)) if review else None
     got = tell(store, tid, APPROVED.format(press=press, what=' '.join(str(what or 'done').split())[:400] + (_changed(store, r) if r else '')) + NEXT, actor)
     if got and r: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': got})
+    return got
+# A PRESS THAT FAILED IS HANDED BACK AT ONCE (the owner, 2026-11-16: "we can't have an agent asking to do something then it does nothing or
+# errors out, at least hand back to agent so we are not left hanging"): an approved INSERT failed on its card, the task sat on "waiting on you",
+# and its agent heard of it only with the owner's next line. Told as a yes that went is (approved), in the words owner_did would have said
+AGENT_TOLD = 'The agent was told and goes on from there.'
+FAILED_NEXT = 'Say in one line what went wrong and the way past it, then put right what is yours to put right.'
+def failed(store, tid: int, review: int, actor: str = 'owner') -> str:
+    "Hand task `tid`'s agent the press on `review` that failed: 'told', 'woke' or '' - said once, as `approved` marks it."
+    r = store.get_review(int(review))
+    if not r or not (failed_act(r) or r['Status'] == 'pending' and (r.get('ActError') or r.get('DeliveryState') in NOT_GONE)): return ''
+    got = tell(store, tid, f'The owner {_decided(store, r)}. {FAILED_NEXT}', actor)
+    # ...and its card says so under the error, so the owner is not left wondering who moves next (an act's; a send's line is its own)
+    if got and r.get('ActError'): store.review_act_failed(r['ReviewId'], f"{str(r['ActError'])[:250].rstrip('. ')}. {AGENT_TOLD}", r.get('DecidedBy') or actor)
+    if got: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': got, 'failed': True})
     return got
 def last_turn_began(store, tid: int) -> str | None:
     """When the turn task `tid`'s agent last answered BEGAN - the owner's line or Taskuary's brief it answered, or its start on the worker record,

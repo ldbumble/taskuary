@@ -5871,7 +5871,7 @@ class SQLiteStore:
         self._review_changed(rid)
     def review_act_failed(self, rid, error, by):
         "An act's press that failed: kept on the review, which still waits - with who pressed and when, as a failed send keeps them (finish_review_delivery)."
-        self._exec("UPDATE review SET ActError=?, DecidedBy=?, DecidedAt=? WHERE ReviewId=? AND Status IN ('pending','held')", (str(error or '')[:300] or None, by, _now(), rid))
+        self._exec("UPDATE review SET ActError=?, DecidedBy=?, DecidedAt=? WHERE ReviewId=? AND Status IN ('pending','held','superseded')", (str(error or '')[:300] or None, by, _now(), rid))
         self._review_changed(rid)
     def set_review_sid(self, rid, sid):
         self._exec('UPDATE review SET DraftSid=? WHERE ReviewId=?', (sid, rid)); self._review_changed(rid)

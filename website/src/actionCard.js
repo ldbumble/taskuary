@@ -37,6 +37,8 @@ export const stateOf = (row, live = true) => {
   const s = row?.Status, act = actionFor(row?.post?.type), w = wordsOf(act, row?.post || {});
   if (s === "approved" || s === "edited") return { done: true, said: w.done, url: row?.post?.result?.url || "" };
   if (s === "pending" && live) return { live: true };
+  // ...a press that failed is over: its error is the card's line (ActionCard), and its agent sets up what goes next (general.failed)
+  if (s === "superseded" && row?.ActError) return { done: false, failed: true, said: "" };
   return { done: false, said: s === "pending" ? w.undone : `${w.undone} · dismissed` };
 };
 // the box's words: the act's one editable text field (a post's `text`, a tracker comment's `body`)

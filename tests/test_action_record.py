@@ -176,33 +176,36 @@ class AnActOnTheLinkedIssueNeedsOne(Acts):
 class APressThatFailed(Acts):
     WHY = 'GitHub refused it: the token may not comment on northwind/ledger'
     def fail(self, rv, why=None):
-        with mock.patch.object(proposals, 'execute', side_effect=RuntimeError(why or self.WHY)):
+        with mock.patch.object(proposals, '_run', side_effect=RuntimeError(why or self.WHY)), mock.patch.object(proposals, 'validate', return_value=(True, 'comment')):
             return verdicts.decide(self.s, rv, 'approve')
 
-    def test_is_kept_on_the_review_that_still_waits(self):
+    def test_is_kept_on_its_settled_card(self):
         rv = self.action({'action': 'comment_issue', 'body': 'Fixed.'})
         out = self.fail(rv)
-        self.assertEqual((out['ok'], out['status'], out['send_error']), (False, 'pending', self.WHY))
+        self.assertEqual((out['ok'], out['status'], out['send_error']), (False, 'superseded', self.WHY))
         now = self.s.get_review(rv['ReviewId'])
-        self.assertEqual((now['Status'], now['ActError']), ('pending', self.WHY), 'a reload drew the card as if it had never been pressed')
-        self.fail(now, 'GitHub is not answering')
-        self.assertEqual(self.s.get_review(rv['ReviewId'])['ActError'], 'GitHub is not answering', 'the newest press is the one it says')
+        # ...over, with its error (the owner, 2026-11-16: no Try again - the agent sets up what goes next): a reload draws it failed
+        self.assertEqual((now['Status'], now['ActError']), ('superseded', self.WHY))
+        self.assertTrue(self.fail(now, 'GitHub is not answering').get('already'), 'nothing on it presses again')
 
-    def test_is_told_to_its_agent_with_the_owners_next_line(self):
+    def test_wakes_its_agent_at_once_and_is_not_said_again(self):
         self.answered(); rv = self.action({'action': 'comment_issue', 'body': 'Fixed.'})
-        self.fail(rv)
+        told = []
+        ses = SimpleNamespace(send_prompt=lambda text, **kw: told.append(text))
+        with mock.patch.object(general, 'start_session', return_value=ses), mock.patch.object(general, 'handles', return_value=True):
+            self.fail(rv)
+            end = time.time() + 5
+            while not told and time.time() < end: time.sleep(.01)
+        [text] = told
+        self.assertIn(f"rv{rv['ReviewId']}", text); self.assertIn('IT FAILED', text); self.assertIn('the token may not comment', text)
+        self.assertEqual(general.owner_did(self.s, self.tid), [], 'told once')
+
+    def test_where_no_agent_could_be_told_it_is_said_with_the_owners_next_line(self):
+        self.answered(); rv = self.action({'action': 'comment_issue', 'body': 'Fixed.'})
+        with mock.patch.object(general, 'tell', return_value=''): self.fail(rv)
         did = ' | '.join(general.owner_did(self.s, self.tid))
         self.assertIn(f"rv{rv['ReviewId']}", did); self.assertIn('IT FAILED', did); self.assertIn('the token may not comment', did)
-        self.assertIn('still waits', did)
-
-    def test_one_that_then_went_is_told_as_gone(self):
-        self.answered(); rv = self.action({'action': 'comment_issue', 'body': 'Fixed.'})
-        self.fail(rv)
-        with mock.patch.object(proposals, 'execute', return_value={'commented': 'northwind/ledger#7', 'url': SAID}), mock.patch.object(general, 'approved'):
-            self.assertTrue(verdicts.decide(self.s, self.s.get_review(rv['ReviewId']), 'approve')['ok'])
-        did = ' | '.join(general.owner_did(self.s, self.tid))
-        self.assertNotIn('IT FAILED', did); self.assertIn(f"pressed Approve on rv{rv['ReviewId']} and it was done", did)
-        self.assertNotIn('if it sends', did, 'an act that ran is not said in a letter\'s words')
+        self.assertIn('set the corrected one up as a new card', did)
 
     def test_a_held_step_that_failed_says_so_on_its_row(self):
         sg.check(self.s, self.tid, 'run1', 'git push origin fix-export', 'Bash', HELD)
@@ -298,7 +301,7 @@ class APartThatIsAnotherJob(Acts):
         rv, _ = self.queue()
         self.s.attach_message(self.other, Factory(self.s).task('Parking'))
         out = verdicts.decide(self.s, rv, 'approve')
-        self.assertEqual((out['ok'], out['status']), (False, 'pending')); self.assertIn('not on this task', out['send_error'])
+        self.assertEqual((out['ok'], out['status']), (False, 'superseded')); self.assertIn('not on this task', out['send_error'])
         self.assertEqual([i['id'] for i in self.s.task_checklist(self.tid)], ['a1', 'b2'])
 
     def test_the_agent_is_told_it_can(self):

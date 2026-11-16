@@ -164,15 +164,15 @@ class SignUp(unittest.TestCase):
         self.assertEqual(self.pending(), [])                                                # no card that could never be approved
 
     def test_approve_on_a_closed_or_unnamed_browser_does_nothing_and_says_why(self):
-        with TheBrowser(): self.check('agent-browser click @e5')
-        [rv] = self.pending()
-        for b, said in ((TheBrowser(open_=False), 'browser is closed'), (TheBrowser(url=None), 'could not read which page'),
-                        (TheBrowser(url='https://events.vendor.example/other'), 'moved on')):
+        for i, (b, said) in enumerate(((TheBrowser(open_=False), 'browser is closed'), (TheBrowser(url=None), 'could not read which page'),
+                                       (TheBrowser(url='https://events.vendor.example/other'), 'moved on'))):
+            with TheBrowser(): self.check(f'agent-browser click @e{5 + i}')
+            [rv] = self.pending()
             with b:
                 out = verdicts.decide(self.s, rv, 'approve')
                 self.assertFalse(out['ok']); self.assertIn(said, out['send_error']); self.assertIn('nothing was done', out['send_error'])
-                self.assertNotIn(['click', '@e5'], b.ran)
-        self.assertEqual(len(self.pending()), 1)                                            # still the owner's to dismiss
+                self.assertNotIn(['click', f'@e{5 + i}'], b.ran)
+            self.assertEqual(self.pending(), [], 'over, its error kept - the agent holds it anew (the owner, 2026-11-16)')
 
 
 class TheOffer(unittest.TestCase):

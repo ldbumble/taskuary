@@ -350,3 +350,134 @@ def test_a_prompt_that_is_not_his_never_sets_his_waiting_reply_aside(acp, tmp_pa
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class AFailedPressIsHandedBack(unittest.TestCase):
+    """THE OWNER, 2026-11-16: "we can't have an agent asking to do something then it does nothing or errors out, at least hand back to agent so
+    we are not left hanging". A coding agent set up an INSERT on a database card; the owner pressed Approve; the card said the error in red and
+    nothing else moved - its agent never heard, the task sat on "waiting on you". Every press that ran and failed now reaches its agent once."""
+    def setUp(self):
+        import os, sqlite3, tempfile
+        self.s = MemoryStore(); general._WOKEN.clear()
+        fd, self.db = tempfile.mkstemp(suffix='.db'); os.close(fd); self.addCleanup(lambda: os.path.exists(self.db) and os.remove(self.db))
+        cx = sqlite3.connect(self.db); cx.execute('CREATE TABLE ledger (id INTEGER, amount REAL)'); cx.commit(); cx.close()
+        c = self.s.get_connector_by_type('database')
+        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'ConfigJson': json.dumps({'conn_str': f'sqlite:///{self.db}'}), 'Active': 1}, 'test')
+
+    def coding_ended(self):
+        tid = Factory(self.s).task('Copy the September rows', kind='coding'); self.s.add_transcript(tid, 'run1', 'Set up the insert.', 'claude', HELD)
+        return tid
+
+    def card(self, tid, query, action='run_tool', **p):
+        d = {'action': action, 'type': 'database', 'query': query} if action == 'run_tool' else {'action': action, **p}
+        rid = Factory(self.s).review(tid, kind='action', reason='The agent asks', draft=json.dumps(d))
+        return self.s.get_review(rid if isinstance(rid, int) else rid['ReviewId'])
+
+    def press(self, rv):
+        with mock.patch('taskuary.waitroom.deliver', return_value={'delivered': 1, 'state': 'restarted'}):
+            return verdicts.decide(self.s, self.s.get_review(rv['ReviewId']), 'approve')
+
+    def test_an_approved_sql_that_fails_wakes_its_coding_agent_once_with_the_error(self):
+        tid = self.coding_ended(); rv = self.card(tid, 'INSERT INTO ledgr (id, amount) SELECT 1, 9.5')
+        out = self.press(rv)
+        self.assertFalse(out['ok']); self.assertIn('ledgr', out['send_error']); self.assertTrue(out.get('told'))
+        [n] = self.s.waiting_notes(tid)
+        self.assertEqual(n['CreatedBy'], 'router', "Taskuary's words, never the owner's line")
+        self.assertIn('IT FAILED', n['Note']); self.assertIn('ledgr', n['Note']); self.assertIn('what went wrong and the way past it', n['Note'])
+        r = self.s.get_review(rv['ReviewId'])
+        self.assertEqual(r['Status'], 'superseded', 'the card is over, its error kept - no Try again (the owner, 2026-11-16)')
+        self.assertTrue(verdicts.decide(self.s, r, 'approve').get('already'), 'nothing on it presses again')
+        self.assertIn('The agent was told', r['ActError'])
+        self.assertEqual(general.owner_did(self.s, tid), [], "told once: never said again with the owner's next line")
+
+    def test_the_agents_new_card_is_the_way_past_and_its_yes_is_told_it_went(self):
+        tid = self.coding_ended(); self.press(self.card(tid, 'INSERT INTO ledgr (id, amount) SELECT 1, 9.5'))
+        out = self.press(self.card(tid, 'INSERT INTO ledger (id, amount) SELECT 1, 9.5'))
+        self.assertTrue(out['ok'], out)
+        notes = self.s.waiting_notes(tid)
+        self.assertEqual(len(notes), 2, 'each press reaches the agent once')
+        self.assertIn('it went through', notes[-1]['Note']); self.assertIn('1 row changed', notes[-1]['Note'])
+
+    def test_a_close_out_that_failed_still_waits_and_a_no_after_it_is_still_news(self):
+        tid = self.coding_ended()
+        rv = self.card(tid, '', 'close_issue', closeout=True)
+        with mock.patch.object(proposals, 'linked', return_value=('northwind/ledger', 7)),              mock.patch('taskuary.ci._conn', side_effect=RuntimeError('GitHub is not answering')):
+            out = self.press(rv)
+        self.assertFalse(out['ok']); [n] = self.s.waiting_notes(tid); self.assertIn('still waits for their press', n['Note'])
+        self.assertEqual(self.s.get_review(rv['ReviewId'])['Status'], 'pending', "a close-out is Taskuary's own card: its buttons stay")
+        self.s._exec("UPDATE audit SET CreatedAt='2000-01-01 00:00:00' WHERE EntityType='review' AND Action=?", (general.TOLD,))
+        self.s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'GitHub was down - press it again later.')
+        self.s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:01' WHERE ActorType=?", (general.ASSISTANT_TYPE,))
+        verdicts.decide(self.s, self.s.get_review(rv['ReviewId']), 'reject')
+        self.assertTrue(any('turned down' in x for x in general.owner_did(self.s, tid)), general.owner_did(self.s, tid))
+
+    def test_a_resting_general_agent_is_woken_on_the_failure(self):
+        tid = Factory(self.s).task('Copy the September rows'); self.s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The insert is ready - press Approve.')
+        told = []
+        ses = SimpleNamespace(send_prompt=lambda text, **kw: told.append((text, kw)))
+        with mock.patch.object(general, 'start_session', return_value=ses), mock.patch.object(general, 'handles', return_value=True):
+            self.press(self.card(tid, 'INSERT INTO ledgr VALUES (1, 2)'))
+            end = time.time() + 5
+            while not told and time.time() < end: time.sleep(.01)
+        [(text, kw)] = told
+        self.assertFalse(kw.get('as_owner', True)); self.assertIn('IT FAILED', text)
+
+    def test_no_agent_ever_on_it_wakes_nothing_and_the_card_says_only_its_error(self):
+        tid = Factory(self.s).task('Copy the September rows', kind='coding'); rv = self.card(tid, 'INSERT INTO ledgr VALUES (1, 2)')
+        out = self.press(rv)
+        self.assertFalse(out.get('told')); self.assertEqual(self.s.waiting_notes(tid), [])
+        self.assertNotIn('The agent was told', self.s.get_review(rv['ReviewId'])['ActError'])
+
+    def test_a_held_browser_step_that_cannot_run_is_handed_back(self):
+        tid = self.coding_ended()
+        rv = self.card(tid, '', 'browser_act', sid='s1', args=['click', '@e3'], url='https://portal.example/pay', what='press Pay', command='click @e3')
+        with mock.patch('taskuary.browserview.state', return_value={'open': False}), mock.patch('taskuary.browserview.ended_on'):
+            out = self.press(rv)
+        self.assertFalse(out['ok']); [n] = self.s.waiting_notes(tid); self.assertIn('browser is closed', n['Note'])
+
+    def test_a_pushed_work_github_refused_is_handed_back(self):
+        tid = self.coding_ended(); self.s.set_setting('agent_push_enabled', '1', 'test')
+        rv = self.card(tid, '', 'open_pr')
+        with mock.patch('taskuary.ci.open_for_task', side_effect=RuntimeError('GitHub refused the push: the branch is protected')):
+            out = self.press(rv)
+        self.assertFalse(out['ok']); [n] = self.s.waiting_notes(tid); self.assertIn('branch is protected', n['Note'])
+
+    def test_a_setting_change_that_cannot_land_is_handed_back(self):
+        tid = self.coding_ended()
+        rv = self.card(tid, '', 'settings', changes=[{'name': 'poll_minutes', 'value': 5}])
+        with mock.patch.object(self.s, 'set_setting', side_effect=RuntimeError('the settings file is locked')):
+            out = self.press(rv)
+        self.assertFalse(out['ok']); [n] = self.s.waiting_notes(tid); self.assertIn('settings file is locked', n['Note'])
+
+    def test_held_steps_approved_together_tell_once_for_the_card(self):
+        tid = self.coding_ended()
+        for cmd in ('git push origin fix', 'gh pr create --fill'): sg.check(self.s, tid, 'run1', cmd, 'Bash', HELD)
+        rids = [r['ReviewId'] for r in self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))]
+        said = []
+        no = SimpleNamespace(returncode=1, stdout=b'rejected', stderr=b'')
+        with mock.patch.object(sg, '_tell', lambda st, t, text, **k: said.append(text)), mock.patch.object(sg, 'mid_turn', return_value=''), \
+             mock.patch.object(sg.os.path, 'isdir', lambda p: True), mock.patch('taskuary.spawn.run', lambda *a, **k: no):
+            sg.approve_steps(self.s, rids, verdicts.decide)
+        self.assertEqual(len(said), 1, said); self.assertEqual(self.s.waiting_notes(tid), [], 'the card told it - never a second note')
+
+
+class AFailedSendIsHandedBack(unittest.TestCase):
+    "A Send that ran and did not go: its agent hears it at once, in the words owner_did keeps for it."
+    def setUp(self):
+        self.s = MemoryStore(); general._WOKEN.clear()
+        self.tid = Factory(self.s).task('Answer Erin on the renewal', kind='coding')
+        self.s.add_transcript(self.tid, 'run1', 'Drafted the reply.', 'claude', HELD)
+        mid = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'graph:x1', 'ConversationId': 'th-1', 'Channel': 'email', 'Subject': 'Renewal',
+                                  'FromEmail': 'erin@northwind.example', 'BodyText': 'Can you confirm?', 'SentAt': '2026-10-01 09:00:00', 'Status': 'routed'})
+        self.rid = self.s.add_review({'TaskId': self.tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Confirmed.',
+                                      'Deliver': json.dumps({'kind': 'reply', 'to': ['erin@northwind.example'], 'cc': [], 'mode': 'reply_to'})})
+
+    def test_a_send_the_provider_refused_wakes_its_agent_once(self):
+        from taskuary import outbound
+        with mock.patch('taskuary.outbound.reply_to_message', side_effect=RuntimeError('mailbox is over its sending limit')), \
+             mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.waitroom.deliver', return_value={}), \
+             mock.patch.object(verdicts, 'context_moved', return_value=(False, None)):
+            out = verdicts.decide(self.s, self.s.get_review(self.rid), 'approve')
+        self.assertEqual(out.get('delivery'), 'failed', out)
+        [n] = self.s.waiting_notes(self.tid)
+        self.assertIn('IT DID NOT GO', n['Note']); self.assertEqual(general.owner_did(self.s, self.tid), [])

@@ -320,7 +320,9 @@ export const resultOf = (review) => {
 // (/api/reviews/steps) and one Dismiss. A step held after the owner wrote again is another turn's card. Each item: { key, reviews }
 const isHeldStep = (r) => proposalFrom(r)?.action === "shell_act";
 // ...a proposal the owner pressed, kept as its pressed card (PassedCard) - a close-out's press is its own card's (closeoutState)
-export const decidedAsk = (r) => r?.Kind === "action" && ["approved", "edited", "rejected"].includes(r.Status) && !isHeldStep(r) && !closeoutOf(r);
+// ...and one whose press FAILED (verdicts: settled with its error, the owner 2026-11-16 - no Try again): the error is its line, its agent sets up what goes next
+export const failedAsk = (r) => r?.Kind === "action" && r.Status === "superseded" && !!r.ActError;
+export const decidedAsk = (r) => r?.Kind === "action" && (["approved", "edited", "rejected"].includes(r.Status) || failedAsk(r)) && !isHeldStep(r) && !closeoutOf(r);
 const turnKey = (r) => { const p = proposalFrom(r); return p?.turn == null ? `rv${r.ReviewId}` : `${r.TaskId}|${p.sid || ""}|${p.turn}|${p.where || p.cwd || ""}`; };
 export const heldGroups = (rows) => {
   const out = [], at = new Map();

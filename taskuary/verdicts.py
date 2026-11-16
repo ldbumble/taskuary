@@ -589,6 +589,14 @@ def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, **kw) -> dic
         elif proposals._action(rv) not in proposals.HELD_ACTS and not (out.get('shut') or {}).get('closed'):
             try: general.approved(store, rv['TaskId'], *pressed(rv, out), actor, review=rv.get('ReviewId'))
             except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: the agent was not told it went - {e}")
+    # ...AND EVERY ONE THAT RAN AND FAILED (general.failed): an act's error, a send that did not go or may have - never a refusal before it
+    # ran (stale, a blank, already answered), and never a held turn's steps, whose card tells its agent once for all (shellgate.approve_steps)
+    elif verb_in in ('approve', 'edit', 'merge_anyway', 'close_pr') and rv.get('TaskId') and (out.get('act_failed') or out.get('delivery') in ('failed', 'unknown')):
+        from . import demo, general, shellgate
+        if not demo.enabled() and shellgate._batch.get() is None:
+            try:
+                if general.failed(store, rv['TaskId'], rv['ReviewId'], a[2] if len(a) > 2 else kw.get('actor', 'owner')): out['told'] = True
+            except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: the agent was not told it failed - {e}")
     return out
 
 
@@ -753,7 +761,7 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
                 except Exception as e:
                     store.add_comment(rv['TaskId'], actor, 'human', f'CLOSING THE PULL REQUEST FAILED: {str(e)[:300]}')
                     store.review_act_failed(rid, str(e), actor)
-                    return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': str(e)[:300]}
+                    return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': str(e)[:300], 'act_failed': True}
                 if not store.decide_review(rid, 'rejected', None, actor, 'closed the pull request without merging'): return _delivery_busy(store, rid)
                 proposals.settle(store, rv, 'approve', actor)       # answered, like a merge - the task stays open for Mark done
                 return {'ok': True, 'status': 'rejected', 'sent': None, 'send_error': None, 'result': out}
@@ -762,8 +770,13 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
                     out = proposals.execute(store, rv, actor, final, skip_checks=verb == 'merge_anyway', fields=fields)
                 except Exception as e:
                     store.add_comment(rv['TaskId'], actor, 'human', f'PROPOSAL FAILED: {str(e)[:300]}')
-                    store.review_act_failed(rid, str(e), actor)     # the card says it after a reload, and its agent hears it (general.owner_did)
-                    return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': str(e)[:300],
+                    store.review_act_failed(rid, str(e), actor)     # the card says it after a reload, and its agent hears it (general.failed)
+                    # ...AND IS OVER (the owner, 2026-11-16: no Try again): what the agent set up failed and is its again - the card keeps
+                    # the error, the agent is woken with it (decide) and sets up what goes next. A close-out is Taskuary's own, and a
+                    # refusal before it ran (the owner's own edit, a switch off, ChecksRed) has its own way on: those still wait
+                    if getattr(e, 'ran', False) and not isinstance(e, proposals.ChecksRed) and proposals._action(rv) not in proposals.CLOSEOUT:
+                        store.decide_review(rid, 'superseded', None, actor, proposals.FAILED_NOTE)
+                    return {'ok': False, 'status': (store.get_review(rid) or {}).get('Status') or 'pending', 'sent': None, 'send_error': str(e)[:300], 'act_failed': True,
                             **({'offers': e.offers, 'refused': True} if isinstance(e, proposals.ChecksRed) else {}),
                             # a grant the token lacks (github.Refused.needs): the owner's to add - a retry only repeats it
                             **({'needs': e.needs} if getattr(e, 'needs', '') else {})}

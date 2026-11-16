@@ -73,3 +73,9 @@ test("the action card leads Next steps and is drawn once", () => {
   assert.match(read("ReviewDecision.jsx"), /act \? <ActionCard/);
   assert.match(read("ActionCard.jsx"), /press\(api, row\.ReviewId, /);       // the one decide road, no second approval
 });
+
+test("a post whose press failed is over: no box, no button, its error the line", async () => {
+  const { stateOf } = await import("../src/actionCard.js");
+  const st = stateOf({ Status: "superseded", ActError: "the network refused the post", post: { type: "linkedin_post" } });
+  assert.equal(st.live, undefined); assert.equal(st.failed, true); assert.equal(st.done, false);
+});

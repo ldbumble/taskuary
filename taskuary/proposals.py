@@ -103,6 +103,7 @@ ACTIONS = {
     # saved or run before it, and it is the one door by which an agent's script ever reaches a schedule
     'save_routine': ('save this script as a routine', ('title', 'script'), None),
 }
+FAILED_NOTE = 'failed'      # a pressed act that failed: settled, its error kept (ActError) - its agent sets up what goes next
 HELD_ACTS = ('browser_act', 'shell_act', 'desktop_act')     # raised by a hook before the act ran - never an agent's marker
 # ...each by its own gate, which runs it on the owner's yes (perform) and tells its agent their no (declined) - and where it was held, as its
 # card says it. One table: the card's reason (queue), the yes (execute) and the no (settle) each spelled the three out
@@ -780,7 +781,11 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
     if not ok: raise RuntimeError(f'refused at execution: {why}')
     tid, a = rv.get('TaskId'), p['action']
     before = (store._one('SELECT MAX(Id) AS n FROM audit') or {}).get('n') or 0
-    out = _run(store, rv, p, tid, a, actor, edited, skip_checks)
+    try: out = _run(store, rv, p, tid, a, actor, edited, skip_checks)
+    except Exception as e:                  # ...the act itself ran and failed (verdicts settles its card), never a refusal before it ran
+        try: e.ran = True
+        except AttributeError: pass
+        raise
     # ONE PRESS, SAID ONCE (the stress round, 2026-11-10): the code an act runs writes its own rows on the task in the presser's name - a split,
     # a pull request opened - and each was a second line beside the pressed card, and a second "the owner did" for its agent. They are the
     # card's: marked with it, and said by it (general.presses)

@@ -523,71 +523,76 @@ def move_on(store, tid, before: str = None) -> list:
         from . import permissions
         permissions.set_aside(store, int(tid))
     except Exception as e: logger.debug(f'task {tid}: a permission waiting was not set aside - {e}')
-    try:                                          # ...and the landing question it raised (a Push card)
-        from . import landing
-        if landing.pass_over(store, int(tid)): out.append(LAND)
-    except Exception as e: logger.debug(f'task {tid}: the landing question was not passed - {e}')
     if out: store.audit('task', tid, 'cards_passed', 'taskuary', 'system', {'rids': out})
     return out
 
 
 def set_aside_drafts(store, tid: int, before: float, actions: float = 0) -> list:
-    """A CARD HE WROTE PAST IS SET ASIDE THE MOMENT HIS LINE IS HEARD (the owner, 2026-11-12: "I thought we keep it but grey out buttons right
-    away"; and for every kind - a chat only grows at its foot, and the live action is the last thing): it stays where it stood, greyed, and its
-    agent is told it was set aside because he wrote again (passed_since / passed_note - never that he declined), to raise it again at the end
-    of its turn if it is still needed. A reply draft older than `before` (his line, or a message that came in), and the agent's own actions -
-    a held step, a proposal - older than `actions` (his line only). Never what Taskuary raised itself: a close-out, a playbook, a routine's step.
-    Every road hears an input through conversation.hear, which calls this. -> the review ids."""
-    out = [r for r in _older(store, tid, before, actions) if store.decide_review(r, 'superseded', None, 'taskuary', note=SET_ASIDE)]
+    """A CARD THE CHAT MOVED PAST IS SET ASIDE FOR GOOD AS ITS AGENT HEARS THE INPUT (the owner, 2026-11-16, said ~20 times: "The second a new
+    prompt comes in, from manual or email, it should gray out the action card but never move"): every card older than the input at `before`
+    (`_older` - one rule, every kind), and the landing question, stays where it stood, greyed, and its agent is told it was set aside because
+    the chat moved on (passed_since / passed_note - never that he declined), to raise it again under the newest line if it is still wanted.
+    From the moment the input came in until then every surface already reads it greyed (written_past). Every road hears an input through
+    conversation.hear, which calls this. `actions`: the old split by kind, read as the same input. -> the review ids (and LAND)."""
+    from . import landing
+    at = max(before or 0., actions or 0.)
+    out = [r for r in _older(store, tid, at) if store.decide_review(r, 'superseded', None, 'taskuary', note=SET_ASIDE)]
+    if landing.pass_over(store, int(tid), at): out.append(LAND)
     if out: store.audit('task', tid, 'cards_passed', 'taskuary', 'system', {'rids': out})
     return out
 
 
 def _older(store, tid: int, before: float, actions: float = 0) -> list:
-    "The pending cards of the agent's an input at `before` (his line too: `actions`) stands after - set_aside_drafts' rule, read only."
+    """The pending cards an input at `before` stands after - set_aside_drafts' and written_past's ONE rule, read only. Every kind: a reply, an
+    email, a calendar answer, the agent's act or held step, and Taskuary's own close-out, playbook or routine step alike (the owner, 2026-11-16:
+    a close-out's Push stood lit above his newer line, and he scrolled up to press it). Only an email he wrote himself is his, never set aside,
+    and a reply owed that nobody wrote is no card yet."""
     from .conversation import ep
-    rows = store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind IN ('draft_reply','draft','action','slot') AND DeliveryClaim IS NULL", (int(tid),))
-    def ours(r):
-        # ...AN EMAIL THE AGENT WROTE IS ITS CARD TOO (the owner, 2026-11-10: "the second you write prompt on email action it should go gray and
-        # then it should generate new email action box under it"; recorded 2026-11-13: he wrote again and the agent's email stood lit above
-        # his line beside the reply that had greyed) - never one he wrote himself
-        if r['Kind'] == 'slot': return bool(str(r.get('DraftText') or '').strip()) and not str(r.get('Reason') or '').startswith('your email')
-        if r['Kind'] != 'action': return False
-        try: d = json.loads(r.get('DraftText') or '{}') or {}
-        except (TypeError, ValueError): d = {}
-        return isinstance(d, dict) and not (d.get('closeout') or d.get('action') in CLOSEOUT or d.get('action') in PLAYBOOKS or d.get('block')
-                                            or str(r.get('Reason') or '').startswith('the workflow'))
+    at = max(before or 0., actions or 0.)
+    if not at: return []
+    rows = store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND DeliveryClaim IS NULL", (int(tid),))
+    words = lambda r: bool(str(r.get('DraftText') or '').strip())
     # ...A REPLY'S WORDS BY WHEN THEY WERE WRITTEN (DraftAt), not when its card was raised: one owed is raised empty as its mail lands and the
-    # agent writes it later - a line between the two is one it saw (CI, 2026-11-15: which second each landed in decided it). Older only:
-    # a stamp is no finer than its second, and a line in the draft's own second leaves it standing until its agent hears it
-    return [r['ReviewId'] for r in rows if (r['Kind'] not in ('action', 'slot') and str(r.get('DraftText') or '').strip()
-                                            and ep(r.get('DraftAt') or r['CreatedAt']) < before
-                                            or actions and ours(r) and ep(r['CreatedAt']) < actions)]
+    # agent writes it later - a line between the two is one it saw (CI, 2026-11-15). Older only: a stamp is no finer than its second, and an
+    # input in the card's own second leaves it standing until its agent hears it
+    def card(r):
+        if r['Kind'] == 'slot': return words(r) and not str(r.get('Reason') or '').startswith('your email')
+        return r['Kind'] == 'action' or words(r) or r['Kind'] not in ('draft_reply', 'draft')
+    return [r['ReviewId'] for r in rows if card(r) and ep(r.get('DraftAt') or r['CreatedAt']) < at]
+
+
+def moved_on(store, tid: int, after: float = 0.) -> float:
+    """WHEN THE CHAT LAST MOVED ON, by an input no agent has heard yet: a line he typed (waiting, or kept for a turn not begun), a message that
+    joined the thread - never his own Send come back from his Sent folder, nor a stranger's words held behind trust (origin.hold), which moved
+    nothing on (recorded on the real CLI, 2026-11-15). Epoch seconds; 0. with none - or none newer than `after`, all that is asked."""
+    from . import conversation, general, origin
+    led = {(r['Kind'], r['Ref']) for r in store._rows("SELECT Kind, Ref FROM heard WHERE TaskId=?", (int(tid),))}
+    lines = [conversation.ep(x['CreatedAt']) for x in store.list_comments(int(tid), internal=True)
+             if x.get('ActorType') in (general.USER_TYPE, general.WAITING_TYPE) and not general.is_brief(x) and x.get('Actor') == 'owner'
+             and (x.get('ActorType') == general.WAITING_TYPE or x.get('LineId') and ('line', str(x['LineId'])) not in led)]
+    top = max([after, *lines])
+    # ...newest first, and only as far as one counts: who sent it and whether it is held are asked of the few newer than his newest line
+    mail = sorted((x for x in conversation._mail(store, int(tid)) if x['T'] > top and ('mail', str(x['MessageId'])) not in led), key=lambda x: -x['T'])
+    if not mail: return top if top > after else 0.
+    got = {}                                        # ...each asked once, and only of a message it is about
+    mine = lambda x: (got['mine'] if 'mine' in got else got.setdefault('mine', general.went_from_here(store, int(tid))))(x)
+    held = lambda x: str(x['MessageId']) in (got['held'] if 'held' in got else got.setdefault('held', {str(m) for m in (origin.hold(store, int(tid)) or {}).get('mids') or ()}))
+    return next((x['T'] for x in mail if not (mine(x) if x.get('Own') else held(x))), top if top > after else 0.)
 
 
 def written_past(store, tid: int) -> set:
-    """THE CARDS THE CONVERSATION HAS MOVED PAST AND NO AGENT HAS HEARD OF YET - ONE FUNCTION FOR EVERY SURFACE (the owner, 2026-11-13: the
-    chat greyed a reply draft his own outside answer stood under while the header's pill said "ready to send"): a pending reply draft
-    with a message on the task's thread that joined after its words were written (_older), the sender's or his own. `hear` settles it
-    for good the moment an agent takes that message (set_aside_drafts, by this same rule, and its agent drafts again where a reply is still
-    owed); until then - no agent may start, the switch is off, the house is full - the row still reads pending, and what waits on his press
-    (store.waiting_on_owner: the pill, the rail, the board) and what the chat draws lit (conversation.items) both leave it out. The thread
-    keeps its one row on the rail all the same - the ask still owed, never "ready to send" (funnel.from_feed). -> the review ids."""
-    from . import conversation
-    if not store._one("SELECT 1 AS x FROM review WHERE TaskId=? AND Status='pending' AND Kind IN ('draft_reply','draft') LIMIT 1", (int(tid),)): return set()
-    # ...a message its agent HAS heard settled what it stood after at that hand-over (hear): only one no agent heard can leave a draft behind
-    led = {r['Ref'] for r in store._rows("SELECT Ref FROM heard WHERE TaskId=? AND Kind='mail'", (int(tid),))}
-    # ...NOR CAN ONE HELD BEHIND TRUST (recorded on the real CLI, 2026-11-15): a stranger's words on the thread are handed to no agent until
-    # he trusts them (origin.hold), so they moved nothing on - and the reply waiting for his colleague lost its Send to them, "agent done"
-    # over it, with trusting the stranger the only press left
-    # ...asked only where a draft would be written past at all: judging a sender can write what it finds down, and this is read on every
-    # build of the rail (CI, 2026-11-15: the pipe was built twice while nothing moved)
-    mail = [x for x in conversation._mail(store, int(tid)) if str(x['MessageId']) not in led]
-    past = lambda rows: set(_older(store, tid, max((x['T'] for x in rows), default=0.)))
-    if not (got := past(mail)): return got
-    from . import origin
-    held = {str(m) for m in (origin.hold(store, int(tid)) or {}).get('mids') or ()}
-    return past([x for x in mail if str(x['MessageId']) not in held]) if held else got
+    """THE CARDS THE CHAT HAS MOVED PAST - ONE FUNCTION FOR EVERY SURFACE (the owner, 2026-11-16: "it should be one code that action cards are no
+    longer useful once the chat moves on. It should gray out immediately, but don't go away"): every pending card older than an input no agent
+    has heard yet (moved_on, _older). From the moment the line is sent or the message joins, the chat draws it greyed where it stood
+    (conversation.items) and what waits on his press leaves it out (store.waiting_reviews / waiting_on_owner: the pill, the rail, the board,
+    the phone); `hear` settles it for good as its agent takes the input (set_aside_drafts, by this same rule). -> the review ids."""
+    from .cardqueue import fresh
+    return fresh(store, ('past', int(tid)), lambda: _written_past(store, tid))
+def _written_past(store, tid: int) -> set:
+    from .conversation import ep
+    first = store._one("SELECT MIN(CreatedAt) AS a FROM review WHERE TaskId=? AND Status='pending'", (int(tid),))
+    if not (first and first['a']): return set()
+    return set(_older(store, tid, moved_on(store, tid, ep(first['a']))))      # ...an input in a card's own second moves nothing (_older)
 
 
 # what its agent is told of a card it raised that the conversation moved past - ONE sentence for every kind and both agent kinds
@@ -601,6 +606,26 @@ def _passed_line(r: dict) -> str:
     try: p = json.loads(r.get('DraftText') or '{}') or {}
     except (TypeError, ValueError): p = {}
     return f"- rv{r['ReviewId']}: " + ' '.join(str(p.get('what') or p.get('command') or r.get('Reason') or p.get('action') or 'a card').split())[:200]
+
+
+def passed_why(store, r: dict) -> str:
+    """WHY A CARD STANDS GREYED, IN WHAT HAPPENED (the owner's live task, 2026-11-16: "there was no earlier draft. This is broken?" - he typed a
+    line while the agent worked, the turn that never read it finished its draft after it, and the draft stood greyed reading "set aside when
+    you moved on", as if he had done something to it). ONE sentence for every kind, from the input that moved the chat past it: the newest of
+    his lines and the messages that came in, up to when it was set aside - written after it, or before the agent read it."""
+    from . import general
+    from .conversation import _mail, ep
+    card, end = ep(r.get('DraftAt') or r.get('CreatedAt')), ep(r.get('DecidedAt')) or time.time()
+    tid = int(r['TaskId'])
+    his = [x for x in store.list_comments(tid, internal=True) if x.get('ActorType') in (general.USER_TYPE, general.WAITING_TYPE)
+           and not general.is_brief(x) and x.get('Actor') == 'owner']
+    lines = [(ep(x['CreatedAt']), f'your line "{w}"', f'you wrote "{w}"') for x in his for w in [_cut(general._line_of(x.get('Body'))['text'])]]
+    mails = [(x['T'], 'your own message' if x.get('Own') else f"{x.get('FromName') or x.get('FromEmail') or 'a'}'s new message",
+              'you wrote again' if x.get('Own') else f"{x.get('FromName') or x.get('FromEmail') or 'someone'} wrote again") for x in _mail(store, tid)]
+    got = max((x for x in lines + mails if x[0] <= end + 1), key=lambda x: x[0], default=None)
+    if not got: return 'Not sent - set aside when the chat moved on'
+    return f'Not sent - {got[2]} after it' if got[0] >= card else f'Not sent - written before the agent read {got[1]}'
+def _cut(w: str, n: int = 60) -> str: return (w := ' '.join(str(w or '').split()))[:n] + ('…' if len(w) > n else '')
 
 
 def passed_since(store, tid: int, since: str) -> list:

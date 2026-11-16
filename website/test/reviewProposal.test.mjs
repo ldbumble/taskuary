@@ -229,7 +229,7 @@ test("a Python script is a source type on this computer, its script in a multi-l
 test("the section says Also waiting on you only under something else that waits", () => {
   const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   assert.match(page, /\$\{asksBelow \? "Also waiting on you" : "Waiting on you"\}\$\{liveAsks > 1 \? ` · \$\{liveAsks\}` : ""\}/);
-  assert.match(page, /const asksBelow = !!\(pendingReview \|\| moreDrafts\.length \|\| owesEmails/);
+  assert.match(page, /const asksBelow = !!\(pendingReview \|\| owesEmails/);
 });
 
 test("an act whose press failed is a settled card with its error, never a waiting one to press again", async () => {

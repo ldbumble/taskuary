@@ -5,7 +5,7 @@ import json, threading, time, unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from taskuary import general, landing, proposals, sessionrecord, shellgate as sg, terminal as term, verdicts, waitroom, workerstate as ws
+from taskuary import cardqueue, general, landing, proposals, sessionrecord, shellgate as sg, terminal as term, verdicts, waitroom, workerstate as ws
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -491,3 +491,152 @@ class AFailedSendIsHandedBack(unittest.TestCase):
         self.assertEqual(out.get('delivery'), 'failed', out)
         [n] = self.s.waiting_notes(self.tid)
         self.assertIn('IT DID NOT GO', n['Note']); self.assertEqual(general.owner_did(self.s, self.tid), [])
+
+
+class OneCardAtATime(unittest.TestCase):
+    """THE OWNER, 2026-11-16: "where there are 2 action cards, like approve push then email, it should wait on each approval step or action
+    card, so the agent should wait on it and then go to next steps". Every kind of card stands in one line (cardqueue): the next is shown only
+    once the one before it was pressed and its agent has heard how it went - so a failed push holds back the email announcing it, and a no
+    is the agent's to decide on before anything behind it stands. Invented people."""
+    setUp, coding_ended, card, press = (AFailedPressIsHandedBack.setUp, AFailedPressIsHandedBack.coding_ended, AFailedPressIsHandedBack.card,
+                                        AFailedPressIsHandedBack.press)
+
+    def email(self, tid, to, words):
+        return self.s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': words, 'Reason': 'assistant wrote this email - approve to send',
+                                  'Deliver': json.dumps({'channel': 'email', 'to': [to], 'cc': [], 'subject': 'Ledger fix', 'slot': to})})
+
+    def answered(self, tid, words, when=None):
+        cid = self.s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, words)
+        if when: self.s._exec('UPDATE comment SET CreatedAt=? WHERE CommentId=?', (when, cid))
+
+    def test_a_push_that_failed_holds_back_the_email_announcing_it_and_its_agent_decides(self):
+        tid = self.coding_ended(); self.s.set_setting('agent_push_enabled', '1', 'test')
+        self.answered(tid, 'The push and the note to Erin are set up.', '2000-01-01 00:00:00')
+        push, note = self.card(tid, '', 'open_pr'), self.email(tid, 'erin@northwind.example', 'Erin - the ledger fix is live.')
+        self.assertEqual((cardqueue.state(self.s, tid)['live'], cardqueue.held(self.s, tid)), ([push['ReviewId']], {note}))
+        self.assertEqual([r['ReviewId'] for r in self.s.waiting_reviews() if r['TaskId'] == tid], [push['ReviewId']])
+        with mock.patch('taskuary.ci.open_for_task', side_effect=RuntimeError('GitHub refused the push: the branch is protected')):
+            out = self.press(push)
+        self.assertFalse(out['ok']); [n] = self.s.waiting_notes(tid)
+        self.assertIn('branch is protected', n['Note'])
+        self.assertIn(f'rv{note} (the email to erin@northwind.example) is shown to the owner once this turn ends', n['Note'], 'it hears what waits, in the same hand-back')
+        self.assertEqual(cardqueue.held(self.s, tid), {note}, 'never shown as-is while its agent goes on from the failure')
+        verdicts.withdraw(self.s, tid, 'the push was refused - nothing is live', 'agent', which=str(note))
+        self.answered(tid, 'GitHub refused the push; I took the note to Erin back.')
+        self.assertEqual(cardqueue.state(self.s, tid)['units'], [], 'nothing of it ever stood in front of the owner')
+
+    def test_a_push_that_went_brings_the_email_forward_once_its_agent_has_heard_it(self):
+        tid = self.coding_ended(); self.s.set_setting('agent_push_enabled', '1', 'test')
+        self.answered(tid, 'The push and the note to Erin are set up.', '2000-01-01 00:00:00')
+        push, note = self.card(tid, '', 'open_pr'), self.email(tid, 'erin@northwind.example', 'Erin - the ledger fix is live.')
+        self.assertEqual(cardqueue.line(cardqueue.state(self.s, tid)), '1 of 2 · next: the email to erin@northwind.example')
+        with mock.patch('taskuary.ci.open_for_task', return_value={'url': 'https://github.com/northwind/ledger/pull/12'}):
+            self.assertTrue(self.press(push)['ok'])
+        [n] = self.s.waiting_notes(tid); self.assertIn('it went through', n['Note']); self.assertIn(f'rv{note}', n['Note'])
+        self.assertEqual(cardqueue.held(self.s, tid), {note})
+        self.answered(tid, 'The pull request is open.')
+        self.assertEqual((cardqueue.state(self.s, tid)['live'], cardqueue.held(self.s, tid)), ([note], set()))
+
+    def test_a_no_to_the_first_card_tells_its_agent_whose_no_it_was_and_the_next_waits_for_it(self):
+        tid = Factory(self.s).task('Answer Gail and tell Ray'); self.answered(tid, 'Both letters are set up.', '2000-01-01 00:00:00')
+        first, second = self.email(tid, 'gail@northwind.example', 'Gail - the rate is 4%.'), self.email(tid, 'ray@northwind.example', 'Ray - Gail has the rate.')
+        told = []
+        with mock.patch.object(general, 'tell', lambda st, t, said, actor='owner': told.append(said) or 'woke'):
+            self.assertTrue(verdicts.decide(self.s, self.s.get_review(first), 'reject')['ok'])
+        [said] = told
+        self.assertIn(f'turned down rv{first} (the email to gail@northwind.example) - their own no', said); self.assertIn(f'rv{second}', said)
+        self.assertEqual(cardqueue.held(self.s, tid), {second}, 'the line does not go on past a no by itself')
+        self.answered(tid, 'Leaving the note to Ray as it is.')
+        self.assertEqual(cardqueue.state(self.s, tid)['live'], [second])
+
+    def test_a_no_with_nothing_behind_it_wakes_nobody(self):
+        tid = Factory(self.s).task('Answer Gail'); self.answered(tid, 'The letter is set up.', '2000-01-01 00:00:00')
+        only = self.email(tid, 'gail@northwind.example', 'Gail - the rate is 4%.')
+        with mock.patch.object(general, 'tell', side_effect=AssertionError('a no with nothing behind it is heard with his next line')):
+            self.assertTrue(verdicts.decide(self.s, self.s.get_review(only), 'reject')['ok'])
+
+
+class TheChatMovedOn(unittest.TestCase):
+    """THE OWNER, 2026-11-16 (said ~20 times): "The second a new prompt comes in, from manual or email, it should gray out the action card but
+    never move. Why do I have to click things on top while I kept on chatting." Recorded live on a coding task: a "Push 2 commits to master and
+    deploy" card stood lit above his newer line "what needs to deploy?"; he scrolled up, pressed it, and it failed. One rule for every card -
+    Taskuary's own close-out and landing question included: an input after it greys it in place at once, nothing presses it, and its agent
+    hears the input and raises what is still wanted under it. Invented people."""
+    def setUp(self):
+        self.s = MemoryStore(); self.tid = Factory(self.s).task('Deploy the ledger fix'); general._WOKEN.clear()
+
+    def closeout(self):
+        rid = self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'finishing it: close the issue it came from',
+                                 'DraftText': json.dumps({'action': 'close_issue', 'closeout': True})})
+        self.s._exec("UPDATE review SET CreatedAt='2026-11-16 09:00:00' WHERE ReviewId=?", (rid,))
+        return rid
+
+    def test_a_close_out_greys_the_moment_his_line_comes_and_presses_nothing(self):
+        from taskuary import conversation
+        rid = self.closeout()
+        self.assertEqual(proposals.written_past(self.s, self.tid), set())
+        self.assertIn(rid, [r['ReviewId'] for r in self.s.waiting_reviews()])
+        general.wait_line(self.s, self.tid, 'what needs to deploy?', line_id='l-deploy')          # ...typed while its agent works: not heard yet
+        self.assertEqual(proposals.written_past(self.s, self.tid), {rid}, 'greyed at once, before any agent hears the line')
+        self.assertNotIn(rid, [r['ReviewId'] for r in self.s.waiting_reviews()]); self.assertIsNone(self.s.waiting_on_owner(self.tid))
+        out = verdicts.decide(self.s, self.s.get_review(rid), 'approve')
+        self.assertTrue(out.get('passed') and not out['ok'], out)
+        self.assertEqual(self.s.get_review(rid)['Status'], 'pending', 'never pressed - and never gone: it is still its card, greyed')
+        conversation.hear(self.s, self.tid, ['l-deploy'])                                          # ...its agent takes the line
+        r = self.s.get_review(rid)
+        self.assertTrue(proposals.passed(r), 'set aside for good as the agent hears it')
+        self.assertTrue(any(f"rv{rid}" in x for x in proposals.passed_since(self.s, self.tid, '')), 'and the agent is told, to raise it again')
+
+    def test_a_mail_that_came_in_after_it_greys_it_too(self):
+        self.s.set_setting('owner_email', 'alex@northwind.example', 'owner')                  # ...a colleague's mail: no stranger held behind trust
+        rid = self.closeout()
+        self.s.add_message({'TaskId': self.tid, 'ExternalId': 'g-1', 'ConversationId': 'th-1', 'Channel': 'email', 'Subject': 'Deploy',
+                            'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example', 'BodyText': 'Hold the deploy until Friday.', 'Status': 'routed'})
+        self.assertEqual(proposals.written_past(self.s, self.tid), {rid})
+
+    def test_the_landing_question_greys_by_the_same_rule(self):
+        landing._save(self.s, self.tid, {'start': 'abc', 'cwd': HELD, 'base': 'master', 'proposal': {'how': 'push', 'why': 'ship it', 'at': '2026-11-16 09:00:00'}})
+        self.assertEqual(cardqueue.state(self.s, self.tid)['live'], [cardqueue.LAND])
+        general.wait_line(self.s, self.tid, 'what needs to deploy?', line_id='l-deploy')
+        self.assertEqual(cardqueue.state(self.s, self.tid)['units'], [], 'greyed: no longer the card that stands')
+        from taskuary import conversation
+        self.assertTrue(landing.pass_over(self.s, self.tid, conversation.ep('2026-11-16 09:00:00') - 1) is False, 'an input before it moves nothing')
+        conversation.hear(self.s, self.tid, ['l-deploy'])
+        self.assertTrue(landing.record(self.s, self.tid)['proposal'].get('passed'))
+        self.assertFalse(landing.asked(self.s, self.tid))
+
+    def test_a_push_raised_again_after_its_press_was_refused_keeps_its_place_before_the_email(self):
+        """Recorded on the real CLI, 2026-11-16: Push was refused, the agent set the push up again, and it went behind the email announcing it
+        - which then stood first; the agent took the email back and wrote it again. A card asked again while it still stands keeps its place."""
+        from taskuary import conversation
+        ask = {'ask': True, 'own': False, 'branch': 'master', 'answers': [{'how': 'push'}], 'line': '1 commit on master not on origin yet'}
+        landing._save(self.s, self.tid, {'start': 'abc', 'cwd': HELD, 'base': 'master', 'proposal': {'how': 'push', 'why': 'ship it', 'at': '2026-11-16 09:00:00'}})
+        note = self.s.add_review({'TaskId': self.tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': 'Erin - the fix is live.', 'Reason': 'assistant wrote this email - approve to send',
+                                  'Deliver': json.dumps({'channel': 'email', 'to': ['erin@northwind.example'], 'cc': [], 'subject': 'Fix', 'slot': 'erin'})})
+        self.s._exec("UPDATE review SET CreatedAt='2026-11-16 09:00:05' WHERE ReviewId=?", (note,))
+        with mock.patch.object(landing, 'state', return_value=ask), mock.patch('taskuary.agentchannels.landing_proposed', lambda *a: None):
+            landing.propose(self.s, self.tid, 'push', 'the push was refused - asking again')
+        q = cardqueue.state(self.s, self.tid)
+        self.assertEqual((q['live'], q['held']), ([cardqueue.LAND], [note]))
+
+    def test_a_draft_the_working_turn_wrote_after_his_line_says_it_was_written_before_the_agent_read_it(self):
+        """The owner's live task, 2026-11-16 ("there was no earlier draft. This is broken?"): an ask came in on WhatsApp, the agent started, he
+        typed "Do it for the Hillside school" at 15:29:22 while it worked, and the turn - which never read his line - finished its draft at
+        15:30:31. The next turn heard his line and set that draft aside, and it read "set aside when you moved on" as if he had done something
+        to a draft he never saw. Greyed it stays; its line says what happened."""
+        from taskuary import conversation
+        general.wait_line(self.s, self.tid, 'Do it for the Hillside school', line_id='l-school')
+        self.s._exec("UPDATE comment SET CreatedAt='2026-11-16 15:29:22' WHERE LineId='l-school'")
+        rid = self.s.add_review({'TaskId': self.tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': 'Hi - the form for Lakeside is attached.',
+                                 'Reason': 'assistant wrote this email - approve to send', 'Deliver': json.dumps({'channel': 'email', 'to': ['gail@northwind.example']})})
+        self.s._exec("UPDATE review SET CreatedAt='2026-11-16 15:30:31' WHERE ReviewId=?", (rid,))
+        self.assertEqual(proposals.written_past(self.s, self.tid), set(), 'written after his line: nothing moved past it before it is heard')
+        conversation.hear(self.s, self.tid, ['l-school'])                                     # ...the next turn takes his line
+        r = self.s.get_review(rid)
+        self.assertTrue(proposals.passed(r))
+        self.assertEqual(proposals.passed_why(self.s, r), 'Not sent - written before the agent read your line "Do it for the Hillside school"')
+
+    def test_a_card_a_line_came_after_says_he_wrote_after_it(self):
+        rid = self.closeout()
+        general.wait_line(self.s, self.tid, 'what needs to deploy?', line_id='l-deploy')
+        self.assertEqual(proposals.passed_why(self.s, self.s.get_review(rid)), 'Not sent - you wrote "what needs to deploy?" after it')

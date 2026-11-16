@@ -334,6 +334,17 @@ NOT_LISTED = ("A SITE OR SYSTEM NOT LISTED HERE has no connection: say so in one
               "Never ask the owner for a password, and never work a sign-in from your shell.")
 
 def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
+    """_call - and a card's tool says where its card stands in the task's line (cardqueue: one card at a time, in the order raised)."""
+    out = _call(store, tid, name, args, doors)
+    if TOOLS[name][0] != 'propose' or not isinstance(out, str): return out
+    from . import cardqueue
+    if not (line := cardqueue.says(store, tid)): return out
+    try: got = json.loads(out)
+    except ValueError: got = None
+    return _j({**got, 'your_cards': line}) if isinstance(got, dict) else f'{out} {line}'
+
+
+def _call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     """Run one tool for the session on task `tid`. `doors` are the server's own handlers for the acts that have one (tool_run, tick,
     reply, draft, propose), called with the caller's request so their own checks - owns_task, scopes, the send-to-proposal rule -
     are the ones that hold. Raises ValueError for a call the model can correct; the answer is text the model reads."""

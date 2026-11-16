@@ -693,13 +693,30 @@ def _items(store, tid: int) -> dict:
     turns_at = {k: i for i, k in enumerate(turn_by)}
     newest = next((x for x in reversed(out) if x['kind'] == 'turn'), None)
     from .proposals import passed as proposals_passed
+    # ONE CARD AT A TIME (cardqueue): a card that waits behind another is drawn nowhere until its turn comes - and then where the chat has
+    # got to, never back in the turn that raised it, above what came since: in the newest turn when nothing came in after it, else under
+    # everything. One that waited and was over before it ever stood (taken back, written past) never stands at all
+    from . import cardqueue
+    queue = cardqueue.state(store, tid); cardqueue.mark(store, tid, queue)
+    held = {x for x in queue['held'] if x != cardqueue.LAND}
+    # ...and what the chat moved past is greyed where it stood from the moment the input came (proposals.written_past): an email too
+    past = queue['past']
+    waited = {r['Key'][2:] for r in store._rows("SELECT Key FROM shown WHERE TaskId=? AND Key LIKE 'q:%'", (tid,))}
+    last_in = max((i for i, x in enumerate(out) if x['kind'] in ('line', 'arrival', 'press')), default=-1)
+    ahead = newest if newest and out.index(newest) > last_in else None
     def place(card, at, cid=None):
         # ...a draft no turn has left yet is new now, whenever its row was made (the recorded walk, 2026-11-12: a reply owed since the mail came
         # was filled in the turn under his line and drawn in the turn of the mail's arrival - live, above his line): it goes in the newest turn,
         # which holds it back while it works
         fresh = card['what'] in DRAFTS and card['status'] == 'pending' and not cid
-        t = (turn_of.get(cid) if cid else None) or (newest if fresh and newest else made_in(at))
         h = hosts.get(card['id'])
+        if card['id'] in waited and not h:
+            # ...(where it first stood under everything it stays: '' is that place in the ledger)
+            if ahead is None or h == '':
+                if h is None: store._exec('INSERT OR IGNORE INTO shown (TaskId, Key, Seq, Host) VALUES (?,?,0,?)', (tid, f"c:{card['id']}", ''))
+                out.append(card); return
+            cid, fresh = None, True
+        t = (turn_of.get(cid) if cid else None) or (newest if fresh and newest else made_in(at))
         # ...down only to a turn that LEFT it again (its record names that turn): a turn begun after it is not one (recorded on ACP, 2026-11-12:
         # the session went on into a second turn and the card, drawn in the first, went from the chat until the second ended)
         # ...(one with no words yet has nothing that stood anywhere: it is the newest turn's, each time, with what that turn needs for it)
@@ -717,8 +734,9 @@ def _items(store, tid: int) -> dict:
     # emails sent, and the list placed neither - the page drew them under everything, so they went from the chat while each later turn
     # worked and came back at its foot, under words written long after them)
     for r in store._rows("SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId", (tid,)):
-        if r['Kind'] == 'slot' and not (str(r.get('DraftText') or '').strip() and (proposals_passed(r) or r['Status'] in WENT)): continue
-        if unwritten(r): continue
+        if r['Kind'] == 'slot' and not (str(r.get('DraftText') or '').strip() and (proposals_passed(r) or r['Status'] in WENT or r['ReviewId'] in past)): continue
+        if unwritten(r) or r['ReviewId'] in held: continue
+        if f"r:{r['ReviewId']}" in waited and hosts.get(f"r:{r['ReviewId']}") is None and r['Status'] != 'pending' and r.get('DecidedBy') not in OWNER_ACTORS: continue
         left = None if r['Kind'] == 'action' else wrapup.left_by(store, r['ReviewId'])
         place(_card(r), ep(r['CreatedAt']) + 0.999, (left or {}).get('CommentId'))
 
@@ -772,10 +790,11 @@ def _items(store, tid: int) -> dict:
     from . import proposals
     last_in = max((i for i, x in enumerate(out) if x['kind'] in ('line', 'arrival')), default=-1)
     last_his = max((i for i, x in enumerate(out) if x['kind'] == 'line'), default=-1)
-    past = proposals.written_past(store, tid)
     for i, x in enumerate(out):
         for c in [x] if x['kind'] == 'card' else x['cards'] if x['kind'] == 'turn' else []:
             if c['status'] == 'pending' and c.get('was') and (c['what'] in DRAFTS and i < last_in or i < last_his or c['review'] in past): c['status'] = 'passed'
+            # ...each says why in what happened (proposals.passed_why), never "you moved on" over a draft he never saw
+            if c['status'] == 'passed' and (rv := store.get_review(c['review'])): c['why'] = proposals.passed_why(store, rv)
     # ...and a reply with NO words yet - its card said only what its agent needed - is not the one to press above his newer line either
     # (recorded 2026-11-13: he answered the agent's question, and the empty reply box stood lit over his answer while the turn that writes it
     # worked): it has nothing to grey, so it is not drawn there; the turn his line began raises it, written, as its own last thing
@@ -827,13 +846,18 @@ def _items(store, tid: int) -> dict:
     # ...an email is written INSIDE its turn: of two turns a whole-second stamp cannot tell apart, the later one wrote it (the one before had ended)
     wrote = lambda at: next((x for x in reversed(out) if x['kind'] == 'turn' and (x.get('started') or 0) <= at and (x.get('ended') is None or x['ended'] + 1 >= at - 0.999)), None)
     spots = [x for x in out if x['kind'] == 'turn' and any(c['status'] == 'pending' and c['what'] in DRAFTS for c in x['cards'])]
-    spots += [t for r in store._rows("SELECT CreatedAt, DraftText FROM review WHERE TaskId=? AND Kind='slot' AND Status='pending'", (tid,))
-              if str(r.get('DraftText') or '').strip() and (t := run_end(wrote(ep(r['CreatedAt']) + 0.999)))]
+    # ...one that waited its turn (cardqueue) where it came to stand: the turn it was first drawn in, else the newest one past the last input
+    def spot(r):
+        k = f"r:{r['ReviewId']}"
+        if k not in waited: return run_end(wrote(ep(r['CreatedAt']) + 0.999))
+        return turn_by.get(hosts.get(k) or (ahead or {}).get('id'))
+    spots += [t for r in store._rows("SELECT ReviewId, CreatedAt, DraftText FROM review WHERE TaskId=? AND Kind='slot' AND Status='pending'", (tid,))
+              if str(r.get('DraftText') or '').strip() and r['ReviewId'] not in held | past and (t := spot(r))]
     letters = max(spots, key=lambda t: order.get(t['id'], -1))['id'] if spots else None
     # ...and where its block stands is where each waiting email STOOD, kept as a card's place is (`shown` Host): sent, it stays there
     if letters and turn_by.get(letters, {}).get('state') not in LIVE:
         for r in store._rows("SELECT ReviewId FROM review WHERE TaskId=? AND Kind='slot' AND Status='pending'", (tid,)):
-            if hosts.get(f"r:{r['ReviewId']}") != letters:
+            if r['ReviewId'] not in held | past and hosts.get(f"r:{r['ReviewId']}") != letters:
                 store._exec('INSERT INTO shown (TaskId, Key, Seq, Host) VALUES (?,?,0,?) ON CONFLICT(TaskId, Key) DO UPDATE SET Host=excluded.Host', (tid, f"c:r:{r['ReviewId']}", letters))
     # THE WAITING ROOM (the owner, 2026-11-12): what waits for the agent is drawn in ONE place until it is heard - his lines as rows over the
     # box, messages as counts on their sender's chip - and `now` says whether a waiting line can be handed into the turn at work at once (a
@@ -852,7 +876,9 @@ def _items(store, tid: int) -> dict:
         if why: idle = f"{why['Body']} {START_BY_WRITING}"
     body = {'items': out, 'pending': pend, 'now': now, 'dropped': [d for d in dropped if d], 'working': at_work, 'started': t0 if at_work else None, 'asking': ask,
             'permissions': perms, 'live': codingchat.live_of(codingchat._live(tid)),
-            'letters': letters, 'idle': idle, 'hold': hold_ and {**{k: hold_[k] for k in ('line', 'person', 'org')},
+            'letters': letters, 'idle': idle,
+            # ...and the line of cards (cardqueue): which one stands, which wait behind it unseen, and what the one standing says of them
+            'queue': {'live': queue['live'], 'held': queue['held'], 'line': cardqueue.line(queue)}, 'hold': hold_ and {**{k: hold_[k] for k in ('line', 'person', 'org')},
                               **({'line': origin.JOINED_LINE.format(who=hold_['who'])} if any(x['kind'] == 'turn' for x in out) else {})}, 'published': published, 'ran': bool(turn_of) or any(x['kind'] == 'turn' for x in out)}
     # ...hashed in the order it is built - the same every time - not sorted: sorting every step's keys was seconds a poll on a long session
     return {'rev': hashlib.sha1(json.dumps(body, default=str).encode()).hexdigest()[:16], **body}

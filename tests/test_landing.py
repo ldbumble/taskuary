@@ -288,7 +288,10 @@ class LandingTests(unittest.TestCase):
         self.on_master_with_origin(); self.dev()
         landing.propose(self.s, self.tid, 'push', 'the fix is ready')
         self.assertTrue(landing.state(self.s, self.tid)['ask'])
-        self.assertIn(proposals.LAND, proposals.move_on(self.s, self.tid))
+        # ...an input after it - his line, a mail - heard by its agent (proposals.set_aside_drafts: one rule with every card's, never a turn's start)
+        from taskuary.conversation import ep
+        self.assertNotIn(proposals.LAND, proposals.move_on(self.s, self.tid), 'a turn that begins moves nothing on by itself')
+        self.assertIn(proposals.LAND, proposals.set_aside_drafts(self.s, self.tid, ep(landing.record(self.s, self.tid)['proposal']['at']) + 0.5))
         s = landing.state(self.s, self.tid)
         self.assertTrue(s['passed']); self.assertFalse(s['ask'], 'nothing pressable')
         with self.assertRaises(ValueError) as e: landing.land(self.s, self.tid, 'push')

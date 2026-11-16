@@ -178,7 +178,8 @@ export const withMine = (list, mine) => {
   const at = items.length && rest.length && ((x) => x.kind === "turn" && ["starting", "working"].includes(x.state) && !x.text && !(x.steps || []).length)(items.at(-1)) ? items.length - 1 : items.length;
   // ...AND A REPLY DRAFT ABOVE IT GREYS IN ITS PLACE FROM THE SAME FRAME (the owner, 2026-11-12: "grey out buttons right away"): what the
   // server does as it hears the line (proposals.set_aside_drafts), drawn before its read comes back - its buttons stood lit ~300 ms
-  const aside = (c) => (rest.length && c.status === "pending" && c.was ? { ...c, status: "passed" } : c);
+  // ...a line sent while a turn works too (the owner, 2026-11-16: "The second a new prompt comes in ... it should gray out the action card but never move")
+  const aside = (c) => (own.some((l) => !l.err) && c.status === "pending" && c.was ? { ...c, status: "passed" } : c);
   const greyed = items.map((x) => (x.kind === "card" ? aside(x) : x.kind === "turn" && (x.cards || []).length ? { ...x, cards: x.cards.map(aside) } : x));
   return { items: [...greyed.slice(0, at), ...rest, ...greyed.slice(at), ...tail], pending: [...pending, ...wait] };
 };

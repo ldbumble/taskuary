@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { draftAnswers, otherPendingReplies } from "../src/pendingDrafts.js";
+import { draftAnswers } from "../src/pendingDrafts.js";
 
 // TWO LETTERS WAITING ON ONE TASK (2026-11-02): an agent's question to one person and a reply to another - each drawn with what it answers.
 // Invented people.
@@ -16,14 +16,6 @@ test("each pending reply answers its own message, not the task's newest", () => 
   assert.equal(draftAnswers(toPaula, msgs).FromName, "Paula Vance");
   assert.equal(draftAnswers({ ReviewId: 1, MessageId: 99 }, msgs), null);
   assert.equal(draftAnswers(null, msgs), null);
-});
-
-test("the other pending replies are drawn beside the one Close out shows - never a sent one, a slot or a proposal", () => {
-  const reviews = [toPaula, toGail, { ReviewId: 9, MessageId: 1, Kind: "draft_reply", Status: "approved" },
-    { ReviewId: 11, Kind: "slot", Status: "pending" }, { ReviewId: 13, Kind: "action", Status: "pending" }];
-  assert.deepEqual(otherPendingReplies(reviews, toPaula).map((r) => r.ReviewId), [10]);
-  assert.deepEqual(otherPendingReplies(reviews, null).map((r) => r.ReviewId), [10, 12]);
-  assert.deepEqual(otherPendingReplies([toGail], toGail), []);
 });
 
 test("a reply answers the mail that asked (AnswersMid), not the newest it saw (MessageId)", () => {

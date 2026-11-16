@@ -124,8 +124,7 @@ import DifferenceOutlinedIcon from "@mui/icons-material/DifferenceOutlined";
 import AgentChannels from "./AgentChannels.jsx";
 import TokenOutlinedIcon from "@mui/icons-material/TokenOutlined";
 import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined";
-import MoreDrafts from "./MoreDrafts.jsx";
-import { draftAnswers, otherPendingReplies } from "./pendingDrafts.js";
+import { draftAnswers } from "./pendingDrafts.js";
 import { replyRounds, roundReviews } from "./replyRounds.js";
 import { diffStat } from "./agentRecord.js";
 import AgentStory from "./AgentStory.jsx";
@@ -1480,8 +1479,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // survive untouched" - left out while a newer session was live, the card he was about to send had no Send after a restart)
   const round = rounds.at(-1), reviews = roundReviews(allReviews, rounds);
   const pendingReview = pendingReplyReview(reviews);
-  // ...and any other reply waiting, to someone else on the task - each drawn under it with its own To and Send (MoreDrafts)
-  const moreDrafts = otherPendingReplies(reviews, pendingReview);
   const allProposals = pendingProposals(reviews);
   // the task's GitHub finish beside its reply is ONE decision on the reply's card; alone, it is its own card below
   const closeoutRv = allProposals.find((p) => closeoutOf(p)) || null;
@@ -2754,7 +2751,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...AND ONCE THE OWNER WRITES AGAIN EACH PRESSED CARD STAYS IN ITS TURN (the owner, 2026-11-09: "leave the card in the turn with the pressed
   // button"): the held steps it approved, and every reply that went - drawn by the chat in the turn that set it up (GeneralWorkspace turnCards)
   const liveAsks = askCards.filter((g) => g.reviews.some((r) => r.Status === "pending")).length;
-  const asksBelow = !!(pendingReview || moreDrafts.length || owesEmails || (handInPane && handoff) || calAsk?.invite);
+  const asksBelow = !!(pendingReview || owesEmails || (handInPane && handoff) || calAsk?.invite);
   // ...AND SO DOES EACH CARD THAT STILL WAITS (the spine audit, 2026-11-09): a held step, a browser act, a drafted playbook rode one block under
   // whichever turn was newest, and the last two stood again at the chat's foot with a second Approve. Each is drawn once, in the turn that
   // raised it (`rid`: the chat's payload names that turn). A to-do no agent has touched has no turns: its cards stay over its box (chatBody)
@@ -2841,7 +2838,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
             <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
               onEmailInstead={() => setEmailOpen(true)} why={rec?.state === "draft_ready" ? rec.why || "" : ""}
               onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} /></Box>   {/* the list's row moves too (T19) */}
-            <MoreDrafts reviews={moreDrafts} messages={storedMessages} onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />
           </>) : (
             <>
               {/* WHAT ALREADY WENT OUT, before any envelope: the item ending upstream (the agent's merge) and what was sent
@@ -2978,7 +2974,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...only where it holds something (an empty Next steps said nothing), and marked while it waits on the owner: a resting Result keeps the chat
   // that holds it on screen (`data-tq-waits`, the agent room's :has)
   // ...the asks drawn in their turns are not this block's: with nothing else to hold it is not drawn (a "Next steps" over nothing)
-  const waits = !!(chatReview || moreDrafts.length || proposals.length - (inTurns ? asks.length : 0) || owesEmails || handoff);
+  const waits = !!(chatReview || proposals.length - (inTurns ? asks.length : 0) || owesEmails || handoff);
   // ...ONLY WHAT CAN STILL BE DONE (the owner, 2026-11-05: "it's a chat nothing else"): a draft waiting on Send, an invite to answer, emails owed -
   // never a closed task's "Mark done 11m ago", a reply sent outside or a draft closed without sending; the chat says those
   const chatCards = sentBox ? <SentCard {...sentBox} /> : !["done", "dropped"].includes(t?.Status) && (waits || (!inTurns && kept.length) || upFailed

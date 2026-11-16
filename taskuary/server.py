@@ -2184,6 +2184,15 @@ def _offer_of(task_id) -> str:
 def task_detail(task_id: int):
     d = store.task_detail(task_id)
     if not d: raise HTTPException(404, 'task not found')
+    # ONE CARD AT A TIME (cardqueue): what waits behind the card that stands is not the page's to draw yet
+    from . import cardqueue
+    q = cardqueue.state(store, task_id)
+    if (held := set(q['held'])): d['reviews'] = [r for r in d['reviews'] if r['ReviewId'] not in held]
+    # ...and what the chat moved past reads as it will once its agent hears that (proposals.written_past): greyed in place, from this read on
+    from .proposals import SET_ASIDE
+    past = q['past']
+    for r in d['reviews']:
+        if r['ReviewId'] in past: r.update(Status='superseded', DecideNote=SET_ASIDE)
     # a session that has ended still leaves work to close out, so the page has to know one
     # happened - the Done and Pause buttons used to vanish with the pty
     tr = store.last_transcript(task_id)

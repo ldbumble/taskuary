@@ -80,12 +80,27 @@ test("nothing drawn goes or moves, and nothing new is drawn above it", () => {
 test("a card is drawn where the list has it and nowhere else - never loose under a turn at work, never live again at the foot", async () => {
   const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   // ...nor before the list is read (chatStream.placesLoose: one word for "there is a list, and no turn of it is at work")
-  assert.match(src, /const loose = looseOk \? nodes\.filter\(\(n\) => !used\.has\(n\.key\) && !listed\.has\(n\.rid\)\) : \[\]/);
+  assert.match(src, /const loose = looseOk \? nodes\.filter\(\(n\) => !used\.has\(n\.key\) && !listed\.has\(n\.rid\) && !held\.has\(n\.rid\)\) : \[\]/);
   assert.match(src, /const nextLoose = next && !used\.has\("next"\) && looseOk && !listed\.has\(nextRid\)/);
   assert.match(src, /loose=\{placesLoose\(list\)\}/);
   // ...a draft no longer to press is greyed in its place with its words: rewritten, set aside as he wrote again, taken back by its agent
   assert.match(src, /const PAST = \{ superseded: .*passed: .*withdrawn: /);
   assert.doesNotMatch(src, /stands below, under a later answer/);
+});
+
+// ONE CARD AT A TIME (the owner, 2026-11-16: "it should say I have 2 emails to send, should we send this one? then user clicks then the next one
+// shows"): the list names what waits behind the card that stands (conversation.items `queue`, cardqueue.py) - the page draws none of it, at
+// its turn, loose at the foot or as the landing question, and says over the card that stands how many come and which is next
+test("a card that waits behind another is drawn nowhere, and the one that stands says what comes next", async () => {
+  const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(src, /if \(held\.has\(c\.review\)\) return \[\];/);
+  assert.match(src, /landing = held\.has\("land"\) \? null : landed/);
+  assert.match(src, /data-tq-card-queue=""/);
+  assert.match(src, /return out\.length && live\.has\(c\.review\) && c\.status === "pending" \? \[\.\.\.qLine\(\), \.\.\.out\] : out;/);
+  assert.match(src, /queue=\{list\?\.queue \|\| null\}/);
+  // ...and no second road draws two letters side by side: the other replies' block and the emails' Approve all are gone
+  const page = await readFile(new URL("../src/TaskPage.jsx", import.meta.url), "utf8"), slots = await readFile(new URL("../src/SlotList.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(page, /MoreDrafts/); assert.doesNotMatch(slots, /Approve all/);
 });
 
 // the bug hunt's stop, 2026-11-12: after Stop his next line set the stopped turn's draft aside, and it read "Earlier draft - not sent; you

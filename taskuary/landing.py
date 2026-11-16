@@ -280,7 +280,13 @@ def state(store, tid: int, full: bool = False) -> dict | None:
     out['ask'] = (mine and ahead > 0 and not r.get('landed')) or bool(out['push'])
     # ...a question the agent RAISED (its proposal) is passed once the conversation moves on (proposals.move_on): greyed, nothing pressable,
     # until the agent raises it again. Unpushed work with no proposal is the checkout's own fact, raised by no turn - it stays live
-    out['passed'] = bool(out['ask'] and (r.get('proposal') or {}).get('passed') and not r.get('landed'))
+    # ...AND SO IS ONE NO TURN RAISED, once the chat moved on past it (the owner, 2026-11-16: "Push 2 commits to master and deploy" stood lit
+    # above his newer line, and he scrolled up to press it): every card greys in place as an input comes after it - one rule (proposals._older)
+    from . import proposals
+    from .conversation import ep
+    p_ = r.get('proposal') or {}
+    since, moved = ep(p_.get('at') or out.get('at')), max(float(r.get('moved') or 0), proposals.moved_on(store, tid))
+    out['passed'] = bool(out['ask'] and not r.get('landed') and (p_.get('passed') or since and moved > since))
     if out['passed']: out['ask'] = False
     hows = (OWN_HOW if mine else PUSH_HOW[:1 + bool((out['push'] or {}).get('deploy'))]) if out['ask'] else ()
     out['answers'] = [{'how': k, 'label': HOW[k]} for k in hows]
@@ -361,7 +367,9 @@ def propose(store, tid: int, how: str, why: str = '', actor: str = 'agent', depl
     if how == 'deploy' and not deploy: raise ValueError('deploy needs the branch it deploys to: `deploy`')
     r = record(store, tid)
     # ...raised again after it was passed (pass_over): asking is the agent's to judge, never refused - its card is live again
-    if (r.get('proposal') or {}).pop('passed', None): _save(store, tid, r)
+    prev = dict(r.get('proposal') or {})
+    # ...asked now, it is after every input it heard - in that input's own second too (`moved`, pass_over)
+    if [(r.get('proposal') or {}).pop('passed', None), r.pop('moved', None)] != [None, None]: _save(store, tid, r)
     if deploy:                                    # ...read into the question below: its Push & deploy button is drawn from it
         r['proposal'] = {**(r.get('proposal') or {}), 'deploy': deploy}; _save(store, tid, r)
     s = state(store, tid)
@@ -370,7 +378,11 @@ def propose(store, tid: int, how: str, why: str = '', actor: str = 'agent', depl
     if how == 'discard' and not s['own']: raise ValueError('discard is only for a branch of your own')
     if how not in {a['how'] for a in s['answers']}: raise ValueError(f"how is one of: {', '.join(a['how'] for a in s['answers'])} here - {s['line']}")
     r = record(store, tid)
-    r['proposal'] = {'how': how, 'why': ' '.join(str(why or '').split())[:400], 'at': time.strftime('%Y-%m-%d %H:%M:%S'), **({'deploy': deploy} if deploy else {})}
+    # ...and asked again while it still stands (a press refused, a better why) it keeps its place in the line of cards (cardqueue): recorded
+    # on the real CLI, 2026-11-16 - a Push refused and raised again went behind the email announcing it, and the agent took the email back
+    stands = prev.get('at') and not prev.get('passed') and str((r.get('landed') or {}).get('at') or '') < str(prev['at'])
+    r['proposal'] = {'how': how, 'why': ' '.join(str(why or '').split())[:400], 'at': time.strftime('%Y-%m-%d %H:%M:%S'), **({'deploy': deploy} if deploy else {}),
+                     **({'first': prev.get('first') or prev['at']} if stands else {})}
     _save(store, tid, r)
     store.add_comment(tid, actor, 'agent', f"Proposes to land {s['branch']}: {HOW[how]}" + (f' to {deploy}' if deploy else '') + (f" - {r['proposal']['why']}" if r['proposal']['why'] else '') + '.')
     store.audit('task', tid, 'land_proposed', actor, detail={'how': how})
@@ -470,10 +482,15 @@ def asked(store, tid) -> bool:
     return bool(p) and not p.get('passed') and str((r.get('landed') or {}).get('at') or '') < str(p.get('at') or '')
 
 
-def pass_over(store, tid: int) -> bool:
-    "The landing question the agent raised, passed as the conversation moves on (proposals.move_on). True when one was."
+def pass_over(store, tid: int, before: float = None) -> bool:
+    """The landing question the agent raised, passed as the chat moves on past it (proposals.set_aside_drafts: an input at `before` - one rule
+    with every card's). True when one was."""
+    from .conversation import ep
     r = record(store, tid); p = r.get('proposal') or {}
+    # ...and when it moved on, for the question the checkout raises by itself (state): no turn raised it, so no proposal carries its mark
+    if before and r.get('start') and before > float(r.get('moved') or 0): r['moved'] = before; _save(store, tid, r)
     if not p or p.get('passed') or str((r.get('landed') or {}).get('at') or '') >= str(p.get('at') or ''): return False
+    if before is not None and ep(p.get('at')) >= before: return False
     r['proposal'] = {**p, 'passed': time.strftime('%Y-%m-%d %H:%M:%S')}; _save(store, tid, r)
     return True
 

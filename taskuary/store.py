@@ -5595,9 +5595,12 @@ class SQLiteStore:
         task's state reads). A road that DECIDES about a pending row (what his own line may have answered, an item that ended upstream)
         reads list_reviews: the row is still pending there until its agent hears the newer message."""
         from . import proposals
-        past = {}
-        gone = lambda r: bool(r.get('TaskId')) and r['Kind'] in ('draft', 'draft_reply') and r['ReviewId'] in (past.get(r['TaskId']) if r['TaskId'] in past else past.setdefault(r['TaskId'], proposals.written_past(self, r['TaskId'])))
-        return [r for r in self.list_reviews('pending') if not gone(r)]
+        from . import cardqueue
+        past, held = {}, {}
+        gone = lambda r: bool(r.get('TaskId')) and r['ReviewId'] in (past.get(r['TaskId']) if r['TaskId'] in past else past.setdefault(r['TaskId'], proposals.written_past(self, r['TaskId'])))
+        # ...nor a card that waits behind another on its task (cardqueue): one stands at a time, on every surface
+        waits = lambda r: bool(r.get('TaskId')) and r['ReviewId'] in (held[r['TaskId']] if r['TaskId'] in held else held.setdefault(r['TaskId'], cardqueue.held(self, r['TaskId'])))
+        return [r for r in self.list_reviews('pending') if not gone(r) and not waits(r)]
     @contextlib.contextmanager
     def review_delivery_edit(self, rid):
         """Exclude send claims while attachment bytes/envelopes change, even in another process."""
@@ -5755,8 +5758,9 @@ class SQLiteStore:
         asked of it read an agent's unsent email as nothing: the task said "agent done" and went to Reports (the product audit, 2026-11-08)."""
         # ...never a reply draft the thread has moved past (proposals.written_past - the one rule the chat greys it by): it is not the one to
         # press, whether or not an agent has heard the newer message yet
-        from . import proposals
-        past = proposals.written_past(self, task_id)
+        # ...nor one that waits its turn behind another (cardqueue): the one that stands is what waits on him
+        from . import cardqueue, proposals
+        past = proposals.written_past(self, task_id) | cardqueue.held(self, task_id)
         return next((r for r in self._rows(f"SELECT rv.* {_REVIEW_FROM} WHERE rv.TaskId=? AND rv.Status='pending' AND {_NOT_ORPHAN} AND {_VISIBLE_PENDING} "
                                            "ORDER BY rv.ReviewId DESC", (task_id,)) if r['ReviewId'] not in past), None)
     def sent_reply(self, message_id=None, task_id=None):

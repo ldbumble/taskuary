@@ -12,6 +12,7 @@ import json
 import re
 from email.utils import parseaddr
 from .timewords import plural
+from loguru import logger
 
 # what a slot can be - a new kind is a new entry here, never a branch elsewhere. A chat (the owner, 2026-10-09: "teams/chat
 # too") is one message into one chat id, sent by outbound.send_out like any of these: no CC, no files, no subject.
@@ -123,7 +124,10 @@ def drop(store, tid: int, slot_id: str, actor: str) -> bool:
     hit = next((i for i in all_(store, tid) if i['id'] == slot_id), None)
     if not hit: return False
     rv = store.get_review(hit['rid']) if hit.get('rid') else None
-    if rv and rv.get('Status') == 'pending': store.decide_review(rv['ReviewId'], 'rejected', None, actor, DROPPED)
+    if rv and rv.get('Status') == 'pending' and store.decide_review(rv['ReviewId'], 'rejected', None, actor, DROPPED):
+        from . import cardqueue          # ...a no, like any card's: what waits behind it is its agent's to decide on first
+        try: cardqueue.said_no(store, rv, 'reject', actor)
+        except Exception as e: logger.warning(f"rv{rv['ReviewId']}: the agent was not told of the dropped email - {e}")
     mark(store, tid, slot_id, done=True, actor=actor)
     store.audit('task', tid, 'slot_dropped', actor, detail={'to': hit['out'].get('name') or hit['out'].get('to'), 'kind': hit['out'].get('kind') or 'email'})
     return _left(store, tid, f"Dropped: {hit['text']}.", actor)

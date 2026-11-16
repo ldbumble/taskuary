@@ -91,12 +91,6 @@ export const completionLine = (manual, owesEmails, noSender = false) => closesIt
 export const completionFact = (manual, owesEmails, noSender = false) => closesItself(manual, owesEmails, noSender)
   ? "closes itself when its agent is done" : "stays open until you Mark done";
 export const slotReviews = (reviews = []) => (reviews || []).filter((review) => review.Kind === "slot");
-// what one Approve all may send: drafted, addressed, and asked for - never an address the agent added on its own
-export const bulkSendable = (items = [], reviews = []) => {
-  const byRid = Object.fromEntries(slotReviews(reviews).map((r) => [r.ReviewId, r]));
-  return items.filter((i) => i.out?.by !== "agent" && String(i.out?.to || "").includes("@")).map((i) => byRid[i.rid])
-    .filter((r) => r?.Status === "pending" && String(r.DraftText || "").trim());
-};
 
 // ...and the one closed WITHOUT sending: the draft stays on the task whatever became of it, a done task
 // included (the owner, 2026-09-24: "draft should always stay on task even on done task"). Newest wins.

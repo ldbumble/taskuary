@@ -851,7 +851,9 @@ def approved(store, tid: int, press: str, what: str, actor: str = 'owner', revie
     prompt's WHAT THE OWNER DID does not say it a second time."""
     from .browsergate import NEXT
     r = store.get_review(int(review)) if review else None
-    got = tell(store, tid, APPROVED.format(press=press, what=' '.join(str(what or 'done').split())[:400] + (_changed(store, r) if r else '')) + NEXT, actor)
+    from .cardqueue import says
+    got = tell(store, tid, APPROVED.format(press=press, what=' '.join(str(what or 'done').split())[:400] + (_changed(store, r) if r else '')) + NEXT
+               + (f' {line}' if (line := says(store, tid, pressed=True)) else ''), actor)
     if got and r: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': got})
     return got
 # A PRESS THAT FAILED IS HANDED BACK AT ONCE (the owner, 2026-11-16: "we can't have an agent asking to do something then it does nothing or
@@ -863,7 +865,8 @@ def failed(store, tid: int, review: int, actor: str = 'owner') -> str:
     "Hand task `tid`'s agent the press on `review` that failed: 'told', 'woke' or '' - said once, as `approved` marks it."
     r = store.get_review(int(review))
     if not r or not (failed_act(r) or r['Status'] == 'pending' and (r.get('ActError') or r.get('DeliveryState') in NOT_GONE)): return ''
-    got = tell(store, tid, f'The owner {_decided(store, r)}. {FAILED_NEXT}', actor)
+    from .cardqueue import says
+    got = tell(store, tid, f'The owner {_decided(store, r)}. {FAILED_NEXT}' + (f' {line}' if (line := says(store, tid, pressed=True)) else ''), actor)
     # ...and its card says so under the error, so the owner is not left wondering who moves next (an act's; a send's line is its own)
     if got and r.get('ActError'): store.review_act_failed(r['ReviewId'], f"{str(r['ActError'])[:250].rstrip('. ')}. {AGENT_TOLD}", r.get('DecidedBy') or actor)
     if got: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': got, 'failed': True})
@@ -947,8 +950,11 @@ def latest_block(store, tid: int, resumed: bool = False, rules: bool = True, tur
                    f"{_quote(rv['DraftText'], 1500)}{wd}")
     # ...each letter with its words (the audit's real turn, 2026-11-10: asked to make the email shorter, the agent read only "the email to
     # paula@..." and asked the owner what it said)
+    # ...each that waits its turn behind another said so (cardqueue): the owner has not seen it yet
+    from .cardqueue import held as held_
+    waits = held_(store, tid) if others else set()
     if others: out.append('ALSO SET UP AND NOT SENT - take back any the newest message undoes or the work no longer needs:\n' + '\n'.join(
-        f"- rv{x['rid']}: {x['what']}" + (f": {_quote(x['text'], 600)}" if x.get('text') else '') for x in others)
+        f"- rv{x['rid']}{' (waits its turn - not shown to the owner yet)' if x['rid'] in waits else ''}: {x['what']}" + (f": {_quote(x['text'], 600)}" if x.get('text') else '') for x in others)
         + ('' if rv else wd))
     if nowhere: out.append('AN EMAIL YOU DRAFTED HAS NO ADDRESS:\n' + '\n'.join(f'- rv{r}: {slots.to_missing(w)}' for r, w in nowhere))
     if refused: out.append('WHAT YOU PROPOSED IN YOUR LAST TURN WAS NOT PUT ON A CARD - the owner has no button for it:\n' + '\n'.join(

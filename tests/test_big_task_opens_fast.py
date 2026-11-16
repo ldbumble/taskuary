@@ -84,7 +84,9 @@ def test_its_read_asks_the_database_a_bounded_number_of_times(big):
     """No question per line: the files, the verdicts, the senders and the calendar are each read once for the whole task."""
     s, tid = big
     n = _counted(s); server.task_detail(tid)
-    assert n[0] < LINES / 10, f'{n[0]} reads for {LINES} lines'
+    # ...a few reads a TASK costs are no read a line costs: what the chat moved past and the line of cards (cardqueue) are asked once a page
+    # read, ~20 reads - the bound had been 147 of 150 before them, no room for anything asked once
+    assert n[0] < LINES / 8, f'{n[0]} reads for {LINES} lines'
 
 
 def test_judging_a_long_group_per_person_says_what_judging_it_per_line_says():

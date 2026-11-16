@@ -123,7 +123,7 @@ test("the chat draws the work's card inside the turn its newest change came in, 
   const ws = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(ws, /const landIn = landAt \? landingTurn\(/);
   // ...a turn's cards, its last thing (cardsOf): what the list placed in it, the letters that wait where this is their turn, then the work's card
-  assert.match(ws, /\.\.\.\(x\.id === landIn \? \[<React\.Fragment key="landing">\{landing\}<\/React\.Fragment>\] : \[\]\)\];/);
+  assert.match(ws, /\.\.\.\(x\.id === landIn \? \[\.\.\.\(live\.has\("land"\) \? qLine\(\) : \[\]\), <React\.Fragment key="landing">\{landing\}<\/React\.Fragment>\] : \[\]\)\];/);
   assert.match(ws, /cards=\{cardsOf\(x\)\}/);
   assert.match(ws, /\{!landIn && landing && <div hidden>\{landing\}<\/div>\}<\/>;/, "unplaced, it is mounted hidden - never drawn at the foot");
   assert.match(ws, /const landAt = landS && \(landS\.ask \|\| landS\.landed\) \? landS\.at \|\| "" : null;/, "only a press, or what a press did - the diff is the header's");

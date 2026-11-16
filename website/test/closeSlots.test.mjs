@@ -27,13 +27,6 @@ test("an email card says nothing of the app's own workings, and one that went st
   assert.doesNotMatch(page, /r\.Kind !== "slot" && \["approved", "edited", "sent"\]/, "a sent email is drawn as its SentCard, as a reply is");
 });
 
-test("Approve all never sweeps up an email the agent added, or one with no address", async () => {
-  const { bulkSendable } = await import("../src/taskLifecycle.js");
-  const items = [{ rid: 9, out: { to: "a@x.example" } }, { rid: 10, out: { to: "b@x.example", by: "agent" } }, { rid: 11, out: { to: "Gail" } }];
-  const reviews = [slot, { ...slot, ReviewId: 10 }, { ...slot, ReviewId: 11 }];
-  assert.deepEqual(bulkSendable(items, reviews).map((r) => r.ReviewId), [9]);
-});
-
 test("the footer says what closes the task", async () => {
   const { completionLine } = await import("../src/taskLifecycle.js");
   assert.match(completionLine(true, false), /so does Send - Send and close or Mark done closes it/);   // Send never closes (2026-10-18); Send and close does (2026-11-03)

@@ -597,6 +597,12 @@ def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, **kw) -> dic
             try:
                 if general.failed(store, rv['TaskId'], rv['ReviewId'], a[2] if len(a) > 2 else kw.get('actor', 'owner')): out['told'] = True
             except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: the agent was not told it failed - {e}")
+    # ...AND A NO TO A CARD WITH OTHERS BEHIND IT (cardqueue.said_no): the line does not go on past it until its agent has decided
+    elif verb_in in ('reject', 'no_reply', 'close_unsent', 'close_pr') and out.get('ok') and rv.get('TaskId'):
+        from . import cardqueue, demo
+        if not demo.enabled():
+            try: cardqueue.said_no(store, rv, verb_in, a[2] if len(a) > 2 else kw.get('actor', 'owner'))
+            except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: the agent was not told of the no - {e}")
     return out
 
 
@@ -648,7 +654,9 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
     if rv.get('DeliveryClaim'): return _delivery_busy(store, rv['ReviewId'])
     # A CARD THE CONVERSATION MOVED PAST presses nothing, from any page or phone however stale (proposals.move_on, the owner 2026-11-10)
     from . import proposals
-    if proposals.passed(rv): return {'ok': False, 'status': rv['Status'], 'sent': None, 'passed': True, 'send_error': proposals.PASSED_SAID}
+    # ...nor one it moved past that no agent has heard yet (written_past): greyed on every surface from the moment the input came
+    if proposals.passed(rv) or rv.get('Status') == 'pending' and rv.get('TaskId') and rv['ReviewId'] in proposals.written_past(store, rv['TaskId']):
+        return {'ok': False, 'status': rv['Status'], 'sent': None, 'passed': True, 'send_error': proposals.PASSED_SAID}
     if rv.get('Status') == 'pending' and verb_in in ('approve', 'edit'):
         def content_envelope(row):
             return {k: v for k, v in _envelope(row).items() if k not in ('delivery', 'attempted_at', 'attempts')}

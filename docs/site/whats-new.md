@@ -2,6 +2,20 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.15 - 2026-11-16
+
+- Codex never runs with its sandbox bypass: an agent's work on it goes over ACP, where a read outside the task asks
+- The mic works with nothing set up: no voice card means Local Whisper in one press, never Windows voice typing by itself
+- One action card at a time, and a card the chat moved past greys in place at once
+- A follow-up minutes after an answer goes to the same warm agent: its launch no longer changes from turn to turn
+- The chat says what its agent is doing as it does it: the thought and the answer as they are written, never minutes of bare "Thinking..."
+- On Windows the mic is Windows voice typing itself: its press focuses the box and sends Win+H
+- A Send that did not go keeps its card where it stood: a press on the card that stands holds nothing of the line back
+- The agent's browser is a real Chrome Taskuary starts, out of sight, and a Cloudflare check passes in it
+- An agent's finish step says it closed nothing, and the agent is told never to say it closed, marked done or reopened a task
+- A turn has one clock: it starts at its first hand-over, live and once finished
+- A chat's shell call runs its browser gate once: the task and its browser hold ride one hook
+
 ## 0.4.0.14 - 2026-11-16
 
 - A working agent's growing log is read only where it grew, and a task's chat is built once for every request at once

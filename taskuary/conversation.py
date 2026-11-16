@@ -17,7 +17,7 @@ One item: {id, kind, at, ...}
   turn     t:<the input before it>:<n>   state starting|working|done|stopped|failed, steps, text, cards (last), started, ended, fail
   card     r:<ReviewId>             an action outside any turn
 Ids never change once given, so the page keys by them and a turn that ends, or a line that is heard, redraws in place."""
-import hashlib, json, re, time
+import functools, hashlib, json, re, threading, time
 from datetime import datetime
 
 INF = float('inf')
@@ -34,7 +34,13 @@ def stamp(ts) -> str: return datetime.fromtimestamp(ts).isoformat(sep=' ', times
 def _flat(s) -> str: return ' '.join(str(s or '').split())
 
 
-def clean(text) -> str:
+# ...each text cleaned once (a long session's every step was cleaned again on every poll - seconds a call): the words decide it alone
+@functools.lru_cache(maxsize=50000)
+def _clean(t: str) -> str: return _cleaned(t)
+def clean(text) -> str: return _clean(str(text or ''))
+
+
+def _cleaned(text) -> str:
     """THE AGENT'S WORDS, WITHOUT WHAT IT WROTE FOR THE APP - one function for every road's turn (a chat's answer, a quick answer, a coding
     session's words, the turn at work): the summary block it is asked to end on (selfclose.SUMMARY_OPEN), closed or not - an opening marker
     with no close goes to the end of the text - and the marker of a question. A turn that said nothing but the block says the block's own
@@ -374,8 +380,33 @@ def served(store, tid: int, out: list) -> list:
     return sorted((x for x in out if x['id'] in known), key=lambda x: known[x['id']]) + new
 
 
+# ONE BUILD OF A TASK'S CONVERSATION AT A TIME (the owner's live app, 2026-11-16: a working coding agent's chat took 25-40 s a call, and the
+# page's polls, the task's read and the rail's ran their builds side by side, each slowing the others): a call while one is building waits for
+# it and takes its result - the same list, built once
+_BUILDS, _BUILDS_LOCK = {}, threading.Lock()
+
+
 def items(store, tid: int) -> dict:
-    "The task's conversation: {rev, items, pending, working, started} - see the module's head."
+    "The task's conversation: {rev, items, pending, working, started} - see the module's head. One build per task at a time (_BUILDS)."
+    key = (id(store), int(tid))
+    with _BUILDS_LOCK:
+        b, mine = _BUILDS.get(key), False
+        if b is None: b, mine = _BUILDS.setdefault(key, {'done': threading.Event(), 'got': None, 'err': None, 'by': threading.get_ident()}), True
+    # ...a build that asks for its own task's list from inside it is that build: read straight, never waiting on itself
+    if not mine and b['by'] == threading.get_ident(): return _items(store, tid)
+    if not mine:
+        b['done'].wait()
+        if b['err'] is not None: raise b['err']
+        return b['got']
+    try: b['got'] = _items(store, tid)
+    except BaseException as e: b['err'] = e; raise
+    finally:
+        with _BUILDS_LOCK: _BUILDS.pop(key, None)
+        b['done'].set()
+    return b['got']
+
+
+def _items(store, tid: int) -> dict:
     from . import codingchat, funnel, general, ownwork, session_artifacts, sessionrecord, wrapup
     from .general import ASSISTANT_TYPE, FOLD_HEAD, USER_TYPE, WAITING_TYPE
     from .processing_unread import OWNER_ACTORS
@@ -823,7 +854,8 @@ def items(store, tid: int) -> dict:
             'permissions': perms, 'live': codingchat.live_of(codingchat._live(tid)),
             'letters': letters, 'idle': idle, 'hold': hold_ and {**{k: hold_[k] for k in ('line', 'person', 'org')},
                               **({'line': origin.JOINED_LINE.format(who=hold_['who'])} if any(x['kind'] == 'turn' for x in out) else {})}, 'published': published, 'ran': bool(turn_of) or any(x['kind'] == 'turn' for x in out)}
-    return {'rev': hashlib.sha1(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()[:16], **body}
+    # ...hashed in the order it is built - the same every time - not sorted: sorting every step's keys was seconds a poll on a long session
+    return {'rev': hashlib.sha1(json.dumps(body, default=str).encode()).hexdigest()[:16], **body}
 
 
 LIVE = ('working', 'starting')

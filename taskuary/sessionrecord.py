@@ -159,72 +159,84 @@ def _typed(j: dict, x: str) -> bool:
 def _texts(content) -> list: return [x for b in _blocks(content) if b.get('type') == 'text' and (x := str(b.get('text') or '').strip())]
 
 
-def _claude(path: Path) -> list:
-    out, uses = [], {}
+# EACH LOG IS READ AS A FEED, one line at a time onto a state ({'out': the steps, ...what a later line completes}): the whole file at once
+# (_read_all), or only the lines a growing log added since (cli_steps) - the same steps either way
+def _read_all(path: Path, line_of) -> list:
+    st = {'out': []}
     for line in path.read_text(encoding='utf-8', errors='replace').splitlines():
         try: j = json.loads(line)
         except ValueError: continue
-        if j.get('isCompactSummary') or (j.get('type') == 'system' and j.get('subtype') == 'compact_boundary'):
-            if not j.get('isSidechain'): _compact(out, j.get('timestamp'))
-            continue
-        q = j.get('attachment') if j.get('type') == 'attachment' and isinstance(j.get('attachment'), dict) else {}
-        if q.get('type') == 'queued_command' and not j.get('isSidechain'):
-            out += [{'k': 'you', 'text': _cut(x, YOU_N), 'at': j.get('timestamp') or q.get('timestamp')} for x in _texts(q.get('prompt')) if _typed(q, x)]
-            continue
-        if j.get('isMeta') or j.get('isSidechain') or j.get('type') not in ('user', 'assistant'): continue
-        at, msg = j.get('timestamp'), j.get('message') or {}
-        # ...an API error is a failure, said as one; any other line Claude writes in the agent's place ("No response requested.") is no one's
-        if j['type'] == 'assistant' and (j.get('isApiErrorMessage') or j.get('sessionFailureNotice')):
-            out.append({'k': 'error', 'text': _cut(' '.join(_texts(msg.get('content'))) or 'The model could not answer.', 400), 'at': at}); continue
-        if j['type'] == 'assistant' and msg.get('model') == '<synthetic>': continue
-        # ...an edit's result carries the patch Claude wrote, line numbers and all: it replaces the before/after its call was handed
-        res = j.get('toolUseResult') if isinstance(j.get('toolUseResult'), dict) else {}
-        for b in _blocks(msg.get('content')):
-            t = b.get('type')
-            if t == 'tool_result' and (s := uses.get(b.get('tool_use_id'))) and (h := _hunks(res.get('structuredPatch'))): s['edit'] = {'hunks': h}
-            # ...A CALL THAT FAILED READS AS FAILED, with what it said (a held step's "Taskuary held this" too - the chat draws that held, not red)
-            if t == 'tool_result' and b.get('is_error') and (s := uses.get(b.get('tool_use_id'))):
-                s['status'], s['output'] = 'failed', _cut(' '.join(_texts(b.get('content'))) if isinstance(b.get('content'), list) else b.get('content'), 400)
-            if j['type'] == 'user':
-                if t == 'text' and (x := str(b.get('text') or '').strip()) and _typed(j, x): out.append({'k': 'you', 'text': _cut(x, YOU_N), 'at': at})
-            elif t == 'thinking' and str(b.get('thinking') or '').strip(): out.append({'k': 'thought', 'text': _cut(b['thinking'], THOUGHT_N), 'at': at})
-            elif t == 'text' and str(b.get('text') or '').strip(): out.append({'k': 'said', 'text': _cut(b['text'], SAID_N), 'at': at})
-            elif t == 'tool_use': out.append(s := _tool(b.get('name'), b.get('input'), at)); uses[b.get('id')] = s
-    return out
+        line_of(st, j)
+    return st['out']
+
+
+def _claude(path: Path) -> list: return _read_all(path, _claude_line)
+
+
+def _claude_line(st: dict, j) -> None:
+    "One line of a Claude Code log onto `st` - a tool call its later result completes is kept by id (`uses`)."
+    out, uses = st['out'], st.setdefault('uses', {})
+    if not isinstance(j, dict): return
+    if j.get('isCompactSummary') or (j.get('type') == 'system' and j.get('subtype') == 'compact_boundary'):
+        if not j.get('isSidechain'): _compact(out, j.get('timestamp'))
+        return
+    q = j.get('attachment') if j.get('type') == 'attachment' and isinstance(j.get('attachment'), dict) else {}
+    if q.get('type') == 'queued_command' and not j.get('isSidechain'):
+        out += [{'k': 'you', 'text': _cut(x, YOU_N), 'at': j.get('timestamp') or q.get('timestamp')} for x in _texts(q.get('prompt')) if _typed(q, x)]
+        return
+    if j.get('isMeta') or j.get('isSidechain') or j.get('type') not in ('user', 'assistant'): return
+    at, msg = j.get('timestamp'), j.get('message') or {}
+    # ...an API error is a failure, said as one; any other line Claude writes in the agent's place ("No response requested.") is no one's
+    if j['type'] == 'assistant' and (j.get('isApiErrorMessage') or j.get('sessionFailureNotice')):
+        out.append({'k': 'error', 'text': _cut(' '.join(_texts(msg.get('content'))) or 'The model could not answer.', 400), 'at': at}); return
+    if j['type'] == 'assistant' and msg.get('model') == '<synthetic>': return
+    # ...an edit's result carries the patch Claude wrote, line numbers and all: it replaces the before/after its call was handed
+    res = j.get('toolUseResult') if isinstance(j.get('toolUseResult'), dict) else {}
+    for b in _blocks(msg.get('content')):
+        t = b.get('type')
+        if t == 'tool_result' and (s := uses.get(b.get('tool_use_id'))) and (h := _hunks(res.get('structuredPatch'))): s['edit'] = {'hunks': h}
+        # ...A CALL THAT FAILED READS AS FAILED, with what it said (a held step's "Taskuary held this" too - the chat draws that held, not red)
+        if t == 'tool_result' and b.get('is_error') and (s := uses.get(b.get('tool_use_id'))):
+            s['status'], s['output'] = 'failed', _cut(' '.join(_texts(b.get('content'))) if isinstance(b.get('content'), list) else b.get('content'), 400)
+        if j['type'] == 'user':
+            if t == 'text' and (x := str(b.get('text') or '').strip()) and _typed(j, x): out.append({'k': 'you', 'text': _cut(x, YOU_N), 'at': at})
+        elif t == 'thinking' and str(b.get('thinking') or '').strip(): out.append({'k': 'thought', 'text': _cut(b['thinking'], THOUGHT_N), 'at': at})
+        elif t == 'text' and str(b.get('text') or '').strip(): out.append({'k': 'said', 'text': _cut(b['text'], SAID_N), 'at': at})
+        elif t == 'tool_use': out.append(s := _tool(b.get('name'), b.get('input'), at)); uses[b.get('id')] = s
 
 
 def _codex_file(ext: str): return _newest(_home() / '.codex' / 'sessions', f'**/rollout-*{ext}.jsonl')
 
 
-def _codex(path: Path) -> list:
-    out = []
-    for line in path.read_text(encoding='utf-8', errors='replace').splitlines():
-        try: j = json.loads(line)
-        except ValueError: continue
-        p, at = j.get('payload') or {}, j.get('timestamp')
-        if j.get('type') == 'compacted': _compact(out, at); continue           # ...and Codex's own compaction, its rollout's `compacted` item
-        if j.get('type') == 'event_msg' and p.get('type') == 'user_message' and str(p.get('message') or '').strip():
-            out.append({'k': 'you', 'text': _cut(p['message'], YOU_N), 'at': at})
-        if j.get('type') != 'response_item': continue
-        t = p.get('type')
-        if t == 'reasoning':
-            # its summary when the model wrote one; the rest is encrypted and stays that way
-            x = '\n\n'.join(str(s.get('text') or '') for s in p.get('summary') or [] if isinstance(s, dict)).strip()
-            if x: out.append({'k': 'thought', 'text': _cut(x, THOUGHT_N), 'at': at})
-        elif t == 'message' and p.get('role') == 'assistant':
-            x = '\n'.join(str(c.get('text') or '') for c in p.get('content') or [] if isinstance(c, dict)).strip()
-            if x: out.append({'k': 'said', 'text': _cut(x, SAID_N), 'at': at})
-        elif t in ('function_call', 'custom_tool_call', 'local_shell_call'):
-            args = p.get('arguments') or p.get('input') or (p.get('action') or {})
-            if t == 'custom_tool_call' and p.get('name') == 'apply_patch':
-                # ...each file with its own part of the patch, the diff the coding chat draws (chatStream.js)
-                cuts = re.split(r'^\*\*\* (?:Update|Add|Delete) File: (.+)$', re.sub(r'\n?\*\*\* End Patch\s*$', '', str(args)), flags=re.M)
-                out += [{'k': 'tool', 'name': 'apply_patch', 'text': _cut(f, TARGET_N), 'file': f, 'at': at, 'edit': {'patch': p.strip('\n')[:EDIT_N]}}
-                        for f, p in zip(cuts[1::2], cuts[2::2])] or [_tool('apply_patch', '', at)]
-            elif t == 'custom_tool_call' and (cmds := re.findall(r'\bcmd:\s*"((?:[^"\\]|\\.)*)"', str(args))):
-                out += [{'k': 'tool', 'name': 'shell', 'text': _cut(_hide_flags(c.replace('\\"', '"')), TARGET_N), 'at': at} for c in cmds]   # codex's js harness: the commands it ran
-            else: out.append(_tool(p.get('name') or 'shell', args, at))
-    return out
+def _codex(path: Path) -> list: return _read_all(path, _codex_line)
+
+
+def _codex_line(st: dict, j) -> None:
+    out = st['out']
+    if not isinstance(j, dict): return
+    p, at = j.get('payload') or {}, j.get('timestamp')
+    if j.get('type') == 'compacted': _compact(out, at); return           # ...and Codex's own compaction, its rollout's `compacted` item
+    if j.get('type') == 'event_msg' and p.get('type') == 'user_message' and str(p.get('message') or '').strip():
+        out.append({'k': 'you', 'text': _cut(p['message'], YOU_N), 'at': at})
+    if j.get('type') != 'response_item': return
+    t = p.get('type')
+    if t == 'reasoning':
+        # its summary when the model wrote one; the rest is encrypted and stays that way
+        x = '\n\n'.join(str(s.get('text') or '') for s in p.get('summary') or [] if isinstance(s, dict)).strip()
+        if x: out.append({'k': 'thought', 'text': _cut(x, THOUGHT_N), 'at': at})
+    elif t == 'message' and p.get('role') == 'assistant':
+        x = '\n'.join(str(c.get('text') or '') for c in p.get('content') or [] if isinstance(c, dict)).strip()
+        if x: out.append({'k': 'said', 'text': _cut(x, SAID_N), 'at': at})
+    elif t in ('function_call', 'custom_tool_call', 'local_shell_call'):
+        args = p.get('arguments') or p.get('input') or (p.get('action') or {})
+        if t == 'custom_tool_call' and p.get('name') == 'apply_patch':
+            # ...each file with its own part of the patch, the diff the coding chat draws (chatStream.js)
+            cuts = re.split(r'^\*\*\* (?:Update|Add|Delete) File: (.+)$', re.sub(r'\n?\*\*\* End Patch\s*$', '', str(args)), flags=re.M)
+            out += [{'k': 'tool', 'name': 'apply_patch', 'text': _cut(f, TARGET_N), 'file': f, 'at': at, 'edit': {'patch': p.strip('\n')[:EDIT_N]}}
+                    for f, p in zip(cuts[1::2], cuts[2::2])] or [_tool('apply_patch', '', at)]
+        elif t == 'custom_tool_call' and (cmds := re.findall(r'\bcmd:\s*"((?:[^"\\]|\\.)*)"', str(args))):
+            out += [{'k': 'tool', 'name': 'shell', 'text': _cut(_hide_flags(c.replace('\\"', '"')), TARGET_N), 'at': at} for c in cmds]   # codex's js harness: the commands it ran
+        else: out.append(_tool(p.get('name') or 'shell', args, at))
 
 
 def _copilot_file(ext: str):
@@ -232,20 +244,20 @@ def _copilot_file(ext: str):
     return p if p.is_file() else None
 
 
-def _copilot(path: Path) -> list:
-    out = []
-    for line in path.read_text(encoding='utf-8', errors='replace').splitlines():
-        try: j = json.loads(line)
-        except ValueError: continue
-        d, at, t = j.get('data') or {}, j.get('timestamp'), j.get('type')
-        if t == 'user.message' and str(d.get('content') or '').strip(): out.append({'k': 'you', 'text': _cut(d['content'], YOU_N), 'at': at})
-        elif t == 'assistant.message':
-            if str(d.get('reasoningText') or '').strip(): out.append({'k': 'thought', 'text': _cut(d['reasoningText'], THOUGHT_N), 'at': at})
-            if str(d.get('content') or '').strip(): out.append({'k': 'said', 'text': _cut(d['content'], SAID_N), 'at': at})
-        elif t == 'tool.execution_start': out.append(_tool(d.get('toolName'), d.get('arguments'), at))
-        elif t == 'tool.execution_complete' and d.get('success') is False:
-            out.append({'k': 'error', 'text': _cut((d.get('error') or {}).get('message') if isinstance(d.get('error'), dict) else d.get('error') or 'a tool failed', 400), 'at': at})
-    return out
+def _copilot(path: Path) -> list: return _read_all(path, _copilot_line)
+
+
+def _copilot_line(st: dict, j) -> None:
+    out = st['out']
+    if not isinstance(j, dict): return
+    d, at, t = j.get('data') or {}, j.get('timestamp'), j.get('type')
+    if t == 'user.message' and str(d.get('content') or '').strip(): out.append({'k': 'you', 'text': _cut(d['content'], YOU_N), 'at': at})
+    elif t == 'assistant.message':
+        if str(d.get('reasoningText') or '').strip(): out.append({'k': 'thought', 'text': _cut(d['reasoningText'], THOUGHT_N), 'at': at})
+        if str(d.get('content') or '').strip(): out.append({'k': 'said', 'text': _cut(d['content'], SAID_N), 'at': at})
+    elif t == 'tool.execution_start': out.append(_tool(d.get('toolName'), d.get('arguments'), at))
+    elif t == 'tool.execution_complete' and d.get('success') is False:
+        out.append({'k': 'error', 'text': _cut((d.get('error') or {}).get('message') if isinstance(d.get('error'), dict) else d.get('error') or 'a tool failed', 400), 'at': at})
 
 
 def _gemini_file(ext: str):
@@ -279,12 +291,50 @@ def _gemini(path: Path) -> list:
 # cli name (terminal.cli_of / transcript.Brain) -> (find the file by conversation id, read it, what to call it)
 READERS = {'claude': (_claude_file, _claude, 'Claude Code log'), 'codex': (_codex_file, _codex, 'Codex rollout'),
            'copilot': (_copilot_file, _copilot, 'Copilot session log'), 'gemini': (_gemini_file, _gemini, 'Gemini chat file')}
+# ...the logs written a line at a time, read as a feed (_read_all): a log that grew is read from where the last read stopped (cli_steps)
+FEEDS = {_claude: _claude_line, _codex: _codex_line, _copilot: _copilot_line}
 
 
 # ...READ ONCE PER VERSION OF THE LOG (the owner's live app, 2026-11-16: a coding task's chat took 15-43 s a poll - every poll parsed each of its
-# sessions' whole CLI log again, ~1 s per 100 MB, and the page polls every few seconds): kept by (file, its mtime, its size), read again only
-# when the log changed
+# sessions' whole CLI log again, ~1 s per 100 MB, and the page polls every few seconds): kept by the file, read again only when the log changed
+# ...AND A LOG THAT GROWS IS READ ONLY WHERE IT GREW (the owner's live app, the same day: a WORKING agent's log grows every few seconds, so every
+# poll missed and parsed the whole multi-hundred-MB log again - 25-40 s a call): the bytes read so far (`pos`) and the parser's state are kept,
+# and only what was appended since is read, its last line left for later until it is whole. A log that shrank or was replaced (its head is
+# not the one read) is read afresh. ONE READ OF A LOG AT A TIME: two polls at once wait on its lock, and the second finds it read
 _STEPS, _STEPS_LOCK = {}, threading.Lock()
+HEAD = 4096                                     # the bytes that say it is still the same file
+
+def _read_from(f: Path, pos: int) -> bytes:
+    "The log's bytes from `pos` to its end (one place, so a test can count what is read)."
+    with open(f, 'rb') as h: h.seek(pos); return h.read()
+
+
+def _head(f: Path) -> bytes:
+    with open(f, 'rb') as h: return h.read(HEAD)
+
+
+def _fed(f: Path, line_of, hit: dict | None) -> dict:
+    "`hit` brought up to the log's end: {'pos', 'head', 'st'} - from where it stopped when the log only grew, else from the start."
+    head = _head(f)
+    if not hit or f.stat().st_size < hit['pos'] or head[:min(len(head), len(hit['head']))] != hit['head'][:min(len(head), len(hit['head']))]:
+        hit = {'pos': 0, 'head': b'', 'st': {'out': []}}
+    data = _read_from(f, hit['pos'])
+    cut = data.rfind(b'\n') + 1
+    lines, rest = data[:cut].split(b'\n'), data[cut:]
+    # ...a last line with no newline yet is read when it parses whole (a log that ends without one); else it waits for the next read
+    try: tail = json.loads(rest.decode('utf-8', errors='replace')) if rest.strip() else None
+    except ValueError: tail = None
+    else: cut += len(rest)
+    for raw in lines:
+        if not raw.strip(): continue
+        try: j = json.loads(raw.decode('utf-8', errors='replace'))
+        except ValueError: continue
+        line_of(hit['st'], j)
+    if tail is not None: line_of(hit['st'], tail)
+    hit['pos'] += cut
+    if len(hit['head']) < HEAD: hit['head'] = head
+    return hit
+
 
 def cli_steps(cli: str, ext: str) -> tuple[list, str]:
     """(steps, source) from the CLI's own log, or ([], '') when it keeps none we can read."""
@@ -293,14 +343,17 @@ def cli_steps(cli: str, ext: str) -> tuple[list, str]:
     try:
         f = r[0](str(ext))
         if not f: return [], ''
-        st = f.stat(); key, ver = (r[2], str(f)), (st.st_mtime_ns, st.st_size)
-        with _STEPS_LOCK: hit = _STEPS.get(key)
-        if not hit or hit[0] != ver:
-            hit = (ver, r[1](f))
-            with _STEPS_LOCK:
-                if len(_STEPS) > 64: _STEPS.clear()
-                _STEPS[key] = hit
-        return [dict(x) for x in hit[1]], r[2]
+        key = (r[2], str(f))
+        with _STEPS_LOCK:
+            if len(_STEPS) > 64: _STEPS.clear()
+            slot = _STEPS.setdefault(key, {'lock': threading.Lock(), 'hit': None})
+        with slot['lock']:
+            st, line_of = f.stat(), FEEDS.get(r[1])
+            ver = (st.st_mtime_ns, st.st_size)
+            if line_of: slot['hit'] = _fed(f, line_of, slot['hit']) if not slot['hit'] or slot['hit'].get('ver') != ver else slot['hit']
+            elif not slot['hit'] or slot['hit'].get('ver') != ver: slot['hit'] = {'st': {'out': r[1](f)}}
+            slot['hit']['ver'] = ver
+            return [dict(x) for x in slot['hit']['st']['out']], r[2]
     except Exception as e:
         logger.debug(f'session record: {cli} log for {ext} unreadable - {e}'); return [], ''
 

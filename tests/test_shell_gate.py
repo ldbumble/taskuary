@@ -360,6 +360,17 @@ class ReadingOutside(unittest.TestCase):
             self.assertTrue(verdicts.decide(self.s, rv, 'reject')['ok'])
         self.assertIn('did not approve it', self.heard()[0]); self.assertIn(browsergate.OWNER_NO, self.told[0])
 
+    def test_the_context_file_taskuary_wrote_for_the_task_is_its_to_read_and_no_other_tasks(self):
+        """Recorded on the real CLI, 2026-11-16: the brief points the agent at its context file in Taskuary's home, and its Read was refused
+        as Taskuary's own data - the agent told the owner "the task's context file was blocked from reading". It is the task's own; another
+        task's is not."""
+        from taskuary import acpgate, context, readgate
+        own, batch = context.files(self.tid)
+        self.assertEqual(acpgate.decide(self.read(str(own)), self.ctx)[0], acpgate.ALLOWED)
+        self.assertEqual(acpgate.decide(self.read(str(batch)), self.ctx)[0], acpgate.ALLOWED)
+        other = context.files(self.tid + 1)[0]
+        self.assertEqual(acpgate.decide(self.read(str(other)), self.ctx), (acpgate.REFUSED, readgate.NEVER))
+
     def test_taskuarys_own_home_is_never_read_not_even_on_a_yes(self):
         from taskuary import acpgate, apiagent, readgate
         self.assertEqual(acpgate.decide(self.read(self.secret), self.ctx), (acpgate.REFUSED, readgate.NEVER))

@@ -336,7 +336,8 @@ def brief_file(store, tid) -> str:
         if d:
             cut = len(d) > DIFF_CHARS
             out += ['### Diff' + (f' (first {DIFF_CHARS} characters of {len(d)})' if cut else ''), '', '```diff', d[:DIFF_CHARS], '```', '']
-    p = home() / 'context' / f'{task_ref(tid)}-batch.md'
+    from .context import files
+    p = files(tid)[1]
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text('\n'.join(out), encoding='utf-8')
     return str(p)

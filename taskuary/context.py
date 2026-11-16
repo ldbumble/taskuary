@@ -795,6 +795,14 @@ def is_new(m: dict, since: str) -> bool:
             and str(m.get('CreatedAt') or m.get('SentAt') or '') > since)
 
 
+def files(tid: int) -> list:
+    """The context files Taskuary writes for task `tid` and points its agent at: its own (write) and its batch's (batch.write_context) - the
+    task's to read like its work folder (readgate.own), though they live in Taskuary's home."""
+    from .config import home
+    d = home() / 'context'
+    return [d / f'{task_ref(tid)}.md', d / f'{task_ref(tid)}-batch.md']
+
+
 def write(store, tid: int, msgs: list = None, repo: str = None):
     """Write ~/.taskuary/context/TQ-xxxx.md and return its path - or None when there is nothing
     worth a file, the setting is off, or the disk refused (the seed then simply carries no pointer)."""
@@ -802,9 +810,7 @@ def write(store, tid: int, msgs: list = None, repo: str = None):
     try:
         text = build(store, tid, msgs, repo)
         if not text: return None
-        from .config import home
-        d = home() / 'context'; d.mkdir(parents=True, exist_ok=True)
-        p = d / f'{task_ref(tid)}.md'
+        p = files(tid)[0]; p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(text, encoding='utf-8')
         return str(p)
     except Exception as e:

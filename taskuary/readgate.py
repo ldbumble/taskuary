@@ -33,9 +33,11 @@ def _in(p: str, root: str) -> bool: return bool(root) and (p == root or p.starts
 
 
 def own(store, tid, cwd: str = '') -> list:
-    "The task's own work area, as normalised roots: where it works, its outputs, Taskuary's scratch, its mail's files."
-    from . import config, outputs
-    rs = [cwd, config.home() / 'scratch'] + ([outputs.folder(int(tid))] if str(tid or '').isdigit() else [])
+    """The task's own work area, as normalised roots: where it works, its outputs, Taskuary's scratch, its mail's files - and the context
+    files Taskuary writes for it and tells it to read (context.files; recorded on the real CLI, 2026-11-16: its Read was refused as Taskuary's
+    own data, and the agent told the owner "the task's context file was blocked from reading")."""
+    from . import config, context, outputs
+    rs = [cwd, config.home() / 'scratch'] + ([outputs.folder(int(tid)), *context.files(int(tid))] if str(tid or '').isdigit() else [])
     if store is not None and str(tid or '').isdigit():
         rs += [a['Path'] for m in store.list_messages(int(tid)) for a in store.list_attachments(m['MessageId']) if a.get('Path')]
     return [_n(r) for r in dict.fromkeys(map(str, rs)) if r]

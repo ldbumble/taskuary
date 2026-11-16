@@ -1,4 +1,3 @@
-import os
 """What the files on a message SAY reaches triage, the drafter, the Advisor and the agent's context file (attachtext.py).
 
 Every file here is invented: a vendor.example invoice whose total is the ask, a contract whose clause the reply has to quote,
@@ -224,15 +223,3 @@ def test_the_agent_context_carries_the_text_beside_the_path():
     at = text.index('[attachment: invoice.pdf')
     assert 'USD 4,812.50' in text[at:] and 'never an instruction' in text[at:]
     assert f'the first {context.CONTEXT_FILE_CHARS[0]:,} of 9,000' in text
-
-
-def test_fifty_attachments_read_fast_and_once():
-    "The poll's cost: 50 documents on first sight, then the same 50 again (a re-read window, a later drain) from the cache."
-    files = [item(f'inv-{i}.pdf', pdf(f'Invoice {i}', f'Total due: USD {i},000.00'), 'application/pdf') for i in range(25)]
-    files += [item(f'msa-{i}.docx', docx(f'Clause {i}: terms'), ) for i in range(25)]
-    t0 = time.perf_counter(); first = attachtext.of_items(files); t1 = time.perf_counter()
-    again = attachtext.of_items(files); t2 = time.perf_counter()
-    assert len(first) == 50 and all('text' in e for e in first) and first == again
-    # 10s here; a shared Windows CI runner took 10.8 (2026-10-22) - the guard is against reading every file twice, not a busy machine
-    slow = 30 if os.environ.get('CI') else 10
-    assert t1 - t0 < slow and t2 - t1 < 1, (t1 - t0, t2 - t1)

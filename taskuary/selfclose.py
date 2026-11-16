@@ -366,7 +366,7 @@ AFTER_PRESS = ('send', 'handoff')
 SUMMARY_LINE = (f'ENDING EVERY TURN: close with {SUMMARY_OPEN}{{"about": "<two or three plain sentences from the whole thread: which '
                 f'conversation, what about, who asked, for whom, why - naming only people it shows in that role>", "did": "<the RESULT ITSELF '
                 f'first (the path, link, figure or name), then what you did; any part unmet or unchecked>", "on_you": ["<each step truly the '
-                f'owner\'s, a line each with why>"], "nothing_left": <true only when the goal '
+                f'owner\'s, a line each with why - shown under your answer as its own list, so your words above never say it again>"],"nothing_left": <true only when the goal '
                 f'is met and you checked it>, "answer_is_result": <true when your words above ARE what was asked>, "after_press": <"handoff" only if '
                 f'you carry on once the owner hands this to a person - that press wakes you once, as any press on your card does>}}'
                 f'{SUMMARY_CLOSE} - valid JSON, plain words, no secret, "you" to the owner. A card you set up and a question you ask are never an on_you step. A draft\'s Send card IS the confirmation: never '

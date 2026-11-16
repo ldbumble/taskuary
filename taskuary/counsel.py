@@ -204,7 +204,23 @@ def for_brief(store) -> str: return pick(store, GOAL_HEAD, VOICE_HEAD)
 def for_discussion(store) -> str: return pick(store, VOICE_HEAD)
 # A worker gets the Voice alone (2026-11-09): the intro is the desk's ("I do not do the work myself: I ... bring up the button"),
 # and it opened every task agent's style section - an agent whose whole job is to do the work.
-def for_worker(store) -> str: return pick(store, VOICE_HEAD, intro=False)
+def for_worker(store) -> str: return without(pick(store, VOICE_HEAD, intro=False), SAID_IN_AGENT)
+
+# ...LESS WHAT AGENT.md ALREADY TELLS A WORKER (the instruction trim, 2026-11-16): the desk needs these two bullets - it has no AGENT.md - and
+# a worker read each rule twice. Only the SHIPPED bullet, word for word, is left out: a bullet the owner wrote or reworded always reaches it
+SAID_IN_AGENT = ('- Plain and short; more only when they ask or a decision needs it. A clear next move, and why.',
+                 '- Verified facts apart from inference. An action happened only when Taskuary confirms it - never an invented fact or result. '
+                 'No repeated introductions, no "all done" announcements.')
+
+def without(text: str, bullets) -> str:
+    "`text` with each bullet (its wrapped lines read as one) whose words are one of `bullets` taken out."
+    drop, out, cur = {_squash(b) for b in bullets}, [], []
+    for line in (text or '').splitlines() + ['']:
+        if cur and (line.startswith('- ') or not line.startswith(' ')):
+            if _squash(' '.join(cur)) not in drop: out += cur
+            cur = []
+        (cur if line.startswith('- ') or cur else out).append(line)
+    return '\n'.join(out).rstrip()
 
 # ...and the Docs editor's meter shows it (doclimits). 10,000 since 2026-11-02: the shipped document measured 7,994 of 8,000, so the
 # meter would have stood amber on a fresh install for a document nobody had touched.

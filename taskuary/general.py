@@ -1670,14 +1670,10 @@ _ACTION = ("NEXT STEPS - DO WHAT YOU CAN DO, rather than hand it back. An act - 
            "- a report, sheet or picture: make it in your task folder\n"
            # ...AND A PART THAT IS NOT THIS TASK'S (the owner, 2026-11-10: "random things that triage puts in one task that doesn't belong
            # really, (where agent should suggest break out to new task)"): judged by what the messages are about - never by a word in them
-           "- another matter filed here (unrelated to the rest): never fold it in or describe the mix-up - propose {{\"action\": "
-           "\"break_out\", \"title\": ..., \"summary\": ..., \"messages\": [its m-ids], \"items\": [its to-do ids]}} for one press to move "
+           "- another matter filed here (unrelated to the rest): never fold it in or describe the mix-up - {brk} for one press to move "
            "it; a follow-up or correction on the same matter stays\n"
            # ...AND A RULE WORTH KEEPING (the owner, 2026-11-10: "agent should be able to after building one should say should we save this")
-           "- a script for a job that recurs under the same rule, once it ran right: propose {{\"action\": \"save_routine\", \"title\": ..., "
-           "\"script\": <whole standard-library Python, rows on stdin, JSON rows out>, \"reads\"?: <a source type and its keys>, "
-           "\"prompt\"?: <for an AI step on its output>, \"daily_at\": \"07:00\" | cron | every_minutes (none: on demand)}} - never asked "
-           "in prose, never for a one-off\n"
+           "- a script for a job that recurs under the same rule, once it ran right: {routine} - never asked in prose, never for a one-off\n"
            "Otherwise next steps is the one question first, or the owner's own part and why; an answer, a finding or a check is simply "
            "answered.\n"
            # ...AND THE OWNER'S OWN LINE DECIDES (the owner, 2026-11-09: "i said no need to reply why did it create email action?"): read for
@@ -1799,15 +1795,20 @@ def takes(tool) -> str:
 # the tool's words for a session Taskuary's tools are wired into - select, never both. [0] the block, [1] the tool
 _MAIL = ('write it in its marked block, as said above', 'propose_reply / propose_email, any file in `attach`')
 _GUESS = ('say the address is a guess', 'name it in `guessed` (a reply: `why_to`) - the card says so')
+# ...a propose's fields said once: where the agent has the propose tool, its own description carries them
+_BREAK = ('propose {"action": "break_out", "title": ..., "summary": ..., "messages": [its m-ids], "items": [its to-do ids]}', 'propose break_out')
+_ROUTINE = ('propose {"action": "save_routine", "title": ..., "script": <whole standard-library Python, rows on stdin, JSON rows out>, '
+            '"reads"?: <a source type and its keys>, "prompt"?: <for an AI step on its output>, "daily_at": "07:00" | cron | every_minutes '
+            '(none: on demand)}', 'propose save_routine')
 def action_line(store, tools: bool = False) -> str:
     r = roads(store)
-    return _ACTION.format(mail=_MAIL[tools], guess=_GUESS[tools],
+    return _ACTION.format(mail=_MAIL[tools], guess=_GUESS[tools], brk=_BREAK[tools], routine=_ROUTINE[tools],
                           roads=f'Connected for this owner: {r}.' if r else 'Nothing that posts or sends is connected for this owner yet.')
 def by_tool(system: str) -> str:
     "`system` for a session that has Taskuary's reply and email tools: the tools' words in place of the marked blocks'."
     from . import selfclose as sc
     return (system.replace(f'\n\n{sc.REPLY_LINE}', '').replace(sc.DRAFT_LINE, sc.DRAFT_TOOL_LINE)
-            .replace(_MAIL[0], _MAIL[1]).replace(_GUESS[0], _GUESS[1]))
+            .replace(_MAIL[0], _MAIL[1]).replace(_GUESS[0], _GUESS[1]).replace(_BREAK[0], _BREAK[1]).replace(_ROUTINE[0], _ROUTINE[1]))
 def for_toolbox(system: str, names) -> str:
     """`system` for an AI card whose Taskuary toolbox answered (apiagent.TOOLBOX), by what is in it: what the plain road says it lacks - a
     way to write a reply but the marked block, a search of its own, a shell to tick a to-do from - said as the tool it has."""

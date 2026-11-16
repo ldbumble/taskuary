@@ -305,6 +305,16 @@ class APartThatIsAnotherJob(Acts):
         self.assertIn('break_out', agenttools.TOOLS['propose'][1])
         self.assertIn('"action": "break_out"', general.action_line(self.s))
 
+    def test_a_proposes_fields_are_said_once_where_the_tool_carries_them(self):
+        """The instruction trim, 2026-11-16: with the propose tool in hand its own description holds break_out's and save_routine's fields;
+        NEXT STEPS names the act alone. The marked-block road, which has no tool, keeps them whole."""
+        tooled, desc = general.action_line(self.s, tools=True), agenttools.TOOLS['propose'][1]
+        for act, field in (('break_out', '"messages"'), ('save_routine', '"script"')):
+            self.assertIn(f'propose {act}', tooled); self.assertIn(field, general.action_line(self.s))
+        self.assertNotIn('"script"', tooled); self.assertNotIn('"messages"', tooled)
+        for shape in ('standard-library Python', 'rows on stdin', 'every_minutes', 'none: on demand'): self.assertIn(shape, desc)
+        self.assertIn('never for a one-off', tooled)
+
 
 class TheOwnersWordsInAnEmptyBox(Acts):
     def test_typed_over_a_merge_with_no_summary_they_are_its_body(self):

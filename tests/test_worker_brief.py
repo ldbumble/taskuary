@@ -53,7 +53,7 @@ class RulesDocumentsTests(unittest.TestCase):
         agent = ' '.join((TEMPLATES / 'agent.md').read_text(encoding='utf-8').split())
         # ...and how one is set up (run it), and that its card says it waits - the agent adds only what it will do once it is pressed (2026-11-12)
         for needle in ('"refused permission"): nobody said no', 'Never retry it or hand them the command', 'To set a step up, run it',
-                       'never say it was saved or waits', 'what you will do once it is pressed',
+                       'never say it was saved, that it waits or that nothing has gone', 'what you will do once it is pressed',
                        'Withdraw a waiting step or draft you no longer need'): self.assertIn(needle, agent, needle)
         self.assertNotIn('Taskuary held is his Approve already', (TEMPLATES / 'coding.md').read_text(encoding='utf-8'))      # once: not again per kind
         from taskuary import shellgate

@@ -389,8 +389,10 @@ class TwoGatesAtOnce(unittest.TestCase):
         ran", the command run twice. The look for a waiting card and the filing of one are one step."""
         import threading
         s = MemoryStore(); tid = Factory(s).task('Fill the invoice templates'); go = threading.Barrier(4)
-        def hold(): go.wait(); sg.check(s, tid, 'run1', 'rm -rf C:/work/elsewhere/old', 'Bash', r'C:\work\ledger')
-        ts = [threading.Thread(target=hold) for _ in range(4)]
-        for t in ts: t.start()
-        for t in ts: t.join(10)
+        # ...a push: held on every OS (a C:/ path is a relative one on macOS, and its delete held nothing there - CI run 43895206403)
+        with mock.patch.object(sg, 'trusted', return_value=''), mock.patch('taskuary.landing.push_asked', return_value=None):
+            def hold(): go.wait(); sg.check(s, tid, 'run1', 'git push origin main', 'Bash', '')
+            ts = [threading.Thread(target=hold) for _ in range(4)]
+            for t in ts: t.start()
+            for t in ts: t.join(10)
         self.assertEqual(len(s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))), 1)

@@ -2,6 +2,27 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.12 - 2026-11-16
+
+- The agents' instructions say each rule once and shorter, and a card's content is never retold in other words
+- The Advisor lights no button any more: its lit verb, model judge, press log and agreement tool are gone
+- Each mail card can mark mail read in its mailbox when it is read here
+- An agent asks before it reads outside its task's folders, on the same held card a push gets
+- The database is copied once a day and before an upgrade opens it, a week kept
+- The security page says an agent asks before it reads outside its task
+- The agents' instructions lose the last repeated lines: the voice, the shipped SOUL and the propose formats each said once
+- A path kept in a shell variable is a read too, and a held read's card names the folder as written with no empty command
+- A task's row fills only a waiting Send or the agent's own Mark done; what to do next is the agent's to suggest
+- A session's waiting-room look a beat after its end stops with its test
+- The ACP stop test reads states, not the clock
+- A held read's Approve says "Allowed - this task may read that folder", and task agents no longer hear the desk's "nothing goes out" line
+- One held step is one card even when two gates hear it in the same moment
+- A coding task's chat reads each CLI log once per version: a poll no longer parses every session's whole log again
+- The quick agent's hand-on to the full agent is silent: the owner never hears the inner workings
+- An agent never says the task is ready for Mark done while a card it set up still waits
+- One failure is one row for filed notices too: a failure mail come again lands on the notice it repeats
+- A browser whose speech service sends no words says so, with this computer's other voice as its button
+
 ## 0.4.0.11 - 2026-11-16
 
 - The agents' instructions say each rule once and shorter, and a card's content is never retold in other words

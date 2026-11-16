@@ -126,6 +126,16 @@ class StateTests(unittest.TestCase):
             self.assertEqual(done[1][1], [5150])
         finally: stream.close()
 
+    def test_with_no_chrome_of_agent_browser_s_own_an_installed_one_is_run(self):
+        """A computer whose agent-browser never fetched a Chrome (Taskuary's own runtime, a fresh install): the session's Chrome is the one
+        installed on the computer - agent-browser's own launch fell back to it, and with none found here nothing would start at all."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'AGENT_BROWSER_HOME': d, 'LOCALAPPDATA': d}):
+            os.environ.pop('AGENT_BROWSER_EXECUTABLE_PATH', None)
+            mine = Path(d) / 'Google' / 'Chrome' / 'Application' / 'chrome.exe'; mine.parent.mkdir(parents=True); mine.write_text('')
+            with mock.patch.dict(os.environ, {'PROGRAMFILES': d + 'x', 'PROGRAMFILES(X86)': d + 'y'}), mock.patch.object(bv.shutil, 'which', return_value=None):
+                self.assertEqual(bv.chrome_exe(), str(mine))
+
     @pytest.mark.real_chrome
     def test_a_chrome_that_cannot_start_on_its_own_desktop_starts_off_the_screen(self):
         if os.name != 'nt': self.skipTest('its own desktop is a Windows road')

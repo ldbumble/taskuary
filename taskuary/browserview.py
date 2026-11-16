@@ -762,7 +762,10 @@ def chrome_exe() -> str:
     names = {'chrome.exe', 'chrome', 'Google Chrome for Testing'}
     for d in sorted((home() / 'browsers').glob('chrome-*'), key=lambda p: [int(x) for x in re.findall(r'\d+', p.name)] or [0], reverse=True):
         if (f := next((p for p in d.rglob('*') if p.name in names and p.is_file()), None)): return str(f)
-    return ''
+    # ...else a Chrome installed on this computer, as agent-browser itself falls back to one - run with a profile of its own, never the owner's
+    roots = [os.environ.get(k) for k in ('LOCALAPPDATA', 'PROGRAMFILES', 'PROGRAMFILES(X86)')]
+    known = [os.path.join(r, 'Google', 'Chrome', 'Application', 'chrome.exe') for r in roots if r] +             ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'] + [shutil.which(n) or '' for n in ('google-chrome', 'chromium', 'chromium-browser')]
+    return next((k for k in known if k and os.path.isfile(k)), '')
 
 def _profile(sid: str) -> Path:
     from . import config

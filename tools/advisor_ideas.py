@@ -1,5 +1,5 @@
 """HOW MANY OF THE ADVISOR'S IDEAS WERE WORTH RAISING (the 2026-11-01 design: an idea kind is raised only while it is right 80% of the time
-on the owner's own record). Read-only, like tools/advisor_agreement.py: the home's database is opened `mode=ro`.
+on the owner's own record). Read-only: the home's database is opened `mode=ro`.
 
     python tools/advisor_ideas.py                    # the live home (TASKUARY_HOME, else ~/.taskuary), ideas first raised in the last 14 days
     python tools/advisor_ideas.py --days 30 --home <dir>

@@ -689,6 +689,9 @@ def m_remind_while_working(r: Run):
     r.type('draft a plan for the offsite')
     r.press(f'/api/tasks/{r.tid}/remind', {'until': 'friday'}, label='Remind me while it works')
     r.drop()                                          # ...the turn it was at is stopped: whatever it would have said is never filed
+    # ...and its session idled out behind the press (remind.rest's thread): read before that, a slow runner caught it still parked - 'blocked'
+    # on one backend, 'stopped' on the next (test_parity[m], CI three times)
+    for t in [x for x in threading.enumerate() if x.name == f'remind-rest-{r.tid}']: t.join(30 * SLACK)
     r.quiet(label='put to rest: nothing at work')
     r.type('add a dinner to it')
     r.turn('The plan with a dinner on day one is above.')

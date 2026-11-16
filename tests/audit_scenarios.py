@@ -184,7 +184,8 @@ class Run:
         blackboard.drain(self.s)
         # ...snapped once the start it freed has landed - its first prompt at the agent - never on the clock: on a slow runner one backend's
         # start had moved the task to in progress and another's not yet (CI, 2026-11-10)
-        until((self.d / f'{self.k}.in').is_file)
+        # ...and its task moved on: a coding session's prompt can reach the agent before its start has written the task in progress (test_parity[n])
+        until(lambda: (self.d / f'{self.k}.in').is_file() and self.s.get_task(self.tid)['Status'] != 'open')
         self.snap('a slot frees')
 
     def git(self, *a): return subprocess.run(['git', '-C', str(self.repo), *a], check=True, capture_output=True, text=True).stdout

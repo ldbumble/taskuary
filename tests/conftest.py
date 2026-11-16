@@ -565,6 +565,16 @@ def no_sessions_left_behind():
 
 
 @pytest.fixture(autouse=True, scope='module')
+def no_task_files_left_behind():
+    """A task's files live under the home by its number (outputs.folder: scratch/outputs/TQ-n), and every module's store numbers from 1:
+    the parity suite's invoices in TQ-0001's folder became "📎 Send the 3 files" on another module's finished task, four red phone tests a
+    shard later (CI, 2026-11-15). Each module starts with no task's files. Per module, not per test: a module may build its files once."""
+    import shutil
+    from taskuary import config
+    shutil.rmtree(config.home() / 'scratch' / 'outputs', ignore_errors=True); yield
+
+
+@pytest.fixture(autouse=True, scope='module')
 def no_calendar_left_behind():
     """faults.world holds its calendar fresh for good (assistant._AGENDA, a meeting twenty minutes out): a module that built it and never
     put it back handed that meeting to every module after it - on CI's order the walk led with it and the rail carried it, two red

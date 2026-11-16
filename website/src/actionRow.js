@@ -308,7 +308,7 @@ export function rowOf({ list, ref, end: last = false, off = "" }, pick = null) {
   // THE ADVISOR PICKS THE FILLED BUTTON (the owner, 2026-10-13: "the advisor should pick which button is dark based off its advice")
   // - AND ONLY TINTS IT, IN PLACE: the layout is the same with and without advice. A verb in More is filled where it stands
   // (clustersOf keeps the filled one in view); a card's other verb advised (its Redraft) is lit on the card (`lit`, useLit); Next is
-  // filled when the Advisor's answer is that nothing here needs a move (words.json advice_none)
+  // filled when the decision is that nothing here needs a move
   const advised = advisedIn(list, pick), primary = advised ? { ...advised, tone: "p" } : null;
   if (advised && !advised.card) {
     const fill = (xs) => xs.map((v) => (v.id === advised.id ? primary : v));

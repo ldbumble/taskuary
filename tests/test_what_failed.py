@@ -62,8 +62,8 @@ class RefusedTests(_Rail):
         self.assertEqual(f['what'], 'the reply could not be drafted'); self.assertEqual(f['fix']['label'], 'Connect an AI')
         self.assertEqual(rulebook.offered(s, it)[0]['label'], 'Connect an AI', 'its fix leads the verbs offered')
         got = rulebook.decide(s, key)
-        self.assertEqual((got.get('verb'), got.get('label')), ('fix', 'Connect an AI'), got)
-        self.assertTrue(got.get('href'), 'the fix opens its place')
+        self.assertEqual((got.get('verb'), got.get('state')), (None, 'failed'), 'offered, never filled: the agent suggests (2026-11-15)')
+        self.assertTrue(got.get('line', '').startswith('Failed:'), 'what failed is said')
 
     def test_whichever_failed_last_is_what_failed(self):
         """The matrix (2026-10-20): Reply failed with no AI, then Send to agent failed - the card showed the agent's error and the line still

@@ -591,7 +591,7 @@ def no_store_left_behind():
 
 @pytest.fixture(autouse=True, scope='session')
 def agents_can_start():
-    """A bare store connects no brain, so every agent button would be greyed and never filled (rulebook.pressable) - agents are not what
+    """A bare store connects no brain, so every agent button would be greyed (rulebook._agent_ready) - agents are not what
     most tests are about. A test of that check turns it on (`rulebook.AGENT_CHECK = True`)."""
     from taskuary import rulebook
     rulebook.AGENT_CHECK = False; yield; rulebook.AGENT_CHECK = True

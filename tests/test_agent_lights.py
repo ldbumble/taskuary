@@ -36,8 +36,8 @@ def test_a_post_whose_network_is_not_connected_lights_nothing():
     s = MemoryStore(); tid = agent_task(s, {'about': 'a post', 'did': 'Wrote the post'})
     s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'a LinkedIn post',
                   'DraftText': json.dumps({'action': 'run_tool', 'type': 'linkedin_post', 'text': 'A year without a lost-time injury.'})})
-    with mock.patch.object(rulebook, 'pressable', return_value=''): assert lit(s, tid)['verb'] is None
-    with mock.patch('taskuary.outbound.connect_fix', return_value=None), mock.patch.object(rulebook, 'pressable', return_value=''):
+    assert lit(s, tid)['verb'] is None
+    with mock.patch('taskuary.outbound.connect_fix', return_value=None):
         assert lit(s, tid)['verb'] in ('approve', 'send_close'), 'connected, its Send is the move'
 
 
@@ -79,4 +79,4 @@ def test_an_agents_email_draft_with_no_mailbox_lights_nothing():
     mid = s.add_message({'ExternalId': 'e2', 'Channel': 'email', 'Subject': 'Overtime', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
                          'BodyText': 'September overtime?', 'Status': 'routed', 'TaskId': tid})
     s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Erin, 2,140 hours.'})
-    with mock.patch.object(rulebook, 'pressable', return_value=''): assert lit(s, tid)['verb'] is None
+    assert lit(s, tid)['verb'] is None

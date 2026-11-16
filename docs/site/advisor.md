@@ -113,10 +113,10 @@ this one.
 
 **It lights no button.** The Advisor speaks on its own rows under **Advisor**, and nowhere else: it
 never fills a button - not on a task's row, not on its own idea rows, not on the Tasks tab or the phone.
-A task's one filled button is the task's own, read in plain code off its agent's latest turn and the
-task's facts: a draft waiting for your yes fills **Send**, an agent that said nothing is left fills
-**Mark done**, a failed send fills the place that fixes it, a late wait no agent was woken for fills
-**Chase**. An idea's row fills nothing; its buttons are yours to press.
+A task's row fills a button only where the move is already settled, in plain code: a draft or held
+action waiting for your yes fills **Send**, and an agent that said nothing is left fills **Mark done**.
+Everything else - a late wait, a failure, work unpushed, an ask nobody took - fills nothing: what to do
+next is the task's agent's to suggest, on its own card. An idea's row fills nothing either.
 
 What it knows about how you work still sets up a few buttons, each counted from what you did:
 
@@ -130,7 +130,7 @@ What it knows about how you work still sets up a few buttons, each counted from 
   line. It opens with that day first, filled, saying whose habit it is, and the line shows on hover.
   Reword the day in the line and Remind me follows. Delete the line, or mark it Wrong, and there is no
   learned day. Nothing is set until you press it.
-- **A person's own day.** A wait is late after three working days; once three of someone's answers say
+- **A person's own day.** A wait is late after three working days - its agent is woken to chase it; once three of someone's answers say
   how soon they answer, it is late on their day instead: *Gail usually answers in a day; this is 3 days.*
 
 **What it learns from.** No button press is kept or learned from: a press is not a fact about how you

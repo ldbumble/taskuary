@@ -46,25 +46,25 @@ def _decide(s, syn, item, key=None):
 # 2026-11-09): a draft that waits fills its Send, a run that is over fills Mark done, a failed run fills its own Try again - and an ask, a
 # report, an FYI and an agent at work or asking fill nothing, and a late wait no agent was woken for fills Chase
 MATRIX = [
-    ('Badge access for the new AP clerk', 'asked', 'regular_agent', False),     # no agent took it: Send to agent (2026-11-10)
+    ('Badge access for the new AP clerk', 'asked', None, True),     # no agent took it: nothing filled, its fact said (2026-11-15)
     ('did the overnight import finish', 'unsendable', None, False),
     ('AP cutover - Thursday?', 'draft_ready', 'send_close', False),
     ('Lease renewal for the Elm Street office', 'failed_cause', None, True),      # a send the server refused is never lit to go again - said why
-    ('Q3 accruals file', 'answered', 'close', False),            # the owner's reply went and nothing came since
+    ('Q3 accruals file', 'answered', None, True),            # the owner's reply went and nothing came since: said, nothing filled
     ('Helpdesk tickets by day', 'report_ok', None, False),
     ('Vendor portal maintenance', 'fyi', None, False),
     ('agent asking (general)', 'agent_asking', None, False),
     ('agent asking (coding)', 'agent_asking', None, False),
     ('agent finished (general)', 'agent_done', 'close', False),
     ('agent finished (coding)', 'agent_done', 'close', False),
-    ('agent failed (general)', 'failed_cause', 'continue', True),       # ...its failure's Try again, said by the run's own line
+    ('agent failed (general)', 'failed_cause', None, True),       # ...its failure said; its Try again offered, never filled
     ('agent failed (coding)', 'failed_cause', None, True),              # its row leads with New task: nothing is filled, the failure said
-    ('agent stopped-saved (coding)', 'stopped', 'continue', False),    # its work unfinished: carried on (2026-11-10)
-    ('Close the August books', 'done_list', 'close', False),
+    ('agent stopped-saved (coding)', 'stopped', None, False),    # its work unfinished: the agent's to suggest (2026-11-15)
+    ('Close the August books', 'done_list', None, True),
     ('Move payroll to Payworth', 'goal', None, False),
-    ('Migrate the census export', 'goal_late', 'chase', False),     # a late answer no agent was woken for is chased (2026-11-10)
-    ('Ray: schema sign-off', 'waiting_overdue', 'chase', False),
-    ('Vendor W-9 for the new supplier', 'waiting_late', 'chase', False),
+    ('Migrate the census export', 'goal_late', None, True),     # late: said, nothing filled (2026-11-15)
+    ('Ray: schema sign-off', 'waiting_overdue', None, True),
+    ('Vendor W-9 for the new supplier', 'waiting_late', None, True),
 ]
 
 

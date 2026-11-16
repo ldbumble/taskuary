@@ -34,7 +34,7 @@ def test_no_line_when_nothing_is_checkable(w):
     stranger = ask(s, 'omar', 'Expense policy wording', 'Per diem or daily allowance?')                         # nobody's usual yet
     for t in (fresh, stranger):
         d = rulebook.decide(s, f'task:{t}')
-        assert (d['state'], d['verb'], d['line']) == ('asked', 'regular_agent', ''), d     # no fact said; the ask is handed to an agent (2026-11-10)
+        assert (d['state'], d['verb']) == ('asked', None) and 'usual' not in d['line'], d     # no usual said, nothing filled (2026-11-15)
 
 
 def test_a_payworth_renewal_opens_remind_me_on_the_day_its_how_you_work_line_says(w):

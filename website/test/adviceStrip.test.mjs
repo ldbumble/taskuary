@@ -6,7 +6,6 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { acted, advisedAny, advisedIn, clustersOf, onPressed, press, put, rowOf } from "../src/actionRow.js";
-import { ADVICE_NONE, adviceNone } from "../src/words.js";
 
 const v = (id, group, extra = {}) => ({ id, group, tone: "s", label: id, title: "", disabled: false, why: "", promote: true, lead: false, ...extra });
 const read = (n) => fs.readFileSync(path.join(process.cwd(), "src", n), "utf8");
@@ -43,12 +42,9 @@ test("the advice only tints: the same buttons in the same places with and withou
 });
 
 // THE OBVIOUS MOVE IS SILENT (the owner, 2026-10-23: "No suggestion...", "Nothing to decide...", "Thinking..." and every sentence
-// explaining a silence go): only no AI is said, with its way out; any other reason lights Next and says nothing
-test("no line is still an answer: only no AI is a sentence, and every other silence lights Next - never nothing", () => {
-  assert.deepEqual(Object.keys(ADVICE_NONE), ["no_ai"]);
-  assert.equal(ADVICE_NONE.no_ai.move, "ai");
-  for (const why of ["nothing", "quiet", "working", "off", "cap", "some-new-reason"]) assert.deepEqual(adviceNone(why), { line: "", move: "next" }, why);
-  const r = rowOf({ ref: "", list: [v("done", "more"), v("next", "next")] }, { verb: adviceNone("nothing").move });
+// explaining a silence go): any reason for lighting nothing lights Next and says nothing - no missing AI included (2026-11-15)
+test("no line is still an answer: every silence lights Next - never nothing", () => {
+  const r = rowOf({ ref: "", list: [v("done", "more"), v("next", "next")] }, { verb: "next" });
   assert.equal(r.next.tone, "p");
   assert.equal(rowOf({ ref: "", list: [v("next", "next", { disabled: true })] }, { verb: "next" }).next.tone, "s", "a greyed Next is never lit");
   const view = read("AssistantView.jsx");

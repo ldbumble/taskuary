@@ -3275,11 +3275,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const tableAdvice = advice?.for === table.key ? advice : null;
   viewOff.current = !!table.folded || !!browsing;
   // ...an answer that landed wins: the strip asking for an AI over a line the Advisor did give hid the line and left its button dark
-  // ...and every other reason there is no line, said (words.json advice_none) - an agent at work included, whose line is hidden.
   // ONE DECISION for the strip's word and the button it lights (advice.stripWord): they were chosen apart, and "Connect an AI" stood
   // over a dark Stop and save on an agent that needed nothing (the UI audit's C2, 2026-10-21)
-  const { pick: stripPick } = stripWord({ speaks: table.speaks, busy, shown: shownAdvice, lit: litNow, aiOff: caps.ai === false,
-    advice, key: table.key, lane: currentItem?.lane });
+  const { pick: stripPick } = stripWord({ speaks: table.speaks, busy, shown: shownAdvice, lit: litNow, advice, key: table.key, lane: currentItem?.lane });
   // ON A PHONE THE LINE RIDES WITH ITS ROW: the row is drawn at the task view's foot there (CanvasItem), and the line pinned over the
   // composer stood a screen away from the button it lit (2026-10-19) - the view draws both, and the dock none
   const hostedRow = useHosted();

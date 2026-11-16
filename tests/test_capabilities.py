@@ -78,10 +78,9 @@ class OfferedTests(unittest.TestCase):
         it = draft(s, 'email', deliver={'kind': 'reply', 'delivery': 'failed', 'fix': fix})
         verbs = rulebook.offered(s, it)
         self.assertEqual((verbs[0]['verb'], verbs[0]['label'], verbs[0]['href']), ('fix', 'Connect a mailbox', '#connections=Email'))
-        # ...and it is the filled button, with its place, so a page with no '<rid>:fix' on the row still opens it
+        # ...offered, never filled: what to do next is the task's agent's to suggest (the owner, 2026-11-15)
         with mock.patch.object(rulebook, '_item', return_value=it):
-            got = rulebook.decide(s, it['key'])
-        self.assertEqual((got['verb'], got['label'], got['href']), ('fix', 'Connect a mailbox', '#connections=Email'))
+            assert rulebook.decide(s, it['key'])['verb'] is None
 
     def test_a_failed_act_names_its_fix_too(self):
         s = MemoryStore(); it = draft(s, 'email')

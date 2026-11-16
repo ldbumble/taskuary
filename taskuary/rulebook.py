@@ -406,32 +406,15 @@ def facts(store, item: dict, verbs: list) -> dict:
     return {'state': st, 'line': line, **({'evidence': ev} if ev and line else {})}
 
 
-# ── THE TASK'S RECOMMENDED MOVE (the owner, 2026-11-09) ─────────────────────────────────────────────────────────────────────────────
-# The Advisor read every task with a model and lit a button over the agent's own word (its finish check was right 7% of the time). Now the
-# one filled button is read off what the task already says, the same for every kind and brain: a held action's Approve; a failed run's own
-# way past it (the row's lead: the place that fixes it, or Try again); the Send of a draft that waits on the owner - whoever wrote it, an
-# agent or triage - never one whose channel is not connected; Mark done where the agent's turn summary said nothing is left; and with no
-# summary at all (a coding agent's terminal writes none, and a task no agent touched has none) Mark done where the facts say it is over.
-# An agent at work or asking fills nothing: its own pane is the way on.
-OVER = frozenset({'agent_done', 'stopped_done', 'answered', 'done_list', 'watch_handled'})
+# ── THE TASK'S RECOMMENDED MOVE (the owner, 2026-11-09; 2026-11-15: "nothing for now. the agent should suggest what to do") ──────────────
+# The row fills a button only where the move is already settled: the Send of what waits for the owner's yes - a draft, whoever wrote it,
+# or a held action - never one whose channel is not connected or that just failed; and Mark done where the agent's own turn said nothing
+# is left (or, for an agent that writes no summary, where its own last word ended the work). Everything else - a late wait, work unpushed, a stopped agent, an ask nobody took, a duplicate - fills nothing: what to do
+# next is the task's agent's to suggest, on its own card.
 QUIET = frozenset({'closed', 'working', 'agent_asking'})
-# an answer owed to the owner gone late: its agent is woken once to draft the chase (checkback.late), and where none was, Chase is lit
+# an answer owed to the owner gone late: its agent is woken once to draft the chase (checkback.late)
 LATE = frozenset({'waiting_late', 'waiting_overdue', 'waiting_late_usual', 'goal_late', 'watch_quiet'})
 NOTHING_LEFT = 'Its agent said nothing is left to do'
-# THE MOVE A STATE'S OWN FACT NAMES (the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible. it shoudl prompt you,
-# should i deploy"): these lit nothing, and their line was hidden too - work left unpushed is looked at, an agent stopped with its work
-# unfinished is carried on, an ask no agent started on is handed to one (as needs_agent is), a phish filed FYI is put down ("Not ours is its
-# move"), and the duplicate of a pair is folded into the one that stays ("fold it into that one")
-MOVES = {'unpushed': ('review_changes',), 'stopped': ('continue',), 'asked': ('regular_agent',),
-         'fyi_danger': ('not_ours', 'remove'), 'duplicate': ('split', 'remove')}
-
-
-def landing_asks(store, tid) -> bool:
-    """Whether the task's landing card asks its question - Push, or how its branch lands (landing.state) - whose own first button is filled
-    there: the row lights nothing over it. Read only for work left unpushed."""
-    from . import landing
-    try: return bool(tid) and (landing.asked(store, tid) or bool((landing.state(store, int(tid)) or {}).get('ask')))
-    except Exception as e: logger.debug(f'rulebook: no landing read for {tid} - {e}'); return False
 
 
 def agent_word(store, tid) -> str | None:
@@ -448,32 +431,20 @@ def agent_word(store, tid) -> str | None:
 
 
 def _recommended(store, it: dict, verbs: list | None, f: dict | None, unlit: bool = False) -> dict | None:
-    from . import checkback
-    if it.get('kind') == 'idea': return None                # an idea is the Advisor's own row, and its light the Advisor's
+    if it.get('kind') == 'idea': return None                # an Advisor idea's row fills nothing (the owner, 2026-11-15)
     verbs = offered(store, it) if verbs is None else verbs
     f = f or facts(store, it, verbs)
-    st, tid, lead = f['state'], it.get('tid'), (verbs[0]['verb'] if verbs else '')
-    pick = lambda *vs: next((v for v in vs if not pressable(store, it, v, verbs)), None)
-    why = f.get('line') or ''
-    if st in QUIET: v = None
-    # ...a reply owed that nothing has written, on a task no agent started on by itself (the setting, a stranger held, no room): the
-    # agent writes it now, so its start is the move - the one that worked it before, else Send to agent (the owner, 2026-11-10)
-    elif st == 'needs_agent': v = pick('continue', 'regular_agent')
+    st, tid, why, on = f['state'], it.get('tid'), f.get('line') or '', {v['verb'] for v in verbs}
+    pick = lambda *vs: next((v for v in vs if v in on), None)
+    if st in QUIET or st in FAILED: v = None              # ...what failed is never sent again as it stood
     elif st == 'action_held': v = None if unconnected(store, it) else pick('approve', 'send_close')
-    # ...what failed is never sent again as it stood: its own fix or Try again where the row leads with one, else nothing
-    elif lead == 'fix' or st in FAILED: v = pick(lead) if lead in ('fix', 'continue') else None
     elif st == 'draft_ready' or ((w := store.waiting_on_owner(int(tid)) if tid else None) and (w.get('FinalText') or w.get('DraftText'))):
         v = None if unconnected(store, it) else pick('send_close', 'approve')
-    # ...a late answer no agent was woken for is chased from the row (the owner, 2026-11-10: "job of agent is to be helpful and do as much as
-    # possible") - over an older turn's word too; one that was woken says itself what it did about it
-    elif st in LATE and not (tid and checkback.woke(store, tid)): v = pick('chase')
-    # ...the agent's own word decides wherever it wrote one: a turn that said neither fills nothing, whatever the facts read
-    elif tid and (said := agent_word(store, tid)) is not None: v, why = (pick('close'), NOTHING_LEFT) if said == 'nothing_left' else (None, '')
-    # ...and with no word of an agent's over it, the move the state's own fact names (MOVES)
-    else: v = pick('close') if st in OVER else None if st == 'unpushed' and landing_asks(store, tid) else pick(*MOVES.get(st, ()))
+    elif tid and (said := agent_word(store, tid)) is not None: v, why = (pick('close'), NOTHING_LEFT) if said == 'nothing_left' else (None, why)
+    # ...an agent that writes no summary (a coding agent's terminal) says it by ending its work: its own last word, never the owner's reply
+    else: v = pick('close') if st == 'agent_done' and why.startswith('Finished') else None
     if v: return {'verb': v, 'label': _label(verbs, v, it), 'why': why, 'state': st}
-    # ...and A ROW WITH NOTHING LIT SAYS WHY, on the desk as on the phone (the owner, 2026-11-10: "if it's consistent do it"): `unlit` asks for
-    # the state's own sentence with no verb - the very line decide says for it, read off the same facts
+    # ...and A ROW WITH NOTHING LIT SAYS WHY, on the desk as on the phone (the owner, 2026-11-10): `unlit` asks for the state's own sentence
     return {'verb': None, 'label': '', 'why': f['line'], 'state': st} if unlit and f.get('line') else None
 
 
@@ -910,22 +881,10 @@ def decide(store, key: str) -> dict:
     # ROW WITH NOTHING LIT SAYS WHY in its state's one sentence (the owner, 2026-11-10): plain buttons and no word stood over a wait gone late
     says = bool(r.get('line')) and (not v or r['state'] in FAILED or (r['state'] == 'draft_ready' and v in SENDS))
     lbl, ev = _label(verbs, v, item) if v else '', list(r.get('evidence') or []) if says else []
-    out = {'key': key, 'state': r['state'], 'verb': v, 'label': lbl, 'line': r['line'] if says else '', 'by': 'agent', 'revision': revision(store, *tgt),
-           'pill': lbl, 'evidence': ev, 'ask': True, 'needs_ai': True, 'kind': 'other'}
-    # a fix is a place, not a proposal: the page opens its href where the row has no '<rid>:fix' of its own to press (a failed act with
-    # no draft on the table) - read live, so a fix already made carries no stale link; and the task "New task to fix this" makes, the same way
-    if v == 'fix':
-        try: fx = delivery_fix(store, item) or (failure(store, item) or {}).get('fix')
-        except Exception: fx = None
-        if fx: out['href'] = fx['href']
-    if v == 'new_task':
-        try: f = failure(store, item)
-        except Exception: f = None
-        if f: out['task'] = fix_task(store, item, f)
-    return out
+    return {'key': key, 'state': r['state'], 'verb': v, 'label': lbl, 'line': r['line'] if says else '', 'by': 'agent', 'revision': revision(store, *tgt),
+            'pill': lbl, 'evidence': ev, 'kind': 'other'}
 
 
-AGENT_VERBS = frozenset({'continue', 'regular_agent', 'run_another', 'strong_again'})
 SENDS = frozenset({'approve', 'send_close'})      # the draft's two sends under it in the chat: Send, and Send and close
 AGENT_CHECK = True       # the suite turns this off (tests/conftest.py): a bare store has no brain, and its agents' buttons are not the subject
 
@@ -941,13 +900,6 @@ def _agent_ready(store, item: dict) -> str:
         ok = any(o.get('type') != 'cli' or ha.runs_here(brains.get(o['pick'][4:])) for o in general.provider_options(store))
         return '' if ok else 'no brain an agent can run on'
     except Exception as e: logger.debug(f'rulebook: no agent check for {item.get("key")} - {e}'); return ''
-
-
-def pressable(store, item: dict, verb: str, verbs: list) -> str:
-    """'' when the row carries `verb` and it can be pressed now, else why not."""
-    if not verb or verb == 'next': return ''
-    if verb not in {v['verb'] for v in verbs}: return 'not on the row'
-    return _agent_ready(store, item) if verb in AGENT_VERBS else ''
 
 
 def unconnected(store, item: dict) -> bool:

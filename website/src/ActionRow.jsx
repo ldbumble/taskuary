@@ -4,10 +4,8 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Menu, MenuItem, useMediaQuery } from "@mui/material";
 import { NAV, ROW_HOLD_MS, ROW_STUCK_MS, TYPES, fitRow, navShort, press, shortParts, putSpineVerbs, rowOf, lightOnCard, sameRow, heldOff, heldRow, splitRow, laidOf, useHosted, useRowVerbs } from "./actionRow.js";
-import { adviceNone } from "./words.js";
 import { label } from "./buttons.js";
 const shortNext = (w) => (w === label("next", "batch") ? label("next", "batch_short") : w);   // a squeezed desk bar's word for a batch's Next
-import { CONNECT_AI } from "./ConnectAi.jsx";
 
 // ONE PILL: the moves the width holds, and its own ▾ for the rest (foldsOf) - the move pill unlabelled, Change with its one quiet word
 const PILL = { move: "What to do", change: "Change the task", more: "More" };
@@ -66,11 +64,8 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   // ...and a held button whose press would do nothing stands greyed until it would (actionRow.heldRow)
   const { verbs, liveOf } = heldRow(kept, now);
   const act = verbs === now ? press : (id, e, a) => { const v = liveOf(id); return v ? press(v.id, e, a, v.of) : undefined; };
-  // a "none" answer lights its one move: no AI lights the row's own Connect an AI where the row has one (a failure's fix named after
-  // its place) - it lit nothing, a move named "ai" no button carries (the design, phase A) - and any other none lights Next
-  const move = advised?.none ? adviceNone(advised.none).move : "";
-  const conn = move === "ai" ? verbs.list.find((v) => v.label === CONNECT_AI && !v.disabled) : null;
-  const pick = advised?.none ? (conn ? { id: conn.id } : move === "ai" ? null : { verb: move || "next" }) : advised;
+  // a "none" answer - nothing decided on - lights Next
+  const pick = advised?.none ? { verb: "next" } : advised;
   // ...LESS THE STAGE MOVES where the task lays its panes: those ride on their pane (actionRow.splitRow) - and on the desk's bar, every move but
   // Back and Next: the rest ride the item's own row (the owner, 2026-11-10: "on bottom the only buttons should be nav")
   const hosted = useHosted();

@@ -13,13 +13,11 @@ export function adviceShown(advice, item, busy) {
 }
 
 /* WHAT THE STRIP SAYS AND WHAT THE ROW LIGHTS, ONE DECISION (the UI audit's C2, 2026-10-21; the design's phase A, 2026-10-23): the
-   one decision (rulebook.decide) is what every surface lights. Only one reason for lighting nothing is said - no AI connected, where the
-   move needs one (`needs_ai`) - with its way out lit; any other answer with no verb (a key nothing is decided on, an idea row) lights Next
-   and says nothing. An agent at work outranks a missing AI.
-   `shown`/`lit`: the decision and the Assistant's light, already read for the item on the table; `aiOff`: caps.ai === false. */
-export function stripWord({ speaks, busy, shown = null, lit = null, aiOff = false, advice = null, key = "", lane = "" } = {}) {
+   one decision (rulebook.decide) is what every surface lights; an answer with no verb (a key nothing is decided on, an idea row, an agent
+   at work) lights Next and says nothing - and no missing AI lights its Connect (the owner, 2026-11-15: "the agent should suggest").
+   `shown`/`lit`: the decision and the Assistant's light, already read for the item on the table. */
+export function stripWord({ speaks, busy, shown = null, lit = null, advice = null, key = "", lane = "" } = {}) {
   const working = lane === "working", mine = !!advice && advice.for === key;
-  const noAi = !!speaks && !busy && !lit && !working && mine && (advice.none === "no_ai" || (aiOff && !!advice.needs_ai));
-  const quiet = !!speaks && !busy && !lit && !noAi && !shown && ((mine && !!advice.none) || working) ? { verb: "next", line: "", for: key } : null;
-  return { noAi, pick: lit || (noAi ? { none: "no_ai", for: key } : shown || quiet) };
+  const quiet = !!speaks && !busy && !lit && !shown && ((mine && !!advice.none) || working) ? { verb: "next", line: "", for: key } : null;
+  return { pick: lit || shown || quiet };
 }

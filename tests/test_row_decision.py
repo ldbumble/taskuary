@@ -72,7 +72,8 @@ class StatusTests(_Rail):
     def test_nothing_is_ever_pending_and_nothing_is_lit_without_its_fact(self):
         s = MemoryStore(); t = self._asked_task(s)
         got = rulebook.status(s, f'task:{t}')
-        self.assertEqual((got['verb'], got['line'], 'pending' in got), ('regular_agent', '', False))     # an ask no agent took: Send to agent (2026-11-10)
+        self.assertEqual((got['verb'], 'pending' in got), (None, False))     # nothing filled: the agent suggests (2026-11-15)
+        self.assertTrue(got['line'].startswith('Gail Moreno asked'), got)
 
     def test_a_meeting_or_an_idea_fills_nothing(self):
         """The owner, 2026-11-15: "remove the entire advisor from buttons thing" - an Advisor idea's row is the owner's own choice, with no
@@ -89,7 +90,7 @@ class StatusTests(_Rail):
             c = TestClient(server.app)
             got = c.get('/api/advice', params={'key': f'task:{t}'}).json()
             self.assertEqual(c.post('/api/advice/press', json={'key': f'task:{t}', 'pressed': 'close'}).status_code, 404, 'no press log')
-        self.assertEqual((got['verb'], got['label'], got['line'], got['state'], got['by']), ('regular_agent', 'Send to agent', '', 'asked', 'agent'))
+        self.assertEqual((got['verb'], got['label'], got['state'], got['by']), (None, '', 'asked', 'agent'))
 
 
 class AfterSendTests(_Rail):

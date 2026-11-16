@@ -5,20 +5,12 @@ import assert from "node:assert/strict";
 import { stripWord } from "../src/advice.js";
 
 // C2 (the UI audit, 2026-10-21): the strip's word and the lit button are one decision (advice.stripWord)
-test("a working agent lights Next and says nothing, even with no AI connected", () => {
-  const w = stripWord({ speaks: true, aiOff: true, key: "task:9", lane: "working" });
-  assert.equal(w.noAi, false); assert.deepEqual(w.pick, { verb: "next", line: "", for: "task:9" });
-  const n = stripWord({ speaks: true, advice: { none: "no_ai", for: "task:9" }, key: "task:9", lane: "working" });
-  assert.equal(n.pick.verb, "next", "a no-AI answer read for a working agent is Next");
-  // ...no AI is said only where the move needs one (advisor.decide's needs_ai) - a rule decides the rest with none connected
-  const ask = { verb: "reply", line: "", needs_ai: true, for: "task:3" };
-  const p = stripWord({ speaks: true, aiOff: true, shown: ask, advice: ask, key: "task:3", lane: "asked" });
-  assert.equal(p.noAi, true); assert.equal(p.pick.none, "no_ai", "the strip asks for an AI, and its own Connect is the lit move");
-  const rule = { verb: "continue", line: "", needs_ai: false, for: "task:4" };
-  assert.equal(stripWord({ speaks: true, aiOff: true, shown: rule, advice: rule, key: "task:4", lane: "stopped" }).pick, rule, "the rule's own move needs no AI");
-  const s = { verb: "reply", line: "x" };
+test("a working agent lights Next and says nothing, and no missing AI lights a Connect (the owner, 2026-11-15)", () => {
+  const w = stripWord({ speaks: true, key: "task:9", lane: "working" });
+  assert.deepEqual(w, { pick: { verb: "next", line: "", for: "task:9" } });
+  const s = { verb: "send_close", line: "x" };
   assert.equal(stripWord({ speaks: true, shown: s, key: "k", lane: "asked" }).pick, s, "a decision lights its verb");
-  assert.deepEqual(stripWord({ speaks: true, advice: { none: "off", for: "k" }, key: "k", lane: "asked" }).pick, { verb: "next", line: "", for: "k" }, "any other none: Next, silent");
+  assert.deepEqual(stripWord({ speaks: true, advice: { none: "nothing", for: "k" }, key: "k", lane: "asked" }).pick, { verb: "next", line: "", for: "k" }, "any none: Next, silent");
 });
 
 // WHEN THE STRIP SPEAKS (the owner, 2026-10-13: "not while waiting or walking through things"): only the decision read for the

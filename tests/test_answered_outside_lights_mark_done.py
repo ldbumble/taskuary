@@ -35,21 +35,22 @@ def read(s, tid):
     return rulebook.decide(s, f'task:{tid}')
 
 
-def test_mark_done_is_lit_where_the_owner_answered_in_teams():
+def test_where_the_owner_answered_in_teams_nothing_is_lit_and_the_reply_is_said():
     s = MemoryStore(); tid = teams_task(s)
     d = read(s, tid)
-    assert (d['verb'], d['label'], d['by'], d.get('section')) == ('close', 'Mark done', 'agent', None), d
+    # ...nothing is filled over it: no agent said nothing is left (the owner, 2026-11-15: "the agent should suggest what to do")
+    assert (d['verb'], d['state'], d['by'], d.get('section')) == (None, 'answered', 'agent', None), d
     r = rulebook.recommended_task(s, tid)
-    assert r['verb'] == 'close' and re.search(r'^Your reply went .*nothing since', r['why']), 'the reply that went is its reason'
+    assert r['verb'] is None and re.search(r'^Your reply went .*nothing since', r['why']), 'the reply that went is said'
 
 
 def test_nothing_answered_or_asked_again_is_not_over_and_names_no_section():
     s = MemoryStore(); tid = teams_task(s, answered=False)
     d = read(s, tid)
-    assert d.get('section') is None and d['verb'] == 'regular_agent', d          # an ask no agent took: Send to agent (2026-11-10)
+    assert d.get('section') is None and d['verb'] is None, d          # an ask no agent took: nothing filled (2026-11-15)
     s = MemoryStore(); tid = teams_task(s, again=True)
     d = read(s, tid)
-    assert d.get('section') is None and d['verb'] == 'regular_agent', 'she wrote again after the answer: it is not over'
+    assert d.get('section') is None and d['state'] != 'answered', 'she wrote again after the answer: it is not over'
 
 
 def test_the_facts_say_the_answer_and_name_no_section():
@@ -68,5 +69,5 @@ def test_the_api_hands_the_page_no_section(monkeypatch):
     s = MemoryStore(); tid = teams_task(s)
     monkeypatch.setattr(server, 'store', s)
     got = TestClient(server.app).get('/api/advice', params={'key': f'task:{tid}'}).json()
-    assert (got.get('verb'), got.get('section')) == ('close', None), got
-    assert TestClient(server.app).get(f'/api/tasks/{tid}').json()['recommended']['verb'] == 'close', 'the task page reads it off its own payload'
+    assert (got.get('verb'), got.get('section'), got.get('state')) == (None, None, 'answered'), got
+    assert TestClient(server.app).get(f'/api/tasks/{tid}').json()['recommended']['verb'] is None, 'the task page reads it off its own payload'

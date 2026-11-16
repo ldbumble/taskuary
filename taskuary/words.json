@@ -47,10 +47,6 @@
     "board":             {"name": "the Board", "href": ""},
     "search":            {"name": "Search", "href": ""}
   },
-  "advice_none": {
-    "_": "WHEN THE ADVISOR LIGHTS NOTHING (rulebook.status {none: why}). The owner, 2026-10-23: an obvious move is an EMPTY strip and one lit button - \"No suggestion...\", \"Nothing to decide...\", \"Thinking...\" and every other sentence explaining a silence went, so only the one reason that has a way out is said: no AI connected, where the move needs one. `move` is what the row lights for it (`ai`: the row's own Connect an AI, else the strip's). Any other reason is silent, and Next is lit.",
-    "no_ai":      {"line": "Connect an AI.", "move": "ai"}
-  },
   "advice_rule": {
     "_": "WHERE AN ITEM STANDS, AS FACTS (rulebook.py; a decider no more - the owner, 2026-11-02: \"never ever use hard coded rules, let the ai see everything\"): each state the app names from facts it keeps - never the words of a mail - with `is`, what the state means, and `line`, the checkable fact said for it ('' when there is none): an age, a clash, a failure, a promise nothing backs - never a sentence explaining a button. Both go to the Advisor's model with every verb the row offers and what the owner chose in that state before (calibrate.evidence); the model decides every light. {who} a person, {ago} how long, {why} a failure's plain reason, {ref} a task, {clash} the meeting it clashes with, {days} working days (days past the due day on a wait that has one), {step} a goal's step, {domain} a sender's domain, {leaving} what leaves with a draft (an address not on its thread, the files it carries), {what}/{when} what ended an agent's work and when, {n} to-dos ticked. A duplicate pair is decided once (rulebook.survivor): only the newer one is the duplicate.",
     "closed":        {"line": "", "is": "the task is closed"},

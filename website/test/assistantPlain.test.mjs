@@ -7,16 +7,11 @@ import fs from "node:fs";
 const read = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 const view = read("AssistantView.jsx"), cards = read("assistantCards.jsx");
 
-test("no AI connected: no strip says it, and nothing is added to the row - a row's own Connect an AI is lit where it has one (U3)", () => {
-  assert.match(read("tableState.js"), /data\.verb \|\| data\.none \|\| data\.state/, "the no-AI answer is kept, not dropped as nothing");
-  // ...the strip that asked for an AI is gone (the owner, 2026-10-26: "remove the advisor"), and with it its button: setup is where an AI
-  // is connected, and a failed run's Result says why and where (the same day: "if you don't get through ai setup the whole thing doesn't work")
-  assert.doesNotMatch(view, /noai:connect/, "and no Connect an AI added to the row (the owner, 2026-10-26: \"why would we need connect an ai?\")");
-  assert.match(read("ActionRow.jsx"), /const conn = move === "ai" \? verbs\.list\.find\(\(v\) => v\.label === CONNECT_AI && !v\.disabled\) : null;/);
-  assert.doesNotMatch(view, /adviceNone\("no_ai"\)/);
-  // ...and only where the move needs an AI: a rule decides the rest with none connected (`needs_ai`, advisor.decide)
-  assert.match(view, /aiOff: caps\.ai === false,/);
-  assert.match(read("advice.js"), /advice\.none === "no_ai" \|\| \(aiOff && !!advice\.needs_ai\)/);
+test("no AI connected: no strip says it, and nothing is added to the row or lit for it (U3; the owner, 2026-11-15)", () => {
+  assert.match(read("tableState.js"), /data\.verb \|\| data\.none \|\| data\.state/, "a none answer is kept, not dropped as nothing");
+  assert.doesNotMatch(view, /noai:connect|aiOff:/);
+  assert.match(read("ActionRow.jsx"), /const pick = advised\?\.none \? \{ verb: "next" \} : advised;/);
+  assert.doesNotMatch(read("advice.js"), /no_ai|needs_ai/);
 });
 
 test("a press refused as changed reads the advice again, and the row lights the new pick (B6)", () => {

@@ -239,7 +239,7 @@ class CheckBackTests(unittest.TestCase):
             self.assertEqual(fired, [], 'the switch is off')
             said = [c['Body'] for c in s.list_comments(tid) if c['Body'].startswith(ingest.NOT_STARTED)]
             self.assertEqual(len(said), 1, 'why is said once'); self.assertIn('switched off', said[0])
-            self.assertEqual((rulebook.recommended(s, it) or {}).get('verb'), 'chase', 'Chase stays lit where none started')
+            self.assertIsNone((rulebook.recommended(s, it) or {}).get('verb'), 'nothing is lit: the agent suggests (2026-11-15)')
             s.set_setting('general_auto_enabled', '1', 'owner')
             other, _ = late_task('Signed lease'); remind.tick(s); remind.tick(s)
             self.assertEqual([t for t, _ in fired], [other], 'a first agent, once, on the task none has worked')

@@ -2,6 +2,29 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.10 - 2026-11-15
+
+- A chart an agent writes as a view spec in its answer is drawn, not shown as its JSON
+- Claude behind any gateway is cache-marked by the model it reaches, and a model that did not answer is said
+- An AI card's request bound counts the tool schemas sent beside the conversation
+- README says what Taskuary is in four lines and answers prompt injection up front
+- README is the product in brief; the full tour moves to the docs
+- The Chinese README follows the English one: the product in brief, the tour in the docs
+- An AI card's call is bounded whole, and a file the agent wrote rides on one call, not every call after
+- A Gemini model's thought signatures ride back on every call but do not count against the call's bound
+- The line that stands for text an agent sent earlier is refused as an argument, never written
+- Every tool is listed by one line and its parameters; its whole instructions are find_tools' answer
+- README: the Game hero back on top, What it does as six numbered sections with their pictures, no docs link list
+- The demo opens on an agent's finished work, not the tour's checklist
+- A report with a markdown table reads as markdown, never as the End of day brief
+- Agents on an AI card run the model tier that answers - Claude where it answers, else the strongest; quick work stays on Flash
+- A task the Assistant starts shows the owner's own line as his, and its rewording as Taskuary's brief
+- A sign-in is kept on disk the moment it is through, not only when its browser closes
+- Several sites in one task open as tabs of its one browser, and the view beside the chat shows them
+- An AI card's agents run the newest model generation, not an old "pro" - Gemini 4 Hydrogen over 2.5 Pro, Gemini Flash keeps the quick work
+- The agent is told who signed in: Taskuary from the saved sign-in, or the owner on the page
+- His I'm done puts the browser back on the hand-over's own tab before the agent is told
+
 ## 0.4.0.9 - 2026-11-15
 
 - A session at rest does not wait on the owner while an input is handed to it

@@ -48,7 +48,7 @@ class TwoOutlookCards(unittest.TestCase):
         read = []
         with mock.patch.object(channels, 'graph_token', side_effect=fake_token), \
              mock.patch.object(channels, '_mail_folder', side_effect=lambda tok, s, folder, *a, **k: read.append((tok, s['Address'])) or 0):
-            for cid in (first, second): channels._poll_one(store, store.get_connector(cid), True, 0, None, False)
+            for cid in (first, second): channels._poll_one(store, store.get_connector(cid), True, 0, None)
         self.assertEqual({(t, a) for t, a in read}, {('tok:rt-northwind', A), ('tok:rt-contoso', B)})
 
     def test_a_reply_leaves_through_the_card_its_mail_came_in_on(self):
@@ -209,7 +209,7 @@ class TwoTeamsCards(unittest.TestCase):
              mock.patch.object(channels, '_graph_user', return_value=('Erin Blake', 'erin@vendor.example')), \
              mock.patch.object(channels, 'hosted_images', return_value=[]), \
              mock.patch.object(channels.requests, 'get', return_value=R(200, {'id': 'u-me'})):
-            for cid in (first, second): channels._poll_one(store, store.get_connector(cid), True, 0, None, False)
+            for cid in (first, second): channels._poll_one(store, store.get_connector(cid), True, 0, None)
         self.assertEqual(sorted(read), ['tok:rt-teams-contoso', 'tok:rt-teams-northwind'])
         rows = {m['ConversationId']: m['SourceName'] for m in store.feed() if m['Channel'] == 'teams'}
         self.assertEqual(rows, {'teams:19:tok:rt-teams-northwind': A, 'teams:19:tok:rt-teams-contoso': B})
@@ -226,7 +226,7 @@ class TwoTeamsCards(unittest.TestCase):
              mock.patch.object(channels, '_graph_user', return_value=('Erin Blake', 'erin@vendor.example')), \
              mock.patch.object(channels, 'hosted_images', return_value=[]), \
              mock.patch.object(channels.requests, 'get', return_value=R(200, {'id': 'u-me'})):
-            channels._poll_one(store, store.get_connector(first), True, 0, None, False)
+            channels._poll_one(store, store.get_connector(first), True, 0, None)
         row = store.get_message(next(m for m in store.feed() if m['Channel'] == 'teams')['MessageId'])
         self.assertIn('the form is here', ' '.join(row['BodyText'].split()))
         self.assertEqual(json.loads(row['MailMetaJson']).get('links'), [['here', 'https://forms.vendor.example/f/9']])

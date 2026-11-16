@@ -58,7 +58,6 @@
     "startup_sync_days": "3",
     "share_links_lan": "0",
     "share_port": "7797",
-    "mark_read_enabled": "0",
     "timezone": "",
     "concierge_fast": "auto",
     "funnel_hours": "12",

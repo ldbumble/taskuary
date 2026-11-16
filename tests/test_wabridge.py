@@ -547,11 +547,11 @@ class SupervisorTests(unittest.TestCase):
         with mock.patch.object(messengers, 'poll_whatsapp', side_effect=messengers.BridgeDown(self.err)), \
              mock.patch.object(wabridge, 'supervise', return_value=self.err) as sup, \
              mock.patch.object(channels.logger, 'warning') as warn:
-            for _ in range(5): channels._poll_one(self.s, full, False, 0, None, False)
+            for _ in range(5): channels._poll_one(self.s, full, False, 0, None)
         self.assertEqual(sup.call_count, 5); warn.assert_not_called()
         self.assertEqual(self.s.get_connector(self.wa['ConnectorId'])['LastError'], self.err)
         with mock.patch.object(messengers, 'poll_whatsapp', return_value=0), mock.patch.object(wabridge, 'came_back') as back:
-            channels._poll_one(self.s, full, False, 0, None, False)
+            channels._poll_one(self.s, full, False, 0, None)
         back.assert_called_once()
 
 

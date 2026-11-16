@@ -119,7 +119,7 @@ class LateTeamsMessageTests(unittest.TestCase):
 
     def poll(self):
         with mock.patch.object(net, 'session', lambda: self.g), mock.patch.object(channels, 'graph_token', return_value='tok'):
-            channels._poll_one(self.store, self.store.get_connector(self.cid), True, 0, None, False)
+            channels._poll_one(self.store, self.store.get_connector(self.cid), True, 0, None)
 
     def rows(self, ext): return self.store._one('SELECT COUNT(*) AS n FROM message WHERE ExternalId=?', (ext,))['n']
 

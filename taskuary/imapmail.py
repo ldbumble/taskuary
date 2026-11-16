@@ -776,7 +776,7 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
     it oldest-first in batches, saving the watermark plus retry holes as each batch lands
     (PW-007/PW-008); the SINCE window applies to the first import only. The 25-highest-then-jump
     of before skipped the lower pending UIDs for good, and the date window hid a long absence."""
-    from .channels import files_for_triage, images_for_triage, save_attachments, wants_read
+    from .channels import files_for_triage, images_for_triage, save_attachments
     from .ingest import ingest_message
     M, user = _login(c)
     n = 0
@@ -809,8 +809,9 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
                                seen_validity=validity, legacy_evidence=legacy)
     try:
         # readonly keeps the funnel invisible in the mailbox, and every fetch PEEKs as well (FETCH_BODY). Only the
-        # mark-read switch opens the box for writing, and then the flag is set explicitly, per message, after it is safely in.
-        read_it = wants_read(store)
+        # card's mark-read choice opens the box for writing, and then the flag is set explicitly, per message, after it is safely in.
+        from . import filing
+        read_it = filing.takes_read(c)
         typ, _data = M.select('INBOX', readonly=not read_it)
         if typ != 'OK': raise IMAPCommandError(f'SELECT INBOX returned {typ}')
         initial_cursor = _number(cfg.get('imap_uid')) or 0

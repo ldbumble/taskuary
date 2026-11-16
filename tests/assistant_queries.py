@@ -180,7 +180,6 @@ CASES = [
     Q('settings', 'change my signature', None, c('setting.set', setting='email_signature', value='Alex'), 'open:#settings=config', freq=3),
     Q('settings', 'connect Outlook', None, c('setup', text='connect Outlook'), 'open:#connector=outlook', sort={'kind': 'connection', 'provider': 'outlook'}, freq=4),
     Q('settings', 'turn off background sync', None, c('setting.set', setting='poll_minutes', value='0'), 'open:#settings=config', freq=2),
-    Q('settings', 'stop marking mail read in my inbox', None, c('setting.set', setting='mark_read_enabled', value='0'), 'open:#settings=config', freq=2),
     Q('settings', 'what timezone am I in', None, [c('setting.read', key='timezone'), 'Your timezone is set to the computer.'], 'read:setting.read', freq=1),
     Q('settings', 'turn off the desktop notifications', None, c('setting.set', setting='hand_desktop', value='0'), 'open:#settings=config', freq=2),
     Q('settings', 'switch off the GitHub connection', None, c('connection.pause', name='GitHub'), 'open:#connector=github', freq=1),
@@ -267,7 +266,6 @@ BRING_UP = [
     ('which AI sorts my mail', 'AI that sorts your mail', '#settings=config&group=How%20mail%20is%20sorted&key=triage_ai'),
     # ...by the name it has on screen since 2026-11-15 ("Taskuary"): that is the word a model that has seen the page searches by
     ('the assistant model', 'model for Taskuary', '#settings=config&group=How%20mail%20is%20sorted&key=concierge_model'),
-    ('stop marking mail read in my inbox setting', 'mark read source', '#settings=config&group=Sync%20%26%20startup&key=mark_read_enabled'),
     ('how many days back it catches up', 'catch-up window', '#settings=config&group=Sync%20%26%20startup&key=startup_sync_days'),
     ('the FYI batching setting', 'fyi read together', '#settings=config&group=Assistant&key=fyi_batch'),
     ('my second Outlook', 'outlook', '#connector=outlook'),

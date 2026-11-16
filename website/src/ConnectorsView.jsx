@@ -112,7 +112,7 @@ const META = {
     howto: ["Your own Microsoft app: Taskuary ships none, so nothing goes through anyone else's Azure. An Outlook.com or Hotmail account first signs up for a free Azure account with that same account (Microsoft registers apps only inside a directory since June 2024; it asks for a phone and a credit or debit card to verify you, and charges nothing). Then Microsoft Entra → App registrations → New registration - Supported account types \"Any Entra ID Tenant + Personal Microsoft accounts\" for an Outlook.com account, single tenant for a company app; Authentication → Add a platform → Mobile and desktop applications → redirect URI http://localhost/api/ms/callback (Entra ignores the port of a localhost redirect, so it covers whatever port Taskuary runs on); Allow public client flows: Yes; API permissions → Microsoft Graph → Delegated: the permissions the card lists → Grant admin consent (a company app; an Outlook.com account approves them on the sign-in page instead). No client secret - a sign-in app is public by design.",
       "Copy the app's Application (client) ID into the card (the Directory (tenant) ID too for a single-tenant company app; blank otherwise), then sign in - either in the browser (Sign in with Microsoft: Microsoft's page opens, you sign in with your own account and the tab hands you back to Taskuary) or with a code (Sign in with a code instead: a code for microsoft.com/devicelogin, for a Taskuary the browser cannot reach on localhost - some organisations block that one). Both use the same app. That is mail, sending and calendar for your mailbox.",
       "AADSTS50011 on Microsoft's page: the app does not list http://localhost/api/ms/callback under Mobile and desktop applications yet. AADSTS700016: the client or tenant ID on the card is wrong. AADSTS50020 / AADSTS50194 with an Outlook.com account: the app was registered for one directory only - register it again for personal accounts too. AADSTS7000218: Allow public client flows is off. \"Need admin approval\": IT has not granted admin consent yet - the card's approval link does it too, once for everyone.",
-      "Tenant app (admins - for Teams chat reading and for mailboxes other than your own): the same App registrations → New registration, then API permissions → APPLICATION permissions Mail.Read (Mail.ReadWrite for Outlook drafts on approve or 'Handled mail, at the source') and Calendars.Read (Calendars.ReadWrite to answer invites and book meetings from Taskuary) → Grant admin consent; Certificates & secrets → New client secret. Enter the two IDs and paste the secret under Admin?; blank = the server's AZURE_* env vars.",
+      "Tenant app (admins - for Teams chat reading and for mailboxes other than your own): the same App registrations → New registration, then API permissions → APPLICATION permissions Mail.Read (Mail.ReadWrite for Outlook drafts on approve and for marking mail read or filing it there) and Calendars.Read (Calendars.ReadWrite to answer invites and book meetings from Taskuary) → Grant admin consent; Certificates & secrets → New client secret. Enter the two IDs and paste the secret under Admin?; blank = the server's AZURE_* env vars.",
       "Mailboxes: signing in adds your own automatically. A tenant app reads every mailbox you add as a UPN under Sources.",
       "Test acquires a real Graph token and reports exactly what failed if anything - and whether the calendar can be read. Enable, and mail flows through the same triage funnel as everything else."],
     // written FOR the agent: it starts the browser sign-in through the API and hands the owner the link (a code only if they ask)
@@ -2981,7 +2981,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
           <Button variant="contained" disableElevation onClick={addSource}>Add</Button>
         </Box>
         {MAIL_CARDS.includes(conn.Type) && <MailSignature conn={conn} addresses={mine.map((s) => s.Address)} reload={reload} />}
-        {MAIL_CARDS.includes(conn.Type) && <MarkReadHere conn={conn} reload={reload} />}
+        {readKind(conn.Type) && <MarkRead conn={conn} reload={reload} />}
       </Box>
     )}] : []),
     ...(isAI ? [] : [
@@ -4046,19 +4046,36 @@ function MailSignature({ conn, addresses = [], reload }) {
     (e) => save({ signatures: { ...per, [a.toLowerCase()]: e.target.value } })))}</>;
 }
 
-// READ HERE, READ THERE (the owner, 2026-11-16): mail you read here - opened, shown in the chat, All read, Done on its task - is
-// marked read in this mailbox too (filing.mark_read_back). Off by default; what stopped it is the one line under the switch.
-const READ_THERE = { outlook: "Outlook", gmail: "Gmail", imap: "your mailbox" };
-function MarkReadHere({ conn, reload }) {
+// WHAT THIS CARD DOES TO A MESSAGE AT ITS SOURCE - one choice per card (the owner, 2026-11-16), read by filing.read_mode and nothing
+// else. A mail card can also mark read what you read HERE (opened, shown in the chat, All read, Done on its task) and file handled mail
+// in Archive; a chat card can mark read what Taskuary takes in. Leave is the default; what stopped it is the one line under the choice.
+const READ_THERE = { outlook: "Outlook", gmail: "Gmail", imap: "your mailbox", teams: "Teams", slack: "Slack", whatsapp: "WhatsApp" };
+const READ_CHOICES = {
+  mail: [["0", "Leave mail as it is", "Nothing in your mailbox changes because Taskuary reads it."],
+    ["read", "Mark read when I read it here", "A mail you open, read in the chat, mark read or finish here turns read there too."],
+    ["taken", "Mark read when Taskuary takes it in", "Everything Taskuary brings in turns read there, so what is still bold is what it never saw."],
+    ["archive", "Mark read when taken in, and archive handled mail", "As above, and once a mail's task is closed here it leaves the Inbox for Archive."]],
+  chat: [["0", "Leave chats as they are", "Nothing in the chat changes because Taskuary reads it."],
+    ["taken", "Mark read when Taskuary takes it in", "What Taskuary brings in turns read there (Teams marks the whole chat)."]],
+};
+const readKind = (t) => (MAIL_CARDS.includes(t) ? "mail" : ["teams", "slack", "whatsapp"].includes(t) ? "chat" : "");
+function MarkRead({ conn, reload }) {
   const saveConn = useSaveConnector(reload);
-  const cfg = parse(conn.ConfigJson), on = !!cfg.mark_read_here;
-  // the old line goes with the press: it was about the switch as it stood
-  const flip = () => saveConn({ ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify({ ...cfg, mark_read_here: !on, mark_read_problem: undefined }) });
+  const cfg = parse(conn.ConfigJson), opts = READ_CHOICES[readKind(conn.Type)];
+  const mode = opts.some(([v]) => v === cfg.mark_read) ? cfg.mark_read : "0", said = opts.find(([v]) => v === mode);
+  // the old line goes with the change: it was about the choice as it stood
+  const pick = (v) => saveConn({ ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify({ ...cfg, mark_read: v === "0" ? undefined : v, mark_read_problem: undefined }) });
   return (
-    <Box data-tq-mark-read-here="" sx={{ mt: 2, maxWidth: 620 }}>
-      <RoleRow on={on} onToggle={flip} label={`Mark mail read in ${READ_THERE[conn.Type]} when you read it here`}
-        desc={`On: a mail you open, read in the chat, mark read or finish here turns read in ${READ_THERE[conn.Type]} too. Off: your mailbox is left as it is.`} />
-      {on && cfg.mark_read_problem && (
+    <Box data-tq-mark-read="" sx={{ mt: 2, maxWidth: 620 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
+        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13 }}>In {READ_THERE[conn.Type]}:</Typography>
+        <Select size="small" value={mode} onChange={(e) => pick(e.target.value)} data-tq-mark-read-pick=""
+          sx={{ fontSize: 13, ".MuiSelect-select": { py: 0.6 }, bgcolor: "var(--tq-panel, #fff)" }}>
+          {opts.map(([v, label]) => <MenuItem key={v} value={v} sx={{ fontSize: 13 }}>{label}</MenuItem>)}
+        </Select>
+      </Box>
+      <Typography variant="body2" sx={{ color: DIM, mt: 0.75 }}>{said[2]}</Typography>
+      {mode !== "0" && cfg.mark_read_problem && (
         <Typography variant="body2" data-tq-mark-read-problem="" sx={{ mt: 0.75, color: "var(--tq-danger, #6b2733)" }}>✗ {cfg.mark_read_problem}</Typography>
       )}
     </Box>

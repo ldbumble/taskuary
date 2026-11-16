@@ -119,11 +119,11 @@ class SignedOut(unittest.TestCase):
     def test_the_poll_itself_keeps_the_story(self):
         """Wired where the poll writes the card's state: a lapse marks the moment, the next clean poll closes it."""
         with mock.patch('taskuary.channels.graph_token', side_effect=RuntimeError(LAPSE)):
-            channels._poll_one(self.s, self.c, False, 0, None, False)
+            channels._poll_one(self.s, self.c, False, 0, None)
         self.assertTrue(problems.away_since(self.s, self.c['ConnectorId']))
         self.s.save_source({**next(x for x in self.s.list_sources() if x['Address'] == ME), 'Active': 0}, 'o')
         with mock.patch('taskuary.channels.graph_token', return_value='tok'):
-            channels._poll_one(self.s, self.c, False, 0, None, False)
+            channels._poll_one(self.s, self.c, False, 0, None)
         self.assertEqual(problems.away_since(self.s, self.c['ConnectorId']), '')
         self.assertIn(f"back:mail:{self.c['ConnectorId']}", {x['key'] for x in problems.news(self.s)})
 

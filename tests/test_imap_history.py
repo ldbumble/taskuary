@@ -209,8 +209,7 @@ class TheSourceRowHealsItself(unittest.TestCase):
         s.save_connector({'Type': 'imap', 'Name': 'Work', 'Active': 1, 'Roles': 'trigger',
                           'ConfigJson': CARD['ConfigJson'], 'Secret': 'pw'}, 'test')
         self.assertEqual(setup._inbound(s), [])             # half-connected: looks done, delivers nothing
-        with mock.patch.object(channels, 'wants_read', return_value=False), \
-             mock.patch.object(imapmail, 'poll_imap', return_value=0):
+        with mock.patch.object(imapmail, 'poll_imap', return_value=0):
             channels.poll_channels(s)
         self.assertEqual(setup._inbound(s), ['Work'])
 

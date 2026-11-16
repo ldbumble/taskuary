@@ -1011,10 +1011,6 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     'proposals_enabled': '1',
                     # triage matches mail to the playbooks, and a recurring job is proposed as one (playbooks.menu / draft)
                     'playbooks_enabled': '1',
-                    # once the hub has READ something, say so at the source: mark the mail
-                    # seen, the chat read. Off by default - the funnel is a reader, and a
-                    # mailbox that empties its own bold rows surprises people. See mark_read()
-                    'mark_read_enabled': '0',
                     # Share -> Shared link: a read-only page for one result on this network (sharing.py). Off: no link exists
                     'share_links_lan': '0',
                     # ...served on a port of its own (sharing.share_app), never Taskuary's: blank = sharing.SHARE_PORT

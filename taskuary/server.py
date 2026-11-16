@@ -242,6 +242,10 @@ async def _lifespan(_app):
     _heal_owner_docs()
     _refresh_soul_connections()
     learn.migrate(store)           # one section per subject, once (2026-10-25) - before anything else writes the doc
+    try:                           # the app-wide mark-read setting as each card's own choice, once (2026-11-16) - before any poll reads it
+        from . import filing
+        if (n := filing.migrate(store)): logger.info(f'mark-read choice moved onto {n} card(s)')
+    except Exception as e: logger.warning(f'mark-read choice not moved onto the cards: {e}')
     try:                           # ...and the old four priorities as the new three, once (2026-10-25)
         if (moved := store.migrate_priorities()): logger.info(f'priorities renamed to regular / important / urgent: {moved}')
         from . import dashboards                                   # ...and a saved dashboard's cuts on them

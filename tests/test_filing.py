@@ -1,5 +1,5 @@
-"""Handled mail goes to Archive only when the owner chose it, only once it is handled here, and only for mail handled
-after the choice. The mark-read setting's third answer (filing.py, 2026-10-25)."""
+"""Handled mail goes to Archive only when the card's owner chose it, only once it is handled here, and only for mail handled
+after the choice. One of the card's mark-read choices (filing.py; per card since 2026-11-16)."""
 import json, unittest
 from unittest import mock
 
@@ -7,11 +7,11 @@ from taskuary import channels, filing
 from taskuary.store import MemoryStore
 
 
-def _store(kind='outlook', cfg=None):
+def _store(kind='outlook', cfg=None, mode=None):
     s = MemoryStore()
     cid = s.get_connector_by_type(kind)['ConnectorId']
-    s.save_connector({'ConnectorId': cid, 'Secret': 'sec', 'Active': 1,
-                      'ConfigJson': json.dumps(cfg or {'tenant_id': 't', 'client_id': 'c', 'address': 'alex@northwind.example'})}, 'o')
+    cfg = {**(cfg or {'tenant_id': 't', 'client_id': 'c', 'address': 'alex@northwind.example'}), **({'mark_read': mode} if mode else {})}
+    s.save_connector({'ConnectorId': cid, 'Secret': 'sec', 'Active': 1, 'ConfigJson': json.dumps(cfg)}, 'o')
     s.save_source({'Channel': 'email', 'Address': 'alex@northwind.example', 'ConnectorId': cid, 'Active': 1}, 'o')
     return s
 
@@ -22,6 +22,11 @@ def _mail(s, ext, closed=False):
                          'FromEmail': 'erin@vendor.example', 'SourceName': 'alex@northwind.example'})
     if closed: s.update_task(tid, {'Status': 'done'}, 'o')
     return mid, tid
+
+
+def _clock(s):
+    c = next(c for c in s.list_connectors() if c['Type'] in filing.MAIL_CARDS and c.get('Active'))
+    return f"mark_read_since:{c['ConnectorId']}"
 
 
 class FakeImap:
@@ -40,30 +45,27 @@ class FakeImap:
 
 class FilingTests(unittest.TestCase):
     def _arm(self, s):
-        s.set_setting('mark_read_enabled', 'archive', 'o')
-        s.set_setting(filing.SINCE, '2000-01-01 00:00:00', 'o')
+        s.set_setting(_clock(s), 'archive 2000-01-01 00:00:00', 'o')
 
-    def test_archive_still_marks_read_as_mark_read_did(self):
-        s = MemoryStore()
-        for v, want in (('0', False), ('1', True), ('archive', True)):
-            s.set_setting('mark_read_enabled', v, 'o')
-            self.assertEqual(channels.wants_read(s), want, v)
+    def test_archive_still_marks_read_as_taking_it_in_does(self):
+        for v, want in (('0', False), ('read', False), ('taken', True), ('archive', True), ('nonsense', False)):
+            self.assertEqual(filing.takes_read(_store(mode=v).get_connector_by_type('outlook')), want, v)
 
     def test_leave_and_mark_read_never_move_anything(self):
-        for v in ('0', '1'):
-            s = _store(); s.set_setting('mark_read_enabled', v, 'o'); _mail(s, 'graph:AAMk1', closed=True)
+        for v in ('0', 'read', 'taken'):
+            s = _store(mode=v); s.set_setting(_clock(s), f'{v} 2000-01-01 00:00:00', 'o'); _mail(s, 'graph:AAMk1', closed=True)
             with mock.patch.object(filing, 'graph_archive') as mv: filing.file_handled(s)
             mv.assert_not_called()
 
     def test_first_sweep_only_starts_the_clock(self):
         """Choosing archive must not empty a year of closed work: what was handled before it is left alone."""
-        s = _store(); s.set_setting('mark_read_enabled', 'archive', 'o'); _mail(s, 'graph:AAMk1', closed=True)
+        s = _store(mode='archive'); _mail(s, 'graph:AAMk1', closed=True)
         with mock.patch.object(filing, 'graph_archive') as mv: self.assertEqual(filing.file_handled(s), 0)
         mv.assert_not_called()
-        self.assertTrue(s.get_setting(filing.SINCE))
+        self.assertTrue(s.get_setting(_clock(s)).startswith('archive '))
 
     def test_a_closed_task_moves_its_mail_once_and_open_work_stays(self):
-        s = _store(); self._arm(s)
+        s = _store(mode='archive'); self._arm(s)
         done, _ = _mail(s, 'graph:AAMk1', closed=True)
         _mail(s, 'graph:AAMk2')
         with mock.patch.object(channels, 'graph_token', return_value='tok'), mock.patch.object(filing, 'graph_archive') as mv:
@@ -74,15 +76,15 @@ class FilingTests(unittest.TestCase):
 
     def test_an_fyi_put_down_with_no_task_stays_in_the_inbox(self):
         """Archive covers closed tasks only (the owner, 2026-10-25): reading an FYI here is not filing it in the mailbox."""
-        s = _store(); self._arm(s)
+        s = _store(mode='archive'); self._arm(s)
         mid = s.add_message({'ExternalId': 'graph:AAMk3', 'Channel': 'email', 'Subject': 'fyi: the office is closed Friday',
                              'SourceName': 'alex@northwind.example'})
         s._exec("INSERT INTO funnel_state (Key, Status, By, At) VALUES (?, 'done', 'owner', '2026-10-25 09:00:00')", (f'msg:{mid}',))
         done, _ = _mail(s, 'graph:AAMk4', closed=True)
-        self.assertEqual([r['MessageId'] for r in filing.handled(s, '2000-01-01 00:00:00')], [done])
+        self.assertEqual([r['MessageId'] for r in filing.handled(s, '2000-01-01 00:00:00', ['alex@northwind.example'])], [done])
 
     def test_a_refused_move_is_written_down_and_not_retried_every_poll(self):
-        s = _store(); self._arm(s); mid, _ = _mail(s, 'graph:AAMk1', closed=True)
+        s = _store(mode='archive'); self._arm(s); mid, _ = _mail(s, 'graph:AAMk1', closed=True)
         with mock.patch.object(channels, 'graph_token', return_value='tok'), \
              mock.patch.object(filing, 'graph_archive', side_effect=RuntimeError('403 Mail.ReadWrite')) as mv:
             filing.file_handled(s); filing.file_handled(s)
@@ -90,12 +92,12 @@ class FilingTests(unittest.TestCase):
         self.assertIn('403', s._one('SELECT Result FROM mail_filed WHERE MessageId=?', (mid,))['Result'])
 
     def test_a_poll_never_fails_on_filing(self):
-        s = _store(); self._arm(s)
+        s = _store(mode='archive'); self._arm(s)
         with mock.patch.object(filing, 'file_handled', side_effect=RuntimeError('boom')):
             self.assertEqual(channels._file_after(s, 3), 3)
 
     def test_imap_moves_to_the_special_use_archive(self):
-        s = _store('imap', {'address': 'alex@northwind.example', 'imap_host': 'imap.northwind.example'}); self._arm(s)
+        s = _store('imap', {'address': 'alex@northwind.example', 'imap_host': 'imap.northwind.example'}, 'archive'); self._arm(s)
         _mail(s, 'imap:abc:v7:41', closed=True)
         fake = FakeImap([('\\HasNoChildren', 'INBOX'), ('\\Archive', 'Old mail')])
         with mock.patch('taskuary.imapmail.imaplib.IMAP4_SSL', return_value=fake): filing.file_handled(s)
@@ -103,14 +105,14 @@ class FilingTests(unittest.TestCase):
         self.assertFalse(fake.readonly)
 
     def test_gmail_archive_is_all_mail(self):
-        s = _store('gmail', {'address': 'alex@northwind.example'}); self._arm(s)
+        s = _store('gmail', {'address': 'alex@northwind.example'}, 'archive'); self._arm(s)
         _mail(s, 'imap:abc:v7:5', closed=True)
         fake = FakeImap([('\\HasNoChildren', 'INBOX'), ('\\All \\HasNoChildren', '[Gmail]/All Mail')])
         with mock.patch('taskuary.imapmail.imaplib.IMAP4_SSL', return_value=fake): filing.file_handled(s)
         self.assertEqual(fake.moved, [('5', '"[Gmail]/All Mail"')])
 
     def test_no_archive_folder_leaves_the_mail_and_a_renumbered_box_is_not_guessed(self):
-        s = _store('imap', {'address': 'alex@northwind.example', 'imap_host': 'imap.northwind.example'}); self._arm(s)
+        s = _store('imap', {'address': 'alex@northwind.example', 'imap_host': 'imap.northwind.example'}, 'archive'); self._arm(s)
         a, _ = _mail(s, 'imap:abc:v7:41', closed=True)
         fake = FakeImap([('\\HasNoChildren', 'INBOX')])
         with mock.patch('taskuary.imapmail.imaplib.IMAP4_SSL', return_value=fake): filing.file_handled(s)
@@ -123,9 +125,57 @@ class FilingTests(unittest.TestCase):
         self.assertIn('renumbered', s._one('SELECT Result FROM mail_filed WHERE MessageId=?', (b,))['Result'])
 
     def test_turning_it_off_restarts_the_clock(self):
-        s = _store(); self._arm(s)
-        s.set_setting('mark_read_enabled', '1', 'o'); filing.file_handled(s)
-        self.assertFalse(s.get_setting(filing.SINCE))
+        s = _store(mode='archive'); self._arm(s)
+        c = s.get_connector_by_type('outlook'); s.merge_connector_config(c['ConnectorId'], {'mark_read': 'taken'})
+        filing.file_handled(s)
+        self.assertFalse(s.get_setting(_clock(s)))
+
+
+class OneChoicePerCard(unittest.TestCase):
+    """The app-wide "Handled mail, at the source" became each card's own choice (the owner, 2026-11-16), moved once."""
+    def _mode(self, s, kind): return filing.read_mode(s.get_connector_by_type(kind))
+    def _old(self, value, since=None):
+        s = MemoryStore()
+        s.set_setting(filing.OLD_KEY, value, 'o')
+        if since: s.set_setting(filing.OLD_SINCE, since, 'o')
+        return s
+
+    def test_a_new_install_leaves_every_mailbox_as_it_is(self):
+        s = MemoryStore()
+        self.assertIsNone(s.get_setting(filing.OLD_KEY))
+        self.assertEqual(filing.migrate(s), 0)
+        self.assertEqual({self._mode(s, k) for k in filing.MAIL_CARDS + filing.CHAT_CARDS}, {'0'})
+
+    def test_mark_read_moves_onto_every_card_it_reached_once_and_the_setting_goes(self):
+        s = self._old('1')
+        filing.migrate(s)
+        self.assertEqual({k: self._mode(s, k) for k in ('outlook', 'gmail', 'imap', 'teams', 'slack', 'whatsapp')},
+                         {k: 'taken' for k in ('outlook', 'gmail', 'imap', 'teams', 'slack', 'whatsapp')})
+        self.assertIsNone(s.get_setting(filing.OLD_KEY))
+        s.merge_connector_config(s.get_connector_by_type('slack')['ConnectorId'], {'mark_read': None})
+        self.assertEqual(filing.migrate(s), 0)                                     # once: a later change is the owner's
+        self.assertEqual(self._mode(s, 'slack'), '0')
+
+    def test_archive_keeps_its_clock_and_a_chat_card_keeps_marking_read(self):
+        s = self._old('archive', '2026-10-25 09:00:00')
+        filing.migrate(s)
+        c = s.get_connector_by_type('outlook')
+        self.assertEqual(filing.read_mode(c), 'archive')
+        self.assertEqual(s.get_setting(f"mark_read_since:{c['ConnectorId']}"), 'archive 2026-10-25 09:00:00')
+        self.assertEqual(self._mode(s, 'teams'), 'taken')
+        self.assertIsNone(s.get_setting(filing.OLD_SINCE))
+
+    def test_a_cards_own_read_here_switch_becomes_its_choice(self):
+        s = self._old('0')
+        cid = s.get_connector_by_type('gmail')['ConnectorId']
+        s.merge_connector_config(cid, {'mark_read_here': True})
+        s.set_setting(f'mark_read_since:{cid}', '2026-11-16 10:00:00', 'filing')
+        filing.migrate(s)
+        c = s.get_connector(cid)
+        self.assertEqual(filing.read_mode(c), 'read')
+        self.assertNotIn('mark_read_here', json.loads(c['ConfigJson']))
+        self.assertEqual(s.get_setting(f'mark_read_since:{cid}'), 'read 2026-11-16 10:00:00')
+        self.assertEqual(self._mode(s, 'outlook'), '0')
 
 
 if __name__ == '__main__': unittest.main()

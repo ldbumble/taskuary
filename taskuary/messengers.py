@@ -707,8 +707,8 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         took.append(m.get('id'))
     # blue ticks on what the funnel took, when the owner asked for it - best effort, and
     # never at the cost of the poll: an unpaired or restarted bridge just does not mark
-    from .channels import wants_read
-    if took and wants_read(store):
+    from . import filing
+    if took and filing.takes_read(c):
         try: _wa(c, '/read', {'ids': [i for i in took if i]})
         except Exception as e: logger.warning(f'marking whatsapp read failed: {e}')
     # only a sequence that moved: an idle check-in rewrote the same number ~2/s, and every write moved the rail (2026-10-12)

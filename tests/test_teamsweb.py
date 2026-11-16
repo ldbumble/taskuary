@@ -90,7 +90,7 @@ def test_the_poller_takes_the_browser_road_and_puts_the_failure_on_the_card():
     s = MemoryStore(); cid = _card(s)
     with mock.patch.object(tw, 'Page', lambda _cid: FakePage(url='https://login.live.com/')), \
          mock.patch.object(channels, 'graph_creds', side_effect=AssertionError('Graph must not be asked')):
-        channels._poll_one(s, s.get_connector(cid), False, 0, None, False)
+        channels._poll_one(s, s.get_connector(cid), False, 0, None)
     assert s.get_connector(cid)['LastError'] == tw.SIGNED_OUT
 
 

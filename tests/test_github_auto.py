@@ -117,7 +117,7 @@ class ADeadRepoDoesNotBlindTheOthersTests(unittest.TestCase):
 
         with mock.patch.object(channels, 'ingest_github_issues', side_effect=issues), \
              mock.patch.object(channels, 'gh_modes', return_value=('work',)):
-            channels._poll_one(s, s.get_connector(c['ConnectorId'], with_secret=True), False, 0, None, False)
+            channels._poll_one(s, s.get_connector(c['ConnectorId'], with_secret=True), False, 0, None)
         self.assertEqual(polled, ['ldbumble/GoneForever', 'ldbumble/taskuary'],
                          'the live repo must still be polled after the dead one')
         said = str((s.get_connector(c['ConnectorId']) or {}).get('LastError') or '')

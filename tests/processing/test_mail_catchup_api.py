@@ -29,7 +29,6 @@ def test_sync_api_recovers_a_late_mail_page_and_preserves_owner_state(tmp_path, 
     origin = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(hours=2)
     watermark = (origin - timedelta(hours=1)).astimezone().strftime('%Y-%m-%d %H:%M:%S')
     db._exec('UPDATE source SET LastPolledAt=? WHERE SourceId=?', (watermark, sid))
-    db.set_setting('mark_read_enabled', '0', 'fixture')
     old_mid = db.add_message({'ExternalId': 'graph:inbox-0', 'Channel': 'email',
                               'Status': 'filed', 'BodyText': 'Preserve the historical stored body',
                               'SentAt': origin.astimezone().strftime('%Y-%m-%d %H:%M:%S')})
@@ -129,7 +128,6 @@ def test_sync_api_reopens_and_retries_imap_hole_below_advanced_cursor(tmp_path, 
     sid = db.save_source({'Channel': 'email', 'Address': address, 'ConnectorId': cid, 'Active': 1}, 'fixture')
     watermark = '2026-08-01 08:00:00'
     db._exec('UPDATE source SET LastPolledAt=? WHERE SourceId=?', (watermark, sid))
-    db.set_setting('mark_read_enabled', '0', 'fixture')
     old_mid = db.add_message({'ExternalId': f'imap:{address}:100', 'Channel': 'email',
                               'Status': 'filed', 'BodyText': 'Historical IMAP item'})
     db.set_funnel_state(f'msg:{old_mid}', 'done', 'owner')

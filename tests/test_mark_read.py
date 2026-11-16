@@ -16,11 +16,11 @@ MAIL = {'id': 'AAMk1', 'subject': 'the export is broken', 'isRead': False,
 
 
 def _outlook(s, read=None):
+    """`read`: the card's own choice (filing.read_mode); None leaves it unset - the default."""
     cid = s.get_connector_by_type('outlook')['ConnectorId']
     s.save_connector({'ConnectorId': cid, 'Secret': 'sec', 'Active': 1,
-                      'ConfigJson': json.dumps({'tenant_id': 't', 'client_id': 'c'})}, 'o')
+                      'ConfigJson': json.dumps({'tenant_id': 't', 'client_id': 'c', **({'mark_read': read} if read else {})})}, 'o')
     s.save_source({'Channel': 'email', 'Address': 'me@myco.example', 'ConnectorId': cid, 'Active': 1}, 'o')
-    if read is not None: s.set_setting('mark_read_enabled', read, 'o')
     return s
 
 
@@ -39,19 +39,19 @@ class MailTests(unittest.TestCase):
         self.assertFalse(req.patch.called)
 
     def test_on_it_marks_what_it_took(self):
-        req = _poll(_outlook(MemoryStore(), '1'))
+        req = _poll(_outlook(MemoryStore(), 'taken'))
         req.patch.assert_called_once()
         self.assertIn('AAMk1', req.patch.call_args[0][0])
         self.assertEqual(req.patch.call_args[1]['json'], {'isRead': True})
 
     def test_mail_already_read_is_left_alone(self):
-        req = _poll(_outlook(MemoryStore(), '1'), inbox=({**MAIL, 'isRead': True},))
+        req = _poll(_outlook(MemoryStore(), 'taken'), inbox=({**MAIL, 'isRead': True},))
         self.assertFalse(req.patch.called)
 
     def test_a_refused_consent_costs_neither_this_mail_nor_the_next(self):
         """Mail.ReadWrite is a consent people forget to grant; a 403 per message must not
         take the ingest down with it, or one missing checkbox empties the whole funnel."""
-        s = _outlook(MemoryStore(), '1')
+        s = _outlook(MemoryStore(), 'taken')
         two = [MAIL, {**MAIL, 'id': 'AAMk2', 'subject': 'and the import too', 'conversationId': 'conv2'}]
         with mock.patch.object(channels, 'graph_token', return_value='tok'), \
              mock.patch.object(channels, '_mail_msgs', side_effect=lambda t, u, since, folder='inbox': list(two) if folder == 'inbox' else []), \
@@ -71,9 +71,8 @@ class SlackTests(unittest.TestCase):
     def _armed(self, read=None):
         s = MemoryStore()
         cid = s.get_connector_by_type('slack')['ConnectorId']
-        s.save_connector({'ConnectorId': cid, 'Secret': 'xoxb', 'Active': 1}, 'o')
+        s.save_connector({'ConnectorId': cid, 'Secret': 'xoxb', 'Active': 1, **({'ConfigJson': json.dumps({'mark_read': read})} if read else {})}, 'o')
         s.save_source({'Channel': 'slack', 'Address': 'C123', 'ConnectorId': cid, 'Active': 1}, 'o')
-        if read is not None: s.set_setting('mark_read_enabled', read, 'o')
         return s
 
     def _hist(self):
@@ -82,7 +81,7 @@ class SlackTests(unittest.TestCase):
                              {'ts': '1755680000.000000', 'text': 'joined', 'user': 'U3', 'subtype': 'channel_join'}]}
 
     def test_the_read_cursor_moves_to_the_newest_line_taken(self):
-        s = self._armed('1')
+        s = self._armed('taken')
         calls = []
         def fake(tok, method, post=False, **p):
             calls.append((method, p))
@@ -132,7 +131,7 @@ class ReadHereTests(unittest.TestCase):
     def _card(self, kind, cfg, on=True):
         s = self.s
         cid = s.get_connector_by_type(kind)['ConnectorId']
-        s.save_connector({'ConnectorId': cid, 'Secret': 'sec', 'Active': 1, 'ConfigJson': json.dumps({**cfg, **({'mark_read_here': True} if on else {})})}, 'o')
+        s.save_connector({'ConnectorId': cid, 'Secret': 'sec', 'Active': 1, 'ConfigJson': json.dumps({**cfg, **({'mark_read': 'read'} if on else {})})}, 'o')
         s.save_source({'Channel': 'email', 'Address': 'alex@northwind.example', 'ConnectorId': cid, 'Active': 1}, 'o')
         return cid
 
@@ -151,7 +150,7 @@ class ReadHereTests(unittest.TestCase):
         self.s.reconcile_processing_membership(fixed_now=stamp)
         self.s.activate_processing_reads(fixed_now=stamp, live_state=[])
         filing.mark_read_back(self.s)
-        self.s._exec("UPDATE setting SET Value='2000-01-01 00:00:00' WHERE Name LIKE 'mark_read_since:%'")
+        self.s._exec("UPDATE setting SET Value='read 2000-01-01 00:00:00' WHERE Name LIKE 'mark_read_since:%'")
 
     def _done(self, tid):
         self.s.reconcile_processing_membership()
@@ -170,7 +169,7 @@ class ReadHereTests(unittest.TestCase):
         _mid, tid = self._mail('graph:AAMk1'); self._armed(); self._done(tid)
         pt, _n = self._graph()
         pt.assert_not_called()
-        self.assertFalse(filing.marks_read_here(self.s.get_connector(cid)))
+        self.assertEqual(filing.read_mode(self.s.get_connector(cid)), '0')
 
     def test_outlook_patches_is_read_once_for_one_read(self):
         self._card('outlook', {'tenant_id': 't', 'client_id': 'c'})

@@ -474,7 +474,7 @@ class OneRoadTests(unittest.TestCase):
         from taskuary import channels
         s = MemoryStore(); c = conn(s, 'shortcut', {'me_id': 'm', 'mention': 'alex'})
         with wired({'/search/stories': {'data': []}, '/api/v3/members': []}):
-            self.assertEqual(channels._poll_one(s, c, False, 0, None, False), 0)
+            self.assertEqual(channels._poll_one(s, c, False, 0, None), 0)
 
     def test_a_revision_is_the_same_conversation(self):
         s = MemoryStore(); c = conn(s, 'shortcut', {'me_id': 'm', 'mention': 'alex'})

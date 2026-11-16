@@ -85,8 +85,7 @@ class ImapTests(unittest.TestCase):
 
     def test_every_fetch_peeks_so_polling_never_marks_mail_read_by_itself(self):
         """A plain RFC822 FETCH sets the Seen flag on a writable box - and the box is writable whenever a switch may flag or file."""
-        s, c = self._store()
-        s.set_setting('mark_read_enabled', '1', 'o')
+        s, c = self._store(cfg={'address': 'me@myco.example', 'mark_read': 'taken'})
         fake = FakeImap({101: _mime()})
         with mock.patch.object(imapmail.imaplib, 'IMAP4_SSL', return_value=fake):
             imapmail.poll_imap(s, c, [], llm=None)
@@ -94,8 +93,7 @@ class ImapTests(unittest.TestCase):
         self.assertTrue(all('BODY.PEEK[]' in f and 'RFC822' not in f for f in fake.fetched), fake.fetched)
 
     def test_mark_read_flags_seen_on_what_it_took(self):
-        s, c = self._store()
-        s.set_setting('mark_read_enabled', '1', 'o')
+        s, c = self._store(cfg={'address': 'me@myco.example', 'mark_read': 'taken'})
         fake = FakeImap({101: _mime(), 102: _mime(frm='Me <me@myco.example>')})
         with mock.patch.object(imapmail.imaplib, 'IMAP4_SSL', return_value=fake):
             imapmail.poll_imap(s, c, [], llm=None)
@@ -103,8 +101,7 @@ class ImapTests(unittest.TestCase):
         self.assertEqual(fake.flagged, [(101, '+FLAGS', r'(\Seen)')])   # my own mail is skipped whole
 
     def test_a_refused_flag_never_costs_the_ingest(self):
-        s, c = self._store()
-        s.set_setting('mark_read_enabled', '1', 'o')
+        s, c = self._store(cfg={'address': 'me@myco.example', 'mark_read': 'taken'})
         fake = FakeImap({101: _mime()})
         fake.uid = lambda cmd, *a: (_ for _ in ()).throw(OSError('read-only mailbox'))             if cmd == 'store' else FakeImap.uid(fake, cmd, *a)
         with mock.patch.object(imapmail.imaplib, 'IMAP4_SSL', return_value=fake):

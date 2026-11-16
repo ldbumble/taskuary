@@ -422,7 +422,7 @@ class FailureTests(unittest.TestCase):
         box = FakeBox(mails(range(101, 106)), bad={103})
         with mock.patch.object(imapmail.imaplib, 'IMAP4_SSL', return_value=box):
             self.assertEqual(channels._poll_one(s, s.get_connector_by_type('gmail'),
-                                                False, 0, None, False), 0)
+                                                False, 0, None), 0)
         card = s.get_connector(cid)
         self.assertIn('uid 103 FETCH returned NO', card['LastError'])
         self.assertIsNone(s.get_source(sid)['LastPolledAt'])

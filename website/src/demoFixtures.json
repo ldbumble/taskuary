@@ -453,13 +453,6 @@
     "Default": null
    },
    {
-    "Name": "mark_read_enabled",
-    "Value": "0",
-    "Description": null,
-    "UpdatedBy": null,
-    "Default": "0"
-   },
-   {
     "Name": "outside_prs",
     "Value": "review",
     "Description": null,

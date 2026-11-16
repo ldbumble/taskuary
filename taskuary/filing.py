@@ -1,42 +1,47 @@
-"""Handled mail, filed where it came from. The mark-read switch grew a third answer (the owner, 2026-10-25: "a mark-read
-setting already exists - extend that setting rather than adding something new"): leave the mailbox alone, mark read what
-the funnel took (what '1' always did), or that AND move the mail out of the Inbox into Archive once it is HANDLED here -
-its task closed (never an FYI or report put down without a task). Unhandled mail is never moved: the Inbox keeps exactly what is still owed.
+"""What Taskuary does to a message at its source - ONE choice on each card (the owner, 2026-11-16: the app-wide "Handled mail,
+at the source" and the mail card's "mark read when you read it here" became one per-card choice). A mail card (Outlook,
+Gmail, IMAP) can leave its mailbox as it is, mark a mail read when the owner reads it HERE, mark it read once Taskuary takes it
+in, or that AND move it out of the Inbox into Archive once it is HANDLED here - its task closed (never an FYI or a report put
+down without a task: unhandled mail is never moved). A chat card the app-wide setting reached (Teams, Slack, WhatsApp) keeps
+what it could do there: leave, or mark read what Taskuary takes in. `read_mode` reads the knob; nothing else does.
 
-Best-effort like every marker in channels.py: a refused consent or a server with no Archive is written down once per
-message and never costs the poll. Only mail handled AFTER the choice was made is filed - choosing it must not empty a
-mailbox of a year of closed work in one poll.
-
-Its sibling, per mail card: mail the owner READ here marked read there (mark_read_back, below)."""
+Every act is best-effort and never costs the poll. Only mail read or handled AFTER the choice was made is acted on - choosing
+it must not empty a mailbox of a year of work in one sweep (_since)."""
 import contextlib, json, logging, threading, time
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
-MODES = ('0', '1', 'archive')                     # leave · mark read · mark read + file handled mail in Archive
-SINCE = 'mail_filing_since'                       # when archive was first seen on: handled before it is left where it is
+MODE_KEY, OLD_KEY, OLD_SINCE = 'mark_read', 'mark_read_enabled', 'mail_filing_since'
+MAIL_CARDS, CHAT_CARDS = ('outlook', 'gmail', 'imap'), ('teams', 'slack', 'whatsapp')
+# leave · mark read when read here · mark read when taken in · that + file handled mail in Archive
+MAIL_MODES, CHAT_MODES = ('0', 'read', 'taken', 'archive'), ('0', 'taken')
 ARCHIVE_NAMES = ('Archive', 'Archives', 'INBOX.Archive', 'INBOX/Archive')
 
 
-def mode(store) -> str:
-    try: v = str(store.get_setting('mark_read_enabled') or '0')
-    except Exception: return '0'
-    return v if v in MODES else '0'
+def modes_of(kind) -> tuple: return MAIL_MODES if kind in MAIL_CARDS else CHAT_MODES if kind in CHAT_CARDS else ('0',)
+def read_mode(c) -> str:
+    """THE knob: what this card does to a message at its source. Anything unknown - or a card it does not apply to - leaves it."""
+    try: v = str(json.loads((c or {}).get('ConfigJson') or '{}').get(MODE_KEY) or '0')
+    except (ValueError, AttributeError): return '0'
+    return v if v in modes_of((c or {}).get('Type')) else '0'
+def takes_read(c) -> bool: return read_mode(c) in ('taken', 'archive')
 
 
 def _now(): return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
 
-def handled(store, since: str, limit: int = 200) -> list:
-    """Inbound mail the hub is done with since `since`, not filed yet: its task closed. Only mailbox mail - Graph or IMAP ids
-    - is anything this module can move."""
+def handled(store, since: str, addresses, limit: int = 200) -> list:
+    """Inbound mail of these mailboxes the hub is done with since `since`, not filed yet: its task closed. Only mailbox mail -
+    Graph or IMAP ids - is anything this module can move."""
     # Closed tasks only (the owner, 2026-10-25: "Archive ... covers closed tasks only"): an FYI or a report put down here has
     # no task, and moving it out of the Inbox filed every read FYI in the mailbox - the press only said "read" (2026-10-26).
     return store._rows(
-        """SELECT m.MessageId, m.ExternalId, m.SourceName FROM message m JOIN task t ON t.TaskId=m.TaskId
+        f"""SELECT m.MessageId, m.ExternalId, m.SourceName FROM message m JOIN task t ON t.TaskId=m.TaskId
            WHERE m.Channel='email' AND COALESCE(m.Direction,'in')='in' AND (m.ExternalId LIKE 'graph:%' OR m.ExternalId LIKE 'imap:%')
+             AND LOWER(m.SourceName) IN ({','.join('?' * len(addresses))})
              AND NOT EXISTS (SELECT 1 FROM mail_filed f WHERE f.MessageId=m.MessageId)
              AND t.Status IN ('done','dropped') AND t.ClosedAt>=?
-           ORDER BY m.MessageId LIMIT ?""", (since, limit))
+           ORDER BY m.MessageId LIMIT ?""", (*[a.lower() for a in addresses], since, limit)) if addresses else []
 
 
 def _filed(store, mid, result): store._exec('INSERT OR REPLACE INTO mail_filed (MessageId, FiledAt, Result) VALUES (?,?,?)', (mid, _now(), result[:200]))
@@ -106,35 +111,44 @@ def _file_imap(store, c, rows) -> int:
         return n
 
 
+def _since(store, c, mode: str):
+    """When this card's current choice began, or None when it begins now: a choice that just began starts its clock and acts on
+    nothing before it, and changing the choice starts it again."""
+    key, wants = f'mark_read_since:{c["ConnectorId"]}', mode in ('read', 'archive')
+    m, _, at = (store.get_setting(key) or '').partition(' ')
+    if m == mode and at: return at
+    if wants or m: store.set_setting(key, f'{mode} {_now()}' if wants else '', 'filing')
+    return None
+
+
+def _cards(store, mode: str):
+    """(card, since, its mailbox addresses) for every connected mail card whose choice is `mode` and whose clock has run."""
+    srcs = None
+    for c in store.list_connectors():
+        if c['Type'] not in MAIL_CARDS: continue
+        on = bool(c.get('Active')) and read_mode(c) == mode
+        since = _since(store, c, read_mode(c) if c.get('Active') else '0')
+        if not (on and since): continue
+        if srcs is None: srcs = [s for s in store.list_sources() if s['Channel'] == 'email' and s.get('Active') and s.get('Address')]
+        yield c, since, [s['Address'] for s in srcs if s.get('ConnectorId') == c['ConnectorId']]
+
+
 def file_handled(store) -> int:
-    """One sweep, after a poll: every handled mail since archive was chosen, moved to its mailbox's Archive."""
-    if mode(store) != 'archive':
-        if store.get_setting(SINCE): store.set_setting(SINCE, '', 'filing')   # off again: a later On starts from then
-        return 0
-    since = store.get_setting(SINCE)
-    if not since: store.set_setting(SINCE, _now(), 'filing'); return 0
-    rows = handled(store, since)
-    if not rows: return 0
-    from .channels import graph_creds, graph_token
-    src = {(s.get('Address') or '').lower(): s.get('ConnectorId') for s in store.list_sources() if s['Channel'] == 'email'}
-    by_card = {}
-    for r in rows: by_card.setdefault(src.get((r['SourceName'] or '').lower()), []).append(r)
+    """One sweep, after a poll: every mail handled since its card chose archive, moved to that mailbox's Archive."""
     n = 0
-    for cid, mine in by_card.items():
-        c = store.get_connector(cid, with_secret=True) if cid else None
-        if not c or not c.get('Active'):
-            for r in mine: _filed(store, r['MessageId'], 'skipped: the mailbox is no longer connected')
-            continue
+    for c, since, addrs in list(_cards(store, 'archive')):
+        rows = handled(store, since, addrs)
+        if not rows: continue
+        full = store.get_connector(c['ConnectorId'], with_secret=True)
         try:
             if c['Type'] == 'outlook':
-                gcfg, gsec, _ = graph_creds(store, c)
+                from .channels import graph_creds, graph_token
+                gcfg, gsec, _ = graph_creds(store, full)
                 tok = graph_token(gcfg, gsec)
-                for r in mine:
+                for r in rows:
                     try: graph_archive(tok, r['SourceName'], r['ExternalId'][6:]); _filed(store, r['MessageId'], 'archived'); n += 1
                     except Exception as e: logger.warning(f'filing {r["ExternalId"]} failed: {e}'); _filed(store, r['MessageId'], f'failed: {e}')
-            elif c['Type'] in ('imap', 'gmail'): n += _file_imap(store, c, mine)
-            else:
-                for r in mine: _filed(store, r['MessageId'], f"skipped: {c['Type']} has no Archive")
+            else: n += _file_imap(store, full, rows)
         except Exception as e:
             # the sign-in itself failed: nothing was moved and nothing is written down, so the next poll tries again
             logger.warning(f"filing handled mail on {c.get('Name') or c['Type']} failed: {e}")
@@ -142,22 +156,15 @@ def file_handled(store) -> int:
 
 
 # ── read here, read there ───────────────────────────────────────────────────────────────────────────────────────────────────
-# A setting on each mail card (the owner, 2026-11-16: "mark email read as you read them, it should be a setting on the
-# connector"). "Read here" is the owner's read receipt - processing_read_receipt, the one record every way of reading writes
-# (opening it, shown in the chat, Next, All read on an FYI batch, Done on its task: store.set_funnel_state) - so the write-back
-# hangs off that table once, never off a view. Only what was read after the switch went on counts; each mail is written back
-# once (mail_read_back); a refusal is kept on the card's switch as one line with its fix, and everything else is tried again.
-READ_KEY, READ_PROBLEM, MAIL_CARDS = 'mark_read_here', 'mark_read_problem', ('outlook', 'gmail', 'imap')
+# "Read here" is the owner's read receipt - processing_read_receipt, the one record every way of reading writes (opening it,
+# shown in the chat, Next, All read on an FYI batch, Done on its task: store.set_funnel_state) - so the write-back hangs off
+# that table once, never off a view. Each mail is written back once (mail_read_back); a refusal is kept on the card's choice
+# as one line with its fix, and everything else is tried again.
+READ_PROBLEM = 'mark_read_problem'
 OWNER_READS = ('explicit_done', 'surfaced', 'own_words')          # never legacy_preserved: a migration is not the owner reading
 SCOPE_LINE = {True: 'Your Microsoft sign-in can read mail but not mark it read - sign in with Microsoft again on this card to allow it.',
               False: 'Microsoft refused to mark mail read - the company app needs Mail.ReadWrite, which its admin grants.'}
 READ_EVERY = 15                                                    # seconds between sweeps on the quick clock
-
-
-def read_since_key(cid) -> str: return f'mark_read_since:{cid}'
-def marks_read_here(c) -> bool:
-    try: return c.get('Type') in MAIL_CARDS and bool(json.loads(c.get('ConfigJson') or '{}').get(READ_KEY))
-    except ValueError: return False
 
 
 def read_here(store, since: str, addresses, limit: int = 200) -> list:
@@ -214,17 +221,10 @@ def _read_imap(store, c, rows) -> int:
 
 
 def mark_read_back(store) -> int:
-    """One sweep: every mail the owner read here, on a card whose switch is on, marked read in that card's own mailbox."""
-    n, srcs = 0, None
-    for c in store.list_connectors():
-        if c['Type'] not in MAIL_CARDS: continue
-        key = read_since_key(c['ConnectorId']); since = store.get_setting(key)
-        if not (c.get('Active') and marks_read_here(c)):
-            if since: store.set_setting(key, '', 'filing')         # off again: a later On starts from then
-            continue
-        if not since: store.set_setting(key, _now(), 'filing'); continue
-        if srcs is None: srcs = [s for s in store.list_sources() if s['Channel'] == 'email' and s.get('Active') and s.get('Address')]
-        rows = read_here(store, since, [s['Address'] for s in srcs if s.get('ConnectorId') == c['ConnectorId']])
+    """One sweep: every mail the owner read here, on a card whose choice is "when I read it here", marked read in its mailbox."""
+    n = 0
+    for c, since, addrs in list(_cards(store, 'read')):
+        rows = read_here(store, since, addrs)
         if not rows: continue
         full = store.get_connector(c['ConnectorId'], with_secret=True)
         try: got = (_read_graph if c['Type'] == 'outlook' else _read_imap)(store, full, rows)
@@ -252,3 +252,27 @@ def read_back_soon(store):
         except Exception as e: logger.warning(f'marking read mail read failed: {e}')
         finally: _SWEEP.release()
     threading.Thread(target=run, name='mark-read-back', daemon=True).start()
+
+
+def migrate(store) -> int:
+    """Once (2026-11-16): the app-wide "Handled mail, at the source" becomes each card's own choice, then goes. Every card it
+    reached keeps what it did there; a mail card whose own "when you read it here" switch was on, with the app-wide one left
+    alone, keeps that. Archive's clock and the switch's carry over, so neither acts on anything older than it did."""
+    old = store.get_setting(OLD_KEY)
+    if old is None: return 0
+    was = {'1': 'taken', 'archive': 'archive'}.get(str(old), '0')
+    since, n = store.get_setting(OLD_SINCE) or '', 0
+    for c in store.list_connectors():
+        if c['Type'] not in MAIL_CARDS + CHAT_CARDS: continue
+        try: cfg = json.loads(c.get('ConfigJson') or '{}')
+        except ValueError: cfg = {}
+        mode = was if was in modes_of(c['Type']) else 'taken' if was != '0' else '0'
+        if mode == '0' and cfg.get('mark_read_here'): mode = 'read'
+        if mode == '0' and 'mark_read_here' not in cfg: continue
+        store.merge_connector_config(c['ConnectorId'], {MODE_KEY: None if mode == '0' else mode, 'mark_read_here': None})
+        key = f'mark_read_since:{c["ConnectorId"]}'
+        at = since if mode == 'archive' else (store.get_setting(key) or '') if mode == 'read' else ''
+        store.set_setting(key, f'{mode} {at}' if at else '', 'migration')
+        n += mode != '0'
+    store._exec('DELETE FROM setting WHERE Name IN (?,?)', (OLD_KEY, OLD_SINCE))
+    return n

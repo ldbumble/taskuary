@@ -2021,18 +2021,10 @@ def _gh_explicit(store, connector_id) -> bool:
 
 
 # ── "the hub has read this" ─────────────────────────────────────────────────────────────
-# One switch (Settings > Sync & startup) decides whether reading an item here also marks it
-# read THERE, so the mailbox and the chat list stop showing work the funnel already took.
-# Every marker is best-effort by design: a missing consent (Graph wants Mail.ReadWrite,
-# Slack conversations.mark) must never cost the ingest that already succeeded, so failures
-# are logged once and swallowed. Protocols with no read state for a bot - Telegram, Discord,
-# the trackers - simply have no marker, and the switch is a no-op for them.
-def wants_read(store) -> bool:
-    # 'archive' marks read too, then files handled mail away (filing.py, 2026-10-25)
-    try: return str(store.get_setting('mark_read_enabled') or '0') in ('1', 'archive')
-    except Exception: return False
-
-
+# Each card's own choice (filing.read_mode) decides whether what the funnel takes in is marked read THERE, so the mailbox
+# and the chat list stop showing work the funnel already took. Every marker is best-effort by design: a missing consent
+# (Graph wants Mail.ReadWrite, Slack conversations.mark) must never cost the ingest that already succeeded, so failures
+# are logged and swallowed. Protocols with no read state for a bot - Telegram, Discord, the trackers - have no marker.
 def mark_mail_read(tok: str, upn: str, graph_id: str):
     """The one Graph call that marks a mail read (Mail.ReadWrite); raises, so each caller decides what a refusal costs."""
     requests.patch(f'{GRAPH}/users/{upn}/messages/{graph_id}', timeout=20,
@@ -2184,12 +2176,14 @@ def _poll_jobs(store, only=None):
     return jobs
 
 
-def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
+def _poll_one(store, c, file_only, backfill_hours, llm) -> int:
     """One connector. HTTP lives here; store writes go through whatever store was handed
     (the writer thread when polls overlap). Messages of one conversation still land in
     arrival order because a connector is one worker."""
     n, errors = 0, []      # errors: folders a mailbox could not finish - the card shows them, the poll goes on
     full = store.get_connector(c['ConnectorId'], with_secret=True)
+    from . import filing
+    read_it = filing.takes_read(full)      # this card's own choice: mark read at the source what it takes in
     first = first_read_hours(store, full)  # how far back a source with no watermark yet goes
     try:
         if c['Type'] == 'teams' and teamsweb.personal(full):       # Teams free: the card's browser, never Graph (teamsweb.py)
@@ -2495,7 +2489,6 @@ def poll_channels(store, backfill_hours: float = 0, progress=None, only=None) ->
     # for the drain, which builds its own brain to judge it, so the one built here every second was never called (2026-11-06)
     try: llm = None if _deferring() else build_llm(store, job='triage')
     except Exception: llm = None
-    read_it = wants_read(store)   # asked once per run, not once per message
     # a mailbox card whose source row was never created polls nothing at all, and looks connected
     # the whole time it is doing so - so it heals itself here, before the source list is read
     for c in store.list_connectors():
@@ -2520,7 +2513,7 @@ def poll_channels(store, backfill_hours: float = 0, progress=None, only=None) ->
         c, file_only = jobs[0]
         _say(c['Type'], 0, store)
         with _first_read(store, c, backfill_hours), tally.on(lambda n: _say(c['Type'], n, store)):
-            n = _poll_one(store, c, file_only, backfill_hours, llm, read_it)
+            n = _poll_one(store, c, file_only, backfill_hours, llm)
         _say(c['Type'], tally.n, store)           # the whole count, never one the once-a-second say left behind
         return _file_after(store, n)
 
@@ -2534,7 +2527,7 @@ def poll_channels(store, backfill_hours: float = 0, progress=None, only=None) ->
             # inherit the poll thread's deferred(): our threading.local is off, and without
             # this wrap we would triage in parallel - the thing drain exists to prevent
             with ingest_mod.deferred() if ingest_mod._parent_deferring() else contextlib.nullcontext(),                  _first_read(writer, c, backfill_hours), tally.on(lambda n: _say(c['Type'], n, writer)):
-                return _poll_one(writer, c, file_only, backfill_hours, llm, read_it)
+                return _poll_one(writer, c, file_only, backfill_hours, llm)
         with ThreadPoolExecutor(max_workers=min(8, len(jobs)), thread_name_prefix='poll') as pool:
             futs = [pool.submit(run, c, fo) for c, fo in jobs]
             n = 0

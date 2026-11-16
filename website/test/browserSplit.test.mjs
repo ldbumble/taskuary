@@ -278,7 +278,28 @@ test("the first picture of a view waits a moment for the pane's shape, and the g
   const { readFileSync } = await import("node:fs");
   const pane = readFileSync(new URL("../src/BrowserPane.jsx", import.meta.url), "utf8");
   assert.match(pane, /late\.current = setTimeout\(\(\) => \{ if \(!img\.current\) show\(\); \}, FIRST_WAIT\)/, "a still page sends no second frame: the held one is drawn when the wait is over");
-  assert.match(pane, /else if \(m\.type === "tabs"\) \{ const u = activeTab\(m\); if \(u\) setUrl\(u\); \}/);
+  assert.match(pane, /else if \(m\.type === "tabs"\) \{ const u = activeTab\(m\); if \(u\) setUrl\(u\);/);
+});
+
+// THE OWNER, 2026-11-15: "you can open multiple sites on same window with tabs" - the view lists the browser's tabs, each by its page's title
+// (its host where the title is only an address), the one the agent works marked; a tab without agent-browser's id is not one to switch to
+test("the browser's tabs read as a strip: title or host, the active one marked, only real tab ids", async () => {
+  const { tabList } = await import("../src/browserSplit.js");
+  const m = { type: "tabs", tabs: [
+    { tabId: "t1", title: "Payworth - Sign in", url: "http://localhost:8931/login", active: false },
+    { tabId: "t2", title: "127.0.0.1:8932", url: "http://127.0.0.1:8932/", active: true },
+    { tabId: "t3", title: "", url: "https://news.example/today", active: false },
+    { tabId: "x;rm", title: "bad", url: "https://bad.example/", active: false }] };
+  assert.deepEqual(tabList(m), [
+    { id: "t1", name: "Payworth - Sign in", url: "http://localhost:8931/login", active: false },
+    { id: "t2", name: "127.0.0.1:8932", url: "http://127.0.0.1:8932/", active: true },
+    { id: "t3", name: "news.example", url: "https://news.example/today", active: false }]);
+  assert.deepEqual(tabList({ type: "tabs" }), []);
+  const { readFileSync } = await import("node:fs");
+  const pane = readFileSync(new URL("../src/BrowserPane.jsx", import.meta.url), "utf8");
+  assert.match(pane, /tabs\.length > 1 &&/, "one tab draws no strip");
+  assert.match(pane, /useState\(\(\) => TABS\.get\(sid\) \|\| \[\]\)/, "a view drawn again for a resize keeps its strip");
+  assert.match(pane, /send\?\.\(\{ type: "tab", tab: t\.id \}\)/, "a press on a tab switches the browser to it, through the view's own socket");
 });
 
 // THE BROWSER AUDIT, 2026-11-15: a step handed over on the page drew "Answer the agent's question..." in the box - it was no question

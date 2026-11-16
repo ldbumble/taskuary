@@ -277,6 +277,10 @@ async def _relay(ws, sid: str, url: str):
                 # focus or spoiled the typed password (2026-10-25)
                 while True:
                     m = await ws.receive_text()
+                    # ...a press on one of its tabs switches the browser to it (switch_tab) - agent-browser's stream has no such message
+                    if _TAB_ANY.search(m):
+                        if sid not in FILLING and (t := _TAB.fullmatch(m.strip())): await asyncio.to_thread(switch_tab, sid, t.group(1))
+                        continue
                     # ...an ack is not input: the page's ack of the frame it drew just before the fill still goes, or the stream stalls on it
                     if sid not in FILLING or _ACK.search(m): await up.send(m)
             tasks = [asyncio.create_task(down()), asyncio.create_task(back())]
@@ -288,6 +292,26 @@ async def _relay(ws, sid: str, url: str):
                     logger.debug(f'browser relay {sid} ended: {exc!r}')
     except (OSError, websockets.WebSocketException) as e:
         logger.debug(f'browser relay {sid} could not attach to {url}: {e}')
+
+
+# SEVERAL SITES ARE TABS OF THE TASK'S ONE BROWSER (the owner, 2026-11-15: "you can open multiple sites on same window with tabs"). The view
+# lists them from the stream's own `tabs` message and shows the active one; the owner's press on another switches the browser to it, which
+# is also the tab the agent's next command works - so the view lets him only while the page is his. Its id is agent-browser's `t<N>`.
+_TAB_ANY = re.compile(r'"type"\s*:\s*"tab"')
+_TAB = re.compile(r'\{\s*"type"\s*:\s*"tab"\s*,\s*"tab"\s*:\s*"(t\d{1,4})"\s*\}')
+def switch_tab(sid: str, tab: str) -> bool:
+    "Make tab `tab` (t<N>) the active one of this session's browser. Output to a FILE, never a pipe (navigate)."
+    exe = program()
+    if not exe or not re.fullmatch(r't\d{1,4}', str(tab)) or not state(sid, fresh=True)['open']: return False
+    log = Path(tempfile.gettempdir()) / f'{session_name(sid)}-tab.log'
+    try:
+        with open(log, 'wb') as f:
+            p = spawn.popen([exe, '--session', session_name(sid), 'tab', tab], env=_cli_env(sid), stdout=f, stderr=f, stdin=subprocess.DEVNULL)
+            try: ok = p.wait(timeout=NAV_WAIT) == 0
+            except subprocess.TimeoutExpired: p.kill(); ok = False
+    except OSError as e: logger.debug(f'the browser of {sid} did not switch to {tab}: {e}'); return False
+    _CACHE.pop(sid, None)
+    return ok
 
 
 def snapshot(store, sid: str, actor: str, tid: int = None) -> dict:
@@ -938,6 +962,11 @@ TURN_LINE = ('NEVER SOLVE, CLICK OR WORK AROUND A CAPTCHA, an "I\'m not a robot"
              'they do it and hand it back, and their "Done" is your next message - then look at the page and go on. Run no browser '
              'command until then. ')
 
+# ...each site in a tab of its own (the owner, 2026-11-15): the view beside the chat shows the tabs, and one tab walked from site to site
+# hid the others from him
+TABS_LINE = ('WORK EACH SITE IN ITS OWN TAB of this one browser: `agent-browser tab new <url>` opens the next site, `agent-browser tab` lists '
+             'them, `agent-browser tab <id>` switches - and switch before you act, the owner may have shown another one. ')
+
 def brief(held: bool = True, open_now: bool = True) -> str:
     """What an agent with a browser of its own needs to know. Longer than hint() on purpose -
     this only rides when the owner asked for a browser, so it can afford to say how to drive
@@ -948,7 +977,7 @@ def brief(held: bool = True, open_now: bool = True) -> str:
             'Drive the existing tab with `agent-browser` - it is already bound and restored, so '
             'NEVER use --session, --headed, profile listing, or launch Chrome separately. Navigate '
             'with `agent-browser open <url>`. ') if open_now else offer_head(held)
-    return (head + OWN_ONLY + SAY_WHY +
+    return (head + OWN_ONLY + SAY_WHY + TABS_LINE +
             # POWERSHELL CALLS A SUCCESS AN ERROR. agent-browser writes its progress to stderr
             # ("[agent-browser] launched browser"), and Windows PowerShell 5.1 wraps any native
             # command's stderr in a NativeCommandError and sets $? to false EVEN ON EXIT 0. A CLI

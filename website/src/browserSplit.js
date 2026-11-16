@@ -145,6 +145,16 @@ export const holdFirst = (drawn, frame, box, waited) => {
 };
 // the address of the tab the browser says is the active one (its `tabs` message), or ""
 export const activeTab = (m) => String((m?.tabs || []).find((t) => t?.active)?.url || "");
+// THE TABS OF THE TASK'S ONE BROWSER (the owner, 2026-11-15: "open multiple sites on same window with tabs"): {id, name, url, active} per tab
+// from the browser's `tabs` message - named by the page's title, or its host where the title is only its address. [] for a tabs message
+// with none, and the strip draws only for two or more: a one-site task looks as it always did
+export const TAB_ID = /^t\d{1,4}$/;
+export const tabList = (m) => (Array.isArray(m?.tabs) ? m.tabs : []).filter((t) => t && TAB_ID.test(String(t.tabId || ""))).map((t) => {
+  const url = String(t.url || ""), title = String(t.title || "").trim();
+  let host = ""; try { host = new URL(url).host; } catch { /* not an address */ }
+  const bare = !title || title === host || url.includes(title);
+  return { id: String(t.tabId), name: (bare ? host || title || url : title) || "new tab", url, active: !!t.active };
+});
 
 // Dragging the splitter fires a resize every frame; Chrome should not be re-laid-out for six pixels.
 export const viewportMoved = (was, now, tol = 32) =>

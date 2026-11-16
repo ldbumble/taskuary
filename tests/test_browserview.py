@@ -164,6 +164,24 @@ class RelayTests(unittest.TestCase):
         self.assertEqual((bv._frame(bv.LAST['r1']['frame']), bv.LAST['r1']['url']), (JPEG, 'https://example.test/login'))
         self.assertEqual(bv.state('r1', fresh=True)['url'], 'https://example.test/login')
 
+    def test_a_press_on_a_tab_switches_the_browser_to_it_and_is_never_sent_to_the_page(self):
+        """The owner, 2026-11-15: several sites in one task are tabs of its one browser, and the view lists them. A press on one reaches
+        agent-browser as `tab <id>` - an argv list, its own id form only - and never the stream, which has no such message; while a sign-in
+        is typed it does nothing. The agent is told, in the one place it is told how its browser works, to work each site in a tab."""
+        with mock.patch.object(bv, 'switch_tab', return_value=True) as sw, c.websocket_connect('/api/terminals/r1/browser/ws') as ws:
+            for _ in range(3): ws.receive_json()
+            ws.send_json({'type': 'tab', 'tab': 't2'}); ws.send_json({'type': 'tab', 'tab': 't2 & del x'}); ws.send_json({'type': 'ack', 'seq': 7})
+            end = time.time() + 5
+            while time.time() < end and not self.fake.got: time.sleep(.05)
+        self.assertEqual([x.args for x in sw.call_args_list], [('r1', 't2')])
+        self.assertEqual(self.fake.got, [{'type': 'ack', 'seq': 7}])
+        with mock.patch.object(bv, 'program', return_value='agent-browser'), mock.patch.object(bv.spawn, 'popen') as po:
+            po.return_value.wait.return_value = 0
+            self.assertTrue(bv.switch_tab('r1', 't3'))
+            self.assertEqual(po.call_args.args[0], ['agent-browser', '--session', 'tq-r1', 'tab', 't3'])
+            self.assertFalse(bv.switch_tab('r1', 't3; rm'))
+        self.assertIn('agent-browser tab new <url>', bv.brief()); self.assertIn('agent-browser tab new <url>', bv.guide())
+
     def test_a_page_the_agent_went_to_after_the_view_closed_is_the_page_named(self):
         """The view was shown for a sign-in and closed; the agent then went to ANOTHER site, with no relay to hear it. The address the view
         last heard outlived it: handed a human check there, the owner read "Your turn in the browser on <the first site>" over the second

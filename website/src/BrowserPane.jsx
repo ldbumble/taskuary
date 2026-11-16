@@ -8,14 +8,18 @@ import api from "./api.js";
 import { failLine, landed, press as pressReview } from "./press.js";
 import { label } from "./buttons.js";
 import { useAgents } from "./ui.jsx";
-import { BORDER, CATPPUCCIN, FAINT, PANEL, mono } from "./theme.jsx";
-import { activeTab, FIRST_WAIT, fitFrame, holdFirst, isPaste, isPress, keyMessage, mayShape, pasteMessages, mouseMessage, parseMessage, shortUrl, viewportFor,
+import { ACCENT, BORDER, CATPPUCCIN, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
+import { activeTab, tabList, FIRST_WAIT, fitFrame, holdFirst, isPaste, isPress, keyMessage, mayShape, pasteMessages, mouseMessage, parseMessage, shortUrl, viewportFor,
   viewportMoved, wheelMessage } from "./browserSplit.js";
 
 const wsUrl = (sid) => {
   const t = localStorage.getItem("taskuary_token");
   return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminals/${sid}/browser/ws${t ? `?token=${encodeURIComponent(t)}` : ""}`;
 };
+
+// ...kept per browser across the view's remounts: a resize that re-laid the task out drew the view without its strip until the relay's greeting
+// came back, ~3 s later (recorded, 2026-11-15)
+const TABS = new Map();
 
 export const hostOf = (u) => { try { return new URL(u).host; } catch { return ""; } };
 
@@ -34,6 +38,7 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
   const { devMode } = useAgents();
   const [live, setLive] = useState(false);
   const [url, setUrl] = useState(url0);
+  const [tabs, setTabs] = useState(() => TABS.get(sid) || []);     // the browser's tabs (browserSplit.tabList): a strip once there are two
   /* THE PAGE THE SERVER SAYS IT IS ON. A reopened task mounts this before the parent's first poll, so
      url0 is "" here - and the relay only sends a url message when the page MOVES. The address bar sat
      blank and "an empty tab, live" was drawn over a real, painting page (the 2026-10-02 pane pass). */
@@ -124,7 +129,7 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
         } else if (m.type === "url" && m.url) setUrl(m.url);
         // ...and the tabs a viewer is greeted with say where the page is NOW: opened after the saved sign-in had moved it on, the address bar
         // read the sign-in page's address over the code page for three seconds (recorded, the browser round 2026-11-14)
-        else if (m.type === "tabs") { const u = activeTab(m); if (u) setUrl(u); }
+        else if (m.type === "tabs") { const u = activeTab(m); if (u) setUrl(u); const l = tabList(m); TABS.set(sid, l); setTabs(l); }
         /* THE STREAM SAYS WHEN IT HAS NOTHING, and we used to drop that on the floor. An
            agent-browser daemon answers its screencast port the moment it launches, whether or not
            a page was ever opened in it - browserview.state() calls that "open", the relay
@@ -226,6 +231,15 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
   };
   const onPaste = (e) => { if (!drivingRef.current) return; e.preventDefault(); pasted.current++; typeIn(e.clipboardData?.getData("text/plain")); };
 
+  // ANOTHER TAB IS SHOWN BY SWITCHING THE BROWSER TO IT - the picture is the active tab's, and the agent's next command works that tab too, so
+  // it is his to switch only while the page is his (handed over, or taken over); watching, a press says how, as a click on the page does
+  const pick = (t) => {
+    if (t.active) return;
+    if (!drivingRef.current) return void setAsked(true);
+    const send = sendRef.current;
+    send?.({ type: "tab", tab: t.id });
+  };
+
   const snapshot = async () => {
     try {
       const r = await api.post(`/api/terminals/${sid}/browser/snapshot`, { task_id: taskId || null });
@@ -286,6 +300,27 @@ Take over to drive it yourself; close the session to close it."
         {devMode && <Box component="button" onClick={snapshot} title="keep this frame on the task as an attachment" sx={btn}>Snapshot</Box>}
         {onFold && <Box component="button" onClick={onFold} title={overlay ? "back to the terminal" : "fold the browser away - the browser chip above the terminal brings it back"} sx={btn}>{overlay ? "✕" : "›"}</Box>}
       </Box>
+      {/* THE TASK'S SITES AS TABS (the owner, 2026-11-15): each by its title or host, the one the agent works marked; one site draws none */}
+      {tabs.length > 1 && (
+        <Box data-tq-browser-tabs="" role="tablist" sx={{ display: "flex", gap: 0.5, px: 1, py: 0.4, bgcolor: PANEL, borderBottom: `1px solid ${BORDER}`,
+          flexShrink: 0, overflowX: "auto", scrollbarWidth: "none", "&::-webkit-scrollbar": { display: "none" } }}>
+          {tabs.map((t) => (
+            <Box key={t.id} component="button" role="tab" aria-selected={t.active} data-tq-browser-tab={t.id} onClick={() => pick(t)}
+              title={`${t.name}
+${t.url}
+
+${t.active ? "the tab the agent is working on - shown now" : driving ? "show this tab - the agent works on the tab shown" : "Take over to switch to this tab"}`}
+              sx={{ ...mono, fontSize: 10.5, lineHeight: 1.2, display: "flex", alignItems: "center", gap: 0.6, flex: "0 1 auto", minWidth: 0, maxWidth: 180,
+                px: 0.9, py: 0.4, borderRadius: 1, cursor: t.active ? "default" : "pointer", whiteSpace: "nowrap",
+                border: `1px solid ${t.active ? ACCENT : BORDER}`, bgcolor: t.active ? PANEL2 : "transparent",
+                color: t.active ? INK : FAINT, fontWeight: t.active ? 600 : 400,
+                "&:hover": t.active ? {} : { borderColor: ACCENT, color: DIM } }}>
+              {t.active && <Box component="span" aria-hidden sx={{ width: 6, height: 6, borderRadius: 99, flexShrink: 0, bgcolor: live ? CATPPUCCIN.green : "#5a554d" }} />}
+              <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{t.name}</Box>
+            </Box>
+          ))}
+        </Box>
+      )}
       {/* the page. tabIndex so keystrokes land here while driving; the canvas swallows the wheel
           the same way the terminal does, so scrolling the page never scrolls the app */}
       {/* a click on the page is not a claim on its shape: re-sending it reshaped the page under the owner's first click, and the box they
@@ -355,7 +390,7 @@ Take over to drive it yourself; close the session to close it."
           <Box sx={{ position: "absolute", left: 8, right: 8, bottom: 6, display: "flex", alignItems: "center", gap: 1,
             bgcolor: "#000000cc", border: `1px solid ${CATPPUCCIN.yellow}66`, px: 1, py: 0.5, borderRadius: 1 }}>
             <Typography sx={{ ...mono, fontSize: 10, color: "var(--tq-muted, #e1dcd5)", flex: 1 }}>
-              You are watching the agent's page — Take over to type on it.
+              {`You are watching the agent's page — Take over to type on it${tabs.length > 1 ? " or switch tabs" : ""}.`}
             </Typography>
             <Box component="button" onClick={takeOver}
               sx={{ ...btn, color: CATPPUCCIN.yellow, borderColor: CATPPUCCIN.yellow }}>Take over</Box>

@@ -200,7 +200,8 @@ def declare(store, tid: int, summary: str = '', agent: str = 'agent', no_reply: 
     # close is still the owner's (nothing_left)
     first = next((x.strip() for x in str(out.get('report') or '').splitlines() if x.strip()), '')[:300]       # no sentence: its report says what
     nothing_left(store, tid, agent, '; '.join(x for x in (line or first, 'no reply is owed, so none was drafted' if no_reply else '') if x), said=DONE_SAID)
-    return out
+    from .buttons import label
+    return {**out, 'says': NEVER_CLOSES.format(close=label('close'))}
 
 
 # NOTHING TO DO IS SAID, AND THE TASK STAYS OPEN (the owner, 2026-11-07): the reply writer decided nothing went back and closed a task
@@ -325,11 +326,16 @@ HANDLES_LINE = ("An id Taskuary gives a draft or a card (rv4) is your tools' han
                 'is and whom it is to.')
 # ...and WHERE THE OWNER CLOSES IT (no CHAT_LINE: nobody wrote in, or the owner keeps the task to finish): the agent said "I couldn't
 # close the task from here", a failure over finished work (the desktop stress test, 2026-11-03). It is told whose press the close is
+# ...and ONE ANSWER TO "DID IT CLOSE": none of an agent's steps closes the task (the owner, 2026-11-16, "straight up lying": a coding agent ran
+# its finish and wrote "I've closed the task", then "I had just marked the task done, so I'm reopening it" over a task open all along)
+NEVER_CLOSES = ('Taskuary did not close the task - closing it is the owner\'s, with {close}, which is lit for them now. Your sentence is filed on '
+                'the task. Never say you closed, marked done or reopened it.')
 def owner_closes_line() -> str:
     from .buttons import label
     # ...and never while a card of its own waits (the real Codex walk, 2026-11-16: "Ready for Mark done" over the email card still waiting for Send)
-    return (f'ENDING THE TASK: the owner closes it with {label("close")}; when the work is complete and no card you set up still waits for '
-            f'their press, say it is ready for {label("close")} - never that you could not close it. '
+    return (f'ENDING THE TASK: the owner closes it with {label("close")} - none of your steps closes it, so never say you closed, marked done or '
+            f'reopened it; when the work is complete and no card you set up still waits for their press, say it is ready for {label("close")} - '
+            f'never that you could not close it. '
             # ...and where what it drafts is (the owner, 2026-11-05: a draft said to be in a section that no longer exists): earlier turns of the
             # conversation may still name another screen - the page they were written for is gone
             f'WHERE YOUR DRAFTS ARE: this task is one chat - no other screen or tab, whatever an earlier turn said. {CARD_SAID} '

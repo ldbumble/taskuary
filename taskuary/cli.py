@@ -590,10 +590,8 @@ def main():
                                         'agent': os.environ.get('TASKUARY_AGENT') or 'agent', 'sid': os.environ.get('TASKUARY_SID') or ''}, stranger, timeout=120)
         if not got: return
         r, out = got
-        if out.get('closed'):
-            print('task closed. Report filed from this session.'
-                  + (' A reply to the sender is drafted and waiting on the owner.' if out.get('drafting')
-                     else ' No reply drafted, as you said.' if args.no_reply else ' No reply was needed.'))
+        # ...what it did, in the server's own words (selfclose.NEVER_CLOSES): the task is the owner's to close - never "task closed"
+        if out.get('says'): print(out['says'])
         elif out.get('held'):
             print('noted, not closed: the owner opened this session to work in, so they end it. Your summary is on '
                   'the task and they have been told; stay at the prompt in case they have more.')

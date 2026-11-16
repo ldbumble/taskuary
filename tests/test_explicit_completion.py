@@ -101,6 +101,28 @@ class ExplicitFinishTests(Base):
         self.assertNotIn(self.s.get_task(self.tid)['Status'], ('done', 'dropped'))
         self.assertTrue(self.s.list_comments(self.tid)[-1]['Body'].startswith('The agent says it is finished: cleared the stuck job. You can close it with'))
 
+    def test_the_finish_step_answers_that_it_closed_nothing_and_the_agent_is_told_never_to_say_so(self):
+        """The owner, 2026-11-16 ("straight up lying"): a coding agent ran its finish and wrote "I've closed the task", then "I had just marked the
+        task done, so I'm reopening it" - over a task open all along. Its finish step answered "not closed: the agent said it was finished", and
+        the standing ending sentence forbade only "I could not close it". The step answers what happened; the sentence says it never closes."""
+        import contextlib, io
+        from types import SimpleNamespace
+        from taskuary import cli
+        from taskuary.buttons import label
+        sess = live(self.tid); term.SESSIONS['run1'] = sess
+        out = selfclose.declare(self.s, self.tid, 'cleared the stuck job', 'agent')
+        self.assertTrue(out.get('ended')); self.assertFalse(out.get('closed'))
+        self.assertEqual(out['says'], selfclose.NEVER_CLOSES.format(close=label('close')))
+        self.assertIn('did not close the task', out['says']); self.assertNotIn(self.s.get_task(self.tid)['Status'], ('done', 'dropped'))
+        # ...and the agent's own shell prints those words: `taskuary --done`, run against the server's answer
+        printed = io.StringIO()
+        with mock.patch('sys.argv', ['taskuary', '--done', 'cleared the stuck job']), mock.patch.dict('os.environ', {'TASKUARY_TASK': str(self.tid)}), \
+                mock.patch.object(cli, '_post', return_value=(None, out)), contextlib.redirect_stdout(printed):
+            cli.main()
+        self.assertEqual(printed.getvalue().strip(), out['says']); self.assertNotIn('task closed', printed.getvalue())
+        line = selfclose.owner_closes_line()
+        self.assertIn('never say you closed, marked done or reopened it', line)
+
     def test_a_second_finish_for_the_same_run_does_nothing_twice(self):
         term.SESSIONS['run1'] = live(self.tid)
         a = selfclose.declare(self.s, self.tid, 'done', 'agent')

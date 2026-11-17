@@ -735,6 +735,36 @@ def keep_typed(store, tid, site) -> bool:
 def _asked(store, tid, rid) -> bool: return (pending(store, tid) or {}).get('request_id') == rid
 
 
+# A CODE THE SITE EMAILED (the real-CLI walk, 2026-11-16): signed up, the site sent "Your code is 383972" to his inbox and asked for it on
+# its page. Triage filed the mail, the task kept saying "press its button" over a code page, and nobody knew the code was in the inbox. While
+# the ask is watched, a mail from the page's own site that came in since holds the code: typed on the pinned page like an authenticator's
+# (the agent never sees it), and the mail put on the task. A mail with no single code is put there for him to read, said in one line.
+CODE_RE = re.compile(r'(?<![\w-])\d{4,8}(?![\w-])')
+def mailed_code(store, site: str, after: int):
+    """(message id, code) of the newest mail from `site` - its sender's registrable domain the page's pinned site - since message `after`,
+    holding exactly one code-shaped number; (message id, '') for one with none or several; None for no such mail."""
+    for r in store._rows('SELECT MessageId, FromEmail, Subject, BodyText FROM message WHERE MessageId>? ORDER BY MessageId DESC', (int(after or 0),)):
+        dom = str(r.get('FromEmail') or '').rsplit('@', 1)[-1]
+        if '@' not in str(r.get('FromEmail') or '') or registrable(dom) != site: continue
+        found = set(CODE_RE.findall(f"{r.get('Subject') or ''}\n{r.get('BodyText') or ''}"))
+        return r['MessageId'], (found.pop() if len(found) == 1 else '')
+    return None
+
+
+def _code_from_mail(store, tid, site, c, mid, code) -> bool:
+    store.attach_message(mid, tid)
+    if not code:
+        store.add_comment(tid, 'taskuary', 'agent', f'{site} emailed you - the mail is on this task. Type its code on the page to continue.')
+        return True
+    try: _type_code(c, site, lambda: code)
+    except SignInError as e:
+        store.add_comment(tid, 'taskuary', 'agent', f'{site} emailed a code, and it could not be typed ({e}) - it is in the mail on this task.')
+        return True
+    _audit(store, tid, site, 'vault', True, 'the code it emailed', code=True)
+    store.add_comment(tid, 'taskuary', 'agent', f'Typed the code {site} emailed you - the mail is on this task.')
+    return True
+
+
 def watch(store, tid: int, sid: str, site: str, rid: str, conn=None, every: float = WATCH_EVERY, until: float = WATCH_FOR):
     """While the ask is open: hear what the owner sends on the page, and when the page is past the sign-in, keep it and tell the agent.
     `conn`: the DevTools connection (tests stand one in)."""
@@ -748,6 +778,7 @@ def watch(store, tid: int, sid: str, site: str, rid: str, conn=None, every: floa
             c.js(CAPTURE)
         except SignInError as e: logger.debug(f'signin: the {site} page of task {tid} could not be listened to - {e}')
         start, end, steady = (c.fields('') or {}).get('href') or '', time.time() + until, 0
+        after, coded = (store._one('SELECT MAX(MessageId) AS m FROM message') or {}).get('m') or 0, False     # mail from here on (mailed_code)
         while time.time() < end and _asked(store, tid, rid):
             time.sleep(every)
             for ev in c.drain():
@@ -756,6 +787,7 @@ def watch(store, tid: int, sid: str, site: str, rid: str, conn=None, every: floa
             if sid in browserview.FILLING: continue
             try: f = c.fields('')
             except SignInError: continue                         # mid-navigation: the page cannot be read for a moment
+            if not coded and code_step(f) and (got := mailed_code(store, site, after)): coded = _code_from_mail(store, tid, site, c, *got)
             steady = steady + 1 if past(f, site, start) else 0
             if steady >= PAST_STEADY and _asked(store, tid, rid):
                 kept = keep_typed(store, tid, site)

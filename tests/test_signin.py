@@ -829,3 +829,36 @@ class SigningUp(unittest.TestCase):
         threading.Timer(.4, lambda: setattr(self.sess, 'busy', False)).start()
         self.run_signup(lambda *a: None)
         self.assertEqual(seen, [False])
+
+
+class CodeByMail(unittest.TestCase):
+    """THE REAL-CLI WALK, 2026-11-16: signed up, the site emailed "Your LienLens verification code is 383972" and asked for it on its page.
+    Triage filed the mail, the task kept saying "press its button" over a code page, and nobody knew the code was in the inbox. The watch
+    of the open ask finds a mail from the page's own site and types its one code on the pinned page; the mail goes on the task."""
+    def setUp(self): self.s = MemoryStore(); self.tid = Factory(self.s).task('Market data from ten vendors')
+
+    def mail(self, frm, body):
+        return self.s.add_message({'Channel': 'email', 'FromEmail': frm, 'FromName': 'LienLens', 'Subject': 'Your LienLens code', 'BodyText': body, 'Status': 'filed'})
+
+    def test_only_a_mail_from_the_pages_own_site_since_the_ask_and_its_one_code(self):
+        before = self.mail('no-reply@lienlens.example', 'Your code is 111111.')
+        after = (self.s._one('SELECT MAX(MessageId) AS m FROM message') or {})['m']
+        self.assertIsNone(signin.mailed_code(self.s, 'lienlens.example', after), 'a mail from before the ask is not this one')
+        self.mail('alerts@lienlens.example.evil.example', 'Your code is 222222.')
+        self.assertIsNone(signin.mailed_code(self.s, 'lienlens.example', after), 'a lookalike sender is another site')
+        mid = self.mail('no-reply@mail.lienlens.example', 'Your LienLens verification code is 383972. It expires in 30 minutes.')
+        self.assertEqual(signin.mailed_code(self.s, 'lienlens.example', after), (mid, '383972'))
+        two = self.mail('no-reply@lienlens.example', 'Code 123456 or 654321, whichever.')
+        self.assertEqual(signin.mailed_code(self.s, 'lienlens.example', after), (two, ''), 'two codes: his to read, never a guess')
+        self.assertTrue(before)
+
+    def test_the_code_is_typed_on_the_pinned_page_and_the_mail_goes_on_the_task(self):
+        mid = self.mail('no-reply@lienlens.example', 'Your LienLens verification code is 383972.')
+        typed = []
+        with mock.patch.object(signin, '_type_code', lambda c, site, code: typed.append((site, code()))):
+            self.assertTrue(signin._code_from_mail(self.s, self.tid, 'lienlens.example', object(), mid, '383972'))
+        self.assertEqual(typed, [('lienlens.example', '383972')])
+        self.assertEqual(self.s.get_message(mid)['TaskId'], self.tid)
+        said = [c['Body'] for c in self.s.list_comments(self.tid)]
+        self.assertIn('Typed the code lienlens.example emailed you - the mail is on this task.', said)
+        self.assertNotIn('383972', json.dumps([said, self.s._rows('SELECT * FROM audit')]))

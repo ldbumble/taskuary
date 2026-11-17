@@ -9,7 +9,8 @@ const src = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "
 
 test("only a task link from the address holds the page, and it lets go once its pull is over, before paint", () => {
   assert.match(src, /useState\(\(\) => \(request\?\.kind === "task" && request\.fromUrl \? request\.n : 0\)\)/);
-  assert.match(src, /useLayoutEffect\(\(\) => \{ if \(linkHold && \(doneReq\.current === linkHold \|\| request\?\.n !== linkHold\) && !turnFlight\.current\) setLinkHold\(0\); \}\);/);
+  // ...nor while the task it names is read whole before its pull (openTaskCard, 2026-11-17): let go then, the boot's item stood a beat
+  assert.match(src, /useLayoutEffect\(\(\) => \{ if \(linkHold && \(doneReq\.current === linkHold \|\| request\?\.n !== linkHold\) && !turnFlight\.current && !wholeOn\.current\) setLinkHold\(0\); \}\);/);
   // an error or setup is never held behind a spinner
   assert.match(src, /const holding = !!linkHold && !err && !firstRun;/);
 });

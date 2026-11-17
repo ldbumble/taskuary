@@ -44,7 +44,8 @@ test("a started hand-off with its task OPENS that task on the table, and the wal
   const out = afterExecute({ ...coding, params: { kind: "general" } }, { status: "done", outcome: { taskId: 9, chat: true } });
   assert.deepEqual([out.handoff, out.tid], [true, 9]);
   assert.equal(afterConfirm(coding, out, coding.key), "watch");
-  assert.match(read("AssistantView.jsx"), /if \(step === "watch"\) \{ clearTable\(\); loadPile\(\); openTaskCard\(\{ tid: out\.tid \}\); \}/);
+  // ...the item it was pressed on kept on the table until the task replaces it (newStartOnce.test.mjs, 2026-11-17)
+  assert.match(read("AssistantView.jsx"), /if \(step === "watch"\) \{ loadPile\(\); opened = openTaskCard\(\{ tid: out\.tid \}\); \}/);
 });
 
 test("a card that asks its own question: each answer is the button that does it, no separate confirm", async () => {

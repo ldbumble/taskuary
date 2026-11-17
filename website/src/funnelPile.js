@@ -355,18 +355,15 @@ export const pressOnto = (walk, rail, { putDown = null, how = "next", fromKey = 
     : key && how === "next" && key !== card?.key && !key.startsWith("fyis:") ? key : null;
   return { onIt, below };
 };
-// NEW STAYS UP UNTIL WHAT IT MADE IS ON THE TABLE (the owner, 2026-11-09, said twice: "it closed the new ui, then opened the old task up with
-// dots on bottom"): New's press opens a task made a second ago, which no rail row holds yet, so nothing draws at the press (pressOnto) - put
-// down then, the card took itself away and the task it had been opened over stood under the "…" until the read landed. Held while it is the
-// live page and the rail has no row to draw; a row there draws at once, and the card goes with the press as ever
-export const holdsNew = (msgs, browsing, rail, key) => !!key && !!browsing
-  && (msgs || []).some((m) => m.id === browsing && m.role === "browse" && m.area === "new")
-  && !(rail || []).some((i) => i.key === key && !i.settling);
-// ...AND WHAT NEW MADE IS ITS ROW AT THE PRESS (the owner, 2026-11-16: "on new task it says sent to agent and then the bottom of the screen shows
+// WHAT NEW MADE IS ITS ROW AT THE PRESS (the owner, 2026-11-16: "on new task it says sent to agent and then the bottom of the screen shows
 // ... it should show ... on the agent starting, not randomly on the bottom of the canvas"): the task New just made, as the row the table draws -
 // put up at the press like a rail row (AssistantView pull), its chat's starting turn under his words from there, and the "…" of the move that
 // fetches its real row waiting under the fold, never at the canvas foot under New's card
-export const madeRow = (tid, title) => ({ key: `task:${tid}`, kind: "task", tid: Number(tid), title: String(title || "").slice(0, 300) });
+// ...AS THE RAIL WOULD DRAW IT (the walk of a new task, 2026-11-17: it stood as a mail-icon row with no age until the rail's own read came): an
+// agent at work on it is an agent's row, its ring turning, and its age is when it was made (`at`, the server's local stamp) - else the press
+const localStamp = (d) => new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace("T", " ");
+export const madeRow = (tid, title, { working = false, at = null } = {}) => ({ key: `task:${tid}`, kind: working ? "agent" : "task", tid: Number(tid),
+  title: String(title || "").slice(0, 300), since: at || localStamp(new Date()), ...(working ? { lane: "working" } : {}) });
 // NEXT TURNS BLUE AS SOON AS THE MOVE SAVES (the owner, 2026-11-06): a light walk answer (no rail rides) carries the walk's whole word -
 // below included - and the rail on screen takes it until its own read lands, so a second press draws its row and Back stands at once
 export const withWalk = (pile, walk) => (pile && walk && "below" in walk ? { ...pile, walk } : pile);

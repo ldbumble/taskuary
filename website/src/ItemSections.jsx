@@ -57,6 +57,8 @@ export function ItemAsk({ ask, hand = null, onHand = null, came = "", hint = "" 
     if (!q || busy || pics.busy) return;
     setBusy(true); setErr("");
     try {
+      // ...his words stay in the box, spinning, until the task the start made is on the table (AssistantView startOnItem resolves then,
+      // 2026-11-17): handed back at once, the item snapped back to itself for the seconds the task took to read
       if (hand) { await hand.start({ verb: hand.verb, text: q, files: pics.paths, items: hand.items }); setText(""); pics.clear(); onHand?.(null); return; }
       const { data } = await api.post("/api/concierge/say", { text: q, key: ask.key,
         view: { area: "item", title, item: { kind: ask.kind, id: ask.key, title, section: "ask" } } });

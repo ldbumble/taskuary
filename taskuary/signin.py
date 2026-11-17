@@ -1050,6 +1050,7 @@ def type_in(sid: str, site: str, user: str, pw: str, code=None, extra=None) -> d
 # every password box. SENDING the form makes an account somewhere: what can't be undone is his press (browsergate - which held a wizard's
 # Next on the same walk), so the page is then his, as a sign-in's is - and what he sends on it is kept and the agent told (watch). The agent
 # never sees the password, and he never types one.
+ENDED_WAIT = 30                 # how long a sign-up's answer waits for the turn that asked to end
 NEW = 'new:'                    # signin_marker's claim for a sign-up: this, then the site the agent named
 def signing_up(claimed) -> bool: return str(claimed or '').startswith(NEW)
 
@@ -1099,6 +1100,11 @@ def new_account(store, tid, sid, site, rid, fill=None, watch=...) -> dict:
     general.hand(tid)
     def run():
         try:
+            # ...AND ONLY ONCE THE TURN THAT ASKED HAS ENDED (the real-CLI walk, 2026-11-16): told in the same instant, that turn ended a beat after
+            # the news was stamped, send_prompt read it as news a later turn had worked past (`since`), dropped it - and the agent never woke
+            from . import workerstate as ws
+            end = time.time() + ENDED_WAIT
+            while time.time() < end and getattr(ws._live(tid), 'busy', False): time.sleep(.1)
             if kept: _continue(store, tid, rid, site, 'taskuary', words=(f'Already signed up on {site}', f'The owner already has an account on '
                                f'{site}, kept with the saved sign-ins - do not sign up again. Open its sign-in page and end your turn with '
                                f'[[TASKUARY-SIGNIN: {site}]].'))

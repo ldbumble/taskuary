@@ -817,3 +817,15 @@ class SigningUp(unittest.TestCase):
         with mock.patch.object(signin, 'connect', return_value=page), mock.patch.object(browserview, 'filling', mock.MagicMock()):
             self.assertEqual(signin.type_new('sess1', 'rentscope.example', 'Np9!x'), 2)
         self.assertEqual((page.typed, page.sent), ([(0, 'Np9!x'), (1, 'Np9!x')], False))
+
+    def test_the_answer_waits_for_the_turn_that_asked_to_end(self):
+        """The real-CLI walk, 2026-11-16: "already signed up" was told in the instant the asking turn was still ending - send_prompt took it for
+        news a later turn had worked past and dropped it, and the agent never woke. It is told once that turn is over."""
+        signin.save(self.s, 'rentscope.example', USER, PW); seen = []
+        self.sess.busy = True
+        real = self.sess.send_prompt
+        def told(text, **k): seen.append(self.sess.busy); return real(text, **k)
+        self.sess.send_prompt = told
+        threading.Timer(.4, lambda: setattr(self.sess, 'busy', False)).start()
+        self.run_signup(lambda *a: None)
+        self.assertEqual(seen, [False])

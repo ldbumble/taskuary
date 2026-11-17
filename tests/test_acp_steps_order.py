@@ -25,3 +25,13 @@ def test_words_after_a_running_step_trace_after_it():
                   say('All 212 pass.')])
     assert got == [('progress', 'Running the suite.'), ('tool_call', 'execute'), ('progress', 'Quick update: half of it passed.'),
                    ('tool_result', 't1'), ('progress', 'All 212 pass.')]
+
+
+def test_the_writing_line_never_shows_the_summary_cut_from_its_tag():
+    # 2026-11-17: the line of what it is writing kept the last 600 characters, and once the summary block passed them its opening
+    # tag fell off the front - the line read '..."], "nothing_left": false, "answ' since nothing downstream could tell it was the summary
+    out, prose = [], ' '.join(['Checked the ledger against the invoice and the totals agree.'] * 34)
+    s = agents.ACPSteps(lambda kind, name, detail=None: out.append((kind, name, detail)), 'claude')
+    s(say(prose + '\n[[TASKUARY-SUMMARY]]{"did": "checked it", "on_you": ["press Send on the reply to Erin Blake"], "nothing_left": false, "answ'))
+    live = [d for k, n, d in out if k == 'live' and n == 'writing']
+    assert live and live[-1].endswith('totals agree.') and '[[' not in live[-1] and 'nothing_left' not in live[-1]

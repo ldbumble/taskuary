@@ -14,6 +14,7 @@ from . import clis as clis_mod
 from .store import task_ref
 from .clis import preset_args
 from .clipool import TimedOut
+from .selfclose import without_summary
 
 _CLI_CHILDREN = set()
 _CLI_CHILDREN_LOCK = threading.Lock()
@@ -1258,7 +1259,9 @@ class ACPSteps:
     LIVE_EVERY, LIVE_N = 1.0, 600
     def _live(self, name: str, parts: list):
         if (now := time.monotonic()) - self.live_at < self.LIVE_EVERY: return
-        if (t := ''.join(parts).strip()): self.live_at = now; self.trace('live', name, t[-self.LIVE_N:])
+        # ...the summary taken out of the whole text BEFORE the newest words are kept (2026-11-17): cut first, a block whose opening tag fell
+        # off the front read as words - '..."], "nothing_left": false, "answ' on the writing line - and nothing after could tell it apart
+        if (t := without_summary(''.join(parts)).strip()): self.live_at = now; self.trace('live', name, t[-self.LIVE_N:])
 
     # ── words ───────────────────────────────────────────────────────────────────────────────
     def _words(self):

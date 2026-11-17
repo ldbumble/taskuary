@@ -2,6 +2,20 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.20 - 2026-11-17
+
+- What the owner asked for in his own words is done, never held for a second yes: a sign-up he asked for is sent by Taskuary
+- The sign-up's send is put to the gate in words, and the verdict must say whether he asked: a bare 'press Enter' was held though he had
+- The gate reads his ask as he means it: "sign up on the vendors listed at X" asks it of each of them, not only of X
+- The gate cannot see which sites a link of his listed: where it cannot, the kind of act he asked for is his yes (money still waits)
+- Parse each CLI model catalog only when its file changes: every request re-parsed the same JSON, codex's twice
+- Drop the hub's pending-review count: it re-read every decorated pending review on mount and after each wake-up for a badge nothing drew
+- Browser and desktop gates judge a shell line in one ask, not one model call per act
+- Stop reading the chat every 2.5 s while it only waits on a sign-in or hand-over
+- A report he set up sends on its own: approval is for what answers input from outside, never his own reports
+- Send to agent on a report, a dashboard or an FYI opens a blank agent canvas with the item a pill on its box; his line names it
+- A routine's own email is sent at once, by the press his Send makes: approval is for what answers input from outside
+
 ## 0.4.0.19 - 2026-11-17
 
 - A card he said Don't send to stays where it stood, greyed with its words: no card is gone from the chat

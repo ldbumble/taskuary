@@ -274,8 +274,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
     setBusy(true); setErr(""); setErrAi(false); setOk(""); setSaid("");
     const about = String((agentBoxRef.current ? wordsRef.current : aboutRef.current?.value) || "").trim();
     // THE BUTTON SPINS UNTIL WHAT IT MADE IS UP (the owner, 2026-11-09: "it should open new task right away or if it needs a second the create
-    // new agent button should spin"): the card in the conversation is put down by the task landing on the table (AssistantView openTaskCard,
-    // read whole first - 2026-11-17),
+    // new agent button should spin"): the card in the conversation is put down by the task landing on the table (AssistantView pull, holdsNew),
     // so its press stays busy until then - free again, it could be pressed twice and file the task twice. A dialog's host closes it itself
     let opened = false;
     // ...drawn at the press as its row (funnelPile.madeRow): the task, his words and its agent starting, never New's card over a "…"

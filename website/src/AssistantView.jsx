@@ -35,7 +35,7 @@ import { loadGeneral } from "./lazyGeneral.js";
 // the static demo's guided journey: nothing outside the demo build ever draws it, so nothing there fetches it
 const DemoJourney = DEMO ? lazyView(() => import("./DemoJourney.jsx")) : () => null;
 import { BACK, advisedIn, aimed, navEnd, navOff, onPressed, onPressing, press as pressRow, walkMove, leaveRow, rowNow, rowDrawable, rowReady, rowTable, useHosted, useRowHold, useRowVerbs, useVerbs } from "./actionRow.js";
-import { forgetTasks, heldConversation, heldTask, notePile, pageRead, prefetchTask, readWhole, recRead, watchReads, watchRecs } from "./taskDetail.js";
+import { forgetTasks, heldTask, notePile, pageRead, prefetchTask, recRead, watchReads, watchRecs } from "./taskDetail.js";
 import { readLists } from "./connectorLists.js";
 import { hint as btnHint, howFar, label as btn, liveVerb, verbOfRow } from "./buttons.js";
 import { readTurn, toolTarget } from "./assistantStream.js";
@@ -101,7 +101,7 @@ import { summarize } from "./walkSummary.js";
 import { refreshToday, useCalendarToday } from "./calendarToday.js";
 import { onFirstRun, readFirstRun } from "./firstRunState.js";
 import FeedView from "./FeedView.jsx";
-import { MORE_PX, backAt, dueWord, levelOf, madeRow, placed, pressOnto, pulledRow, withWalk } from "./funnelPile.js";
+import { MORE_PX, backAt, dueWord, holdsNew, levelOf, placed, pressOnto, pulledRow, withWalk } from "./funnelPile.js";
 import { STAYS, dropHeld, ghostsOf, keepHeld, movedEntry } from "./movedFyi.js";
 import { isImportant, level as priorityOf } from "./priority.js";
 import { age, ago, band, bandUntil, plural } from "./timeWords.js";
@@ -2526,10 +2526,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   // back through the interpreter. The receipt is what the server said happened; the walk moves only on a
   // success that settles the item on the table.
   const confirmProposal = async (p) => { if (!busy) await runProposal(p); };
-  // ...resolves to { opened }: a start's task being opened (openTaskCard), once it is on the table - the box that pressed it waits for that
   const runProposal = async (p) => {
     setBusy(true);
-    let opened = null;
     try {
       let res;
       try { res = (await api.post(`/api/operations/${p.id}/execute`, { version: p.version })).data; }
@@ -2569,9 +2567,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
       // once the same way (PW-135): the delegated task stays in Unread as Working, nothing is settled; a
       // repository still to choose, a failed start or a cancel keep the item where it is. A sweep that
       // cleared the table settled it too, but does NOT walk on: the table is put down and Next is offered.
-      // ...the item stays on the table, as it is, until the task replaces it (openTaskCard, 2026-11-17): cleared first, the report a Send to
-      // agent was pressed on snapped back and an empty table stood under the "…" while the task was read
-      if (step === "watch") { loadPile(); opened = openTaskCard({ tid: out.tid }); }
+      if (step === "watch") { clearTable(); loadPile(); openTaskCard({ tid: out.tid }); }
       else if (step === "advance") walkOn();
       // PUT IT ON MY LIST keeps the new task on the table, at the report's place: no move (the walk has one owner, 2026-10-30, W49)
       else if (step === "keep") deferInChat(() => surfaceRef.current?.(`task:${out.tid}`, null, p.key), 120);
@@ -2580,7 +2576,6 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
       else if (step === "settle") done(null);
       else { if (step === "offer") clearTable(); loadPile(); }
     } finally { setBusy(false); }
-    return { opened };
   };
   // a card button on ONE entry (PW-151): the same proposal road the words take, minus the interpreter - the target is explicit
   // ...AND THE PRESS IS THE DECISION (`press`, the 2026-10-25 sweep): it runs here at once, whatever the verb - "Chase them" and "Put it
@@ -2662,9 +2657,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
       agent: o.agent || null, brain: o.brain || null, pick: o.pick || null, model: o.model || null, press: true });
     if (!data?.id) throw new Error(data?.say || "It did not start.");
     setAgentOn(null);
-    // ...and the box's Send waits for the task to be up (2026-11-17): it keeps his words and spins till then, never handing the item back first
-    const r = await runProposal({ ...data, key: data.key || item.key });
-    return r?.opened;
+    await runProposal({ ...data, key: data.key || item.key });
   };
   // THE CALENDAR'S ANSWERS (calwrite.py): Accept and Decline draft at once; Propose a new time and Find a time open the free times
   // first (SlotPicker). Each lands on the table as a draft with Send lit, as a reply does - nothing reaches the calendar before the
@@ -3073,32 +3066,20 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   // the Assistant's own answer linking it is followed before its turn has closed, and a Board press during a slow Next is too - each landed
   // the bare card, so the rail ringed nothing and only the address told the server. A walk handed to a phone waits the same way (no lock, 2026-10-23).
   const openLater = useRef(null);
-  // ...AND IT IS DRAWN WHOLE, ONE ROAD FOR EVERY PRESS THAT OPENS ONE (the walk of a new task, 2026-11-17: Enter on a report's Send to agent
-  // snapped the report back, then a title alone, an empty head, the task before it, a greyed arrow and a mail-icon row): New, a report's or
-  // an email's Send to agent, Run now, a link - the view on screen stays as it is until the task's head and chat are read (readWhole), then
-  // the task and its row (madeRow, from what was read, where the rail has none yet) are drawn in one move. The latest ask wins; `read`: done.
-  // Resolves once the pull has landed (or is queued behind a move)
-  const wholeAsk = useRef(0), wholeOn = useRef(false);
-  const openTaskCard = (req, read = false) => {
-    if (!read) {
-      const n = ++wholeAsk.current; wholeOn.current = true;
-      return readWhole(api, req.tid).then(() => { if (n !== wholeAsk.current) return null; wholeOn.current = false; return openTaskRef.current?.(req, true); });
-    }
+  const openTaskCard = (req) => {
     setExpanded(false); setFoldedKey(null);
     if (setupOn.current) setOverSetup(true);
     if (!(busy || resetting || turnFlight.current)) {
       openExtra.current = req.start || req.act ? { tid: req.tid, autostart: req.start || null, act: req.act || null } : null;
-      const h = heldTask(req.tid), title = req.row?.title || h?.task?.Title;
-      return pull(`task:${req.tid}`, null, title ? madeRow(req.tid, title, { working: !!heldConversation(req.tid)?.working, at: h?.task?.CreatedAt }) : null);
+      pull(`task:${req.tid}`, null, req.row); return;
     }
     openLater.current = req;
-    return null;
   };
   browseRef.current = browse; openTaskRef.current = openTaskCard; browseDownRef.current = browseDown;
   useEffect(() => {
     if (busy || resetting || !openLater.current) return;
     const req = openLater.current; openLater.current = null;
-    if (req.kind === "msg") openMsgRef.current?.(req.mid); else if (req.kind === "pull") pullRef.current?.(req.key, req.asUser, req.row); else openTaskRef.current?.(req, true);
+    if (req.kind === "msg") openMsgRef.current?.(req.mid); else if (req.kind === "pull") pullRef.current?.(req.key, req.asUser, req.row); else openTaskRef.current?.(req);
   }, [busy, resetting]);
   // ...and a line typed while it came up (askLater, at send) goes once it is up - after an open queued above, which takes the turn first,
   // and one at a time: each is its own turn, answered before the next goes
@@ -3120,7 +3101,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     setRailOpen(false); if (old) setOld(null); browseDown();
     return surface(null, null, null, false, "back");
   };
-  // `made`: the row of a task a press just opened (openTaskCard, funnelPile.madeRow), which no rail row may hold yet - drawn at once as a rail row is
+  // `made`: the row of a task New just made (funnelPile.madeRow), which no rail row holds yet - drawn at the press as a rail row is
   const pull = (key, asUser, made = null) => {
     const row = (pileRef.current?.items || []).find((i) => i.key === key && !i.settling) || (made?.key === key ? made : null);
     const ahead = () => {
@@ -3138,10 +3119,13 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     // ...and the row it leaves is off the table at the press (`opening`): New's Send put the new task's pull out and the FYI under New wore
     // "on the table" again until the task loaded (the owner, 2026-11-05)
     setOpening(key && key !== currentRef.current?.key ? key : null);
-    // ...New's own card stays up, its button spinning, until the task it made is read and drawn here at once (openTaskCard, 2026-11-17)
+    // ...but New's own press, opening the task it just made, keeps the card up - its button spinning - until that task is on the table
+    // (holdsNew): put down at the press, the task it was opened over came back under the "…" (the owner, 2026-11-09)
+    const held = !made && holdsNew(msgsRef.current, browsingRef.current, pileRef.current?.items, key);
     if (made && row !== currentRef.current && key !== currentRef.current?.key) ahead();
-    setRailOpen(false); if (old) setOld(null); browseDown();
-    return surface(key, asUser || null);
+    setRailOpen(false); if (old) setOld(null); if (!held) browseDown();
+    const going = surface(key, asUser || null);
+    if (held) Promise.resolve(going).finally(() => browseDownRef.current?.());
   };
   pullRef.current = pull;
 
@@ -3370,8 +3354,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   // Before paint (layout effect), so the frame that lands the pull is the first one drawn; every render, as the pull may end in any
   // state (busy, the messages, an error).
   const [linkHold, setLinkHold] = useState(() => (request?.kind === "task" && request.fromUrl ? request.n : 0));
-  // ...and while the task it names is read whole before its pull (openTaskCard)
-  useLayoutEffect(() => { if (linkHold && (doneReq.current === linkHold || request?.n !== linkHold) && !turnFlight.current && !wholeOn.current) setLinkHold(0); });
+  useLayoutEffect(() => { if (linkHold && (doneReq.current === linkHold || request?.n !== linkHold) && !turnFlight.current) setLinkHold(0); });
   const holding = !!linkHold && !err && !firstRun;
   // THE ROW DRAWS ONCE (actionRow.useRowHold): from the table's change, a press that leaves the item or one that acts on it, the row drawn
   // last stays up until the new one is whole - the item's verbs, the walk move over (and a cold link's pull), the Advisor's read made

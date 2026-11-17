@@ -43,19 +43,6 @@ export const prefetchTask = (api, tid) => {
   held.set(id, rec);
   return rec.p;
 };
-// A TASK A PRESS OPENS IS DRAWN WHOLE, the view on screen kept till then (the walk of a new task, 2026-11-17: Enter on a report's Send to agent
-// snapped the report back, then a title alone, an empty head, the task before it, a stub row): resolves once its head, its chat's state and
-// its list are all in hand - read once more if a write let the head go meanwhile (a job just started writes to its task at once) - and never
-// later than `wait`, so a slow or failed read still opens the task on its own loading frame rather than leave the press doing nothing
-export const WHOLE_WAIT = 6000;
-export const readWhole = (api, tid, wait = WHOLE_WAIT) => {
-  const id = Number(tid);
-  const go = (left) => { prefetchTask(api, id); const e = held.get(id);
-    return !e ? null : Promise.all([e.p, e.chatP]).then(() => (left && e.data && !heldTask(id) ? go(left - 1) : null)); };
-  let t = null;
-  const cap = new Promise((r) => { t = setTimeout(r, wait); });
-  return Promise.race([Promise.resolve(go(1)), cap]).then(() => { clearTimeout(t); return null; });
-};
 // ...A WRITE LETS THE TASK'S READ GO, NOT ITS CHAT'S FIRST PAINT (the bug hunt, 2026-11-12: a job just made and started writes to its task
 // over and over in its first seconds, and the view opened on its head over an empty chat, reading it all again): the chat is drawn from what
 // was read for PAINT ms more - the view reads it again on mount and the newer read wins (GeneralWorkspace newerList) - never its buttons

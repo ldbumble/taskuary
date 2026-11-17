@@ -33,7 +33,7 @@ test("every item put on the table goes through putOnTable, which pins its card t
   // ONE road: the turn's landing, the Board's open, a browse card, an unfold - none sets Current on its own any more
   assert.match(view, /const putOnTable = useCallback\(\(card, how = "pile", ahead = false\) => \{/);
   assert.match(view, /\n\s+putOnTable\(card, "pile", !!below && card\?\.key === below\.key\);\n[^\n]*\n\s+say\(data\.say\);/, "landed");
-  assert.match(view, /return pull\(`task:\$\{req\.tid\}`, null, title \? madeRow\(/, "the Board's open goes the rail's road - no bare card for a walk on the phone (2026-10-23)");
+  assert.match(view, /pull\(`task:\$\{req\.tid\}`, null, req\.row\); return;/, "the Board's open goes the rail's road - no bare card for a walk on the phone (2026-10-23)");
   assert.match(view, /putOnTable\(null, "view"\);\s+\/\/ its top in view/, "a browse card");
   assert.match(view, /if \(onTable\) \{ setFoldedKey\(null\); browseDown\(\); putOnTable\(null, "view"\); \}/, "the folded item opened again");
   assert.equal((view.match(/setCurrent\(/g) || []).length, 1, "Current is set in one place");

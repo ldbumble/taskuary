@@ -101,32 +101,44 @@ def test_steps_with_no_ai_run_without_any_model_and_every_step_is_recorded(db):
     assert json.loads(s.get_setting(f"report_last_run:{src['SourceId']}"))['steps'][0]['rows'] == 1
 
 
-def test_a_run_whose_draft_waits_on_its_own_task_is_done(db):
-    """The draft is answered on its own task; counting its review kept the run "not started yet" after every step ran (walk
-    2026-10-21). A write waiting for the yes on THIS task still keeps it open."""
-    s = MemoryStore()
-    src = source(s, [read_dupes(db), {'id': 's2', 'kind': 'draft', 'label': 'Tell Erin', 'to': 'erin@northwind.example', 'about': '{{s1}}'}])
-    tid = run_task(s, src)
-    with mock.patch('taskuary.outbox.compose', return_value={'reviewId': 41, 'taskId': tid + 100, 'ref': 'TQ-0999', 'draft': 'Hi'}):
-        flow.execute(s, src, tid, 'manual', llm=no_model)
-    assert s.get_task(tid)['Status'] == 'done'
-    tid2 = run_task(s, src)
-    with mock.patch('taskuary.outbox.compose', return_value={'reviewId': 42, 'taskId': tid2, 'ref': 'TQ', 'draft': 'Hi'}):
-        flow.execute(s, src, tid2, 'manual', llm=no_model)
-    assert s.get_task(tid2)['Status'] != 'done'                      # its own review waits here
+def mailer(sent):
+    "outbound.send_out as a fixture outbox: what would have left is kept in `sent`."
+    def send(store, channel, to, subject, body, cc=None, **_):
+        sent.append({'channel': channel, 'to': list(to) if isinstance(to, (list, tuple)) else [to], 'cc': list(cc or []), 'subject': subject, 'body': body})
+        return {'channel': channel, 'to': sent[-1]['to'], 'cc': sent[-1]['cc']}
+    return mock.patch('taskuary.outbound.send_out', side_effect=send)
 
 
-def test_a_run_the_routine_closed_says_so_and_where_its_draft_waits(db):
-    # the visual audit, 2026-11-13: a routine's run task opened on "✓ Mark done just now" - a press the owner never made - and nothing about
-    # what ran or that its draft waited on another task
-    from taskuary import taskstate
+def test_a_routines_email_goes_from_its_run_task_and_opens_nothing_else(db):
+    """The owner, 2026-11-17: "routines should send on their own too". A draft step went through outbox.compose, which opened a second task
+    holding a card that waited for his yes - so a routine's email never went. It is the run task's own letter (slots.draft), sent at once."""
+    from taskuary import outbound, taskstate
     s = MemoryStore()
-    src = source(s, [read_dupes(db), {'id': 's2', 'kind': 'draft', 'label': 'Tell Erin', 'to': 'erin@northwind.example', 'about': '{{s1}}'}])
-    tid = run_task(s, src)
-    with mock.patch('taskuary.outbox.compose', return_value={'reviewId': 41, 'taskId': tid + 100, 'ref': 'TQ-0999', 'draft': 'Hi'}):
-        flow.execute(s, src, tid, 'manual', llm=no_model)
-    why = taskstate.closed_why(s, s.get_task(tid))
-    assert why.startswith('Closed by the routine: Ran 2 steps') and 'waiting for your yes on TQ-0999' in why and 'agent' not in why
+    steps = [read_dupes(db), {'id': 's2', 'kind': 'ai', 'label': 'Sum up', 'prompt': 'Summarise {{s1}}', 'output': 'text'},
+             {'id': 's3', 'kind': 'draft', 'label': 'Email Gail', 'to': 'gail@northwind.example', 'about': 'This week: {{s2}}', 'subject': 'Duplicate bills'}]
+    src = source(s, steps); tid = run_task(s, src); sent = []
+    with mailer(sent), mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learn.learn_from'):
+        out = flow.execute(s, src, tid, 'manual', llm=answering('One duplicate: Payworth INV-1.', 'Hi Gail, one duplicate this week: Payworth INV-1. Alex'))
+    assert [m['to'] for m in sent] == [['gail@northwind.example']] and 'Payworth INV-1' in sent[0]['body'] and sent[0]['subject'] == 'Duplicate bills'
+    assert [t['TaskId'] for t in s.list_tasks()] == [tid]                              # no second task
+    assert s._rows("SELECT * FROM review WHERE Status='pending'") == []                # and no card waiting for a yes
+    assert out['steps'][2]['head'] == 'sent to gail@northwind.example' and not out['failed']
+    assert any(c['Body'].startswith('Step 3/3 Email Gail: sent to gail@northwind.example') for c in s.list_comments(tid))
+    assert taskstate.closed_why(s, s.get_task(tid)).startswith('Closed by the routine: Ran 3 steps')
+
+
+def test_a_routines_email_that_did_not_go_waits_on_the_run_task(db):
+    # ...one whose address an earlier step read is not fixed at setup, so it waits for his Send - on the run task, which stays open
+    from taskuary import outbound
+    s = MemoryStore()
+    steps = [{'id': 's1', 'kind': 'ai', 'label': 'Who', 'prompt': 'who?', 'output': 'fields', 'fields': ['email']},
+             {'id': 's2', 'kind': 'draft', 'label': 'Email them', 'to': '{{s1.fields.email}}', 'about': 'the bills', 'subject': 'Bills'}]
+    src = source(s, steps); tid = run_task(s, src); sent = []
+    with mailer(sent), mock.patch.object(outbound, 'send_block', return_value=''):
+        out = flow.execute(s, src, tid, 'manual', llm=answering({'email': 'erin@northwind.example'}, 'Hi Erin, the bills. Alex'))
+    [rv] = s._rows("SELECT * FROM review WHERE Status='pending'")
+    assert sent == [] and rv['TaskId'] == tid and [t['TaskId'] for t in s.list_tasks()] == [tid]
+    assert out['steps'][1]['head'] == 'draft for erin@northwind.example - waiting for your Send' and s.get_task(tid)['Status'] != 'done'
 
 
 def test_a_token_that_names_nothing_is_left_visible_and_said():
@@ -143,12 +155,12 @@ def test_a_text_steps_answer_is_its_text_and_a_draft_from_nothing_is_never_writt
     steps = [read_dupes(db), {'id': 's2', 'kind': 'ai', 'label': 'Write it', 'prompt': 'Summarise {{s1}}', 'output': 'text'},
              {'id': 's3', 'kind': 'draft', 'label': 'Tell Erin', 'to': 'erin@northwind.example', 'about': 'Status: {{s2.answer}}'}]
     src = source(s, steps)
-    with mock.patch('taskuary.outbox.compose', return_value={'reviewId': 6, 'taskId': 99, 'ref': 'TQ-0099', 'draft': 'Hi'}) as made:
+    with mock.patch('taskuary.outbox.draft_message', return_value='Hi Erin, one duplicate. Alex') as made, mock.patch('taskuary.slots.routine_sends', return_value={}):
         flow.execute(s, src, run_task(s, src), llm=answering('One duplicate: Payworth INV-1.'))
     assert made.call_args.args[3] == 'Status: One duplicate: Payworth INV-1.'
     # ...and a token that still names nothing stops the draft step, said where it happened - never an email written around the hole
     ctx = flow.context({'title': 'Weekly'}, 'manual', None)
-    with mock.patch('taskuary.outbox.compose') as made:
+    with mock.patch('taskuary.outbox.draft_message') as made:
         rec = flow.run_step(s, {'id': 's3', 'kind': 'draft', 'label': 'Tell Erin', 'to': 'erin@northwind.example', 'about': '{{s9.why}}'}, ctx, None, task_id=7)
     assert not made.called and rec['status'] == 'failed' and '{{s9.why}}' in rec['error']
 
@@ -306,17 +318,6 @@ def test_a_new_workflow_waits_for_its_next_slot_and_a_new_report_still_runs_at_o
     assert src['LastPolledAt'] and not reports.is_due(workflows.cfg_of(src), src['LastPolledAt'])
     assert s.get_source(rp)['LastPolledAt'] is None and reports.is_due({'type': 'taskuary', **every_midnight}, None)
     assert edited == wf
-
-
-def test_a_draft_step_says_which_task_its_draft_waits_on():
-    """The draft lands on a task of its own (outbox.compose); "draft for erin@..." on the run task named no place to approve it."""
-    s, ctx = MemoryStore(), flow.context({'title': 'Weekly'}, 'manual', None)
-    step = {'id': 's3', 'kind': 'draft', 'label': 'Mail to Erin', 'to': 'erin@northwind.example', 'about': 'the open invoices'}
-    with mock.patch('taskuary.outbox.compose', return_value={'reviewId': 6, 'taskId': 8, 'ref': 'TQ-0008', 'draft': 'Hi Erin'}):
-        rec = flow.run_step(s, step, ctx, None, task_id=7)
-    assert rec['head'] == 'draft for erin@northwind.example - waiting for your yes on TQ-0008' and rec['ref'] == 'TQ-0008'
-    with mock.patch('taskuary.outbox.compose', return_value={'reviewId': 6, 'taskId': 7, 'ref': 'TQ-0007', 'draft': 'Hi Erin'}):
-        assert flow.run_step(s, step, ctx, None, task_id=7)['head'] == 'draft for erin@northwind.example'   # on the run task itself
 
 
 # ── test this step ──────────────────────────────────────────────────────────────────────────────────────────────────────

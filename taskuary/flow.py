@@ -11,7 +11,7 @@ cfg['flow'] = [{id, kind, label, only_if?, ...the kind's own keys}], top to bott
   source  a report source card - read or write any catalog type          -> head, body, rows
   ai      one model call that judges, summarizes or drafts (text|yes_no|fields) -> answer / why / fields
   task    a task opened by code, from the templated text                -> TQ-n
-  draft   an email drafted for the owner's approval - it never sends     -> the Review it left
+  draft   an email the routine writes on its run task and sends (slots.draft) -> sent, or the card that waits for his Send
   agent   the escape hatch, always last: the run task handed to an agent with what the steps above found
 
 `only_if` is the branch without a model: {"step": "s2", "is": "yes"|"no"|"rows"|"empty"}. Later steps read earlier output with
@@ -32,7 +32,7 @@ from .store import task_ref
 from . import processing_order as po
 
 KINDS = ('source', 'ai', 'task', 'draft', 'agent')
-KIND_WORDS = {'source': 'Read/write a system', 'ai': 'AI judgment', 'task': 'Open a task', 'draft': 'Draft a message', 'agent': 'Hand to an agent'}
+KIND_WORDS = {'source': 'Read/write a system', 'ai': 'AI judgment', 'task': 'Open a task', 'draft': 'Send a message', 'agent': 'Hand to an agent'}
 USES_AI = ('ai', 'draft', 'agent')            # what "no AI used" is counted from: a draft is written by the model too
 STEP_KEYS = ('id', 'kind', 'label', 'only_if')
 ONLY_IF = ('yes', 'no', 'rows', 'empty')
@@ -406,8 +406,9 @@ def _task(store, step, ctx, llm, tid, dry, warns, title):
 
 
 def _draft(store, step, ctx, llm, tid, dry, warns, title):
-    from . import outbox
-    if _refs(step.get('to')) or _refs(step.get('cc')): warns.append('who it goes to comes from an earlier step - check the address before you send it')
+    from . import outbox, slots
+    # an address an earlier step read was not fixed at setup - a mail or a page could have chosen it - so that email waits for his Send
+    if read := bool(_refs(step.get('to')) or _refs(step.get('cc'))): warns.append('who it goes to comes from an earlier step - check the address before you send it')
     n = len(warns)
     to, about = render(str(step.get('to') or ''), ctx, warns).strip(), render(str(step.get('about') or ''), ctx, warns)
     subject, cc = render(str(step.get('subject') or ''), ctx, warns).strip(), render(step.get('cc') or [], ctx, warns)
@@ -415,13 +416,19 @@ def _draft(store, step, ctx, llm, tid, dry, warns, title):
     if holes := [w for w in warns[n:] if 'names nothing' in w]:
         raise RuntimeError(f"{holes[0].split(' names nothing')[0]} names nothing, so there is nothing to write this from - fix the step that should fill it")
     if dry: return {'status': 'dry', 'head': f'would draft for {to}' + (f": {subject[:80]}" if subject else ''), 'body': about}
-    out = outbox.compose(store, step.get('channel') or 'email', to, about, mode='draft', subject=subject or None, actor='workflow', llm=llm,
-                         cc=cc if isinstance(cc, list) else [cc])
-    # ...and WHERE it waits: the draft is on a task of its own (outbox.compose), and "draft for erin@..." on the run task named no
-    # place to approve it - two identical "Open invoices this week" tasks sat on the rail with nothing linking them (walk 2026-10-21)
-    where = f" - waiting for your yes on {out['ref']}" if out.get('ref') and out.get('taskId') != tid else ''
-    return {'head': f'draft for {to}{where}', 'review_id': out.get('reviewId'), 'task_id': out.get('taskId'), 'ref': out.get('ref'),
-            'body': out.get('draft') or ''}
+    # ONE ROAD FOR A ROUTINE'S EMAIL (2026-11-17): this went through outbox.compose, which opened a second task holding a card that waited
+    # for his yes, so a routine's email never went (the owner, 2026-11-17: "routines should send on their own too"). It is the run task's own
+    # letter now, laid through slots.draft like every agent's, so slots.routine_sends sends it - the same press his Send makes
+    ch, ccs = step.get('channel') or 'email', [a for x in (cc if isinstance(cc, list) else [cc]) for a in _addrs(x)]
+    tos = _addrs(to) if ch == 'email' else [to]
+    if not tos or not tos[0]: raise RuntimeError('say who it goes to')
+    text = outbox.draft_message(store, ch, tos, about, llm=llm, cc=tos[1:] + ccs)
+    subject = subject or (outbox.subject_for(store, about, llm) if ch == 'email' else '')
+    out = slots.draft(store, tid, text, to=tos[0], subject=subject, agent=slots.ROUTINE, channel=ch, cc=tos[1:] + ccs, sends=not read)
+    if not out.get('ok'): raise RuntimeError(out.get('why') or 'the email could not be laid on the run task')
+    if out.get('sent'): return {'head': f'sent to {to}', 'task_id': tid, 'body': text}
+    why = f" - it did not go ({out['send_error'][:160]})" if out.get('send_error') else ''
+    return {'head': f'draft for {to}{why} - waiting for your Send', 'review_id': out.get('review_id'), 'task_id': tid, 'body': text}
 
 
 def done_so_far(recs: list) -> list:

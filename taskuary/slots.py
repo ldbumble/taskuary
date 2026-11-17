@@ -146,13 +146,14 @@ def _chat_id(to) -> bool:
     return str(to or '').split(':')[0].strip().lower() in CHAT_CHANNELS
 
 def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str = '', agent: str = 'agent',
-          channel: str = 'email', name: str = '', cc=(), mailbox: str = '', guessed=()) -> dict:
+          channel: str = 'email', name: str = '', cc=(), mailbox: str = '', guessed=(), sends: bool = True) -> dict:
     """The agent that did the work writes one output itself - the slot named by id, else the open one to the same person,
     else a slot it adds (said on the task: the owner sees the list grow). Nothing is sent: the owner approves it. `cc`: who
     else is copied - kept on the envelope, so the card shows what the agent said it did (it said "Gail on cc" and dropped her).
     `mailbox`: the connected mailbox it leaves FROM - a + New task has no mail in to answer from, so "send it from my JOIN
     Gmail" fell to the first Outlook card, and the agent, with no way to say it, tried the Gmail card as a tool (TQ-1354).
-    `guessed`: the addresses on it the agent guessed (no address on record) - the card says so, and the owner's Send is the check."""
+    `guessed`: the addresses on it the agent guessed (no address on record) - the card says so, and the owner's Send is the check.
+    `sends`: False keeps a routine's email for his Send (flow._draft: an address a step read, not one fixed at setup)."""
     text = str(text or '').strip()
     # ...a recipient with no words is no email (the owner, 2026-11-10: "it created reply with nothing in it ... if you have nothing to reply just
     # ask what should i reply?"): nothing is filed, and the agent is told its two ways on
@@ -228,7 +229,7 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         from .signatures import agent_signed
         text = agent_signed(store, store.get_review(rid), text) or text
     store.update_review_draft(rid, text, None, by=f'agent:{agent}')
-    return {'ok': True, 'review_id': rid, 'slot': hit['id'], 'added': added, **routine_sends(store, tid, rid, agent, missing),
+    return {'ok': True, 'review_id': rid, 'slot': hit['id'], 'added': added, **(routine_sends(store, tid, rid, agent, missing) if sends else {}),
             **({'to_missing': to_missing(missing)} if missing else {})}
 
 

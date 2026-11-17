@@ -4,7 +4,7 @@ import { toShape } from "./sourceShape.js";
 import { plural } from "./timeWords.js";
 
 export const KINDS = ["source", "ai", "task", "draft", "agent"];
-export const KIND_WORDS = { source: "Read/write a system", ai: "AI judgment", task: "Open a task", draft: "Draft a message", agent: "Hand to an agent" };
+export const KIND_WORDS = { source: "Read/write a system", ai: "AI judgment", task: "Open a task", draft: "Send a message", agent: "Hand to an agent" };
 export const USES_AI = new Set(["ai", "draft", "agent"]);       // what "no AI used" is counted from (flow.tally)
 export const STEP_KEYS = ["id", "kind", "label", "only_if"];
 export const ONLY_IF = [["yes", "answered yes"], ["no", "answered no"], ["rows", "has rows"], ["empty", "came back empty"]];

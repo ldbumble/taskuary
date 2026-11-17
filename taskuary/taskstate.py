@@ -282,12 +282,12 @@ def closed_why(store, t: dict, comments=None) -> str | None:
     first line of its report. None for an open task, one the owner closed, or one its upstream item ended (`ended` says that)."""
     if not t or t.get('Status') != 'done': return None
     # ...A ROUTINE'S RUN CLOSED BY THE ROUTINE (flow.execute; the visual audit, 2026-11-13): it read "✓ Mark done just now", a press the owner
-    # never made, over nothing of what ran - its last line says that, and a draft step's line where its draft waits
+    # never made, over nothing of what ran - its last line says that. A draft step's email waits on this same task now (flow._draft,
+    # 2026-11-17), so a run closed by the routine has no draft waiting elsewhere to name
     if str(t.get('UpdatedBy') or '') == 'workflow':
         said = [str(c.get('Body') or '') for c in (comments if comments is not None else store.list_comments(t['TaskId'], internal=True) or [])
                 if c.get('Actor') == 'workflow']
-        waits = [b.split(': ', 1)[-1].rsplit(' (', 1)[0] for b in said if 'waiting for your yes on' in b]
-        if said: return 'Closed by the routine: ' + ' '.join([said[-1], *(f'{w[:1].upper()}{w[1:]}.' for w in waits)])[:400]
+        if said: return f'Closed by the routine: {said[-1]}'[:400]
     ev = finish_evidence(store, t['TaskId'])
     if not ev or str(ev.get('who') or '').startswith('Its '): return None
     from .wrapup import is_report, report_body

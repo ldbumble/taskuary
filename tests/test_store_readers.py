@@ -323,3 +323,19 @@ def test_the_funnel_states_are_read_again_only_after_a_write(s, tmp_path):
     assert big.funnel_states()['msg:1']['Status'] == 'done'
     peer = sqlite3.connect(str(tmp_path / 'readers.db')); peer.execute("DELETE FROM funnel_state WHERE Key='msg:2'"); peer.commit(); peer.close()
     assert 'msg:2' not in big.funnel_states(), 'another process\'s write moves it too'
+
+
+def test_the_cards_are_read_again_only_after_a_card_is_written(s, tmp_path):
+    """The owner's restart, 2026-11-16: one page read asked list_connectors a dozen times, ~340 cards each time, and every request of the first
+    minute queued behind the reads. The cards are kept until one is written - here, through any write road, or by another process."""
+    first = s.list_connectors(); n, kept = len(first), s._conn_cache
+    assert s.list_connectors() == first and s._conn_cache is kept, 'read again with nothing written: the kept rows'
+    first[0]['Name'] = 'a caller edited its copy'
+    assert s.list_connectors()[0]['Name'] != 'a caller edited its copy'
+    import sqlite3 as sq
+    cid = s.save_connector({'Type': 'imap', 'Name': 'Northwind mail', 'Active': 1}, 'owner')
+    assert len(s.list_connectors()) == n + 1
+    s.touch_connector(cid, error='refused')
+    assert next(c for c in s.list_connectors() if c['ConnectorId'] == cid)['LastError'] == 'refused'
+    peer = sq.connect(str(tmp_path / 'readers.db')); peer.execute("UPDATE connector SET Name='Payworth inbox' WHERE ConnectorId=?", (cid,)); peer.commit(); peer.close()
+    assert next(c for c in s.list_connectors() if c['ConnectorId'] == cid)['Name'] == 'Payworth inbox', "another process's write moves it too"

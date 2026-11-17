@@ -109,3 +109,16 @@ class SharedSignatureTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_a_folder_on_many_paths_is_read_once_a_second_for_all_of_them():
+    """The owner's restart, 2026-11-16: the CLIs are looked up on a dozen PATHs (each connection's, npm's, the session's), and each read all
+    of its folders again every second - ~10 s of the page's first minute. A folder's signature now serves every PATH that holds it."""
+    a, b, c = tempfile.mkdtemp(), tempfile.mkdtemp(), tempfile.mkdtemp()
+    read, real = [], pathcache._mtime
+    pathcache.forget()
+    with mock.patch.object(pathcache, '_mtime', side_effect=lambda d: (read.append(d), real(d))[1]), mock.patch.object(pathcache, 'SIG_TTL', 60):
+        for path in (os.pathsep.join([a, b]), os.pathsep.join([b, c]), os.pathsep.join([a, c]), os.pathsep.join([c, b, a])):
+            pathcache.which('nwtool', path=path)
+    assert sorted(x for x in read if x in (a, b, c)) == sorted([a, b, c]), read
+    pathcache.forget()

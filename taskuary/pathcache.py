@@ -23,7 +23,7 @@ MAX_AGE = 30.0     # and no answer is older than this, whatever the mtimes say
 
 def forget() -> None:
     """Drop every remembered answer: Taskuary just installed, updated or reconnected a CLI, or the owner pressed Test."""
-    _hits.clear(); _sigs.clear()
+    _hits.clear(); _sigs.clear(); _dirs.clear()
 
 
 def _mtime(d):
@@ -42,9 +42,20 @@ def _sig(path: str, cwd: str) -> tuple:
     hit = _sigs.get(k)
     if hit and now - hit[0] < SIG_TTL: return hit[1]
     ds = ([os.curdir] if sys.platform == 'win32' else []) + path.split(os.pathsep)
-    s = tuple(_mtime(d) for d in dict.fromkeys(ds))
+    s = tuple(_dir_sig(d if d != os.curdir else cwd, now) for d in dict.fromkeys(ds))
     _sigs[k] = (now, s)
     return s
+
+
+# ...EACH FOLDER READ ONCE FOR EVERY PATH THAT HOLDS IT (the owner's restart, 2026-11-16: the CLIs are looked up on a dozen PATHs - each
+# connection's, npm's, the session's - and each read all of its ~80 folders again every second, ~10 s of a page's first minute): one
+# folder's signature serves every PATH for SIG_TTL, the same freshness each had on its own
+_dirs = {}
+def _dir_sig(d: str, now: float):
+    hit = _dirs.get(d)
+    if hit and now - hit[0] < SIG_TTL: return hit[1]
+    v = _mtime(d); _dirs[d] = (now, v)
+    return v
 
 
 def _ok(fn, mode) -> bool: return os.path.exists(fn) and os.access(fn, mode) and not os.path.isdir(fn)

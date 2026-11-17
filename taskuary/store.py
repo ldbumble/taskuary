@@ -557,6 +557,12 @@ CREATE TABLE IF NOT EXISTS source (SourceId INTEGER PRIMARY KEY, Channel TEXT, A
 CREATE TABLE IF NOT EXISTS connector (ConnectorId INTEGER PRIMARY KEY, Type TEXT, Name TEXT,
   ConfigJson TEXT, Secret TEXT, Active INTEGER DEFAULT 0, LastSyncAt TEXT, LastError TEXT, LastErrorAt TEXT, Roles TEXT,
   Scope TEXT);
+-- every write to the connectors, from any process, moves its generation: list_connectors keeps its read until it moves
+CREATE TABLE IF NOT EXISTS change_gen (Tbl TEXT PRIMARY KEY, Gen INTEGER NOT NULL DEFAULT 0);
+INSERT OR IGNORE INTO change_gen (Tbl, Gen) VALUES ('connector', 0);
+CREATE TRIGGER IF NOT EXISTS connector_gen_ins AFTER INSERT ON connector BEGIN UPDATE change_gen SET Gen=Gen+1 WHERE Tbl='connector'; END;
+CREATE TRIGGER IF NOT EXISTS connector_gen_upd AFTER UPDATE ON connector BEGIN UPDATE change_gen SET Gen=Gen+1 WHERE Tbl='connector'; END;
+CREATE TRIGGER IF NOT EXISTS connector_gen_del AFTER DELETE ON connector BEGIN UPDATE change_gen SET Gen=Gen+1 WHERE Tbl='connector'; END;
 CREATE TABLE IF NOT EXISTS setting (Name TEXT PRIMARY KEY, Value TEXT, Description TEXT, UpdatedBy TEXT);
 CREATE TABLE IF NOT EXISTS deleted (DeletedId INTEGER PRIMARY KEY, Kind TEXT, Title TEXT, DataJson TEXT, DeletedAt REAL, KeepUntil REAL);
 -- (the notes table, `memory`, is gone: an older install's rows are written into LEARNED.md once and the table dropped - memorylines.migrate)
@@ -1178,6 +1184,7 @@ class SQLiteStore:
         self._snap_cache = None
         self._processing_display_cache = {}
         self._states_cache = None     # funnel_states(): (DirtyGeneration, newest dirty row) -> the rows read at that mark
+        self._conn_cache = None       # list_connectors(): (the connectors' change_gen, the rows read at it)
         self._processing_ignored_writes = 0
         self._writes = 0
         with self.lock:
@@ -2694,30 +2701,6 @@ class SQLiteStore:
         saving grows with the message table rather than with the task table. SearchSources stays:
         Board and Tasks both draw "Report - <source>" from it.
         """
-        query = f'''SELECT t.*, rv.Status ReviewStatus, rv.Kind ReviewKind,
-                       rn.Status RunStatus, rn.AgentName RunAgent,
-                       ho.Body HandoverNote,
-                       ms.SearchSources
-                FROM task t
-               LEFT JOIN (
-                   SELECT TaskId, Status, Kind FROM review
-                   WHERE ReviewId IN (SELECT MAX(ReviewId) FROM review GROUP BY TaskId)
-               ) rv ON rv.TaskId=t.TaskId
-               LEFT JOIN (
-                   SELECT TaskId, Status, AgentName FROM run
-                   WHERE RunId IN (SELECT MAX(RunId) FROM run GROUP BY TaskId)
-               ) rn ON rn.TaskId=t.TaskId
-               LEFT JOIN (
-                   SELECT TaskId, Body FROM comment
-                   WHERE CommentId IN (
-                       SELECT MAX(CommentId) FROM comment WHERE Body LIKE 'HANDOVER NOTE%' GROUP BY TaskId
-                   )
-                ) ho ON ho.TaskId=t.TaskId'''
-        query += '''
-               LEFT JOIN (
-                   SELECT TaskId, GROUP_CONCAT(DISTINCT SourceName) SearchSources
-                   FROM message GROUP BY TaskId
-               ) ms ON ms.TaskId=t.TaskId'''
         where, p = [], []
         # The hovering guide persists its conversation in a task-shaped record so it can reuse
         # the assistant session machinery, but it is application chrome, not work. Keep it out
@@ -2732,8 +2715,33 @@ class SQLiteStore:
                          + ''.join(f" OR t.TaskId={int(i)}" for i in also) + ")")
         qw, qp = self._search_where(q, shown)
         where += qw; p += qp
-        if where:
-            query += ' WHERE ' + ' AND '.join(where)
+        # ...THE TASKS FIRST, then what each one carries - for those tasks only (the owner's restart, 2026-11-16): the latest review, run,
+        # handover and sources were each built over the whole table and then joined to the thirty open tasks, ~90 ms a call on his store,
+        # and one page read asks for the open tasks several times
+        query = f'''WITH t AS (SELECT t.* FROM task t WHERE {' AND '.join(where)}), ids AS (SELECT TaskId FROM t)
+                SELECT t.*, rv.Status ReviewStatus, rv.Kind ReviewKind,
+                       rn.Status RunStatus, rn.AgentName RunAgent,
+                       ho.Body HandoverNote,
+                       ms.SearchSources
+                FROM t
+               LEFT JOIN (
+                   SELECT TaskId, Status, Kind FROM review
+                   WHERE ReviewId IN (SELECT MAX(ReviewId) FROM review WHERE TaskId IN ids GROUP BY TaskId)
+               ) rv ON rv.TaskId=t.TaskId
+               LEFT JOIN (
+                   SELECT TaskId, Status, AgentName FROM run
+                   WHERE RunId IN (SELECT MAX(RunId) FROM run WHERE TaskId IN ids GROUP BY TaskId)
+               ) rn ON rn.TaskId=t.TaskId
+               LEFT JOIN (
+                   SELECT TaskId, Body FROM comment
+                   WHERE CommentId IN (
+                       SELECT MAX(CommentId) FROM comment WHERE TaskId IN ids AND Body LIKE 'HANDOVER NOTE%' GROUP BY TaskId
+                   )
+                ) ho ON ho.TaskId=t.TaskId
+               LEFT JOIN (
+                   SELECT TaskId, GROUP_CONCAT(DISTINCT SourceName) SearchSources
+                   FROM message WHERE TaskId IN ids GROUP BY TaskId
+               ) ms ON ms.TaskId=t.TaskId'''
         return self._rows(query + ' ORDER BY t.TaskId DESC', p)
     def delete_task(self, task_id):
         # the Advisor idea this task was made from goes with it: left open, it came back on the rail alone as "asked you",
@@ -6098,7 +6106,18 @@ class SQLiteStore:
 
     # channel connectors (secrets are write-only: list/get never return them)
     _CONN_SAFE = "ConnectorId, Type, Name, ConfigJson, Active, Roles, Scope, LastSyncAt, LastError, LastErrorAt, (Secret IS NOT NULL AND Secret != '') HasSecret"
-    def list_connectors(self): return self._rows(f'SELECT {self._CONN_SAFE} FROM connector ORDER BY ConnectorId')
+    def list_connectors(self):
+        """Every card, secrets left out. ASKED A DOZEN TIMES A PAGE READ (the owner's restart, 2026-11-16: /api/setup, the first run, the
+        agents and the rail each asked it again, ~340 cards each time): kept until a connector is written - change_gen's trigger counts every
+        write, from any process - and read with that count in one snapshot. A copy each time: callers edit what they get."""
+        if not self._off_writer(): return self._rows(f'SELECT {self._CONN_SAFE} FROM connector ORDER BY ConnectorId')   # ...its own writes, unread
+        with self._snapshot_read() as cur:
+            gen = cur.execute("SELECT Gen FROM change_gen WHERE Tbl='connector'").fetchone()
+            got = self._conn_cache
+            if gen is None: return [dict(r) for r in cur.execute(f'SELECT {self._CONN_SAFE} FROM connector ORDER BY ConnectorId')]
+            if got is None or got[0] != gen[0]:
+                got = self._conn_cache = (gen[0], [dict(r) for r in cur.execute(f'SELECT {self._CONN_SAFE} FROM connector ORDER BY ConnectorId')])
+        return [dict(r) for r in got[1]]
     # A REFRESH TOKEN KEPT IN ConfigJson IS SEALED LIKE THE Secret COLUMN: the Gmail card's Google calendar sign-in (googlecal.py,
     # 2026-10-26) keeps its token there beside the App Password, and a copy of taskuary.db must not carry it in the clear either
     SEALED_CONFIG = ('google_refresh_token',)

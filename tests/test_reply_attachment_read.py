@@ -30,3 +30,19 @@ def test_a_name_not_on_the_reply_is_refused():
         c = TestClient(server.app)
         assert c.get(f'/api/reviews/{rid}/attachment', params={'name': '../secrets.txt'}).status_code == 404
         assert c.get(f'/api/reviews/{rid}/attachment', params={'name': 'other.csv'}).status_code == 404
+
+
+def test_a_workbook_on_the_reply_previews_as_its_rows():
+    """The owner, 2026-11-17: the 15,018-row workbook on an email card opened as "This sheet is empty." - this route handed the page the
+    workbook's bytes where it asked for a preview. It serves files as every file route does (server._serve_file)."""
+    from openpyxl import Workbook
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'PTO true-up for Gail', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    d = tempfile.mkdtemp(); path = os.path.join(d, 'trueup.xlsx')
+    wb = Workbook(); ws = wb.active; ws.append(['Site', 'Hours']); ws.append(['North', 12]); wb.save(path)
+    rid = s.add_review({'TaskId': tid, 'Kind': 'reply', 'Status': 'pending', 'DraftText': 'Attached.'})
+    s.set_review_deliver(rid, json.dumps({'attachments': [{'name': 'trueup.xlsx', 'path': path, 'size': os.path.getsize(path)}]}))
+    with mock.patch.object(server, 'store', s):
+        got = TestClient(server.app).get(f'/api/reviews/{rid}/attachment', params={'name': 'trueup.xlsx', 'preview': 'true'})
+    assert got.status_code == 200, got.text
+    assert got.json()['rows'][:2] == [['Site', 'Hours'], ['North', '12']]

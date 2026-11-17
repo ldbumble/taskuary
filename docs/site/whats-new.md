@@ -2,6 +2,16 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.17 - 2026-11-16
+
+- A lesson the memory already holds for everything is not written again for one topic
+- What is already known about a task leads its brief: the Hub notes, closed tasks and repository it is about
+- A long coding session's chat is read in a beat: its told steps are marked once, and the waiting room's head no longer walks every step
+- A WhatsApp bridge belongs to its own home: another Taskuary on the machine never stops, restarts or adopts it
+- The cards, the open tasks and the CLIs' PATH folders are each read once for a page, not once per question
+- The page's first reads are made while Taskuary starts, and a rail build reads each setting once
+- The page's first reads are made on one thread started with the new walk, and the test lifespan stops it like every loop
+
 ## 0.4.0.16 - 2026-11-16
 
 - One card for a bulk job: the agent raises many of one act at once, he reviews a few, one press does them all with a bar in the card

@@ -177,6 +177,17 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     to = split(to)[1] if channel == 'email' else ' '.join(str(to or '').split())
     if channel == 'email' and _chat_id(to): return {'ok': False, 'why': _NO_MAILBOX.format(to=to)}
     want = ' '.join(str(to or '').split()).casefold()
+    # A GUESS WHERE HIS MAIL KNOWS THE COMPANY IS NOT MADE (the owner, 2026-11-17: an email to a made-up address at a bank bounced while the
+    # bank's contact had written three months before - "give it tool to search emails"): refused before anything stands, with the people at
+    # that company his mail knows, so the agent drafts to one of them or asks him. A company his mail never saw still takes a marked guess
+    if channel == 'email' and agent != 'owner':
+        from .people import at_domain
+        for g in {a.lower() for a in (split(x)[1] for x in ([guessed] if isinstance(guessed, str) else guessed or [])) if a and '@' in a}:
+            known = [(a, n) for a, n in at_domain(store, g.rpartition('@')[2]) if a.lower() != g]
+            if known: return {'ok': False, 'why': f"{g} is your guess, and the owner's mail knows {g.rpartition('@')[2]}: "
+                                                    + ', '.join(f'{a} ({n})' if n else a for a, n in known[:5])
+                                                    + ' - draft to the one this is for (search_messages and person tell you who each is), '
+                                                      'or ask the owner in one question. Nothing was drafted.'}
     hit = next((i for i in all_(store, tid) if slot and i['id'] == slot), None) or \
           next((i for i in open_(store, tid) if want and str(i['out'].get('to')).casefold() == want), None) or \
           (want and _reopen(store, tid, want, agent))

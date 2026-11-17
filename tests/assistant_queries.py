@@ -283,7 +283,8 @@ BRING_UP = [
     ('the AP ageing report', 'AP ageing', '#msg=10'),
     ('the end of day report', 'end of day', '#report=2'),
     ('the headcount report', 'headcount', '#msg=9'),
-    ('open the report about Kesler Medical', 'Kesler Medical', '#msg=10'),
+    # ...by what only it says: since a dashboard's run holds its whole table (2026-11-17), the weekly spend lists every vendor too
+    ('open the report about what Kesler Medical owes past due', 'Kesler Medical past due', '#msg=10'),
     ('my routines', 'routines', '#report=workflows'),   # the shelf's name since 2026-10-29
     ('my SOUL doc', 'soul', '#about=docs&doc=soul'),
     ('what it learned', 'learned', '#about=memory'),     # About you's Memory since 2026-11-06

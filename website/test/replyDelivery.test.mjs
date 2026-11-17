@@ -100,12 +100,3 @@ test("what went names the copied, as the agent says it; the To line keeps the To
   assert.match(src("ReviewDecision.jsx"), /said: verb === "approve" \? \{[^}]*to: sentTo\(r\)/);
 });
 
-// A GUESSED ADDRESS SAYS SO ON THE CARD (the owner, 2026-11-17: an email to a made-up address went out and bounced - "This is not
-// acceptable"): the agent named it in `guessed`, the card never drew it. Only a guess still on it: one he changed is gone
-test("a guessed address still on the email is named on its card before Send", async () => {
-  const { guessedOn } = await import("../src/replyDelivery.js");
-  assert.deepEqual(guessedOn({ to: ["ray@vendor.example"], cc: ["gail@northwind.example"], guessed: ["Ray@vendor.example"] }), ["ray@vendor.example"]);
-  assert.deepEqual(guessedOn({ to: ["ray.colton@vendor.example"], guessed: ["ray@vendor.example"] }), []);
-  const fs = await import("node:fs");
-  assert.match(fs.readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8"), /guessedOn\(meta\)\.length > 0 && <Typography variant="caption" data-tq-to-guessed=""/);
-});

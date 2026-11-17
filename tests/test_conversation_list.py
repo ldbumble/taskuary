@@ -1119,3 +1119,14 @@ def test_his_first_line_on_a_report_he_sent_on_carries_its_name():
     assert [(x['text'], x.get('came')) for x in lines] == [('Which site is closest to its cap?', 'Headcount by site, nightly'), ('And by how much?', None)], lines
     t2 = Factory(s).task('From mail'); s.add_comment(t2, 'owner', general.USER_TYPE, 'Reply to her')
     assert all('came' not in x for x in conversation.items(s, t2)['items'])
+
+
+def test_his_answer_to_a_permission_request_is_its_card_greyed_where_it_stood():
+    """The owner, 2026-11-17: "the approve card should never go anywhere and just say it was approved ... keep the action cards but gray out
+    if passed" - his Allow on a coding agent's permission request left only "You allowed: ..." in its place. The press carries what it asked
+    and his answer, and the page draws the card it was."""
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Ship the board', 'Kind': 'coding', 'Status': 'open'}, 'o')
+    s.audit('task', tid, 'permission_answered', 'owner', detail={'pid': 'p1', 'answer': 'allow_once', 'pattern': 'Bash:git push', 'asked': 'Push the merge to deploy'})
+    p = next(x for x in conversation.items(s, tid)['items'] if x['kind'] == 'press')
+    assert p['perm'] == {'asked': 'Push the merge to deploy', 'answer': 'allow_once'}

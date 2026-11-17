@@ -292,3 +292,10 @@ test("his line draws a pill for every file he sent with it, from the press on", 
   assert.match(src, /\(x\.files \|\| \[\]\)\.map\(\(f\) => <AttachChip key=\{f\} name=\{fileName\(f\)\}/);
   assert.match(src, /kind: "line", text: w, files: files\.map\(\(a\) => a\.path\)/);
 });
+
+// HIS ANSWER TO A PERMISSION REQUEST STAYS ITS CARD, greyed with what he pressed (the owner, 2026-11-17: "the approve card should never go anywhere")
+test("an answered permission request is drawn as its card, greyed, never a bare line", () => {
+  const ws = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8"), ac = fs.readFileSync(new URL("../src/AgentChannels.jsx", import.meta.url), "utf8");
+  assert.match(ws, /if \(x\.kind === "press" && x\.perm\) return [^\n]*\n\s+<AnsweredPermission perm=\{x\.perm\}/);
+  assert.match(ac, /export function AnsweredPermission\(\{ perm, at = "" \}\)[^]*?PERM_SAID\[perm\.answer\]/);
+});

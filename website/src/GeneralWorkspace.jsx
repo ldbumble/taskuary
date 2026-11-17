@@ -23,7 +23,7 @@ import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
 import { useChatDefaults } from "./DetailSlider.jsx";
-import { PermissionCards } from "./AgentChannels.jsx";
+import { AnsweredPermission, PermissionCards } from "./AgentChannels.jsx";
 import { Hunk } from "./DiffView.jsx";
 // ...a file he sent, by its own name: the upload's stamp (server.prompt_file) is not his, and neither is the folder
 const fileName = (p) => String(p).split(/[\\/]/).pop().replace(/^\d{8}-\d{6}-[0-9a-f]{6}-/, "");
@@ -525,6 +525,9 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
     if (x.kind === "line") return <ConvLine key={x.id} x={x} more={prev?.kind === "line"} />;
     if (x.kind === "arrival") return <div key={x.id} className="tq-aui-message tq-aui-brief" data-tq-item={x.id}><Arrived mail={[x]} prev={prev?.kind === "arrival" ? prev : null} /></div>;
     if (x.kind === "card") { const got = draw([x]); return got.length ? <div key={x.id} className="tq-aui-message tq-aui-agent" data-tq-item={x.id} data-tq-row-cards=""><div className="tq-aui-agent-body">{got}</div></div> : null; }
+    // ...his answer to a permission request is its card, greyed where it stood - never a line in its place (2026-11-17)
+    if (x.kind === "press" && x.perm) return <div key={x.id} className="tq-aui-message tq-aui-agent" data-tq-item={x.id}><div className="tq-aui-agent-body">
+      <AnsweredPermission perm={x.perm} at={x.at ? when(String(x.at)) : ""} /></div></div>;
     return <div key={x.id} className={`tq-aui-message tq-aui-press${prev && (prev.kind === "press" || prev.kind === "note") ? " tq-aui-press-more" : ""}`} data-tq-item={x.id} data-tq-chat-press="">
       <div className="tq-aui-press-line">{pressLine(x.text, x.at ? when(String(x.at)) : "")}</div></div>;
   });

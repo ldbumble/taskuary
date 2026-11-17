@@ -7,11 +7,6 @@ import { label } from "./buttons.js";
 export const deliveryMeta = (review) => {
   try { return JSON.parse(review?.Deliver || "null") || {}; } catch { return {}; }
 };
-// THE ADDRESSES THE AGENT GUESSED THAT ARE STILL ON IT (slots.draft's `guessed`): one he changed is no longer a guess
-export const guessedOn = (meta) => {
-  const on = [...[].concat(meta?.to || []), ...[].concat(meta?.cc || [])].map((a) => String(a).toLowerCase());
-  return [...new Set((meta?.guessed || []).map((g) => String(g).toLowerCase()))].filter((g) => on.some((a) => a.includes(g)));
-};
 // WHAT A PRESS OF THE CARD DOES, IN ITS OWN WORDS (the owner, 2026-11-16: "Accept and close" said "Sending…", then "Checking delivery…", then
 // "Sent by email" over an invite he accepted): a calendar card's act - Accepting… / Accepted - and every other card's send (buttons.json states)
 const CAL_VERB = { accept: "accept_invite", decline: "decline_invite", propose: "propose_time" };

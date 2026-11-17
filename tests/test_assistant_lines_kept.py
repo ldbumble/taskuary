@@ -62,7 +62,7 @@ def test_a_report_opens_as_search_opens_it_its_newest_run_read_or_not():
     # ...the very card a Search pick puts on the table: its hit is that run
     assert ('report', 10) in [(h['type'], h.get('mid')) for h in search.everything(s, 'AP ageing')['hits']]
     # ...found by what it says, too
-    assert search.places(s, 'Kesler Medical')[0]['href'] == '#msg=10'
+    assert search.places(s, 'Kesler Medical past due')[0]['href'] == '#msg=10'         # ...by what only it says (a dashboard's run lists every vendor)
     # ...and one that never ran opens its page
     assert search.places(s, 'end of day')[0]['href'] == '#report=2'
     told = concierge.read_op(s, 'app.find', {'query': 'AP ageing report'})

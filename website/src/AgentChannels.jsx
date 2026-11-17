@@ -47,6 +47,19 @@ export function PermissionCards({ taskId, items = [], onAnswered }) {
     </Box>); });
 }
 
+// ...AND ONE HE ANSWERED STAYS WHERE IT STOOD, greyed, saying what he pressed (the owner, 2026-11-17: "the approve card should never go
+// anywhere and just say it was approved ... keep the action cards but gray out if passed"): the conversation's press carries `perm`
+export const PERM_SAID = { allow_once: "Allowed", allow_always: "Allowed, from now on", reject_once: "Refused", reject_always: "Refused, from now on" };
+export function AnsweredPermission({ perm, at = "" }) {
+  return (
+    <Box data-tq-permission-answered={perm.answer} sx={{ ...card, bgcolor: "transparent", borderStyle: "dashed", opacity: 0.75 }} role="group" aria-label="The agent asked permission">
+      <Head>THE AGENT ASKED</Head>
+      <Typography variant="body2" sx={{ color: INK }}>{perm.asked || "a step of its work"}</Typography>
+      <Typography variant="caption" data-tq-permission-said="" sx={{ display: "inline-block", mt: 0.6, color: DIM, fontWeight: 600 }}>
+        {String(perm.answer).startsWith("allow") ? "✓ " : "✗ "}{PERM_SAID[perm.answer] || "Answered"}{at ? ` · ${at}` : ""}</Typography>
+    </Box>);
+}
+
 // ── the setup: the bindings, Unbind, and Add a channel ─────────────────────────────────────────────────────────────────
 // `taskId`: this task's agent (the fold at the foot of a coding task's chat). None: every binding, and a new one is "the coding agents" -
 // conductor mode, the owner alone, any of their agents by TQ ref (Settings > Phone & chats). Teammates belong to one task's agent: the

@@ -603,6 +603,7 @@ def _items(store, tid: int) -> dict:
         h, closes = led.get(('press', aid)), bool(shut) and aid == str(shut['Id'])
         if closes and (note := next((c['note'] for c in reversed(store.closeouts(tid)) if c['what'] == 'closed'), '')): text = f"{text.rstrip('.')} - {note.rstrip('.')}."
         it = {'id': f'p:{aid}', 'kind': 'press' if m.get('press') else 'note', 'at': m['createdAt'], 'text': text, **({'closes': True} if closes else {}),
+              **({'perm': m['perm']} if m.get('perm') else {}),
               **({'stop': True, '_hs': bool(h)} if text == stop else {})}
         if not h and at_work and ep(m['createdAt']) + 1 > began and m.get('press') and text != stop: pend.append(it)
         # ...A PRESS NOBODY HEARD YET STANDS AFTER ALL OF ITS OWN SECOND - its stamp is no finer: a stop pressed in the second its turn's line was

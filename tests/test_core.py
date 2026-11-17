@@ -72,8 +72,8 @@ class CoreTests(unittest.TestCase):
         import taskuary.ingest as ing
 
         class InlineThread:
-            def __init__(self, target=None, args=(), daemon=None): self.t, self.a = target, args
-            def start(self): self.t(*self.a)
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None, name=None): self.t, self.a, self.k = target, args, kwargs or {}
+            def start(self): self.t(*self.a, **self.k)
 
         s = MemoryStore()
         s.set_setting('coding_auto_enabled', '1', 't')

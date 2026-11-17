@@ -25,6 +25,17 @@ def _part(words: list, address: str, name: str = '') -> bool:
     return bool(words) and all(w in hay for w in words)
 
 
+def at_domain(store, domain: str) -> list:
+    "[(address, name)] of everyone at `domain` in the owner's mail - who wrote in, and whom he wrote to - most written-with first."
+    d = str(domain or '').strip().lower().lstrip('@')
+    if not d: return []
+    out = {h['Email']: h.get('Name') or '' for h in (store.senders_like(f'@{d}', limit=8) if hasattr(store, 'senders_like') else [])
+           if h['Email'].endswith('@' + d)}
+    for a in written_to(store):
+        if a.lower().endswith('@' + d): out.setdefault(a.lower(), '')
+    return list(out.items())
+
+
 def written_to(store) -> dict:
     """{address: (times, last sent)} over the To and Cc of the owner's own sent mail - one scan per new message."""
     # kept ON the store, rescanned only when mail arrives. Keyed by id(store) it outlived its store: a closed store's id

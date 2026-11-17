@@ -750,7 +750,12 @@ def press_lines(store, tid: int) -> list:
     # ...but an approved held step is its CARD in the turn, pressed (the owner, 2026-11-09: "leave the approval card in the agent turn as well
     # with approved") - and stays so after the owner writes again ("compact the land": it gave way to this line), drawn there (TaskPage
     # turnCards), so never a second time as a line
-    own = [{'id': f'press-{i}', 'role': 'user', 'press': True, 'content': [{'type': 'text', 'text': f'You {what}.'}], 'createdAt': at}
+    # ...AND HIS ANSWER TO AN AGENT'S PERMISSION REQUEST IS ITS CARD, pressed and greyed where it stood (the owner, 2026-11-17: "the approve
+    # card should never go anywhere and just say it was approved ... keep the action cards but gray out if passed"): `perm` - what it asked
+    # and his answer - lets the page draw the card it was, never a bare line in its place
+    perm = {r['Id']: _detail(r) for r in store._rows("SELECT Id, Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action='permission_answered'", (tid,))}
+    own = [{'id': f'press-{i}', 'role': 'user', 'press': True, 'content': [{'type': 'text', 'text': f'You {what}.'}], 'createdAt': at,
+            **({'perm': {'asked': str(perm[i].get('asked') or ''), 'answer': str(perm[i].get('answer') or '')}} if i in perm else {})}
            for i, at, what, *x in presses(store, tid) if not x]
     return sorted(own + agent_set(store, tid), key=lambda m: int(m['id'].split('-')[1]))        # as they happened: one audit chain numbers both
 # ...and WHAT THE AGENT SET FOR THEM BY TOOL is a line at its time too (the agent walk, 2026-11-09: a reminder it set stood nowhere on the page

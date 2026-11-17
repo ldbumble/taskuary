@@ -32,3 +32,17 @@ def test_the_agent_is_told_to_guess_and_mark_rather_than_hold_the_email():
     told = general.action_line(MemoryStore(), tools=True)      # ...a session with the email tool: `guessed` is the tool's own word
     assert '`guessed`' in told and 'never hold the email or the meeting invite back' in told
     assert 'is a guess' in general.action_line(MemoryStore()) and '`guessed`' not in general.action_line(MemoryStore())
+
+
+# A GUESS WHERE HIS MAIL KNOWS THE COMPANY IS NO GUESS TO MAKE (the owner, 2026-11-17: an email to a made-up address at a bank went out and
+# bounced while the bank's contact had written three months before - "give it tool to search emails"): the email tool refuses it and names
+# the people at that company his mail knows, so the agent drafts to one of them or asks him. A company his mail never saw still takes a guess
+def test_a_guessed_address_at_a_company_his_mail_knows_is_refused_with_who_is_there():
+    s = MemoryStore(); tid = own_task(s, 'general')
+    s.add_message({'ExternalId': 'in-bank', 'ConversationId': 'c-bank', 'Channel': 'email', 'SourceName': 'alex@northwind.example',
+                   'FromName': 'Garlanian, Anna', 'FromEmail': 'AGarlanian@bank.example', 'Subject': 'Your account', 'BodyText': 'Hi',
+                   'SentAt': '2026-08-26 11:58:17', 'Status': 'filed'})
+    out = slots.draft(s, tid, 'Hi Anna', to='acarlini@bank.example', subject='Allowlist', guessed=['acarlini@bank.example'])
+    assert out['ok'] is False and 'agarlanian@bank.example' in out['why'].lower() and 'Garlanian, Anna' in out['why']
+    assert not s._rows("SELECT * FROM review WHERE TaskId=?", (tid,)), 'nothing stands for his Send'
+    assert slots.draft(s, tid, 'Hi Anna', to='AGarlanian@bank.example', subject='Allowlist')['ok']

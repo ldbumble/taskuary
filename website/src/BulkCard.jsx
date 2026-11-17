@@ -1,7 +1,7 @@
 // ONE CARD FOR A BULK JOB (bulkCard.js, taskuary/bulkcard.py): the count, a row each - whom or what it goes to, its one line, what to check -
 // with a tick box; the first few opened in their single form to review, any other opened the same way; one press does every ticked one, each
 // by its own road, and a bar IN the card says how far it is, failures counted as they come, Stop for the rest. Its agent hears the run once.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Box, Button, Checkbox, LinearProgress, Typography } from "@mui/material";
 import ReviewDecision from "./ReviewDecision.jsx";
 import ActionCard from "./ActionCard.jsx";
@@ -18,7 +18,11 @@ export default function BulkCard({ rows = [], tid, onChanged }) {
   const read = useCallback(() => api.get(`/api/reviews/batch/${key}`).then(({ data }) => setRun(data)).catch(() => {}), [key]);
   useEffect(() => { read(); }, [read]);
   // ...read again while it runs, never blocking the page: a row at a time lands on GitHub or in the outbox
-  useEffect(() => { if (!running(run)) return undefined; const t = setInterval(() => { read(); onChanged?.(); }, 1000); return () => clearInterval(t); }, [run, read, onChanged]);
+  // ...keyed on WHETHER it runs, never on the page's onChanged (2026-11-17): each row done pokes task-changed, the task page redraws with a
+  // new arrow, and a poll keyed on it was torn down before its second came - the bar read "0 of 25" and Stop the rest stood lit to the end
+  const changed = useRef(onChanged); changed.current = onChanged;
+  const live = running(run);
+  useEffect(() => { if (!live) return undefined; const t = setInterval(() => { read(); changed.current?.(); }, 1000); return () => clearInterval(t); }, [live, read]);
   const states = rows.map((r) => [r, rowState(r, run)]), waiting = states.filter(([, s]) => s.waiting), n = waiting.filter(([r]) => !skip.has(r.ReviewId)).length;
   const aside = !waiting.length && states.some(([, s]) => s.aside) && !run?.total;
   const go = async () => {

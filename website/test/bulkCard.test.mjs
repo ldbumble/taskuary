@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import { countOf, pressOf, progress, rowOf, rowState, running } from "../src/bulkCard.js";
 
 // ONE CARD FOR A BULK JOB (taskuary/bulkcard.py; the owner, 2026-11-16). Invented people and a stand-in repository.
@@ -25,4 +26,61 @@ test("each row stands where its run left it, and the bar counts what is over", (
   assert.deepEqual([1, 2, 3].map((id) => rowState(close(id), run)), [{ done: true }, { failed: "issue was deleted" }, { waiting: true }]);
   assert.equal(progress(run), 50); assert.ok(running(run)); assert.ok(!running({ state: "finished" }));
   assert.deepEqual(rowState({ ...close(4), Status: "superseded", DecideNote: "set aside when you moved on" }, null), { aside: true });
+});
+
+// THE CARD READS ITS RUN WHILE THE PAGE AROUND IT REDRAWS (2026-11-17: the bar read "0 of 25" until the run ended and Stop the rest stayed lit).
+// Each row the run does pokes task-changed, the task page redraws and hands the card a fresh onChanged - and the poll, keyed on it, was torn
+// down before its one second came. Rendered here with a stand-in React (hooks with their deps, no DOM) so the effect's deps are what is tested.
+const R = (() => {
+  let slots = [], at = 0, props = null, Comp = null, effects = [], tree = null;
+  const same = (a, b) => !!a && !!b && a.length === b.length && a.every((x, i) => Object.is(x, b[i]));
+  const slot = (make) => { const i = at++; if (!(i in slots)) slots[i] = make(); return slots[i]; };
+  const draw = () => {
+    at = 0; effects = []; tree = Comp(props);
+    for (const e of effects) { e.s.undo?.(); e.s.undo = e.f(); }
+  };
+  const el = (type, p) => ({ type, props: p || {} });
+  return {
+    useState: (init) => { const s = slot(() => ({ v: typeof init === "function" ? init() : init }));
+      return [s.v, (v) => { s.v = typeof v === "function" ? v(s.v) : v; queueMicrotask(draw); }]; },
+    useRef: (v) => slot(() => ({ current: v })),
+    useCallback: (f, deps) => { const s = slot(() => ({})); if (!same(s.deps, deps)) Object.assign(s, { f, deps }); return s.f; },
+    useMemo: (f, deps) => { const s = slot(() => ({})); if (!same(s.deps, deps)) Object.assign(s, { v: f(), deps }); return s.v; },
+    useEffect: (f, deps) => { const s = slot(() => ({})); if (!deps || !same(s.deps, deps)) { s.deps = deps; effects.push({ s, f }); } },
+    jsx: el, jsxs: el, Fragment: "Fragment",
+    render: (C, p) => { Comp = C; props = p; draw(); },
+    text: () => { const out = []; const walk = (n) => { if (n == null || typeof n === "boolean") return; if (Array.isArray(n)) return n.forEach(walk);
+      if (typeof n !== "object") return void out.push(String(n)); walk(n.props.children); }; walk(tree); return out.join(" "); },
+  };
+})();
+
+const build = async () => {
+  const { build: esb } = await import("esbuild");
+  const stub = { "react": "export const { useState, useRef, useCallback, useMemo, useEffect } = globalThis.__R; export default globalThis.__R;",
+    "react/jsx-runtime": "export const { jsx, jsxs, Fragment } = globalThis.__R;",
+    "@mui/material": "const C = (n) => n; export const Box = C('Box'), Button = C('Button'), Checkbox = C('Checkbox'), LinearProgress = C('LinearProgress'), Typography = C('Typography');",
+    "./api": "export default globalThis.__api;", "./theme.jsx": "export const BORDER = '', DIM = '', FAINT = '', INK = '';",
+    "./ReviewDecision.jsx": "export default 'ReviewDecision';", "./ActionCard.jsx": "export default 'ActionCard';" };
+  const out = await esb({ entryPoints: [fileURLToPath(new URL("../src/BulkCard.jsx", import.meta.url))], bundle: true, write: false, format: "esm",
+    jsx: "automatic", logLevel: "silent", plugins: [{ name: "stubs", setup(b) {
+      b.onResolve({ filter: /.*/ }, (a) => (a.path in stub ? { path: a.path, namespace: "stub" } : undefined));
+      b.onLoad({ filter: /.*/, namespace: "stub" }, (a) => ({ contents: stub[a.path], loader: "js" })); } }] });
+  return (await import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].text).toString("base64")}`)).default;
+};
+
+test("the bar follows the run while every row it does redraws the page with a fresh onChanged", async (t) => {
+  t.mock.timers.enable(["setInterval", "setTimeout"]);
+  const flush = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r)); };
+  const rows = Array.from({ length: 25 }, (_, i) => mail(i + 1, `owner${i + 1}@cedar.example`));
+  let reads = 0, run = { key: "b1", state: "running", total: 25, done: 0, failed: 0, left: 0, rows: {} };
+  globalThis.__R = R;
+  globalThis.__api = { get: async () => { reads += 1; run = { ...run, done: Math.min(run.done + 3, 25) }; return { data: run }; }, post: async () => ({ data: run }) };
+  const BulkCard = await build();
+  const page = () => R.render(BulkCard, { rows, tid: 7, onChanged: () => {} });     // the task page: a new arrow on every render
+  page(); await flush();
+  const first = reads;
+  for (let ms = 0; ms < 3000; ms += 300) { t.mock.timers.tick(300); page(); await flush(); }
+  assert.ok(reads >= first + 2, `read ${reads - first} more times in 3 s while the page redrew`);
+  assert.doesNotMatch(R.text(), /\b3 of 25\b/, "the bar moved past its first read");
+  assert.match(R.text(), /(\d+) of 25/);
 });

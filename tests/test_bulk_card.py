@@ -9,7 +9,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import bulkcard, cardqueue, conversation, general, github, outbound, proposals, server
+from taskuary import bulkcard, cardqueue, conversation, general, github, outbound, proposals, server, taskstate
 from taskuary.store import MemoryStore
 from test_agent_toolbox import hdr
 from test_own_ask_no_reply import own_task
@@ -129,3 +129,18 @@ def test_an_agent_reads_a_repositorys_open_issues_as_rows():
         got = github.run_github_issues({'repo': REPO, 'token': 'ghp_stand_in'})
     head, body = got
     assert '3 issues' in head and 'Stale question 1' in body and 'a PR' not in body, 'pull requests are no issues'
+
+
+def test_a_task_whose_card_is_running_reads_at_work_not_waiting_on_him():
+    "2026-11-17: mid-run the chip said \"agent waiting on you\" over rows his press was doing - its rows still read pending until each was done."
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        out = call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='duplicates', items=[{'number': n} for n in range(1, 11)])
+    assert taskstate.state(s, s.get_task(tid)) != 'working', 'before the press the card waits on him'
+    st = {**bulkcard.state(s, out['batch']), 'key': out['batch'], 'tid': tid, 'state': 'running'}
+    bulkcard._save(s, st)
+    assert taskstate.state(s, s.get_task(tid)) == 'working', 'his press is at work'
+    st['state'] = 'cancelling'; bulkcard._save(s, st)
+    assert taskstate.state(s, s.get_task(tid)) == 'working', 'stopping after the row in hand'
+    st['state'] = 'stopped'; bulkcard._save(s, st)
+    assert taskstate.state(s, s.get_task(tid)) != 'working', 'what was not run waits on him again'

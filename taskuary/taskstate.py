@@ -177,6 +177,10 @@ class TaskState:
         # a live session is the fact happening now - a done task continued is work in progress again (T8). A session that
         # PREDATES the close is a terminal nobody shut, not the task picked back up (the Board's old rule, kept).
         if live and t.get('Status') == 'done' and t.get('ClosedAt') and str(session.get('started') or '') < str(t['ClosedAt']): live = False
+        # ...and HIS PRESS ON A BULK CARD at work is the task at work (bulkcard.at_work, 2026-11-17): its rows wait until each is done, and the
+        # chip read "agent waiting on you" over the run doing them
+        from . import bulkcard
+        if t.get('Status') in ('open', 'in_progress') and bulkcard.at_work(store, tid): return 'working'
         if live:
             # ...by the one function every surface asks (general.working): the session's own word here, a line it was just handed (owed), or
             # an input on its way to its next turn (starting: a typed line from the press, a mail from its hand-over)

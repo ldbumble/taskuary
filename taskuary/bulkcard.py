@@ -31,6 +31,11 @@ def state(store, key: str) -> dict:
 
 
 def running(store, key) -> bool: return bool(key) and state(store, key).get('state') in ('running', 'cancelling')
+def at_work(store, tid) -> bool:
+    """A bulk card on task `tid` whose run is under way (2026-11-17): its rows read pending until each is done, so the task read "agent waiting
+    on you" over the very press doing them - the task's state reads it at work, as any act in flight (taskstate.TaskState.key)."""
+    keys = store._rows("SELECT DISTINCT Batch FROM review WHERE TaskId=? AND Batch IS NOT NULL AND Status='pending'", (int(tid),))
+    return any(running(store, r['Batch']) for r in keys)
 
 
 def _save(store, st: dict) -> None:

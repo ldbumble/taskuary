@@ -91,7 +91,7 @@ await page.evaluate((tid) => { window.__tid = tid; }, t); await page.evaluate(sa
 await type(page, ask);
 
 // ── PLAY THE OWNER until the job rests: press cards, answer the one question, deliver mail, watch the working line ──
-let pagePresses = 0, inboxSeen = 0, calm = 0, lastLine = "", sameLine = 0, n = 0;
+let restarted = false, pagePresses = 0, inboxSeen = 0, calm = 0, lastLine = "", sameLine = 0, n = 0;
 // a site's code, emailed: into his inbox as mail, on the arrival road - the moment it is sent, whatever the walk is waiting on
 const deliver = async () => { if (!existsSync(INBOX)) return; const lines = readFileSync(INBOX, "utf8").split("\n").filter(Boolean);
   for (const l of lines.slice(inboxSeen)) { const m = JSON.parse(l); console.log(`[${s()}s] MAIL in: ${m.subject}`);
@@ -101,6 +101,13 @@ const MAX = (+process.env.JOB_MIN || 75) * 60000;
 while (Date.now() - t0 < MAX) {
   await sleep(5000); n++;
   await deliver();
+  // A RESTART IN THE MIDDLE (the owner's stress round: "a restart in the middle"): JOB_RESTART_AT seconds in, Taskuary's server is stopped and
+  // started again on the same home (real-run's `restart`), the page left open - the job must go on, its cards kept, nothing asked twice
+  if (process.env.JOB_RESTART_AT && !restarted && s() >= +process.env.JOB_RESTART_AT) {
+    restarted = true; console.log(`[${s()}s] RESTART of the server`); writeFileSync(path.join(out, "restart"), "");
+    while (existsSync(path.join(out, "restart"))) await sleep(1000);
+    console.log(`[${s()}s] RESTARTED`); await sleep(5000); await shot(page, `${name}-after-restart`); continue;
+  }
   const c = await api(`/api/tasks/${t}/conversation`);
   const st = await page.evaluate(() => {
     const tp = document.querySelector("[data-tq-task-page]"), vp = tp?.querySelector(".tq-aui-viewport");

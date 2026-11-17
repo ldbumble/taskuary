@@ -122,7 +122,12 @@ while (Date.now() - t0 < MAX) {
     await shot(page, `${name}-page-${pagePresses}`);
     const r = await api('/api/fixture/press-page', { taskId: t });     // ...his click on the form's own button (the pane relays it; measured)
     pressed.push({ s: s(), go: "the page's button", what: st.tail.slice(-160) }); console.log(`[${s()}s] PRESSED the page's button (${JSON.stringify(r)}): ${st.tail.slice(-160).replace(/\n/g, " ")}`);
-    calm = 0; await sleep(4000); continue;
+    // ...once, as he would: the page is given a minute to move on, and one still handed to him after it is a finding, never a second press
+    const was = st.tail.slice(-200); let moved = false;
+    for (let k = 0; k < 30 && !moved; k++) { await sleep(2000); moved = (await api(`/api/tasks/${t}/conversation`)).working || !(await page.evaluate(() => !!document.querySelector("[data-tq-task-page] canvas")))
+      || (await page.evaluate(() => (document.querySelector("[data-tq-task-page] .tq-aui-viewport")?.innerText || "").slice(-200))) !== was; }
+    if (!moved) note(`pressed the page and a minute later it is still handed to him: "${was.slice(-120)}"`);
+    calm = 0; continue;
   }
   // A CARD: pressed as he would, its go-ahead - and what it said kept, to catch the same thing asked again
   const go = st.lit.find((b) => GO.test(b) && !STOP.test(b));

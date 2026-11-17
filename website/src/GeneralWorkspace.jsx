@@ -508,7 +508,9 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
     ...(x.id === landIn ? [...(live.has("land") ? qLine() : []), <React.Fragment key="landing">{landing}</React.Fragment>] : [])];
   const rows = items.map((x, i) => {
     const prev = items[i - 1];
-    if (x.kind === "turn") return <ConvTurn key={x.id} t={x} more={prev?.kind === "turn"} name={name} ask={x.id === askAt ? ask : null}
+    // ...A TURN AT WORK ALWAYS DRAWS ITS HEAD (2026-11-17: one that carried on after the agent's first message folded into the turn above - no
+    // clock, no Stop x, and the head over it read that turn's "ran 27s"): only a finished turn after a turn folds into it
+    if (x.kind === "turn") return <ConvTurn key={x.id} t={x} more={prev?.kind === "turn" && x.state !== "working" && x.state !== "starting"} name={name} ask={x.id === askAt ? ask : null}
       cards={cardsOf(x)} later={items.slice(0, i).some((y) => y.kind === "turn")} />;
     if (x.kind === "line") return <ConvLine key={x.id} x={x} more={prev?.kind === "line"} />;
     if (x.kind === "arrival") return <div key={x.id} className="tq-aui-message tq-aui-brief" data-tq-item={x.id}><Arrived mail={[x]} prev={prev?.kind === "arrival" ? prev : null} /></div>;

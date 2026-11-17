@@ -2,6 +2,12 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.19 - 2026-11-17
+
+- A card he said Don't send to stays where it stood, greyed with its words: no card is gone from the chat
+- The task's list keeps an email he said Don't send to: the card was built greyed but never placed, so it still went from the chat
+- An account the sign-up road made is said as one: "You signed up on ...", never "You signed in to ..."
+
 ## 0.4.0.18 - 2026-11-17
 
 - A report's Send to agent takes his words in its box first, as an FYI's and a dashboard's do: never an empty task waiting on him

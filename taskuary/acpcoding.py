@@ -237,7 +237,7 @@ class ACPCoding:
             prof, launch, env = self._launch()
             self._out(f"\x1b[1;36m{self.cli} over ACP\x1b[0m \x1b[2m{launch['adapter'] or launch['cmd'][0]} - {self.cwd}\x1b[0m\r\n")
             self.client = agents._acp_open(name, launch, agents._long(self.cwd), env, self.resumed_from or None, None, self._say, fresh_if_gone=True)
-            if getattr(self.client, 'fresh_from', None): self._carry_over()
+            if isinstance(getattr(self.client, 'fresh_from', None), str): self._carry_over()
             if launch['adapter']: agents._acp_gears(self.client, prof, name, self._say)
         except Exception as e:
             return self._fell_back(e)

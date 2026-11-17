@@ -1630,7 +1630,7 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     client = conv.client
     # ...ITS CONVERSATION WAS GONE: nothing is asked of the fresh one here - this turn's words assume what it no longer has. The caller says the
     # whole of it again (Gone), and a kept one finds this fresh conversation open and unused (clipool._stale), so no second start is paid
-    if getattr(client, 'fresh_from', None) and not conv.turns:
+    if isinstance(getattr(client, 'fresh_from', None), str) and not conv.turns:
         client.fresh_from = None
         if not keep: client.close()
         raise Gone(resume)

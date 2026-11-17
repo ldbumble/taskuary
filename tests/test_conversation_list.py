@@ -194,6 +194,30 @@ class TheList(unittest.TestCase):
         self.assertEqual(ids[-3:], ['l-two', *drawn, 'l-three'])
         self.assertEqual([x['state'] for x in got['items'] if x['kind'] == 'turn'][0], 'done')                 # the answer above was never stopped
 
+    def test_a_stopped_turn_whose_only_step_is_machinery_is_no_item_on_any_read(self):
+        """The walks, 2026-11-17: he stopped a turn whose only step was Claude loading a tool (ToolSearch). The server kept it for that step, the
+        page drew none - a "1 step" trail for 100 ms, then head and trail gone. One list says what is machinery (stepkinds.json), on every read."""
+        from taskuary import codingchat
+        load = {'type': 'tool_call', 'name': 'ToolSearch', 'detail': {'tool_call_id': 'ts1', 'args': {'query': 'select:WebSearch'}}}
+        self.say('Suggest two.', 'l-one'); self.rest()
+        self.brain.delay = 30
+        self.say('Compare both in detail.', 'l-two', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        ses = general.session_for(self.tid); ses.trace = [*ses.trace, load]
+        self.assertTrue(general.stop_turn(self.s, self.tid))
+        got = self.list()                                                    # ...the live trace, while its CLI lets go
+        self.brain.delay = 0; self.rest()
+        self.assertFalse([x for x in got['items'] if x.get('state') == 'stopped'], self.kinds(got))
+        # ...and a session's record whose turn did nothing but load a tool
+        at = '2026-11-17 09:12:03.200'
+        ups = [{'sessionUpdate': 'tool_call', 'toolCallId': 'ts1', 'title': 'ToolSearch', 'rawInput': {'query': 'select:WebSearch'},
+                '_meta': {'claudeCode': {'toolName': 'ToolSearch'}}, 'status': 'completed', '_at': at, '_t': conversation.ep(at)}]
+        with mock.patch.object(codingchat, 'owned', return_value=[{'sid': 's1', 'source': 'acp', 'updates': ups, 'at': at}]), \
+             mock.patch.object(codingchat, 'sessions', return_value=[]), mock.patch.object(general, 'handles', return_value=False):
+            got = self.list()
+        self.assertFalse([s for x in got['items'] if x['kind'] == 'turn' for s in x['steps'] if s.get('name') == 'ToolSearch'], self.kinds(got))
+        self.assertFalse([x for x in got['items'] if x.get('sid') == 's1'], self.kinds(got))
+
     def test_a_line_typed_while_the_stopped_turn_lets_go_stands_under_the_stop_from_the_first_read(self):
         """The bug hunt's stop, 2026-11-12: he stopped a turn whose CLI took seconds to let go, then typed his next line. The chat read at
         rest, so the page drew the line under the stop; the server kept it unheard behind the stopped turn, so the next read moved it down by

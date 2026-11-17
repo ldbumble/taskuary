@@ -11,6 +11,7 @@
 // and its output stay in `detail`, which the canvas keeps behind the row's disclosure for debugging.
 import { forScreen } from "./agentMarkers.js";
 import { plural } from "./timeWords.js";
+import stepKinds from "../../taskuary/stepkinds.json" with { type: "json" };
 
 const flat = (s) => String(s || "").split(/\s+/).join(" ").trim();
 const clip = (s, n = 90) => { const t = flat(s); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
@@ -356,8 +357,9 @@ const ECHO = /^(→ |· |✗ |session started\b)/;            // agents._live_li
 const RETRY = /^Can't reach Claude's servers right now/;      // agents._live_line's line for Claude's own api_retry
 const QUICK_RAW =/^\s*(?:```(?:json)?\s*)?\{\s*"(?:report|draft|question|done|escalate|why)"\s*:/i;
 // a CLI's own plumbing, never a step of the work: Claude's ToolSearch loads a tool it has not loaded yet ("Used Tool Search on
-// 'select:WebSearch'", ACP step 1, 2026-11-06) - the call it loads it for is the step
-const MACHINERY = new Set(["toolsearch"]);
+// 'select:WebSearch'", ACP step 1, 2026-11-06) - the call it loads it for is the step. ONE LIST, the server's too (conversation._said, the walks
+// 2026-11-17): it kept a stopped turn for a ToolSearch this page drew as nothing - a "1 step" trail for 100 ms, then gone
+const MACHINERY = new Set(stepKinds.machinery);
 export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
   const events = trace || [];
   // A structured backend says everything twice: its tool call and text as events, and the same again as readable `live` lines for

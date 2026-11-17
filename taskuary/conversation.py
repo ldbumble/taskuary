@@ -19,6 +19,7 @@ One item: {id, kind, at, ...}
 Ids never change once given, so the page keys by them and a turn that ends, or a line that is heard, redraws in place."""
 import functools, hashlib, json, re, threading, time
 from datetime import datetime
+from pathlib import Path
 
 INF = float('inf')
 
@@ -53,11 +54,18 @@ def _cleaned(text) -> str:
     try: j = json.loads(t[t.index('{'):t.rindex('}') + 1])
     except ValueError: return ''
     return str(j.get('did') or j.get('about') or '').strip() if isinstance(j, dict) else ''
+# ...A CLI'S OWN PLUMBING IS NO STEP, by the one list the page reads too (the walks, 2026-11-17: a stopped turn whose only step was ToolSearch
+# was kept here for that step and drawn as nothing there - a "1 step" trail for 100 ms, then head and trail gone)
+MACHINERY = frozenset(json.loads(Path(__file__).with_name('stepkinds.json').read_text(encoding='utf-8'))['machinery'])
+def machinery(s: dict) -> bool: return s.get('k') == 'tool' and re.sub(r'[^a-z0-9]', '', str(s.get('name') or '').lower()) in MACHINERY
+
+
 def _said(steps: list, body: str = '') -> list:
-    "A turn's steps with its words cleaned (clean) - and a step that says only what the turn's answer says, or nothing, left out."
+    "A turn's steps with its words cleaned (clean) - and a step that says only what the turn's answer says, or nothing, or is machinery, left out."
     from .chatformat import plain_text
     out = []
     for s in steps:
+        if machinery(s): continue
         # ...a thought is one plain row: the same cleaner, and its markup said as words ("**Replacing the pending draft**" stood raw)
         if s.get('k') == 'thought' and (w := plain_text(clean(s.get('text'))) or clean(s.get('text'))): out.append({**s, 'text': w}); continue
         if s.get('k') != 'said': out.append(s); continue

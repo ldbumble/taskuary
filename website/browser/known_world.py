@@ -13,8 +13,10 @@ from taskuary.store import SQLiteStore
 
 home = Path(os.environ['TASKUARY_HOME'])
 s = SQLiteStore(config.db_path())
-code, data = home / 'code', home / 'data'
-code.mkdir(exist_ok=True); data.mkdir(exist_ok=True)
+# ...beside the home, never in it: Taskuary's own home is never read by an agent (readgate.NEVER), and the owner's code is not kept there
+work = home.parent / f'{home.name}-work'
+code, data = work / 'code', work / 'data'
+code.mkdir(parents=True, exist_ok=True); data.mkdir(parents=True, exist_ok=True)
 
 
 def repo(name: str, files: dict) -> str:

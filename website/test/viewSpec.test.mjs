@@ -66,6 +66,12 @@ test("the server's checked spec rides the answer after its mark; a refusal or a 
   assert.equal(viewOf(call("show", SPEC), res("done")), null);                         // someone else's tool called show
   assert.equal(viewOf(call("mcp__taskuary__show", { summary: "{\"root\":…" })), null); // its arguments cut in the trace
   assert.equal(viewOf(call("mcp__taskuary__show", SPEC)).spec.title, "Northwind renewals");   // live: drawn from its arguments
+  // ...but AN ANSWER WITHOUT THE MARK IS A REFUSAL (2026-11-17): the server says why in plain text, not is_error, so a table it refused was
+  // drawn from the arguments over the one it then accepted - the price table twice. Only a call with no answer at all draws its arguments
+  const twice = { title: "Prices", root: "t", elements: { t: { type: "table", props: { columns: ["Plan", "Price"], rows: [["Basic", 10]] }, columns: ["Plan", "Price"], rows: [["Basic", 10]] } } };
+  assert.equal(viewOf(call("mcp__taskuary__show", twice), res("elements.t has columns, rows - an element is type, props, children")), null);
+  assert.equal(viewOf({ ...call("mcp__taskuary__show", twice), detail: { ...call("", twice).detail, output: "elements.t has columns, rows - an element is type, props, children" } }), null);
+  assert.equal(viewOf(call("mcp__taskuary__show", twice), res("")).spec.title, "Prices");     // a log that kept no answer
   // ...and A VIEW IS DRAWN OR IT STAYS A STEP, NEVER ITS JSON (the owner, 2026-11-15: "did you also fix the json render of the charts/visuals?"):
   // a spec the page cannot draw - a live call's own arguments outside the catalog (a pie, a Vega object) - was printed as JSON in the chat
   assert.equal(viewOf(call("mcp__taskuary__show"), res(`${MARK}{"root":"a","elements":{"a":{"type":"marquee"}}}`)), null);

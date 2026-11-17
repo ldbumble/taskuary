@@ -114,7 +114,7 @@ export const buttonOf = (p) => ({ label: p.label, ...(p.verb ? { verb: p.verb, l
 
 // ── a trace's `show` call -> the chat's view part ───────────────────────────────────────────────
 const SHOW = /^(mcp__taskuary__)?show$/;
-// its answer's spec, after MARK: the server's own check of it. A call with no answer yet (live) or none kept (a log) draws its arguments
+// its answer's spec, after MARK: the server's own check of it. Only a call with no answer yet (live) or none kept (a log) draws its arguments
 export const specIn = (out) => { const s = String(out || ""), i = s.indexOf(MARK); if (i < 0) return undefined;
   try { return JSON.parse(s.slice(i + MARK.length).replace(/ ⏎ /g, "\n").trim()); } catch { return null; } };
 // ...and the FILES it showed (agenttools.show_files, 2026-11-09): copies kept on the task, their rows after FILES_MARK and before any view's
@@ -136,8 +136,11 @@ export function viewOf(e, result) {
   if (e?.type !== "tool_call" || !SHOW.test(String(e.name || ""))) return null;
   const d = result?.detail;
   if (d?.is_error) return null;                       // refused: the agent was told why, and its step says it tried
-  const got = specIn(d?.result ?? e.detail?.output);
+  const said = String(d?.result ?? e.detail?.output ?? "").trim(), got = specIn(said);
   if (got === undefined && String(e.name) === "show") return null;       // a bare "show" is someone else's tool unless its answer is ours
+  // ...and an answer without the mark is the server's refusal (2026-11-17): it says why in words, not is_error, so drawing the arguments
+  // put a table it refused above the one it then took - the server's check decides, the page draws only what it marked shown
+  if (got === undefined && said) return null;
   const raw = got === undefined ? e.detail?.args : got;
   // ...arguments cut down in the trace (a summary) or never kept (a CLI log's step): nothing to draw, so it stays a step
   if (raw == null || (got === undefined && !isObj(raw.elements))) return null;

@@ -84,7 +84,10 @@ def _going_on(store, tid: int, since: float, own=()) -> bool:
     A press on the front itself (`own`: a Send that did not go, which still waits on its card) holds nothing back: it never left its place."""
     from . import general
     from .conversation import ep
-    pressed = max([ep(r['at']) for r in store._rows("SELECT ReviewId, DecidedAt AS at FROM review WHERE TaskId=? AND DecidedAt IS NOT NULL", (int(tid),))
+    # ...a PRESS: the agent taking back its own card is none - nothing wakes it, and the front stood held for WAKING seconds over it (a CI
+    # flake twice, 2026-11-17: whenever the take-back fell in the second after its last answer)
+    pressed = max([ep(r['at']) for r in store._rows("SELECT ReviewId, DecidedAt AS at FROM review WHERE TaskId=? AND DecidedAt IS NOT NULL "
+                                                    "AND COALESCE(DecidedBy, '') NOT LIKE 'agent%'", (int(tid),))
                    if r['ReviewId'] not in own] or [0.])
     from . import landing
     if LAND not in own: pressed = max(pressed, ep((landing.record(store, int(tid)).get('landed') or {}).get('at')))

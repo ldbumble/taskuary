@@ -408,6 +408,7 @@ class TheList(unittest.TestCase):
         ray, erin = mail('ray@northwind.example', 'Ray - a quote for a bus for 40? Alex'), mail('erin@northwind.example', 'Erin - the bus is booked. Alex')
         self.brain.delay = 0; self.rest()
         was = self.list(); self.assertEqual(was['queue']['held'], [erin])
+        import time; time.sleep(1.1)            # ...in the second after its last answer: an agent's own take-back is no press that holds Ray's back
         verdicts.withdraw(s, tid, 'Ray has not quoted yet', 'agent', which=str(erin))
         got = self.list()
         self.assertNotIn(erin, [c['review'] for x in got['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])])

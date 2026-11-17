@@ -671,6 +671,12 @@ def _items(store, tid: int) -> dict:
     begun, opens = min((r['At'] for r in starts if t0 and r['At'] >= t0), default=0.), ({'opening': True} if general.cold(tid) else {})
     if at_work and not mine and unfiled: pass
     elif at_work and not mine:
+        # ...AND WHAT IT WILL TAKE STANDS ABOVE IT FROM THE FIRST READ (the walks, 2026-11-17: his outside reply, handed to the agent at rest,
+        # sat ~3 s as a chip by the box under the turn's bare dots, then jumped up into the chat): where no input heard since begins this turn,
+        # what waits - a mail, a line of his - is its input, drawn where it will stand once heard, under its own name. Behind a Trust it waits
+        if not hold_ and not (tail and tail['kind'] in ('line', 'arrival', 'press') and (tail.get('_h') or tail.get('_hm') or ('press', tail['id'][2:]) in led)):
+            took = [p for p in pend if p['kind'] in ('line', 'arrival')]
+            if took: out += took; pend = [p for p in pend if p not in took]; tail = took[-1]
         began_ =begun or t0 or max(mark if tail and tail['kind'] == 'turn' and mark >= (tail.get('ended') or 0) else 0., (tail or {}).get('_h') or (tail or {}).get('_hm') or 0.) or time.time()      # from its hand-over, where one is written
         out.append(tail := {'kind': 'turn', 'at': stamp(began_), 'state': 'starting', 'steps': [], 'text': '', 'cards': [], 'started': began_, 'ended': None, **opens})
     elif at_work and tail['state'] != 'working': tail.update(state='working', ended=None, started=t0 or tail['started'])

@@ -663,6 +663,21 @@ class TheList(unittest.TestCase):
         self.assertTrue(any(b.startswith('h:') for b in conversation.flow_breaks({'items': [mail], 'pending': []}, held)))   # ...and then nowhere
         self.assertFalse(any(b.startswith('h:') for b in conversation.flow_breaks({'items': [mail], 'pending': [], 'dropped': ['l-2']}, held)))
 
+    def test_his_outside_reply_that_starts_a_turn_stands_above_it_from_the_first_read(self):
+        """The walks, 2026-11-17: his own reply on the thread came in at rest and was handed to the agent (general.hand) - for the ~3 s before
+        the hand-over was written it sat as a chip by the box under a turn's bare dots, then jumped up into the chat. The input that starts a
+        turn is drawn in its place from the first read, the turn under it, and both keep their names once it is heard."""
+        self.say('Suggest two.', 'l-one'); self.rest(); time.sleep(1.1)              # an earlier turn: its session stays, at rest
+        first = [x['id'] for x in self.list()['items']]
+        mid = self.mail('I booked the Harbour Room myself.', own=True)
+        general.hand(self.tid); self.addCleanup(general.hand, self.tid, -1)
+        got = self.list()
+        self.assertEqual((got['pending'], [x['id'] for x in got['items']][:-1]), ([], [*first, f'm:{mid}']), self.kinds(got))
+        self.assertEqual(self.kinds(got)[-1], ('turn', 'starting')); live = got['items'][-1]['id']
+        conversation.hear(self.s, self.tid, [], turn=True)
+        got = self.list()
+        self.assertEqual(([x['id'] for x in got['items']][-2:], got['pending']), ([f'm:{mid}', live], []))
+
     def test_a_message_drawn_never_goes_back_by_the_box_when_a_turn_begins_in_its_second(self):
         """The release run on macOS, 2026-11-12 (the basic flow's check, on seven coding scenarios): the first mail was drawn, a turn began in
         the second it had joined - before any hand-over named it - and the mail left the canvas for the waiting room. Drawn once, it stays."""

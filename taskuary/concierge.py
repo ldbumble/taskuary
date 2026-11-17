@@ -1749,7 +1749,7 @@ NEW_TAB = {'general': ('agent', 'general', 'regular_agent'), 'coding': ('agent',
 NEW_ONLY = ('send', 'goal', 'dashboard')          # New's tabs alone: no task kind, so on a phone they are the desk's
 # ...each the button New's tab draws (NewSheet.jsx): since 2026-10-30 a report, a dashboard and a routine have no Build it - their describe
 # box became Set up with AI - and a goal reads Plan it while an AI can plan the steps. The line named presses nobody could find (2026-11-02)
-NEW_PRESS = {'note': 'Note it', 'report': 'Set up with AI', 'workflow': 'Set up with AI', 'playbook': 'Set up with AI', 'send': 'Draft it',
+NEW_PRESS = {'note': 'Note it', 'report': 'Set up with AI', 'workflow': 'Set up with AI', 'playbook': 'Set up with AI',
              'goal': 'Track it', 'dashboard': 'Set up with AI'}
 def new_press(store, kind: str) -> str:
     from . import capabilities
@@ -1780,28 +1780,24 @@ def routine_prefill(recurs: dict, text: str = '') -> tuple:
 # To empty - "did it wrong. it should be on whatsapp?"). The tool took no channel, so the card had none and dropped the `to` with it
 # (NewSheet applies a recipient only on a channel it was told), and a chat is sent to by its id, never the name the owner said. The
 # model names the channel and who; the name is found among the chats this install knows - a group's own name from the WhatsApp roster
-# too - and never guessed: two that fit, or none, leave To empty and say so.
+# too - and never guessed: two that fit, or none, place nobody (and _new hands the ask to an agent).
 def send_to(store, channel: str, who: str) -> tuple:
-    "(channel, the id Send something's To takes, '' - or what kept To empty)."
+    "(channel, the id - or comma-joined addresses - the message goes to, '' when nobody can be placed)."
     from . import outbound, peoplesearch as ps, wanames
     w, ch = ' '.join(str(who or '').split()), str(channel or '').strip().lower() or ('email' if str(who or '').strip() else '')
-    if not w: return ch, '', ''
+    if not w: return ch, ''
     if ch == 'email':
         addr, miss = route_to(store, w)
-        return ch, addr, f'{miss}, so To is empty - pick them there.' if miss else ''
-    name = ch.title() if ch != 'whatsapp' else 'WhatsApp'
-    if ch not in outbound.send_channels(store): return ch, '', f'No {name} is connected to send from, so To is empty.'
+        return ch, '' if miss else addr
+    if ch not in outbound.send_channels(store): return ch, ''
     rows = {r['to']: r.get('name') or '' for r in ps.known(store, ch)}
     if ch == 'whatsapp': rows |= {j: n for j, n in wanames.names(store).items() if wanames.is_jid(j) and not wanames.bare(n, j)}
-    if w in rows: return ch, w, ''
+    if w in rows: return ch, w
     words = ps._words(w)
     hits = sorted(((s, j, n) for j, n in rows.items() if words and (s := ps.score(words, {'to': j, 'name': n}))), key=lambda x: -x[0])
     exact = [(j, n) for _, j, n in hits if ps._words(n) == words]
     top = exact or [(j, n) for s, j, n in hits if s == hits[0][0]]
-    if not top: return ch, '', f'No {name} chat or group called {w} is known here, so To is empty - pick it there.'
-    if len(top) > 1: return ch, '', f"{w} could be {' or '.join(n for _, n in top[:3])} on {name}, so To is empty - pick one there."
-    if outbound.refuse_input_chat(store, ch, top[0][0]): return ch, '', f'{top[0][1]} is a chat Taskuary reads, never one it writes to, so To is empty.'
-    return ch, top[0][0], ''
+    return ch, top[0][0] if len(top) == 1 and not outbound.refuse_input_chat(store, ch, top[0][0]) else ''
 
 
 def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = '', recurs: dict | None = None, lead: str = '',
@@ -1812,24 +1808,27 @@ def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = ''
     kind, how, verb = NEW_TAB[want]
     # A JOB, OR A MESSAGE WITH ITS RECIPIENT, IS MADE AND OPENED - NOT WRITTEN INTO NEW (the owner, 2026-11-12: "assistant tab should not open new
     # but open task directly"): the card came up filled in and pressed itself, a step between the ask and the task. What still needs the owner
-    # - a recipient nobody could place, a meeting's time, a goal's date, a builder's setup - still comes up in New
+    # - a meeting's time, a goal's date, a builder's setup - still comes up in New
     # ...`job`: the checkout or profile the ask named, which the task is made with (handoff_task)
     if kind == 'agent' and str(text or '').strip():
         return _made_now(store, tid, 'task.create_from_text', {'kind': want, 'text': str(text).strip(), **{k: v for k, v in (job or {}).items() if v}}, lead)
-    ch, to, miss = send_to(store, channel, to) if kind == 'send' else ('', '', '')
-    if kind == 'send' and to and not miss and str(text or '').strip():
-        return _made_now(store, tid, 'outbox', {'channel': ch, 'to': to, 'about': str(text).strip()}, lead)
+    if kind == 'send':
+        ch, to = send_to(store, channel, to)
+        if to and str(text or '').strip(): return _made_now(store, tid, 'outbox', {'channel': ch, 'to': to, 'about': str(text).strip()}, lead)
+        # A MESSAGE THAT CANNOT BE PLACED IS HIS SENTENCE TO AN AGENT (2026-11-17): "email Erin and Gail that the offsite moved to Friday"
+        # came up in New cut down to the model's "The offsite moved to Friday.", To empty, under a line naming Draft it - and with nothing
+        # able to send, New had already switched itself to the agent tab, so the line named a button that was not there. A recipient
+        # nobody could place, two who fit, no chat to send on: the agent gets his words as typed and finds or asks who - one road, no New
+        typed = str((_TURN.get() or {}).get('typed') or '').strip()
+        return _made_now(store, tid, 'task.create_from_text', {'kind': 'general', 'text': typed or str(text or '').strip()}, lead)
     press = buttons.label(verb) if verb else new_press(store, kind)
     # ...in the past, never "below": after a reload New is shut and the line stood over nothing (verify, 2026-10-19)
     # ...and what it did LEADS, what it found after: the receipt at the end of a paragraph read as a turn that did nothing (said_what; the
     # live audit, 2026-11-02)
-    said = f"Wrote it into New - {press} there starts it." + (f' {miss}' if miss else '') + (f' {lead}' if lead else '')
+    said = f"Wrote it into New - {press} there starts it." + (f' {lead}' if lead else '')
     line = record(store, tid, 'assistant', said)
-    # ...and Send something's channel and recipient, as its own fields take them (NewSheet initialChannel, initialTo) - nothing goes before its Send
     return {'say': said, 'options': [], 'chips': [], 'decision': None,
-            'new': {'kind': kind, 'how': how, 'text': str(text or '').strip()[:2000], 'line': line,
-                    **({'routine': runs} if recurs else {}),
-                    **({'channel': ch} if ch else {}), **({'to': to[:300]} if to else {})}}
+            'new': {'kind': kind, 'how': how, 'text': str(text or '').strip()[:2000], 'line': line, **({'routine': runs} if recurs else {})}}
 
 
 def no_start(store, kind: str) -> str:
@@ -3943,12 +3942,24 @@ def on_its_page(sid: int, kind: str, named: str) -> tuple:
     return {'op': 'set', 'field': f['key'], 'value': ON_PAGE[kind]}, f'Switched {named} {ON_PAGE[kind]} its clock.'
 
 
+# A LIST OF PEOPLE IS EACH OF THEM (2026-11-17: "email Erin and Gail that ..." was looked up as one person called "Erin, Gail", found
+# nobody, and the message was never drafted): the list's grammar - commas, semicolons, "and", "&" outside a quoted display name - is split
+# and every name placed on its own; one that cannot be placed leaves the whole list unplaced, never a message to half of them
+LIST_SEP = re.compile(r'\s*(?:[,;&]|(?<![@.])\band\b(?![@.]))\s*(?=(?:[^"]*"[^"]*")*[^"]*$)', re.I)
+
 def route_to(store, who: str) -> tuple:
-    """(the address a report's `to` names, '') - or ('', what makes it unsure) when it is not sure who: a name nobody by it has written as, or
+    """(the address - or addresses, comma-joined - a `to` names, '') or ('', what makes it unsure): a name nobody by it has written as, or
     one several people answer to equally. An address is taken as typed; a name is never guessed into one (the owner, 2026-11-02)."""
+    w = ' '.join(str(who or '').split())
+    parts = [p for p in LIST_SEP.split(w) if p.strip()] or ['']
+    got = [_route_one(store, p) for p in parts]
+    if miss := [m for _, m in got if m]: return '', '; '.join(miss)
+    return ', '.join(dict.fromkeys(a for a, _ in got)), ''
+
+def _route_one(store, w: str) -> tuple:
+    "route_to for one person."
     from . import peoplesearch as ps
     from email.utils import parseaddr
-    w = ' '.join(str(who or '').split())
     if '@' in w and ' ' not in w: return w.lower(), ''
     # ...and a name WITH its address ("Gail Moreno <gail@northwind.example>", the visual audit 2026-11-13) is that address: a header's grammar
     if '<' in w and '@' in (a := parseaddr(w)[1]) and ' ' not in a: return a.lower(), ''

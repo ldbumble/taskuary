@@ -326,13 +326,11 @@ class EveryRoadIsOffered(unittest.TestCase):
             out = call(s, 'task.create_from_text', kind='send', channel='whatsapp', text='everything is updated and the installer is ready', to='Northwind team')
         tid = int(out['open'].split('=')[1])
         self.assertEqual({k: json.loads(s.pending_review(tid)['Deliver'])[k] for k in ('channel', 'to')}, {'channel': 'whatsapp', 'to': grp})   # its Send stays the owner's
-        # ...a group nobody knows opens on WhatsApp with To empty, and the line says it was not found
-        out = call(s, 'task.create_from_text', kind='send', channel='whatsapp', text='x', to='Payworth billing')
-        self.assertEqual((out['new']['channel'], 'to' in out['new']), ('whatsapp', False))
-        self.assertIn('No WhatsApp chat or group called Payworth billing', out['say'])
-        # ...and two that fit equally are both named, neither picked
-        out = call(s, 'task.create_from_text', kind='send', channel='whatsapp', text='x', to='Northwind')
-        self.assertNotIn('to', out['new']); self.assertIn('Northwind team or Northwind night shift', out['say'])
+        # ...a group nobody knows, or two that fit equally, place nobody: the ask goes to an agent, which finds or asks who (2026-11-17) -
+        # never New with To empty
+        for to in ('Payworth billing', 'Northwind'):
+            with mock.patch.object(concierge, '_made_now', side_effect=lambda s, t, op, p, lead='': {'op': op}):
+                self.assertEqual(call(s, 'task.create_from_text', kind='send', channel='whatsapp', text='x', to=to).get('op'), 'task.create_from_text', to)
 
     def test_page_only_buttons_bring_their_page_up(self):
         s = store()

@@ -85,6 +85,13 @@ def _hash(tok) -> str: return hashlib.sha256(str(tok or '').encode('utf-8', 'sur
 
 
 # ── the site: what a page IS, by its own origin ──────────────────────────────────────────────────────────────────────────
+def _loopback(h: str) -> bool:
+    "This computer: localhost, or an address of the loopback range - all of 127.0.0.0/8 is, not only 127.0.0.1."
+    if h in LOOPBACK: return True
+    try: return ipaddress.ip_address(h.strip('[]')).is_loopback
+    except ValueError: return False
+
+
 def _ip(h: str) -> bool:
     try: ipaddress.ip_address(h.strip('[]')); return True
     except ValueError: return False
@@ -115,7 +122,7 @@ def site_of(url) -> str:
     try: u = urlsplit(str(url or '').strip())
     except ValueError: return ''
     h = host_of(u.hostname)
-    if u.scheme == 'https' or (u.scheme == 'http' and h in LOOPBACK): return registrable(h)
+    if u.scheme == 'https' or (u.scheme == 'http' and _loopback(h)): return registrable(h)
     return ''
 
 
@@ -1093,17 +1100,20 @@ def type_new(sid: str, site: str, pw: str) -> dict:
 def new_account(store, tid, sid, site, rid, fill=None) -> dict:
     """The agent ended its turn on a sign-up form, everything but the password filled. A site the owner already keeps a sign-in for is
     signed in to, never signed up on twice; else the password is made and typed on its own thread, and the agent told what happened."""
-    if saved(store, site):
-        _continue(store, tid, rid, site, 'taskuary', words=(f'Already signed up on {site}', f'The owner already has an account on {site}, kept '
-                  f'with the saved sign-ins - do not sign up again. Open its sign-in page and end your turn with [[TASKUARY-SIGNIN: {site}]].'))
-        return {'site': site, 'auto': False}
+    # ...TOLD FROM ITS OWN THREAD, either way (the real-CLI walk, 2026-11-16): told inside the turn that asked - still ending - the agent never
+    # heard "already signed up", nothing ran, and the chat read "Thinking..." for good
+    kept = bool(saved(store, site))
     from . import general
     general.hand(tid)
     def run():
-        try: _signup(store, tid, sid, site, rid, fill or type_new)
+        try:
+            if kept: _continue(store, tid, rid, site, 'taskuary', words=(f'Already signed up on {site}', f'The owner already has an account on '
+                               f'{site}, kept with the saved sign-ins - do not sign up again. Open its sign-in page and end your turn with '
+                               f'[[TASKUARY-SIGNIN: {site}]].'))
+            else: _signup(store, tid, sid, site, rid, fill or type_new)
         finally: general.hand(tid, -1)
     threading.Thread(target=run, daemon=True, name=f'signup-{tid}').start()
-    return {'site': site, 'auto': True}
+    return {'site': site, 'auto': not kept}
 
 
 def _signup(store, tid, sid, site, rid, fill):

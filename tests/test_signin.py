@@ -807,3 +807,17 @@ class SigningUp(unittest.TestCase):
         with mock.patch.object(signin, 'connect', return_value=page), mock.patch.object(signin, 'SETTLE', 0), mock.patch.object(browserview, 'filling', mock.MagicMock()):
             self.assertEqual(signin.type_new('sess1', 'rentscope.example', 'Np9!x'), {'user': USER})
         self.assertEqual((page.typed, page.sent), ([(0, 'Np9!x'), (1, 'Np9!x')], True))
+
+
+    def test_the_agent_is_told_from_its_own_thread_never_inside_the_turn_that_asked(self):
+        """The real-CLI walk, 2026-11-16: a site already kept was answered inside the ending turn that asked - the agent never heard it, and
+        the chat read "Thinking..." for good. Every answer to the marker comes from a thread of its own, after needs() has returned."""
+        signin.save(self.s, 'rentscope.example', USER, PW); told = []
+        real = signin._continue
+        def spy(*a, **k): told.append(threading.current_thread() is threading.main_thread()); return real(*a, **k)
+        with mock.patch.object(signin, '_continue', spy): self.run_signup(lambda *a: None)
+        self.assertEqual(told, [False])
+
+    def test_every_loopback_address_is_this_computer(self):
+        self.assertEqual(signin.site_of('http://127.0.0.7:18791/s/x/signup'), '127.0.0.7')
+        self.assertEqual(signin.site_of('http://10.0.0.7/login'), '', 'plain http off this computer is no place for a password')

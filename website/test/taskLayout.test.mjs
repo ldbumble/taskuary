@@ -246,6 +246,8 @@ test("the two sections come in the flow's order, and each closed tab says where 
   assert.equal(cameFrom({ Channel: "email", SourceName: "alex@northwind.example", FromName: "Gail Moreno", FromEmail: "gail@northwind.example" }), "Gail Moreno");
   assert.equal(cameFrom({ Channel: "email", SourceName: "alex@northwind.example", FromEmail: "gail@northwind.example" }), "gail@northwind.example");
   assert.equal(cameFrom({ Channel: "whatsapp", SourceName: "Finance team", FromName: "Ray Colton" }), "Finance team");
+  // ...and a Teams message read through his mailbox is its sender's, never his own address (the owner, 2026-11-17)
+  assert.equal(cameFrom({ Channel: "teams", SourceName: "alex@northwind.example", FromName: "Ray Colton", FromEmail: "teams:u-ray" }), "Ray Colton");
   assert.match(fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8"), /channel: cameIn \? cameFrom\(cameIn\) \|\| channelName\(cameIn\.Channel\)/);
   assert.equal(agentWord({}), "not started");
   assert.equal(agentWord({ live: true, waiting: true }), "needs you");

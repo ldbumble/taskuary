@@ -108,7 +108,10 @@ export const TAB_MOST = 40;
 // ...and under the first line whom it went to, when anyone but the owner was on it (`to`, taskSources.toLine - the owner, 2026-11-03)
 // ...WHO it came from, for its first line: an email's sender by name - its SourceName is the owner's own mailbox, and the spine of every mail
 // task read "alex@northwind.example · 1 message" (the overnight run, 2026-11-03) - and a chat's room (a WhatsApp group, a Teams channel) by its own
-export const cameFrom = (m) => !m ? "" : String(m.Channel || "").toLowerCase() === "email" ? String(m.FromName || m.FromEmail || "") : String(m.SourceName || "");
+// ...and A ROOM THAT IS AN ACCOUNT IS WHERE IT CAME IN, never who it is from (the owner, 2026-11-17, of a Teams task: "why does it say my email when
+// it's from a teams thing?" - the Teams reader names the mailbox it read through): the sender, as for an email
+export const cameFrom = (m) => !m ? "" : String(m.Channel || "").toLowerCase() === "email" || String(m.SourceName || "").includes("@")
+  ? String(m.FromName || m.FromEmail || m.SourceName || "") : String(m.SourceName || "");
 export const fromStatus = ({ channel = "", count = 0, msgs = [], workflow = null, made = "", sorted = "", to = "" } = {}) => ({
   lines: [count ? [channel, plural(count, "message")].filter(Boolean).join(" · ") : workflow ? `Routine · ${workflow.title}` : made, to,
     ...msgs.slice(0, TAB_MOST).map((m) => `${m.who}: ${q(m.words)}`)].filter(Boolean),

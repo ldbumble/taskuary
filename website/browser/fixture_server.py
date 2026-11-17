@@ -175,6 +175,15 @@ def _install_fresh_routes(app, store):
         if out.get("message_id"): channels.save_attachments(store, out["message_id"], atts, ext)
         return out
 
+    @app.post("/api/fixture/incoming")
+    def fixture_incoming(body: dict = Body(...)):
+        "A mail from anyone (`from_email`, `from_name`, `subject`, `body`) taken in on the real arrival road, triage and all - a site's code, a vendor's answer."
+        from taskuary import server
+        ext = f"fx-in:{time.time()}"
+        return ingest.ingest_message(store, {"external_id": ext, "channel": "email", "subject": body.get("subject") or "", "body": body.get("body") or "", "conversation_id": ext,
+                                             "from_name": body.get("from_name") or "", "from_email": body["from_email"], "to": ["alex@northwind.example"],
+                                             "source_name": "alex@northwind.example"}, llm=server._llm())
+
     @app.post("/api/fixture/own-reply")
     def fixture_own_reply(body: dict = Body(...)):
         "The owner's own line on the task's channel, read back from it as a poll reads it (channels.ingest_own_message) - a recorded flood's third voice."

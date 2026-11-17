@@ -121,6 +121,14 @@ TOOLS = {
                       "\"tomorrow 9am\", \"2026-11-12\"), then back. The owner's \"remind me\" is this; check_back is your own wait on "
                       "someone else. Nothing is sent.",
                _S({'when': _STR}, ('when',)), ('POST', '/api/agent/remind')),
+    # ...and A JOB OF ITS OWN, STARTED NOW (the owner, 2026-11-17: "I think it should be able to create new task from the agent"): a separate
+    # job the owner asks for here gets its own task and its own agent at once - made inside the app, nothing leaves, so no card
+    'new_task': ('own', "Start a separate job the owner asked for as a task of its own, with its own agent working it at once: `title` (a "
+                        "line), `ask` (the whole brief, in the owner's words and what you know), `kind` general or coding, `model` if the "
+                        "owner named one, `repo` (a checkout's name or path) for coding. Nothing is sent; no card - it starts now. Not for "
+                        "this task's own work, and not to move this task's messages (that is propose break_out).",
+                 _S({'title': _STR, 'ask': _STR, 'kind': {'type': 'string', 'enum': ['general', 'coding']}, 'model': _STR, 'repo': _STR},
+                    ('title', 'ask')), ('POST', '/api/agent/new-task')),
     # ...and a stronger model for one hard question (askstronger.py, the owner 2026-11-06: "if it needs it, it calls it")
     'ask_stronger': ('read', "Ask a stronger model ONE question you are stuck on - a hard judgement, a tricky calculation. `context` "
                              "is all it sees; it has no tools and answers in words. Not for routine steps.",
@@ -281,6 +289,7 @@ SHORT = {
     'check_back': 'Be woken on this task later, at `when`, with `what` as your next turn.',
     'remind': "Take the task off the owner's list until `when`.",
     'ask_stronger': 'Ask a stronger model one hard question; `context` is all it sees.',
+    'new_task': 'Start a separate job the owner asked for as its own task, its agent working at once (no card).',
     'note_peers': 'Leave a note for another coding agent (`to`: TQ-0123, repo or all).',
     'use_repo': "Pick the git checkout this task's work belongs in.",
     'find_repos': 'The git checkouts you may work in, newest commit first.',
@@ -335,6 +344,9 @@ NOT_LISTED = ("A SITE OR SYSTEM NOT LISTED HERE has no connection: say so in one
 
 def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     """_call - and a card's tool says where its card stands in the task's line (cardqueue: one card at a time, in the order raised)."""
+    # ...ONE item is one card, as if given whole (2026-11-17: a lone break_out stood as "1 step - review a few, then do them all", "Approve all 1")
+    if TOOLS[name][0] == 'propose' and isinstance((args or {}).get('items'), list) and len(args['items']) == 1 and isinstance(args['items'][0], dict):
+        args = {**{k: v for k, v in args.items() if k != 'items'}, **args['items'][0]}
     if TOOLS[name][0] == 'propose' and isinstance((args or {}).get('items'), list): out = _many(store, tid, name, args, doors)
     else: out = _call(store, tid, name, args, doors)
     if TOOLS[name][0] != 'propose' or not isinstance(out, str): return out
@@ -470,6 +482,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if name == 'check_back': return _j(doors['check_back'](tid, str(a.get('when') or ''), str(a.get('what') or '')))
     if name == 'todos': return _j(doors['todos'](tid, a))
     if name == 'remind': return _j(doors['remind'](tid, str(a.get('when') or '')))
+    if name == 'new_task': return _j(doors['new_task'](tid, a))
     if name == 'remember': return doors['remember'](tid, str(a.get('note') or ''), str(a.get('about') or ''), str(a.get('replaces') or ''))['says']
     if name == 'ask_stronger':
         out = doors['ask_stronger'](tid, str(a.get('question') or ''), str(a.get('context') or ''))

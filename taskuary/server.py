@@ -5863,6 +5863,43 @@ def agent_remind(body: AgentRemindBody, request: Request):
         store.add_comment(body.task_id, body.agent, 'agent', f"Reminder set for you: {out['when']}." + (f" {out['warn']}" if out.get('warn') else ''))
     return {'ok': True, **out}
 
+class AgentNewTaskBody(BaseModel): task_id: int; title: str = ''; ask: str = ''; kind: str = 'general'; model: str = ''; repo: str = ''; agent: str = 'agent'
+
+@app.post('/api/agent/new-task')
+def agent_new_task(body: AgentNewTaskBody, request: Request):
+    """The new_task tool: a separate job the owner asked for on this task, made a task of its own and started at once (the owner, 2026-11-17:
+    "I think it should be able to create new task from the agent"). It is the owner's own work - made as New makes it, started by the task
+    page's own dispatch door - so nothing is held for a press: nothing leaves. Never from a stranger's task, nor one the owner never spoke on."""
+    import asyncio, threading
+    from . import general, origin, repochoice
+    _own_task_only(request, body.task_id)
+    if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
+    if origin.of_task(store, body.task_id)[0] == 'stranger' or not general.owner_spoke(store, body.task_id):
+        raise HTTPException(403, 'not started: only the owner starts new work, and they have not asked for it on this task - say what you '
+                                 'would start in your answer instead.')
+    title, ask = ' '.join(str(body.title or '').split())[:120], str(body.ask or '').strip()
+    if not title or not ask: raise HTTPException(422, 'give `title` (a line) and `ask` (the whole brief) - nothing was started')
+    kind = str(body.kind or 'general').strip().lower()
+    if kind not in task_kinds.AGENT: raise HTTPException(422, f'`kind` is general or coding, not {kind!r} - nothing was started')
+    if kind == 'coding' and not hub_agents.developer_mode(store): kind = 'general'
+    new = store.create_task({'Title': title, 'Summary': ask, 'Kind': kind, 'AskedVia': 'agent', 'OriginBase': 'owner'}, body.agent)
+    from . import selfclose
+    selfclose.claim(store, new, ACTOR)           # the owner's own work: its agent never closes it by itself
+    store.audit('task', new, 'create', body.agent, detail={'from_task': body.task_id})
+    store.add_comment(body.task_id, body.agent, 'agent', f'Started {task_ref(new)}: {title}')
+    out = {'ok': True, 'task': task_ref(new), 'title': title}
+    if body.repo and kind == 'coding':
+        try: repochoice.use(store, new, body.repo, f'named by the agent on {task_ref(body.task_id)}')
+        except (PermissionError, ValueError) as e: out['repo_not_set'] = str(e)
+    bg = BackgroundTasks()
+    try: got = dispatch_task(new, DispatchBody(kind=kind, instruction=ask, model=body.model or None, app_words=True), bg)
+    except HTTPException as e:
+        return {**out, 'started': False, 'why': str(e.detail), 'next': f'{task_ref(new)} is made but its agent did not start - say why in your answer'}
+    # ...its first turn runs off this call: the agent that asked goes on with its own turn meanwhile
+    if bg.tasks: threading.Thread(target=lambda: asyncio.run(bg()), daemon=True, name=f'new-task-{new}').start()
+    if got.get('dispatch') == 'needs_repo': return {**out, 'started': False, 'why': got.get('reason'), 'next': 'the owner picks its checkout on that task'}
+    return {**out, 'started': bool(got.get('started') or got.get('existing')), 'next': f'say in one line that {task_ref(new)} is working on it'}
+
 class AgentRememberBody(BaseModel): task_id: int; note: str = ''; about: str = ''; replaces: str = ''; agent: str = 'agent'
 AGENT_KEEPS = 5          # new memory lines one task's agent may write in a day; a correction (`replaces`) adds none and is always taken
 
@@ -6204,6 +6241,7 @@ async def mcp_rpc(request: Request, task: int = 0):
              'check_back': lambda tid, when, what: agent_check_back(AgentCheckBackBody(task_id=tid, when=when, what=what), request),
              'todos': lambda tid, a: agent_todos(AgentTodosBody(**{k: v for k, v in a.items() if k in ('add', 'reword', 'merge')}, task_id=tid), request),
              'remind': lambda tid, until: agent_remind(AgentRemindBody(task_id=tid, until=until), request),
+             'new_task': lambda tid, a: agent_new_task(AgentNewTaskBody(**{**{k: v for k, v in a.items() if k in AgentNewTaskBody.model_fields}, 'task_id': tid}), request),
              'remember': lambda tid, note, about='', replaces='': agent_remember(AgentRememberBody(task_id=tid, note=note, about=about, replaces=replaces), request),
              'ask_stronger': lambda tid, q, c: agent_ask_stronger(AgentAskStrongerBody(task_id=tid, question=q, context=c), request),
              'reply': lambda tid, text, to='', files=(), **who: agent_reply(AgentReplyBody(task_id=tid, text=text, to=to, files=list(files), **who), request),

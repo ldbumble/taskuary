@@ -333,3 +333,41 @@ class EverySessionGetsThem(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+# AN AGENT STARTS A NEW TASK BY ITSELF (the owner, 2026-11-17: "seems like the agent can not create a new task by itself? why is there a action
+# button? I think it should be able to create new task from the agent"): asked on one task for a separate job ("build a bed board in the
+# app"), the agent reached for break_out - a split of this task's own mail, which needs ids and waits for a press - and stood a card
+# "Approve all 1". A task is made inside the app and nothing leaves, so the new_task tool makes it and starts its agent, no card
+class NewTaskTool(unittest.TestCase):
+    def setUp(self):
+        self.s, self.tid, _ = world()
+        self.s.add_comment(self.tid, 'owner', 'assistant_user', 'Build a bed board in the portal for admins, and run it on the stronger model.')
+        self.p = mock.patch.object(server, 'store', self.s); self.p.start()
+
+    def tearDown(self): self.p.stop()
+
+    def test_it_makes_the_task_and_starts_its_agent_with_no_card(self):
+        with mock.patch.object(server, 'dispatch_task', return_value={'started': True, 'ref': 'TQ-0002'}) as go:
+            said, err = tool(self.tid, 'new_task', title='Bed board in the portal', ask='Build a bed board tab, admins only.', kind='general', model='claude-fable-5-2')
+        self.assertFalse(err, said)
+        new = max(t['TaskId'] for t in self.s.list_tasks())
+        self.assertNotEqual(new, self.tid)
+        t = self.s.get_task(new)
+        self.assertEqual((t['Title'], t['Kind']), ('Bed board in the portal', 'general'))
+        body = go.call_args[0][1]
+        self.assertEqual((go.call_args[0][0], body.instruction, body.model), (new, 'Build a bed board tab, admins only.', 'claude-fable-5-2'))
+        self.assertEqual(self.s._rows("SELECT * FROM review WHERE Status='pending'"), [])         # no card for a press
+        self.assertIn('TQ-', said)
+
+    def test_a_stranger_task_cannot_start_work(self):
+        from taskuary import origin
+        with mock.patch.object(origin, 'of_task', return_value=('stranger', None)), mock.patch.object(server, 'dispatch_task') as go:
+            said, err = tool(self.tid, 'new_task', title='Anything', ask='Do it.')
+        self.assertTrue(err); go.assert_not_called()
+
+    def test_one_item_on_a_card_tool_is_one_card_not_a_batch(self):
+        said, err = tool(self.tid, 'propose_email', items=[{'to': ['gail@northwind.example'], 'subject': 'Offsite', 'text': 'Friday it is. Alex'}])
+        self.assertFalse(err, said)
+        rows = self.s._rows("SELECT Batch FROM review WHERE TaskId=?", (self.tid,))
+        self.assertEqual([r['Batch'] for r in rows], [None])

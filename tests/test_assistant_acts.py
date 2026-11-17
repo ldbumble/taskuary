@@ -171,7 +171,8 @@ class ActsTests(unittest.TestCase):
     def test_route_with_who_fills_the_cards_to_box(self):
         done = concierge.run_proposal(self.s, self._turn('report.route', title='ar report', line='send', how='always', to='gail@northwind.example')['proposal'])
         cfg = json.loads(self.s.get_source(self.sid)['ConfigJson'])
-        self.assertEqual(cfg['deliver'], {'gate': 'review', 'channel': 'email', 'to': 'gail@northwind.example'})
+        # ...no gate set for him: his own report sends on its own (reports.GATE - the owner, 2026-11-17)
+        self.assertEqual(cfg['deliver'], {'channel': 'email', 'to': 'gail@northwind.example'})
         self.assertEqual(cfg['route']['send'], {'how': 'always'})
         self.assertIn('to gail@northwind.example', concierge.receipt(self.s, done))
 

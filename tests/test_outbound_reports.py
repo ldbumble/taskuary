@@ -4,9 +4,9 @@ A report has always landed on the Timeline and stopped there. An outbound report
 turning around: it goes to an address the owner chose, on a channel they picked, either after
 they have read it or - if they say so once, deliberately - straight away.
 
-The gate is the part that matters. Everything else in this app holds to "nothing sends without
-you", and a scheduled job that mails people on its own would be the one place that promise did
-not hold. So it defaults to review, and choosing otherwise is an explicit act.
+The gate: a report the owner set up is his own work, so it sends on its schedule (the owner, 2026-11-17: "approval is only for
+emails/chats etc where the input is from the outside, internal generated reports sent out do not require approval"). Review is his
+to choose for any one report.
 """
 import json
 import unittest
@@ -26,14 +26,15 @@ def _cfg(gate='review', to='dana@example.org', channel='email'):
 
 
 class TheGateTests(unittest.TestCase):
-    def test_review_is_the_default_when_nobody_said_otherwise(self):
-        """A deliver block with no gate must never mean "send it"."""
+    def test_a_report_he_set_up_sends_on_its_own_when_nobody_chose_review(self):
+        """The owner, 2026-11-17: internal generated reports sent out do not require approval - a deliver block with no gate sends."""
         s = MemoryStore()
         cfg = {'title': 'x', 'deliver': {'channel': 'email', 'to': 'a@b.com'}}
-        with mock.patch.object(outbound, 'send_out') as send:
+        with mock.patch.object(outbound, 'send_out', return_value={'channel': 'email', 'to': ['a@b.com']}) as send:
             out = reports.deliver_report(s, _src(s), cfg, 'x - 1 row', 'body')
-        send.assert_not_called()
-        self.assertEqual(out['gate'], 'review')
+        send.assert_called_once()
+        self.assertEqual(out['gate'], 'auto')
+        self.assertEqual([r for r in s.list_reviews() if r['Status'] == 'pending'], [], 'nothing waits for his approval')
 
     def test_a_gated_report_waits_as_a_draft_and_sends_on_approval(self):
         s = MemoryStore()

@@ -1526,11 +1526,11 @@ def _run_kind(op: dict, background: BackgroundTasks):
             except ValueError as e: raise HTTPException(422, str(e))
             prev = full_route(cfg)[line]
             # ...and who gets it, the same box the card's "to - who gets it" fills (the owner, 2026-11-02): an address, placed by the chat
-            # (concierge.route_to) - a send line's gate stays the card's own, review unless the owner set another
+            # (concierge.route_to) - a send line's gate stays the card's own (reports.GATE unless the owner set another)
             to = str(p.get('to') or '').strip()
             if to and line in ('send', 'alert'):
                 k = 'deliver' if line == 'send' else 'alert'
-                new[k] = {**({'gate': 'review'} if k == 'deliver' else {}), **(new.get(k) or {}), 'channel': 'email', 'to': to}
+                new[k] = {**(new.get(k) or {}), 'channel': 'email', 'to': to}
             store.save_source({'SourceId': tid, 'ConfigJson': json.dumps(new)}, ACTOR)
             store.audit('source', tid, 'route', 'assistant', detail={'title': title, 'line': line, 'from': prev, 'to': new['route'][line],
                                                                      **({'recipient': to} if to else {})})

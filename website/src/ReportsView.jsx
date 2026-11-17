@@ -1212,7 +1212,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   useEffect(() => {
     if (!routeAsk || !cur) return;
     const k = routeAsk.line === "alert" ? "alert" : "deliver";
-    setCfg((c) => ({ ...c, [k]: { ...(k === "deliver" ? { gate: "review" } : {}), ...(c[k] || {}), channel: "email", to: routeAsk.to },
+    setCfg((c) => ({ ...c, [k]: { ...(c[k] || {}), channel: "email", to: routeAsk.to },
       ...(routeAsk.how ? { route: { ...(c.route || {}), [routeAsk.line]: { how: routeAsk.how } } } : {}) }));
     onRouteTaken?.();
   }, [routeAsk, cur?.SourceId]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -1635,7 +1635,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                   SEND IT SOMEWHERE (OPTIONAL)
                 </Typography>
                 <Switch size="small" checked={!!cfg.deliver}
-                  onChange={(e) => setCfg({ ...cfg, deliver: e.target.checked ? { ...firstDest(), gate: "review" } : undefined })} />
+                  onChange={(e) => setCfg({ ...cfg, deliver: e.target.checked ? { ...firstDest() } : undefined })} />
               </Box>
               {!cfg.deliver ? (
                 <Typography variant="caption" sx={{ color: FAINT }}>
@@ -1654,14 +1654,14 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                     Whether a given run actually goes out is one of the lines under “one prompt that routes each run”, below.
                   </Typography>
                   <Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center", flexWrap: "wrap" }}>
-                    <Select size="small" value={cfg.deliver.gate || "review"} sx={{ bgcolor: "var(--tq-panel, #fff)", fontSize: 12.5, minWidth: 260 }}
+                    <Select size="small" value={cfg.deliver.gate || "auto"} sx={{ bgcolor: "var(--tq-panel, #fff)", fontSize: 12.5, minWidth: 260 }}
                       onChange={(e) => setCfg({ ...cfg, deliver: { ...cfg.deliver, gate: e.target.value } })}>
                       <MenuItem value="review" sx={{ fontSize: 12 }}>wait for me to approve it (Review)</MenuItem>
                       <MenuItem value="auto" sx={{ fontSize: 12 }}>send it without asking</MenuItem>
                     </Select>
-                    <Typography variant="caption" sx={{ color: (cfg.deliver.gate === "auto") ? "var(--tq-link, #55697a)" : FAINT, flex: 1, minWidth: 200 }}>
-                      {cfg.deliver.gate === "auto"
-                        ? "This report will send on its schedule with nobody reading it first. Everything else in Taskuary waits for you — this is the one place you can turn that off, deliberately."
+                    <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 200 }}>
+                      {(cfg.deliver.gate || "auto") === "auto"
+                        ? "It is your own report, so it sends on its schedule - choose Review to read each run first."
                         : "Each run lands on the task as a draft. Approving it sends; editing first is fine."}
                     </Typography>
                   </Box>

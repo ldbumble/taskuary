@@ -2779,19 +2779,22 @@ def send_failed(store, src: dict, kind: str, what: str = '', err=None) -> None:
     store.audit('source', src['SourceId'], f'report_{kind}_failed', 'report', 'agent', {'error': str(err)[:200]})
 
 
+# A REPORT HE SET UP SENDS ON ITS OWN (the owner, 2026-11-17: "approval is only for emails/chats etc where the input is from the outside,
+# internal generated reports sent out do not require approval"). Review stays his to choose for any one report.
+GATE = 'auto'
+
+
 def deliver_report(store, src: dict, cfg: dict, subject: str, body: str) -> dict:
     """A report that goes OUT: to an address the owner chose, on a channel they picked, either
     after they have read it or straight away.
 
-    `gate` is the whole point and it defaults to 'review'. Everything else in this app holds to
-    "nothing sends without you", and a scheduled job that mails your customers on its own would
-    be the one place that promise did not hold. Choosing 'auto' is the owner saying, once, that
-    THIS report is safe to send unread - not a default they discover afterwards.
+    `gate` defaults to GATE ('auto'): the report is his own work, set up by him, so it goes on its schedule - approval is for what
+    answers input from outside. 'review' holds each run as a draft on its task for him to read first.
 
     Either way it lands on the timeline as an outbound row, so the funnel shows both directions.
     """
     d = cfg.get('deliver') or {}
-    gate = str(d.get('gate') or 'review').strip().lower()
+    gate = str(d.get('gate') or GATE).strip().lower()
     if gate not in ('review', 'auto'):
         raise ValueError("invalid report delivery gate: choose 'review' or 'auto'")
     to = d.get('to') if isinstance(d.get('to'), list) else [x.strip() for x in str(d.get('to') or '').split(',') if x.strip()]

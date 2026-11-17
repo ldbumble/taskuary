@@ -29,7 +29,8 @@ def _goes(cfg: dict) -> str:
     d = cfg.get('deliver') or {}
     to = d.get('to') if isinstance(d.get('to'), list) else [x.strip() for x in str(d.get('to') or '').split(',') if x.strip()]
     if not to: return 'in the app only - sent to nobody'
-    return f"{d.get('channel') or 'email'} to {len(to)} recipient{'s' if len(to) > 1 else ''}, {'sent unread' if str(d.get('gate')).lower() == 'auto' else 'after you approve'}"
+    from .reports import GATE
+    return f"{d.get('channel') or 'email'} to {len(to)} recipient{'s' if len(to) > 1 else ''}, {'sent on its own' if str(d.get('gate') or GATE).lower() == 'auto' else 'after you approve'}"
 
 
 def reports(store) -> list:

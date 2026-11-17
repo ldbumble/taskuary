@@ -863,3 +863,15 @@ class CodeByMail(unittest.TestCase):
         said = [c['Body'] for c in self.s.list_comments(self.tid)]
         self.assertIn('Typed the code lienlens.example emailed you ("Your LienLens code").', said)
         self.assertNotIn('383972', json.dumps([said, self.s._rows('SELECT * FROM audit')]))
+
+
+def test_a_sign_up_that_went_through_is_said_as_one():
+    """The real-CLI walk, 2026-11-16: every account the sign-up road made read "You signed in to ... - saved for next time". The page's
+    watch knows the ask was a sign-up, and the receipt says so."""
+    from taskuary import general
+    assert general._signed_in({'site': 'rentscope.example', 'ok': True, 'why': 'signed up', 'saved': True}).startswith('signed up on rentscope.example - saved')
+    assert general._signed_in({'site': 'bank.example', 'ok': True, 'saved': True}).startswith('signed in to bank.example')
+    s = MemoryStore(); tid = Factory(s).task('Sign up'); signin.SIGNING_UP.clear()
+    with mock.patch.object(signin, '_ask', lambda *a, **k: None):
+        signin._signup(s, tid, 'sess1', 'rentscope.example', 'signin:rentscope.example', lambda *a: 2, None)
+    assert (tid, 'rentscope.example') in signin.SIGNING_UP

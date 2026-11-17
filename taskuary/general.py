@@ -720,7 +720,8 @@ def _detail(r):
 def _signed_in(d) -> str:
     from . import words
     if not d.get('ok'): return f"tried to sign in to {d.get('site')} - it did not go in"
-    return f"signed in to {d.get('site')}" + (f" - saved for next time (remove it under {words.name('signins')})" if d.get('saved') else '')
+    went = 'signed up on' if d.get('why') == 'signed up' else 'signed in to'
+    return f"{went} {d.get('site')}" + (f" - saved for next time (remove it under {words.name('signins')})" if d.get('saved') else '')
 def presses(store, tid: int, since: str = '') -> list:
     "The owner's presses on task `tid` after `since`, oldest first: [(audit id, at, what)] - its own and its shares."
     from .processing_unread import OWNER_ACTORS

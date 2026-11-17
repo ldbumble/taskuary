@@ -791,9 +791,12 @@ def watch(store, tid: int, sid: str, site: str, rid: str, conn=None, every: floa
             if not coded and code_step(f) and (got := mailed_code(store, site, after)): coded = _code_from_mail(store, tid, site, c, *got)
             steady = steady + 1 if past(f, site, start) else 0
             if steady >= PAST_STEADY and _asked(store, tid, rid):
-                kept = keep_typed(store, tid, site)
-                _audit(store, tid, site, 'page', True, saved=kept)
-                _continue(store, tid, rid, site, 'owner')
+                kept, up = keep_typed(store, tid, site), (int(tid), site) in SIGNING_UP
+                SIGNING_UP.discard((int(tid), site))
+                # ...A SIGN-UP IS SAID AS ONE (the real-CLI walk, 2026-11-16: every account it made read "You signed in to ...")
+                _audit(store, tid, site, 'page', True, 'signed up' if up else '', saved=kept)
+                _continue(store, tid, rid, site, 'owner', words=(f'Signed up on {site}', f"Signed up on {site} - continue. The owner pressed the site's "
+                          "button; the password Taskuary made is kept with their saved sign-ins.") if up else None)
                 return True
         return False
     finally:
@@ -1084,6 +1087,7 @@ def type_in(sid: str, site: str, user: str, pw: str, code=None, extra=None) -> d
 # Next on the same walk), so the page is then his, as a sign-in's is - and what he sends on it is kept and the agent told (watch). The agent
 # never sees the password, and he never types one.
 ENDED_WAIT = 30                 # how long a sign-up's answer waits for the turn that asked to end
+SIGNING_UP = set()              # (task, site) whose open ask is a sign-up: the watch says "signed up" when it goes through, never "signed in"
 NEW = 'new:'                    # signin_marker's claim for a sign-up: this, then the site the agent named
 def signing_up(claimed) -> bool: return str(claimed or '').startswith(NEW)
 
@@ -1155,6 +1159,7 @@ def _signup(store, tid, sid, site, rid, fill, watch):
         return _continue(store, tid, rid, site, 'taskuary', words=(f'The sign-up on {site} was not filled', f'The password for {site} was not '
                          f'typed: {why}. Look at the page and go on from what it shows.'))
     _audit(store, tid, site, 'vault', True, 'a new password typed')
+    SIGNING_UP.add((int(tid), site))
     _ask(store, tid, sid, site, rid, f'Sign up on {site}: check the form and press its button - the password is made and kept for you', watch)
 
 

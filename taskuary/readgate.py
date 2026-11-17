@@ -94,6 +94,11 @@ def _open() -> list:
     # 2026-11-16 - an agent looking for its python (`ls .../AppData/Local/Programs/Python`) was held as a card asking him to let it read "Python"
     if os.name == 'nt' and os.environ.get('LOCALAPPDATA'): rs.append(os.path.join(os.environ['LOCALAPPDATA'], 'Programs'))
     if os.name != 'nt': rs += ['/tmp', '/usr', '/bin', '/lib', '/opt', '/dev', '/proc', '/sys', '/System', '/Library', '/Applications']
+    # ...and A CLI'S OWN INSTRUCTIONS - the skills, plugins, agents and commands it loads to work (the owner's live task, 2026-11-17: a coding
+    # agent reading ~/.claude/skills/impeccable/reference/craft-floor.md stood as a card "Read craft-floor.md in reference"). Its sign-ins and
+    # settings in the same home stay on the never-list (floor.kept_secret), judged before this
+    from .climodels import claude_home, codex_home
+    rs += [Path(h) / d for h in (claude_home(), codex_home(), Path.home() / '.agents') for d in ('skills', 'plugins', 'agents', 'commands')]
     return [_n(r) for r in rs if r]
 
 

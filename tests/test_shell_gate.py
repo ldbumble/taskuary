@@ -349,6 +349,15 @@ class ReadingOutside(unittest.TestCase):
             d = hooks.command_gate(self.s, self.tid, 'run1', f'ls "{local}"', 'Bash', self.work)          # ...the rest of AppData still asks
             self.assertEqual(d['hookSpecificOutput']['permissionDecision'], 'deny')
 
+    def test_a_clis_own_skills_are_read_without_asking_and_the_rest_of_its_home_still_asks(self):
+        """The owner's live task, 2026-11-17: a coding agent reading one of Claude Code's own skills (~/.claude/skills/<name>/reference/...)
+        stood as a card "Read craft-floor.md in reference". A CLI's skills, plugins, agents and commands are its own instructions."""
+        claude = os.path.join(self.docs, 'claude-home'); os.makedirs(os.path.join(claude, 'skills', 'impeccable', 'reference'), exist_ok=True)
+        with mock.patch.dict(os.environ, {'CLAUDE_CONFIG_DIR': claude}):
+            self.assertEqual(hooks.command_gate(self.s, self.tid, 'run1', f'cat "{os.path.join(claude, "skills", "impeccable", "reference", "craft-floor.md")}"', 'Bash', self.work), {})
+            d = hooks.command_gate(self.s, self.tid, 'run1', f'cat "{os.path.join(claude, "history.jsonl")}"', 'Bash', self.work)   # ...the rest still asks
+            self.assertEqual(d['hookSpecificOutput']['permissionDecision'], 'deny')
+
     def test_what_its_own_cli_downloaded_is_its_work_and_the_rest_of_that_home_still_asks(self):
         """The owner, 2026-11-16: a research turn's read-back of the PDF its own WebFetch had saved was held as a card under its finished
         answer - "files the agent's own CLI downloaded during the task count as its work area". The exact folders: Claude Code's tool-results

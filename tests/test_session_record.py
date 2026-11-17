@@ -515,6 +515,17 @@ def test_a_thought_being_written_is_one_open_step_its_snapshots_update(monkeypat
     assert [d for k, n, d in said if (k, n) == ('live', 'writing')] == ['Tatte opens first.Salem is close.']    # ...the words as they streamed
 
 
+def test_a_call_whose_result_came_back_has_finished_while_the_model_writes():
+    """Walk evidence, 2026-11-17: "Reading notes.md" stood on the working line for 10 s after the read was done, while the model wrote its
+    answer - the turn at work's steps never said a call had its result, so the newest call read as running until another step came."""
+    tr = [{'type': 'tool_call', 'name': 'Read', 'detail': {'tool_call_id': 'c1', 'args': {'file_path': 'notes.md'}}},
+          {'type': 'tool_result', 'name': 'c1', 'detail': {'tool_call_id': 'c1', 'result': '1 line'}},
+          {'type': 'tool_call', 'name': 'Grep', 'detail': {'tool_call_id': 'c2', 'args': {'pattern': 'budget'}}},
+          {'type': 'live', 'name': 'writing', 'detail': 'The plan is'}]
+    st = sessionrecord.trace_steps(tr)
+    assert [(s['name'], s.get('status')) for s in st] == [('Read', 'completed'), ('Grep', None)], 'only a call still waiting on its result runs'
+
+
 def test_the_turn_at_work_says_when_its_agent_is_still_opening_and_what_it_is_writing(monkeypatch):
     """Recorded on the real CLI, 2026-11-16: a cold adapter took most of a minute to open under "Thinking...", then a long answer streamed in
     under the same word. The turn at work says it is `opening` until its road hands the agent the prompt, and carries the answer being

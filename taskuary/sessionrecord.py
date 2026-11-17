@@ -531,6 +531,9 @@ def trace_steps(trace: list) -> list:
     steps, calls = [], {}
     for e in trace or []:
         k, name, d = e.get('type'), e.get('name'), e.get('detail')
+        # ...A CALL WHOSE RESULT CAME BACK HAS FINISHED (walk evidence, 2026-11-17): left without a status, the newest call read as running until
+        # another step came (chatStream.eventsOf) - "Reading notes.md" stood on the working line for 10 s while the model wrote its answer
+        if k == 'tool_result' and isinstance(d, dict) and (s := calls.get(d.get('tool_call_id') or name)): s['status'] = 'completed'
         if k == 'tool_call':
             steps.append(s := _tool(name, (d or {}).get('args') if isinstance(d, dict) else d))
             if isinstance(d, dict): calls[d.get('tool_call_id')] = s

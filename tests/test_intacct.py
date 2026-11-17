@@ -119,11 +119,34 @@ class QueryTests(unittest.TestCase):
         self.assertIsNone(fil.find('and'))
         self.assertEqual(fil[0].tag, 'equalto')
 
-    def test_no_fields_asks_for_all_of_them(self):
-        sent, fake = _posts(LOGIN_OK, _data([]))
+    def test_no_fields_asks_for_every_field_the_object_has(self):
+        """The object's own field list, read first - GLBATCH refuses `*` ("This function requires one or more fields", the live task,
+        2026-11-17)."""
+        look = (b'<response><operation><result><status>success</status><data><Type><Fields>'
+                b'<Field><ID>RECORDNO</ID></Field><Field><ID>BATCH_TITLE</ID></Field></Fields></Type></data></result></operation></response>')
+        sent, fake = _posts(LOGIN_OK, look, _data([]))
         with mock.patch('taskuary.intacct.requests.post', fake):
-            intacct.query(dict(CFG), 'VENDOR')
-        self.assertEqual([f.text for f in sent[1][1].findall('.//select/field')], ['*'])
+            intacct.query(dict(CFG), 'GLBATCH')
+        self.assertEqual([f.text for f in sent[2][1].findall('.//select/field')], ['RECORDNO', 'BATCH_TITLE'])
+
+    # AN AGENT'S SHAPES ARE TAKEN AS MEANT (the owner, 2026-11-17: "We have a entire repo that connects to Intacct. WHy can't it use it"): its
+    # run_system call sent `fields` as "RECORDNO,BATCHNO,..." and as '["RECORDNO", ...]', each read one LETTER at a time ("cannot be queried:
+    # [R, E, C, O, D ...]"), and a filter as words. A list in words is the list; a filter in words is answered with the shape, never sent
+    def test_fields_as_words_or_json_are_the_list(self):
+        for given in ('RECORDNO, BATCH_TITLE', '["RECORDNO", "BATCH_TITLE"]'):
+            sent, fake = _posts(LOGIN_OK, _data([]))
+            intacct._sessions.clear()
+            with mock.patch('taskuary.intacct.requests.post', fake):
+                intacct.query(dict(CFG), 'GLBATCH', given, '[["BATCH_DATE", ">=", "07/01/2026"]]')
+            self.assertEqual([f.text for f in sent[1][1].findall('.//select/field')], ['RECORDNO', 'BATCH_TITLE'])
+            self.assertEqual(sent[1][1].find('.//filter/greaterthanorequalto').findtext('value'), '07/01/2026')
+
+    def test_a_filter_in_words_says_the_shape_and_sends_nothing(self):
+        sent, fake = _posts(LOGIN_OK)
+        with mock.patch('taskuary.intacct.requests.post', fake):
+            with self.assertRaisesRegex(intacct.IntacctError, r'\[\["BATCH_DATE", ">=", "07/01/2026"\]\]'):
+                intacct.query(dict(CFG), 'GLBATCH', ['RECORDNO'], "BATCH_DATE >= '07/01/2026'")
+        self.assertLessEqual(len(sent), 1)
 
     def test_an_unknown_operator_is_refused_rather_than_sent(self):
         _, fake = _posts(LOGIN_OK)

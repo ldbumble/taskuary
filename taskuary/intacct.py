@@ -20,7 +20,7 @@ identify the integration (issued by Sage to whoever wrote the client), a user id
 identify the person, and a company id picks the tenant. The first pair is not a second factor on
 the second - they authorise different things, and the web login's password is NOT the API user's.
 """
-import json, time
+import json, re, time
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse
 
@@ -144,19 +144,34 @@ def _rows(res, tag='data'):
     return [{c.tag: (c.text or '') for c in rec} for rec in list(data or [])]
 
 
+# AN AGENT'S SHAPES, TAKEN AS MEANT (the live task, 2026-11-17): `fields` came as "A, B" and as '["A", "B"]' and was read a letter at a time;
+# a list in words or JSON is that list. A filter in words is not guessed at: the error shows the shape, and nothing is sent
+FILTER_SHAPE = 'filters is a list of [FIELD, op, value], e.g. [["BATCH_DATE", ">=", "07/01/2026"], ["STATE", "=", "Posted"]]'
+def _listed(x, what: str) -> list:
+    if x in (None, ''): return []
+    if isinstance(x, (list, tuple)): return list(x)
+    s = str(x).strip()
+    if s.startswith('['):
+        try: return list(json.loads(s))
+        except ValueError: pass
+    if what == 'filters': raise IntacctError(f'{FILTER_SHAPE} - not {s[:80]!r}. Nothing was sent.')
+    return [f for f in re.split(r'[\s,]+', s) if f]
+
+
 def query(cfg, obj, fields=None, filters=None, limit=PAGE, order=None):
-    """readByQuery, paged until `limit` is reached. Fields default to every one the object has,
-    because a report asking for 'the vendor list' should not have to know that vendors carry
-    forty columns - and asking Intacct is cheaper than being wrong about it."""
+    """readByQuery, paged until `limit` is reached. Fields default to every one the object has
+    (fields_of - GLBATCH refuses `*`), because a report asking for 'the vendor list' should not have
+    to know that vendors carry forty columns - and asking Intacct is cheaper than being wrong about it."""
+    fields, filters = _listed(fields, 'fields'), _listed(filters, 'filters')
     sid, end = login(cfg)
-    fields = list(fields or [])
+    fields = fields or [f['ID'] for f in fields_of(cfg, obj) if f.get('ID')] or ['*']
     out, offset = [], 0
     while len(out) < limit:
         root, fn = _envelope(cfg, sid)
         q = _el(fn, 'query')
         _el(q, 'object', obj)
         sel = _el(q, 'select')
-        for f in (fields or ['*']): _el(sel, 'field', f)
+        for f in fields: _el(sel, 'field', f)
         _filter_xml(q, filters)
         if order:
             o = _el(q, 'orderby')

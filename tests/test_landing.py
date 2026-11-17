@@ -295,7 +295,7 @@ class LandingTests(unittest.TestCase):
         s = landing.state(self.s, self.tid)
         self.assertTrue(s['passed']); self.assertFalse(s['ask'], 'nothing pressable')
         with self.assertRaises(ValueError) as e: landing.land(self.s, self.tid, 'push')
-        self.assertEqual(str(e.exception), proposals.PASSED_SAID); self.assertFalse(self.pushed())
+        self.assertTrue(str(e.exception).startswith('Not sent - '), e.exception); self.assertFalse(self.pushed())
         self.assertIn(proposals.LAND_LINE, proposals.passed_note(self.s, [proposals.LAND]))
         # ...its own `git push` over a passed card is still held - raised again, never run
         self.assertTrue(landing.push_asked(self.s, self.tid, 'git push origin master', self.cwd)[0]); self.assertFalse(self.pushed())

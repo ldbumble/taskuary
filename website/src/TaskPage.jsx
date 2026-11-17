@@ -2939,7 +2939,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               {unsentReview && (
                 <Box sx={{ bgcolor: PANEL2, border: `1px dashed ${BORDER}`, borderRadius: 1.25,
                   px: 1.1, py: 0.85, mt: 0.9 }}>
-                  <Typography sx={{ ...label, display: "block" }}>Not sent - closed without sending</Typography>
+                  {/* ...why, as the chat says it (proposals.passed_why, 2026-11-17): a draft the chat moved past was never "closed" */}
+                  <Typography sx={{ ...label, display: "block" }}>{unsentReview.Why || "Not sent - closed without sending"}</Typography>
                   <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                     {unsentReview.DraftText}</Typography>
                   {/* ...and it can still go: the draft comes back to send, the task done or not (T11) */}

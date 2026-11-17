@@ -546,8 +546,10 @@ def _land(store, tid: int, how: str, actor: str) -> dict:
     if how not in HOW: raise ValueError(f"how is one of: {', '.join(HOW)}")
     s = state(store, tid)
     if s and s.get('passed'):
-        from .proposals import PASSED_SAID
-        raise ValueError(PASSED_SAID)
+        # ...refused with the sentence its greyed card reads (proposals.passed_why, 2026-11-17), its question standing as a card would
+        from .proposals import passed_why
+        p = s.get('proposal') or {}
+        raise ValueError(passed_why(store, {'TaskId': tid, 'CreatedAt': p.get('at') or s.get('at'), 'DecidedAt': p.get('passed')}))
     if not s or not s['ask']: raise ValueError((s or {}).get('line') or 'nothing to land on this task')
     if how == 'discard' and not s['own']: raise ValueError('discard is only offered for a branch the agent made itself')
     if how not in {a['how'] for a in s['answers']}: raise ValueError(f"{HOW[how]} is not offered here - {s['line']}")

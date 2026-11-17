@@ -660,8 +660,9 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
     # A CARD THE CONVERSATION MOVED PAST presses nothing, from any page or phone however stale (proposals.move_on, the owner 2026-11-10)
     from . import proposals
     # ...nor one it moved past that no agent has heard yet (written_past): greyed on every surface from the moment the input came
+    # ...refused with the one sentence its greyed card reads (passed_why, 2026-11-17), never a fixed "set aside when you moved on"
     if proposals.passed(rv) or rv.get('Status') == 'pending' and rv.get('TaskId') and rv['ReviewId'] in proposals.written_past(store, rv['TaskId']):
-        return {'ok': False, 'status': rv['Status'], 'sent': None, 'passed': True, 'send_error': proposals.PASSED_SAID}
+        return {'ok': False, 'status': rv['Status'], 'sent': None, 'passed': True, 'send_error': proposals.passed_why(store, rv)}
     if rv.get('Status') == 'pending' and verb_in in ('approve', 'edit'):
         def content_envelope(row):
             return {k: v for k, v in _envelope(row).items() if k not in ('delivery', 'attempted_at', 'attempts')}

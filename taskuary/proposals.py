@@ -503,14 +503,13 @@ def held_pending(store, tid) -> dict | None:
 SET_ASIDE = 'set aside when you moved on'
 LAND = 'land'                  # move_on's mark for the landing question (landing.pass_over) among the review ids
 LAND_LINE = '- the push/landing question you raised'
-PASSED_SAID = 'This was set aside when you moved on - ask the agent to bring it back.'
 
 
 NOT_NEEDED = 'not needed - the agent finished without it'
 
 
 def passed(rv: dict | None) -> bool:
-    "Whether review `rv` is a card the conversation moved past (move_on) - not pressable, and its press route says so (PASSED_SAID)."
+    "Whether review `rv` is a card the conversation moved past (move_on) - not pressable, and its press route says so (passed_why)."
     return bool(rv) and rv.get('Status') == 'superseded' and rv.get('DecideNote') in (SET_ASIDE, NOT_NEEDED)
 
 
@@ -639,19 +638,24 @@ def passed_why(store, r: dict) -> str:
     line while the agent worked, the turn that never read it finished its draft after it, and the draft stood greyed reading "set aside when
     you moved on", as if he had done something to it). ONE sentence for every kind, from the input that moved the chat past it: the newest of
     his lines and the messages that came in, up to when it was set aside - written after it, or before the agent read it."""
-    from . import general
+    from . import continuity, general
     from .conversation import _mail, ep
     if r.get('DecideNote') == NOT_NEEDED: return 'Not needed - the agent finished without it'
     card, end = ep(r.get('DraftAt') or r.get('CreatedAt')), ep(r.get('DecidedAt')) or time.time()
     tid = int(r['TaskId'])
     his = [x for x in store.list_comments(tid, internal=True) if x.get('ActorType') in (general.USER_TYPE, general.WAITING_TYPE)
            and not general.is_brief(x) and x.get('Actor') == 'owner']
-    lines = [(ep(x['CreatedAt']), f'your line "{w}"', f'you wrote "{w}"') for x in his for w in [_cut(general._line_of(x.get('Body'))['text'])]]
-    mails = [(x['T'], 'your own message' if x.get('Own') else f"{x.get('FromName') or x.get('FromEmail') or 'a'}'s new message",
-              'you wrote again' if x.get('Own') else f"{x.get('FromName') or x.get('FromEmail') or 'someone'} wrote again") for x in _mail(store, tid)]
+    lines = [(ep(x['CreatedAt']), f'your line "{w}"', f'you wrote "{w}" after it') for x in his for w in [_cut(general._line_of(x.get('Body'))['text'])]]
+    # ...his own mail on the thread is his answer to whom it was with, never "you wrote again" (2026-11-17): the newest other sender before it
+    mails, who = [], ''
+    for x in _mail(store, tid):
+        n = x.get('FromName') or x.get('FromEmail')
+        if not x.get('Own'): who = n or who; mails.append((x['T'], f"{n or 'a'}'s new message", f"{n or 'someone'} wrote again after it")); continue
+        to = who or continuity.sent_to(store, r, 'them')
+        mails.append((x['T'], f'your answer to {to}', f'you answered {to} yourself'))
     got = max((x for x in lines + mails if x[0] <= end + 1), key=lambda x: x[0], default=None)
     if not got: return 'Not sent - set aside when the chat moved on'
-    return f'Not sent - {got[2]} after it' if got[0] >= card else f'Not sent - written before the agent read {got[1]}'
+    return f'Not sent - {got[2]}' if got[0] >= card else f'Not sent - written before the agent read {got[1]}'
 def _cut(w: str, n: int = 60) -> str: return (w := ' '.join(str(w or '').split()))[:n] + ('…' if len(w) > n else '')
 
 

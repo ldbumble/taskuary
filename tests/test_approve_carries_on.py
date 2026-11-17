@@ -314,7 +314,7 @@ def test_a_card_he_writes_past_greys_in_its_place_on_every_agents_road_and_its_a
     assert proposals.PASSED_TOLD in heard and f'rv{rid}' in heard, heard
     # ...and it keeps its record: never pressable, said so
     out = verdicts.decide(s, s.get_review(rid), 'approve')
-    assert (out['ok'], out['send_error']) == (False, proposals.PASSED_SAID), out
+    assert (out['ok'], out['send_error']) == (False, proposals.passed_why(s, rv)), out
 
 
 def test_a_reply_draft_is_the_agents_to_redecide_never_passed_by_the_line_itself():
@@ -593,6 +593,28 @@ class TheChatMovedOn(unittest.TestCase):
         self.s.add_message({'TaskId': self.tid, 'ExternalId': 'g-1', 'ConversationId': 'th-1', 'Channel': 'email', 'Subject': 'Deploy',
                             'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example', 'BodyText': 'Hold the deploy until Friday.', 'Status': 'routed'})
         self.assertEqual(proposals.written_past(self.s, self.tid), {rid})
+
+    # ONE SENTENCE FOR A GREYED CARD ON EVERY SURFACE (2026-11-17): his own answer to the sender read "you wrote again", and a press on a card
+    # the sender's new mail moved past was refused with "set aside when you moved on" - the chat, the press and the page said three things
+    def test_his_own_answer_to_the_sender_says_he_answered_them(self):
+        self.s.set_setting('owner_email', 'alex@northwind.example', 'owner')
+        mid = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'g-1', 'ConversationId': 'th-1', 'Channel': 'email', 'Subject': 'Pilot',
+                                  'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example', 'BodyText': 'Can you price site two?', 'Status': 'routed'})
+        self.s._exec("UPDATE message SET CreatedAt='2026-11-16 08:00:00' WHERE MessageId=?", (mid,))
+        rid = self.s.add_review({'TaskId': self.tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Gail - yes, by Friday.'})
+        self.s._exec("UPDATE review SET CreatedAt='2026-11-16 09:00:00' WHERE ReviewId=?", (rid,))
+        self.s.add_message({'TaskId': self.tid, 'ExternalId': 'a-1', 'ConversationId': 'th-1', 'Channel': 'email', 'Subject': 'RE: Pilot', 'Direction': 'out',
+                            'FromName': 'Alex Doyle', 'FromEmail': 'alex@northwind.example', 'BodyText': 'Done - see attached.', 'Status': 'routed'})
+        self.assertEqual(proposals.passed_why(self.s, self.s.get_review(rid)), 'Not sent - you answered Gail Moreno yourself')
+
+    def test_a_press_on_a_card_the_sender_wrote_past_is_refused_with_the_same_sentence(self):
+        self.s.set_setting('owner_email', 'alex@northwind.example', 'owner')
+        rid = self.closeout()
+        self.s.add_message({'TaskId': self.tid, 'ExternalId': 'g-1', 'ConversationId': 'th-1', 'Channel': 'email', 'Subject': 'Deploy',
+                            'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example', 'BodyText': 'Hold the deploy until Friday.', 'Status': 'routed'})
+        out = verdicts.decide(self.s, self.s.get_review(rid), 'approve')
+        self.assertEqual(out['send_error'], 'Not sent - Gail Moreno wrote again after it')
+        self.assertEqual(out['send_error'], proposals.passed_why(self.s, self.s.get_review(rid)))
 
     def test_the_landing_question_greys_by_the_same_rule(self):
         landing._save(self.s, self.tid, {'start': 'abc', 'cwd': HELD, 'base': 'master', 'proposal': {'how': 'push', 'why': 'ship it', 'at': '2026-11-16 09:00:00'}})

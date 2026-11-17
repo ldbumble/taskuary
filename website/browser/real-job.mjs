@@ -33,7 +33,7 @@ c.commit()`, db]);
     return api("/api/connectors", { Type: "database", Name: "County parcels", ConfigJson: JSON.stringify({ conn_str: `sqlite:///${db.replace(/\\/g, "/")}` }), Active: true, Roles: "tool", Scope: "read" });
   },
   contacts() {
-    const f = path.join(info.home, "Documents", "event-contacts.csv");
+    const f = path.join(out, "owner-files", "event-contacts.csv")     // ...a folder of his own, outside Taskuary's data (the harness HOME sits inside it);
     execFileSync(PY, ["-c", `
 import csv, os, random, sys
 r = random.Random(3); os.makedirs(os.path.dirname(sys.argv[1]), exist_ok=True)
@@ -69,7 +69,8 @@ const JOBS = {
   report: { world: null, title: null, ask: "Which site is closest to a cap of 140 people, and draft a note to its manager about it." },
 };
 // what the owner says when asked: a fact only he has, or his go-ahead
-const ANSWERS = [[/phone|mobile|number/i, "Use 555-0142 - it is the office line."], [/card|pay|\$49|subscri/i, "Skip the paid one - do not pay for anything."],
+const ANSWERS = [[/thursday|friday|which date|the date/i, "Thursday 3 December - my mistake on the date."],
+  [/(phone|mobile) number/i, "Use 555-0142 - it is the office line."], [/\$\d|by card|card number|subscri/i, "Skip the paid one - do not pay for anything."],
   [/password/i, "Make up a strong one for each and keep them in the sign-in vault."], [/.*/, "Yes - go ahead and do it the way you think best."]];
 const STOP = /^(Reject|Not now|Withdraw|Cancel|Skip|Edit|Change|Dismiss|Stop)/i, GO = /^(Send all|Send|Approve|Allow once|Allow|Trust|Yes|Go ahead|Run|Sign|Pay|Confirm|Continue)/i;
 
@@ -143,7 +144,8 @@ while (Date.now() - t0 < MAX) {
   if (c.working) { calm = 0; continue; }
   // AT REST: a question of his to answer, or the end
   const last = String(c.items.filter((x) => x.kind === "turn").at(-1)?.text || "");
-  const q = /\?\s*$/.test(last.trim()) || /\?\s*\n/.test(last.slice(-300));
+  // ...a question: the app's own word for one (an open ask), else a ? in its last paragraph - mid-sentence too
+  const q = !!c.asking || /\?/.test(last.trim().split(/\n\s*\n/).pop() || "");
   if (q && asked.length < 6) {
     if (asked.some((a) => a.q === last.slice(-300))) note("the same question twice");
     if (pressed.length && /should I|shall I|do you want me to|want me to (send|go)|ready to send|go ahead/i.test(last.slice(-300))) note(`asked for a go-ahead in words after a press, not a card: "${last.slice(-200)}"`);

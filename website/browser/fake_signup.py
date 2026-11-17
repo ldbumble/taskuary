@@ -91,7 +91,10 @@ class H(BaseHTTPRequestHandler):
         meta = next((x for x in SITES if x[0] == site), None)
         if not meta: return self._send(404, page('', 'Not found', ''))
         extra, who = meta[3], self._who()
-        def again(err, fields=BASE): return self._send(400, page(site, 'Create your account', form(site, 'signup', fields, err=err)))
+        # ...a refused form is drawn again as itself: a wizard's first step stays its two boxes and its Next, as a real one does
+        def again(err, fields=None):
+            fields = fields or ([('Full name', 'name', 'text'), ('Work email', 'email', 'email')] if extra == 'wizard' else BASE)
+            return self._send(400, page(site, 'Create your account', form(site, 'signup', fields, 'Next' if extra == 'wizard' else 'Create account', err=err)))
         if act == 'signup':
             email = (f.get('email') or '').strip().lower()
             if '@' not in email or not f.get('name'): return again('Name and a valid email are needed.')

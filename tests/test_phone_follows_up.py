@@ -107,6 +107,13 @@ def test_send_to_agent_tapped_starts_the_agent_and_is_followed_up_once():
     asks the agent its question when the chat opens, and a phone has no page, so nothing started and nothing came back."""
     from taskuary import general, server
     store, _c = armed_store()
+    h = mock.patch('taskuary.origin.hold', return_value=None); h.start()     # Gail is trusted here: a held start is its own test
+    try: _tapped(store)
+    finally: h.stop()
+
+
+def _tapped(store):
+    from taskuary import general, server
     t = store.create_task({'Title': 'Summarise the vendor contract', 'Kind': 'general', 'Status': 'open', 'Tags': server.ASK_TAG}, 'owner')
     m = store.add_message({'TaskId': t, 'Channel': 'email', 'Subject': 'Vendor contract', 'FromName': 'Gail Moreno',
                            'FromEmail': 'gail@northwind.example', 'BodyText': 'Can someone summarise this?', 'Status': 'open'})

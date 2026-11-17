@@ -4625,8 +4625,12 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         # "agent done"): his line waits by the box as every typed line on a held task does (general.take_line), and Trust starts it
         from . import origin
         if (h := origin.hold(store, tid)):
-            if (typed := str(body.instruction or '').strip()) and not body.app_words: general.wait_line(store, tid, typed)
-            return {'dispatch': 'held', 'started': False, 'existing': False, 'held': h['line'], 'taskId': tid, 'ref': task_ref(tid)}
+            if (typed := str(body.instruction or '').strip()) and not body.app_words:
+                general.wait_line(store, tid, typed)
+                return {'dispatch': 'held', 'started': False, 'existing': False, 'held': h['line'], 'taskId': tid, 'ref': task_ref(tid)}
+            # ...and a press with no words of his is a start refused at the door, said with its way on (Trust) - as the offer's press is
+            # (accept_offer): kept on the task for the Advisor, said as not done on the phone (2026-11-17, CI)
+            _start_refused(tid, body, origin.RefusedForStranger(h['line']))
         had_session = general.session_for(tid) is not None
         # THE PROFILE IS THE ASSIGNEE. A general hand-off may now name the worker it goes to, and
         # `agent:<name>` is where general.assigned_role already reads it from to seed PROFILE RULES -
@@ -7253,6 +7257,12 @@ def prompt_images(paths) -> list[str]:
             if p.is_file() and p.is_relative_to(root): out.append(str(p))
         except (OSError, ValueError): continue
     return out
+
+
+def with_images(text: str, paths) -> str:
+    "The words, then the files this server saved - general.with_files, the one block every door writes."
+    from .general import with_files
+    return with_files(text, prompt_images(paths))
 
 
 async def _save_prompt_image(tid: int | None, request: Request):

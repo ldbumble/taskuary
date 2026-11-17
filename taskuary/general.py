@@ -575,7 +575,7 @@ def chat_rows(store, tid: int, run: bool = False) -> list:
 def _as_messages(rows) -> list:
     return [{'id': f"comment-{c['CommentId']}",
              'role': 'assistant' if c.get('ActorType') == ASSISTANT_TYPE else 'user',
-             'content': [{'type': 'text', 'text': c.get('Body') or ''}],
+             'content': [{'type': 'text', 'text': (split_files(c.get('Body')) if c.get('ActorType') != ASSISTANT_TYPE else {'text': c.get('Body') or ''})['text']}],
              'createdAt': c.get('CreatedAt'), **({'brief': True} if is_brief(c) else {}), **({'line': c['LineId']} if c.get('LineId') else {})} for c in rows]
 
 

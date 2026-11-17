@@ -72,7 +72,8 @@ class FailedSendToAgentTests(PhoneCase):
         tid, _ = self.f._work('Badge access for the new hire', subject='Badge access for the new hire', from_name=RAY[0], from_email=RAY[1],
                               body='Alex, the new AP clerk starts Monday. Can you get her a badge for floors 2 and 3?', sent_at=self.f.ago(hours=3))
         self.ph.ready(); self.ph.walk()
-        with mock.patch.object(general, 'start_session', side_effect=RuntimeError('the claude CLI is not installed on this computer')):
+        with mock.patch.object(general, 'start_session', side_effect=RuntimeError('the claude CLI is not installed on this computer')), \
+             mock.patch('taskuary.origin.hold', return_value=None):          # ...Ray is trusted here: a held start is its own test (HeldStrangerTests)
             # it asks what first (the owner, 2026-10-23); its own button hands it over as it is
             self.assertIn('What should it do?', text_of(self.ph.tap('Send to agent')))
             got = self.ph.tap('Send to agent')

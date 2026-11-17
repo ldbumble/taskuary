@@ -146,8 +146,10 @@ def sent_to(store, rv, none: str = 'them') -> str:
     try: env = json.loads((rv or {}).get('Deliver') or '{}') or {}
     except (TypeError, ValueError): env = {}
     to = env.get('to') if isinstance(env, dict) else None
-    if to: return ', '.join(map(str, to)) if isinstance(to, (list, tuple)) else str(to)
     m = store.get_message((rv or {}).get('MessageId')) or {}
+    # ...each address by the person it is where the message answered says so - "Gail Moreno", never her address (CI, 2026-11-17)
+    named = {str(m.get('FromEmail') or '').lower(): str(m.get('FromName') or '').strip()} if m.get('FromName') else {}
+    if to: return ', '.join(named.get(str(x).lower()) or str(x) for x in (to if isinstance(to, (list, tuple)) else [to]))
     return str(m.get('FromName') or m.get('FromEmail') or none).strip()
 
 

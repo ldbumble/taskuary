@@ -61,9 +61,11 @@ class TaskDispatchTests(Base):
         self.assertEqual(r.status_code, 422); self.assertIn('pty spawn failed', r.json()['detail'])
 
     def test_the_assistant_path_uses_the_same_words(self):
+        h = mock.patch('taskuary.origin.hold', return_value=None); h.start(); self.addCleanup(h.stop)    # its sender trusted: a held start is its own test
         out = arrive(self.s, 'general')
         session = mock.Mock(provider='cli:claude', model='m'); session.info.return_value = {'sid': 'g1', 'alive': True}
-        with mock.patch.object(general, 'start_session', return_value=session), mock.patch.object(general, 'history', return_value=[]):
+        with mock.patch.object(general, 'start_session', return_value=session), mock.patch.object(general, 'history', return_value=[]), \
+             mock.patch('taskuary.origin.hold', return_value=None):          # ...its sender trusted: a held start is its own test (test_stranger_live_fixes)
             r = self.c.post(f"/api/tasks/{out['task_id']}/dispatch", json={'kind': 'general'}).json()
         self.assertEqual((r['dispatch'], r['started'], r['existing']), ('assistant', True, False))
         with mock.patch.object(general, 'session_for', return_value=session), mock.patch.object(general, 'start_session', return_value=session), \

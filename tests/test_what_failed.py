@@ -89,7 +89,8 @@ class RefusedTests(_Rail):
         from taskuary import general, server
         s = self._world(); key, r = self._draft(s)
         s._exec("UPDATE task SET Kind='general' WHERE TaskId=?", (r['TaskId'],))
-        with mock.patch.object(server, 'store', s), mock.patch.object(general, 'start_session', side_effect=RuntimeError('the assistant could not start')):
+        with mock.patch.object(server, 'store', s), mock.patch.object(general, 'start_session', side_effect=RuntimeError('the assistant could not start')), \
+             mock.patch('taskuary.origin.hold', return_value=None):          # ...from a sender he trusts: a held start is its own test (test_stranger_live_fixes)
             got = TestClient(server.app).post(f"/api/tasks/{r['TaskId']}/dispatch", json={})
         self.assertEqual(got.status_code, 422, got.text)
         f = rulebook.failure(s, rulebook._item(s, 'task', r['TaskId'], key))

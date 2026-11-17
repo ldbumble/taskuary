@@ -371,3 +371,12 @@ class NewTaskTool(unittest.TestCase):
         self.assertFalse(err, said)
         rows = self.s._rows("SELECT Batch FROM review WHERE TaskId=?", (self.tid,))
         self.assertEqual([r['Batch'] for r in rows], [None])
+
+
+def test_an_agent_is_told_to_offer_to_keep_code_it_wrote_as_a_routine():
+    """The owner, 2026-11-17: "if it generates code ... it should save it in taskuary deterministic scripts ... it should also offer you to
+    save it for later". Asked to save the script it wrote, the agent left a .py in Downloads: save_routine sat only in propose's long words,
+    which an agent reads by name (find_tools). The tool's own line and the guide both say it."""
+    from pathlib import Path
+    assert 'save_routine' in agenttools.SHORT['propose']
+    assert 'save_routine' in (Path(agenttools.__file__).parent / 'templates' / 'agent.md').read_text(encoding='utf-8')

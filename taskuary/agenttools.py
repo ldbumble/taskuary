@@ -302,7 +302,7 @@ SHORT = {
     'answer_invite': "Answer this task's meeting invite: accept, decline or propose.",
     'set_up_meeting': "Set up a meeting for the owner's press.",
     'share': 'Share a dashboard or report you made with a person.',
-    'propose': 'Ask the owner to approve an act Taskuary runs on their press (action, why) - many at once in `items`, one card.',
+    'propose': 'Ask the owner to approve an act Taskuary runs on their press (action, why) - many at once in `items`, one card; save_routine keeps a script you wrote as a routine.',
     'find_tools': "A tool's full instructions by name, or more tools by need.",
 }
 def lean(s):

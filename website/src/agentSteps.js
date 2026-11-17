@@ -19,6 +19,11 @@ const parts = (p) => String(p || "").replace(/[\\/]+$/, "").split(/[\\/]+/).filt
 export const baseName = (p) => parts(p).pop() || String(p || "");
 // `$d`, `$env:TEMP`, `%TEMP%`: the shell fills these in, so they name nothing a person can read ("Listed the files in $d", 2026-11-03)
 const named = (p) => !!p && !/\$|%\w+%/.test(String(p));
+// A FILE TASKUARY SEEDED FOR THE TASK reads as what is in it, never its name (the walk, 2026-11-17: "Reading TQ-0006.stranger.md"):
+// origin.stranger_file_path names it, and it holds the sender's own words
+const seeded = (f) => /^TQ-\d+\.stranger\.md$/i.test(baseName(f));
+// what reading a file said, by whichever tool read it - a Read call or a `cat` in a shell
+const readSaid = (f) => (seeded(f) ? "Read what the sender wrote" : named(f) ? `Read ${baseName(f)}` : "Read a file");
 const parent = (p) => { const x = parts(p); return x.length > 1 ? x[x.length - 2] : ""; };
 // ...past any `user:password@` the address carries: a host is all a person needs, and a sign-in in a URL is a secret
 const hostOf = (u) => (/^https?:\/\/(?:[^/@\s]*@)?(?:www\.)?([^/?#:@]+)/i.exec(String(u || "")) || [])[1] || "";
@@ -176,7 +181,7 @@ const commandStep = (cmd, depth = 0) => {
     // `cat > desk.svg` WRITES desk.svg: it read "Read <<EOF" (the stress test, 2026-11-02)
     const to = args.findIndex((a) => /^>>?$/.test(a)), into = to >= 0 ? args[to + 1] : (args.find((a) => /^>>?[^>&]/.test(a)) || "").replace(/^>+/, "");
     if (READERS.has(p) && into && !/^(\/dev\/null|nul|\$null)$/i.test(into)) { found.push({ kind: "edit", summary: named(into) ? `Wrote ${baseName(into)}` : "Wrote a file", file: into, vague: !named(into) }); continue; }
-    if (READERS.has(p) && plain.length) { const f = plain[plain.length - 1]; found.push({ kind: "read", summary: named(f) ? `Read ${baseName(f)}` : "Read a file", file: f, vague: !named(f) }); continue; }
+    if (READERS.has(p) && plain.length) { const f = plain[plain.length - 1]; found.push({ kind: "read", summary: readSaid(f), file: f, vague: !named(f) }); continue; }
     if (GREPS.has(p) || (p === "git" && args[0] === "grep")) {
       const e = args.indexOf("-e"), pat = e >= 0 ? args[e + 1] : plain[p === "git" ? 1 : 0];
       found.push({ kind: "search", summary: pat ? `Searched files for ${quoted(pat)}` : "Searched files", pattern: pat, asked: plain }); continue;
@@ -221,6 +226,7 @@ const TOOLS = {
   plan: ["todowrite", "updateplan", "plan", "todoread"],
   sync: ["syncmessages"],
 };
+const SHOWN = { table: "a table", chart: "a chart", checklist: "a checklist", list: "a list", steps: "the steps", stats: "the figures" };
 const asked = (w) => (w ? ` for ${quoted(w)}` : ""), asking = (w) => (w ? ` for "${clip(w, 60)}"` : "");
 const OWN = {
   mytask: () => ({ kind: "task", summary: "Looked at the task's emails" }),
@@ -241,7 +247,10 @@ const OWN = {
   replynotneeded: () => ({ kind: "plan", summary: "Marked the reply as not needed" }),
   signform: () => ({ kind: "edit", summary: "Filled in and signed a form" }),
   propose: () => ({ kind: "plan", summary: "Asked for your yes" }),
-  show: () => ({ kind: "plan", summary: "Showed you a view" }),
+  // ...a view by what it shows - its own title, the file it put up, its kind - never "a view" (the walk, 2026-11-17: "Showing you a view")
+  show: (a) => { const el = a.elements?.[a.root] || {}, t = a.title || el.props?.title, fs = [a.files || []].flat().filter(Boolean);
+    return { kind: "plan", summary: t ? `Showed you ${quoted(t)}` : fs.length ? `Showed you ${baseName(fs[0])}${fs.length > 1 ? `, and ${fs.length - 1} more` : ""}`
+      : SHOWN[el.type] ? `Showed you ${SHOWN[el.type]}` : "Laid it out for you" }; },
   // ...and where it works (repochoice.py): the one line the chat shows for the agent's pick - "Working in northwind/ledger - <why>"
   userepo: (a) => { const w = String(a.path_or_name || "").trim(), at = /[\\/]/.test(w) && !/^[\w.-]+\/[\w.-]+$/.test(w) ? baseName(w) : w;
     return { kind: "plan", summary: `Working in ${at || "a checkout"}${a.why ? ` - ${clip(a.why, 100)}` : ""}` }; },
@@ -249,9 +258,17 @@ const OWN = {
 };
 const KIND = Object.fromEntries(Object.entries(TOOLS).flatMap(([k, names]) => names.map((n) => [n, k])));
 
+// ...and every label is built from PARSED arguments: a call whose arguments came as a JSON string (Codex's function_call, an OpenAI-style
+// tool call) read as none, so a draft fell through to "Running a command" and a write to its own text (the walk, 2026-11-17)
+const parsed = (x) => { if (typeof x !== "string") return x && typeof x === "object" ? x : {}; try { const j = JSON.parse(x); return j && typeof j === "object" ? j : {}; } catch { return {}; } };
 export const describeCall = (name, args = {}) => {
-  const a = args && typeof args === "object" ? args : {};
-  const mcp = /^mcp__(.+?)__(.+)$/.exec(String(name || ""));
+  const a = parsed(args);
+  // a server's tool by its own name: Claude's mcp__server__tool, and Codex's server__tool
+  const mcp = /^(?:mcp__)?(.+?)__(.+)$/.exec(String(name || ""));
+  // TASKUARY'S OWN TOOLS (agenttools.TOOLS), by what each one is for, BEFORE any guess from its arguments: a draft kept without them was
+  // read as a command ("Running a command" for an email, 2026-11-17)
+  const own = OWN[key(mcp ? mcp[2] : name)];
+  if (own && (!mcp || key(mcp[1]) === "taskuary")) return own(a);
   let kind = KIND[key(mcp ? mcp[2] : name)] || "";
   // an ACP "search" is either kind, and says which by what it was given: a pattern searches files, a query searches the web
   if (kind === "search" && a.query && !a.pattern) kind = "web";
@@ -265,7 +282,7 @@ export const describeCall = (name, args = {}) => {
     if (a.description) return { kind: s?.browser ? "page" : s?.vague ? s.kind : "run", summary: clip(a.description), ...(s?.vague && s.asked ? { asked: s.asked } : {}) };
     return s || { kind: "run", summary: "Ran a command" };
   }
-  if (kind === "read") { const f = fileOf(a); return { kind, summary: f ? `Read ${baseName(f)}` : "Read a file", file: f }; }
+  if (kind === "read") { const f = fileOf(a); return { kind, summary: f ? readSaid(f) : "Read a file", file: f }; }
   if (kind === "search") { const pat = a.pattern || a.query || a.regex; return { kind, summary: pat ? `Searched files for ${quoted(pat)}` : "Searched files", pattern: pat }; }
   if (kind === "list") { const g = a.pattern || a.glob, d = a.path || a.dir_path || a.directory; return { kind, summary: g ? `Looked for files matching ${quoted(g)}` : d ? `Listed the files in ${baseName(d)}` : "Listed the files" }; }
   if (kind === "web") { const q = a.query || a.q || a.search_term;
@@ -289,9 +306,6 @@ export const describeCall = (name, args = {}) => {
   if (kind === "plan") { const n = (a.todos || a.plan || []).length; return { kind, summary: n ? `Updated its plan (${n} steps)` : "Updated its plan" }; }
   // ...whatever channel the task came in on - a WhatsApp task read "Checking for new mail" (the owner, 2026-11-05: "this is not mail")
   if (kind === "sync") return { kind, summary: a.new ? `Found ${plural(a.new, "new message")} on the thread` : "Checked the thread for new messages" };
-  // TASKUARY'S OWN TOOLS (agenttools.TOOLS), by what each one is for: "Used my task (taskuary)" said nothing
-  const own = OWN[key(mcp ? mcp[2] : name)];
-  if (own && (!mcp || key(mcp[1]) === "taskuary")) return own(a);
   // anything else: its own name in words, and the one argument a person would want - a query, a host, a file
   const label = String(mcp ? mcp[2] : a.title || name || "a tool").replace(/[_-]+/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").trim();
   const target = a.query ? quoted(a.query) : hostOf(a.url) || (fileOf(a) ? baseName(fileOf(a)) : "");
@@ -305,7 +319,7 @@ const ING = { Read: "Reading", Searched: "Searching", Wrote: "Writing", Edited: 
   Checked: "Checking", Went: "Going", Reloaded: "Reloading", Scrolled: "Scrolling", Closed: "Closing", Pressed: "Pressing", Ticked: "Ticking",
   Unticked: "Unticking", Chose: "Choosing", Uploaded: "Uploading", Saved: "Saving", Started: "Starting", Drafted: "Drafting", Marked: "Marking",
   Filled: "Filling", Asked: "Asking", Showed: "Showing", Deleted: "Deleting", Moved: "Moving", Renamed: "Renaming", Copied: "Copying",
-  Thought: "Thinking" };
+  Thought: "Thinking", Laid: "Laying" };
 export const present = (s) => { const t = String(s || ""), m = /^([A-Z][a-z]+)\b/.exec(t); return m && ING[m[1]] ? ING[m[1]] + t.slice(m[1].length) : t; };
 // the row's words: what it is doing while it runs, what it did once done
 export const stepLabel = (s) => (s?.status === "running" ? s.doing || present(s.summary) : s?.summary || "");
@@ -317,7 +331,7 @@ const countOf = (out) => {
   return list ? list.length : null;
 };
 const rawOf = (name, args) => {
-  const a = args && typeof args === "object" ? args : {};
+  const a = parsed(args);
   const cmd = a.command || a.cmd;
   if (cmd) return `$ ${Array.isArray(cmd) ? cmd.join(" ") : cmd}`;
   return `${name} ${JSON.stringify(a, null, 2)}`;

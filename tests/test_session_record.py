@@ -68,6 +68,21 @@ def test_codex_rollout_reads_reasoning_commands_patches_and_message(home):
     assert sessionrecord.summarise(steps)['files'] == ['portal/app.js']
 
 
+# A CALL'S ARGUMENTS ARRIVE AS A JSON STRING on Codex's function_call (the walk, 2026-11-17): kept as a string, a write had no file or edit and
+# a draft no arguments at all, so the chat drew "Writing <its own text>" and "Running a command" for an email
+def test_a_codex_call_with_json_string_arguments_keeps_them_as_arguments(home):
+    body = 'Hi Erin,' + chr(10) * 2 + 'The run sheet is attached - see n @path for the totals.'
+    jsonl(home / '.codex' / 'sessions' / '2026' / '11' / '17' / 'rollout-2026-11-17T09-00-00-s1.jsonl', [
+        {'type': 'response_item', 'payload': {'type': 'function_call', 'name': 'write_file',
+                                              'arguments': json.dumps({'path': '/work/run-sheet.md', 'content': body})}},
+        {'type': 'response_item', 'payload': {'type': 'function_call', 'name': 'mcp__taskuary__propose_email',
+                                              'arguments': json.dumps({'to': 'erin@northwind.example', 'subject': 'Run sheet', 'text': body})}}])
+    wrote, drafted = sessionrecord.cli_steps('codex', 's1')[0]
+    assert (wrote.get('args'), wrote.get('file')) == ({'path': '/work/run-sheet.md'}, '/work/run-sheet.md')
+    assert wrote['edit'] == {'parts': [{'old': '', 'new': body}]}
+    assert drafted['name'] == 'mcp__taskuary__propose_email' and body not in json.dumps(drafted)      # ...and the draft's body stays in the draft
+
+
 def test_copilot_events_read_and_an_unknown_cli_keeps_its_screen(home):
     jsonl(home / '.copilot' / 'session-state' / 'k1' / 'events.jsonl', [
         {'type': 'user.message', 'data': {'content': 'List the stale branches.'}},

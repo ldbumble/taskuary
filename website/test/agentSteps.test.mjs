@@ -262,3 +262,18 @@ test("the agent's pick of a checkout is one line in the chat: Working in <repo> 
   assert.equal(said({ path_or_name: "C:\\code\\portal", why: "the login page" }), "Working in portal - the login page");
   assert.equal(describeCall("mcp__taskuary__find_repos", { query: "portal" }).summary, "Looked for the code on this computer for 'portal'");
 });
+
+// THE WORKING LINE NAMES THE WORK, NEVER THE MACHINERY (the walk, 2026-11-17: "Reading TQ-0006.stranger.md", "Writing n @pa…", "Showing you a
+// view", "Running a command" for an email draft) - every label from parsed arguments, Taskuary's own tools by what they are for
+test("a step says what it did: a seeded file by what is in it, a view by its title, a draft as a draft, string arguments parsed", () => {
+  const said = (n, a) => describeCall(n, a).summary;
+  assert.equal(said("Read", { file_path: "C:/tq/stranger/6/TQ-0006.stranger.md" }), "Read what the sender wrote");
+  assert.equal(said("Bash", { command: "cat /tmp/tq/TQ-0006.stranger.md" }), "Read what the sender wrote");
+  assert.equal(said("mcp__taskuary__show", { title: "Run sheet", root: "t", elements: { t: { type: "table" } } }), "Showed you 'Run sheet'");
+  assert.equal(said("show", { root: "t", elements: { t: { type: "table", props: {} } } }), "Showed you a table");
+  assert.equal(said("taskuary__show", { files: ["/work/out/budget.pdf"] }), "Showed you budget.pdf");
+  // ...a draft whose arguments were kept without its words reads as a draft, never as a command made of its one line of text
+  assert.equal(said("mcp__taskuary__propose_email", { command: "erin@northwind.example", file_path: "erin@northwind.example" }), "Drafted an email");
+  assert.equal(said("taskuary__propose_email", JSON.stringify({ to: "erin@northwind.example", subject: "Run sheet" })), "Drafted an email");
+  assert.equal(said("write_file", JSON.stringify({ path: "/work/run-sheet.md", content: "see n @path" })), "Wrote run-sheet.md");
+});

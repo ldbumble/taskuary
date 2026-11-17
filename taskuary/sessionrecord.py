@@ -95,8 +95,18 @@ def _edit(a: dict) -> dict | None:
     return {'parts': parts[:20]} if parts else None
 
 
+def _parsed(args):
+    "A call's arguments as given, or the object a JSON string of them holds (Codex's function_call, an OpenAI-style tool call)."
+    if not isinstance(args, str): return args
+    try: j = json.loads(args)
+    except ValueError: return args
+    return j if isinstance(j, dict) else args
+
+
 def _tool(name, args, at=None) -> dict:
-    args = hide_draft(name, args)
+    # ...read as the object they are (2026-11-17): kept as a string, a call had no args, file or edit, so the chat drew a write by its own
+    # text and an email draft as "Running a command" (agentSteps.describeCall)
+    args = hide_draft(name, _parsed(args))
     s = {'k': 'tool', 'name': str(name or 'tool'), 'text': _target(args), 'at': at}
     a = args if isinstance(args, dict) else {}
     if (kept := _args(a)): s['args'] = kept

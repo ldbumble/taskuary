@@ -40,7 +40,9 @@ export const STATE_META = byKey(vocab.states);
 // - every word the Tasks list and the Board draw comes from lanes.json
 export const taskStateMeta = (key) => LANE_META[key] || STATE_META[key] || KIND_META[key] || null;
 // ...and a reply the server refused (funnel: `not_sent`) wears "not sent" in red, never the lane's "ready to send" (the UI audit, 2026-10-21)
-export const rowMeta = (item) => ({ ...laneMeta(item?.lane), ...(KIND_META[item?.kind] || {}), ...(item?.not_sent ? KIND_META.not_sent : {}) });
+// ...a new sender's held row (`hold`, processing_unread) reads held over its lane and kind: nothing starts it by itself (2026-11-17)
+export const rowMeta = (item) => ({ ...laneMeta(item?.lane), ...(KIND_META[item?.kind] || {}), ...(item?.hold ? STATE_META.held : {}),
+  ...(item?.not_sent ? KIND_META.not_sent : {}) });
 
 // The column is drawn top → bottom = next out → last out: the SERVER sends next-first and the rail
 // keeps that order, so what triage moved up is what you see first (it used to be drawn upside down,

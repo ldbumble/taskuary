@@ -111,6 +111,8 @@ test("a general chat that has answered is agent state, not \"not started\"", () 
   assert.equal(agentPhase({ conversation: true }), "stopped and saved");
   assert.equal(agentPhase({ conversation: true, report: { Body: "x" } }), "stopped and saved");
   assert.equal(agentPhase({}), "waiting to start");
+  // a new sender's task the server reads held says so, never "waiting to start" (taskstate, 2026-11-17)
+  assert.equal(agentPhase({ state: "held", handed: true }), "new sender");
   assert.equal(focusStage({ kind: "general", task: "open", agent: "stopped and saved", reply: "not drafted" }), "agent");
 });
 

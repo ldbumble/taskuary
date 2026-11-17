@@ -54,7 +54,7 @@ const railStatus_ = (item, cantSend = false, page = null) => {
   // ...a FINISHED run's row (processing_unread: lane yours, `finished`) is the agent's finish, as its line says: the pill read "on you"
   // under "the assistant finished - read what it found" (the product audit, 2026-11-08) - as the server's state_of says it
   const done = item.finished && item.lane === "yours" && !KIND_META[item.kind];
-  const key = copy ? UNSENDABLE : item.not_sent ? "not_sent" : done ? "agentdone" : KIND_META[item.kind] ? item.kind : item.lane;
+  const key = copy ? UNSENDABLE : item.not_sent ? "not_sent" : item.hold ? "held" : done ? "agentdone" : KIND_META[item.kind] ? item.kind : item.lane;
   const spins = item.lane === "working" && !item.settling;
   return said(key, copy ? { ...rowMeta(item), ...KIND_META[UNSENDABLE] } : done ? { ...rowMeta(item), ...KIND_META.agentdone } : rowMeta(item), spins);
 

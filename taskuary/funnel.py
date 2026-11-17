@@ -76,6 +76,7 @@ def lane_word(item: dict) -> str:
     on the rail. A coding task keeps its own."""
     it = item or {}
     if it.get('chat_done'): return lanes.word('chat_done')
+    if it.get('hold'): return lanes.word('held')                 # a new sender's held row (processing_unread, 2026-11-17)
     if it.get('chat') and it.get('lane') in CHAT_READY_LANES: return lanes.word('chat_ready')
     return lanes.word('owed') if owed_no_draft(item) else (LANE_WORDS.get(str(it.get('lane') or '')) or ('',))[0]
 
@@ -84,6 +85,7 @@ def mark_for(item: dict) -> str:
     """The one emoji that identifies a row: its kind's when that says more than its lane's."""
     if not item: return ''
     if owed_no_draft(item): return KIND_MARKS['owed']
+    if item.get('hold'): return lanes.MARK['held']
     return KIND_MARKS.get(str(item.get('kind') or '')) or LANE_MARKS.get(str(item.get('lane') or ''), '')
 ALERT_MIN, STARTED_MIN = lanes.ALERT_MIN, 5   # when a meeting comes onto the rail and rings (lanes.json `urgent`); grace after the start
 SETUP_GRACE_MIN = 15              # a walk-through the owner is still in does not raise its own hand

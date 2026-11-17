@@ -5,6 +5,16 @@ import assert from "node:assert/strict";
 import { ANIM, BADGE, agentGone, chatOf, railStatus, rowWhy, stateStatus, statusLabel, taskStatus } from "../src/railStatus.js";
 import { LANE_META, rowMeta } from "../src/funnelPile.js";
 
+test("a new sender's held row reads held on the rail, the header and the Tasks list alike, never waiting to start", () => {
+  // 2026-11-17: the rail and the page said "waiting to start" over a task nothing starts until the owner trusts the sender
+  for (const lane of ["queued", "asked", "yours"]) {
+    const item = { lane, kind: "task", hold: true, tid: 7 };
+    assert.equal(rowMeta(item).word, "new sender", lane);
+    assert.deepEqual([railStatus(item).key, railStatus(item).word], ["held", "new sender"], lane);
+    assert.equal(taskStatus({ rail: item }).word, stateStatus("held").word, `${lane}: the header reads what the list's state says`);
+  }
+});
+
 test("the header's status is exactly the rail row's mark and word, for every lane", () => {
   for (const lane of Object.keys(LANE_META)) {
     const item = { lane, kind: "task" }, st = taskStatus({ rail: item }), m = rowMeta(item);

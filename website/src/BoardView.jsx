@@ -233,7 +233,8 @@ const NoteDialog = ({ open, task, onClose }) => {
 // draws the same field; this board used to decide again in the browser, from its own facts, and the two disagreed.
 // Its columns are the agent's states, in lanes.json's words: "Queued" held waiting-to-start, stopped, saved and
 // Taskuary-closed alike, and "Waiting on you" held an asking agent, a drafted reply and a task waiting on somebody else.
-const COLUMN_OF = { queued: "queued", working: "working", blocked: "blocked", saved: "left", stopped: "left",
+// ...a new sender's held task stands with them, in its own word on the card (taskstate, 2026-11-17)
+const COLUMN_OF = { queued: "queued", held: "queued", working: "working", blocked: "blocked", saved: "left", stopped: "left",
   agentdone: "agentdone", approve: "agentdone" };
 const laneOf = (t) => COLUMN_OF[t.State] || null;
 

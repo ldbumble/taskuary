@@ -8,8 +8,9 @@ once, on the server, with the rail's rules (funnel.left_by_facts, general_not_st
 words (lanes.json), and both pages draw what it says.
 
 The keys are lanes.json's own: a lane where the rail has one (blocked, working, approve, queued, saved, stopped,
-yours), `theirs` for a task waiting on somebody else, and for a closed task `agentdone` (the agent finished
-it) or `closed` (you did) - `agentdone` as well for an open task whose last run said it finished (workerstate.ended).
+yours), `held` for a new sender's task nothing starts on until the owner trusts them, `theirs` for a task waiting on
+somebody else, and for a closed task `agentdone` (the agent finished it) or `closed` (you did) - `agentdone` as well for an
+open task whose last run said it finished (workerstate.ended).
 
 And ONE RECORD under it (TaskState, the spine audit 2026-11-09): what is true of a task's agent - the facts, read once - and the
 rules over them, which the rail, All, the page's story and this key had each written out for themselves.
@@ -20,7 +21,7 @@ from . import funnel, workerstate
 from .processing_unread import OWNER_ACTORS, finish_evidence
 
 # the Board's columns, left to right: what each holds (T2, T3)
-BOARD = (('queued', ('queued',)), ('working', ('working',)), ('blocked', ('blocked',)),
+BOARD = (('queued', ('queued', 'held')), ('working', ('working',)), ('blocked', ('blocked',)),
          ('left', ('saved', 'stopped')), ('agentdone', ('agentdone', 'approve')))
 
 
@@ -106,6 +107,11 @@ class TaskState:
         "left without finishing" (A1, 2026-09-25). A new session clears it (terminal.open_session)."""
         from . import terminal
         return terminal.SAVED in self.tags
+    @property
+    def held(self) -> bool:
+        "A new sender's words hold it (ingest.HOLD_TAG, lifted by Trust): nothing starts on it until the owner says so."
+        from .ingest import HOLD_TAG
+        return HOLD_TAG in self.tags
     @property
     def interrupted(self) -> bool:
         "Taskuary itself closed on top of a live worker (terminal.release_task, PW-262): nothing restarts by itself."
@@ -207,6 +213,9 @@ class TaskState:
             return 'agentdone' if finish_evidence(store, tid) else 'closed'
         if t.get('RunStatus') == 'running': return 'working'
         if waits_press(store, t, row=True): return 'approve'
+        # A NEW SENDER'S TASK IS HELD, never "waiting to start" (2026-11-17): nothing starts on it until the owner trusts the sender, and the
+        # chip, the list and the Board read the word the phone said alone (lanes.json `held`) - off the tag ingest leaves, which Trust lifts
+        if self.held: return 'held'
         # still waiting to start, a failed start included - the row carries the error and the page offers Start now / Cancel (T10)
         if self.queued: return 'queued'
         left = funnel.left_by_facts(t.get('Tags'), [{'Status': t.get('RunStatus')}] if t.get('RunStatus') else [])

@@ -96,6 +96,22 @@ class StateTests(unittest.TestCase):
         s = MemoryStore(); t = task(s, Assignee='agent:coding')
         self.assertEqual(taskstate.state(s, row(s, t), queued={'State': 'failed'}), 'queued')
 
+    def test_a_new_sender_s_held_task_reads_held_never_waiting_to_start(self):
+        # 2026-11-17: a stranger's task read "waiting to start" on the chip, the list and the Board - as if it would start by itself -
+        # while only the phone said it was held; nothing starts on it until the owner trusts the sender
+        from taskuary.ingest import HOLD_TAG
+        s = MemoryStore(); t = task(s, Kind='general', Assignee='agent:general')
+        s.tag_task(t, HOLD_TAG, True, 'router')
+        self.assertEqual(taskstate.state(s, row(s, t), queued={'State': 'waiting'}), 'held')
+        self.assertEqual(taskstate.state(s, row(s, t)), 'held')
+        self.assertEqual(taskstate.column('held'), 'queued')                          # the Board keeps it where it stood
+        from taskuary import funnel, lanes                                             # ...and the rail's row, which the phone reads, says it too
+        self.assertEqual((funnel.lane_word({'lane': 'queued', 'hold': True}), funnel.mark_for({'lane': 'queued', 'hold': True})),
+                         (lanes.word('held'), '🔒'))
+        self.assertEqual(taskstate.state(s, row(s, t), {'alive': True, 'waiting': False}), 'working')    # ...an agent at work is at work
+        s.tag_task(t, HOLD_TAG, False, 'owner')                                        # Trust lifts it: a plain wait again
+        self.assertEqual(taskstate.state(s, row(s, t), queued={'State': 'waiting'}), 'queued')
+
     def test_who_closed_it_decides_agent_finished(self):
         s = MemoryStore(); t = task(s)
         s.add_comment(t, 'coding', 'agent', 'The agent closed this itself: fixed.')

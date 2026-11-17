@@ -34,6 +34,7 @@ IDEA = VOCAB['idea_kinds']
 # to send" is read here, never retyped where a sentence needs it (the cleanup round, 2026-10-18)
 WORD = {r['key']: r['word'] for g in ('lanes', 'kinds', 'states') for r in VOCAB[g]}
 def word(key: str) -> str: return WORD.get(key, '')
+MARK = {r['key']: r.get('mark') or '' for g in ('lanes', 'kinds', 'states') for r in VOCAB[g]}     # ...and its emoji
 # ...and its sentence, which the page's header chip shows as its hover: a row's line that says the same state reads it here (funnel)
 HINT = {r['key']: r.get('hint') or '' for g in ('lanes', 'kinds', 'states') for r in VOCAB[g]}
 def hint(key: str) -> str: return HINT.get(key, '')

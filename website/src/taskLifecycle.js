@@ -18,7 +18,7 @@ export const taskPhase = (status) => {
 // ONE WORD PER AGENT STATE, the words lanes.json gives the rail (the owner, 2026-09-25: "let's unify
 // the vocab for agent status ... show it everywhere").
 export const AGENT = { waiting: WORD.blocked, working: WORD.working, saved: WORD.saved, stopped: WORD.stopped, finished: WORD.agentdone,
-  idle: WORD.queued };
+  idle: WORD.queued, held: WORD.held };
 
 // THE SERVER'S STATE WHEREVER THE PAGE OPENS: the list's row carries it, and a task opened on the table has no row - its own detail
 // carries the same word (server task_detail). Without it an agent's own close read "stopped and saved" and opened on Close out (2026-10-21).
@@ -38,7 +38,8 @@ export const reopenedDetail = (d) => d?.task ? { ...d, task: { ...d.task, Status
 // "waiting to start" (T5).
 // `state`: the server's word for the task (taskstate.py) - saved, stopped or waiting to start is what the list and the
 // Board say, so the page says it too instead of guessing from the facts it happens to have loaded (2026-09-25 pass).
-const FROM_STATE = { saved: AGENT.saved, stopped: AGENT.stopped, queued: AGENT.idle };
+// ...and a new sender's task is held, never "waiting to start": nothing starts it until the owner trusts them (2026-11-17)
+const FROM_STATE = { saved: AGENT.saved, stopped: AGENT.stopped, queued: AGENT.idle, held: AGENT.held };
 export const agentPhase = ({ session, run, transcript, report, conversation, finished, handed, state } = {}) => {
   if (session?.alive) return session.waiting ? AGENT.waiting : AGENT.working;
   if (run?.Status === "running") return AGENT.working;

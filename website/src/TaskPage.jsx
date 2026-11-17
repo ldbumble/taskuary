@@ -1727,7 +1727,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     session: term?.alive ? { ...term, waiting: answered || isWaiting(term) } : null,
     run: liveRun, transcript: detail?.transcript, report,
     conversation: generalStarted, finished: rowState === "agentdone", state: rowState,
-    handed: !!assignedAgent(t?.Assignee) || rowState === "queued" || !!detail?.transcript || !!report || generalStarted,
+    handed: !!assignedAgent(t?.Assignee) || ["queued", "held"].includes(rowState) || !!detail?.transcript || !!report || generalStarted,
   });
   // a sender wrote again after the agent's last session (funnel.news_since_agent): the task stage leads with that message
   const news = !term?.alive && detail?.agentStory?.kind === "news" ? detail.agentStory : null;

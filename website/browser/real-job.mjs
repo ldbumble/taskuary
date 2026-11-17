@@ -46,7 +46,9 @@ with open(sys.argv[1], 'w', newline='') as o:
         w.writerow([fn, ln, co, f"{fn.lower()}.{ln.lower()}{i}@{co.lower()}.example", r.choice(['Harbor City','Millbrook','Oak Ridge']), r.choice(['2025 Summit','2026 Expo','never'])])`, f]);
     return f;
   },
-  signups() {
+  async signups() {
+    // ...a fresh world each run: the sites forget their accounts when they start, so the sign-ins kept for them go too (Remove, as he would)
+    for (const r of ((await api("/api/signins"))?.data || [])) if (/^127\./.test(r.Site || r.site || "")) await api(`/api/signins/${r.Site || r.site}`, null, "DELETE");
     const p = spawn(PY, [path.join(here, "fake_signup.py"), String(SITE), INBOX], { stdio: "ignore", detached: false });
     process.on("exit", () => { try { p.kill(); } catch {} });
     return `http://127.0.0.1:${SITE}`;
@@ -62,7 +64,7 @@ const JOBS = {
     ask: () => `Email everyone in ${worlds.contacts()} to invite them to our open house on Thursday 4 December, 5-7pm at Northwind, 12 Harbor St. ` +
       "Personalise each one with their first name and company, and mention their last event if they came to one. Then tell me how many went out." },
   signups: { world: "signups", title: "Market data from ten vendors",
-    ask: () => `Sign up for a free account on each of the ten data vendors listed at ${worlds.signups()}/ using my work email alex@northwind.example, ` +
+    ask: async () => `Sign up for a free account on each of the ten data vendors listed at ${await worlds.signups()}/ using my work email alex@northwind.example, ` +
       "collect each one's table, and put them together into one sheet by city with a column per vendor. Tell me which ones you could not get and why." },
   report: { world: null, title: null, ask: "Which site is closest to a cap of 140 people, and draft a note to its manager about it." },
 };
@@ -75,7 +77,7 @@ const J = JOBS[job]; if (!J) { console.log("no such job", job, Object.keys(JOBS)
 await api("/api/fixture/outbox", {});
 const outbox = path.join(info.home, "outbox.jsonl"), sentBefore = existsSync(outbox) ? readFileSync(outbox, "utf8").split("\n").filter(Boolean).length : 0;
 if (J.world === "parcels") console.log("world", JSON.stringify(await worlds.parcels()).slice(0, 160));
-const ask = typeof J.ask === "function" ? J.ask() : J.ask;
+const ask = typeof J.ask === "function" ? await J.ask() : J.ask;
 
 const { browser, page } = await connect();
 await page.reload({ waitUntil: "domcontentloaded" }); await sleep(3000);

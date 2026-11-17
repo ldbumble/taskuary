@@ -16,6 +16,7 @@ SITES = [('rentscope', 'RentScope', 'asking rent per sq ft', ''), ('vacancyiq', 
          ('permitwatch', 'PermitWatch', 'building permits filed', 'sum'), ('lienlens', 'LienLens', 'new liens filed', 'emailcode'),
          ('footfall', 'Footfall', 'weekly foot traffic (k)', ''), ('zoningnow', 'ZoningNow', 'rezoning applications', 'phone'),
          ('dealflowpro', 'DealFlow Pro', 'off-market listings', 'payment'), ('tenantpulse', 'TenantPulse', 'lease renewals %', '')]
+HOST = {s: f'127.0.0.{i + 2}' for i, (s, *_) in enumerate(SITES)}     # each vendor its own site, as real vendors are
 DATA = {s: [(c, round(r.uniform(5, 95), 1)) for c in CITIES] for s, *_ in SITES}
 USERS, SESS, CODES = {}, {}, {}     # (slug, email) -> {..}; cookie -> (slug, email); (slug, email) -> code
 
@@ -51,7 +52,7 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path); parts = [p for p in u.path.split('/') if p]
         if not parts or parts[0] != 's':
-            return self._send(200, page('', 'Data vendors', '<ul>' + ''.join(f'<li><a href="/s/{s}/">{n}</a> - {d}</li>' for s, n, d, _ in SITES) + '</ul>'))
+            return self._send(200, page('', 'Data vendors', '<ul>' + ''.join(f'<li><a href="http://{HOST[s]}:{PORT}/s/{s}/">{n}</a> - {d}</li>' for s, n, d, _ in SITES) + '</ul>'))
         site = parts[1] if len(parts) > 1 else ''
         meta = next((x for x in SITES if x[0] == site), None)
         if not meta: return self._send(404, page('', 'Not found', '<p>No such site.</p>'))
@@ -132,4 +133,6 @@ class H(BaseHTTPRequestHandler):
         with open(INBOX + '.log' if INBOX else 'signup.log', 'a', encoding='utf-8') as o: o.write(f'{time.strftime("%H:%M:%S")} {a[0] % a[1:] if len(a) > 1 else a}\n')
 
 
-ThreadingHTTPServer(('127.0.0.1', PORT), H).serve_forever()
+import threading
+for h in ['127.0.0.1', *HOST.values()]: threading.Thread(target=ThreadingHTTPServer((h, PORT), H).serve_forever, daemon=True).start()
+threading.Event().wait()

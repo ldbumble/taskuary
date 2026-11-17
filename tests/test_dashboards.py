@@ -519,3 +519,33 @@ def test_every_saved_tile_has_a_sentence_and_the_built_in_ones_keep_their_hand_w
     assert [c['said'] for c in got[:-1]] == [c['said'] for c in dashboards.GLANCE['components']]
     assert got[-1]['said'] == 'The count of what came in'
     assert dashboards.with_said(dashboards.GLANCE) is dashboards.GLANCE and dashboards.with_said({'type': 'report'}) == {'type': 'report'}
+
+
+def test_a_run_says_every_panel_so_send_to_agent_hands_over_the_whole_dashboard():
+    # Send to agent on a dashboard handed the agent its run's BodyText, and that held the stat tiles only - the agent said the dashboard
+    # "shows only totals" while the page drew a goal, a ranking and a list. The run says every panel, as the preview reads it (2026-11-17)
+    s = MemoryStore()
+    spec = {'type': 'dashboard', 'title': 'Northwind desk', 'filters': {'range': 7},
+            'sources': [{'key': 'mail', 'label': 'What came in', 'type': 'taskuary_data', 'dataset': 'mail', 'date': 'day'},
+                        {'key': 'tasks', 'label': 'Tasks', 'type': 'taskuary_data', 'dataset': 'tasks', 'date': 'arrived'}],
+            'components': [{'kind': 'stat', 'title': 'Came in', 'source': 'mail', 'agg': 'count'},
+                           {'kind': 'progress', 'title': 'Closed this week', 'source': 'tasks', 'where': {'state': 'closed'}, 'range': 7, 'target': 15},
+                           {'kind': 'bar', 'title': 'Who writes most', 'source': 'mail', 'x': 'sender', 'limit': 8},
+                           {'kind': 'list', 'title': 'Waiting longest on you', 'source': 'tasks', 'label': 'title', 'meta': 'waiting',
+                            'where': {'state': 'open'}, 'range': False}]}
+    data = {'sources': {'mail': {'label': 'What came in', 'head': '3 rows', 'failed': False,
+                                 'rows': [{'day': _day(0), 'sender': 'Erin Blake'}, {'day': _day(1), 'sender': 'Erin Blake'},
+                                          {'day': _day(2), 'sender': 'Gail Moreno'}]},
+                        'tasks': {'label': 'Tasks', 'head': '1 rows', 'failed': False,
+                                  'rows': [{'arrived': _day(3), 'state': 'open', 'title': 'Reconcile the GL export', 'waiting': '3 days'}]}}}
+    from unittest import mock
+    with mock.patch.object(dashboards, 'collect', lambda store, cfg: data):
+        out = dashboards.file_run(s, _save(s, spec), spec)
+    body = s.get_message(out['message_id'])['BodyText']
+    assert out['subject'] == 'Northwind desk — Came in 3'                       # the headline stays the subject
+    assert 'last 7 days' in body and 'Came in: 3' in body and 'Closed this week: 0 of 15' in body
+    assert 'Who writes most' in body and 'Erin Blake: 2' in body and 'Gail Moreno: 1' in body
+    assert 'Waiting longest on you' in body and 'Reconcile the GL export' in body and '3 days' in body
+    # ...and the preview a report reads a dashboard by says it in the same words
+    with mock.patch.object(dashboards, 'collect', lambda store, cfg: data):
+        assert reports._dashboard_preview({**spec, 'store': s}) == (out['subject'].split(' — ', 1)[1], body)

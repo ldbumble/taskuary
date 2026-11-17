@@ -1070,13 +1070,9 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
 
 
 def _dashboard_preview(cfg):
-    """{"sources": [...], "components": [...]} - a dashboard read as a report would read it: its tiles, then its rows per source."""
+    """A dashboard read as a report reads it: its headline, and every panel as the page draws it - the words its own run files."""
     from . import dashboards
-    data = dashboards.collect(cfg['store'], cfg)
-    tiles = dashboards.headline(cfg, data)
-    head = ' · '.join(f'{t} {v}' for t, v in tiles[:3]) or f"{sum(len(d['rows']) for d in data['sources'].values())} rows"
-    return head, '\n\n'.join(f"=== {d['label']} ({d['head']}) ===\n" + '\n'.join(json.dumps(r, default=str) for r in d['rows'][:50])
-                               for d in data['sources'].values())[:BODY_CHARS]
+    return dashboards.as_text(cfg, dashboards.collect(cfg['store'], cfg))
 
 
 def executor_for(type_name):

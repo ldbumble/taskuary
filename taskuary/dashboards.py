@@ -569,22 +569,86 @@ def fmt(v) -> str:
     return f'{v:,.0f}' if float(v).is_integer() else f'{v:,.1f}'
 
 
+def tile_rows(spec: dict, data: dict, c: dict, days: int) -> list:
+    """A component's rows as the page cuts them (slice.componentRows, no segment chosen): its own window, then its where."""
+    rows = ((data.get('sources') or {}).get(c.get('source')) or {}).get('rows') or []
+    date = None if c.get('range') is False else next((s.get('date') for s in spec.get('sources') or [] if s.get('key') == c.get('source')), None)
+    return where(in_range(rows, date, span(c, days)), c.get('where'))     # "range": false counts what is true now
+
+
+def _days(spec): return int((spec.get('filters') or {}).get('range') or 0)
+
+
 def numbers(spec: dict, data: dict) -> list:
     """[(tile, value)] for every stat tile, over the dashboard's default range - the value as counted, None where nothing was."""
-    days, out = int((spec.get('filters') or {}).get('range') or 0), []
-    srcs = {s.get('key'): s for s in spec.get('sources') or []}
-    for c in spec.get('components') or []:
-        if c.get('kind') != 'stat': continue
-        rows = ((data.get('sources') or {}).get(c.get('source')) or {}).get('rows') or []
-        date = None if c.get('range') is False else (srcs.get(c['source']) or {}).get('date')     # "range": false counts what is true now
-        out.append((c, aggregate(where(in_range(rows, date, span(c, days)), c.get('where')), c.get('agg'), c.get('y'))))
-    return out
+    return [(c, aggregate(tile_rows(spec, data, c, _days(spec)), c.get('agg'), c.get('y')))
+            for c in spec.get('components') or [] if c.get('kind') == 'stat']
+
+
+def _says(c, v): return fmt(v) + (f" {c['unit']}" if c.get('unit') and v is not None else '')
 
 
 def headline(spec: dict, data: dict, nums: list = None) -> list:
     """[(title, value)] for every stat tile, as the tile says it."""
-    return [(c.get('title') or 'value', fmt(v) + (f" {c['unit']}" if c.get('unit') and v is not None else ''))
-            for c, v in (numbers(spec, data) if nums is None else nums)]
+    return [(c.get('title') or 'value', _says(c, v)) for c, v in (numbers(spec, data) if nums is None else nums)]
+
+
+def _key_of(v): return '(blank)' if v is None or v == '' else str(v)[:10] if re.match(r'\d{4}-\d{2}-\d{2}', str(v)) else str(v)
+
+
+def _groups(rows, x, agg, y, limit=None, order=None) -> list:
+    """[(key, value)] as a bar ranks them (slice.groupBy): biggest first, the tail folded into Other - or in `order`, a stage at zero kept."""
+    by = {}
+    for r in rows: by.setdefault(_key_of(r.get(x)), []).append(r)
+    if order: return [(str(k), aggregate(by.get(str(k), []), agg, y)) for k in order]
+    out = sorted(((k, aggregate(rs, agg, y)) for k, rs in by.items()), key=lambda g: (-(g[1] if g[1] is not None else float('-inf')), g[0]))
+    if not limit or len(out) <= limit: return out
+    return out[:limit - 1] + [('Other', aggregate([r for k, _ in out[limit - 1:] for r in by[k]], agg, y))]
+
+
+def _panel(spec, data, c, days) -> list:
+    """The lines one component says: a number, a goal against its target, or the rows its chart, list or table draws."""
+    rows, t, agg, y = tile_rows(spec, data, c, days), c.get('title') or c.get('kind'), c.get('agg'), c.get('y')
+    k = c.get('kind')
+    if k == 'stat': return [f'{t}: {_says(c, aggregate(rows, agg, y))}']
+    if k == 'progress':
+        v, goal = aggregate(rows, agg, y) or 0, _num(c.get('target')) or 0
+        return [f"{t}: {fmt(v)} of {fmt(goal)}" + (f' ({round(100 * min(1, v / goal))}%)' if goal else '')]
+    if k == 'list':
+        if s := c.get('sort'):
+            col = s.lstrip('-'); rows = sorted(rows, key=lambda r: (_num(r.get(col)) is None, _num(r.get(col)) or 0, str(r.get(col) or '')), reverse=s.startswith('-'))
+        rows = rows[:int(c.get('limit') or 50)]
+        return [f'{t}:', *(f"- {r.get(c.get('label'))}" + (f" — {r.get(c['meta'])}" if c.get('meta') and r.get(c['meta']) not in (None, '') else '')
+                           for r in rows)] if rows else [f'{t}: nothing']
+    if k == 'table': return [f'{t}:', *(json.dumps(r, default=str) for r in rows[:50])] if rows else [f'{t}: nothing']
+    if k == 'stacked':
+        by = {}
+        for r in rows: by.setdefault(_key_of(r.get(c.get('x'))), []).append(r)
+        return [f'{t}:', *(f"{x}: " + ', '.join(f'{s} {fmt(v)}' for s, v in _groups(rs, c.get('series'), agg, y)) for x, rs in sorted(by.items()))]
+    gs = _groups(rows, c.get('x'), agg, y, int(c.get('limit') or 8), c.get('order')) if k == 'bar' else sorted(_groups(rows, c.get('x'), agg, y))
+    return [f'{t}:', *(f'{x}: {fmt(v)}' for x, v in gs)] if gs else [f'{t}: nothing']
+
+
+def unread(srcs) -> str:
+    """The line a run says when some of its sources could not be read - the rest still drew."""
+    bad = [d for d in srcs if d.get('failed')]
+    return ('Read without ' + '; '.join(f"{d['label']}: {d.get('error') or 'could not be read'}" for d in bad)) if bad else ''
+
+
+def as_text(spec: dict, data: dict, nums: list = None) -> tuple:
+    """(headline, body): the dashboard as a reader with no screen reads it - its range, then every panel in the page's order, each as it
+    draws. A run's rail row and Send to agent hand over this body, and a report that reads a dashboard reads the same (2026-11-17: the
+    body held the stat tiles only, so an agent sent a dashboard said it "shows only totals" beside a goal, a ranking and a list)."""
+    srcs, days = (data.get('sources') or {}).values(), _days(spec)
+    head = ' · '.join(f'{t} {v}' for t, v in headline(spec, data, nums)[:3]) or f"{sum(len(d.get('rows') or []) for d in srcs)} rows"
+    note = unread(srcs)
+    span_ = f'Range: the last {days} days' if days else 'Range: everything the sources returned'
+    panels = ['\n'.join(_panel(spec, data, c, days)) for c in spec.get('components') or []]
+    # ...and under them every source's own rows, for a question no panel answers - past the mark a brief's readers stop at
+    raw = '\n\n'.join(f"=== {d.get('label')} ({d.get('head')}) ===\n" + '\n'.join(json.dumps(r, default=str) for r in (d.get('rows') or [])[:50])
+                      for d in srcs)
+    from .reports import BODY_CHARS, RAW_MARK
+    return head, ('\n\n'.join([*([note] if note else []), span_, *panels]) + (RAW_MARK + raw if raw else ''))[:BODY_CHARS]
 
 
 # ── keeping the last result, and a run ─────────────────────────────────────────────────────────
@@ -614,11 +678,8 @@ def file_run(store, src: dict, cfg: dict, trigger: str = 'schedule') -> dict:
     if srcs and (not any(d['rows'] for d in srcs) or (nums and not any(v for _, v in nums))):
         return {'message_id': None, 'subject': f'{title} — nothing to show yet', 'files': 0, 'said': 0, 'failed': False,
                 'summary': 'Every source was read and none has a number yet'}
-    tiles = headline(cfg, data, nums)
-    bad = [d for d in srcs if d['failed']]
-    note = ('Read without ' + '; '.join(f"{d['label']}: {d.get('error') or 'could not be read'}" for d in bad)) if bad else ''
-    head = ' · '.join(f'{t} {v}' for t, v in tiles[:3]) or f"{sum(len(d['rows']) for d in srcs)} rows"
-    text = '\n'.join([*([note] if note else []), *(f'{t}: {v}' for t, v in tiles)]) or head
+    head, text = as_text(cfg, data, nums)          # every panel, not the tiles alone: Send to agent hands over this body (2026-11-17)
+    note = unread(srcs)
     stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     mid = store.add_message({'TaskId': None, 'ExternalId': f"report:{src['SourceId']}:{stamp}:dashboard", 'ConversationId': f"report:{src['SourceId']}",
                              'Channel': 'report', 'SourceName': title, 'Subject': f'{title} — {head}', 'FromName': title, 'SentAt': stamp,

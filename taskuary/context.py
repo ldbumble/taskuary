@@ -48,23 +48,103 @@ def alike(store, query: str, rows: list, k: int = None) -> dict:
     return {int(key.split(':', 1)[1]): sim for key, sim in got or []}
 
 
-def past_work(store, msgs: list, title: str = '', repo: str = None, limit: int = PAST) -> list:
-    """Closed tasks that touch this one - same sender, a title and summary alike in meaning (embeddings), or the same repo -
-    newest first, each with the report its session ended on. [] when the hub has no history."""
+def past_work(store, msgs: list, title: str = '', repo: str = None, limit: int = PAST, near=None) -> list:
+    """Closed tasks that touch this one - same sender, a title and summary alike in meaning (`near`: recall's pick, else embeddings), or
+    the same repo - newest first, each with the report its session ended on. [] when the hub has no history."""
     senders = {(m.get('FromEmail') or '').lower() for m in msgs if m.get('FromEmail')}
     by_sender = {r['TaskId'] for r in store.done_tasks_from(senders)} if senders else set()
-    done = store.list_tasks(status='done')[:400]
-    near = alike(store, '\n'.join([title or ''] + [str(m.get('Subject') or '') for m in msgs]), done, limit)
+    done = store.list_tasks(status='done')[:DONE_POOL]
+    near = set(near) if near is not None else alike(store, '\n'.join([title or ''] + [str(m.get('Subject') or '') for m in msgs]), done, limit)
     out = []
     for t in done:
         why = ('the same sender' if t['TaskId'] in by_sender
                else 'the same subject' if t['TaskId'] in near
                else 'the same repository' if repo and repo.lower() in str(t.get('Tags') or '').lower() else '')
         if not why: continue
-        out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '', 'closed': str(t.get('ClosedAt') or t.get('UpdatedAt') or '')[:10],
-                    'why': why, 'report': _report(store, t['TaskId'])})
+        out.append(_past_row(store, t, why))
         if len(out) >= limit: break
     return out
+
+
+def _past_row(store, t: dict, why: str) -> dict:
+    return {'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '', 'closed': str(t.get('ClosedAt') or t.get('UpdatedAt') or '')[:10],
+            'why': why, 'report': _report(store, t['TaskId'])}
+
+
+DONE_POOL = 400          # the closed tasks a past-work read looks among, newest first
+
+
+# WHAT IS ALREADY KNOWN ABOUT THIS, BEFORE THE AGENT EXPLORES (the owner, 2026-11-16: "great example of terrible memory. It should know to
+# look in [the app] without spending a bunch of tokens"). An agent on a new hire's record in an internal app ran twelve minutes through
+# the databases and found a stale copy before it asked for the app's checkout - while the Hub held sixty notes on that app, ten closed
+# tasks had settled the same kind of case in its repository, and the repository map named it. None of it reached the agent: with no
+# embedder the Hub block was its four best-voted posts on other things, past work came only from the same sender, and its own Hub search
+# matched only a post carrying the whole query. Now one judgement of meaning (textsim.pick: embeddings, else one light model call over
+# the titles) picks the few Hub notes, closed tasks and the repository this task is about, once per task, and the brief leads with them
+RECALL_HUB, RECALL_PAST, RECALL_LINE, RECALL_TTL = 5, 5, 220, 6 * 3600
+_recalled: dict = {}             # (task, what it is about) -> (when, picks): every turn rebuilds the brief, the judgement is made once
+_REPO_TAG = re.compile(r'(?:^|[\s,])(?:agent-|triage-)?repo:([^\s,]+)')
+PAST_LIST = 'closed tasks, by title'
+REPO_LIST = "the owner's repositories and what each is"
+NOTHING = {'hub': [], 'past': [], 'repo': '', 'why': ''}
+
+
+def recall(store, tid: int, msgs: list = None, repo: str = None) -> dict:
+    """{'hub': [post rows], 'past': [task ids], 'repo': name or '', 'why': how the repo was found} - what is already known that bears on
+    this task. NOTHING on a stranger's task (the Hub and the owner's past work are company fact) and where nothing can judge."""
+    from . import handbook, origin
+    if origin.of_task(store, tid)[0] == 'stranger': return NOTHING
+    t = store.get_task(tid) or {}
+    msgs = msgs if msgs is not None else store.list_messages(tid)
+    about = '\n'.join([task_text(t), *dict.fromkeys(str(m.get('Subject') or '') for m in msgs if m.get('Subject'))])
+    key = (id(store), int(tid), about, repo or '')
+    if (had := _recalled.get(key)) and datetime.now().timestamp() - had[0] < RECALL_TTL: return had[1]
+    hub = store.lore_posts(limit=store.LORE_POOL, sort='top') if handbook.enabled(store) else []
+    done = [d for d in store.list_tasks(status='done')[:DONE_POOL] if d['TaskId'] != tid]
+    from .repochoice import known
+    try: repos = [] if repo else known(store)
+    except Exception as e: logger.debug(f'context: no repositories to recall - {e}'); repos = []
+    got = textsim.pick(store, about, {'hub': [(f"lore:{p['LoreId']}", handbook.entry_line(p)) for p in hub],
+                                      'past': [(f"task:{d['TaskId']}", d.get('Title') or '') for d in done],
+                                      'repo': [(f"repo:{r['repo']}", f"{r['repo']}: {r['about']}") for r in repos]},
+                       RECALL_HUB, about={'hub': handbook.HUB_LIST, 'past': PAST_LIST, 'repo': REPO_LIST}, task_id=tid)
+    if got is None: return NOTHING
+    by = {f"lore:{p['LoreId']}": p for p in hub}
+    past = [int(k.split(':', 1)[1]) for k in got['past']][:RECALL_PAST]
+    # ...the repository: where the closed tasks on the same thing were worked (a fact each kept), else the one the model read as its home
+    tags = {d['TaskId']: str(d.get('Tags') or '') for d in done}
+    worked = [m.group(1) for i in past if (m := _REPO_TAG.search(tags.get(i, '')))]
+    top = max(dict.fromkeys(worked), key=worked.count) if worked else ''
+    pick = top or next((k.split(':', 1)[1] for k in got['repo']), '')
+    why = (f"earlier tasks on the same thing worked in it ({', '.join(task_ref(i) for i in past if f'repo:{top}' in tags.get(i, ''))})" if top
+           else 'what the repository map says it is' if pick else '')
+    out = {'hub': [by[k] for k in got['hub'] if k in by], 'past': past, 'repo': '' if repo else pick, 'why': why}
+    _recalled[key] = (datetime.now().timestamp(), out)
+    return out
+
+
+KNOWN_HEAD = '## Already known about this - start from it before you explore'
+def render_known(store, rc: dict, past: list) -> str:
+    """The brief's first read after the mail: the likely repository, the Hub notes and the closed tasks on the same thing, a line each,
+    with where to read more. '' when nothing is known."""
+    lines = []
+    if r := rc.get('repo'):
+        from .repochoice import known
+        k = next((x for x in known(store) if x['repo'] == r), {})
+        lines.append(f"Likely repository: {r} - {rc.get('why')}" + (f"; checkout {k['path']}" if k.get('path') else '')
+                     + (f". It is: {_short(k['about'], 160)}" if k.get('about') else ''))
+    if rc.get('hub'):
+        lines.append('From the Hub (notes earlier work left - check them; run_system {"type": "hub_search", "query": "<words>"} reads one whole):')
+        lines += [f"- #{p['LoreId']} {_short(hub_line(p), RECALL_LINE)}" for p in rc['hub']]
+    if past:
+        lines.append('Closed tasks on the same thing and how they ended (search_tasks with the ref reads more):')
+        lines += [f"- {r['ref']} {r['title']} (closed {r['closed']}): {_short(r['report'], RECALL_LINE) or 'no report was written'}" for r in past]
+    return f'{KNOWN_HEAD}\n' + '\n'.join(lines) if lines else ''
+
+
+def hub_line(p: dict) -> str:
+    from .handbook import entry_line
+    return entry_line(p) + (f" - {p['Body']}" if p.get('Body') else '')
 
 
 RECENT_DAYS = 3          # how far back a closure still speaks to an arrival (the owner, 2026-09-22:
@@ -632,6 +712,8 @@ def build(store, tid: int, msgs: list = None, repo: str = None, general: bool = 
     try: came = came_in(store, tid)
     except Exception as e: logger.debug(f'context: what came in skipped - {e}'); came = ''
     if came: parts.append(came)
+    try: rc = recall(store, tid, msgs, repo)
+    except Exception as e: logger.debug(f'context: nothing recalled for task {tid} - {e}'); rc = NOTHING
     # WHO THE OWNER IS (SOUL.md + JOB.md), the same background the general assistant reads (brief.background) - here, not in the
     # seed, which a terminal types and must keep short (the owner, 2026-10-14)
     # ...never on a stranger's task (origin.py): who the owner is is what a planted line would ask for
@@ -650,7 +732,10 @@ def build(store, tid: int, msgs: list = None, repo: str = None, general: bool = 
         except Exception as e:
             logger.debug(f'context: dossier skipped - {e}'); dos = ''
         if dos: parts.append('## What the hub knows about this sender and topic\n' + dos)
-    past = past_work(store, msgs, t.get('Title') or '', repo)
+    # ...the closed tasks recall judged to be on the same thing lead the brief; the rest of past work (the same sender, the same repo) follows
+    if (known := render_known(store, rc, [_past_row(store, store.get_task(i) or {'TaskId': i}, 'the same subject') for i in rc['past']])):
+        parts.insert(2 if came else 1, known)
+    past = [r for r in past_work(store, msgs, t.get('Title') or '', repo, near=None if rc is NOTHING else ()) if r['tid'] not in rc['past']]
     if past: parts.append('## Past work that touches this (closed tasks and how they ended)\n' + render_past(past))
     # ...and how the last run on THIS task ended: a coding seed carries it as PREVIOUS SESSION RESULT, the general agent had only
     # its own chat - a run another brain made on the task was invisible to it

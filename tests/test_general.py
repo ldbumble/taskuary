@@ -135,8 +135,12 @@ class SharedSessionTests(unittest.TestCase):
         handbook.post(store, 'Customer launches need operations approval',
                       'Ask the operations owner before fixing the date.', 'customer-launch',
                       'decision', 'agent')
-        _system, user = general._prompt(store, tid)
-        self.assertIn('FROM HUB', user)
+        from tests import fake_embed
+        from taskuary import context
+        context._recalled.clear()
+        with fake_embed.reads({'launch': ['launch']}): _system, user = general._prompt(store, tid)
+        self.assertIn(context.KNOWN_HEAD, user)          # what bears on this task, read for it (context.recall) - one block, not two
+        self.assertNotIn('FROM HUB', user)
         self.assertIn('Customer launches need operations approval', user)
         self.assertNotIn('taskuary --upvote', user)  # an API assistant has no shell for this
 

@@ -74,3 +74,44 @@ def rank(store, query: str, items: list, k: int = None, least: float = None):
         logger.warning(f'textsim: the embedder failed, ranking by structure for {DOWN_SECS}s - {e}'); return None
     rows = [(key, len(b) // 4, b) for key, b in vs.items()]
     return kbembed.nearest(qv, rows, k or len(rows), kbembed.floor(store) if least is None else least)
+
+
+# WHAT BEARS ON THIS, READ BY A MODEL WHERE NO EMBEDDER RUNS (the owner, 2026-11-16: "great example of terrible memory. It should know to
+# look in [the app] without spending a bunch of tokens"). Semantic search is off on most computers, and there `rank` says None: the Hub's
+# search then found only a post carrying the agent's whole query word for word ("0 Hub posts ... nothing matched in 267 posts" over sixty
+# about that very system), and past tasks on the same system reached the agent only from the same sender. A light model reads the
+# numbered lists instead - a judgement of meaning, one call for every list, never a count of shared words
+PICK_LINE = 160
+PICK_SYSTEM = ('An agent is about to work a task. Below it are numbered lists of what is already known - each list says what it holds. '
+               'Pick the entries that bear on THIS task: the same system, the same kind of problem, where its data or code lives. Best '
+               'first, at most {k} from each list, none from a list where nothing fits - a shared word alone is not a fit. '
+               'Answer JSON {{"picks": ["<id>", ...]}} with the ids as written.')
+
+
+def pick(store, query: str, groups: dict, k: int = 5, about: dict = None, task_id=None, brain=None):
+    """{group: [key, ...]} best first, at most `k` each - for `groups` {name: [(key, text)]} against `query`: ranked by embeddings when an
+    embedder runs (`rank`), else one light model call reading every list (`about` {name: what the list holds}), else None (no AI either:
+    the caller's structural road decides)."""
+    groups = {g: [(key, t) for key, t in items if _norm(t)] for g, items in groups.items()}
+    if not _norm(query) or not any(groups.values()): return {g: [] for g in groups}
+    if available(store):
+        out = {g: rank(store, query, items, k) for g, items in groups.items()}
+        if all(v is not None for v in out.values()): return {g: [key for key, _ in v] for g, v in out.items()}
+    from . import llm
+    try: brain = brain or llm.build_llm(store, job='rank', gear='light', task_id=task_id)
+    except Exception as e: logger.debug(f'textsim: no brain to pick with - {e}'); return None
+    if not brain: return None
+    ids = {f'{g.upper()}{i}': (g, key) for g, items in groups.items() for i, (key, _t) in enumerate(items, 1)}
+    lists = '\n\n'.join(f"{g.upper()} - {(about or {}).get(g) or g}:\n" + '\n'.join(f"{g.upper()}{i}. {_norm(t)[:PICK_LINE]}" for i, (_k, t) in enumerate(items, 1))
+                        for g, items in groups.items() if items)
+    try:
+        a = llm.ask_json(brain, PICK_SYSTEM.format(k=k), f'THE TASK:\n{_norm(query)[:kbembed.QUERY_CHARS]}\n\n{lists}',
+                         want={'type': 'object', 'properties': {'picks': {'type': 'array', 'items': {'type': 'string'}}}, 'required': ['picks']})
+    except Exception as e: logger.info(f'textsim: the model did not pick - {e}'); return None
+    got = (a.data or {}).get('picks') if isinstance(a.data, dict) else None
+    if not isinstance(got, list): return None
+    out = {g: [] for g in groups}
+    for i in got:
+        g, key = ids.get(str(i).strip().upper().rstrip('.'), (None, None))
+        if g and key not in out[g] and len(out[g]) < k: out[g].append(key)
+    return out

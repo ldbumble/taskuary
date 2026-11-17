@@ -2109,13 +2109,15 @@ def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
     # facts as a coding session: how the business works, decisions, ownership, people and traps.
     # API-backed assistants cannot run taskuary's voting commands, so hand them the facts without
     # advertising controls they do not have; CLI sessions receive the action line separately.
+    # ...on a task, what the Hub knows that bears on it is the brief's own (context.recall, in WHAT THE HUB KNOWS below): this block is the
+    # guide's chat alone, which has no task to recall for
     from . import handbook as hub
-    hub_query = ' '.join([
+    hub_query = '' if not dock else ' '.join([
         str(task.get('Title') or ''), str(task.get('Summary') or ''),
         *[str(m.get('BodyText') or '') for m in (detail.get('messages') or [])[-12:]],
         *[str(c.get('Body') or '') for c in chat_rows(store, tid, run=True)[-12:]],
     ])
-    hub_context = hub.block(store, hub_query[:8_000]) if hub.enabled(store) else ''
+    hub_context = hub.block(store, hub_query[:8_000]) if hub_query and hub.enabled(store) else ''
     # the chat is an agent too, so it is on the wall - the HOUSE lane, the notes with no
     # checkout behind them, which is where it and the owner leave things for everybody
     from . import blackboard as bb, selfclose

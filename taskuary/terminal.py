@@ -2069,7 +2069,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # short on purpose: this line rides on the command line with a full path in it, and a canonical
     # tty caps a line at 1024 bytes (CI's fake TUI; macOS temp paths are long) - a wordy sentence here
     # pushed the seed over and the prompt arrived clipped
-    if cpath: parts.append(f'CONTEXT FILE: {cpath} - read it FIRST: this sender, this topic, past tasks and how they ended.')
+    if cpath: parts.append(f'CONTEXT FILE: {cpath} - read it FIRST: what is already known (repo, Hub, past tasks) before you explore.')
     # a browser the owner can WATCH exists only if the agent is told so - and told who types passwords
     from . import browserview as _bv
     if _bv.hint(): parts.append(_bv.hint())

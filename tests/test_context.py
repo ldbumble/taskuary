@@ -66,6 +66,81 @@ class PastWorkTests(unittest.TestCase):
         self.assertIsNone(context.write(s, tid))
 
 
+# WHAT IS ALREADY KNOWN LEADS THE BRIEF (the owner, 2026-11-16: "It should know to look in [the app] without spending a bunch of tokens"). The live
+# shape: a colleague nobody has written to before asks about one user's record in an internal app; the Hub holds notes on that app among
+# better-voted ones on other things, closed tasks from OTHER senders settled the same kind of case in its repository, and semantic search is
+# off. The agent was handed the best-voted notes on other things and no past task, and explored the databases for twelve minutes
+PORTAL = {'portal': ['payroll portal', 'portal login', 'portal record'], 'close': ['month-end close', 'ledger close']}
+def _known_world():
+    s = _store()
+    s.save_doc('soul', '## Repo map\n- **northwind/portal**: the internal web app staff sign in to\n- **northwind/ledger**: the finance backend\n', 't')
+    from taskuary import handbook
+    for i in range(4):          # better-voted notes about something else - what the old block handed every task
+        p = handbook.post(s, f'Month-end close step {i} posts accruals first', 'Run the accrual job before the ledger close.', 'ledger', 'howto', 'agent')
+        s.lore_vote(p['LoreId'], 2, 'owner')
+    handbook.post(s, 'Payroll portal logins are created from the ledger db table pay_people',
+                  'Payroll portal code lives in northwind/portal; the live data is the ledger db table pay_people, not the 2023 archive copy.',
+                  'portal', 'system', 'agent')
+    old = _closed(s, 'Blank payroll portal login for a new hire', 'gail@northwind.example', 'Cause: the hire had no job code in pay_people. Fixed the row.')
+    s._exec('UPDATE task SET Tags=? WHERE TaskId=?', ('agent-repo:northwind/portal', old))
+    _closed(s, 'Ledger close ran late', 'ray@northwind.example', 'Actions: moved the close job to 6am.')
+    tid = s.create_task({'Title': 'Check incomplete payroll portal record for a new hire', 'Kind': 'coding',
+                         'Summary': 'Paula asks why the new hire shows an incomplete payroll portal record'}, 't')
+    _mail(s, 'paula@northwind.example', 'Portal help', 'The new hire still shows blank logins in the portal. Pls advise.', days=0, tid=tid)
+    s._exec('UPDATE task SET OriginBase=? WHERE TaskId=?', ('owner', tid)); s.set_setting('owner_email', 'alex@northwind.example', 't')  # a colleague's ask
+    return s, tid, old
+
+
+class RecallTests(unittest.TestCase):
+    def setUp(self): context._recalled.clear()
+
+    def test_the_brief_leads_with_the_hub_notes_past_tasks_and_repository_this_task_is_about(self):
+        s, tid, old = _known_world()
+        calls = []
+        with fake_embed.reads(PORTAL, calls): text = context.build(s, tid)
+        self.assertIn(context.KNOWN_HEAD, text)
+        known = text.split(context.KNOWN_HEAD, 1)[1].split('\n## ', 1)[0]
+        self.assertIn('Likely repository: northwind/portal - earlier tasks on the same thing worked in it (TQ-%04d)' % old, known)
+        self.assertIn('the ledger db table pay_people', known)                       # the Hub note, its body's gist with it
+        self.assertIn('TQ-%04d Blank payroll portal login for a new hire' % old, known)
+        self.assertIn('no job code in pay_people', known)                             # ...and how it ended
+        self.assertNotIn('Month-end close', known); self.assertNotIn('Ledger close ran late', known)
+        self.assertLess(text.index(context.KNOWN_HEAD), text.index('## About the owner'))     # read first, before the background
+        self.assertEqual(len(calls), 1)                                               # one judgement for every list
+        with fake_embed.reads(PORTAL, calls): context.build(s, tid); context.for_prompt(s, tid)
+        self.assertEqual(len(calls), 1)                                               # ...made once per task, every turn reuses it
+
+    def test_the_general_agent_reads_it_too_and_never_the_best_voted_notes_on_other_things(self):
+        from taskuary import general
+        s, tid, old = _known_world()
+        with fake_embed.reads(PORTAL): user = general._prompt(s, tid)[1]
+        self.assertIn('Already known about this', user); self.assertIn('northwind/portal', user); self.assertIn('pay_people', user)
+        self.assertNotIn('Month-end close', user)
+
+    def test_with_embeddings_the_same_picks_come_from_meaning(self):
+        s, tid, old = _known_world()
+        with fake_embed.meaning(PORTAL): rc = context.recall(s, tid)
+        self.assertEqual(rc['past'], [old]); self.assertEqual(rc['repo'], 'northwind/portal')
+        self.assertEqual([p['Title'] for p in rc['hub']], ['Payroll portal logins are created from the ledger db table pay_people'])
+
+    def test_no_ai_and_no_embedder_recalls_nothing_rather_than_guessing(self):
+        s, tid, old = _known_world()
+        from taskuary import llm
+        with fake_embed.no_embedder(), mock.patch.object(llm, 'build_llm', return_value=None): text = context.build(s, tid)
+        self.assertNotIn(context.KNOWN_HEAD, text); self.assertNotIn('Month-end close', text)
+
+    def test_a_strangers_task_recalls_nothing(self):
+        s, tid, old = _known_world()
+        s._exec('UPDATE task SET OriginBase=? WHERE TaskId=?', ('stranger', tid))
+        with fake_embed.reads(PORTAL): self.assertEqual(context.recall(s, tid), context.NOTHING)
+
+    def test_the_coding_seed_names_the_likely_repository_among_its_hints(self):
+        s, tid, old = _known_world()
+        from taskuary import repochoice
+        with fake_embed.reads(PORTAL): block = repochoice.block(s, tid, 'C:/scratch/TQ')
+        self.assertIn('northwind/portal - earlier tasks on the same thing worked in it', block.split('What Taskuary knows', 1)[1])
+
+
 class FileTests(unittest.TestCase):
     def test_the_file_carries_history_past_work_and_thread_and_the_seed_points_at_it(self):
         s = _store(); s.set_setting('owner_email', 'owner@vendor.com', 't')

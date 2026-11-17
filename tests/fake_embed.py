@@ -38,3 +38,24 @@ def meaning(jobs: dict):
 @contextmanager
 def no_embedder():
     with mock.patch.object(textsim, 'embedder', lambda store: None): yield
+
+
+def reader(jobs: dict, calls: list = None):
+    """A stand-in for the light model textsim.pick asks where no embedder runs: it reads THE TASK, finds the job it is about (as
+    `embedder` does) and picks every listed id whose line is about that job - what a model reading the titles would answer."""
+    import json, re
+    def job_of(t): return next((j for j, marks in jobs.items() if any(m.lower() in str(t).lower() for m in marks)), None)
+    def brain(system, user, **kw):
+        if calls is not None: calls.append(user)
+        task, _, lists = user.partition('\n\n')
+        j = job_of(task)
+        ids = [m.group(1) for m in re.finditer(r'(?m)^([A-Z]+\d+)\. (.*)$', lists) if j and job_of(m.group(2)) == j]
+        return json.dumps({'picks': ids})
+    return brain
+
+
+@contextmanager
+def reads(jobs: dict, calls: list = None):
+    """No embedder, and the light model is `reader`: the road most computers take."""
+    from taskuary import llm
+    with mock.patch.object(textsim, 'embedder', lambda store: None), mock.patch.object(llm, 'build_llm', lambda *a, **k: reader(jobs, calls)): yield

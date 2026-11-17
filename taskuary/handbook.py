@@ -180,10 +180,19 @@ def vote(store, lid: int, delta: int, actor: str = 'owner') -> dict:
 
 
 # ── what an agent is given before it starts ─────────────────────────────────────────────
-def search(store, text: str, limit: int = BLOCK_POSTS, topic: str = None) -> list:
+HUB_LIST = 'notes from earlier work: how a system works, where its data and code live, what went wrong before'
+def entry_line(p: dict) -> str: return f"[{p.get('Topic') or ''}] {p.get('Title') or ''}"
+def search(store, text: str, limit: int = BLOCK_POSTS, topic: str = None, judge: bool = False) -> list:
     """The posts alike in meaning to a piece of work (embeddings) - and with no embedder, the best-scored ones within the cap for
-    the model to judge, never a guess by shared words."""
+    the model to judge, never a guess by shared words. `judge`: with no embedder a light model reads every title and picks (textsim.pick)
+    - the agent's own hub_search, which otherwise found only a post carrying its whole query word for word."""
     from . import textsim
+    if judge and str(text or '').strip():
+        pool = store.lore_posts(topic=topic, limit=store.LORE_POOL, sort='top')
+        got = textsim.pick(store, text, {'hub': [(f"lore:{p['LoreId']}", entry_line(p)) for p in pool]}, limit, about={'hub': HUB_LIST})
+        if got is not None:
+            by = {f"lore:{p['LoreId']}": p for p in pool}
+            return [by[k] for k in got['hub'] if k in by]
     hits = store.lore_posts(topic=topic, q=text, limit=limit, sort='top')
     return hits if hits or textsim.available(store) else store.lore_posts(topic=topic, limit=limit, sort='top')
 
@@ -361,7 +370,7 @@ def run_handbook_search(cfg):
     lim, mine = row_limit(cfg)
     try: top = max(1, min(50, int(cfg.get('top') or 6)))
     except (TypeError, ValueError): top = 6
-    hits = store.lore_posts(topic=cfg.get('topic'), q=q or None, limit=top, sort='top')
+    hits = search(store, q, top, cfg.get('topic'), judge=True) if q else store.lore_posts(topic=cfg.get('topic'), limit=top, sort='top')
     rows = [{'id': h['LoreId'], 'topic': h['Topic'], 'kind': h['Kind'], 'title': h['Title'], 'says': h['Body'],
              'by': h['Author'], 'updated': (h['UpdatedAt'] or '')[:16]} for h in hits]
     head, body = rows_out(rows, min(lim, top), unit=f'Hub posts for "{q[:60]}"' if q else 'Hub posts', mine=mine)

@@ -152,6 +152,8 @@ def block(store, tid: int, cwd: str, profile: dict = None) -> str:
         from .projects import repositories_for_task
         rel, why = repositories_for_task(store, tid)
         if rel: hints.append(f"{', '.join(rel[:4])} - {why}")
+        from .context import recall
+        if (rc := recall(store, tid)).get('repo') and rc['repo'] not in rel: hints.append(f"{rc['repo']} - {rc['why']}")
     except Exception as e: logger.debug(f'repochoice: no hints for task {tid} - {e}')
     return (f"REPOSITORIES - no checkout is chosen for this task yet: you are in its own folder ({cwd}), which is not a repository. Before "
             "you read or change any code, pick the checkout this work belongs in with the use_repo tool (`path_or_name`: a name below or a "

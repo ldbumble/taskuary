@@ -217,6 +217,18 @@ class VotedOn(unittest.TestCase):
             self.assertEqual([r['LoreId'] for r in s.lore_posts(q='the old view')], [p['LoreId']])
             self.assertEqual(s.lore_posts(q='census view'), [])
 
+    def test_with_no_embedder_the_agents_search_is_read_by_a_model_not_matched_word_for_word(self):
+        """The live shape (2026-11-16): an agent searched the Hub for its system in its own words - "0 Hub posts ... nothing matched in 267
+        posts" over sixty notes on that very system, as no post carried the whole query. Semantic search is off on most computers."""
+        s = MemoryStore()
+        for i in range(3): handbook.vote(s, handbook.post(s, f'Month-end close step {i} posts accruals', '', 'ledger', 'howto', 'coding')['LoreId'], 1, 'owner')
+        p = handbook.post(s, 'Payroll portal logins come from the ledger db table pay_people', 'not the archive copy', 'portal', 'system', 'coding')
+        from tests import fake_embed
+        with fake_embed.reads({'portal': ['portal']}):
+            head, body = handbook.run_hub_search({'store': s, 'query': 'payroll portal new hire record incomplete'})
+        self.assertEqual([json.loads(l).get('id') for l in body.splitlines()], [p['LoreId']])
+        self.assertIn('pay_people', body)
+
     def test_a_post_is_written_down_as_a_hub_post_not_a_lore_post(self):
         s = MemoryStore()
         p = handbook.post(s, 'Invoices from vendor.example arrive on the 3rd', '', 'payables', 'system', 'coding')

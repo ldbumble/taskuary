@@ -2,6 +2,23 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.18 - 2026-11-17
+
+- A report's Send to agent takes his words in its box first, as an FYI's and a dashboard's do: never an empty task waiting on him
+- A general task's browser gate hears every shell call again: the hook's address is quoted, so the shell no longer splits it at its &
+- An agent signs up on a site by itself: Taskuary makes the password, types it on the pinned site, sends the form and keeps it sealed
+- A site already signed up on is told to the agent from its own thread: told inside the turn that asked, it was never heard
+- A sign-up's sending is the owner's press, as every act that can't be undone is: Taskuary types the new password and hands him the page
+- A sign-up's answer waits for the turn that asked to end: told in that instant, it was dropped as news already worked past
+- The browser gate lets a tick, a choice or typing go on an unsure verdict: they send nothing, and the sending is judged on its own
+- A held press fills in what came before it: the boxes typed in the same line go in, so the owner is handed the form as the agent filled it
+- A code a site emails on a sign-up or sign-in is typed for the owner: the watch of the open ask finds it in his inbox
+- A shell redirection is no part of a browser command: `fill @e1 "Alex Doyle" 2>/dev/null` types "Alex Doyle", never "Alex Doyle 2"
+- A site's emailed code is named on the task, never put on it: put there, its no-reply mail made his own task a stranger's
+- The sign-up marker is for a form with a box only the owner can fill too: he answers it on the same page, never typing a password
+- A program installed for this user alone is nobody's files: an agent finding its python under AppData\Local\Programs asks nothing
+- The sign-up line is said in half the words: the browser offer stays under half its guide, as the slim-prompt test holds it
+
 ## 0.4.0.17 - 2026-11-16
 
 - A lesson the memory already holds for everything is not written again for one topic

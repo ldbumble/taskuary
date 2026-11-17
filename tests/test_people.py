@@ -111,3 +111,13 @@ def test_a_new_store_never_sees_another_stores_sent_mail():
                 assert list(people.written_to(b)) == ['murray.jones@vendor.example']; return
         finally: b.close()
     pytest.skip('no id reuse to provoke here')
+
+
+# A NAME HALF RIGHT STILL FINDS ITS PERSON, OFFERED (the owner, 2026-11-17: an email went to a made-up address and bounced while the bank's
+# contact had written in three months before - asked for "Anna Carlini", the lookup knew only "Garlanian, Anna"): where the whole name finds
+# nobody, the people who share a word of it are offered - never picked
+def test_a_name_with_one_word_wrong_offers_who_shares_the_rest(s):
+    wrote_in(s, 'Garlanian, Anna', 'AGarlanian@bank.example')
+    wrote_in(s, 'Ray Colton', 'ray@vendor.example')
+    got = people.resolve(s, 'Anna Carlini')
+    assert got == {'candidates': ['agarlanian@bank.example']}

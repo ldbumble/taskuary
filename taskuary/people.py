@@ -64,4 +64,14 @@ def resolve(store, name: str) -> dict:
     rank = lambda d: [a for a, _ in sorted(d.items(), key=lambda kv: kv[1], reverse=True)]    # most written-to, then newest
     if len(whole) == 1: return {'address': next(iter(whole))}       # one whole-word match outranks fragments of other names
     found = rank(whole) or rank(part)
+    # ...AND WHERE THE WHOLE NAME FINDS NOBODY, WHO SHARES A WORD OF IT, offered and never picked (2026-11-17: asked for "Anna Carlini", the
+    # bank's contact "Garlanian, Anna" was never offered, and an address was made up, sent and bounced)
+    if not found and len(words) > 1:
+        some = {}
+        for w in (w for w in words if len(w) > 2):
+            for h in store.senders_like(w, limit=6) if hasattr(store, 'senders_like') else []:
+                if w in _words(h.get('Name') or '') or w in _words(h['Email'].split('@', 1)[0]): add(some, h['Email'], h.get('N') or 1, str(h.get('Last') or ''))
+            for a_, (n, last) in written_to(store).items():
+                if _whole([w], a_): add(some, a_, n, last)
+        found = rank(some)
     return {'candidates': found[:5]} if found else {}

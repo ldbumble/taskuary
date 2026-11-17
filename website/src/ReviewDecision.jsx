@@ -14,9 +14,9 @@ import { cardOf } from "./actionCard.js";
 import ActionCard from "./ActionCard.jsx";
 import { withoutSignature } from "./signature.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
-import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
+import { PANEL2, BORDER, DIM, FAINT, INK, ALERT_INK, label } from "./theme.jsx";
 import { CcRow, DraftField, SubjectRow, ToRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
-import { deliveryBcc, deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, needsAddress, pressWords, replyContext, sentCardOf, sentTo } from "./replyDelivery.js";
+import { deliveryBcc, deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, guessedOn, needsAddress, pressWords, replyContext, sentCardOf, sentTo } from "./replyDelivery.js";
 import SentCard from "./SentCard.jsx";
 import { cardLook, hearMarks, markOf, pressMark, WENT } from "./sentLine.js";
 import { acted, announce, repeatClick, useLit, useVerbs } from "./actionRow.js";
@@ -692,7 +692,11 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
         <Box data-tq-to-line="" sx={{ display: "flex", alignItems: "baseline", columnGap: 2, flexWrap: "wrap" }}>
         <ToRow to={replyContext(filedDelivery)} disabled={off || delivery.frozen} needs={needsTo} who={String(meta.needs || [].concat(meta.to || []).join(", "))}
           onSave={async (to) => { await api.put(`/api/reviews/${r.ReviewId}/envelope`, { to }); onChanged?.(); }} />
-        {ccLinks}</Box>
+        {ccLinks}
+        {/* ...AND AN ADDRESS THE AGENT GUESSED SAYS SO, before Send (the owner, 2026-11-17, of an email that went to a made-up address and
+            bounced: "This is not acceptable"): the agent named it in `guessed`, and the card never drew it */}
+        {!delivery.frozen && guessedOn(meta).length > 0 && <Typography variant="caption" data-tq-to-guessed="" sx={{ flexBasis: "100%", color: ALERT_INK, fontWeight: 600 }}>
+          {guessedOn(meta).join(", ")} {guessedOn(meta).length > 1 ? "are guesses" : "is a guess"} - not in your mail. Check it, or Change it, before Send.</Typography>}</Box>
       ) : (
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mb: 0.75, minWidth: 0 }}>
         <Typography sx={{ ...label, flexShrink: 0 }}>{proposal?.destinationLabel || "To"}</Typography>

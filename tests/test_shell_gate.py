@@ -338,6 +338,17 @@ class ReadingOutside(unittest.TestCase):
         self.assertEqual(d['hookSpecificOutput']['permissionDecision'], 'deny')
         self.assertEqual(hooks.command_gate(self.s, self.tid, 'run1', 'Get-Content notes.md', 'PowerShell', self.work), {})
 
+    def test_a_program_installed_for_this_user_alone_is_nobodys_files(self):
+        """The real-CLI walk, 2026-11-16: an agent looking for its python (`ls .../AppData/Local/Programs/Python`) was held as a card asking the
+        owner to let it read "Python". A per-user install (%LOCALAPPDATA%\\Programs) is a program's folder, as Program Files is."""
+        import pytest
+        if os.name != 'nt': pytest.skip('%LOCALAPPDATA% is Windows')
+        local = os.path.join(self.docs, 'AppData-Local'); os.makedirs(os.path.join(local, 'Programs', 'Python', 'Python312'), exist_ok=True)
+        with mock.patch.dict(os.environ, {'LOCALAPPDATA': local}):
+            self.assertEqual(hooks.command_gate(self.s, self.tid, 'run1', f'ls "{os.path.join(local, "Programs", "Python")}"', 'Bash', self.work), {})
+            d = hooks.command_gate(self.s, self.tid, 'run1', f'ls "{local}"', 'Bash', self.work)          # ...the rest of AppData still asks
+            self.assertEqual(d['hookSpecificOutput']['permissionDecision'], 'deny')
+
     def test_what_its_own_cli_downloaded_is_its_work_and_the_rest_of_that_home_still_asks(self):
         """The owner, 2026-11-16: a research turn's read-back of the PDF its own WebFetch had saved was held as a card under its finished
         answer - "files the agent's own CLI downloaded during the task count as its work area". The exact folders: Claude Code's tool-results

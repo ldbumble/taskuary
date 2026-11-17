@@ -90,6 +90,9 @@ def _open() -> list:
     """The temp folder, where a CLI keeps its scratchpad, and installed programs' folders - nobody's files: reading a library or a tool
     there is not reading the owner's things. Judged after the never-list: Taskuary's home in a temp folder is still Taskuary's."""
     rs = [tempfile.gettempdir(), sys.base_prefix, sys.prefix, *(os.environ.get(v) for v in ('ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432', 'SystemRoot'))]
+    # ...and a program installed for this user alone (%LOCALAPPDATA%\Programs - Python, VS Code, most per-user installers): the real-CLI walk,
+    # 2026-11-16 - an agent looking for its python (`ls .../AppData/Local/Programs/Python`) was held as a card asking him to let it read "Python"
+    if os.name == 'nt' and os.environ.get('LOCALAPPDATA'): rs.append(os.path.join(os.environ['LOCALAPPDATA'], 'Programs'))
     if os.name != 'nt': rs += ['/tmp', '/usr', '/bin', '/lib', '/opt', '/dev', '/proc', '/sys', '/System', '/Library', '/Applications']
     return [_n(r) for r in rs if r]
 

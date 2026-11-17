@@ -21,6 +21,6 @@ test("the task page announces the Remove, and the rail and the Tasks list draw i
   const page = read("TaskPage.jsx");
   assert.match(page, /try \{ out = walkLeave \? \(await walkLeave\("not_task"\)\)\?\.left : await runOperation\(api, "task\.not_a_task", selected\); \}/);
   assert.match(page, /announceRemoved\(fromAnswer\(out, "task", t\?\.Title \|\| "the task"\)\);/);
-  assert.match(read("AssistantView.jsx"), /top=\{<><UndoLine kinds=\{\["task"\]\} onRestored=\{\(\) => \{ loadPile\(true\); onChanged\?\.\(\); \}\}/);
+  assert.match(read("AssistantView.jsx"), /top=\{<><UndoLine kinds=\{\["task"\]\} onRestored=\{\(\) => loadPile\(true\)\}/);
   assert.match(read("TasksView.jsx"), /<UndoLine kinds=\{\["task"\]\} onRestored=\{\(\) => \{ loadTasks\(\); onChanged\?\.\(\); \}\}/);
 });

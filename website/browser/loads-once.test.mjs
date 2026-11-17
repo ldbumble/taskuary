@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import os from "node:os";
+import path from "node:path";
 import { startHarness } from "./harness.mjs";
+import { note, record } from "./recorder.mjs";
 
 /* A PAGE LOADS ITS DATA ONCE (the owner, 2026-10-26: "things don't load twice, if you click a button twice it won't reload [double
    work]"). The overnight setup walk counted the GETs each open fires in the demo world: every start asked for the first-run state, the
@@ -89,5 +92,37 @@ test("setup reads its state once for the canvas, the rail and the Assistant - at
   const n = count(g.since(at), "/api/setup/first-run");
   assert.ok(n <= 4, `${n} reads of the first run in 16.5 s`);
   assert.match(await page.$eval('[data-tq-setup-step="ai"]', (e) => e.innerText), /Your AI[\s\S]*Anthropic/, "the rail still draws each answer");
+  assert.deepEqual(errors, []);
+});
+
+// A WAKE-UP DOES NOT RE-READ THE REVIEW QUEUE (2026-11-17): the top bar counted /api/reviews?status=pending - every pending card,
+// decorated - on mount and after every settled burst of feed-changed / task-changed, for a badge nothing drew. A card that shows a
+// review reads it itself; the hub reads it never
+test("the hub never reads the pending reviews - not on mount, not on a wake-up", { timeout: 180000 }, async (t) => {
+  const h = await startHarness(); t.after(() => h.close());
+  const page = await h.newPage(), errors = [], reads = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  page.on("request", (r) => { const u = new URL(r.url()); if (r.method() === "GET" && u.pathname === "/api/reviews" && u.searchParams.get("status") === "pending") reads.push(Date.now()); });
+  await page.setViewport({ width: 1600, height: 810, deviceScaleFactor: 1 });
+  await page.goto(h.ui, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 60000 });
+  await sleep(2500);
+  // a review card on the table reads its own row - that read is the card's, not the hub's
+  const cards = await page.$$eval("[data-tq-review]", (els) => els.length);
+  const boot = reads.length;
+  const dir = path.join(process.env.TEMP || os.tmpdir(), "claude", "loads-once", "reviews-on-wake"), rec = await record(page, dir);
+  const rail = () => page.$$eval("[data-tq-rail] .tq-pile-row", (els) => els.map((e) => e.innerText.trim().split("\n")[0]).join(" | "));
+  const before = await rail();
+  const poke = () => fetch(`${h.fixtureApi}/api/fixture/live/poke`, { method: "POST", headers: { "Content-Type": "application/json", "X-Taskuary-Token": h.token }, body: "{}" });
+  for (let i = 0; i < 3; i++) { assert.equal((await poke()).status, 200); await sleep(2500); }
+  await rec.stop();
+  const after = await rail(), woke = reads.length - boot;
+  await note(dir, { done: "The hub at rest on the fixture; three feed-changed + task-changed pokes from the server, 2.5 s apart.",
+    expect: "The rail stands still: no row flickers, moves or blanks. No GET /api/reviews?status=pending from the hub.",
+    saw: `${boot} reads at the start with ${cards} review cards on screen, ${woke} after the pokes; rail before "${before}", after "${after}"`,
+    verdict: !woke && boot <= cards && before === after ? "PASS" : "FAIL" });
+  assert.ok(boot <= cards, `${boot} reads of the pending reviews at the start with ${cards} review cards on screen`);
+  assert.equal(woke, 0, `${woke} reads of the pending reviews after three wake-ups`);
+  assert.equal(after, before, "the rail stands as it was");
   assert.deepEqual(errors, []);
 });

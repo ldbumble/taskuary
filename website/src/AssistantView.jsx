@@ -1163,7 +1163,7 @@ function WorkingFor() {
   return line ? <span className="tq-working" data-tq-working="">{line}</span> : null;
 }
 
-export default function AssistantView({ onOpenTask, onNavigate, onChanged, active = true, request = null }) {
+export default function AssistantView({ onOpenTask, onNavigate, active = true, request = null }) {
   const [state, setState] = useState(null);           // /api/concierge: the dock task, its turns, the AI choices
   // A set-up walk-through, running HERE. The conversation binds to that task's own session - which
   // is the one with the browser and the operator's brain - so the owner never leaves this tab to be
@@ -1202,7 +1202,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                                                       // a read's: [{ key, keys, coming, at }] - `keys` every rail key it took off
   // the moves pressed on the table's task, counted: the rail lets its row go where a move of the owner's put it (funnelPile.pinOf)
   const [presses, setPresses] = useState(0);
-  const tablePressed = useCallback(() => { setPresses((n) => n + 1); onChanged?.(); }, [onChanged]);
+  const tablePressed = useCallback(() => setPresses((n) => n + 1), []);
   const putDownRef = useRef([]);
   useEffect(() => { putDownRef.current = leaving; }, [leaving]);
   const dropLeaving = (key) => setLeaving((l) => (l.some((x) => x.key === key) ? l.filter((x) => x.key !== key) : l));
@@ -2166,7 +2166,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // ...held as a close is (stillLeaving): until a rail no longer has them, or one read begun after this answer still does
       if (reads) { const at = Date.now(); setLeaving((l) => l.map((x) => (x.keys && x.key === putDown ? { ...x, keys: x.keys.filter((k) => !back.includes(k)), at } : x))
         .filter((x) => !x.keys || x.keys.length)); }
-      if (how === "leave") onChanged?.();            // a draft may have gone out: the Review badge recounts
       // ...and the close is written now: a rail read begun after this moment that still has the row is the server's word on it
       if (how === "leave" && fromKey) { const at = Date.now(); setLeaving((l) => l.map((x) => (x.key === fromKey && !x.at ? { ...x, at } : x))); }
       // ...and A CLOSE KEPT OPEN (a Send with work still live on it, 2026-11-01) is back on the rail as well as the table: the row put down
@@ -2353,7 +2352,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             // ...folded as done() folds the card a press lands on
             setMsgs((m) => { const i = interactiveCardIndex(m); return i < 0 ? m : m.map((x, j) => (j === i ? { ...x, done: true } : x)); });
             canvasState.putDown(here.key || pr.key, pr.tid ?? null); leave(here.key || pr.key, "left");
-          } else { onChanged?.(); loadPile(); }
+          } else loadPile();
         }
         // a connector card brought up lights its first step - the line is finished with what it lit ("press Sign in with LinkedIn")
         if (String(data.say || "").includes(STEP_SAID)) {
@@ -2474,7 +2473,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // failure over a success and left the walk sitting on finished work (2026-09-10 walk).
       if (verb === "confirm" || verb === "cancel") {
         setMsgs((m) => markExecuted(m, data?.executed));
-        onChanged?.();
         if (data?.settled) walkOn(); else loadPile();
         return;
       }
@@ -2564,7 +2562,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         return quiet && worn !== ms ? worn
           : [...worn, { id: `r${Date.now()}`, role: "receipt", status: out.status, text: out.receipt, tid: p.tid || res?.outcome?.taskId, ref: p.ref || res?.outcome?.ref, chips }];
       });
-      onChanged?.();
       // the server already settled or closed the item; a settle proposal (later, tomorrow, done) must not be
       // re-marked "done" by the page, so it advances without the settle post. A hand-off that STARTED advances
       // once the same way (PW-135): the delegated task stays in Unread as Working, nothing is settled; a
@@ -2711,7 +2708,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       try {
         await runOperation(api, "task.complete", c.tid);
         setMsgs((m) => pressChip(m, c));          // ...and Mark done's badge on the send's line, not "TQ-0001 marked done." (2026-10-22)
-        onChanged?.(); loadPile(true);
+        loadPile(true);
       } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
       return;
     }
@@ -2820,7 +2817,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       if (tid) for (let j = m.length - 1; j >= 0; j -= 1) if (Number(m[j]?.card?.tid) === Number(tid)) { i = j; break; }
       if (i < 0) i = interactiveCardIndex(m);
       return i < 0 ? m : m.map((x, j) => (j === i ? { ...x, done: true, sent: true, ...(pressed ? { pressed } : {}), ...sentChips(tid, ref) } : x)); });
-    onChanged?.(); loadPile();
+    loadPile();
   };
   // Setting Taskuary up: the scripted walk, one stop per message so the conversation keeps the
   // trail. Nothing here reaches a model - a question typed during it is an ordinary turn, answered
@@ -3956,11 +3953,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   pressRowRef.current = pressRow;
   return (
     <>
-    {DEMO && <DemoJourney onChanged={() => { loadPile(true); onChanged?.(); }} />}
-    <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active} onGo={(tab, key) => browse(key)} navOn={navOn}
+    {DEMO && <DemoJourney onChanged={() => loadPile(true)} />}
+    <FeedView onOpenTask={onOpenTask} active={active} onGo={(tab, key) => browse(key)} navOn={navOn}
       onInventoryFilter={inventoryFilterChanged} unreadInventory={pile}
       // a task Removed as not a task leaves the rail with "Removed <title> - Undo" over it (Removed.jsx); Undo puts it back on the rail
-      top={<><UndoLine kinds={["task"]} onRestored={() => { loadPile(true); onChanged?.(); }} sx={{ mx: 1, mt: 1, mb: 1 }} /><Pile pile={railPile} settingUp={firstRun ? setupTodo || "finish setting up" : ""} noAi={!!state && !(state.providers || []).length}
+      top={<><UndoLine kinds={["task"]} onRestored={() => loadPile(true)} sx={{ mx: 1, mt: 1, mb: 1 }} /><Pile pile={railPile} settingUp={firstRun ? setupTodo || "finish setting up" : ""} noAi={!!state && !(state.providers || []).length}
         // ...folded by a walk press, its rows keep their place on the rail until the answer lands (rule 7): a batch folded by "All read, next"
         // lost the cap's hold on its rows, and the band counted them as "10 more fyi" between the batch and the next
         // ...unless the press read them: then they are off the pile already (readGone), the ring would only put them back (onTable), and

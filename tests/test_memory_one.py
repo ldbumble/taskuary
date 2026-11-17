@@ -125,6 +125,23 @@ def test_one_topic_keeps_the_newest_word_and_a_lesson_in_other_spacing_is_said_o
                              llm=teacher('ledger  export failures are yours to fix -  real work.')) == '', 'said once'
 
 
+def test_a_lesson_the_memory_already_holds_for_everything_is_not_written_again_for_one_topic():
+    """The live LEARNED.md, 2026-11-16: What you care about held one lesson twice - the reflection's line (tagged, about everything) and a
+    verdict's line in the very same words with `(about: the topic ...)` after it. A line about everything already says it about one topic;
+    and a line about everything said after the same words about one topic takes that one's place."""
+    s = MemoryStore()
+    said = 'Resident refund paperwork between a site and billing is not yours to chase'
+    doc = s.get_doc('learned') or ''
+    s.save_doc('learned', learn._under(doc, lc.SECTIONS['care'], f'- {said} [s:4 | ev: msg1, msg2 | seen: 2026-11-16 | k: care-refund-not-ours]'), 'learn')
+    assert memorylines.teach(s, 'not_ours', 'msg3', 'Subject: Refund request', 'subject', 'refund request', llm=teacher(said)) == ''
+    assert [lc.said(r) for r in _section(s, 'care')] == [f'- {said}'], 'said once'
+    # ...and the other way round: the topic's line first, then the same words about everything
+    s = MemoryStore()
+    one = memorylines.keep(s, said, 'subject', 'refund request')
+    every = memorylines.keep(s, said)
+    assert every == f'- {said}' and _section(s, 'care') == [every] and one not in _section(s, 'care')
+
+
 def test_the_memory_page_says_a_verdicts_line_was_learned_from_a_verdict_never_that_the_owner_wrote_it():
     """The real page, 2026-11-14: "Make it a task" taught "You book vendor account reviews yourself", and the Memory page listed it as "you wrote
     this" with Forget alone - no Wrong on the one kind of line the owner most needs it for. The graph says which lines a verdict taught."""

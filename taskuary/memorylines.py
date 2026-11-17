@@ -102,6 +102,14 @@ def _put(doc: str, text: str, scope: str = 'global', key: str = None, section: s
         from .memoryedit import _without
         for r, _k in lc.lines(doc, lc.SECTIONS[slug]):
             if r.strip() != raw and family(r) == fam and scope_of(r) == sk: doc = _without(doc, r); gone.append(r.strip())
+    # ...SAID ONCE, WHATEVER IT IS ABOUT (the live LEARNED.md, 2026-11-16): one lesson stood twice in a section - the reflection's line about
+    # everything and a verdict's in the same words about one topic. A line about everything already says it of that topic; and the same
+    # words said about everything take the narrower line's place
+    from .memoryedit import _same, _without
+    words = lambda r: ABOUT.sub('', text_of(lc.said(r)))
+    same = [r for r, _k in lc.lines(doc, lc.SECTIONS[slug]) if r.strip() != raw and _same(words(r), words(raw))]
+    if (cover := next((r for r in same if scope_of(lc.said(r)) in (('global', None), sk)), None)): return doc, cover.strip(), gone
+    for r in same if sk[0] == 'global' else (): doc = _without(doc, r); gone.append(r.strip())
     if raw not in doc.splitlines():
         from .learn import _under
         doc = _under(doc, lc.SECTIONS[slug], raw)

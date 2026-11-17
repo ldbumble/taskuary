@@ -122,6 +122,9 @@ owner sees, what a press does, what the agent is told after. A round is not fini
   app, the sender writes again, a press, a second press, a restart in the middle.
 - **Real session shapes** fed through to the chat: a long session the CLI compacted, a resumed
   one, a tool error, a turn that ended mid-work, a session that ended before its press.
+- **Everything that rides into a prompt, through every door**: a picture, a PDF, a sheet, a report, a
+  dashboard, an FYI, a routine - attached in New, on a chat's line, a coding task's line, Send to agent and
+  Continue - followed until the agent has READ it (its own log, not the app's), and shown on his line.
 - **Every action against every answer**: approve, edit, reject, withdraw, replace, pressed twice,
   pressed after the agent stopped, a press whose execution fails.
 - **Every way a start can be refused**: the switch off, no AI, a full house, a stranger held, a

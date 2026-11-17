@@ -48,7 +48,7 @@ import { outcomeOf } from "./dispatchOutcome.js";
 import { FailWays, failOf } from "./failure.jsx";
 import { noteKey, noteOf, onYouLine, progressLine, saveNote, settleTick, withTicks } from "./checklist.js";
 import { fmtDate, fmtTime } from "./dates.js";
-import { deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, pressWords, replyContext } from "./replyDelivery.js";
+import { deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, pressWords, replyContext, sentTo } from "./replyDelivery.js";
 import { sizeText } from "./replyFiles.js";
 import { completionTransition, cutAway, filterForSelectedState, remindWaiting, remindDay } from "./taskFilter.js";
 import ReviewDecision from "./ReviewDecision.jsx";
@@ -2774,7 +2774,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // ...and the one just pressed here says what the press did to the task beside it (`closing`, `kept`), as it did where its draft stood
     ...allReviews.filter((r) => r.Kind !== "action" && WENT.includes(r.Status) && r.ReviewId !== sentBox?.id)
       .map((r) => ({ key: `sent:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, node: <SentCard id={r.ReviewId} text={r.FinalText || r.DraftText} channel={r.Channel || ""} done={pressWords(r).sentAs}
-        to={replyContext(r)} subject={deliverySubject(r)} at={r.DecidedAt} {...(sentHere?.id === r.ReviewId ? { closing: sentHere.closing, kept: sentHere.kept } : {})} /> }))];
+        to={sentTo(r)} subject={deliverySubject(r)} at={r.DecidedAt} {...(sentHere?.id === r.ReviewId ? { closing: sentHere.closing, kept: sentHere.kept } : {})} /> }))];
   // ...the reply that went is that card in its turn, so the chat's cards say it no second time - no "What was sent", no To over it
   const sentCarded = !!sentReview && turnCards.some((c) => c.key === `sent:${sentReview.ReviewId}`);
   // ...the reply in it only once it is written or something was said about it (replyCardShown): a reply owed that nobody wrote is the agent's

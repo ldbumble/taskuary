@@ -16,7 +16,7 @@ import { withoutSignature } from "./signature.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
 import { CcRow, DraftField, SubjectRow, ToRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
-import { deliveryBcc, deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, needsAddress, pressWords, replyContext } from "./replyDelivery.js";
+import { deliveryBcc, deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, needsAddress, pressWords, replyContext, sentTo } from "./replyDelivery.js";
 import { acted, announce, repeatClick, useLit, useVerbs } from "./actionRow.js";
 import { useFoldBar } from "./foldBar.js";
 import { hint as btnHint, label as btn } from "./buttons.js";   // theme.jsx owns `label`
@@ -412,7 +412,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       else if (data.ok && (verb === "approve" || (verb === "close_unsent" && r.Kind !== "slot")) && onSent) {
         // ...with what went and where (`said`): the chat keeps the sent card in place, marked, while the task closes (TaskPage SentHere)
         setSent(verb === "approve"); setBusy(false); await onSent({ closes: closesIt && shut && verb === "approve" && (data.reply ? !!data.reply.ok : true),
-          said: verb === "approve" ? { text: value, channel: r.Channel || "", to: replyContext(r), subject: deliverySubject(r), id: r.ReviewId, done: pw.sentAs } : null }); return;
+          said: verb === "approve" ? { text: value, channel: r.Channel || "", to: sentTo(r), subject: deliverySubject(r), id: r.ReviewId, done: pw.sentAs } : null }); return;
       }
       onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || "That didn't go through - nothing was sent. Try the button again."); }      // what the page did after the answer (onSent), not the press

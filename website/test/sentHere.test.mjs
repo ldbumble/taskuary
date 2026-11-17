@@ -13,7 +13,7 @@ test("a reply that went says where, and that the task is closing or why it stays
   assert.equal(sentLine({ channel: "", to: "Ray Colton", closing: false }), "Sent to Ray Colton");
   const page = read("TaskPage.jsx");
   assert.match(page, /const chatCards = sentBox \? <SentCard \{\.\.\.sentBox\} \/> :/);
-  assert.match(read("ReviewDecision.jsx"), /said: verb === "approve" \? \{ text: value, channel: r\.Channel \|\| "", to: replyContext\(r\), subject: deliverySubject\(r\), id: r\.ReviewId, done: pw\.sentAs \} : null/);
+  assert.match(read("ReviewDecision.jsx"), /said: verb === "approve" \? \{ text: value, channel: r\.Channel \|\| "", to: sentTo\(r\), subject: deliverySubject\(r\), id: r\.ReviewId, done: pw\.sentAs \} : null/);
 });
 
 // the owner, 2026-11-09: "leave the card in the turn with the pressed button" - the sent block said it with no card around it

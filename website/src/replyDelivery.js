@@ -64,3 +64,6 @@ export const replyContext = (review) => {
   if (room && room === review?.FromName) return who;
   return `${who} in ${room || (channel === "whatsapp" ? "the chat" : APP[channel])}`;
 };
+// WHO IT WENT TO, ALL OF THEM (the walk, 2026-11-17: a mail to Erin copying Gail read "To erin@" on its sent card while the agent said it went
+// to both): what went names its Cc as well. The To box keeps replyContext alone - its save is the To, and a Cc in it would send as a To.
+export const sentTo = (review) => { const cc = deliveryCc(review); return `${replyContext(review)}${cc.length ? `, copying ${cc.join(", ")}` : ""}`; };

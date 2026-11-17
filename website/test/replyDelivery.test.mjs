@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { bareAddresses, deliveryCc,deliveryFiles, deliveryMeta, deliveryTo, needsAddress, replyContext } from "../src/replyDelivery.js";
+import { bareAddresses, deliveryCc,deliveryFiles, deliveryMeta, deliveryTo, needsAddress, replyContext, sentTo } from "../src/replyDelivery.js";
 
 const deliver = (obj) => ({ Deliver: JSON.stringify(obj) });
 
@@ -84,4 +84,17 @@ test("the card holds Send and opens To while the address is missing", async () =
   const rd = readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
   assert.match(rd, /needsTo && \[no\("approve"\), no\("send_close"\), no\("anyway"\)\]\.includes\(v\.id\) \? \{ \.\.\.v, disabled: true/);
   assert.match(rd, /needs=\{needsTo\}/);
+});
+// THE RECEIPT NAMES EVERYONE IT WENT TO (the walk, 2026-11-17): a mail to Erin copying Gail read "To erin@" on its sent card while the agent
+// said it went to both. The To box keeps the To alone (its save is the To); what went - the sent card and the line at the press - names the Cc too.
+test("what went names the copied, as the agent says it; the To line keeps the To alone", async () => {
+  const r = { FromName: "Erin Blake", FromEmail: "erin@northwind.example", ...deliver({ to: ["erin@northwind.example"], cc: ["gail@northwind.example"] }) };
+  assert.equal(sentTo(r), "Erin Blake <erin@northwind.example>, copying gail@northwind.example");
+  assert.equal(replyContext(r), "Erin Blake <erin@northwind.example>");
+  assert.equal(sentTo({ ...deliver({ to: ["erin@northwind.example"], cc: ["gail@northwind.example", "ray@northwind.example"] }) }),
+    "erin@northwind.example, copying gail@northwind.example, ray@northwind.example");
+  assert.equal(sentTo(deliver({ to: ["erin@northwind.example"] })), "erin@northwind.example");
+  const { readFileSync } = await import("node:fs"), src = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
+  assert.match(src("TaskPage.jsx"), /<SentCard[^>]*\s*to=\{sentTo\(r\)\}/);
+  assert.match(src("ReviewDecision.jsx"), /said: verb === "approve" \? \{[^}]*to: sentTo\(r\)/);
 });

@@ -3,7 +3,7 @@
 The funnel remains a card/navigation adapter. It no longer supplies membership,
 read policy, history windows, or an independent size limit after activation.
 """
-import json
+import contextlib, json
 import re
 from .timewords import plural
 from .categories import agent_word
@@ -733,7 +733,9 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
     by_id = {item['item_id']: item for item in snapshot['items']}
     states = store.funnel_states()
     noise = _noise_hidden(store)
-    cards = [card_for(store, by_id[row['item_id']], row, live_state, now, states, noise, leads) for row in rows]
+    # ...each setting a card reads, read once for all of them (store.held_settings): ~1,000 queries a build on the owner's rail
+    with (store.held_settings() if hasattr(store, 'held_settings') else contextlib.nullcontext()):
+        cards = [card_for(store, by_id[row['item_id']], row, live_state, now, states, noise, leads) for row in rows]
     # ...and a task put away with Remind me stays on the rail, in For later, saying its day - it is still open work, and
     # the rail is where open work lives (2026-09-29). It is never actionable, so the walk does not offer it early.
     # ...a goal's child told by the goal's row is not a row, read or unread (on_rail)

@@ -84,6 +84,7 @@ class _TimedLock:
 # second by the pile, the doorways, the pollers - queued 1-3 s behind each membership census, 6-8 deep. A reader sees exactly
 # what is committed; only the thread that holds the writer's lock (its own open transaction) reads through the writer.
 _OFF_WRITER, _ON_WRITER = threading.local(), threading.local()
+_HELD = threading.local()        # held_settings(): (the store, {name: its row}) for this thread while a build holds them
 READERS_KEPT = 16      # reader connections kept open for reuse: a request pool's worth of threads reading at once
 
 _LIVE_UNSET = object()
@@ -6239,6 +6240,16 @@ class SQLiteStore:
                             AND NOT (LastError IS NULL AND LastErrorAt IS NULL AND COALESCE(LastSyncAt, '') BETWEEN ? AND ?)''',
                          (now, cid, since, now))
         self._processing_ignored_writes += 1
+    @contextlib.contextmanager
+    def held_settings(self):
+        """ONE READ OF A SETTING FOR A WHOLE BUILD (the owner's restart, 2026-11-16: the rail's ~1,300 cards each asked the owner's address
+        and its neighbours again - ~1,000 queries a build, rebuilt after every write of the start's sync): while held, this thread's
+        get_setting answers each name from its first read. A build reads one moment; a write it makes itself is read fresh after."""
+        was = getattr(_HELD, 'settings', None)
+        if was is not None and was[0] is self: yield; return
+        _HELD.settings = (self, {})
+        try: yield
+        finally: _HELD.settings = was
     def get_settings(self):
         return {r['Name']: (BLANK_DEFAULTS[r['Name']] if r['Name'] in BLANK_DEFAULTS and not str(r['Value'] or '').strip() else r['Value'])
                 for r in self._rows('SELECT * FROM setting')}
@@ -6246,7 +6257,11 @@ class SQLiteStore:
         """ONE setting, as `get_setting(name, default)` answers it (a stored NULL or '' is returned as stored - except a number
         knob's, which reads back its shipped default: BLANK_DEFAULTS). Reading the whole table to pick one key was ~35% of the
         app's busy time (2026-09-25 profile): the table carries 400 rows, one of them a 35k-character run record."""
-        r = self._one('SELECT Value FROM setting WHERE Name=?', (name,))
+        held = getattr(_HELD, 'settings', None)
+        if held is not None and held[0] is self:
+            if name not in held[1]: held[1][name] = self._one('SELECT Value FROM setting WHERE Name=?', (name,))
+            r = held[1][name]
+        else: r = self._one('SELECT Value FROM setting WHERE Name=?', (name,))
         if r is None: return default
         return BLANK_DEFAULTS[name] if name in BLANK_DEFAULTS and not str(r['Value'] or '').strip() else r['Value']
     def list_settings(self): return self._rows('SELECT * FROM setting ORDER BY Name')
@@ -6258,6 +6273,7 @@ class SQLiteStore:
         # A write that says what the row already says - the same value from the same writer - changes nothing, so it moves no stamp and
         # empties no cache: a setting rewritten on a loop (a pane's size, a router note) used to throw the whole pile away each time
         # (2026-11-09). str() as SQLite keeps it: a number written as 3 reads back '3' only through the TEXT column's affinity.
+        if (held := getattr(_HELD, 'settings', None)) is not None and held[0] is self: held[1].pop(name, None)   # its own write, read fresh
         was = self._one('SELECT Value, UpdatedBy FROM setting WHERE Name=?', (name,))
         if was is not None and was['UpdatedBy'] == actor and (was['Value'] == value or (value is not None and was['Value'] == str(value))): return
         self._exec('INSERT INTO setting (Name, Value, UpdatedBy) VALUES (?,?,?) ON CONFLICT(Name) DO UPDATE SET Value=?, UpdatedBy=?',

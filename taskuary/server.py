@@ -111,6 +111,26 @@ _WALK_THREAD = [None]
 WALK_WAIT = 15                   # a reset that hangs (a locked store) must not hold the app shut for ever; it logs and lets go
 
 
+def _warm_reads():
+    """THE PAGE'S FIRST READS, MADE BEFORE IT ASKS (the owner's restart, 2026-11-16: the setup, first-run and agents reads each looked for
+    every AI CLI on every PATH folder, and the rail was built from nothing, all inside the page's first requests - 2-6 s each, on top of the
+    start's own work). The same reads the page makes, on this thread while the window opens: each keeps what it found (pathcache, the rail,
+    the cards), and a read the page makes after a write still sees the write."""
+    from . import firstrun, setup as setup_mod
+    for name, read in (('setup', lambda: setup_mod.page(store)), ('first run', lambda: firstrun.state(store)), ('agents', agents)): _made(name, read)
+
+
+def _made(name, read):
+    try: read()
+    except Exception as e: logger.debug(f'warm reads: {name} not made ahead - {e}')
+
+
+def _warm_rail():
+    """...and the rail, built from nothing the long one, once the launch's new chat is in place (_new_walk): built before it, the new dock
+    task moved the rail under it and the page's first read built it all again."""
+    _walk_settled(); _made('rail', _pile_payload)
+
+
 def _new_walk():
     try:
         from . import funnel as _f
@@ -150,6 +170,8 @@ async def _lifespan(_app):
         # or New chat can change the inputs. Schema construction alone never cuts over.
         from .processing_startup import initialize
         initialize(store, live_state=[])
+        # ...and the page's first reads made from here, while the rest of the start runs and before the window can ask (_warm_reads)
+        threading.Thread(target=_warm_reads, daemon=True, name='warm-reads').start()
         from . import counsel as _counsel
         try: logger.info(f"COUNSEL migration: {_counsel.migrate(store)}")
         except Exception as e: logger.warning(f'COUNSEL migration skipped: {e}')
@@ -230,6 +252,7 @@ async def _lifespan(_app):
         remind.tick(store)
     except Exception as e: logger.warning(f'reminders on start skipped: {e}')
     _start_new_walk()              # a relaunch opens a NEW chat rather than resuming the last one - off the window's path
+    threading.Thread(target=_warm_rail, daemon=True, name='warm-rail').start()
     catch_up_on_startup()          # defined below; resolved when the app actually starts
     try:                           # archived chats past their keep-days go on the app's own clock (PW-158), never on a history read
         from . import retention

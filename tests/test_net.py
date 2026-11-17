@@ -106,3 +106,29 @@ class TeamsUserLookupTests(unittest.TestCase):
         with mock.patch.object(net, 'session', lambda: rec):
             for _ in range(2): channels.ingest_teams_chats(s, upn, 'tok', datetime.now() - timedelta(hours=1))
         self.assertEqual(sum(u.endswith(f'/users/{upn}') for _, u, _ in rec.calls), 2)
+
+
+# A TEAMS PICTURE THAT COULD NOT BE READ SAYS THE WAY PAST (the owner, 2026-11-17, of "[1 image in this message could not be read ... Open it in
+# Teams to see it.]": "need this fixed"): Microsoft serves a picture in a chat with outside people only to someone in the chat, so a Teams card
+# reading as an app is refused whatever it is granted - and the line names the card's own Sign in with Microsoft, where signed in as him it reads
+class TeamsPictureNotReadTests(unittest.TestCase):
+    MSG = {'id': 'm1', 'chatId': 'c1', 'messageType': 'message', 'createdDateTime': '2026-11-17T18:15:00Z',
+           'from': {'user': {'id': 'u-ray', 'displayName': 'Ray Colton'}},
+           'body': {'content': 'Good day,<img src="https://graph.microsoft.com/v1.0/chats/c1/messages/m1/hostedContents/x/$value">'}}
+
+    def body(self, user):
+        s = MemoryStore()
+        with mock.patch.object(channels, 'hosted_images', return_value=[]), mock.patch.object(channels, '_chat_meta', return_value=('Help desk', 'group')), \
+             mock.patch.object(channels, '_graph_user', return_value=('Ray Colton', 'ray@vendor.example')), \
+             mock.patch.object(net, 'session', lambda: Recorder(lambda m, u, kw: R(200, {'id': 'oid-alex'}))):
+            channels.ingest_teams_chats(s, 'alex@northwind.example', 'tok', datetime.now() - timedelta(hours=1), user=user, feed=[dict(self.MSG)])
+        return next(m['BodyText'] for m in s.list_messages_all() if m.get('Channel') == 'teams') if hasattr(s, 'list_messages_all') else \
+            s._one("SELECT BodyText FROM message WHERE Channel='teams'")['BodyText']
+
+    def test_read_as_an_app_it_names_sign_in_as_you_on_the_teams_card(self):
+        b = self.body(user=False)
+        self.assertIn('Sign in with Microsoft', b); self.assertIn('Teams card', b)
+
+    def test_read_as_him_it_says_open_it_in_teams(self):
+        b = self.body(user=True)
+        self.assertNotIn('Sign in with Microsoft', b); self.assertIn('Open it in Teams', b)

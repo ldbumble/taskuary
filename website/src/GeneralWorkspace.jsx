@@ -825,13 +825,11 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ...and whether this turn has drawn anything yet: its trace holds more than what Taskuary itself writes as a turn opens - the `start`,
   // the prompt it sent and the CLI's launch line (server's run-tail reads them the same way: ours, not news)
   const drawn = (data?.session?.trace || []).some((e) => e?.type && !["start", "prompt"].includes(e.type) && !(e.type === "tool" && e.name === "cli"));
-  /* ...AND WHILE IT WAITS ON THE PAGE - a sign-in or a hand-over - which Taskuary itself can answer: the saved sign-in typed, the fill page
-     sent, the owner signing in on the page (signin.watch). None of those is this pane's own send, so nothing read again: the question and
-     "your turn - type" stood over a page already signed in, the agent's next answer and its held click unseen until a reload (the
-     browser-agent walk, 2026-11-04). */
-  const onPage = waitsOnPage(data?.asking || null);
+  // ...and NOT while it only waits on the page (2026-11-17): every way the page's ask is answered - the saved sign-in typed, the fill page,
+  // the owner signing in or stepping through on it (signin._continue, browsergate._close) - is a workerstate.record, whose task-changed the
+  // quiet pane below reads once. Read every 2.5 s, it was a read of the whole conversation for as long as the page stood unanswered
   useEffect(() => {
-    if (!busy && !onPage) return undefined;
+    if (!busy) return undefined;
     let live = true;
     const timer = setInterval(async () => {
       try {
@@ -840,13 +838,11 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         setData(fresh);
         // ...and the page's copy too: it held the session the turn STARTED with, so its heading said "is working" under the
         // finished answer (2026-10-15)
-        // (a read made only because it waits on the page tells the page of a session only when there is one: an agent asking from a
-        // terminal has none here, and a null swapped the task's agent view out from under its question)
-        if (busy || fresh.session) onSession?.(fresh.session || null);
+        onSession?.(fresh.session || null);
       } catch { /* it will still be there next tick */ }
     }, drawn ? 2500 : 1000);      // a start that has drawn nothing yet is read every second: its first word gives the room at once
     return () => { live = false; clearInterval(timer); };
-  }, [busy, onPage, drawn, task.TaskId, onSession]);
+  }, [busy, drawn, task.TaskId, onSession]);
   // ...and what a read brings is handed to the standing thread (a revision bump), as the poll does: taken into `data` alone, the owner's
   // Continue note waited for the next poll to show (the owner, 0.3.9.51: "I did Continue, filled it out and nothing happened")
   const refresh = useCallback(() => {

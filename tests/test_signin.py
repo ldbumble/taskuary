@@ -479,6 +479,18 @@ class TheOwnerSignsInOnThePage(Asking):
         self.assertEqual(len(sess.said), 1)                         # told once - after the real sign-in, not on the loading page
         self.assertEqual(page.pages, [form('https://app.bank.example/home', False, False)])   # ...it read through to the page past it
 
+    def test_a_sign_in_done_on_the_page_wakes_the_open_chat(self):
+        """The chat no longer reads its task every 2.5 s while it only waits on the page (2026-11-17): what brings the ask's end to a
+        quiet pane is the task-changed this road sends - with the ask already closed when it is read."""
+        sess = self.chat(); p = self.ask(sess); woke, poke = [], self.s._poke
+        def spy(*kinds, **kw):
+            if 'task-changed' in kinds and kw.get('task_id') == self.tid: woke.append(signin.pending(self.s, self.tid))
+            return poke(*kinds, **kw)
+        page = WatchPage([form('https://login.bank.example/signin')] + [form('https://app.bank.example/home', False, False)] * signin.PAST_STEADY)
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}), mock.patch.object(self.s, '_poke', spy):
+            self.assertTrue(signin.watch(self.s, self.tid, 'sess1', 'bank.example', p['request_id'], conn=page, every=0))
+        self.assertIn(None, woke)
+
     def test_a_two_step_sign_in_typed_on_the_page_is_seen_saved_and_used_next_time(self):
         sess = self.chat(); p = self.ask(sess)
         self.assertEqual((p['text'], ws.status(self.s, self.tid)['requests'][-1]['choices']), ('Sign in to bank.example to continue', []))

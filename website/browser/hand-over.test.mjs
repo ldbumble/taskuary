@@ -63,6 +63,10 @@ test("the agent hands its browser over for a sign-in and goes on under the card 
     await page.keyboard.type("open the vendor portal and get the price list"); await page.keyboard.press("Enter");
     await page.waitForFunction(() => /sign in to the vendor portal|wants a sign-in/i.test(document.querySelector("[data-tq-task-page]")?.innerText || ""), { timeout: 60000 });
     await new Promise((r) => setTimeout(r, 4000)); await look("handed-over");
+    // ...and while it only waits on him, nothing reads the chat on a timer: his step's end comes as the task's own task-changed (2026-11-17)
+    const reads = []; page.on("request", (q) => { if (q.method() === "GET" && new URL(q.url()).pathname === `/api/tasks/${task.taskId}/assistant`) reads.push(Date.now()); });
+    await new Promise((r) => setTimeout(r, 10000)); states.push({ label: "chat reads over 10 s waiting on him", n: reads.length });
+    assert.equal(reads.length, 0);
     // ...he puts the pane away in the middle of his step: there must be a way back to it
     const folded = await page.evaluate(() => { const b = [...document.querySelectorAll("[data-tq-task-page] button")].find((x) => /fold the browser away/.test(x.title || "")); b?.click(); return !!b; });
     states.push({ label: "fold pressed", folded });

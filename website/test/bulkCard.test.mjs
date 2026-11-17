@@ -69,7 +69,8 @@ const build = async () => {
 };
 
 test("the bar follows the run while every row it does redraws the page with a fresh onChanged", async (t) => {
-  t.mock.timers.enable(["setInterval", "setTimeout"]);
+  // ...node 22 takes {apis}; its array form mocks every timer, setImmediate too, and the flush below never resolves (node 20 takes the array)
+  try { t.mock.timers.enable({ apis: ["setInterval", "setTimeout"] }); } catch { t.mock.timers.enable(["setInterval", "setTimeout"]); }
   const flush = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r)); };
   const rows = Array.from({ length: 25 }, (_, i) => mail(i + 1, `owner${i + 1}@cedar.example`));
   let reads = 0, run = { key: "b1", state: "running", total: 25, done: 0, failed: 0, left: 0, rows: {} };

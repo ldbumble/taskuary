@@ -95,6 +95,6 @@ test("Send to agent on a report, a dashboard or an FYI opens a blank Agent canva
 test("his first line on a report he sent on draws the report as a pill, then his words", async () => {
   const fs = await import("node:fs");
   const gw = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8"), tp = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  assert.match(gw, /\{!!x\.came && <div data-tq-line-came=""[^]*?<AttachChip name=\{x\.came\}/);
+  assert.match(gw, /<div data-tq-line-came=""[^]*?\{!!x\.came && <AttachChip name=\{x\.came\}/);          // ...beside his files' pills (2026-11-17)
   assert.doesNotMatch(tp, /setReportOpen|>The report</);
 });

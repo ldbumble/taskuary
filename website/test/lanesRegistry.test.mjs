@@ -91,7 +91,7 @@ test("every state word the page says is read from lanes.json, never typed in a p
   const { WORD } = await import("../src/lanes.js");
   const { AGENT, READY } = await import("../src/taskLifecycle.js");
   for (const g of ["lanes", "kinds", "states"]) for (const r of vocab[g]) assert.equal(WORD[r.key], r.word, r.key);
-  assert.deepEqual(AGENT, { waiting: WORD.blocked, working: WORD.working, saved: WORD.saved, stopped: WORD.stopped, finished: WORD.agentdone, idle: WORD.queued });
+  assert.deepEqual(AGENT, { waiting: WORD.blocked, working: WORD.working, saved: WORD.saved, stopped: WORD.stopped, finished: WORD.agentdone, idle: WORD.queued, held: WORD.held });          // ...and a new sender's task is held (2026-11-17)
   assert.equal(READY, WORD.approve);
   // the words a sentence could not say by accident: two words or more ("done", "report" and "fyi" are ordinary English too)
   const words = new Set(Object.values(WORD).filter((w) => /\s/.test(w)));

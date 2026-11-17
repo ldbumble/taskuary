@@ -99,6 +99,16 @@ class Judging(unittest.TestCase):
             self.assertTrue(bg.judge(self.s, bg.acts('agent-browser fill @e1 "a"')[0], {'url': CHECKOUT}, b)['hold'])
         self.assertTrue(b.seen)
 
+    def test_unsure_of_a_tick_or_a_choice_lets_it_go_but_sure_it_cannot_be_undone_still_holds(self):
+        """The real-CLI walk, 2026-11-16: ticking a sign-up's "I agree to the terms" box was held as "the AI could not tell whether it can be
+        undone" - the owner was handed a checkbox, and an Enter on the page could not tick it. A tick, an untick, a choice or typing sends
+        nothing: unsure on one of them it goes on. Sure it can't be undone (a toggle that saves itself), it is held as ever; a click unsure is held."""
+        unsure, sure = {'irreversible': True, 'sure': False, 'what': 'agrees to the terms'}, {'irreversible': True, 'sure': True, 'what': 'turns 2FA off'}
+        for cmd in ('agent-browser check @e4', 'agent-browser uncheck @e4', 'agent-browser select @e5 "free"', 'agent-browser fill @e1 "a"'):
+            with verdict(unsure): self.assertFalse(bg.judge(self.s, bg.acts(cmd)[0], {'url': CHECKOUT}, Brain(None))['hold'], cmd)
+            with verdict(sure): self.assertTrue(bg.judge(self.s, bg.acts(cmd)[0], {'url': CHECKOUT}, Brain(None))['hold'], cmd)
+        with verdict(unsure): self.assertTrue(bg.judge(self.s, self.act, {'url': CHECKOUT}, Brain(None))['hold'])
+
     def test_a_reversible_act_sure_of_it_passes(self):
         with verdict({'irreversible': False, 'sure': True, 'what': 'opens the order summary'}):
             self.assertFalse(bg.judge(self.s, self.act, {'url': CHECKOUT}, Brain(None))['hold'])

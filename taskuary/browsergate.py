@@ -45,6 +45,11 @@ VALUED = frozenset('--session --profile --state --args --user-agent --proxy --pr
                    '--headers --extension --provider --device --color-scheme --download-path --timeout'.split())
 # its commands that only TYPE into a box: what passes when no AI is connected to judge (`keyboard` and `find` by their sub-action)
 TYPES, KEY_TYPES = frozenset('fill type'.split()), frozenset('type inserttext'.split())
+# ...and its commands that only SET a field - tick, untick, choose (the real-CLI walk, 2026-11-16: ticking a sign-up's "I agree" box was held
+# for the owner as "the AI could not tell whether it can be undone", and an Enter on the page could not tick it). They send nothing: an
+# unsure verdict on one of them, or on typing, lets it go - the sending is judged on its own. A verdict SURE it can't be undone (a settings
+# toggle that saves itself) still holds it.
+SETS = frozenset('check uncheck select'.split())
 SNAP_MAX = 6000                 # the page as the model reads it: the interactive elements, enough for a checkout or a settings page
 JUDGE_WAIT = 45.0
 HELD = 'Taskuary held this for the owner'
@@ -144,6 +149,13 @@ def typing(act: dict) -> bool:
     v = act['verb']
     ok = v in TYPES or (v == 'keyboard' and sub(1) in KEY_TYPES) or (v == 'find' and sub(3) in TYPES)
     return ok and not act.get('nl') and not any('\n' in t or '\r' in t for t in a)
+
+
+def setting(act: dict) -> bool:
+    "Does this act only fill in the form - type into a box, or tick, untick or choose a field? By agent-browser's verb (SETS), as typing is."
+    a, i = act.get('args') or [], 0
+    while i < len(a) and a[i].startswith('-'): i += 2 if a[i] in VALUED and '=' not in a[i] else 1
+    return typing(act) or (i < len(a) and a[i].lower() == act.get('verb') and act.get('verb') in SETS)
 
 
 # ── the page it would act on, and the model's verdict ─────────────────────────────────────────────────────────────────────
@@ -280,8 +292,8 @@ def _judge(store, act: dict, pg: dict, brain=None) -> dict:
     if not isinstance(v, dict) or not isinstance(v.get('irreversible'), bool) or not isinstance(v.get('sure'), bool):
         return {'hold': True, 'what': target(act, pg) or cmd, 'why': "the AI's answer could not be read, so it waits for you"}
     what = ' '.join(str(v.get('what') or '').split())[:200] or target(act, pg) or cmd
-    if v['irreversible']: return {'hold': True, 'what': what, 'why': "it can't be undone"}
-    if not v['sure']: return {'hold': True, 'what': what, 'why': "the AI could not tell whether it can be undone"}
+    if v['irreversible'] and (v['sure'] or not setting(act)): return {'hold': True, 'what': what, 'why': "it can't be undone"}
+    if not v['sure'] and not setting(act): return {'hold': True, 'what': what, 'why': "the AI could not tell whether it can be undone"}
     return {'hold': False, 'what': what, 'why': ''}
 
 

@@ -347,7 +347,7 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
                              why='an agent proposed an action - it runs only if you say so' if action
                                  # ...a draft its channel cannot send says what the task's chip says (lanes.json `unsendable`, decided 2026-11-12)
                                  else (('a reply is drafted for you to send' if capabilities.can_send_draft(store, r['ReviewId']) else lanes.hint('unsendable'))
-                                       if r.get('HasDraft') else 'a reply is owed - draft it with AI or write it'),
+                                       if r.get('HasDraft') else 'a reply is owed - no draft yet'),   # the agent drafts on arrival, never a chore for him (2026-11-17)
                              draft=bool(r.get('HasDraft')), summary=agent_found(store, r.get('TaskId')),
                              stale=stale,
                              sig=hashlib.sha1(str(rv.get('DraftText') or '').encode()).hexdigest()[:10],   # the draft's fingerprint: a rewrite is news

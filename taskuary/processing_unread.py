@@ -460,6 +460,7 @@ def card_for(store, item, compact, live_state, now, states=None, noise=None, lea
     # for its task over a draft; one still WORKING did not, so a reply it wrote a minute into the session
     # read "reply ready" through forty more minutes of edits. Working is newer than any draft it made -
     # the reply is back the moment the agent parks or its session ends.
+    from .general import starting
     if worker and active:
         agent_cards = funnel.from_agents(store, live_state=[worker], now=now)
         if agent_cards:
@@ -470,7 +471,9 @@ def card_for(store, item, compact, live_state, now, states=None, noise=None, lea
             card.update(kind='agent', lane='working', working=shown_agent(worker), agent=shown_agent(worker), sid=worker.get('sid'),   # Taskuary, never the profile
                         mode=worker.get('mode') or 'terminal', tail=worker.get('tail') or [],
                         why='An agent is working on this; nothing needs your input yet')
-    elif (row.get('Working') or persisted_working) and active:          # ...a headless run too
+    # ...a headless run too, and a START IN FLIGHT (general.starting - the mark taskstate reads the task at work by, 2026-11-17): a reply owed
+    # with its agent coming up read "ready to send" over no draft while the task, the list and the Board said it was at work
+    elif active and (row.get('Working') or persisted_working or (tid and starting(tid))):
         who = row.get('Working') or SHOWN
         card.update(kind='agent', lane='working', working=who, agent=who)
     elif active and not review:

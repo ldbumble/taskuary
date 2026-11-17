@@ -419,6 +419,26 @@ class LanesTests(unittest.TestCase):
         it = funnel.build(s)['items'][0]
         self.assertEqual((it['lane'], it['not_sent'], it['why']), ('approve', True, 'the mail server refused erin@northwind.example (5.1.1 no such user)'))
 
+    def test_a_reply_owed_while_its_agent_is_starting_reads_working_not_ready_to_send(self):
+        """2026-11-17: a mail owed a reply had its agent coming up (general.OPENING) and no draft yet, and the row read 'ready to send -
+        a reply is owed, draft it with AI or write it' - the agent drafts on arrival, and the task read at work everywhere else."""
+        from taskuary import general
+        s = store()
+        t = s.create_task({'Title': 'Lease renewal', 'Kind': 'reply', 'Status': 'open'}, 'o')
+        m = mail(s, 'Lease renewal', who='Erin Blake', email='erin@northwind.example', tid=t)
+        s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': '', 'Status': 'pending'})
+        general.OPENING.add(t)
+        try:
+            with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+                it = next(i for i in funnel.build(s)['items'] if i.get('tid') == t)
+        finally: general.OPENING.discard(t)
+        self.assertEqual(it['lane'], 'working')
+        self.assertNotIn('draft it', it['why'])
+        funnel.invalidate()
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            it = next(i for i in funnel.build(s)['items'] if i.get('tid') == t)
+        self.assertNotIn('draft it', it['why'])                      # ...and at rest the row says what is owed, never a chore the agent does
+
     def test_a_failed_check_is_promoted_and_does_not_expire_while_it_is_still_failing(self):
         """"Could not open a connection to SQL Server" needs no classifier - it says what it is. It
         used to file in the 'report' lane, behind even a slipped thread, and then leave the pipe

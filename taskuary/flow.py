@@ -525,6 +525,26 @@ def said(rec: dict) -> str:
     return (rec.get('head') or s or '') + (f", {plural(rec['rows'], 'row')}" if rec.get('rows') and 'row' not in str(rec.get('head') or '') else '')
 
 
+def step_line(rec: dict) -> str:
+    "A step as the run says it - on its task's record and as a step of the run's turn in the chat (conversation.items), the same words."
+    return f"{rec.get('label')}: {said(rec)}" + (f" ({rec['ms'] / 1000:.1f}s)" if rec.get('ms') else '')
+
+
+def turn(store, tid: int, at_work: bool) -> dict | None:
+    """THE RUN OF STEPS AS ITS TASK'S TURN (the walk, 2026-11-17: a routine's chat held only the generic greeting while its steps ran, and the
+    task read "not started yet"): the run's own record (report_run) read in the shape every agent turn has - each step done so far a step of it,
+    at work while the run has the task (workflows.at_work), and its last word the turn's words once it is over. None for a task no run of
+    steps has."""
+    run = store.report_run_of_task(tid)
+    if not run or run.get('type') != 'flow': return None
+    from .conversation import ep
+    t0, recs = ep(run.get('at')), [r for r in run.get('steps') or [] if r.get('kind') != 'agent']
+    steps = [{'k': 'error' if r.get('status') == 'failed' else 'note', 'text': step_line(r)} for r in recs]
+    return {'kind': 'turn', 'at': run.get('at') or '', 'state': 'working' if at_work else 'done', 'steps': steps,
+            'text': '' if at_work else str(run.get('summary') or ''), 'cards': [], 'started': t0 or None,
+            'ended': None if at_work else t0 + (run.get('ms') or 0) / 1000}
+
+
 def tally(recs: list) -> str:
     """"Ran 4 steps in 2.1s, no AI used" - counted from the kinds, so the owner sees how little of it was a model."""
     ran = [r for r in recs if r.get('status') not in ('skipped', 'repaired')]
@@ -587,7 +607,7 @@ def _walk(store, src, tid, trigger, llm, ctx, recs, repairs, rec, start, t0) -> 
             r = run_step(store, step, ctx, llm, tid, title=title)
             recs.append(r)
             store.set_report_run_steps(rid, recs, ms=int((time.time() - t0) * 1000))
-            store.add_comment(tid, 'workflow', 'agent', f"Step {i + 1}/{n} {r['label']}: {said(r)}" + (f" ({r['ms'] / 1000:.1f}s)" if r.get('ms') else ''))
+            store.add_comment(tid, 'workflow', 'agent', f"Step {i + 1}/{n} {step_line(r)}")
             if r['status'] in ('failed', 'waiting'): stop = i; break
         if stop is None or recs[-1]['status'] != 'failed': break
         # THE APP'S FAULT IS NOT THE STEPS' TO FIX: an expired sign-in stops here, with no repair call, and says where it is fixed

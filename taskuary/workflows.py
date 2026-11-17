@@ -156,6 +156,13 @@ _STARTING, _LOCK = set(), threading.Lock()      # runs whose worker is on its wa
 def _spawn(fn): threading.Thread(target=fn, daemon=True, name='workflow-start').start()
 
 
+def at_work(tid) -> bool:
+    """A RUN OF A ROUTINE HAS THIS TASK NOW - its steps going, or its worker on its way (_STARTING, held until the last step is done). The one
+    read for it (the walk, 2026-11-17: a run of code steps read "not started yet" over an empty chat while it ran - only Taskuary's own
+    housekeeping asked): the task's state, its idle line, its chat and what still works on it all ask here."""
+    with _LOCK: return int(tid) in _STARTING
+
+
 def trigger_of(task) -> str:
     tags = [x.strip() for x in str((task or {}).get('Tags') or '').split(',')]
     return next((x[len(TRIGGER_TAG):] for x in tags if x.startswith(TRIGGER_TAG)), '')
@@ -335,7 +342,7 @@ def running(store, sid) -> dict | None:
     for t in store.dock_tasks(f'workflow:{sid}', limit=3):
         if t.get('Status') not in LIVE_STATUSES: continue
         q = store.get_dispatch(t['TaskId'])
-        if t['TaskId'] in _STARTING or terminal.for_task(t['TaskId'], details=False) or (q and q.get('State') != 'failed'): return t
+        if at_work(t['TaskId']) or terminal.for_task(t['TaskId'], details=False) or (q and q.get('State') != 'failed'): return t
     return None
 
 

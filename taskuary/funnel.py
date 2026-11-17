@@ -678,6 +678,10 @@ def idle_state(store, tid, st=None) -> dict:
     # a parked one fell through every fact below to "Not started yet" - and NOT "LEFT" EITHER (the audit, 2026-11-10): a coding session parked
     # over its reply read "ran on this and left without finishing it" off the transcript an earlier session of it filed
     if (live := live_session_state(tid, agent)): return out('live', *live)
+    # ...NOR A ROUTINE RUNNING ITS STEPS BY CODE (workflows.at_work; the walk, 2026-11-17): no session, no run row of an agent's - it read
+    # "Not started yet. Nothing has started the assistant on this." while its steps ran
+    from . import workflows
+    if workflows.at_work(tid): return out('live', 'Its routine is running its steps.', 'working')
     # ...NOR ONE THAT IDLED OUT AT REST (recorded on the real CLI, 2026-11-16: a coding agent answered, its session closed quietly, and its chat
     # ended "ran on this and left without finishing it" under the answer): it waits on you as it did live (taskstate.left reads the close)
     from . import workerstate

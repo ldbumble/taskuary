@@ -91,8 +91,7 @@ def live_work(store, tid: int, but=None, skip: tuple = ()) -> list:
     with quickwork._RUN_LOCK: quick = tid in quickwork.RUNNING
     if quick and 'quick' not in skip: out.append('a quick answer is still being worked out on it')
     if writeup.running(tid) and not writeup.in_job(): out.append('its write-up is still being written')
-    with workflows._LOCK: flowing = tid in workflows._STARTING
-    if flowing and 'routine' not in skip: out.append('its routine is still running')
+    if workflows.at_work(tid) and 'routine' not in skip: out.append('its routine is still running')
     if store.get_dispatch(tid): out.append('an agent is queued to start on it')
     return out
 

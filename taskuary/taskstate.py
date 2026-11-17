@@ -208,6 +208,9 @@ class TaskState:
         # coding task read "yours" while its adapter came up, a chat "working" (the audit, 2026-11-10)
         from .general import starting
         if starting(tid) and st in ('open', 'in_progress'): return 'working'
+        # ...and A ROUTINE RUNNING ITS STEPS is at work with no agent at all (workflows.at_work; the walk, 2026-11-17: it read "not started yet")
+        from . import workflows
+        if workflows.at_work(tid) and st in ('open', 'in_progress'): return 'working'
         if st == 'done':
             if str(t.get('UpdatedBy') or '') in OWNER_ACTORS: return 'closed'        # yours: no need to read its notes
             return 'agentdone' if finish_evidence(store, tid) else 'closed'

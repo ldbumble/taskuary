@@ -116,6 +116,32 @@ class DispatchTests(unittest.TestCase):
         auto_code.assert_called_once_with(s, out['task_id'])
 
 
+class StepsRunTests(unittest.TestCase):
+    def test_a_routine_running_its_steps_reads_at_work_and_its_chat_shows_the_steps_then_the_outcome(self):
+        """A routine whose steps run by code read "not started yet" with an empty chat for as long as they ran (walk, 2026-11-17): nothing
+        read the run in flight. Mid-run - the second step still going - it reads working, the done step drawn in a turn at work; after, that
+        turn holds both steps and the run's own last word."""
+        from taskuary import conversation, flow, funnel, taskstate
+        s = store()
+        sid = s.save_source({'Channel': 'report', 'Address': 'Duplicate bill check', 'Owner': 'o', 'Active': 1, 'ConfigJson': json.dumps(
+            {'type': 'agent', 'access': 'write', 'title': 'Duplicate bill check', 'flow': [
+                {'id': 's1', 'kind': 'source', 'label': 'Read AP bills', 'type': 'sqlite'}, {'id': 's2', 'kind': 'source', 'label': 'Read vendors', 'type': 'sqlite'}]})}, 'o')
+        mid = {}
+        def step(store_, st, ctx, llm, tid, *a, **k):
+            if st['id'] == 's2':
+                mid.update(key=taskstate.state(s, s.get_task(tid)), idle=funnel.idle_state(s, tid)['row'], chat=conversation.items(s, tid))
+            return {'head': f"read {st['label'].split()[-1]}"}
+        with mock.patch.dict(flow.RUNNERS, {'source': step}):
+            out = workflows.run(s, s.get_source(sid), trigger='manual', background=False)
+        self.assertEqual((mid['key'], mid['idle']), ('working', 'working'))
+        turns = [x for x in mid['chat']['items'] if x['kind'] == 'turn']
+        self.assertTrue(mid['chat']['working'])
+        self.assertEqual([(t['state'], [x['text'] for x in t['steps']]) for t in turns], [('working', ['Read AP bills: read bills'])])
+        turns = [x for x in conversation.items(s, out['task_id'])['items'] if x['kind'] == 'turn']
+        self.assertEqual([(t['state'], len(t['steps'])) for t in turns], [('done', 2)])
+        self.assertTrue(turns[0]['text'].startswith('Ran 2 steps in'))
+
+
 class ProcedureTests(unittest.TestCase):
     def test_a_pto_style_request_selects_its_procedure_without_forced_coding_or_a_second_start(self):
         s = store(); home = tempfile.mkdtemp()

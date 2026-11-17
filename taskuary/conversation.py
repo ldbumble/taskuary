@@ -491,6 +491,13 @@ def _items(store, tid: int) -> dict:
                           for s in snaps.get(cid, []) if newest.get(s['review']) != cid]
             turn_of[cid] = t; put(last, 1, t)
 
+    # A ROUTINE'S RUN OF STEPS IS A TURN, on the one road every turn takes (flow.turn, 2026-11-17): at work while the run has the task and no
+    # agent has taken it from there - "working" is one fact, so the run's at work is the chat's
+    from . import flow, workflows
+    flowing = workflows.at_work(tid) and not at_work
+    if (ft := flow.turn(store, tid, flowing)): put(ft['started'] or last + 1e-7, 1, ft)      # ...where the run began: an agent it hands to answers under it
+    at_work = at_work or flowing
+
     # a chat agent's turn at work: under what it was given, its steps as they come
     ses = general.session_for(tid)
     # ...never once its answer is filed: the session reads busy for a beat after (recorded 2026-11-12: a second, empty turn spun under the

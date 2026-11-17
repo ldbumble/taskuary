@@ -1255,6 +1255,9 @@ def create_task(body: TaskBody):
     if len(fields['Title']) > 120: fields = {**fields, 'Summary': fields.get('Summary') or fields['Title'], 'Title': _title_cut(' '.join(fields['Title'].split()))}
     # made by the owner on the page: an ask from the desktop once an agent works it (asks.py)
     tid = store.create_task({**fields, 'AskedVia': 'desktop', 'OriginBase': 'owner'}, ACTOR)
+    # ...and a file attached in New is the task's own, in its folder - named under attachments/, its agent's Read was refused (2026-11-17)
+    from . import outputs
+    if (s := fields.get('Summary')) and (s2 := outputs.take_in_text(tid, s)) != s: store.update_task(tid, {'Summary': s2}, ACTOR)
     # A task created by the owner is their durable TODO. Agent runs may come and go without
     # silently completing it; only routed/triaged work is eligible for automatic completion.
     from . import selfclose
@@ -7250,13 +7253,6 @@ def prompt_images(paths) -> list[str]:
             if p.is_file() and p.is_relative_to(root): out.append(str(p))
         except (OSError, ValueError): continue
     return out
-
-
-def with_images(text: str, paths) -> str:
-    """The words, then the files - how a CLI agent is shown a picture: it reads the path (general.py says it the same way)."""
-    from .general import files_head
-    ps = prompt_images(paths)
-    return (text or '') + (f'\n\n{files_head(ps)} (read these files)\n' + '\n'.join(ps) if ps else '')
 
 
 async def _save_prompt_image(tid: int | None, request: Request):

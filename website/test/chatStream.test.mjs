@@ -284,3 +284,11 @@ test("a turn at work draws its steps behind the quiet n-steps fold, as a finishe
   const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(src, /if \(now\) \{\s*const shown = [^]*?<WorkFold k=\{`\$\{key\}:all`\} quiet parts=\{rest\}/);
 });
+
+// HIS LINE SHOWS WHAT HE SENT WITH IT (the owner, 2026-11-17: "the prompt box should show attachment of whatever goes into prompt like report,
+// dashboard, routine, attached pdf"): a pill per file on his bubble, from the press (his own line, files kept) to the heard line (`files`)
+test("his line draws a pill for every file he sent with it, from the press on", () => {
+  const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(src, /\(x\.files \|\| \[\]\)\.map\(\(f\) => <AttachChip key=\{f\} name=\{fileName\(f\)\}/);
+  assert.match(src, /kind: "line", text: w, files: files\.map\(\(a\) => a\.path\)/);
+});

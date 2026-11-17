@@ -171,7 +171,7 @@ def take_kept(store, tid: int, ids=None, **how) -> list:
     with store.lock:
         rows = [r for r in store.list_comments(tid, internal=True) if r.get('ActorType') == WAITING_TYPE and (ids is None or r['CommentId'] in ids)] if ids is None or ids else []
         conversation.hear(store, tid, rows, **how)
-        return store.take_lines(tid, WAITING_TYPE, USER_TYPE, lambda b: _line_of(b)['text'], ids={r['CommentId'] for r in rows}) if rows else []
+        return store.take_lines(tid, WAITING_TYPE, USER_TYPE, lambda b: with_files(**_line_of(b)), ids={r['CommentId'] for r in rows}) if rows else []
 # A SESSION THAT ENDED UNDER A LINE (failed, closed, idled out) - never "reload the page" (the owner, 2026-11-07): say_line starts a fresh one,
 # which takes the kept line. 'has ended' is what every caller reads it by
 ENDED = 'this assistant session has ended - it starts again with the next line you send'
@@ -2310,6 +2310,15 @@ def compacted_mail(mails) -> str:
 
 # ...a file that is no picture is named as a file (server.prompt_file): "ATTACHED IMAGES" over a PDF told the agent to look at it as one
 def files_head(paths) -> str: return 'ATTACHED IMAGES' if all(_IMAGE_FILE.search(str(p)) for p in paths) else 'ATTACHED FILES'
+# HIS WORDS AND WHAT HE ATTACHED, AS ONE LINE - the block every door writes (the page's withImages, the waiting room's note) and the one his
+# heard line keeps (2026-11-17: once a turn took his line its files were dropped, and his bubble drew the words alone). Read back by split_files
+_FILES = re.compile(r'\n\nATTACHED (?:IMAGES|FILES) \(read these files\)\n(.+)\Z', re.S)
+def with_files(text: str = '', files=()) -> str:
+    return (text or '') + (f"\n\n{files_head(files)} (read these files)\n" + '\n'.join(map(str, files)) if files else '')
+def split_files(body) -> dict:
+    "{'text', 'files'} of a line written by with_files - the words alone where it names no files."
+    b = str(body or ''); m = _FILES.search(b)
+    return {'text': b[:m.start()] if m else b, 'files': [x.strip() for x in m.group(1).splitlines() if x.strip()] if m else []}
 _IMAGE_FILE = re.compile(r'\.(png|jpe?g|gif|webp)$', re.I)
 
 
@@ -3621,7 +3630,9 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
         from . import selfclose
         selfclose.claim(store, tid, actor)
     from . import outputs
-    files = outputs.take_in(tid, files) if files and handles(t) else files
+    # ...WHAT HE ATTACHED IS THE TASK'S OWN, whatever agent works it (the owner, 2026-11-17: "if you attach item on prompt it's not being sent to
+    # agnet"): copied into its folder first - left under attachments/, a coding agent's Read of it was refused as Taskuary's own data
+    files = outputs.take_in(tid, files) if files else files
     line_id = line_id or new_line_id()
     # ...AND A TURN HE STOPPED IS AT REST FOR HIS NEXT LINE, though its CLI has not let go (the bug hunt's stop, 2026-11-12): the page drew the
     # line under the stop, kept unheard it went down by the box, and came back up seconds later when the stopped turn ended. It begins the

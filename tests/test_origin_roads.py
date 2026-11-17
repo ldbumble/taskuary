@@ -352,3 +352,19 @@ def test_the_folder_passes_in_its_long_name_when_temp_is_a_short_one(monkeypatch
     d = origin.stranger_dir(7)
     for p in (d / 'notes.md', Path(os.path.realpath(d)) / 'notes.md'):
         assert floor.check({'tool_name': 'Read', 'tool_input': {'file_path': str(p)}}, 7) == {}, p
+
+# HIS OWN REPORT IS HIS OWN WORK (2026-11-17): a report or dashboard read only from Taskuary's own data - his tasks, his mail's counts - and
+# sent to an agent ran as a stranger's task: no tools, a cut copy, and the work handed back to him with no Trust in sight
+def test_a_report_on_taskuary_s_own_data_sent_to_an_agent_runs_as_trusted_work():
+    from taskuary import reports
+    from taskuary.ingest import task_from_message
+    s = MemoryStore(); cfg = {'title': 'Open tasks', 'type': 'taskuary_data', 'dataset': 'tasks', 'days': 90}
+    sid = s.save_source({'Channel': 'report', 'Address': 'Open tasks', 'Active': 1, 'ConfigJson': json.dumps(cfg)}, 't')
+    with mock.patch.object(reports, 'gate', lambda *a: None), mock.patch.object(reports, 'resolve_cfg', lambda st, c: c), \
+         mock.patch.object(reports, 'executor_for', lambda t: lambda c: ('6 rows', 'task_id,title\n1,a\n2,b')):
+        mid = reports.run_report_source(s, s.get_source(sid))['message_id']
+    assert json.loads(s.get_message(mid)['MailMetaJson'])['built_from'][0]['own'] is True
+    t = task_from_message(s, mid, 'owner', 'general')
+    o, why = origin.of_task(s, t)
+    assert o == 'trusted', why
+    assert origin.launch_mode(s, t, 'claude') == 'full'                # ...not the stranger's sandbox

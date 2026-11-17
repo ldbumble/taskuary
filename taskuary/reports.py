@@ -1445,15 +1445,20 @@ def source_label(sub: dict, i: int) -> str:
 # ── WHOSE SYSTEM A SOURCE READS (the owner, 2026-11-03) ─────────────────────────────────────────────────────────────────────────────
 # A report built only from the owner's own systems - their database, their books - is trusted; one that read anything from outside is
 # a stranger's (origin.report_rests_on). Each source carries `own_system`, the switch on its card; unset, the catalogue's group decides
-# (connectorcatalog.json `own_systems`). Taskuary's own tables are never one: they hold everyone's mail.
+# (connectorcatalog.json `own_systems`). Taskuary's other store readers are never one (a card, the digest, an agent: what they read is open).
+# HIS OWN DATA IS HIS (2026-11-17): a report or dashboard on Taskuary's own data ran as a stranger's task once sent to an agent - no tools, a
+# cut copy, the work handed back with no Trust in sight. The instruction is his typed line and the report is data he set up; an outsider's
+# words inside its rows stay fenced as data by the source fence, as for any own-system read of mail.
+OWN_DATA = ('taskuary_data', 'dashboard', 'evening_inbox')
+
 def own_default(t) -> bool:
     from .connectorcatalog import by_type, own_groups
-    return t not in STORE_BACKED and (by_type(card_of(t)) or {}).get('group') in own_groups()
+    return t in OWN_DATA or t not in STORE_BACKED and (by_type(card_of(t)) or {}).get('group') in own_groups()
 
 def is_own(sub: dict) -> bool:
     "Is this source marked as the owner's own system - the switch when they set it, else its card's default."
     v = sub.get('own_system')
-    if sub.get('type') in STORE_BACKED: return False
+    if sub.get('type') in STORE_BACKED and sub.get('type') not in OWN_DATA: return False
     return own_default(sub.get('type')) if v is None or v == '' else v is True or str(v).lower() in ('1', 'true', 'on', 'yes')
 
 def built_from(cfg: dict) -> list:

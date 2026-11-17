@@ -72,6 +72,13 @@ def take_in(tid: int, paths) -> list:
     return out
 
 
+def take_in_text(tid: int, text: str) -> str:
+    "`text` with every file this server saved under attachments/ that it names copied into task `tid`'s folder and named there (take_in)."
+    if not text: return text
+    root = str((config.home() / 'attachments').resolve())
+    return re.sub(re.escape(root) + r'[^\r\n]*', lambda m: take_in(tid, [m.group(0)])[0], str(text), flags=re.I)
+
+
 def resolve(tid: int, rel: str, base: Path = None):
     """The file `rel` names inside task `tid`'s outputs folder (or `base`, a turn's kept copies - turn_folder), or None. A name only: never
     absolute, never a drive or a share, no `..` or empty step, no `:` (an NTFS stream), no link anywhere on the way - and after resolving,

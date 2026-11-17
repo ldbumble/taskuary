@@ -215,7 +215,7 @@ def _lines(store, tid: int) -> list:
     from . import general
     if general.handles(store.get_task(tid) or {}): return []
     return [{'WId': None, 'line': w['id'], **({'name': w['line']} if w.get('line') else {}), 'CreatedBy': 'owner', 'CreatedAt': w['at'],
-             'Note': w['text'] + (f"\n\n{general.files_head(w['files'])} (read these files)\n" + '\n'.join(w['files']) if w['files'] else '')}
+             'Note': general.with_files(w['text'], w['files'])}
             for w in general.waiting_lines(store, tid)]
 
 

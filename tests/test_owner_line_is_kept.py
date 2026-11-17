@@ -157,3 +157,45 @@ class OwnerLineIsKept(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# EVERY FILE HE ATTACHES REACHES THE AGENT, AND STAYS ON HIS LINE (the owner, 2026-11-17: "if you attach item on prompt it's not being sent to
+# agnet. Make sure all attachmetns work"): on a coding task the picture he attached stayed in Taskuary's own attachments folder, and the
+# agent's Read of it was refused as "Taskuary's own data"; and once a turn took his line its files were dropped, so his bubble drew the words
+# alone. Every door copies what he attached into the task's own folder first, and his line keeps its files once heard
+class AttachedFilesReachTheAgent(unittest.TestCase):
+    def setUp(self):
+        from taskuary import config
+        self.s = MemoryStore()
+        self.d = config.home() / 'attachments' / 'prompt' / '209901'; self.d.mkdir(parents=True, exist_ok=True)
+        self.pic = self.d / '20991231-235959-abc123-the person.png'; self.pic.write_bytes(b'\x89PNG fake')
+        self.addCleanup(self.pic.unlink, missing_ok=True)
+        p = mock.patch.object(server, 'store', self.s); p.start(); self.addCleanup(p.stop)
+
+    def inside(self, tid, path):
+        from taskuary import outputs
+        return str(path).startswith(str(outputs.folder(tid)))
+
+    def test_a_coding_tasks_line_hands_over_a_file_in_its_own_folder(self):
+        from taskuary import waitroom
+        tid = self.s.create_task({'Title': 'Check the Relias account', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
+        with mock.patch.object(waitroom, 'deliver', return_value={'delivered': 0, 'state': 'working'}):
+            general.take_line(self.s, tid, 'it was this person', [str(self.pic)], 'owner')
+        files = general.waiting_lines(self.s, tid)[0]['files']
+        self.assertEqual(len(files), 1); self.assertTrue(self.inside(tid, files[0]), files)
+
+    def test_a_heard_line_keeps_its_files_in_the_chat(self):
+        from taskuary import conversation
+        tid = self.s.create_task({'Title': 'Check the Relias account', 'Kind': 'general', 'Status': 'in_progress'}, 'o')
+        general.wait_line(self.s, tid, 'it was this person', [str(self.pic)])
+        general.take_kept(self.s, tid)
+        line = next(x for x in conversation.items(self.s, tid)['items'] if x['kind'] == 'line')
+        self.assertEqual((line['text'], line['files']), ('it was this person', [str(self.pic)]))
+
+    def test_a_task_new_makes_with_a_file_names_it_in_its_own_folder(self):
+        c = TestClient(server.app)
+        tid = c.post('/api/tasks', json={'Title': 'Who is this', 'Summary': f'Who is this?\n\nATTACHED IMAGES (read these files)\n{self.pic}'}).json()['taskId']
+        summary = self.s.get_task(tid)['Summary']
+        self.assertNotIn(str(self.pic), summary)
+        from taskuary import outputs
+        self.assertIn(str(outputs.folder(tid)), summary)

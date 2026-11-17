@@ -25,7 +25,8 @@ import { detailFor, useOwnDetail } from "./chatDetail.js";
 import { useChatDefaults } from "./DetailSlider.jsx";
 import { PermissionCards } from "./AgentChannels.jsx";
 import { Hunk } from "./DiffView.jsx";
-import { withImages } from "./promptImages.jsx";
+// ...a file he sent, by its own name: the upload's stamp (server.prompt_file) is not his, and neither is the folder
+const fileName = (p) => String(p).split(/[\\/]/).pop().replace(/^\d{8}-\d{6}-[0-9a-f]{6}-/, "");
 import { shared } from "./singleFlight.js";
 import WriteIcon from "@mui/icons-material/EditNoteRounded";
 import ViewSpec, { PlanRow } from "./ViewSpec.jsx";
@@ -458,7 +459,11 @@ const ConvLine = ({ x, more }) => {
   const stamp = x.at ? when(x.at instanceof Date ? x.at : String(x.at)) : "", retry = React.useContext(RetryCtx);
   return <div className={`tq-aui-message tq-aui-user${more ? " tq-aui-user-more" : ""}`} data-tq-item={x.id} data-tq-chat-line={x.id}>
     {!more && <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{stamp ? ` · ${stamp}` : ""}</div>}
-    <div className="tq-aui-user-bubble" dir="auto">{!!x.came && <div data-tq-line-came="" style={{ marginBottom: 6 }}><AttachChip name={x.came} title={`Sent with ${x.came}`} /></div>}{x.text}</div>
+    <div className="tq-aui-user-bubble" dir="auto">{(!!x.came || !!x.files?.length) && <div data-tq-line-came="" style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
+      {!!x.came && <AttachChip name={x.came} title={`Sent with ${x.came}`} />}
+      {/* ...AND EVERY FILE HE SENT WITH IT (the owner, 2026-11-17: "the prompt box should show attachment of whatever goes into prompt"): a pill each,
+          as on the box he typed it in - from the press (his own line, drawn at once) to the heard line (conversation's `files`) */}
+      {(x.files || []).map((f) => <AttachChip key={f} name={fileName(f)} title={`Sent with ${fileName(f)}`} data-tq-line-file="" />)}</div>}{x.text}</div>
     {/* ...a send that failed: ONE plain line under his words, with the way past it - never glued into them */}
     {!!x.err && <div className="tq-aui-hint" role="alert" data-tq-line-failed="">{x.err}{retry && <> · <button type="button" className="tq-aui-arrived-more-btn"
       data-tq-try-again="" onClick={() => retry(x)}>{btn("try_again")}</button></>}</div>}</div>;
@@ -573,7 +578,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
     if (given == null) c.setText("");
     if (files.length) onClearAttachments(files.map((a) => a.path));
     const id = `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, sel = selectionRef.current || {};
-    setMine((m) => [...m, { id, kind: "line", text: w || withImages("", files.map((a) => a.path)), at: new Date(), rest: !listNow.current?.working && !listNow.current?.hold && !listNow.current?.permissions?.length }]);      // ...on an untrusted sender's task it waits by the box at once (the list's `hold`), and under a step that waits on his Allow (`permissions`)
+    setMine((m) => [...m, { id, kind: "line", text: w, files: files.map((a) => a.path), at: new Date(), rest: !listNow.current?.working && !listNow.current?.hold && !listNow.current?.permissions?.length }]);      // ...on an untrusted sender's task it waits by the box at once (the list's `hold`), and under a step that waits on his Allow (`permissions`)
     stick.current = true;
     api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w, attachments: files.map((a) => a.path), line_id: id, pick: sel.connectorId || null, model: sel.model || null }, { timeout: 0 })
       .then((r) => { if (road) road(); else if (r.data?.messages) onSent?.(r.data); reloadList?.(); })

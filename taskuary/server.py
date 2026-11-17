@@ -10010,11 +10010,6 @@ def agents():
     # menu app-wide and failed only when it was started (the owner, 2026-09-18).
     conns = cfg.get('cli_connections') or {}
     brains_here = sorted(k for k in conns if hub_agents.runs_here(cli_connections.with_defaults(conns[k])))
-    _cats = {}
-    def _brain_cat(key):
-        """One catalog read per CLI per request: `catalog` goes to disk, and this is asked twice a brain."""
-        if key not in _cats: _cats[key] = climodels.catalog(cli_connections.cli_key(conns[key].get('cmd')) or key)
-        return _cats[key]
     from . import general as _general
     head = hub_agents.default_agent(store)
     rows = sorted(store.list_agents(), key=lambda a: a['Name'] != head)
@@ -10045,10 +10040,9 @@ def agents():
             'developer_mode': hub_agents.developer_mode(store),
             # every connection keeps its models, installed or not: a task still pinned to a CLI that
             # has since gone has to be able to SAY so, and the picker renders it from this.
-            'brain_models': {k: {'choices': _brain_cat(k)['choices'], 'models': _brain_cat(k)['models'],
-                                 'installed': k in brains_here,
+            'brain_models': {k: {'choices': c['choices'], 'models': c['models'], 'installed': k in brains_here,
                                  'default': (cli_connections.gears(cfg, k) or {}).get('model') or ''}
-                             for k in (cfg.get('cli_connections') or {})},
+                             for k in conns for c in [climodels.catalog(cli_connections.cli_key(conns[k].get('cmd')) or k)]},
             'work': _agent_work(store)}
 
 @app.post('/api/agents/{name}/test')

@@ -8,7 +8,7 @@ aliases stay static. A pick is spelled `model` or `model@effort` (gpt-5.4-mini@l
 agents turn the effort into the CLI's own flag (effort_args): codex's -c model_reasoning_effort=<effort>,
 claude's --effort <effort>.
 """
-import json, os, re, shutil, subprocess
+import copy, json, os, re, shutil, subprocess
 from functools import lru_cache
 from . import pathcache
 from pathlib import Path
@@ -138,17 +138,47 @@ def copilot_models() -> list:
     return _copilot_models(pathcache.which('copilot') or '')
 
 
+_memo = {}
+def _parsed(path: Path, parse):
+    """parse(path), re-run only when the file's stat changes; None when it is missing or unreadable.
+
+    Every agents/settings request asks each CLI's catalog, and each ask parsed the same JSON again
+    (codex's twice). The stat still runs every time, so a /login or a model change shows without a
+    restart (2026-11-17). A copy goes out, so no caller can edit what the next one reads.
+    """
+    try: st = path.stat()
+    except OSError: return None
+    k, stamp = (str(path), parse), (st.st_mtime_ns, st.st_size)
+    hit = _memo.get(k)
+    if not hit or hit[0] != stamp:
+        try: v = parse(path)
+        except (OSError, ValueError, TypeError, AttributeError): v = None
+        _memo[k] = hit = (stamp, v)
+    return copy.deepcopy(hit[1])
+
+
 def claude_home() -> Path: return Path(os.getenv('CLAUDE_CONFIG_DIR') or Path.home() / '.claude')
+
+
+def _granted(p: Path) -> list:
+    rows = json.loads(p.read_text(encoding='utf-8', errors='replace')).get('additionalModelOptionsCache') or []
+    return [{'id': r['value'], 'label': r.get('label') or r['value'], 'desc': (r.get('description') or '')[:120],
+             'efforts': [], 'default_effort': ''} for r in rows if isinstance(r, dict) and r.get('value')]
 
 
 def _claude_granted() -> list:
     """Models this account was granted on top of the catalog - the [1m] long-context variants."""
     for p in (claude_home() / '.claude.json', Path.home() / '.claude.json'):
-        try: rows = json.loads(p.read_text(encoding='utf-8', errors='replace')).get('additionalModelOptionsCache') or []
-        except (OSError, ValueError): continue
-        return [{'id': r['value'], 'label': r.get('label') or r['value'], 'desc': (r.get('description') or '')[:120],
-                 'efforts': [], 'default_effort': ''} for r in rows if isinstance(r, dict) and r.get('value')]
+        rows = _parsed(p, _granted)
+        if rows is not None: return rows
     return []
+
+
+def _claude_catalog(p: Path) -> tuple:
+    d = json.loads(p.read_text(encoding='utf-8', errors='replace'))
+    rows = ((d.get('catalog') or {}).get('config') or {}).get('models') or []
+    return float(d.get('fetchedAt') or 0), [{'id': m['id'], 'label': m.get('name') or m['id'], 'desc': (m.get('description') or '')[:120],
+                                             **_claude_efforts(m)} for m in rows if isinstance(m, dict) and m.get('id')]
 
 
 def claude_models() -> list:
@@ -162,14 +192,8 @@ def claude_models() -> list:
     """
     best, models = -1.0, []
     for p in sorted(claude_home().glob('cache/model-catalog/*.json')):
-        try: d = json.loads(p.read_text(encoding='utf-8', errors='replace'))
-        except (OSError, ValueError): continue
-        when = float(d.get('fetchedAt') or 0)
-        if when < best: continue
-        rows = ((d.get('catalog') or {}).get('config') or {}).get('models') or []
-        found = [{'id': m['id'], 'label': m.get('name') or m['id'], 'desc': (m.get('description') or '')[:120],
-                  **_claude_efforts(m)} for m in rows if isinstance(m, dict) and m.get('id')]
-        if found: best, models = when, found
+        when, found = _parsed(p, _claude_catalog) or (0.0, [])
+        if found and when >= best: best, models = when, found
     seen = {m['id'] for m in models}
     return models + [m for m in _claude_granted() if m['id'] not in seen] if models else []
 
@@ -177,12 +201,8 @@ def claude_models() -> list:
 def codex_home() -> Path: return Path(os.getenv('CODEX_HOME') or Path.home() / '.codex')
 
 
-def codex_models() -> list:
-    """The /model list, as Codex cached it: visible models by priority, each with its reasoning levels."""
-    p = codex_home() / 'models_cache.json'
-    try: d = json.loads(p.read_text(encoding='utf-8'))
-    except (OSError, ValueError): return []
-    out = []
+def _codex_cache(p: Path) -> list:
+    d, out = json.loads(p.read_text(encoding='utf-8')), []
     for m in sorted(d.get('models') or [], key=lambda m: m.get('priority') or 999):
         if (m.get('visibility') or 'list') != 'list' or not m.get('slug'): continue
         out.append({'id': m['slug'], 'label': m.get('display_name') or m['slug'], 'desc': (m.get('description') or '')[:120],
@@ -191,48 +211,59 @@ def codex_models() -> list:
     return out
 
 
-def codex_current() -> dict:
-    """What Codex itself runs with (config.toml) - the sensible first suggestion."""
-    try: text = (codex_home() / 'config.toml').read_text(encoding='utf-8')
-    except OSError: return {}
+def codex_models() -> list:
+    """The /model list, as Codex cached it: visible models by priority, each with its reasoning levels."""
+    return _parsed(codex_home() / 'models_cache.json', _codex_cache) or []
+
+
+def _codex_cfg(p: Path) -> dict:
+    text = p.read_text(encoding='utf-8')
     m = re.search(r'^\s*model\s*=\s*"([^"]+)"', text, re.M); e = re.search(r'^\s*model_reasoning_effort\s*=\s*"([^"]+)"', text, re.M)
     return {k: v for k, v in (('model', m and m.group(1)), ('effort', e and e.group(1))) if v}
+
+
+def codex_current() -> dict:
+    """What Codex itself runs with (config.toml) - the sensible first suggestion."""
+    return _parsed(codex_home() / 'config.toml', _codex_cfg) or {}
+
+
+def _kimi_cfg(path: Path) -> tuple:
+    data = tomllib.loads(path.read_text(encoding='utf-8'))
+    entries = data.get('models') or {}
+    ids = [alias for alias, m in entries.items() if isinstance(m, dict) and m.get('model') and m.get('provider')]
+    labels = {alias: entries[alias].get('display_name') for alias in ids}
+    current = data.get('default_model')
+    return _items(ids, labels), {'model': current} if current else {}, f'kimi {path.name}'
+
+
+def _qwen_cfg(path: Path) -> tuple:
+    data = json.loads(path.read_text(encoding='utf-8'))
+    auth = data.get('security', {}).get('auth', {}).get('selectedType')
+    if auth == 'qwen-oauth': return [], {}, ''
+    entries = (data.get('modelProviders') or {}).get(auth, [])
+    ids = [m['id'] for m in entries if isinstance(m, dict) and isinstance(m.get('id'), str)]
+    labels = {m['id']: m.get('name') for m in entries if isinstance(m, dict) and m.get('id') in ids}
+    current = (data.get('model') or {}).get('name')
+    if current and current not in ids: ids.append(current)
+    return _items(ids, labels), {'model': current} if current else {}, f'qwen {path.name}'
 
 
 def _configured_models(cli: str) -> tuple:
     """Read only model identifiers/labels, never return provider keys or endpoints.
 
-    Re-read on each request so finishing /login or changing a model needs no restart.
+    Re-read whenever the file changes, so finishing /login or changing a model needs no restart.
     These are user-level suggestions; a project or per-run override can still win.
     """
-    try:
-        if cli == 'kimi':
-            path = Path(os.getenv('KIMI_CODE_HOME') or Path.home() / '.kimi-code') / 'config.toml'
-            data = tomllib.loads(path.read_text(encoding='utf-8'))
-            entries = data.get('models') or {}
-            ids = [alias for alias, m in entries.items() if isinstance(m, dict) and m.get('model') and m.get('provider')]
-            labels = {alias: entries[alias].get('display_name') for alias in ids}
-            current = data.get('default_model')
-        else:
-            path = Path(os.getenv('QWEN_HOME') or Path.home() / '.qwen') / 'settings.json'
-            data = json.loads(path.read_text(encoding='utf-8'))
-            auth = data.get('security', {}).get('auth', {}).get('selectedType')
-            if auth == 'qwen-oauth': return [], {}, ''
-            entries = (data.get('modelProviders') or {}).get(auth, [])
-            ids = [m['id'] for m in entries if isinstance(m, dict) and isinstance(m.get('id'), str)]
-            labels = {m['id']: m.get('name') for m in entries if isinstance(m, dict) and m.get('id') in ids}
-            current = (data.get('model') or {}).get('name')
-            if current and current not in ids: ids.append(current)
-        return _items(ids, labels), {'model': current} if current else {}, f'{cli} {path.name}'
-    except (OSError, ValueError, TypeError, AttributeError):
-        return [], {}, ''
+    if cli == 'kimi': got = _parsed(Path(os.getenv('KIMI_CODE_HOME') or Path.home() / '.kimi-code') / 'config.toml', _kimi_cfg)
+    else:             got = _parsed(Path(os.getenv('QWEN_HOME') or Path.home() / '.qwen') / 'settings.json', _qwen_cfg)
+    return got or ([], {}, '')
 
 
 def catalog(cli: str) -> dict:
     """{models, current, choices} for one CLI. `choices` is the flat id list older pickers use."""
     if cli == 'codex':
-        models = codex_models() or CODEX_FALLBACK
-        return {'models': models, 'current': codex_current(), 'source': 'codex models_cache.json' if codex_models() else 'built-in',
+        m = codex_models(); models = m or CODEX_FALLBACK
+        return {'models': models, 'current': codex_current(), 'source': 'codex models_cache.json' if m else 'built-in',
                 'choices': [m['id'] for m in models]}
     if cli == 'copilot':
         models = copilot_models()

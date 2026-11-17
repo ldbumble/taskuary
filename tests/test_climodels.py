@@ -1,5 +1,5 @@
 """Model picks come from the CLI's own files: codex's models_cache.json and config.toml."""
-import json, tempfile, unittest
+import json, os, tempfile, unittest
 from pathlib import Path
 from unittest import mock
 from taskuary import climodels, clis, llm
@@ -61,6 +61,41 @@ class CatalogTests(unittest.TestCase):
             Path(cache, 'broken-cc.json').write_bytes(b'{not json at all')
             with mock.patch.dict('os.environ', {'CLAUDE_CONFIG_DIR': d}):
                 self.assertEqual(climodels.catalog('claude')['choices'], ['opus', 'sonnet', 'haiku'])
+
+    def _parses(self): return mock.patch.object(climodels.json, 'loads', wraps=json.loads)
+
+    def _touch(self, p, data):
+        # a rewrite inside one clock tick can keep its mtime, so step it the way a later write would
+        st = p.stat(); p.write_text(json.dumps(data), encoding='utf-8'); os.utime(p, ns=(st.st_atime_ns, st.st_mtime_ns + 10**9))
+
+    def test_codex_catalog_is_parsed_once_until_its_file_changes(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict('os.environ', {'CODEX_HOME': d}):
+            p = Path(d, 'models_cache.json'); p.write_text(json.dumps(CACHE), encoding='utf-8')
+            with self._parses() as loads:
+                a, b = climodels.catalog('codex'), climodels.catalog('codex')
+            self.assertEqual(loads.call_count, 1); self.assertEqual(a, b)
+            a['models'].clear()                                        # what a caller does to its copy reaches no one else
+            self.assertEqual(climodels.catalog('codex')['choices'], ['gpt-5.6-sol', 'gpt-5.4-mini'])
+            self._touch(p, {'models': [{'slug': 'gpt-6', 'priority': 1}]})
+            with self._parses() as loads: self.assertEqual(climodels.catalog('codex')['choices'], ['gpt-6'])
+            self.assertEqual(loads.call_count, 1)
+
+    def test_claude_catalog_is_parsed_once_per_file_and_sees_a_new_file(self):
+        cat = lambda when, *ids: {'fetchedAt': when, 'catalog': {'config': {'models': [{'id': i} for i in ids]}}}
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict('os.environ', {'CLAUDE_CONFIG_DIR': d}):
+            cache = Path(d, 'cache', 'model-catalog'); cache.mkdir(parents=True)
+            Path(d, '.claude.json').write_text('{}', encoding='utf-8')
+            p = Path(cache, 'a-cc.json'); p.write_text(json.dumps(cat(100, 'claude-opus-5')), encoding='utf-8')
+            with self._parses() as loads:
+                self.assertEqual(climodels.catalog('claude')['choices'], ['claude-opus-5'])
+                self.assertEqual(climodels.catalog('claude')['choices'], ['claude-opus-5'])
+            self.assertEqual(loads.call_count, 2)                      # the catalog and .claude.json, once each
+            Path(cache, 'b-cc.json').write_text(json.dumps(cat(200, 'claude-sonnet-5')), encoding='utf-8')
+            with self._parses() as loads: self.assertEqual(climodels.catalog('claude')['choices'], ['claude-sonnet-5'])
+            self.assertEqual(loads.call_count, 1)                      # only the new file
+            self._touch(p, cat(300, 'claude-fable-1'))
+            with self._parses() as loads: self.assertEqual(climodels.catalog('claude')['choices'], ['claude-fable-1'])
+            self.assertEqual(loads.call_count, 1)
 
     def test_copilot_models_come_from_the_installed_sdks_visible_choices(self):
         declaration = ('export declare const HELP_VISIBLE_MODELS: '

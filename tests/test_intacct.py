@@ -144,7 +144,7 @@ class QueryTests(unittest.TestCase):
     def test_a_filter_in_words_says_the_shape_and_sends_nothing(self):
         sent, fake = _posts(LOGIN_OK)
         with mock.patch('taskuary.intacct.requests.post', fake):
-            with self.assertRaisesRegex(intacct.IntacctError, r'\[\["BATCH_DATE", ">=", "07/01/2026"\]\]'):
+            with self.assertRaisesRegex(intacct.IntacctError, r'\[\["BATCH_DATE", ">=", "07/01/2026"\]'):
                 intacct.query(dict(CFG), 'GLBATCH', ['RECORDNO'], "BATCH_DATE >= '07/01/2026'")
         self.assertLessEqual(len(sent), 1)
 

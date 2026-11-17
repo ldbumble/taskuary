@@ -150,8 +150,8 @@ def _session(tid: int, sid: str, cli: str, ext: str, at: str, live: bool = False
         # ...marked again as it is read: a record saved before 2026-11-09 holds the owner's words inside Taskuary's wrapper (mark_briefs)
         try: return {**s, 'source': 'saved', 'steps': _local(sessionrecord.mark_briefs(tid, (json.loads(saved.read_text(encoding='utf-8')) or {}).get('steps') or []))}
         except (OSError, ValueError): pass
-    steps, src = sessionrecord.cli_steps(cli, ext)
-    return {**s, 'source': src or 'none', 'steps': _local(sessionrecord.mark_briefs(tid, steps)) if steps else []}
+    steps, src = sessionrecord.marked_steps(tid, cli, ext)
+    return {**s, 'source': src or 'none', 'steps': _local(steps) if steps else []}
 
 
 def sessions(store, tid: int, local: bool = True) -> list:

@@ -213,3 +213,42 @@ def test_a_coding_agent_s_question_reads_as_a_chat_s_does(home, server, monkeypa
     (said,) = [u['content']['text'] for u in d['sessions'][0]['updates'] if u['sessionUpdate'] == 'agent_message_chunk']
     assert said == 'Q3 totals are in the reply. One thing only you can say:\n\nWhich vendor - Payworth or Trainly?'
     assert d['asking']['text'] == 'Which vendor - Payworth or Trainly?'
+
+
+def test_a_long_session_s_told_steps_are_marked_once_never_on_every_read_of_its_chat(home, monkeypatch):
+    """The owner's restart, 2026-11-16: the chat of a task whose CLI log ran to 200 MB took 7 s a read, and every poll of it ran each of the
+    log's ~100,000 steps through mark_briefs again - holding the interpreter from every other request on the page. A told step is marked once
+    (sessionrecord.marked_steps), the same as mark_briefs marks it, and only a step the log adds is marked after."""
+    ext, rows = 'cc-long', []
+    for i in range(400):
+        rows.append({'type': 'user', 'timestamp': f'2026-11-06T09:{i // 60:02d}:{i % 60:02d}Z', 'origin': {'kind': 'human'},
+                     'message': {'content': f'FROM THE OWNER: check the ledger totals, part {i}' if i % 2 else f'Look at part {i} of the budget.'}})
+        rows.append({'type': 'assistant', 'timestamp': f'2026-11-06T09:{i // 60:02d}:{i % 60:02d}Z', 'message': {'content': [{'type': 'text', 'text': f'Done {i}.'}]}})
+    p = home / '.claude' / 'projects' / 'C--work-ledger' / f'{ext}.jsonl'; p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text('\n'.join(json.dumps(r) for r in rows), encoding='utf-8')
+    tid = 7301
+    want = sessionrecord.mark_briefs(tid, sessionrecord.cli_steps('claude', ext)[0])
+    marked, real = [0], sessionrecord._marker
+    def counting(t):
+        m = real(t)
+        return lambda x: (marked.__setitem__(0, marked[0] + 1), m(x))[1]
+    monkeypatch.setattr(sessionrecord, '_marker', counting)
+    first = sessionrecord.marked_steps(tid, 'claude', ext)[0]
+    assert first == want and marked[0] == 400, marked
+    first[0]['text'] = 'a reader edited its copy'
+    assert sessionrecord.marked_steps(tid, 'claude', ext)[0] == want and marked[0] == 400, 'read again, nothing is marked again'
+    with p.open('a', encoding='utf-8') as f: f.write('\n' + json.dumps({'type': 'user', 'timestamp': '2026-11-06T10:00:00Z', 'origin': {'kind': 'human'},
+                                                                         'message': {'content': 'FROM THE OWNER: and the tax line'}}))
+    again = sessionrecord.marked_steps(tid, 'claude', ext)[0]
+    assert marked[0] == 401 and again[:len(want)] == want and again[-1]['k'] == 'you' and 'tax line' in again[-1]['text']
+
+
+def test_a_long_told_step_with_no_stop_in_it_is_read_in_a_beat():
+    """The waiting room's head names who left the notes in a few words; read with no bound, a 3,000-word step with no full stop was searched from
+    every word to its end - 1.4 s a step, minutes over a long log (2026-11-16). The heads still read as before."""
+    import time
+    t0 = time.perf_counter(); assert sessionrecord.queued(' '.join(['ledger'] * 3000)) is None
+    assert time.perf_counter() - t0 < 0.2
+    head = ('While you were working, the owner and a teammate queued 2 notes for you. Take them in order, after finishing the step you are on; '
+            'if one conflicts with work already done, say so instead of undoing it:')
+    assert sessionrecord.queued(f'{head} (1) check the tax line (2) then merge') == [('brief', head), ('you', 'check the tax line'), ('you', 'then merge')]

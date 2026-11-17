@@ -336,13 +336,13 @@ def _fed(f: Path, line_of, hit: dict | None) -> dict:
     return hit
 
 
-def cli_steps(cli: str, ext: str) -> tuple[list, str]:
-    """(steps, source) from the CLI's own log, or ([], '') when it keeps none we can read."""
+def _cli_read(cli: str, ext: str):
+    "(the log's kept read - {'st': {'out': steps}, 'ver'}, its steps never edited by a reader -, source), or (None, '') where none can be read."
     r = READERS.get(str(cli or '').split('/')[-1].removesuffix('.exe'))
-    if not (r and ext): return [], ''
+    if not (r and ext): return None, ''
     try:
         f = r[0](str(ext))
-        if not f: return [], ''
+        if not f: return None, ''
         key = (r[2], str(f))
         with _STEPS_LOCK:
             if len(_STEPS) > 64: _STEPS.clear()
@@ -353,9 +353,33 @@ def cli_steps(cli: str, ext: str) -> tuple[list, str]:
             if line_of: slot['hit'] = _fed(f, line_of, slot['hit']) if not slot['hit'] or slot['hit'].get('ver') != ver else slot['hit']
             elif not slot['hit'] or slot['hit'].get('ver') != ver: slot['hit'] = {'st': {'out': r[1](f)}}
             slot['hit']['ver'] = ver
-            return [dict(x) for x in slot['hit']['st']['out']], r[2]
+            return slot['hit'], r[2]
     except Exception as e:
-        logger.debug(f'session record: {cli} log for {ext} unreadable - {e}'); return [], ''
+        logger.debug(f'session record: {cli} log for {ext} unreadable - {e}'); return None, ''
+
+
+def cli_steps(cli: str, ext: str) -> tuple[list, str]:
+    """(steps, source) from the CLI's own log, or ([], '') when it keeps none we can read."""
+    hit, src = _cli_read(cli, ext)
+    return ([dict(x) for x in hit['st']['out']], src) if hit else ([], '')
+
+
+# A LONG SESSION'S LOG IS MARKED ONCE, NOT ON EVERY READ OF ITS CHAT (the owner's restart, 2026-11-16: GET .../conversation took 7 s, and a 200 MB
+# log's ~100,000 steps run through mark_briefs on each of the page's polls held the interpreter from every other request): kept beside the log's
+# read, for as long as neither the log nor the task's kept seeds change
+def marked_steps(tid: int, cli: str, ext: str) -> tuple[list, str]:
+    "cli_steps, each told step marked as the seed it was (mark_briefs) - a copy of each step, so a reader may edit what it gets."
+    hit, src = _cli_read(cli, ext)
+    if not hit: return [], ''
+    try: sv = (lambda st: (st.st_mtime_ns, st.st_size))(_seeds_path(tid).stat())
+    except OSError: sv = None
+    # ...only a told step is marked, each once: the rest is what the log says (a tool step a later result completes included), read fresh
+    memo, mark, out = hit.setdefault('marks', {}).setdefault((int(tid), sv), {}), None, []
+    for i, x in enumerate(hit['st']['out']):
+        if x.get('k') not in ('you', 'brief'): out.append(dict(x)); continue
+        if (c := memo.get(i)) is None or c[0] != x.get('text'): mark = mark or _marker(tid); c = memo[i] = (x.get('text'), mark(dict(x)))
+        out += [dict(y) for y in c[1]]
+    return out, src
 
 
 # WHAT A RUN COST (the owner, 2026-10-22: cost & time per run): the tokens each CLI's own log counts, from `since` - a resumed
@@ -538,14 +562,17 @@ def keep_seed(tid: int, seed: str):
 
 # THE WAITING ROOM'S BATCH TYPED INTO A PTY (waitroom.batch) is Taskuary's head round the owner's notes: drawn whole it was their bubble, "While
 # you were working, the owner queued 1 note for you..." (the owner, 2026-11-09: only what they typed, or what came in on the thread, is an input)
-_QUEUED = re.compile(r'(?:While you were working, (?P<a>[\w ]+?) queued \d+ notes? for you\. Take them in order, after finishing the step you are on; '
-                     r'if one conflicts with work already done, say so instead of undoing it:|(?P<b>[\w ]+?) left \d+ notes? for you(?: after the last '
+# ...WHO left them is a name of a few words (waitroom.batch: the owner, Taskuary, a teammate, both) - bounded, or a long step of words with no
+# stop in them was searched from every word to its end, and a 200 MB log's steps took minutes (2026-11-16)
+_QUEUED = re.compile(r'(?:While you were working, (?P<a>[\w ]{1,40}?) queued \d+ notes? for you\. Take them in order, after finishing the step you are on; '
+                     r'if one conflicts with work already done, say so instead of undoing it:|(?P<b>[\w ]{1,40}?) left \d+ notes? for you(?: after the last '
                      r'session ended)?\. Take them in order:)')
 _LEFT = re.compile(r'\s*\(\d+ more notes? waits? behind this one.*$', re.S)
 def queued(text):
     "[(k, text)] of a typed waiting-room batch - the owner's notes `you`, the rest `brief` - or None when `text` is not one."
-    s = ' '.join(str(text or '').split()); m = _QUEUED.search(s)
-    if not m: return None
+    s = ' '.join(str(text or '').split())
+    if ' for you' not in s: return None              # ...the words every head has, looked for at C speed before the pattern walks the step
+    if not (m := _QUEUED.search(s)): return None
     if 'owner' not in (m.group('a') or m.group('b') or '').lower(): return [('brief', s)]
     rest = s[m.end():]; tail = _LEFT.search(rest)
     head, rest = (s[:m.end()] + (tail.group(0) if tail else '')).strip(), rest[:tail.start()] if tail else rest
@@ -564,6 +591,12 @@ def mark_briefs(tid: int, steps: list) -> list:
     `you` line just before it (outcomes.owner_split). A told step headed with those words is ours too, kept seed or not: only Taskuary writes
     them (2026-11-09: a typed resume lost a space - "try now" landed "trynow" - matched no kept seed, and the chat drew the whole wrapper,
     Resume's handover and all, as the owner's line). Compared without spacing, which a typed seed does not keep."""
+    mark = _marker(tid)
+    return [y for x in steps for y in mark(x)]
+
+
+def _marker(tid: int):
+    "mark_briefs' rule for one step - [the step it is, as `you`, `brief` or `compact`] - with the task's kept seeds read once."
     from .outcomes import owner_split
     p, seeds = _seeds_path(tid), set()
     if p.is_file():
@@ -581,7 +614,7 @@ def mark_briefs(tid: int, steps: list) -> list:
         if x.get('k') not in ('you', 'brief') or (x['k'] == 'you' and not ours(x) and not owner_split(x.get('text'))[0]): return [x]
         w, rest = owner_split(x.get('text'))
         return ([{**x, 'k': 'you', 'text': w}] if w else []) + ([{**x, 'k': 'brief', 'text': rest}] if rest.strip() else [])
-    return [y for x in steps for y in mark(x)]
+    return mark
 
 
 def general_steps(store, tid: int) -> list:

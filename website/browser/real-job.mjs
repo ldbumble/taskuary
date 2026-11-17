@@ -88,7 +88,7 @@ await page.evaluate((tid) => { window.__tid = tid; }, t); await page.evaluate(sa
 await type(page, ask);
 
 // ── PLAY THE OWNER until the job rests: press cards, answer the one question, deliver mail, watch the working line ──
-let inboxSeen = 0, calm = 0, lastLine = "", sameLine = 0, n = 0;
+let pagePresses = 0, inboxSeen = 0, calm = 0, lastLine = "", sameLine = 0, n = 0;
 const MAX = (+process.env.JOB_MIN || 75) * 60000;
 while (Date.now() - t0 < MAX) {
   await sleep(5000); n++;
@@ -102,7 +102,10 @@ while (Date.now() - t0 < MAX) {
     const tp = document.querySelector("[data-tq-task-page]"), vp = tp?.querySelector(".tq-aui-viewport");
     const lit = [...(tp?.querySelectorAll("[data-tq-turn-cards] button, [data-tq-ask] button, [data-tq-permission] button") || [])].filter((b) => !b.disabled && b.getBoundingClientRect().width).map((b) => b.innerText.trim().replace(/\s+/g, " "));
     const cards = [...(tp?.querySelectorAll("[data-tq-turn-cards] > *") || [])].filter((e) => e.querySelector("button:not([disabled])")).map((e) => e.innerText.replace(/\s+/g, " ").slice(0, 220));
-    return { line: (tp?.querySelector("[data-tq-working]")?.innerText || "").replace(/\s+/g, " ").slice(0, 160), lit, cards, tail: (vp?.innerText || "").slice(-600) };
+    return { line: (() => { const w = tp?.querySelector("[data-tq-working]"); if (!w) return "";
+      // ...the line the dots stand beside: the working element, or the row it sits in
+      let e = w; while (e && !e.innerText.trim() && e.parentElement && !e.parentElement.hasAttribute("data-tq-item")) e = e.parentElement;
+      return (e?.innerText || "").replace(/\s+/g, " ").slice(0, 160); })(), lit, cards, tail: (vp?.innerText || "").slice(-600) };
   });
   // WHAT IT IS DOING, AT ALL TIMES: a working agent always has its line, and the line moves on
   if (c.working && !st.line.trim()) note("working with no line that says what it does");
@@ -110,6 +113,15 @@ while (Date.now() - t0 < MAX) {
   lastLine = st.line;
   if (n % 3 === 0) { const x = { s: s(), working: c.working, line: st.line, lit: st.lit.join(" | "), queue: c.queue }; log.push(x); console.log(JSON.stringify(x));
     if (n % 12 === 0) await shot(page, `${name}-${String(s()).padStart(5, "0")}`); }
+  // A PAGE HANDED TO HIM (a sign-up's press, a held click - browsergate.hand_over): he presses the site's own button in the pane - Enter in its form
+  const pane = await page.evaluate(() => { const c = document.querySelector("[data-tq-task-page] canvas"); if (!c) return null; const b = c.getBoundingClientRect(); return b.width ? [b.left, b.top, b.width, b.height] : null; });
+  if (pane && !c.working) {
+    if ((pagePresses += 1) > 25) { note("pressed on the page 25 times and it is still handed to him"); break; }
+    await shot(page, `${name}-page-${pagePresses}`);
+    const [x, y, w, h] = pane; await page.mouse.click(x + w / 2, y + h * 0.3); await sleep(400); await page.keyboard.press("Enter");
+    pressed.push({ s: s(), go: "Enter on the page", what: st.tail.slice(-160) }); console.log(`[${s()}s] PRESSED Enter on the page: ${st.tail.slice(-160).replace(/\n/g, " ")}`);
+    calm = 0; await sleep(4000); continue;
+  }
   // A CARD: pressed as he would, its go-ahead - and what it said kept, to catch the same thing asked again
   const go = st.lit.find((b) => GO.test(b) && !STOP.test(b));
   if (go && !c.working || go && /Allow|Trust/.test(go)) {

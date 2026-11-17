@@ -1629,7 +1629,7 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     from . import acpgate, clipool
     sig = _acp_sig(launch, cwd, env)
     opener = lambda: acp_mod.Conversation(_acp_open(name, launch, cwd, env, resume, profile.get('timeout'), trace, fresh_if_gone=True), sig)
-    conv = clipool.take(keep, sig, opener, resume, opening=lambda: trace('opening', name, '')) if keep else opener()
+    conv = clipool.take(keep, sig, opener, resume) if keep else opener()      # ...its turn read opening from its start where none was up (general.cold)
     client = conv.client
     # ...ITS CONVERSATION WAS GONE: nothing is asked of the fresh one here - this turn's words assume what it no longer has. The caller says the
     # whole of it again (Gone), and a kept one finds this fresh conversation open and unused (clipool._stale), so no second start is paid

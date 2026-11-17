@@ -235,6 +235,34 @@ class TheList(unittest.TestCase):
         last = [x for x in self.list()['items'] if x['kind'] == 'turn'][-1]
         self.assertAlmostEqual(last['started'], began, delta=0.5)
 
+    def test_a_turn_reads_opening_from_its_first_read_to_its_prompt_on_one_clock_and_one_stamp(self):
+        """The walks, 2026-11-17 (7 of 20): a turn read "Thinking..." from its first read, stepped back to "Waiting for the agent to start" once
+        the road opening its CLI said so, and its clock and stamp went back from his press to the hand-over. A turn whose CLI is not up is
+        opening from the press until its prompt is handed over, and one whose CLI is up never is; all of it on one clock and one stamp."""
+        from taskuary import clipool
+        gates, tr = [threading.Event() for _ in range(3)], {}
+        real_take, real_parts = general.take_kept, general.prompt_parts
+        def take(*a, **k): k.get('turn') and gates[0].wait(10); return real_take(*a, **k)       # ...the hand-over held: a slow start
+        def parts(*a, **k): gates[1].wait(10); return real_parts(*a, **k)                       # ...after the hand-over, before the prompt
+        def brain(system, user, **k): tr['f']('prompt', 'prompt_sent_to_agent', user); gates[2].wait(10); return 'Answer.'
+        def build(*a, **k): tr['f'] = k['trace']; return brain
+        def walk(name, warm):
+            for g in gates: g.clear()
+            with mock.patch.object(general, 'take_kept', take), mock.patch.object(general, 'prompt_parts', parts), \
+                    mock.patch.object(general.llm_mod, 'build_llm', side_effect=build), mock.patch.object(clipool, 'is_live', return_value=warm):
+                self.say('Suggest two.', name, wait=False)
+                tail = lambda: self.list()['items'][-1]
+                a = tail(); time.sleep(1.1); gates[0].set()
+                self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False) and tail()['state'] == 'working'))
+                b = tail(); gates[1].set()
+                self.assertTrue(until(lambda: 'f' in tr and len(general.session_for(self.tid).trace) > 1 and tail().get('opening') is None))
+                c = tail(); gates[2].set(); self.rest(); tr.clear()
+            self.assertEqual([(x['state'], bool(x.get('opening'))) for x in (a, b, c)], [('starting', not warm), ('working', not warm), ('working', False)])
+            self.assertEqual({x['at'] for x in (a, b, c)}, {a['at']}, 'one stamp')
+            for x in (b, c): self.assertAlmostEqual(x['started'], a['started'], delta=0.05)
+        walk('l-one', False)      # ...the chat's first turn, its CLI starting
+        walk('l-two', True)       # ...a later one on a CLI already up
+
     def test_a_stop_pressed_in_the_second_its_line_was_heard_still_stands_under_that_line(self):
         """A press is stamped by the whole second: one made in the second the turn's own line was heard sorted above it by the tie, and the
         stopped mark fell on the finished answer before - order by what happened, never by the clock's grain."""

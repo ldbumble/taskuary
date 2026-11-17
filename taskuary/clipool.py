@@ -294,15 +294,13 @@ def _put(key: str, lv):
         _POOL[key] = lv
 
 
-def take(key: str, sig: tuple, open_conn, resume=None, opening=None):
-    """The live ACP conversation for `key`: the open one when it still fits (same launch, same conversation), else `open_conn()` -
-    `opening()` heard first, so the turn can say its agent really is starting (conversation.items `opening`)."""
+def take(key: str, sig: tuple, open_conn, resume=None):
+    "The live ACP conversation for `key`: the open one when it still fits (same launch, same conversation), else `open_conn()`."
     with _LOCK:
         lv, why = _POOL.get(key), 'none was open'
         if lv is not None and (why := _stale(lv, sig, resume) or 'none was open') != 'none was open' and not lv.lock.locked(): _POOL.pop(key).close(); lv = None
     if lv is not None: return lv
     logger.info(f'clipool: opening {key}{" on " + resume if resume else ""} - {why}')
-    if opening: opening()
     lv = open_conn(); _put(key, lv)
     return lv
 

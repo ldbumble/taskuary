@@ -298,6 +298,7 @@ class SharedSessionTests(unittest.TestCase):
 
         def fake_build(*args, trace=None, **kwargs):
             def brain(system, user, **brain_kwargs):
+                trace('prompt', 'prompt_sent_to_agent', user)          # ...as every CLI road does as it hands the turn over
                 trace('tool_call', 'WebSearch', {'tool_call_id': 'search-1', 'args': {'query': 'competitors'}})
                 entered.set(); release.wait(5)
                 trace('tool_result', 'search-1', {'result': 'three sources', 'is_error': False})
@@ -311,11 +312,12 @@ class SharedSessionTests(unittest.TestCase):
             worker.start(); self.assertTrue(entered.wait(2))
             live = session.info()
             self.assertTrue(live['busy'])
-            self.assertEqual([e['type'] for e in live['trace']], ['start', 'tool_call'])
+            # ...opening from its start, its CLI not up yet, until the prompt is handed over (general.cold, 2026-11-17)
+            self.assertEqual([e['type'] for e in live['trace']], ['start', 'opening', 'prompt', 'tool_call'])
             release.set(); worker.join(5)
         finished = session.info()
         self.assertFalse(finished['busy'])
-        self.assertEqual([e['type'] for e in finished['trace']], ['start', 'tool_call', 'tool_result'])
+        self.assertEqual([e['type'] for e in finished['trace']], ['start', 'opening', 'prompt', 'tool_call', 'tool_result'])
         self.assertGreater(finished['trace_revision'], live['trace_revision'])
 
     def test_an_owner_started_conversation_does_not_close_itself_after_answering(self):

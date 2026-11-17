@@ -217,14 +217,15 @@ export const waitingChips = (pending, came = "") => {
 // dots, from what the list already holds - what the turn waits on him for (`ask`), else the newest step at work in its own words
 // (agentSteps.stepLabel), else the model writing; a turn not begun yet waits for its agent to start. Plain code, never a model call
 // ...but only the CHAT'S FIRST turn says it waits for its agent (the owner, 2026-11-16, mid-conversation on a session gone idle: "Waiting for the
-// agent to start" is the app's mechanics) - a `later` turn starting is the work going on: its dots and no words, until it has a step to name
+// agent to start" is the app's mechanics) - a `later` turn starting is the work going on, and reads as the turn it becomes: bare dots stood
+// over it, then words (the walks, 2026-11-17). One whose CLI is opening is not `later` (ConvTurn), so a later line never steps back
 // `doing`: the answer it is writing, while that is the newest thing it did (conversation `doing`)
 export const workingLine = (parts, label, { starting = false, later = false, ask = "", doing = "" } = {}) => {
   if (ask) return ask;
   const steps = (parts || []).filter((p) => p.type === "work").flatMap((p) => p.steps || []), last = steps.at(-1);
   if (last?.status === "running") return String(label(last) || "").split(/\r?\n/)[0].trim() || "Working…";
   if (doing && thinkingLine(doing)) return `Writing: ${thinkingLine(doing)}`;
-  if (!last) return !starting ? "Thinking…" : later ? "" : "Waiting for the agent to start";
+  if (!last) return starting && !later ? "Waiting for the agent to start" : "Thinking…";
   // ...and WHAT IT IS THINKING, where its newest step is a thought (the owner, 2026-11-16: "Thinking..." for three minutes with nothing else):
   // that thought's latest words, as it writes them (agents.ACPSteps._thinking) - never a bare word for minutes
   return last.kind === "thought" ? thinkingLine(last.detail || last.summary) || "Thinking…" : "Thinking…";

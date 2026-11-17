@@ -435,6 +435,9 @@ def _items(store, tid: int) -> dict:
     led = {(r['Kind'], r['Ref']): r for r in store._rows('SELECT * FROM heard WHERE TaskId=? ORDER BY HId', (tid,))}
     era = min((r['At'] for r in led.values()), default=INF)
     marks = [r for (k, _), r in led.items() if k == 'turn']; prev_answer = 0       # the answer before the turn being read (turn_start)
+    # ...AND A TURN HIS LINE BEGAN STARTS AT THAT LINE (the walks, 2026-11-17): heard at his press (general.take_line), it is the first thing
+    # of the turn the ledger has - the turn not yet handed over read from his press, then went back to its hand-over seconds later
+    starts = [r for (k, _), r in led.items() if k in ('turn', 'line')]
     # ...his stops, where heard (else from their own second - a stamp is no finer): each ends the turn it stopped (turn_start)
     stops = [(h := led.get(('press', str(i)))) and h['At'] or ep(at) for i, at, w, *_ in general.presses(store, tid) if w == general.PRESSES['stopped_turn']({})]
     backs = [int(r[1:]) for k, r in led if k == 'back' and r[:1] == '>']      # an answer taken back before its row was filed (take_back)
@@ -478,7 +481,7 @@ def _items(store, tid: int) -> dict:
                 # as Taskuary closed), it stood above the work it was said of
                 last = max(last + 1e-7, ep(c['CreatedAt']) + 0.999); put(last, 0, {'id': f'n:c{cid}', 'kind': 'note', 'at': c['CreatedAt'], 'text': body}); continue
             began = max((m['At'] for m in marks if m['Seq'] < cid), default=0.)
-            clock, prev_answer = turn_start(marks, prev_answer, cid, stops) or began, cid      # ...its clock (turn_start); `began` places it
+            clock, prev_answer = turn_start(starts, prev_answer, cid, stops) or began, cid      # ...its clock (turn_start); `began` places it
             # ...AN ANSWER NOBODY MARKED THE START OF STANDS AT ITS OWN TIME (every task answered before hand-overs were written down - his
             # older tasks, the demo's): placed at the start of time, it stood above the mail it answered and the chat began with the agent
             last = max(last + 1e-7, began or ep(c['CreatedAt']))
@@ -489,7 +492,7 @@ def _items(store, tid: int) -> dict:
             took = (('back', str(cid)) in led or any(n < cid for n in backs)) and body
             if took:
                 st, body, backs = [*st, {'k': 'note', 'text': (led.get(('back', str(cid))) or {}).get('Sid') or back_why(cid) or TOOK_BACK}], '', [n for n in backs if n >= cid]
-            t = {'kind': 'turn', 'at': stamp(began) or c['CreatedAt'], 'state': 'done', 'steps': st, 'text': body, 'cards': [], 'started': clock or None,
+            t = {'kind': 'turn', 'at': stamp(clock) or c['CreatedAt'], 'state': 'done', 'steps': st, 'text': body, 'cards': [], 'started': clock or None,
                  'ended': ep(c['CreatedAt']), 'answer': f'comment-{cid}', **({'summary': summ[cid]} if cid in summ and not took else {})}
             # ...and each draft this turn left that a later turn rewrote: greyed where it stood, never moved
             newest = {s['review']: k for k, ss in snaps.items() for s in ss}
@@ -512,17 +515,17 @@ def _items(store, tid: int) -> dict:
     if ses is not None and getattr(ses, 'busy', False) and not done_:
         answered = max(turn_of, default=0)
         began = max((m['At'] for m in marks if m['Seq'] >= answered), default=0.) or max(last + 1e-7, getattr(ses, 'last', 0) or 0)
-        clock = turn_start(marks, answered, stops=stops) or general.PRESSED.get(tid) or began      # its clock, as the finished turn reads it (his press before it is written)
+        clock = turn_start(starts, answered, stops=stops) or general.PRESSED.get(tid) or began      # its clock, as the finished turn reads it (his press before it is written)
         trace = list(getattr(ses, 'trace', None) or [])
         # ...and the answer it is writing, while that is the newest thing it did (agents.ACPSteps._live): the turn's line of what it is doing
         doing = (lambda e: clean(e.get('detail')) if e and e.get('type') == 'live' and e.get('name') == 'writing' else '')(trace[-1] if trace else None)
         # ...STARTING UNTIL ITS AGENT HAS THE PROMPT (recorded on the real CLI, 2026-11-16: a cold adapter took most of a minute to open, and the
         # turn read "Thinking..." over it): no word from the agent's road yet but its own start - every CLI road traces `prompt` as it hands it over
-        # ...OPENING while its agent really is starting: the road that opens a conversation says so (clipool.take), and the prompt it then hands
-        # over ends it - a kept conversation is never opening, whatever its trace holds a beat into the turn
+        # ...OPENING while its agent really is starting: the turn says so from its start where its CLI is not up (general.cold, 2026-11-17), and
+        # the prompt its road then hands over ends it - a kept conversation is never opening
         kinds = [e.get('type') for e in trace]
         opening = 'opening' in kinds and kinds[::-1].index('opening') < (kinds[::-1].index('prompt') if 'prompt' in kinds else len(kinds))
-        put(max(last + 1e-7, began), 1, {'kind': 'turn', 'at': stamp(began), 'state': 'working', 'steps': _said(sessionrecord.trace_steps(trace)), 'text': '', 'cards': [],
+        put(max(last + 1e-7, began), 1, {'kind': 'turn', 'at': stamp(clock), 'state': 'working', 'steps': _said(sessionrecord.trace_steps(trace)), 'text': '', 'cards': [],
                                         'started': clock, 'ended': None, 'sid': getattr(ses, 'sid', ''), **({'doing': doing} if doing else {}), **({'opening': True} if opening else {})})
 
     # a coding session's record: its steps, cut into turns where it was given something. What it was given is never drawn from the record -
@@ -663,10 +666,13 @@ def _items(store, tid: int) -> dict:
     # line drew the new turn's dots under the old answer, his line then under them): a line heard and not yet filed is the input it waits for
     drawn = {x.get('id') for x in out}
     unfiled = any(k == 'line' and r['At'] >= mark - 0.01 and ref not in drawn and ref not in {p['id'] for p in pend} for (k, ref), r in led.items())
+    # ...A TURN NOT YET HANDED OVER IS THE SAME TURN (the walks, 2026-11-17): its clock and stamp the ones it keeps once at work - the first
+    # thing heard from the press that began it (`starts`) - and opening where the turn at work will be (general.cold)
+    begun, opens = min((r['At'] for r in starts if t0 and r['At'] >= t0), default=0.), ({'opening': True} if general.cold(tid) else {})
     if at_work and not mine and unfiled: pass
     elif at_work and not mine:
-        began_ =t0 or max(mark if tail and tail['kind'] == 'turn' and mark >= (tail.get('ended') or 0) else 0., (tail or {}).get('_h') or (tail or {}).get('_hm') or 0.) or time.time()      # from its hand-over, where one is written
-        out.append(tail := {'kind': 'turn', 'at': stamp(began_), 'state': 'starting', 'steps': [], 'text': '', 'cards': [], 'started': began_, 'ended': None})
+        began_ =begun or t0 or max(mark if tail and tail['kind'] == 'turn' and mark >= (tail.get('ended') or 0) else 0., (tail or {}).get('_h') or (tail or {}).get('_hm') or 0.) or time.time()      # from its hand-over, where one is written
+        out.append(tail := {'kind': 'turn', 'at': stamp(began_), 'state': 'starting', 'steps': [], 'text': '', 'cards': [], 'started': began_, 'ended': None, **opens})
     elif at_work and tail['state'] != 'working': tail.update(state='working', ended=None, started=t0 or tail['started'])
     # ...AND NEVER ABOVE HIS NEWEST LINE (the owner's live task, 2026-11-12: the dots stood over "try now"; recorded on ACP the same day for a
     # frame - the session's record had not yet cut its turn at his line): what works now is the turn his line began, under it
@@ -674,8 +680,8 @@ def _items(store, tid: int) -> dict:
         for x in out[:his]:
             if x['kind'] == 'turn' and x['state'] in ('working', 'starting'): x.update(state='done', ended=x.get('ended') or x.get('started'))
         if not any(x['kind'] == 'turn' and x['state'] in ('working', 'starting') for x in out[his + 1:]):
-            b_ = t0 or out[his].get('_h') or time.time()
-            out.append({'kind': 'turn', 'at': stamp(b_), 'state': 'starting', 'steps': [], 'text': '', 'cards': [], 'started': b_, 'ended': None})
+            b_ = begun or t0 or out[his].get('_h') or time.time()
+            out.append({'kind': 'turn', 'at': stamp(b_), 'state': 'starting', 'steps': [], 'text': '', 'cards': [], 'started': b_, 'ended': None, **opens})
     # ..."WORKING" IS ONE FACT, the one the task's header reads: where it is false no turn spins
     if not at_work:
         for x in out:

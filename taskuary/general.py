@@ -2541,6 +2541,16 @@ class GeneralSession:
     # ...a turn he STOPPED that has not let go yet (its CLI takes seconds to end): busy, but no longer at work for him (take_line)
     def letting_go(self): return self.busy and self._cancel is not None and self._cancel.is_set()
     def keep(self) -> str: return f"{'dock' if is_dock(self.store.get_task(self.task_id)) else 'general'}:{self.task_id}"     # its live CLI (clipool)
+    # A TURN WHOSE CLI IS NOT UP IS OPENING FROM ITS FIRST READ UNTIL ITS PROMPT IS HANDED OVER (the walks, 2026-11-17, 7 of 20): said only once
+    # clipool began opening it, the turn read "Thinking..." first and then stepped back to "Waiting for the agent to start". ONE fact, read
+    # by the turn's own trace (`opening` here, ended by the road's `prompt`) and by the turn not yet handed over (cold)
+    def cold(self) -> bool:
+        from . import clipool
+        return self.pick.startswith('cli:') and not clipool.is_live(self.keep())
+    def _turn_trace(self, t0) -> None:
+        self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}, 'at': t0},      # `at`: a cut turn's files are its own (keep_cut_turns)
+                      *([{'type': 'opening', 'name': self.pick, 'detail': ''}] if self.cold() else [])]
+        self.trace_revision += 1
     # A LINE SENT WHILE A TURN WORKS GOES INTO THAT TURN (2026-11-17): it waited for the turn's end, so the agent finished on old facts and then did
     # the whole job again from the new ones. Claude's stream-json input takes a further message mid-turn, as the ACP road steers (acpcoding.steerable);
     # where the CLI cannot (an API card, a turn not reading yet, one he stopped), the line waits for the next turn as before
@@ -2692,6 +2702,10 @@ class GeneralSession:
         if as_owner: self.woke = self.silent = False       # ...and a turn the owner's words began may be woken once again (wake)
         self.owned = as_owner and not brief
         self.busy, self.last = True, time.time()
+        # ...ITS TRACE IS THIS TURN'S FROM THE MOMENT IT IS BUSY (the walks, 2026-11-17): the turn read at work over the last turn's trace -
+        # "Thinking..." with that turn's prompt in it - and stepped back to "opening" when its CLI's start said so (conversation.items)
+        from . import clipool; self.warm_ = clipool.is_live(self.keep())      # its CLI was already open at the start of this turn: the audit says so
+        self._turn_trace(self.last)
         if (news := came_in(self.store, conversation.with_turn(self.store, self.task_id), mails)):
             delivery_instructions = f'{delivery_instructions}\n\n{news}' if delivery_instructions else news
         # A NEW TURN MAY FINISH AGAIN (the email walk, 2026-10-29): the mark a self-close leaves stops two hooks wrapping one turn,
@@ -2699,7 +2713,6 @@ class GeneralSession:
         from . import selfclose
         selfclose.forget(self.task_id)
         t0 = self.last                       # the turn's own time, kept with its record (sessionrecord.record sums them)
-        from . import clipool; self.warm_ = clipool.is_live(f'general:{self.task_id}')      # its CLI was already open at the start of this turn: the audit says so
         self._cancel = cancel if cancel is not None else threading.Event()
         cancel = self._cancel
         try:
@@ -2750,8 +2763,7 @@ class GeneralSession:
             # ...and a run under way is not a session saved: a mark left on the task spoke over this run's own ending (2026-11-04)
             from . import terminal
             self.store.tag_task(self.task_id, terminal.SAVED, False, 'assistant')
-            self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}, 'at': t0}]      # `at`: a cut turn's files are its own (keep_cut_turns)
-            self.trace_revision += 1
+            self._turn_trace(t0)                 # ...again, now its provider is picked: the start names it
             # ...ON DISK FROM ITS START: kept only from its first step, a turn the restart cut while its CLI was still coming up left his line
             # heard with nothing under it and nothing running (the recorded restart, 2026-11-11) - a turn cut at any point says it was cut
             from . import sessionrecord
@@ -3780,6 +3792,10 @@ def session_for(tid: int):
     from . import terminal
     return next((s for s in list(terminal.SESSIONS.values())
                  if s.task_id == tid and s.alive and getattr(s, 'mode', '') == 'assistant'), None)
+def cold(tid: int) -> bool:
+    "The turn now beginning on task `tid` opens its agent's CLI (GeneralSession.cold): no session is there to hold one, or a chat's is not up."
+    s = _live_of(tid)
+    return s is None or bool(getattr(s, 'cold', lambda: False)())
 
 
 def drop_session(tid: int) -> int:

@@ -415,7 +415,7 @@ const TurnTime = ({ t }) => {
   const ran = t.started && t.ended ? turnStamp({ start: t.started * 1000, end }) : "";
   return <span data-tq-ran="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>· {when(end)}{ran ? ` · ${ran}` : ""}</span>;
 };
-// `later`: a turn after the chat's first - its agent starting again is the work going on, never a line of its own (workingLine)
+// `later`: a turn after the chat's first - its agent starting again is the work going on, never "waiting for the agent" (workingLine)
 const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = false }) => {
   const live = t.state === "working" || t.state === "starting";
   const parts = useMemo(() => turnParts(eventsOf(t.steps || [], live), { answer: t.text || "" }), [t.steps, t.text, live]);

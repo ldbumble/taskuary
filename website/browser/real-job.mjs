@@ -67,6 +67,9 @@ const JOBS = {
     ask: async () => `Sign up for a free account on each of the ten data vendors listed at ${await worlds.signups()}/ using my work email alex@northwind.example, ` +
       "collect each one's table, and put them together into one sheet by city with a column per vendor. Tell me which ones you could not get and why." },
   report: { world: null, title: null, ask: "Which site is closest to a cap of 140 people, and draft a note to its manager about it." },
+  // ...one letter, to say no to (JOB_REJECT): its card has its own Don't send
+  email1: { world: null, title: "Tell Erin the open house moved", ask: "Email Erin Blake (erin@northwind.example) a two-line note that the open house " +
+    "moved to Thursday 3 December, 5-7pm, same place." },
 };
 // what the owner says when asked: a fact only he has, or his go-ahead
 const ANSWERS = [[/thursday|friday|which date|the date/i, "Thursday 3 December - my mistake on the date."],
@@ -139,7 +142,9 @@ while (Date.now() - t0 < MAX) {
     calm = 0; continue;
   }
   // A CARD: pressed as he would, its go-ahead - and what it said kept, to catch the same thing asked again
-  const go = st.lit.find((b) => GO.test(b) && !STOP.test(b));
+  // ...or his NO to the first card (JOB_REJECT=1 - every action against every answer): the agent hears whose no it was and never lays the same card again
+  const no = process.env.JOB_REJECT && !pressed.length && st.lit.find((b) => /^(Don't send|Reject|Not now|Dismiss)/i.test(b));
+  const go = no || st.lit.find((b) => GO.test(b) && !STOP.test(b));
   if (go && !c.working || go && /Allow|Trust/.test(go)) {
     const what = st.cards.at(-1) || st.tail.slice(-200);
     if (pressed.some((p) => p.what === what)) note(`asked again for what he already pressed: "${what.slice(0, 140)}"`);

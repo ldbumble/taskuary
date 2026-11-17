@@ -875,3 +875,14 @@ def test_a_sign_up_that_went_through_is_said_as_one():
     with mock.patch.object(signin, '_ask', lambda *a, **k: None):
         signin._signup(s, tid, 'sess1', 'rentscope.example', 'signin:rentscope.example', lambda *a: 2, None)
     assert (tid, 'rentscope.example') in signin.SIGNING_UP
+
+
+def test_a_sign_up_he_asked_for_is_sent_by_taskuary_and_its_password_kept():
+    """The owner, 2026-11-17: "If you ask it to sign up to those sites it should do it, nothing else required." The gate, given his words,
+    passes the sending: Taskuary sends the form itself, keeps the password it made, and the agent goes on - nothing is handed to him."""
+    from taskuary import browsergate
+    s = MemoryStore(); tid = Factory(s).task('Market data'); typed, told = [], []
+    with mock.patch.object(browsergate, 'judge', return_value={'hold': False, 'what': 'creates an account', 'why': ''}),             mock.patch.object(browsergate, 'page', return_value={}), mock.patch.object(signin, 'send_new', return_value={'ok': True, 'user': USER}),             mock.patch.object(signin, '_continue', lambda *a, **k: told.append(k['words'])), mock.patch.object(signin, '_ask', side_effect=AssertionError('handed to him')):
+        signin._signup(s, tid, 'sess1', 'rentscope.example', 'signin:rentscope.example', lambda sid, site, pw: typed.append(pw) or 2, None)
+    assert vault.unseal(signin.saved(s, 'rentscope.example')['Secret']) == typed[0]
+    assert told[0][0] == f'Signed up on rentscope.example as {USER}' and 'As the owner asked' in told[0][1], told

@@ -1152,15 +1152,65 @@ def new_account(store, tid, sid, site, rid, fill=None, watch=...) -> dict:
 
 
 def _signup(store, tid, sid, site, rid, fill, watch):
-    try: fill(sid, site, new_password())
+    pw = new_password()
+    try: fill(sid, site, pw)
     except Exception as e:
         why = str(e) if isinstance(e, SignInError) else 'the browser could not be reached'
         _audit(store, tid, site, 'vault', False, why)
         return _continue(store, tid, rid, site, 'taskuary', words=(f'The sign-up on {site} was not filled', f'The password for {site} was not '
                          f'typed: {why}. Look at the page and go on from what it shows.'))
     _audit(store, tid, site, 'vault', True, 'a new password typed')
+    # ...HE ASKED FOR IT, SO IT IS SENT (the owner, 2026-11-17: "If you ask it to sign up to those sites it should do it, nothing else required"):
+    # the browser gate's own verdict, given his words - asked for, Taskuary presses the form's Enter and keeps the password it made; else his press
+    from . import browsergate
+    if not browsergate.judge(store, {'verb': 'press', 'args': ['press', 'Enter'], 'raw': f'send the sign-up form on {site}'}, browsergate.page(sid),
+                             said=browsergate.asked(store, tid))['hold']:
+        return _sent_up(store, tid, sid, site, rid, pw)
     SIGNING_UP.add((int(tid), site))
     _ask(store, tid, sid, site, rid, f'Sign up on {site}: check the form and press its button - the password is made and kept for you', watch)
+
+
+USER = "(() => { " + DEEP + " const a = deepActive(); return a && a.type !== 'password' ? String(a.value || '').slice(0, 200) : ''; })()"
+SAYS = (r"(() => [...document.querySelectorAll('[role=alert], [aria-invalid=true], .error, .err, .errors, .invalid-feedback, .field-error')]"
+        r".map((e) => e.innerText.trim()).filter(Boolean).join(' ').replace(/\s+/g, ' ').slice(0, 240))()")
+
+
+def send_new(sid: str, site: str) -> dict:
+    """Send the sign-up form the password was typed into: Enter in its password box on the pinned site. {'ok', 'user', 'why'} - `why` the
+    page's own error marks when the form stayed up; the password boxes emptied after either way."""
+    from . import browserview
+    with browserview.filling(sid):
+        c = connect(sid)
+        try:
+            f, user = _guard(c, site, ''), ''
+            if f.get('user'): _guard(c, site, 'user'); user = str(c.js(USER) or '')
+            _guard(c, site, 'password'); c.enter()
+            time.sleep(SETTLE)
+            ok, why = accepted(c, site), ''
+            if not ok:
+                try: why = str(c.js(SAYS) or '')
+                except SignInError: pass
+            try: c.js(CLEAR)
+            except SignInError: pass
+            return {'ok': ok, 'user': user, 'why': why}
+        finally: c.close()
+
+
+def _sent_up(store, tid, sid, site, rid, pw, send=None):
+    try: got = (send or send_new)(sid, site)
+    except Exception as e: got = {'ok': False, 'why': str(e) if isinstance(e, SignInError) else 'the browser could not be reached'}
+    if not got.get('ok'):
+        _audit(store, tid, site, 'vault', False, got.get('why') or 'the form stayed up')
+        return _continue(store, tid, rid, site, 'taskuary', words=(f'The sign-up on {site} did not go through', f"{site} kept its sign-up form up"
+                         + (f' - it says "{got["why"]}"' if got.get('why') else '') + '. No account was kept. Look at the page: fix what it asks for and '
+                         'end your turn with the sign-up marker again; a box only the owner can fill is theirs - hand it over with the your-turn marker.'))
+    user = got.get('user') or ''
+    try: save(store, site, user, pw, by='taskuary'); kept = ''
+    except ValueError as e: kept = f' The password could not be kept: {e}.'
+    _audit(store, tid, site, 'vault', True, 'signed up', saved=not kept)
+    who = f' as {user}' if user else ''
+    return _continue(store, tid, rid, site, 'taskuary', words=(f'Signed up on {site}{who}', f'Signed up on {site}{who} - continue. As the owner asked, '
+                     f"Taskuary made a strong password, typed it and sent the form; it is kept with the owner's saved sign-ins.{kept}"))
 
 
 # ── the fill page: one site, two boxes, one press - served by the app itself on 127.0.0.1, never on the share port ───────────

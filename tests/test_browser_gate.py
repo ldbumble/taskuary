@@ -116,6 +116,24 @@ class Judging(unittest.TestCase):
             with verdict(sure): self.assertTrue(bg.judge(self.s, bg.acts(cmd)[0], {'url': CHECKOUT}, Brain(None))['hold'], cmd)
         with verdict(unsure): self.assertTrue(bg.judge(self.s, self.act, {'url': CHECKOUT}, Brain(None))['hold'])
 
+    def test_what_the_owner_asked_for_in_his_own_words_is_done_save_money(self):
+        """The owner, 2026-11-17: "If you ask it to sign up to those sites it should do it, nothing else required." His own words are given to
+        the verdict; an act they ask for is not held for a second yes - unless it pays or moves money, which always waits. No words of his,
+        no such pass, whatever the model says."""
+        b = Brain(None)
+        said = 'Sign up for a free account on each of the ten vendors and collect their tables.'
+        with verdict({'irreversible': True, 'sure': True, 'what': 'creates an account on rentscope.example', 'asked': True, 'money': False}):
+            self.assertFalse(bg.judge(self.s, self.act, {'url': CHECKOUT, 'elements': SNAP}, b, said=said)['hold'])
+            self.assertTrue(bg.judge(self.s, self.act, {'url': CHECKOUT}, Brain(None), said='')['hold'], 'no words of his, no pass')
+        self.assertIn(said, b.seen[0])
+        with verdict({'irreversible': True, 'sure': True, 'what': 'pays $49 on dealflow.example', 'asked': True, 'money': True}):
+            self.assertTrue(bg.judge(self.s, self.act, {'url': CHECKOUT}, Brain(None), said='Sign up and pay for DealFlow Pro')['hold'])
+        from taskuary import general
+        self.s.add_comment(self.tid, 'owner', general.USER_TYPE, said)
+        self.s.add_comment(self.tid, general.BRIEF_ACTOR, general.USER_TYPE, 'Signed in to x - continue.')
+        self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'Sure.')
+        self.assertEqual(bg.asked(self.s, self.tid), said, "only his own lines, never Taskuary's or the agent's")
+
     def test_a_reversible_act_sure_of_it_passes(self):
         with verdict({'irreversible': False, 'sure': True, 'what': 'opens the order summary'}):
             self.assertFalse(bg.judge(self.s, self.act, {'url': CHECKOUT}, Brain(None))['hold'])

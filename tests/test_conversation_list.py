@@ -217,6 +217,24 @@ class TheList(unittest.TestCase):
         self.assertEqual(ids[-3:], ['l-two', press, 'l-three'])
         self.assertEqual(self.kinds(got)[-2:], [('line', ''), ('turn', 'done')])
 
+    def test_the_turn_after_a_stop_runs_from_its_own_hand_over_not_the_stopped_one(self):
+        """The real-CLI walk, 2026-11-17: he stopped a turn that had said nothing, typed his next line, and its 12 s turn read "ran 37s" from
+        the stopped turn's start - a stopped turn files no answer, so the clock ran from the hand-over after the last answer. A turn starts at
+        the first hand-over after the turn before it ended, answered or stopped."""
+        self.say('Suggest two.', 'l-one'); self.rest()
+        self.brain.delay = 30
+        self.say('Compare both in detail.', 'l-two', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.brain.delay = 0
+        self.assertTrue(general.stop_turn(self.s, self.tid))
+        self.say('Go on, compare them now.', 'l-three', wait=False); self.rest()
+        # ...the stopped turn's hand-over 25 s before the line that began the next
+        grp = self.s._one("SELECT Grp FROM heard WHERE TaskId=? AND Ref='l-three'", (self.tid,))['Grp']
+        self.s._exec('UPDATE heard SET At=At-25 WHERE TaskId=? AND Grp<?', (self.tid, grp))
+        began = self.s._one("SELECT At FROM heard WHERE TaskId=? AND Ref='l-three'", (self.tid,))['At']
+        last = [x for x in self.list()['items'] if x['kind'] == 'turn'][-1]
+        self.assertAlmostEqual(last['started'], began, delta=0.5)
+
     def test_a_stop_pressed_in_the_second_its_line_was_heard_still_stands_under_that_line(self):
         """A press is stamped by the whole second: one made in the second the turn's own line was heard sorted above it by the tie, and the
         stopped mark fell on the finished answer before - order by what happened, never by the clock's grain."""
@@ -975,6 +993,7 @@ def test_a_turn_has_one_clock_live_and_finished():
     marks = [{'Seq': 3, 'At': 100.0}, {'Seq': 5, 'At': 160.0}, {'Seq': 9, 'At': 200.0}, {'Seq': 9, 'At': 230.0}]
     assert turn_start(marks, 0, 6) == 100.0, 'a second hand-over mid-turn does not move its start'
     assert turn_start(marks, 9) == 200.0 and turn_start(marks, 12) == 0.
+    assert turn_start(marks, 0, 6, stops=[150.0]) == 160.0 and turn_start(marks, 0, 6, stops=[170.0]) == 100.0, 'a stop ends a turn; one after the last hand-over cuts nothing'
 
 
 def test_a_card_he_said_no_to_keeps_its_words_where_it_stood():

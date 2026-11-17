@@ -391,9 +391,13 @@ _BUILDS, _BUILDS_LOCK = {}, threading.Lock()
 # ONE CLOCK FOR A TURN (the owner, 2026-11-16: a reply turn read "working 1m 39s" while it ran and "ran 1m 27s" once it was done): it starts
 # at the FIRST hand-over after the answer before it - his line or press, a mail it woke for - live and finished alike. The latest one, read
 # for the finished turn, was an input heard mid-way, and the turn he had watched for 1m 39s "ran" 12 seconds less
-def turn_start(marks, after: float, before: float = float('inf')) -> float:
-    "When the turn after answer `after` and before `before` began: its first hand-over from `after` on (0. with none)."
-    return min((m['At'] for m in marks if after <= m['Seq'] < before), default=0.)
+# ...AND A STOP ENDS A TURN AS AN ANSWER DOES (the real-CLI walk, 2026-11-17: a turn he stopped files no answer, so the 12 s turn after it
+# counted from the stopped one's start and "ran 37s"): `stops`, when each of his stops was heard - the turn begins after the last one
+def turn_start(marks, after: float, before: float = float('inf'), stops=()) -> float:
+    "When the turn after answer `after` and before `before` began: its first hand-over from `after` on, and from his last stop (0. with none)."
+    ms = [m['At'] for m in marks if after <= m['Seq'] < before]
+    cut = max((s for s in stops if ms and s <= max(ms)), default=0.)
+    return min((a for a in ms if a >= cut), default=0.)
 
 
 def items(store, tid: int) -> dict:
@@ -431,6 +435,8 @@ def _items(store, tid: int) -> dict:
     led = {(r['Kind'], r['Ref']): r for r in store._rows('SELECT * FROM heard WHERE TaskId=? ORDER BY HId', (tid,))}
     era = min((r['At'] for r in led.values()), default=INF)
     marks = [r for (k, _), r in led.items() if k == 'turn']; prev_answer = 0       # the answer before the turn being read (turn_start)
+    # ...his stops, where heard (else from their own second - a stamp is no finer): each ends the turn it stopped (turn_start)
+    stops = [(h := led.get(('press', str(i)))) and h['At'] or ep(at) for i, at, w, *_ in general.presses(store, tid) if w == general.PRESSES['stopped_turn']({})]
     backs = [int(r[1:]) for k, r in led if k == 'back' and r[:1] == '>']      # an answer taken back before its row was filed (take_back)
     back_why = lambda cid: next((w for n in sorted(backs, reverse=True) if n < cid and (w := led[('back', f'>{n}')].get('Sid'))), '')
     asked = None                                   # the task's own row: the ask that opened it, where no message did
@@ -472,7 +478,7 @@ def _items(store, tid: int) -> dict:
                 # as Taskuary closed), it stood above the work it was said of
                 last = max(last + 1e-7, ep(c['CreatedAt']) + 0.999); put(last, 0, {'id': f'n:c{cid}', 'kind': 'note', 'at': c['CreatedAt'], 'text': body}); continue
             began = max((m['At'] for m in marks if m['Seq'] < cid), default=0.)
-            clock, prev_answer = turn_start(marks, prev_answer, cid) or began, cid      # ...its clock (turn_start); `began` places it
+            clock, prev_answer = turn_start(marks, prev_answer, cid, stops) or began, cid      # ...its clock (turn_start); `began` places it
             # ...AN ANSWER NOBODY MARKED THE START OF STANDS AT ITS OWN TIME (every task answered before hand-overs were written down - his
             # older tasks, the demo's): placed at the start of time, it stood above the mail it answered and the chat began with the agent
             last = max(last + 1e-7, began or ep(c['CreatedAt']))
@@ -506,7 +512,7 @@ def _items(store, tid: int) -> dict:
     if ses is not None and getattr(ses, 'busy', False) and not done_:
         answered = max(turn_of, default=0)
         began = max((m['At'] for m in marks if m['Seq'] >= answered), default=0.) or max(last + 1e-7, getattr(ses, 'last', 0) or 0)
-        clock = turn_start(marks, answered) or general.PRESSED.get(tid) or began      # its clock, as the finished turn reads it (his press before it is written)
+        clock = turn_start(marks, answered, stops=stops) or general.PRESSED.get(tid) or began      # its clock, as the finished turn reads it (his press before it is written)
         trace = list(getattr(ses, 'trace', None) or [])
         # ...and the answer it is writing, while that is the newest thing it did (agents.ACPSteps._live): the turn's line of what it is doing
         doing = (lambda e: clean(e.get('detail')) if e and e.get('type') == 'live' and e.get('name') == 'writing' else '')(trace[-1] if trace else None)

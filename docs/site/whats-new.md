@@ -2,6 +2,53 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.22 - 2026-11-17
+
+- An agent asks for a step only the owner can take the moment it meets it, and goes on with what does not need it
+- A workbook or document asked for while its agent still writes it is waited on, not called unreadable
+- An agent taking back its own card is no press: the card in front of it stays live
+- A line sent to a held task's agent is kept and starts nothing, and no row claims an agent ran
+- Trust hands the held agent its line instead of raising TypeError, and a start that breaks is kept on the task
+- A turn at work always draws its head, so one after the agent's first message has its clock and Stop x
+- A list of names is each person, and a message nobody can place goes to an agent as he typed it
+- The New box's ask is his line to someone, not mail he sent, so the agent knows whom the email is for
+- A routine's email step sends from its run task instead of opening a second task whose card waited for a yes
+- What is sent is exactly the reply box: the signature goes on once when the draft is made, never again at send or on save
+- His own report or dashboard runs as his work: Taskuary's own data counts as his own system
+- A dashboard's run says every panel, so Send to agent hands over its goal, rankings and lists, not the stat tiles alone
+- A show call the server refused is no view: only what it marked shown is drawn, so a table is not drawn twice
+- A bulk card's run is read while the page redraws, and the task reads at work while it runs
+- For you to do is what is left: only the newest turn at rest with no ask or card of its own says it
+- A greyed card says one reason everywhere: his own answer reads "you answered X yourself", and a press or the page says the same
+- A new sender's held task reads held everywhere, not "waiting to start" as if it would start by itself
+- A reply owed while its agent is starting reads at work, not "ready to send - draft it with AI"
+- A routine running its code steps reads at work, and its chat shows the steps then the outcome
+- An agent starts a separate job the owner asked for as its own task, working at once - no card
+- A stranger's file holds each source once and whole, and points at no read_message its session cannot call
+- A sent mail's card names everyone it went to, copying the Cc, not the To alone
+- The turn after a Stop runs from its own hand-over, not from the stopped turn's start
+- The writing line takes the summary out before keeping its newest words, so it never shows the summary's raw JSON
+- Every file the owner attaches reaches the agent, in the task's own folder, and stays on his line as a pill
+- A step's line names the work, not the machinery: string arguments parsed, Taskuary's tools first, a seeded file by its contents
+- A Teams picture that could not be read says the way past: the Teams card's Sign in with Microsoft
+- A call whose result came back reads finished, so the working line moves on to what the model writes
+- A line typed while a general agent works goes into that turn, so it never finishes on old facts and redoes the job
+- A turn reads opening from its press until its prompt goes, on one clock and stamp, so its working line never steps back
+- The same check-back set again changes nothing and says nothing, and every turn is told the one that stands, so a wake never re-sets it
+- A mail or line that starts a turn stands above it from the first read, so his outside reply never sits by the box then jumps up
+- A stress round follows every attachment through every door until the agent has read it
+- A task a press opens is read whole while the view stays, then drawn in one move, so no in-between screen flashes
+- Intacct takes an agent's fields and filters as meant, and with no fields asks for the object's own
+- A Teams task's pill names who wrote it, never the owner's own mailbox it was read through
+- The pill on the box is the connection and the chat: "Teams Â· Help desk", "WhatsApp Â· Finance team", "Email Â· Gail Moreno"
+- An email's card turns Sent where it stands, so its Send never lights again and it is never gone between reads
+- A new turn's trace is reset before it reads busy, so the last turn is never drawn again under his new line
+- A stopped turn whose only step was a tool load is dropped on every read, by one machinery list the server and page share
+- Everything that names the log names the file it is written to, the temp folder's where it moved there
+- A coding CLI reads its own skills, plugins, agents and commands without a card; its sign-ins still never
+- A file on an email card previews as every file does: a workbook as its rows, never "This sheet is empty"
+- An agent offers to keep code it wrote for a job that comes again as a routine, in that same turn
+
 ## 0.4.0.21 - 2026-11-17
 
 - A turn at work shows its steps counted behind the quiet "n steps" line, shut, as a finished turn does

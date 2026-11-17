@@ -282,7 +282,14 @@ const TurnWorkView = ({ data, now, ended, k }) => {
   // WHILE IT RUNS EVERY LEVEL IS THE SAME (the owner, 2026-11-12: "that setting is what displays after it runs"): the agent's words as they
   // come and what it showed - no list of steps open - with ONE live line at the foot saying what it does or what we wait for (ConvTurn,
   // workingLine). Once the turn has ended the level decides: summary folds its work, steps lists it, everything shows it whole
-  if (now) return <>{parts.filter((p) => ["said", "view", "files"].includes(p.type)).map((p, i) => draw(p, i, "everything"))}</>;
+  // ...AND ITS STEPS COUNTED, SHUT, OVER THEM (the owner, 2026-11-17, of a turn 7 minutes in with 19 steps behind three short lines: "7 minutes
+  // this is all the agent did? and that little feedback?"): the same quiet "n steps" line a finished turn has, climbing as it works and open on
+  // every step - its retries and errors too - at a press; the very fold the turn keeps once it ends, so nothing moves then
+  if (now) {
+    const shown = (p) => ["said", "view", "files"].includes(p.type), rest = parts.filter((p) => !shown(p));
+    return <>{rest.some((p) => p.type !== "said") && <WorkFold k={`${key}:all`} quiet parts={rest} draw={draw} />}
+      {parts.filter(shown).map((p, i) => draw(p, i, "everything"))}</>;
+  }
   // SUMMARY: the agent's words, in order; every step, edit and plan behind one quiet "n steps" line over them that opens on them all. A turn its
   // summary sums up folds whole - its summary says the words
   if (level === "summary") {

@@ -277,3 +277,10 @@ test("a card he said no to is drawn where it stood, with its words", async () =>
   const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(src, /rejected: \(\) => "Not sent - you said don't send"/);
 });
+
+// A TURN AT WORK SHOWS ITS STEPS COUNTED, SHUT (the owner, 2026-11-17: "7 minutes this is all the agent did? and that little feedback?" - 19 steps
+// stood behind three short lines): while it runs the turn draws the same quiet "n steps" fold a finished one has, over its words, closed
+test("a turn at work draws its steps behind the quiet n-steps fold, as a finished one does", async () => {
+  const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(src, /if \(now\) \{\s*const shown = [^]*?<WorkFold k=\{`\$\{key\}:all`\} quiet parts=\{rest\}/);
+});

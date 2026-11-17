@@ -69,11 +69,17 @@ def _segments(cmd: str):
         lx.whitespace_split = True
         toks = list(lx)
     except ValueError: return None
-    out, cur = [], []
+    out, cur, redir = [], [], False
     for t in toks:
         if t and set(t) <= set(';&|()<>'):
+            # ...A REDIRECTION IS NO SEPARATOR AND NO ARGUMENT (the real-CLI walk, 2026-11-16: `fill @e1 "Alex Doyle" 2>/dev/null` read as
+            # fill @e1 "Alex Doyle" 2 - run for the owner, the box said "Alex Doyle 2"): its descriptor before it and its target after it go
+            if '<' in t or '>' in t:
+                if cur and re.fullmatch(r'\d{1,2}', cur[-1]): cur.pop()
+                redir = True; continue
             if cur: out.append(cur)
-            cur = []
+            cur, redir = [], False
+        elif redir: redir = False
         else: cur.append(t)
     if cur: out.append(cur)
     return out

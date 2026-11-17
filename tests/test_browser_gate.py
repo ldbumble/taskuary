@@ -144,6 +144,21 @@ class Holding(unittest.TestCase):
         self.held()                                                                   # tried again: the same card, not a second
         self.assertEqual(len(self.pending()), 1)
 
+    def test_the_boxes_filled_before_a_held_press_in_one_line_go_in_and_nothing_after_it_runs(self):
+        """The real-CLI walk, 2026-11-16: "fill name && fill email && click Next" was held whole - the boxes were never filled, the owner was
+        handed an empty form "left as you filled it", and every press of his was refused by the site. The acts the gate passes on their own,
+        before the held one, run first and in order; the held one waits; what comes after it does not run."""
+        ran = []
+        def ask(brain, system, user, want=None, need=(), **kw):
+            v = {'irreversible': 'click' in user.rsplit('ABOUT TO RUN', 1)[-1], 'sure': True, 'what': 'goes to step 2 of the sign-up'}
+            return SimpleNamespace(data=v)
+        cmd = "agent-browser fill @e1 'Alex Doyle' && agent-browser fill @e2 alex@northwind.example && agent-browser click @e12 && agent-browser fill @e3 x"
+        with on(), mock.patch('taskuary.llm.ask_json', ask), mock.patch.object(bg, '_run', lambda sid, args, wait, tag: ran.append(args) or (0, '')):
+            out = bg.check(self.s, self.tid, 'run1', cmd, Brain(None))
+        self.assertEqual(out['hookSpecificOutput']['permissionDecision'], 'deny')
+        self.assertEqual(ran, [['fill', '@e1', 'Alex Doyle'], ['fill', '@e2', 'alex@northwind.example']])
+        [rv] = self.pending(); self.assertEqual(json.loads(rv['DraftText'])['args'], ['click', '@e12'])
+
     def test_a_reversible_act_runs_and_nothing_is_queued(self):
         self.assertEqual(self.held('agent-browser fill @e1 "Northwind"', {'irreversible': False, 'sure': True, 'what': 'types a name'}), {})
         self.assertEqual(self.pending(), [])

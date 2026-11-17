@@ -309,11 +309,13 @@ def _pending(store, tid: int, sid: str, args: list):
 
 def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
     """The hook's answer for one shell command: {} lets it run; a refusal holds it and puts the act on the task. ONE act held
-    holds the whole command - the shell line is the agent's, and running half of it is not what it asked for."""
+    holds the rest of the command - the shell line is the agent's, and running what comes after the held act is not what it asked for.
+    THE ACTS BEFORE IT THAT PASSED ON THEIR OWN RUN FIRST, in order (the real-CLI walk, 2026-11-16: "fill name && fill email && click Next"
+    was held whole, so the boxes were never filled - the owner was handed an empty form "left as you filled it", and every press was refused)."""
     from . import browserview, signin
     todo = acts(cmd)
     if not todo: return {}
-    pg = page(sid)
+    pg, passed = page(sid), []
     for a in todo:
         if a.get('read'):           # a box's value is read only where the page shows it is no password box
             c = control(a, pg)
@@ -321,10 +323,16 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
                 return _deny(f"{HELD}: reading what is typed in that box is refused - it is a password box, or the page does not say what it is.")
             continue
         v = judge(store, a, pg, brain)
-        if not v['hold']: continue
+        if not v['hold']: passed.append(a); continue
         args = _own_args(a['args'])
         if not args: return _deny(f"{HELD}: a browser command it could not read. Run each agent-browser command on its own line.")
         if not pg['url']: return _deny(NO_PAGE.format(held=HELD))
+        for b in passed:
+            try: rc, out = _run(sid, _own_args(b['args']), 30, 'before-held')
+            except Exception as e: rc, out = 1, str(e)
+            if rc != 0: return _deny(f"{HELD}: {v['what']} waits for the owner, and `{' '.join([EXE, *_own_args(b['args'])])}` before it in your line did "
+                                     f"not go in ({' '.join(str(out).split())[:160]}). Nothing after it ran. Run the commands before the held one on their own "
+                                     "line, then the held one on its own.")
         try: site = signin.site_of(pg['url']) or signin.registrable(urlsplit(pg['url']).hostname) or 'the page'
         except ValueError: site = 'the page'
         browserview.ended_on(sid, 'held', store, tid)                          # its last frame is kept if the session stops here

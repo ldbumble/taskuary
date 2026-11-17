@@ -108,10 +108,19 @@ export const TAB_MOST = 40;
 // ...and under the first line whom it went to, when anyone but the owner was on it (`to`, taskSources.toLine - the owner, 2026-11-03)
 // ...WHO it came from, for its first line: an email's sender by name - its SourceName is the owner's own mailbox, and the spine of every mail
 // task read "alex@northwind.example · 1 message" (the overnight run, 2026-11-03) - and a chat's room (a WhatsApp group, a Teams channel) by its own
-// ...and A ROOM THAT IS AN ACCOUNT IS WHERE IT CAME IN, never who it is from (the owner, 2026-11-17, of a Teams task: "why does it say my email when
-// it's from a teams thing?" - the Teams reader names the mailbox it read through): the sender, as for an email
-export const cameFrom = (m) => !m ? "" : String(m.Channel || "").toLowerCase() === "email" || String(m.SourceName || "").includes("@")
-  ? String(m.FromName || m.FromEmail || m.SourceName || "") : String(m.SourceName || "");
+// ...and A ROOM THAT IS AN ACCOUNT IS WHERE IT CAME IN, never the chat (the owner, 2026-11-17, of a Teams task: "why does it say my email when
+// it's from a teams thing?" - the Teams reader names the mailbox it read through): the chat is its topic, and a chat with no topic is its person
+const UNNAMED = /^Teams (?:chat with (.+)|group|meeting|chat)$/i;
+export const cameFrom = (m) => {
+  if (!m) return "";
+  if (String(m.Channel || "").toLowerCase() === "email") return String(m.FromName || m.FromEmail || "");
+  if (!String(m.SourceName || "").includes("@")) return String(m.SourceName || "");
+  const s = String(m.Subject || "").trim(), u = s.match(UNNAMED);
+  return (u ? u[1] || m.FromName : s || m.FromName) || String(m.FromEmail || "");
+};
+// THE PILL ON THE BOX IS THE CONNECTION AND THE CHAT (the owner, 2026-11-17: "pill should be what the message connection card source is"):
+// "Teams · MFA Security App Help", "WhatsApp · Finance team", "Email · Gail Moreno", "Report · End of day checkup"
+export const cameChip = (m) => (cameFrom(m) ? `${channelName(m.Channel)} · ${cameFrom(m)}` : "");
 export const fromStatus = ({ channel = "", count = 0, msgs = [], workflow = null, made = "", sorted = "", to = "" } = {}) => ({
   lines: [count ? [channel, plural(count, "message")].filter(Boolean).join(" · ") : workflow ? `Routine · ${workflow.title}` : made, to,
     ...msgs.slice(0, TAB_MOST).map((m) => `${m.who}: ${q(m.words)}`)].filter(Boolean),

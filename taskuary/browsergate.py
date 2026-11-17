@@ -304,7 +304,8 @@ def _judge(store, act: dict, pg: dict, brain=None, said: str = '') -> dict:
                 f"ITS INTERACTIVE ELEMENTS (@refs are what a command names):\n{fence(pg.get('elements') or '(could not be read)')}\n"
                 f"THE COMMAND THE AGENT IS ABOUT TO RUN: {fence(cmd)}\n"
                 f"THE OWNER'S OWN WORDS TO THIS AGENT: {fence(said or '(none)')}")
-        v = ask_json(b, SYSTEM, user, want=WANT, need=('irreversible', 'sure')).data or {}
+        v = ask_json(b, SYSTEM, user, want=WANT, need=('irreversible', 'sure', 'asked')).data or {}
+        logger.debug(f'browsergate: verdict on {cmd[:80]!r}: {v}')
     except Exception as e:
         logger.debug(f'browsergate: no verdict on {act["verb"]} - {e}')
         return {'hold': True, 'what': target(act, pg) or cmd, 'why': 'the AI did not answer in time, so it waits for you'}

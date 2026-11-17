@@ -1163,7 +1163,7 @@ def _signup(store, tid, sid, site, rid, fill, watch):
     # ...HE ASKED FOR IT, SO IT IS SENT (the owner, 2026-11-17: "If you ask it to sign up to those sites it should do it, nothing else required"):
     # the browser gate's own verdict, given his words - asked for, Taskuary presses the form's Enter and keeps the password it made; else his press
     from . import browsergate
-    if not browsergate.judge(store, {'verb': 'press', 'args': ['press', 'Enter'], 'raw': f'send the sign-up form on {site}'}, browsergate.page(sid),
+    if not browsergate.judge(store, {'verb': 'press', 'args': [], 'raw': f'send the filled sign-up form on {site}, creating an account there'}, browsergate.page(sid),
                              said=browsergate.asked(store, tid))['hold']:
         return _sent_up(store, tid, sid, site, rid, pw)
     SIGNING_UP.add((int(tid), site))

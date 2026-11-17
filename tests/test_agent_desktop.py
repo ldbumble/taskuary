@@ -10,6 +10,9 @@ from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 from test_browser_gate import Brain, verdict
 
+
+def one(store, act, ctl, brain=None, **kw): return ad.judge(store, [act], [ctl], brain, **kw)[0]
+
 SEND = "agent-desktop click '@s8f3k2p9:e8'"
 BUTTON = {'role': 'button', 'name': 'Send'}
 
@@ -79,15 +82,15 @@ class Judging(unittest.TestCase):
     def test_the_model_reads_the_control_and_the_command(self):
         b = Brain(None)
         with verdict({'irreversible': True, 'sure': True, 'what': 'sends the reply in the mail app'}):
-            self.assertEqual(ad.judge(self.s, self.act, BUTTON, b), {'hold': True, 'what': 'sends the reply in the mail app', 'why': "it can't be undone"})
+            self.assertEqual(one(self.s, self.act, BUTTON, b), {'hold': True, 'what': 'sends the reply in the mail app', 'why': "it can't be undone"})
         self.assertIn('"Send"', b.seen[0]); self.assertIn('agent-desktop click @s8f3k2p9:e8', b.seen[0])
 
     def test_unsure_unread_or_unjudged_is_a_hold_and_no_ai_lets_only_typing_through(self):
         for v in ({'irreversible': False, 'sure': False}, {'nonsense': 1}, RuntimeError('timed out')):
-            with verdict(v): self.assertTrue(ad.judge(self.s, self.act, BUTTON, Brain(None))['hold'], v)
+            with verdict(v): self.assertTrue(one(self.s, self.act, BUTTON, Brain(None))['hold'], v)
         with mock.patch('taskuary.llm.build_llm', return_value=None):
-            self.assertTrue(ad.judge(self.s, self.act, BUTTON)['hold'])
-            self.assertFalse(ad.judge(self.s, ad.acts("agent-desktop set-value '@s1:e1' hi")[0], {})['hold'])
+            self.assertTrue(one(self.s, self.act, BUTTON)['hold'])
+            self.assertFalse(one(self.s, ad.acts("agent-desktop set-value '@s1:e1' hi")[0], {})['hold'])
 
 
 class Holding(unittest.TestCase):
@@ -127,6 +130,15 @@ class Holding(unittest.TestCase):
         with mock.patch('taskuary.origin.of_task', return_value=('stranger', 'a sender nobody vouched for')):
             out = self.check(v={'irreversible': False, 'sure': True, 'what': 'types'})
         self.assertTrue(self.denied(out)); self.assertIn('not vouched for', out['hookSpecificOutput']['permissionDecisionReason'])
+
+    def test_a_line_of_acts_is_one_ask_held_at_its_first_held_act(self):
+        # 2026-11-17: the browser gate's road - one verdict per line, an entry per act; the held send holds the line
+        from test_browser_gate import answers
+        calls, ok = [], {'irreversible': False, 'sure': True, 'what': 'types the reply'}
+        with installed(), names(), answers(ok, ok, {'irreversible': True, 'sure': True, 'what': 'sends the reply'}, calls=calls):
+            out = ad.check(self.s, self.tid, 'run1', "agent-desktop set-value '@s1:e1' hi && agent-desktop set-value '@s1:e2' there && " + SEND, Brain(None))
+        self.assertTrue(self.denied(out)); self.assertEqual(len(calls), 1)
+        [rv] = self.pending(); self.assertEqual(json.loads(rv['DraftText'])['args'], ['click', '@s8f3k2p9:e8'])
 
     def test_an_irreversible_act_is_refused_and_put_on_the_task_once(self):
         out = self.check()

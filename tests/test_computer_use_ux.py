@@ -174,13 +174,13 @@ class TheHeldActInWords(unittest.TestCase):
         self.assertEqual(bg.target(bg.acts("agent-browser click '@e12'")[0], pg), 'click the "Pay $412.50" button on billing.vendor.example')
         self.assertEqual(bg.target(bg.acts('agent-browser click @e99')[0], pg), 'click an element the page no longer shows on billing.vendor.example')
         with mock.patch('taskuary.llm.build_llm', return_value=None):
-            self.assertEqual(bg.judge(MemoryStore(), bg.acts('agent-browser click @e12')[0], pg)['what'],
+            self.assertEqual(bg.judge(MemoryStore(), bg.acts('agent-browser click @e12'), pg)[0]['what'],
                              'click the "Pay $412.50" button on billing.vendor.example')
 
     def test_a_slow_verdict_holds_inside_the_hooks_limit(self):
         slow = lambda *a, **k: time.sleep(2) or {'hold': False, 'what': 'x', 'why': ''}
         with mock.patch.object(bg, '_judge', slow):
-            t0 = time.time(); v = bg.judge(MemoryStore(), bg.acts('agent-browser click @e12')[0], {'url': 'https://x.example/'}, wait=.2)
+            t0 = time.time(); [v] = bg.judge(MemoryStore(), bg.acts('agent-browser click @e12'), {'url': 'https://x.example/'}, wait=.2)
         self.assertTrue(v['hold']); self.assertIn('did not answer in time', v['why']); self.assertLess(time.time() - t0, 1.5)
         self.assertLess(bg.JUDGE_WAIT + 20, hooks.BROWSER_WAIT)       # verdict + snapshot always land before curl gives up
 

@@ -48,4 +48,28 @@ class PhoneSavesALateAnswerTests(unittest.TestCase):
         self.assertIn('saved', said)
 
 
+
+class CheckBackSetOnceTests(unittest.TestCase):
+    def test_the_same_check_back_set_again_is_said_once_and_the_agent_is_told_it_stands(self):
+        """A recorded walk, 2026-11-17 (invented people): the turn set its check-back, its summary set it again, and the wake after the owner's
+        Send spent a turn setting the same one a third time - three lines on the task. The same one is already set: one line, and every turn's
+        facts say it stands. The turn that re-set it still reads as on the clock (hooks.checks_back)."""
+        from taskuary import checkback, general, hooks
+        s = MemoryStore()
+        t = s.create_task({'Title': 'Bus quote', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        lines = lambda: [c for c in s.list_comments(t, internal=True) if 'will check back' in str(c.get('Body') or '')]
+        self.assertNotIn('YOUR CHECK-BACK IS SET', general.latest_block(s, t))
+        first = checkback.set_check(s, t, 'tomorrow 9am', 'Ray Colton sent the bus quote', 'assistant')
+        s._exec("UPDATE audit SET CreatedAt='2026-11-01 09:00:00' WHERE Action='check_back'")
+        ws.record(s, t, 'g1', 'working', text='', source='api')
+        again = checkback.set_check(s, t, 'tomorrow 9am', '  Ray Colton sent   the bus quote', 'agent')
+        self.assertEqual((again['at'], len(lines())), (first['at'], 1))
+        self.assertTrue(again.get('already'))
+        self.assertTrue(hooks.checks_back(s, t, 'g1'), 'the turn that set it again is on the clock')
+        self.assertIn('YOUR CHECK-BACK IS SET', general.latest_block(s, t))
+        self.assertIn('Ray Colton sent the bus quote', general.latest_block(s, t))
+        # ...a new time or a new note is a new one, said as before
+        checkback.set_check(s, t, 'in 2 days', 'Ray Colton sent the bus quote', 'agent')
+        self.assertEqual(len(lines()), 2)
+
 if __name__ == '__main__': unittest.main()

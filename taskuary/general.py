@@ -934,7 +934,11 @@ def latest_block(store, tid: int, resumed: bool = False, rules: bool = True, tur
     # ...and the cards it raised that the conversation moved past (proposals.move_on): old news, said once in the turn after
     # ...a first turn too (2026-11-17): his first line set aside the draft the New box wrote, and its agent never heard there was one
     passed = proposals.passed_since(store, tid, last or '')
-    if not (rv or sent or answered or others or handed or did or own or asked or nowhere or refused or passed): return ''
+    # ...and ITS OWN CHECK-BACK, as it waits on the task (2026-11-17: the wake after Send spent a turn setting the same one again - it was
+    # told nowhere that one stood): a stored fact, said where every turn's facts are
+    from . import checkback, remind
+    cb = checkback.of_task(store.get_task(tid))
+    if not (rv or sent or answered or others or handed or did or own or asked or nowhere or refused or passed or cb): return ''
     # `rules` False: an agent whose startup context says the rules once (selfclose.DRAFTS_ONCE) - the turn carries the facts alone
     out = [selfclose.FACTS_HEAD, (selfclose.NO_NEW_LINE if heard else selfclose.LATEST_LINE) if rules else selfclose.NO_NEW_HEAD if heard else selfclose.LATEST_HEAD]
     wd = f'\n{selfclose.WITHDRAW_LINE}' if rules else ''
@@ -986,6 +990,7 @@ def latest_block(store, tid: int, resumed: bool = False, rules: bool = True, tur
     if did: out.append('WHAT THE OWNER DID SINCE YOUR LAST TURN - each is a line in the chat already: take it as said, never undo it, never '
                        'say it again:\n' + '\n'.join(f'- {x}' for x in did))
     if passed: out.append(proposals.PASSED_TOLD + '\n' + '\n'.join(passed))
+    if cb: out.append(CHECK_SET.format(when=remind.when(cb['at']), what=_quote(cb['what'], 300)))
     if handed: out.append('THE OWNER HANDED THIS TO A PERSON - it is theirs now; never send them what they were already sent:\n' + '\n'.join(
         f"- {clock(c['CreatedAt'])}: {c['Body'].partition(chr(10))[0].rstrip(':')} - {_quote(c['Body'].partition(chr(10))[2], 400)}" for c in handed))
     return '\n\n'.join(out)
@@ -1788,6 +1793,8 @@ CHECK_BACK_LINE = ('CHECK BACK LATER: when the job waits on someone else and onl
                    'date), add "check_back": {"when": "<tomorrow 9am | in 2 days | YYYY-MM-DD>", "what": "<what to verify>"} to your summary '
                    '(mid-turn: the check_back tool or `taskuary --check-back WHEN "WHAT"`) - you are woken then with it. One per task; a new '
                    'one replaces it. Never for what the owner owes you; "remind me" is their reminder - the remind tool.')
+# ...and the one waiting, told with each turn's facts (latest_block), so it is never set again for nothing (2026-11-17)
+CHECK_SET = 'YOUR CHECK-BACK IS SET - you are woken {when} to check: {what}. It stands; set one again only to change it.'
 # ...and AGENT.md AS THE OWNER'S COPY MAY STILL READ IT: an edited copy stops tracking its template (store.py), and older wording told every
 # worker to stay at the prompt for an answer, keep to the brief and run `taskuary --done` - a coding session's way, not this agent's
 # A FIGURE IS PROVED, NOT GUESSED - the walk-through itself is the `number` guide (guides.py), read when the work comes to one

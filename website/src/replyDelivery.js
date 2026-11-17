@@ -67,3 +67,7 @@ export const replyContext = (review) => {
 // WHO IT WENT TO, ALL OF THEM (the walk, 2026-11-17: a mail to Erin copying Gail read "To erin@" on its sent card while the agent said it went
 // to both): what went names its Cc as well. The To box keeps replyContext alone - its save is the To, and a Cc in it would send as a To.
 export const sentTo = (review) => { const cc = deliveryCc(review); return `${replyContext(review)}${cc.length ? `, copying ${cc.join(", ")}` : ""}`; };
+// ...and THE SENT CARD OF A REVIEW, one reading wherever it is drawn (SentCard: in its turn, or the card itself once its Send went, 2026-11-17).
+// `text`: the words that went where the review has not been read again yet
+export const sentCardOf = (review, text = "") => ({ id: review.ReviewId, text: text || review.FinalText || review.DraftText, channel: review.Channel || "",
+  done: pressWords(review).sentAs, to: sentTo(review), subject: deliverySubject(review), at: review.DecidedAt });

@@ -47,8 +47,7 @@ test("Send stays off and reads Sent until the page's re-read takes the card away
   assert.match(src, /onSent\) \{ setSent\(true\); setBusy\(false\); await onSent\(\{ closes: closesIt && close && !!data\.reply\?\.ok \}\); return; \}/);
   assert.match(src, /onSent\) \{\n(\s+\/\/[^\n]*\n)*\s+setSent\(verb === "approve"\); setBusy\(false\); await onSent\(\{ closes: [^\n]+\n\s+said: [^\n]+\}\); return;/);
   assert.match(src, /busy \? spinning\(simulated \? "Simulating…" : pw\.busy\)/);
-  // ...the pressed button spins while it goes, and once a Send and close has gone "Closing…" stands UNDER it until the task has closed
+  // ...the pressed button spins while it goes; once it went the card is its sent card, which says what the press did to the task (2026-11-17)
   assert.match(src, /const spinning = \(w\) => \(sent \? pw\.done : <><CircularProgress size=\{11\} data-tq-sending=""/);
-  assert.match(src, /\{sent && pressed === "send_close" && <Typography data-tq-closing="" role="status"[^\n]*\n\s+<CircularProgress size=\{11\}[^\n]*\/>Closing…<\/Typography>\}/);
-  assert.match(src, /if \(delivery\.frozen\) setSent\(false\);/, "the review's own delivery line takes over");
+  assert.match(src, /if \(look === "sent" && !proposal && !co\) return <SentCard \{\.\.\.sentCardOf\(r, WENT\.includes\(r\.Status\) \? "" : value\)\} \{\.\.\.\(went \|\| \{\}\)\} \/>;/);
 });

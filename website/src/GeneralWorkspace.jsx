@@ -502,14 +502,19 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
     const out = [...got.map((n) => <React.Fragment key={n.key}>{n.node}</React.Fragment>),
       ...(post && !got.length && !used.has(`post:${c.review}`) && used.add(`post:${c.review}`) ? [<ActionCard key={`post:${c.review}`} row={post} tid={tid} onChanged={onChanged} />] : []),
       // ...the letters that wait: at the end of the turn the list names (`lettersAt`, below); only where it names none, on the reply's own card
-      ...(next && !lettersAt && c.review === nextRid && !used.has("next") && used.add("next") ? [nextBox()] : [])];
+      ...(next && !lettersAt && c.review === nextRid && !used.has("next") && used.add("next") ? [...lettersHere(), nextBox()] : [])];
     return out.length && live.has(c.review) && c.status === "pending" ? [...qLine(), ...out] : out;
   });
   // ...over the letters' block when the card that stands is one of them: an email (the list places none that wait) or the reply
   const inLetters = [...live].some((r) => r === nextRid || (r !== "land" && !listed.has(r)));
   const nextBox = () => <Box key="next" data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>{inLetters && qLine()}{next}</Box>;
+  // ...THE TASK'S EMAILS, EACH ITS OWN NODE (`letter`, TaskPage turnCards; the walk, 2026-11-17): drawn in their turn where the list places them,
+  // and where it places them nowhere yet - one waiting, or sent a read ahead of the list - with the letters, as siblings of the same turn's cards, so
+  // the card he pressed Send on turns Sent where it stands and is never gone between the two reads
+  const lettersHere = () => { const ls = nodes.filter((n) => n.letter && !used.has(n.key) && !listed.has(n.rid)); ls.forEach((n) => used.add(n.key));
+    return ls.length ? [...(ls.some((n) => live.has(n.rid)) ? qLine() : []), ...ls.map((n) => <React.Fragment key={n.key}>{n.node}</React.Fragment>)] : []; };
   // A TURN'S CARDS, ITS LAST THING: what the list placed in it, then the letters that wait for his Send where this is their turn, then the work's card
-  const cardsOf = (x) => [...draw(x.cards), ...(next && x.id === lettersAt && !used.has("next") && used.add("next") ? [nextBox()] : []),
+  const cardsOf = (x) => [...draw(x.cards), ...(x.id === lettersAt ? [...lettersHere(), ...(next && !used.has("next") && used.add("next") ? [nextBox()] : [])] : []),
     ...(x.id === landIn ? [...(live.has("land") ? qLine() : []), <React.Fragment key="landing">{landing}</React.Fragment>] : [])];
   const rows = items.map((x, i) => {
     const prev = items[i - 1];

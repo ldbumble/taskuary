@@ -48,13 +48,13 @@ import { outcomeOf } from "./dispatchOutcome.js";
 import { FailWays, failOf } from "./failure.jsx";
 import { noteKey, noteOf, onYouLine, progressLine, saveNote, settleTick, withTicks } from "./checklist.js";
 import { fmtDate, fmtTime } from "./dates.js";
-import { deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, pressWords, replyContext, sentTo } from "./replyDelivery.js";
+import { deliveryCc, deliveryFiles, deliveryMeta, replyContext, sentCardOf } from "./replyDelivery.js";
 import { sizeText } from "./replyFiles.js";
 import { completionTransition, cutAway, filterForSelectedState, remindWaiting, remindDay } from "./taskFilter.js";
 import ReviewDecision from "./ReviewDecision.jsx";
 import BulkCard from "./BulkCard.jsx";
 import HeldSteps from "./HeldSteps.jsx";
-import SlotList from "./SlotList.jsx";
+import SlotList, { Letter, letterItems } from "./SlotList.jsx";
 import BatchItems from "./BatchItems.jsx";
 import { progress as batchProgress } from "./batchItems.js";
 import CloseNote from "./CloseNote.jsx";
@@ -2762,6 +2762,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...AND A DRAFT THE AGENT REPLACED stays a dimmed record where it stood (the owner, 2026-11-10: "it should go gray and then it should generate
   // new email action box under it"): by its time, as it stood while it waited (agentSummary.draftHome), the new card in the turn that wrote it
   const sentBox = sentStands(sentHere, allReviews, inTurns);
+  const letterOf = Object.fromEntries((detail?.checklist || []).filter((i) => i.out).map((i) => [i.rid, i]));
+  const letters = new Set(letterItems(detail?.checklist, allReviews).map((x) => x.rv.ReviewId));
   const replacedCards = allReviews.filter(isReplaced).map((r) => ({ key: `replaced:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, byRow: true, record: true,
     node: <ReplacedDraft review={r} /> }));
   const turnCards = [...passedCards, ...batches.map((rs) => ({ key: `batch:${rs[0].Batch}`, at: rs[0].CreatedAt || "", rid: rs[0].ReviewId, waits: true,
@@ -2770,11 +2772,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     ...(inTurns ? askCards : []).map((g) => ({ key: g.key, at: g.reviews[0].CreatedAt || "", rid: g.reviews[0].ReviewId, waits: true, also: asksBelow, note: g.held ? "" : askNote(g.reviews[0]),
       node: g.held ? <HeldSteps reviews={g.reviews} toRow={inRow && !pendingReview && liveAsks === 1} onChanged={decided} />
         : <ReviewDecision review={g.reviews[0]} toRow={inRow && !pendingReview && proposals.length === 1} onChanged={decided} /> })),
-    // ...a task's email the same as a reply (the owner, 2026-11-13: "never close action boxes. once sent just say sent")
-    // ...and the one just pressed here says what the press did to the task beside it (`closing`, `kept`), as it did where its draft stood
-    ...allReviews.filter((r) => r.Kind !== "action" && WENT.includes(r.Status) && r.ReviewId !== sentBox?.id)
-      .map((r) => ({ key: `sent:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, node: <SentCard id={r.ReviewId} text={r.FinalText || r.DraftText} channel={r.Channel || ""} done={pressWords(r).sentAs}
-        to={sentTo(r)} subject={deliverySubject(r)} at={r.DecidedAt} {...(sentHere?.id === r.ReviewId ? { closing: sentHere.closing, kept: sentHere.kept } : {})} /> }))];
+    // ...a task's email the same as a reply (the owner, 2026-11-13: "never close action boxes. once sent just say sent") - and ONE NODE from its
+    // draft to its Sent (the walk, 2026-11-17: its Send lit again, then nothing, then a sent card elsewhere at another width): the card that waits
+    // is the card that turns Sent, in its turn, by its review (`letter`: drawn with the letters while the chat's list places it nowhere yet)
+    ...allReviews.filter((r) => r.Kind === "slot" && (WENT.includes(r.Status) || (inTurns && letters.has(r.ReviewId))))
+      .map((r) => ({ key: `rv:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, letter: true,
+        node: <Letter taskId={t?.TaskId} item={letterOf[r.ReviewId] || null} rv={r} onChanged={decided} /> })),
+    // ...and the reply just pressed here says what the press did to the task beside it (`closing`, `kept`), as it did where its draft stood
+    ...allReviews.filter((r) => r.Kind !== "action" && r.Kind !== "slot" && WENT.includes(r.Status) && r.ReviewId !== sentBox?.id)
+      .map((r) => ({ key: `sent:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, node: <SentCard {...sentCardOf(r)}
+        {...(sentHere?.id === r.ReviewId ? { closing: sentHere.closing, kept: sentHere.kept } : {})} /> }))];
   // ...the reply that went is that card in its turn, so the chat's cards say it no second time - no "What was sent", no To over it
   const sentCarded = !!sentReview && turnCards.some((c) => c.key === `sent:${sentReview.ReviewId}`);
   // ...the reply in it only once it is written or something was said about it (replyCardShown): a reply owed that nobody wrote is the agent's
@@ -2803,8 +2810,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           {calAsk?.invite && <Typography data-tq-invite="" variant="body2" sx={{ mb: 1, color: INK }}>{calAsk.line}
             {!!calAsk.clash && <Box component="span" sx={{ color: "var(--tq-danger, #7a2f3c)", fontWeight: 600 }}> - it {calAsk.clash}</Box>}</Typography>}
           {/* the emails that close it (slots.py), where a task's close is decided - each with its own draft */}
-          <SlotList taskId={t?.TaskId} checklist={detail?.checklist || []} reviews={allReviews}
-            onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />
+          {/* ...and where the chat has turns each stands in its own (turnCards, Letter) - here only over a to-do's box, which has none */}
+          {!inTurns && <SlotList taskId={t?.TaskId} checklist={detail?.checklist || []} reviews={allReviews}
+            onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />}
           {/* the bar comes FIRST, above the letter it acts on. What it no longer holds is
               that jump to another tab: the draft is right here, and a button whose whole job
               was sending you to another tab to do this card's own job is gone. */}
@@ -2979,7 +2987,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...only where it holds something (an empty Next steps said nothing), and marked while it waits on the owner: a resting Result keeps the chat
   // that holds it on screen (`data-tq-waits`, the agent room's :has)
   // ...the asks drawn in their turns are not this block's: with nothing else to hold it is not drawn (a "Next steps" over nothing)
-  const waits = !!(chatReview || proposals.length - (inTurns ? asks.length : 0) || owesEmails || handoff);
+  // ...nor the emails drawn in their turns (Letter)
+  const waits = !!(chatReview || proposals.length - (inTurns ? asks.length : 0) || (owesEmails && !inTurns) || handoff);
   // ...ONLY WHAT CAN STILL BE DONE (the owner, 2026-11-05: "it's a chat nothing else"): a draft waiting on Send, an invite to answer, emails owed -
   // never a closed task's "Mark done 11m ago", a reply sent outside or a draft closed without sending; the chat says those
   const chatCards = sentBox ? <SentCard {...sentBox} /> : !["done", "dropped"].includes(t?.Status) && (waits || (!inTurns && kept.length) || upFailed

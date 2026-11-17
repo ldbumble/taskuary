@@ -23,3 +23,12 @@ export const sentMark = (p) => `✓ ${p.done || SENT}`;
 // it (turnCards), and the block under the chat is whatever waits now. A task with no turns has no such card, and keeps it where it stood.
 export const WENT = ["approved", "edited", "sent"];
 export const sentStands = (sentHere, reviews, inTurns) => (sentHere && !(inTurns && (reviews || []).some((r) => r.ReviewId === sentHere.id && WENT.includes(r.Status))) ? sentHere : null);
+// WHERE A PRESS STANDS IS THE REVIEW'S, NOT ITS CARD'S (the walk, 2026-11-17: an email's Send read "sending…", then Send and Don't send lit
+// again, then nothing, then a Sent card elsewhere - the card kept its press in its own state, and each time the chat drew it again it began over).
+// Kept by review id for the page's life: `going` from the press until its answer, `sent` once the server said it went - and every card of that
+// review, drawn now or again, reads it. A review the page has read as gone is Sent from its own row alone.
+const marks = new Map(), ears = new Set();
+export const markOf = (rid) => marks.get(rid) || null;
+export const pressMark = (rid, m) => { if (m) marks.set(rid, m); else marks.delete(rid); ears.forEach((f) => f()); };
+export const hearMarks = (f) => { ears.add(f); return () => { ears.delete(f); }; };
+export const cardLook = (r, m = markOf(r?.ReviewId)) => (WENT.includes(r?.Status) || m?.state === "sent" ? "sent" : m?.state === "going" ? "going" : "live");

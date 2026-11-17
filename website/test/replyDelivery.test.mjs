@@ -95,6 +95,7 @@ test("what went names the copied, as the agent says it; the To line keeps the To
     "erin@northwind.example, copying gail@northwind.example, ray@northwind.example");
   assert.equal(sentTo(deliver({ to: ["erin@northwind.example"] })), "erin@northwind.example");
   const { readFileSync } = await import("node:fs"), src = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
-  assert.match(src("TaskPage.jsx"), /<SentCard[^>]*\s*to=\{sentTo\(r\)\}/);
+  assert.match(src("replyDelivery.js"), /export const sentCardOf = [^\n]*\n[^\n]*to: sentTo\(review\)/);   // ...one reading of a sent card, wherever drawn
+  assert.match(src("TaskPage.jsx"), /<SentCard \{\.\.\.sentCardOf\(r\)\}/);
   assert.match(src("ReviewDecision.jsx"), /said: verb === "approve" \? \{[^}]*to: sentTo\(r\)/);
 });

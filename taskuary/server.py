@@ -2119,7 +2119,12 @@ def task_trust(task_id: int, scope: str = ''):
     m = next((m for m in store.list_messages(task_id) if m.get('Channel') == 'email' and m.get('Direction') != 'out'), None)
     if m: store.remember_trust(m.get('SourceName'), m.get('FromEmail'), 'trusted by the owner')
     o, why = origin.of_task(store, task_id)
-    started = _trusted_starts(task_id) if o != 'stranger' else ''
+    # ...A START THAT BREAKS IS KEPT ON THE TASK with its retry (blackboard.record_failure), never a bare 500 under "You trusted the sender"
+    # with nobody at work (2026-11-17)
+    try: started = _trusted_starts(task_id) if o != 'stranger' else ''
+    except Exception as e:
+        from . import blackboard as bb
+        logger.warning(f'task {task_id}: the start Trust makes failed - {e}'); bb.record_failure(store, task_id, e, 'assistant'); started = ''
     return {'origin': o, 'why': why, 'started': started, **({'org': org} if org else {})}
 
 

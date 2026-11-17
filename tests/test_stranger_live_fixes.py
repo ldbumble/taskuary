@@ -247,3 +247,45 @@ def test_send_prompt_keeps_the_line_before_it_refuses_for_the_hold():
     s = MemoryStore(); t = _held(s)
     with pytest.raises(origin.RefusedForStranger): general.GeneralSession(s, t).send_prompt('Reply and say thanks')
     assert [w['text'] for w in general.waiting_lines(s, t)] == ['Reply and say thanks']
+
+# ── L8: Trust starts the held agent with his kept line, and a start that breaks is kept on the task (2026-11-17) ──────────
+# His Trust on a held task raised TypeError (_spawn took no `vouched`): nobody started, while the chat read "You trusted the sender".
+def _held_with_line(monkeypatch):
+    from taskuary import general
+    s = MemoryStore(); t = _held(s); monkeypatch.setattr(server, 'store', s)
+    general.wait_line(s, t, 'Reply and say thanks'); return s, t
+
+def test_trust_with_an_agent_on_the_task_hands_it_the_line_vouched_for(monkeypatch):
+    "A session the old dispatch road had opened is still on it (live_agent): Trust hands the thread on, his press its vouch."
+    from taskuary import ingest
+    s, t = _held_with_line(monkeypatch); got, done = [], threading.Event()
+    monkeypatch.setattr(ingest, 'live_agent', lambda *a: 'general')
+    monkeypatch.setattr(ingest, 'thread_moved', lambda *a, **k: (got.append((a, k)), done.set()))
+    r = TestClient(server.app).post(f'/api/tasks/{t}/trust')
+    assert r.status_code == 200 and r.json()['started'] == 'handed', r.text
+    assert done.wait(5) and got[0][0][1] == t and got[0][1] == {'vouched': True}
+
+def test_trust_with_no_agent_yet_starts_one_whose_first_turn_takes_his_line(monkeypatch):
+    from taskuary import general
+    s, t = _held_with_line(monkeypatch); prompts, done = [], threading.Event()
+    monkeypatch.setattr(general, 'provider_options', lambda *a, **k: [{'pick': 'cli:claude', 'type': 'cli'}])
+    s.set_setting('general_auto_enabled', '1', 't')
+    class Ses:
+        quick = False
+        def send_prompt(self, text, *a, **kw):   # the first turn takes every line still kept with it (GeneralSession.send_prompt, take_kept)
+            prompts.append('\n\n'.join([text, *(w['text'] for w in general.waiting_lines(s, t))])); done.set(); return 'ok'
+        def info(self, tail=0): return {'sid': 's1'}
+    monkeypatch.setattr(general, 'start_session', lambda *a, **k: Ses())
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+        r = TestClient(server.app).post(f'/api/tasks/{t}/trust')
+        assert r.status_code == 200 and r.json()['started'] == 'started', r.text
+        assert done.wait(5) and 'Reply and say thanks' in prompts[0]
+    general.OPENING.discard(t)
+
+def test_a_start_trust_makes_that_breaks_is_kept_on_the_task_not_a_500(monkeypatch):
+    s, t = _held_with_line(monkeypatch)
+    def boom(tid): raise RuntimeError('the CLI would not come up')
+    monkeypatch.setattr(server, '_trusted_starts', boom)
+    r = TestClient(server.app).post(f'/api/tasks/{t}/trust')
+    assert r.status_code == 200 and r.json()['started'] == '', r.text
+    assert any('would not come up' in (c['Body'] or '') for c in s.list_comments(t, internal=True)) and s.get_dispatch(t)

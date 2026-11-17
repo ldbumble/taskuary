@@ -3194,7 +3194,9 @@ def split_message(store, mid: int, actor: str = 'owner', kind: str = None) -> in
     return tid
 
 
-def _spawn(fn, *args):
+def _spawn(fn, *args, **kw):
+    # ...what the caller names goes through to fn as named (2026-11-17: Trust handed thread_moved `vouched=True`, _spawn took no keywords, and
+    # the press raised TypeError - nobody started while the chat read "You trusted the sender")
     # ...an agent's start is at work from the moment it is set going, as a hand-over's is (agent_on_reply `opening`): read before its thread
     # had run, a mail's new task said "yours" with nothing at work for the seconds its CLI took to come up (the audit, 2026-11-10)
     from . import general
@@ -3203,10 +3205,10 @@ def _spawn(fn, *args):
     # (PASS_GATHER), the idled agent it starts again - as a typed line is from the press (the owner, 2026-11-13: "it's like typing")
     elif fn in (_pass_general, _replan_pass) and general.handles(args[0].get_task(args[1]) or {}):
         general.hand(args[1])
-        def fn(*a, _f=fn):
-            try: _f(*a)
+        def fn(*a, _f=fn, **k):
+            try: _f(*a, **k)
             finally: general.hand(a[1], -1)
-    threading.Thread(target=fn, args=args, daemon=True).start()
+    threading.Thread(target=fn, args=args, kwargs=kw, daemon=True).start()
 
 
 # A BUTTON NEVER WAITS ON THE AI (the owner, 2026-10-01: "Split, Make a task are buttons - act instantly, triage enriches

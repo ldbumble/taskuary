@@ -228,8 +228,24 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         from .signatures import agent_signed
         text = agent_signed(store, store.get_review(rid), text) or text
     store.update_review_draft(rid, text, None, by=f'agent:{agent}')
-    return {'ok': True, 'review_id': rid, 'slot': hit['id'], 'added': added,
+    return {'ok': True, 'review_id': rid, 'slot': hit['id'], 'added': added, **routine_sends(store, tid, rid, agent, missing),
             **({'to_missing': to_missing(missing)} if missing else {})}
+
+
+# A ROUTINE'S OWN EMAIL GOES (the owner, 2026-11-17: "routines should send on their own too" - approval is only for what answers input from
+# outside): a routine run is his own work, so its agent's email is sent at once by the very press his Send makes (verdicts.decide, as the
+# bulk card's own run presses it), quietly - the agent is mid-turn, it hears the send in what this returns. One with no address waits for him.
+ROUTINE = 'routine'
+def routine_sends(store, tid: int, rid: int, agent: str, missing: str = '') -> dict:
+    "{'sent': True} where the task is a routine's run and its email went; {'send_error': why} where it did not; {} for any other task."
+    if agent == 'owner' or missing or (store.get_task(tid) or {}).get('Source') != 'workflow': return {}
+    from . import verdicts
+    tok = verdicts.QUIET.set(True)
+    try: out = verdicts.decide(store, store.get_review(rid), 'approve', actor=ROUTINE)
+    except Exception as e: out = {'ok': False, 'error': str(e)}
+    finally: verdicts.QUIET.reset(tok)
+    if out.get('ok') and not out.get('send_error'): return {'sent': True}
+    return {'send_error': out.get('send_error') or out.get('error') or 'it did not go - the card waits for the owner'}
 
 
 # ...said to the agent in the same words whichever road the draft took: the tool or `taskuary --draft` returns it at once; a draft MARKER in an

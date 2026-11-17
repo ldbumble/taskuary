@@ -736,3 +736,21 @@ def test_an_email_the_agent_wrote_is_the_answer_no_reply_all_beside_it(s):
 def test_without_a_written_email_the_reply_is_still_drafted(s):
     tid, raised = _finish_with_a_written_email(s, written=[])
     raised.assert_called_once()
+
+
+def test_a_routines_own_email_goes_at_once_and_his_own_task_waits_for_his_send(s):
+    """The owner, 2026-11-17: "routines should send on their own too" - approval is only for what answers input from outside. A routine run's
+    agent email is sent by the very press his Send makes, at once; the same email on a task of his own still waits on his Send."""
+    run = s.create_task({'Title': 'Weekly vendor follow-up - Mon', 'Kind': 'general', 'Status': 'open', 'Source': 'workflow',
+                         'SourceRef': 'workflow:7'}, 'routine')
+    own = s.create_task({'Title': 'Follow up with Ray', 'Kind': 'general', 'Status': 'open', 'Source': 'assistant'}, 'owner')
+    with mock.patch('taskuary.outbound.send_out', return_value=SENT) as send, mock.patch.object(outbound, 'send_block', return_value=''), \
+            mock.patch('taskuary.learn.learn_from'):
+        went = slots.draft(s, run, 'Hi Ray, any update on the quote? Alex', 'ray@northwind.example', 'Quote')
+        held = slots.draft(s, own, 'Hi Ray, any update on the quote? Alex', 'ray@northwind.example', 'Quote')
+    assert went['sent'] is True and send.call_count == 1, went
+    assert s.get_review(went['review_id'])['Status'] == 'approved'
+    assert 'sent' not in held and s.get_review(held['review_id'])['Status'] == 'pending', held
+    with mock.patch('taskuary.outbound.send_out', side_effect=RuntimeError('SMTP 535')), mock.patch.object(outbound, 'send_block', return_value=''):
+        failed = slots.draft(s, run, 'Hi Erin, the schedule is attached. Alex', 'erin@northwind.example', 'Schedule')
+    assert failed.get('send_error') and 'sent' not in failed, failed

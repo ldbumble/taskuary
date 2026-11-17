@@ -1175,7 +1175,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // a batch's items start FOLDED to their progress line: with them open, the agent's session - the thing being watched -
   // was pushed below the fold (the owner, 2026-10-13: "the coding agent should be the main view"). One click opens them.
   const [itemsOpen, setItemsOpen] = useState(false);
-  const [reportOpen, setReportOpen] = useState(false);
   // HAND IT TO A PERSON, ASKED FOR IN WORDS (the owner, 2026-11-03: "This should be sent to <an address>" did nothing): the Assistant's light
   // carries who and a note, and the form comes up with them in it - kept while it is open, so the light going out never empties what is typed
   const [handSaid, setHandSaid] = useState(null);
@@ -1183,7 +1182,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // disappears"): the draft read-only, marked, and the line that says it went and the task is closing - until the task leaves the view
   const [sentHere, setSentHere] = useState(null);
   useEffect(() => { setSentHere(null); }, [selected]);
-  useEffect(() => { setHandoff(false); setHandSaid(null); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setDiff(null); setShowAll(false); setOpenMsg(undefined); setPick(null); setReportOpen(false); setPeek(false); }, [selected]);
+  useEffect(() => { setHandoff(false); setHandSaid(null); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setDiff(null); setShowAll(false); setOpenMsg(undefined); setPick(null); setPeek(false); }, [selected]);
   useEffect(() => { if (saidHand?.to) { setHandSaid({ to: saidHand.to, note: saidHand.note || "" }); setHandoff(true); } }, [saidHand?.to, saidHand?.note]);
   // asked when the drawer opens, and only then: shelling out to git on every task poll would
   // spend a subprocess a second on an answer nobody is looking at
@@ -3264,24 +3263,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     result of the work is the thing you are looking at */}
                 {/* The checkout, and why. A wrong guess means an agent editing the wrong tree in
                     good faith, so it is stated on the page rather than buried in the prompt. */}
-                {/* In the agent view the task card (and its Came from) is not drawn, and a report task's
-                    whole substance is the report - so it is one click away here (the owner, 2026-09-30) */}
-                {sessionView && t?.Source === "report" && sourceMessage?.BodyText && (
-                  <Box sx={{ ...card, ...step, mb: 0, px: 1.5, py: 1.1, flexShrink: 0 }}>
-                    <Box onClick={() => setReportOpen((v) => !v)} sx={{ display: "flex", alignItems: "center", gap: 0.85, cursor: "pointer" }}>
-                      <Typography sx={{ ...label }}>The report</Typography>
-                      <Typography noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>
-                        {sourceMessage.SourceName || sourceMessage.Subject} · {fmtDateTime(sourceMessage.SentAt)}</Typography>
-                      <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, transition: "transform .15s", transform: reportOpen ? "rotate(180deg)" : "none" }} />
-                    </Box>
-                    {reportOpen && (
-                      <Box sx={{ mt: 0.85, maxHeight: 420, overflowY: "auto", minWidth: 0, overflowWrap: "anywhere" }}>
-                        {looksMd(sourceMessage.BodyText) ? <Md text={cleanText(sourceMessage.BodyText)} />
-                          : <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{cleanText(sourceMessage.BodyText)}</Typography>}
-                      </Box>
-                    )}
-                  </Box>
-                )}
+                {/* ...A REPORT TASK'S REPORT IS ITS CAME FROM, and named in his first line (conversation `came`, the owner, 2026-11-17): no strip of
+                    its own over the chat */}
                 {/* ...and a BATCH's items stay in view while its agent works through them: each result lands on its line as the
                     agent reports it, and the presses on a finished line are usable without leaving the session (batch.py) */}
                 {sessionView && detail?.batch && (

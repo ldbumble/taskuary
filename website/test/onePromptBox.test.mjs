@@ -75,3 +75,26 @@ test("a task chat's paste takes the one attach road, on the box, and no upload h
   assert.match(pi, /e\?\.code === "ECONNABORTED" \? "the upload took too long - try it again"/);
   assert.match(read("NewSheet.jsx"), /const pics = usePromptImages\(\{ files: true \}\);/, "New's box takes any file");
 });
+
+// SEND TO AGENT OPENS THE AGENT'S OWN CANVAS (the owner, 2026-11-17: "why do i see the dashboard? it should be blank agent chat canvas" ... "keep the
+// blue pill in the prompt box and tell the user to write prompt on the report in the prompt box"): the press adds a blank Agent section and opens it,
+// the item a chip on its box, one line saying to write there; the item's own reading is not drawn on that canvas
+test("Send to agent on a report, a dashboard or an FYI opens a blank Agent canvas with the item a chip on its box", async () => {
+  const fs = await import("node:fs");
+  const src = fs.readFileSync(new URL("../src/ItemSections.jsx", import.meta.url), "utf8");
+  assert.match(src, /const sections = hand && !all\.some\(\(s\) => s\.key === "agent" && s\.body\)/);
+  assert.match(src, /useEffect\(\(\) => \{ if \(hand\) setOpen\(boxAt\);/);
+  assert.doesNotMatch(src, /data-tq-item-agent-hint/, "the canvas is blank - the box asks");
+  assert.match(src, /What do you want to know about this \$\{noun\}\?/);
+  assert.match(src, /const ls = hand \? \[\] : itemLines/);
+  assert.match(src, /data-tq-item-chip=\{i\.key\}/, "the item stays a chip on the box");
+});
+
+// ...AND WHAT HE TYPES THERE "SAYS REPORT NAME THEN YOUR PROMPT" (the owner, 2026-11-17): his line's bubble carries the report as a pill, the list's
+// `came`; the report itself is the task's Came from - the old "The report" strip over the chat is gone
+test("his first line on a report he sent on draws the report as a pill, then his words", async () => {
+  const fs = await import("node:fs");
+  const gw = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8"), tp = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
+  assert.match(gw, /\{!!x\.came && <div data-tq-line-came=""[^]*?<AttachChip name=\{x\.came\}/);
+  assert.doesNotMatch(tp, /setReportOpen|>The report</);
+});

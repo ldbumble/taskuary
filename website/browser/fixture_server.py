@@ -175,6 +175,12 @@ def _install_fresh_routes(app, store):
         if out.get("message_id"): channels.save_attachments(store, out["message_id"], atts, ext)
         return out
 
+    @app.post("/api/fixture/live/poke")
+    def fixture_live_poke(body: dict = Body(...)):
+        "A write elsewhere wakes every tab - a drafter finishing, a mail landing - with nothing on this page's screen changed (loads-once)."
+        store._poke("feed-changed", "task-changed")
+        return {"ok": True}
+
     @app.post("/api/fixture/incoming")
     def fixture_incoming(body: dict = Body(...)):
         "A mail from anyone (`from_email`, `from_name`, `subject`, `body`) taken in on the real arrival road, triage and all - a site's code, a vendor's answer."

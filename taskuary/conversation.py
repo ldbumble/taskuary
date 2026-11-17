@@ -905,6 +905,11 @@ def _items(store, tid: int) -> dict:
         from .ingest import NOT_STARTED
         why = next((c for c in reversed(store.list_comments(tid, internal=True)) if str(c.get('Body') or '').startswith(NOT_STARTED)), None)
         if why: idle = f"{why['Body']} {START_BY_WRITING}"
+    # ...HIS FIRST LINE ON A REPORT HE SENT ON CARRIES ITS NAME (the owner, 2026-11-17: "it says report name then your prompt"): the report is the
+    # pill in his bubble, as it was on the box he typed it in - and the report itself on the task's Came from
+    if (task_.get('Source') == 'report') and (first := next((x for x in out if x['kind'] == 'line'), None)):
+        m = next(iter(store.list_messages(tid)), None) or {}
+        if (name := str(m.get('SourceName') or m.get('Subject') or '').strip()): first['came'] = name
     body = {'items': out, 'pending': pend, 'now': now, 'dropped': [d for d in dropped if d], 'working': at_work, 'started': t0 if at_work else None, 'asking': ask,
             'permissions': perms, 'live': codingchat.live_of(codingchat._live(tid)),
             'letters': letters, 'idle': idle,

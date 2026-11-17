@@ -996,3 +996,20 @@ def test_an_email_he_said_dont_send_to_stays_in_the_list_where_it_stood():
     s._exec("UPDATE review SET Status='rejected', DecidedBy='owner' WHERE ReviewId=?", (rid,))
     cards = [c for x in conversation.items(s, tid)['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])]
     assert [(c['review'], c['status'], c['was']['text']) for c in cards] == [(rid, 'rejected', 'Hi Erin, the open house moved to Thursday.')], cards
+
+
+def test_his_first_line_on_a_report_he_sent_on_carries_its_name():
+    """The owner, 2026-11-17: Send to agent on a report puts it on the box as a pill, and what he types "says report name then your prompt" - his
+    first line names the report it was sent with; the report itself is the task's Came from. A task from mail names nothing."""
+    from taskuary import conversation, general
+    from taskuary.store import MemoryStore
+    from taskuary.testing import Factory
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Headcount by site', 'Kind': 'general', 'Status': 'open', 'Source': 'report'}, 'owner')
+    s.add_message({'TaskId': tid, 'Channel': 'report', 'SourceName': 'Headcount by site, nightly', 'Subject': 'Headcount - 5 rows', 'BodyText': 'x', 'Status': 'routed'})
+    s.add_comment(tid, 'owner', general.USER_TYPE, 'Which site is closest to its cap?')
+    s.add_comment(tid, 'owner', general.USER_TYPE, 'And by how much?')
+    lines = [x for x in conversation.items(s, tid)['items'] if x['kind'] == 'line']
+    assert [(x['text'], x.get('came')) for x in lines] == [('Which site is closest to its cap?', 'Headcount by site, nightly'), ('And by how much?', None)], lines
+    t2 = Factory(s).task('From mail'); s.add_comment(t2, 'owner', general.USER_TYPE, 'Reply to her')
+    assert all('came' not in x for x in conversation.items(s, t2)['items'])

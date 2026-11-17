@@ -17,7 +17,7 @@ import { label as btn } from "./buttons.js";
 import { AttachChip, usePromptImages } from "./promptImages.jsx";
 import { PromptBox } from "./AgentSummary.jsx";
 import "./generalWorkspace.css";
-import { sectionFade } from "./taskLayout.js";
+import { SECTIONS, sectionFade } from "./taskLayout.js";
 import { FOCUS, FOCUS_EDGE, MINI_W, OPEN_MIN, PaneStrip, SECTION, SHADE, SLOT, STRIP_H, SectionHead, SectionTab, tabW, useStackBelow } from "./TaskPage.jsx";
 import { BORDER, DIM, INK, frameInner } from "./theme.jsx";
 import { layTable, onPressing, useSpineAll } from "./actionRow.js";
@@ -44,8 +44,8 @@ const HANDS = new Map();
 export const handToItem = (key, hand) => { const f = key && HANDS.get(key); if (!f) return false; f(hand); return true; };
 const ASK_ONLY = "the answer here reads the item only";
 // `came`: what the item is, a chip on the box while nothing is handed on (the owner, 2026-11-06: Came-from rides the one box as a chip)
-export function ItemAsk({ ask, hand = null, onHand = null, came = "" }) {
-  const ls = itemLines(readingOf(ask?.reading));
+export function ItemAsk({ ask, hand = null, onHand = null, came = "", hint = "" }) {
+  const ls = hand ? [] : itemLines(readingOf(ask?.reading));
   const [text, setText] = useState(""), [said, setSaid] = useState([]), [busy, setBusy] = useState(false), [err, setErr] = useState("");
   const pics = usePromptImages({ files: true }), input = useRef(null);
   useEffect(() => { setText(""); setSaid([]); setErr(""); pics.clear(); }, [ask?.key]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -80,7 +80,7 @@ export function ItemAsk({ ask, hand = null, onHand = null, came = "" }) {
     <Box aria-hidden sx={{ flex: "1 1 auto" }} />
     <Box sx={{ position: "sticky", bottom: 0, bgcolor: SHADE, pt: 0.5, mx: -0.5, px: 0.5 }}>
       <PromptBox text={text} setText={setText} pics={pics} busy={busy} onSend={send} inputRef={input} cannot={hand ? null : () => ASK_ONLY}
-        placeholder={MESSAGE}
+        placeholder={hint || MESSAGE}
         label={hand ? btn(hand.verb) : "Ask about this"} sendAttrs={{ "data-tq-item-send": hand ? "agent" : "ask" }}
         chips={hand?.items.length ? hand.items.map((i) => <AttachChip key={i.key} data-tq-item-chip={i.key} name={i.title} onRemove={busy ? null : () => drop(i.key)}
           title={`${btn(hand.verb)} - it gets ${i.title}`} />) : came ? <AttachChip data-tq-came-chip="" name={came} icon={false} title={`Came from: ${came}`} /> : null} />
@@ -101,20 +101,32 @@ export default function ItemSections({ kind, label, title, aside, sections: all,
   moves = null }) {
   // NO AGENT COLUMN WITH NOTHING OF ITS OWN (the owner, 2026-11-06: "the one bottom box with Came-from as a chip, with no side-column Agent"): the
   // box is at the foot of the section the item is about, its Came-from a chip on it
-  const sections = all.filter((s) => !(s.key === "agent" && !s.body));
-  const [open, setOpen] = useState(about), [hand, setHand] = useState(null);
+  const [open, setOpen] = useState(about), [hand, setHand] = useState(null), noun = String(label || kind || "item").toLowerCase();
+  // ...SEND TO AGENT OPENS THE AGENT'S OWN CANVAS (the owner, 2026-11-17: "why do i see the dashboard? it should be blank agent chat canvas"):
+  // the press adds the Agent section - blank, the box at its foot with the item a chip on it - and opens it; the item folds to its tab on the
+  // left, as a task's Came from does. Taking the chip off closes it, and the item is back as it was
+  const sections = hand && !all.some((s) => s.key === "agent" && s.body)
+    ? [...all.filter((s) => s.key !== "agent"), { key: "agent", n: all.length + 1, name: SECTIONS[1].name, lines: ["your words start it"],
+        // ...BLANK, as any agent's canvas before its first line (the owner, 2026-11-17: "agent section should be blank ... it shows as pill on left
+        // side you type on it and it goes to blank canvas"): the item is the chip on the box, and the box's own words ask what to do with it
+        body: <Box data-tq-item-agent="" sx={{ flex: "1 1 auto" }} /> }]
+    : all.filter((s) => !(s.key === "agent" && !s.body));
   useEffect(() => { setOpen(about); setHand(null); }, [itemKey, about]);
   const fadeMemo = useRef(null); fadeMemo.current = sectionFade(fadeMemo.current, open, itemKey, about);
   const fades = fadeMemo.current.moved;
   const takes = !!ask || hands, boxAt = sections.some((s) => s.key === "agent") ? "agent" : about;
   useEffect(() => {
     if (!takes) return undefined;
-    const f = (h) => { setHand(h); setOpen(boxAt); };
+    const f = (h) => setHand(h);
     HANDS.set(itemKey, f);
     return () => { if (HANDS.get(itemKey) === f) HANDS.delete(itemKey); };
   }, [itemKey, takes, boxAt]);
-  const box = (ask || hand) && <ItemAsk ask={ask} hand={hand} onHand={setHand} came={typeof title === "string" ? title : label} />;
-  const skip = (v) => noAgent && AGENT_STARTS.has(String(v?.id || "").split(":").pop());
+  // ...opened where its box now is, the moment it is handed on - and back on the item once the chip is off and the section with it
+  useEffect(() => { if (hand) setOpen(boxAt); else setOpen((o) => (sections.some((x) => x.key === o) ? o : about)); }, [hand, boxAt]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const box = (ask || hand) && <ItemAsk ask={ask} hand={hand} onHand={setHand} came={typeof title === "string" ? title : label}
+    hint={hand ? `What do you want to know about this ${noun}?` : ""} />;
+  // ...and none once it is handed on: the press is made, the box is where it goes now
+  const skip = (v) => (noAgent || !!hand) && AGENT_STARTS.has(String(v?.id || "").split(":").pop());
   const body = useRef(null), [w, setW] = useState(0);
   useLayoutEffect(() => {
     const el = body.current;

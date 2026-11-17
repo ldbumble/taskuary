@@ -887,13 +887,6 @@ def install_processing_changes(app, store):
         funnel.invalidate(); live.emit('task-changed', task_id=body['task_id'])
         return {'ok': True}
 
-    @app.post('/api/fixture/live/poke')
-    def live_poke(body: dict):
-        """A write elsewhere wakes every tab - a drafter finishing, a mail landing - with nothing on this page's screen changed (loads-once)."""
-        if body: raise HTTPException(422, 'this poke takes an empty object')
-        store._poke('feed-changed', 'task-changed')
-        return {'ok': True}
-
     @app.post('/api/fixture/task/agent-word')
     def agent_word(body: dict):
         """The live agent's own word changes mid-run (agent-draft-popup): `working` again, a pause the run reports as `input_needed`, or `ended` -

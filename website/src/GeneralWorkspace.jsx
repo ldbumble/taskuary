@@ -451,7 +451,7 @@ const ConvLine = ({ x, more }) => {
   const stamp = x.at ? when(x.at instanceof Date ? x.at : String(x.at)) : "", retry = React.useContext(RetryCtx);
   return <div className={`tq-aui-message tq-aui-user${more ? " tq-aui-user-more" : ""}`} data-tq-item={x.id} data-tq-chat-line={x.id}>
     {!more && <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{stamp ? ` · ${stamp}` : ""}</div>}
-    <div className="tq-aui-user-bubble" dir="auto">{x.text}</div>
+    <div className="tq-aui-user-bubble" dir="auto">{!!x.came && <div data-tq-line-came="" style={{ marginBottom: 6 }}><AttachChip name={x.came} title={`Sent with ${x.came}`} /></div>}{x.text}</div>
     {/* ...a send that failed: ONE plain line under his words, with the way past it - never glued into them */}
     {!!x.err && <div className="tq-aui-hint" role="alert" data-tq-line-failed="">{x.err}{retry && <> · <button type="button" className="tq-aui-arrived-more-btn"
       data-tq-try-again="" onClick={() => retry(x)}>{btn("try_again")}</button></>}</div>}</div>;

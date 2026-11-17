@@ -99,7 +99,11 @@ test("setup reads its state once for the canvas, the rail and the Assistant - at
 // decorated - on mount and after every settled burst of feed-changed / task-changed, for a badge nothing drew. A card that shows a
 // review reads it itself; the hub reads it never
 test("the hub never reads the pending reviews - not on mount, not on a wake-up", { timeout: 180000 }, async (t) => {
-  const h = await startHarness(); t.after(() => h.close());
+  // ...on a fresh home, not the demo: the demo refuses every write it does not list (the poke below is one), as it must for the public site
+  const h = await startHarness({ fresh: true }); t.after(() => h.close());
+  const post = (p, body) => fetch(`${h.fixtureApi}${p}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Taskuary-Token": h.token }, body: JSON.stringify(body) });
+  await post("/api/setup/first-run/ai", { name: "claude" }); await post("/api/setup/dismiss", { dismissed: true });
+  await post("/api/fixture/mail-task", { sent: "2026-11-10 08:00:00" });          // ...a row on the rail, and its draft a review card
   const page = await h.newPage(), errors = [], reads = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("request", (r) => { const u = new URL(r.url()); if (r.method() === "GET" && u.pathname === "/api/reviews" && u.searchParams.get("status") === "pending") reads.push(Date.now()); });

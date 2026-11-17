@@ -184,6 +184,18 @@ def _install_fresh_routes(app, store):
                                              "from_name": body.get("from_name") or "", "from_email": body["from_email"], "to": ["alex@northwind.example"],
                                              "source_name": "alex@northwind.example"}, llm=server._llm())
 
+    @app.post("/api/fixture/press-page")
+    def fixture_press_page(body: dict = Body(...)):
+        """The owner's press on a page handed to him (a sign-up, a held click): the button of the page's form clicked in the task's own browser,
+        as his click in the pane is - over its DevTools socket, so the page's own submit runs and is heard. A walk's stand-in for his hand."""
+        from taskuary import general, signin
+        s = general._live_of(int(body["taskId"]))
+        if not s: return {"ok": False, "why": "no live session"}
+        c = signin.connect(s.sid)
+        try: return {"ok": bool(c.js("(() => { const b = document.querySelector('form button, form [type=submit]'); if (b) { b.click(); return true; }"
+                                     " const f = document.querySelector('form'); if (f) { f.requestSubmit(); return true; } return false; })()"))}
+        finally: c.close()
+
     @app.post("/api/fixture/own-reply")
     def fixture_own_reply(body: dict = Body(...)):
         "The owner's own line on the task's channel, read back from it as a poll reads it (channels.ingest_own_message) - a recorded flood's third voice."

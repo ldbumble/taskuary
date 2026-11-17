@@ -120,8 +120,8 @@ while (Date.now() - t0 < MAX) {
   if (pane && !c.working) {
     if ((pagePresses += 1) > 25) { note("pressed on the page 25 times and it is still handed to him"); break; }
     await shot(page, `${name}-page-${pagePresses}`);
-    const [x, y, w, h] = pane; await page.mouse.click(x + w / 2, y + h * 0.3); await sleep(400); await page.keyboard.press("Enter");
-    pressed.push({ s: s(), go: "Enter on the page", what: st.tail.slice(-160) }); console.log(`[${s()}s] PRESSED Enter on the page: ${st.tail.slice(-160).replace(/\n/g, " ")}`);
+    const r = await api('/api/fixture/press-page', { taskId: t });     // ...his click on the form's own button (the pane relays it; measured)
+    pressed.push({ s: s(), go: "the page's button", what: st.tail.slice(-160) }); console.log(`[${s()}s] PRESSED the page's button (${JSON.stringify(r)}): ${st.tail.slice(-160).replace(/\n/g, " ")}`);
     calm = 0; await sleep(4000); continue;
   }
   // A CARD: pressed as he would, its go-ahead - and what it said kept, to catch the same thing asked again

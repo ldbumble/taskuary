@@ -2,6 +2,21 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.16 - 2026-11-16
+
+- One card for a bulk job: the agent raises many of one act at once, he reviews a few, one press does them all with a bar in the card
+- A slow request's log line names the store lock only when it was waited on
+- Fix CI after the bulk card: its press and Stop are decided as the owner's, the bulk field rides the email and act tools only, and the card says what it holds
+- Marking mail read at the source is one choice on each card
+- One read of a task's conversation at a time, shared by every view and listener that asks
+- A coding conversation the CLI no longer has starts afresh with the task, never its resume error
+- A turn judges its task's origin once: 3 s of every turn on a long task down to under 0.1 s
+- A search across the files on the task's own mail is the agent's own work, not Taskuary's data
+- A command before the browser's launch no longer leaves it dead: "open" means its Chrome answers, and start launches it
+- What its own CLI downloaded and every checkout Taskuary has are an agent's work; a step done without is greyed with the truth; a step nobody answered is nobody's no
+- With no Chrome of agent-browser's own, the agent's browser runs the Chrome installed on the computer, as agent-browser's own launch did
+- A conversation the CLI no longer has starts afresh on every road: the general chat's ACP and command-line turns and a coding terminal
+
 ## 0.4.0.15 - 2026-11-16
 
 - Codex never runs with its sandbox bypass: an agent's work on it goes over ACP, where a read outside the task asks

@@ -91,14 +91,15 @@ await type(page, ask);
 
 // ── PLAY THE OWNER until the job rests: press cards, answer the one question, deliver mail, watch the working line ──
 let pagePresses = 0, inboxSeen = 0, calm = 0, lastLine = "", sameLine = 0, n = 0;
+// a site's code, emailed: into his inbox as mail, on the arrival road - the moment it is sent, whatever the walk is waiting on
+const deliver = async () => { if (!existsSync(INBOX)) return; const lines = readFileSync(INBOX, "utf8").split("\n").filter(Boolean);
+  for (const l of lines.slice(inboxSeen)) { const m = JSON.parse(l); console.log(`[${s()}s] MAIL in: ${m.subject}`);
+    await api("/api/fixture/incoming", { from_email: m.from, from_name: m.from.split("@")[1], subject: m.subject, body: m.body }); }
+  inboxSeen = lines.length; };
 const MAX = (+process.env.JOB_MIN || 75) * 60000;
 while (Date.now() - t0 < MAX) {
   await sleep(5000); n++;
-  // a site's code, emailed: into his inbox as mail, on the arrival road
-  if (existsSync(INBOX)) { const lines = readFileSync(INBOX, "utf8").split("\n").filter(Boolean);
-    for (const l of lines.slice(inboxSeen)) { const m = JSON.parse(l); console.log(`[${s()}s] MAIL in: ${m.subject}`);
-      await api("/api/fixture/incoming", { from_email: m.from, from_name: m.from.split("@")[1], subject: m.subject, body: m.body }); }
-    inboxSeen = lines.length; }
+  await deliver();
   const c = await api(`/api/tasks/${t}/conversation`);
   const st = await page.evaluate(() => {
     const tp = document.querySelector("[data-tq-task-page]"), vp = tp?.querySelector(".tq-aui-viewport");
@@ -124,7 +125,7 @@ while (Date.now() - t0 < MAX) {
     pressed.push({ s: s(), go: "the page's button", what: st.tail.slice(-160) }); console.log(`[${s()}s] PRESSED the page's button (${JSON.stringify(r)}): ${st.tail.slice(-160).replace(/\n/g, " ")}`);
     // ...once, as he would: the page is given a minute to move on, and one still handed to him after it is a finding, never a second press
     const was = st.tail.slice(-200); let moved = false;
-    for (let k = 0; k < 30 && !moved; k++) { await sleep(2000); moved = (await api(`/api/tasks/${t}/conversation`)).working || !(await page.evaluate(() => !!document.querySelector("[data-tq-task-page] canvas")))
+    for (let k = 0; k < 30 && !moved; k++) { await sleep(2000); await deliver(); moved = (await api(`/api/tasks/${t}/conversation`)).working || !(await page.evaluate(() => !!document.querySelector("[data-tq-task-page] canvas")))
       || (await page.evaluate(() => (document.querySelector("[data-tq-task-page] .tq-aui-viewport")?.innerText || "").slice(-200))) !== was; }
     if (!moved) note(`pressed the page and a minute later it is still handed to him: "${was.slice(-120)}"`);
     calm = 0; continue;

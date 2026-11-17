@@ -394,8 +394,30 @@ def previewed(p: Path, name: str = '', sheet_name: str = '') -> dict:
     from . import attachtext
     how = PREVIEW.get(Path(name or p.name).suffix.lower())
     if how not in ('sheet', 'document'): raise ValueError(how)
-    key = f'preview-{hashlib.sha256(p.read_bytes()).hexdigest()}-{how}-{sheet_name}-v{PREVIEW_VERSION}'
-    return attachtext.cached(key, lambda: document(p) if how == 'document' else sheet(p, sheet_name))
+    def read():
+        key = f'preview-{hashlib.sha256(p.read_bytes()).hexdigest()}-{how}-{sheet_name}-v{PREVIEW_VERSION}'
+        return attachtext.cached(key, lambda: document(p) if how == 'document' else sheet(p, sheet_name))
+    try: return read()
+    except Exception:
+        # ...A FILE ITS AGENT STILL WRITES (the owner's live task, 2026-11-17: a card asked the second the workbook was being saved, read half a
+        # zip and said "could not be read" over a file that was whole a moment later): one that changed just now is waited on until it stops
+        # changing, then read once more; one that is not changing is broken, said at once
+        if not settled(p): raise
+        return read()
+
+
+SETTLE = 20
+def settled(p: Path, wait: float = SETTLE) -> bool:
+    "True once a file that changed in the last `wait` seconds has stood still for a second; False at once for one not being written."
+    import time
+    def stamp(): st = p.stat(); return st.st_size, st.st_mtime_ns
+    if time.time() - p.stat().st_mtime > wait: return False
+    end, last = time.monotonic() + wait, stamp()
+    while time.monotonic() < end:
+        time.sleep(0.5)
+        if (now := stamp()) == last and time.time() - p.stat().st_mtime >= 1: return True
+        last = now
+    return False
 
 
 def brief(tid: int) -> str:

@@ -102,6 +102,26 @@ class TaskOutputsTests(unittest.TestCase):
         self.assertLessEqual(len(notes['rows'][0][1]), outputs.CELL)               # a cell is capped
         self.assertEqual(self.client.get(f'/api/task-outputs/{self.tid}/notes.md', params={'preview': 'true'}).status_code, 422)
 
+    # A WORKBOOK ASKED FOR WHILE ITS AGENT STILL WRITES IT (the owner's live task, 2026-11-17: the file card asked for its preview the second the
+    # agent was saving it, read half a zip - "File is not a zip file" - and kept "could not be read" over a workbook that was fine a moment later):
+    # a file that changed just now and does not read is waited on until it stops changing, then read
+    def test_a_workbook_still_being_written_is_read_once_it_settles(self):
+        import threading, time
+        whole = (self.dir / 'vendor comparison.xlsx').read_bytes(); half = self.dir / 'census.xlsx'
+        half.write_bytes(whole[:len(whole) // 2])
+        threading.Timer(1.0, lambda: half.write_bytes(whole)).start()
+        got = self.client.get(f'/api/task-outputs/{self.tid}/census.xlsx', params={'preview': 'true'})
+        self.assertEqual(got.status_code, 200, got.text)
+        self.assertEqual(got.json()['sheet'], 'Vendors')
+
+    def test_a_broken_workbook_that_is_not_changing_says_so_at_once(self):
+        import time
+        bad = self.dir / 'broken.xlsx'; bad.write_bytes(b'not a workbook')
+        old = time.time() - 120; os.utime(bad, (old, old))
+        t0 = time.monotonic()
+        self.assertEqual(self.client.get(f'/api/task-outputs/{self.tid}/broken.xlsx', params={'preview': 'true'}).status_code, 422)
+        self.assertLess(time.monotonic() - t0, 2)
+
     def test_rows_and_columns_are_capped(self):
         from openpyxl import Workbook
         wb = Workbook(); ws = wb.active

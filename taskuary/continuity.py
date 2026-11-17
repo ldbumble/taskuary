@@ -140,9 +140,15 @@ def sent_since(store, tid) -> tuple:
     return (rv, mail_since(store, tid, str(rv.get('DecidedAt') or rv.get('CreatedAt') or ''))) if rv else (None, [])
 
 
-def sent_to(store, rv) -> str:
+def sent_to(store, rv, none: str = 'them') -> str:
+    """Whom a reply or an email goes to: where its envelope sends it, else who wrote the message it answers. The envelope first (2026-11-17):
+    a message the owner started answers his own ask, and the agent read its draft as going "to You"."""
+    try: env = json.loads((rv or {}).get('Deliver') or '{}') or {}
+    except (TypeError, ValueError): env = {}
+    to = env.get('to') if isinstance(env, dict) else None
+    if to: return ', '.join(map(str, to)) if isinstance(to, (list, tuple)) else str(to)
     m = store.get_message((rv or {}).get('MessageId')) or {}
-    return str(m.get('FromName') or m.get('FromEmail') or 'them').strip()
+    return str(m.get('FromName') or m.get('FromEmail') or none).strip()
 
 
 def sent_block(store, tid, quote: int = 300, cmd: str = '') -> str:

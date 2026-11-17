@@ -104,9 +104,11 @@ def resolution_text(rep: dict) -> str:
 
 
 def from_owner(store, m: dict, own: set = None) -> bool:
-    """Did the owner write this row - mail from one of their own addresses (ingest.own_addresses)? Nobody else is behind it."""
+    """Did the owner write this row - mail from one of their own addresses (ingest.own_addresses), or his ask from the New box (outbox.is_ask,
+    2026-11-17)? Nobody else is behind it."""
     from .ingest import own_addresses
-    return str((m or {}).get('FromEmail') or '').strip().lower() in (own if own is not None else own_addresses(store)) - {''}
+    from .outbox import is_ask
+    return is_ask(m) or str((m or {}).get('FromEmail') or '').strip().lower() in (own if own is not None else own_addresses(store)) - {''}
 
 
 def reply_target(store, task_id: int):

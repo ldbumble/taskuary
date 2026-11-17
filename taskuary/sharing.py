@@ -415,9 +415,8 @@ def email(store, snap: dict, to: list, actor: str = 'owner') -> dict:
     else:
         tid = store.create_task({'Title': subject[:300], 'Summary': f'Share "{subject}" with {", ".join(who)}', 'Kind': 'reply', 'Status': 'open',
                                  'Priority': 'normal', 'Source': 'outbox'}, actor)
-        mid = store.add_message({'TaskId': tid, 'ExternalId': f'outbox:{tid}', 'ConversationId': f'outbox:{tid}', 'Channel': 'email',
-                                 'SourceName': ', '.join(who), 'Subject': subject, 'FromName': 'You', 'Direction': 'out', 'BodyText': text,
-                                 'Status': 'routed', 'SentAt': _now()})
+        from .outbox import ask_row          # his ask, not mail he sent (2026-11-17): the one row New's ask is filed as
+        mid = ask_row(store, tid, 'email', who[:1], who[1:], subject, text)
         store.add_route(mid, tid, 'outbox', None, 'you shared a result from Taskuary - drafted for you to approve, then it sends', [], actor)
         rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': text,
                                 'Deliver': json.dumps({'channel': 'email', 'to': who[:1], 'cc': [], 'subject': subject}),

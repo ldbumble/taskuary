@@ -622,9 +622,13 @@ AGAIN = ('If a step is still needed, raise it again as a new card (a step held f
          'say it still waits on them, and never ask them in words to press it.')
 PASSED_TOLD = ('THE OWNER MOVED ON PAST THESE CARDS OF YOURS WITHOUT PRESSING THEM - they are old news and nothing waits on the owner for '
                f'them now. {AGAIN}')
-def _passed_line(r: dict) -> str:
-    if r.get('Kind') in ('draft_reply', 'draft'): return f"- rv{r['ReviewId']}: your reply draft, which began: " + ' '.join(str(r.get('DraftText') or '').split())[:160]
-    if r.get('Kind') == 'slot': return f"- rv{r['ReviewId']}: the email you wrote, which began: " + ' '.join(str(r.get('DraftText') or '').split())[:160]
+# ...a letter with whom it was to and its words (2026-11-17): told "your reply draft, which began: Hi Gail," the agent asked whom it was for
+def _passed_line(store, r: dict) -> str:
+    from .continuity import sent_to
+    to = sent_to(store, r, '')
+    said = ' '.join(str(r.get('DraftText') or '').split())[:600] + (f' (to {to})' if to else '')
+    if r.get('Kind') in ('draft_reply', 'draft'): return f"- rv{r['ReviewId']}: your reply draft, which began: {said}"
+    if r.get('Kind') == 'slot': return f"- rv{r['ReviewId']}: the email you wrote, which began: {said}"
     try: p = json.loads(r.get('DraftText') or '{}') or {}
     except (TypeError, ValueError): p = {}
     return f"- rv{r['ReviewId']}: " + ' '.join(str(p.get('what') or p.get('command') or r.get('Reason') or p.get('action') or 'a card').split())[:200]
@@ -656,13 +660,13 @@ def passed_since(store, tid: int, since: str) -> list:
     from . import landing
     p = (landing.record(store, int(tid)).get('proposal') or {})
     # ...from the answer's own second on: a stamp is no finer, and a draft he wrote past in the second of that answer was never told
-    return [_passed_line(r) for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='superseded' AND DecideNote=? AND DecidedAt>=? "
+    return [_passed_line(store, r) for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='superseded' AND DecideNote=? AND DecidedAt>=? "
                                                  "ORDER BY ReviewId", (int(tid), SET_ASIDE, since or ''))] + ([LAND_LINE] if str(p.get('passed') or '') > (since or '') else [])
 
 
 def passed_note(store, rids: list) -> str:
     "PASSED_TOLD with the cards `rids` - for a coding agent, whose next prompt is the line that passed them; '' with none."
-    rows = [_passed_line(r) for r in (store.get_review(int(x)) for x in rids or [] if x != LAND) if r] + ([LAND_LINE] if LAND in (rids or []) else [])
+    rows = [_passed_line(store, r) for r in (store.get_review(int(x)) for x in rids or [] if x != LAND) if r] + ([LAND_LINE] if LAND in (rids or []) else [])
     return f"{PASSED_TOLD}\n" + '\n'.join(rows) if rows else ''
 
 

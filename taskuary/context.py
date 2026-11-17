@@ -639,6 +639,7 @@ def joins(store, tid: int) -> list:
     from .ingest import is_aside
     from .linkdocs import _unwrap
     from .routing import norm_subject
+    from .outbox import asked
     road = {r['MessageId']: r for r in store.list_routes(tid)}          # the last word on each message's place here
     out = []
     for m in store.list_messages(tid):
@@ -647,7 +648,7 @@ def joins(store, tid: int) -> list:
         try: v = json.loads(r.get('VerdictJson') or 'null') or {}
         except (TypeError, ValueError): v = {}
         joined = r.get('Decision') == 'attach'
-        out.append({'mid': m['MessageId'], 'who': m.get('FromName') or m.get('FromEmail') or '?', 'when': str(m.get('SentAt') or ''),
+        out.append({'mid': m['MessageId'], 'who': asked(m) or m.get('FromName') or m.get('FromEmail') or '?', 'when': str(m.get('SentAt') or ''),
                     'channel': str(m.get('Channel') or ''), 'conversation': str(m.get('ConversationId') or ''), 'subject': str(m.get('Subject') or ''),
                     **_addresses(m), 'links': [[w, _unwrap(h)] for w, h in kept_links(m)], 'empty': not str(m.get('BodyText') or '').strip(),
                     'title': str(m.get('TriageTitle') or ''), 'road': str(r.get('Reason') or ''), 'joined': joined, 'aside': is_aside(v),

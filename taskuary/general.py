@@ -77,7 +77,8 @@ def owner_spoke(store, tid: int) -> bool:
     """Whether the owner's own words are on this task: a line they typed in its chat, or the task itself where no mail made it. What goes
     into their memory from a task is only theirs (the remember tool) - a sender's mail on a task they never spoke on is not."""
     if any(c.get('ActorType') in (USER_TYPE, WAITING_TYPE) and not is_brief(c) for c in store.list_comments(tid, internal=True)): return True
-    return not any(str(m.get('Direction') or 'in') != 'out' for m in store.list_messages(tid))
+    from .outbox import is_ask
+    return not any(str(m.get('Direction') or 'in') != 'out' and not is_ask(m) for m in store.list_messages(tid))
 def _line_of(body) -> dict:
     try: got = json.loads(body or '{}')
     except ValueError: got = {'text': str(body or '')}
@@ -621,7 +622,8 @@ def newest_message(store, tid: int, turn: bool = False) -> dict | None:
     mail = [m for m in store._rows(JOINED, (tid,)) if m['MessageId'] not in late]
     a = {'who': 'the owner (in this chat)', 'at': str(said[-1].get('CreatedAt') or ''), 'words': said[-1].get('Body'), 'cid': said[-1]['CommentId']} if said else None
     m = mail[-1] if mail else None
-    b = {'who': 'the owner (their own reply on the thread)' if m.get('Own') else m.get('FromName') or m.get('FromEmail') or 'someone',
+    from .outbox import asked
+    b = {'who': asked(m) or ('the owner (their own reply on the thread)' if m.get('Own') else m.get('FromName') or m.get('FromEmail') or 'someone'),
          'at': str(m.get('JoinedAt') or ''), 'words': m.get('OwnText') or m.get('BodyText') or m.get('Subject'), 'mid': m.get('MessageId')} if m else None
     return max((x for x in (a, b) if x), key=lambda x: x['at'], default=None)
 
@@ -929,7 +931,8 @@ def latest_block(store, tid: int, resumed: bool = False, rules: bool = True, tur
     from . import proposals
     refused = proposals.unheard(store, tid, last_turn_began(store, tid) or '') if last else []
     # ...and the cards it raised that the conversation moved past (proposals.move_on): old news, said once in the turn after
-    passed = proposals.passed_since(store, tid, last) if last else []
+    # ...a first turn too (2026-11-17): his first line set aside the draft the New box wrote, and its agent never heard there was one
+    passed = proposals.passed_since(store, tid, last or '')
     if not (rv or sent or answered or others or handed or did or own or asked or nowhere or refused or passed): return ''
     # `rules` False: an agent whose startup context says the rules once (selfclose.DRAFTS_ONCE) - the turn carries the facts alone
     out = [selfclose.FACTS_HEAD, (selfclose.NO_NEW_LINE if heard else selfclose.LATEST_LINE) if rules else selfclose.NO_NEW_HEAD if heard else selfclose.LATEST_HEAD]
@@ -943,7 +946,9 @@ def latest_block(store, tid: int, resumed: bool = False, rules: bool = True, tur
         # and the agent withdrew that correct answer as "a stale copy" and drafted nothing
         # ...and one the thread moved past is never that (the owner, 2026-11-10): the join re-pins a draft to the newest line as its freshness
         # marker and marks it Stale - read by the pin alone, the old answer was handed to the woken agent as "written for this message - keep it"
-        to = m.get('FromName') or m.get('FromEmail') or ''
+        # ...whom it goes to by its envelope (continuity.sent_to): a message he started answers his own ask, and read "to You" (2026-11-17)
+        from .continuity import sent_to
+        to = sent_to(store, rv, '')
         mine = bool(new and new.get('mid') and m.get('MessageId') == new['mid']) and not rv.get('Stale')
         before = not mine and not heard and bool(new) and (bool(rv.get('Stale')) or at < new['at'])
         out.append(f"THE DRAFT WAITING NOW ({'to ' + to + ', ' if to else ''}drafted at {clock(at)}"
@@ -2075,6 +2080,7 @@ def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
     # its last lines too (triage.both_ends: the ask is as often under the story as over it)
     from .routing import norm_subject
     from .triage import both_ends
+    from .outbox import asked
     said_subject = None
     def wrote(m):
         files = store.list_attachments(m['MessageId'])
@@ -2086,7 +2092,7 @@ def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
         return both_ends(str(m.get('BodyText') or ''), SOURCE_CHARS) + (f"\n[cut to fit - read_message m{m['MessageId']} reads it whole]" if long else '') + file_line
     for run in runs[-SOURCE_MAILS:]:
         m = run[0]
-        who = m.get('FromName') or m.get('FromEmail') or m.get('SourceName') or m.get('Channel') or 'source'
+        who = asked(m) or m.get('FromName') or m.get('FromEmail') or m.get('SourceName') or m.get('Channel') or 'source'
         subj, was = str(m.get('Subject') or '').strip(), said_subject
         said_subject = norm_subject(subj) if subj else said_subject
         where = ''.join(f' · {x}' for x in (m.get('Channel'), f'"{_flat(subj, 140)}"' if subj and norm_subject(subj) != was else '') if x)

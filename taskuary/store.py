@@ -1358,6 +1358,11 @@ class SQLiteStore:
             # the owner's own replies were stored as INCOMING (X1, 2026-09-25) - everything that counts senders, and the
             # triage accuracy measure, counted the owner as one. 'You' on a context row is the owner, never a bot.
             self.cx.execute("UPDATE message SET Direction='out' WHERE Status='context' AND FromName='You' AND IFNULL(Direction,'in')='in'")
+            # ...and his New-box ask was filed as mail he SENT, its recipient as its source (outbox.ask_row, 2026-11-17): his line now, to them
+            for r in self.cx.execute("SELECT MessageId, SourceName FROM message WHERE ExternalId LIKE 'outbox:%' AND Direction='out'").fetchall():
+                to = [a.strip() for a in str(r[1] or '').split(',') if a.strip()]
+                self.cx.execute("UPDATE message SET Direction='in', SourceName=NULL, RecipientsJson=COALESCE(RecipientsJson, ?) WHERE MessageId=?",
+                                (json.dumps({'to': to, 'cc': []}), r[0]))
             # WHICH BRAIN ran a session, beside the role that owned it. A role is always the same
             # for coding work, so the session is the only place the actual CLI is recorded
             # (docs/superpowers/specs/2026-09-16-profile-brain-separation-design.md)

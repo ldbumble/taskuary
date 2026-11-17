@@ -73,5 +73,57 @@ class OutboxEmailTests(unittest.TestCase):
         self.assertIn('The result is 42.', seen['user'])
 
 
+class OwnersAskTests(unittest.TestCase):
+    """THE NEW BOX'S ASK IS HIS INSTRUCTION, NOT MAIL HE SENT (2026-11-17): it was stored outbound, addressed to nobody - the page drew it as
+    "Sent by you · gail@...", and the agent's brief read "FROM You" with no recipient, called it his own reply on the thread, and the draft
+    waiting "to You". Asked to make the email shorter, it asked him whom it was for."""
+    def setUp(self):
+        self.s = MemoryStore()
+        made = outbox.compose(self.s, 'email', 'gail@northwind.example', 'ask her for the March census numbers', subject='Census',
+                              llm=lambda *_a, **_k: 'Hi Gail,\n\nCould you send the March census numbers?')
+        self.tid, self.mid, self.rid = made['taskId'], made['messageId'], made['reviewId']
+
+    def test_the_ask_is_his_words_and_the_brief_says_whom_it_is_for(self):
+        from taskuary import context, general, wrapup
+        m = self.s.get_message(self.mid)
+        self.assertNotEqual(m.get('Direction'), 'out', 'nothing was sent')
+        self.assertEqual(m['BodyText'], 'ask her for the March census numbers', 'his words as typed')
+        self.assertFalse([x for x in self.s.list_messages(self.tid) if x.get('Direction') == 'out'])
+        self.assertIn('gail@northwind.example', context.came_in(self.s, self.tid))
+        self.assertTrue(wrapup.from_owner(self.s, m), 'he wrote it - nobody to reply to')
+        self.assertTrue(general.owner_spoke(self.s, self.tid))
+        self.assertFalse(general.owner_answered_last(self.s, self.tid), 'he answered nothing outside Taskuary')
+        self.assertEqual(general.own_replies(self.s, self.tid, since='2000-01-01'), [])
+        said = general.latest_block(self.s, self.tid)
+        self.assertIn('You asked to email gail@northwind.example', said)
+        self.assertIn('to gail@northwind.example', said)
+        self.assertNotIn('to You', said)
+        self.assertNotIn('their own reply', said)
+        self.assertIn('You asked to email gail@northwind.example', general.prompt_parts(self.s, self.tid)[2])
+
+    def test_a_first_turn_hears_the_card_his_line_moved_past_with_whom_and_what(self):
+        import time
+        from taskuary import general, proposals
+        self.assertTrue(proposals.set_aside_drafts(self.s, self.tid, time.time() + 5))
+        said = general.latest_block(self.s, self.tid)          # no turn has answered yet: this is the agent's first
+        self.assertIn(f'rv{self.rid}', said)
+        self.assertIn('gail@northwind.example', said)
+        self.assertIn('Could you send the March census numbers?', said)
+
+    def test_an_ask_filed_by_an_earlier_build_is_read_as_his_ask(self):
+        import os, tempfile
+        from taskuary.store import SQLiteStore
+        p = os.path.join(tempfile.mkdtemp(), 't.db')
+        s = SQLiteStore(p)
+        tid = s.create_task({'Title': 'Census', 'Kind': 'reply', 'Status': 'open', 'Source': 'outbox'}, 'owner')
+        mid = s.add_message({'TaskId': tid, 'ExternalId': f'outbox:{tid}', 'ConversationId': f'outbox:{tid}', 'Channel': 'email',
+                             'SourceName': 'gail@northwind.example', 'FromName': 'You', 'Direction': 'out', 'BodyText': 'ask her', 'Status': 'routed'})
+        s.cx.close()
+        m = SQLiteStore(p).get_message(mid)
+        self.assertNotEqual(m.get('Direction'), 'out')
+        self.assertFalse(m.get('SourceName'))
+        self.assertEqual(json.loads(m['RecipientsJson'])['to'], ['gail@northwind.example'])
+
+
 if __name__ == '__main__':
     unittest.main()

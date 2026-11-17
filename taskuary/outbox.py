@@ -14,8 +14,8 @@ So: ＋ New on the Timeline, and two forks that both end in the same place.
   finishes it drafts the message from what it actually found, and THAT lands on the task. Same
   lifecycle, same buttons, same one approval at the end.
 
-The row on the Timeline is created either way, at the moment you pressed the button, marked
-outbound - so the day's record includes what you started, not only what happened to you.
+The row on the Timeline is created either way, at the moment you pressed the button, holding
+your ask (ask_row) - so the day's record includes what you started, not only what happened to you.
 
 Nothing here can send. `send_out` is reached from exactly one place (verdicts.decide, on an
 approved review carrying `Deliver`), which is what keeps "the owner approves everything that
@@ -130,11 +130,36 @@ def redraft_review(store, review: dict, resolution: str = None, llm=None, instru
     return draft
 
 
+# THE ASK IS HIS INSTRUCTION, NOT MAIL HE SENT (2026-11-17): it was filed outbound with its recipient as its source - the page drew it as
+# "Sent by you", and the agent read "FROM You" with nobody named, as his own reply on the thread, beside a draft "to You", and asked him whom
+# it was for. Now it is his line as typed, from him (wrapup.from_owner), its recipients where every message keeps them, said as `asked`.
+# It wears the TARGET channel: can_reply and the send path read a real channel behind the row.
+ASK = 'outbox:'
+def is_ask(m) -> bool: return str((m or {}).get('ExternalId') or '').startswith(ASK)
+
+def ask_row(store, tid: int, channel: str, to, cc, subject: str, body: str) -> int:
+    "File the owner's ask on task `tid` - his words `body`, for `to`/`cc` on `channel` - and return its message id."
+    to = list(to) if isinstance(to, (list, tuple)) else [to]
+    return store.add_message({'TaskId': tid, 'ExternalId': f'{ASK}{tid}', 'ConversationId': f'{ASK}{tid}', 'Channel': channel,
+                              'Subject': subject, 'FromName': 'You', 'BodyText': body, 'Status': 'routed',
+                              'RecipientsJson': json.dumps({'to': to, 'cc': list(cc or [])}),
+                              'SentAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+
+def asked(m) -> str:
+    "'You asked to email a@x (cc b@y)' for the owner's ask - every surface's one label for it - '' for any other row."
+    if not is_ask(m): return ''
+    try: r = json.loads(m.get('RecipientsJson') or '{}') or {}
+    except (TypeError, ValueError): r = {}
+    to, cc = ', '.join(r.get('to') or []) or 'someone', ', '.join(r.get('cc') or [])
+    ch = str(m.get('Channel') or '').lower()
+    return (f'You asked to email {to}' if ch == 'email' else f'You asked to message {to} on {ch}') + (f' (cc {cc})' if cc else '')
+
+
 def compose(store, channel: str, to, about: str, mode: str = 'draft', subject: str = None,
             repo: str = None, actor: str = 'owner', llm=None, cc: list = None) -> dict:
     """Start something outbound. Returns {taskId, messageId, reviewId, mode, draft, subject}.
 
-    Both modes leave the same shape behind - a task, a Timeline row marked outbound, and a
+    Both modes leave the same shape behind - a task, a Timeline row holding the owner's ask, and a
     review carrying WHERE it goes - so the approve button, the audit trail and the reply-pending
     tag on the Timeline are the ones that already exist."""
     from . import outbound, terminal as term
@@ -165,14 +190,8 @@ def compose(store, channel: str, to, about: str, mode: str = 'draft', subject: s
                              'Kind': 'coding' if mode == 'task' else 'reply',
                              'Status': 'open', 'Priority': 'normal', 'Source': 'outbox',
                              'Tags': f'repo:{repo}' if repo else None}, actor)
-    # the Timeline row. It wears the TARGET channel, not a synthetic one: Direction 'out' is
-    # already how the feed renders something we sent, and can_reply / the send path both need a
-    # real channel behind the row.
     to_text = ', '.join(to) if isinstance(to, list) else to
-    mid = store.add_message({'TaskId': tid, 'ExternalId': f'outbox:{tid}', 'ConversationId': f'outbox:{tid}',
-                             'Channel': channel, 'SourceName': to_text, 'Subject': subject, 'FromName': 'You',
-                             'Direction': 'out', 'BodyText': about, 'Status': 'routed',
-                             'SentAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+    mid = ask_row(store, tid, channel, to, cc, subject, about)
     deliver = json.dumps({'channel': channel, 'to': to, 'cc': cc, 'subject': subject})
     store.add_route(mid, tid, 'outbox', None,
                     f'you started this from Taskuary - ' +

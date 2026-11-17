@@ -20,7 +20,7 @@ while :; do
   sleep 30
 done
 # pytest's summary lines, a subtest's too: `FAILED tests/x.py::T::t - msg`, `ERROR tests/x.py`, `SUBFAILED(i=1) tests/x.py::t`
-pyids() { gh run view "$RUN" --log --job "$1" 2>/dev/null | grep -oE "(FAILED|ERROR|SUBFAILED\([^)]*\)) tests/[^ ]+" | sed -E 's/^[^ ]+ //' | sort -u; }
+pyids() { gh run view "$RUN" --log --job "$1" 2>/dev/null | grep -oE "(FAILED|ERROR|SUBFAILED\([^)]*\)) tests/[^ ]+" | grep -oE "tests/[^ ]+$" | sort -u; }      # ...the path alone: a subtest's own words have spaces (2026-11-17: "the" ran as a test file)
 if [ "$IDS" = 1 ]; then
   echo "$S" | grep -q " success" && exit 0
   JOBS=$(gh run view "$RUN" --json jobs -q '.jobs[] | select(.conclusion=="failure" or .conclusion=="cancelled" or .conclusion=="timed_out") | select(.name!="ci-required" and .name!="build-exe") | "\(.databaseId)	\(.name)"')

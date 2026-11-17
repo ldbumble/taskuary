@@ -974,3 +974,12 @@ def test_a_turn_has_one_clock_live_and_finished():
     marks = [{'Seq': 3, 'At': 100.0}, {'Seq': 5, 'At': 160.0}, {'Seq': 9, 'At': 200.0}, {'Seq': 9, 'At': 230.0}]
     assert turn_start(marks, 0, 6) == 100.0, 'a second hand-over mid-turn does not move its start'
     assert turn_start(marks, 9) == 200.0 and turn_start(marks, 12) == 0.
+
+
+def test_a_card_he_said_no_to_keeps_its_words_where_it_stood():
+    """The real-CLI walk, 2026-11-16: Don't send took the email's card off the chat and left only "You dropped the email" - the basic flow's
+    "no card gone from the canvas". A rejected draft is drawn where it stood, greyed, with what it said."""
+    from taskuary import conversation
+    c = conversation._card({'ReviewId': 9, 'Kind': 'slot', 'Status': 'rejected', 'DraftText': 'Hi Erin, the open house moved to Thursday.',
+                            'DecideNote': '', 'CreatedAt': '2026-11-17 03:41:00', 'DecidedAt': '2026-11-17 03:41:20'})
+    assert (c['status'], c['was']['text']) == ('rejected', 'Hi Erin, the open house moved to Thursday.'), c

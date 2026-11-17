@@ -268,3 +268,12 @@ test("a missing fact is one question: the reply not written yet waits under no o
   assert.equal(askedFirst({ request_id: "q1" }, [written]), false);                         // ...a reply with words is his to send
   assert.equal(askedFirst({ request_id: "q1" }, [empty, { Kind: "slot", Status: "pending", DraftText: "x" }]), false);   // ...emails wait with it
 });
+
+// A CARD HE SAID NO TO STAYS WHERE IT STOOD (the real-CLI walk, 2026-11-16: Don't send took the email off the chat, only "You dropped the email"
+// was left - the basic flow's "no card gone from the canvas"): drawn greyed with its words, under "Not sent"
+test("a card he said no to is drawn where it stood, with its words", async () => {
+  const { isPastCard } = await import("../src/chatStream.js");
+  assert.ok(isPastCard({ id: "r:9", review: 9, status: "rejected", was: { text: "Hi Erin, the open house moved" } }));
+  const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(src, /rejected: \(\) => "Not sent - you said don't send"/);
+});

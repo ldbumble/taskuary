@@ -330,9 +330,11 @@ def _card(r) -> dict:
         except (TypeError, ValueError): d = {}
         words = ' '.join(str((d.get('what') or d.get('command') or r.get('Reason') or '') if isinstance(d, dict) else r.get('Reason') or '').split())[:300]
     gone = r['Status'] == 'closed_unsent' and str(r.get('DecideNote') or '').startswith(WITHDRAWN) and words
+    # ...AND ONE HE SAID NO TO STAYS TOO, its words under "not sent" (the real-CLI walk, 2026-11-16: Don't send took the card off the chat, and
+    # only "You dropped the email" was left - the basic flow's "no card gone from the canvas")
     st = 'passed' if passed(r) else 'failed' if failed else 'withdrawn' if gone else r['Status']
     return {'id': f"r:{r['ReviewId']}", 'kind': 'card', 'review': r['ReviewId'], 'what': r['Kind'], 'status': st,
-            'at': r['CreatedAt'], 'decided': r.get('DecidedAt'), **({'was': {'text': words if r['Kind'] == 'action' else r['DraftText']}} if words and st in ('passed', 'withdrawn', 'pending') else {})}
+            'at': r['CreatedAt'], 'decided': r.get('DecidedAt'), **({'was': {'text': words if r['Kind'] == 'action' else r['DraftText']}} if words and st in ('passed', 'withdrawn', 'pending', 'rejected') else {})}
 DRAFTS = ('draft_reply', 'draft')
 
 def unwritten(r: dict) -> bool:

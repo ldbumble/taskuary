@@ -746,8 +746,9 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
         return {'ok': True, 'status': 'closed_unsent', 'sent': None, 'send_error': None}
     # ONE approve: if the text differs from the draft, it was edited - no need to declare it
     if verb_in in ('approve', 'edit'):
-        # THE SIGNATURE GOES ON ONCE, HERE (signatures.py): the box shows it, so a box holding only the signature is an empty box,
-        # and the owner's words are compared with the draft above it - adding the block is not an edit the drafter learns from
+        # THE SIGNATURE IS NOT ADDED HERE (signatures.py): it went on when the draft was made and the box shows it, so a box holding only
+        # the signature is an empty box, the owner's words are compared with the draft above it, and what goes is what the box held -
+        # signing again here put the block under his own "Thanks, Alex" (2026-11-17)
         from . import signatures
         sig = signatures.for_review(store, rv)
         if sig and (final_text or '').strip() and not signatures.unsigned(final_text, sig).strip(): final_text = ''
@@ -757,7 +758,7 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
         final = final_text if (final_text or '').strip() or (cal and final_text is not None) else rv.get('DraftText')
         bare = lambda t: signatures.unsigned(t, sig).strip()
         verb = 'edit' if bare(final) != bare(rv.get('DraftText')) else 'approve'
-        if sig or final is not None: final = signatures.sign(store, rv, final)     # ...and an email goes as plain text (chatformat.plain_text)
+        if final is not None: final = signatures.as_sent(store, rv, final)     # ...an email as plain text (chatformat.plain_text)
     else:
         final, verb = None, verb_in
     # a PROPOSAL is not a draft reply: approving it RUNS the action the agent asked for

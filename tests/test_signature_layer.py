@@ -1,6 +1,7 @@
 """Every email Taskuary prepares ends with the owner's signature exactly once (the owner, 2026-10-28: "on replies there was no
 signature with it. It should use the default signature always (you can put that as a setting)"). A reply they typed into the
-empty box, the AI's draft, an agent's, a forward - signed as it leaves, never twice; chat never; the switch off, nothing."""
+empty box, the AI's draft, an agent's, a forward - signed once as the draft is made, and what goes is what the box held (2026-11-17);
+chat never; the switch off, nothing."""
 import json
 from unittest import mock
 
@@ -38,18 +39,20 @@ def send(s, rid, text=None):
     return got, (out.call_args.args[2] if out.called else None)
 
 
-def test_the_owners_own_typed_reply_goes_with_the_signature(s):
+def test_the_owners_own_typed_reply_goes_as_the_box_held_it(s):
+    # the empty box opened on the block, so what he typed goes with it; a block he cleared stays cleared - sending signs nothing (2026-11-17)
     _, _, rid = thread(s, draft='')
-    got, body = send(s, rid, 'Hi Erin,\n\nAttached.')
+    got, body = send(s, rid, f'Hi Erin,\n\nAttached.\n\n{SIG}')
     assert got['ok'], got
     assert body == f'Hi Erin,\n\nAttached.\n\n{SIG}'
+    _, _, rid = thread(s, draft='')
+    assert send(s, rid, 'Hi Erin,\n\nAttached.')[1] == 'Hi Erin,\n\nAttached.'
 
 
-def test_an_ai_draft_filed_without_it_is_signed_once_as_it_leaves(s):
-    _, _, rid = thread(s, draft='Hi Erin,\n\nThe export ran.')
+def test_a_signed_draft_sent_unedited_is_an_approve(s):
+    _, _, rid = thread(s, draft=f'Hi Erin,\n\nThe export ran.\n\n{SIG}')
     got, body = send(s, rid)
-    assert body.endswith(SIG) and body.count('Northwind') == 1
-    assert got['status'] == 'approved'            # the block going on is not an edit the drafter learns from
+    assert body == f'Hi Erin,\n\nThe export ran.\n\n{SIG}' and got['status'] == 'approved'
 
 
 def test_an_already_signed_draft_is_not_signed_twice(s):
@@ -164,3 +167,22 @@ def test_an_agents_chat_reply_loses_its_name_and_gets_no_block(s):
     tid, mid, _ = thread(s, channel='teams', box='Erin Blake', draft='')
     out = wrapup.agent_reply(s, tid, 'on it - done by noon\nAlex', 'coding')
     assert s.get_review(out['review_id'])['DraftText'] == 'on it - done by noon'
+
+
+def test_what_goes_is_exactly_the_box_his_own_sign_off_kept(s):
+    """The box showed the draft with the block; he wrote his own "Thanks,\nAlex" in its place and pressed Send, and the send road
+    signed it again: 'Alex Doyle' landed under his sign-off, a line the box never showed (2026-11-17). The block goes on once, when
+    the draft is made; what he sends - typed, or saved first and sent from another surface - goes as he left it."""
+    from taskuary import wrapup, server
+    from fastapi.testclient import TestClient
+    tid, mid, _ = thread(s, draft='')
+    rid = wrapup.agent_reply(s, tid, 'Hi Erin,\n\nThe export ran.', 'coding')['review_id']
+    assert s.get_review(rid)['DraftText'] == f'Hi Erin,\n\nThe export ran.\n\n{SIG}'      # made with the block: the box shows it
+    mine = 'Hi Erin,\n\nThe export ran.\n\nThanks,\nAlex'
+    with mock.patch.object(server, 'store', s):
+        assert TestClient(server.app).patch(f'/api/reviews/{rid}', json={'body': mine}).json()['draft'] == mine
+    got, body = send(s, rid)
+    assert got['ok'], got
+    assert body == mine
+    _, _, other = thread(s, draft=f'Hi Erin,\n\nYes.\n\n{SIG}')
+    assert send(s, other, 'Hi Erin,\n\nYes.\n\nThanks,\nAlex')[1] == 'Hi Erin,\n\nYes.\n\nThanks,\nAlex'

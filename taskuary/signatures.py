@@ -4,8 +4,9 @@ use the default signature always (you can put that as a setting)").
 One layer, three doors:
 - what the owner sees: every review row carries `Signature`, the block that will go under it, and the reply box shows it - an
   empty box opens on it, a draft without it gets it - so what is in the box is what goes;
-- what leaves: `verdicts.decide` signs the approved text once more before it is sent, so a draft filed before this, an agent's
-  draft, a forward or the owner's own typed words all end with it exactly once;
+- what is made: every draft is signed once as it is filed (responder.signed, agent_signed, a forward's draft), and what leaves is
+  exactly what the box held - `verdicts.decide` signs nothing (2026-11-17: signing at send put the block under the owner's own
+  "Thanks, Alex", a line the box never showed);
 - what it is: `responder.signature_for` - the sending mailbox's own (its card), else Settings → Replies → Email signature, else
   STYLE.md's sign-off line, else the owner's name. `sign_replies` off: none anywhere.
 
@@ -64,15 +65,14 @@ def unsigned(text: str, sig: str) -> str:
     return t[:-len(s)].rstrip() if s and t.endswith(s) else t
 
 
-def sign(store, rv: dict, text: str, msg: dict = None) -> str:
-    """The text as it goes out: an email as plain text (chatformat.plain_text: the owner's or a writer's Markdown left in the box
-    went out as stars and hashes) with the signature once at the end - never a second copy; chat untouched."""
-    from .responder import with_signature
+def as_sent(store, rv: dict, text: str, msg: dict = None) -> str:
+    """The text as it goes out: an email's words as plain text (chatformat.plain_text: Markdown left in the box went out as stars and
+    hashes), the block under them as it stands - nothing added, so a sign-off of the owner's own is the last line; chat untouched."""
     from .chatformat import plain_text
-    if not str(text or '').strip() or not is_email(store, rv, msg): return str(text or '')
-    sig = for_review(store, rv, msg)
-    body = plain_text(unsigned(text, sig)) or str(text)
-    return with_signature(body, sig) if sig else body
+    t = str(text or '').rstrip()
+    if not t.strip() or not is_email(store, rv, msg): return str(text or '')
+    body = unsigned(t, for_review(store, rv, msg))
+    return (plain_text(body) or body) + t[len(body):]
 
 
 def agent_signed(store, rv: dict, text: str, msg: dict = None) -> str:

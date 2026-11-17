@@ -97,15 +97,17 @@ def test_the_from_picker_starts_on_the_tasks_mailbox(s):
     assert got['default'] == CT and plain['default'] == plain['data'][0]['address']
 
 
-def test_saving_an_edit_signs_it_for_the_sending_mailbox(s):
+def test_the_box_shows_the_sending_mailboxs_signature_and_a_saved_edit_stays_as_written(s):
+    # the box opens on the block of the mailbox it answers from; what he saves there is his, never signed again (2026-11-17)
     from fastapi.testclient import TestClient
-    from taskuary import server
+    from taskuary import server, signatures
     tid, mid = asked_on(s, CT)
     rid = Factory(s).review(tid, mid, kind='draft_reply', draft='x')
+    assert signatures.for_review(s, s.get_review(rid)) == 'Alex Doyle\nContoso board'
     old, server.store = server.store, s
     try: r = TestClient(server.app).patch(f'/api/reviews/{rid}', json={'body': 'Hi Paula,\n\nDone.'})
     finally: server.store = old
-    assert r.json()['draft'].endswith('Contoso board')
+    assert r.json()['draft'] == 'Hi Paula,\n\nDone.'
 
 
 def test_a_new_email_on_the_task_is_signed_as_its_mailbox(s):

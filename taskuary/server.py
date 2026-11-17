@@ -4997,9 +4997,11 @@ def handoff(task_id: int, body: HandoffBody):
         # only the DRAFT is the model's. A send with no words wrote the forward and sent it in the same step, unseen (the spine audit,
         # 2026-11-09): what goes is what the owner was shown
         if not text and not body.draft_only: raise HTTPException(422, 'write what it says first')
-        text = text or outbound.draft_handoff(store, task_id, body.to or 'a colleague', body.note)
-        # a forward by email is an email from the owner: signed once, in the draft they see and in what goes (signatures.py)
-        if body.channel == 'email': text = responder.with_signature(text, responder.signature_for(store))
+        # a forward by email is an email from the owner: signed once, when the draft they see is made - their own words go as written
+        # (2026-11-17: signing again at send put a second name under their own sign-off, a line the box never showed)
+        if not text:
+            text = outbound.draft_handoff(store, task_id, body.to or 'a colleague', body.note)
+            if body.channel == 'email': text = responder.with_signature(text, responder.signature_for(store))
         if body.draft_only: return {'draft': text}
         subject = f"{task_ref(task_id)} {t.get('Title') or ''}".strip()
         chat = [m for m in store.list_messages(task_id) if m['Channel'] == 'teams'] if body.channel == 'teams' else []
@@ -6332,11 +6334,12 @@ def clarify_with_sender(tid: int, body: ClarifyBody):
     rv = store.pending_review(tid, 'clarification')
     if rv:
         rid = rv['ReviewId']
-        store.save_review_draft(rid, text)
     else:
         rid = store.add_review({'TaskId': tid, 'MessageId': m['MessageId'], 'Kind': 'clarification',
                                 'Status': 'pending', 'DraftText': text,
                                 'Reason': 'the agent needs missing information from the sender'})
+    # an email question is signed as it is filed, like every agent draft: the send road no longer signs (2026-11-17)
+    store.save_review_draft(rid, text := signatures.agent_signed(store, store.get_review(rid), text, m) or text)
     store.add_comment(tid, ACTOR, 'human', 'Clarification drafted for the sender; waiting for your approval on the task.')
     store.audit('review', rid, 'clarification_drafted', ACTOR, detail={'message_id': m['MessageId']})
     return {'reviewId': rid, 'taskId': tid, 'draft': text}
@@ -7378,16 +7381,13 @@ def _owners(rid: int):
 
 @app.patch('/api/reviews/{rid}')
 def save_review_text(rid: int, body: TextBody):
-    """Save what is in the reply box without deciding or sending it - with the owner's signature applied once
-    on an email draft (PW-065); an edit that already carries it is kept as written."""
+    """Save what is in the reply box without deciding or sending it - exactly as written. The box opened on the signature (signatures.py),
+    so what he left there is his: signing it again here put the block under his own "Thanks, Alex" (2026-11-17)."""
     rv = store.get_review(rid)
     if not rv: raise HTTPException(404, 'review not found')
     if rv.get('Status') not in ('pending', 'held'):
         raise HTTPException(409, 'this reply has already been decided')
     text = str(body.body or '')[:50_000]
-    m = store.get_message(rv.get('MessageId')) if rv.get('MessageId') else None
-    if m and str(m.get('Channel') or '').lower() == 'email' and text.strip():
-        text = responder.with_signature(text, responder.signature_for(store, outbound.sending_mailbox(store, rv, m)))
     store.save_review_draft(rid, text); _owners(rid)
     store.audit('review', rid, 'edit_draft', ACTOR, detail={'characters': len(text)})
     return {'ok': True, 'draft': text}

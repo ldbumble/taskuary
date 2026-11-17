@@ -5,8 +5,8 @@ signature was whatever the model chose to write. Now an email draft is pinned to
 envelope when it is written - Reply all by default: the sender (or the Reply-To), the original To
 and CC participants, the sending mailbox's own addresses excluded, deduplicated, never a BCC - the
 owner can switch to Reply to or edit To/CC, approval sends exactly the envelope reviewed, and the
-owner's email signature is applied once when a draft is written or saved by hand - visible before
-approval, never at send time, never on chat, never twice.
+owner's email signature is applied once when a draft is written - visible before approval, never on a
+hand edit, never at send time, never on chat, never twice.
 """
 import json, unittest
 from unittest import mock
@@ -176,19 +176,17 @@ class SignatureTests(unittest.TestCase):
         s.set_setting('email_signature', 'Regards,\nAlex', 'owner')
         self.assertEqual(responder.signature_for(s), 'Regards,\nAlex')
 
-    def test_a_draft_a_redraft_and_a_manual_draft_carry_it_exactly_once(self):
+    def test_a_draft_and_a_redraft_carry_it_once_and_a_hand_edit_stays_as_written(self):
         s, tid, mid, rid = self.thread()
         responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'Here it is.')
         text = s.get_review(rid)['DraftText']
         self.assertTrue(text.endswith('Best,\nAlex Doyle\nNorthwind Trading')); self.assertEqual(text.count('Northwind Trading'), 1)
         responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'Here it is again.\n\nBest,\nAlex Doyle\nNorthwind Trading')   # the model signed already
         self.assertEqual(s.get_review(rid)['DraftText'].count('Northwind Trading'), 1)
+        # the box showed the block, so a hand edit is saved exactly as he left it - never signed again (2026-11-17)
         with mock.patch.object(server, 'store', s):
-            r = TestClient(server.app).patch(f'/api/reviews/{rid}', json={'body': 'Attached.'}).json()
-        self.assertEqual(r['draft'].count('Northwind Trading'), 1); self.assertTrue(r['draft'].startswith('Attached.'))
-        with mock.patch.object(server, 'store', s):
-            r2 = TestClient(server.app).patch(f'/api/reviews/{rid}', json={'body': r['draft']}).json()
-        self.assertEqual(r2['draft'].count('Northwind Trading'), 1)                              # saving again adds nothing
+            r = TestClient(server.app).patch(f'/api/reviews/{rid}', json={'body': 'Attached.\n\nThanks,\nAlex'}).json()
+        self.assertEqual(r['draft'], 'Attached.\n\nThanks,\nAlex')
 
     def test_chat_gets_no_signature(self):
         s, tid, mid, rid = self.thread('teams')

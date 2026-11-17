@@ -263,6 +263,25 @@ class TheList(unittest.TestCase):
         walk('l-one', False)      # ...the chat's first turn, its CLI starting
         walk('l-two', True)       # ...a later one on a CLI already up
 
+    def test_the_turn_his_new_line_starts_never_reads_the_last_turns_steps(self):
+        """The walks, 2026-11-17: for about 200 ms under his new answer the previous turn was drawn again - the session read busy while its
+        trace was still the last turn's, so the turn at work read with that turn's thinking in it. Every read that finds it at work finds
+        its own trace."""
+        from taskuary import clipool
+        tr, seen, real_live = {}, [], clipool.is_live
+        def brain(system, user, **k): tr['f']('progress', 'thinking', 'Comparing the Harbour Room with the Quay Loft.'); return 'Answer.'
+        def build(*a, **k): tr['f'] = k['trace']; return brain
+        def live(key):          # ...a read in the start's own steps, as the page's poll lands mid-start
+            ses = general.session_for(self.tid)
+            if ses is not None and ses.busy and not tr.get('in'):
+                tr['in'] = True; seen.extend(t for t in self.list()['items'] if t['kind'] == 'turn' and t['state'] == 'working'); tr['in'] = False
+            return real_live(key)
+        with mock.patch.object(general.llm_mod, 'build_llm', side_effect=build):
+            self.say('Suggest two.', 'l-one'); self.rest()
+            with mock.patch.object(clipool, 'is_live', side_effect=live): self.say('Which is cheaper?', 'l-two'); self.rest()
+        self.assertTrue(seen, 'the turn at work was read')
+        self.assertEqual([s for t in seen for s in t['steps'] if 'Harbour' in str(s.get('text'))], [])
+
     def test_a_stop_pressed_in_the_second_its_line_was_heard_still_stands_under_that_line(self):
         """A press is stamped by the whole second: one made in the second the turn's own line was heard sorted above it by the tie, and the
         stopped mark fell on the finished answer before - order by what happened, never by the clock's grain."""

@@ -2708,11 +2708,13 @@ class GeneralSession:
         self.quick = quick                   # an agent's turn takes a desk from here; the warm agent's stays a fraction of one (quickwork._take)
         if as_owner: self.woke = self.silent = False       # ...and a turn the owner's words began may be woken once again (wake)
         self.owned = as_owner and not brief
-        self.busy, self.last = True, time.time()
         # ...ITS TRACE IS THIS TURN'S FROM THE MOMENT IT IS BUSY (the walks, 2026-11-17): the turn read at work over the last turn's trace -
         # "Thinking..." with that turn's prompt in it - and stepped back to "opening" when its CLI's start said so (conversation.items)
+        # ...so the trace is reset BEFORE it reads busy (the walks, 2026-11-17): set busy first, the reads of the task row in between (keep,
+        # cold) let a poll pair busy with the last turn's trace - the previous turn drawn again under his new line for ~200 ms
         from . import clipool; self.warm_ = clipool.is_live(self.keep())      # its CLI was already open at the start of this turn: the audit says so
-        self._turn_trace(self.last)
+        t0 = time.time(); self._turn_trace(t0)
+        self.busy, self.last = True, t0
         if (news := came_in(self.store, conversation.with_turn(self.store, self.task_id), mails)):
             delivery_instructions = f'{delivery_instructions}\n\n{news}' if delivery_instructions else news
         # A NEW TURN MAY FINISH AGAIN (the email walk, 2026-10-29): the mark a self-close leaves stops two hooks wrapping one turn,

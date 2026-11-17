@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { SECTIONS, homeSection, liveTerminal, soloTodo, cameFrom, agentStatus, agentWord, answeredOutside, reportLine, writeupAt, fromStatus, TAB_MOST, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, sectionFade, waitingOn, workPane } from "../src/taskLayout.js";
+import { SECTIONS, homeSection, liveTerminal, soloTodo, cameFrom, cameChip, agentStatus, agentWord, answeredOutside, reportLine, writeupAt, fromStatus, TAB_MOST, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, sectionFade, waitingOn, workPane } from "../src/taskLayout.js";
 import { STAGE, sectionOf } from "../src/stages.js";
 import { taskSource } from "./taskSource.mjs";
 
@@ -246,8 +246,16 @@ test("the two sections come in the flow's order, and each closed tab says where 
   assert.equal(cameFrom({ Channel: "email", SourceName: "alex@northwind.example", FromName: "Gail Moreno", FromEmail: "gail@northwind.example" }), "Gail Moreno");
   assert.equal(cameFrom({ Channel: "email", SourceName: "alex@northwind.example", FromEmail: "gail@northwind.example" }), "gail@northwind.example");
   assert.equal(cameFrom({ Channel: "whatsapp", SourceName: "Finance team", FromName: "Ray Colton" }), "Finance team");
-  // ...and a Teams message read through his mailbox is its sender's, never his own address (the owner, 2026-11-17)
-  assert.equal(cameFrom({ Channel: "teams", SourceName: "alex@northwind.example", FromName: "Ray Colton", FromEmail: "teams:u-ray" }), "Ray Colton");
+  // ...and a Teams message read through his mailbox is its chat's, never his own address (the owner, 2026-11-17): the topic, else its person
+  const teams = { Channel: "teams", SourceName: "alex@northwind.example", FromName: "Ray Colton", FromEmail: "teams:u-ray" };
+  assert.equal(cameFrom({ ...teams, Subject: "Help desk" }), "Help desk");
+  assert.equal(cameFrom({ ...teams, Subject: "Teams chat with Ray Colton" }), "Ray Colton");
+  assert.equal(cameFrom({ ...teams, Subject: "Teams group" }), "Ray Colton");
+  // ...and the pill on the box is the connection and the chat
+  assert.equal(cameChip({ ...teams, Subject: "Help desk" }), "Teams · Help desk");
+  assert.equal(cameChip({ Channel: "whatsapp", SourceName: "Finance team", FromName: "Ray Colton" }), "WhatsApp · Finance team");
+  assert.equal(cameChip({ Channel: "email", SourceName: "alex@northwind.example", FromName: "Gail Moreno" }), "Email · Gail Moreno");
+  assert.match(fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8"), /label: cameChip\(sourceMessage\) \|\| \(sources\.length/);
   assert.match(fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8"), /channel: cameIn \? cameFrom\(cameIn\) \|\| channelName\(cameIn\.Channel\)/);
   assert.equal(agentWord({}), "not started");
   assert.equal(agentWord({ live: true, waiting: true }), "needs you");

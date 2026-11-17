@@ -738,7 +738,8 @@ def _asked(store, tid, rid) -> bool: return (pending(store, tid) or {}).get('req
 # A CODE THE SITE EMAILED (the real-CLI walk, 2026-11-16): signed up, the site sent "Your code is 383972" to his inbox and asked for it on
 # its page. Triage filed the mail, the task kept saying "press its button" over a code page, and nobody knew the code was in the inbox. While
 # the ask is watched, a mail from the page's own site that came in since holds the code: typed on the pinned page like an authenticator's
-# (the agent never sees it), and the mail put on the task. A mail with no single code is put there for him to read, said in one line.
+# (the agent never sees it), the mail named on the task by its subject. A mail with no single code is his to read, said in one line. The
+# mail stays where triage filed it: put on the task, a site's no-reply mail made his own task a stranger's, held until he trusted the site.
 CODE_RE = re.compile(r'(?<![\w-])\d{4,8}(?![\w-])')
 def mailed_code(store, site: str, after: int):
     """(message id, code) of the newest mail from `site` - its sender's registrable domain the page's pinned site - since message `after`,
@@ -752,16 +753,16 @@ def mailed_code(store, site: str, after: int):
 
 
 def _code_from_mail(store, tid, site, c, mid, code) -> bool:
-    store.attach_message(mid, tid)
+    mail = f'"{str((store.get_message(mid) or {}).get("Subject") or "").strip()[:120]}"'
     if not code:
-        store.add_comment(tid, 'taskuary', 'agent', f'{site} emailed you - the mail is on this task. Type its code on the page to continue.')
+        store.add_comment(tid, 'taskuary', 'agent', f'{site} emailed you {mail} - type its code on the page to continue.')
         return True
     try: _type_code(c, site, lambda: code)
     except SignInError as e:
-        store.add_comment(tid, 'taskuary', 'agent', f'{site} emailed a code, and it could not be typed ({e}) - it is in the mail on this task.')
+        store.add_comment(tid, 'taskuary', 'agent', f'{site} emailed you {mail}, and its code could not be typed ({e}) - type it on the page.')
         return True
     _audit(store, tid, site, 'vault', True, 'the code it emailed', code=True)
-    store.add_comment(tid, 'taskuary', 'agent', f'Typed the code {site} emailed you - the mail is on this task.')
+    store.add_comment(tid, 'taskuary', 'agent', f'Typed the code {site} emailed you ({mail}).')
     return True
 
 

@@ -834,7 +834,7 @@ class SigningUp(unittest.TestCase):
 class CodeByMail(unittest.TestCase):
     """THE REAL-CLI WALK, 2026-11-16: signed up, the site emailed "Your LienLens verification code is 383972" and asked for it on its page.
     Triage filed the mail, the task kept saying "press its button" over a code page, and nobody knew the code was in the inbox. The watch
-    of the open ask finds a mail from the page's own site and types its one code on the pinned page; the mail goes on the task."""
+    of the open ask finds a mail from the page's own site and types its one code on the pinned page, naming the mail."""
     def setUp(self): self.s = MemoryStore(); self.tid = Factory(self.s).task('Market data from ten vendors')
 
     def mail(self, frm, body):
@@ -858,7 +858,8 @@ class CodeByMail(unittest.TestCase):
         with mock.patch.object(signin, '_type_code', lambda c, site, code: typed.append((site, code()))):
             self.assertTrue(signin._code_from_mail(self.s, self.tid, 'lienlens.example', object(), mid, '383972'))
         self.assertEqual(typed, [('lienlens.example', '383972')])
-        self.assertEqual(self.s.get_message(mid)['TaskId'], self.tid)
+        # ...the mail stays where it was filed: on the task, a site's no-reply mail made his own task a stranger's, held for Trust
+        self.assertIsNone(self.s.get_message(mid)['TaskId'])
         said = [c['Body'] for c in self.s.list_comments(self.tid)]
-        self.assertIn('Typed the code lienlens.example emailed you - the mail is on this task.', said)
+        self.assertIn('Typed the code lienlens.example emailed you ("Your LienLens code").', said)
         self.assertNotIn('383972', json.dumps([said, self.s._rows('SELECT * FROM audit')]))

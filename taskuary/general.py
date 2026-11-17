@@ -3193,7 +3193,7 @@ class GeneralSession:
         reply, turn = selfclose.turn_marker(reply)           # a step only the owner can do on the page: handed over on the browser view
         reply, asks = selfclose.asked_inline(could_not(self, reply))
         reply = reply or closing or ''
-        if signing is not None and not reply: reply = 'I need the site signed in to go on.'
+        if signing is not None and not reply: reply = 'Signing up on the site.' if str(signing).startswith('new:') else 'I need the site signed in to go on.'
         if turn is not None and not reply: reply = turn or 'Your turn in the browser.'
         # the worker's own lifecycle, as events (PW-225): the turn ended; and if it asked, the exact question
         try:

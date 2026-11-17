@@ -641,7 +641,8 @@ def without_ask(text: str) -> str:
 # ── ...and a sign-in it needs (signin.py) ────────────────────────────────────────────────────
 # The browser agent's "sign me in here". Its domain is only the agent's WORD, shown to the owner - what gets signed in is the page
 # the browser is on (signin.needs), so a marker a mail talked the agent into writing can name anything and fill nothing.
-_SIGNIN_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?SIGN[-_ ]?IN\s*(?::\s*([^\]]*))?\]\][^\n]*', re.I)
+# ...and its "sign me UP here" (signin.new_account): the same marker with UP, its claim then signin.NEW before the site
+_SIGNIN_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?SIGN[-_ ]?(IN|UP)\s*(?::\s*([^\]]*))?\]\][^\n]*', re.I)
 
 
 def signin_marker(text: str) -> tuple:
@@ -649,7 +650,8 @@ def signin_marker(text: str) -> tuple:
     t = str(text or '')
     m = _SIGNIN_RE.search(t)
     if not m: return text, None
-    return _SIGNIN_RE.sub('', t).rstrip(), ' '.join((m.group(1) or '').split())[:200]
+    site = ' '.join((m.group(2) or '').split())[:200]
+    return _SIGNIN_RE.sub('', t).rstrip(), (f'new:{site}' if m.group(1).lower() == 'up' else site)
 
 
 # ── ...and a step only the owner can do on the page (browserview.TURN_PREFIX) ────────────────────────────────────────────────

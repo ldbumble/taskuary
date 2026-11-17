@@ -736,3 +736,74 @@ class Routes(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class SigningUp(unittest.TestCase):
+    """THE REAL-CLI WALK, 2026-11-16: asked to sign up on ten sites, the agent filled nine forms and handed every one back for the owner to type
+    a password into - it may not make one up and hold it, and nothing else could. Now it ends its turn with [[TASKUARY-SIGNUP: <domain>]]:
+    Taskuary makes the password, types it on the page's pinned site, sends the form, and keeps it sealed only when the site took it."""
+    def setUp(self):
+        self.s = MemoryStore(); self.tid = Factory(self.s).task('Market data from ten vendors'); signin._TRIED.clear()
+        class Chat:
+            sid, alive, task_id = 'sess1', True, None
+            def __init__(self): self.said = []
+            def send_prompt(self, text, as_owner=True, **k): self.said.append(text)
+        self.sess = Chat(); self.sess.task_id = self.tid
+
+    def run_signup(self, fill, url='https://www.rentscope.example/signup'):
+        with on_page(url), mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': self.sess}):
+            _, claim = selfclose.signin_marker('Everything but the password is filled.\n[[TASKUARY-SIGNUP: rentscope.example]]')
+            out = signin.needs(self.s, self.tid, 'sess1', claim, fill=fill)
+            end = time.time() + 5
+            while time.time() < end and not self.sess.said: time.sleep(.02)
+        return out
+
+    def test_the_marker_says_sign_up_and_is_never_shown(self):
+        self.assertEqual(selfclose.signin_marker('Filled.\n[[TASKUARY-SIGNUP: rentscope.example]]'), ('Filled.', 'new:rentscope.example'))
+        self.assertEqual(selfclose.signin_marker('x\n[[TASKUARY-SIGNIN: bank.example]]'), ('x', 'bank.example'))
+
+    def test_a_sign_up_the_site_takes_is_kept_sealed_and_the_agent_goes_on_never_seeing_it(self):
+        typed = []
+        out = self.run_signup(lambda sid, site, pw: typed.append((sid, site, pw)) or {'user': USER})
+        self.assertEqual(out, {'site': 'rentscope.example', 'auto': True})
+        (sid, site, pw), = typed
+        self.assertEqual((sid, site), ('sess1', 'rentscope.example'))
+        self.assertTrue(len(pw) >= 16 and any(ch.isdigit() for ch in pw) and any(not ch.isalnum() for ch in pw), 'a password a strict site takes')
+        row = signin.saved(self.s, 'rentscope.example')
+        self.assertEqual((vault.unseal(row['Secret']), vault.unseal(row['User'])), (pw, USER))
+        self.assertTrue(self.sess.said[0].startswith(f'Signed up on rentscope.example as {USER} - continue.'), self.sess.said)
+        self.assertNotIn(pw, json.dumps([self.sess.said, self.s._rows('SELECT * FROM audit'), self.s._rows('SELECT * FROM comment')], default=str))
+        self.assertIsNone(signin.pending(self.s, self.tid), 'nobody is asked anything')
+
+    def test_a_form_the_site_kept_up_keeps_nothing_and_the_agent_hears_why(self):
+        def fill(sid, site, pw): raise signin.NotAccepted(f'{site} kept its sign-up form up - it says "That answer is not right."')
+        self.run_signup(fill)
+        self.assertIsNone(signin.saved(self.s, 'rentscope.example'))
+        self.assertIn('That answer is not right.', self.sess.said[0]); self.assertIn('No account was kept', self.sess.said[0])
+
+    def test_a_site_already_kept_is_signed_in_to_never_signed_up_on_twice(self):
+        signin.save(self.s, 'rentscope.example', USER, PW); typed = []
+        self.assertFalse(self.run_signup(lambda *a: typed.append(a))['auto'])
+        self.assertEqual(typed, [])
+        self.assertIn('[[TASKUARY-SIGNIN: rentscope.example]]', self.sess.said[0])
+        self.assertEqual(vault.unseal(signin.saved(self.s, 'rentscope.example')['Secret']), PW, 'the kept password is untouched')
+
+    def test_the_new_password_goes_into_every_password_box_of_the_pinned_site_and_the_form_is_sent(self):
+        class Page:
+            def __init__(self): self.boxes, self.focus, self.typed, self.sent = 2, None, [], False
+            def js(self, expr):
+                if expr.startswith(f'({signin.PASSBOX})'):
+                    i = int(expr.rsplit('(', 1)[1].rstrip(')')); self.focus = i if 0 <= i < self.boxes else None
+                    return {'n': 0 if self.sent else self.boxes, 'top': True, 'href': 'https://www.rentscope.example/signup', 'focused': self.focus is not None}
+                if expr == signin.VALUE: return USER
+                return '' if expr == signin.SAYS else None
+            def fields(self, want=''):
+                return {'top': True, 'href': 'https://www.rentscope.example/' + ('data' if self.sent else 'signup'), 'password': not self.sent,
+                        'user': not self.sent, 'focused': bool(want)}
+            def type(self, t): self.typed.append((self.focus, t))
+            def enter(self): self.sent = True
+            def close(self): pass
+        page = Page()
+        with mock.patch.object(signin, 'connect', return_value=page), mock.patch.object(signin, 'SETTLE', 0), mock.patch.object(browserview, 'filling', mock.MagicMock()):
+            self.assertEqual(signin.type_new('sess1', 'rentscope.example', 'Np9!x'), {'user': USER})
+        self.assertEqual((page.typed, page.sent), ([(0, 'Np9!x'), (1, 'Np9!x')], True))

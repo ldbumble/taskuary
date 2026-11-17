@@ -262,7 +262,9 @@ def _deliver(store, tid: int, new: int = None) -> dict:
     # into the turn at work, rather than at its end - the parked road below, under every one of its holds
     # ...and a chat's general agent on a CLI that takes them mid-turn (GeneralSession.can_steer, 2026-11-17): held to the turn's end, it finished
     # on old facts and then did the whole job again
-    steer = st == 'working' and t is not None and bool(getattr(t, 'steerable' if term.is_acp(t) else 'can_steer', lambda: False)())
+    # ...his own typed lines only: Taskuary's notes - a press, a message that came in - wait for the turn's end, as on every other agent (the
+    # audit's parity, 2026-11-17: a Send pressed mid-turn was steered in, and that chat's turn read at work on through its own answer)
+    steer = st == 'working' and t is not None and (term.is_acp(t) or all(x.get('line') for x in notes)) and         bool(getattr(t, 'steerable' if term.is_acp(t) else 'can_steer', lambda: False)())
     # "WHILE YOU WERE WORKING" ONLY WHEN IT WAS (agent walk 2, 2026-11-10): a line typed to an agent at rest reached it as "While you were
     # working, the owner queued 1 note for you ... after finishing the step you are on". Only a note that waited behind a turn says so
     waited = steer or any(x['WId'] not in (new, None) for x in notes)

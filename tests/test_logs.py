@@ -18,6 +18,11 @@ class TestLogs(unittest.TestCase):
         with mock.patch.object(logger, 'add', side_effect=add): logs.setup()
         self.assertEqual(len(paths), 2)
         self.assertNotEqual(paths[0], paths[1], 'the log moved to the temp folder')
+        # ...and everything that names the log names THAT file (2026-11-17: sent to the data folder's, two months stale)
+        self.assertEqual(logs.where(), paths[1])
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        self.assertEqual(TestClient(server.app).get('/api/version').json()['log'], paths[1])
 
 
 if __name__ == '__main__': unittest.main()

@@ -9,6 +9,10 @@ from loguru import logger
 from . import config
 
 FMT = '{time:YYYY-MM-DD HH:mm:ss} {level: <7} {name}:{line} {message}'
+# WHERE THE LOG IS WRITTEN, said by everything that names it (2026-11-17: a computer whose log had moved to the temp folder was sent to the data
+# folder's, two months stale - "the log has no data for 2 months"): the file setup() opened, else the data folder's
+FILE = None
+def where() -> str: return str(FILE or config.home() / 'taskuary.log')
 
 
 def setup(debug: bool = False):
@@ -23,5 +27,7 @@ def setup(debug: bool = False):
     except OSError as e:
         why, f = str(e), Path(tempfile.gettempdir()) / 'taskuary.log'
         logger.add(f, level='DEBUG', rotation='5 MB', retention=3, enqueue=True, format=FMT)
+    global FILE
+    FILE = f
     logger.info(f"log file: {f}" + (' (debug console)' if debug else ''))
     if why: logger.warning(f'the log file could not go in the data folder, so it is in the temp folder - {why}')

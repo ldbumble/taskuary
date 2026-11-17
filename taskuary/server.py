@@ -394,10 +394,10 @@ async def request_log(request: Request, call_next):
         # the error anywhere"). One line of it here, and where the rest of it is.
         logger.exception(f'{request.method} {request.url.path} crashed')
         if not request.url.path.startswith('/api'): raise
-        from .config import home
+        from . import logs
         return JSONResponse({'detail': f'{type(e).__name__}: {str(e)[:300] or "no message"}',
                              'where': f'{request.method} {request.url.path}',
-                             'log': str(home() / 'taskuary.log'), 'code': 'crashed'}, status_code=500)
+                             'log': logs.where(), 'code': 'crashed'}, status_code=500)
     # ...except a status poll that answered: the page asks every second or so, and those lines were three
     # quarters of taskuary.log - the 5 MB rotation then kept a day and a half of anything else (P13)
     if request.url.path.startswith('/api') and not (request.method == 'GET' and request.url.path in QUIET_GETS and resp.status_code < 300):
@@ -992,7 +992,9 @@ from . import __version__ as _ver
 _started = datetime.now().isoformat(sep=' ', timespec='seconds')
 
 @app.get('/api/version')
-def version(): return {'version': _ver, 'started': _started, 'cli_installer_revision': 2}
+def version():
+    from . import logs
+    return {'version': _ver, 'started': _started, 'cli_installer_revision': 2, 'log': logs.where()}
 
 # ── update in place (update.py): Settings → Updates ─────────────────────────────────────
 @app.get('/api/update')

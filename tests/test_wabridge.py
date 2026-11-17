@@ -25,7 +25,7 @@ class BridgeManagerTests(unittest.TestCase):
         netstat = 'Active Connections\n\n  Proto  Local Address          Foreign Address        State           PID\n  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       1234\n  TCP    127.0.0.1:8977         0.0.0.0:0              LISTENING       4242\n'
         # port() is pinned: with os.name faked to 'nt', reading the port file builds a WindowsPath, which Linux and macOS refuse
         with mock.patch.object(wabridge.os, 'name', 'nt'), mock.patch.object(wabridge.subprocess, 'run', return_value=mock.Mock(stdout=netstat)) as run, \
-             mock.patch.object(wabridge, '_proc', return_value=NODE), mock.patch.object(wabridge, 'port', return_value=8977):
+             mock.patch.object(wabridge, '_proc', return_value=NODE), mock.patch.object(wabridge, 'port', return_value=8977),              mock.patch.object(wabridge, '_status', return_value={'code': 'old'}):           # ...this home's: it answers its token
             self.assertEqual(wabridge.pid_on_port(8977), 4242)
             with mock.patch.object(wabridge, 'start', return_value={'phase': 'starting'}) as st, mock.patch.object(wabridge.time, 'sleep'):
                 self.assertEqual(wabridge.restart()['phase'], 'starting')
@@ -135,8 +135,9 @@ class BridgeManagerTests(unittest.TestCase):
         with mock.patch('requests.get', side_effect=get):
             self.assertEqual(wabridge._status(), {'code': 'x'})
         self.assertEqual(seen.get('x-bridge-token'), wabridge.token())
+        # ...and a 401 is ANOTHER home's bridge (2026-11-16): never this home's to adopt; start moves off its port (PortInUseTests)
         with mock.patch('requests.get', return_value=mock.Mock(status_code=401)):
-            self.assertTrue(wabridge._listening(), 'something answers on the port - never launch a second copy onto it')
+            self.assertEqual(wabridge._status(), {}); self.assertFalse(wabridge._listening()); self.assertFalse(wabridge.stale())
 
     def test_no_node_is_a_failed_phase_the_owner_can_act_on(self):
         # wait=True runs the worker inline: a threaded worker outlived its mocks on a slow CI box and
@@ -351,11 +352,32 @@ class PortInUseTests(unittest.TestCase):
             self.assertEqual(wabridge.start(wait=True)['pid'], 5150)
         self.assertEqual(self.killed, [4242]); pop.assert_called_once()
 
-    def test_a_bridge_with_another_token_is_not_ended_by_start_only_by_restart(self):
-        with mock.patch.object(wabridge, '_proc', return_value=NODE), mock.patch.object(wabridge, '_status', return_value={}), self.popen([None]):
-            out = wabridge.start(wait=True)
-        self.assertEqual(out['phase'], 'failed'); self.assertIn("does not know this Taskuary's token", out['detail'])
-        self.assertIn('Restart bridge replaces it', out['detail']); self.assertEqual(self.killed, [])
+    def test_two_homes_each_keep_their_own_bridge_and_neither_ends_the_other_s(self):
+        """2026-11-16: a second Taskuary home on the same machine found the owner's bridge on 8977 answering 401 to its token, read it as its
+        own stale bridge and restarted it - the owner's WhatsApp was down until his app brought it back. Another home's bridge is never
+        stopped, restarted or adopted: this home's moves to a port of its own, kept in this home, and its Restart ends only its own."""
+        pids = self.saved.parent / 'wa-bridge.pids'
+        with mock.patch.object(wabridge, '_proc', return_value=NODE), mock.patch.object(wabridge, '_status', return_value={}),              mock.patch.object(wabridge, '_pids_file', return_value=pids), mock.patch.object(wabridge, 'restart') as again,              mock.patch.object(wabridge, 'start', return_value={'phase': 'starting'}) as fresh:
+            wabridge.start_configured(self.store_with_whatsapp())
+        again.assert_not_called(); fresh.assert_called_once()                # its own start, never a restart of what answers 401
+        with mock.patch.object(wabridge, '_proc', return_value=NODE), mock.patch.object(wabridge, '_status', return_value={}),              mock.patch.object(wabridge, '_pids_file', return_value=pids), self.popen([None] * 5) as pop,              mock.patch.object(wabridge, '_listening', side_effect=[False, True, True]):
+            wabridge.start(wait=True)
+        self.assertEqual(self.killed, [], "the other home's bridge is never ended"); pop.assert_called_once()
+        self.assertEqual(pop.call_args.kwargs['env']['WA_BRIDGE_PORT'], '8978'); self.assertEqual(self.saved.read_text(), '8978')
+        self.assertEqual(wabridge.state()['pid'], 5150); self.assertEqual(pids.read_text(), '5150')
+        self.port[:] = [5150, 4242]                       # ...now on its own port; Restart ends the bridge it launched, and only that one
+        with mock.patch.object(wabridge, '_proc', return_value=NODE), mock.patch.object(wabridge, '_status', return_value={}),              mock.patch.object(wabridge, '_pids_file', return_value=pids), mock.patch.object(wabridge, 'start', return_value={'phase': 'starting'}):
+            wabridge.restart()
+        self.assertEqual(self.killed, [5150])
+        self.killed.clear(); self.port[:] = [4242]; wabridge._STATE.update(pid=None)
+        with mock.patch.object(wabridge, '_proc', return_value=NODE), mock.patch.object(wabridge, '_status', return_value={}),              mock.patch.object(wabridge, '_pids_file', return_value=pids):
+            wabridge.stop()
+        self.assertEqual(self.killed, [], "a stop in this home never reaches the other home's bridge")
+
+    def store_with_whatsapp(self):
+        s = MemoryStore(); wa = s.get_connector_by_type('whatsapp')
+        s.save_connector({'ConnectorId': wa['ConnectorId'], 'Active': 1}, 'owner')
+        return s
 
     def test_the_bell_says_why_the_last_start_failed(self):
         s = MemoryStore(); wa = s.get_connector_by_type('whatsapp')

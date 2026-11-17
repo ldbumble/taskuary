@@ -180,10 +180,10 @@ def _status() -> dict | None:
 
 
 def _listening() -> bool:
-    """Is Taskuary's managed local bridge already answering? The bridge is detached, so a
+    """Is Taskuary's managed local bridge already answering - THIS home's, by its token? The bridge is detached, so a
     Taskuary restart commonly finds the old process still healthy and must adopt it rather than
-    launch a second copy that dies with EADDRINUSE."""
-    return _status() is not None
+    launch a second copy that dies with EADDRINUSE. Another home's bridge on the port answers 401: not ours to adopt (start moves)."""
+    return bool(_status())
 
 
 def code() -> str:
@@ -197,7 +197,7 @@ def code() -> str:
 def stale() -> bool:
     """The bridge answering runs older code than is on disk (an update landed while it kept running)."""
     st = _status()
-    return st is not None and st.get('code') != code()
+    return bool(st) and st.get('code') != code()          # ...ours, by its token: another home's bridge is never "stale" to this one
 
 
 def wait_listening(secs: float) -> bool:
@@ -357,7 +357,7 @@ def _update(run: Path) -> str:
     except Exception as e: return failed(str(e))
     if r.returncode != 0 or not (new / 'node_modules' / '@whiskeysockets').exists():
         return failed(npm_why((r.stderr or '') + (r.stdout or ''), new) if r.returncode else 'npm installed nothing')
-    if (held := pid_on_port()) and _ours(_proc(held)):          # the bridge holding the old modules open: ended at the last moment
+    if (held := pid_on_port()) and _mine(held, _proc(held)):    # the bridge holding the old modules open: ended at the last moment
         _kill(held); _freed({held})
     shutil.rmtree(old, ignore_errors=True)
     try:
@@ -410,7 +410,9 @@ def start(force_install: bool = False, wait: bool = False, filter_policy: dict =
             # WHO HOLDS THE PORT, before a launch (#269): a second copy only dies on EADDRINUSE - and it went on dying, Restart after
             # Restart, while an old bridge nobody recorded kept the port. Ours is replaced; a stranger is left alone and the bridge moves.
             held,note = pid_on_port(),upd
-            if held and not _ours(info := _proc(held)):
+            # ...and ANOTHER HOME'S BRIDGE is not ours either (2026-11-16: a second Taskuary on the machine restarted the owner's): it keeps
+            # its port, and this home's bridge moves to one of its own, saved in this home
+            if held and not _mine(held, info := _proc(held)):
                 # MOVED, NOT STUCK (owner, 2026-10-26): a program that is not provably a bridge of ours keeps its port, and the
                 # bridge runs on a free one, saved so the poll and every later start look there. If that program is an old bridge
                 # whose command line this machine would not show, the pairing lock (bridge.mjs wa-auth.lock) keeps the two apart.
@@ -436,6 +438,7 @@ def start(force_install: bool = False, wait: bool = False, filter_policy: dict =
                 # bare: detached, outlives us by design - so it must hold nothing of the exe's unpack folder (spawn's note)
                 p = spawn.bare([node(), 'bridge.mjs'], cwd=str(run), stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                      env=env, **kw)
+                _launched(p.pid)
                 # until it answers or dies, not a fixed 2.5s: loading Baileys outlasts that on a cold Windows start, so a copy that died
                 # on EADDRINUSE a moment later was already called running - the card's Start said yes and the bridge stayed down (#269)
                 end = time.monotonic() + LAUNCH_SECS
@@ -553,6 +556,29 @@ def _proc(pid: int):
 def _ours(info) -> bool: return bool(info) and 'bridge.mjs' in info[1] and 'node' in (info[0] + info[1]).lower()
 
 
+# A BRIDGE IS THIS HOME'S ONLY BY WHAT THIS HOME KNOWS OF IT (2026-11-16: a second Taskuary on the same machine found the owner's bridge on the
+# port, read it as its own stale one and restarted it): a pid this home launched, or the bridge on the port answering this home's token.
+# A `node bridge.mjs` alone is any home's - it is never stopped, replaced or adopted on that alone.
+LAUNCHED_KEPT = 20
+def _pids_file() -> Path:
+    from . import config
+    return config.home() / 'wa-bridge.pids'
+
+def _launched(pid: int):
+    "Remember a bridge this home started, so a later start or stop knows it as its own (_mine) even when it no longer answers."
+    try:
+        f = _pids_file(); had = [l for l in (f.read_text(encoding='utf-8').split() if f.exists() else []) if l.isdigit()]
+        f.write_text('\n'.join([*had, str(int(pid))][-LAUNCHED_KEPT:]), encoding='utf-8')
+    except OSError as e: logger.debug(f'wa bridge: pid {pid} not remembered - {e}')
+
+def _mine(pid: int, info) -> bool:
+    """Is the bridge at `pid` this home's: a node bridge.mjs this home launched, or the one on the port answering this home's token."""
+    if not (pid and _ours(info)): return False
+    try: started = {int(l) for l in _pids_file().read_text(encoding='utf-8').split() if l.isdigit()}
+    except OSError: started = set()
+    return pid in started or pid == _STATE.get('pid') or (pid == pid_on_port() and bool(_status()))
+
+
 def _who(pid: int, info) -> str: return f'{info[0]} (pid {pid})' if info and info[0] else f'pid {pid}'
 
 
@@ -622,7 +648,7 @@ def stop(hold: bool = False) -> dict:
     for pid in dict.fromkeys(x for x in (mine, held) if x):
         info = _proc(pid)
         # our own child when this machine will not say who it is; never a pid that is gone or that someone else now has
-        if _ours(info) or (pid == mine and info is None): _kill(pid); gone.add(pid)
+        if _mine(pid, info) or (pid == mine and info is None): _kill(pid); gone.add(pid)
         elif pid == held: logger.warning(f'wa bridge stop: {_in_use(pid, info)}')
     if held in gone and not _freed(gone): logger.warning(f'wa bridge stop: pid {held} still holds port {port()}')
     _set('idle', 'stopped')

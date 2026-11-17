@@ -161,10 +161,10 @@ def _store():
 
 def refuse_op(op) -> str:
     """'' when a confirmed proposal only writes the demo's database, else the sentence. Making a task of a message is local;
-    handing it to an agent is a start - but not one sent on with its box (`box`): that only makes the task, and starts nothing."""
+    handing it to an agent is a start."""
     if not op: return ''                                    # no such proposal: the handler's own 404 says so
     kind, p = op.get('kind'), op.get('params') or {}
-    if kind in LOCAL_OPS or (kind == 'task.create_from_message' and (str(p.get('kind') or 'task').lower() == 'task' or p.get('box'))): return ''
+    if kind in LOCAL_OPS or (kind == 'task.create_from_message' and str(p.get('kind') or 'task').lower() == 'task'): return ''
     # ...a letter's Send is played wherever it is pressed (refuse_verdict): the rail's Send is the card's
     if kind == 'review.approve' and (st := _store()) is not None and (rv := st.get_review(int(op.get('target') or 0))):
         return refuse_verdict('approve', rv.get('Kind'))

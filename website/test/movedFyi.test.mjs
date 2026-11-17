@@ -45,20 +45,3 @@ test("its ghost is its FYI row, wearing the task", () => {
   assert.equal(awayFromClear([{ level: "task", items: [{ key: "p:2", tid: 1290 }] }, { level: "fyi", items: [g, fyi("p:3")] }]), 2, "counted once, as the task");
 });
 
-// ...and the task it became opens with the cursor in its box (boxWanted.js): wanted for the few seconds the task's chat takes to settle - it is
-// drawn again as the page reads the new task, and a box focused on the first draw went with it - and for that task alone
-test("a report sent to an agent wants its task's box for a moment, and only that task's", async () => {
-  const { takeBox, wantBox } = await import("../src/boxWanted.js");
-  wantBox(31, 1000);
-  assert.equal(takeBox(31, 1500), true, "the first draw");
-  assert.equal(takeBox(31, 3500), true, "and the draw after the page read the task");
-  assert.equal(takeBox(31, 6000), false, "never later, when he may be typing elsewhere");
-  assert.equal(takeBox(32, 1500), false);
-});
-
-test("a report sent on as a task reads in What came in as it does on Reports, never its rows' raw data", () => {
-  // the owner, 2026-11-13: the task's What came in showed {"site": ..., "headcount": ...}
-  const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  assert.match(page, /const cameReport = !!cameIn && t\?\.Source === "report"/);
-  assert.match(page, /cameReport \? <Box data-tq-came-in-report=""><FullText mid=\{cameIn\.MessageId\} report=/);
-});

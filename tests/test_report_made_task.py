@@ -4,8 +4,10 @@ Reply - over a report no person wrote (the owner, 2026-09-16: "i don't like this
 
 A REPORT IS SENT ON AS A TASK (the owner, 2026-11-13): "it should just have button send to agent and that will move it to task"; "when you hit
 send to agent it should look like every task with coming from and then you should be able to write what you want to send to agent about the
-prompt so the report plus your prompt will be injected together into the agent on the task". The row offers Send to agent and no Make it a task;
-the press makes a task with the report as its source and starts nothing; his first line in its box starts the agent with the report and his words."""
+prompt so the report plus your prompt will be injected together into the agent on the task". The row offers Send to agent and no Make it a task.
+AS A REPORT, A DASHBOARD OR AN FYI ALL DO (the owner, 2026-11-16: "they should all work the same ... it requires user prompt on the reports/dashboard
+what they want to know about it"): his words go in the box the press opens on the item, and they start the agent on a task whose Came from is the
+report - the press once made an empty task, its agent a line waiting on him."""
 import time
 from unittest import mock
 
@@ -59,32 +61,6 @@ def test_a_report_row_offers_send_to_agent_and_never_make_it_a_task():
     assert bulk.refusal(it, 'mine')
 
 
-def _sent_on(s):
-    "The desk's Send to agent pressed on a report row, run as the page runs it - the task it made, and the proposal."
-    it = _report(s)
-    with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(server, 'store', s), \
-            mock.patch.object(general, 'start_session', side_effect=AssertionError('the press started an agent')):
-        prop = concierge.propose_direct(s, 'regular_agent', it['key'], '', 'owner', table=True, exact=True, press=True)
-        out = concierge.run_proposal(s, prop, 'owner')
-    return it, prop, out
-
-
-def test_send_to_agent_on_a_report_makes_its_task_and_starts_nothing():
-    s = _world()
-    it, prop, out = _sent_on(s)
-    assert prop['params'].get('box') and prop['label'] == 'Send to agent', prop
-    tid = s.get_message(it['mid'])['TaskId']
-    assert tid and (out.get('outcome') or out).get('box'), out
-    t = s.get_task(tid)
-    assert t['Source'] == 'report' and t['Status'] not in ('done', 'dropped'), t
-    assert server.ASK_TAG not in str(t.get('Tags') or ''), 'nothing asks in his place when the chat opens - the first line is his'
-    assert not general.session_for(tid) and not general.working(s, tid), 'nothing works it until he says what to do'
-    # ...its Came from is the report, as any task made from a message
-    assert [m['MessageId'] for m in s.list_messages(tid)] == [it['mid']]
-    rows, _ = _lane(s, tid)
-    assert rows == [('todo', 'yours')], rows
-
-
 class Brain:
     "An API card's model: answers at once, and keeps what each turn was asked."
     def __init__(self): self.asked = []
@@ -93,10 +69,9 @@ class Brain:
         return 'Read it - the biggest site is Fairhaven.'
 
 
-def test_his_first_line_in_the_box_starts_the_agent_with_the_report_and_his_words(monkeypatch):
+def test_send_to_agent_on_a_report_starts_its_agent_on_the_report_and_his_words(monkeypatch):
     s = _world()
-    it, _, _ = _sent_on(s)
-    tid = s.get_message(it['mid'])['TaskId']
+    it = _report(s)
     body = str(s.get_message(it['mid']).get('BodyText') or '')
     from taskuary import browserview, llm
     brain = Brain()
@@ -105,22 +80,27 @@ def test_his_first_line_in_the_box_starts_the_agent_with_the_report_and_his_word
     monkeypatch.setattr(llm, 'build_llm', lambda *a, **k: brain)
     monkeypatch.setattr(browserview, 'installed', lambda: False)
     monkeypatch.setattr(browserview, 'can_set_up', lambda: False)
-    words = 'Pull out the three biggest numbers for Erin Blake'
-    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(server, 'store', s):
+    words, tid = 'Pull out the three biggest numbers for Erin Blake', None
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(server, 'store', s), \
+            mock.patch.object(terminal, 'live_sessions', return_value=[]):
         try:
-            # ...as its box sends it (AgentSummary.NoAgentChat: a to-do no agent has touched starts its agent with his words)
-            r = TestClient(server.app).post(f'/api/tasks/{tid}/dispatch', json={'kind': 'general', 'instruction': words})
-            assert r.status_code == 200, r.text
+            # ...the desk's press with his words, as the item's own box sends it (AssistantView.startOnItem)
+            prop = concierge.propose_direct(s, 'regular_agent', it['key'], words, 'owner', table=True, exact=True, press=True)
+            assert prop['label'] == 'Send to agent' and not prop['params'].get('box'), prop
+            concierge.run_proposal(s, prop, 'owner')
+            tid = s.get_message(it['mid'])['TaskId']
             end = time.time() + 20
-            while not brain.asked and time.time() < end: time.sleep(0.05)
+            while not any(words in a for a in brain.asked) and time.time() < end: time.sleep(0.05)
         finally:
             for t in list(terminal.SESSIONS.values()):
                 try: t.close()
                 except Exception: pass
-            general.answered(tid, every=True)
-    assert brain.asked, 'his line started no agent'
-    first = brain.asked[0]
-    assert words in first, 'his words reach the agent'
+            if tid: general.answered(tid, every=True)
+    # ...its Came from is the report, as any task made from a message
+    assert tid and s.get_task(tid)['Source'] == 'report' and [m['MessageId'] for m in s.list_messages(tid)] == [it['mid']]
+    # ...the agent's first turn has his words (the model's first call may be the task's own read of the message, triage.extract_ask)
+    first = next((a for a in brain.asked if words in a), '')
+    assert first, 'his words started no agent'
     # the report's own rows, as the run wrote them, reach that first turn as the task's source: in it, or - a report read from a source not marked
     # the owner's own system is a stranger's text (origin.report_rests_on) - in the source file it is told to read first
     from taskuary import origin

@@ -26,7 +26,5 @@ export const AGENT_TURN = "Agent";
 // "Ask the Assistant…". Every box, button and tooltip that names it to the owner reads this one name
 export const ASSISTANT_NAME = kinds.assistant;
 export const MESSAGE = "Message the agent…", ASK_ASSISTANT = `Ask ${ASSISTANT_NAME}…`;
-// ...and the line a task's first box says when sent empty: the agent starts on what the task came from (AgentSummary.NoAgentChat)
-export const START_ON_SOURCE = "Work out what's needed from what this came from, and do it.";
 export const shownAgent = () => AGENT_SHOWN;      // `run` was read for a tool's name; every agent is Agent now
 export const instructionsHint = (profile) => profile ? `Instructions: ${profile}` : "";

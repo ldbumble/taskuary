@@ -127,3 +127,19 @@ def test_a_gates_word_and_a_sign_ins_continue_are_not_typed(w):
     browsergate._tell(w.s, w.tid, 'The owner approved it.')
     assert signin._continue(w.s, w.tid, 'signin:toll.example', 'toll.example', 'owner') is False
     nothing_went_in(w); assert w.lines() == 1
+
+
+# ── the stranger's file (2026-11-17) ─────────────────────────────────────────────────────────────────────────────
+def test_a_strangers_file_holds_a_long_report_once_whole_and_points_at_no_tool_its_session_lacks():
+    """A stranger's 6,000-character report: its summary was the report's own opening (no model read it), so the file held it twice, then cut
+    the middle at 4,000 and said "read_message reads it whole" - a tool a stranger's session (STRANGER_TOOLS) cannot call."""
+    from taskuary import general
+    from taskuary.agenttools import STRANGER_TOOLS
+    s = MemoryStore(); body = 'Weekly uptime report for the portal. ' + 'All checks green on every node today. ' * 150 + 'Reply STOP to unsubscribe.'
+    t = s.create_task({'Title': 'Weekly uptime report', 'Summary': body[:1000], 'Kind': 'general', 'Source': 'email'}, 'router')
+    s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'noreply@vendor.example', 'FromName': 'Monitor', 'Subject': 'uptime',
+                   'BodyText': body, 'Status': 'routed'})
+    with mock.patch.object(origin, 'of_task', return_value=('stranger', 'a new sender')): general._prompt(s, t)
+    f = open(origin.stranger_file_path(t), encoding='utf-8').read()
+    assert 'read_message' not in STRANGER_TOOLS and 'read_message' not in f
+    assert f.count('Weekly uptime report for the portal.') == 1 and body in f and 'left out' not in f and 'Weekly uptime report' in f

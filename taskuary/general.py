@@ -225,6 +225,7 @@ SCROLLBACK = 200_000
 # says how to read it whole (READ_WHOLE) - the model opens what it needs instead of being handed everything
 MAX_CONTEXT = 30_000
 SOURCE_MAILS, SOURCE_CHARS = 8, 4_000
+STRANGER_CHARS = 30_000          # one message in a stranger's file, read whole by a session with no read_message to open the rest (2026-11-17)
 TURNS, TURN_CHARS = 30, 4_000
 READ_WHOLE = 'read_message (or `taskuary --message ID`) reads any mail in full, search_messages (`taskuary --search`) finds the rest'
 OWNER_ASK_CHARS = 2_000          # the owner's words at the head of the prompt (_prompt): the whole of them, short of a pasted essay
@@ -2074,7 +2075,13 @@ def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
     # ...and A RUN OF CHAT LINES IS ONE ENTRY (the stress run, 2026-11-10): eleven lines one person typed in a minute were eleven mails to
     # the window - the three that said what was wanted went to the one-line "earlier mail", and "pls" and "thx" each stood in full
     runs = chat_runs(mails)
-    if len(runs) > SOURCE_MAILS: sources.append(compacted_mail([m for r in runs[:-SOURCE_MAILS] for m in r]))
+    # ...AND A CUT POINTS AT read_message ONLY WHERE THE SESSION HAS IT (2026-11-17): a stranger's file is its session's one door, and with
+    # STRANGER_TOOLS alone "read_message reads it whole" named a tool it cannot call over a report cut at 4,000 - there, every source goes in,
+    # each whole up to STRANGER_CHARS
+    from .agenttools import STRANGER_TOOLS
+    reads = not stranger or 'read_message' in STRANGER_TOOLS
+    window, budget = (SOURCE_MAILS, SOURCE_CHARS) if reads else (len(runs), STRANGER_CHARS)
+    if len(runs) > window: sources.append(compacted_mail([m for r in runs[:-window] for m in r]))
     # ...WHERE EACH WAS WRITTEN, AND UNDER WHAT SUBJECT WHEN IT CHANGES (the stress run, 2026-11-10): a task holding a mail and a chat line on
     # another matter read as one flat list of senders and bodies - nothing said the third message came by another road. A long one keeps
     # its last lines too (triage.both_ends: the ask is as often under the story as over it)
@@ -2088,9 +2095,9 @@ def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
         # sign_form could only reach after a read_message to learn its number
         tag = lambda a: ', '.join(str(x) for x in (f"attachment {a['AttachmentId']}" if a.get('AttachmentId') else '', a.get('Path')) if x)
         file_line = ('\nATTACHMENTS: ' + '; '.join(str(a.get('Name') or 'file') + (f' ({tag(a)})' if tag(a) else '') for a in files[:8])) if files else ''
-        long = len(str(m.get('BodyText') or '')) > SOURCE_CHARS
-        return both_ends(str(m.get('BodyText') or ''), SOURCE_CHARS) + (f"\n[cut to fit - read_message m{m['MessageId']} reads it whole]" if long else '') + file_line
-    for run in runs[-SOURCE_MAILS:]:
+        long = reads and len(str(m.get('BodyText') or '')) > budget
+        return both_ends(str(m.get('BodyText') or ''), budget) + (f"\n[cut to fit - read_message m{m['MessageId']} reads it whole]" if long else '') + file_line
+    for run in runs[-window:]:
         m = run[0]
         who = asked(m) or m.get('FromName') or m.get('FromEmail') or m.get('SourceName') or m.get('Channel') or 'source'
         subj, was = str(m.get('Subject') or '').strip(), said_subject
@@ -2170,7 +2177,7 @@ def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
     ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words
     from .terminal import TICK_HEAD, _tickable
     chk = f"CHECKLIST - what was asked for, as triage read it{f' ({TICK_HEAD})' if _tickable(md) else ''}:\n{md}\n" if md else ''
-    if stranger: sources.insert(0, f"TITLE: {task.get('Title') or ''}\nSUMMARY: {task.get('Summary') or ''}\n{chk}")
+    if stranger: sources.insert(0, f"{origin.stranger_head(store, tid, task)}\n{chk}")
     # THE OWNER'S WORDS LEAD (the owner, 2026-10-23: "write prompt what about the email or attachment is the issue"): what they asked
     # on this turn heads the prompt, over the task and the item it is about - an email and its files, a report's rows - which follow
     # as its material. The conversation still ends on the same words; this is where they are read FIRST.

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { answerShown, chatReplyShown, foldedSummaries, hasReply, lastAnswerSummed, nextSteps, oneLine, turnOnYou } from "../src/agentSummary.js";
+import { onYouTurn } from "../src/chatStream.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 
@@ -141,14 +142,35 @@ test("the To do is the work alone, and what is left on the owner is one On you l
 // the decision it left him - the summary's `on_you` - was drawn nowhere: "agent finished" over a list of options, his choice unsaid
 test("a turn's On you steps are said under its words, never twice", () => {
   const sum = { did: "Compared three providers.", on_you: ["Decide whether to offer same-day pay.", "Say if I should ask Payworth for terms"] };
-  assert.equal(turnOnYou(sum, sum.did), "For you to do: Decide whether to offer same-day pay; Say if I should ask Payworth for terms.");
-  assert.equal(turnOnYou(sum, "Compared three. **Decide whether to offer same-day pay** - your call."), "For you to do: Say if I should ask Payworth for terms.");
-  assert.equal(turnOnYou({ did: "x" }, "x"), "");
+  assert.equal(turnOnYou(sum), "For you to do: Decide whether to offer same-day pay; Say if I should ask Payworth for terms.");
+  assert.equal(turnOnYou({ did: "x" }), "");
   // ...a step ending on its own question or ellipsis keeps it, never "?." (the live chat, 2026-11-16)
-  assert.equal(turnOnYou({ on_you: ["Pick a date", "Should I ask Payworth for terms?"] }, ""), "For you to do: Pick a date; Should I ask Payworth for terms?");
-  assert.equal(turnOnYou(null, "x"), "");
-  assert.match(read("GeneralWorkspace.jsx"), /const onYou = !live && sum && !ask \? turnOnYou\(sum, words\) : ""/);
+  assert.equal(turnOnYou({ on_you: ["Pick a date", "Should I ask Payworth for terms?"] }), "For you to do: Pick a date; Should I ask Payworth for terms?");
+  assert.equal(turnOnYou(null), "");
+  // ...and nothing is left to him where the turn said nothing is left (the walk, 2026-11-17: a to-do under "nothing else is pending")
+  assert.equal(turnOnYou({ did: "Sent.", on_you: ["Watch for a reply"], nothing_left: true }), "");
+  assert.match(read("GeneralWorkspace.jsx"), /const onYou = owes && !live && sum \? turnOnYou\(sum\) : ""/);
   assert.match(read("GeneralWorkspace.jsx"), /\{!!onYou && <div className="tq-aui-summary" data-tq-on-you="" style={{ marginTop: 10 }}>/);
+});
+
+// FOR YOU TO DO IS WHAT IS LEFT, NOT A RECORD OF EACH TURN (the walk, 2026-11-17): a turn asked for the agenda, the ask was withdrawn as he
+// answered, and the old turn grew "For you to do: Give the three agenda topics" above his own reply and the turn that used it. Only the newest
+// turn at rest, nothing of his under it, says what is left - and never one whose own ask or card is the step
+test("only the newest turn at rest with no ask or card of its own says what is left to him", () => {
+  const A = { kind: "turn", id: "a", state: "done", summary: { did: "Asked for the agenda.", on_you: ["Give the three agenda topics"] } };
+  const items = [A, { kind: "line", id: "l1", text: "Budget, hiring, offsite" }, { kind: "turn", id: "b", state: "done", summary: { did: "Drafted the agenda." } }];
+  assert.equal(onYouTurn(items), "b");
+  assert.equal(onYouTurn(items.slice(0, 2)), "", "his line under it: nothing new above it");
+  assert.equal(onYouTurn([A]), "a");
+  assert.equal(onYouTurn([A, { kind: "press", id: "p", text: "Send" }]), "");
+  assert.equal(onYouTurn([A], { askAt: "a" }), "", "the ask is the step");
+  assert.equal(onYouTurn([{ ...A, cards: [{ id: "c", review: 4, status: "pending" }] }]), "", "the card is the step");
+  assert.equal(onYouTurn([A], { lettersAt: "a" }), "");
+  assert.equal(onYouTurn([A], { landAt: "a" }), "");
+  assert.equal(onYouTurn([{ ...A, cards: [{ id: "c", review: 4, status: "superseded" }] }]), "a", "a greyed card asks nothing");
+  assert.equal(onYouTurn([...items, { kind: "turn", id: "c", state: "working" }]), "");
+  assert.equal(onYouTurn([]), "");
+  assert.match(read("GeneralWorkspace.jsx"), /owes=\{x\.id === owes\}/);
 });
 
 // the phone audit (2026-11-13): New's box was one fixed row - its example wrapped to a row and a half under a scrollbar at 390px, and long

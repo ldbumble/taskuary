@@ -18,7 +18,7 @@ import { keepUnsent, unsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isMade, isPastCard, standing, heldAtEnd,  partsMessage, turnParts, workCount, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, lettersTurn, placesLoose, askedFirst } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isMade, isPastCard, standing, heldAtEnd,  partsMessage, turnParts, workCount, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, lettersTurn, onYouTurn, placesLoose, askedFirst } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
@@ -415,7 +415,7 @@ const TurnTime = ({ t }) => {
   return <span data-tq-ran="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>· {when(end)}{ran ? ` · ${ran}` : ""}</span>;
 };
 // `later`: a turn after the chat's first - its agent starting again is the work going on, never a line of its own (workingLine)
-const ConvTurn = ({ t, more, cards, name, ask = null, later = false }) => {
+const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = false }) => {
   const live = t.state === "working" || t.state === "starting";
   const parts = useMemo(() => turnParts(eventsOf(t.steps || [], live), { answer: t.text || "" }), [t.steps, t.text, live]);
   const key = t.answer || t.id, at = useTurnOutputs(key), shown = React.useContext(ShownCtx)[key];
@@ -425,8 +425,8 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false }) => {
   const rest = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown).rest.filter((p) => !names.has(p.name));
   const quiet = !live && !hasParts(parts) && !words && !t.fail && !cards?.length && !made.length && !rest.length && !ask;
   // ...and never under the turn's own open question (the audit, 2026-11-15: "What is your plate number?" in its words, then "For you to do:
-  // Tell me your plate number"): what it asks him IS what is left to him, said once
-  const onYou = !live && sum && !ask ? turnOnYou(sum, words) : "";
+  // Tell me your plate number"): what it asks him IS what is left to him, said once - nor on any turn but the one that `owes` it (onYouTurn)
+  const onYou = owes && !live && sum ? turnOnYou(sum) : "";
   // ...WHILE THE CLI COMPACTS ITS CONTEXT the turn at work says so (the owner, 2026-11-10: "show compacting like claude code does"): its newest
   // step is the compaction, not yet over
   const compacting = live && ((x) => x?.k === "compact" && !!x.status && !["completed", "failed", "cancelled"].includes(x.status))((t.steps || []).at(-1));
@@ -484,7 +484,7 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
   const landIn = landAt ? landingTurn(items.filter((x) => x.kind === "turn").map((x) => ({ role: "assistant", id: x.id, createdAt: x.at })), landAt) : null;
   // ...every review the list places, in whatever state: a card is drawn where the list has it and nowhere else
   const used = new Set(), listed = new Set(items.flatMap((x) => (x.kind === "card" ? [x] : x.kind === "turn" ? x.cards || [] : [])).map((c) => c.review));
-  const stands = standing(items);
+  const stands = standing(items), owes = onYouTurn(items, { askAt, lettersAt, landAt: landIn });
   const draw = (cs) => (cs || []).flatMap((c) => {
     // ...a draft no longer to press carries what it said (`was`); any other card the server settled is its own node, in its place
     // ...and it takes its review's node with it only where the review has no card of its own left in the list (chatStream.standing)
@@ -511,7 +511,7 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
     // ...A TURN AT WORK ALWAYS DRAWS ITS HEAD (2026-11-17: one that carried on after the agent's first message folded into the turn above - no
     // clock, no Stop x, and the head over it read that turn's "ran 27s"): only a finished turn after a turn folds into it
     if (x.kind === "turn") return <ConvTurn key={x.id} t={x} more={prev?.kind === "turn" && x.state !== "working" && x.state !== "starting"} name={name} ask={x.id === askAt ? ask : null}
-      cards={cardsOf(x)} later={items.slice(0, i).some((y) => y.kind === "turn")} />;
+      cards={cardsOf(x)} owes={x.id === owes} later={items.slice(0, i).some((y) => y.kind === "turn")} />;
     if (x.kind === "line") return <ConvLine key={x.id} x={x} more={prev?.kind === "line"} />;
     if (x.kind === "arrival") return <div key={x.id} className="tq-aui-message tq-aui-brief" data-tq-item={x.id}><Arrived mail={[x]} prev={prev?.kind === "arrival" ? prev : null} /></div>;
     if (x.kind === "card") { const got = draw([x]); return got.length ? <div key={x.id} className="tq-aui-message tq-aui-agent" data-tq-item={x.id} data-tq-row-cards=""><div className="tq-aui-agent-body">{got}</div></div> : null; }

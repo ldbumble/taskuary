@@ -259,6 +259,14 @@ export const askedFirst = (asking, reviews = []) => !!asking && !(reviews || [])
   && !(reviews || []).some((r) => ["draft_reply", "draft"].includes(r.Kind) && r.Status === "pending" && words(r));
 export const lettersTurn = (list, items) => { const xs = items || [], i = list?.letters ? xs.findIndex((x) => x.kind === "turn" && x.id === list.letters) : -1;
   return i >= 0 && !["starting", "working"].includes(xs[i].state) && !xs.slice(i + 1).some((x) => x.kind === "line") ? xs[i].id : ""; };
+// THE ONE TURN THAT SAYS WHAT IS LEFT TO HIM ("For you to do", the summary's `on_you`; the walk, 2026-11-17): it is the state of what is left,
+// not a record of each turn - an old turn whose ask was withdrawn grew "Give the three agenda topics" above his own answer. The newest turn, at
+// rest, with nothing of his under it (nothing new is drawn above his line), and never one whose own ask, card or letters wait: those ARE the step
+export const onYouTurn = (items, { askAt = "", lettersAt = "", landAt = "" } = {}) => {
+  const xs = items || [], i = xs.map((x) => x.kind === "turn").lastIndexOf(true), t = xs[i];
+  if (!t || ["starting", "working"].includes(t.state) || xs.slice(i + 1).some((x) => x.kind !== "arrival")) return "";
+  return [askAt, lettersAt, landAt].includes(t.id) || (t.cards || []).some((c) => c.status === "pending") ? "" : t.id;
+};
 // ...what a turn at work waits on HIM for, in words: the step its session is stopped at, a sign-in, a question
 // ...(a question the agent asked before is no wait while it works: the recorded walk, 2026-11-12, read "Waiting for your answer" over a turn
 // already at work on his answer - only a step it is stopped at, or a sign-in on the page, holds a turn at work)

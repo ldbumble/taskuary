@@ -1547,6 +1547,7 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
         except requests.RequestException:
             pass
     if feed is None: feed = _teams_user_delta(tok, since_iso, state=state) if user else _teams_delta(tok, upn, since_iso, state=state)
+    as_him = user                    # read as the owner (his own sign-in) or as an app - `user` is each message's sender below
     tenant = _token_tenant(tok)
     # oldest first, so threads read in order - by when each was written: a delta link's pages need not be newest first
     for m in sorted(reversed(feed), key=lambda m: m.get('createdDateTime') or ''):
@@ -1587,11 +1588,14 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
         # a MEMBERSHIP check on the chat, not a scope check. An app-only connection is not in
         # the chat, so no permission grant fixes it; that would take delegated auth.
         missed = len(set(_HOSTED.findall(raw_html))) - len(atts)
+        # ...WITH THE WAY PAST (the owner, 2026-11-17: "need this fixed"): read as an app, the card's own Sign in with Microsoft - as him, a
+        # member of the chat, the picture is his to read; read as him already, only Teams itself shows it
         if missed > 0:
             body += ('\n\n[' + f"{missed} image{'s' if missed > 1 else ''} in this message could not be read: "
-                     'Microsoft refused the download for THIS chat (403) - it happens on group '
-                     'threads with external participants, whatever the app is consented for. '
-                     'Images in your other chats come through normally. Open it in Teams to see it.]')
+                     + ("Microsoft gives a picture in a chat with people outside the company only to someone in the chat, and the Teams card "
+                        "reads as an app. Press Sign in with Microsoft on the Teams card to read Teams as you, and pictures like this come "
+                        "through. Until then, open it in Teams to see it.]" if not as_him else
+                        "Microsoft refused the download for this chat (403). Open it in Teams to see it.]"))
         common = {'external_id': f'teams:{cid}:{m["id"]}', 'channel': 'teams',
                   'subject': topic or (f'Teams chat with {name}' if kind == 'oneOnOne' else f'Teams {kind}'),
                   'body': body[:20000], 'conversation_id': f'teams:{cid}',

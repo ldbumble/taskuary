@@ -764,7 +764,8 @@ def _items(store, tid: int) -> dict:
             place({'id': f"r:{r['ReviewId']}", 'kind': 'card', 'review': r['ReviewId'], 'what': 'batch', 'batch': b, 'n': len(rs),
                    'status': 'pending' if open_ else 'done', 'at': r['CreatedAt'], 'decided': None}, ep(r['CreatedAt']) + 0.999)
             continue
-        if r['Kind'] == 'slot' and not (str(r.get('DraftText') or '').strip() and (proposals_passed(r) or r['Status'] in WENT or r['ReviewId'] in past)): continue
+        # ...and one he said Don't send to stays too, greyed where it stood (the real-CLI walk, 2026-11-16: it went from the chat - _card)
+        if r['Kind'] == 'slot' and not (str(r.get('DraftText') or '').strip() and (proposals_passed(r) or r['Status'] in (*WENT, 'rejected') or r['ReviewId'] in past)): continue
         if unwritten(r) or r['ReviewId'] in held: continue
         if f"r:{r['ReviewId']}" in waited and hosts.get(f"r:{r['ReviewId']}") is None and r['Status'] != 'pending' and r.get('DecidedBy') not in OWNER_ACTORS: continue
         left = None if r['Kind'] == 'action' else wrapup.left_by(store, r['ReviewId'])

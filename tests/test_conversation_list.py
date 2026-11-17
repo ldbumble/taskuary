@@ -983,3 +983,16 @@ def test_a_card_he_said_no_to_keeps_its_words_where_it_stood():
     c = conversation._card({'ReviewId': 9, 'Kind': 'slot', 'Status': 'rejected', 'DraftText': 'Hi Erin, the open house moved to Thursday.',
                             'DecideNote': '', 'CreatedAt': '2026-11-17 03:41:00', 'DecidedAt': '2026-11-17 03:41:20'})
     assert (c['status'], c['was']['text']) == ('rejected', 'Hi Erin, the open house moved to Thursday.'), c
+
+
+def test_an_email_he_said_dont_send_to_stays_in_the_list_where_it_stood():
+    "The same, read through the task's list: the rejected email's card is placed, greyed, with its words - never dropped from it."
+    from taskuary import conversation
+    from taskuary.store import MemoryStore
+    from taskuary.testing import Factory
+    s = MemoryStore(); tid = Factory(s).task('Tell Erin the open house moved')
+    rid = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': 'Hi Erin, the open house moved to Thursday.',
+                        'Deliver': '{"channel": "email", "to": ["erin@northwind.example"], "slot": "s1"}'})
+    s._exec("UPDATE review SET Status='rejected', DecidedBy='owner' WHERE ReviewId=?", (rid,))
+    cards = [c for x in conversation.items(s, tid)['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])]
+    assert [(c['review'], c['status'], c['was']['text']) for c in cards] == [(rid, 'rejected', 'Hi Erin, the open house moved to Thursday.')], cards

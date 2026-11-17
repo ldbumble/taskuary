@@ -2,6 +2,10 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.21 - 2026-11-17
+
+- A turn at work shows its steps counted behind the quiet "n steps" line, shut, as a finished turn does
+
 ## 0.4.0.20 - 2026-11-17
 
 - What the owner asked for in his own words is done, never held for a second yes: a sign-up he asked for is sent by Taskuary

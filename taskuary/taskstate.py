@@ -255,7 +255,9 @@ def done_for_now(store, t: dict, session: dict) -> bool:
     # ...a chat agent in its own chat, unless its last turn was STOPPED (the audit, 2026-11-10: Remind me pressed mid-turn lit Mark done over the
     # turn it had just stopped, in the beat before its session rested); one of its kind in a pane (a routine's run) is read by its turns, as a
     # coding agent is
-    if handles(t) and (session.get('mode') or 'assistant') == 'assistant': return last not in ('stopped', 'failed')
+    # ...and never one that has not run a turn at all (never_ran, 2026-11-17: a held task's session, its first turn refused, read "agent done -
+    # type to carry on" on the rail over a chat no agent had worked)
+    if handles(t) and (session.get('mode') or 'assistant') == 'assistant': return last not in ('stopped', 'failed') and not never_ran(store, t, session)
     return last == 'turn_end' and not landing.asked(store, tid)
 
 

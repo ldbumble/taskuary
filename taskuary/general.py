@@ -2610,8 +2610,6 @@ class GeneralSession:
         text = str(text or '').strip()
         if not text and waiting is None: raise ValueError('empty message')
         if not self.alive: raise Ended(waiting)
-        from . import origin
-        if (h := origin.hold(self.store, self.task_id)): raise origin.RefusedForStranger(h['line'])      # nothing is handed over until Trust
         # LINES TYPED WHILE IT WORKS ARE ONE TURN (the owner, 2026-11-05: "either or what the model decides if it's clarification"): each
         # waits here; the first to get the turn files them all and the model reads them together - a later one may correct an earlier one.
         # The others find theirs already taken and end quietly: the turn that took them answers for them.
@@ -2619,6 +2617,9 @@ class GeneralSession:
         # agent, through a reload and a restart - never only in this process (WAITING_TYPE)
         mine = as_owner and not brief and not kept
         if mine and waiting is None: waiting = wait_line(self.store, self.task_id, text, attachments, line_id)
+        # ...nothing is handed over until Trust - but his line is kept first, so a refusal here never loses it (2026-11-17)
+        from . import origin
+        if (h := origin.hold(self.store, self.task_id)): raise origin.RefusedForStranger(h['line'])
         if not self._take(WAIT_TURN, cancel):
             # ...it gave up because the session ended under it - the caller's road starts a fresh one, which takes the kept line (say_line) -
             # or because it was cancelled, which takes the line back

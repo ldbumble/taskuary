@@ -35,6 +35,12 @@ def _msg(subject='Which vendor should we pick?', body='Two quotes, both fine. Th
                                      'Status': 'filed'})
 
 
+class _Trusted:
+    "Dana's mail is a vendor's, held for Trust before any agent starts (2026-11-17): these doors are about the start, so she is trusted."
+    def setUp(self):
+        p = mock.patch('taskuary.origin.hold', return_value=None); p.start(); self.addCleanup(p.stop)
+
+
 def _task(tid):
     r = c.get(f'/api/tasks/{tid}').json()
     return r.get('task', r)
@@ -61,7 +67,7 @@ class EveryDoorOpensTheSameChat(unittest.TestCase):
         self._assert_is_a_chat(d['taskId'], '/calendar/prep')
 
 
-class TheDoorsThatAreNotChats(unittest.TestCase):
+class TheDoorsThatAreNotChats(_Trusted, unittest.TestCase):
     def test_a_plain_task_is_not_a_conversation(self):
         """"This one is mine" is yours to do. Opening a chat workspace on it was the bug."""
         d = c.post(f'/api/messages/{_msg("sign the form", "wet signature needed")}/mine', json={}).json()
@@ -180,7 +186,7 @@ class TheConversationWorks(unittest.TestCase):
         self.assertTrue(any('second quote' in b for b in bodies))
 
 
-class ItClosesAndSaysSo(unittest.TestCase):
+class ItClosesAndSaysSo(_Trusted, unittest.TestCase):
     def test_the_agent_can_end_it_from_inside_the_conversation(self):
         """A chat has no shell to run `taskuary --done` in, so it says it in the reply."""
         clean, said = selfclose.chat_marker(

@@ -1011,6 +1011,10 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
         if task.get('SourceRef') == 'assistant:setup' and _ts(t.get('started')) >= fresh_setup: continue
         waiting = t.get('waiting') if t.get('waiting') is not None else (t.get('idle') or 0) >= term.IDLE_WAITING
         if not waiting: continue
+        # ...A CHAT SESSION THAT NEVER RAN A TURN IS NO AGENT ROW (2026-11-17: a held task's, its first turn refused for the hold, read "agent
+        # waiting on you"): the task's own row stands, as its state reads it (taskstate.never_ran)
+        from . import taskstate
+        if taskstate.never_ran(store, task, {**t, 'mode': t.get('mode') or 'terminal'}): continue
         tail = [str(x).strip() for x in (t.get('tail') or []) if str(x).strip()]
         # ...read off the RENDERED screen when there is one, with the TUI's chrome dropped: the
         # card showed a theme toolbar where the agent's question belonged (2026-09-03)
@@ -1037,7 +1041,6 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
         # ...AN AGENT THAT ASKED NOTHING is done for now (the owner, 2026-11-07; after a Send too, 2026-11-06; a coding agent's as well,
         # 2026-11-10): its row said "Taskuary is waiting on you" - it is the task's wrap-up, "agent done", until something is typed again. A
         # reply or an email it drafted still waits on you. One reading with the task's own state (taskstate.done_for_now)
-        from . import taskstate
         if not asking and taskstate.done_for_now(store, task, {**t, 'mode': t.get('mode') or 'terminal'}):       # a row with no mode is a pane's, as below
             out.append(chat_done(store, task, t.get('started'))); continue
         out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),

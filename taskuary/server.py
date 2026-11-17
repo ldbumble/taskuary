@@ -4608,6 +4608,13 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
     regular = general.handles(task) or bool(card)
 
     if regular:
+        # ...AN UNTRUSTED SENDER'S TASK HANDS NOTHING TO AN AGENT, at the door before a session or a start is made (2026-11-17: Send to agent
+        # with a line typed on a no-reply sender's task opened a session, its turn was refused inside it, the line was lost and the row read
+        # "agent done"): his line waits by the box as every typed line on a held task does (general.take_line), and Trust starts it
+        from . import origin
+        if (h := origin.hold(store, tid)):
+            if (typed := str(body.instruction or '').strip()) and not body.app_words: general.wait_line(store, tid, typed)
+            return {'dispatch': 'held', 'started': False, 'existing': False, 'held': h['line'], 'taskId': tid, 'ref': task_ref(tid)}
         had_session = general.session_for(tid) is not None
         # THE PROFILE IS THE ASSIGNEE. A general hand-off may now name the worker it goes to, and
         # `agent:<name>` is where general.assigned_role already reads it from to seed PROFILE RULES -

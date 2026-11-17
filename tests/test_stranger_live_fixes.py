@@ -206,3 +206,44 @@ def test_a_floor_denial_is_recorded_on_the_task_with_its_reason(monkeypatch, tmp
         ev = [e for e in s.worker_events(t) if e['Kind'] == 'floor_denied']
         assert len(ev) == 1 and ev[0]['Sid'] == 'run-p1' and 'config.toml is a protected file' in ev[0]['Text']
         assert ws.status(s, t)['state'] == 'working'                              # a refusal is a note on the run, not its state
+
+# ── L7: his line on a held task is kept, and nothing claims an agent took it (2026-11-17) ─────────────────────────
+# A no-reply sender's task, held for Trust, got Send to agent with a typed line: a session opened, its first turn was refused inside it, the
+# line was gone, and the row read "agent done - type to carry on" over a chat no agent had worked. Invented people.
+def _held(s):
+    t = s.create_task({'Title': 'Your order shipped', 'Kind': 'general', 'Source': 'email', 'Status': 'open'}, 'router')
+    s.add_message({'TaskId': t, 'Channel': 'email', 'SourceName': 'alex@northwind.example', 'FromEmail': 'no-reply@vendor.example',
+                   'FromName': 'Vendor', 'Subject': 'Shipped', 'BodyText': 'Your order shipped.', 'Status': 'routed'})
+    assert origin.hold(s, t); return t
+
+def test_a_line_sent_to_a_held_task_waits_by_the_box_and_starts_nothing(monkeypatch):
+    from taskuary import general, funnel, taskstate
+    s = MemoryStore(); t = _held(s); monkeypatch.setattr(server, 'store', s); started, opening = [], []
+    monkeypatch.setattr(general, 'provider_options', lambda *a, **k: [{'pick': 'cli:claude', 'type': 'cli'}])
+    class Ses:
+        provider, model, quick = 'Claude Code', '', False
+        def send_prompt(self, text, **kw): opening.append(t in general.OPENING)
+        def info(self, tail=0): return {'sid': 's1'}
+    monkeypatch.setattr(general, 'start_session', lambda *a, **k: started.append(a) or Ses())
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+        r = TestClient(server.app).post(f'/api/tasks/{t}/dispatch', json={'kind': 'general', 'instruction': 'Reply and say thanks'})
+        assert r.status_code == 200, r.text
+        out = r.json()
+        assert not out['started'] and out['held'] == origin.hold(s, t)['line']
+        assert [w['text'] for w in general.waiting_lines(s, t)] == ['Reply and say thanks'], 'his line is kept'
+        assert started == [] and opening == [] and t not in general.OPENING and general.session_for(t) is None
+        assert taskstate.state(s, s.get_task(t)) != 'working'
+
+def test_a_chat_session_that_never_ran_a_turn_is_not_done_nor_waiting_on_him(monkeypatch):
+    "A session another road opened, whose first turn was refused for the hold: no turn ran, so no 'agent done' and no agent row."
+    from taskuary import funnel, taskstate
+    s = MemoryStore(); t = _held(s)
+    parked = {'taskId': t, 'sid': 'g1', 'agent': 'assistant', 'mode': 'assistant', 'alive': True, 'waiting': True, 'state': 'parked', 'tail': []}
+    assert not taskstate.done_for_now(s, s.get_task(t), parked)
+    assert funnel.from_agents(s, live_state=[parked]) == []
+
+def test_send_prompt_keeps_the_line_before_it_refuses_for_the_hold():
+    from taskuary import general
+    s = MemoryStore(); t = _held(s)
+    with pytest.raises(origin.RefusedForStranger): general.GeneralSession(s, t).send_prompt('Reply and say thanks')
+    assert [w['text'] for w in general.waiting_lines(s, t)] == ['Reply and say thanks']

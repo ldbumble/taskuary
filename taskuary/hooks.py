@@ -133,6 +133,9 @@ def header_file(token: str, home: str = None) -> str:
     return p.as_posix()          # forward slashes: one spelling every hook shell (bash, PowerShell, cmd) passes through untouched
 
 
+# THE ADDRESS IS QUOTED in every hook command (the real-CLI walk, 2026-11-16): a session's browser hold names its task and chat in the query,
+# `?task=1&sid=...`, and a shell splits a bare `&` - curl ran in the background with no token and no body, `-H` ran as a command of its own,
+# the hook printed nothing and Claude ran every shell call ungated ("A hook gave no usable answer, so it didn't check this action")
 def token_arg(token: str, home: str = None) -> str:
     "curl's header argument for the token, quoted for a shell: the file's path, never the token itself (header_file)."
     return f' -H "@{header_file(token, home)}"' if token else ''
@@ -144,26 +147,26 @@ def command(base: str, token: str, cli: str, home: str = None) -> str:
     device (not a shell redirect: PowerShell has no /dev/null) - a hook's stdout is read by Claude as a
     decision, and our reply is not one. `home` is Taskuary's (tests); the token rides in a file (header_file)."""
     curl, null = ('curl.exe', 'NUL') if os.name == 'nt' else ('curl', '/dev/null')
-    return f'{curl} -s -m 3 -o {null} -X POST {base}/api/hooks/{cli} -H "Content-Type: application/json"{token_arg(token, home)} --data-binary @-'
+    return f'{curl} -s -m 3 -o {null} -X POST "{base}/api/hooks/{cli}" -H "Content-Type: application/json"{token_arg(token, home)} --data-binary @-'
 
 
 def ask_command(base: str, token: str = '', home: str = None) -> str:
     """The ask hook: POST the ask and PRINT our answer (Claude reads a hook's stdout as its decision). -f prints nothing
     on an error and -m outlives the server's wait, so a failure or a timeout leaves Claude to draw its own form."""
     curl = 'curl.exe' if os.name == 'nt' else 'curl'
-    return f'{curl} -s -f -m {ASK_WAIT + 30} -X POST {base}{ASK_MARK} -H "Content-Type: application/json"{token_arg(token, home)} --data-binary @-'
+    return f'{curl} -s -f -m {ASK_WAIT + 30} -X POST "{base}{ASK_MARK}" -H "Content-Type: application/json"{token_arg(token, home)} --data-binary @-'
 
 
 def reason_command(base: str, token: str = '', home: str = None) -> str:
     "The Reason Network hook: like the ask hook, its stdout is the decision; a failure prints nothing and leaves the call to Claude."
     curl = 'curl.exe' if os.name == 'nt' else 'curl'
-    return f'{curl} -s -f -m {ASK_WAIT + 30} -X POST {base}{REASON_MARK} -H "Content-Type: application/json"{token_arg(token, home)} --data-binary @-'
+    return f'{curl} -s -f -m {ASK_WAIT + 30} -X POST "{base}{REASON_MARK}" -H "Content-Type: application/json"{token_arg(token, home)} --data-binary @-'
 
 
 def browser_command(base: str, token: str = '', home: str = None) -> str:
     "The browser hook: like the ask hook, its stdout is the decision; a failure prints nothing and leaves the command to Claude."
     curl = 'curl.exe' if os.name == 'nt' else 'curl'
-    return f'{curl} -s -f -m {int(BROWSER_WAIT)} -X POST {base}{BROWSER_MARK} -H "Content-Type: application/json"{token_arg(token, home)} --data-binary @-'
+    return f'{curl} -s -f -m {int(BROWSER_WAIT)} -X POST "{base}{BROWSER_MARK}" -H "Content-Type: application/json"{token_arg(token, home)} --data-binary @-'
 
 
 BROWSER_WAIT = 120                  # a snapshot and one light verdict; past this curl gives up and Claude runs the command

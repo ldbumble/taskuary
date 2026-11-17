@@ -47,3 +47,22 @@ def test_one_browser_hook_carries_the_task_and_its_hold():
     d = _json.loads(Path(hooks.general_settings(7, 'abc123')).read_text(encoding='utf-8'))
     bw = [x for h in d['hooks']['PreToolUse'] if h.get('matcher') == hooks.BROWSER_MATCH for x in h['hooks']]
     assert len(bw) == 1 and '?task=7&sid=abc123' in bw[0]['command'] and bw[0]['timeout'] == hooks.BROWSER_WAIT + 10
+
+
+
+def test_every_hook_command_is_one_shell_line_its_address_one_word():
+    """The real-CLI walk, 2026-11-16: the one hook's address, `...?task=7&sid=abc123`, was bare in its command, and the shell Claude runs a
+    hook in split it at `&` - curl went off with no token and no body, `-H` ran as a command (exit 127), the hook printed nothing, and every
+    shell call of the chat ran ungated ("A hook gave no usable answer"). Read as a shell reads it: no control operator, the address one word."""
+    import json as _json, shlex
+    from pathlib import Path
+    from taskuary import hooks
+    d = _json.loads(Path(hooks.general_settings(7, 'abc123')).read_text(encoding='utf-8'))
+    cmds = [x['command'] for groups in d['hooks'].values() for g in groups for x in g['hooks']]         + [_json.loads(Path(hooks.browser_settings('s9')).read_text(encoding='utf-8'))['hooks']['PreToolUse'][0]['hooks'][0]['command']]
+    for cmd in cmds:
+        lex = shlex.shlex(cmd, posix=True, punctuation_chars=True); lex.whitespace_split = True
+        words = list(lex)
+        assert not {'&', '&&', ';', '|', '||'} & set(words), (cmd, words)
+        url = next(w for w in words if '/api/hooks/' in w)
+        assert '-H' in words and '--data-binary' in words, words
+        if 'browser' in url and '?' in url: assert ('task=7' in url and 'sid=abc123' in url) or 'sid=s9' in url, url

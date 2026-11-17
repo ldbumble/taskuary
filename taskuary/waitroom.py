@@ -79,15 +79,18 @@ def together(lines: list, waiting: list) -> list:
 # ...and the head round them ("Taskuary left 1 note for you. Take them in order:") is the AGENT'S, typed with the notes - filed, it drew on the
 # owner's screen as an event line where the card he had just approved had stood (the overnight audit, 2026-11-10). What the Assistant added
 # to his note is the one part of Taskuary's that the record keeps
-def to_general(store, tid, session, notes: list, after_restart: bool = False, remaining: int = 0, waited: bool = True) -> None:
+def to_general(store, tid, session, notes: list, after_restart: bool = False, remaining: int = 0, waited: bool = True, steer: bool = False) -> bool:
+    "`steer`: into the turn at work where it can take them now (GeneralSession.steer), else the next turn - True when they went in now."
     from . import general
     if (extra := ' '.join(f'{general.RELAY} ({i}) {e}' for i, x in enumerate(notes, 1) if (e := parts(x.get('Note'))[1]))):
         store.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, extra)
     for x in notes:
         store.add_comment(tid, 'owner' if (x.get('CreatedBy') or 'owner') not in ('router', TEAMMATE) else general.BRIEF_ACTOR, general.USER_TYPE,
                           parts(x.get('Note'))[0])
+    if steer and session.steer(batch(notes, after_restart, remaining, waited=waited)): return True
     threading.Thread(target=session.send_prompt, args=(batch(notes, after_restart, remaining, waited=waited),), kwargs={'kept': True, 'brief': True},
                      daemon=True).start()
+    return False
 
 
 def drip(store) -> bool:
@@ -257,7 +260,9 @@ def _deliver(store, tid: int, new: int = None) -> dict:
     left = len(pending) - len(notes)
     # MID-TURN, INTO THE TURN (the owner, 2026-11-06): an ACP coding session whose adapter steers (acpcoding.steerable) takes the words now,
     # into the turn at work, rather than at its end - the parked road below, under every one of its holds
-    steer = st == 'working' and t is not None and term.is_acp(t) and bool(getattr(t, 'steerable', lambda: False)())
+    # ...and a chat's general agent on a CLI that takes them mid-turn (GeneralSession.can_steer, 2026-11-17): held to the turn's end, it finished
+    # on old facts and then did the whole job again
+    steer = st == 'working' and t is not None and bool(getattr(t, 'steerable' if term.is_acp(t) else 'can_steer', lambda: False)())
     # "WHILE YOU WERE WORKING" ONLY WHEN IT WAS (agent walk 2, 2026-11-10): a line typed to an agent at rest reached it as "While you were
     # working, the owner queued 1 note for you ... after finishing the step you are on". Only a note that waited behind a turn says so
     waited = steer or any(x['WId'] not in (new, None) for x in notes)
@@ -313,7 +318,7 @@ def _deliver(store, tid: int, new: int = None) -> dict:
         return {'delivered': len(notes), 'state': 'answered', 'left': left}
     if st == 'parked' or steer:
         from . import general
-        if isinstance(t, general.GeneralSession): to_general(store, tid, t, notes, remaining=left, waited=waited); how = 'typed into'
+        if isinstance(t, general.GeneralSession): steer = to_general(store, tid, t, notes, remaining=left, waited=waited, steer=steer); how = 'typed into'
         # ...an ACP coding session (acpcoding.py) takes it as its next prompt, the batch as Taskuary's brief and each of the owner's own notes
         # drawn as theirs in the coding chat - never "While you were working, the owner queued..." in the owner's bubble (to_general's rule)
         elif term.is_acp(t):

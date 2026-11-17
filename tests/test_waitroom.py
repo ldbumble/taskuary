@@ -360,6 +360,45 @@ class GeneralTests(unittest.TestCase):
         self.assertEqual([w for w, _ in self.said(s, tid)], ['owner'])
         self.assertIn('after the last session ended', ses.sent[0][0])
 
+class SteerGeneralTests(unittest.TestCase):
+    """A GENERAL AGENT HEARS WHAT IS TYPED WHILE IT WORKS (2026-11-17): its lines waited for the turn's end, so it finished on old facts and then
+    did the whole job again from them. Claude's stream-json input takes a further message mid-turn - the ACP road's steer - so his lines go
+    into the turn at work and stand in the chat where it heard them. On the fake stream CLI, the people and the work invented."""
+    def test_lines_typed_while_a_general_turn_works_go_into_that_turn(self):
+        import json, os, sys, tempfile
+        from pathlib import Path
+        from taskuary import agents, clipool, clis, general, session_artifacts
+        fake = os.path.join(os.path.dirname(__file__), 'fake_stream_cli.py')
+        s = MemoryStore(); tid = Factory(s).task(title='Vendor totals', kind='general', status='in_progress')
+        conn = {'cmd': 'claude', 'args': ['-p', '--output-format', 'stream-json', '--verbose']}
+        s.upsert_agent('claude', 'general', 'cli', json.dumps(conn)); s.set_setting('assistant_ai', 'cli:claude', 'owner')
+        tmp = tempfile.mkdtemp()
+        def until(cond, secs=20):
+            end = time.time() + secs
+            while not cond() and time.time() < end: time.sleep(0.02)
+            return cond()
+        with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(clis, 'ADAPTERS', {}),              mock.patch.object(agents, 'connection_brains', lambda store, cfg=None: [('claude', conn)]),              mock.patch.object(agents, '_resolve_cmd', lambda name: [sys.executable, fake]),              mock.patch.object(session_artifacts, 'root', lambda: Path(tmp)), mock.patch.object(general, 'idle_for', lambda: 3600):
+            try:
+                general.take_line(s, tid, 'absorb:2 add up the vendor totals', wait=False)
+                assert until(lambda: (t := general._live_of(tid)) is not None and t.busy and clipool.is_live(f'general:{tid}')), 'the first turn is at work'
+                time.sleep(0.3)
+                for w in ('use the March export', 'and leave Payworth out'): general.take_line(s, tid, w, wait=False); time.sleep(0.1)
+                assert until(lambda: not general.at_work(tid) and any(c['ActorType'] == general.ASSISTANT_TYPE for c in s.list_comments(tid, internal=True)), 30)
+                said = [(c['ActorType'], c['Body']) for c in s.list_comments(tid, internal=True) if c['ActorType'] in (general.USER_TYPE, general.ASSISTANT_TYPE)]
+            finally:
+                for t in list(terminal.SESSIONS.values()):
+                    try: t.close()
+                    except Exception: pass
+                general.answered(tid, every=True); clipool.close('')
+        # ...the CLI had both lines before its turn's one result, which answered them - no second turn did the job again
+        [reply] = [b for k, b in said if k == general.ASSISTANT_TYPE]
+        self.assertIn(':1:heard use the March export | and leave Payworth out', reply)
+        # ...and the chat files them inside that turn: his three lines, then its answer
+        self.assertEqual([b for k, b in said if k == general.USER_TYPE][1:], ['use the March export', 'and leave Payworth out'])
+        self.assertEqual(said[-1][0], general.ASSISTANT_TYPE)
+        self.assertEqual(general.waiting_lines(s, tid), [])
+
+
 class DripTests(unittest.TestCase):
     def test_a_pasted_list_becomes_notes_in_order_and_drips_one_per_stop(self):
         s = MemoryStore(); tid = task(s)

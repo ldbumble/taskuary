@@ -53,6 +53,7 @@ class Live:
                              text=True, encoding='utf-8', errors='replace', cwd=cwd, env=env, shell=False)
         self.lines, self.err = queue.Queue(), []
         self.lock = threading.Lock()
+        self.on, self.io = False, threading.Lock()       # a turn is reading (steer); `io` keeps a steer and the turn's end apart
         self.sid, self.turns, self.used = None, 0, time.time()
         threading.Thread(target=self._pump, daemon=True).start()
         threading.Thread(target=lambda: self.err.append(self.p.stderr.read() or ''), daemon=True).start()
@@ -70,15 +71,29 @@ class Live:
         try: self.p.kill()
         except Exception: pass
 
+    def _send(self, prompt: str):
+        self.p.stdin.write(json.dumps({'type': 'user', 'message': {'role': 'user', 'content': prompt}}) + '\n')
+        self.p.stdin.flush()
+
     def turn(self, prompt: str, on_event, cancel=None, timeout: float = None) -> tuple:
         """Send one message and read until its `result`. Returns (result event, raw lines). `timeout` None: no limit - an agent's turn."""
         # a process that went away while idle - killed, or its CLI updated itself under it - never gets the message: Gone, not mid-turn
         if not self.alive(): raise Gone(f'the CLI was gone before the message reached it (exit {self.p.poll()})')
+        # ...WHAT AN EARLIER TURN LEFT IN THE PIPE IS NOT THIS ONE'S (2026-11-17): words steered in just as that turn ended run as a turn nobody
+        # read (and an older CLI that does not count its queue does the same) - read here, its result was this turn's answer, every later one behind
+        while True:
+            try: old = self.lines.get_nowait()
+            except queue.Empty: break
+            if old is None: self.lines.put(None); break
+            logger.debug(f'clipool: {self.key} - a line left from an earlier turn dropped: {old[:200]}')
         try:
-            self.p.stdin.write(json.dumps({'type': 'user', 'message': {'role': 'user', 'content': prompt}}) + '\n')
-            self.p.stdin.flush()
+            with self.io: self._send(prompt); self.on = True
         except (OSError, ValueError) as e: raise Gone(f'the CLI was gone before the message reached it ({e})')
-        raw, end = [], time.time() + timeout if timeout else None
+        try: return self._read(on_event, cancel, timeout)
+        finally: self.on = False
+
+    def _read(self, on_event, cancel, timeout) -> tuple:
+        raw, end, said = [], time.time() + timeout if timeout else None, []
         while True:
             if cancel is not None and cancel.is_set():
                 self.close(); raise RuntimeError('cancelled')
@@ -99,8 +114,26 @@ class Live:
             if j.get('type') == 'result':
                 self.turns += 1; self.used = time.time()
                 self.sid = j.get('session_id') or self.sid
-                return j, raw
+                if str(j.get('result') or '').strip(): said.append(str(j['result']).strip())
+                # ...WORDS STEERED IN THAT THE CLI KEPT FOR A TURN OF THEIR OWN (claude's `queued_turn_count`: more results follow) are this turn's
+                # too - read to the last result, its answer every one of theirs; ended at the first, the rest stood in the pipe as the next turn's
+                with self.io:
+                    if (j.get('queued_turn_count') or 0) > 0: continue
+                    self.on = False
+                return ({**j, 'result': '\n\n'.join(said)} if len(said) > 1 else j), raw
             on_event(j)
+
+    def steer(self, said) -> bool:
+        """Words INTO the turn at work (`said`: the text, or what makes it - made only once it can go in): claude's stream-json input takes a
+        further user message while a turn runs and folds it into that turn, or keeps it for a turn of its own that this one reads to its end
+        (_read). False, and nothing made or written, where no turn is reading."""
+        with self.io:
+            if not (self.on and self.alive()): return False
+            text = said() if callable(said) else said
+            if not text: return True
+            try: self._send(text)
+            except (OSError, ValueError) as e: logger.warning(f'clipool: {self.key} - words for the turn at work did not go in ({e})')
+            return True
 
 
 _POOL: dict[str, Live] = {}
@@ -117,6 +150,18 @@ def _sweep():
 
 def _reap():
     while True: time.sleep(60); _sweep()
+
+
+def steerable(key: str) -> bool:
+    "Is a turn at work on this conversation's live process, so words written now go into it (Live.steer)?"
+    with _LOCK: lv = _POOL.get(key)
+    return isinstance(lv, Live) and lv.on and lv.alive()
+
+
+def steer(key: str, said) -> bool:
+    "Words into the turn at work on this conversation (Live.steer): False where none is - they wait for the next turn."
+    with _LOCK: lv = _POOL.get(key)
+    return isinstance(lv, Live) and lv.steer(said)
 
 
 def is_live(key: str) -> bool:

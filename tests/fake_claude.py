@@ -5,6 +5,8 @@ What it reproduces of Claude Code 2.x in `-p --output-format stream-json --verbo
   - `--input-format stream-json`: one process, one JSON `user` line per turn on stdin, a `result` event closing each turn
   - without it: the prompt is all of stdin, one turn, then exit (the per-call road)
   - `system`/`init` before the first turn's answer, `assistant` with the whole message, `result` with session_id
+  - stdin read while a turn runs: a message written then is kept for a turn of its own, and each `result` counts those still waiting
+    (`queued_turn_count`) - the real CLI may fold one into the turn at work instead; either way a reader reads on while the count is above 0
   - `--include-partial-messages`: `stream_event` content_block_delta text chunks as the words are written
   - `--resume <id>` keeps that session id; `--system-prompt-file` is read (its size counts toward the first turn)
 Timing (seconds, env, defaults measured against claude 2.1 on the owner's machine - 4.2 s a cold turn, ~1.1 s warm):
@@ -64,6 +66,9 @@ def answer(prompt: str) -> str:
     return 'Ok.'
 
 
+QUEUED = lambda: 0          # the sends still waiting behind this turn (the live loop's)
+
+
 def turn(prompt: str, n: int):
     t = time.time()
     log('turn', chars=len(prompt), n=n)
@@ -83,7 +88,7 @@ def turn(prompt: str, n: int):
     out({'type': 'assistant', 'session_id': sid, 'message': {'role': 'assistant', 'content': [{'type': 'text', 'text': text}]}})
     log('result', n=n, out_chars=len(text))
     out({'type': 'result', 'subtype': 'success', 'is_error': False, 'result': text, 'session_id': sid, 'num_turns': n,
-         'duration_ms': int((time.time() - t) * 1000)})
+         'duration_ms': int((time.time() - t) * 1000), **({'queued_turn_count': QUEUED()} if LIVE else {})})
 
 
 TAKES = {'--session-id', '--resume', '-r', '--settings', '--model', '--system-prompt-file', '--append-system-prompt-file', '--append-system-prompt', '--permission-mode',
@@ -162,9 +167,16 @@ log('ready', spawn=round(time.time() - T0, 3), live=LIVE, args=args)
 if '-p' not in args and '--print' not in args:
     interactive()
 elif LIVE:
-    n = 0
-    for line in sys.stdin:
-        if not line.strip(): continue
+    import queue, threading
+    q, n = queue.Queue(), 0
+    def read():
+        try:
+            for line in sys.stdin:
+                if line.strip(): q.put(line)
+        finally: q.put(None)
+    threading.Thread(target=read, daemon=True).start()
+    QUEUED = lambda: sum(1 for x in list(q.queue) if x is not None)
+    while (line := q.get()) is not None:
         n += 1
         c = json.loads(line)['message']['content']
         turn(c if isinstance(c, str) else ''.join(b.get('text', '') for b in c if isinstance(b, dict)), n)

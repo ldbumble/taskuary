@@ -162,3 +162,33 @@ def test_touch_keeps_a_process_from_the_reaper(cli):
     clipool._sweep()
     assert clipool.is_live('general:5') and not clipool.is_live('general:6'), 'on screen stays; the one nobody looks at is reaped'
     assert clipool.touch('general:9') == 0
+
+
+def _steer_in(key, *said):
+    "Words written into the turn at work on `key` once it is on - as the owner types them while it works (general.GeneralSession.steer)."
+    end = time.time() + 20
+    while not clipool.steerable(key) and time.time() < end: time.sleep(0.02)
+    return [clipool.steer(key, w) for w in said]
+
+
+def test_words_written_while_a_turn_works_go_into_that_turn(cli):
+    """A GENERAL AGENT HEARS WHAT IS TYPED WHILE IT WORKS (2026-11-17): claude's stream-json input takes a further message mid-turn and folds it in.
+    The turn's one result answers them - and the next turn reads its own result, not one left behind."""
+    got = {}
+    t = threading.Thread(target=lambda: got.update(ask(cli, 'chat:1', 'absorb:2 check the totals')), daemon=True); t.start()
+    assert _steer_in('chat:1', 'use the March file', 'and skip the refunds') == [True, True]
+    t.join(20)
+    assert got['said'] == 'heard use the March file | and skip the refunds'
+    assert not clipool.steerable('chat:1') and not clipool.steer('chat:1', 'too late'), 'at rest a line is a turn of its own, never steered'
+    assert ask(cli, 'chat:1', 'next', resume=got['sid'])['said'] == 'next'
+
+
+def test_words_the_cli_queued_as_their_own_turn_are_read_to_the_end(cli):
+    """...where the CLI kept them for a turn of their own (queued_turn_count > 0), the turn reads on to the last result, with every answer in it:
+    returned at the first, the second sat in the pipe and the next turn read it as its own answer."""
+    got = {}
+    t = threading.Thread(target=lambda: got.update(ask(cli, 'chat:1', 'queue:1 check the totals')), daemon=True); t.start()
+    assert _steer_in('chat:1', 'and the refunds') == [True]
+    t.join(20)
+    assert got['said'].split('\n\n')[0] == 'queued' and got['said'].endswith(':and the refunds')
+    assert ask(cli, 'chat:1', 'next', resume=got['sid'])['said'] == 'next'

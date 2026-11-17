@@ -2540,6 +2540,19 @@ class GeneralSession:
     def waiting(self): return self.alive and not self.busy and (self.spoke or self.task_id not in OPENING) and not HANDED.get(self.task_id)
     # ...a turn he STOPPED that has not let go yet (its CLI takes seconds to end): busy, but no longer at work for him (take_line)
     def letting_go(self): return self.busy and self._cancel is not None and self._cancel.is_set()
+    def keep(self) -> str: return f"{'dock' if is_dock(self.store.get_task(self.task_id)) else 'general'}:{self.task_id}"     # its live CLI (clipool)
+    # A LINE SENT WHILE A TURN WORKS GOES INTO THAT TURN (2026-11-17): it waited for the turn's end, so the agent finished on old facts and then did
+    # the whole job again from the new ones. Claude's stream-json input takes a further message mid-turn, as the ACP road steers (acpcoding.steerable);
+    # where the CLI cannot (an API card, a turn not reading yet, one he stopped), the line waits for the next turn as before
+    def can_steer(self) -> bool:
+        from . import clipool
+        return self.busy and not self.letting_go() and clipool.steerable(self.keep())
+    def steer(self, said: str = None) -> bool:
+        "Words into the turn at work: `said`, or his kept lines - heard in the step they go in (take_kept). False where nothing can take them now."
+        from . import clipool
+        if not self.can_steer(): return False
+        def lines(): return '\n\n'.join(with_files(**_line_of(r['Body'])) for r in take_kept(self.store, self.task_id, sid=self.sid))
+        return clipool.steer(self.keep(), lines if said is None else said)
     def tail(self, n=3):
         from .terminal import plain
         return [line for line in plain(self.scrollback()[-8000:]).splitlines() if line.strip()][-n:]
@@ -2642,6 +2655,8 @@ class GeneralSession:
         # ...nothing is handed over until Trust - but his line is kept first, so a refusal here never loses it (2026-11-17)
         from . import origin
         if (h := origin.hold(self.store, self.task_id)): raise origin.RefusedForStranger(h['line'])
+        # ...and one sent while a turn works goes INTO it (steer): that turn answers for it, so this one has nothing more to say
+        if mine and self.steer(): return ''
         if not self._take(WAIT_TURN, cancel):
             # ...it gave up because the session ended under it - the caller's road starts a fresh one, which takes the kept line (say_line) -
             # or because it was cancelled, which takes the line back
@@ -2912,7 +2927,7 @@ class GeneralSession:
                               cancel=cancel, resume=self.cli_sid or None, research=not hands, fallback_user=user,
                               # the task's CLI stays open between messages instead of starting again (clipool)
                               # ...keyed `general:` for an agent's work, which no clock ends (llm.make_cli_llm), `dock:` for the Assistant's chat
-                              keep=f"{'dock' if is_dock(self.store.get_task(self.task_id)) else 'general'}:{self.task_id}",
+                              keep=self.keep(),
                               # whose words the task carries decides how its CLI launches (origin.py)
                               task_id=self.task_id)
             # the NAME always rides (so a browser this session opens is one the pane can find); the

@@ -1131,7 +1131,8 @@ def brief(held: bool = True, open_now: bool = True) -> str:
 # first command (only this browser, no password or CAPTCHA, the last press) and names the guide; the rest is read when a page is needed.
 # A SIGN-UP (signin.new_account, the real-CLI walk 2026-11-16): nine forms were handed back for him to type a password into. One line,
 # read wherever the sign-in is told (the brief, the offer, the API agent's brief)
-SIGNUP_LINE = "A SIGN-UP is the same: fill every box but the password, then end your turn with [[TASKUARY-SIGNUP: <the site's domain>]] - Taskuary makes a strong password and types it, the owner presses the site's own button, and the password is kept with their saved sign-ins. "
+SIGNUP_LINE = ("A SIGN-UP is the same: fill every box but the password, then end your turn with [[TASKUARY-SIGNUP: <the site's domain>]] - Taskuary makes a strong password and types it, the owner presses the site's own button, and the password is kept with their saved sign-ins - "
+               "use it too when a box on the form is theirs to fill (a check that they are a person, their own phone): they do it on the same page. ")
 SIGNIN_LINE = ("A SIGN-IN YOU HAVE NO PASSWORD FOR IS NOT A BLOCKER AND NEVER A QUESTION - you do not need the password. For a site with no "
                'connection among your systems, say so in one line, open its sign-in page in this browser, and end your turn with a final '
                "line [[TASKUARY-SIGNIN: <the site's domain>]]: Taskuary types a saved sign-in, or shows the owner the page and keeps it for next "

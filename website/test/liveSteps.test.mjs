@@ -52,10 +52,11 @@ test("the turn's stamp: working m:ss while it runs, ran once it answered, nothin
   assert.equal(clockText(3_725_000), "1:02:05");
 });
 
-test("a running turn shows its words and ONE live line on every level - the level decides only once it ended - and ONE clock", () => {
+test("a running turn shows its words, its steps counted SHUT, and ONE live line on every level - the level decides only once it ended - and ONE clock", () => {
   const ws = read("GeneralWorkspace.jsx");
-  // ...the owner, 2026-11-12: "that setting is what displays after it runs": no open list of steps while it runs
-  assert.match(ws, /if \(now\) return <>\{parts\.filter\(\(p\) => \["said", "view", "files"\]\.includes\(p\.type\)\)\.map/);
+  // ...the owner, 2026-11-12: "that setting is what displays after it runs": no open list of steps while it runs - and 2026-11-17 ("7 minutes this is
+  // all the agent did?"): its steps counted behind the quiet n-steps fold, shut, over its words
+  assert.match(ws, /if \(now\) \{\s*const shown = \(p\) => \["said", "view", "files"\]\.includes\(p\.type\)[^]*?<WorkFold k=\{`\$\{key\}:all`\} quiet parts=\{rest\}/);
   assert.doesNotMatch(ws, /data-tq-live-steps=""|LIVE_SHOWN/);
   assert.match(ws, /doing \? <span className="tq-aui-working-line" data-tq-working-line="" title=\{doing\}>\{doing\}<\/span> : null/);
   assert.match(ws, /const WorkFold = \(\{ k, quiet = false, parts, draw \}\) => \{ const n = workCount\(parts\);\s+return n \? <Fold k=\{k\} quiet=\{quiet\} label=\{plural\(n, "step"\)\}>/, "an ended turn folds to N steps");

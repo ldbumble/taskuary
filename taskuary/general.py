@@ -2988,7 +2988,10 @@ class GeneralSession:
                         or MID_TURN in str(e)): raise
                 logger.info(f"assistant could not resume {self.cli_sid or 'its conversation'} on task {self.task_id}; starting a new one ({str(e)[:160]})")
                 self.cli_sid, kept, self.card_msgs = '', self.card_msgs, []
-                self.resume_notice = 'The original session could not be resumed. Restored from the saved conversation.'
+                # ...ITS CLI NO LONGER HAS IT (hub_agents.Gone, on either road): one plain line in the chat, as a coding pane says it
+                from . import agents as hub_agents
+                if isinstance(e, hub_agents.Gone): hub_agents.said_afresh(self.store, self.task_id); self.resume_notice = ''
+                else: self.resume_notice = 'The original session could not be resumed. Restored from the saved conversation.'
                 self._remember_session()
                 # THE SAME TURN, ON THE SAME BRAIN, UNDER THE SAME INSTRUCTIONS (the spine audit, 2026-11-09): this was a second copy of
                 # everything above, written by hand, and it had drifted - the fresh conversation was not told of the files sent with the

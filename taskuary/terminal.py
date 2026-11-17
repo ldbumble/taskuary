@@ -375,6 +375,12 @@ class Term:
         self.keep()                                       # the transcript must outlive the pty
         # SIGNING OUT IS NOT FINISHING: the same CLI opens again, in this pane, BEFORE the sockets hear the end - their onExit
         # looks for the task's live session and finds the new one, so the pane never falls to a Result in between
+        # ...AND A CONVERSATION ITS CLI NO LONGER HAS IS STARTED AFRESH (agents.Gone): `--resume` printed "No conversation found ..." and exited
+        if conversation_gone(self) and start_afresh(self):
+            self._emit(None)
+            from . import handraise
+            handraise.moved(self.task_id)
+            return
         if signed_out(self) and sign_in_again(self):
             self._emit(None)
             from . import browserview as _bv
@@ -906,6 +912,15 @@ def resume_seed(instruction: str = '', store=None, tid: int = None) -> str:
     return '\n\n'.join(parts)
 
 
+def afresh_seed(store, tid: int, cwd: str = None, cli: str = '', then: str = '') -> str:
+    """What a FRESH conversation is told where its CLI no longer had the old one (agents.Gone) - a coding pane's on either road: the task's own
+    seed, then where the work stopped (`then`: what the old one was about to be told, else continuity.RESUME_PROMPT)."""
+    from .continuity import RESUME_PROMPT
+    try: first = seed_text(store, tid, cwd=cwd, cli=cli)
+    except Exception as e: logger.debug(f'task {tid}: no seed for the fresh conversation - {e}'); first = ''
+    return '\n\n'.join(x for x in (first, then or RESUME_PROMPT) if x)
+
+
 def with_brain(profile: dict, cmd: dict) -> dict:
     """The profile run by the brain's connection. The connection owns EVERY command field, not only the ones it sets: a profile saved when
     claude was the only brain still carries claude's `model`, codex has none of its own, and overlaying just what codex names left
@@ -1267,7 +1282,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     elif resume and agent: bind_ext(t, resume)
     # ...and it keeps that id as its own for good: Codex FORKS a resumed thread - a new rollout id, `forked_from_id` the
     # one we asked for - so the rollout renames the pane (witness.RolloutTail) while a hook may still say the old one
-    t.resumed_from = resume or ''
+    t.resumed_from, t.told = resume or '', seed or ''
     # The agents already here are not told a newcomer arrived: THIS session was just handed the
     # whole live picture in its seed (blackboard.briefing), which is where peer awareness belongs.
     # The configured profile name is the worker's identity, not just a launch option. Keep it on
@@ -3090,6 +3105,27 @@ def sign_in_again(t):
     n.relogin = True
     SESSIONS.pop(t.sid, None)
     t.store.add_comment(t.task_id, 'terminal', 'agent', SIGNED_OUT_NOTE)
+    return n
+
+
+def conversation_gone(t) -> bool:
+    "Did this resumed pane's CLI end at once because it no longer has the conversation (agents.gone, its own words on the last screen)?"
+    from .agents import gone
+    return bool(getattr(t, 'resumed_from', '') and t.task_id and t.agent and not getattr(t, 'on_purpose', False)
+                and time.time() - t.started_ts < 120 and gone(plain(t.tail_chars(4000))))
+
+
+def start_afresh(t):
+    """The same CLI on the same task and folder in a FRESH conversation, told the task and what the dead one was about to be (afresh_seed), with
+    one plain line in the chat (agents.said_afresh). The dead pane leaves the list, as a sign-out's does (sign_in_again)."""
+    from .agents import said_afresh
+    told = getattr(t, 'told', '')
+    try: n = open_session(t.store, t.agent, t.task_id, None, t.cwd, t.rows, t.cols, 'owner', seed_fn=lambda here: afresh_seed(t.store, t.task_id, here, t.cli, told),
+                          brain=t.cli or None)
+    except Exception as e: logger.warning(f'{t.sid}: its conversation was gone and a fresh one did not open ({e}); its session ends'); return None
+    logger.info(f'{t.sid}: {t.resumed_from} was gone - {n.sid} carries the task on in a fresh conversation')
+    SESSIONS.pop(t.sid, None)
+    said_afresh(t.store, t.task_id)
     return n
 
 

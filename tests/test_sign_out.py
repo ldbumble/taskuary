@@ -109,3 +109,39 @@ class LogoutHookTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class GoneConversationTests(unittest.TestCase):
+    """THE TERMINAL ROAD (2026-11-16): a resumed pane whose CLI no longer has the conversation prints claude's own "No conversation found with
+    session ID: ..." and exits. The same CLI opens again on the task in a FRESH conversation, told the task and what the dead one was about to be
+    told, with one plain line in the chat (agents.said_afresh) - never the task released to "nobody is working it"."""
+    def _run(self, said, resumed='conv-gone'):
+        s = MemoryStore(); tid = working(s)
+        again = SimpleNamespace(sid='fresh', relogin=False)
+        pty = type('P', (Pty,), {'said': said})
+        with mock.patch.object(terminal, 'open_session', return_value=again) as op, mock.patch('taskuary.wrapup.wrap'), \
+             mock.patch.object(terminal, '_WinPty', pty), mock.patch.object(terminal, '_UnixPty', pty), \
+             mock.patch.object(terminal, 'seed_text', return_value='TASK: fix the nightly export'):
+            t = terminal.Term(ECHO, os.getcwd(), 'coding', tid, 'coding', store=s, cli='claude')
+            t.ext_id, t.resumed_from, t.told = resumed, resumed, 'FROM THE OWNER: try the staging copy first'
+            terminal.SESSIONS[t.sid] = t
+            try: self.assertTrue(_wait(lambda: t.ended is not None and (op.called or s.get_task(tid)['Status'] == 'open')))
+            finally: terminal.SESSIONS.pop(t.sid, None)
+            time.sleep(.3)
+            seed = op.call_args.kwargs['seed_fn'](t.cwd) if op.called else ''
+        return s, tid, op, seed
+
+    def test_a_resume_the_cli_no_longer_has_opens_a_fresh_conversation_told_the_task(self):
+        from taskuary import agents
+        s, tid, op, seed = self._run('\x1b[38;2;171;43;63mNo conversation found with session ID: conv-gone\x1b[39m\r\n')
+        op.assert_called_once()
+        self.assertIsNone(op.call_args.kwargs.get('resume'), 'a fresh conversation, never the dead id again')
+        self.assertIn('TASK: fix the nightly export', seed); self.assertIn('try the staging copy first', seed)
+        self.assertEqual(s.get_task(tid)['Status'], 'in_progress')
+        bodies = [c.get('Body') or '' for c in s.list_comments(tid)]
+        self.assertEqual(bodies.count(agents.GONE_LINE), 1)
+        self.assertFalse(any('No conversation found' in b or 'nobody is working it' in b for b in bodies), bodies)
+
+    def test_a_fresh_pane_that_exits_is_not_restarted(self):
+        s, tid, op, _ = self._run('No conversation found with session ID: x\r\n', resumed='')
+        op.assert_not_called()

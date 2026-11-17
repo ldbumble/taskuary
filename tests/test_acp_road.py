@@ -402,3 +402,44 @@ def test_a_held_only_run_that_cannot_start_over_acp_runs_nothing_and_says_so():
     s.set_setting(agents.ACP_SETTING, '0', 'owner')                              # ...nor with the owner's ACP switch off
     with mock.patch.object(agents, 'run_acp', side_effect=AssertionError('off')), mock.patch.object(agents.spawn, 'popen', side_effect=popen):
         with pytest.raises(RuntimeError, match="Run CLI agents over ACP"): run(profile(args=['-p'], held_only=True), store=s)
+
+
+# ── a conversation the CLI no longer has (agents.Gone): the turn is said again to a fresh one, never the CLI's error ─────────────────────────
+GONE_ENV = {'FAKE_ACP_RESUME': '1', 'FAKE_ACP_GONE': '1'}
+
+def test_a_resume_the_agent_refuses_is_gone_and_the_fresh_conversation_it_opened_takes_the_whole_turn():
+    """The owner's chat after a restart, 2026-11-16: its saved conversation was gone from the CLI. The resume used to fail over to the command
+    line, which resumed the same dead id and printed "No conversation found with session ID" into the steps. Now the ACP road says Gone, and
+    the turn said again (with no id) runs on the fresh conversation that was opened for it - one start, no fallback, no CLI error anywhere."""
+    key, ev = 'general:test-acp-gone', []
+    trace = lambda k, n, d=None: ev.append((k, n, d))
+    try:
+        with mock.patch.object(agents, '_resolve_cmd', return_value=[FAKE[0]]):
+            with pytest.raises(agents.Gone): agents.run_cli(profile(keep_alive=key), 'and the totals?', trace, resume='sess_gone_1', extra_env=GONE_ENV)
+            conv = clipool._POOL[key]
+            said, sid, _ = agents.run_cli(profile(keep_alive=key), 'the whole conversation, then: and the totals?', trace, extra_env=GONE_ENV)
+        assert clipool._POOL[key] is conv and sid == conv.sid                 # the conversation opened for it, not a second start
+        assert 'heard: the whole conversation' in said and 'turn=1' in said and 'resumed=' not in said
+        assert not any(agents.gone(str(d)) or 'did not start' in str(d) for _k, _n, d in ev), ev
+    finally: clipool.close(key)
+
+
+def test_a_gone_resume_on_a_one_shot_acp_run_is_gone_too_never_the_command_line():
+    ev = []
+    with mock.patch.object(agents, '_resolve_cmd', return_value=[FAKE[0]]), pytest.raises(agents.Gone):
+        agents.run_cli(profile(), 'carry on', lambda k, n, d=None: ev.append((k, n, d)), resume='sess_gone_2', extra_env=GONE_ENV)
+    assert not any('did not start' in str(d) for _k, _n, d in ev)
+
+
+@pytest.mark.parametrize('keep', ['', 'general:test-argv-gone'])
+def test_the_command_line_says_gone_for_claude_s_own_no_conversation_found(monkeypatch, keep):
+    """The same refusal on the argv road, as claude 2.1.326 gives it - with -p on its own (a one-shot) and on a kept stream-json process: the
+    line on stderr, a result of error_during_execution with the line in `errors`. Gone, never "claude exit 1: ..." or "error_during_execution"."""
+    monkeypatch.setattr(clis, 'ADAPTERS', {}); monkeypatch.setenv('FAKE_CLAUDE_GONE', '1'); monkeypatch.setenv('FAKE_CLAUDE_SPAWN', '0')
+    fake = [sys.executable, str(Path(HERE) / 'fake_claude.py')]
+    args = ['-p', '--output-format', 'stream-json', '--verbose'] + (['--input-format', 'stream-json'] if keep else [])
+    try:
+        with mock.patch.object(agents, '_resolve_cmd', return_value=fake), pytest.raises(agents.Gone):
+            agents.run_cli({'cmd': 'claude', 'args': args, 'cwd': HERE, **({'keep_alive': keep} if keep else {})}, 'carry on', lambda *a: None,
+                           resume='3f1c2b9a-0000-4000-8000-00000000000a')
+    finally: clipool.close(keep) if keep else None

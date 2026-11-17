@@ -1513,6 +1513,21 @@ def _acp_sig(launch: dict, cwd, env: dict) -> tuple:
 # only the CLI's own "No conversation found with session ID: ..." and the turn never ran): where the caller can carry the task over to a fresh
 # one (`fresh_if_gone`), a resume the agent refuses opens a new conversation, said in one plain line, and the client says so (`fresh_from`)
 GONE_LINE = 'Started a fresh session - the old one was gone.'
+# ...ON EVERY ROAD (the general chat's ACP and command-line turns, a coding pane's terminal): the CLI's own words for a conversation it no longer
+# has - a message format, read as structure (claude 2.1.326's; codex's, out of its binary) - never shown, said instead as GONE_LINE (said_afresh)
+_GONE = re.compile(r'No conversation found with session ID|No saved session found with ID|no rollout found for (?:thread|conversation) id|thread not found:', re.I)
+def gone(text) -> bool: return bool(_GONE.search(str(text or '')))
+
+class Gone(RuntimeError):
+    "The CLI no longer has the conversation the turn resumed: nothing ran, and the caller carries the task over to a fresh one (general.Session)."
+    def __init__(self, resume=''): super().__init__(GONE_LINE); self.resume = resume or ''
+
+def said_afresh(store, task_id) -> None:
+    "The one plain line every road says when its conversation was gone and a fresh one carries the task on - Taskuary's note, never the CLI's error."
+    if not (store and task_id): return
+    from . import general, sessionrecord
+    try: store.add_comment(task_id, sessionrecord.NOTE_ACTOR, general.ASSISTANT_TYPE, GONE_LINE)
+    except Exception as e: logger.debug(f'task {task_id}: the fresh start was not said - {e}')
 
 def _acp_open(name: str, launch: dict, cwd, env: dict, resume, timeout, trace, fresh_if_gone: bool = False):
     """A connected session, ready for a prompt: started, initialized, the conversation opened (resumed where there is one),
@@ -1530,7 +1545,7 @@ def _acp_open(name: str, launch: dict, cwd, env: dict, resume, timeout, trace, f
                 except acp_mod.ACPAgentError as e:
                     if not fresh_if_gone or _SIGNED_OUT.search(str(e)): raise
                     logger.info(f'acp: {name} could not reopen {resume} ({str(e)[:160]}) - a fresh conversation instead')
-                    trace('progress', 'acp', GONE_LINE); client.new_session(cwd, meta=launch['meta']); client.fresh_from = resume
+                    client.new_session(cwd, meta=launch['meta']); client.fresh_from = resume      # the caller says it once (said_afresh)
             else:
                 if resume: trace('progress', 'acp', f'{name} cannot reload a session; starting a fresh one')
                 client.new_session(cwd, meta=launch['meta'])
@@ -1610,9 +1625,15 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     env = {**spawn_env(profile, extra_env), **launch['env']}
     from . import acpgate, clipool
     sig = _acp_sig(launch, cwd, env)
-    opener = lambda: acp_mod.Conversation(_acp_open(name, launch, cwd, env, resume, profile.get('timeout'), trace), sig)
+    opener = lambda: acp_mod.Conversation(_acp_open(name, launch, cwd, env, resume, profile.get('timeout'), trace, fresh_if_gone=True), sig)
     conv = clipool.take(keep, sig, opener, resume, opening=lambda: trace('opening', name, '')) if keep else opener()
     client = conv.client
+    # ...ITS CONVERSATION WAS GONE: nothing is asked of the fresh one here - this turn's words assume what it no longer has. The caller says the
+    # whole of it again (Gone), and a kept one finds this fresh conversation open and unused (clipool._stale), so no second start is paid
+    if getattr(client, 'fresh_from', None) and not conv.turns:
+        client.fresh_from = None
+        if not keep: client.close()
+        raise Gone(resume)
     trace('prompt', 'prompt_sent_to_agent', prompt)
     trace('tool', 'cli', f"{name} over acp{' via ' + launch['adapter'] if launch['adapter'] else ''} cwd={cwd or os.getcwd()}"
                          + (f' resume={resume}' if resume else '') + (f' live={keep}' if keep else ''))
@@ -1917,6 +1938,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         limit = rate_limited(raw) or rate_limited(hay)
         if limit: raise RateLimited(rate_limit_msg(name, limit), limit)
         if _SIGNED_OUT.search(hay): raise RuntimeError(signed_out_msg(name, said, cmd[0] if cmd else ''))
+        if resume and gone(hay + '\n'.join(raw)): raise Gone(resume)
         # a refusal to START, not a failed run: the CLI produced no output of its own and the
         # only thing on stderr is the refusal
         if _DENIED.search(hay) and not raw: raise RuntimeError(denied_msg(name, cmd[0] if cmd else '', said))
@@ -2022,7 +2044,7 @@ def _warm_acp(profile: dict, resume, extra_env, store, swap: bool) -> bool:
         env = {**spawn_env(profile, extra_env), **launch['env']}
         sig = _acp_sig(launch, cwd, env)
         return clipool.warm_with(profile['keep_alive'], sig, lambda: acp_mod.Conversation(
-            _acp_open(name, launch, cwd, env, resume, profile.get('timeout'), lambda *a: None), sig), resume, swap=swap)
+            _acp_open(name, launch, cwd, env, resume, profile.get('timeout'), lambda *a: None, fresh_if_gone=True), sig), resume, swap=swap)
     except acp_mod.ACPStartError as e:
         logger.info(f"acp: {profile['cmd']} not warmed over ACP - {e}"); return None
 
@@ -2079,6 +2101,7 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
         limit = rate_limited(said)
         if limit: raise RateLimited(rate_limit_msg(name, limit), limit)
         if _SIGNED_OUT.search(said): raise RuntimeError(signed_out_msg(name, said, cmd[0] if cmd else ''))
+        if resume and gone(said): raise Gone(resume)
         # ...a turn its CLI died in says so in the one sentence an ACP agent's death says too (acp.py), no process name before it and no
         # "(the CLI exited (3))" after it (the overnight walk, 2026-11-11) - that is the log's
         if said.startswith(clipool.MID_TURN): logger.warning(f'{name}: {said[:500]}'); raise RuntimeError(clipool.MID_TURN)
@@ -2089,6 +2112,7 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
         limit = rate_limited(raw) or rate_limited(said)
         if limit: raise RateLimited(rate_limit_msg(name, limit), limit)
         if _SIGNED_OUT.search(said): raise RuntimeError(signed_out_msg(name, said, cmd[0] if cmd else ''))
+        if resume and gone('\n'.join(raw)): raise Gone(resume)          # its `errors`, beside a result that says only error_during_execution
         raise RuntimeError(f'{name}: {said[:500]}')
     out = str(final.get('result') or '').strip()
     trace('output', name, out[-1000:])

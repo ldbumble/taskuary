@@ -233,3 +233,24 @@ def test_resume_starts_once_after_owner_click_and_reopens_a_finished_task():
         finally: general.OPENING.discard(tid)
     assert seen == [finished, tid]
     assert session.send_prompt.call_args.kwargs == {'as_owner': False, 'echo': False}
+
+
+def test_a_conversation_its_cli_no_longer_has_is_one_plain_line_and_the_turn_runs_in_full():
+    """The owner's chat after a restart, 2026-11-16: the CLI no longer had the saved conversation (agents.Gone, on either road). The turn runs on a
+    fresh one told the whole conversation, and the chat says it in one plain line - the coding pane's - never the CLI's error."""
+    from taskuary import agents
+    store = MemoryStore(); connect(store); tid = task(store)
+    store.add_comment(tid, 'owner', general.USER_TYPE, 'Use the August period, not September.')
+    session = general.GeneralSession(store, tid, pick='cli:claude')
+    session.cli_sid = 'gone-conv'; session._remember_session()
+    failed = mock.Mock(side_effect=agents.Gone('gone-conv'))
+    seen = {}
+    def fresh(system, user, **kw): seen['user'] = user; return 'Continuing the August report.'
+    fresh.session_id = 'replacement'
+    with mock.patch.object(llm, 'build_llm', side_effect=[failed, fresh]) as build:
+        session.send_prompt('and the totals?')
+    assert build.call_args_list[0].kwargs['resume'] == 'gone-conv' and not build.call_args_list[1].kwargs['resume']
+    assert 'August period' in seen['user'] and 'and the totals?' in seen['user']
+    notes = [c['Body'] for c in store.list_comments(tid)]
+    assert notes.count(agents.GONE_LINE) == 1 and not any('No conversation found' in n for n in notes)
+    assert not session.info()['resume_notice'] and session.cli_sid == 'replacement'

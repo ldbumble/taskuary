@@ -233,7 +233,10 @@ def _differs(a, b) -> str:
 def _stale(lv, sig, resume) -> str:
     "Why the open conversation no longer fits ('' when it does): the same four reasons _take reads for a process."
     return ('its process ended' if not lv.alive() else f'its launch settings changed ({_differs(lv.sig, sig)})' if lv.sig != sig
-            else 'a fresh conversation' if not resume and lv.turns > 0 else f'another conversation ({lv.sid} open)' if resume and lv.sid and resume != lv.sid else '')
+            else 'a fresh conversation' if not resume and lv.turns > 0
+            # ...a warmed one opened fresh because `resume` was gone (agents._acp_open fresh_if_gone) is what that resume now opens
+            else f'another conversation ({lv.sid} open)' if resume and lv.sid and resume != lv.sid and getattr(getattr(lv, 'client', None), 'fresh_from', None) != resume
+            else '')
 
 
 def _put(key: str, lv):

@@ -149,6 +149,14 @@ def interactive():
 
 
 if os.environ.get('FAKE_CLAUDE_BROKEN'): sys.exit(1)          # a CLI half-way through updating itself: it starts and dies
+# FAKE_CLAUDE_GONE=1: it no longer has the conversation `--resume` names, as claude 2.1.326 says it - the line on the tty (stderr with -p), and
+# with -p its stream-json result, error_during_execution with the line in `errors`, then exit 1 (measured on the real CLI, 2026-11-16)
+if os.environ.get('FAKE_CLAUDE_GONE') and arg('--resume'):
+    said = f"No conversation found with session ID: {arg('--resume')}"
+    if '-p' not in args and '--print' not in args: sys.stdout.write(f'\x1b[38;2;171;43;63m{said}\x1b[39m\r\n'); sys.stdout.flush(); time.sleep(0.3); sys.exit(1)
+    sys.stderr.write(said + '\n'); sys.stderr.flush()
+    out({'type': 'result', 'subtype': 'error_during_execution', 'is_error': True, 'num_turns': 0, 'session_id': arg('--resume'), 'errors': [said]})
+    sys.exit(1)
 time.sleep(SPAWN)
 log('ready', spawn=round(time.time() - T0, 3), live=LIVE, args=args)
 if '-p' not in args and '--print' not in args:

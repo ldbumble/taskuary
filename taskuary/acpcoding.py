@@ -257,15 +257,12 @@ class ACPCoding:
             elif self.busy and self.client and not self._take_waiting(): self._idle(turn=False)      # reopened with nothing to say: back at its prompt
 
     def _carry_over(self):
-        """ITS OLD CONVERSATION WAS GONE (agents.GONE_LINE): the fresh one is told the task and where the work stopped - the seed and the handover a
-        fresh session gets (waitroom.reopen_coding), ahead of what was waiting for it - and the chat says it in one plain line, never the CLI's error."""
-        from . import agents, continuity, sessionrecord, terminal as term
-        try: told = '\n\n'.join(x for x in (term.seed_text(self.store, self.task_id, cwd=self.cwd, cli=self.cli), continuity.RESUME_PROMPT) if x)
-        except Exception as e: logger.debug(f'acp coding {self.sid}: no seed for the fresh conversation - {e}'); told = continuity.RESUME_PROMPT
-        with self._qlock: self._q.insert(0, (told, True, [], None))
+        """ITS OLD CONVERSATION WAS GONE (agents.Gone): the fresh one is told the task and where the work stopped (terminal.afresh_seed), ahead of
+        what was waiting for it - and the chat says it in one plain line (agents.said_afresh), never the CLI's error."""
+        from . import agents, terminal as term
+        with self._qlock: self._q.insert(0, (term.afresh_seed(self.store, self.task_id, self.cwd, self.cli), True, [], None))
         self.resumed_from = ''
-        try: self.store.add_comment(self.task_id, sessionrecord.NOTE_ACTOR, general.ASSISTANT_TYPE, agents.GONE_LINE)
-        except Exception as e: logger.debug(f'acp coding {self.sid}: the fresh start was not said - {e}')
+        agents.said_afresh(self.store, self.task_id)
 
     def _take_waiting(self) -> bool:
         """REOPENED FOR THE OWNER'S LINE, IT GOES STRAIGHT ON TO IT (the owner, 2026-11-10: "the agnt thing should show right away working"): an

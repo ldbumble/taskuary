@@ -247,6 +247,33 @@ def _published(j, trace):
         if doc: trace('artifact', 'claude', doc)
 
 
+class ClaudeSteps:
+    """One claude stream-json turn as the trace events every road speaks (tool_call, tool_result, progress text and thinking, a published
+    page). The one-shot run and the kept conversation each make one per turn and feed it every event. A call the CLI gave no id is numbered
+    here, once per turn (`tool-0`, `tool-1`), and a result with no id closes the oldest such call still open - so on both roads every
+    step is its own and every one closes (agentSteps.js and sessionrecord.trace_steps pair them by id)."""
+    def __init__(self, trace): self.trace, self.n, self.open = trace, 0, []
+
+    def __call__(self, j: dict):
+        kind = j.get('type')
+        if kind not in ('assistant', 'user'): return
+        for c in (j.get('message') or {}).get('content') or []:
+            if not isinstance(c, dict): continue
+            if kind == 'assistant' and c.get('type') == 'tool_use':
+                iid = c.get('id') or f'tool-{self.n}'
+                if not c.get('id'): self.n += 1; self.open.append(iid)
+                self.trace('tool_call', c.get('name') or 'tool', {'tool_call_id': iid, 'args': c.get('input') or {},
+                                                                 **({'parent': j['parent_tool_use_id']} if j.get('parent_tool_use_id') else {})})
+            elif kind == 'assistant' and c.get('type') == 'text' and str(c.get('text') or '').strip(): self.trace('progress', 'text', str(c['text']).strip())
+            elif kind == 'assistant' and c.get('type') == 'thinking' and str(c.get('thinking') or '').strip():
+                self.trace('progress', 'thinking', str(c['thinking']).strip())     # what it thought is part of the record
+            elif kind == 'user' and c.get('type') == 'tool_result':
+                iid = c.get('tool_use_id') or (self.open.pop(0) if self.open else 'tool')
+                if iid in self.open: self.open.remove(iid)
+                self.trace('tool_result', iid, {'result': _result_text(c), 'is_error': bool(c.get('is_error'))})
+        _published(j, self.trace)
+
+
 def _live_line(j):
     """One readable console line per claude stream-json event; None = not worth showing.
     Tool RESULTS stream too (trimmed), so the console reads like the terminal you'd see
@@ -1833,6 +1860,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         except Exception: pass
     threading.Thread(target=_feed, daemon=True).start()
     raw, final, streamed_out, streamed_sid, open_tools = [], None, '', None, set()
+    claude = ClaudeSteps(trace)
     stream_error, structured_stream = None, False
     try:
         for line in p.stdout:
@@ -1883,22 +1911,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
                 final = j; continue
             # Preserve the CLI's structured work for visual clients. The existing readable
             # `live` line remains for Board traces and the terminal renderer.
-            if isinstance(j, dict) and j.get('type') == 'assistant':
-                for c in (j.get('message') or {}).get('content') or []:
-                    if c.get('type') == 'tool_use':
-                        trace('tool_call', c.get('name') or 'tool', {
-                            'tool_call_id': c.get('id') or f'tool-{len(raw)}', 'args': c.get('input') or {}})
-                    elif c.get('type') == 'text' and str(c.get('text') or '').strip():
-                        trace('progress', 'text', str(c['text']).strip())
-                    elif c.get('type') == 'thinking' and str(c.get('thinking') or '').strip():
-                        trace('progress', 'thinking', str(c['thinking']).strip())     # what it thought is part of the record
-                _published(j, trace)
-            elif isinstance(j, dict) and j.get('type') == 'user':
-                for c in (j.get('message') or {}).get('content') or []:
-                    if isinstance(c, dict) and c.get('type') == 'tool_result':
-                        trace('tool_result', c.get('tool_use_id') or 'tool', {
-                            'result': _result_text(c), 'is_error': bool(c.get('is_error'))})
-                _published(j, trace)
+            if isinstance(j, dict): claude(j)
             # Codex `exec --json` speaks item lifecycle events instead of Claude content blocks.
             # Normalize both into one stream so assistant-ui does not care which CLI is logged in.
             if isinstance(j, dict) and j.get('type') == 'thread.started':
@@ -2063,7 +2076,7 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
     # THE WORDS AS THEY ARE WRITTEN, for a conversation that asked for them (--include-partial-messages: the Assistant): the page
     # draws them while the rest is still coming, instead of after the whole answer (the owner, 2026-10-20: "it should respond to
     # things quickly"). Only what the owner would read - the machine's CALL line never - and the finished answer replaces them.
-    written, drawn = [''], ['']
+    written, drawn, claude = [''], [''], ClaudeSteps(trace)
     def on(j):
         if j.get('type') == 'stream_event':
             ev = j.get('event') or {}
@@ -2074,19 +2087,7 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
                 now = spoken(written[0])
                 if now and now != drawn[0]: drawn[0] = now; trace('words', name, now)
             return
-        if j.get('type') == 'assistant':
-            for c in (j.get('message') or {}).get('content') or []:
-                if c.get('type') == 'tool_use':
-                    trace('tool_call', c.get('name') or 'tool', {'tool_call_id': c.get('id') or 'tool', 'args': c.get('input') or {},
-                                                                  **({'parent': j['parent_tool_use_id']} if j.get('parent_tool_use_id') else {})})
-                elif c.get('type') == 'text' and str(c.get('text') or '').strip():
-                    trace('progress', 'text', str(c['text']).strip())
-            _published(j, trace)
-        elif j.get('type') == 'user':
-            for c in (j.get('message') or {}).get('content') or []:
-                if isinstance(c, dict) and c.get('type') == 'tool_result':
-                    trace('tool_result', c.get('tool_use_id') or 'tool', {'result': _result_text(c), 'is_error': bool(c.get('is_error'))})
-            _published(j, trace)
+        claude(j)
         shown = _live_line(j)
         if shown: trace('live', name, shown)
     try:

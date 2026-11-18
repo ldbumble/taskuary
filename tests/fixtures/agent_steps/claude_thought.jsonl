@@ -1,0 +1,6 @@
+{"type": "system", "subtype": "init", "model": "claude-opus-5"}
+{"type": "assistant", "message": {"content": [{"type": "thinking", "thinking": "The thread comes first."}]}}
+{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Read", "input": {"file_path": "notes/budget-review.md"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": "Sign-off is with Gail Moreno."}]}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "The budget review waits on Gail Moreno."}]}}
+{"type": "result", "result": "The budget review waits on Gail Moreno.", "session_id": "sess-claude-2"}

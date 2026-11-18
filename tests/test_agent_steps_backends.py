@@ -119,6 +119,45 @@ class EachBackendTracesTheTurn(unittest.TestCase):
             out = llm._anthropic_web(cli, 'claude-x', 'sys', 'user', 100)
         self.assertIn('Gail Moreno', out); same(self, 'anthropic_api', ev)
 
+    def test_a_kept_claude_conversation_traces_the_same_steps_as_a_one_shot_run_thoughts_too(self):
+        """One stream, two roads: claude's stream-json read by the one-shot run and by the kept conversation (the general agent, the
+        Assistant). The kept one had its own copy of the mapping and never traced what the agent thought, so the same task read
+        differently by road. The same recorded stream, a thought in it, must trace alike on both."""
+        from taskuary import clipool
+        lines = (D / 'claude_thought.jsonl').read_text(encoding='utf-8').splitlines()
+        shown = lambda ev: [e for e in ev if e['type'] in ('tool_call', 'tool_result', 'progress')]
+        out, ev = cli_run('claude_thought', 'claude', ['-p', '--output-format', 'stream-json', '--verbose'])
+        kept, ktrace = recorder()
+        def turn(key, cmd, prompt, on, **kw):
+            for ln in lines: on(json.loads(ln))
+            return json.loads(lines[-1]), lines
+        with mock.patch.object(clipool, 'run', turn):
+            agents._run_live({'cmd': 'claude'}, 'claude', ['claude'], 'look into the budget review', ktrace, 'general:1', None, None, None)
+        self.assertIn({'type': 'progress', 'name': 'thinking', 'detail': 'The thread comes first.'}, shown(ev))
+        self.assertEqual(shown(kept), shown(ev))
+
+    def test_id_less_calls_and_a_sub_agents_step_trace_alike_on_both_roads_and_each_closes_once(self):
+        """Two calls of one tool with no id, their results with none either, and a call a sub-agent made (parent): each is its own step,
+        numbered once per turn by the one function (agents.ClaudeSteps), and every result closes the call it answers - on the one-shot
+        run and the kept conversation alike. Pairing is by id (agentSteps.js, sessionrecord.trace_steps), so a shared `tool-0` left the
+        first call running forever."""
+        from taskuary import clipool, sessionrecord
+        lines = (D / 'claude_idless.jsonl').read_text(encoding='utf-8').splitlines()
+        ev = cli_run('claude_idless', 'claude', ['-p', '--output-format', 'stream-json', '--verbose'])[1]
+        kept, ktrace = recorder()
+        def turn(key, cmd, prompt, on, **kw):
+            for ln in lines: on(json.loads(ln))
+            return json.loads(lines[-1]), lines
+        with mock.patch.object(clipool, 'run', turn):
+            agents._run_live({'cmd': 'claude'}, 'claude', ['claude'], 'go', ktrace, 'general:1', None, None, None)
+        steps = lambda e: [x for x in e if x['type'] in ('tool_call', 'tool_result')]
+        self.assertEqual(steps(kept), steps(ev))
+        calls = [x['detail']['tool_call_id'] for x in steps(ev) if x['type'] == 'tool_call']
+        self.assertEqual(calls, ['tool-0', 'tool-1', 'h1', 'h2'])
+        self.assertEqual(sorted(x['name'] for x in steps(ev) if x['type'] == 'tool_result'), sorted(calls))      # every call closed, once
+        self.assertEqual(next(x for x in steps(ev) if x['detail'].get('tool_call_id') == 'h2')['detail']['parent'], 'h1')
+        self.assertEqual([s.get('status') for s in sessionrecord.trace_steps(ev)], ['completed'] * 4)
+
     def test_nobody_watching_costs_nothing(self):
         fixture = json.loads((D / 'openai_responses.json').read_text(encoding='utf-8'))
         r = SimpleNamespace(status_code=200, json=lambda: fixture, text='')

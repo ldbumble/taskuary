@@ -184,9 +184,6 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     cc = [a for a in (split(x)[1] for x in ([cc] if isinstance(cc, str) else cc or [])) if a]
     if cc and channel != 'email': return {'ok': False, 'why': f'{channel} has no cc - only an email can copy somebody in'}
     if bad := [a for a in cc if not is_address(a)]: return {'ok': False, 'why': f"cc takes email addresses - {', '.join(bad)} is not one"}
-    # ...ONE address a line: "paula@x; gail@x" stood on the card as one recipient and failed only at the owner's Send, the whole string refused
-    if many := [a for a in [split(to)[1] if channel == 'email' else '', *cc] if a.count('@') > 1]:
-        return {'ok': False, 'why': f"{many[0]} is more than one address - `to` takes one, and the others go in `cc` as a list. Nothing was drafted."}
     cc = [a.lower() for a in cc]
     if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return {'ok': False, 'why': 'that task is closed'}
     to = split(to)[1] if channel == 'email' else ' '.join(str(to or '').split())

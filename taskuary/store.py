@@ -2968,7 +2968,15 @@ class SQLiteStore:
     def deliver_promise(self, mid, by):
         self._exec('UPDATE sent_verdict SET DeliveredBy=? WHERE MessageId=? AND Promise=1 AND DeliveredBy IS NULL', (by, mid))
         t = self.promise_task(mid)
-        if t and t.get('Status') not in ('done', 'dropped'): self.update_task(t['TaskId'], {'Status': 'done'}, 'promise')
+        if t and t.get('Status') not in ('done', 'dropped'):
+            # ...AN AUTOMATIC CLOSE, so it asks what every automatic close asks (workerstate.live_work, the owner 2026-11-01: "If anything
+            # still working never close the task automatically") and what still waits on the owner there (proposals.owed): an agent put on
+            # the promise kept working a closed task, and a reply drafted on it waited where no page shows one. Kept open, and said
+            from . import buttons, proposals, workerstate as ws
+            live = ws.live_work(self, t['TaskId'])
+            if not live and not proposals.owed(self, t['TaskId']): self.update_task(t['TaskId'], {'Status': 'done'}, 'promise')
+            else: self.add_comment(t['TaskId'], 'promise', 'agent', 'Your sent mail delivered this promise. It stays open - '
+                                   + (live[0] if live else 'something on it still waits on you') + f" - {buttons.label('close')} when it is finished.")
         if t:                                           # delivered: the ledger row resolves now, not at the sweep
             try:
                 from . import outcomes

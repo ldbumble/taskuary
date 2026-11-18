@@ -45,6 +45,22 @@ class PromiseTaskTests(unittest.TestCase):
         judged(s, {'attached': {'delivers': [f'm{m1}']}})
         self.assertEqual(s.get_task(t['TaskId'])['Status'], 'done')
 
+    def test_delivery_never_closes_a_promise_task_under_live_work_or_a_waiting_draft(self):
+        """Sent mail that delivers a promise closed its task by a plain status write: an agent the owner had put on it (queued, or
+        running) kept working a closed task, and a reply drafted on it went where no page shows a pending review. An automatic close
+        asks workerstate.live_work and what still waits on the owner first - the task stays open, said on it, for Mark done."""
+        for shape in ('agent', 'draft'):
+            s = _store()
+            _theirs(s, 'Can I have the revised budget?', 4, f'c-{shape}'); m1 = _mine(s, "I'll send the revised budget Friday", 3, f'c-{shape}')
+            judged(s, {'revised budget Friday': {'promise': True, 'what': 'send the revised budget', 'due': _day(2)}})
+            tid = s.promise_task(m1)['TaskId']
+            if shape == 'agent': s.enqueue_dispatch(tid, None, 'claude', 'the owner sent it to an agent')
+            else: s.add_review({'TaskId': tid, 'MessageId': m1, 'Kind': 'draft', 'Status': 'pending', 'Origin': 'agent', 'DraftText': 'Here it is, Gail.'})
+            _mine(s, 'Here is the revised budget, attached.', 1, f'c-{shape}')
+            judged(s, {'attached': {'delivers': [f'm{m1}']}})
+            self.assertEqual(s.get_task(tid)['Status'], 'open', shape)
+            self.assertTrue(any('delivered' in c['Body'] and 'open' in c['Body'] for c in s.list_comments(tid)), shape)
+
     def test_a_promise_with_no_date_has_no_due_and_a_second_pass_makes_no_second_task(self):
         s = _store()
         _theirs(s, 'Can you sort the refund?', 4, 'c2'); m1 = _mine(s, 'Leave it with me', 3, 'c2')

@@ -151,6 +151,9 @@ REFUSALS = (
     # ...and the top bar's Quit, which reaches nothing: the demo stays up for whoever opens it next - the website's /demo is one server for
     # every visitor. It read "that would reach something real" (the walk, 2026-11-18)
     (r'^/api/quit$', 'This is the demo - it stays up for whoever opens it next, so it does not quit from here. Close the tab to leave.'),
+    # ...and About you's own fields - the name, the picture's Keep, the signature: they change the invented owner, and read "that would
+    # reach something real" (the walk, 2026-11-18)
+    (r'^/api/(whoami|owner|hand-signature)$', 'This is the demo - its owner is invented, and stays as written.'),
     (r'^/api/(tools/run|agents/[^/]+/test)', 'This is the demo - nothing runs, because there are no real systems here to run against.'),
     (r'^/api/(reviews?/\d+/send|tasks/\d+/(handoff|clarify)|board/send|messages/\d+/send)', SENDS),
     # ...and Trust, whose whole effect is that an agent starts on the sender's words: it read "that would reach something real"

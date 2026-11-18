@@ -773,6 +773,14 @@ class TheDemoWorldIsConnectedTests(unittest.TestCase):
                 self.assertEqual(demo.refuse('POST', path), demo.RECORDED, path)
             self.assertEqual(demo.refuse_op({'kind': 'agent.stop', 'params': {}}), demo.RECORDED)
 
+    def test_about_you_says_the_owner_is_invented(self):
+        """The walk, 2026-11-18: About you > a picture's Keep answered "that would reach something real"."""
+        with on():
+            for m, path in (('PATCH', '/api/whoami'), ('PUT', '/api/owner'), ('PUT', '/api/hand-signature')):
+                why = demo.refuse(m, path)
+                self.assertNotEqual(why, demo.OFF, path)
+                self.assertIn('owner is invented', why)
+
     def test_trust_says_no_agent_starts_here_never_that_it_would_reach_something_real(self):
         with on(): self.assertEqual(demo.refuse('POST', '/api/tasks/4/trust'), demo.STARTS)
 

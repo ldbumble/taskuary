@@ -312,6 +312,10 @@ def break_out(store, tid, p: dict) -> tuple:
                      + ' '.join(str(m.get('BodyText') or m.get('Subject') or '').split())[:140]
     moves = [line(msgs[m]) for m in want] + [f"to-do: {todo[i]['text']}" for i in items]
     return {**p, 'title': str(p['title']).strip()[:200], 'messages': want, 'items': items, 'moves': '\n'.join(moves)}, ''
+def _draft(r: dict) -> dict:
+    try: d = json.loads(r.get('DraftText') or '{}')
+    except ValueError: return {}
+    return d if isinstance(d, dict) else {}
 def break_out_words(p: dict) -> str:
     n = [plural(len(p[k]), w) for k, w in (('messages', 'message'), ('items', 'to-do')) if p.get(k)]
     return f"move {' and '.join(n)} to a task of its own, \"{p['title'][:120]}\""
@@ -384,6 +388,17 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
     if ok and p.get('action') == 'break_out':
         p, miss = break_out(store, task_id, p)
         if miss: ok, why = False, miss
+    # ...ONE CARD PER ASK (the stress round, 2026-11-18): the same proposal again - a retried call - is the card already waiting, and a
+    # break_out moving what a waiting one moves is refused: stood behind it, its press could only fail
+    if ok:
+        bare = lambda d: {k: v for k, v in d.items() if k != 'why'}
+        waiting = [(r, _draft(r)) for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind='action' ORDER BY ReviewId",
+                                                       (int(task_id),))]
+        if same := next((r for r, d in waiting if bare(d) == bare(p)), None):
+            return {'reviewId': same['ReviewId'], 'action': p['action'], 'already': True}
+        if p.get('action') == 'break_out' and (r := next((r for r, d in waiting if d.get('action') == 'break_out' and (
+                set(d.get('messages') or ()) & set(p['messages']) or set(d.get('items') or ()) & set(p['items']))), None)):
+            ok, why = False, f"rv{r['ReviewId']} already moves part of that to a task of its own - take it back or replace it rather than a second card"
     if ok and p.get('action') == 'save_routine':
         from . import origin, workflows
         # ...never from work a stranger started: what their mail said may be what wrote the script

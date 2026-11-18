@@ -304,6 +304,18 @@ class APartThatIsAnotherJob(Acts):
         self.assertEqual((out['ok'], out['status']), (False, 'superseded')); self.assertIn('not on this task', out['send_error'])
         self.assertEqual([i['id'] for i in self.s.task_checklist(self.tid)], ['a1', 'b2'])
 
+    def test_the_same_break_out_asked_twice_is_one_card(self):
+        """The same break_out proposed twice (a retried call) stood as two cards: the second, pressed after the first, failed with "not on this
+        task - name its own messages (their m-ids)", words for the agent shown to the owner. A repeat is the card already waiting; another
+        break_out moving what a waiting one moves is refused to the agent, with the card it collides with."""
+        one, _ = self.queue()
+        two, _ = self.queue(why='said again')
+        self.assertEqual(two['ReviewId'], one['ReviewId'])
+        self.assertEqual(len(self.s._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (self.tid,))), 1)
+        three, why = self.queue(title='Renew the permits this week', items=[])
+        self.assertIsNone(three)
+        self.assertIn(f"rv{one['ReviewId']}", why[0])
+
     def test_the_agent_is_told_it_can(self):
         self.assertIn('break_out', agenttools.TOOLS['propose'][1])
         self.assertIn('"action": "break_out"', general.action_line(self.s))

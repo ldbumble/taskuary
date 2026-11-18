@@ -226,6 +226,30 @@ class TheDraftHisAnswerRetiredStaysWhereItStood(unittest.TestCase):
         self.assertEqual(r.get('Why'), 'Not sent - you answered Erin Blake yourself')
 
 
+    def test_mail_polled_together_after_a_restart_still_says_he_answered(self):
+        """Taskuary was off overnight. Erin wrote at 08:00 and he answered from his phone at 09:00; at 10:00 the poll took her mail in, the
+        draft was written, and the Sent folder's read brought his answer. His mail was placed by when he SENT it, hers by when it ARRIVED, so
+        the card read "written before the agent read Erin Blake's new message" - over a draft his own answer had retired."""
+        from taskuary import conversation
+        from taskuary.channels import ingest_outbound_mail
+        s = _store()
+        mid = s.add_message({'ExternalId': 'in-erin2', 'ConversationId': 'c-erin2', 'Channel': 'email', 'SourceName': 'alex@northwind.example',
+                             'Subject': 'Budget numbers', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
+                             'SentAt': '2026-11-17 08:00:00', 'BodyText': 'Can you send the Q3 numbers?', 'Status': 'routed'})
+        tid = s.create_task({'Title': 'Send the Q3 numbers', 'Kind': 'reply', 'Status': 'open'}, 'router')
+        s.attach_message(mid, tid)
+        rid = s.add_review({'MessageId': mid, 'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Erin, attached.'})
+        s._exec("UPDATE message SET CreatedAt='2026-11-17 10:00:00' WHERE MessageId=?", (mid,))
+        s._exec("UPDATE route SET CreatedAt='2026-11-17 10:00:00' WHERE MessageId=?", (mid,))
+        s._exec("UPDATE review SET CreatedAt='2026-11-17 10:00:05' WHERE ReviewId=?", (rid,))
+        ingest_outbound_mail(s, 'alex@northwind.example', {'id': 'out-2', 'subject': 'RE: Budget numbers', 'conversationId': 'c-erin2',
+                                                            'bodyPreview': 'Here they are.', 'sentDateTime': '2026-11-17T09:00:00'})
+        s._exec("UPDATE message SET CreatedAt='2026-11-17 10:00:10' WHERE ExternalId='graph:out-2'")
+        card = next(c for x in conversation.items(s, tid)['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])
+                    if c['review'] == rid)
+        self.assertEqual(card.get('why'), 'Not sent - you answered Erin Blake yourself')
+
+
 class TheBallIsInTheirCourt(unittest.TestCase):
     """You answered and they have not. The row read "on your list - nobody is on this" for the
     whole of that wait, so "needs me" counted every thread the owner had just dealt with."""

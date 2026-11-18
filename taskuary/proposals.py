@@ -647,12 +647,15 @@ def passed_why(store, r: dict) -> str:
            and not general.is_brief(x) and x.get('Actor') == 'owner']
     lines = [(ep(x['CreatedAt']), f'your line "{w}"', f'you wrote "{w}" after it') for x in his for w in [_cut(general._line_of(x.get('Body'))['text'])]]
     # ...his own mail on the thread is his answer to whom it was with, never "you wrote again" (2026-11-17): the newest other sender before it
+    # ...each placed by when it CAME IN, his too (2026-11-18): his mail was placed by when he sent it and theirs by when it arrived, so mail
+    # polled together after a restart read "written before the agent read Erin's new message" over a draft his own answer had retired
     mails, who = [], ''
-    for x in _mail(store, tid):
+    came = lambda x: max(x['T'], ep(x.get('CreatedAt'))) if x.get('Own') else x['T']
+    for at, x in sorted(((came(x), x) for x in _mail(store, tid)), key=lambda p: (p[0], p[1]['MessageId'])):
         n = x.get('FromName') or x.get('FromEmail')
-        if not x.get('Own'): who = n or who; mails.append((x['T'], f"{n or 'a'}'s new message", f"{n or 'someone'} wrote again after it")); continue
+        if not x.get('Own'): who = n or who; mails.append((at, f"{n or 'a'}'s new message", f"{n or 'someone'} wrote again after it")); continue
         to = who or continuity.sent_to(store, r, 'them')
-        mails.append((x['T'], f'your answer to {to}', f'you answered {to} yourself'))
+        mails.append((at, f'your answer to {to}', f'you answered {to} yourself'))
     got = max((x for x in lines + mails if x[0] <= end + 1), key=lambda x: x[0], default=None)
     if not got: return 'Not sent - set aside when the chat moved on'
     return f'Not sent - {got[2]}' if got[0] >= card else f'Not sent - written before the agent read {got[1]}'

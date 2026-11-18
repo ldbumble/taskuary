@@ -923,6 +923,16 @@ class TheAppsOwnTrouble(unittest.TestCase):
         self.assertEqual(self.restarts, [])
         self.assertIn('no restart_bridge to run here', h['said'])
 
+    def test_a_bridge_this_computer_runs_is_restarted_when_the_owner_asks_even_while_it_answers(self):
+        # "restart the whatsapp bridge" over a bridge that answers was refused "WhatsApp has no restart_bridge to run here" - untrue: this
+        # computer runs it, and its card's Restart bridge is lit. Where the bridge runs decides, not whether health named the repair
+        from taskuary import troubleshoot
+        self.up[0] = True; self.s.touch_connector(self.cid, None)
+        h = troubleshoot.repair(self.s, 'whatsapp', 'restart_bridge')
+        self.assertEqual(self.restarts, [1])
+        self.assertEqual((h['did'], h['worked']), ('restart_bridge', True))
+        self.assertNotIn('said', h)
+
     def test_the_steps_are_drawn_as_they_happen(self):
         seen = []
         with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(ingest, '_spawn'):

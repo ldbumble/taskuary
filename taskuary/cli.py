@@ -476,6 +476,8 @@ def main():
         if out.get('attached'): print('attached: ' + ', '.join(out['attached']))
         for w in out.get('not_attached') or []: print(f'NOT attached - {w}')
         if out.get('tell'): print(out['tell'])
+        # ...and a To left empty for want of an address, as the draft tool says it (slots.to_missing): "email saved" alone hid it
+        if out.get('to_missing'): print(out['to_missing'])
         return
     if args.item is not None:
         import os, sys

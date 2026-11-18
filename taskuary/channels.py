@@ -1040,7 +1040,7 @@ REREAD_SYSTEM = ('You read words written for the owner and not acted on yet - a 
                  'only: {"covered": "covered" | "partly" | "none", "left": "the cut words for partly, else empty"}')
 REREAD_WANT = {'type': 'object', 'properties': {'covered': {'type': 'string', 'enum': ['covered', 'partly', 'none']}, 'left': {'type': 'string'}},
                'required': ['covered']}
-COVERED, CHECK_IT = 'Your line covers this, nothing more to send.', 'You wrote on the thread since - check the draft still fits.'
+CHECK_IT = 'You wrote on the thread since - check the draft still fits.'
 
 
 def reread(store, tid, words: str, line: str, brain=None) -> tuple:
@@ -1069,7 +1069,8 @@ def reread_draft(store, tid, rv: dict, sent: dict, brain=None) -> str:
     who = str(m.get('FromName') or '').strip() if m.get('FromName') != 'You' else ''
     got, left = reread(store, tid, draft, line, brain=brain)
     if got == 'covered':
-        store.decide_review(rv['ReviewId'], 'superseded', None, 'you', COVERED)
+        from .proposals import SET_ASIDE      # ...greyed where it stood, as every card his answer moved past (retire_draft_answered_elsewhere)
+        store.decide_review(rv['ReviewId'], 'superseded', None, 'you', SET_ASIDE)
         if tid:
             from . import verdicts
             verdicts._settle_task_after_sent_reply(store, rv, 'you', True)
@@ -1135,9 +1136,12 @@ def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict, later: b
         if not stale: return []
 
     place = SENT_FROM.get(sent.get('Channel'), 'outside Taskuary')
+    # ...SET ASIDE BY THE ONE RULE A CARD THE CHAT MOVED PAST IS (proposals.passed): under a note of its own no surface read it as passed, so
+    # the chat had no words to draw greyed and the card went from it. Now it stays where it stood, greyed, and says why (passed_why: "Not
+    # sent - you answered Erin yourself") - on the chat, the task page and a press alike
+    from .proposals import SET_ASIDE
     for rv in stale:
-        store.decide_review(rv['ReviewId'], 'superseded', None, 'you',
-                            f'The owner replied {place}; this draft was not sent.')
+        store.decide_review(rv['ReviewId'], 'superseded', None, 'you', SET_ASIDE)
 
     # Treat this exactly like a successful send through Review - which closes nothing (the owner, 2026-10-18: "sending and
     # closing are two steps"): the task stays open for Mark done.

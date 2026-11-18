@@ -136,7 +136,9 @@ LOCAL_OPS = {'task.complete', 'task.reopen', 'task.defer', 'task.watching', 'ite
 # The sentences the visitor sees, plain and said as the demo, not as a fault: the page posts them as an ordinary line.
 SENDS = 'This is the demo - nothing is sent. In your own Taskuary this is where you approve it and it goes.'
 STARTS = 'This is the demo - the agents here are recordings, so nothing new starts.'
-OFF = 'This is the demo - that would reach something real, so it is switched off. Everything here is invented.'
+# ...the catch-all, for whatever the lists here do not name: true of every one of them. It said "that would reach something real", and most
+# of what fell to it reached nothing - a Quit, a picture's Keep, a file taken off a draft, a press through a card (the walk, 2026-11-18)
+OFF = 'This is the demo - that is switched off here, so nothing changed. Everything here is invented.'
 NO_AI = 'This is the demo - no AI runs here, so nothing is read or planned again. In your own Taskuary your AI does this.'
 # ...and a stop: the coding sessions here REPLAY a recording, so Stop and save, Pause and Stop have no agent to reach - each read "that
 # would reach something real" (the walk, 2026-11-18)

@@ -781,6 +781,12 @@ class TheDemoWorldIsConnectedTests(unittest.TestCase):
                 self.assertNotEqual(why, demo.OFF, path)
                 self.assertIn('owner is invented', why)
 
+    def test_the_catch_all_claims_nothing_it_cannot_know(self):
+        """The walk, 2026-11-18: whatever the deny list does not name answered "that would reach something real" - most of it reached
+        nothing. The catch-all says only what is true of all of it."""
+        self.assertNotIn('real', demo.OFF)
+        self.assertTrue(demo.OFF.startswith('This is the demo - '))
+
     def test_trust_says_no_agent_starts_here_never_that_it_would_reach_something_real(self):
         with on(): self.assertEqual(demo.refuse('POST', '/api/tasks/4/trust'), demo.STARTS)
 

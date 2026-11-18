@@ -108,6 +108,21 @@ class RecentlyDeletedTests(unittest.TestCase):
         self.assertEqual((self.s.get_connector(cid)['Active'], self.s.get_source(box)['Active']), (1, 1))
         self.assertEqual(json.loads(self.s.get_connector(cid)['ConfigJson'])['host'], 'mail.northwind.example')
 
+    def test_a_card_added_after_a_remove_never_takes_the_removed_cards_place(self):
+        # the connections hammer (2026-11-18): a second mail card removed, another added within the Undo line's minutes - the new one was
+        # given the removed card's id, and Undo then wrote the old card's password and settings over the new card, its mailbox with it
+        cid, box = self._mail_card()
+        out = self.c.post(f'/api/connectors/{cid}/reset').json()
+        self.assertTrue(out['gone'])
+        new = self.c.post('/api/connectors', json={'Type': 'imap', 'Name': 'Erin mail', 'Secret': 'erins-password',
+                                                   'ConfigJson': json.dumps({'host': 'mail.vendor.example'})}).json()['connectorId']
+        self.assertNotEqual(new, cid)
+        self.assertEqual(self.c.post(f"/api/deleted/{out['deleted']}/restore").status_code, 200)
+        self.assertEqual(self.s.get_connector(new, with_secret=True)['Secret'], 'erins-password')
+        self.assertEqual(json.loads(self.s.get_connector(new)['ConfigJson'])['host'], 'mail.vendor.example')
+        self.assertEqual((self.s.get_connector(cid)['Name'], self.s.get_connector(cid, with_secret=True)['Secret']), ('Northwind mail', 'app-password'))
+        self.assertEqual(self.s.get_source(box)['ConnectorId'], cid)
+
     def test_a_removed_connections_sign_in_is_forgotten_once_its_undo_has_passed(self):
         cid, _ = self._mail_card()
         sealed = self.s._one('SELECT Secret FROM connector WHERE ConnectorId=?', (cid,))['Secret']

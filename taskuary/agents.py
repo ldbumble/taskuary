@@ -275,16 +275,25 @@ class ClaudeSteps:
         _published(j, self.trace)
 
 
+def failure_of(name: str, said: str, cmd0: str = '', resume=None, raw=None, err: str = '') -> Exception | None:
+    """WHAT A FAILED TURN IS, read one way on every road - the one-shot run, the kept conversation, ACP's chat and coding sessions: its usage
+    allowance (the CLI's own event, or its notice in words, as Codex and the ACP adapters say it), its sign-in, a conversation it no longer
+    has - else None. `raw` is what else it printed; `err` its stderr, read for a sign-in as `said` is."""
+    from .failures import cli_quota
+    raw = raw if raw is not None else [said]
+    if limit := rate_limited(raw) or rate_limited(said): return RateLimited(rate_limit_msg(name, limit), limit)
+    if notice := cli_quota(said) or cli_quota(err): return RateLimited(notice)
+    if _SIGNED_OUT.search(f'{said}\n{err}'): return RuntimeError(signed_out_msg(name, said, cmd0))
+    if resume and gone('\n'.join(map(str, raw)) or said): return Gone(resume)
+    return None
+
+
 def raise_failure(name: str, said: str, cmd0: str = '', resume=None, raw=None, part_way=None):
     """THE ONE WAY A TURN THAT DID NOT FINISH IS REPORTED, on every road that reads a CLI's own account of it (the kept conversation, ACP,
-    the one-shot run's death with no words): its usage allowance, its sign-in, a conversation it no longer has, a turn that ended part-way -
-    else its own words. `raw` is what else it printed, read for the same. `part_way` is (sentence, conversation id) where the road knows the
-    turn ended part-way (it died mid-turn, or ended early (a refusal, a limit), before a word or after some): raised as clipool.PartWay in that sentence alone."""
-    raw = raw if raw is not None else [said]
-    limit = rate_limited(raw) or rate_limited(said)
-    if limit: raise RateLimited(rate_limit_msg(name, limit), limit)
-    if _SIGNED_OUT.search(said): raise RuntimeError(signed_out_msg(name, said, cmd0))
-    if resume and gone('\n'.join(map(str, raw)) or said): raise Gone(resume)
+    the one-shot run's death with no words): what it is (failure_of) - else its own words. `part_way` is (sentence, conversation id) where the
+    road knows the turn ended part-way (it died mid-turn, or ended early (a refusal, a limit), before a word or after some): raised as
+    clipool.PartWay in that sentence alone."""
+    if e := failure_of(name, said, cmd0, resume, raw): raise e
     # ...no process name before it and no "(the CLI exited (3))" or stop code after it (the overnight walk, 2026-11-11) - those are the log's
     if part_way: logger.warning(f'{name}: {said[:500]}'); raise PartWay(*part_way)
     raise RuntimeError(f'{name}: {said[:500]}')
@@ -1627,7 +1636,7 @@ def _acp_open(name: str, launch: dict, cwd, env: dict, resume, timeout, trace, f
                 client.new_session(cwd, meta=launch['meta'])
         except acp_mod.ACPAgentError as e:
             # a CLI that is not signed in answers session/new in its own words: said as a sign-in, not as a broken app (2026-10-25)
-            if _SIGNED_OUT.search(str(e)): raise RuntimeError(signed_out_msg(name, str(e), launch['cmd'][0])) from e
+            if f := failure_of(name, str(e), launch['cmd'][0]): raise f from e
             raise acp_mod.ACPStartError(f'session: {e}') from e
         if launch['mode'] and not client.set_option('mode', launch['mode']):
             logger.warning(f"acp: {name} has no '{launch['mode']}' mode - it runs in {client.option('mode').get('currentValue') or 'its own'}")
@@ -1770,7 +1779,8 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     except acp_mod.ACPAgentError as e:
         # ...a stopped turn its agent did not end was ended by the backstop: still his stop, never a death
         if cancel is not None and cancel.is_set(): raise Cancelled(client.session_id) from e
-        if _SIGNED_OUT.search(str(e)): raise RuntimeError(signed_out_msg(name, str(e), launch['cmd'][0])) from e
+        # ...a usage limit, a sign-in: read as every road reads them (failure_of) - an ACP limit was raw adapter text, and the router never rested it
+        if f := failure_of(name, str(e), launch['cmd'][0]): raise f from e
         raise
     finally:
         over.set(); asked.set()
@@ -2026,10 +2036,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         # the CLASSIFYING patterns read both streams: a sign-in refusal or a Windows launch
         # refusal lands on stderr, while the reason the owner reads now comes off stdout
         hay = f'{said}\n{err}'
-        limit = rate_limited(raw) or rate_limited(hay)
-        if limit: raise RateLimited(rate_limit_msg(name, limit), limit)
-        if _SIGNED_OUT.search(hay): raise RuntimeError(signed_out_msg(name, said, cmd[0] if cmd else ''))
-        if resume and gone(hay + '\n'.join(raw)): raise Gone(resume)
+        if f := failure_of(name, said, cmd[0] if cmd else '', resume, [*raw, err], err): raise f
         # a refusal to START, not a failed run: the CLI produced no output of its own and the
         # only thing on stderr is the refusal
         if _DENIED.search(hay) and not raw: raise RuntimeError(denied_msg(name, cmd[0] if cmd else '', said))

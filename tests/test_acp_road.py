@@ -499,3 +499,20 @@ def test_a_turn_that_says_words_then_hits_a_limit_or_a_refusal_ended_part_way_it
     # ...and a turn that ended for any other reason after words is still its answer
     out, ev = run(profile(), 'go', env={'FAKE_ACP_SCRIPT': str(rules), 'FAKE_ACP_STOP': 'budget_gone'})
     assert out[0] == 'Half of it.'
+
+
+# ── ONE FAILURE ROAD: a usage limit reads the same whatever the AI and the road (the design round, 2026-11-18) ──────────────────────
+def test_a_usage_limit_over_acp_is_the_limit_every_road_raises():
+    """Over ACP the adapter says its limit in words, and the chat's road raised them raw - never RateLimited, so the router went on handing
+    the spent AI the next call. Read by agents.failure_of, as the one-shot and kept roads read theirs."""
+    with pytest.raises(agents.RateLimited) as e:
+        run(profile(), 'go', env={'FAKE_ACP_FAIL': 'quota'})
+    assert str(e.value) == "You've hit your 5-hour limit · resets 12:10pm (America/New_York)"
+
+
+@pytest.mark.parametrize('said', ["You've hit your usage limit. Upgrade to Pro or try again at 3:05 PM.", 'Not logged in · Please run /login'])
+def test_every_road_reads_a_failure_by_one_function(said):
+    "A limit and a sign-out, said in words by any CLI, are the same exception on the one-shot road, the kept road and ACP."
+    f = agents.failure_of('codex', said, 'codex')
+    assert isinstance(f, agents.RateLimited) if 'limit' in said else 'sign' in str(f).lower() or 'log' in str(f).lower()
+    with pytest.raises(type(f)): agents.raise_failure('codex', said, 'codex')

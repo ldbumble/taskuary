@@ -403,7 +403,7 @@ class ACPCoding:
         codingchat.record_update(self.task_id, self.sid, u)
 
     def _turn(self, items: list):
-        from . import agents, acpgate, failures
+        from . import agents, acpgate
         text = '\n\n'.join(t for t, *_ in items)
         self._show(items); self._drawn.difference_update(map(id, items))
         # ...ITS CLOCK IS SET ONCE, HERE (the 0.3.11.50 release run: it read the turn's start, then the CLI's own prompt hook's time, then the
@@ -446,11 +446,12 @@ class ACPCoding:
             else:
                 logger.warning(f'acp coding {self.sid}: the turn failed - {e}')
                 # ...a sentence that already says how to carry on is said as it is (acp's mid-turn death)
-                quota = failures.cli_quota(e)
+                f = agents.failure_of(self.cli, str(e))          # what it is, read as every road reads it
+                quota = str(f) if isinstance(f, agents.RateLimited) else ''
                 if quota:
                     self.busy = False
                     general.answered(self.task_id, every=True)
-                why = quota or (f'{str(e)[:400]}.' if general.CARRY_ON in str(e) else f'The turn failed: {str(e)[:300]} - {general.CARRY_ON}.')
+                why = str(f) if f else f'{str(e)[:400]}.' if general.CARRY_ON in str(e) else f'The turn failed: {str(e)[:300]} - {general.CARRY_ON}.'
                 self._say('progress', 'acp', why)
                 # ...IN THE CHAT, where it happened (rules part 4): said only on its Terminal, the chat - drawn from the kept updates - showed the
                 # turn's first words and stopped. Taskuary's own update, marked as its brief is (chatStream.stepsFromAcp draws it as the turn's error)

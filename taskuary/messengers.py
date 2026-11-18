@@ -227,6 +227,7 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
     return n
 
 
+_TAPS = __import__('threading').Lock()      # tg_tap: one tap at a time reads and spends a list
 TG_BUTTONS = 'tg_buttons'              # tg_buttons:<chat> -> {"msg": id, "labels": [...]} - the one message whose buttons answer
 
 
@@ -269,12 +270,17 @@ def tg_tap(store, c, q: dict) -> bool:
     cid = str((msg.get('chat') or {}).get('id') or '')
     if not cid or frm.get('is_bot') or ((msg.get('chat') or {}).get('type') or 'private') != 'private': return False
     if not remote_assistant.enabled(store, 'telegram', cid, c): return False
-    try: shown = json.loads(store.get_setting(f'{TG_BUTTONS}:{cid}') or '{}') or {}
-    except ValueError: shown = {}
-    data, labels = str(q.get('data') or ''), shown.get('labels') or []
-    i = int(data[1:]) if data[:1] == 'p' and data[1:].isdigit() else -1
-    if shown.get('msg') != msg.get('message_id') or not 0 <= i < len(labels):
-        remote_assistant.stale_tap(store, 'telegram', cid, c.get('ConnectorId')); return True
+    # ONE PICK PER LIST: a double tap is two callback queries on the same message, and both ran - the second as a pick on whatever list
+    # the first one's answer drew. The first marks the list spent before anything runs; a later one is told, as a spent WhatsApp poll is.
+    with _TAPS:
+        try: shown = json.loads(store.get_setting(f'{TG_BUTTONS}:{cid}') or '{}') or {}
+        except ValueError: shown = {}
+        data, labels = str(q.get('data') or ''), shown.get('labels') or []
+        i = int(data[1:]) if data[:1] == 'p' and data[1:].isdigit() else -1
+        mine = shown.get('msg') == msg.get('message_id')
+        if not mine or shown.get('spent') or not 0 <= i < len(labels):
+            remote_assistant.stale_tap(store, 'telegram', cid, c.get('ConnectorId'), spent=mine and bool(shown.get('spent'))); return True
+        store.set_setting(f'{TG_BUTTONS}:{cid}', json.dumps({**shown, 'spent': True}), 'assistant')
     return remote_assistant.intercept(store, 'telegram', cid, labels[i], from_me=True, connector=c, poll=True)
 
 

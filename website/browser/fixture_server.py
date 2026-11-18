@@ -268,6 +268,7 @@ def _install_fresh_routes(app, store):
         box = Path(os.environ["TASKUARY_HOME"]) / "outbox.jsonl"
         def out(*a, **k):
             if body.get("fail"): raise RuntimeError(body["fail"])         # ...a mailbox that refuses: a press whose act fails (`fail` its words)
+            if body.get("delay"): time.sleep(float(body["delay"]))          # ...a mailbox that takes its time over each send (browser/bulk-card-queue)
             keep = lambda v: v if isinstance(v, (str, list, int, type(None))) else type(v).__name__
             with box.open("a", encoding="utf-8") as f: f.write(json.dumps({"args": [keep(x) for x in a[1:]], "kw": {n: keep(v) for n, v in k.items()}}, default=str) + "\n")
             return {"channel": "email", "to": k.get("to") or ["gail@northwind.example"], "cc": k.get("cc") or []}

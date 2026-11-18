@@ -14,6 +14,8 @@ from loguru import logger
 KEY = 'batch:'                 # setting: batch:<key> -> the run's state
 YES = 'approve'
 LEFT = 'left out by you'      # a row he unticked: closed, never done
+_CLAIM = threading.Lock()      # a press claims the card's run (run)
+BOOT = uuid.uuid4().hex        # this process: a run marked by another was cut short by a restart (state)
 
 
 def new_key() -> str: return uuid.uuid4().hex[:12]
@@ -27,6 +29,9 @@ def state(store, key: str) -> dict:
     "The run as it stands: {key, tid, total, done, failed, left, state: idle|running|cancelling|stopped|finished, rows: {rid: 'ok'|'left'|error}}."
     try: got = json.loads(store.get_setting(f'{KEY}{key}') or '{}') or {}
     except (TypeError, ValueError): got = {}
+    # ...A RUN CUT SHORT BY A RESTART (its thread went with the old process) is stopped, the rest waiting for his press - never "running" for good
+    # ...(one with no mark at all was written before runs carried one: by another process too)
+    if got.get('state') in ('running', 'cancelling') and got.get('boot') != BOOT: got['state'] = 'stopped'
     return got or {'key': key, 'state': 'idle', 'rows': {}}
 
 
@@ -53,13 +58,19 @@ def _went(out: dict) -> str:
 def run(store, key: str, skip=(), actor: str = 'owner', wait: bool = False) -> dict:
     """His one press: every waiting row of bulk card `key` done by its own road, in order, in the background (`wait`: here, for a test);
     the rows in `skip` closed as left out. -> the run's state as it starts."""
-    from . import verdicts
-    todo = [r for r in rows(store, key) if r['Status'] == 'pending']
-    if not todo: raise ValueError('nothing on this card waits any more')
-    if running(store, key): return state(store, key)
-    tid, skip = todo[0]['TaskId'], {int(x) for x in skip or ()}
-    st = {**state(store, key), 'key': key, 'tid': tid, 'total': len(todo), 'done': 0, 'failed': 0, 'left': 0, 'state': 'running', 'rows': {}, 'at': time.time()}
-    _save(store, st)
+    from . import proposals, verdicts
+    # ...ONE RUN AT A TIME, however many presses (a double click, the phone and the desk): checked and marked at work as one step - two runs each
+    # found the other's row in hand, counted it failed, and its agent heard the run twice, half of it "failed"
+    with _CLAIM:
+        todo = [r for r in rows(store, key) if r['Status'] == 'pending']
+        if not todo: raise ValueError('nothing on this card waits any more')
+        if running(store, key): return state(store, key)
+        tid, skip = todo[0]['TaskId'], {int(x) for x in skip or ()}
+        # ...A CARD THE CHAT MOVED PAST PRESSES NOTHING (verdicts._decide's rule): asked here, before the run is marked at work - a bulk card at
+        # work is never written past (proposals._older), so each row's own refusal would read it as still standing
+        if tid and (past := [r for r in todo if r['ReviewId'] in proposals.written_past(store, tid)]): raise ValueError(proposals.passed_why(store, past[0]))
+        st = {**state(store, key), 'key': key, 'tid': tid, 'total': len(todo), 'done': 0, 'failed': 0, 'left': 0, 'state': 'running', 'rows': {}, 'at': time.time(), 'boot': BOOT}
+        _save(store, st)
     def go():
         tok = verdicts.QUIET.set(True)
         try:
@@ -103,16 +114,23 @@ def summary(store, key: str, st: dict) -> str:
     rs = {str(r['ReviewId']): r for r in rows(store, key)}
     what = lambda rid: cardqueue.what(store, {'rids': [int(rid)], 'rows': [rs[rid]]}) if rid in rs else f'rv{rid}'
     bad = [(rid, why) for rid, why in st.get('rows', {}).items() if why not in ('ok', 'left')]
-    rest = [r for r in rs.values() if r['Status'] == 'pending']
+    # ...a send that did not go still waits on the card for his press, as a single card's does (general.NOT_GONE); an act that failed is off it
+    again = [rid for rid, _ in bad if rid in rs and rs[rid]['Status'] == 'pending']
+    rest = [r for r in rs.values() if r['Status'] == 'pending' and str(r['ReviewId']) not in st.get('rows', {})]
     return (f"The owner pressed the bulk card ({st.get('total', 0)} items): {st.get('done', 0)} done, {st.get('failed', 0)} failed, {st.get('left', 0)} left out by them"
             + (f", {len(rest)} not run - they stopped it" if st.get('state') == 'stopped' and rest else '') + '.'
             + (' Failed: ' + '; '.join(f'rv{rid} ({what(rid)}): {why}' for rid, why in bad[:20]) + ('…' if len(bad) > 20 else '') + '.' if bad else '')
-            + ' Say in one line how it went and what, if anything, is still to do; set up again only what failed and is still wanted.')
+            + (f' Did not go and still on the card for their press: {len(again)} - never set them up again; take back any no longer wanted.' if again else '')
+            + ' Say in one line how it went and what, if anything, is still to do; set up again only a failed act that is still wanted.')
 
 
 def told(store, key: str, st: dict, actor: str = 'owner') -> str:
     "Its agent hears the whole run once, by the one road (general.tell) - and nothing is said of it again with his next line."
     from . import general
+    from .cardqueue import says
     def heard(how):
         for rid in st.get('rows', {}): store.audit('review', int(rid), general.TOLD, actor, 'system', {'task': st['tid'], 'how': how, 'batch': key})
-    return general.tell(store, st['tid'], summary(store, key, st), actor, heard=heard) if st.get('tid') else ''
+    # ...with what still waits in the line behind it, as a yes, a failure or a no on one card tells it (general.approved / failed, said_no)
+    if not st.get('tid'): return ''
+    line = says(store, st['tid'], pressed=True)
+    return general.tell(store, st['tid'], summary(store, key, st) + (f' {line}' if line else ''), actor, heard=heard)

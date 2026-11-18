@@ -456,6 +456,11 @@ def withdraw(store, tid: int, why: str, by: str, which='', keep: int = 0) -> dic
     from .wrapup import WITHDRAWN
     why, which = ' '.join(str(why or '').split()), ' '.join(str(which or '').split()).casefold().removeprefix('rv')
     if not why: return {'ok': False, 'why': 'say in one line why the draft no longer answers - what the newest message changed'}
+    # ...SEVERAL BY THEIR IDS, as a bulk card is named to its agent ("rv1 + rv2 + ...", cardqueue.says): each taken back, one call for the card
+    if re.fullmatch(r'\d+(?:\s*[,+]\s*(?:rv)?\d+)+', which):
+        got = [(x, withdraw(store, tid, why, by, x, keep)) for x in dict.fromkeys(re.findall(r'\d+', which))]
+        done, bad = [g['review_id'] for _, g in got if g.get('ok')], [f"rv{x}: {g.get('why')}" for x, g in got if not g.get('ok')]
+        return {'ok': bool(done), 'review_id': done[0] if done else None, 'review_ids': done, **({'why': '; '.join(bad)[:600]} if bad else {})}
     left = [r for r in unsent(store, tid) if r['rid'] != keep]
     if not left: return {'ok': False, 'why': 'nothing unsent is waiting on this task, so there is nothing to withdraw'}
     if which.isdigit(): hit = [r for r in left if r['rid'] == int(which)]

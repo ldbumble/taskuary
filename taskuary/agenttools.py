@@ -172,7 +172,7 @@ TOOLS = {
                                 "your turn saying so; draft a new reply if something is still owed.", _S({'why': _STR}, ('why',)), ('POST', '/api/agent/not-needed')),
     'withdraw_draft': ('own', "Take back something you set up here that has not gone out - the reply, an email, a post, another "
                               "proposal - when the goal changed or it no longer answers the newest message. `which`: its review id "
-                              "(each propose tool returns one) or who it was to; none for the reply. `why`: one line on what changed."
+                              "(each propose tool returns one; a card of many, all its ids: 'rv1 + rv2') or who it was to; none for the reply. `why`: one line on what changed."
                               " It is kept under Not sent with the owner's Bring it back; what already went is never touched. To "
                               "correct a reply, just propose the new one; an email IN PLACE of another is the new one's `replaces` - "
                               "one call, one Send left.",
@@ -412,7 +412,7 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if not items: raise ValueError('`items` holds no objects - give each item its own fields')
     if len(items) > 500: raise ValueError(f'{len(items)} items is past what one card holds (500) - split them, or narrow the list')
     key, top = bulkcard.new_key(), (store._one('SELECT MAX(ReviewId) AS m FROM review') or {}).get('m') or 0
-    refused, sent = [], 0
+    refused, sent, mine = [], 0, []
     for i, it in enumerate(items):
         try: out = _call(store, tid, name, {**base, **it}, doors)
         except Exception as e: refused.append(f'item {i + 1}: {failed(name, e)}'); continue
@@ -420,9 +420,13 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
         try: got = json.loads(out.body if hasattr(out, 'body') else out)
         except (TypeError, ValueError): got = None
         if isinstance(got, dict) and got.get('ok') is False:
-            refused.append(f"item {i + 1}: {got.get('why') or got.get('says') or 'refused, with no reason given'}")
+            refused.append(f"item {i + 1}: {got.get('why') or got.get('says') or 'refused, with no reason given'}"); continue
         sent += bool(isinstance(got, dict) and got.get('sent'))       # a routine's own email went at once (slots.routine_sends): no card
-    store._exec('UPDATE review SET Batch=? WHERE TaskId=? AND ReviewId>? AND Status=?', (key, int(tid), top, 'pending'))
+        # ...the card EACH item filed, by its own answer - never every card raised on the task meanwhile: a reply drafted for a mail that came
+        # in as the items were filed, or the agent's own call beside this one, joined the card and went with its one press
+        if isinstance(got, dict) and isinstance(rid := got.get('review_id', got.get('review')), int): mine.append(rid)
+    if mine: store._exec(f"UPDATE review SET Batch=? WHERE TaskId=? AND ReviewId>? AND Status='pending' AND ReviewId IN ({','.join('?' * len(mine))})",
+                         (key, int(tid), top, *mine))
     n = (store._one('SELECT COUNT(*) AS n FROM review WHERE Batch=?', (key,)) or {}).get('n') or 0
     return _j({'ok': n + sent > 0, **({'batch': key, 'on_the_card': n} if n else {}), **({'sent': sent} if sent else {}),
                **({'refused': refused} if refused else {}),

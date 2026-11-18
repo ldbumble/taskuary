@@ -37,7 +37,8 @@ export const rowState = (r, run) => {
   const said = run?.rows?.[String(r.ReviewId)];
   if (said === "ok" || ["approved", "edited", "sent"].includes(r.Status)) return { done: true };
   if (said === "left") return { left: true };
-  if (said) return { failed: said };
+  // ...a send that did not go still waits on the card (bulkcard.summary): once the run is over, ticked for the next press, its error beside it
+  if (said) return r.Status === "pending" && !running(run) ? { waiting: true, failed: said } : { failed: said };
   if (r.Status === "superseded" && r.DecideNote === SET_ASIDE) return { aside: true };
   if (r.Status === "superseded" && r.ActError) return { failed: r.ActError };
   return r.Status === "pending" ? { waiting: true } : { left: true };

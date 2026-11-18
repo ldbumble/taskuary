@@ -28,6 +28,16 @@ test("each row stands where its run left it, and the bar counts what is over", (
   assert.deepEqual(rowState({ ...close(4), Status: "superseded", DecideNote: "set aside when you moved on" }, null), { aside: true });
 });
 
+// A SEND THAT DID NOT GO STILL WAITS ON THE CARD (taskuary/bulkcard.summary): its row was drawn failed, with no tick box, and with every other
+// row done the press was gone - the card stood in front of the line with nothing to press, the card behind it held for good.
+test("a row whose send did not go still waits for the press, its error said beside it", () => {
+  const run = { state: "finished", total: 3, done: 2, failed: 1, left: 0, rows: { 1: "ok", 2: "ok", 3: "mailbox refused: over quota" } };
+  const rows = [{ ...mail(1, "a@cedar.example"), Status: "approved" }, { ...mail(2, "b@cedar.example"), Status: "approved" }, mail(3, "c@cedar.example")];
+  assert.deepEqual(rows.map((r) => rowState(r, run)), [{ done: true }, { done: true }, { waiting: true, failed: "mailbox refused: over quota" }]);
+  assert.deepEqual(rowState({ ...close(4), Status: "superseded", ActError: "issue was deleted" }, { rows: { 4: "issue was deleted" } }), { failed: "issue was deleted" },
+    "an act that failed is off the card");
+});
+
 // THE CARD READS ITS RUN WHILE THE PAGE AROUND IT REDRAWS (2026-11-17: the bar read "0 of 25" until the run ended and Stop the rest stayed lit).
 // Each row the run does pokes task-changed, the task page redraws and hands the card a fresh onChanged - and the poll, keyed on it, was torn
 // down before its one second came. Rendered here with a stand-in React (hooks with their deps, no DOM) so the effect's deps are what is tested.
@@ -49,6 +59,7 @@ const R = (() => {
     useEffect: (f, deps) => { const s = slot(() => ({})); if (!deps || !same(s.deps, deps)) { s.deps = deps; effects.push({ s, f }); } },
     jsx: el, jsxs: el, Fragment: "Fragment",
     render: (C, p) => { Comp = C; props = p; draw(); },
+    reset: () => { slots = []; },          // ...a test of its own: no hook state left by the one before
     text: () => { const out = []; const walk = (n) => { if (n == null || typeof n === "boolean") return; if (Array.isArray(n)) return n.forEach(walk);
       if (typeof n !== "object") return void out.push(String(n)); walk(n.props.children); }; walk(tree); return out.join(" "); },
   };
@@ -84,4 +95,36 @@ test("the bar follows the run while every row it does redraws the page with a fr
   assert.ok(reads >= first + 2, `read ${reads - first} more times in 3 s while the page redrew`);
   assert.doesNotMatch(R.text(), /\b3 of 25\b/, "the bar moved past its first read");
   assert.match(R.text(), /(\d+) of 25/);
+});
+
+// THE BAR COUNTS WHAT THE ROWS SHOW (recorded, browser/bulk-card-queue): every row stood ✓ while the bar still read "0 of 30 · 0 done" and
+// Stop the rest stood lit - the rows come with the page's redraw on each row done, the bar only with its own poll a second later.
+test("the bar is read again as the rows it counts change, never a second behind them", async () => {
+  const flush = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r)); };
+  const rows = Array.from({ length: 3 }, (_, i) => mail(i + 1, `owner${i + 1}@cedar.example`));
+  let reads = 0, run = { key: "b1", state: "running", total: 3, done: 0, failed: 0, left: 0, rows: {} };
+  globalThis.__R = R; R.reset();
+  // ...the card is built once per run (its bundle is cached), holding the api it was built with: its calls are swapped in place
+  Object.assign(globalThis.__api ||= {}, { get: async () => { reads += 1; return { data: run }; }, post: async () => ({ data: run }) });
+  const BulkCard = await build();
+  R.render(BulkCard, { rows, tid: 7, onChanged: () => {} }); await flush();
+  const first = reads;
+  run = { ...run, state: "finished", done: 3, rows: { 1: "ok", 2: "ok", 3: "ok" } };
+  R.render(BulkCard, { rows: rows.map((r) => ({ ...r, Status: "approved" })), tid: 7, onChanged: () => {} }); await flush();
+  assert.ok(reads > first, "the rows changed and the bar was not read again");
+  assert.match(R.text(), /3 of 3 · 3 done/);
+});
+
+// A STOPPED RUN HE THEN WROTE PAST: the rest was set aside, greyed, and the bar still said "stopped - the rest still waits"
+test("a stopped run whose rest the chat moved past never says the rest still waits", async () => {
+  const flush = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r)); };
+  const aside = { Status: "superseded", DecideNote: "set aside when you moved on" };
+  const rows = [1, 2, 3, 4].map((i) => ({ ...mail(i, `owner${i}@cedar.example`), ...(i <= 2 ? { Status: "approved" } : aside) }));
+  const run = { key: "b1", state: "stopped", total: 4, done: 2, failed: 0, left: 0, rows: { 1: "ok", 2: "ok" } };
+  globalThis.__R = R; R.reset();
+  Object.assign(globalThis.__api ||= {}, { get: async () => ({ data: run }), post: async () => ({ data: run }) });
+  const BulkCard = await build();
+  R.render(BulkCard, { rows, tid: 7, onChanged: () => {} }); await flush();
+  assert.match(R.text(), /2 of 4 · 2 done/);
+  assert.doesNotMatch(R.text(), /the rest still waits/);
 });

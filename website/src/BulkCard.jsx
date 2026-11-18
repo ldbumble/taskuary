@@ -16,7 +16,9 @@ export default function BulkCard({ rows = [], tid, onChanged }) {
   const key = rows[0]?.Batch, [run, setRun] = useState(null), [skip, setSkip] = useState(() => new Set()), [open, setOpen] = useState(() => new Set());
   const [busy, setBusy] = useState(false), [err, setErr] = useState("");
   const read = useCallback(() => api.get(`/api/reviews/batch/${key}`).then(({ data }) => setRun(data)).catch(() => {}), [key]);
-  useEffect(() => { read(); }, [read]);
+  // ...and read again whenever the rows it counts change (recorded: every row stood ✓ while the bar read "0 of 30" a second behind them)
+  const marks = rows.map((r) => `${r.ReviewId}:${r.Status}`).join(",");
+  useEffect(() => { read(); }, [read, marks]);
   // ...read again while it runs, never blocking the page: a row at a time lands on GitHub or in the outbox
   // ...keyed on WHETHER it runs, never on the page's onChanged (2026-11-17): each row done pokes task-changed, the task page redraws with a
   // new arrow, and a poll keyed on it was torn down before its second came - the bar read "0 of 25" and Stop the rest stood lit to the end
@@ -44,7 +46,7 @@ export default function BulkCard({ rows = [], tid, onChanged }) {
         <LinearProgress variant="determinate" value={progress(run)} sx={{ height: 6, borderRadius: 3 }} />
         <Typography variant="caption" sx={{ color: DIM }}>
           {`${(run.done || 0) + (run.failed || 0) + (run.left || 0)} of ${run.total} · ${run.done || 0} done`}{run.failed ? ` · ${run.failed} failed` : ""}{run.left ? ` · ${run.left} left out` : ""}
-          {run.state === "stopped" ? " · stopped - the rest still waits" : run.state === "cancelling" ? " · stopping after this one" : run.state === "finished" ? " · finished" : ""}</Typography>
+          {run.state === "stopped" ? ` · stopped${waiting.length ? " - the rest still waits" : ""}` : run.state === "cancelling" ? " · stopping after this one" : run.state === "finished" ? " · finished" : ""}</Typography>
       </Box>}
       <Box component="ul" sx={{ listStyle: "none", m: 0, p: 0, maxHeight: 420, overflowY: "auto" }}>
         {states.map(([r, s], i) => { const w = rowOf(r); return (

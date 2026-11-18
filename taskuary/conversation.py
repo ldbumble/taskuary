@@ -832,15 +832,21 @@ def _items(store, tid: int) -> dict:
         if (b := r.get('Batch')):
             rs = batches.get(b) or [r]
             if r['ReviewId'] != rs[0]['ReviewId'] or r['ReviewId'] in held: continue
-            open_ = any(x['Status'] == 'pending' for x in rs)
+            # ...greyed where it stood once the chat moved past it, as any card (written_past) - and one that waited behind another and was
+            # over before it ever stood never stands, as a single card's rule below
+            open_ = [x for x in rs if x['Status'] == 'pending']
+            gone = all(x['ReviewId'] in past for x in open_) if open_ else any(proposals_passed(x) for x in rs)
+            if (f"r:{r['ReviewId']}" in waited and hosts.get(f"r:{r['ReviewId']}") is None and (gone or not open_)
+                    and not any(x.get('DecidedBy') in OWNER_ACTORS for x in rs)): continue
             place({'id': f"r:{r['ReviewId']}", 'kind': 'card', 'review': r['ReviewId'], 'what': 'batch', 'batch': b, 'n': len(rs),
-                   'status': 'pending' if open_ else 'done', 'at': r['CreatedAt'], 'decided': None}, ep(r['CreatedAt']) + 0.999)
+                   'status': 'passed' if gone else 'pending' if open_ else 'done', 'at': r['CreatedAt'], 'decided': None}, ep(r['CreatedAt']) + 0.999)
             continue
         # ...and one he said Don't send to stays too, greyed where it stood (the real-CLI walk, 2026-11-16: it went from the chat - _card)
         if r['Kind'] == 'slot' and not (str(r.get('DraftText') or '').strip() and (proposals_passed(r) or r['Status'] in (*WENT, 'rejected') or r['ReviewId'] in past)): continue
         if unwritten(r) or r['ReviewId'] in held: continue
         if r['Kind'] == 'action' and readgate.opened(store, tid, _payload(r)): continue
-        if f"r:{r['ReviewId']}" in waited and hosts.get(f"r:{r['ReviewId']}") is None and r['Status'] != 'pending' and r.get('DecidedBy') not in OWNER_ACTORS: continue
+        # ...(one the chat moved past while it waited is over already, before its agent has heard the line that did it)
+        if f"r:{r['ReviewId']}" in waited and hosts.get(f"r:{r['ReviewId']}") is None and (r['Status'] != 'pending' or r['ReviewId'] in past) and r.get('DecidedBy') not in OWNER_ACTORS: continue
         left = None if r['Kind'] == 'action' else wrapup.left_by(store, r['ReviewId'])
         place(_card(r), ep(r['CreatedAt']) + 0.999, (left or {}).get('CommentId'))
 

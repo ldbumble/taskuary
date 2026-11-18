@@ -9,7 +9,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import bulkcard, cardqueue, conversation, general, github, outbound, proposals, server, taskstate
+from taskuary import bulkcard, cardqueue, conversation, general, github, outbound, proposals, server, taskstate, verdicts
 from taskuary.store import MemoryStore
 from test_agent_toolbox import hdr
 from test_own_ask_no_reply import own_task
@@ -113,7 +113,7 @@ def test_a_line_he_types_while_it_runs_never_stops_the_run():
     with mock.patch.object(server, 'store', s):
         out = call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='duplicates', items=[{'number': n} for n in range(1, 11)])
     s._exec("UPDATE review SET CreatedAt='2026-11-16 09:00:00' WHERE Batch=?", (out['batch'],))
-    st = {**bulkcard.state(s, out['batch']), 'key': out['batch'], 'tid': tid, 'state': 'running'}
+    st = {**bulkcard.state(s, out['batch']), 'key': out['batch'], 'tid': tid, 'state': 'running', 'boot': bulkcard.BOOT}
     bulkcard._save(s, st)
     general.wait_line(s, tid, 'how many are left?', line_id='l-left')
     assert proposals.written_past(s, tid) == set(), 'a card at work runs on to its end'
@@ -137,10 +137,207 @@ def test_a_task_whose_card_is_running_reads_at_work_not_waiting_on_him():
     with mock.patch.object(server, 'store', s):
         out = call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='duplicates', items=[{'number': n} for n in range(1, 11)])
     assert taskstate.state(s, s.get_task(tid)) != 'working', 'before the press the card waits on him'
-    st = {**bulkcard.state(s, out['batch']), 'key': out['batch'], 'tid': tid, 'state': 'running'}
+    st = {**bulkcard.state(s, out['batch']), 'key': out['batch'], 'tid': tid, 'state': 'running', 'boot': bulkcard.BOOT}
     bulkcard._save(s, st)
     assert taskstate.state(s, s.get_task(tid)) == 'working', 'his press is at work'
     st['state'] = 'cancelling'; bulkcard._save(s, st)
     assert taskstate.state(s, s.get_task(tid)) == 'working', 'stopping after the row in hand'
     st['state'] = 'stopped'; bulkcard._save(s, st)
     assert taskstate.state(s, s.get_task(tid)) != 'working', 'what was not run waits on him again'
+
+
+def test_sends_that_did_not_go_still_wait_on_the_card_and_its_agent_never_sets_them_up_again():
+    """A run of 20 emails where the mailbox refused every fifth: those rows did not go and still wait for a Send, as a single card's failed
+    send does (general.NOT_GONE) - its agent was told to "set up again only what failed", the road to every one of them twice; and a
+    stop after the failures counted them as "not run"."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        out = call(tid, 'propose_email', items=emails(20))
+    n = [0]
+    def send(*a, **k):
+        n[0] += 1
+        if n[0] % 5 == 0: raise RuntimeError('mailbox refused: over quota')
+        return {'channel': 'email', 'to': k.get('to') or []}
+    with mock.patch.object(outbound, 'send_out', send), mock.patch.object(outbound, 'send_block', lambda *a, **k: ''):
+        st, told = press(s, out['batch'])
+    assert (st['done'], st['failed']) == (16, 4)
+    waiting = [r for r in bulkcard.rows(s, out['batch']) if r['Status'] == 'pending']
+    assert len(waiting) == 4, 'a send that did not go still waits on its card'
+    [said] = told
+    assert 'set up again only what failed' not in said
+    assert 'Did not go and still on the card for their press: 4' in said and 'never set them up again' in said, said
+    assert 'stands in front of the owner' not in said or '(4 emails)' in said
+    rest = cardqueue.state(s, tid)['units'][0]
+    assert cardqueue.what(s, rest) == '4 emails', 'what still waits on it, not what it once held'
+    assert cardqueue.says(s, tid, pressed=True).count('rv') == 4, cardqueue.says(s, tid, pressed=True)
+    stopped = {**st, 'state': 'stopped'}
+    assert 'not run' not in bulkcard.summary(s, out['batch'], stopped), 'a row that ran and failed is no row that was not run'
+
+
+def test_a_press_on_a_bulk_card_the_chat_moved_past_sends_nothing():
+    """He typed "hold off" under 5 emails, the card greyed on every surface - and a press on it from a page not yet redrawn sent all 5: the
+    run marked itself at work before its first row, and a bulk card at work is never written past, so no row's own refusal stood."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        out = call(tid, 'propose_email', items=emails(5))
+    s._exec("UPDATE review SET CreatedAt='2026-11-16 09:00:00', DraftAt='2026-11-16 09:00:00' WHERE Batch=?", (out['batch'],))
+    general.wait_line(s, tid, 'hold off - I want to change the wording', line_id='l-hold')
+    assert len(proposals.written_past(s, tid)) == 5
+    sent = []
+    with mock.patch.object(server, 'store', s), mock.patch.object(outbound, 'send_out', lambda *a, **k: sent.append(1) or {'channel': 'email'}), \
+         mock.patch.object(outbound, 'send_block', lambda *a, **k: ''), mock.patch.object(general, 'tell', lambda *a, **k: 'woke'):
+        r = c.post(f"/api/reviews/batch/{out['batch']}/run", json={'skip': []})
+        time.sleep(0.5)
+    assert r.status_code == 409 and 'hold off' in r.json()['detail'], r.json()
+    assert sent == [] and bulkcard.state(s, out['batch'])['state'] == 'idle'
+    assert len(proposals.written_past(s, tid)) == 5, 'it stays greyed where it stood'
+
+
+def test_two_presses_at_once_are_one_run_and_its_agent_hears_it_once():
+    """A double click, or the phone and the desk together: both presses found the card not yet at work and each started a run - each found the
+    other's row in hand ("already in progress"), counted it failed, and its agent heard the run twice, half of it failed each time."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        out = call(tid, 'propose_email', items=emails(6))
+    sent, told, slow = [], [], bulkcard.running
+    def send(*a, **k): time.sleep(0.02); sent.append(k.get('to')); return {'channel': 'email', 'to': k.get('to') or []}
+    with mock.patch.object(outbound, 'send_out', send), mock.patch.object(outbound, 'send_block', lambda *a, **k: ''), \
+         mock.patch.object(general, 'tell', lambda st, t, said, actor='owner': told.append(said) or 'woke'), \
+         mock.patch.object(bulkcard, 'running', lambda *a: (slow(*a), time.sleep(0.05))[0]):      # ...both presses read it before either marks it
+        presses = [threading.Thread(target=bulkcard.run, args=(s, out['batch'])) for _ in range(2)]
+        for t in presses: t.start()
+        for t in presses: t.join()
+        end = time.time() + 10
+        while not told and time.time() < end: time.sleep(0.02)
+        time.sleep(0.3)
+    st = bulkcard.state(s, out['batch'])
+    assert (st['done'], st['failed']) == (6, 0) and len(sent) == 6, st
+    assert len(told) == 1 and '6 done, 0 failed' in told[0], told
+
+
+def test_a_run_cut_short_by_a_restart_reads_stopped_with_the_rest_waiting_for_his_press():
+    """Taskuary restarted with a run under way: its state still read "running", its thread gone with the old process - Stop the rest lit for
+    good, the task "at work" with nothing at work, and a press answered with the dead run. Cut short, it reads stopped (the owner's ruling: a
+    turn cut short by a restart is not resumed by itself), and the rest waits for his press."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        out = call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='duplicates', items=[{'number': n} for n in range(1, 6)])
+    bulkcard._save(s, {'key': out['batch'], 'tid': tid, 'total': 5, 'done': 2, 'failed': 0, 'left': 0, 'state': 'running', 'rows': {}, 'boot': 'a-process-gone'})
+    assert not bulkcard.running(s, out['batch']) and bulkcard.state(s, out['batch'])['state'] == 'stopped'
+    bulkcard._save(s, {'key': out['batch'], 'tid': tid, 'total': 5, 'done': 2, 'state': 'running', 'rows': {}})
+    assert bulkcard.state(s, out['batch'])['state'] == 'stopped', 'one written before runs were marked: another process too'
+    assert taskstate.state(s, s.get_task(tid)) != 'working', 'nothing is at work on it'
+    gh = GitHub()
+    with mock.patch.object(github.requests, 'patch', gh.patch):
+        st, told = press(s, out['batch'])
+    assert (st['state'], st['done']) == ('finished', 5) and len(gh.closed) == 5 and len(told) == 1
+
+
+def test_a_card_raised_beside_a_bulk_call_is_never_swept_onto_it():
+    """The rows of a bulk call were found as every pending card on the task newer than its start: a reply drafted for a mail that came in while
+    the call filed its items (or the agent's own tool call beside it) joined the bulk card, and its one press sent that reply with them."""
+    from taskuary import agenttools
+    s, tid = world()
+    real, other = agenttools._call, []
+    def beside(store, t, name, a, doors):
+        if not other: other.append(s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': 'Gail - the rate is 4%.',
+                                                 'Reason': 'assistant wrote this email - approve to send',
+                                                 'Deliver': json.dumps({'channel': 'email', 'to': ['gail@northwind.example'], 'subject': 'Rate'})}))
+        return real(store, t, name, a, doors)
+    with mock.patch.object(server, 'store', s), mock.patch.object(agenttools, '_call', beside):
+        out = call(tid, 'propose_email', items=emails(5))
+    assert out['on_the_card'] == 5, out
+    assert s.get_review(other[0])['Batch'] is None, 'the email beside it is its own card'
+    assert other[0] not in {r['ReviewId'] for r in bulkcard.rows(s, out['batch'])}
+
+
+def test_a_bulk_card_next_in_line_is_named_as_the_card_names_itself():
+    """The line said "next: 40 like northwind/ledger#1" of the card that heads itself "40 issues" (bulkCard.countOf, from the catalogue's
+    press words): one fact, two wordings."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        call(tid, 'propose_email', to='erin@northwind.example', subject='Issues', text='Erin - closing the stale issues next.')
+        call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='stale', items=[{'number': n} for n in range(1, 41)])
+        call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='stale', items=[{'number': n} for n in range(41, 43)])
+    us = cardqueue.state(s, tid)['units']
+    assert cardqueue.line(cardqueue.state(s, tid)) == '1 of 3 · next: 40 issues'
+    assert [cardqueue.what(s, u) for u in us] == ['the email to erin@northwind.example', '40 issues', '2 issues']
+
+
+def test_after_a_bulk_run_its_agent_hears_what_still_waits_behind_it():
+    """A yes, a failure and a no on one card each tell the agent what waits next in the line (cardqueue.says); the bulk card's run did not, so
+    the agent went on from 10 emails sent never told the note to Gail behind them stands once its turn ends - free to raise it again."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        out = call(tid, 'propose_email', items=emails(10))
+        last = call(tid, 'propose_email', to='gail@northwind.example', subject='Done', text='Gail - the ten went out.')
+    with mock.patch.object(outbound, 'send_out', lambda *a, **k: {'channel': 'email', 'to': k.get('to') or []}), mock.patch.object(outbound, 'send_block', lambda *a, **k: ''):
+        st, told = press(s, out['batch'])
+    [said] = told
+    assert '10 done' in said and f"rv{last['review_id']} (the email to gail@northwind.example)" in said, said
+
+
+def chat_cards(s, tid):
+    with mock.patch.object(server, 'store', s): got = conversation.items(s, tid)
+    return {k['review']: (k['what'], k['status']) for x in got['items'] for k in ([x] if x['kind'] == 'card' else x.get('cards') or [])}
+
+
+def test_a_line_typed_over_the_line_of_cards_greys_what_stood_and_never_draws_what_waited_behind_it():
+    """He typed under a bulk card with a note to Gail held behind it. The bulk card read "pending" in the chat while every other surface read it
+    set aside, and the note he had never seen was drawn greyed - "Not sent - you wrote ... after it" - until the agent heard his line and
+    it went again: drawn, then gone. What stood greys where it stood; what waited behind it never stands."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        bulk = call(tid, 'propose_email', items=emails(10))
+        note = call(tid, 'propose_email', to='gail@northwind.example', subject='Done', text='Gail - the ten went out.')['review_id']
+    first = bulkcard.rows(s, bulk['batch'])[0]['ReviewId']
+    assert chat_cards(s, tid) == {first: ('batch', 'pending')}, 'the note waits its turn, drawn nowhere'
+    time.sleep(1.1)                                                                      # (a stamp is a whole second)
+    general.wait_line(s, tid, 'wait - leave out the corner lots', line_id='l-corner')
+    assert chat_cards(s, tid) == {first: ('batch', 'passed')}, 'greyed where it stood, and the note never drawn'
+    proposals.set_aside_drafts(s, tid, time.time())                                      # ...as its agent hears the line
+    assert chat_cards(s, tid) == {first: ('batch', 'passed')}, 'the same once heard: nothing appears, nothing goes'
+
+
+def test_a_bulk_card_that_waited_behind_another_and_was_written_past_never_stands():
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        note = call(tid, 'propose_email', to='gail@northwind.example', subject='First', text='Gail - the letters go out next.')['review_id']
+        call(tid, 'propose_email', items=emails(10))
+    assert chat_cards(s, tid) == {}, "the note stands in the page's letters, the bulk card waits its turn"
+    time.sleep(1.1)
+    general.wait_line(s, tid, 'hold everything', line_id='l-hold-all')
+    assert chat_cards(s, tid) == {note: ('slot', 'passed')}
+    proposals.set_aside_drafts(s, tid, time.time())
+    assert chat_cards(s, tid) == {note: ('slot', 'passed')}
+
+
+def test_a_bulk_card_that_waited_its_turn_then_stood_and_went_stays_where_it_stood():
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        note = call(tid, 'propose_email', to='gail@northwind.example', subject='First', text='Gail - the letters go out next.')['review_id']
+        bulk = call(tid, 'propose_email', items=emails(5))
+    first = bulkcard.rows(s, bulk['batch'])[0]['ReviewId']
+    send = mock.patch.object(outbound, 'send_out', lambda *a, **k: {'channel': 'email', 'to': k.get('to') or []})
+    with send, mock.patch.object(outbound, 'send_block', lambda *a, **k: ''), mock.patch.object(general, 'approved', lambda *a, **k: 'woke'):
+        assert verdicts.decide(s, s.get_review(note), 'approve')['ok']
+    time.sleep(1.1); s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Sent to Gail; the letters are next.')
+    assert chat_cards(s, tid)[first] == ('batch', 'pending'), 'its turn came'
+    with send, mock.patch.object(outbound, 'send_block', lambda *a, **k: ''):
+        press(s, bulk['batch'])
+    assert chat_cards(s, tid)[first] == ('batch', 'done'), 'pressed, it stays where it stood'
+
+
+def test_its_agent_takes_back_a_bulk_card_by_the_ids_it_was_told():
+    """The agent hears a bulk card as "rv1 + rv2 + ... (5 emails)" and is told to take back one an outcome changed - but `which` took one id:
+    that string matched nothing, and the answer listed every unsent row. One call takes the card back by the ids it was given."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        bulk = call(tid, 'propose_email', items=emails(5))
+        note = call(tid, 'propose_email', to='gail@northwind.example', subject='Done', text='Gail - the five went out.')['review_id']
+        named = cardqueue.says(s, tid).split(': ', 1)[1].split(' (')[0]
+        out = call(tid, 'withdraw_draft', why='the owner wants to wait for the survey', which=named)
+    rids = [r['ReviewId'] for r in bulkcard.rows(s, bulk['batch'])]
+    assert out['ok'] and sorted(out['review_ids']) == rids, out
+    assert {s.get_review(x)['Status'] for x in rids} == {'closed_unsent'}
+    assert cardqueue.state(s, tid)['units'][0]['rids'] == [note], 'the note to Gail is the next card'

@@ -199,3 +199,32 @@ class AttachedFilesReachTheAgent(unittest.TestCase):
         self.assertNotIn(str(self.pic), summary)
         from taskuary import outputs
         self.assertIn(str(outputs.folder(tid)), summary)
+
+
+# A TASK MADE IN NEW WITH A FILE OPENS ITS CHAT WITH HIS WORDS AND THE FILE'S PILL (the stress round of New's attachments): its ask line is the
+# task's own Summary - his words, then the block naming the file - and it was drawn with no files at all, so the paths stood in his bubble as
+# text and no pill was drawn. The ask is read the way every other line of his is (general.split_files)
+class NewTasksAskKeepsItsFiles(unittest.TestCase):
+    def setUp(self):
+        from taskuary import config
+        self.s = MemoryStore()
+        self.d = config.home() / 'attachments' / 'prompt' / '209901'; self.d.mkdir(parents=True, exist_ok=True)
+        p = mock.patch.object(server, 'store', self.s); p.start(); self.addCleanup(p.stop)
+
+    def made(self, name, data, words='what does this say?'):
+        f = self.d / f'20991231-235959-abc123-{name}'; f.write_bytes(data); self.addCleanup(f.unlink, missing_ok=True)
+        c = TestClient(server.app)
+        tid = c.post('/api/tasks', json={'Title': words, 'Summary': general.with_files(words, [str(f)]), 'Kind': 'general'}).json()['taskId']
+        from taskuary import ownwork, conversation
+        ownwork.ensure(self.s, tid)
+        return tid, next(x for x in conversation.items(self.s, tid)['items'] if x['kind'] == 'line')
+
+    def test_each_kind_of_file_is_a_pill_on_the_ask_not_a_path_in_its_words(self):
+        from taskuary import outputs
+        for name, data in (('shot.png', b'\x89PNG fake'), ('q3 report.pdf', b'%PDF-1.4'), ('ledger.xlsx', b'PK\x03\x04'),
+                           ('rows.csv', b'a,b\n1,2\n'), ('memo.docx', b'PK\x03\x04')):
+            with self.subTest(name):
+                tid, line = self.made(name, data)
+                self.assertEqual(line['text'], 'what does this say?')
+                self.assertEqual(line['files'], [str(outputs.folder(tid) / name)])
+                self.assertTrue((outputs.folder(tid) / name).is_file())

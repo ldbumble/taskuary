@@ -639,7 +639,8 @@ def _items(store, tid: int) -> dict:
     typed = any(k == 'line' and ref not in drawn0 for (k, ref) in led)
     if (asked or once or not any_mail and at_work and not pend and not typed and tid not in general.PRESSED) and (once or first is None or first['kind'] == 'turn') and (said := ownwork.ask(store, store.get_task(tid) or {}, asked)):
         at = asked['T'] if asked else ep((store.get_task(tid) or {}).get('CreatedAt'))
-        out.insert(0, {'id': f'a:{tid}', 'kind': 'line', 'at': stamp(at), 'text': said, 'files': [], '_h': at})
+        # ...his words and his files, read as every line of his is (split_files): a file attached in New stood in his bubble as its path
+        out.insert(0, {'id': f'a:{tid}', 'kind': 'line', 'at': stamp(at), **general.split_files(said), '_h': at})
     # ONE TURN AT WORK, AND IT IS THE LAST (the owner's live task, 2026-11-11: a second head spun under a later, finished answer while the task
     # read done): a turn stands where it began, so one that reads at work with a turn after it has ended - whatever its session still says
     turns_ = [x for x in out if x['kind'] == 'turn']

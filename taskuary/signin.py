@@ -1110,7 +1110,7 @@ def fill_page(c: Cdp, site: str, user: str, pw: str, wait: float = STEP_WAIT, co
     c.type(pw)
     c.enter()
     # ...and a user box left empty is said (refused): a sign-up whose user name no box named keeps its password alone (send_new)
-    return {'code': bool(code) and _await_code(c, site, code, code_wait), 'others': left, 'nouser': bool(f.get('user') and not user)}
+    return {'code': bool(code) and _await_code(c, site, code, code_wait), 'others': left, **({'nouser': True} if f.get('user') and not user else {})}
 
 
 REJECT_WAIT = 4.0               # after SETTLE: how long a site is given to take its password box away before the password is called refused

@@ -430,7 +430,7 @@ const TurnTime = ({ t }) => {
 // `later`: a turn after the chat's first - its agent starting again is the work going on, never "waiting for the agent" (workingLine)
 const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = false }) => {
   const live = t.state === "working" || t.state === "starting";
-  const parts = useMemo(() => turnParts(eventsOf(t.steps || [], live), { answer: t.text || "" }), [t.steps, t.text, live]);
+  const parts = useMemo(() => turnParts(eventsOf(t.steps || [], live), { answer: t.text || "", live }), [t.steps, t.text, live]);
   const key = t.answer || t.id, at = useTurnOutputs(key), shown = React.useContext(ShownCtx)[key];
   const sum = t.summary, words = t.text || (sum ? [sum.about, sum.did].map((x) => String(x || "").trim()).filter(Boolean).join("\n\n") : "");
   const made = at ? turnFiles({ listed: at.listed, id: key, words, did: sum?.did, tid: at.tid, skip: [] }) : [];

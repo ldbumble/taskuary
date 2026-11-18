@@ -168,3 +168,18 @@ test("his waiting line is pinned just over the box until the agent takes it - ne
   assert.match(css, /\.tq-conv-pending \{[^}]*margin: 0 0 10px/, "a little room between it and the box");
   assert.match(css, /\.tq-conv-pending-row \{[^}]*border: 1px solid/, "each line in its own border");
 });
+
+test("an edit still being made is \"Editing x\" in its row and on the working line - never \"Edited x (+1 -1)\" over \"Thinking...\"", async () => {
+  const { eventsOf, turnParts, workingLine } = await import("../src/chatStream.js");
+  const label = (s) => (s.status === "running" ? s.doing : s.summary);
+  const steps = [{ k: "tool", name: "Read", args: { file_path: "a.py" }, status: "completed" },
+    { k: "tool", name: "Edit", args: { file_path: "budget.py", old_string: "a", new_string: "b" }, status: "in_progress" }];
+  const live = turnParts(eventsOf(steps, true), { live: true });
+  assert.equal(live.at(-1).summary, "Editing budget.py");
+  assert.equal(workingLine(live, label), "Editing budget.py");
+  // ...made once its call returned, or once the turn is over
+  const made = turnParts(eventsOf([steps[0], { ...steps[1], status: "completed" }], true), { live: true });
+  assert.equal(made.at(-1).summary, "Edited budget.py (+1 −1)");
+  assert.equal(workingLine(made, label), "Thinking…");
+  assert.ok(!turnParts(eventsOf(steps, false)).some((p) => p.type === "edit"), "one that never returned is no edit made once the turn is over");
+});

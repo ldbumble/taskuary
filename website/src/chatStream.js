@@ -50,18 +50,20 @@ const argEdit = (name, a) => {
 };
 // ...but an edit that FAILED or never ran is no edit made: drawn "Edited totals.py (+1 −1)" from the diff it asked to make, it read as done -
 // it is its step, drawn failed (the stress round, 2026-11-10)
-export function editOf(e, res) {
+export function editOf(e, res, running = false) {
   if (e?.type !== "tool_call" || res?.detail?.is_error) return null;
   const d = e.detail || {}, a = d.args || {};
   if (!d.edit && describeCall(e.name, a).kind !== "edit") return null;
   const edit = d.edit || argEdit(e.name, a), file = d.file || FILE_KEYS.map((k) => a[k]).find(Boolean) || "";
   // ...a log's own edit row stands even with no diff kept; a trace's call is a row of its own only when it carries one
-  return edit || d.file ? editRow({ name: e.name, edit, file }) : null;
+  return edit || d.file ? editRow({ name: e.name, edit, file, running: running && !res }) : null;
 }
 export const editRow = (s) => {
   const hunks = editHunks(s.edit), { plus, minus } = stat(hunks), file = s.file || "";
   const wrote = /^(write|writefile|createfile)$/i.test(String(s.name || "").replace(/[^a-z]/gi, "")) || (hunks.length && hunks.every((h) => h.lines.every((l) => l[0] === "+")));
-  return { type: "edit", file, wrote: !!wrote, summary: `${wrote ? "Wrote" : "Edited"} ${baseName(file) || "a file"}${hunks.length ? ` (+${plus} −${minus})` : ""}`, plus, minus, hunks };
+  // ...an edit still being made is "Editing x", never "Edited x (+1 −1)" over a call that has not returned (and the working line says it, workingLine)
+  const verb = s.running ? (wrote ? "Writing" : "Editing") : wrote ? "Wrote" : "Edited";
+  return { type: "edit", file, wrote: !!wrote, running: !!s.running, summary: `${verb} ${baseName(file) || "a file"}${hunks.length && !s.running ? ` (+${plus} −${minus})` : ""}`, plus, minus, hunks };
 };
 // THE PLAN IS A CHECKLIST, the newest one of the turn where it was last updated - never "Updated its plan (3 steps)" six times over
 const PLAN_MARK = { completed: "done", done: "done", in_progress: "now", now: "now" };
@@ -78,7 +80,7 @@ export function planOf(e) {
 // in order: its words, a fold of the work it did, each edit with its diff, each view it showed, its plan. `answer`: the words the turn
 // filed as its answer, which its trail does not say twice (agentSteps.stepsOf). A call's result is its own wherever it came - a run of steps cut by an edit keeps the results
 // that arrived after the edit, so nothing it started is left spinning
-export function turnParts(events, { answer = "", keepStart = false } = {}) {
+export function turnParts(events, { answer = "", keepStart = false, live = false } = {}) {
   const evs = (events || []).filter(Boolean), results = new Map(), parts = [], special = new Set();
   for (const e of evs) if (e.type === "tool_result") results.set(e.detail?.tool_call_id || e.name, e);
   let run = [], first = true;
@@ -96,7 +98,7 @@ export function turnParts(events, { answer = "", keepStart = false } = {}) {
     if (e.type === "tool_result") continue;
     // ...and a VIEW the agent showed (agenttools `show`) is its own part, drawn as the UI it describes (ViewSpec.jsx)
     // ...and the FILES it showed with it (viewSpec.filesOf): the pictures themselves, over any view the same call drew
-    const res = results.get(e.detail?.tool_call_id), ps = [filesOf(e, res), editOf(e, res) || planOf(e) || viewOf(e, res)].filter(Boolean);
+    const res = results.get(e.detail?.tool_call_id), ps = [filesOf(e, res), editOf(e, res, live) || planOf(e) || viewOf(e, res)].filter(Boolean);
     if (ps.length) { flush(); special.add(e.detail?.tool_call_id); parts.push(...ps); } else run.push(e);
   }
   flush();
@@ -228,6 +230,9 @@ export const waitingChips = (pending, came = "") => {
 export const workingLine = (parts, label, { starting = false, later = false, ask = "", doing = "" } = {}) => {
   if (ask) return ask;
   const steps = (parts || []).filter((p) => p.type === "work").flatMap((p) => p.steps || []), last = steps.at(-1);
+  // ...an edit being made is the newest thing at work, in its own words (editRow `running`)
+  const edit = (parts || []).findLast((p) => p.type === "work" || p.type === "edit");
+  if (edit?.type === "edit" && edit.running) return edit.summary;
   if (last?.status === "running") return String(label(last) || "").split(/\r?\n/)[0].trim() || "Working…";
   if (doing && thinkingLine(doing)) return `Writing: ${thinkingLine(doing)}`;
   if (!last) return starting && !later ? "Waiting for the agent to start" : "Thinking…";

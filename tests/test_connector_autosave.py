@@ -60,6 +60,20 @@ class FieldSaves(unittest.TestCase):
         self.assertEqual(post({'Type': 'telegram', 'Name': 'Second bot', 'ConfigPatch': {'a': 1}}), 422)
         self.assertEqual(post({'ConnectorId': 99999, 'ConfigPatch': {'a': 1}}), 404)
 
+    def test_a_card_is_made_only_of_a_type_something_works(self):
+        # the catalogue names a mailbox preset by its own type (Fastmail); the page makes it an IMAP card with its servers filled in, but the
+        # server took {Type: 'fastmail'} as it came - a card no page draws, whose Test said "no test for connector type 'fastmail'". What
+        # Set up with AI reads off the catalogue is what it may send: a preset becomes its card, a type nothing knows is refused
+        r = self.c.post('/api/connectors', json={'Type': 'fastmail', 'Name': 'Fastmail'})
+        self.assertEqual(r.status_code, 200, r.text)
+        made = self.s.get_connector(r.json()['connectorId'])
+        self.assertEqual((made['Type'], json.loads(made['ConfigJson'])),
+                         ('imap', {'imap_host': 'imap.fastmail.com', 'smtp_host': 'smtp.fastmail.com', 'preset': 'fastmail'}))
+        r = self.c.post('/api/connectors', json={'Type': 'proton_mail', 'Name': 'Proton', 'ConfigJson': json.dumps({'address': 'alex@northwind.example'})})
+        conf = json.loads(self.s.get_connector(r.json()['connectorId'])['ConfigJson'])
+        self.assertEqual((conf['imap_port'], conf['address'], conf['preset']), (1143, 'alex@northwind.example', 'proton_mail'))
+        self.assertEqual(self.c.post('/api/connectors', json={'Type': 'no_such_system', 'Name': 'Mystery'}).status_code, 422)
+
     def test_a_source_field_save_keeps_its_watermark(self):
         sid = self.s.save_source({'Channel': 'email', 'Address': 'alex@northwind.example', 'Active': 1,
                                   'ConfigJson': json.dumps({'folders': ['Inbox'], 'delta': 'cursor-7'})}, 'test')
@@ -93,6 +107,20 @@ class RemoveIsOnePress(unittest.TestCase):
         c = self.s.get_connector(cid)
         self.assertFalse(out['gone'])
         self.assertEqual((c['HasSecret'], c['Active'], c['ConfigJson']), (0, 0, None))
+
+    def test_a_second_remove_of_the_wiped_card_leaves_the_undo_that_brings_the_sign_in_back(self):
+        # the last card stays on the list, blank - and its mailbox source still names it, so its Remove is still lit. A second press
+        # filed the blank row as a new removal, the Undo line named that one, and Undo brought back an empty card
+        cid = self.s.get_connector_by_type('imap')['ConnectorId']
+        self.s.save_connector({'ConnectorId': cid, 'Active': 1, 'Secret': 'app-password',
+                               'ConfigJson': json.dumps({'address': 'alex@northwind.example'})}, 'test')
+        self.s.save_source({'Channel': 'email', 'Address': 'alex@northwind.example', 'Active': 1, 'ConnectorId': cid}, 'test')
+        first = self.c.post(f'/api/connectors/{cid}/reset').json()
+        second = self.c.post(f'/api/connectors/{cid}/reset').json()
+        self.assertEqual(second['deleted'], first['deleted'])
+        self.assertEqual(self.c.post(f"/api/deleted/{second['deleted']}/restore").status_code, 200)
+        c = self.s.get_connector(cid)
+        self.assertEqual((c['HasSecret'], c['Active'], json.loads(c['ConfigJson'])), (1, 1, {'address': 'alex@northwind.example'}))
 
 
 if __name__ == '__main__': unittest.main()

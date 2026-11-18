@@ -86,7 +86,22 @@ test("a card read from its review keeps the review's Connect", () => {
   const fix = { says: "Jira isn't connected", label: "Connect Jira", href: "#connector=jira" };
   assert.deepEqual(cardOf(rv({ action: "run_tool", type: "jira_comment", item: "NW-12", body: "Done." }, { Connect: fix })).connect, fix);
   assert.equal(cardOf(rv(POST)).connect, null);
-  // ...and a press that failed is said as failed, never "Not posted · dismissed" - he dismissed nothing
+  assert.equal(cardOf(rv(POST, { Connect: fix, Status: "approved" })).connect, null);
+  // ...and a press that failed is said as failed, never "Not posted Â· dismissed" - he dismissed nothing
   const failed = cardOf(rv(POST, { Status: "superseded", ActError: "the network refused the post" }));
   assert.equal(stateOf(failed).failed, true);
+});
+
+// AN ACT WHOSE WORDS ARE OPTIONAL IS NOT HELD ON AN EMPTY BOX (the stress round, 2026-11-18): an agent set up "close northwind/ledger#12"
+// with no comment - the executor takes none (github.run_github_close) - and the card drew Close issue greyed over its empty box, a press
+// nothing could light. A comment the agent wrote and the owner emptied still holds it: an empty box is never sent as the agent's words.
+test("Close issue with no comment proposed can be pressed; a comment or a post the box needs cannot go empty", async () => {
+  const { pressable } = await import("../src/actionCard.js");
+  const close = actionFor("github_close"), CLOSE = { action: "run_tool", type: "github_close", repo: "northwind/ledger", number: 12 };
+  assert.ok(pressable(close, CLOSE, ""));
+  assert.ok(pressable(close, CLOSE, "Fixed in the last release."));
+  assert.ok(!pressable(close, { ...CLOSE, comment: "Fixed." }, "  "));
+  assert.ok(pressable(actionFor("github_issue"), { action: "run_tool", type: "github_issue", repo: "northwind/ledger", title: "Totals off" }, ""));
+  assert.ok(!pressable(actionFor("jira_comment"), { action: "run_tool", type: "jira_comment", item: "NW-12" }, ""));
+  assert.ok(!pressable(actionFor("linkedin_post"), { ...POST, text: "" }, ""));
 });

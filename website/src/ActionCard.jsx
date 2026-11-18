@@ -12,7 +12,7 @@ import api from "./api.js";
 import { openAppLink } from "./appLinks.js";
 import { attUrl } from "./fileSave.js";
 import { FileDialog } from "./PublishedPages.jsx";
-import { actionFor, changed, choiceOf, fieldsOf, stateOf, textKey, valuesOf, wordsOf } from "./actionCard.js";
+import { actionFor, changed, choiceOf, fieldsOf, pressable, stateOf, textKey, valuesOf, wordsOf } from "./actionCard.js";
 import { outputRow } from "./taskOutputs.js";
 import { hint } from "./buttons.js";
 import { failLine, landed, press } from "./press.js";
@@ -101,7 +101,7 @@ export default function ActionCard({ row: given, tid, live = true, onChanged }) 
             <Button size="small" variant="contained" disableElevation data-tq-act-connect="" onClick={() => openAppLink(row.connect.href)}>{row.connect.label}</Button>
             <Typography data-tq-not-connected="" sx={{ fontSize: 11.5, color: FAINT }}>{row.connect.says}</Typography></>
           : st.live ? <>
-            <Button size="small" variant="contained" disableElevation data-tq-act-press="" disabled={!!busy || !text.trim() || !!over} onClick={() => decide("approve")}
+            <Button size="small" variant="contained" disableElevation data-tq-act-press="" disabled={!!busy || !pressable(act, p, text) || !!over} onClick={() => decide("approve")}
               title={act.note || hint("approve", post ? "post" : "action")} startIcon={busy === "approve" ? <CircularProgress size={12} color="inherit" /> : null}>
               {busy === "approve" ? w.busy : w.press}</Button>
             <Button size="small" disabled={!!busy} onClick={() => decide("reject")} data-tq-act-dismiss="">Dismiss</Button>

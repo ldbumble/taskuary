@@ -150,7 +150,12 @@ def remove_connection(store, cid: int, title: str) -> dict:
     row = store._one('SELECT * FROM connector WHERE ConnectorId=?', (cid,)) or {}
     on = [s['SourceId'] for s in store.list_sources(active_only=False) if s.get('ConnectorId') == cid and s.get('Active')]
     gone = len(store.connectors_by_type(row.get('Type'))) > 1 if row else False
-    did = keep(store, 'connection', title, {'cid': cid, 'row': row, 'sources': on, 'gone': gone})
+    # ...a card already wiped has nothing to take: its Remove pressed again (its sources still name it, so it stays lit) answers with the
+    # removal that took its sign-in, or the Undo line named the blank row and Undo brought back an empty card
+    blank = not (gone or on or any(row.get(k) for k in ('Secret', 'ConfigJson', 'Active', 'LastSyncAt', 'Scope')))
+    was = next((r['DeletedId'] for r in store.deleted_rows() if blank and r['Kind'] == 'connection'
+                and json.loads(r['DataJson'] or '{}').get('cid') == cid), None)
+    did = was or keep(store, 'connection', title, {'cid': cid, 'row': row, 'sources': on, 'gone': gone})
     if gone: store._exec('DELETE FROM connector WHERE ConnectorId=?', (cid,))
     else: store._exec('UPDATE connector SET Secret=NULL, ConfigJson=NULL, Active=0, LastSyncAt=NULL, LastError=NULL, Scope=NULL WHERE ConnectorId=?', (cid,))
     store._exec('UPDATE source SET Active=0 WHERE ConnectorId=?', (cid,))

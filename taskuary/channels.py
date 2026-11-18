@@ -564,6 +564,10 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
         elif c['Type'] == 'knowledge':
             from . import knowledge
             detail = knowledge.test(store, c)
+        elif c['Type'] == 'handbook':
+            # the Company Hub is Taskuary's own store - nothing to reach, so its Test says what it holds rather than failing for want of a branch
+            n = store.lore_count()
+            detail = f"kept here in Taskuary, nothing to reach · {plural(n['posts'], 'live post')} in {plural(n['topics'], 'topic')}"
         elif c['Type'] in ('smb_file', 'sftp'):
             from . import files
             detail = files.test_smb(store, c) if c['Type'] == 'smb_file' else files.test_sftp(store, c)
@@ -585,6 +589,8 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
             out['setup'] = setup_info('ready', None)
         return out
     except Exception as e:
+        from . import deps
+        e = deps.missing(e, c.get('Name') or c['Type']) or e        # a missing package said as one, whichever card's import met it
         store.touch_connector(cid, str(e))
         out = {'ok': False, 'ms': int((time.time() - t0) * 1000), 'detail': plain_failure(e)}
         # a failure the owner fixes in the OS (macOS privacy consent) carries the structured
@@ -593,7 +599,6 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
         # ...and a failure that is only a missing package carries the package, so the card offers
         # Install rather than a pip command the owner has to take somewhere else (deps.py)
         if getattr(e, 'package', None):
-            from . import deps
             can, why = deps.can_install()
             out['install'] = {'package': e.package, 'name': deps.pip_name(e.package), 'can': can, 'why': why}
         return out

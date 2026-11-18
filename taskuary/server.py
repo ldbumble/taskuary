@@ -1076,8 +1076,10 @@ def _send_state(memo: dict, channel, has_message=True) -> tuple:
 
 
 def _review_connect(memo: dict, r: dict) -> dict | None:
-    "A draft's channel not connected: the card's Connect instead of its Send (outbound.connect_fix), once per channel a request."
-    return None if r.get('Kind') == 'action' else outbound.review_connect(store, r, memo)
+    """A draft's channel not connected: the card's Connect instead of its Send (outbound.connect_fix), once per channel a request - and an
+    act's card its connector's (a post's LinkedIn), as the chat's card says it: left out for every act, a review drawn as its ActionCard off
+    this list offered Post over a network nothing had connected. A proposal no catalogue card draws has none (review_connect)."""
+    return outbound.review_connect(store, r, memo)
 
 
 def _review_send_state(memo: dict, r: dict) -> tuple:
@@ -7926,6 +7928,17 @@ def save_connector(body: ConnectorBody):
     if not fields.get('ConnectorId') and not (fields.get('Type') and fields.get('Name')):
         raise HTTPException(422, 'new connectors need Type and Name')
     if not fields.get('ConnectorId'):
+        # ...OF A TYPE SOMETHING WORKS: a mailbox preset the catalogue names by its own type (Fastmail) is the card it is made into - IMAP,
+        # its servers filled in (connectorCatalog.presetBody) - and a type no card, no seed and no row knows is refused. Taken as sent, it was
+        # a card no page draws whose Test said "no test for connector type"
+        from . import connectorcatalog
+        known = connectorcatalog.by_type(fields['Type'])
+        if (pre := (known or {}).get('preset')):
+            try: given = json.loads(fields.get('ConfigJson') or '{}')
+            except ValueError: raise HTTPException(422, 'ConfigJson is not JSON')
+            fields = {**fields, 'Type': pre['type'], 'ConfigJson': json.dumps({**pre.get('config', {}), **given, 'preset': known['type']})}
+        elif not known and not store.connectors_by_type(fields['Type']):
+            raise HTTPException(422, f"no connector type {fields['Type']!r} - the catalogue's cards name the ones there are")
         # New instances start with the normal role for their type, but never inherit credentials,
         # cursors, sources or test state from the card they were added beside.
         fields.setdefault('Roles', store_mod.DEFAULT_ROLES.get(fields['Type'], ''))

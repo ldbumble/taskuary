@@ -30,7 +30,7 @@ test("the line sits on the card beside Remove, and Remove asks once", () => {
   const ur = cv.slice(cv.indexOf("function useRemove("), cv.indexOf("function RemoveConnection("));
   assert.match(ur, /api\.get\(`\/api\/connectors\/\$\{conn\.ConnectorId\}\/uses`\)/);
   assert.match(ur, /words: removeWords\(conn, channel, uses\)/);
-  assert.match(ur, /after\?\.\(\); await reload\?\.\(\);/);
+  assert.match(ur, /await reload\?\.\(\); after\?\.\(\);/);     // the list read before the card is left: never drawn as it was
   assert.match(rc, /useRemove\(conn, channel, reload, onBack\)/);
   assert.match(rc, /const line = usedBy\(uses\);/);
   assert.match(rc, /\{line && <Typography data-tq-used-by="" variant="caption"[^>]*>\{line\}<\/Typography>\}/);

@@ -85,6 +85,17 @@ class DepsTests(unittest.TestCase):
         self.assertEqual(out['install']['name'], 'boto3')
         self.assertTrue(out['install']['can'])
 
+    def test_sql_servers_test_without_pyodbc_offers_the_button_too(self):
+        """The same hole by another card: mssql.test flattened the ImportError to "No module named 'pyodbc'", a line with no button,
+        while pyodbc is on the closed list the button installs. A missing optional package is said as one, whichever card hit it."""
+        from taskuary import channels, mssql
+        cid = server.store.get_connector_by_type('mssql')['ConnectorId']
+        with mock.patch.object(mssql, '_connect', side_effect=ModuleNotFoundError("No module named 'pyodbc'", name='pyodbc')):
+            out = channels.test_connector(server.store, cid)
+        self.assertFalse(out['ok'])
+        self.assertEqual(out['install']['package'], 'pyodbc')
+        self.assertNotIn('No module named', out['detail'])
+
     def test_aws_raises_the_kind_the_card_can_act_on(self):
         from taskuary import aws
         real = __builtins__['__import__'] if isinstance(__builtins__, dict) else __builtins__.__import__

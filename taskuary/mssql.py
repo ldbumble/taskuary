@@ -49,11 +49,13 @@ def run_query(cfg: dict, limit: int = None) -> list:
 
 
 def test(cfg: dict) -> dict:
-    """Connect and report server version + current db; never raises - errors come back as data."""
+    """Connect and report server version + current db; errors come back as data - save pyodbc missing, which is raised so the card
+    can offer its Install button (deps.missing)."""
     try:
         with _connect(conn_str(cfg)) as cx:
             ver, db = cx.cursor().execute('SELECT @@VERSION, DB_NAME()').fetchone()
         return {'ok': True, 'version': str(ver).split('\n')[0][:200], 'database': db}
+    except ImportError: raise
     except Exception as e:
         return {'ok': False, 'error': str(e)[:500]}
 

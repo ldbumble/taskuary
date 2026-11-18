@@ -68,9 +68,9 @@ class EveryCardCanBeTested(unittest.TestCase):
     comes back empty on Monday. A card with no branch says "no test for connector type" - which
     reads as a broken product, not a missing one."""
 
-    # The Company Hub is Taskuary's own store. There is no remote end to reach, so there is
-    # nothing a Test could tell anyone.
-    NO_REMOTE = {'handbook'}
+    # None left out: the Company Hub is Taskuary's own store with no remote end, but its card draws Test like every other - under "flip on
+    # once Test passes" - and a Test that answered "no test for connector type 'handbook'" failed forever (the stress round, 2026-11-18).
+    NO_REMOTE = set()
 
     def _covered(self) -> set:
         src = (ROOT / 'taskuary' / 'channels.py').read_text(encoding='utf-8')

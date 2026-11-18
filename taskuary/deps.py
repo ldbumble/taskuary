@@ -65,6 +65,15 @@ class Missing(RuntimeError):
         super().__init__(message or f'{pkg} is not installed')
 
 
+def missing(e: BaseException, card: str = '') -> 'Missing | None':
+    """An import that failed on one of the packages the button installs, as the kind a card acts on - a bare ModuleNotFoundError
+    reached Test as "No module named 'pyodbc'", a line with no button (mssql.test). None for anything else."""
+    if isinstance(e, Missing): return e
+    name = getattr(e, 'name', None) if isinstance(e, ImportError) else None
+    pkg = next((p for p in OPTIONAL if name and (name == p or name.startswith(p + '.'))), None)
+    return Missing(pkg, f"{pip_name(pkg)} is not installed - {f'the {card} card' if card else 'this card'} needs it. Install it from the card") if pkg else None
+
+
 def pip_name(pkg: str) -> str:
     """What the owner should see: 'pywinpty', not 'winpty>=0'."""
     return str(OPTIONAL.get(pkg) or pkg).split('>')[0].split('=')[0].split('[')[0]

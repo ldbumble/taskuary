@@ -13,10 +13,14 @@ import { startHarness } from "./harness.mjs";
 for (const k of Object.keys(process.env)) if (/^npm_/i.test(k)) delete process.env[k];
 const out = process.env.REAL_OUT || path.join(os.tmpdir(), "claude", "real");
 await mkdir(out, { recursive: true });
-const where = (n) => execFileSync("where", [n], { encoding: "utf8" }).trim().split(/\r?\n/).map((s) => s.trim());
-const claude = where("claude").find((p) => /\.cmd$/i.test(p)), exe = path.join(path.dirname(claude), "node_modules", "@anthropic-ai", "claude-code", "bin");
+// ...on any machine: `where` on Windows, `which -a` elsewhere (a cloud walk runs on Linux)
+const WIN = process.platform === "win32", BRAIN = process.env.EVAL_BRAIN || "cli";
+const where = (n) => execFileSync(WIN ? "where" : "which", WIN ? [n] : ["-a", n], { encoding: "utf8" }).trim().split(/\r?\n/).map((s) => s.trim());
 const git = where("git")[0];
-const real = [exe, path.dirname(where("npx")[0])          /* the folder npx is in: an ACP adapter is launched through it */, path.dirname(git)];
+const real = [path.dirname(where("npx")[0])          /* the folder npx is in: an ACP adapter is launched through it */, path.dirname(git)];
+// ...the person's Claude CLI's own folder only when the walk runs on it
+if (BRAIN === "cli") { const claude = where("claude").find((p) => !WIN || /\.cmd$/i.test(p));
+  real.unshift(WIN ? path.join(path.dirname(claude), "node_modules", "@anthropic-ai", "claude-code", "bin") : path.dirname(claude)); }
 // THE AGENTS' BROWSER, KEPT IN THE SCRATCH HOME (REAL_BROWSER=1; a walk of the browser): the CLI signs in from the person's own profile, and the
 // browser driver keeps its sessions under whatever profile it is run with - so it is run through a stand-in of its name that hands it the
 // scratch profile (the folder above AGENT_BROWSER_HOME, harness.mjs). Nothing of a walk is written to the person's own driver folder.
@@ -48,7 +52,6 @@ exec "$(cygpath -u '${exe}')" "$@"
 // WHICH AGENT THE WALK RUNS ON (EVAL_BRAIN, tools/eval): `cli` the person's real CLI (the default), `stand-in` the test CLIs (tests/fake_claude.py,
 // fake_acp_server.py - free, every mechanic and no judgement), `gateway` the test CLIs with an organisation AI card picked as every job's brain
 // (its address, key and model from EVAL_AI_URL/EVAL_AI_KEY/EVAL_AI_MODEL or ~/.taskuary-eval.json - never from the repo)
-const BRAIN = process.env.EVAL_BRAIN || "cli";
 // ...`codex`: the person's real Codex CLI picked as the agents' brain (its own budget, not Claude's)
 if (BRAIN === "codex") real.unshift(path.dirname(where("codex")[0]));
 if (BRAIN === "cli" || BRAIN === "codex") process.env.TASKUARY_BROWSER_REAL_CLI = real.join(path.delimiter);

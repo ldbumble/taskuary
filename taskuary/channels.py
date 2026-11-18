@@ -1026,8 +1026,12 @@ def _same_words(a: str, b: str, n: int = 160) -> bool:
     """Two renderings of the SAME reply. The copy that comes back from the Sent folder went out
     through the provider's HTML and back through our stripper, so it is never byte-identical to
     the text approved here - the opening words are what survive both, and the quoted thread the
-    provider appends is what makes a prefix the only honest comparison."""
-    x, y = (re.sub(r'\s+', ' ', a or '').strip().lower()[:n], re.sub(r'\s+', ' ', b or '').strip().lower()[:n])
+    provider appends is what makes a prefix the only honest comparison. ...and both are read down to
+    their own words first (triage.split_own: cut at the quote head), each the same way: a reply
+    shorter than `n` came back with the quoted thread under it and never matched its own copy."""
+    from .triage import split_own
+    norm = lambda t: re.sub(r'\s+', ' ', split_own(t or '', floor=1)[0]).strip().lower()[:n]
+    x, y = norm(a), norm(b)
     return bool(x) and x == y
 
 

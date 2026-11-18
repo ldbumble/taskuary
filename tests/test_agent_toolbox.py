@@ -390,6 +390,16 @@ class NewTaskTool(unittest.TestCase):
         self.assertEqual((json.loads(two)['task'], json.loads(two)['started']), (json.loads(one)['task'], True))
         self.assertEqual(go.call_args[0][0], max(t['TaskId'] for t in self.s.list_tasks()))
 
+    def test_a_start_refused_is_kept_on_the_new_task(self):
+        """A plain refusal under the new task's start ("no coding agent is set up to take it") was said only to the agent that called: the
+        owner, opening the new task, met an open task with nothing running, nothing said and nothing lit. Kept on the task, as a press's is."""
+        with mock.patch.object(server, 'dispatch_task', side_effect=server.HTTPException(422, 'no coding agent is set up to take it')):
+            said, _ = tool(self.tid, 'new_task', title='Bed board', ask='Build it.')
+        new = max(t['TaskId'] for t in self.s.list_tasks())
+        ops = [o for o in self.s.operations_for(new) if o.get('Kind') == 'dispatch.prepare' and o.get('Status') == 'error']
+        self.assertEqual(len(ops), 1, said)
+        self.assertIn('coding agent', ops[0]['Error'])
+
     def test_one_item_on_a_card_tool_is_one_card_not_a_batch(self):
         said, err = tool(self.tid, 'propose_email', items=[{'to': ['gail@northwind.example'], 'subject': 'Offsite', 'text': 'Friday it is. Alex'}])
         self.assertFalse(err, said)

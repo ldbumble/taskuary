@@ -5923,6 +5923,9 @@ def agent_new_task(body: AgentNewTaskBody, request: Request):
     bg = BackgroundTasks()
     try: got = dispatch_task(new, DispatchBody(kind=kind, instruction=ask, model=body.model or None, app_words=True), bg)
     except HTTPException as e:
+        # ...kept on the new task, where the owner meets it: a refusal said only in this answer left it open with nothing said (StartRefused
+        # is kept by the door that raised it)
+        if not isinstance(e, StartRefused): _start_failed(new, e)
         return {**out, 'started': False, 'why': str(e.detail), 'next': f'{task_ref(new)} is made but its agent did not start - say why in your answer'}
     # ...its first turn runs off this call: the agent that asked goes on with its own turn meanwhile
     if bg.tasks: threading.Thread(target=lambda: asyncio.run(bg()), daemon=True, name=f'new-task-{new}').start()

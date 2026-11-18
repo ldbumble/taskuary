@@ -79,3 +79,14 @@ test("a post whose press failed is over: no box, no button, its error the line",
   const st = stateOf({ Status: "superseded", ActError: "the network refused the post", post: { type: "linkedin_post" } });
   assert.equal(st.live, undefined); assert.equal(st.failed, true); assert.equal(st.done, false);
 });
+
+// ...ITS CONNECTION NOT MADE, SAID ON EVERY ROAD (the card round, 2026-11-18): the review the page reads carries `Connect` (server
+// _review_connect), and the card drawn from it - a review list, a batch - lost it, so its Post was lit where the chat's card said Connect
+test("a card read from its review keeps the review's Connect", () => {
+  const fix = { says: "Jira isn't connected", label: "Connect Jira", href: "#connector=jira" };
+  assert.deepEqual(cardOf(rv({ action: "run_tool", type: "jira_comment", item: "NW-12", body: "Done." }, { Connect: fix })).connect, fix);
+  assert.equal(cardOf(rv(POST)).connect, null);
+  // ...and a press that failed is said as failed, never "Not posted · dismissed" - he dismissed nothing
+  const failed = cardOf(rv(POST, { Status: "superseded", ActError: "the network refused the post" }));
+  assert.equal(stateOf(failed).failed, true);
+});

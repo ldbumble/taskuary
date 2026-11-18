@@ -6,7 +6,7 @@
 import { says, subState } from "./laneSays.js";
 import { outputRefs } from "./taskOutputs.js";
 import ContinueBox from "./ContinueBox.jsx";
-import { usePromptImages, withImages } from "./promptImages.jsx";
+import { usePromptImages, withImages, wordsOf } from "./promptImages.jsx";
 import { ASK_WHAT, RunForm } from "./RunForm.jsx";
 import CheckBackChip from "./CheckBackChip.jsx";
 import QueuedStart from "./QueuedStart.jsx";
@@ -1561,7 +1561,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // equally useful. This is the human TODO, not an agent-launch advertisement.
   // ...except where Summary is Taskuary's own brief to the agent (a playbook built with AI: the setup instructions and the example
   // email's raw record - ownwork.BRIEFED): its title is the ask, and the owner's words are in the conversation
-  const taskAsk = cleanText(t?.SourceRef === "assistant:playbook" ? t?.Title : t?.Summary || sourceMessage?.BodyText || "");
+  // ...his words, never the files his ask names (wordsOf): those are pills on his line in the chat
+  const taskAsk = cleanText(t?.SourceRef === "assistant:playbook" ? t?.Title : wordsOf(t?.Summary) || sourceMessage?.BodyText || "");
   // WHAT THEY ACTUALLY SAID. A task opens on one message and then keeps collecting the rest of
   // the conversation - three WhatsApp voice notes seconds apart are one thought, and ingest
   // attaches the later ones to the same task. The panel showed the FIRST and nothing else, so a
@@ -1615,7 +1616,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // THE ASK IS TRIAGE'S SUMMARY, whole (the owner, 2026-10-16: "the ask should be the triage summary") - its first sentence alone
   // read as the sender's voice ("Assistant for Backend Monitoring flags…") with the point cut off
   // ...never Taskuary's own brief to the agent (ownwork.BRIEFED: a playbook built with AI) - its title is the ask (taskAsk)
-  const askText = (t?.SourceRef === "assistant:playbook" ? "" : cleanText(verdict?.summary || t?.Summary || opener?.ReadText || opener?.BodyText || "")) || taskAsk;
+  const askText = (t?.SourceRef === "assistant:playbook" ? "" : cleanText(verdict?.summary || wordsOf(t?.Summary) || opener?.ReadText || opener?.BodyText || "")) || taskAsk;
   const askQuoted = !verdict?.summary && !t?.Summary && !!(opener?.ReadText || opener?.BodyText);   // the sender's words, not triage's
   // ...said once where it is the title's own words (taskLayout.askIsTitle): the band under the head is for a different sentence, or who it waits on
   // ...nor under What came in when it IS that one message's words (the product audit, 2026-11-08: the to-do's paragraph stood twice) - askInBody

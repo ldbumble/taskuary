@@ -228,3 +228,5 @@ class NewTasksAskKeepsItsFiles(unittest.TestCase):
                 self.assertEqual(line['text'], 'what does this say?')
                 self.assertEqual(line['files'], [str(outputs.folder(tid) / name)])
                 self.assertTrue((outputs.folder(tid) / name).is_file())
+                from taskuary import ownwork
+                self.assertEqual(ownwork.row_for(self.s, tid)['BodyText'], 'what does this say?', 'his message in Came from is his words, no path')

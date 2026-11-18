@@ -82,6 +82,10 @@ test("every kind of file attached in New is the started agent's: in its folder, 
     await new Promise((r) => setTimeout(r, 500));
   }
   const bubble = await page.$eval("[data-tq-line-came]", (x) => x.parentElement.innerText).catch(() => "");
+  // ...and nowhere on the page - the task's ask, its row, a hover - is the file block or a path on disk read out as words
+  const raw = await page.evaluate(() => [document.body.innerText, ...[...document.querySelectorAll("[title]")].map((x) => x.getAttribute("title"))]
+    .filter((s) => /ATTACHED (FILES|IMAGES)|scratch[\\/]outputs|attachments[\\/]prompt/.test(s || "")).map((s) => s.slice(0, 300)));
+  await page.screenshot({ path: path.join(dir, "task.png") });
   await rec.stop();
   await note(dir, { done: "New's box: five files attached, 'summarise these for Erin', Send; the Assistant starts an agent's job.",
     expect: "the task opens; his line has a pill per file; each file in the task folder; the agent's prompt names each there",
@@ -89,6 +93,7 @@ test("every kind of file attached in New is the started agent's: in its folder, 
   for (const n of names) assert.ok(existsSync(path.join(folder, n)), `${n} is in the task's folder`);
   assert.deepEqual([...pills].sort(), [...names].sort(), "a pill per file on his line");
   assert.doesNotMatch(bubble, /ATTACHED|scratch/, "no path in his words");
+  assert.deepEqual(raw, [], "no file block or path read out anywhere on the page");
   for (const n of names) assert.ok(seen.includes(path.join(folder, n)), `the agent's own prompt names ${n} in the task's folder`);
   assert.deepEqual(errors, []);
 });

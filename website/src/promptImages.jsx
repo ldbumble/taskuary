@@ -136,5 +136,7 @@ export function ImageTray({ pics, sx, cannot = null }) {
 }
 
 // the words, then the files: how a CLI agent is shown a picture or a file (server.with_images says it the same way)
+// ...and the words alone, from a text withImages wrote (the server's general.split_files): a task's ask quoted on its page, never its paths
+export const wordsOf = (text) => String(text || "").replace(/\n\nATTACHED (?:IMAGES|FILES) \(read these files\)\n[\s\S]+$/, "");
 export const withImages = (text, paths) => (paths?.length
   ? `${text || ""}\n\n${paths.every(isImagePath) ? "ATTACHED IMAGES" : "ATTACHED FILES"} (read these files)\n${paths.join("\n")}` : text || "");

@@ -1248,7 +1248,13 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
         # - at once where its draft waits or it is at work (owner_line)
         if ingest.is_chat(msg): owner_line(store, tid, msg, mid, sent); return 1
         if not ingest.is_ack(store, sent):
-            ingest.thread_moved(store, tid, msg, mid, None, 'router', own=True)
+            went = ingest.thread_moved(store, tid, msg, mid, None, 'router', own=True)
+            # ...and a reply his mail did not answer (it went to others - answered_drafts) where no agent heard it: the arrival writer's draft
+            # on a task no agent worked stood greyed under his newer mail with nothing at work. It is owed still, the agent's to write as an
+            # arrival's is (reply_to_agent) - it reads the thread, his mail with it
+            left = [rv for rv in store.list_reviews('pending') if rv.get('TaskId') == tid and rv.get('Kind') in ('draft', 'draft_reply')
+                    and rv.get('ConversationId') == conv]
+            if not went and left: ingest._spawn(ingest.reply_to_agent, store, tid, left[0]['ReviewId'])
             # ...and every OTHER open task on the thread hears it too (the stress run, 2026-11-05): a follow-up that was a new ask made a
             # second task on one thread, the owner's answer was filed on the newer one, and the first's agent never heard that he had answered
             for other in sorted(set(on) - {tid}):

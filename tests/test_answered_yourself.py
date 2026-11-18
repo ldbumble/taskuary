@@ -288,6 +288,16 @@ class AForwardIsNotTheAnswer(unittest.TestCase):
         self.assertNotIn('Erin', card.get('why') or '', card)
         self.assertIn('gail@northwind.example', card.get('why') or '', card)
 
+    def test_with_no_agent_to_hear_it_her_reply_goes_to_an_agent_to_write(self):
+        """The reply was the arrival writer's - no agent conversation on the task, so none hears his forward. Greyed as moved past (the chat
+        moved on), with nothing at work and nothing lit, it was a dead end. The reply owed goes to an agent to write, as an arrival's does."""
+        from unittest import mock
+        from taskuary import ingest
+        with mock.patch.object(ingest, '_spawn') as spawn:
+            s, tid, rid = self._world(['gail@northwind.example'])
+        handed = [c.args for c in spawn.call_args_list if c.args and c.args[0] is ingest.reply_to_agent]
+        self.assertEqual([(a[2], a[3]) for a in handed], [(tid, rid)], spawn.call_args_list)
+
     def test_a_reply_to_her_with_gail_copied_still_answers_her(self):
         s, tid, rid = self._world(['Erin@northwind.example'], ['gail@northwind.example'])
         self.assertEqual(s.get_review(rid)['Status'], 'superseded')

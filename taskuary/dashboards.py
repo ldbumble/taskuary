@@ -653,6 +653,8 @@ def as_text(spec: dict, data: dict, nums: list = None) -> tuple:
     body held the stat tiles only, so an agent sent a dashboard said it "shows only totals" beside a goal, a ranking and a list)."""
     srcs, days = (data.get('sources') or {}).values(), _days(spec)
     head = ' · '.join(f'{t} {v}' for t, v in headline(spec, data, nums)[:3]) or f"{sum(len(d.get('rows') or []) for d in srcs)} rows"
+    # ...and a source it went without, named in the headline as a report's run names one (`label: FAILED`): the bell reads it there
+    head += ''.join(f" · {d.get('label')}: FAILED" for d in srcs if d.get('failed'))
     note = unread(srcs)
     span_ = f'Range: the last {days} days' if days else 'Range: everything the sources returned'
     panels = ['\n'.join(_panel(spec, data, c, days)) for c in spec.get('components') or []]

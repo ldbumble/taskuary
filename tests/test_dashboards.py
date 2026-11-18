@@ -631,3 +631,15 @@ def test_a_web_source_that_answers_hundreds_of_items_draws_every_one(monkeypatch
     head, body = reports.run_rest({'url': 'https://api.vendor.example/bills'})        # ...and a report still reads it whole-headed, in its cap
     assert head == '500 items' and len(body) <= reports.BODY_CHARS and json.loads(body.splitlines()[0])['id'] == 0
 
+
+def test_a_run_without_one_of_its_sources_reaches_the_bell_as_a_reports_does():
+    """A report that ran without a source names it in its headline (`Bills: FAILED`) and the bell says "<report> ran without Bills".
+    A dashboard's headline was its tiles alone, so one that lost a source drew on - and nothing anywhere but its own page said so."""
+    from taskuary import problems
+    s = _store()
+    spec = {**SPEC, 'sources': SPEC['sources'] + [{'key': 'bills', 'label': 'Bills', 'type': 'taskuary_data', 'dataset': 'gone'}]}
+    src = _save(s, spec)
+    out = reports.run_one(s, src, None, 'manual')
+    assert out['message_id'] and not out['failed'] and out['subject'].endswith('Bills: FAILED')
+    rang = [p for p in problems.collect(s) if p['key'] == f"report:{src['SourceId']}"]
+    assert rang and rang[0]['title'] == 'Northwind desk ran without Bills' and 'gone' in rang[0]['detail']

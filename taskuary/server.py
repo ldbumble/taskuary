@@ -5680,7 +5680,7 @@ def agent_messages(request: Request, task_id: int, sender: str = '', subject: st
     except ValueError as e: raise HTTPException(422, str(e))
     # ...and what earlier tasks settled on those words (search.outcomes): the CLI's one search reads both, so it asks the owner neither
     done = search.outcomes(store, f'{subject} {words}', skip=task_id) if (words or subject).strip() else []
-    return {'data': hits, 'outcomes': done, 'says': mailsearch.says(hits) + (f'\n\n{search.says_outcomes(done)}' if done else '')}
+    return {'data': hits, 'outcomes': done, 'says': mailsearch.says(hits, store) + (f'\n\n{search.says_outcomes(done)}' if done else '')}
 
 @app.get('/api/agent/messages/{mid}')
 def agent_message(mid: str, request: Request, task_id: int):

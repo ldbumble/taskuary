@@ -85,11 +85,26 @@ def message(store, mid) -> dict | None:
             'messages': [_hit(x) for x in thread if x.get('Channel') != 'assistant']}
 
 
-def says(hits: list) -> str:
-    """The hits as an agent reads them at its prompt: one block each, the id first - what `taskuary --message ID` opens."""
-    if not hits: return 'No message in Taskuary matches that. Try fewer words, only --from, or a wider date range.'
+def says(hits: list, store=None) -> str:
+    """The hits as an agent reads them at its prompt: one block each, the id first - what `taskuary --message ID` opens. With none,
+    and the `store` to ask, how far the saved mail reaches: an empty mailbox read "try fewer words" to an agent searching mail that was
+    never there, and it searched on and told the owner nothing was found."""
+    if not hits:
+        far = reach(store) if store is not None else ''
+        return 'No message in Taskuary matches that. ' + (far if far.startswith('Taskuary holds no') else
+                                                          f'{far} Try fewer words, only --from, or a wider date range.'.strip())
     return '\n\n'.join(f"[{h['id']}] {h['when']} - {h['from']}\n{h['subject']}" + (f"  ({h['task']})" if h['task'] else '')
                        + (f"\nthread {h['thread']}" if h['thread'] else '') + (f"\n{h['snippet']}" if h['snippet'] else '') for h in hits)
+
+
+def reach(store) -> str:
+    """How far the owner's saved mail and messages reach, in one line - or that there are none, and where a mailbox is connected."""
+    from . import words
+    r = store._one("SELECT COUNT(*) AS n, MIN(SentAt) AS lo, MAX(SentAt) AS hi FROM message WHERE COALESCE(Channel, '') != 'assistant'") or {}
+    if not r.get('n'):
+        return (f"Taskuary holds no saved mail or messages at all yet - no mailbox has been read, so searching again finds nothing. Tell "
+                f"the owner, with the place a mailbox is connected: {words.link('mail')}.")
+    return f"Its saved mail runs from {str(r['lo'])[:10]} to {str(r['hi'])[:10]}."
 
 
 def meeting_reads(store, who: list, subject: str, per: int = 3, cap: int = 12) -> list:

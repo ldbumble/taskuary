@@ -397,7 +397,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if name == 'search_messages':
         hits = mailsearch.search(store, a.get('sender', ''), a.get('subject', ''), a.get('words', ''), a.get('since', ''), a.get('until', ''),
                                  a.get('limit') or 20)
-        return _out(mailsearch.says(hits), fence_it=bool(hits))
+        return _out(mailsearch.says(hits, store), fence_it=bool(hits))
     if name == 'read_message':
         mid = mailsearch.message_id(a.get('id'))
         m = mailsearch.message(store, mid)

@@ -64,6 +64,16 @@ class TheSearchTests(unittest.TestCase):
         with self.assertRaises(ValueError) as e: mailsearch.search(s, limit='ten')
         self.assertNotIn('int()', str(e.exception))
 
+    def test_nothing_found_says_how_far_the_saved_mail_reaches_and_an_empty_one_says_it_is_empty(self):
+        # an agent searching a Taskuary that had read no mailbox was told "try fewer words", searched on, and told the owner nothing
+        # was found - when there was nothing to find in
+        s = world()
+        said = mailsearch.says(mailsearch.search(s, words='quarterly forecast'), s)
+        self.assertIn('2026-09-01 to 2026-10-15', said)
+        empty = MemoryStore()
+        said = mailsearch.says(mailsearch.search(empty, words='renewal'), empty)
+        self.assertIn('no saved mail', said); self.assertIn('#connections=Email', said); self.assertNotIn('fewer words', said)
+
     def test_the_assistants_own_chat_is_not_mail(self):
         s = world()
         self.assertNotIn('Renewal chat line', [h['subject'] for h in mailsearch.search(s, words='renewal')])

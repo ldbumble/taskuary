@@ -460,6 +460,12 @@ def broken(r: Run) -> list:
         for told, rid in re.findall(r'^- (Waiting|Not on his screen yet|Greyed|Sent|Done)[^\n]*?: rv(\d+)', s['told'].split(SCREEN_HEAD)[-1], re.M) * (SCREEN_HEAD in s['told']):
             c = next((c for c in s['cards'] if c['id'] == int(rid)), None)
             if not c or not want[told](c): say('vii', i, f"told rv{rid} is {told!r}, but it is {c and c['status']}")
+    # (vii) ...and each fact once: a press that woke the agent carried the screen fact in its note, and the turn's facts said it again above it
+    from taskuary.cardqueue import SCREEN_HEAD
+    for k, p in enumerate(r.prompts):
+        # ...(a fresh conversation's head quotes the turn's own words over the task on purpose - general.prompt_parts' lead - and is not counted)
+        p = re.sub(r"(?:TASKUARY'S WORDS ON THIS TURN|THE OWNER'S ASK)[^\n]*:\n.*?\n\nTASK TQ-", 'TASK TQ-', p, count=1, flags=re.S)
+        if p.count(SCREEN_HEAD) > 1: out.append(f'(vii) turn {k + 1} is told what stands on his screen {p.count(SCREEN_HEAD)} times')
     # (iii) a card stands in the turn that raised it, from its first answer on, and never moves
     # ...BUT A RUN IS ONE TURN'S WORK (conversation.items, the owner 2026-11-13): a turn Taskuary woke with no line of his between - a press's
     # outcome handed back (general.approved, general.failed) - goes on from the one before it, and what still waits stands at the run's end

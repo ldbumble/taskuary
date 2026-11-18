@@ -2285,7 +2285,8 @@ def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
     if stranger and not dock and (nh := origin.no_history_line(store, tid)): system = system + '\n\n' + nh     # closed on purpose, and said so
     # ...the LATEST facts ride in the TURN, never the system prompt: they change every turn, and a CLI's system prompt is its process's
     # command line (a hashed --append-system-prompt-file), so in the system prompt each turn started a new process (clipool's one per chat)
-    lb = turn_facts(store, tid, task, rules=False, turn=turn)
+    from .cardqueue import once          # ...the screen fact once, where the note that woke this turn says it already
+    lb = once(turn_facts(store, tid, task, rules=False, turn=turn), str((chat_rows(store, tid, run=True)[-1:] or [{}])[0].get('Body') or ''))
     if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF): system += f'\n\n{selfclose.DRAFTS_ONCE}'
     md = store.checklist_markdown(tid, ids=True, shell=False) if hasattr(store, 'checklist_markdown') else ''    # the slot's id: its road is in the brief (by_tool)
     ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words
@@ -3174,7 +3175,8 @@ class GeneralSession:
             if kept_conv:
                 # an opening turn's 'turn' IS the instruction, which the history never saw
                 user = _turn_only(self.store, self.task_id, text) if as_owner and not brief else text     # a brief is Taskuary's, never "the owner says"
-                if (lb := turn_facts(self.store, self.task_id, resumed=True, rules=False, turn=True)): user = f'{lb}\n\n{user}'      # what is newest, waiting and sent, as of THIS turn
+                from .cardqueue import once
+                if (lb := once(turn_facts(self.store, self.task_id, resumed=True, rules=False, turn=True), user)): user = f'{lb}\n\n{user}'      # what is newest, waiting and sent, as of THIS turn
                 if turn_said: user, whole = f'{turn_said}\n\n{user}', f'{turn_said}\n\n{whole}'
                 if (cut := cut_heard(self.store, self.task_id)): user = f'{cut}\n\n{user}'       # ...a conversation said in full has them already
                 if news: user = f'{news}\n\n{user}'

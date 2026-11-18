@@ -513,7 +513,8 @@ class ACPCoding:
                 proposals.move_on(self.store, self.task_id)
                 # ...EACH DUTY ONCE, as a chat's agent is told (selfclose.DRAFTS_ONCE in its startup): the rules ride the first turn that has
                 # facts for them, and every turn after carries the facts alone - told each turn, it said "the draft waits on your Send" each turn
-                if (lb := general.turn_facts(self.store, self.task_id, resumed=True, rules=False, turn=True)):
+                from .cardqueue import once
+                if (lb := once(general.turn_facts(self.store, self.task_id, resumed=True, rules=False, turn=True), text)):
                     from . import selfclose
                     text = f"{'' if getattr(self, 'duties', False) else selfclose.DRAFTS_ONCE + chr(10) * 2}{lb}\n\n{text}"; self.duties = True
             except Exception as e: logger.debug(f'task {self.task_id}: the turn was not told its facts - {e}')

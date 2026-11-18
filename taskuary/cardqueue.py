@@ -259,6 +259,13 @@ def screen(store, tid: int, skip=()) -> str:
     return '\n'.join([SCREEN_HEAD, *lines])
 
 
+def once(facts: str, said: str) -> str:
+    """`facts` (a turn's, latest_block) less the screen fact when `said` - the note the same turn carries, a press told back - says it
+    already: a press woke the agent with the screen in its note, and the turn's facts said it again above it."""
+    if SCREEN_HEAD not in (said or '') or SCREEN_HEAD not in (facts or ''): return facts
+    return '\n\n'.join(p for p in facts.split('\n\n') if not p.startswith(SCREEN_HEAD))
+
+
 def _flat(x, n: int = 200) -> str: return ' '.join(str(x or '').split())[:n]
 
 

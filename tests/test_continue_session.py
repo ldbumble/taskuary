@@ -105,6 +105,25 @@ class OneRoadTests(unittest.TestCase):
         self.assertEqual(kw['waiting'], general.waiting_lines(s, tid)[0]['id'], 'his line, kept with its picture')
         general.answered(tid, every=True)
 
+    def test_continue_on_a_session_that_just_ended_goes_to_a_fresh_one(self):
+        """The Continue round, 2026-11-18, recorded: a general agent's CLI died mid-turn, and Continue (Try again) was pressed while that session was
+        still closing. The press answered "continued", the turn met "this assistant session has ended", and that was logged and said nowhere -
+        nothing ran, nothing lit. A typed line in the same spot is handed once to a fresh session (say_line); Continue takes that road too."""
+        from taskuary import general
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Compare payroll vendors', 'Kind': 'general', 'Status': 'open'}, 'o')
+        dying, fresh = mock.Mock(alive=False), mock.Mock(alive=True)
+        dying.send_prompt.side_effect = general.Ended()
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=True), \
+             mock.patch('taskuary.general.provider_options', return_value=['x']), \
+             mock.patch('taskuary.general.start_session', side_effect=[dying, fresh]), \
+             mock.patch('threading.Thread', side_effect=lambda target, **k: mock.Mock(start=target)):
+            out = TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={}).json()
+        self.assertTrue(out['continued'])
+        args, kw = fresh.send_prompt.call_args
+        self.assertTrue(args[0].endswith(continuity.RESUME_PROMPT)); self.assertEqual((kw['brief'], kw['kept']), (True, True))
+        self.assertNotIn(tid, general.OPENING)
+
     def test_a_coding_agent_reopens_its_own_session_or_a_fresh_one(self):
         from taskuary import general, ingest, terminal
         s = MemoryStore()
@@ -192,6 +211,34 @@ class BriefInParagraphsTests(unittest.TestCase):
 
 
 class PhoneTests(unittest.TestCase):
+    def test_a_note_held_behind_trust_is_said_as_held_never_as_continuing(self):
+        """The Continue round, 2026-11-18: Continue from the phone on a stranger's task. The note was kept by the box behind Trust - nothing went
+        to an agent - and the phone said "Continuing TQ-0001 with your note - it picks up where it left off". It says what happened: kept, and why."""
+        from taskuary import general, origin
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Quote request', 'Kind': 'general', 'Status': 'done'}, 'o')
+        line = 'You have not trusted Pat Lee (pat@vendor.example) yet - nothing goes to an agent until you do.'
+        with mock.patch.object(server, 'store', s), mock.patch.object(origin, 'hold', return_value={'line': line}), \
+             mock.patch('taskuary.general.provider_options', return_value=['x']), mock.patch.object(server, '_brainless', return_value=''):
+            said = ra._continue(s, str(tid), 'send them our price list')
+        self.assertNotIn('Continuing', said); self.assertNotIn('picks up', said)
+        self.assertIn('Your note waits on TQ-0001', said); self.assertIn(line, said)
+        self.assertEqual([w['text'] for w in general.waiting_lines(s, tid)], ['send them our price list'])
+
+    def test_the_assistant_says_a_held_note_as_held_too(self):
+        "The same press from the Assistant's chat said \"Picked up TQ-0001 again with your note\" - one sentence for both (general.kept_held)."
+        from taskuary import general, origin
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Quote request', 'Kind': 'general', 'Status': 'done'}, 'o')
+        dock = s.create_task({'Title': 'Assistant', 'Kind': 'general', 'Status': 'open'}, 'o')
+        line = 'You have not trusted Pat Lee (pat@vendor.example) yet - nothing goes to an agent until you do.'
+        with mock.patch.object(server, 'store', s), mock.patch.object(origin, 'hold', return_value={'line': line}), \
+             mock.patch('taskuary.general.provider_options', return_value=['x']), mock.patch.object(server, '_brainless', return_value=''), \
+             mock.patch.object(concierge, 'continuable', return_value=True):
+            out = concierge._task_writes(s, dock, 'agent.continue', tid, {'note': 'send them our price list'}, 'TQ-0001', 'owner',
+                                         said='send them our price list')
+        self.assertEqual(out['say'], f'Your note waits on TQ-0001 - {line}')
+
     def test_the_pick_asks_and_the_next_typed_line_is_the_note(self):
         s = MemoryStore()
         tid = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open'}, 'o')

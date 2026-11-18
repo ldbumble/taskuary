@@ -3126,14 +3126,17 @@ def continue_work(task_id: int, body: ContinueBody = None):
         store.add_comment(task_id, general.BRIEF_ACTOR, general.USER_TYPE, brief)
         turn = '\n\n'.join(x for x in [news, continuity.RESUME_PROMPT] if x)
         def go():
+            # ...ON THE ONE ROAD A LINE TAKES (general.say_line): a session that ended under the press - a CLI that died, still closing - hands
+            # the turn once to a fresh one; started here on its own, the turn met "this assistant session has ended" and nothing said so
+            got = []
             try:
-                try: ses = general.start_session(store, task_id, actor=ACTOR)
-                except Exception as e: _walk_cannot(task_id, f'The session could not continue: {e}. Your saved conversation is still here.'); return
-                # ...a turn that fails is its run's own failure, said by the run (workerstate `failed`) with Try again: a line here said it twice,
-                # "Failed - Claude: API Error ..." over "The session could not continue: claude: API Error ..." (the desktop run, 2026-11-04)
-                try: ses.send_prompt(turn, brief=True, kept=True)
+                try: general.say_line(store, task_id, turn, imgs or None, actor=ACTOR, started=got.append, brief=True, kept=True)
                 except general.Stopped: pass       # the owner stopped it again: nothing to say
-                except Exception as e: logger.info(f'task {task_id}: the continued turn failed - {e}')
+                except Exception as e:
+                    # ...a turn that fails is its run's own failure, said by the run (workerstate `failed`) with Try again: a line here said it
+                    # twice, "Failed - Claude: API Error ..." over "The session could not continue: ..." (the desktop run, 2026-11-04)
+                    if not got: _walk_cannot(task_id, f'The session could not continue: {e}. Your saved conversation is still here.')
+                    else: logger.info(f'task {task_id}: the continued turn failed - {e}')
             finally: general.OPENING.discard(task_id)
         # marked HERE, as /resume and the walk are: the page reloads the conversation the moment this answers, before the thread has
         # a session, read "nothing running" and never looked again - Continue and Try again left the new turn unseen (the agents walk,
@@ -3192,8 +3195,7 @@ def _resume_assistant(task_id):
     from . import continuity, general
     try:
         news = continuity.news_block(store, task_id)     # the mail since, or that its reply already went (2026-10-20)
-        general.start_session(store, task_id, actor=ACTOR).send_prompt(
-            continuity.RESUME_PROMPT, as_owner=False, echo=False, **({'delivery_instructions': news} if news else {}))
+        general.say_line(store, task_id, continuity.RESUME_PROMPT, actor=ACTOR, as_owner=False, echo=False, delivery_instructions=news or None)
     except Exception as e:
         _walk_cannot(task_id, f'The session could not resume: {e}. Your saved conversation is still here.')
     finally:

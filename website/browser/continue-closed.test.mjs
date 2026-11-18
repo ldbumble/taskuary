@@ -78,3 +78,28 @@ for (const shape of ["done", "failed"]) test(`a ${shape} chat task, then a line 
   else assert.doesNotMatch(aboves[0], /You reopened it/, "his line is the reopen");
   assert.deepEqual(errors, []);
 });
+
+test("a failed chat task, Try again from the rail: the failure stays, the new turn under it", { timeout: 300000 }, async (t) => {
+  const w = await agentWorld(t);
+  const page = await w.newPage();
+  await page.setViewport({ width: 1600, height: 900 });
+  await page.goto(w.ui, { waitUntil: "domcontentloaded" });
+  const made = await w.api("/api/tasks", { Title: "Compare payroll vendors", Summary: "Compare three payroll vendors on price for Northwind", Kind: "general" });
+  await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
+  const box = await page.waitForSelector("[data-tq-task-page] [data-tq-agent-room] .tq-aui-input", { visible: true, timeout: 30000 });
+  await box.type("compare them, fail now"); await page.keyboard.press("Enter");
+  await inTask(page, /stopped in the middle/i, 40000);
+  await writeFile(path.join(w.bin, "script.json"), JSON.stringify([{ when: ".", anywhere: true, first: "Starting with the south office: two sites, both on Payworth." }]));
+  await page.evaluate(() => { window.__tqStates = []; const f = () => { const vp = document.querySelector("[data-tq-task-page] .tq-aui-viewport")?.innerText || "";
+    if (window.__tqStates.at(-1) !== vp) window.__tqStates.push(vp); if (!/Starting with the south/.test(vp)) requestAnimationFrame(f); }; requestAnimationFrame(f); });
+  // ...Try again, as the rail and the phone press it (TaskPage.tryAgain): /continue-work with no note, right after the failure - its session
+  // still closing (recorded: the press answered "continued" and the turn met "this assistant session has ended", said nowhere)
+  assert.equal((await w.api(`/api/tasks/${made.taskId}/continue-work`, { note: null })).continued, true);
+  await inTask(page, /Starting with the south office/, 40000);
+  await new Promise((r) => setTimeout(r, 1500));
+  const states = await page.evaluate(() => window.__tqStates);
+  const failure = /stopped in the middle of its turn/;
+  assert.deepEqual(states.filter((x) => !failure.test(x)), [], "the failure stands in every frame from the press");
+  const last = await page.evaluate(() => document.querySelector("[data-tq-task-page] .tq-aui-viewport")?.innerText || "");
+  assert.match(last, /stopped in the middle of its turn[\s\S]*AGENT[^\n]*ran \d+s\s*\n[\s\S]*Starting with the south office/, `the answer under its own head, under the failure:\n${last}`);
+});

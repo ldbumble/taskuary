@@ -83,7 +83,7 @@ test("the agent card names the role and the brain, and offers no model", () => {
   assert.match(tasks, /const runBrain = term\?\.provider \|\| term\?\.cli \|\| detail\?\.ranOn\?\.brain \|\| \(runRole && brains\[runRole\]\) \|\| "";/);
   assert.match(tasks, /const brainPill = runBrain && !\(isGeneral && term\?\.alive\) \? runBrain : "";/,
     "a live general session shows the brain in its workspace picker - the pill would be the same fact twice");
-  assert.ok(tasks.includes("const { agents, models, kinds, brains, brainList, brainModels, generalBrains, agentsRead, codingReady } = useAgents();"),
+  assert.match(tasks, /const \{[^}]*\bbrains\b[^}]*\} = useAgents\(\);/,
     "the roster's role->brain map has to reach the card");
   // the profile is no pill (the owner, 2026-10-28: "works as researcher" named instructions as the worker) - it is on the AI pill's hover
   assert.ok(!tasks.includes(">works as</Box>"), "no works-as pill");
@@ -269,4 +269,17 @@ test("every door that starts an agent on a task opens the box first - none start
 
 test("a live session's Mark done asks for a place on the bar", () => {
   assert.match(tasks, /promote: !liveSession && !pendingReview, beside: liveSession, onCard: !!pendingReview && !liveSession \}/);   // ...and a waiting draft's send is the move (2026-10-06)
+});
+
+// HAND THE TASK TO ANOTHER AI (the owner, 2026-11-18: "we need button on top of every task to change the backend of this both model, and
+// provider"): one pill in the task's head on every open task, and its pick takes Continue's one road with the AI named - no second start road
+test("the task's head hands the task to another AI on Continue's road", () => {
+  assert.match(tasks, /\{notDone && <SwitchAi choices=\{aiChoices\} busy=\{startingAgent === "switch"\} onPick=\{switchAi\} \/>\}/,
+    "the pill stands in the task's head, beside its status");
+  assert.ok(tasks.indexOf("<SwitchAi") > tasks.indexOf("<StatusPill status={status}"), "after the status pill");
+  assert.match(tasks, /api\.post\(`\/api\/tasks\/\$\{id\}\/continue-work`, \{ pick: o\.pick, model: o\.model \|\| null \}\)/,
+    "the pick goes to /continue-work, the road Continue and Try again take");
+  const pill = src("SwitchAi.jsx");
+  assert.match(pill, /disabled=\{!!why \|\| busy\}/, "greyed with its reason where nothing else is ready");
+  assert.doesNotMatch(pill, /uppercase|monospace|Mono/, "the app's own pill, no shouting");
 });

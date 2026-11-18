@@ -705,6 +705,7 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))} - pu
            'stopped_turn': lambda d: 'stopped the agent',       # the x on a turn at work (stop_turn)
            # ...who does it, changed to an agent (server.update_task): the change wrote no row of its own, and the task said only what the
            # change taught - "You routing learned." (the owner, 2026-11-11)
+           'ai_switched': lambda d: f"handed this to {d.get('to') or 'another AI'}",     # the AI picked at the task's head (server._take_ai)
            'handed_to_agent': lambda d: f"handed it to {_kinds.worker(d.get('to')) or 'an agent'}",
            'priority': lambda d: f"changed its priority from {d.get('from')} to {d.get('to')}",
            'handoff': lambda d: f"handed this to {d.get('to')} by {d.get('channel')}", 'reopened': lambda d: 'reopened it', 'reopen': lambda d: 'reopened it',

@@ -2424,8 +2424,9 @@ def _ran_on(task_id: int, tr=None):
             c = store.get_connector(int(pick.split(':', 1)[1])) or {}
             name = c.get('Name') or c.get('Type') or 'AI connector'
         else: name = pick.split(':', 1)[-1] or pick
-        return {'brain': name, 'model': saved.get('Model') or ''}
-    if tr and tr['Brain']: return {'brain': tr['Brain'], 'model': ''}
+        return {'brain': name, 'model': saved.get('Model') or '', 'pick': pick}
+    # ...with the pick it is in the AI pickers (`pick`), so the task's head marks the one at work (TaskPage's SwitchAi)
+    if tr and tr['Brain']: return {'brain': tr['Brain'], 'model': '', 'pick': f"cli:{tr['Brain']}"}
     return None
 
 
@@ -3100,6 +3101,40 @@ class ContinueBody(BaseModel):
     note: str | None = None          # what to tell it as it picks up - optional
     context: str | None = None       # ...and what the Assistant added to the owner's words, Taskuary's own (general.relayed)
     images: list[str] = []           # pictures to go with it (/api/prompt-image)
+    pick: str | None = None          # ...ON ANOTHER AI: `cli:<key>` / `connector:<id>`, as the pickers name them (_take_ai)
+    model: str | None = None
+
+
+def _take_ai(task_id: int, pick: str, model: str | None) -> str | None:
+    """HAND THE TASK TO ANOTHER AI (the owner, 2026-11-18: "i need way to hand this to new AI agent instead of the one that blocked me"): the
+    chosen AI must be one ready here; what works the task now is stopped - a chat's turn stopped and its session closed, a coding session paused
+    with its handover filed - the press is his line in the chat, and Continue's own road then wakes the chosen AI on the saved conversation.
+    The CLI key a coding start takes, else None (a chat's session, opened here on the pick, carries it - and the task's later turns)."""
+    from . import agents as hub_agents, general
+    task = store.get_task(task_id)
+    if not task: raise HTTPException(404, 'task not found')
+    coding = str(task.get('Kind') or '').lower() in hub_agents.CODING_KINDS
+    ready = hub_agents.coding_options(store) if coding else [{**o, 'value': o['pick']} for o in general.brain_options(store)]
+    o = next((o for o in ready if o['value'] == pick and o.get('ready', True)), None)
+    if not o: raise HTTPException(422, f"That AI is not ready here - connect it under {words.name('ai')}, then pick it again.")
+    if (s := general.session_for(task_id)):
+        if s.busy and general.stop_turn(store, task_id):
+            end = time.time() + 5
+            while s.busy and time.time() < end: time.sleep(0.05)
+        hub_term.close(s.sid)
+    elif (live := hub_term.session_for(task_id)) and live.alive:
+        try: _pause_task(task_id)
+        except HTTPException: hub_term.close(live.sid)       # nothing of it to save: it goes all the same
+    store.audit('task', task_id, 'ai_switched', ACTOR, detail={'to': o['label'] + (f' ({model})' if model else ''), 'pick': pick, 'model': model or ''})
+    brain = pick[4:] if coding and pick.startswith('cli:') else None
+    if coding: general.on_card(store, task, None if brain else pick, brain)
+    if coding and not brain:
+        try: general.place_coding(store, task_id)
+        except ValueError as e: raise HTTPException(422, str(e))
+    if not brain:
+        try: general.start_session(store, task_id, model=model or None, pick=pick, actor=ACTOR)
+        except (ValueError, RuntimeError) as e: raise HTTPException(422, str(e))
+    return brain
 
 
 @app.post('/api/tasks/{task_id}/continue-work')
@@ -3109,6 +3144,7 @@ def continue_work(task_id: int, body: ContinueBody = None):
     coding agent reopens its own CLI session by the id its CLI gave it, or - where there is none to reopen - a fresh
     one seeded with the handover. The owner's note, when there is one, is the first thing it hears."""
     from . import general as _g
+    brain = _take_ai(task_id, body.pick, body.model) if body and body.pick else None
     if (t := store.get_task(task_id)) and not _g.on_card(store, t) and (why := _brainless(not _g.handles(t))): raise HTTPException(422, why)
     from . import asks
     asks.mark(store, task_id)          # the owner picked it up again: it reports back like an ask
@@ -3170,14 +3206,15 @@ def continue_work(task_id: int, body: ContinueBody = None):
         from . import outcomes
         outcomes.record(store, 'agent.continued', 'task', task_id, ACTOR, next_move='', facts={'door': 'continue-work', 'kind': 'general'})
         return {'continued': True, 'taskId': task_id, 'kind': 'general'}
-    row, _why = _resumable(task_id)
+    # ...handed to another CLI, its conversation is the one CLI's it was made in: the new one starts fresh, seeded with the handover
+    row, _why = (None, '') if brain else _resumable(task_id)
     # CONTINUE IS THE SAME CLI (the owner, 2026-09-30: "it should start as codex if i hit continue of course"): the one that made
     # the conversation, else the one that last worked the task - never whatever the default happens to be today
     last = row or store.last_transcript(task_id) or {}
-    brain = (last.get('Brain') or None) if isinstance(last, dict) else None
+    brain = brain or ((last.get('Brain') or None) if isinstance(last, dict) else None)
     # ...and a reply the owner has since SENT is said too: a fresh session told nothing drafted it again (2026-10-20)
     sent = continuity.sent_block(store, task_id, quote=0, cmd='`taskuary --follow-up --reply "<text>"`')
-    fresh = lambda: continue_task(task_id, CodeBody(brain=brain, instruction=continuity.RESUME_PROMPT + (f'\n\n{sent}' if sent else '')))
+    fresh = lambda: continue_task(task_id, CodeBody(brain=brain, model=(body.model if body and body.pick else None) or None, instruction=continuity.RESUME_PROMPT + (f'\n\n{sent}' if sent else '')))
     if row:
         # the conversation belongs to the CLI that made it; when THAT CLI cannot open now (out of sessions, signed out), a fresh
         # session seeded with the handover is the way on - not an error (the owner, 2026-09-30, TQ-0887: codex made it, codex was

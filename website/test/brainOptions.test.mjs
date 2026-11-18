@@ -66,3 +66,24 @@ test("the picker draws codingChoices' list and Settings draws the server's codin
   assert.match(ui, /code\.list\.map\(\(o\) => \(\s*<MenuItem key=\{o\.value\} value=\{o\.value\} data-tq-coding-option/);
   assert.match(ui, /codingOptions: data\.coding_options \|\| \[\], codingPick: data\.coding_pick \|\| ""/);
 });
+
+// HAND THE TASK TO ANOTHER AI (the owner, 2026-11-18): every AI ready, each with its models, the one at work marked - greyed with its reason
+// where there is nothing else to hand it to
+test("the task's AI switch lists every ready AI and its models, the one at work marked", async () => {
+  const { switchChoices } = await import("../src/brainOptions.js");
+  const generalBrains = [{ pick: "cli:claude", label: "Claude Code", models: [{ id: "opus", label: "Opus" }] },
+    { pick: "cli:codex", label: "Codex CLI", models: [{ id: "gpt-6.2", label: "gpt-6.2" }] }, { pick: "connector:4", label: "Azure OpenAI", models: [] }];
+  const got = switchChoices({ generalBrains, current: "cli:claude", model: "opus" });
+  assert.deepEqual(got.rows.map((r) => [r.pick, r.model, !!r.now]),
+    [["cli:claude", "", false], ["cli:claude", "opus", true], ["cli:codex", "", false], ["cli:codex", "gpt-6.2", false], ["connector:4", "", false]]);
+  assert.equal(got.said, "Claude Code · opus"); assert.equal(got.why, "");
+  // a coding task: its CLIs (models from brain_models) and its AI cards; one not ready is no choice
+  const coding = switchChoices({ coding: true, current: "cli:claude", brainModels: { codex: { models: [{ id: "gpt-6.2" }] } }, generalBrains,
+    codingOptions: [{ value: "cli:claude", key: "claude", kind: "cli", label: "Claude Code", ready: true },
+      { value: "cli:codex", key: "codex", kind: "cli", label: "Codex CLI", ready: true }, { value: "cli:gemini", key: "gemini", kind: "cli", label: "Gemini", ready: false }] });
+  assert.deepEqual(coding.rows.map((r) => r.pick + "/" + r.model), ["cli:claude/", "cli:codex/", "cli:codex/gpt-6.2"]);
+  assert.ok(coding.rows[0].now);
+  // nothing else to hand it to: greyed, with the reason
+  assert.match(switchChoices({ generalBrains: [{ pick: "cli:claude", label: "Claude Code" }], current: "cli:claude" }).why, /Only one AI is ready/);
+  assert.match(switchChoices({ generalBrains: [] }).why, /No AI is connected/);
+});

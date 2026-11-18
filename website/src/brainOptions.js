@@ -41,3 +41,23 @@ export function codingChoices({ options, brains = [], brain = "", pick = "", cod
 }
 // what choosing one sends: { brain, pick } with the other cleared
 export const codingChoice = (v) => String(v).startsWith("cli:") ? { brain: String(v).slice(4), pick: "" } : { brain: "", pick: String(v) };
+
+// HAND THE TASK TO ANOTHER AI (the owner, 2026-11-18: "we need button on top of every task to change the backend of this both model, and
+// provider of whatever is available in app"): every AI ready here - a coding task's coding_options, any other's general brains - each with
+// its models, the one at work marked (`now`). `current` is its pick (`cli:<key>` / `connector:<id>`), `model` the model it runs.
+// `why` is the reason the control is greyed: there is nothing else to hand it to.
+const modelRows = (ms = []) => ms.map((m) => (typeof m === "string" ? { id: m, label: m } : { id: m?.id, label: m?.label || m?.id })).filter((m) => m.id);
+export function switchChoices({ coding = false, codingOptions = [], generalBrains = [], brainModels = {}, current = "", model = "", read = true } = {}) {
+  const cardModels = (pick) => generalBrains.find((b) => b.pick === pick)?.models;
+  const ais = coding
+    ? codingOptions.filter((o) => o.ready !== false).map((o) => ({ pick: o.value, label: o.label,
+        models: modelRows(o.kind === "cli" ? brainModels[o.key]?.models || brainModels[o.key]?.choices : cardModels(o.value)) }))
+    : generalBrains.map((b) => ({ pick: b.pick, label: b.label, models: modelRows(b.models) }));
+  const on = ais.find((a) => a.pick === current), named = on?.models.some((m) => m.id === model) ? model : "";
+  const rows = ais.flatMap((a) => [{ pick: a.pick, model: "", label: a.label, now: a === on && !named },
+    ...a.models.map((m) => ({ pick: a.pick, model: m.id, label: m.label, ai: a.label, now: a === on && m.id === named }))]);
+  const said = on ? `${on.label}${model ? ` · ${model}` : ""}` : "";
+  const why = !read ? "Reading which AIs are ready…" : !ais.length ? "No AI is connected - connect one under Connections."
+    : rows.length === 1 || rows.every((r) => r.now) ? "Only one AI is ready - connect another under Connections to hand this to it." : "";
+  return { rows, said, why };
+}

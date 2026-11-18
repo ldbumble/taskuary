@@ -146,14 +146,14 @@ class WhatRanItTests(unittest.TestCase):
         tid = s.create_task({'Title': 'Vendor asks for SAML SSO', 'Kind': 'general', 'Status': 'open'}, 'router')
         cid = s.save_connector({'Type': 'azure_openai', 'Name': 'Azure OpenAI', 'Active': 1, 'ConfigJson': '{}'}, 'owner')
         s.save_session(tid, f'connector:{cid}', 'gpt-5.4', '', 'ctx')
-        self.assertEqual(c.get(f'/api/tasks/{tid}').json()['ranOn'], {'brain': 'Azure OpenAI', 'model': 'gpt-5.4'})
+        self.assertEqual(c.get(f'/api/tasks/{tid}').json()['ranOn'], {'brain': 'Azure OpenAI', 'model': 'gpt-5.4', 'pick': f'connector:{cid}'})
 
     def test_a_coding_session_is_named_by_the_brain_its_transcript_recorded(self):
         c, s = self.client()
         tid = s.create_task({'Title': 'fix the importer', 'Kind': 'coding', 'Status': 'open'}, 'router')
         s.add_transcript(tid, 'sid9', 'output', agent='coding', cwd='C:/repo', brain='claude')
         d = c.get(f'/api/tasks/{tid}').json()
-        self.assertEqual(d['ranOn'], {'brain': 'claude', 'model': ''})
+        self.assertEqual(d['ranOn'], {'brain': 'claude', 'model': '', 'pick': 'cli:claude'})
         self.assertEqual(d['transcript']['brain'], 'claude')
 
     def test_the_later_session_is_the_one_that_ran_it(self):

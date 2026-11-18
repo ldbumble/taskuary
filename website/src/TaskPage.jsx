@@ -9,6 +9,8 @@ import ContinueBox from "./ContinueBox.jsx";
 import { usePromptImages, withImages, wordsOf } from "./promptImages.jsx";
 import { ASK_WHAT, RunForm } from "./RunForm.jsx";
 import CheckBackChip from "./CheckBackChip.jsx";
+import SwitchAi from "./SwitchAi.jsx";
+import { switchChoices } from "./brainOptions.js";
 import QueuedStart from "./QueuedStart.jsx";
 import { dangerAimOf, dangerLine, dangerOf, strangerLine, trustInBox } from "./strangerLine.js";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -809,7 +811,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     )).catch(() => {});
   }, []);
   const stale = (id) => selRef.current !== id;
-  const { agents, models, kinds, brains, brainList, brainModels, generalBrains, agentsRead, codingReady } = useAgents();
+  const { agents, models, kinds, brains, brainList, brainModels, generalBrains, codingOptions, agentsRead, codingReady } = useAgents();
   // an agent start with nothing to run on is greyed, the reason its hover - one check for both roads (capabilities.cannotStart)
   const runWhy = (coding) => cannotStart(caps, { coding, read: agentsRead, brains: generalBrains, codingReady }), noAiWhy = runWhy(false);
   const pickerTask = useRef(null);         // initialize each task from its durable worker once
@@ -2338,6 +2340,20 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // A RUN THAT FAILED IS TRIED AGAIN, NOT CONTINUED (owner-approved, 2026-10-21): the step says "Failed - <why>", Try again runs it
   // once more on the same conversation at the press, and the place that fixes it - Connect an AI - is the filled move when it has one
   const runFix = failedRun ? detail?.agentStory?.fix || null : null;
+  // HANDED TO ANOTHER AI at the task's head (SwitchAi): Continue's road with the AI picked (server._take_ai) - what works it stops, the press is
+  // his line in the chat ("You handed this to Codex CLI (gpt-6.2)"), the new AI picks the conversation up and takes the task's later turns
+  const aiNow = term?.pick || (term?.alive && term?.cli ? `cli:${term.cli}` : "") || detail?.ranOn?.pick || "";
+  const aiChoices = switchChoices({ coding: ["coding", "cli"].includes(String(t?.Kind || "").toLowerCase()), codingOptions, generalBrains, brainModels,
+    current: aiNow, model: term?.model || detail?.ranOn?.model || "", read: agentsRead });
+  const switchAi = async (o) => {
+    const id = selected;
+    if (!beginStart(id, "switch")) return;
+    setErr(""); setStartFail(null);
+    try { await api.post(`/api/tasks/${id}/continue-work`, { pick: o.pick, model: o.model || null }); if (!stale(id)) setTerm(null); continued(); }
+    catch (e) {
+      if (!stale(id)) { const msg = e?.response?.data?.detail || e?.message || `It could not be handed to ${o.label}.`; setErr(msg); setStartFail({ ...failOf(e), text: msg, again: () => switchAi(o) }); }
+    } finally { endStart(id); }
+  };
   const tryAgain = async () => {
     const id = selected;
     if (!beginStart(id, "resume")) return;
@@ -3099,6 +3115,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   <CheckBackChip task={t} onChanged={() => { loadDetail(t.TaskId); onChanged?.(); }} />
                   <StatusPill status={status} agent={agentName(t)} note={interruptedTask ? INTERRUPTED : ""}
                     logo={<ChannelIcon channel={rail?.channel || t.Source || "email"} sx={{ fontSize: 13 }} />} />
+                  {/* ...and the AI that works it, a press away from another (SwitchAi) - on every open task, at work or at rest */}
+                  {notDone && <SwitchAi choices={aiChoices} busy={startingAgent === "switch"} onPick={switchAi} />}
                   {/* ...what AI the task used, and - a coding task in Developer mode - the chats its agent can be talked to from: quiet corner
                       buttons, each its popover (the owner, 2026-11-06: never at the bottom of the chat) */}
                   <HeadPop id="ai-used" title="AI used" icon={<TokenOutlinedIcon sx={{ fontSize: 16 }} />}><AiUsed taskId={t.TaskId} pop /></HeadPop>

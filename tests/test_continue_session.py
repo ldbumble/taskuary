@@ -142,6 +142,41 @@ class OneRoadTests(unittest.TestCase):
             TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={})
         fresh.assert_called_once()
 
+    # HANDED TO ANOTHER AI (the owner, 2026-11-18: "i need way to hand this to new AI agent instead of the one that blocked me"): the AI picked
+    # at the task's head takes the conversation on, told what happened so far, and the press is his one line in the chat
+    def test_a_chat_at_work_is_stopped_and_handed_to_the_ai_he_picked(self):
+        from taskuary import general, terminal
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Compare payroll vendors', 'Kind': 'general', 'Status': 'in_progress'}, 'o')
+        old, new = mock.Mock(alive=True, busy=True, sid='old'), mock.Mock(alive=True)
+        def stop(store, t): old.busy = False; return True
+        ready = [{'pick': 'cli:claude', 'label': 'Claude Code'}, {'pick': 'cli:codex', 'label': 'Codex CLI'}]
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=True),              mock.patch('taskuary.general.provider_options', return_value=['x']), mock.patch('taskuary.general.brain_options', return_value=ready),              mock.patch('taskuary.general.session_for', side_effect=[old, new, new, new, new]), mock.patch('taskuary.general.stop_turn', side_effect=stop) as stopped,              mock.patch.object(terminal, 'close') as closed, mock.patch('taskuary.general.start_session', return_value=new) as start,              mock.patch('threading.Thread', side_effect=lambda target, **k: mock.Mock(start=target)):
+            out = TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'pick': 'cli:codex', 'model': 'gpt-6.2'}).json()
+        self.assertTrue(out['continued']); stopped.assert_called_once(); closed.assert_called_once_with('old')
+        self.assertEqual((start.call_args_list[0].kwargs['pick'], start.call_args_list[0].kwargs['model']), ('cli:codex', 'gpt-6.2'))
+        self.assertTrue(new.send_prompt.call_args.args[0].endswith(continuity.RESUME_PROMPT), 'the new AI picks the work up from the saved conversation')
+        self.assertIn('You handed this to Codex CLI (gpt-6.2).', [m['content'][0]['text'] for m in general.press_lines(s, tid)])
+
+    def test_a_coding_task_handed_to_another_cli_starts_it_fresh_with_the_handover(self):
+        from taskuary import agents, general
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open'}, 'o')
+        ready = [{'value': 'cli:claude', 'label': 'Claude Code', 'ready': True}, {'value': 'cli:codex', 'label': 'Codex CLI', 'ready': True}]
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=False),              mock.patch.object(agents, 'coding_options', return_value=ready), mock.patch('taskuary.general.session_for', return_value=None),              mock.patch.object(server.hub_term, 'session_for', return_value=mock.Mock(alive=True, sid='pty')),              mock.patch.object(server, '_pause_task') as paused, mock.patch.object(server, '_brainless', return_value=''),              mock.patch.object(server, '_resumable', side_effect=AssertionError('the old CLI is not reopened')),              mock.patch.object(server, 'continue_task', return_value={'session': 'sid'}) as fresh:
+            TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'pick': 'cli:codex'})
+        paused.assert_called_once_with(tid)
+        self.assertEqual(fresh.call_args.args[1].brain, 'codex')
+        self.assertIn('You handed this to Codex CLI.', [m['content'][0]['text'] for m in general.press_lines(s, tid)])
+
+    def test_an_ai_that_is_not_ready_is_refused_and_nothing_is_stopped(self):
+        from taskuary import agents
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open'}, 'o')
+        with mock.patch.object(server, 'store', s), mock.patch.object(agents, 'coding_options', return_value=[{'value': 'cli:codex', 'label': 'Codex CLI', 'ready': False}]),              mock.patch.object(server, '_pause_task', side_effect=AssertionError('nothing stops for an AI that cannot take it')):
+            r = TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'pick': 'cli:codex'})
+        self.assertEqual(r.status_code, 422); self.assertIn('not ready', r.json()['detail'])
+
     def test_a_coding_continue_with_only_a_picture_hands_the_picture_over(self):
         """Continue on a coding task with a screenshot and no words: the coding branch never looked at the pictures, so the session
         reopened on the resume prompt alone and what he attached was lost. It is a line like any other (take_line), its file the task's."""

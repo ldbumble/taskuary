@@ -125,6 +125,27 @@ def keep_cut_turns(store) -> list:
 FAILED_MARK = '\u26a0 '
 
 
+# A TURN'S TRACE KEEPS EVERY STEP IT TOOK (chat-render, 2026-11-18): it was cut to its newest 100 events, and a call is three or four of them - at
+# its 26th call a long turn lost its first steps off the top of the turn at work, and was filed without them. What makes room is what says
+# the same work again: the live lines past the newest TRACE_LIVE, and a result's body once TRACE_WHOLE events have come after it (a view's, or
+# an error's, is a step of its own and stays whole) - no more served on a read than the newest 100 events were. TRACE_MAX bounds a turn that
+# never ends.
+TRACE_N, TRACE_LIVE, TRACE_WHOLE, TRACE_RESULT, TRACE_MAX = 100, 20, 50, 400, 2000
+
+
+def bounded_trace(trace: list) -> list:
+    "The trace with room made as above - its start, every call, every word and every error kept."
+    from .viewspec import MARK
+    if len(trace) <= TRACE_N: return trace
+    live = [i for i, e in enumerate(trace) if e.get('type') == 'live']
+    if len(live) > TRACE_LIVE: drop = set(live[:len(live) - TRACE_LIVE]); trace = [e for i, e in enumerate(trace) if i not in drop]
+    for e in trace[:-TRACE_WHOLE]:
+        d = e.get('detail')
+        if e.get('type') == 'tool_result' and isinstance(d, dict) and not d.get('is_error') and len(r := str(d.get('result') or '')) > TRACE_RESULT and MARK not in r:
+            e['detail'] = {**d, 'result': r[:TRACE_RESULT] + '…'}
+    return trace if len(trace) <= TRACE_MAX else trace[:1] + trace[len(trace) - TRACE_MAX + 1:]
+
+
 def failed_line(body: str) -> tuple:
     "(the words, the failure) of a filed turn's body - its last paragraph when that opens with FAILED_MARK, else (body, '')."
     head, _, tail = ('\n\n' + str(body or '')).rpartition('\n\n')
@@ -2618,7 +2639,7 @@ class GeneralSession:
         event = {'type': str(kind or ''), 'name': str(name or ''),
                  'detail': self._trace_detail(kind, detail)}
         self.trace.append(event)
-        if len(self.trace) > 100: self.trace = self.trace[-100:]
+        self.trace = bounded_trace(self.trace)
         self.trace_revision += 1
         if getattr(self, 'busy', False) and event['type'] in ('tool_call', 'progress', 'error'):     # a restart must not erase it (keep_cut_turns)
             from . import sessionrecord

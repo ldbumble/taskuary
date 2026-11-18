@@ -77,3 +77,19 @@ def test_a_turn_whose_cli_died_part_way_keeps_its_steps_and_its_failure_where_it
     assert later[0]['text'] == now[0]['text'] and later[1]['text'] == 'The reply to Gail is drafted.', later
     assert later[1]['started'] is None or later[1]['started'] >= now[0]['ended'] - 1, later
 
+
+def test_a_long_turn_keeps_every_step_it_took():
+    """A LONG SESSION'S TURN NEVER LOSES ITS FIRST STEPS (chat-render, 2026-11-18): the trace kept only its newest 100 events, and every tool
+    call is three or four of them (the call, its live line, its result, the result's line) - at its 26th call the turn at work lost its first
+    steps off the top, and the turn was filed with only what was left. The live lines are narration of the same work: they make room first."""
+    s = MemoryStore(); tid = s.create_task({'Title': 'Vendor audit for Northwind', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    me = types.SimpleNamespace(task_id=tid, busy=True, trace=[{'type': 'start', 'session': {}, 'at': 1.0}], trace_revision=0, _trace_detail=general.GeneralSession._trace_detail)
+    for i in range(60):
+        general.GeneralSession._remember_trace(me, 'tool_call', 'Read', {'tool_call_id': f'tu{i}', 'args': {'file_path': f'vendor-{i}.txt'}})
+        general.GeneralSession._remember_trace(me, 'live', 'claude', f'→ Read: vendor-{i}.txt')
+        general.GeneralSession._remember_trace(me, 'tool_result', f'tu{i}', {'result': 'x' * 5000})
+        general.GeneralSession._remember_trace(me, 'live', 'claude', '· ' + 'x' * 200)
+    tools = [x['text'] for x in sessionrecord.trace_steps(me.trace) if x['k'] == 'tool']
+    assert tools == [f'vendor-{i}.txt' for i in range(60)], tools[:3]
+    assert me.trace[0]['type'] == 'start', 'the turn keeps its start (keep_cut_turns: its files)'
+    assert len(json.dumps(me.trace)) < 160_000, 'and no more is served on a read than the newest 100 events were (~150K here)'

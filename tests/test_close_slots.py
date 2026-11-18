@@ -754,3 +754,19 @@ def test_a_routines_own_email_goes_at_once_and_his_own_task_waits_for_his_send(s
     with mock.patch('taskuary.outbound.send_out', side_effect=RuntimeError('SMTP 535')), mock.patch.object(outbound, 'send_block', return_value=''):
         failed = slots.draft(s, run, 'Hi Erin, the schedule is attached. Alex', 'erin@northwind.example', 'Schedule')
     assert failed.get('send_error') and 'sent' not in failed, failed
+
+
+def test_the_agent_on_a_routine_run_is_told_its_email_went_not_that_it_waits(s):
+    # a routine run's agent drafted to Ray: the email went at once, and its tool still answered that the card "waits and nothing went" -
+    # so the agent told the owner a sent email was waiting for his Send
+    from taskuary import agenttools
+    from taskuary.selfclose import CARD_SAID
+    run = s.create_task({'Title': 'Weekly vendor follow-up - Mon', 'Kind': 'general', 'Status': 'open', 'Source': 'workflow',
+                         'SourceRef': 'workflow:7'}, 'routine')
+    with mock.patch('taskuary.outbound.send_out', return_value=SENT), mock.patch.object(outbound, 'send_block', return_value=''), \
+            mock.patch('taskuary.learn.learn_from'):
+        went = agenttools.said_once(slots.draft(s, run, 'Hi Ray, any update on the quote? Alex', 'ray@northwind.example', 'Quote'))
+    assert went['shown'] != CARD_SAID and went['shown'].startswith('Sent to ray@northwind.example'), went
+    with mock.patch('taskuary.outbound.send_out', side_effect=RuntimeError('SMTP 535')), mock.patch.object(outbound, 'send_block', return_value=''):
+        held = agenttools.said_once(slots.draft(s, run, 'Hi Erin, the schedule is attached. Alex', 'erin@northwind.example', 'Schedule'))
+    assert held['shown'].startswith('Not sent to erin@northwind.example') and "owner's Send" in held['shown'], held

@@ -561,7 +561,7 @@ def show_files(store, tid: int, paths) -> str:
 def said_once(o):
     "A draft that stands, with how it is spoken of (selfclose.CARD_SAID): the owner sees it as a card - its words are never said again."
     from .selfclose import CARD_SAID
-    return {**o, 'shown': CARD_SAID} if isinstance(o, dict) and o.get('ok') else o
+    return {**o, 'shown': o.get('says') or CARD_SAID} if isinstance(o, dict) and o.get('ok') else o
 
 
 def replaced(store, doors, tid: int, was: list, out, old, why: str):

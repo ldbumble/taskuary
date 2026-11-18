@@ -256,8 +256,13 @@ def routine_sends(store, tid: int, rid: int, agent: str, missing: str = '') -> d
     try: out = verdicts.decide(store, store.get_review(rid), 'approve', actor=ROUTINE)
     except Exception as e: out = {'ok': False, 'error': str(e)}
     finally: verdicts.QUIET.reset(tok)
-    if out.get('ok') and not out.get('send_error'): return {'sent': True}
-    return {'send_error': out.get('send_error') or out.get('error') or 'it did not go - the card waits for the owner'}
+    try: to = ', '.join((json.loads((store.get_review(rid) or {}).get('Deliver') or '{}') or {}).get('to') or []) or 'them'
+    except (TypeError, ValueError): to = 'them'
+    # ...and said to the agent as it happened: told the card "waits and nothing went", it reported a sent email as waiting for a press
+    if out.get('ok') and not out.get('send_error'):
+        return {'sent': True, 'says': f"Sent to {to} at once - a routine's own email goes without a press; say it went. No card waits on it."}
+    why = out.get('send_error') or out.get('error') or 'it did not go'
+    return {'send_error': why, 'says': f"Not sent to {to}: {str(why).rstrip(' .')}. Its card waits on the task for the owner's Send."}
 
 
 # ...said to the agent in the same words whichever road the draft took: the tool or `taskuary --draft` returns it at once; a draft MARKER in an

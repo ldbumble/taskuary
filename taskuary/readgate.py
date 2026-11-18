@@ -102,6 +102,18 @@ def _open() -> list:
     return [_n(r) for r in rs if r]
 
 
+def opened(store, tid, p: dict) -> bool:
+    """A held step that was only reads the gate lets through now (`p` a shell_act payload): never his to answer, so never drawn (the owner,
+    2026-11-17: "Read craft-floor.md in reference · Dismissed" stood after the CLI's own skills were opened - "it told you to get rid of it").
+    His own Approve is no opening here: a folder he let in stays his press, on its card."""
+    from . import floor, shellgate
+    if p.get('action') != 'shell_act' or not p.get('reads'): return False
+    cwd = p.get('cwd') or ''
+    if p.get('command') and shellgate.acts(p['command'], cwd): return False
+    ok, nev = own(store, tid, cwd) + _open(), [_n(x) for x in floor.kept_secret()]
+    return all(not any(_in(_n(f), r) for r in nev) and any(_in(_n(f), r) for r in ok) for f in p['reads'])
+
+
 def granted(store, tid) -> list:
     if store is None or not str(tid or '').isdigit(): return []
     return [r['Pattern'][len(GRANT):] for r in store.perm_rules(int(tid)) if str(r.get('Pattern') or '').startswith(GRANT) and r.get('Answer') == 'allow']

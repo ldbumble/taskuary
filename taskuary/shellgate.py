@@ -133,6 +133,24 @@ _SPLIT = re.compile(r'\r?\n|;|&&|\|\||\||\{|\}')
 _VALUED_DEL = frozenset('-erroraction -ea -filter -include -exclude -depth -credential -stream -warningaction -wa'.split())
 
 
+_HEREDOC = re.compile(r"(?<!<)<<(?!<)-?\s*(['\"]?)([A-Za-z_][\w.-]*)\1")
+_SHELLS = ('bash', 'sh', 'zsh', 'dash', 'powershell', 'pwsh', 'cmd')
+
+
+def shell_text(raw: str) -> str:
+    """The line as its shell reads it: a heredoc's body fed to any program but a shell (`python - <<'PY'`, `cat > f <<EOF`) is that
+    program's data, dropped - its words are not commands (the owner's live task, 2026-11-17: Python lines `del rows[unit]` held as
+    "delete not in .., in in .., unit:"). A delete call inside a snippet is still caught on the whole line (_API_DEL)."""
+    lines, out, i = str(raw or '').split('\n'), [], 0
+    while i < len(lines):
+        ln = lines[i]; out.append(ln); i += 1
+        for m in _HEREDOC.finditer(ln):
+            w = _SPLIT.split(ln[:m.start()])[-1].split()
+            if w and _name(w[0]) in _SHELLS: continue
+            while i < len(lines) and lines[i].strip() != m.group(2): i += 1
+    return '\n'.join(out)
+
+
 def _expand(t: str, env: dict) -> str:
     "A target with what the shell would fill in filled in: the line's own `$dst=...`, then the environment, then ~."
     def sub(m):
@@ -192,7 +210,7 @@ def _deletes(raw: str, cwd: str, env: dict, here='') -> dict:
     done = lambda: {'named': named, 'places': places, 'blind': blind, 'tools': tools, 'here': here}
     if not any(w in raw.lower() for w in _DEL_WORDS + ('cd', 'location')): return done()             # the cheap test first
     raw = re.sub(r'\$\{(\w+(?::\w+)?)\}', r'$\1', raw)                         # ${dst} is $dst - and its braces are not a block
-    for seg in _SPLIT.split(raw):
+    for seg in _SPLIT.split(shell_text(raw)):
         seg = seg.strip()
         if not seg: continue
         if (m := re.match(r'^\$?([A-Za-z_]\w*)\s*=\s*(\S.*)$', seg)) and not m.group(2).startswith('='):
@@ -251,7 +269,7 @@ def acts(cmd: str, cwd: str = '') -> list:
 def _outward(cmd: str) -> list:
     """Every step in a shell command that goes out: [{'tool', 'what', 'why', 'command'}]. A command that cannot be read and names one of
     these tools is one step - held, never let through for being hard to read."""
-    raw = str(cmd or '')
+    raw = shell_text(str(cmd or ''))
     low = raw.lower()
     if not any(w in low for w in ('git', 'gh', 'glab', 'publish', 'push', 'upload', 'mail', 'mutt', 'msmtp', 'http', 'curl', 'wget', 'xh', 'iwr', 'irm',
                                   'invoke-')): return []      # the cheap test first

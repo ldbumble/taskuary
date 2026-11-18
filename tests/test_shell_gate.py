@@ -263,6 +263,21 @@ class Deleting(unittest.TestCase):
         # ...while the Recycle Bin can be undone - the agent's own pick in the stress test - and passes
         self.assertEqual(self.held(vb.format('SendToRecycleBin')), [])
 
+    def test_a_heredoc_fed_to_a_program_is_its_data_not_shell(self):
+        # the owner's live task, 2026-11-17: a coding agent wrote layout helpers with `python - <<'PY' ... PY`; lines of its Python
+        # (`del cells[k]`, `if unit not in rows: remove(...)`) were read as shell deletes - "it would delete not in TQ-.., in in TQ-.., unit:",
+        # and the card said "It sends or pushes"
+        script = ("cd out && python - <<'PY'\nrows = {}\nfor unit in rows:\n    del rows[unit]\nif 'b' not in rows: rows.remove('b')\n"
+                  "print('git push is only a word here')\nPY\necho done")
+        self.assertEqual(self.held(script), [])
+        self.assertEqual(sg.acts(script), [])
+        self.assertEqual(self.held("cat > notes.md <<EOF\nrm -rf ~/Downloads\nEOF"), [], 'a file written from a heredoc is its words')
+        # ...while the shell around it, a heredoc a SHELL runs, and a Python delete call in it are still read
+        self.assertTrue(self.held(f"python - <<'PY'\nprint(1)\nPY\nrm -rf \"{self.dl}\""))
+        self.assertTrue(self.held(f"bash <<'SH'\nrm -rf \"{self.dl}\"\nSH"))
+        self.assertTrue(self.held("python - <<'PY'\nimport shutil; shutil.rmtree(p)\nPY"))
+        self.assertTrue(sg.acts("bash <<SH\ngit push origin main\nSH"))
+
     def test_its_own_folder_temp_and_other_words_pass(self):
         import tempfile
         for cmd in ('rm -rf build', 'rm -f out/report.md', f'rm -rf "{self.os.path.join(self.cwd, "tmp")}"', 'echo term; npm run format',
@@ -357,6 +372,25 @@ class ReadingOutside(unittest.TestCase):
             self.assertEqual(hooks.command_gate(self.s, self.tid, 'run1', f'cat "{os.path.join(claude, "skills", "impeccable", "reference", "craft-floor.md")}"', 'Bash', self.work), {})
             d = hooks.command_gate(self.s, self.tid, 'run1', f'cat "{os.path.join(claude, "history.jsonl")}"', 'Bash', self.work)   # ...the rest still asks
             self.assertEqual(d['hookSpecificOutput']['permissionDecision'], 'deny')
+
+    def test_a_read_card_held_before_the_gate_opened_that_folder_leaves_the_chat(self):
+        """The owner, 2026-11-17, on the same task after the fix: the old card still stood, "Read craft-floor.md in reference · Dismissed ·
+        nothing was run" - "it told you to get rid of it". A held read the gate would let through now was never his to answer: it is not
+        drawn, pending or answered. A read it still holds stays, and so does a card whose command holds something else."""
+        from taskuary import conversation, proposals
+        claude = os.path.join(self.docs, 'claude-home'); ref = os.path.join(claude, 'skills', 'impeccable', 'reference'); os.makedirs(ref, exist_ok=True)
+        hist = os.path.join(self.docs, 'claude-home-other')
+        def held(folder, cmd='', status='rejected'):
+            proposals.queue(self.s, self.tid, {'action': 'shell_act', 'sid': 'run1', 'command': cmd, 'cwd': self.work, 'what': f'read x in {os.path.basename(folder)}',
+                                               'why': 'outside', 'where': folder, 'reads': [folder]}, 'agent')
+            rid = self.s._rows("SELECT ReviewId FROM review WHERE TaskId=? ORDER BY ReviewId DESC LIMIT 1", (self.tid,))[0]['ReviewId']
+            if status != 'pending': self.s._exec("UPDATE review SET Status=? WHERE ReviewId=?", (status, rid))
+            return rid
+        with mock.patch.dict(os.environ, {'CLAUDE_CONFIG_DIR': claude}):
+            gone, gone2, kept, both = held(ref), held(ref, status='pending'), held(hist), held(ref, cmd='git push origin main')
+            cards = [c['review'] for x in conversation.items(self.s, self.tid)['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])]
+        self.assertNotIn(gone, cards); self.assertNotIn(gone2, cards)
+        self.assertIn(kept, cards); self.assertIn(both, cards)
 
     def test_what_its_own_cli_downloaded_is_its_work_and_the_rest_of_that_home_still_asks(self):
         """The owner, 2026-11-16: a research turn's read-back of the PDF its own WebFetch had saved was held as a card under its finished

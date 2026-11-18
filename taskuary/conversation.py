@@ -747,6 +747,10 @@ def _items(store, tid: int) -> dict:
     turns_at = {k: i for i, k in enumerate(turn_by)}
     newest = next((x for x in reversed(out) if x['kind'] == 'turn'), None)
     from .proposals import passed as proposals_passed
+    from . import readgate
+    def _payload(r):
+        try: return json.loads(r.get('DraftText') or '{}') or {}
+        except ValueError: return {}
     # ONE CARD AT A TIME (cardqueue): a card that waits behind another is drawn nowhere until its turn comes - and then where the chat has
     # got to, never back in the turn that raised it, above what came since: in the newest turn when nothing came in after it, else under
     # everything. One that waited and was over before it ever stood (taken back, written past) never stands at all
@@ -801,6 +805,7 @@ def _items(store, tid: int) -> dict:
         # ...and one he said Don't send to stays too, greyed where it stood (the real-CLI walk, 2026-11-16: it went from the chat - _card)
         if r['Kind'] == 'slot' and not (str(r.get('DraftText') or '').strip() and (proposals_passed(r) or r['Status'] in (*WENT, 'rejected') or r['ReviewId'] in past)): continue
         if unwritten(r) or r['ReviewId'] in held: continue
+        if r['Kind'] == 'action' and readgate.opened(store, tid, _payload(r)): continue
         if f"r:{r['ReviewId']}" in waited and hosts.get(f"r:{r['ReviewId']}") is None and r['Status'] != 'pending' and r.get('DecidedBy') not in OWNER_ACTORS: continue
         left = None if r['Kind'] == 'action' else wrapup.left_by(store, r['ReviewId'])
         place(_card(r), ep(r['CreatedAt']) + 0.999, (left or {}).get('CommentId'))

@@ -16,6 +16,7 @@ import { attUrl, saveFile } from "./fileSave.js";
 import { FileView, isPdf } from "./PublishedPages.jsx";
 import ViewSpec from "./ViewSpec.jsx";
 import { fencedView } from "./viewSpec.js";
+import { useOverlay } from "./overlays.js";
 export { looksMd };
 
 const TASK_LINK = /#task=(\d+)/;
@@ -25,6 +26,7 @@ const TASK_LINK = /#task=(\d+)/;
 const LinkPop = React.createContext(null);
 export const isWebLink = (h) => /^https?:\/\//i.test(String(h || "").trim());
 export function LinkDialog({ url, onClose }) {
+  useOverlay(!!url, onClose, { typeThrough: true });
   if (!url) return null;
   const out = () => { window.open(url, "_blank", "noopener,noreferrer"); onClose(); };
   return (
@@ -120,6 +122,7 @@ const Img = ({ src, alt }) => <A href={src}>{`[image${alt ? `: ${alt}` : ""}]`}<
 export const LocalFiles = React.createContext(null);
 const LocalPath = ({ f, children }) => {
   const [big, setBig] = React.useState(false), src = attUrl({ url: f.url });
+  useOverlay(big, () => setBig(false), { typeThrough: true });
   return (<>
     {/* ...a picture opens over the chat; any other file as a link to a file does (A: saved, a PDF read under it) */}
     {f.image ? <a href={src} data-tq-file-link="" onClick={(e) => { e.preventDefault(); setBig(true); }} style={{ color: "var(--tq-link, #55697a)", fontWeight: 600, textDecoration: "none" }}>

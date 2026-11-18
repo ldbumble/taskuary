@@ -10,12 +10,16 @@ import { draftRequest, howToOpen, openBugReport, rawError, shownError } from "./
 import { capture, copyShot } from "./shot.js";
 import { DIM, FAINT } from "./theme.jsx";
 import { label as btnLabel } from "./buttons.js";
+import { useOverlay } from "./overlays.js";
+import { IconButton } from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
 
 const CUT = "The full report is on your clipboard - paste it into the issue.";
 const SHOT_ON = "The screenshot is on your clipboard - paste it into the issue.";
 const REFUSED = "The clipboard refused it - select the text and copy it yourself.";
 
 export default function BugReportDialog({ open, onClose, screen, error, supportUrl }) {
+  useOverlay(open, onClose);
   const [req, setReq] = useState(null);
   const [draft, setDraft] = useState(null);
   const [refused, setRefused] = useState("");
@@ -71,9 +75,11 @@ export default function BugReportDialog({ open, onClose, screen, error, supportU
     finally { setBusy(false); }
   };
 
-  return <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm" aria-labelledby="bug-report-title"
+  return <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" aria-labelledby="bug-report-title"
     PaperProps={{ sx: { maxHeight: "90vh" } }}>
-    <DialogTitle id="bug-report-title">{btnLabel("report_bug", wish ? "feature" : undefined)}</DialogTitle>
+    <DialogTitle id="bug-report-title" sx={{ display: "flex", alignItems: "center", gap: 1 }}><Box component="span" sx={{ flex: 1 }}>{btnLabel("report_bug", wish ? "feature" : undefined)}</Box>
+      {/* ...a close always in sight, busy or not (the 2026-11-18 walk: it lost its Close once drafted and trapped every typed word) */}
+      <IconButton size="small" aria-label="Close" data-tq-bug-close="" onClick={onClose}><CloseIcon fontSize="small" /></IconButton></DialogTitle>
     <DialogContent>
       {refused ? <Typography sx={{ fontSize: 13.5 }}>{refused}</Typography>
         : !draft ? <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, color: DIM, fontSize: 13 }}><CircularProgress size={16} />{wish ? "Preparing the request…" : "Preparing the report…"}</Box>

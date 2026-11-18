@@ -13,6 +13,7 @@ import { attUrl, fileError, useSave } from "./fileSave.js";
 import { label as btn } from "./buttons.js";
 import { copyText } from "./CopyCorner.jsx";
 import { Md } from "./md.jsx";
+import { useOverlay } from "./overlays.js";
 import { csvRows, fitSvg, lockDown } from "./shownPages.js";
 import { deliverables } from "./taskOutputs.js";
 import "./publishedPages.css";
@@ -173,6 +174,7 @@ export function Preview({ page }) {
 // Download beside it for when it is wanted after all. Esc or the cross closes it, back where the owner was reading
 export function FileDialog({ file, onClose }) {
   const [, save] = useSave();
+  useOverlay(!!file, onClose, { typeThrough: true });
   if (!file) return null;
   return (
     <Dialog open onClose={onClose} maxWidth="lg" fullWidth data-tq-file-dialog={file.path || file.name}>

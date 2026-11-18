@@ -3,7 +3,7 @@
 // words and a source by its name, and a mail no task held was findable from nowhere. This is the one box: the bar at
 // the top of the rail (or Ctrl+K anywhere) opens it, and every hit wears a pill saying what it is (searchHits.js).
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Box, Dialog, InputBase, LinearProgress, Tooltip } from "@mui/material";
+import { Box, Dialog, IconButton, InputBase, LinearProgress, Tooltip } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import TaskAltIcon from "@mui/icons-material/TaskAlt";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
@@ -23,6 +23,8 @@ import { ago } from "./timeWords.js";
 import { aloneAs, arrange, asks, channelsFor, countWords, filters, hitAge, kindOf, lineOf, marks, messageLink, meta, nothingMatches, nothingYet, personHits, terms, totalOf } from "./searchHits.js";
 import { ASSISTANT, BORDER, DIM, FAINT, INK, PANEL, PANEL2, PALETTE, PILL_COLORS, ACCENT, mono } from "./theme.jsx";
 import { useAgents } from "./ui.jsx";
+import { useOverlay } from "./overlays.js";
+import CloseIcon from "@mui/icons-material/Close";
 const DONE_TODAY = "done:today";      // search.DONE_TODAY
 
 // colour identifies, it never shouts: each pill is a pale tint with its own ink, from the five colours - never the
@@ -182,6 +184,7 @@ const opened = (h) => {
 
 export default function SearchEverything({ open, onClose, onOpenTask, onOpenMessage, onPickSource, query = "" }) {
   const [q, setQ] = useState(""), [res, setRes] = useState(null), [busy, setBusy] = useState(false);
+  useOverlay(open, onClose);              // ...one overlay at a time, shut when the page under it moves (overlays.js)
   const { devMode } = useAgents();       // "pull requests" only where there are any to find (Developer mode)
   const [only, setOnly] = useState(""), [at, setAt] = useState(0);
   // DONE TODAY (the owner, 2026-11-06): the tasks closed today, as a filter of this box - never on the rail. Pressed, the box asks the
@@ -276,7 +279,7 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
           onChange={(e) => { typed.current = e.target.value; if (held.current !== askOf(e.target.value)) held.current = ""; setQ(e.target.value); }}
           placeholder={devMode ? "Search tasks, mail, chats, pull requests, the Advisor…" : "Search tasks, mail, chats, the Advisor…"} inputProps={{ "aria-label": "Search everything", "data-tq-search-input": "true" }}
           sx={{ fontSize: 16, color: INK, "& input::placeholder": { color: FAINT, opacity: 1 } }} />
-        <Kbd>Esc</Kbd>
+        <Tooltip title="Close (Esc)"><IconButton size="small" aria-label="Close search" data-tq-search-close="" onClick={onClose}><CloseIcon sx={{ fontSize: 18, color: FAINT }} /></IconButton></Tooltip>
       </Box>
       <Box sx={{ height: 2 }}>{busy && <LinearProgress sx={{ height: 2, bgcolor: "transparent", "& .MuiLinearProgress-bar": { bgcolor: ACCENT } }} />}</Box>
       <Box role="tablist" sx={{ display: "flex", gap: 0.6, px: 2, pt: 1, pb: 0.5, flexWrap: "wrap" }}>

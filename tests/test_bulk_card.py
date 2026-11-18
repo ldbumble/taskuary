@@ -243,3 +243,16 @@ def test_a_card_raised_beside_a_bulk_call_is_never_swept_onto_it():
     assert out['on_the_card'] == 5, out
     assert s.get_review(other[0])['Batch'] is None, 'the email beside it is its own card'
     assert other[0] not in {r['ReviewId'] for r in bulkcard.rows(s, out['batch'])}
+
+
+def test_a_bulk_card_next_in_line_is_named_as_the_card_names_itself():
+    """The line said "next: 40 like northwind/ledger#1" of the card that heads itself "40 issues" (bulkCard.countOf, from the catalogue's
+    press words): one fact, two wordings."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        call(tid, 'propose_email', to='erin@northwind.example', subject='Issues', text='Erin - closing the stale issues next.')
+        call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='stale', items=[{'number': n} for n in range(1, 41)])
+        call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='stale', items=[{'number': n} for n in range(41, 43)])
+    us = cardqueue.state(s, tid)['units']
+    assert cardqueue.line(cardqueue.state(s, tid)) == '1 of 3 · next: 40 issues'
+    assert [cardqueue.what(s, u) for u in us] == ['the email to erin@northwind.example', '40 issues', '2 issues']

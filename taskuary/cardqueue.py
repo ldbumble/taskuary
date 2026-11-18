@@ -137,7 +137,10 @@ def what(store, u: dict) -> str:
     r = u['rows'][0]
     if r.get('Batch') and len(u['rows']) > 1:
         from .timewords import plural
-        return plural(len(u['rows']), 'email') if r['Kind'] == 'slot' else f"{len(u['rows'])} like {what(store, {'rids': [r['ReviewId']], 'rows': [{**r, 'Batch': None}]})}"
+        # ...as the card heads itself (bulkCard.countOf): "24 emails", "40 issues" - the noun of the act's own press words, else "steps"
+        from .connectorcatalog import action_for
+        press = str((action_for(_p(r).get('type')) or {}).get('press') or '').split() if r['Kind'] == 'action' else ['', 'email']
+        return plural(len(u['rows']), press[1] if len(press) == 2 else 'step')
     if r['Kind'] == 'action':
         if (p := _p(r)).get('repo') and p.get('number') is not None: return f"{p['repo']}#{p['number']}"       # ...an issue by its own name
         why = ' '.join(str(r.get('Reason') or '').split())

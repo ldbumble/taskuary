@@ -69,7 +69,7 @@ class TypedWordsStartAnAgent(unittest.TestCase):
         s.save_doc('soul', '# SOUL.md\n## Repository map\n- **northwind/ledger**: the ledger app\n', 'owner')
         s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/ledger'}}))
         llm, _ = scripted('CALL: ' + json.dumps({'kind': 'task.create_from_text', 'params': {'kind': 'coding', 'text': 'fix the login crash', 'repo': 'ledger'}}))
-        with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch('taskuary.capabilities.can_code', return_value=True),              mock.patch('taskuary.ingest._spawn'), mock.patch('taskuary.server.store', s):
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch('taskuary.capabilities.can_code', return_value=True),              mock.patch('taskuary.ingest._spawn'), mock.patch('taskuary.server.store', s), mock.patch('taskuary.capabilities.has_ai', return_value=True):
             out = concierge.say(s, 'start a coding agent on ledger to fix the login crash', llm=llm)
         self.assertNotIn('proposal', out); self.assertNotIn('new', out)
         t = s.get_task(int(out['open'].split('=')[1]))

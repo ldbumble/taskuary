@@ -198,7 +198,7 @@ class TurnTests(unittest.TestCase):
         self.assertIn('deep dive', p['params']['text']); self.assertEqual(s.list_tasks(active_only=True), [])   # nothing started on the words
         session = mock.Mock()
         with mock.patch.object(concierge.general, 'start_session', return_value=session), \
-             mock.patch.object(concierge.threading, 'Thread') as thread:
+             mock.patch.object(concierge.threading, 'Thread') as thread, mock.patch('taskuary.capabilities.has_ai', return_value=True):
             r = run(s, p).json()
         task = s.get_task(r['outcome']['taskId'])
         self.assertEqual((task['Kind'], task['SourceRef']), ('general', 'assistant:agent'))

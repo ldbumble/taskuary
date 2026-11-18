@@ -175,6 +175,8 @@ AGENT_READS = (
 # listed so that test_guard walks app.routes and FAILS on a write route nobody classified: a new
 # door is a decision, not something that inherits whatever the table happened to say.
 OWNER_ONLY = (
+    # New's box, the one start from the owner's words (F1): an agent starts new work by its own new_task, which checks the owner asked
+    (r'POST', r'^/api/start$', "a new task from the owner's own words is the owner's - an agent's is new_task"),
     # a bulk card's press does every act on it, and its Stop ends the rest (bulkcard.py): his alone, as each act's own press is
     (r'POST', r'^/api/reviews/batch/[0-9a-f]+/(run|cancel)$', "a bulk card's press does every act on it - that is the owner's"),
     # the first thing a cornered model would do is mark the send tool it was denied as one that does not send (sendfilter)

@@ -113,7 +113,7 @@ def test_a_line_he_types_while_it_runs_never_stops_the_run():
     with mock.patch.object(server, 'store', s):
         out = call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='duplicates', items=[{'number': n} for n in range(1, 11)])
     s._exec("UPDATE review SET CreatedAt='2026-11-16 09:00:00' WHERE Batch=?", (out['batch'],))
-    st = {**bulkcard.state(s, out['batch']), 'key': out['batch'], 'tid': tid, 'state': 'running'}
+    st = {**bulkcard.state(s, out['batch']), 'key': out['batch'], 'tid': tid, 'state': 'running', 'boot': bulkcard.BOOT}
     bulkcard._save(s, st)
     general.wait_line(s, tid, 'how many are left?', line_id='l-left')
     assert proposals.written_past(s, tid) == set(), 'a card at work runs on to its end'
@@ -137,7 +137,7 @@ def test_a_task_whose_card_is_running_reads_at_work_not_waiting_on_him():
     with mock.patch.object(server, 'store', s):
         out = call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='duplicates', items=[{'number': n} for n in range(1, 11)])
     assert taskstate.state(s, s.get_task(tid)) != 'working', 'before the press the card waits on him'
-    st = {**bulkcard.state(s, out['batch']), 'key': out['batch'], 'tid': tid, 'state': 'running'}
+    st = {**bulkcard.state(s, out['batch']), 'key': out['batch'], 'tid': tid, 'state': 'running', 'boot': bulkcard.BOOT}
     bulkcard._save(s, st)
     assert taskstate.state(s, s.get_task(tid)) == 'working', 'his press is at work'
     st['state'] = 'cancelling'; bulkcard._save(s, st)
@@ -224,6 +224,8 @@ def test_a_run_cut_short_by_a_restart_reads_stopped_with_the_rest_waiting_for_hi
         out = call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='duplicates', items=[{'number': n} for n in range(1, 6)])
     bulkcard._save(s, {'key': out['batch'], 'tid': tid, 'total': 5, 'done': 2, 'failed': 0, 'left': 0, 'state': 'running', 'rows': {}, 'boot': 'a-process-gone'})
     assert not bulkcard.running(s, out['batch']) and bulkcard.state(s, out['batch'])['state'] == 'stopped'
+    bulkcard._save(s, {'key': out['batch'], 'tid': tid, 'total': 5, 'done': 2, 'state': 'running', 'rows': {}})
+    assert bulkcard.state(s, out['batch'])['state'] == 'stopped', 'one written before runs were marked: another process too'
     assert taskstate.state(s, s.get_task(tid)) != 'working', 'nothing is at work on it'
     gh = GitHub()
     with mock.patch.object(github.requests, 'patch', gh.patch):

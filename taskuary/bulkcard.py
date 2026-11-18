@@ -30,7 +30,8 @@ def state(store, key: str) -> dict:
     try: got = json.loads(store.get_setting(f'{KEY}{key}') or '{}') or {}
     except (TypeError, ValueError): got = {}
     # ...A RUN CUT SHORT BY A RESTART (its thread went with the old process) is stopped, the rest waiting for his press - never "running" for good
-    if got.get('state') in ('running', 'cancelling') and got.get('boot', BOOT) != BOOT: got['state'] = 'stopped'
+    # ...(one with no mark at all was written before runs carried one: by another process too)
+    if got.get('state') in ('running', 'cancelling') and got.get('boot') != BOOT: got['state'] = 'stopped'
     return got or {'key': key, 'state': 'idle', 'rows': {}}
 
 

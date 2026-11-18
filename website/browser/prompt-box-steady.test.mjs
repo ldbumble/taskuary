@@ -38,25 +38,25 @@ export async function world(t) {
 }
 
 // every frame from now until `stop`: the box's rect, its words' rect, its attach button's rect
-export const watchBox = (page, sel) => page.evaluate((sel) => {
+export const watchBox = (page, sel, { words = ".tq-aui-input", clip = "[data-tq-box-attach]" } = {}) => page.evaluate((sel, words, clip) => {
   window.__seen = []; const t0 = performance.now();
   const r = (el) => { if (!el) return null; const b = el.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)]; };
   const tick = () => {
-    const box = document.querySelector(sel), s = { box: r(box), words: r(box?.querySelector(".tq-aui-input")), clip: r(box?.querySelector("[data-tq-box-attach]")),
-      chips: box?.querySelector(".tq-aui-attachments")?.innerText || "" };
+    const box = document.querySelector(sel), s = { box: r(box), words: r(box?.querySelector(words)), clip: r(box?.querySelector(clip)),
+      chips: [...(box?.querySelectorAll("[data-tq-file-chip], [data-tq-attach-more], [data-tq-came-chip]") || [])].map((c) => c.innerText).join("\n") };
     const last = window.__seen.at(-1);
     if (!last || JSON.stringify([last.box, last.words, last.clip, last.chips]) !== JSON.stringify([s.box, s.words, s.clip, s.chips])) window.__seen.push({ at: Math.round(performance.now() - t0), ...s });
     if (!window.__stop) requestAnimationFrame(tick);
   };
   window.__stop = false; tick();
-}, sel);
+}, sel, words, clip);
 
 // the paperclip pressed seven times: five pictures picked, two pickers cancelled - every frame of the box read
-async function pressClip(page, w, sel, name) {
+async function pressClip(page, w, sel, name, parts = {}) {
   const dir = path.join(out, name); await mkdir(dir, { recursive: true });
   const rec = await record(page, dir);
-  await watchBox(page, sel);
-  const clip = `${sel} [data-tq-box-attach]`;
+  await watchBox(page, sel, parts);
+  const clip = `${sel} ${parts.clip || "[data-tq-box-attach]"}`;
   for (const [i, f] of ["a.png", "b.png", "", "c.png", "d.png", "", "e.png"].entries()) {
     const [chooser] = await Promise.all([page.waitForFileChooser({ timeout: 5000 }).catch(() => null), page.click(clip).catch(() => {})]);
     if (chooser) { if (f) await chooser.accept([path.join(w.bin, f)]); else await chooser.cancel(); }
@@ -111,17 +111,18 @@ const slowUploads = async (page, ms = 2000) => {
   const posted = [], guard = page.fixtureRequestGuard;
   page.off("request", guard);
   page.on("request", (r) => {
-    if (r.method() === "POST" && /\/api\/(tasks\/\d+\/(assistant\/messages|dispatch)|tasks|concierge\/say)$/.test(r.url().split("?")[0])) posted.push({ url: r.url(), body: r.postData() || "" });
+    if (process.env.BOX_DEBUG && r.method() === "POST") console.log("POST", r.url(), (r.postData() || "").slice(0, 200));
+    if (r.method() === "POST" && /\/api\/(tasks\/\d+\/(assistant\/messages|dispatch)|tasks|concierge\/(say|stream))$/.test(r.url().split("?")[0])) posted.push({ url: r.url(), body: r.postData() || "" });
     if (/\/api\/prompt-(image|file)/.test(r.url())) setTimeout(() => guard(r), ms); else guard(r);
   });
   return posted;
 };
-const typeThenPick = async (page, w, sel, words) => {
-  await page.click(`${sel} .tq-aui-input`); await page.keyboard.type(words);
-  const [chooser] = await Promise.all([page.waitForFileChooser({ timeout: 5000 }), page.click(`${sel} [data-tq-box-attach]`)]);
+const typeThenPick = async (page, w, sel, words, { input = ".tq-aui-input", clip = "[data-tq-box-attach]" } = {}) => {
+  await page.click(`${sel} ${input}`); await page.keyboard.type(words);
+  const [chooser] = await Promise.all([page.waitForFileChooser({ timeout: 5000 }), page.click(`${sel} ${clip}`)]);
   await chooser.accept([path.join(w.bin, "a.png")]);
   await new Promise((r) => setTimeout(r, 300));
-  await page.focus(`${sel} .tq-aui-input`); await page.keyboard.press("Enter");
+  await page.focus(`${sel} ${input}`); await page.keyboard.press("Enter");
   await new Promise((r) => setTimeout(r, 4000));
 };
 
@@ -182,5 +183,63 @@ test("a paste of words that also carries a picture of them is words; a picture a
   }, sel, withText, PNG.toString("base64"));
   assert.deepEqual(await paste(true), { prevented: false, chips: 0 }, "words from a sheet pasted as a picture of them");
   assert.deepEqual(await paste(false), { prevented: true, chips: 1 }, "a picture alone is attached");
+  assert.deepEqual(errors, []);
+});
+
+// A LONG LINE (a pasted address with no spaces, then forty lines): the box wraps it and grows up to its cap, then scrolls inside - it never
+// widens past its place nor pushes the page sideways
+for (const [width, height] of [[1600, 900], [390, 844]]) {
+  test(`a long line in New and on a task's chat at ${width}px: the box keeps its width`, { timeout: 300000 }, async (t) => {
+    const w = await world(t), page = await w.newPage();
+    await page.setViewport({ width, height });
+    const errors = []; page.on("pageerror", (e) => errors.push(e.message));
+    const made = await w.api("/api/fixture/mail-task", {});
+    const long = `https://portal.vendor.example/${"a1b2c3d4".repeat(60)}`, many = Array.from({ length: 40 }, (_, i) => `line ${i + 1}`).join("\n");
+    const measure = (sel) => page.evaluate((sel) => { const b = document.querySelector(sel).getBoundingClientRect(), i = document.querySelector(`${sel} .tq-aui-input`);
+      return { w: Math.round(b.width), h: Math.round(b.height), sideways: document.documentElement.scrollWidth > innerWidth, inputH: Math.round(i.getBoundingClientRect().height) }; }, sel);
+    for (const [where, sel] of [[`${w.ui}#new-task`, "[data-tq-new] [data-tq-prompt-box]"], [null, "[data-tq-task-page] [data-tq-one-box]"]]) {
+      if (where) await page.goto(where, { waitUntil: "domcontentloaded" });
+      else await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
+      await page.waitForSelector(sel, { visible: true, timeout: 60000 });
+      await new Promise((r) => setTimeout(r, 1500));
+      const before = await measure(sel);
+      await page.click(`${sel} .tq-aui-input`);
+      await page.evaluate((sel, v) => { const i = document.querySelector(`${sel} .tq-aui-input`);
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(i, v); i.dispatchEvent(new Event("input", { bubbles: true })); }, sel, long);
+      await new Promise((r) => setTimeout(r, 400));
+      const one = await measure(sel);
+      await page.keyboard.down("Shift"); await page.keyboard.press("Enter"); await page.keyboard.up("Shift");
+      await page.evaluate((sel, v) => { const i = document.querySelector(`${sel} .tq-aui-input`);
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(i, i.value + v); i.dispatchEvent(new Event("input", { bubbles: true })); }, sel, many);
+      await new Promise((r) => setTimeout(r, 400));
+      const lots = await measure(sel);
+      const said = JSON.stringify({ sel, before, one, lots });
+      assert.equal(one.w, before.w, `the long line widened the box: ${said}`); assert.equal(lots.w, before.w, said);
+      assert.ok(!one.sideways && !lots.sideways, `the page scrolls sideways: ${said}`);
+      assert.ok(lots.inputH <= 160, `the words grew past their cap: ${said}`);
+    }
+    assert.deepEqual(errors, []);
+  });
+}
+
+// THE RAIL'S BOX (the Assistant's ask bar): the same two - the paperclip again and again, and Enter while its file uploads
+const RAIL = { words: "textarea", clip: "button[aria-label^='Attach']" };
+test("the rail's box: the paperclip again and again holds it still, and Enter while its file uploads sends them together", { timeout: 300000 }, async (t) => {
+  const w = await world(t), page = await w.newPage();
+  await page.setViewport({ width: 1600, height: 900 });
+  const errors = []; page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto(w.ui, { waitUntil: "domcontentloaded" });
+  const sel = ".tq-compose-box";
+  await page.waitForSelector(`${sel} textarea`, { visible: true, timeout: 60000 });
+  await new Promise((r) => setTimeout(r, 2000));
+  await page.click(`${sel} textarea`); await new Promise((r) => setTimeout(r, 800));
+  check(await pressClip(page, w, sel, "rail-1600", RAIL));
+  await page.reload({ waitUntil: "domcontentloaded" });              // ...a fresh box for the second half
+  await page.waitForSelector(`${sel} textarea`, { visible: true, timeout: 60000 }); await new Promise((r) => setTimeout(r, 2000));
+  const posted = await slowUploads(page);
+  await typeThenPick(page, w, sel, "What does this chart say about Q3?", { input: "textarea", clip: RAIL.clip });
+  const said = posted.filter((p) => /concierge\/(say|stream)/.test(p.url)).map((p) => JSON.parse(p.body));
+  assert.equal(said.length, 1, `the line did not go once: ${JSON.stringify(posted)}`);
+  assert.equal(said[0].images?.length, 1, `the line went without its file: ${JSON.stringify(said)}`);
   assert.deepEqual(errors, []);
 });

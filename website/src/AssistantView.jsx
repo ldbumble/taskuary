@@ -73,7 +73,7 @@ import { SlotPicker } from "./CalendarPick.jsx";
 import ContinueBox from "./ContinueBox.jsx";
 import { AgentAsk } from "./RunForm.jsx";
 import CloseNote from "./CloseNote.jsx";
-import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
+import { AttachImage, ImageTray, usePromptImages, useSendWhenUp, withImages } from "./promptImages.jsx";
 import { handToItem } from "./ItemSections.jsx";
 import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, liveBrowseId, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, tableItemOf, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
@@ -1294,6 +1294,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   const noteFor = (tid) => (continueNote.current && Number(continueNote.current.tid) === Number(tid) ? continueNote.current.note : "");
   // pictures sent with the chat line - and any file (the owner, 2026-11-05): the turn names its path; an API AI is handed pictures only
   const pics = usePromptImages({ files: true });
+  // ...a line typed while his files upload waits for them, then goes with them (promptImages.useSendWhenUp) - the box every other box is
+  const { go: sendTyped, waiting: sendHeld } = useSendWhenUp(pics, () => send());
   // ...A CONTINUE IN THE AGENT PANE (the owner, 2026-10-29: "Continue box should be inside the canvas always"): a Continue for the task on
   // the table - the walk's, or the Assistant's lit with notes - is the task view's own card, in its Agent pane, when it lays its panes
   // (TaskPage claims it, tq-continue-here, at any width); only an item with no task view up leaves it to the card under the item here.
@@ -3669,10 +3671,11 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
       placeholder={!boxWide && isMini && winLines.length ? (phone || deskChat ? "Continue…" : "Continue chat…")
         : boxNarrow && !boxWide ? "Ask…" : tableSays.phone /* the chat window's words: "Talk to Taskuary…" on a task (the owner, 2026-10-28) */}
       onChange={(e) => { const v = e.target.value; setText(heard && v.endsWith(heard) ? v.slice(0, -heard.length).trimEnd() : v); openBox(); }} onKeyDown={(e) => {
-        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTyped(); }
         // Esc shuts the window, the box back to its pill (escShut, on the box)
       }} />
-    <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || heard || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
+    <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || sendHeld || !(text.trim() || heard || pics.imgs.length || pics.busy)} onClick={sendTyped}>
+      {sendHeld ? <CircularProgress size={14} color="inherit" /> : <SendIcon fontSize="small" />}</button>
     {/* THE MODEL PICKER, bottom right (the owner, 2026-10-29: a modern chat composer): the brain this chat speaks on, the Assistant's default
         until another is chosen here - for this chat only, Settings stay as they are. A press opens its list, never the chat window */}
     {chatApart && !!state && <button type="button" className="tq-model-pick" data-tq-model-pick="" aria-haspopup="menu" aria-expanded={!!modelEl}

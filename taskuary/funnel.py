@@ -591,6 +591,11 @@ def run_failed(store, tid, live_too: bool = False, st=None) -> dict | None:
     return failure(last.get('Text'), tid)
 
 
+def failure_of(ev: dict, tid=None) -> dict:
+    "A `failed` worker event in plain words: {sentence, fix} - the one reading run_failed and the chat's failed turn share."
+    return failure((ev or {}).get('Text'), tid)
+
+
 def failure(text, tid=None) -> dict:
     "{sentence, fix} of a run's failure, from the words it failed with - what run_failed says, and what a failed turn keeps (general.file_turn)."
     from .failures import classify

@@ -674,6 +674,8 @@ def newest_message(store, tid: int, turn: bool = False) -> dict | None:
          'at': str(m.get('JoinedAt') or ''), 'words': m.get('OwnText') or m.get('BodyText') or m.get('Subject'), 'mid': m.get('MessageId')} if m else None
     return max((x for x in (a, b) if x), key=lambda x: x['at'], default=None)
 
+OWN_BELOW = 'their line below, which this turn answers'
+
 def _quote(x, n) -> str: return '"' + _cut(' '.join(str(x or '').split()), n) + '"'
 
 # THE OWNER'S HAND-OFF (Hand it to a person, server.handoff) is a 'human' comment headed this - the agent's next turn hears it with what went
@@ -777,10 +779,13 @@ def presses(store, tid: int, since: str = '') -> list:
     who = ','.join('?' * len(OWNER_ACTORS))
     # ...ONLY A ROW THAT HAS WORDS (the owner, 2026-11-11: "You routing learned."): one without was said by its bare name, so any bookkeeping
     # written as the actor it was handed (routingmemory.learn_correction) stood in the chat as a sentence of theirs that is none
+    rows = store._rows(f"SELECT * FROM audit WHERE EntityType='task' AND EntityId=? AND Actor IN ({who}) AND CreatedAt>? ORDER BY Id", (tid, *OWNER_ACTORS, since or ''))
+    # ...A REOPEN HIS TYPED LINE MADE IS SAID BY THAT LINE (QUIET's reopened_by_typing, reopen): the store's own `reopened` row, written by the same
+    # write, stood as "You reopened it" right above his line, a frame after the line was drawn (the Continue round, 2026-11-18)
+    typed = {a['Id'] for a, b in zip(rows, rows[1:]) if a['Action'] == 'reopened' and b['Action'] == 'reopened_by_typing'}
     out = [(r['Id'], r['CreatedAt'], PRESSES[r['Action']](_detail(r)),
             *((_held_result(_detail(r)),) if r['Action'] in HELD_DONE else ()))
-           for r in store._rows(f"SELECT * FROM audit WHERE EntityType='task' AND EntityId=? AND Actor IN ({who}) AND CreatedAt>? ORDER BY Id",
-                                (tid, *OWNER_ACTORS, since or '')) if r['Action'] in PRESSES and not _detail(r).get('review')]   # a card's own act: said by its card (proposals.execute)
+           for r in rows if r['Action'] in PRESSES and r['Id'] not in typed and not _detail(r).get('review')]   # a card's own act: said by its card (proposals.execute)
     out += [(r['Id'], r['CreatedAt'], f"shared it ({r['Action']})") for r in store._rows(
         f"SELECT * FROM audit WHERE EntityType='share' AND Actor IN ({who}) AND CreatedAt>? ORDER BY Id", (*OWNER_ACTORS, since or ''))
         if _detail(r).get('task') == tid]
@@ -1021,8 +1026,10 @@ def latest_block(store, tid: int, resumed: bool = False, rules: bool = True, tur
     # `rules` False: an agent whose startup context says the rules once (selfclose.DRAFTS_ONCE) - the turn carries the facts alone
     out = [selfclose.FACTS_HEAD, (selfclose.NO_NEW_LINE if heard else selfclose.LATEST_LINE) if rules else selfclose.NO_NEW_HEAD if heard else selfclose.LATEST_HEAD]
     wd = f'\n{selfclose.WITHDRAW_LINE}' if rules else ''
+    # ...HIS OWN LINE THAT THIS TURN CARRIES IS NOT QUOTED HERE (the Continue round, 2026-11-18): every turn that hears these facts ends on it - a
+    # kept conversation's turn, a coding prompt, a fresh one's last USER line - and quoted as well, a note typed on Continue reached the agent twice
     if new: out.append(f"{'THE LAST MESSAGE, WHICH YOU ANSWERED' if heard else 'THE NEWEST MESSAGE'} - from {new['who']}, at {clock(new['at'])}: "
-                       f"{_quote(new['words'], 600)}")
+                       f"{OWN_BELOW if new.get('cid') and not heard else _quote(new['words'], 600)}")
     if rv:
         s = wrapup.left_by(store, rv['ReviewId']); at = str((s or rv).get('CreatedAt') or '')
         m = store.get_message(rv.get('AnswersMid') or rv.get('MessageId')) or {}

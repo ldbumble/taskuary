@@ -18,13 +18,17 @@ const why = (e, d) => e?.response?.data?.detail || e?.message || d;
 
 // ── the agent asks: one card per request waiting on the owner ─────────────────────────────────────────────────────────
 export function PermissionCards({ taskId, items = [], onAnswered }) {
-  const [busy, setBusy] = useState(""), [err, setErr] = useState("");
+  const [busy, setBusy] = useState({}), [err, setErr] = useState("");
   if (!items.length) return null;
+  // ...A PRESS THAT LANDED KEEPS ITS SPIN until the list reads the card answered: cleared at the answer, its buttons lit again for the
+  // read's round trip and then the card went grey - a flicker before the press (browser/permission-press). Only a failed press lights them
   const answer = async (p, kind) => {
-    setBusy(`${p.id}:${kind}`); setErr("");
+    setBusy((b) => ({ ...b, [p.id]: kind })); setErr("");
     try { await api.post(`/api/tasks/${taskId}/permission`, { id: p.id, option: kind }); onAnswered?.(); }
-    catch (e) { setErr(why(e, "That answer did not reach the agent")); }
-    setBusy("");
+    catch (e) {      // ...answered first elsewhere (a bound chat) or timed out: no button to light again, the list says how it ended
+      if (e?.response?.status === 409) return onAnswered?.();
+      setErr(why(e, "That answer did not reach the agent")); setBusy(({ [p.id]: _, ...b }) => b);
+    }
   };
   return items.map((p) => { const l = permissionLead(p); return (
     <Box key={p.id} data-tq-permission={p.id} sx={card} role="group" aria-label="The agent asks permission">
@@ -35,10 +39,10 @@ export function PermissionCards({ taskId, items = [], onAnswered }) {
         "& code": { display: "block", whiteSpace: "pre-wrap", overflowWrap: "anywhere", mt: 0.4, fontSize: 11.5, fontFamily: mono, color: INK } }}>
         <summary>Show the command</summary><code>{l.command}</code></Box>}
       <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mt: 0.8 }}>
-        {p.options.map((o) => <Button key={o.kind} size="small" disableElevation disabled={!!busy} data-tq-permission-answer={o.kind}
+        {p.options.map((o) => <Button key={o.kind} size="small" disableElevation disabled={!!busy[p.id]} data-tq-permission-answer={o.kind}
           variant={o.kind === "allow_once" ? "contained" : "outlined"}
           sx={{ ...btn, ...(o.kind === "allow_once" ? {} : o.kind.startsWith("reject") ? { color: "var(--tq-danger, #7a2f3c)", borderColor: BORDER } : { color: INK, borderColor: BORDER }) }}
-          startIcon={busy === `${p.id}:${o.kind}` ? <CircularProgress size={12} color="inherit" /> : null}
+          startIcon={busy[p.id] === o.kind ? <CircularProgress size={12} color="inherit" /> : null}
           onClick={() => answer(p, o.kind)}>{o.label}</Button>)}
       </Box>
       <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.5 }}>

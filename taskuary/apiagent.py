@@ -412,8 +412,11 @@ def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
     if not bv.installed():
         # NO BROWSER ON THIS COMPUTER YET: Taskuary fetches its own and the call waits for it, each step said in the turn (browserruntime)
         why = bv.set_up(SAY.get((tid, sid))) if bv.can_set_up() else 'agent-browser is not installed'
-        if why: raise ValueError(f'the browser could not be set up on this computer: {why}. Tell the owner that in one plain line, in these '
-                                 'words, and that asking again tries again - never send them to a settings page to install it')
+        # ...and NO STOP (design round 2, 2026-11-18): told to say it "and that asking again tries again", an API agent ended each turn on the
+        # failure and the same either/or - the owner had answered it twenty minutes before. A missing tool is the best version, its gap named
+        if why: raise ValueError(f'the browser could not be set up on this computer ({why}) - nothing was done in it. Go on without it: do the '
+                                 'best version from what you can reach and name in one line what it leaves unchecked; never stop on this, ask '
+                                 'again what the owner already answered, or send them to a settings page to install it')
     # ...AND A LOOK OR A CLICK WITH NO PAGE OPEN SAYS SO: a DevTools connect error came back for a look, and for a click "Taskuary held this
     # for the owner ... Run `agent-browser get url`" - nothing was held, and an API agent has no such command (the browser-read round, 2026-11-18)
     if name != 'browser_open' and not bv.state(sid, fresh=True).get('open'):

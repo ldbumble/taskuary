@@ -129,3 +129,19 @@ def test_every_worker_is_told_its_browser_is_the_way_where_no_connection_does_a_
     rules = (Path(general.__file__).parent / 'templates' / 'agent.md').read_text(encoding='utf-8')
     assert 'do it in your browser' in rules and 'for their press' in rules and "Never answer that you can't where a browser can" in rules
 
+
+
+def test_every_worker_is_told_effort_in_proportion_and_a_missing_tool_is_no_stop():
+    """The walks, 2026-11-18: 12 minutes and 42 steps on a one-line chat question (the agent read the folder C:\), and a browser that could not
+    be set up ended each turn on the same either/or the owner had answered. One rule, where every worker on every road is told its job."""
+    from pathlib import Path
+    from unittest import mock
+    from taskuary import apiagent, browserview
+    rules = (Path(general.__file__).parent / 'templates' / 'agent.md').read_text(encoding='utf-8')
+    assert 'Effort in proportion to the ask' in rules and 'a missing tool is never a stop' in rules
+    with mock.patch.object(browserview, 'installed', return_value=False), mock.patch.object(browserview, 'can_set_up', return_value=True), \
+         mock.patch.object(browserview, 'set_up', return_value='the download was refused'), \
+         mock.patch.dict(apiagent.OFFERED, {}, clear=True), mock.patch.dict(apiagent.TOOLBOX, {}, clear=True):
+        try: apiagent.run_tool(None, 7, 's1', 'browser_open', {'url': 'https://trainly.example/signup'}); said = ''
+        except ValueError as e: said = str(e)
+    assert 'Go on without it' in said and 'asking again' not in said, said

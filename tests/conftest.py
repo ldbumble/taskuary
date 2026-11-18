@@ -516,13 +516,25 @@ def no_real_acp_adapters(request, monkeypatch):
     monkeypatch.setattr(clis, 'ADAPTERS', {})
 
 
+_REAL_AGENTS = {}            # agents' functions as first seen by this fixture, before any test replaced them
+
+
 @pytest.fixture(autouse=True)
-def no_connection_brains():
+def no_connection_brains(request):
     """A test's brains are the agent rows IT wrote. agents.connection_brains reads config.toml, and the
     test home's carries the `claude` connection cli_connections.migrate split off the default coding agent
     profile - so a bare MemoryStore "with no CLI" suddenly had one. A test about connection brains
     patches config.load and puts the real function back: `agents.connection_brains.real`."""
     from taskuary import agents
+    # ...EACH TEST FROM THE REAL ONES (CI, 2026-11-18): one left replaced by an earlier test - a mock never stopped - became the next
+    # fixture's `.real`, so every later test in that CI shard that asked for the real brains got an empty list ("No AI is connected").
+    # The first-seen functions are put back before each test, and the test that left one behind is named on stdout
+    names = ('connection_brains', 'default_pick', 'coding_ready', 'developer_mode')
+    if not _REAL_AGENTS: _REAL_AGENTS.update({k: getattr(agents, k) for k in names})
+    for k in names:
+        if getattr(agents, k) is not _REAL_AGENTS[k]:
+            print(f"LEAK: agents.{k} was left replaced before {request.node.nodeid} - put back")
+            setattr(agents, k, _REAL_AGENTS[k])
     real = agents.connection_brains
     stub = lambda store: []
     stub.real = real

@@ -78,8 +78,9 @@ squarespace.com webflow.io bubbleapps.io notion.site'''.split())
 class SignInError(Exception): pass
 class NotAccepted(SignInError):
     """Typed, and the site kept its password box up: not a sign-in. Every surface said "Signed in", the vault kept a password that never
-    worked and typed it again (the owner's computer-use walk, 2026-10-25). `again`: a fresh fill link's token, for the form shown again."""
-    again = ''
+    worked and typed it again (the owner's computer-use walk, 2026-10-25). `again`: a fresh fill link's token, for the form shown again.
+    `own`: the reason names what the form also needed (refused) - the password was not shown to be wrong."""
+    again, own = '', False
 def _now() -> float: return time.time()
 def _hash(tok) -> str: return hashlib.sha256(str(tok or '').encode('utf-8', 'surrogateescape')).hexdigest()
 
@@ -505,13 +506,13 @@ def _auto(store, tid, sid, site, rid, fill, ask=None):
         _continue(store, tid, rid, site, 'taskuary', bool(got.get('code')))
     except NotAccepted as e:
         _audit(store, tid, site, 'vault', False, str(e))
-        why = str(e) if 'also asks for' in str(e) else (f'The saved password for {site} did not work - {site} kept its sign-in form up. '
+        why = str(e) if e.own else (f'The saved password for {site} did not work - {site} kept its sign-in form up. '
                                                       'Sign in on the page, or fill it in securely with the right one - it is saved when it works.')
         back(f'The saved sign-in for {site} did not go in.')
         store.add_comment(tid, 'taskuary', 'agent', why[0].upper() + why[1:] + ('.' if not why.endswith('.') else ''))
         # ...and the ask itself says why the page is in front of him (the recorded walk, 2026-11-11: it read "Sign in to ... to continue" over a
         # form the site had just refused the saved password on)
-        if ask: ask(FAILED_ASK.format(site=site) if 'also asks for' not in str(e) else None)
+        if ask: ask(None if e.own else FAILED_ASK.format(site=site))
     except Exception as e:
         why = str(e) if isinstance(e, SignInError) else 'the browser could not be reached'
         _audit(store, tid, site, 'vault', False, why)
@@ -1048,7 +1049,8 @@ def fill_page(c: Cdp, site: str, user: str, pw: str, wait: float = STEP_WAIT, co
     if not s.get('password') or not on_site(s.get('href'), site): raise SignInError('the page changed under the sign-in - nothing was typed')
     c.type(pw)
     c.enter()
-    return {'code': bool(code) and _await_code(c, site, code, code_wait), 'others': left}
+    # ...and a user box left empty is said (refused): a sign-up whose user name no box named keeps its password alone (send_new)
+    return {'code': bool(code) and _await_code(c, site, code, code_wait), 'others': left, 'nouser': bool(f.get('user') and not user)}
 
 
 REJECT_WAIT = 4.0               # after SETTLE: how long a site is given to take its password box away before the password is called refused
@@ -1067,9 +1069,11 @@ def accepted(c, site: str, wait: float = REJECT_WAIT) -> bool:
         time.sleep(.5)
 
 
-def refused(site: str, others=None) -> str:
+def refused(site: str, others=None, nouser=False) -> str:
     "Why a typed sign-in stayed on its form - the box the form also needed, when it showed one empty, before blaming the password."
     o = [str(x) for x in (others or []) if str(x).strip()]
+    if nouser: return (f'{site} also asks for the user name, and none was given - type it on the page, then sign in there; the password '
+                       'was not shown to be wrong')
     if o: return (f'{site} also asks for {o[0]!r}, which Taskuary does not keep - type it on the page, then sign in there; the saved '
                   'password was not shown to be wrong')
     return f'{site} did not accept that password'
@@ -1088,7 +1092,9 @@ def type_in(sid: str, site: str, user: str, pw: str, code=None, extra=None) -> d
             ok = out.get('code') or accepted(c, site)
             try: c.js(CLEAR)
             except SignInError: pass                          # the page moved on: nothing of it is left to clear
-            if not ok: raise NotAccepted(refused(site, out.get('others')))
+            if not ok:
+                e = NotAccepted(refused(site, out.get('others'), out.get('nouser'))); e.own = bool(out.get('others') or out.get('nouser'))
+                raise e
             return out
         finally: c.close()
 

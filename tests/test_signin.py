@@ -141,6 +141,23 @@ class Filling(unittest.TestCase):
         self.assertIn("bank.example also asks for 'Customer ID'", said); self.assertNotIn('did not accept that password', said)
         self.assertEqual(signin.refused('bank.example', []), 'bank.example did not accept that password')
 
+    def test_a_saved_sign_in_with_no_user_name_says_so_instead_of_blaming_the_password(self):
+        """A sign-up whose user name no box named (a wizard asked the email a page earlier) is kept with its password alone. Signing in with
+        it, only the password went in, the form stayed up, and the owner was told "The saved password ... did not work" - it was right."""
+        class Page(FakePage):
+            def __init__(self): super().__init__(); self.cleared = False
+            def js(self, expr): return {} if expr == signin.CLEAR else super().js(expr)
+            def close(self): pass
+        s = MemoryStore(); tid = Factory(s).task('Market data'); signin.save(s, 'bank.example', '', PW)
+        with mock.patch.object(signin, 'connect', return_value=Page()), mock.patch.object(browserview, 'filling', mock.MagicMock()), \
+             mock.patch.object(signin, 'SETTLE', 0), mock.patch.object(signin, 'accepted', return_value=False), \
+             mock.patch.object(signin, 'asks_code', return_value=False):
+            asked = []
+            signin._auto(s, tid, 'sess1', 'bank.example', 'signin:bank.example', signin.type_in, lambda said=None: asked.append(said))
+        said = ' '.join(c['Body'] for c in s.list_comments(tid))
+        self.assertIn('user name', said); self.assertNotIn('did not work', said)
+        self.assertEqual(asked, [None], 'the ask is the plain one: nothing says the saved password failed')
+
     def test_a_third_box_the_vault_keeps_is_filled_by_its_label_before_the_user_name(self):
         p = FakePage(); f = p.fields
         def fields(want=''):

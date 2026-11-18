@@ -70,6 +70,16 @@ test("a chat reply names the room it lands in; an email says only who it goes to
   assert.equal(replyContext({ FromName: "Ray Colton", FromEmail: "15550000332@s.whatsapp.net", Channel: "whatsapp", SourceName: "Northwind ops" }), "Ray Colton in Northwind ops");
 });
 
+// AN EMAIL OF ITS OWN SAYS ITS OWN ENVELOPE (the walks, 2026-11-18): Erin asked by Teams chat, the agent's email went to gail@, and the card and
+// its receipt read "To Erin Blake" / "Sent to Erin Blake" - the chat's sender, not the address the send used. The envelope's channel and To decide
+test("an email set up on a chat's task names the address it goes to, never the chat's sender", () => {
+  const chat = { FromName: "Erin Blake", FromEmail: "erin@teams.example", Channel: "teams", SourceName: "Erin Blake" };
+  const email = { ...chat, Deliver: JSON.stringify({ channel: "email", to: ["gail@northwind.example"] }) };
+  assert.equal(replyContext(email), "gail@northwind.example");
+  assert.equal(sentTo(email), "gail@northwind.example");
+  assert.equal(replyContext(chat), "Erin Blake");                                   // ...a reply in the chat itself is still the chat's
+});
+
 // "To: <a bank's name>" on an agent's email (the owner, 2026-11-09): a To with no address asks for one; a reply to a mail has no To
 test("an envelope whose To holds no address needs one - an address, or no To at all, does not", () => {
   assert.equal(needsAddress(deliver({ channel: "email", to: [] })), true);

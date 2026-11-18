@@ -704,6 +704,11 @@ def keep_cut_runs(store) -> list:
         n = len(steps_of(workflows.cfg_of(src))) if src else len(recs)
         words = CUT_RUN.format(done=sum(1 for x in recs if x.get('status') != 'repaired'), n=max(n, len(recs)))
         store.set_report_run_steps(r['RunId'], recs, True, words, None, words)
+        # ...and the routine's row says it too, where its last run is this one (the Reports shelf reads LAST_RUN, never the run row)
+        from .reports import LAST_RUN
+        try: last = json.loads(store.get_setting(f"{LAST_RUN}{r['SourceId']}") or '{}') or {}
+        except ValueError: last = {}
+        if last.get('run_id') == r['RunId']: _keep_last(store, r['SourceId'], {**last, 'steps': recs, 'failed': True, 'error': words, 'summary': words})
         store.add_comment(tid, 'workflow', 'agent', words)
         out.append(tid)
     return out

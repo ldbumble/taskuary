@@ -545,6 +545,8 @@ def test_a_run_of_steps_the_restart_cut_says_so_and_is_not_walked_again(db):
     assert run['failed'] and run['summary'].startswith('Cut short when Taskuary restarted, after step 1 of 3') and 'Run now' in run['summary']
     assert flow.turn(s, tid, False)['text'] == run['summary']
     assert sum(c['Body'] == run['summary'] for c in s.list_comments(tid)) == 1
+    last = json.loads(s.get_setting(f"report_last_run:{src['SourceId']}"))            # ...and the routine's row on the shelf says it too
+    assert last['failed'] and last['summary'] == run['summary']
 
 
 def test_a_repair_whose_answer_cannot_be_read_says_so_never_asks_the_owner_to_say_it_another_way(db):

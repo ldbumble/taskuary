@@ -696,13 +696,20 @@ def _rd_token(c) -> str:
     cfg = _cfg(c)
     if not (cfg.get('client_id') and cfg.get('client_secret') and cfg.get('username')):
         raise RuntimeError('need the script app\'s client id and secret (reddit.com/prefs/apps) and your user name')
-    from . import net
+    from . import net, totp
     def mint():
+        # TWO-FACTOR SIGN-IN (the owner, 2026-11-18: "it should work anyway"): Reddit's script app takes the password with the current
+        # authenticator code after a colon - made here from the account's key the card keeps sealed, at each sign-in
+        key = str(cfg.get('totp_key') or '').strip()
+        try: pw = (c.get('Secret') or '') + (f':{totp.current(key)}' if key else '')
+        except totp.BadKey as e: raise RuntimeError(f'the authenticator key on the Reddit card: {e}') from None
         r = requests.request('post', 'https://www.reddit.com/api/v1/access_token', timeout=30, auth=(cfg['client_id'], cfg['client_secret']),
-                             data={'grant_type': 'password', 'username': cfg['username'], 'password': c.get('Secret') or ''}, headers={'User-Agent': RD_UA})
+                             data={'grant_type': 'password', 'username': cfg['username'], 'password': pw}, headers={'User-Agent': RD_UA})
         j = r.json() if r.status_code == 200 else {}
-        if not j.get('access_token'): raise RuntimeError('Reddit refused the sign-in - check the app id, its secret, your user name and password '
-                                                         '(an account with two-factor sign-in cannot use a script app)')
+        if not j.get('access_token'):
+            raise RuntimeError('Reddit refused the sign-in - check the app id, its secret, your user name and password' + (
+                ', and the authenticator key on the card' if key else
+                ' - and if your account has two-factor sign-in, save its authenticator key on the card'))
         return j['access_token'], j.get('expires_in')
     return net.token(('reddit', cfg['client_id'], cfg['username']), mint)
 

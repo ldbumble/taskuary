@@ -6159,7 +6159,7 @@ class SQLiteStore:
         return [dict(r) for r in got[1]]
     # A REFRESH TOKEN KEPT IN ConfigJson IS SEALED LIKE THE Secret COLUMN: the Gmail card's Google calendar sign-in (googlecal.py,
     # 2026-10-26) keeps its token there beside the App Password, and a copy of taskuary.db must not carry it in the clear either
-    SEALED_CONFIG = ('google_refresh_token',)
+    SEALED_CONFIG = ('google_refresh_token', 'totp_key')      # ...and a card's authenticator key (Reddit's two-factor sign-in, totp.py)
     @classmethod
     def _opened(cls, r):
         """A with_secret row carries the secret itself: the column holds it sealed (vault.py) - and so do SEALED_CONFIG keys."""

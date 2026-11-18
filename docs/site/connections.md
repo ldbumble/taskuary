@@ -482,7 +482,9 @@ recalled: set the card to `read` and a post an agent drafts becomes a proposal y
 its task as **Post to Reddit** or **Post to X**, and goes out only on your press; afterwards the card
 shows the link to it, and a refusal (a subreddit that asks for a flair, a plan with no posts left)
 stays on the card in the network's own words. Reddit posts with the same script app the inbox reads
-with, for your personal use: a subreddit, a title, and text or a link. X needs your own developer
+with, for your personal use: a subreddit, a title, and text or a link. An account with two-factor
+sign-in works too: save its authenticator setup key on the card, and it makes the code each time it
+signs in. X needs your own developer
 app set to **Read and write**, and its four user keys (API key and secret, access token and secret)
 on the X card; a post is up to 280 characters with a picture, and how many X allows is that app's plan.
 

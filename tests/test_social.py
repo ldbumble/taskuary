@@ -392,6 +392,51 @@ class XPosts(unittest.TestCase):
         self.assertEqual(out['rows'][0]['image'], '77')
 
 
+class RedditTwoFactor(unittest.TestCase):
+    """An account with two-factor sign-in (the owner, 2026-11-18: "it should work anyway"): Reddit's script app takes the password with the
+    current authenticator code after a colon. The card keeps the account's authenticator key, sealed, and the code is made at each sign-in."""
+    KEY = 'JBSWY3DPEHPK3PXP'                          # an invented setup key, as a site prints it
+
+    def setUp(self):
+        from taskuary import net
+        net._TOKENS.clear()
+
+    def sign_in(self, rd, card):
+        from taskuary import inboxes
+        with mock.patch.object(inboxes.requests, 'request', rd.request):
+            return inboxes.run_reddit_post({'_card': card, 'subreddit': 'smallbusiness', 'title': 'T', 'text': 'x'})
+
+    def test_the_saved_key_puts_the_current_code_after_the_password(self):
+        from taskuary import totp
+        rd = RedditNet()
+        with mock.patch.object(totp.time, 'time', return_value=1_800_000_000.0):
+            self.sign_in(rd, _rd_card(totp_key=self.KEY))
+            want = totp.code(totp.parse(self.KEY))
+        grant = next(kw['data'] for m, u, kw in rd.calls if u.endswith('/api/v1/access_token'))
+        self.assertEqual(grant['password'], f'pw:{want}')
+        self.assertEqual(len(rd.submitted()), 1)
+
+    def test_with_no_key_the_password_goes_alone_and_a_refusal_names_the_key(self):
+        rd = RedditNet()
+        rd.request = (lambda m, u, **kw: (rd.calls.append((m, u, kw)), _Resp({'error': 'invalid_grant'}))[1])
+        with self.assertRaises(RuntimeError) as e: self.sign_in(rd, _rd_card())
+        grant = rd.calls[0][2]['data']
+        self.assertEqual(grant['password'], 'pw')
+        self.assertIn('two-factor', str(e.exception)); self.assertIn('authenticator key', str(e.exception))
+        self.assertNotIn('cannot', str(e.exception))                          # a 2FA account can use the card now
+
+    def test_a_key_that_is_not_one_is_said_plainly_before_any_sign_in(self):
+        rd = RedditNet()
+        with self.assertRaises(RuntimeError) as e: self.sign_in(rd, _rd_card(totp_key='not a key!'))
+        self.assertIn('setup key', str(e.exception)); self.assertEqual(rd.calls, [])
+
+    def test_the_key_is_sealed_and_never_sent_back_to_the_page(self):
+        from taskuary import guard
+        from taskuary.store import SQLiteStore
+        self.assertIn('totp_key', SQLiteStore.SEALED_CONFIG)
+        self.assertIn('totp_key', guard.WRITE_ONLY_CONFIG['reddit'])
+
+
 class RedditAndXAreWired(unittest.TestCase):
     def test_each_post_is_a_write_that_reaches_people_on_its_own_card(self):
         from taskuary import connectorcatalog as cat, proposals, scopes

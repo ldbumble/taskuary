@@ -561,12 +561,9 @@ def _code_of(key):
     from . import totp, vault
     raw = vault.unseal(key) if key else ''
     if not raw: return None
-    try: cfg = totp.loads(raw) if raw.lstrip().startswith('{') else totp.parse(raw)
+    try: totp.loads(raw) if raw.lstrip().startswith('{') else totp.parse(raw)
     except (ValueError, KeyError, TypeError): return None
-    def now():
-        if totp.left(cfg) < 3: time.sleep(totp.left(cfg) + .2)
-        return totp.code(cfg)
-    return now
+    return lambda: totp.current(raw)
 
 
 def by_owner(store, tok, user, pw, keep: bool, fill=None, key: str = '') -> dict:

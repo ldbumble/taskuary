@@ -69,3 +69,11 @@ def left(cfg: dict, at: float = None) -> float:
     "Seconds before this code turns over - a code typed in its last breath arrives as the next one's."
     t = time.time() if at is None else at
     return cfg['period'] - (t % cfg['period'])
+
+
+def current(raw: str) -> str:
+    """The code to send NOW from a kept key - a vault row's (dumps) or as the owner pasted it - one in its last seconds waited out, so it
+    never arrives stale. BadKey for a key that isn't one. The sign-in vault types it (signin._code_of); a card signs in with it (Reddit)."""
+    cfg = loads(raw) if str(raw or '').lstrip().startswith('{') else parse(raw)
+    if left(cfg) < 3: time.sleep(left(cfg) + .2)
+    return code(cfg)

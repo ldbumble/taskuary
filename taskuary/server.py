@@ -2216,6 +2216,11 @@ def _offer_of(task_id) -> str:
 
 @app.get('/api/tasks/{task_id}')
 def task_detail(task_id: int, rev: str = ''):
+    """ONE TASK AS ITS PAGE DRAWS IT, read every 3 s while an agent works. Each setting and document its many readers ask (the owner's addresses,
+    the AI pick, trusted organisations, SOUL.md for the owner's name) is read once for the whole read (store.held_settings)."""
+    with store.held_settings(): return _task_detail(task_id, rev)
+
+def _task_detail(task_id: int, rev: str = ''):
     d = store.task_detail(task_id)
     if not d: raise HTTPException(404, 'task not found')
     # ONE CARD AT A TIME (cardqueue): what waits behind the card that stands is not the page's to draw yet

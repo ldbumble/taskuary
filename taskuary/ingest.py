@@ -2393,9 +2393,15 @@ REPLY_JOB = ('THIS TASK IS A REPLY OWED to {who}. Work out the answer - read, lo
 
 def reply_job(store, tid) -> str:
     """What an agent started on a reply task is told its job is - '' on any other task."""
-    if not store.task_has_tag(tid, REPLY_TAG): return ''
-    first = next((m for m in store.list_messages(tid) if not is_ours(m)), None) or {}
-    return REPLY_JOB.format(who=first.get('FromName') or first.get('FromEmail') or 'the person who wrote')
+    return REPLY_JOB.format(who=owed_to(store, tid)) if store.task_has_tag(tid, REPLY_TAG) else ''
+
+
+def owed_to(store, tid) -> str:
+    "Whom a reply task's reply goes to, by name: the first person on it who reads a reply - never a notice that joined it, nor the owner."
+    from .wrapup import reads_reply_row
+    rows = [m for m in store.list_messages(tid) if not is_ours(m)]
+    first = next((m for m in rows if reads_reply_row(store, m)), None) or (rows[0] if rows else {})
+    return first.get('FromName') or first.get('FromEmail') or 'the person who wrote'
 
 
 def agent_on_reply(store, tid, msg: dict, mid, verdict: dict | None, actor: str, opening: bool = False) -> bool:
@@ -2418,8 +2424,10 @@ def agent_on_reply(store, tid, msg: dict, mid, verdict: dict | None, actor: str,
     if not (kind == 'general' and general.handles(store.get_task(tid))): store.update_task(tid, {'Kind': kind}, 'triage')
     store.tag_task(tid, REPLY_TAG, actor='triage')
     if (store.get_task(tid) or {}).get('Status') in ('done', 'waiting'): store.update_task(tid, {'Status': 'open'}, 'triage')
-    store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s message needs {task_kinds.worker(kind)} before it can be answered: it "
-                      "works out the answer, then drafts the reply for your Send." + (f' Starting by itself: {who}' if who else ''))
+    # ...naming whom that reply goes to: the line that needed the agent may be a machine's notice on the person's thread, and "before it
+    # can be answered" promised a reply to a no-reply address
+    store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s message needs {task_kinds.worker(kind)}: it works out the answer, then "
+                      f"drafts the reply to {owed_to(store, tid)} for your Send." + (f' Starting by itself: {who}' if who else ''))
     store.audit('task', tid, 'reply_to_agent', actor, 'agent', {'message_id': mid, 'kind': kind})
     msg['_reply_agent'] = True
     if opening and kind != 'coding': general.OPENING.add(tid)

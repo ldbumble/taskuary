@@ -2,6 +2,40 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.24 - 2026-11-18
+
+- A terminal agent's pane that showed its turn and is back at its prompt is no longer "at work"
+- A turn stopped before its first step leaves nothing at work under the stop
+- A file edit still being made read as made, over a working line that said Thinking
+- find_tools: a need no tool meets is sent on to the session's own tools
+- A tool call whose arguments came as JSON text is read as the object
+- An email's To with two addresses: one refusal, the later wording
+- A cc written as one string is told to be a list
+- A number written as its link ('#report=4') is read as the number
+- Fold claude's stream-json step mapping into one per-turn object for the one-shot and kept roads
+- A turn's head with no start from the list claimed the moment it was drawn, at 0s
+- Delete SendToAgent, the old text-only Send to agent box nothing renders
+- Delete chat CSS no element carries
+- Delete the chat rules left behind with no element to style
+- An edit at work was worded by a pair of verbs of its own beside the one table
+- A turn names each attached file once, in the one files block
+- Delete four exported components nothing renders
+- A turn that did not finish is one kind on every road, and keeps its conversation
+- A line steered into a turn at work reads as the same line at rest
+- A tool's refusal gives the agent's next step on a line the owner's Why line skips
+- propose_land with no checkout says how to pick one
+- search_tasks gives a report's number, which share asks for
+- share's description says what it can name: the owner's reports and a routine saved from this task
+- share's docstrings say what it names: the owner's reports and a routine saved from this task
+- The chat tells its task page its work changed only when it changed, and the turn's own flip tells everyone else
+- The task's own read and the chat's state answer 'unchanged' in a name, through the one rev the conversation already uses
+- A task's page read asks each setting and the owner's document once, and every write to them is read fresh
+- A task's first turn no longer waits on the judgement of what is known about it: it starts when its page is opened or the line is taken
+- A turn that ends early at a limit or a refusal is said as a turn that ended part-way, on every road
+- A one-shot claude that exits non-zero is said by its own reason, its answer kept when it finished
+- The working line said a row's words again under that row, and an older thought's words over a newer edit
+- The old Send to agent box the swarm took out goes whole: a merge had kept its body, with no import for its repository picker
+
 ## 0.4.0.23 - 2026-11-17
 
 - A pressed card holds still while it sends: the press is said on its button, no line drawn over the card

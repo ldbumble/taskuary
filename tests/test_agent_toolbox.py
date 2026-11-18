@@ -394,6 +394,23 @@ class NewTaskTool(unittest.TestCase):
         r = rpc(self.tid, 'tools/call', {'name': 'propose_reply', 'arguments': {'text': 'x'}}).json()
         self.assertIn('tools/list names', r['error']['message'])
 
+    def test_a_routines_email_that_went_at_once_is_never_spoken_of_as_a_waiting_card(self):
+        "A routine run's own email is sent by the draft itself (slots.routine_sends): the agent was told its card \"shows that it waits and that nothing went\"."
+        from taskuary import selfclose, slots
+        self.s._exec("UPDATE task SET Source='workflow' WHERE TaskId=?", (self.tid,))
+        with mock.patch.object(slots, 'routine_sends', return_value={'sent': True}):
+            said, err = tool(self.tid, 'propose_email', to='ray@northwind.example', subject='Quote', text='Any update on the quote? Alex')
+            self.assertFalse(err, said)
+            got = json.loads(said)
+            self.assertTrue(got['sent']); self.assertNotEqual(got['shown'], selfclose.CARD_SAID); self.assertIn('sent', got['shown'])
+            said, err = tool(self.tid, 'propose_email', items=[{'to': 'erin@northwind.example', 'subject': 'Quote', 'text': 'Any update? Alex'},
+                                                               {'to': 'gail@northwind.example', 'subject': 'Quote', 'text': 'Any update? Alex'}])
+            got = json.loads(said)
+            self.assertTrue(got['ok'], got); self.assertEqual(got['sent'], 2); self.assertNotIn('Nothing was filed', got['shown'])
+        with mock.patch.object(slots, 'routine_sends', return_value={'send_error': 'the mailbox refused the sign-in'}):
+            got = json.loads(tool(self.tid, 'propose_email', to='paula@northwind.example', subject='Quote', text='Any update? Alex')[0])
+            self.assertIn('did not go (the mailbox refused the sign-in)', got['shown'])
+
     def test_a_list_or_a_number_given_in_another_shape_is_read_as_the_schema_has_it(self):
         "A lone cc address, an `answers` written m12, an attachment named \"attachment 12\": read as meant - never a Pydantic dump or a cc spelled letter by letter."
         mid = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'r0', 'ConversationId': 'conv-r', 'Channel': 'email', 'FromName': 'Gail Moreno',

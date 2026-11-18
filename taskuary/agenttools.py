@@ -379,7 +379,7 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if not items: raise ValueError('`items` holds no objects - give each item its own fields')
     if len(items) > 500: raise ValueError(f'{len(items)} items is past what one card holds (500) - split them, or narrow the list')
     key, top = bulkcard.new_key(), (store._one('SELECT MAX(ReviewId) AS m FROM review') or {}).get('m') or 0
-    refused = []
+    refused, sent = [], 0
     for i, it in enumerate(items):
         try: out = _call(store, tid, name, {**base, **it}, doors)
         except Exception as e: refused.append(f'item {i + 1}: {failed(name, e)}'); continue
@@ -388,11 +388,15 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
         except (TypeError, ValueError): got = None
         if isinstance(got, dict) and got.get('ok') is False:
             refused.append(f"item {i + 1}: {got.get('why') or got.get('says') or 'refused, with no reason given'}")
+        sent += bool(isinstance(got, dict) and got.get('sent'))       # a routine's own email went at once (slots.routine_sends): no card
     store._exec('UPDATE review SET Batch=? WHERE TaskId=? AND ReviewId>? AND Status=?', (key, int(tid), top, 'pending'))
     n = (store._one('SELECT COUNT(*) AS n FROM review WHERE Batch=?', (key,)) or {}).get('n') or 0
-    return _j({'ok': n > 0, **({'batch': key, 'on_the_card': n} if n else {}), **({'refused': refused} if refused else {}),
-               'shown': 'They stand as ONE card: the owner reviews a few and does them all with one press; you hear the whole run once.' if n else
-                        'Nothing was filed, so no card stands - fix what each item was refused for and call it again.'})
+    return _j({'ok': n + sent > 0, **({'batch': key, 'on_the_card': n} if n else {}), **({'sent': sent} if sent else {}),
+               **({'refused': refused} if refused else {}),
+               'shown': ' '.join(filter(None, (
+                   f"{sent} went at once - a routine's own email is sent without a press: say they were sent." if sent else '',
+                   'They stand as ONE card: the owner reviews a few and does them all with one press; you hear the whole run once.' if n else '',
+                   'Nothing was filed, so no card stands - fix what each item was refused for and call it again.' if not n + sent else '')))})
 
 
 # THE ARGUMENTS AS THE SCHEMA HAS THEM (the tools stress round, 2026-11-18): a model writes `cc: "paula@..."` where a list is asked, `answers:
@@ -593,9 +597,9 @@ def show_files(store, tid: int, paths) -> str:
 
 
 def said_once(o):
-    "A draft that stands, with how it is spoken of (selfclose.CARD_SAID): the owner sees it as a card - its words are never said again."
-    from .selfclose import CARD_SAID
-    return {**o, 'shown': CARD_SAID} if isinstance(o, dict) and o.get('ok') else o
+    "A draft that stands, with how it is spoken of (selfclose.card_said): the owner sees it as a card - its words are never said again."
+    from .selfclose import card_said
+    return {**o, 'shown': card_said(o)} if isinstance(o, dict) and o.get('ok') else o
 
 
 def replaced(store, doors, tid: int, was: list, out, old, why: str):

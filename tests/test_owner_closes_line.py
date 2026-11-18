@@ -56,7 +56,7 @@ def test_the_draft_tools_answer_says_the_same_one_sentence():
     import inspect
     from taskuary import cli
     src = inspect.getsource(cli)
-    assert 'saved on the task. {CARD_SAID}' in src and 'saved on the task, waiting on the owner' not in src
+    assert "'saved on the task'}. {card_said(out)}" in src and 'saved on the task, waiting on the owner' not in src
 
 
 def test_a_draft_is_never_retold_in_other_words():

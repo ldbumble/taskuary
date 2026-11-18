@@ -121,7 +121,9 @@ def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing:
     refs = []
     if turn or standing:
         since = _since(store, tid) - 1
-        refs += [((0, x['T'], x['MessageId']) if x['MessageId'] <= first else (1, int(ep(x.get('SentAt') or x.get('CreatedAt')) or x['T']), x['MessageId'], 0, x['MessageId']),
+        # ...a mail by when it CAME - the store took it (CreatedAt), or he sent his own - never its sender's clock: a mail held up on its way
+        # was placed by its Date, above the line he typed before it came. Nor by when triage put it here (`T`), which a flood finishes out of order
+        refs += [((0, x['T'], x['MessageId']) if x['MessageId'] <= first else (1, int(ep((x.get('SentAt') if x.get('Own') else None) or x.get('CreatedAt')) or x['T']), x['MessageId'], 0, x['MessageId']),
                   'mail', str(x['MessageId'])) for x in _mail(store, tid) if x['T'] >= since]
         # ...a press stands where he made it (his stop is drawn the moment it is pressed): the lines that waited enter under it
         refs += [((0, ep(p[1]), i), 'press', str(p[0])) for i, p in enumerate(general.presses(store, tid)) if ep(p[1]) >= since]

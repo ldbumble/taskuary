@@ -141,6 +141,23 @@ class TheList(unittest.TestCase):
         self.assertNotIn('ALPHA', came, 'the mail the turn itself carries is not said again beside it')
         self.assertTrue(conversation.heard(self.s, self.tid, 'mail', mids))
 
+    def test_a_mail_delayed_in_delivery_enters_after_the_line_typed_before_it_came(self):
+        """A line typed while the agent worked, then a mail that came in a moment later - sent an hour before, held up on its way. The hand-
+        over placed the mail by the sender's own clock (its Date), above the line that came first: by the box it waited after the line, and
+        on the hand-over it jumped above it."""
+        self.brain.delay = 2.5
+        self.say('Suggest two.', 'l0', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        t = time.time(); self.assertTrue(until(lambda: time.time() >= t + 1.1))
+        self.say('LINE typed while it works.', 'l1', wait=False)
+        t = time.time(); self.assertTrue(until(lambda: time.time() >= t + 1.1))
+        late = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'late', 'ConversationId': 'conv-1', 'Channel': 'email', 'Subject': 'Offsite venue',
+                                   'BodyText': 'MAIL delayed in delivery.', 'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example',
+                                   'Status': 'routed', 'SentAt': conversation.stamp(time.time() - 3600)})
+        self.rest()
+        ids = [x['id'] for x in self.list()['items']]
+        self.assertLess(ids.index('l1'), ids.index(f'm:{late}'), ids)
+
     def test_a_flood_is_one_hand_over_and_every_input_is_heard_once_and_told_once(self):
         self.brain.delay = 1.0
         self.say('Suggest two.', 'l0', wait=False)

@@ -490,19 +490,24 @@ def approve_steps(store, rids: list, decide, actor: str = 'owner', verb: str = '
     if not rvs or any(not r or r.get('Kind') != 'action' or json.loads(r.get('DraftText') or '{}').get('action') != 'shell_act' for r in rvs):
         raise ValueError('only held shell steps are approved together')
     if len({r.get('TaskId') for r in rvs}) != 1: raise ValueError('held steps of one task only')
-    tid, told, done, failed = rvs[0]['TaskId'], [], [], None
+    tid, told, done, failed, refused = rvs[0]['TaskId'], [], [], None, ''
     if verb == 'approve' and (busy := mid_turn(store, tid, json.loads(rvs[0].get('DraftText') or '{}').get('sid'))):
         return {'ok': False, 'done': [], 'failed': None, 'left': [r['ReviewId'] for r in rvs], 'busy': busy}
     tok = _batch.set(told)
     try:
         for i, rv in enumerate(rvs):
             out = decide(store, rv, verb, actor=actor)
+            # ...A STEP REFUSED BEFORE IT RAN DID NOT FAIL (the held-steps round, 2026-11-18): a second press of an answered card - a double
+            # click, a page or phone that had not read the first - woke the agent with "step 1 failed: this one was already approved". Only a
+            # step that ran and failed (its act's own error) is a failure; a refusal stops the card, leaves every step as it stands, tells nobody
+            if not out.get('ok') and not out.get('act_failed'): refused = out.get('send_error') or 'it was answered already'; break
             if not out.get('ok'): failed = {'review': rv['ReviewId'], 'step': i + 1, 'error': out.get('send_error') or 'it did not run'}; break
             done.append({'review': rv['ReviewId'], 'result': out.get('result')})
     finally: _batch.reset(tok)
     left = [r['ReviewId'] for r in rvs[len(done) + (1 if failed else 0):]]
+    if refused and not done: return {'ok': False, 'already': True, 'send_error': refused, 'done': [], 'failed': None, 'left': left}
     ran = '; '.join(told) or 'nothing ran'
-    if verb != 'approve': _tell(store, tid, f"The owner dismissed {len(rvs)} held steps: {ran} - NOT done. {OWNER_NO}")
+    if verb != 'approve': _tell(store, tid, f"The owner dismissed {len(done)} held step{'s' if len(done) != 1 else ''}: {ran} - NOT done. {OWNER_NO}")
     elif failed:
         # ...A STEP THAT FAILED IS OVER, AND THE AGENT'S (the owner, 2026-11-10: "no idea what this is. it's broken"): the card read "1 of 2 ran -
         # the rest wait" with Approve still lit under the failure, and the agent - told they still waited - worked the failure while the owner's
@@ -513,8 +518,8 @@ def approve_steps(store, rids: list, decide, actor: str = 'owner', verb: str = '
                           f"failed: {failed['error'][:300]}. Nothing on that card waits on the owner now - the steps after it were not run. Find out "
                           "why and put it right if you can; a step still needed is run again by you and held as a new card for their press. " + NEXT,
               wake=True)
-    else: _tell(store, tid, f"The owner approved {len(rvs)} held steps together and Taskuary ran them in order: {ran}. " + NEXT, wake=True)
-    return {'ok': not failed, 'done': done, 'failed': failed, 'left': left}
+    else: _tell(store, tid, f"The owner approved {len(done)} held step{'s' if len(done) != 1 else ''} together and Taskuary ran them in order: {ran}. " + NEXT, wake=True)
+    return {'ok': not (failed or refused), 'done': done, 'failed': failed, 'left': left, **({'send_error': refused} if refused else {})}
 
 
 def declined(store, tid: int, p: dict) -> None:

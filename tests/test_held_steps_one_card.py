@@ -82,6 +82,31 @@ class HeldStepsOneCard(unittest.TestCase):
         self.assertEqual(ran, []); self.assertEqual([self.s.get_review(i)['Status'] for i in ids], ['rejected'] * 3)
         [t] = told; self.assertIn('NOT done', t)
 
+    def test_a_second_press_on_an_answered_card_runs_nothing_and_tells_nobody(self):
+        # a double click, or the card pressed again from a page or phone that had not read the first press: the steps were already approved
+        # (or dismissed), so nothing failed - the agent was woken with "step 1 failed: this one was already approved" and the card read it
+        for verb in ('approve', 'reject'):
+            with self.subTest(verb=verb):
+                self.setUp(); ids, *_ = self.run_all([0, 0, 0], verb)
+                told = []
+                with mock.patch.object(sg, '_tell', lambda st, tid, t, **k: told.append(t)):
+                    again = sg.approve_steps(self.s, ids, verdicts.decide, 'owner', verb)
+                self.assertEqual(told, [], 'the agent heard the press once, at the first')
+                self.assertFalse(again['ok']); self.assertIsNone(again['failed'], 'nothing failed'); self.assertTrue(again.get('already'))
+                self.assertEqual({self.s.get_review(i)['Status'] for i in ids}, {'approved' if verb == 'approve' else 'rejected'})
+
+    def test_a_step_answered_on_its_own_stops_the_card_without_a_failure_and_the_agent_hears_what_ran(self):
+        ids = [self.hold(c)['ReviewId'] for c in ('git push origin deploy', 'git push origin master')]
+        verdicts.decide(self.s, self.s.get_review(ids[1]), 'reject')           # step 2 dismissed from an older card
+        told = []
+        def run(argv, **k): return SimpleNamespace(returncode=0, stdout=b'ok', stderr=b'')
+        with mock.patch('taskuary.spawn.run', run), mock.patch.object(sg.os.path, 'isdir', lambda p: p == HELD), \
+             mock.patch.object(sg, 'git_bash', return_value='bash'), mock.patch.object(sg, '_tell', lambda st, tid, t, **k: told.append(t)):
+            out = sg.approve_steps(self.s, ids, verdicts.decide)
+        self.assertIsNone(out['failed']); self.assertEqual([d['review'] for d in out['done']], [ids[0]])
+        self.assertEqual(self.s.get_review(ids[1])['Status'], 'rejected', 'its own answer stands')
+        [t] = told; self.assertIn('git push origin deploy', t); self.assertNotIn('failed', t)
+
     def test_only_held_shell_steps_go_together(self):
         rid = Factory(self.s).review(self.tid, kind='action', reason='x', draft=json.dumps({'action': 'comment_issue', 'body': 'hi'}))
         with self.assertRaises(ValueError): sg.approve_steps(self.s, [rid if isinstance(rid, int) else rid['ReviewId']], verdicts.decide)

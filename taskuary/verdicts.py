@@ -204,12 +204,22 @@ def _act_busy(store, rid):
     return out if out.get('already') else {**out, 'send_error': 'This is already being done; nothing was run again.'}
 
 
+# A PRESS THAT LOST TO AN ANSWER says what that answer was in words, one sentence on every road (the stress round, 2026-11-18: a phone pick
+# of an email its agent had taken back read "already closed_unsent" - the store's own word)
+STATUS_WORDS = {'approved': 'approved', 'edited': 'approved with changes', 'rejected': 'turned down', 'no_reply': 'marked as needing no reply',
+                'closed_unsent': 'taken back unsent', 'superseded': 'replaced'}
+def already(rv: dict) -> str:
+    "'already turned down by you' - what became of a review no longer waiting, and whose answer it was."
+    st, by = str(rv.get('Status') or ''), str(rv.get('DecidedBy') or '')
+    word = 'sent' if rv.get('DeliveryState') == 'sent' else STATUS_WORDS.get(st, st.replace('_', ' ') or 'gone')
+    return f"already {word}" + (f" by {'you' if by == 'owner' else by}" if by else '')
+
+
 def _delivery_busy(store, rid):
     current = store.get_review(rid) or {}
     state = current.get('DeliveryState')
     if current.get('Status') != 'pending':
-        return {'ok': False, 'status': current.get('Status'), 'sent': None, 'already': True,
-                'send_error': f"this one was already {current.get('Status')}"}
+        return {'ok': False, 'status': current.get('Status'), 'sent': None, 'already': True, 'send_error': f"this one was {already(current)}"}
     return {'ok': False, 'status': 'pending', 'sent': None, 'delivery': state or 'pending',
             'send_error': ('A delivery check or send is already in progress; nothing was sent again.'
                            if current.get('DeliveryClaim') else 'This draft changed before approval; review it and approve again.')}
@@ -705,7 +715,7 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
     # clicked - or one double click - sent the same mail twice (2026-09-03).
     if str(rv.get('Status') or 'pending') != 'pending':
         return {'ok': False, 'status': rv.get('Status'), 'sent': None, 'already': True,
-                'send_error': f"this one was already {rv.get('Status')}" + (f" by {rv['DecidedBy']}" if rv.get('DecidedBy') else '')}
+                'send_error': f"this one was {already(rv)}"}
     # ...and approving an EMPTY draft sent nothing, marked the review approved and closed the task
     # anyway: the person never got an answer and nothing was left in the pipe to say so.
     # ...and an email to a name nobody has resolved to an address goes nowhere: the provider is never handed a bare name

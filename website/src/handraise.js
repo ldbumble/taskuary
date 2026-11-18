@@ -8,8 +8,9 @@
 import { useEffect, useRef } from "react";
 import api from "./api";
 import { IDLE_WAITING } from "./ui.jsx";
-import { advanceHandRaises, claimHandRaise, loadHandRaiseState, nonOverlapping,
+import { advanceHandRaises, claimHandRaise, handRaiseDue, loadHandRaiseState, nonOverlapping,
   saveHandRaiseState } from "./handraiseState.js";
+import { liveUp, onLive } from "./live.js";
 import { dueMeetings, meetingId, rememberRung, rungBefore } from "./meetingAlert.js";
 
 export const SOUNDS = ["off", "chime", "bell", "knock", "pop"];
@@ -61,11 +62,13 @@ export async function desktopNotify(title, body, onClick) {
 export function useHandRaise(onRaise, every = 8000, onRows = null) {
   const tracker = useRef(null);
   useEffect(() => {
-    let alive = true;
+    let alive = true, live = 0, last = 0;
     const poll = nonOverlapping(async () => {
       try {
+        last = Date.now();
         const { data } = await api.get("/api/runs/live", { params: { lines: 4 } });
         if (!alive) return;
+        live = (data.data || []).length;
         let storage = null;
         try { storage = window.localStorage; } catch { /* private mode */ }
         if (tracker.current === null) tracker.current = loadHandRaiseState(storage);
@@ -79,8 +82,10 @@ export function useHandRaise(onRaise, every = 8000, onRows = null) {
       } catch { /* the server is asleep; try again next tick */ }
     });
     poll();
-    const id = setInterval(() => alive && poll(), every);
-    return () => { alive = false; clearInterval(id); };
+    const id = setInterval(() => alive && handRaiseDue({ live, socket: liveUp(), last }) && poll(), every);
+    // ...with none live, an agent's start is read as it is pushed (handRaiseDue)
+    const off = onLive(["task-changed", "run-tail"], () => { if (alive && !live) poll(); }, { wait: 1000, max: 5000 });
+    return () => { alive = false; clearInterval(id); off(); };
   }, [onRaise, every, onRows]);
 }
 

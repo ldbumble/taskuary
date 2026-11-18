@@ -2593,7 +2593,9 @@ function useRemove(conn, channel, reload, after, read = true) {
   // a refusal is said in the question (ConfirmDelete), which stays open on it
   const remove = async () => {
     await removeNow(() => api.post(`/api/connectors/${conn.ConnectorId}/reset`), "connection", conn.Name || conn.Type);
-    after?.(); await reload?.();
+    // ...the list read BEFORE the card is left (the question stays up, its press busy, meanwhile): left first, the list drew the card as it
+    // was - "connection failing", red - for the beat its read took
+    await reload?.(); after?.();
   };
   return { asking, setAsking, uses, words: removeWords(conn, channel, uses), remove };
 }

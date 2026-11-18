@@ -301,3 +301,24 @@ def test_a_full_session_on_a_teammate_bound_task_gets_nothing_until_it_restarts_
     w.bind(); term.SESSIONS[f's{w.tid}'].mode = 'full'
     line(w, 'U0GAIL', 'please fix the rounding')
     assert not w.typed and 'Nothing was sent' in w.said()
+
+
+def test_two_requests_waiting_at_once_are_each_answered_from_the_chat(w):
+    """Two of the agent's helpers ask at once (a test run and a delete, in parallel). The chat's one open ask was the newer: answered, the
+    older still waited with no number on the chat to answer it by - only the app could. Once one is done, what still waits is put again."""
+    w.bind()
+    boxes = {}
+    def ask(cmd): boxes[cmd] = []; threading.Thread(target=lambda: boxes[cmd].append(perm.ask(w.s, w.tid, {'tool': 'Bash', 'kind': 'execute', 'command': cmd}, wait=120)), daemon=True).start()
+    def until(f):
+        for _ in range(1500):
+            if f(): return True
+            time.sleep(0.02)
+    ask('npm test -- money'); until(lambda: w.said().count('asks permission') == 1)
+    ask('rm -rf build/old-ledger'); until(lambda: w.said().count('asks permission') == 2 and len(perm.pending(w.tid, w.s)) == 2)
+    line(w, 'U0ALEX', 'Reject')                                   # the newer one, the one the chat put last
+    until(lambda: boxes['rm -rf build/old-ledger'])
+    assert boxes['rm -rf build/old-ledger'] == ['reject_once']
+    assert until(lambda: w.said().count('asks permission') == 3), 'the one still waiting is put to the chat again'
+    assert 'npm test -- money' in w.said().rsplit('asks permission', 1)[1]
+    line(w, 'U0ALEX', '1'); until(lambda: boxes['npm test -- money'])
+    assert boxes['npm test -- money'] == ['allow_once'] and not perm.pending(w.tid, w.s)

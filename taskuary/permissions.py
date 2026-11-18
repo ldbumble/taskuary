@@ -148,6 +148,13 @@ def calls(store, tid: int) -> dict:
     return out | {c: 'held' for c in held}
 
 
+def still_waiting(store, tid: int) -> list:
+    "[(pid, request)] still waiting on the owner on task `tid`, oldest first - none that is being set aside or already answered."
+    from . import workerstate as ws
+    with _LOCK: rows = sorted((p for p in PENDING.values() if p['tid'] == int(tid) and p['store'] is store and p['id'] not in ASIDE), key=lambda p: p['at'])
+    return [(p['id'], p['req']) for p in rows if (h := ws.HELD.get(p['g'])) and not h.get('answers')]
+
+
 ASIDE: set = set()      # the requests set aside as the chat moved on (set_aside): refused, and by nobody - never the owner's no
 
 

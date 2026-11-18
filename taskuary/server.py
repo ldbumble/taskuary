@@ -3086,7 +3086,9 @@ def continue_work(task_id: int, body: ContinueBody = None):
     if task.get('Status') == 'dropped': raise HTTPException(409, 'This task was dismissed.')
     note = ' '.join(str((body.note if body else '') or '').split())[:4000]
     imgs = prompt_images(body.images if body else [])
-    if note:
+    # ...A PICTURE WITH NO WORDS IS A LINE OF HIS TOO (the attach stress round, 2026-11-18): Continue's box sends one alone, and only a note took
+    # this road - a chat's rode Taskuary's own brief with no pill of his, a coding agent's was dropped
+    if note or imgs:
         # A NOTE IS A LINE THE OWNER TYPED, and takes the one road every typed line takes (general.take_line): kept as his, the turn at work
         # from the press, then whatever agent works the task reopened, woken or started by its own starter - a coding session that ended
         # (its own conversation, else a fresh one with the handover), one that idled out, one at rest. What came in since rides as Taskuary's
@@ -3116,7 +3118,7 @@ def continue_work(task_id: int, body: ContinueBody = None):
                 except Exception as e: _walk_cannot(task_id, f'The session could not continue: {e}. Your saved conversation is still here.'); return
                 # ...a turn that fails is its run's own failure, said by the run (workerstate `failed`) with Try again: a line here said it twice,
                 # "Failed - Claude: API Error ..." over "The session could not continue: claude: API Error ..." (the desktop run, 2026-11-04)
-                try: ses.send_prompt(turn, imgs or None, brief=True, kept=True)
+                try: ses.send_prompt(turn, brief=True, kept=True)
                 except general.Stopped: pass       # the owner stopped it again: nothing to say
                 except Exception as e: logger.info(f'task {task_id}: the continued turn failed - {e}')
             finally: general.OPENING.discard(task_id)

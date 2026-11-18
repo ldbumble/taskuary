@@ -206,6 +206,18 @@ class HeldStrangerChoicesTests(PhoneCase):
         self.assertIn('Send to agent', got[-1][1]); self.assertNotIn('Trust them', got[-1][1])
 
 
+    def test_trusting_them_when_nothing_could_start_never_says_its_agent_took_it(self):
+        """Tell the truth: Trust's start can come back empty - the start broke (kept on the task), or the task closed while it waited.
+        The phone said "its agent takes it from here" all the same, with nobody at work."""
+        from taskuary import server
+        tid = _held(self.f, self.s); self.ph.ready(); self.ph.walk()
+        with mock.patch.object(server, '_trusted_starts', return_value=''):
+            got = self.ph.tap('Trust them')
+        said = text_of(got)
+        self.assertIn(f'TQ-{tid:04d}', said); self.assertNotIn('takes it from here', said); self.assertIn('nothing has started', said)
+        self.assertIn('Send to agent', got[-1][1])
+
+
 class TrustIsATapNeverTheModelsTests(PhoneCase):
     """The owner, 2026-10-22: keep Trust them as built - a button run in code, never a tool the model can call. A typed "trust them" that
     the model answers with a CALL of task.trust lifts nothing: only the tap does."""

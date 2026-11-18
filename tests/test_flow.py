@@ -612,3 +612,22 @@ def test_the_agent_after_the_steps_is_told_where_an_output_was_cut():
     assert 'Vendor 0' in brief and 'cut here - the output ran to' in brief
     whole = len('\n'.join(json.dumps({'vendor': f'Vendor {i}', 'amount': 10.0}) for i in range(150)))
     assert f'{whole:,} characters' in brief
+
+
+def test_a_run_whose_task_the_owner_closes_stops_there_and_asks_no_repair(db):
+    # the owner dropped a routine's run task while its first step ran: the walk went on - opened a task, failed its email on the closed task,
+    # asked a repair model to fix steps that were fine, and told him "Fix it on the workflow"
+    s = MemoryStore()
+    src = source(s, [read_dupes(db), {'id': 's2', 'kind': 'task', 'label': 'Open a task', 'title': 'Follow up'},
+                     {'id': 's3', 'kind': 'draft', 'label': 'Email Gail', 'to': 'gail@northwind.example', 'about': '{{s1}}'}])
+    tid, real = run_task(s, src), flow.run_step
+    def then_dropped(store, step, *a, **k):
+        r = real(store, step, *a, **k)
+        if step['id'] == 's1': store.update_task(tid, {'Status': 'dropped'}, 'owner')
+        return r
+    with mock.patch.object(flow, 'run_step', then_dropped):
+        out = flow.execute(s, src, tid, 'manual', llm=no_model)
+    assert [r['id'] for r in out['steps']] == ['s1'] and not out['failed'] and not out['repairs']
+    assert out['summary'] == 'Stopped before step 2 of 3: the task was closed while the run worked, so nothing after it ran.'
+    assert [t['TaskId'] for t in s.list_tasks()] == [tid] and s.get_task(tid)['Status'] == 'dropped'
+    assert s._rows("SELECT * FROM operation") == []

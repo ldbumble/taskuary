@@ -611,9 +611,12 @@ def _walk(store, src, tid, trigger, llm, ctx, recs, repairs, rec, start, t0) -> 
     steps, title, at, ref = steps_of(cfg), cfg.get('title') or src.get('Address') or 'Workflow', rec['at'], task_ref(tid)
     stop, agent, app, asked = None, None, None, False
     while True:
-        n, stop, agent = len(steps), None, None
+        n, stop, agent, closed = len(steps), None, None, None
         for i, step in enumerate(steps):
             if i < start: continue
+            # ...A RUN TASK CLOSED WHILE IT WORKS STOPS IT (the stress round, 2026-11-18): the walk went on over the owner's Drop - opened a task,
+            # failed its email on the closed task, asked a repair model to fix steps that were fine and told him to Fix it on the workflow
+            if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): closed = i; break
             if step.get('kind') == 'agent' and not _skip(step, ctx): agent = step; break
             r = run_step(store, step, ctx, llm, tid, title=title)
             recs.append(r)
@@ -646,7 +649,8 @@ def _walk(store, src, tid, trigger, llm, ctx, recs, repairs, rec, start, t0) -> 
     # EVERY STOP SAYS WHAT COMES NEXT: where the app is fixed, the repair that waits on this task, or the fix on the workflow
     nxt = ('' if not failed else f" This is {app['name']} in Taskuary, not the steps - fix it there, then run the workflow again." if app
            else ' A repair waits for your yes on this task.' if asked else f" {buttons.label('fix')} on the workflow, or change the step by hand.")
-    words = (f"Step {stop + 1} failed: {str(recs[-1].get('error') or '').rstrip(' .')}.{nxt}" if failed
+    words = (f"Stopped before step {closed + 1} of {n}: the task was closed while the run worked, so nothing after it ran." if closed is not None
+             else f"Step {stop + 1} failed: {str(recs[-1].get('error') or '').rstrip(' .')}.{nxt}" if failed
              else f"Waiting for your yes on step {stop + 1} - the run goes on from there once you approve it." if stop is not None
              else tally(recs) + (f"; repaired itself {len(repairs)} time{'s' if len(repairs) > 1 else ''}" if repairs else '')
              + ('; the agent takes it from here.' if agent else '.'))
@@ -667,7 +671,7 @@ def _walk(store, src, tid, trigger, llm, ctx, recs, repairs, rec, start, t0) -> 
     # ...done when nothing waits HERE. A draft step's review sits on a task of its own (outbox.compose) and is answered there: counting
     # it kept every run that drafts a mail open as "not started yet", offering Send to agent after every step had run (walk 2026-10-21)
     # ...and nothing else on it still working: the run is not the only hand on its task (workerstate.live_work, 2026-11-01)
-    elif stop is None and not any(r.get('review_id') and r.get('task_id') in (None, tid) for r in recs) \
+    elif stop is None and closed is None and not any(r.get('review_id') and r.get('task_id') in (None, tid) for r in recs) \
             and not workerstate.live_work(store, tid, skip=('routine',)):
         store.update_task(tid, {'Status': 'done'}, 'workflow')
     return {'run_id': rid, 'steps': recs, 'failed': failed, 'error': error, 'waiting': stop is not None and not failed, 'summary': words,

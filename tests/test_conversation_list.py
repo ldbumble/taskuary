@@ -69,6 +69,28 @@ class TheList(unittest.TestCase):
         self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'Four permits, listed below.')
         self.assertIsNone(self.list()['idle'], 'said only while nothing has worked it')
 
+    def test_a_failed_turn_stays_under_the_line_it_failed_on_when_he_moves_on(self):
+        """The Continue round, 2026-11-18: his ask's turn failed ("API Error: 529"), and he pressed Continue with a note. The failure was drawn
+        only while it was the run's last word: at the press it went from above his note, and his first ask stood with nothing under it. It stays
+        where it happened - while the next turn works and after it answers - and only its way past it (Try again) goes."""
+        real = self.brain
+        def flaky(system, user, **k):
+            if not real.calls: real.calls.append('failed'); raise RuntimeError('API Error: 529 overloaded')
+            return real(system, user, **k)
+        with mock.patch.object(general.llm_mod, 'build_llm', side_effect=lambda *a, **k: flaky):
+            with self.assertRaises(Exception): self.say('Suggest two.', 'l-one')
+            got = self.list()
+            self.assertEqual([(x['id'], x.get('state')) for x in got['items'][-2:]], [('l-one', None), ('t:l-one:0', 'failed')])
+            t = time.time(); self.assertTrue(until(lambda: time.time() >= int(t) + 1.05))      # (a stamp is a whole second: his note comes in a later one)
+            real.delay = 0.8
+            self.say('Try once more, just the Mill.', 'l-two', wait=False)
+            for when in ('at work', 'answered'):
+                if when == 'answered': self.rest()
+                got = self.list()
+                self.assertEqual([(x['id'], x.get('state')) for x in got['items'][-4:-1]], [('l-one', None), ('t:l-one:0', 'failed'), ('l-two', None)], when)
+                self.assertEqual(got['items'][-3]['fail'], 'API Error: 529 overloaded.', when)
+            self.assertIsNone(got['items'][-3]['fix']); self.assertEqual(got['items'][-1]['text'], 'Answer 2.')
+
     def test_an_answer_from_before_the_ledger_stands_under_the_message_it_answered(self):
         """Every task whose agent answered before hand-overs were written down (the owner's older tasks, the demo's): an answer with no
         turn mark before it was placed at the start of time, above the mail it answered - "the chat begins with the agent's turn". A turn

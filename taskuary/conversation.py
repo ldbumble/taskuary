@@ -709,13 +709,27 @@ def _items(store, tid: int) -> dict:
     # ...and one stopped before it said or did anything is no item: his stop's own line says it. It was drawn empty between his line and
     # the press while its session still held it, and was gone once the next turn ended (the recorded stop, 2026-11-11)
     out = [x for x in out if not (x['kind'] == 'turn' and x['state'] == 'stopped' and not (x['text'] or x['steps'] or x['cards']))]
-    if not at_work and (f := funnel.run_failed(store, tid)):
+    # ...AND STAYS THERE ONCE HE HAS MOVED ON (the Continue round, 2026-11-18): drawn only while it was the run's last word, the failure went from
+    # above his line the moment he pressed Continue with a note - his first ask then stood with nothing under it. It stands under the input it
+    # failed on, by its own time; the way past it (`fix`) only while it is still the run's ending
+    if not at_work and (f := funnel.run_failed(store, tid, live_too=True)):
         evf = store.last_worker_event(tid, kinds=('failed',)) or {}
         t = next((y for y in reversed(out) if y['kind'] in ('turn', 'line', 'arrival')), None)
         if not (t and t['kind'] == 'turn'):
             if ep(evf.get('CreatedAt')) >= ep((t or {}).get('at')) - 1: out.append(t := {'kind': 'turn', 'at': evf.get('CreatedAt') or '', 'state': 'failed', 'steps': [], 'text': '', 'cards': [], 'started': None, 'ended': ep(evf.get('CreatedAt'))})
             else: t = None
         if t and (t.get('ended') or 0) <= ep(evf.get('CreatedAt')) + 1: t.update(state='failed', fail=f['sentence'], fix=f.get('fix'))
+    # ...AND STAYS THERE ONCE HE HAS MOVED ON (the Continue round, 2026-11-18): drawn only while it was the run's last word, the failure went from
+    # above his line the moment he pressed Continue with a note, and his first ask stood with nothing under it. Past, it stands under the input it
+    # failed on, by its own time, without the way past it - the turn after it is that
+    elif (evf := store.last_worker_event(tid, kinds=('failed',))):
+        tf = ep(evf.get('CreatedAt'))
+        i = next((k for k in range(len(out) - 1, -1, -1) if out[k]['kind'] in ('line', 'arrival') and ep(out[k].get('at')) <= tf), None)
+        if i is not None and i + 1 < len(out):
+            f, t = funnel.failure_of(evf, tid), out[i + 1]
+            if not (t['kind'] == 'turn' and t['state'] != 'working' and (t.get('ended') or 0) <= tf + 1):
+                out.insert(i + 1, t := {'kind': 'turn', 'at': evf.get('CreatedAt') or '', 'state': 'failed', 'steps': [], 'text': '', 'cards': [], 'started': None, 'ended': tf})
+            t.update(state='failed', fail=f['sentence'], fix=None)
 
     # names: an input's is its own; a turn's is the input it stands under and its place after it
     seen, anchor, n = set(), f'0:{tid}', 0

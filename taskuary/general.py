@@ -2412,15 +2412,21 @@ def split_files(body) -> dict:
     "{'text', 'files'} of a line written by with_files - the words alone where it names no files."
     b = str(body or ''); m = _FILES.search(b)
     return {'text': b[:m.start()] if m else b, 'files': [x.strip() for x in m.group(1).splitlines() if x.strip()] if m else []}
-def his_line(c) -> dict:
-    "{'text', 'files'} of a line of his, kept (wait_line's JSON) or heard (with_files' block) - the one read of either, on every surface."
-    return _line_of(c.get('Body')) if c.get('ActorType') == WAITING_TYPE else split_files(c.get('Body'))
 def line_words(c) -> str:
     "A line of his as words, where one is quoted back to him (a greyed card, search): what he typed, then each file by its name - never the block."
     from .outputs import _STAMPED              # ...by his name for it, as his bubble's pill reads it - never the upload's stamp
     h = his_line(c)
     return ' · '.join(x for x in [' '.join(h['text'].split()), *(_STAMPED.sub('', Path(f).name) for f in h['files'])] if x)
 _IMAGE_FILE = re.compile(r'\.(png|jpe?g|gif|webp)$', re.I)
+# ...AND THE OTHER LINES OF AN FYI HANDFUL he sent on with it (the page's FyisCard handAll writes this block under his words, for the agent to
+# read each one): Taskuary's words, never drawn as his - his bubble read "m7 - Gail Moreno: ..." as if he had typed it (the stress round, 2026-11-18)
+_ALSO = re.compile(r'\n\nTHE OTHER MESSAGES OF THIS LIST IT IS ABOUT \(read each with read_message\)\n.*?(?=\n\nATTACHED (?:IMAGES|FILES) \(read these files\)\n|\Z)', re.S)
+def his_line(c, kept: bool = False) -> dict:
+    """{'text', 'files'} of a line of his as he wrote it - the words he typed and the files he attached, without what Taskuary added for the
+    agent - the one read on every surface. `c`: its comment, kept (wait_line's JSON) or heard (with_files' block), else a body (`kept` says which)."""
+    if isinstance(c, dict): c, kept = c.get('Body'), c.get('ActorType') == WAITING_TYPE
+    got = _line_of(c) if kept else split_files(c)
+    return {**got, 'text': _ALSO.sub('', got['text'])}
 
 
 def _images(paths) -> list:

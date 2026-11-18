@@ -110,3 +110,26 @@ test("a paste that carries words is those words; its files are taken only when n
   assert.deepEqual(pastedFiles(null), []);
   assert.match(read("promptImages.jsx"), /const files = pastedFiles\(e\.clipboardData, takes\);/, "the one paste road reads it");
 });
+
+// ...HIS WORDS START IT, AND SEND IS LIT ONLY WHEN THEY CAN (the stress round, 2026-11-18): a picture put on the item's box with nothing typed
+// lit Send - the box counts a file as something to send - and the press did nothing, since the item's box goes on words alone
+test("the item's Send is lit only once words are in it, so a file alone never lights a press that does nothing", async () => {
+  const fs = await import("node:fs");
+  const src = fs.readFileSync(new URL("../src/ItemSections.jsx", import.meta.url), "utf8");
+  const send = src.match(/const send = async \(\) => \{\n\s*const q = text\.trim\(\);\n\s*if \(([^)]*)\) return;/);
+  assert.ok(send, "send reads its words first");
+  assert.match(send[1], /^!q\b/, "no words, no send");
+  assert.match(src, /<PromptBox [^>]*sendOff=\{!text\.trim\(\)\}/, "...and the button says so: unlit while no words are in it");
+});
+
+// ...AND WHAT HE TYPED BEFORE HE PRESSED IT STAYS HIS (the stress round, 2026-11-18): Send to agent moves the item's box from the section it is
+// about to the blank Agent section, and a box holding its own words was a new box there - empty. The item holds the box's words and files
+test("the item's box keeps his words and files when Send to agent moves it to the Agent section", async () => {
+  const fs = await import("node:fs");
+  const src = fs.readFileSync(new URL("../src/ItemSections.jsx", import.meta.url), "utf8");
+  const ask = src.slice(src.indexOf("export function ItemAsk"), src.indexOf("export default function ItemSections"));
+  assert.doesNotMatch(ask, /\[text, setText\] = useState|usePromptImages\(/, "the box keeps no words or files of its own");
+  assert.match(ask, /const \{ text, setText, pics \} = draft;/);
+  assert.match(src, /const \[text, setText\] = useState\(""\), pics = usePromptImages\(\{ files: true \}\), draft = \{ text, setText, pics \};/);
+  assert.match(src, /useEffect\(\(\) => \{ setText\(""\); pics\.clear\(\); \}, \[itemKey\]\);/, "...a new item starts them empty");
+});

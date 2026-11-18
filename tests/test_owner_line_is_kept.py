@@ -302,3 +302,62 @@ class NewTasksAskKeepsItsFiles(unittest.TestCase):
                 self.assertTrue((outputs.folder(tid) / name).is_file())
                 from taskuary import ownwork
                 self.assertEqual(ownwork.row_for(self.s, tid)['BodyText'], 'what does this say?', 'his message in Came from is his words, no path')
+
+
+# ...AND SEND TO AGENT ON A REPORT, A DASHBOARD OR AN FYI IS THE SAME (the stress round, 2026-11-18): his words and the picture he put on the
+# box ride the dispatch's instruction, which never went through the task's folder - the agent was told the upload's path under Taskuary's own
+# attachments, and on a held sender's task the line waited with the files block spelled out as words, no pill
+class SendToAgentCarriesItsFiles(AttachedFilesReachTheAgent):
+    class Session:
+        quick, provider, model = False, 'Claude Code', ''
+        def __init__(self): self.said = []
+        def send_prompt(self, prompt, brief=False): self.said.append(prompt)
+        def info(self, tail=0): return {}
+
+    def send(self, mid, words):
+        from fastapi import BackgroundTasks
+        bg, ses = BackgroundTasks(), self.Session()
+        with mock.patch.object(general, 'start_session', return_value=ses), mock.patch('taskuary.ingest._reads_quick', return_value=False):
+            out = server.dispatch_message(mid, server.DispatchBody(kind='general', instruction=f'{words}\n\nATTACHED IMAGES (read these files)\n{self.pic}'), bg)
+            for t in bg.tasks: t.func(*t.args, **t.kwargs)
+        return out, ses.said
+
+    def test_a_report_sent_on_with_a_picture_names_it_in_the_tasks_folder(self):
+        mid = self.s.add_message({'ExternalId': 'r1', 'Channel': 'report', 'SourceName': 'Weekly AR aging', 'Subject': 'Weekly AR aging', 'BodyText': '| Payworth | 95 |'})
+        with mock.patch('taskuary.origin.hold', return_value=None):
+            out, said = self.send(mid, 'Is this invoice on it?')
+        self.assertEqual(len(said), 1, out)
+        self.assertNotIn(str(self.pic), said[0]); self.assertIn(str(outputs_folder(out['taskId'])), said[0])
+
+    def test_a_held_senders_fyi_keeps_his_line_with_its_files_as_files(self):
+        mid = self.s.add_message({'ExternalId': 'f1', 'Channel': 'email', 'FromEmail': 'billing@vendor.example', 'FromName': 'Trainly',
+                                  'Subject': 'Renewal notice', 'BodyText': 'Your plan renews on Dec 1.', 'Status': 'filed'})
+        with mock.patch('taskuary.origin.hold', return_value={'line': 'You have not trusted Trainly yet.'}):
+            out, said = self.send(mid, 'Is this invoice theirs?')
+        self.assertEqual((out['dispatch'], said), ('held', []))
+        line = general.waiting_lines(self.s, out['taskId'])[0]
+        self.assertEqual(line['text'], 'Is this invoice theirs?')
+        self.assertEqual(len(line['files']), 1); self.assertTrue(self.inside(out['taskId'], line['files'][0]), line['files'])
+
+    def test_an_fyi_handfuls_line_draws_his_words_and_the_agent_still_reads_the_other_lines(self):
+        """Send to agent on one line of an FYI handful: the page writes the handful's other lines under his words for the agent to read - his
+        bubble drew them, minted ids and all, as if he had typed them."""
+        from taskuary import conversation
+        mid = self.s.add_message({'ExternalId': 'f1', 'Channel': 'email', 'FromEmail': 'erin@northwind.example', 'FromName': 'Erin Blake',
+                                  'Subject': 'Office closed Friday', 'BodyText': 'The office is closed on Friday.', 'Status': 'filed'})
+        also = '\n\nTHE OTHER MESSAGES OF THIS LIST IT IS ABOUT (read each with read_message)\nm7 - Gail Moreno: Parking moves Monday'
+        with mock.patch('taskuary.origin.hold', return_value=None):
+            out, said = self.send(mid, f'Which of these change my week?{also}')
+        self.assertIn('m7 - Gail Moreno: Parking moves Monday', said[0])                            # ...the agent is told
+        self.s.add_comment(out['taskId'], 'owner', general.USER_TYPE, said[0])                     # ...and the turn keeps it as his line
+        line = next(x for x in conversation.items(self.s, out['taskId'])['items'] if x['kind'] == 'line')
+        self.assertEqual(line['text'], 'Which of these change my week?')
+        self.assertEqual(len(line['files']), 1)
+        # ...held for a sender not yet trusted, the same line by the box
+        general.wait_line(self.s, out['taskId'], f'And this one?{also}')
+        self.assertEqual([p['text'] for p in conversation.items(self.s, out['taskId'])['pending']], ['And this one?'])
+
+
+def outputs_folder(tid):
+    from taskuary import outputs
+    return outputs.folder(tid)

@@ -918,7 +918,7 @@ def command_gate(st, tid: int, sid: str, cmd: str, tool: str = 'Bash', cwd: str 
     # alone, and its "push" card, a trusted repo or the terminal's own prompt ran the payment with it, unseen. The desktop and the browser are
     # judged first - their acts are held on their own cards - and only a line whose page and desktop acts all pass reaches the shell's
     if desk and (held := agentdesktop.check(st, tid, sid, cmd, brain)): return held
-    if browse and (held := browsergate.check(st, tid, sid, cmd, brain)): return held
+    if browse and (held := browsergate.check(st, tid, sid, cmd, brain, cwd)): return held
     return shellgate.check(st, tid, sid, cmd, tool, cwd, ask, about=about, reads=reads) if out or reads else {}
 
 

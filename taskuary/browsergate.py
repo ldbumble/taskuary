@@ -179,16 +179,16 @@ def setting(act: dict) -> bool:
 
 
 # ── the page it would act on, and the model's verdict ─────────────────────────────────────────────────────────────────────
-def _run(sid: str, args: list, wait: float, tag: str) -> tuple:
+def _run(sid: str, args: list, wait: float, tag: str, cwd: str = None) -> tuple:
     """(exit code, output) of one agent-browser command in this session's browser. Output to a FILE (browserview.navigate says
-    why: the daemon inherits a pipe and it never ends)."""
+    why: the daemon inherits a pipe and it never ends). `cwd`: the agent's folder, for an act that names a file by a relative path."""
     from . import browserview, spawn
     exe = browserview.program()
     if not exe: raise RuntimeError('agent-browser is not installed')
     log = Path(tempfile.gettempdir()) / f'{browserview.session_name(sid)}-{tag}.log'
     with open(log, 'wb') as f:
         p = spawn.popen([exe, '--session', browserview.session_name(sid), *args], env=browserview._cli_env(sid), stdout=f, stderr=f,
-                        stdin=subprocess.DEVNULL)
+                        stdin=subprocess.DEVNULL, **({'cwd': cwd} if cwd and os.path.isdir(cwd) else {}))
         try: rc = p.wait(timeout=wait)
         except subprocess.TimeoutExpired: p.kill(); raise RuntimeError('the browser did not answer in time')
     return rc, log.read_text(encoding='utf-8', errors='replace')
@@ -367,10 +367,10 @@ def _pending(store, tid: int, sid: str, args: list):
     return None
 
 
-def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
+def check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> dict:
     """_check, and A FAILURE ONCE THERE IS AN ACT IS A HOLD: the hook's route lets a command go on any error (server.cli_hook_browser), so a
     payment whose card could not be written - a busy store, a record that raised - ran with no card and no press."""
-    try: return _check(store, tid, sid, cmd, brain)
+    try: return _check(store, tid, sid, cmd, brain, cwd)
     except Exception as e:
         if not acts(cmd): raise
         logger.warning(f'browsergate: task {tid} - the act was not filed for the owner - {e}')
@@ -378,7 +378,7 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
                      "on its own line; if it is held like this again, tell the owner in one line what you were about to do and end your turn.")
 
 
-def _check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
+def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> dict:
     """The hook's answer for one shell command: {} lets it run; a refusal holds it and puts the act on the task. ONE act held
     holds the rest of the command - the shell line is the agent's, and running what comes after the held act is not what it asked for.
     THE ACTS BEFORE IT THAT PASSED ON THEIR OWN RUN FIRST, in order (the real-CLI walk, 2026-11-16: "fill name && fill email && click Next"
@@ -400,7 +400,7 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
         if not args: return _deny(f"{HELD}: a browser command it could not read. Run each agent-browser command on its own line.")
         if not pg['url']: return _deny(NO_PAGE.format(held=HELD))
         for b in passed:
-            try: rc, out = _run(sid, _own_args(b['args']), 30, 'before-held')
+            try: rc, out = _run(sid, _own_args(b['args']), 30, 'before-held', **({'cwd': cwd} if cwd else {}))
             except Exception as e: rc, out = 1, str(e)
             if rc != 0: return _deny(f"{HELD}: {v['what']} waits for the owner, and `{' '.join([EXE, *_own_args(b['args'])])}` before it in your line did "
                                      f"not go in ({' '.join(str(out).split())[:160]}). Nothing after it ran. Run the commands before the held one on their own "
@@ -413,7 +413,7 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
             from . import proposals
             c = control(a, pg)
             proposals.queue(store, tid, {'action': 'browser_act', 'sid': str(sid), 'args': args, 'command': ' '.join([EXE, *args]),
-                                         'url': pg['url'], 'site': site, 'what': v['what'], 'why': v['why'],
+                                         'url': pg['url'], 'site': site, 'what': v['what'], 'why': v['why'], **({'cwd': cwd} if cwd else {}),
                                          **({'control': {'name': c['name'], 'role': c['role']}} if c.get('role') else {})}, 'agent')
             store.audit('task', tid, 'browser_act_held', 'taskuary', 'system', {'verb': a['verb'], 'site': site, 'why': v['why']})
         from .selfclose import CARD_TAIL
@@ -472,7 +472,8 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
     if (was := p.get('control')) and (now := control({'args': args}, page(sid))) and (now.get('role'), now.get('name')) != (was.get('role'), was.get('name')):
         raise RuntimeError(f"the {was.get('role') or 'control'} \"{was.get('name')}\" this was held on is no longer where it was on "
                            f"{p.get('site') or 'the page'} - the page has changed since, so nothing was done. {AGAIN}")
-    rc, said = (run or (lambda s, a: _run(s, a, 60, 'act')))(sid, args)
+    # ...WHERE THE AGENT RAN IT: `upload @e5 ./resume.pdf` approved ran from the server's own folder, and its relative path named another file
+    rc, said = (run or (lambda s, a: _run(s, a, 60, 'act', **({'cwd': p['cwd']} if p.get('cwd') else {}))))(sid, args)
     said = ' '.join(str(said or '').split())[-600:]
     if rc != 0:
         # THE OWNER SAID YES AND THE PAGE SAID NO (the browser-agent walk, 2026-11-04: a click held for a yes landed under a menu the page

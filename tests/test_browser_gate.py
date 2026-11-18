@@ -280,6 +280,21 @@ class Holding(unittest.TestCase):
         run.assert_not_called()
         self.assertEqual(self.pending(), [], 'over, its error kept - the agent holds it anew (the owner, 2026-11-16: no Try again)')
 
+    def test_a_held_upload_runs_in_the_agents_folder_on_approve(self):
+        """`upload @e5 ./resume.pdf` held and approved ran from the SERVER's folder: the relative path named another file, or none, and a held
+        `download @e5 ./invoice.pdf` saved where nobody looks. The held command runs where the agent ran it, as a held shell step does."""
+        work = r'C:\work\offsite'
+        with on(snap='- button "Attach your resume" [ref=e5]'), verdict({'irreversible': True, 'sure': True, 'what': 'uploads resume.pdf to jobs.example'}):
+            hooks.command_gate(self.s, self.tid, 'run1', 'agent-browser upload @e5 ./resume.pdf', 'Bash', work)
+        [rv] = self.pending(); self.assertEqual(json.loads(rv['DraftText'])['cwd'], work)
+        ran = []
+        def run(sid, args, wait, tag, cwd=None):
+            ran.append((args, cwd)); return (0, '- button "Attach your resume" [ref=e5]') if args[0] == 'snapshot' else (0, '✓ Done')
+        with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': CHECKOUT}), mock.patch.object(bg, '_run', run), \
+                mock.patch('taskuary.workerstate._live', return_value=self.sess):
+            self.assertTrue(verdicts.decide(self.s, rv, 'approve')['ok'])
+        self.assertIn((['upload', '@e5', './resume.pdf'], work), ran)
+
     def test_a_hold_that_fails_to_be_filed_still_holds(self):
         """The hook's route lets a command go on any error (server.cli_hook_browser), so a payment judged irreversible whose card failed to be
         written - a busy store, a record that raised - ran with no card and no press. Once there is an act, a failure is a hold."""

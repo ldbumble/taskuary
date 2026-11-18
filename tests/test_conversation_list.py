@@ -731,6 +731,43 @@ class TheList(unittest.TestCase):
             got = self.list()
         self.assertIn(f'm:{mid}', [x['id'] for x in got['items']]); self.assertEqual(got['pending'], [])
 
+    def test_his_close_drawn_never_goes_back_by_the_box_when_the_turn_a_reopening_mail_starts_begins(self):
+        """A stress round, 2026-11-18: Mark done drew "You marked it done"; a question that came in a beat later reopened the task and handed it
+        to the agent, and while that turn was starting the close left the canvas for the waiting room, coming back above the mail once the turn
+        was at work - a jump. A press drawn once stays, as a drawn mail does."""
+        from taskuary import concierge
+        self.say('Suggest two.'); self.rest()
+        self.assertTrue(concierge.close_task(self.s, self.tid, 'owner'))
+        shut = next(x['id'] for x in self.list()['items'] if x.get('closes'))
+        at = conversation.ep(self.s._one("SELECT CreatedAt FROM audit WHERE Id=?", (int(shut[2:]),))['CreatedAt'])
+        with mock.patch.object(general, 'working', return_value=True), mock.patch.object(general, 'turn_started', return_value=at + 0.5):
+            got = self.list()
+        self.assertIn(shut, [x['id'] for x in got['items']]); self.assertEqual(got['pending'], [])
+
+    def test_the_work_a_reopening_mail_begins_stands_under_his_close_from_the_first_read(self):
+        """A stress round, 2026-11-18: Mark done pressed while a turn worked (the close stopped it, no answer filed), then a question reopened
+        the task and its agent was started on it. In the beat before that hand-over was written the turn at work read from the stopped turn's
+        hand-over: drawn as that old turn, at work again ABOVE "You marked it done", and the reply card the close had put down was hidden
+        inside it. A close ends the turn above it as a stop does: what works after it stands under it, and what came in stands above that."""
+        from types import SimpleNamespace
+        from taskuary import concierge
+        self.say('Suggest two.', 'l-one'); self.rest()
+        self.brain.delay = 30
+        self.say('Compare both in detail.', 'l-two', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.brain.delay = 0
+        self.assertTrue(concierge.close_task(self.s, self.tid, 'owner'))
+        shut = next(x['id'] for x in self.list()['items'] if x.get('closes'))                 # drawn: "You marked it done"
+        self.s.update_task(self.tid, {'Status': 'open'}, 'router')                  # ...a question reopened it
+        mid = self.mail('One more - which of the two has parking?')
+        busy = SimpleNamespace(busy=True, trace=[], sid='s-new', last=0, alive=True, quick=False)
+        with mock.patch.object(general, 'working', return_value=True), mock.patch.object(general, 'session_for', return_value=busy):
+            got = self.list()
+        ids = [x['id'] for x in got['items']]
+        self.assertFalse([x['id'] for x in got['items'][:ids.index(shut)] if x.get('state') in ('working', 'starting')], self.kinds(got))
+        self.assertEqual(ids[-2:], [f'm:{mid}', ids[-1]], self.kinds(got))
+        self.assertIn(got['items'][-1].get('state'), ('working', 'starting'))
+
     def test_what_was_drawn_keeps_its_place_through_any_read(self):
         """The chat only grows at its foot (`shown`): an item's place is the one it was first served in - an answer filed late for a turn
         whose next input was already drawn stands under that input, never above it, and every later read gives the same order."""

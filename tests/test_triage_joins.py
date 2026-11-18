@@ -330,6 +330,32 @@ class QuestionReopensTests(unittest.TestCase):
         self.assertTrue(self.s.pending_review(self.tid, kind='draft'))
 
 
+class QuestionWhileClosingTests(unittest.TestCase):
+    """Mark done on a live agent closes BEHIND the press (writeup.start, close=True): the write-up runs for seconds and the task closes
+    when it ends. A question to the owner that arrived in between landed on a task still open - nothing to reopen - and the close then
+    shut it over that question, its draft put down unsent: a mail owed an answer on a closed task, and nothing lit. A mail on a task
+    that is closing lands once the close has (the close every road waits on, writeup.wait_for), so the reopen rule reads it."""
+    def test_a_question_that_lands_while_mark_done_writes_up_reopens_the_task(self):
+        import threading, time
+        from taskuary import writeup
+        s = MemoryStore()
+        tid = mail(s, 'a', brain('task', title='Investigate the missing ledger accounts'), conv='gl', subject='Missing GL accounts')['task_id']
+        done = threading.Event()
+        with writeup._LOCK: writeup._JOBS[tid] = done
+        writeup._begin(tid, 'report', True)                    # Mark done pressed: the write-up runs, the close comes when it ends
+        def write_up():
+            time.sleep(0.3); s.update_task(tid, {'Status': 'done'}, 'owner'); done.set()
+        th = threading.Thread(target=write_up); th.start()
+        try:
+            back = mail(s, 'b', asked('reply_only', True, 'Erin asks what separates the 4100 accounts'), conv='gl',
+                        subject='RE: Missing GL accounts', body='Can you explain the difference between the 4100 accounts?')
+        finally:
+            th.join(); writeup._JOBS.pop(tid, None); writeup._STATE.pop(tid, None)
+        self.assertEqual(back['task_id'], tid)
+        self.assertEqual(s.get_task(tid)['Status'], 'open', 'the question was closed under the write-up')
+        self.assertTrue(any(c['Body'].startswith('Reopened - Erin Blake has a question for you') for c in s.list_comments(tid)))
+
+
 class ChatQuestionReopensTests(ChatReopensTests):
     """The chat side of the same rule (2026-10-25): a "sure" stays filed, a question put to the owner brings the task back."""
     def joins(self, intent, title, summary='s', asks=None):

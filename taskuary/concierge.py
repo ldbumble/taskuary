@@ -4325,6 +4325,10 @@ def close_task(store, tid: int, actor: str = 'owner', save: bool = True) -> bool
             store.add_comment(tid, actor, 'human', 'Stopped the agent - the task was closed from the chat.')
     except Exception as e: logger.warning(f'concierge: the agent on {task_ref(tid)} was not stopped - {e}')
     if not closed: store.update_task(tid, {'Status': 'done'}, actor)
+    # ...and a start in flight for a line of his is over with it: the turn it was opening was stopped by the close, and the mark it left read
+    # the closed task "at work" until that turn's thread let go (a stress round, 2026-11-18)
+    from . import general
+    general.answered(tid, every=True)
     from . import selfclose
     selfclose.unclaim(store, tid, actor)            # a finished task is nobody's to end any more
     store.audit('task', tid, 'close_from_assistant', actor)

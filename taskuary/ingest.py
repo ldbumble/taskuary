@@ -1520,6 +1520,7 @@ def joinable(store, tid, shut: bool = True):
     return tid if t and t['TaskId'] < INTERNAL_TASK_BASE and t.get('Status') != 'dropped' and (shut or t.get('Status') != 'done') else None
 
 
+CLOSING_WAIT = 120                # seconds a mail waits for its task's Mark done write-up to close it (land_on)
 def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = 'thread', *, fail: dict = None, cfg: dict = None,
             pol: dict = None, mine=(), score=1.0, cands=(), reason: str = '', notes_note: str = '', step: dict = None) -> dict:
     """THE ONE ROAD ONTO A TASK THAT EXISTS (the spine audit, 2026-11-09). A message reaches a task three ways - by its own thread or
@@ -1534,6 +1535,11 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
     from . import waiton
     from .outbound import send_block
     cfg, pol = store.get_settings() if cfg is None else cfg, pol or {}
+    # A TASK CLOSING BEHIND MARK DONE (writeup.closing: the live agent written up, the close when that ends) is as good as closed: a mail
+    # landed meanwhile met it open, nothing reopened, and the close then shut it over that mail - a question owed an answer, its draft put
+    # down unsent. It lands once the close has, as every close waits (writeup.wait_for), so the one rule below reads it on a closed task
+    from . import writeup
+    if writeup.closing(tid) and not writeup.in_job(): writeup.wait_for(tid, CLOSING_WAIT)
     t, ref = store.get_task(tid) or {}, task_ref(tid)
     closed = t.get('Status') == 'done'
     # ...the GOAL itself, under a step nobody holds, is a container: its date, its boxes and the agent it does not have are not this mail's

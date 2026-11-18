@@ -295,3 +295,17 @@ def test_a_letter_filed_while_his_line_still_waits_for_the_turn_is_a_new_draft()
     assert out['ok'] and out['review_id'] != rid
     old = s.get_review(rid)
     assert (old['Status'], old['DecideNote'], old['DraftText']) == ('closed_unsent', wrapup.REPLACED, OLD)
+
+
+def test_a_close_a_message_reopened_since_is_told_with_the_reopening():
+    # a stress round, 2026-11-18: Mark done, then a question that reopened the task woke its agent - told "marked it done" under "take it as
+    # said, never undo it", and nowhere that the task was open again because of the message it was woken for
+    from taskuary import concierge, ingest
+    s = MemoryStore(); tid = s.create_task({'Title': 'Offsite venue for Erin', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    s.add_comment(tid, 'agent', general.ASSISTANT_TYPE, 'Harbor Hall is booked.')
+    s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00' WHERE TaskId=?", (tid,))
+    concierge.close_task(s, tid, 'owner')
+    assert [x.split(': ', 1)[1] for x in general.owner_did(s, tid)] == ['marked it done']          # closed: as it stands
+    ingest._reopen(s, tid, {'from_name': 'Erin Blake', 'subject': 'Which room?'}, 'router', {'intent': 'reply_only'})
+    did = [x.split(': ', 1)[1] for x in general.owner_did(s, tid)]
+    assert did == ['marked it done - a new message on its thread has opened it again since'], did

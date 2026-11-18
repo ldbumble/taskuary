@@ -36,7 +36,7 @@ somewhere else, a pipe into Remove-Item - is held, never let through for being h
 """
 import contextvars, json, ntpath, os, re, shlex, shutil, subprocess, tempfile, threading
 from loguru import logger
-from .browsergate import _segments, _deny, _tell, launched, not_approved, NEXT, OWNER_NO
+from .browsergate import _segments, _deny, _tell, joined, launched, not_approved, NEXT, OWNER_NO, words
 
 HELD = 'Taskuary held this for the owner'
 _FILING = threading.Lock()
@@ -221,7 +221,7 @@ def _deletes(raw: str, cwd: str, env: dict, here='') -> dict:
     # (the stress test's second delete, 2026-11-03). '' is the agent's own folder; None a `cd` it could not read
     named, places, blind, tools = [], [], False, []
     done = lambda: {'named': named, 'places': places, 'blind': blind, 'tools': tools, 'here': here}
-    if not any(w in raw.lower() for w in _DEL_WORDS + ('cd', 'location')): return done()             # the cheap test first
+    if not any(w in joined(raw) for w in _DEL_WORDS + ('cd', 'location')): return done()             # the cheap test first
     raw = re.sub(r'\$\{(\w+(?::\w+)?)\}', r'$\1', raw)                         # ${dst} is $dst - and its braces are not a block
     for seg in _SPLIT.split(raw):
         seg = seg.strip()
@@ -231,8 +231,7 @@ def _deletes(raw: str, cwd: str, env: dict, here='') -> dict:
             except ValueError: v = []
             if len(v) == 1: env[m.group(1).lower()] = _expand(v[0].strip('"\''), env)
             continue
-        try: w = [x.strip('"\'') for x in shlex.split(seg, posix=False)]
-        except ValueError: w = [x.strip('"\'') for x in seg.split()]      # a quote the split cut in two (`cmd /c "cd X && rd Y"`)
+        w = words(seg)
         while w and w[0].lower() in ('if', 'else', 'elseif', 'then', 'do'): w = w[1:]
         w = launched(w, _tool)
         if not w: continue
@@ -284,7 +283,7 @@ def _outward(cmd: str) -> list:
     """Every step in a shell command that goes out: [{'tool', 'what', 'why', 'command'}]. A command that cannot be read and names one of
     these tools is one step - held, never let through for being hard to read."""
     raw = str(cmd or '')
-    low = raw.lower()
+    low = joined(raw)
     if not any(w in low for w in ('git', 'gh', 'glab', 'publish', 'push', 'upload', 'mail', 'mutt', 'msmtp', 'http', 'curl', 'wget', 'xh', 'iwr', 'irm',
                                   'invoke-')): return []      # the cheap test first
     segs = _segments(raw)

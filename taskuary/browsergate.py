@@ -85,14 +85,29 @@ def _segments(cmd: str):
     return out
 
 
+def words(seg: str) -> list:
+    """One simple command's words as the shell will see them: quotes joined to what they touch (`"$HOME"/.ssh/x` is one path) and a redirect cut
+    from the word it is stuck to (`cat<x`). On Windows a backslash is a path's separator, never an escape."""
+    try:
+        lx = shlex.shlex(seg.replace('\\', '\\\\') if os.name == 'nt' else seg, posix=True, punctuation_chars=True)
+        lx.whitespace_split = True
+        return list(lx)
+    except ValueError: return [x.strip('"\'') for x in seg.split()]      # a quote the split cut in two (`cmd /c "cd X && rd Y"`)
+
+
 def _is_exe(tok: str, exe: str = EXE) -> bool:
     # `npx agent-browser@0.41.0 click ...` is the same tool: a pinned version must not walk an act past the gate
     return re.sub(r'(?<=.)@[^/]*$', '', re.sub(r'\.(exe|cmd|ps1|bat)$', '', os.path.basename(str(tok).replace('\\', '/')).lower())) == exe
 
 
+def joined(cmd: str) -> str:
+    "The line as the shell will join its words, for a cheap test of what it names: `agent-brows''er` and `g\"\"h` are agent-browser and gh."
+    return re.sub(r'[\'"\\`]', '', str(cmd or '')).lower()
+
+
 def names(cmd: str, exe: str = EXE) -> bool:
-    "The cheap test: does this line name `exe` at all - as the shell will join it (`agent-brows''er` is agent-browser)?"
-    return exe in re.sub(r'[\'"\\`]', '', str(cmd or '')).lower()
+    "The cheap test: does this line name `exe` at all, as the shell will join it?"
+    return exe in joined(cmd)
 
 
 # THE PROGRAMS THAT ONLY LAUNCH ANOTHER: the command they run is the one that acts (`timeout 30 agent-browser click @e3` pressed "Pay now" past

@@ -13,7 +13,7 @@ API road's file tools), and in a shell line every argument that is a path - driv
 A path built from a variable this cannot read is held, as an unreadable delete is. Programs' own folders (Program Files, the system's,
 Python's) are no one's files and pass.
 """
-import os, re, shlex, sys, tempfile
+import os, re, sys, tempfile
 from pathlib import Path
 
 WHY = "it is outside this task's own folders"
@@ -185,19 +185,10 @@ def _segments(cmd: str) -> list:
     return out
 
 
-def _words(seg: str) -> list:
-    """One command's words as the shell will see them: quotes joined to what they touch (`"$HOME"/.ssh/x` is one path) and a redirect cut
-    from the word it is stuck to (`cat<x`). On Windows a backslash is a path's separator, never an escape."""
-    try:
-        lx = shlex.shlex(seg.replace('\\', '\\\\') if os.name == 'nt' else seg, posix=True, punctuation_chars=True)
-        lx.whitespace_split = True
-        return list(lx)
-    except ValueError: return [x.strip('"\'') for x in seg.split()]      # a quote the split cut in two (`cmd /c "cd X && rd Y"`)
-
-
 def command_paths(cmd: str, cwd: str = '', env: dict = None) -> list:
     """Every path a shell line names as an argument, through `cd`, `bash -c "..."` and `--opt=value` - None for one built from a variable
     it cannot read. The program itself, options, URLs and switches (`/s`) are not paths."""
+    from .browsergate import words
     out, here, env = [], cwd, dict(env or {})
     for seg in _segments(str(cmd or '')):
         # ...a path kept in a variable is read where the variable is (`$p='C:/x.csv'; Get-Content $p` - the real-CLI walk, 2026-11-16)
@@ -205,7 +196,7 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None) -> list:
             v = m[2].strip().strip('"\'')
             env[m[1].lower()] = v
             seg = f'= {v}'
-        w = _words(seg)
+        w = words(seg)
         while w and (re.match(r'^[A-Za-z_]\w*=', w[0]) or w[0].lower() in ('&', 'sudo', 'time', 'nohup', 'command', 'exec', 'call', 'then', 'do', 'if', 'else')): w = w[1:]
         if not w: continue
         tool = re.sub(r'\.(exe|cmd|ps1|bat)$', '', os.path.basename(w[0].replace('\\', '/')).lower())

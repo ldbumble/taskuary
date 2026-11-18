@@ -54,6 +54,9 @@ class Reading(unittest.TestCase):
                           ('timeout 9 rm -rf /srv/northwind/ledger', 'delete ledger')):
             got = sg.acts(cmd, '/w')
             self.assertTrue(got, cmd); self.assertIn(what, got[0]['what'], cmd)
+        # ...and a quote inside the tool's name is one word to the shell: `g''h` is gh, `r''m` is rm
+        self.assertIn('merge a pull request', sg.acts("g''h pr merge 12", '/w')[0]['what'])
+        self.assertIn('delete ledger', sg.acts("r''m -rf /srv/northwind/ledger", '/w')[0]['what'])
         for cmd in ('timeout 60 git status', 'time pytest -q', 'timeout 30 curl -s https://docs.vendor.example/rates'):
             self.assertEqual(sg.acts(cmd, '/w'), [], cmd)
 

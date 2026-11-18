@@ -39,6 +39,7 @@ MAIL_LIST_SELECT = ','.join(f for f in MAIL_SELECT.split(',') if f != 'body')
 MAIL_BODY_SELECT = 'id,body,uniqueBody,internetMessageHeaders'
 MAIL_FULL_SELECT = MAIL_SELECT + ',uniqueBody,internetMessageHeaders'
 BODY_BATCH = 20              # Graph's $batch ceiling
+BODY_RETRIES = 3             # a throttled body is asked again this many times before the folder waits for the next poll
 
 
 def _cfg(c): return json.loads(c.get('ConfigJson') or '{}')
@@ -190,13 +191,15 @@ ACTOR_DISCOVER = 'connector-test'
 _DNS = re.compile(r'getaddrinfo failed|Name or service not known|nodename nor servname|Temporary failure in name resolution|NameResolutionError|No address associated', re.I)
 _TIMEOUT = re.compile(r'timed? ?out|ReadTimeout|ConnectTimeout', re.I)
 _REFUSED = re.compile(r'Connection refused|actively refused|ECONNREFUSED|WinError 10061', re.I)
+# ...a connection that dropped part-way through a read, as the socket, imaplib and requests each word it
+_DROPPED = re.compile(r'Connection aborted|Connection reset|RemoteDisconnected|socket error|EOF occurred|Broken pipe|IncompleteRead', re.I)
 _AUTH_WORDS = re.compile(r'\b(invalid_auth|not_authed|token_revoked|token_expired|account_inactive|bad credentials|invalid[_ ]api[_ ]key|incorrect api key)\b', re.I)
 def _status(e):
     r = getattr(e, 'response', None)
     code = getattr(r, 'status_code', None) or getattr(e, 'code', None) or getattr(e, 'status_code', None)
     if isinstance(code, int): return code
     # requests/httpx spell it "401 Client Error: Unauthorized for url" when only the text survives a re-raise
-    m = re.search(r'\b(401|403|5\d\d)\b[^\n]{0,20}(?:Client Error|Server Error|Unauthori[sz]ed|Forbidden)', str(e), re.I)
+    m = re.search(r'\b(401|403|429|5\d\d)\b[^\n]{0,20}(?:Client Error|Server Error|Unauthori[sz]ed|Forbidden|Too Many Requests)', str(e), re.I)
     if m: return int(m.group(1))
     # ...and an API that answers 200 with its own word for it: Slack's "invalid_auth" was printed to the owner as it came
     return 401 if _AUTH_WORDS.search(str(e)) else None
@@ -222,6 +225,8 @@ def plain_failure(e: Exception, signin: bool = False) -> str:
     if isinstance(code, int) and 500 <= code < 600:
         return (f"The service is having trouble on its side (it answered {code}). Nothing here needs changing - "
                 "it is tried again on every poll, and what came in meanwhile is read once it is back.")
+    if code == 429: return ("The service asked Taskuary to slow down (too many requests at once). Nothing is lost - it is tried again on "
+                            "every poll, and the rest is read then.")
     # ...a sign-in card has no key to paste: its sign-in still renews (a lapsed one says LAPSED above), so the service refused the read
     if code == 401 and signin: return ("Microsoft refused the read though the sign-in still works - usually trouble on its side, and it "
                                        "is tried again on every poll. If it lasts, sign in again on the card.")
@@ -236,7 +241,14 @@ def plain_failure(e: Exception, signin: bool = False) -> str:
     # setup has one box for the server and none for a port: the name is what can be checked, and IT knows the rest (2026-10-17)
     if _REFUSED.search(raw): return ("The server turned the connection away. Check the server name, or ask your IT team "
                                      "for the right server and port.")
-    return raw[:500] or type(e).__name__
+    # ...a read cut off part-way, or a server never reached (failures._UNREACHED, the road the run cards read): the socket's words
+    # and requests' repr - the folder, the host, the mailbox in its URL - reached the card and the bell with no word of what happens next
+    from .failures import _UNREACHED
+    if _DROPPED.search(raw): return ("The connection to the server dropped part-way through the read. Nothing already in is lost, "
+                                     "and it is tried again on every poll.")
+    if _UNREACHED.search(raw): return ("The server could not be reached - check this computer is online. It is tried again on every poll.")
+    # ...and any other answer as requests words it, without the address it was asked at - the mailbox is in that URL
+    return re.sub(r' for url: \S+', '', raw)[:500] or type(e).__name__
 
 class DraftStore:
     """The store as a card's Test sees it while the values on screen are not saved yet (2026-10-30, the owner: "a connection's Test can
@@ -846,6 +858,10 @@ def source_folders(s: dict) -> list:
     return [f for f in fs if f] or ['inbox']
 
 
+GONE_FOLDER = ("One of the folders this mailbox reads is not in it any more - deleted or moved in Outlook. Choose its folders again "
+               "on the card; the rest of its mail is read meanwhile.")
+
+
 MAIL_BATCH = 500   # one _mail_msgs call; _mail_folder keeps asking until a short batch comes back
 
 
@@ -891,16 +907,32 @@ def _mail_bodies(tok: str, upn: str, ids: list) -> list:
     already carried, which is what the old single-request page would have given a stripped mail."""
     out = []
     for i in range(0, len(ids), BODY_BATCH):
-        chunk = ids[i:i + BODY_BATCH]
-        r = requests.post(f'{GRAPH}/$batch', timeout=60, headers={'Authorization': f'Bearer {tok}'},
-                          json={'requests': [{'id': str(k), 'method': 'GET',
-                                              'url': f'/users/{upn}/messages/{x}?$select={MAIL_BODY_SELECT}'}
-                                             for k, x in enumerate(chunk)]})
-        r.raise_for_status()
-        for resp in r.json().get('responses') or []:
-            body = resp.get('body')
-            if resp.get('status') == 200 and isinstance(body, dict) and body.get('id'): out.append(body)
-            else: logger.debug(f"mail body {resp.get('id')} came back {resp.get('status')}")
+        chunk, tries = ids[i:i + BODY_BATCH], 0
+        while chunk:
+            r = requests.post(f'{GRAPH}/$batch', timeout=60, headers={'Authorization': f'Bearer {tok}'},
+                              json={'requests': [{'id': str(k), 'method': 'GET',
+                                                  'url': f'/users/{upn}/messages/{x}?$select={MAIL_BODY_SELECT}'}
+                                                 for k, x in enumerate(chunk)]})
+            r.raise_for_status()
+            again, wait = [], 1.0
+            for resp in r.json().get('responses') or []:
+                body, status = resp.get('body'), resp.get('status')
+                if status == 200 and isinstance(body, dict) and body.get('id'): out.append(body); continue
+                # ...a request Graph THROTTLED inside the batch (429 - a mailbox takes only a few at once) or failed on its side is asked
+                # again: kept as its listing's preview, the mail's 255 characters stood for its whole body for good
+                if status == 429 or (isinstance(status, int) and status >= 500):
+                    try: again.append(chunk[int(resp.get('id'))])
+                    except (TypeError, ValueError, IndexError): continue
+                    try: wait = max(wait, float(((resp.get('headers') or {}).get('Retry-After')) or 1))
+                    except (TypeError, ValueError): pass
+                else: logger.debug(f"mail body {resp.get('id')} came back {status}")
+            if not again: break
+            tries += 1
+            if tries > BODY_RETRIES:
+                raise RuntimeError(f'Outlook is throttling this mailbox - {len(again)} mail bodies were not given; the folder is read again '
+                                   'on the next poll')
+            time.sleep(min(wait, 10))
+            chunk = again
     return out
 
 
@@ -2325,7 +2357,11 @@ def _poll_one(store, c, file_only, backfill_hours, llm) -> int:
                         atts = []
                         if wants_attachments(m) and not store.message_exists(f"graph:{m['id']}"):
                             try: atts = mail_attachments(tok, s['Address'], m['id'])
-                            except Exception as e: logger.warning(f"attachments for {m['id']} failed: {e}")
+                            except Exception as e:
+                                # ...a miss Graph may yet answer (a throttle, its own trouble, a token that lapsed mid-poll, a dropped
+                                # line) holds this mail for the next poll: let in without its files, it never asked for them again
+                                if _status(e) not in (400, 403, 404): raise
+                                logger.warning(f"attachments for {m['id']} failed: {e}")
                         # an invite is read in full once, as it arrives: the meeting to answer and whether it still needs answering
                         inv = is_invite(m)
                         cal_ = None
@@ -2384,7 +2420,11 @@ def _poll_one(store, c, file_only, backfill_hours, llm) -> int:
                         broken.append(f'{folder}: {e}')
                         break                           # disabled/retargeted source: make no more provider calls
                     except Exception as e:
-                        logger.warning(f"outlook {s['Address']} {folder}: {e}"); broken.append(f'{folder}: {e}')
+                        logger.warning(f"outlook {s['Address']} {folder}: {e}")
+                        # ...a folder the card chose that is not there any more (deleted in Outlook: 404 on every poll) has nothing left
+                        # to wait for - held as unfinished, it froze the cycle's cutoff, and mail into the Inbox after it was never read
+                        if folder not in ('inbox', 'sentitems') and _status(e) == 404: errors.append(GONE_FOLDER); continue
+                        broken.append(f'{folder}: {e}')
                 if broken:
                     errors += broken; continue     # the watermark waits for the folders that did not finish
                 if not store.patch_source_poll_state(

@@ -31,6 +31,28 @@ class PlainFailureTests(unittest.TestCase):
         self.assertTrue(gone.startswith('The service could not be reached'), gone)
         for x in (slow, gone): self.assertNotRegex(x, r'ConnectionPool|northwind|443')
 
+    def test_a_mail_read_cut_off_part_way_is_said_in_words_with_the_way_on(self):
+        """A mailbox poll whose connection dropped mid-read (an IMAP socket's EOF, Graph's RemoteDisconnected, a reset) reached the card and
+        the bell as the socket's own words, or as the folder and a page of requests' repr - with nothing to say it is retried."""
+        for raw in (imaplib.IMAP4.abort('socket error: EOF'), ConnectionResetError(104, 'Connection reset by peer'),
+                    RuntimeError("inbox: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"),
+                    RuntimeError("inbox: HTTPSConnectionPool(host='graph.microsoft.com', port=443): Max retries exceeded with url: "
+                                 "/v1.0/users/alex@northwind.example/mailFolders/inbox/messages (Caused by ProtocolError('Connection aborted.'))")):
+            said = plain_failure(raw)
+            self.assertIn('tried again on every poll', said, raw)
+            self.assertNotRegex(said, r'socket|Remote|ConnectionPool|northwind|Errno')
+        self.assertIn('could not be reached', plain_failure(RuntimeError("HTTPSConnectionPool(host='mail.northwind.example', port=443): "
+                                                                         "Max retries exceeded with url: /x (Caused by SSLError('bad handshake'))")))
+
+    def test_a_throttled_read_is_said_in_words_and_no_url_reaches_the_card(self):
+        """Graph throttles a mailbox on a long catch-up: "inbox: 429 Client Error: Too Many Requests for url: https://graph.../users/<the
+        mailbox>/..." reached the card and the bell whole. And any other status left as requests words it carried the same URL."""
+        url = 'https://graph.microsoft.com/v1.0/users/alex@northwind.example/mailFolders/inbox/messages'
+        said = plain_failure(RuntimeError(f'inbox: 429 Client Error: Too Many Requests for url: {url}'))
+        self.assertIn('tried again on every poll', said); self.assertNotIn('northwind', said)
+        said = plain_failure(RuntimeError(f'inbox: 400 Client Error: Bad Request for url: {url}'))
+        self.assertIn('400', said); self.assertNotIn('northwind', said); self.assertNotIn('graph.microsoft.com', said)
+
     def test_our_own_words_pass_through(self):
         self.assertEqual(plain_failure(RuntimeError('no mailbox address set')), 'no mailbox address set')
         from taskuary.msauth import LAPSED

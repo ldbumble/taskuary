@@ -142,6 +142,7 @@ def _hosts(c) -> tuple:
 # The owner, 2026-11-15: "add that option as well not just app password". The same IMAP and SMTP, signed in to with the Gmail card's
 # Google sign-in (googlecal.py, scope https://mail.google.com/) by XOAUTH2 - no second mail road. A saved App Password is what the
 # card uses while it is there: it does not lapse, and removing it is how the owner moves the mail to the sign-in.
+GOOGLE_REFUSED = 'Gmail refused the Google sign-in'     # outbound.auth_fix reads it: the fix is Sign in again, never Send again
 def google_mail(c, cfg) -> bool: return c.get('Type') == 'gmail' and not c.get('Secret') and bool(cfg.get('google_refresh_token'))
 def xoauth2(user: str, token: str) -> str: return f'user={user}\x01auth=Bearer {token}\x01\x01'
 
@@ -202,7 +203,7 @@ def _login(c):
         if not re.search(r'AUTHENTICATIONFAILED|invalid credentials|login failed|authentication failed|incorrect', str(e), re.I): raise
         # the server's own words are b'[AUTHENTICATIONFAILED] Invalid credentials (Failure)' - true, and no help
         with contextlib.suppress(Exception): M.shutdown()
-        if google: raise RuntimeError(f'Gmail refused the Google sign-in for {user} - it has to be the account that signed in. Press Sign in '
+        if google: raise RuntimeError(f'{GOOGLE_REFUSED} for {user} - it has to be the account that signed in. Press Sign in '
                                       'with Google on the Gmail card again; a Workspace account also needs IMAP allowed by its admin.') from e
         raise RuntimeError('The mail server refused the password. Gmail and some others need an app password '
                            '(myaccount.google.com → Security → App passwords) rather than your normal one.') from e
@@ -253,7 +254,11 @@ def _body_and_attachments(msg) -> tuple:
         fname = part.get_filename()
         payload = part.get_payload(decode=True) or b''
         if fname or part.get('Content-ID'):
-            atts.append({'id': (part.get('Content-ID') or fname or str(len(atts))).strip('<>')[:60],
+            # ...an id of its own on this mail: two files of one name ("scan.pdf" twice, a phone's "image.jpg") shared it, and the second
+            # was taken for the first already saved and dropped. A repeat takes its place number; a first keeps the id it always had
+            key = (part.get('Content-ID') or fname or str(len(atts))).strip('<>')[:60]
+            if any(a['id'] == key for a in atts): key = f'{key}#{len(atts)}'
+            atts.append({'id': key,
                          'name': _dec(fname) or f'part-{len(atts)}', 'contentType': ctype,
                          'size': len(payload), 'isInline': bool(part.get('Content-ID')),
                          'contentBytes': base64.b64encode(payload).decode()})
@@ -932,7 +937,9 @@ def send_smtp(store, c, to: list, subject: str, body: str, in_reply_to: str = No
         m.attach(text)
         for f in attachments:
             part = MIMEApplication(f['bytes'], name=f['name'])
-            part['Content-Disposition'] = f'attachment; filename="{f["name"]}"'
+            # ...its name by RFC 2231 (add_header): written into the header by hand, "Résumé.pdf" turned the whole header into one encoded
+            # word no mail client reads as an attachment, and a quote in a name cut it short
+            part.add_header('Content-Disposition', 'attachment', filename=f['name'])
             m.attach(part)
     else:
         m = text
@@ -952,7 +959,7 @@ def send_smtp(store, c, to: list, subject: str, body: str, in_reply_to: str = No
             S.ehlo()
             try: S.auth('XOAUTH2', _once(xoauth2(user, _google_token(cfg)), ''), initial_response_ok=True)
             except smtplib.SMTPAuthenticationError as e:
-                raise RuntimeError(f'Gmail refused the Google sign-in for {user} - press Sign in with Google on the Gmail card again.') from e
+                raise RuntimeError(f'{GOOGLE_REFUSED} for {user} - press Sign in with Google on the Gmail card again.') from e
         else: S.login(user, c['Secret'])
         S.sendmail(user, list(to) + cc + bcc, m.as_string())
     return {'channel': 'email', 'to': to, 'cc': cc, 'bcc': bcc, 'mailbox': user, 'threaded': bool(in_reply_to),

@@ -45,9 +45,12 @@ TOOLS = {
                         ('GET', '/api/agent/messages')),
     'read_message': ('read', "One saved message in full - body, recipients, its thread and its attachments' ids. `id`: m1073 or 1073."
                              " Read-only.",
-                     _S({'id': {'type': 'string', 'description': 'the message id - m1073 or 1073'}}, ('id',)), ('GET', '/api/agent/messages/1')),
+                     _S({'id': {'type': 'string', 'description': 'the message id - m1073 or 1073'},
+                         'start': {'type': 'integer', 'description': "where to go on reading a long body - the answer's body_goes_on says it"}},
+                        ('id',)), ('GET', '/api/agent/messages/1')),
     'read_attachment': ('read', "The text of one attachment on a saved message (PDF, Word, Excel, PowerPoint, text). Read-only.",
-                        _S({'id': _INT}, ('id',)), ('GET', '/api/attachments/1')),
+                        _S({'id': _INT, 'start': {'type': 'integer', 'description': 'where to go on reading a long file - the answer says it'}},
+                           ('id',)), ('GET', '/api/attachments/1')),
     'my_task': ('read', "This task's brief: title, summary, status and checklist with each to-do's id. Re-read it after a long "
                         "stretch of work. Read-only.", _S({}), ('GET', '/api/tasks/1')),
     'search_tasks': ('read', "Search the owner's tasks, mail, chats and pull requests by words (Taskuary's own search box), and what "
@@ -338,6 +341,36 @@ def _out(text, fence_it: bool = False) -> str:
 def _j(o) -> str: return json.dumps(o, indent=1, default=str, ensure_ascii=False)
 
 
+def _fitted(m: dict, start=0) -> str:
+    """One message as read_message answers it, inside CAP: everything but the body first - its attachments' ids above all - then as much
+    of the body as fits from `start`, saying where to go on. Cut whole at CAP, a long mail lost its attachments and the rest of its body
+    behind "narrow the search" (a mail is kept to 20,000 characters, an answer to 12,000)."""
+    body, head = str(m.get('body') or ''), {k: v for k, v in m.items() if k != 'body'}
+    while len(_j(head)) > CAP // 2 and len(head.get('messages') or []) > 1:        # ...a long thread gives way first, oldest first
+        head['messages'] = head['messages'][1:]
+        head['thread_cut'] = 'older messages on this thread are not shown - read_message opens each by its id (search_messages lists them)'
+    room = CAP - len(_j(head)) - 200
+    while True:
+        part, more = _part(body, start, room, 0, 'read_message')
+        out = {**head, 'body': part, **({'body_goes_on': more} if more else {})}
+        if len(_j(out)) <= CAP or room <= 0: return _j(out)
+        room -= max(len(_j(out)) - CAP, 50)                                         # escapes made it longer than its characters
+
+
+def _part(text: str, start, room: int, whole: int, tool: str) -> tuple:
+    """(the part of `text` from `start` that fits `room`, and what says where to go on - '' when it is all there). `whole`: the length of
+    what `text` was kept from, when it was longer than what is kept - said, so a cut is never taken for the end."""
+    try: start = max(0, int(start or 0))
+    except (TypeError, ValueError): raise ValueError(f'start {str(start)[:20]!r} is not a number - the answer says where to go on') from None
+    part = text[start:start + max(room, 0)]
+    end = start + len(part)
+    more = f'{len(text) - end:,} more characters - {tool} again with start={end}' if end < len(text) else ''
+    if whole > len(text) and end >= len(text):
+        more = f'Taskuary keeps the first {len(text):,} of its {whole:,} characters - the rest is in the original, opened from the mail'
+    elif whole > len(text): more += f' (Taskuary keeps the first {len(text):,} of its {whole:,} characters)'
+    return part, more
+
+
 NOT_LISTED = ("A SITE OR SYSTEM NOT LISTED HERE has no connection: say so in one line, and reach it in Taskuary's browser where you have one "
               "(the guide `browser` first) - a sign-in is done on the page there, by a saved sign-in or by the owner, and kept for next time. "
               "Never ask the owner for a password, and never work a sign-in from your shell.")
@@ -432,24 +465,28 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'search_messages':
         hits = mailsearch.search(store, a.get('sender', ''), a.get('subject', ''), a.get('words', ''), a.get('since', ''), a.get('until', ''),
                                  a.get('limit') or 20)
-        return _out(mailsearch.says(hits), fence_it=bool(hits))
+        return _out(mailsearch.says(hits, store), fence_it=bool(hits))
     if name == 'read_message':
         mid = mailsearch.message_id(a.get('id'))
         m = mailsearch.message(store, mid)
         if not m: raise ValueError(f"Taskuary has no saved message m{mid} - search_messages finds a message and its id")
         files = [{'id': x['AttachmentId'], 'name': x.get('Name'), 'bytes': x.get('Size')} for x in store.list_attachments(mid) or []
                  if not x.get('Inline')]
-        return _out(_j({**m, 'attachments': files}), fence_it=True)
+        return _out(_fitted({**m, 'attachments': files}, a.get('start')), fence_it=True)
     if name == 'read_attachment':
         from pathlib import Path
         from . import attachtext
-        x = store.get_attachment(int(a['id']))
+        # ...by the id as the attach parameter spells it ("attachment 12"), never Python's "invalid literal for int()"
+        n = _AID.match(str(a['id']))
+        x = store.get_attachment(int(n[1])) if n else None
         if not x or not store.get_message(x.get('MessageId')) or (store.get_message(x['MessageId']) or {}).get('Channel') == 'assistant':
             raise ValueError(f"no attachment {a['id']} - read_message lists a message's attachments with their ids")
         p = Path(x['Path']) if x.get('Path') else None
         if not p or not p.is_file(): raise ValueError(not_kept(x.get('Name')))
         got = attachtext.read(x.get('Name'), p.read_bytes())
-        return _out(got.get('text') or got.get('note') or '(no text in it)', fence_it=bool(got.get('text')))
+        if not got.get('text'): return _out(got.get('note') or '(no text in it)')
+        part, more = _part(got['text'], a.get('start'), CAP - 400, int(got.get('chars') or 0), 'read_attachment')
+        return _out(part, fence_it=True) + (f'\n{more}' if more else '')
     if name == 'my_task':
         t = store.get_task(tid) or {}
         items = [f"[{i['id']}] {'x' if i.get('done') else ' '} {i.get('text')}" for i in store.task_checklist(tid)]

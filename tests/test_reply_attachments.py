@@ -141,6 +141,29 @@ class SendingThemTests(unittest.TestCase):
         # the upload url is pre-authorised - our token on it is what makes Graph refuse the chunk
         self.assertNotIn('Authorization', puts[0]['headers'])
 
+    def test_a_file_graph_refuses_leaves_no_draft_behind_and_says_graphs_words(self):
+        """A second file refused (too large for the mailbox) stopped the send after the draft was composed: the half-made draft stayed in
+        the owner's Outlook Drafts, one more on every Try again, and the task read Graph's raw JSON. The draft we made is taken back,
+        and the refusal is Graph's own message."""
+        calls = []
+        post, patch, put = self._graph(calls)
+        def refusing(url, **kw):
+            if url.endswith('/attachments') and len([c for c in calls if c[1].endswith('/attachments')]) == 1:
+                calls.append(('POST', url, kw))
+                return mock.Mock(status_code=413, text='{"error":{"code":"ErrorRequestEntityTooLarge","message":"The attachment is too large."}}',
+                                 json=mock.Mock(return_value={'error': {'code': 'ErrorRequestEntityTooLarge', 'message': 'The attachment is too large.'}}))
+            return post(url, **kw)
+        def delete(url, **kw):
+            calls.append(('DELETE', url, kw)); return mock.Mock(status_code=204)
+        two = [{'name': n, 'size': 10, 'bytes': b'0123456789', 'type': 'application/x-xls'} for n in ('east.xlsx', 'west.xlsx')]
+        with mock.patch.object(outbound.requests, 'post', side_effect=refusing), mock.patch.object(outbound.requests, 'patch', side_effect=patch), \
+             mock.patch.object(outbound.requests, 'delete', side_effect=delete, create=True):
+            with self.assertRaises(RuntimeError) as e:
+                outbound._send_with_files({'Authorization': 'Bearer t'}, 'me@co.test', ['gitty@example.test'], [], 'Re: PTO', 'Attached.', 'graph-99', two)
+        self.assertIn('The attachment is too large', str(e.exception)); self.assertNotIn('{"error"', str(e.exception))
+        self.assertIn(('DELETE', 'https://graph.microsoft.com/v1.0/users/me@co.test/messages/draft-1'), [(m, u) for m, u, _k in calls])
+        self.assertFalse(any(u.endswith('/send') for _m, u, _k in calls))
+
     def test_a_chat_says_it_cannot_carry_a_file_rather_than_dropping_it(self):
         store = MemoryStore()
         msg = {'Channel': 'teams', 'ConversationId': 'teams:19:abc', 'ExternalId': 'teams:1'}

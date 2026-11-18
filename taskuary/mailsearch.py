@@ -6,6 +6,7 @@ behind `taskuary --search` / `--message` (cli.py) and GET /api/agent/messages (s
 (guard.owns_task), and a stranger's session never (guard.stranger_denied refuses it, and its brief does not name it).
 """
 import re
+from datetime import date
 from .routing import tokens
 from .store import task_ref
 from . import textsim
@@ -25,13 +26,23 @@ def _hit(r: dict) -> dict:
             'channel': str(r.get('Channel') or ''), 'task': task_ref(r['TaskId']) if r.get('TaskId') else ''}
 
 
+def _day(x, name: str) -> str:
+    """A date filter as YYYY-MM-DD, '' when none is given. One it cannot read is a ValueError: compared as text, "yesterday" filtered out
+    every message and the agent was told nothing matched - about the mailbox, when the trouble was the date."""
+    d = str(x or '').strip()[:10]
+    if not d: return ''
+    try: return date.fromisoformat(d).isoformat()
+    except ValueError: raise ValueError(f'{name} {str(x)[:40]!r} is not a date - give it as YYYY-MM-DD') from None
+
+
 def search(store, sender: str = '', subject: str = '', words: str = '', since: str = '', until: str = '', limit: int = 20) -> list:
     """Messages matching every filter given, best match first when there are words, else newest first. `since`/`until` are dates
     (YYYY-MM-DD) on when it was SENT, `until` inclusive. The Assistant's own chat is not mail and is never a hit."""
     who, subj = str(sender or '').strip().lower(), str(subject or '').strip().lower()
     want = tokens(f'{subject or ""} {words or ""}')
-    lo, hi = str(since or '').strip()[:10], str(until or '').strip()[:10]
-    limit = max(1, min(int(limit or 20), 100))
+    lo, hi = _day(since, 'since'), _day(until, 'until')
+    try: limit = max(1, min(int(limit or 20), 100))
+    except (TypeError, ValueError): raise ValueError(f'limit {str(limit)[:20]!r} is not a number - give how many messages, like 20') from None
     ids = store.message_search(want, who, 3650) if (want or who) else None
     if ids is None:                                  # no index (or nothing to match on): the newest, scanned
         from .concierge import newest_rows
@@ -74,11 +85,26 @@ def message(store, mid) -> dict | None:
             'messages': [_hit(x) for x in thread if x.get('Channel') != 'assistant']}
 
 
-def says(hits: list) -> str:
-    """The hits as an agent reads them at its prompt: one block each, the id first - what `taskuary --message ID` opens."""
-    if not hits: return 'No message in Taskuary matches that. Try fewer words, only --from, or a wider date range.'
+def says(hits: list, store=None) -> str:
+    """The hits as an agent reads them at its prompt: one block each, the id first - what `taskuary --message ID` opens. With none,
+    and the `store` to ask, how far the saved mail reaches: an empty mailbox read "try fewer words" to an agent searching mail that was
+    never there, and it searched on and told the owner nothing was found."""
+    if not hits:
+        far = reach(store) if store is not None else ''
+        return 'No message in Taskuary matches that. ' + (far if far.startswith('Taskuary holds no') else
+                                                          f'{far} Try fewer words, only --from, or a wider date range.'.strip())
     return '\n\n'.join(f"[{h['id']}] {h['when']} - {h['from']}\n{h['subject']}" + (f"  ({h['task']})" if h['task'] else '')
                        + (f"\nthread {h['thread']}" if h['thread'] else '') + (f"\n{h['snippet']}" if h['snippet'] else '') for h in hits)
+
+
+def reach(store) -> str:
+    """How far the owner's saved mail and messages reach, in one line - or that there are none, and where a mailbox is connected."""
+    from . import words
+    r = store._one("SELECT COUNT(*) AS n, MIN(SentAt) AS lo, MAX(SentAt) AS hi FROM message WHERE COALESCE(Channel, '') != 'assistant'") or {}
+    if not r.get('n'):
+        return (f"Taskuary holds no saved mail or messages at all yet - no mailbox has been read, so searching again finds nothing. Tell "
+                f"the owner, with the place a mailbox is connected: {words.link('mail')}.")
+    return f"Its saved mail runs from {str(r['lo'])[:10]} to {str(r['hi'])[:10]}."
 
 
 def meeting_reads(store, who: list, subject: str, per: int = 3, cap: int = 12) -> list:

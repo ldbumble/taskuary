@@ -140,6 +140,31 @@ class AttachmentReReadTests(unittest.TestCase):
             poll(s, FakeGraph({'inbox': [first, second]}))
         self.assertEqual(fetched, ['inbox-1', 'inbox-2'])
 
+    def test_files_graph_did_not_give_this_poll_are_fetched_on_the_next(self):
+        """A throttle or a dropped token while a mail's files were fetched (a 401 mid-poll) let the mail in without them - and a mail
+        already in never asks for its files again, so "see the attached invoice" stood with no invoice for good. A miss Graph may yet
+        answer holds the mail for the next poll; one it never will (404, the mail is gone) lets it in without."""
+        import requests
+        s, sid = outlook_store()
+        m = {**graph_mail(1, T0), 'hasAttachments': True}
+        def throttled(code):
+            r = requests.Response(); r.status_code = code
+            return requests.HTTPError(f'{code} Client Error', response=r)
+        answers = [throttled(429), [{'id': 'a1', 'name': 'invoice.pdf', 'size': 3, 'contentBytes': 'QUFB', 'contentType': 'application/pdf'}]]
+        def atts(tok, upn, gid):
+            a = answers.pop(0)
+            if isinstance(a, Exception): raise a
+            return a
+        with mock.patch.object(channels, 'mail_attachments', side_effect=atts):
+            poll(s, FakeGraph({'inbox': [m]}))
+            poll(s, FakeGraph({'inbox': [m]}))
+        [row] = inbox_rows(s)
+        self.assertEqual([a['Name'] for a in s.list_attachments(row['MessageId'])], ['invoice.pdf'])
+        s2, _ = outlook_store()
+        with mock.patch.object(channels, 'mail_attachments', side_effect=throttled(404)):
+            poll(s2, FakeGraph({'inbox': [m]}))
+        self.assertEqual(len(inbox_rows(s2)), 1)
+
 
 
 class MailMsgsTests(unittest.TestCase):
@@ -483,6 +508,26 @@ class CatchUpTests(unittest.TestCase):
         self.assertNotIn('inbox', cfg.get('mail_cursor', {}))                    # nothing of it was read: no half-way point to keep
         self.assertEqual(s.get_source(sid)['LastPolledAt'], (T0 - timedelta(hours=1)).astimezone().strftime('%Y-%m-%d %H:%M:%S'))
 
+
+    def test_a_folder_deleted_in_outlook_does_not_blind_the_rest_of_the_mailbox(self):
+        """A folder the card reads was deleted in Outlook: Graph answers 404 for it on every poll, the catch-up cycle never finished, its
+        frozen cutoff never moved - and mail arriving in the Inbox after it was never read again, behind a raw 404 and its URL on the
+        card. A folder that is not there any more has nothing to wait for: the rest is read and the card says which way to fix it."""
+        import requests
+        class Gone(FakeGraph):
+            def __call__(self, tok, upn, since, folder='inbox', **kw):
+                if folder == 'AAMk-gone':
+                    r = requests.Response(); r.status_code = 404
+                    raise requests.HTTPError(f'404 Client Error: Not Found for url: https://graph.microsoft.com/v1.0/users/{upn}/mailFolders/{folder}/messages', response=r)
+                return super().__call__(tok, upn, since, folder, **kw)
+        s, sid = outlook_store(folders=('inbox', 'AAMk-gone'))
+        box = {'inbox': [graph_mail(1, T0 + timedelta(seconds=1))]}
+        with mock.patch.object(channels, '_mail_cutoff', return_value=_iso(T0 + timedelta(minutes=1))): poll(s, Gone(box))
+        box['inbox'].append(graph_mail(2, T0 + timedelta(minutes=5)))            # ...and the next mail comes in after that poll's cutoff
+        with mock.patch.object(channels, '_mail_cutoff', return_value=_iso(T0 + timedelta(minutes=10))): poll(s, Gone(box))
+        self.assertEqual([r['Subject'] for r in inbox_rows(s)], ['mail 1', 'mail 2'])
+        card = channels.card_error(s.get_connector(s.get_source(sid)['ConnectorId']))
+        self.assertIn('not in it any more', card); self.assertNotIn('graph.microsoft.com', card)
 
 if __name__ == '__main__':
     unittest.main()

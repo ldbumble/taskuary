@@ -35,7 +35,11 @@ def fix_of(e) -> dict | None: return getattr(e, 'fix', None) or auth_fix(e)
 # advising Send, with no button to the mailbox (error sweep, 2026-10-18)
 _AUTH = re.compile(r'\((401|403)\)|\b535\b|authentication (unsuccessful|failed)|invalid_grant|AADSTS\d+|token (has )?expired', re.I)
 def auth_fix(e) -> dict | None:
-    return {'label': 'Sign in again', 'href': MAIL[1]} if isinstance(e, smtplib.SMTPAuthenticationError) or _AUTH.search(str(e)) else None
+    # ...and a sign-in the app itself found lapsed or refused, by the words it wrote (a Gmail Send with a lapsed Google sign-in offered Try again)
+    from . import googlecal, imapmail, msauth
+    s = str(e)
+    lapsed = msauth.LAPSED in s or googlecal.lapsed(s) or imapmail.GOOGLE_REFUSED in s
+    return {'label': 'Sign in again', 'href': MAIL[1]} if isinstance(e, smtplib.SMTPAuthenticationError) or _AUTH.search(s) or lapsed else None
 MAIL = ('Connect a mailbox', words.href('mail'))          # the places, by their one link (words.json)
 # ENVELOPES THAT ARE NOT MAIL: an invoice Zoho sends and a calendar answer (calwrite.py) leave by their own provider - no reply
 # channel, no redraft, no mailbox receipt to check
@@ -112,6 +116,15 @@ def read_attachments(items) -> list:
     return out
 
 
+def _graph_said(r) -> str:
+    """What Graph said when it refused, in its own words - its error's message, never the JSON envelope around it (the task read
+    'graph could not attach x (413): {"error":{"code":...'). The raw text when it sent no JSON."""
+    try: e = (r.json() or {}).get('error') or {}
+    except Exception: e = {}
+    said = (e.get('message') or e.get('code')) if isinstance(e, dict) else None
+    return str(said or getattr(r, 'text', '') or '')[:300]
+
+
 def _attach_to_draft(hdr: dict, box: str, draft_id: str, f: dict):
     """One file onto a draft message: in the request when it is small, through an upload session
     when it is not. 3.3MB of payroll workbooks is exactly the size that needs the second road."""
@@ -120,11 +133,11 @@ def _attach_to_draft(hdr: dict, box: str, draft_id: str, f: dict):
                           data=json.dumps({'@odata.type': '#microsoft.graph.fileAttachment', 'name': f['name'],
                                            'contentType': f['type'],
                                            'contentBytes': base64.b64encode(f['bytes']).decode('ascii')}))
-        if r.status_code >= 300: raise RuntimeError(f'graph could not attach {f["name"]} ({r.status_code}): {r.text[:200]}')
+        if r.status_code >= 300: raise RuntimeError(f'graph could not attach {f["name"]} ({r.status_code}): {_graph_said(r)}')
         return
     r = requests.post(f'{GRAPH}/users/{box}/messages/{draft_id}/attachments/createUploadSession', headers=hdr, timeout=60,
                       data=json.dumps({'AttachmentItem': {'attachmentType': 'file', 'name': f['name'], 'size': f['size']}}))
-    if r.status_code >= 300: raise RuntimeError(f'graph refused an upload for {f["name"]} ({r.status_code}): {r.text[:200]}')
+    if r.status_code >= 300: raise RuntimeError(f'graph refused an upload for {f["name"]} ({r.status_code}): {_graph_said(r)}')
     url = r.json().get('uploadUrl')
     if not url: raise RuntimeError(f'graph gave no upload url for {f["name"]}')
     for start in range(0, f['size'], UPLOAD_CHUNK):
@@ -135,7 +148,7 @@ def _attach_to_draft(hdr: dict, box: str, draft_id: str, f: dict):
                           headers={'Content-Length': str(len(chunk)),
                                    'Content-Range': f'bytes {start}-{end}/{f["size"]}'})
         if rr.status_code >= 300:
-            raise RuntimeError(f'uploading {f["name"]} failed at {start} ({rr.status_code}): {rr.text[:200]}')
+            raise RuntimeError(f'uploading {f["name"]} failed at {start} ({rr.status_code}): {_graph_said(rr)}')
 
 
 def _rcpts_of(xs) -> list: return [{'emailAddress': {'address': a}} for a in xs]
@@ -153,7 +166,7 @@ def _send_with_files(hdr: dict, box: str, to: list, cc: list, subject: str, body
     said = html or _html.escape(body).replace(chr(10), '<br>')
     if reply_to_graph_id:
         r = requests.post(f'{GRAPH}/users/{box}/messages/{reply_to_graph_id}/createReply', headers=hdr, timeout=30, data='{}')
-        if r.status_code >= 300: raise RuntimeError(f'graph could not open a reply ({r.status_code}): {r.text[:200]}')
+        if r.status_code >= 300: raise (GoneAtSource if r.status_code == 404 else RuntimeError)(f'graph could not open a reply ({r.status_code}): {_graph_said(r)}')
         draft = r.json() or {}
         did = draft.get('id')
         quoted = ((draft.get('body') or {}).get('content') or '')
@@ -170,19 +183,28 @@ def _send_with_files(hdr: dict, box: str, to: list, cc: list, subject: str, body
         if bcc: msg['bccRecipients'] = _rcpts_of(bcc)
         r = requests.post(f'{GRAPH}/users/{box}/messages', headers=hdr, timeout=30, data=json.dumps(msg))
         did = (r.json() or {}).get('id') if r.status_code < 300 else None
-    if r.status_code >= 300: raise RuntimeError(f'graph could not compose the mail ({r.status_code}): {r.text[:200]}')
-    if not did: raise RuntimeError('graph composed no draft to attach to')
-    for f in files: _attach_to_draft(hdr, box, did, f)
+    try:
+        if r.status_code >= 300: raise RuntimeError(f'graph could not compose the mail ({r.status_code}): {_graph_said(r)}')
+        if not did: raise RuntimeError('graph composed no draft to attach to')
+        for f in files: _attach_to_draft(hdr, box, did, f)
+    except Exception:
+        # ...and the half-made draft goes back: left in the owner's Drafts, every Try again added one more beside it. Before /send only -
+        # past it the mail may have gone, and that draft is the record of it
+        if did:
+            try: requests.delete(f'{GRAPH}/users/{box}/messages/{did}', headers=hdr, timeout=30)
+            except Exception as e: logger.warning(f'the unsent draft {did} was not taken back: {e}')
+        raise
     r = requests.post(f'{GRAPH}/users/{box}/messages/{did}/send', headers=hdr, timeout=120)
     if r.status_code >= 300:
         error = UncertainDelivery if r.status_code >= 500 else RuntimeError
-        raise error(f'graph sendMail failed ({r.status_code}): {r.text[:300]}')
+        raise error(f'graph sendMail failed ({r.status_code}): {_graph_said(r)}')
     return {'channel': 'email', 'to': to, 'cc': cc, 'bcc': list(bcc), 'mailbox': box, 'threaded': bool(reply_to_graph_id),
             'attached': [f['name'] for f in files]}
 
 
 def send_email(store, to: list, subject: str, body: str, reply_to_graph_id: str = None, mailbox: str = None,
-               connector_id=None, cc: list = None, attachments: list = None, html: str = None, bcc: list = None, retitle: bool = False) -> dict:
+               connector_id=None, cc: list = None, attachments: list = None, html: str = None, bcc: list = None, retitle: bool = False,
+               thread: dict = None) -> dict:
     """Reply in thread when we know the Graph message id, otherwise a new mail. Plain text:
     these are answers from a person, not marketing.
 
@@ -198,6 +220,40 @@ def send_email(store, to: list, subject: str, body: str, reply_to_graph_id: str 
     if not to and not reply_to_graph_id: raise RuntimeError('no recipient')
     hdr = {'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'}
     files = read_attachments(attachments)
+    # ...a reply whose mail was MOVED in the mailbox (filed, deleted to Deleted Items, archived when its task closed) - a move gives a mail a
+    # new Graph id, and /reply answered 404 on every Send and every Try again. `thread` ({conv, sent, from}) finds it again, and it is answered
+    # there; nothing was sent on the 404, so asking once more sends once
+    try: return _graph_send(hdr, box, to, cc, bcc, subject, body, reply_to_graph_id, files, html, retitle)
+    except GoneAtSource:
+        moved = _moved_id(hdr, box, thread)
+        if not moved: raise GoneAtSource(GONE) from None
+        return _graph_send(hdr, box, to, cc, bcc, subject, body, moved, files, html, retitle)
+
+
+GONE = ("the mail this answers is not in the mailbox any more - it was deleted there, so the reply cannot go on its thread. Nothing was "
+        "sent; write to them as a new email instead")
+class GoneAtSource(RuntimeError):
+    "Graph has no mail at the id a reply answers (404): moved or deleted in the mailbox since it came in."
+
+
+def _moved_id(hdr: dict, box: str, thread: dict | None) -> str | None:
+    """The id the answered mail has now: on its conversation, the one that came at the same second from the same sender. None when none is."""
+    from .channels import _local
+    conv = str((thread or {}).get('conv') or '')
+    if not conv: return None
+    try:
+        r = requests.get(f'{GRAPH}/users/{box}/messages', headers=hdr, timeout=30,
+                         params={'$filter': f"conversationId eq '{conv.replace(chr(39), chr(39) * 2)}'",
+                                 '$select': 'id,receivedDateTime,from', '$top': 100})
+        if r.status_code >= 300: return None
+        rows = r.json().get('value') or []
+    except (requests.RequestException, ValueError): return None
+    who = str(thread.get('from') or '').lower()
+    return next((m['id'] for m in rows if _local(str(m.get('receivedDateTime') or '')) == str(thread.get('sent') or '')
+                 and str(((m.get('from') or {}).get('emailAddress') or {}).get('address') or '').lower() == who), None)
+
+
+def _graph_send(hdr: dict, box: str, to: list, cc: list, bcc: list, subject: str, body: str, reply_to_graph_id, files: list, html, retitle) -> dict:
     if files: return _send_with_files(hdr, box, to, cc, subject, body, reply_to_graph_id, files, html=None if reply_to_graph_id else html, bcc=bcc, retitle=retitle)
     if reply_to_graph_id:
         # Graph reads the reply `comment` as HTML, so plain-text newlines collapse into one long
@@ -222,8 +278,8 @@ def send_email(store, to: list, subject: str, body: str, reply_to_graph_id: str 
                                                        **({'bccRecipients': _rcpts_of(bcc)} if bcc else {})},
                                            'saveToSentItems': True}))
     if r.status_code >= 300:
-        error = UncertainDelivery if r.status_code >= 500 else RuntimeError
-        raise error(f'graph sendMail failed ({r.status_code}): {r.text[:300]}')
+        error = UncertainDelivery if r.status_code >= 500 else GoneAtSource if reply_to_graph_id and r.status_code == 404 else RuntimeError
+        raise error(f'graph sendMail failed ({r.status_code}): {_graph_said(r)}')
     return {'channel': 'email', 'to': to, 'cc': cc, 'bcc': bcc, 'mailbox': box, 'threaded': bool(reply_to_graph_id)}
 
 
@@ -249,7 +305,7 @@ def send_teams(store, chat_id: str, body: str, connector_id=None, want_id: bool 
     # make - the line deleted, a cloud without the action - still lets the words go, plain, rather than fail the Send
     r = post('/replyWithQuote', {'messageIds': [str(quote)], 'replyMessage': said}) if quote else None
     if r is not None and r.status_code in (400, 404, 405, 501):
-        logger.info(f'teams: the reply goes unquoted - Graph would not quote message {quote} ({r.status_code}): {r.text[:200]}')
+        logger.info(f'teams: the reply goes unquoted - Graph would not quote message {quote} ({r.status_code}): {_graph_said(r)}')
         r = None
     quoted = r is not None
     if r is None: r = post('', said)
@@ -297,7 +353,7 @@ def one_on_one(tok: str, who: str) -> str:
     m = lambda i: {'@odata.type': '#microsoft.graph.aadUserConversationMember', 'roles': ['owner'], 'user@odata.bind': f"{GRAPH}/users('{i}')"}
     r = requests.post(f'{GRAPH}/chats', timeout=30, headers={'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'},
                       data=json.dumps({'chatType': 'oneOnOne', 'members': [m(mid), m(them)]}))
-    if r.status_code >= 300: raise RuntimeError(f'Teams would not open a chat with {who} ({r.status_code}): {r.text[:200]}')
+    if r.status_code >= 300: raise RuntimeError(f'Teams would not open a chat with {who} ({r.status_code}): {_graph_said(r)}')
     return r.json()['id']
 
 
@@ -1003,7 +1059,8 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         return send_email(store, to or [msg.get('FromEmail')], subj,
                           body, ext[6:] if ext.startswith('graph:') else None, msg.get('SourceName'),
                           _source_connector_id(store, 'email', msg.get('SourceName')), cc=cc, bcc=bcc,
-                          attachments=attachments, retitle=bool(subject))
+                          attachments=attachments, retitle=bool(subject),
+                          thread={'conv': msg.get('ConversationId'), 'sent': msg.get('SentAt'), 'from': msg.get('FromEmail')})
     if ch == 'teams':
         chat = (msg.get('ConversationId') or '')[6:]        # 'teams:19:...'
         if not chat: raise RuntimeError('this chat message has no chat id to answer in')

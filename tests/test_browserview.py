@@ -475,6 +475,15 @@ class StuckLoadTests(unittest.TestCase):
             rc, said = browsergate._run('st', ['open', 'https://slow.example/report'], 45, 'api')
         self.assertEqual(rc, 1); self.assertIn(bv.STOPPED, said); self.assertEqual(self.stopped, ['A'])
 
+    def test_the_owners_address_bar_says_it_in_one_plain_line(self):
+        def popen(argv, **kw):
+            kw['stdout'].write(b'Failed to read: Resource temporarily unavailable (os error 11)\n')
+            return mock.Mock(wait=mock.Mock(return_value=1), kill=mock.Mock())
+        with mock.patch.object(bv, 'program', return_value='agent-browser'), mock.patch.object(bv.spawn, 'popen', side_effect=popen), \
+             mock.patch.object(bv, 'state', return_value={'open': True}), mock.patch.object(bv, 'STUCK', 0):
+            with self.assertRaises(ValueError) as e: bv.navigate('st', 'https://slow.example/report')
+        self.assertTrue(str(e.exception).startswith('It had not finished loading')); self.assertIn('Taskuary stopped it', str(e.exception))
+
     def test_the_agents_next_browser_line_stops_it_first(self):
         from taskuary import browsergate, hooks
         bv._BEGAN['st'] = time.time() - bv.STUCK - 5

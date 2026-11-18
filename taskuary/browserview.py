@@ -404,7 +404,7 @@ def navigate(sid: str, url: str) -> str:
     except (RuntimeError, OSError) as e:
         if not str(e).startswith(browsergate.LATE): raise ValueError(f'could not open that page: {e}')
         raise ValueError(str(e) if STOPPED in str(e) else 'the page did not finish loading in time - the browser still has it, so watch the pane')
-    if rc != 0: raise ValueError(STOPPED.capitalize() if STOPPED in said else said.strip()[-300:].strip() or 'agent-browser could not open that page')
+    if rc != 0: raise ValueError(STOPPED[0].upper() + STOPPED[1:] if STOPPED in said else said.strip()[-300:].strip() or 'agent-browser could not open that page')
     _CACHE.pop(sid, None)
     return u
 

@@ -79,3 +79,17 @@ test("a post whose press failed is over: no box, no button, its error the line",
   const st = stateOf({ Status: "superseded", ActError: "the network refused the post", post: { type: "linkedin_post" } });
   assert.equal(st.live, undefined); assert.equal(st.failed, true); assert.equal(st.done, false);
 });
+
+// AN ACT WHOSE WORDS ARE OPTIONAL IS NOT HELD ON AN EMPTY BOX (the stress round, 2026-11-18): an agent set up "close northwind/ledger#12"
+// with no comment - the executor takes none (github.run_github_close) - and the card drew Close issue greyed over its empty box, a press
+// nothing could light. A comment the agent wrote and the owner emptied still holds it: an empty box is never sent as the agent's words.
+test("Close issue with no comment proposed can be pressed; a comment or a post the box needs cannot go empty", async () => {
+  const { pressable } = await import("../src/actionCard.js");
+  const close = actionFor("github_close"), CLOSE = { action: "run_tool", type: "github_close", repo: "northwind/ledger", number: 12 };
+  assert.ok(pressable(close, CLOSE, ""));
+  assert.ok(pressable(close, CLOSE, "Fixed in the last release."));
+  assert.ok(!pressable(close, { ...CLOSE, comment: "Fixed." }, "  "));
+  assert.ok(pressable(actionFor("github_issue"), { action: "run_tool", type: "github_issue", repo: "northwind/ledger", title: "Totals off" }, ""));
+  assert.ok(!pressable(actionFor("jira_comment"), { action: "run_tool", type: "jira_comment", item: "NW-12" }, ""));
+  assert.ok(!pressable(actionFor("linkedin_post"), { ...POST, text: "" }, ""));
+});

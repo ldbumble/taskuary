@@ -17,7 +17,7 @@
     ]
   },
   "actions": {
-    "_": "WHAT THE OWNER PRESSES, PER CONNECTOR (the owner, 2026-11-05: \"each connector should have settings what the action view looks like no?\"). A card's `actions` lists the acts it can be set up for under a chat turn's Next steps, and one card (ActionCard.jsx) draws whatever is declared. Each: `kind` (post, email, chat, tracker), `road` (run_tool: a proposal on `tool`; reply: propose_reply / propose_email), the press words (`press`, `busy`, `done`, `undone`, `note`) and `fields`. A field has a `key` (the proposal's own), a `label` and a `type` (text, line, image, choice, people, files); `edit`: the owner may change it on the card before pressing; `agent`: the agent may propose it (general.roads tells it which); `setting`: a per-connection default on the Connections card, saved as default_<key> on the card and filled into the agent's proposal when it names none (connectorcatalog.with_defaults); a choice's own `press` / `busy` / `done` replace the act's while it is picked."
+    "_": "WHAT THE OWNER PRESSES, PER CONNECTOR (the owner, 2026-11-05: \"each connector should have settings what the action view looks like no?\"). A card's `actions` lists the acts it can be set up for under a chat turn's Next steps, and one card (ActionCard.jsx) draws whatever is declared. Each: `kind` (post, email, chat, tracker), `road` (run_tool: a proposal on `tool`; reply: propose_reply / propose_email), the press words (`press`, `busy`, `done`, `undone`, `note`) and `fields`. A field has a `key` (the proposal's own), a `label` and a `type` (text, line, image, choice, people, files); `edit`: the owner may change it on the card before pressing; `agent`: the agent may propose it (general.roads tells it which); `optional`: a text the act may go without - its press is lit over the empty box the agent left (ActionCard); `setting`: a per-connection default on the Connections card, saved as default_<key> on the card and filled into the agent's proposal when it names none (connectorcatalog.with_defaults); a choice's own `press` / `busy` / `done` replace the act's while it is picked."
   },
   "cards": [
     {
@@ -192,7 +192,8 @@
               "label": "Issue",
               "type": "text",
               "edit": true,
-              "agent": true
+              "agent": true,
+              "optional": true
             }
           ]
         },
@@ -230,7 +231,8 @@
               "label": "Comment",
               "type": "text",
               "edit": true,
-              "agent": true
+              "agent": true,
+              "optional": true
             }
           ]
         }

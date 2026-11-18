@@ -378,14 +378,24 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if not items: raise ValueError('`items` holds no objects - give each item its own fields')
     if len(items) > 500: raise ValueError(f'{len(items)} items is past what one card holds (500) - split them, or narrow the list')
     key, top = bulkcard.new_key(), (store._one('SELECT MAX(ReviewId) AS m FROM review') or {}).get('m') or 0
-    refused = []
+    refused, went, held = [], [], []
     for i, it in enumerate(items):
-        try: _call(store, tid, name, {**base, **it}, doors)
-        except Exception as e: refused.append(f'item {i + 1}: {failed(name, e)}')
+        try: got = _call(store, tid, name, {**base, **it}, doors)
+        except Exception as e: refused.append(f'item {i + 1}: {failed(name, e)}'); continue
+        # ...A ROUTINE'S OWN EMAIL WENT AS IT WAS FILED (slots.routine_sends): counted as sent, and one that did not go said with why - never
+        # "they stand as ONE card" over emails that already left
+        try: o = json.loads(got) if isinstance(got, str) else got
+        except ValueError: o = {}
+        who = str({**base, **it}.get('to') or 'them')
+        if isinstance(o, dict) and o.get('sent'): went.append(who)
+        elif isinstance(o, dict) and o.get('send_error'): held.append(f"{who} ({str(o['send_error']).rstrip(' .')})")
     store._exec('UPDATE review SET Batch=? WHERE TaskId=? AND ReviewId>? AND Status=?', (key, int(tid), top, 'pending'))
     n = (store._one('SELECT COUNT(*) AS n FROM review WHERE Batch=?', (key,)) or {}).get('n') or 0
-    return _j({'ok': n > 0, 'batch': key, 'on_the_card': n, **({'refused': refused} if refused else {}),
-               'shown': 'They stand as ONE card: the owner reviews a few and does them all with one press; you hear the whole run once.'})
+    card = 'They stand as ONE card: the owner reviews a few and does them all with one press; you hear the whole run once.'
+    shown = (f"{len(went)} of {len(items)} sent at once - a routine's own email goes without a press; say they went."
+             + (f" Not sent: {'; '.join(held)}." if held else '') + (f' The {n} unsent stand as ONE card for the owner\'s Send.' if n else '')) if went else card
+    return _j({'ok': n > 0 or bool(went), 'batch': key, 'on_the_card': n, **({'sent': len(went)} if went else {}),
+               **({'refused': refused} if refused else {}), 'shown': shown})
 
 
 def _call(store, tid: int, name: str, args: dict, doors: dict) -> str:

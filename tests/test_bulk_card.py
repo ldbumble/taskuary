@@ -144,3 +144,21 @@ def test_a_task_whose_card_is_running_reads_at_work_not_waiting_on_him():
     assert taskstate.state(s, s.get_task(tid)) == 'working', 'stopping after the row in hand'
     st['state'] = 'stopped'; bulkcard._save(s, st)
     assert taskstate.state(s, s.get_task(tid)) != 'working', 'what was not run waits on him again'
+
+
+def test_a_routine_runs_many_emails_go_at_once_and_its_agent_hears_the_true_count():
+    # a routine run's agent raised three emails in one call: a routine's own email goes without a press, so each went as it was filed - and
+    # the answer read 0 on the card, ok false and "they stand as ONE card", so the agent told the owner three sent emails were waiting
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Monday vendor nudges - Mon', 'Kind': 'general', 'Status': 'open', 'Source': 'workflow', 'SourceRef': 'workflow:7'}, 'routine')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Set up.'); s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00'")
+    sent = []
+    def send(store, channel, to, *a, **k):
+        if 'owner1@' in str(to): raise RuntimeError('mailbox refused the recipient')
+        sent.append(to); return {'channel': 'email', 'to': list(to)}
+    with mock.patch.object(server, 'store', s), mock.patch.object(outbound, 'send_out', send), \
+            mock.patch.object(outbound, 'send_block', lambda *a, **k: ''), mock.patch('taskuary.learn.learn_from'):
+        out = call(tid, 'propose_email', items=emails(3))
+    assert len(sent) == 2, sent
+    assert (out['ok'], out['sent'], out['on_the_card']) == (True, 2, 1), out
+    assert out['shown'].startswith('2 of 3 sent at once') and 'owner1@cedar.example' in out['shown'] and 'mailbox refused' in out['shown'], out

@@ -107,6 +107,16 @@ class StateTests(unittest.TestCase):
             self.assertIn('--disable-blink-features=AutomationControlled', argv)
             self.assertFalse([a for a in argv if 'headless' in a or 'enable-automation' in a])
             self.assertTrue(any(a.startswith('--user-data-dir=') and a.endswith('tq-rc1') for a in argv))
+            # ...AND WHAT IT DOWNLOADS LANDS WHERE ITS AGENT MAY READ IT: a click on a download link saved into the owner's own Downloads
+            # (recorded with agent-browser 0.41.2 on a real Chrome: AGENT_BROWSER_DOWNLOAD_PATH is not applied to a browser it attaches to),
+            # and reading it back was a read outside the task, held. Chrome takes the folder from its profile's preferences at launch
+            prof = Path(next(a for a in argv if a.startswith('--user-data-dir=')).split('=', 1)[1])
+            prefs = json.loads((prof / 'Default' / 'Preferences').read_text(encoding='utf-8'))
+            self.assertEqual(prefs['download']['default_directory'], str(bv.downloads()))
+            self.assertFalse(prefs['download']['prompt_for_download'])
+            self.assertTrue(bv.downloads().is_dir()); self.assertIn(str(bv.downloads()), bv.brief())
+            from taskuary import readgate
+            self.assertTrue(any(readgate._in(readgate._n(bv.downloads() / 'invoice.pdf'), r) for r in readgate.own(None, None)))
 
     @pytest.mark.real_chrome
     def test_a_helper_left_by_a_command_before_the_launch_is_no_open_browser_and_start_launches_the_chrome(self):

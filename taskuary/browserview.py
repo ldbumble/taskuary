@@ -804,6 +804,29 @@ def _spawn_chrome(argv: list, hidden: bool = True) -> int:
     k.CloseHandle(pi.hp); k.CloseHandle(pi.ht)
     return int(pi.pid)
 
+# WHAT THE AGENT'S BROWSER DOWNLOADS LANDS WHERE THE AGENT MAY READ IT: a click on a download link saved into the owner's own Downloads
+# folder, and reading it back was a read outside the task (readgate), held - a file the agent fetched it could not open without a card for
+# all of Downloads. agent-browser does not apply its download path to a Chrome it attaches to (0.41.2, recorded on a real Chrome), so the
+# session's own profile names the folder before Chrome starts: Taskuary's scratch, which every task's agent reads freely
+def downloads() -> Path:
+    from . import config
+    return config.home() / 'scratch' / 'downloads'
+
+
+def _downloads_to(prof: Path) -> None:
+    f, d = prof / 'Default' / 'Preferences', downloads()
+    try:
+        d.mkdir(parents=True, exist_ok=True); f.parent.mkdir(parents=True, exist_ok=True)
+        try: p = json.loads(f.read_text(encoding='utf-8'))
+        except (OSError, ValueError): p = {}
+        p = p if isinstance(p, dict) else {}
+        p['download'] = {**(p.get('download') if isinstance(p.get('download'), dict) else {}),
+                         'default_directory': str(d), 'prompt_for_download': False, 'directory_upgrade': True}
+        p['savefile'] = {**(p.get('savefile') if isinstance(p.get('savefile'), dict) else {}), 'default_directory': str(d)}
+        f.write_text(json.dumps(p), encoding='utf-8')
+    except OSError as e: logger.warning(f'the browser downloads folder was not set in {prof} - {e}')
+
+
 def chrome_up(sid: str) -> bool: return _listening(cdp_port(sid))      # session `sid`'s own Chrome answers on its port
 
 
@@ -813,7 +836,7 @@ def real_chrome(sid: str) -> int | None:
     if _listening(port): return 0
     exe = chrome_exe()
     if not exe: logger.warning(f'no Chrome for the browser of {sid}'); return None
-    prof = _profile(sid); prof.mkdir(parents=True, exist_ok=True)
+    prof = _profile(sid); prof.mkdir(parents=True, exist_ok=True); _downloads_to(prof)
     argv = [exe, f'--remote-debugging-port={port}', f'--user-data-dir={prof}', *CHROME_ARGS, 'about:blank']
     # ...and where its own desktop cannot be had or Chrome does not come up on it, the same Chrome with its window off the screen: a browser
     # that works beats one that is out of sight, and the log says which it was
@@ -1064,6 +1087,8 @@ TURN_LINE = ('NEVER SOLVE, CLICK OR WORK AROUND A CAPTCHA, an "I\'m not a robot"
 TABS_LINE = ('WORK EACH SITE IN ITS OWN TAB of this one browser: `agent-browser tab new <url>` opens the next site, `agent-browser tab` lists '
              'them, `agent-browser tab <id>` switches - and switch before you act, the owner may have shown another one. ')
 
+DOWNLOADS_LINE = 'A file the page downloads lands in {folder}; one the owner should have, copy into your outputs folder. '
+
 def brief(held: bool = True, open_now: bool = True) -> str:
     """What an agent with a browser of its own needs to know. Longer than hint() on purpose -
     this only rides when the owner asked for a browser, so it can afford to say how to drive
@@ -1074,7 +1099,7 @@ def brief(held: bool = True, open_now: bool = True) -> str:
             'Drive the existing tab with `agent-browser` - it is already bound and restored, so '
             'NEVER use --session, --headed, profile listing, or launch Chrome separately. Navigate '
             'with `agent-browser open <url>`. ') if open_now else offer_head(held)
-    return (head + OWN_ONLY + SAY_WHY + TABS_LINE +
+    return (head + OWN_ONLY + SAY_WHY + TABS_LINE + DOWNLOADS_LINE.format(folder=downloads()) +
             # POWERSHELL CALLS A SUCCESS AN ERROR. agent-browser writes its progress to stderr
             # ("[agent-browser] launched browser"), and Windows PowerShell 5.1 wraps any native
             # command's stderr in a NativeCommandError and sets $? to false EVEN ON EXIT 0. A CLI

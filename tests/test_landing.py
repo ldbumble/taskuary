@@ -264,6 +264,25 @@ class LandingTests(unittest.TestCase):
         self.assertIn('nothing was pushed', str(e.exception))
         with self.assertRaises(ValueError): landing.land(self.s, self.tid, 'deploy')           # not offered: no deploy branch known
 
+    def test_push_and_deploy_whose_deploy_is_refused_says_the_base_went_and_keeps_it(self):
+        """Push & deploy: the base went out, then the deploy branch refused (it had moved on). The press answered "refused ... - master was
+        pushed", the agent was told "Nothing went out, and the question stays on the task" - and nothing stayed: the base had nothing left
+        to push, so the question was gone and asking again was refused. What went is kept as a push; what did not is said, to both."""
+        from taskuary import ci
+        self.on_master_with_origin(); tip = self.sha('master')
+        other = tempfile.mkdtemp(); git(other, 'clone', '-q', self.remote, '.'); git(other, 'checkout', '-q', '-b', 'deploy')
+        commit(other, 'hotfix.py', 'x\n'); git(other, 'push', '-q', 'origin', 'deploy')                  # the deploy branch is ahead of us
+        landing.propose(self.s, self.tid, 'push', 'live is the ask', deploy='deploy')
+        with mock.patch('taskuary.waitroom.add') as told, mock.patch('taskuary.shellgate.repo_of', return_value='northwind/ledger'):
+            out = landing.land(self.s, self.tid, 'deploy')
+        self.assertEqual(git(self.remote, 'rev-parse', 'master'), tip, 'the base went out')
+        self.assertNotEqual(git(self.remote, 'rev-parse', 'deploy'), tip, 'the deploy did not')
+        self.assertIn('master', out['says']); self.assertIn('deploy', out['says']); self.assertIn('refused', out['says'])
+        said = told.call_args[0][2]
+        self.assertNotIn('Nothing went out', said); self.assertIn('refused', said); self.assertIn(tip[:7], said)
+        self.assertEqual(landing.state(self.s, self.tid)['landed']['how'], 'push')
+        self.assertEqual((ci.landing_of(self.s, self.tid) or {}).get('sha'), tip, 'the CI watch follows what was pushed')
+
     # ── AN AGENT'S OWN `git push` IS THE CARD'S QUESTION TOO (the agent walk, 2026-11-09): told to call propose_land, a coding agent ran
     # `git add ... && git commit ... && git push` in its shell. With Developer mode on the owner got "THE AGENT ASKS - It wants to run
     # "git add ... | tail -1; gi"" with Allow once / Reject - cut mid-word, the push not on it - beside a card built to ask it with one Push

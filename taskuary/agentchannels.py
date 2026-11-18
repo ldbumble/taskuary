@@ -485,7 +485,8 @@ def landing_proposed(store, tid: int):
 # ── Slack: a bound channel is read here, by its own cursor ───────────────────────────────────────────────────────────
 def poll_slack(store, c: dict, tok: str) -> int:
     "Each Slack channel bound on this connection, read since its cursor; top-level lines only (a thread's replies are not in history)."
-    from .channels import _slack
+    from .channels import _slack, slack_said, slack_files
+    from .messengers import _files
     n = 0
     for b in [x for x in rows(store) if x['Kind'] == 'slack' and x.get('ConnectorId') in (None, c['ConnectorId'])]:
         since = float(b['state'].get('cursor') or b['state'].get('since') or time.time())
@@ -494,7 +495,8 @@ def poll_slack(store, c: dict, tok: str) -> int:
             logger.warning(f"slack agent channel {b['Chat']}: not read - {e}"); continue
         msgs = sorted(hist.get('messages') or [], key=lambda m: float(m.get('ts') or 0))
         for m in msgs:
-            if m.get('subtype') or m.get('bot_id'): continue           # the app's own posts, joins, edits
-            n += heard(store, 'slack', b['Chat'], [m.get('user')], m.get('text') or '', f"slack:{b['Chat']}:{m.get('ts')}")
+            if not slack_said(m) or m.get('bot_id'): continue          # the app's own posts, joins, edits
+            n += heard(store, 'slack', b['Chat'], [m.get('user')], m.get('text') or '', f"slack:{b['Chat']}:{m.get('ts')}",
+                       media=lambda m=m: _files(*slack_files(tok, m)))
         if msgs: _save_state(store, b, cursor=max(float(m.get('ts') or 0) for m in msgs))
     return n

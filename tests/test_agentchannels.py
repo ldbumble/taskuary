@@ -235,6 +235,18 @@ def test_slack_reads_a_bound_channel_by_its_own_cursor(w):
     assert len(w.typed) == 2, 'a re-read routed a line twice'
 
 
+def test_a_slack_line_with_a_screenshot_reaches_the_bound_agent(w, tmp_path, monkeypatch):
+    "Slack marks a line with a file in it file_share: the bound channel skipped every subtype, so it never reached the agent."
+    monkeypatch.setenv('TASKUARY_HOME', str(tmp_path))
+    w.bind()
+    hist = {'messages': [{'ts': '1767000005.0', 'user': 'U0GAIL', 'subtype': 'file_share', 'text': 'the total is off here',
+                          'files': [{'id': 'F1', 'name': 'total.png', 'mimetype': 'image/png', 'url_private': 'https://files.slack.com/x/total.png'}]}]}
+    got = mock.Mock(content=b'\x89PNGfake', headers={'Content-Type': 'image/png'}, raise_for_status=lambda: None)
+    with mock.patch('taskuary.channels._slack', return_value=hist), mock.patch('taskuary.channels.requests.get', return_value=got):
+        ac.poll_slack(w.s, w.s.connectors_by_type('slack')[0], 'tok')
+    assert len(w.typed) == 1 and 'the total is off here' in w.typed[0] and re.search(r'agentchannel\S+total\.png', w.typed[0])
+
+
 def test_telegram_routes_a_bound_group_before_anything_else(w):
     w.bind('telegram', '-100777', members=[{'name': 'Alex Doyle', 'id': '4242', 'role': 'owner'}, {'name': 'Gail Moreno', 'id': '5151', 'role': 'teammate'}])
     ups = [{'update_id': 1, 'message': {'message_id': 10, 'chat': {'id': -100777, 'type': 'supergroup', 'title': 'ledger'}, 'from': {'id': 5151, 'first_name': 'Gail'}, 'text': 'tests pass now'}},

@@ -118,6 +118,31 @@ class SlackTests(unittest.TestCase):
         self.assertIn('C000', s.get_connector(cid)['LastError'] or '')
 
 
+class SlackFilesTests(unittest.TestCase):
+    """A Slack line with a screenshot in it is subtype file_share, and a thread reply sent to the channel too is thread_broadcast: the
+    poll dropped every line with a subtype, so both never arrived. Its picture is fetched for triage; one Slack refuses is said."""
+    def test_a_picture_line_and_a_broadcast_reply_arrive_and_a_refused_picture_is_said(self):
+        s = SlackTests._armed(self)
+        hist = {'messages': [
+            {'ts': '1755700003.0', 'user': 'U2', 'subtype': 'file_share', 'text': 'export is broken, see this',
+             'files': [{'id': 'F1', 'name': 'shot.png', 'mimetype': 'image/png', 'url_private': 'https://files.slack.com/files-pri/T1-F1/shot.png'}]},
+            {'ts': '1755700002.0', 'user': 'U3', 'subtype': 'thread_broadcast', 'text': 'fixed it on my side', 'thread_ts': '1755690000.0'},
+            {'ts': '1755700001.0', 'user': 'U4', 'subtype': 'file_share', 'text': '',
+             'files': [{'id': 'F2', 'name': 'b.png', 'mimetype': 'image/png', 'url_private': 'https://files.slack.com/files-pri/T1-F2/b.png'}]},
+            {'ts': '1755700000.0', 'user': 'U5', 'subtype': 'channel_join', 'text': 'joined'}]}
+        png = b'\x89PNG\r\n\x1a\nfake'
+        def get(url, **kw):
+            if 'F2' in url: return mock.Mock(content=b'<html>sign in</html>', headers={'Content-Type': 'text/html; charset=utf-8'}, raise_for_status=lambda: None)
+            return mock.Mock(content=png, headers={'Content-Type': 'image/png'}, raise_for_status=lambda: None)
+        fake = lambda tok, method, post=False, **p: hist if method == 'conversations.history' else {'ok': True}
+        with mock.patch.object(channels, '_slack', fake), mock.patch.object(channels.requests, 'get', side_effect=get):
+            channels.poll_channels(s)
+        rows = {r['BodyText'].split('\n')[0]: r for r in s._rows("SELECT * FROM message WHERE Channel='slack'")}
+        self.assertEqual(set(rows), {'export is broken, see this', 'fixed it on my side', '[A picture in this message could not be read - open the chat in Slack to see it.]'})
+        atts = s.list_attachments(rows['export is broken, see this']['MessageId'])
+        self.assertEqual([a['ContentType'] for a in atts], ['image/png'])
+
+
 class ReadHereTests(unittest.TestCase):
     """A switch on each mail card (the owner, 2026-11-16): mail he reads HERE - the receipt Done, Next, All read and "shown in
     the chat" all write - is marked read in that card's own mailbox. Off by default; one read, one write-back."""

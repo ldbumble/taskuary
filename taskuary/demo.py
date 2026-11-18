@@ -62,6 +62,9 @@ READ_ONLY_METHODS = {'GET', 'HEAD', 'OPTIONS'}
 # The methods an allowance can be given for at all: a DELETE is never the demo, and PUT is how
 # agents and connectors are configured. Both fall through to the refusal.
 ALLOWED_METHODS = {'POST', 'PATCH'}
+# ...but for the undo of a write the demo lets by, named one by one: a file put on a draft is a copy in the demo's own home, and its
+# Remove answered "that would reach something real" - nothing could take it off again (the walk, 2026-11-18)
+ALLOWED_DELETES = (r'^/api/reviews/\d+/attachment$',)
 
 # POSTs that change nothing outside the demo's own database, and are the demo itself
 ALLOWED_WRITES = (
@@ -235,6 +238,7 @@ def refuse(method: str, path: str, store=None) -> str:
     if method.upper() in READ_ONLY_METHODS: return ''
     for pattern, why in REFUSALS:
         if re.match(pattern, path): return why
+    if method.upper() == 'DELETE' and any(re.match(p, path) for p in ALLOWED_DELETES): return ''
     if method.upper() in ALLOWED_METHODS:
         for pattern in ALLOWED_WRITES:
             if not re.match(pattern, path): continue

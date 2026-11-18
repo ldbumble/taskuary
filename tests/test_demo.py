@@ -739,6 +739,15 @@ class TheDemoWorldIsConnectedTests(unittest.TestCase):
             self.assertNotEqual(why, demo.OFF)
             self.assertIn('close', why.lower())
 
+    def test_a_file_put_on_a_draft_can_be_taken_off_again(self):
+        """The walk, 2026-11-18: a file could be attached to a draft (copied into the demo's own home) but its Remove answered "that
+        would reach something real" - nothing could take it back off. Taking it off is the same local write as putting it on."""
+        with on():
+            self.assertEqual(demo.refuse('POST', '/api/reviews/12/attachment'), '')
+            self.assertEqual(demo.refuse('DELETE', '/api/reviews/12/attachment'), '')
+            for path in ('/api/reviews/12', '/api/tasks/3', '/api/connectors/2', '/api/policies/1'):
+                self.assertTrue(demo.refuse('DELETE', path), f'only the attachment is let by: {path}')
+
     def test_trust_says_no_agent_starts_here_never_that_it_would_reach_something_real(self):
         with on(): self.assertEqual(demo.refuse('POST', '/api/tasks/4/trust'), demo.STARTS)
 

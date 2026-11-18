@@ -71,6 +71,43 @@ class AgentSendsWaitForThePress(unittest.TestCase):
         self.assertNotIn('flow_run', p); self.assertNotIn('closeout', p)
 
 
+class ARedditPostFromItsInboxCard(unittest.TestCase):
+    """The Reddit card reads an inbox and now posts: as it is seeded (no role set by hand) an agent's post waits for the press, the press
+    posts on the card's own sign-in, and Reddit's link is what the card keeps. Reddit's HTTP is stubbed."""
+    def setUp(self):
+        from taskuary import net
+        net._TOKENS.clear()
+        s = server.store
+        self.tid = s.create_task({'Title': 'Share the payroll write-up', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        self.card = s.get_connector_by_type('reddit')
+        s.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 1, 'Secret': 'pw',
+                          'ConfigJson': json.dumps({'client_id': 'cid', 'client_secret': 'cs', 'username': 'alexdoyle'})}, 'test')
+
+    def tearDown(self): server.store.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 0}, 'test')
+
+    def test_proposed_then_posted_on_the_press_with_its_link(self):
+        from tests.test_social import RedditNet
+        from taskuary import inboxes
+        r = c.post('/api/tools/run', headers=agent(self.tid), json={'type': 'reddit_post', 'task_id': self.tid, 'subreddit': 'smallbusiness',
+                   'title': 'How we moved payroll', 'text': 'Three things we learned.', 'why': 'Alex asked to share it'})
+        self.assertEqual(r.status_code, 202, r.text)
+        rv = server.store.get_review(r.json()['review'])
+        rd = RedditNet()
+        with mock.patch.object(inboxes.requests, 'request', rd.request): out = proposals.execute(server.store, rv, 'owner')
+        self.assertEqual(rd.submitted()[0]['data']['sr'], 'smallbusiness')
+        self.assertEqual(out['url'], RedditNet.OK['json']['data']['url'])
+
+    def test_a_refused_press_raises_and_posts_nothing(self):
+        from tests.test_social import RedditNet
+        from taskuary import inboxes
+        r = c.post('/api/tools/run', headers=agent(self.tid), json={'type': 'reddit_post', 'task_id': self.tid, 'subreddit': 'smallbusiness',
+                   'title': 'T', 'text': 'x', 'why': 'w'})
+        rd = RedditNet({'json': {'errors': [['SUBMIT_VALIDATION_FLAIR_REQUIRED', 'Your post must contain post flair.', 'flair']]}}, [{'id': 'f1', 'text': 'Question'}])
+        with mock.patch.object(inboxes.requests, 'request', rd.request), self.assertRaises(RuntimeError) as e:
+            proposals.execute(server.store, server.store.get_review(r.json()['review']), 'owner')
+        self.assertIn('flair - one of: Question', str(e.exception))
+
+
 class WhatReaches(unittest.TestCase):
     def test_every_executor_is_a_decision(self):
         "A new executor is either a read, a write that reaches nobody, or a send - never inherited."

@@ -731,6 +731,48 @@ def items_reddit(store, c, since) -> list:
     return out
 
 
+def run_reddit_post(cfg):
+    """{"subreddit", "title", "text" | "link", "flair"} - a post of yours in a subreddit, on the same script app the inbox reads with. A WRITE:
+    the owner's press runs it (scopes.REACHES). Both text and a link make a text post with the link at its end - a link post takes no body."""
+    c, sr = cfg.get('_card') or {}, re.sub(r'^/?r/', '', str(cfg.get('subreddit') or '').strip()).strip('/')
+    title, text, link = (str(cfg.get(k) or '').strip() for k in ('title', 'text', 'link'))
+    if not re.fullmatch(r'\w{2,21}', sr): raise RuntimeError('a Reddit post needs the subreddit it goes to - `subreddit`, e.g. r/smallbusiness')
+    if not title: raise RuntimeError('a Reddit post needs a `title`')
+    if len(title) > 300: raise RuntimeError(f'Reddit titles are capped at 300 characters; this one is {len(title)}')
+    if not (text or link): raise RuntimeError('a Reddit post needs `text` or a `link`')
+    if link and not link.startswith(('https://', 'http://')): raise RuntimeError(f'{link} is not a web address')
+    body = {'sr': sr, 'title': title, 'api_type': 'json', 'sendreplies': 'true',
+            **({'kind': 'self', 'text': f'{text}\n\n{link}'.strip()} if text else {'kind': 'link', 'url': link, 'resubmit': 'true'})}
+    flairs = lambda: [f for f in _rd_call(c, 'get', f'/r/{sr}/api/link_flair_v2') or [] if isinstance(f, dict)]
+    if want := str(cfg.get('flair') or '').strip():
+        fs = flairs()
+        f = next((f for f in fs if str(f.get('text') or '').strip().lower() == want.lower()), None)
+        if not f: raise RuntimeError(f"r/{sr} has no flair {want!r} - it takes {', '.join(str(f.get('text')) for f in fs) or 'none you may set'}; nothing was posted")
+        body['flair_id'] = f['id']
+    j = _rd_call(c, 'post', '/api/submit', data=body) or {}
+    # Reddit answers 200 with its refusal inside (a flair the subreddit requires, its rules, a rate limit): nothing was posted
+    if errs := (j.get('json') or {}).get('errors'):
+        code, said = errs[0][0], ' '.join(str(x) for x in errs[0][1:2])
+        if 'FLAIR' in str(code):
+            try: names = ', '.join(str(f.get('text')) for f in flairs())
+            except RuntimeError: names = ''
+            raise RuntimeError(f"r/{sr} asks for a flair{' - one of: ' + names if names else ''}. Name it in `flair`; nothing was posted")
+        raise RuntimeError(f'Reddit did not take the post ({code}): {said} - nothing was posted')
+    d = (j.get('json') or {}).get('data') or {}
+    return {'rows': [{'id': d.get('name') or d.get('id') or '', 'subreddit': f'r/{sr}', 'title': title, 'kind': body['kind'], 'url': d.get('url') or ''}],
+            'columns': ['id', 'subreddit', 'title', 'kind', 'url']}
+
+
+def _rd_call(c, method, path, **kw):
+    "One call on the owner's own Reddit sign-in: a refusal said with Reddit's words, and a 401 the card's to fix."
+    from .outbound import Fixable
+    r = requests.request(method, f'https://oauth.reddit.com{path}', timeout=30, headers={'Authorization': f'Bearer {_rd_token(c)}', 'User-Agent': RD_UA}, **kw)
+    if r.status_code == 401: raise Fixable('Reddit refused the sign-in (401) - Test the Reddit card again; nothing was posted', 'Open the Reddit card', '#connector=reddit')
+    if r.status_code >= 400: raise RuntimeError(f'Reddit refused it ({r.status_code}): {(r.text or "")[:200]} - nothing was posted')
+    try: return r.json()
+    except ValueError: return {}
+
+
 # ── YouTube (comments on your channel's videos) ──────────────────────────────────────────
 def _yt(c, path, **params):
     return _req(c, 'get', f'https://www.googleapis.com/youtube/v3{path}', 'check the API key (Google Cloud console, YouTube Data API v3 enabled)',
@@ -1386,6 +1428,53 @@ def items_x(store, c, since) -> list:
                         t.get('author_id') and f"x:{t['author_id']}", False, t.get('created_at'), f"https://x.com/{h}/status/{t['id']}",
                         f"@{_cfg(c).get('username')}", conv=t.get('conversation_id')))
     return out
+
+
+# POSTING IS A SIGN-IN AS YOU, NOT THE APP: the card's bearer token reads, but X takes a post only on user context. The four user keys of
+# the owner's own developer app (Keys and tokens: API key and secret, access token and secret, made after the app is set to Read and write)
+# sign each call with OAuth 1.0a - no redirect, nothing that expires. What X lets that app post is its plan's to say.
+X_API, X_CHARS, X_IMAGE_MAX = 'https://api.x.com/2', 280, 5 * 1024 * 1024
+X_KEYS = ('consumer_key', 'consumer_secret', 'access_token', 'access_secret')
+
+
+def _x_post(c, path, **kw):
+    from . import apireads
+    k, url = _cfg(c), f'{X_API}{path}'
+    r = requests.post(url, timeout=60, headers={'Authorization': apireads.oauth1('POST', url, None, *(k[n] for n in X_KEYS))}, **kw)
+    if r.status_code < 300: return r.json()
+    try: j = r.json() or {}
+    except ValueError: j = {}
+    said = j.get('detail') or ((j.get('errors') or [{}])[0]).get('message') or j.get('title') or (r.text or '')[:200]
+    past = {401: 'check the four user keys on the X card', 402: "this app's X API plan has no posts left", 429: "X's limit on posts for this app - try again later",
+            403: "the app may be read-only: set it to Read and write under User authentication settings, then make a new access token and secret"}
+    raise RuntimeError(f"X refused the post ({r.status_code}): {said}{' - ' + past[r.status_code] if r.status_code in past else ''}; nothing was posted")
+
+
+def run_x_post(cfg):
+    """{"text", "image"} - a post on X as you, with a picture when there is one. A WRITE: the owner's press runs it (scopes.REACHES)."""
+    from .outbound import Fixable
+    c, text = cfg.get('_card') or {}, str(cfg.get('text') or '').strip()
+    if not text: raise RuntimeError('an X post needs `text`')
+    if len(text) > X_CHARS: raise RuntimeError(f'X posts are capped at {X_CHARS} characters; this one is {len(text)}')
+    if miss := [n for n in X_KEYS if not str(_cfg(c).get(n) or '').strip()]:
+        raise Fixable(f"posting needs your own X app's user keys ({', '.join(miss)} not saved) - developer.x.com: your app, then Keys and tokens; "
+                      'set the app to Read and write first', 'Open the X card', '#connector=x')
+    body, media = {'text': text}, ''
+    if cfg.get('image_path'):           # the picture goes up only after every check above: an upload X keeps is a stray if the post is refused here
+        from pathlib import Path
+        from .linkedin import IMAGE_TYPES
+        p = Path(cfg['image_path'])
+        if p.suffix.lower() not in IMAGE_TYPES: raise RuntimeError(f'X takes a PNG, JPG or GIF picture - {p.name} is not one')
+        data = p.read_bytes()
+        if len(data) > X_IMAGE_MAX: raise RuntimeError(f'{p.name} is {len(data) // 1048576} MB - X takes a picture up to 5 MB')
+        j = _x_post(c, '/media/upload', files={'media': (p.name, data, IMAGE_TYPES[p.suffix.lower()])}, data={'media_category': 'tweet_image'})
+        media = str((j.get('data') or {}).get('id') or j.get('media_id_string') or '')
+        if not media: raise RuntimeError('X did not hand back an id for the picture - nothing was posted')
+        body['media'] = {'media_ids': [media]}
+    pid = str((_x_post(c, '/tweets', json=body).get('data') or {}).get('id') or '')
+    h = str(_cfg(c).get('username') or '').lstrip('@')
+    return {'rows': [{'id': pid, 'characters': len(text), 'image': media, 'url': f"https://x.com/{h or 'i/web'}/status/{pid}" if pid else ''}],
+            'columns': ['id', 'characters', 'image', 'url']}
 
 
 # ── WordPress (comments awaiting your moderation) ────────────────────────────────────────

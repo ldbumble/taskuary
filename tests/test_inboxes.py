@@ -467,7 +467,8 @@ class OneRoadTests(unittest.TestCase):
             self.assertIn(t, channels.PER_CONNECTOR); self.assertEqual(channels.CH2SRC[t], t)
             self.assertIn(t, senders.TRACKERS); self.assertIn(t, search.TICKET)
             self.assertEqual(t in outbound.NEVER, t not in inboxes.REPLY, t)   # read-only, unless it answers on its own thread (test_replyback)
-            self.assertEqual(store.DEFAULT_ROLES[t], 'trigger,report,tool' if t in apireads.types() else 'trigger')    # a keyed read too: test_read_sources
+            # a keyed read too (test_read_sources), and a card that posts (Reddit) is a tool its agent proposes the post through
+            self.assertEqual(store.DEFAULT_ROLES[t], 'trigger,report,tool' if t in apireads.types() else 'trigger,tool' if t == 'reddit' else 'trigger', t)
         self.assertEqual({c['Type'] for c in MemoryStore().list_connectors()} & set(inboxes.TYPES), set(inboxes.TYPES))
 
     def test_a_poll_goes_through_the_card_test_and_poll_dispatch(self):

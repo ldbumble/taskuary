@@ -8,6 +8,9 @@ from loguru import logger
 from . import vault
 from .inboxes import TYPES as INBOXES, NAMES as INBOX_NAMES     # the helpdesks and newer trackers: seeded and triggering like the rest
 from .apireads import types as _read_types                     # a vendor's REST API read (apireads.json): each row a card
+def _posts() -> set:
+    from .connectorcatalog import cards
+    return {c['type'] for c in cards() for a in c.get('actions') or [] if a.get('road') == 'run_tool'}
 from .kinds import SHOWN, shown as shown_agent   # the name a chip says for whoever works a task: Taskuary, never the profile
 
 # WHO HELD THE STORE, AND FOR HOW LONG (2026-10-23): three freezes in a day left a log where unrelated requests all finished in
@@ -1111,6 +1114,8 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  **dict.fromkeys(INBOXES, 'trigger'),
                  # ...and the ones that are both (HubSpot, Salesforce, DocuSign, Webex, WooCommerce, BigCommerce...): work comes in, and agents read the same API
                  **{t: 'trigger,report,tool' for t in INBOXES if t in _read_types()},
+                 # ...and one whose card posts (a catalogue act on a tool - Reddit's): an agent proposes the post through it
+                 **{t: 'trigger,tool' for t in INBOXES if t not in _read_types() and t in _posts()},
                  # speech to text: no role - the funnel and the prompt box ask the first active one
                  'gemini_stt': '', 'groq_stt': '', 'openai_stt': '', 'deepgram': '', 'elevenlabs_stt': '', 'stt_server': '', 'local_whisper': '',
                  'assemblyai': '', 'speechmatics': '', 'gladia': '', 'azure_speech': '', 'amazon_transcribe': '',
@@ -1670,6 +1675,10 @@ class SQLiteStore:
                                 (t, n, DEFAULT_ROLES.get(t, ''), t))
             for t, r in DEFAULT_ROLES.items():        # dbs from before roles existed
                 self.cx.execute('UPDATE connector SET Roles=? WHERE Type=? AND Roles IS NULL', (r, t))
+            # Reddit's card became an agent tool when it learned to post: one from before, an inbox alone, gains the role once
+            if self.cx.execute("SELECT 1 FROM setting WHERE Name='reddit_tool_role'").fetchone() is None:
+                self.cx.execute("UPDATE connector SET Roles='trigger,tool' WHERE Type='reddit' AND Roles='trigger'")
+                self.cx.execute("INSERT OR REPLACE INTO setting (Name, Value) VALUES ('reddit_tool_role','1')")
             # Product rename without touching a name the owner customised.
             self.cx.execute("UPDATE connector SET Name='Company Hub' WHERE Type='handbook' AND Name='Company handbook'")
             # SECRETS ARE SEALED (vault.py): a database from before kept them as text - seal those in place, once each

@@ -258,5 +258,166 @@ class WiredInTests(unittest.TestCase):
             self.assertNotIn('trigger', DEFAULT_ROLES[card])
 
 
+# ── Reddit and X: posts from the cards that already read their inboxes ──────────────────
+def _rd_card(**cfg):
+    return {'ConnectorId': 41, 'Type': 'reddit', 'Secret': 'pw', 'Active': 1,
+            'ConfigJson': json.dumps({'client_id': 'cid', 'client_secret': 'cs', 'username': 'alexdoyle', **cfg})}
+
+
+class RedditNet:
+    "Reddit's HTTP, stubbed: the sign-in, the flair list, the submit - every call recorded, none leaves."
+    OK = {'json': {'errors': [], 'data': {'url': 'https://www.reddit.com/r/smallbusiness/comments/abc/payroll/', 'name': 't3_abc', 'id': 'abc'}}}
+
+    def __init__(self, submit=None, flairs=()): self.calls, self.submit, self.flairs = [], submit or self.OK, list(flairs)
+
+    def request(self, method, url, **kw):
+        self.calls.append((method.upper(), url, kw))
+        if url.endswith('/api/v1/access_token'): return _Resp({'access_token': 'rtok', 'expires_in': 3600})
+        if url.endswith('/api/link_flair_v2'): return _Resp(self.flairs)
+        return _Resp(self.submit)
+
+    def submitted(self): return [kw for m, u, kw in self.calls if u.endswith('/api/submit')]
+
+
+class RedditPosts(unittest.TestCase):
+    def setUp(self):
+        from taskuary import net
+        net._TOKENS.clear()
+
+    def post(self, rd, **cfg):
+        from taskuary import inboxes
+        with mock.patch.object(inboxes.requests, 'request', rd.request):
+            return inboxes.run_reddit_post({'_card': _rd_card(), **cfg})
+
+    def test_a_text_post_goes_to_the_subreddit_as_the_signed_in_user(self):
+        rd = RedditNet()
+        out = self.post(rd, subreddit='r/smallbusiness', title='How we moved payroll', text='Three things we learned.')
+        sent = rd.submitted()[0]
+        self.assertEqual({k: sent['data'][k] for k in ('sr', 'kind', 'title', 'text', 'api_type')},
+                         {'sr': 'smallbusiness', 'kind': 'self', 'title': 'How we moved payroll', 'text': 'Three things we learned.', 'api_type': 'json'})
+        self.assertEqual(sent['headers']['Authorization'], 'Bearer rtok')
+        self.assertNotIn('alexdoyle', sent['headers']['User-Agent'])         # names the app, never the person
+        self.assertEqual(out['rows'][0]['url'], 'https://www.reddit.com/r/smallbusiness/comments/abc/payroll/')
+
+    def test_a_link_alone_is_a_link_post(self):
+        rd = RedditNet()
+        self.post(rd, subreddit='smallbusiness', title='Our write-up', link='https://northwind.example/payroll')
+        sent = rd.submitted()[0]['data']
+        self.assertEqual((sent['kind'], sent['url']), ('link', 'https://northwind.example/payroll'))
+
+    def test_a_refused_post_says_reddits_words_and_nothing_was_posted(self):
+        "Reddit answers 200 with its refusal inside - a 200 is not a post."
+        rd = RedditNet({'json': {'errors': [['SUBREDDIT_NOTALLOWED', 'you are not allowed to post there.', 'sr']]}})
+        with self.assertRaises(RuntimeError) as e: self.post(rd, subreddit='smallbusiness', title='T', text='x')
+        self.assertIn('you are not allowed to post there', str(e.exception))
+        self.assertIn('nothing was posted', str(e.exception))
+
+    def test_a_subreddit_that_wants_a_flair_names_the_flairs_it_takes(self):
+        rd = RedditNet({'json': {'errors': [['SUBMIT_VALIDATION_FLAIR_REQUIRED', 'Your post must contain post flair.', 'flair']]}},
+                       [{'id': 'f1', 'text': 'Question'}, {'id': 'f2', 'text': 'Story'}])
+        with self.assertRaises(RuntimeError) as e: self.post(rd, subreddit='smallbusiness', title='T', text='x')
+        self.assertIn('r/smallbusiness asks for a flair', str(e.exception))
+        self.assertIn('Question, Story', str(e.exception))
+
+    def test_a_named_flair_is_sent_as_its_id(self):
+        rd = RedditNet(flairs=[{'id': 'f1', 'text': 'Question'}, {'id': 'f2', 'text': 'Story'}])
+        self.post(rd, subreddit='smallbusiness', title='T', text='x', flair='story')
+        self.assertEqual(rd.submitted()[0]['data']['flair_id'], 'f2')
+        rd = RedditNet(flairs=[{'id': 'f1', 'text': 'Question'}])
+        with self.assertRaises(RuntimeError) as e: self.post(rd, subreddit='smallbusiness', title='T', text='x', flair='Rant')
+        self.assertIn('Question', str(e.exception))
+        self.assertEqual(rd.submitted(), [])
+
+    def test_what_is_missing_is_refused_before_anything_is_called(self):
+        rd = RedditNet()
+        for cfg, said in (({'title': 'T', 'text': 'x'}, 'subreddit'), ({'subreddit': 'smallbusiness', 'text': 'x'}, 'title'),
+                          ({'subreddit': 'smallbusiness', 'title': 'T'}, '`text` or a `link`')):
+            with self.assertRaises(RuntimeError) as e: self.post(rd, **cfg)
+            self.assertIn(said, str(e.exception))
+        self.assertEqual(rd.calls, [])
+
+
+def _x_card(**cfg):
+    return {'ConnectorId': 42, 'Type': 'x', 'Secret': 'app-bearer', 'Active': 1, 'ConfigJson': json.dumps(
+        {'username': 'alexdoyle', 'consumer_key': 'ck', 'consumer_secret': 'cs', 'access_token': 'at', 'access_secret': 'as', **cfg})}
+
+
+class XPosts(unittest.TestCase):
+    def post(self, resp, card=None, **cfg):
+        from taskuary import inboxes
+        with mock.patch.object(inboxes.requests, 'post', return_value=resp) as post:
+            out = inboxes.run_x_post({'_card': card or _x_card(), **cfg})
+        return out, post
+
+    def test_a_post_is_signed_with_the_users_own_keys_not_the_app_bearer(self):
+        out, post = self.post(_Resp({'data': {'id': '1850', 'text': 'We shipped.'}}, 201), text='We shipped.')
+        self.assertEqual(post.call_args[0][0], 'https://api.x.com/2/tweets')
+        self.assertEqual(post.call_args.kwargs['json'], {'text': 'We shipped.'})
+        auth = post.call_args.kwargs['headers']['Authorization']
+        self.assertTrue(auth.startswith('OAuth '), auth)
+        for k in ('oauth_consumer_key="ck"', 'oauth_token="at"', 'HMAC-SHA1'): self.assertIn(k, auth)
+        self.assertNotIn('app-bearer', auth)
+        self.assertEqual(out['rows'][0]['url'], 'https://x.com/alexdoyle/status/1850')
+
+    def test_a_refused_post_says_why_in_xs_words_and_the_way_past(self):
+        with self.assertRaises(RuntimeError) as e:
+            self.post(_Resp({'title': 'Forbidden', 'detail': 'You are not permitted to perform this action.'}, 403), text='hi')
+        self.assertIn('not permitted', str(e.exception))
+        self.assertIn('Read and write', str(e.exception))
+
+    def test_without_the_user_keys_it_says_which_and_where(self):
+        from taskuary.outbound import Fixable
+        card = {**_x_card(), 'ConfigJson': json.dumps({'username': 'alexdoyle'})}
+        with self.assertRaises(Fixable) as e: self.post(_Resp({}), card=card, text='hi')
+        self.assertIn('Keys and tokens', str(e.exception))
+        self.assertEqual(e.exception.fix['href'], '#connector=x')
+
+    def test_an_over_long_post_is_refused_before_the_call(self):
+        with self.assertRaises(RuntimeError) as e: self.post(_Resp({}), text='x' * 281)
+        self.assertIn('280', str(e.exception))
+
+    def test_a_picture_is_uploaded_then_named_on_the_post(self):
+        import pathlib, tempfile
+        f = pathlib.Path(tempfile.mkdtemp()) / 'chart.png'
+        f.write_bytes(b'\x89PNG\r\n\x1a\n' + b'0' * 64)
+        from taskuary import inboxes
+        seen = []
+        def post(url, **kw):
+            seen.append((url, kw))
+            return _Resp({'data': {'id': '77'}}) if url.endswith('/media/upload') else _Resp({'data': {'id': '1851'}}, 201)
+        with mock.patch.object(inboxes.requests, 'post', post):
+            out = inboxes.run_x_post({'_card': _x_card(), 'text': 'The chart.', 'image_path': str(f)})
+        self.assertEqual([u for u, _ in seen], ['https://api.x.com/2/media/upload', 'https://api.x.com/2/tweets'])
+        self.assertEqual(seen[1][1]['json']['media'], {'media_ids': ['77']})
+        self.assertEqual(out['rows'][0]['image'], '77')
+
+
+class RedditAndXAreWired(unittest.TestCase):
+    def test_each_post_is_a_write_that_reaches_people_on_its_own_card(self):
+        from taskuary import connectorcatalog as cat, proposals, scopes
+        from taskuary.reports import card_of
+        for t, card, press in (('reddit_post', 'reddit', 'Post to Reddit'), ('x_post', 'x', 'Post to X')):
+            self.assertIn(t, REGISTRY); self.assertEqual(card_of(t), card); self.assertEqual(scopes.needs(t), 'write')
+            self.assertIn(t, scopes.REACHES); self.assertIn(t, proposals.POSTS)
+            a = cat.action_for(t)
+            self.assertEqual((a['card'], a['press'], a['road']), (card, press, 'run_tool'))
+        self.assertIn('x_post', proposals.MEDIA); self.assertNotIn('reddit_post', proposals.MEDIA)
+        self.assertIn('developer app', cat.by_type('x')['desc'])
+
+    def test_the_saved_card_reaches_the_executor_and_no_body_can_bring_its_own(self):
+        from taskuary.reports import query_only
+        s = MemoryStore()
+        for card, t in (('reddit', 'reddit_post'), ('x', 'x_post')):
+            cid = s.get_connector_by_type(card)['ConnectorId']
+            s.save_connector({'ConnectorId': cid, 'Secret': f'sec-{card}', 'Active': 1}, 'test')
+            got = resolve_cfg(s, {'type': t, 'text': 'hi'})
+            self.assertEqual((got['_card']['ConnectorId'], got['_card']['Secret']), (cid, f'sec-{card}'))
+            self.assertNotIn('_card', query_only({'type': t, '_card': {'Secret': 'theirs'}}))
+
+    def test_reddit_is_an_agent_tool_so_the_agent_can_propose_a_post(self):
+        from taskuary.store import DEFAULT_ROLES
+        self.assertIn('tool', DEFAULT_ROLES['reddit'].split(','))
+
+
 if __name__ == '__main__':
     unittest.main()

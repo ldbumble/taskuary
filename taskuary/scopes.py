@@ -88,7 +88,7 @@ ACTIONS = {
     'github_issue': 'write',     # a new issue: the everyday write a GitHub card is for - and it reaches people (REACHES)
     'github_issues': 'read', 'github_close': 'write',     # ...a repository's open issues read; one closed, on his press
     'bluesky_me': 'read', 'bluesky_timeline': 'read', 'bluesky_post': 'write',
-    'mastodon_me': 'read', 'mastodon_timeline': 'read', 'mastodon_post': 'write',
+    'mastodon_me': 'read', 'mastodon_timeline': 'read', 'mastodon_post': 'write', 'reddit_post': 'write', 'x_post': 'write',
     'robinhood_tools': 'read', 'robinhood_read': 'read', 'robinhood_order': 'write',
     'markets_screen': 'read',    # the screen only reads through whichever provider it borrows
     # the semantic layer (semantic.py) reaches the ERP only through those same reads. The check
@@ -157,7 +157,8 @@ _TRACKERS = {'jira': 'Jira', 'monday': 'Monday', 'linear': 'Linear'}
 # the older comments above about "the card ships at read, so an agent can only propose" stopped holding; this is what holds now.
 REACHES = {
     'linkedin_post': 'posts on LinkedIn under your name', 'bluesky_post': 'posts on Bluesky under your name',
-    'mastodon_post': 'posts on Mastodon under your name', 'zoho_invoice_send': 'sends an invoice to a customer',
+    'mastodon_post': 'posts on Mastodon under your name', 'reddit_post': 'posts in a subreddit under your name',
+    'x_post': 'posts on X under your name', 'zoho_invoice_send': 'sends an invoice to a customer',
     # ...an issue too (2026-11-06): GitHub tells everyone watching the repository - a trusted repository's agent still waits for Create issue
     'github_issue': 'opens an issue on GitHub - everyone watching the repository is told',
     'github_close': 'closes an issue on GitHub - everyone watching it is told',

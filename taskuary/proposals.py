@@ -120,8 +120,8 @@ MARKS = ('closeout', 'flow_run')
 # A POST IS DRAWN AS THE POST (the owner, 2026-11-05: "it's not showing the post and the image as a linkedin post and asking me if i want to
 # post it"): a run_tool on one of these is the owner's words on a network, so its card shows them as a post, editable, with the picture
 # where the network takes one - and what the owner left in the box is what goes. MEDIA: the ones that carry a picture from here.
-POSTS = {'linkedin_post': 'LinkedIn', 'bluesky_post': 'Bluesky', 'mastodon_post': 'Mastodon'}
-MEDIA = {'linkedin_post'}
+POSTS = {'linkedin_post': 'LinkedIn', 'bluesky_post': 'Bluesky', 'mastodon_post': 'Mastodon', 'reddit_post': 'Reddit', 'x_post': 'X'}
+MEDIA = {'linkedin_post', 'x_post'}
 
 
 def is_post(p: dict) -> bool: return (p or {}).get('action') == 'run_tool' and (p or {}).get('type') in POSTS

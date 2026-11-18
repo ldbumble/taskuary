@@ -4376,7 +4376,7 @@
       "title": "Reddit",
       "group": "Social",
       "planned": false,
-      "desc": "Replies, mentions and messages in your Reddit inbox land on your work rail through triage.",
+      "desc": "Replies, mentions and messages in your Reddit inbox land on your work rail through triage, and posts to a subreddit go out on your press - your own script app, for personal use.",
       "match": [
         "reddit",
         "subreddit"
@@ -4384,7 +4384,54 @@
       "replies": {
         "on": false,
         "says": "a public comment reply, or a reply to the message"
-      }
+      },
+      "actions": [
+        {
+          "kind": "post",
+          "road": "run_tool",
+          "tool": "reddit_post",
+          "press": "Post to Reddit",
+          "busy": "Posting…",
+          "done": "Posted",
+          "undone": "Not posted",
+          "note": "Nothing is posted until you press it.",
+          "fields": [
+            {
+              "key": "subreddit",
+              "label": "In",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "title",
+              "label": "Title",
+              "type": "line",
+              "agent": true,
+              "heading": true
+            },
+            {
+              "key": "text",
+              "label": "Post",
+              "type": "text",
+              "edit": true,
+              "agent": true,
+              "max": 40000
+            },
+            {
+              "key": "link",
+              "label": "Link",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "flair",
+              "label": "Flair",
+              "type": "line",
+              "agent": true
+            }
+          ]
+        }
+      ]
     },
     {
       "type": "youtube",
@@ -4468,11 +4515,39 @@
       "title": "X (Twitter)",
       "group": "Social",
       "planned": false,
-      "desc": "Posts that mention you land on your work rail through triage; posts and users as reports and an agent tool - GET /users/<id>/mentions. Direct messages need a sign-in as you, which comes later.",
+      "desc": "Posts that mention you land on your work rail through triage; posts and users as reports and an agent tool - GET /users/<id>/mentions. Posting, with a picture, goes out on your press and needs your own X developer app's user keys; what it may post is limited by that app's X API plan.",
       "match": [
         "twitter",
         "x.com",
         "tweet"
+      ],
+      "actions": [
+        {
+          "kind": "post",
+          "road": "run_tool",
+          "tool": "x_post",
+          "press": "Post to X",
+          "busy": "Posting…",
+          "done": "Posted",
+          "undone": "Not posted",
+          "note": "Nothing is posted until you press it.",
+          "fields": [
+            {
+              "key": "text",
+              "label": "Post",
+              "type": "text",
+              "edit": true,
+              "agent": true,
+              "max": 280
+            },
+            {
+              "key": "image",
+              "label": "Picture",
+              "type": "image",
+              "agent": true
+            }
+          ]
+        }
       ]
     },
     {

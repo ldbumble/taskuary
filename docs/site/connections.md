@@ -478,6 +478,14 @@ work: a public timeline is not an inbox, so they are report sources and tools ra
 Like every connection they start at full authority, so an agent can post. A public post cannot be
 recalled: set the card to `read` and a post an agent drafts becomes a proposal you approve on the task.
 
+**Reddit** and **X** post too, from the cards that bring their inboxes in. An agent's post waits on
+its task as **Post to Reddit** or **Post to X**, and goes out only on your press; afterwards the card
+shows the link to it, and a refusal (a subreddit that asks for a flair, a plan with no posts left)
+stays on the card in the network's own words. Reddit posts with the same script app the inbox reads
+with, for your personal use: a subreddit, a title, and text or a link. X needs your own developer
+app set to **Read and write**, and its four user keys (API key and secret, access token and secret)
+on the X card; a post is up to 280 characters with a picture, and how many X allows is that app's plan.
+
 **Agent tools** — **treg** puts thousands of endpoints across many providers behind one key, billed
 per call. Searching its catalogue is free and commits nothing, so an agent may do it unattended;
 calling an endpoint spends real money and can reach services that publish or order. The card starts

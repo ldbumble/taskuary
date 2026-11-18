@@ -990,6 +990,8 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'mastodon_me': _lazy('social', 'run_mastodon_me'),
             'mastodon_timeline': _lazy('social', 'run_mastodon_timeline'),
             'mastodon_post': _lazy('social', 'run_mastodon_post'),
+            # ...and the two whose cards read an inbox (inboxes.py): a post on the same sign-in
+            'reddit_post': _lazy('inboxes', 'run_reddit_post'), 'x_post': _lazy('inboxes', 'run_x_post'),
             'linkedin_me': _lazy('linkedin', 'run_linkedin_me'),
             'linkedin_post': _lazy('linkedin', 'run_linkedin_post'),
             'github_issue': _lazy('github', 'run_github_issue'),     # a new issue, on the owner's press (github.run_github_issue)
@@ -1121,7 +1123,7 @@ CARD_OF = {'postgresql': 'postgresql', 'mysql': 'mysql', 'clickhouse': 'clickhou
            'treg_tools': 'treg', 'treg_search': 'treg', 'treg_call': 'treg',
            'linkedin_me': 'linkedin', 'linkedin_post': 'linkedin', 'github_issue': 'github', 'github_issues': 'github', 'github_close': 'github',
            'bluesky_me': 'bluesky', 'bluesky_timeline': 'bluesky', 'bluesky_post': 'bluesky',
-           'mastodon_me': 'mastodon', 'mastodon_timeline': 'mastodon', 'mastodon_post': 'mastodon',
+           'mastodon_me': 'mastodon', 'mastodon_timeline': 'mastodon', 'mastodon_post': 'mastodon', 'reddit_post': 'reddit', 'x_post': 'x',
            's3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 'azure_logs': 'azure', 'calendar': 'outlook',
            'entra_users': 'azure', 'entra_groups': 'azure', 'entra_signins': 'azure', 'entra_licenses': 'azure',
            'intacct_fields': 'intacct', 'intacct_create': 'intacct', 'intacct_update': 'intacct',
@@ -1294,6 +1296,14 @@ def _read_card(t):
     return lambda store, connector_id=None: {**_card(store, t, 'api_key', connector_id), 'store': store, 'connector_id': connector_id}
 
 
+def _inbox_card(t):
+    "An inbox card's write (reddit_post, x_post): the card, secret and all, as `_card` - inboxes signs in from it as it does to read."
+    def conn(store, connector_id=None) -> dict:
+        c = _connector(store, t, connector_id, with_secret=True)
+        return {'_card': c, 'token': c.get('Secret')} if c else {}
+    return conn
+
+
 def linkedin_connection(store, connector_id=None) -> dict:
     """The access token IS the card's secret, and it arrives as `token` because that is the name
     linkedin._headers reads. Without this the card holds a token nobody can spend: resolve_cfg
@@ -1391,6 +1401,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'bluesky_post': bluesky_connection,
                  'mastodon_me': mastodon_connection, 'mastodon_timeline': mastodon_connection,
                  'mastodon_post': mastodon_connection,
+                 'reddit_post': _inbox_card('reddit'), 'x_post': _inbox_card('x'),
                  'treg_tools': treg_connection, 'treg_search': treg_connection, 'treg_call': treg_connection,
                  **{e: engine_connection(e) for e in
                     ('postgresql', 'mysql', 'clickhouse', 'snowflake', 'bigquery', 'cockroachdb', 'oracle', 'duckdb', 'mongodb', 'redis', 'neo4j')},

@@ -249,15 +249,21 @@ def _oauth1(s, cfg, key, method, url, params) -> str:
     """NetSuite token-based auth: OAuth 1.0a, HMAC-SHA256, the account id as realm (netsuite.com: "the authorization header").
     The card's secret is the TOKEN secret; the consumer secret is a write-only field beside it."""
     _need(cfg, 'account', 'consumer_key', 'token_id', 'consumer_secret')
+    return oauth1(method, url, params, cfg['consumer_key'], cfg['consumer_secret'], cfg['token_id'], key, hashlib.sha256,
+                  str(cfg['account']).upper().replace('-', '_'))
+
+
+def oauth1(method, url, params, ck, cs, tok, ts, digest=hashlib.sha1, realm=None) -> str:
+    """An OAuth 1.0a Authorization header (RFC 5849): the one signer, NetSuite's (SHA-256, a realm) and X's user keys (SHA-1). `params`
+    are the query or form fields that are signed - a JSON or multipart body is not."""
     e = lambda x: quote(str(x), safe='~')
-    o = {'oauth_consumer_key': cfg['consumer_key'], 'oauth_token': cfg['token_id'], 'oauth_signature_method': 'HMAC-SHA256',
+    o = {'oauth_consumer_key': ck, 'oauth_token': tok, 'oauth_signature_method': 'HMAC-SHA1' if digest is hashlib.sha1 else 'HMAC-SHA256',
          'oauth_timestamp': str(int(time.time())), 'oauth_nonce': secrets.token_hex(12), 'oauth_version': '1.0'}
     u = urlsplit(url)
     ps = sorted((e(k), e(v)) for k, v in [*parse_qsl(u.query), *(params or {}).items(), *o.items()])
     base = '&'.join([method.upper(), e(f'{u.scheme}://{u.netloc}{u.path}'), e('&'.join(f'{k}={v}' for k, v in ps))])
-    sig = base64.b64encode(hmac.new(f"{e(cfg['consumer_secret'])}&{e(key)}".encode(), base.encode(), hashlib.sha256).digest()).decode()
-    realm = str(cfg['account']).upper().replace('-', '_')
-    return 'OAuth ' + ', '.join([f'realm="{realm}"', *(f'{k}="{e(v)}"' for k, v in {**o, 'oauth_signature': sig}.items())])
+    sig = base64.b64encode(hmac.new(f"{e(cs)}&{e(ts)}".encode(), base.encode(), digest).digest()).decode()
+    return 'OAuth ' + ', '.join([*([f'realm="{realm}"'] if realm else []), *(f'{k}="{e(v)}"' for k, v in {**o, 'oauth_signature': sig}.items())])
 
 
 def request_parts(t: str, cfg: dict, key: str, store=None) -> tuple:

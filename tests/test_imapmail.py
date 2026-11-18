@@ -3,7 +3,7 @@ UID watermarks that never re-ingest, bodies and attachments parsed off real MIME
 threaded and sent from the arriving address, and the outlook poller keeping its hands off
 sources that belong to an IMAP connector.
 """
-import email.message, hashlib, json, ssl, unittest
+import email, email.message, hashlib, json, ssl, unittest
 from unittest import mock
 from taskuary import imapmail, outbound
 from taskuary.store import MemoryStore
@@ -164,6 +164,28 @@ class ImapTests(unittest.TestCase):
         self.assertNotIn('Re: RE:', sent['data'])
         self.assertIn('\nDate: ', sent['data'])
         self.assertRegex(sent['data'], r'\nMessage-ID: <[^>]+@myco\.example>')
+
+    def test_a_file_name_with_accents_or_quotes_goes_as_a_proper_header(self):
+        """'Résumé.pdf' was written into a hand-made Content-Disposition, which Python then wrapped WHOLE in an encoded word - a header
+        a mail client cannot read as an attachment at all, so it arrived as a nameless blob - and a name with a quote in it cut the
+        name at the quote. RFC 2231 is how a file's name rides a header."""
+        s, c = self._store()
+        sent = {}
+        class FakeSmtp:
+            def __init__(self, host, port, timeout=None): self.sock = mock.Mock(getpeercert=mock.Mock(return_value=b'cert'))
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+            def starttls(self, context=None): pass
+            def login(self, u, p): pass
+            def sendmail(self, frm, to, data): sent['data'] = data
+        names = ['Résumé Erin Blake.pdf', 'the "final" plan.xlsx', '発注書.xlsx']
+        with mock.patch.object(imapmail.smtplib, 'SMTP', FakeSmtp):
+            imapmail.send_smtp(s, c, ['erin@vendor.example'], 'Files', 'Attached.', attachments=[{'name': n, 'bytes': b'x'} for n in names])
+        lines = [l for l in sent['data'].splitlines() if l.startswith('Content-Disposition')]
+        self.assertEqual(len(lines), 3)
+        for l in lines: self.assertTrue(l.startswith('Content-Disposition: attachment;'), l)
+        got = [p.get_filename() for p in email.message_from_string(sent['data']).walk() if p.get_content_disposition() == 'attachment']
+        self.assertEqual(got, names)
 
     def test_the_graph_poller_keeps_its_hands_off_imap_sources(self):
         """Both are channel 'email' - without ownership the outlook branch tried to fetch the

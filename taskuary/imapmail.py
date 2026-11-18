@@ -936,7 +936,9 @@ def send_smtp(store, c, to: list, subject: str, body: str, in_reply_to: str = No
         m.attach(text)
         for f in attachments:
             part = MIMEApplication(f['bytes'], name=f['name'])
-            part['Content-Disposition'] = f'attachment; filename="{f["name"]}"'
+            # ...its name by RFC 2231 (add_header): written into the header by hand, "Résumé.pdf" turned the whole header into one encoded
+            # word no mail client reads as an attachment, and a quote in a name cut it short
+            part.add_header('Content-Disposition', 'attachment', filename=f['name'])
             m.attach(part)
     else:
         m = text

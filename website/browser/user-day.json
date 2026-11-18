@@ -4,75 +4,20 @@
  "goals": [
   "Answer Gail's offsite question today, with a real recommendation.",
   "Get the October vendor spend summary to Paula by 3pm - the numbers are in the attached sheet.",
-  "Make sure the Payworth invoice is paid before the late fee, but nothing is paid without your say-so. (An automated bill reminder lands as FYI by design - press Make a task on it when you want it done.)",
+  "Make sure the Payworth invoice is paid before the late fee, but nothing is paid without your say-so.",
   "Draft three short social posts announcing the new Northwind ledger portal (LinkedIn, X, Reddit), each clearly separate, with one clean image.",
   "Do not let sales pitches or newsletters waste your time."
  ],
  "arrivals": [
-  {
-   "at": 0,
-   "channel": "email",
-   "from": "Gail Moreno <gail@northwind.example>",
-   "subject": "Offsite venue",
-   "body": "Hi Alex,\n\nCan you suggest two venues for the March offsite in Boston, about 40 people, and tell me which you would pick? I need it by end of day.\n\nThanks,\nGail"
-  },
-  {
-   "at": 1,
-   "channel": "email",
-   "from": "Paula Vance <paula@northwind.example>",
-   "subject": "October vendor spend - need by 3pm",
-   "body": "Alex - can you send me a short summary of October vendor spend by 3pm? Top five vendors and the total. The export is attached.\n\nPaula",
-   "attach": "october-spend.csv"
-  },
-  {
-   "at": 3,
-   "channel": "email",
-   "from": "Payworth Billing <billing@payworth.example>",
-   "subject": "Invoice PW-2291 due Friday - late fee applies",
-   "body": "Invoice PW-2291 for $4,860.00 is due Friday. A 2% late fee applies after the due date. Reply to this email with any questions."
-  },
-  {
-   "at": 5,
-   "channel": "email",
-   "from": "Spendly Sales <hello@spendly.example>",
-   "subject": "Quick question about Northwind's expense process",
-   "body": "Hi Alex, I'd love 15 minutes to show you how Spendly cuts expense approvals by 60%. Are you free Thursday?"
-  },
-  {
-   "at": 7,
-   "channel": "chat",
-   "from": "Erin Blake",
-   "subject": "",
-   "body": "hey - did the ledger sync finish last night? finance is asking"
-  },
-  {
-   "at": 9,
-   "channel": "email",
-   "from": "CI <noreply@ci.northwind.example>",
-   "subject": "[northwind/ledger] Build failed on main",
-   "body": "The build for commit 4be21c0 failed: 2 tests failed in tests/test_totals.py (test_rounding, test_month_end)."
-  },
-  {
-   "at": 12,
-   "channel": "email",
-   "from": "Gail Moreno <gail@northwind.example>",
-   "subject": "Re: Offsite venue",
-   "body": "Also - we need a projector and parking for about 15 cars. Thanks!"
-  },
-  {
-   "at": 15,
-   "channel": "email",
-   "from": "Trainly Weekly <news@trainly.example>",
-   "subject": "This week in workplace learning",
-   "body": "Five ways to boost engagement in your next training session..."
-  },
-  {
-   "at": 20,
-   "channel": "email",
-   "from": "Paula Vance <paula@northwind.example>",
-   "subject": "Re: October vendor spend - need by 3pm",
-   "body": "Any update on this? Leadership meeting moved up."
-  }
+  {"at": 0, "channel": "email", "from": "Gail Moreno <gail@northwind.example>", "subject": "Offsite venue", "body": "Hi Alex,\n\nCan you suggest two venues for the March offsite in Boston, about 40 people, and tell me which you would pick? I need it by end of day.\n\nThanks,\nGail"},
+  {"at": 1, "channel": "email", "from": "Paula Vance <paula@northwind.example>", "subject": "October vendor spend - need by 3pm", "body": "Alex - can you send me a short summary of October vendor spend by 3pm? Top five vendors and the total. The export is attached.\n\nPaula", "attach": "october-spend.csv"},
+  {"at": 3, "channel": "email", "from": "Payworth Billing <billing@payworth.example>", "subject": "Invoice PW-2291 due Friday - late fee applies", "body": "Invoice PW-2291 for $4,860.00 is due Friday. A 2% late fee applies after the due date. Reply to this email with any questions."},
+  {"at": 5, "channel": "email", "from": "Spendly Sales <hello@spendly.example>", "subject": "Quick question about Northwind's expense process", "body": "Hi Alex, I'd love 15 minutes to show you how Spendly cuts expense approvals by 60%. Are you free Thursday?"},
+  {"at": 7, "channel": "chat", "from": "Erin Blake", "subject": "", "body": "hey - did the ledger sync finish last night? finance is asking"},
+  {"at": 9, "channel": "email", "from": "CI <noreply@ci.northwind.example>", "subject": "[northwind/ledger] Build failed on main", "body": "The build for commit 4be21c0 failed: 2 tests failed in tests/test_totals.py (test_rounding, test_month_end)."},
+  {"at": 12, "channel": "email", "from": "Gail Moreno <gail@northwind.example>", "subject": "Re: Offsite venue", "body": "Also - we need a projector and parking for about 15 cars. Thanks!"},
+  {"at": 15, "channel": "email", "from": "Trainly Weekly <news@trainly.example>", "subject": "This week in workplace learning", "body": "Five ways to boost engagement in your next training session..."},
+  {"at": 20, "channel": "email", "from": "Paula Vance <paula@northwind.example>", "subject": "Re: October vendor spend - need by 3pm", "body": "Any update on this? Leadership meeting moved up."}
  ],
  "files": {
   "october-spend.csv": "vendor,amount\nPayworth,48210\nTrainly,9100\nSpendly,4400\nPhishGuard,12750\nVendorCo,3300\nNorthwind Print,2950\nCloudRack,22480\n"

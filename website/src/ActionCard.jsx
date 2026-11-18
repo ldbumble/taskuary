@@ -38,7 +38,10 @@ export default function ActionCard({ row: given, tid, live = true, onChanged }) 
   // ...gone by this card's own press: said in the words of what he picked ("Saved as a draft"), with its link
   const done = settled && ["approved", "edited"].includes(settled.Status) ? settled : null;
   if (!act) return null;
-  const fields = fieldsOf(act, p, !!st.live && !done), post = act.kind === "post", w = wordsOf(act, done || st.live ? vals : p);
+  // ...and gone by it, it reads what he pressed - his words, his picks - not the proposal's until the row comes back with them (a landed draft
+  // said "Post now" over the agent's words for a beat, then "Save as draft" over his: the card round, 2026-11-18)
+  const shown = done ? { ...p, ...vals, [tk]: text } : p;
+  const fields = fieldsOf(act, shown, !!st.live && !done), post = act.kind === "post", w = wordsOf(act, done || st.live ? vals : p);
   const img = fields.find((f) => f.type === "image" && f.value), pic = img ? outputRow(tid ?? row?.TaskId, img.value) : null;
   const max = fields.find((f) => f.key === tk)?.max, over = max && text.length > max;
   const go = done?.url || st.url, gone = !!done || st.done;
@@ -82,7 +85,7 @@ export default function ActionCard({ row: given, tid, live = true, onChanged }) 
       {st.live && !gone
         ? <Box component="textarea" data-tq-act-text="" value={text} onChange={(e) => setText(e.target.value)} disabled={!!busy} rows={Math.min(14, Math.max(3, text.split("\n").length + 1))}
             sx={{ display: "block", width: "100%", boxSizing: "border-box", resize: "vertical", border: 0, outline: 0, px: 1.5, py: 0.5, font: "inherit", fontSize: 13.5, lineHeight: 1.5, color: INK, bgcolor: "transparent" }} />
-        : <Typography data-tq-act-text="" sx={{ px: 1.5, py: 0.5, fontSize: 13.5, lineHeight: 1.5, color: gone ? INK : DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{p[tk]}</Typography>}
+        : <Typography data-tq-act-text="" sx={{ px: 1.5, py: 0.5, fontSize: 13.5, lineHeight: 1.5, color: gone ? INK : DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{shown[tk]}</Typography>}
       {pic && <Box component="img" data-tq-act-image={img.value} src={attUrl(pic)} alt={p.alt || pic.name} onClick={() => setViewing(pic)}
         sx={{ display: "block", width: "100%", height: IMG_MAX, objectFit: "contain",   /* its room from the first frame: a picture landing grew the card 2 -> 180 px (2026-11-12) */ bgcolor: "var(--tq-canvas, #f6f4f1)", mt: 0.75, cursor: "zoom-in", borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }} />}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.5, py: 1, flexWrap: "wrap" }}>

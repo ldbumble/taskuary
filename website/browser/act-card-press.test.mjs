@@ -53,7 +53,10 @@ const watch = (page, sel, which, ms = 6000) => page.evaluate((sel, which, ms) =>
 
 const relitAfter = (states) => { const after = states.slice(1); return after.findIndex((x, i) => x.s === "lit" && after.slice(0, i).some((y) => y.s !== "lit")); };
 
-for (const [name, which, body] of [["dismiss", "[data-tq-act-dismiss]", {}], ["post-fails", "[data-tq-act-press]", { connected: true }]]) {
+// ...`elsewhere`: decided in another window before this one pressed - the press answers `already`, and the card reads what was decided
+for (const [name, which, body, elsewhere, says] of [["dismiss", "[data-tq-act-dismiss]", { connected: true }, null, /dismissed/],
+  ["post-fails", "[data-tq-act-press]", { connected: true }, null, /blocked outbound/],
+  ["dismissed-elsewhere", "[data-tq-act-press]", { connected: true }, "reject", /dismissed/]]) {
   test(`an act's card pressed (${name}) never lights again before it says what was pressed`, { timeout: 300000 }, async (t) => {
     const w = await world(t), page = await w.newPage();
     await page.setViewport({ width: 1600, height: 900 });
@@ -66,6 +69,7 @@ for (const [name, which, body] of [["dismiss", "[data-tq-act-dismiss]", {}], ["p
     await page.waitForSelector(sel, { visible: true, timeout: 60000 });
     await new Promise((r) => setTimeout(r, 2500));
     const dir = path.join(out, "video", name); await mkdir(dir, { recursive: true });
+    if (elsewhere) await w.api(`/api/reviews/${made.reviewId}/decide`, { verb: elsewhere, final_text: null, note: null });
     const rec = await record(page, dir);
     const states = await watch(page, sel, which);
     // ...and once the chat is read again it is still that card, pressed, with its words - never swapped for another (2026-11-18)
@@ -77,8 +81,54 @@ for (const [name, which, body] of [["dismiss", "[data-tq-act-dismiss]", {}], ["p
       saw: JSON.stringify(states), verdict: relit < 0 ? "PASS" : "FAIL" });
     assert.notEqual(states[0]?.s, "no-button", `no button on the card: ${states[0]?.text}`);
     assert.equal(relit, -1, `the card lit its buttons again after the press: ${JSON.stringify(states)}`);
+    assert.match(kept, says, `the pressed card does not say what came of it: ${kept}`);
+    assert.doesNotMatch(kept, /Try again|didn't go through/, `a press decided elsewhere read as a failure: ${kept}`);
     assert.match(kept, /deployed this morning/, `the pressed card went from where it stood: ${JSON.stringify(states)}`);
     assert.ok(!states.some((x) => x.s === "gone"), `the card went, or was swapped for another, after the press: ${JSON.stringify(states)}`);
     assert.deepEqual(errors, []);
   });
 }
+
+test("an act's card whose tracker is not connected offers Connect, never a Post that can only fail", { timeout: 300000 }, async (t) => {
+  const w = await world(t), page = await w.newPage();
+  await page.setViewport({ width: 1600, height: 900 });
+  const made = await w.api("/api/fixture/act-card", {});
+  await page.goto(w.ui, { waitUntil: "domcontentloaded" });
+  await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
+  const sel = `[data-tq-task-page] [data-tq-act="${made.reviewId}"]`;
+  await page.waitForSelector(`${sel} [data-tq-act-connect]`, { visible: true, timeout: 60000 });
+  assert.equal(await page.$(`${sel} [data-tq-act-press]`), null, "Post comment lit beside Connect");
+});
+
+// ...ITS WORDS AND CHOICES EDITED, THEN PRESSED, AND IT LANDS: the press says the pick ("Save as draft"), and the card says it went in the
+// pick's words with its link - his words, never the agent's, from the press to the read after it
+test("a post with its words and a choice edited lands as edited, and its card says so with no relight", { timeout: 300000 }, async (t) => {
+  const w = await world(t), page = await w.newPage();
+  await page.setViewport({ width: 1600, height: 900 });
+  const errors = []; page.on("pageerror", (e) => errors.push(e.message));
+  const made = await w.api("/api/fixture/act-card", { connected: true, lands: "linkedin_post", title: "Gas prices post",
+    post: { action: "run_tool", type: "linkedin_post", text: "Gas rose 4 cents this week.", visibility: "CONNECTIONS", publish: "now" } });
+  await page.goto(w.ui, { waitUntil: "domcontentloaded" });
+  await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
+  const sel = `[data-tq-task-page] [data-tq-act="${made.reviewId}"]`;
+  await page.waitForSelector(`${sel} [data-tq-act-press]`, { visible: true, timeout: 60000 });
+  await new Promise((r) => setTimeout(r, 1500));
+  await page.select(`${sel} select[data-tq-act-choice=publish]`, "draft");
+  await page.$eval(`${sel} textarea[data-tq-act-text]`, (x) => { x.focus(); x.select(); }); await page.keyboard.type("Gas rose 5 cents this week.");
+  assert.match(await page.$eval(`${sel} [data-tq-act-press]`, (b) => b.innerText), /Save as draft/);
+  const dir = path.join(out, "video", "edited-lands"); await mkdir(dir, { recursive: true });
+  const rec = await record(page, dir);
+  const states = await watch(page, sel, "[data-tq-act-press]");
+  await rec.stop();
+  await writeFile(path.join(dir, "states.json"), JSON.stringify(states, null, 1));
+  const kept = await page.evaluate((sel) => document.querySelector(sel)?.innerText.replace(/\s+/g, " ") || "", sel);
+  await note(dir, { done: "A post waits; the owner edits its words, picks Save as draft and presses.", expect: "Saving, then the card says Saved as a draft with his words and its link.",
+    saw: JSON.stringify(states), verdict: relitAfter(states) < 0 ? "PASS" : "FAIL" });
+  assert.equal(relitAfter(states), -1, `relit: ${JSON.stringify(states)}`);
+  // ...every state after the press says his words, never the agent's coming back for a beat
+  assert.ok(!states.filter((x) => x.s === "pressed").some((x) => /4 cents|Post now/.test(x.text)), `the agent's words came back after the press: ${JSON.stringify(states)}`);
+  assert.match(kept, /^.*Save as draft Gas rose 5 cents this week\. ✓ Saved as a draft/); assert.match(kept, /See it on LinkedIn/);
+  const sent = (await w.api(`/api/tasks/${made.taskId}/assistant`)).cards.find((c) => c.ReviewId === made.reviewId);
+  assert.equal(sent.post.result?.url, "https://social.example/alex/posts/1"); assert.equal(sent.post.text, "Gas rose 5 cents this week."); assert.equal(sent.post.publish, "draft");
+  assert.deepEqual(errors, []);
+});

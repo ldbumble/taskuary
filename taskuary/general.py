@@ -786,7 +786,14 @@ def owner_did(store, tid: int) -> list:
             # ...ONCE: a yes its agent was already handed in Taskuary's words (approved) is not said a second time here (the owner's rules, part 3)
             # ...as it stands now: a no after a failure it was handed is still news
             and not store._one("SELECT 1 AS x FROM audit WHERE EntityType='review' AND EntityId=? AND Action=? AND CreatedAt>=?", (r['ReviewId'], TOLD, r['DecidedAt'] or ''))]
+    # ...AND A CLOSE A MESSAGE HAS UNDONE SINCE IS SAID WITH IT (a stress round, 2026-11-18): woken by the question that reopened the task, its
+    # agent was told only "marked it done", under "never undo it" - as if the work it was woken for were against his word
+    if (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped') and (shut := store._one(
+            "SELECT Id, CreatedAt FROM audit WHERE EntityType='task' AND EntityId=? AND Action='close_from_assistant' ORDER BY Id DESC LIMIT 1", (tid,))) \
+            and store._one("SELECT 1 AS x FROM audit WHERE EntityType='task' AND EntityId=? AND Action='reopen' AND Id>? LIMIT 1", (tid, shut['Id'])):
+        out = [(at, f"{what} - {REOPENED_SINCE}" if at == shut['CreatedAt'] and what == PRESSES['close_from_assistant']({}) else what) for at, what in out]
     return [f'{clock_of(at)}: {what}' for at, what in sorted(out, key=lambda x: str(x[0]))]
+REOPENED_SINCE = 'a new message on its thread has opened it again since'
 # WHAT BECAME OF A SEND IS THE AGENT'S TO KNOW, AS IT ENDED (the agent walk, 2026-11-09): a send the server refused was not told to it at
 # all, one that went on the second press was told as "approved (Not sent: ...)" - it answered "not sent" and offered to set the mail up
 # again, one yes from sending it twice - and a text the owner changed before sending went out without the agent ever seeing what went

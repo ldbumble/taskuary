@@ -185,7 +185,9 @@ def run_github_issues(cfg):
     repo = str(cfg.get('repo') or '').strip()
     if not REPO.match(repo): raise RuntimeError('github_issues needs `repo` - owner/name')
     if not cfg.get('token'): raise RuntimeError('the GitHub connection has no token saved - paste one under Connections')
-    want, out, page = min(int(cfg.get('limit') or 100), 500), [], 1
+    lim = str(cfg.get('limit') or 100).strip().lower()
+    if lim != 'all' and not lim.isdigit(): raise RuntimeError(f'github_issues `limit` is a number of issues (at most 500), not {lim!r}')
+    want, out, page = min(500 if lim == 'all' else max(1, int(lim)), 500), [], 1
     while len(out) < want:
         r = _ok(requests.get(f'{GH}/repos/{repo}/issues', headers=_h(cfg['token']), params={'state': 'open', 'per_page': 100, 'page': page, 'sort': 'updated'},
                              timeout=20), 'list the issues')
@@ -196,7 +198,8 @@ def run_github_issues(cfg):
         if len(r.json()) < 100: break
         page += 1
     from .reports import rows_out
-    return rows_out(out[:want + 1], want, 'issues')        # (headline, body), saying so when the list was cut
+    # (headline, body), saying so when the list was cut - and how to see more: this tool's own `limit`, not a source's "max rows"
+    return rows_out(out[:want + 1], want, 'issues', how='call again with a larger `limit` (at most 500)' if want < 500 else 'close some first')
 
 def run_github_close(cfg):
     """GitHub: close one issue - {repo: owner/name, number, comment (optional, said on it after the close), reason: completed|not_planned}.

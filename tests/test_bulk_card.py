@@ -164,3 +164,14 @@ def test_two_presses_at_once_are_one_run_and_one_true_telling():
     assert sorted(gh.closed) == list(range(1, 11)) and (st['done'], st['failed']) == (10, 0), st
     [said] = told
     assert '10 done, 0 failed' in said
+
+
+def test_reading_issues_says_how_to_see_more_and_refuses_a_limit_it_cannot_read():
+    page = [{'number': n, 'title': f'Stale question {n}', 'labels': [], 'comments': 0, 'updated_at': '2022-03-04T10:00:00Z',
+             'user': {'login': 'user1'}, 'body': 'How do I export?'} for n in range(1, 11)]
+    with mock.patch.object(github.requests, 'get', lambda *a, **k: SimpleNamespace(status_code=200, ok=True, text='[]', json=lambda: page)):
+        head, _ = github.run_github_issues({'repo': REPO, 'token': 'ghp_stand_in', 'limit': 5})
+        assert 'larger `limit`' in head and 'max rows' not in head, head     # the tool's own argument - there is no source setting here
+        assert github.run_github_issues({'repo': REPO, 'token': 'ghp_stand_in', 'limit': 'all'})[0].startswith('10 issues')
+        try: github.run_github_issues({'repo': REPO, 'token': 'ghp_stand_in', 'limit': 'lots'}); raise AssertionError('read')
+        except RuntimeError as e: assert 'number of issues' in str(e)

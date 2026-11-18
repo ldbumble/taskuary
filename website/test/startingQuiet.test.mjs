@@ -14,5 +14,5 @@ test("a start is the spin under the turn's head, never a line of words", () => {
   assert.match(turn, /\{\.\.\.\(t\.state === "starting" \? \{ "data-tq-starting-line": "" \} : \{\}\)\}/);
   assert.match(turn, /<RunClock start=/);
   assert.doesNotMatch(ws, /const AgentBand|<AgentBand/);
-  assert.match(ws, /const RunClock = \(\{ start \}\)/);
+  assert.match(read("RunClock.jsx"), /export const RunClock = \(\{ start/);
 });

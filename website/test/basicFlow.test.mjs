@@ -142,6 +142,12 @@ test("a turn at work says what is happening, or what we wait for, beside its dot
   // ...and where the newest step is a thought, its latest words - never a bare "Thinking…" for minutes (the owner, 2026-11-16)
   const thought = { kind: "thought", status: "done", summary: "The owner wants two bakeries.", detail: "The owner wants two bakeries. Tatte opens at 7 on Sundays, so I should check Bakey next." };
   assert.equal(workingLine([{ type: "work", steps: [thought] }], label), "Tatte opens at 7 on Sundays, so I should check Bakey next");
+  // ...but never the words of a row in sight (the status walk, 2026-11-18): a short thought is its row's whole text, standing open over the line
+  // while no work folds it - the line says "Thinking…" under it, and the thought's words again only once a fold has shut it away
+  const short = { kind: "thought", status: "done", summary: "The budget note comes first, then the archive." };
+  assert.equal(workingLine([{ type: "work", steps: [short] }], label), "Thinking…", "the row says it: the line does not");
+  assert.equal(workingLine([{ type: "work", steps: [{ summary: "Read budget.xlsx", status: "done" }, short] }], label), "The budget note comes first, then the archive",
+    "folded behind \"1 step\", the row is out of sight: the line says it");
   const { thinkingLine } = await import("../src/chatStream.js");
   assert.ok(thinkingLine("word ".repeat(80)).length <= 110);
   // ...and the answer it is writing, while that is the newest thing it did - a long answer read "Thinking…" for 85 s on the real CLI
@@ -167,4 +173,64 @@ test("his waiting line is pinned just over the box until the agent takes it - ne
   const css = (await readFile(new URL("../src/generalWorkspace.css", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
   assert.match(css, /\.tq-conv-pending \{[^}]*margin: 0 0 10px/, "a little room between it and the box");
   assert.match(css, /\.tq-conv-pending-row \{[^}]*border: 1px solid/, "each line in its own border");
+});
+
+// ...ONE TABLE WORDS A STEP AT WORK (rule 3): the edit row's running verbs were a pair of its own beside agentSteps' ING; it reads them from there
+test("an edit's running verb is the one table's, never words of its own", async () => {
+  const { editRow } = await import("../src/chatStream.js");
+  assert.equal(editRow({ name: "Write", file: "notes.md", edit: "", running: true }).summary, "Writing notes.md");
+  assert.equal(editRow({ name: "Edit", file: "a/budget.py", edit: "", running: true }).summary, "Editing budget.py");
+  const src = await readFile(new URL("../src/chatStream.js", import.meta.url), "utf8");
+  assert.doesNotMatch(src.slice(src.indexOf("export const editRow"), src.indexOf("// THE PLAN IS A CHECKLIST")), /"Writing"|"Editing"/);
+});
+
+test("an edit still being made is \"Editing x\" in its row and on the working line - never \"Edited x (+1 -1)\" over \"Thinking...\"", async () => {
+  const { eventsOf, turnParts, workingLine } = await import("../src/chatStream.js");
+  const label = (s) => (s.status === "running" ? s.doing : s.summary);
+  const steps = [{ k: "tool", name: "Read", args: { file_path: "a.py" }, status: "completed" },
+    { k: "tool", name: "Edit", args: { file_path: "budget.py", old_string: "a", new_string: "b" }, status: "in_progress" }];
+  const live = turnParts(eventsOf(steps, true), { live: true });
+  assert.equal(live.at(-1).summary, "Editing budget.py");
+  assert.equal(workingLine(live, label), "Editing budget.py");
+  // ...made once its call returned, or once the turn is over
+  const made = turnParts(eventsOf([steps[0], { ...steps[1], status: "completed" }], true), { live: true });
+  assert.equal(made.at(-1).summary, "Edited budget.py (+1 −1)");
+  assert.equal(workingLine(made, label), "Thinking…");
+  assert.ok(!turnParts(eventsOf(steps, false)).some((p) => p.type === "edit"), "one that never returned is no edit made once the turn is over");
+});
+
+test("the working line names what no row in sight says - at every beat of a turn, its fold shut or opened, on the chat and the dock", async () => {
+  // The status walk, 2026-11-18: a thought stood as its row and again on the line under it; a thought then a finished edit read the old
+  // thought's words, the edit newer than it; and with the fold opened, "Reading budget.md" / "Editing budget.py" stood as a row and on the line
+  const { workingLine, editRow } = await import("../src/chatStream.js");
+  const { stepLabel } = await import("../src/agentSteps.js");
+  const short = { kind: "thought", status: "done", summary: "The budget note comes first, then the archive." };
+  const read = (status) => ({ kind: "read", status, summary: "Read budget.md" });
+  const edit = (running) => editRow({ name: "Edit", file: "budget.py", edit: { old_string: "a = 1", new_string: "a = 2" }, running });
+  const beat = (parts, open = false) => workingLine(parts, stepLabel, { open });
+  // a thought alone: its row stands open (no work to fold it) - the line does not say it again
+  assert.equal(beat([{ type: "work", steps: [short] }]), "Thinking…");
+  // a step at work: shut in its fold, the line names it; the fold opened, its row says it with its spinner
+  assert.equal(beat([{ type: "work", steps: [short, read("running")] }]), "Reading budget.md");
+  assert.equal(beat([{ type: "work", steps: [short, read("running")] }], true), "Working…");
+  // an edit being made: the same (4bce367's "Editing budget.py" under the shut fold)
+  assert.equal(beat([{ type: "work", steps: [short] }, edit(true)]), "Editing budget.py");
+  assert.equal(beat([{ type: "work", steps: [short] }, edit(true)], true), "Working…");
+  // a thought, then an edit that has been made, nothing newer: the edit is the newest thing - never the older thought's words
+  assert.equal(beat([{ type: "work", steps: [short] }, edit(false)]), "Thinking…");
+  // a thought behind a step, the fold shut: its row is out of sight - the line says it; opened, the row says it
+  assert.equal(beat([{ type: "work", steps: [read("done"), short] }]), "The budget note comes first, then the archive");
+  assert.equal(beat([{ type: "work", steps: [read("done"), short] }], true), "Thinking…");
+  // ...and a long thought's row shows its start only: its latest words are on no row, so the line says them, open or shut
+  const long = { kind: "thought", status: "done", summary: "The owner wants two venues.", detail: "The owner wants two venues. The Mill has parking, so I check the Quay next." };
+  assert.equal(beat([{ type: "work", steps: [read("done"), long] }], true), "The Mill has parking, so I check the Quay next");
+  // ConvTurn reads the fold's open state as the fold does, and the dock's trail as always open
+  const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(src, /const folded = useFoldOpen\(`\$\{foldKey\(t\.id\)\}:all`\), work = React\.useContext\(WorkCtx\), open = folded \|\| !work;/, "both hooks called on every render");
+  assert.match(src, /const Fold = \(\{ k, label, quiet = false, children \}\) => \{\n  const open = useFoldOpen\(k\);/);
+  // ...and the fold's open state is set by his click, in the render the click causes - heard from the native toggle (a task later), the line on
+  // ACP followed the opened fold 75-90 ms late, saying the row's words under it (the judges' recording, 2026-11-18)
+  const fold = src.slice(src.indexOf("const Fold = "), src.indexOf("// ONE RULE FOR EVERY FOLD"));
+  assert.match(fold, /<summary onClick=\{\(e\) => \{ e\.preventDefault\(\); set\(!OPEN_FOLDS\.has\(k\)\); \}\}>/);
+  assert.match(fold, /const set = \(o\) => \{ if \(o === OPEN_FOLDS\.has\(k\)\) return;[^\n]*FOLD_HEARD\.forEach/, "the click and the toggle agree on one state");
 });

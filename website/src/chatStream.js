@@ -5,7 +5,7 @@
 //   as sessionrecord reads it, an ACP session's updates as conversation.acp_steps does), read into trace events (eventsOf).
 // Trace events are the one currency: turnParts reads them into a turn's parts - its words, its work (agentSteps.stepsOf, one line a step),
 // each edit its own row with its diff ("Edited budget.py (+12 −3)"), its plan a checklist. Whatever drew them, a turn is those parts.
-import { baseName, describeCall, isWork, stepsOf } from "./agentSteps.js";
+import { baseName, describeCall, isWork, present, stepsOf } from "./agentSteps.js";
 import { editHunks, stat } from "./diffView.js";
 import { liveTerminal } from "./taskLayout.js";
 import { filesOf, viewOf } from "./viewSpec.js";
@@ -50,18 +50,21 @@ const argEdit = (name, a) => {
 };
 // ...but an edit that FAILED or never ran is no edit made: drawn "Edited totals.py (+1 −1)" from the diff it asked to make, it read as done -
 // it is its step, drawn failed (the stress round, 2026-11-10)
-export function editOf(e, res) {
+export function editOf(e, res, running = false) {
   if (e?.type !== "tool_call" || res?.detail?.is_error) return null;
   const d = e.detail || {}, a = d.args || {};
   if (!d.edit && describeCall(e.name, a).kind !== "edit") return null;
   const edit = d.edit || argEdit(e.name, a), file = d.file || FILE_KEYS.map((k) => a[k]).find(Boolean) || "";
   // ...a log's own edit row stands even with no diff kept; a trace's call is a row of its own only when it carries one
-  return edit || d.file ? editRow({ name: e.name, edit, file }) : null;
+  return edit || d.file ? editRow({ name: e.name, edit, file, running: running && !res }) : null;
 }
 export const editRow = (s) => {
   const hunks = editHunks(s.edit), { plus, minus } = stat(hunks), file = s.file || "";
   const wrote = /^(write|writefile|createfile)$/i.test(String(s.name || "").replace(/[^a-z]/gi, "")) || (hunks.length && hunks.every((h) => h.lines.every((l) => l[0] === "+")));
-  return { type: "edit", file, wrote: !!wrote, summary: `${wrote ? "Wrote" : "Edited"} ${baseName(file) || "a file"}${hunks.length ? ` (+${plus} −${minus})` : ""}`, plus, minus, hunks };
+  // ...an edit still being made is "Editing x", never "Edited x (+1 −1)" over a call that has not returned (and the working line says it, workingLine)
+  // - its verb in the present by the one table every running step is worded by (agentSteps.present), never a pair of its own
+  const did = wrote ? "Wrote" : "Edited", verb = s.running ? present(did) : did;
+  return { type: "edit", file, wrote: !!wrote, running: !!s.running, summary: `${verb} ${baseName(file) || "a file"}${hunks.length && !s.running ? ` (+${plus} −${minus})` : ""}`, plus, minus, hunks };
 };
 // THE PLAN IS A CHECKLIST, the newest one of the turn where it was last updated - never "Updated its plan (3 steps)" six times over
 const PLAN_MARK = { completed: "done", done: "done", in_progress: "now", now: "now" };
@@ -78,7 +81,7 @@ export function planOf(e) {
 // in order: its words, a fold of the work it did, each edit with its diff, each view it showed, its plan. `answer`: the words the turn
 // filed as its answer, which its trail does not say twice (agentSteps.stepsOf). A call's result is its own wherever it came - a run of steps cut by an edit keeps the results
 // that arrived after the edit, so nothing it started is left spinning
-export function turnParts(events, { answer = "", keepStart = false } = {}) {
+export function turnParts(events, { answer = "", keepStart = false, live = false } = {}) {
   const evs = (events || []).filter(Boolean), results = new Map(), parts = [], special = new Set();
   for (const e of evs) if (e.type === "tool_result") results.set(e.detail?.tool_call_id || e.name, e);
   let run = [], first = true;
@@ -96,7 +99,7 @@ export function turnParts(events, { answer = "", keepStart = false } = {}) {
     if (e.type === "tool_result") continue;
     // ...and a VIEW the agent showed (agenttools `show`) is its own part, drawn as the UI it describes (ViewSpec.jsx)
     // ...and the FILES it showed with it (viewSpec.filesOf): the pictures themselves, over any view the same call drew
-    const res = results.get(e.detail?.tool_call_id), ps = [filesOf(e, res), editOf(e, res) || planOf(e) || viewOf(e, res)].filter(Boolean);
+    const res = results.get(e.detail?.tool_call_id), ps = [filesOf(e, res), editOf(e, res, live) || planOf(e) || viewOf(e, res)].filter(Boolean);
     if (ps.length) { flush(); special.add(e.detail?.tool_call_id); parts.push(...ps); } else run.push(e);
   }
   flush();
@@ -225,16 +228,27 @@ export const waitingChips = (pending, came = "") => {
 // agent to start" is the app's mechanics) - a `later` turn starting is the work going on, and reads as the turn it becomes: bare dots stood
 // over it, then words (the walks, 2026-11-17). One whose CLI is opening is not `later` (ConvTurn), so a later line never steps back
 // `doing`: the answer it is writing, while that is the newest thing it did (conversation `doing`)
-export const workingLine = (parts, label, { starting = false, later = false, ask = "", doing = "" } = {}) => {
+// ...AND NEVER THE WORDS OF A ROW IN SIGHT (the status walk, 2026-11-18: a short thought's row and the line under it read "The budget note comes
+// first, then the archive" at one beat; with the fold opened, "Reading budget.md" stood as a row and again on the line under it at every tool
+// beat). One structural test, for a thought and a step alike: is the row that holds those words drawn open right now - a turn's rows stand open
+// while it has no work to fold (TurnWorkView), and inside a fold he opened or the dock's trail (`open`); shut in the fold, the line names it
+export const workingLine = (parts, label, { starting = false, later = false, ask = "", doing = "", open = false } = {}) => {
   if (ask) return ask;
-  const steps = (parts || []).filter((p) => p.type === "work").flatMap((p) => p.steps || []), last = steps.at(-1);
-  if (last?.status === "running") return String(label(last) || "").split(/\r?\n/)[0].trim() || "Working…";
+  // the newest thing the turn did: its last step, or an edit made after it (an edit is a part of its own, editRow)
+  const newest = (parts || []).flatMap((p) => (p.type === "work" ? (p.steps || []).map((st) => ({ st, row: String(label(st) || "") }))
+    : p.type === "edit" ? [{ edit: p, row: p.summary }] : [])).at(-1);
+  const inSight = open || workCount(parts) === 0;
+  const say = (line, held) => (line && !(inSight && flat(newest.row).includes(flat(line))) ? line : held);
+  // ...an edit being made, or a step at work, is the newest thing at work, in its own words (editRow `running`, stepLabel)
+  if (newest?.edit?.running) return say(newest.edit.summary, "Working…");
+  if (newest?.st?.status === "running") return say(newest.row.split(/\r?\n/)[0].trim(), "Working…");
   if (doing && thinkingLine(doing)) return `Writing: ${thinkingLine(doing)}`;
-  if (!last) return starting && !later ? "Waiting for the agent to start" : "Thinking…";
+  if (!newest) return starting && !later ? "Waiting for the agent to start" : "Thinking…";
   // ...and WHAT IT IS THINKING, where its newest step is a thought (the owner, 2026-11-16: "Thinking..." for three minutes with nothing else):
-  // that thought's latest words, as it writes them (agents.ACPSteps._thinking) - never a bare word for minutes
-  return last.kind === "thought" ? thinkingLine(last.detail || last.summary) || "Thinking…" : "Thinking…";
+  // that thought's latest words, as it writes them (agents.ACPSteps._thinking) - never a bare word for minutes. An edit made after it is newer
+  return newest.st?.kind === "thought" ? say(thinkingLine(newest.st.detail || newest.st.summary), "Thinking…") : "Thinking…";
 };
+const flat = (t) => String(t || "").replace(/\s+/g, " ").replace(/[.…]+$/, "").trim();
 // a thought as one short line: its last sentence, cut at a word
 export const thinkingLine = (text) => {
   const t = String(text || "").replace(/\s+/g, " ").trim().replace(/[.…]+$/, "");

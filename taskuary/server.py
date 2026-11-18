@@ -1259,7 +1259,7 @@ def create_task(body: TaskBody):
     tid = store.create_task({**fields, 'AskedVia': 'desktop', 'OriginBase': 'owner'}, ACTOR)
     # ...and a file attached in New is the task's own, in its folder - named under attachments/, its agent's Read was refused (2026-11-17)
     from . import outputs
-    if (s := fields.get('Summary')) and (s2 := outputs.take_in_text(tid, s)) != s: store.update_task(tid, {'Summary': s2}, ACTOR)
+    outputs.take_in_summary(store, tid, ACTOR)
     # A task created by the owner is their durable TODO. Agent runs may come and go without
     # silently completing it; only routed/triaged work is eligible for automatic completion.
     from . import selfclose

@@ -178,3 +178,28 @@ class NoThreadNoInventedRefs(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+# A FILE WITH THE WORDS GOES WITH THE JOB THEY START (the stress round of New's attachments): New's first box is one Assistant turn, and a PDF
+# attached there reached the Assistant's model - but the task it started carried his typed words alone (his_words), so the agent on that
+# task never heard of the file, nothing was copied into its folder, and his line drew no pill
+class AFileGoesWithTheJob(unittest.TestCase):
+    def test_a_file_attached_to_the_words_is_the_started_tasks_own(self):
+        from taskuary import config, conversation, general, outputs, ownwork
+        s = T.store()
+        s.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'claude'}))
+        d = config.home() / 'attachments' / 'prompt' / '209902'; d.mkdir(parents=True, exist_ok=True)
+        pdf = d / '20990228-101010-abc123-q3 census.pdf'; pdf.write_bytes(b'%PDF-1.4 census'); self.addCleanup(pdf.unlink, missing_ok=True)
+        llm, _ = scripted('CALL: ' + json.dumps({'kind': 'task.create_from_text', 'params': {'kind': 'general', 'text': 'Summarise the attached Q3 census for Erin Blake'}}))
+        with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch('taskuary.general.start_session'), \
+                mock.patch('taskuary.server.store', s), mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'summarise this for Erin', llm=llm, images=[str(pdf)])
+        tid = int(out['open'].split('=')[1])
+        kept = outputs.folder(tid) / 'q3 census.pdf'
+        self.assertTrue(kept.is_file(), 'the file is in the task folder')
+        self.assertIn(str(kept), s.get_task(tid)['Summary'], 'the task names it where its agent can read it')
+        ownwork.ensure(s, tid)
+        line = next(x for x in conversation.items(s, tid)['items'] if x['kind'] == 'line')
+        self.assertEqual((line['text'], line['files']), ('summarise this for Erin', [str(kept)]))
+        self.assertEqual(s.get_task(tid)['Title'][:9], 'Summarise', 'a title made of his words, never of a path')
+        self.assertIn(str(kept), general.prompt_parts(s, tid)[2], "the agent's own prompt names it")

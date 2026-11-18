@@ -79,6 +79,13 @@ def take_in_text(tid: int, text: str) -> str:
     return re.sub(re.escape(root) + r'[^\r\n]*', lambda m: take_in(tid, [m.group(0)])[0], str(text), flags=re.I)
 
 
+def take_in_summary(store, tid: int, actor: str) -> str:
+    "Task `tid`'s Summary with every file it names that this server saved taken into its folder (take_in_text) - kept, and returned."
+    s = str((store.get_task(tid) or {}).get('Summary') or '')
+    if (s2 := take_in_text(tid, s)) != s: store.update_task(tid, {'Summary': s2}, actor)
+    return s2
+
+
 def resolve(tid: int, rel: str, base: Path = None):
     """The file `rel` names inside task `tid`'s outputs folder (or `base`, a turn's kept copies - turn_folder), or None. A name only: never
     absolute, never a drive or a share, no `..` or empty step, no `:` (an NTFS stream), no link anywhere on the way - and after resolving,

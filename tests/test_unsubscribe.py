@@ -94,6 +94,15 @@ class RunTests(unittest.TestCase):
         self.assertEqual(r.status_code, 502); self.assertIn('500', r.json()['detail'])
         self.assertEqual(next(i for i in funnel.from_feed(self.s, self.s.feed(limit=10)) if i['mid'] == mid)['unsub'], 'post')
 
+    def test_a_post_that_never_reaches_the_list_says_so_and_stays_offered(self):
+        import requests
+        mid = _ingest(self.s, {'via': 'post', 'url': HTTPS})
+        for err in (requests.exceptions.ConnectTimeout('timed out'), requests.exceptions.ConnectionError('connection refused')):
+            with self.subTest(err=type(err).__name__), mock.patch('taskuary.webguard.check_url'), mock.patch('requests.post', side_effect=err):
+                r = c.post(f'/api/messages/{mid}/unsubscribe', json={})
+                self.assertEqual(r.status_code, 502); self.assertIn('did not answer', r.json()['detail'])
+        self.assertEqual(next(i for i in funnel.from_feed(self.s, self.s.feed(limit=10)) if i['mid'] == mid)['unsub'], 'post')
+
     def test_no_one_click_hands_back_the_link_and_opens_it_in_the_app(self):
         mid = _ingest(self.s, {'via': 'mailto', 'mailto': MAILTO})
         r = c.post(f'/api/messages/{mid}/unsubscribe', json={})

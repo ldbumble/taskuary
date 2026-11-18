@@ -493,6 +493,8 @@ def _items(store, tid: int) -> dict:
             # ...AN ANSWER NOBODY MARKED THE START OF STANDS AT ITS OWN TIME (every task answered before hand-overs were written down - his
             # older tasks, the demo's): placed at the start of time, it stood above the mail it answered and the chat began with the agent
             last = max(last + 1e-7, began or ep(c['CreatedAt']))
+            # ...ONE THAT FAILED says so where it failed, for good (general.file_turn): its closing line, after the app's own mark, is its `fail`
+            body, fail = general.failed_line(body)
             st = _said(steps_of.get(cid, []), body)
             # ...one it was made to take back (take_back): its words are a step of the work that goes on under it
             # ...and its summary goes with its words (the recorded walk, 2026-11-12: the saved sign-in's folded turn still drew its summary - "Erin
@@ -500,7 +502,8 @@ def _items(store, tid: int) -> dict:
             took = (('back', str(cid)) in led or any(n < cid for n in backs)) and body
             if took:
                 st, body, backs = [*st, {'k': 'note', 'text': (led.get(('back', str(cid))) or {}).get('Sid') or back_why(cid) or TOOK_BACK}], '', [n for n in backs if n >= cid]
-            t = {'kind': 'turn', 'at': stamp(clock) or c['CreatedAt'], 'state': 'done', 'steps': st, 'text': body, 'cards': [], 'started': clock or None,
+            t = {'kind': 'turn', 'at': stamp(clock) or c['CreatedAt'], 'state': 'failed' if fail else 'done', 'steps': st, 'text': body, 'cards': [], 'started': clock or None,
+                 **({'fail': fail.strip()} if fail else {}),
                  'ended': ep(c['CreatedAt']), 'answer': f'comment-{cid}', **({'summary': summ[cid]} if cid in summ and not took else {})}
             # ...and each draft this turn left that a later turn rewrote: greyed where it stood, never moved
             newest = {s['review']: k for k, ss in snaps.items() for s in ss}

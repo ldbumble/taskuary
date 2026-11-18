@@ -114,17 +114,35 @@ def keep_cut_turns(store) -> list:
     out = []
     for tid, trace in sessionrecord.cut_turns():
         if (store.get_task(tid) or {}).get('Status') in (None, 'done', 'dropped'): continue
-        words = sessionrecord.said(trace)
-        cut = cut_line(store, tid)
-        rid = store.add_comment(tid, 'assistant', ASSISTANT_TYPE, f'{words}\n\n{cut}' if words else cut)
-        sessionrecord.keep_turn(tid, rid, trace)
-        if (t0 := next((e.get('at') for e in trace[:1] if e.get('type') == 'start'), None)):
-            from . import outputs
-            try: outputs.keep_turn(tid, rid, float(t0))
-            except Exception as e: logger.debug(f'task {tid}: the files of the cut turn were not kept with it - {e}')
+        file_turn(store, tid, trace, cut_line(store, tid))
         out.append(tid)
-
     return out
+
+
+# A TURN THAT FAILED KEEPS ITS FAILURE WHERE IT HAPPENED (chat-render, 2026-11-18; the owner's rule 4): its CLI died part-way, it filed nothing,
+# and the chat said why only while that run was the task's last word - once he wrote again the turn read "1 step" with no reason under it.
+# Filed as a cut turn is, its sentence on a line of its own that opens with this mark (conversation._items reads it back as the turn's `fail`)
+FAILED_MARK = '\u26a0 '
+
+
+def failed_line(body: str) -> tuple:
+    "(the words, the failure) of a filed turn's body - its last paragraph when that opens with FAILED_MARK, else (body, '')."
+    head, _, tail = ('\n\n' + str(body or '')).rpartition('\n\n')
+    return (head.strip(), tail[len(FAILED_MARK):].strip()) if tail.startswith(FAILED_MARK) and '\n' not in tail.strip() else (str(body or ''), '')
+
+
+def file_turn(store, tid: int, trace: list, line: str) -> int:
+    """A TURN THAT ENDED WITHOUT ITS ANSWER - cut by a restart, or failed under its CLI - filed as its answer: what it said, its steps (its
+    trace's), its files, and one closing line. One road for both: the chat draws it where it stood, and the agent reads it next turn."""
+    from . import sessionrecord
+    words = sessionrecord.said(trace)
+    rid = store.add_comment(tid, 'assistant', ASSISTANT_TYPE, f'{words}\n\n{line}' if words else line)
+    sessionrecord.keep_turn(tid, rid, trace)
+    if (t0 := next((e.get('at') for e in trace[:1] if e.get('type') == 'start'), None)):
+        from . import outputs
+        try: outputs.keep_turn(tid, rid, float(t0))
+        except Exception as e: logger.debug(f'task {tid}: the files of the cut turn were not kept with it - {e}')
+    return rid
 def run_kept(store, tid: int) -> bool:
     """A CHAT'S LINES NOBODY IS TAKING GO IN WHEN ITS AGENT IS READY (the owner, 2026-11-11: "yes pending should go in when agent ready"): the turn
     that would have taken them went with the process - a restart - and they wait by the box. One turn takes them all, as a turn at its end
@@ -3134,6 +3152,11 @@ class GeneralSession:
                 logger.warning(f'assistant turn on task {self.task_id} ran out of time: {e}')
                 if not is_dock(self.store.get_task(self.task_id)): self._end_soon(learn=False, report=False)
                 raise Stopped(str(e)) from e
+            # ...and one that failed is filed where it happened, with what it did and why it ended (file_turn) - before its run reads failed
+            if not stopped and not is_dock(self.store.get_task(self.task_id)):
+                from . import funnel
+                try: file_turn(self.store, self.task_id, [x for x in self.trace if x.get('type') != 'error'], FAILED_MARK + funnel.failure(said[:4000], self.task_id)['sentence'])
+                except Exception as skipped: logger.warning(f'task {self.task_id}: the failed turn was not filed - {skipped}')
             try:
                 from . import workerstate as ws
                 ws.record(self.store, self.task_id, self.sid, 'stopped' if stopped else 'failed', text=said[:4000], source='quick' if quick else 'api')

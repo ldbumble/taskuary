@@ -2113,8 +2113,10 @@ def task_trust(task_id: int, scope: str = ''):
     """The owner vouches for everything on this task so far (origin.raise_to). Not on guard.AGENT_WRITES, so a session
     cannot vouch for itself; a stranger who writes afterwards lowers it again. `scope` 'org': for the sender's whole organisation
     (senders.trust_org) - everyone at that domain, by mail or Teams, from now on."""
-    from . import origin, senders
+    from . import origin, senders, ingest as _ing
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    # ...a press that lifts nothing starts nothing (pressed twice, or on the phone and the desk): the second handed the same thread over again
+    lifts = store.task_has_tag(task_id, _ing.HOLD_TAG) or origin.of_task(store, task_id)[0] == 'stranger'
     org = None
     if scope == 'org':
         try: org = senders.trust_org(store, task_id, ACTOR)
@@ -2123,7 +2125,7 @@ def task_trust(task_id: int, scope: str = ''):
     o, why = origin.of_task(store, task_id)
     # ...A START THAT BREAKS IS KEPT ON THE TASK with its retry (blackboard.record_failure), never a bare 500 under "You trusted the sender"
     # with nobody at work (2026-11-17)
-    try: started = _trusted_starts(task_id) if o != 'stranger' else ''
+    try: started = (_trusted_starts(task_id) if lifts else 'already' if _ing.live_agent(store, task_id) or _ing.started(store, task_id) else '') if o != 'stranger' else ''
     except Exception as e:
         from . import blackboard as bb
         logger.warning(f'task {task_id}: the start Trust makes failed - {e}'); bb.record_failure(store, task_id, e, 'assistant'); started = ''

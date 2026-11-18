@@ -643,6 +643,28 @@ def r_monitor_notice(r: Run):
 
 
 @on('cli', 'acp', 'api')
+def u_stranger_twice(r: Run):
+    """(u) A stranger writes twice before the owner looks, he types a line, and presses Trust - twice (a double tap; the phone and the desk):
+    nothing starts before Trust, the agent's first turn reads both mails and his line, once each, and the second press starts nothing more."""
+    v, who = {'intent': 'task', 'kind': 'general', 'title': 'Quote for the spring order'}, dict(from_email='sales@vendor.example', from_name='Gail Moreno')
+    r.arrive(v, wrote=False, body='Could you send the spring order quantities?', label='a stranger writes', **who)
+    r.quiet(label='held: nothing starts by itself')
+    r.arrive({**v, 'refines': False}, wrote=False, body='Following up - we need the quantities by Friday.', label='the stranger writes again', **who)
+    r.quiet(label='still held')
+    r.type('check what we ordered last spring')
+    r.quiet(label='his line waits behind Trust')
+    r.press(f'/api/tasks/{r.tid}/trust', label='press Trust')
+    r.press(f'/api/tasks/{r.tid}/trust', label='press Trust again')
+    p = r.turn('Last spring was 40 units; the reply with the quantities waits for your Send.')
+    assert all(said in p for said in ('spring order quantities', 'by Friday', 'check what we ordered last spring')), p
+    r.quiet(label='one turn for one Trust')
+    assert not r.started, f'{r.backend}: the second Trust started a second turn'
+    r.press(f'/api/tasks/{r.tid}/trust', label='Trust pressed again, from the phone, after the turn')
+    r.quiet(label='a press that lifts nothing starts nothing')
+    assert not r.started, f'{r.backend}: a Trust on a trusted task handed the stranger\'s mail over again'
+
+
+@on('cli', 'acp', 'api')
 def i_late_answer(r: Run):
     "(i) Someone is late answering -> the agent is woken once -> a chase card."
     r.waiting_on_ray()
@@ -778,5 +800,6 @@ def t_send_at_work(r: Run):
 SCENARIOS = {k: f for k, f in [('a', a_question_answered), ('b', b_email_rewritten), ('c', c_bug_pushed), ('d', d_page_step), ('e', e_three_asks),
                                ('f', f_ci_notice), ('g', g_invite_clash), ('h', h_steered_mail), ('i', i_late_answer), ('j', j_answered_outside),
                                ('k', k_send_fails), ('l', l_no_connector), ('m', m_remind_while_working), ('n', n_full_house), ('o', o_silent_turn),
-                               ('p', p_break_out), ('q', q_save_routine), ('r', r_monitor_notice), ('s', s_send_close_at_work), ('t', t_send_at_work)]}
+                               ('p', p_break_out), ('q', q_save_routine), ('r', r_monitor_notice), ('s', s_send_close_at_work), ('t', t_send_at_work),
+                               ('u', u_stranger_twice)]}
 def runs_on(name, backend) -> bool: return backend in getattr(SCENARIOS[name], 'on', BACKENDS)

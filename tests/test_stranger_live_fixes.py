@@ -289,3 +289,17 @@ def test_a_start_trust_makes_that_breaks_is_kept_on_the_task_not_a_500(monkeypat
     r = TestClient(server.app).post(f'/api/tasks/{t}/trust')
     assert r.status_code == 200 and r.json()['started'] == '', r.text
     assert any('would not come up' in (c['Body'] or '') for c in s.list_comments(t, internal=True)) and s.get_dispatch(t)
+
+def test_trust_pressed_twice_hands_the_waiting_line_over_once(monkeypatch):
+    """Pressed twice - a double tap, or the phone and the desk both - the second press found the task trusted and an agent on it, and
+    handed the same thread over again: the agent was told the stranger's mail twice. A press that changes nothing starts nothing."""
+    from taskuary import ingest
+    s, t = _held_with_line(monkeypatch); got = []
+    monkeypatch.setattr(ingest, 'live_agent', lambda *a: 'general')
+    monkeypatch.setattr(ingest, '_spawn', lambda fn, *a, **k: got.append(fn))
+    c = TestClient(server.app)
+    assert c.post(f'/api/tasks/{t}/trust').json()['started'] == 'handed'
+    again = c.post(f'/api/tasks/{t}/trust')
+    assert again.status_code == 200 and again.json()['origin'] == 'trusted'
+    assert len(got) == 1, got
+    assert again.json()['started']          # ...and it still says an agent has it: the first press's is at work

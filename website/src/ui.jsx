@@ -14,8 +14,6 @@ import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, Dialo
   DialogContentText, DialogTitle, InputAdornment, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
 import { ButtonBar } from "./ButtonBar.jsx";
 import SearchIcon from "@mui/icons-material/Search";
-import BlockIcon from "@mui/icons-material/Block";
-import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
 import { browserRecogniser, dictate, dictationError, inAppWindow, micFix } from "./dictation.js";
 import { chooseVoice, voiceChoice, micRoute } from "./voiceChoice.js";
@@ -58,13 +56,13 @@ import ConnectAi from "./ConnectAi.jsx";
 import { Logo, hasLogo } from "./logos.jsx";
 import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import { choice, label as btnLabel } from "./buttons.js";   // buttons.json's words; theme.jsx owns `label`
-import { asUtc, setTz, fmtTime } from "./dates.js";
+import { asUtc, setTz } from "./dates.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { readContacts } from "./contacts.js";
 import { personLine, runSearch, withFound } from "./peopleSearch.js";
 export { agentAssignee, assignedAgent, assigneeLabel } from "./agentIdentity.js";
-import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2, label } from "./theme.jsx";
-import { AGENT_SHOWN, MESSAGE, shownAgent } from "./kinds.js";
+import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2, label } from "./theme.jsx";
+import { MESSAGE, shownAgent } from "./kinds.js";
 import { codingChoice, codingChoices } from "./brainOptions.js";
 // a waiting note the Assistant passed on keeps the owner's words and its own version apart (waitroom.SEP): the owner's are what is shown
 export const ownWords = (note) => String(note || "").split("\x1f")[0].trim();
@@ -902,135 +900,6 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
   );
 };
 
-// "This isn't ours." Says so about THIS item and teaches the classifier at the same time:
-// the note is saved to memory, and triage reads it on every later message from that sender.
-// Editable before saving, because the reason is the part that has to be right.
-// `onLock` tells the panel above to stop following the mouse while this is open: rows shift
-// under the cursor during a sync, hover re-selects whatever landed there, and the panel -
-// keyed on the selected message - unmounted with the half-typed verdict inside it. That read
-// as "Not our task doesn't work while syncing", and nothing said otherwise because the save
-// error was swallowed. Both ends are fixed here: the lock, and a visible failure.
-export const NotMine = ({ messageId, onDone, onLock, row, first, compact = false }) => {
-  const [open, setOpen] = useState(false);
-  const [note, setNote] = useState("");
-  // no default here on purpose: the server picks the scope this message calls for (a topic when
-  // there is a subject to key on) and the panel shows what it picked. "this sender" as a fixed
-  // default is what filed "resident refunds are not our task" under one colleague of seventeen.
-  const [scope, setScope] = useState("");
-  const [topic, setTopic] = useState("");
-  const [topicEdited, setTopicEdited] = useState(false);
-  const [edited, setEdited] = useState(false);
-  const [saved, setSaved] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  useEffect(() => { onLock?.(open && !saved); }, [open, saved, onLock]);
-  useEffect(() => () => onLock?.(false), [onLock]);      // unmounted anyway: never leave it locked
-  // the suggested wording follows the scope, so the sentence and the dropdown never disagree -
-  // but an EDITED note is the owner's own words and is never overwritten
-  useEffect(() => {
-    if (!open) return;
-    api.get(`/api/messages/${messageId}/not-mine/suggest`, { params: { ...(scope ? { scope } : {}), ...(topicEdited ? { topic } : {}) } })
-      .then(({ data }) => { setScope((c) => c || data.scope); if (!topicEdited) setTopic(data.topic || ""); if (!edited) setNote(data.note); })
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, messageId, scope]);
-  const save = async () => {
-    setBusy(true); setErr("");
-    try {
-      const { data } = await api.post(`/api/messages/${messageId}/not-mine`,
-        { note: note.trim() || null, scope: scope || "sender", topic: topic.trim() || null });
-      setSaved(data);
-      setTimeout(() => onDone?.(), 1400);
-    } catch (e) {
-      setErr(e?.response?.data?.detail || e?.message || "the verdict did not save — try again");
-    }
-    setBusy(false);
-  };
-  if (saved) return (
-    <Box sx={row ? { px: 1.25, py: 1 } : undefined}>
-      <Typography variant="caption" sx={{ color: "var(--tq-success, #47654a)", fontWeight: 600, display: "block" }}>
-        ✓ noted — triage will apply this to{" "}
-        {saved.scope === "global" ? "every sender" : saved.scope === "subject" ? `any mail about “${saved.scopeKey}”` : saved.scopeKey}
-        {" "}from now on
-      </Typography>
-      {/* the verdict works from here on; tasks opened BEFORE it are still sitting there, and
-          saying nothing about them is how a fix reads as "still not learning" */}
-      {!!saved.alsoCovered?.length && (
-        <Typography variant="caption" sx={{ color: "var(--tq-link, #55697a)", display: "block", mt: 0.25 }}>
-          {plural(saved.alsoCovered.length, "open task")} already match it
-          ({saved.alsoCovered.slice(0, 4).map((t) => `TQ-${String(t.taskId).padStart(4, "0")}`).join(", ")}
-          {saved.alsoCovered.length > 4 ? ", …" : ""}) — close them the same way if they are not yours either.
-        </Typography>
-      )}
-    </Box>
-  );
-  if (!open && compact) return (
-    <Button size="small" disableElevation startIcon={<PsychologyOutlinedIcon sx={{ fontSize: 16 }} />}
-      onClick={() => setOpen(true)} title="Not our responsibility — explain why once so triage remembers"
-      sx={{ width: 190, height: 34, px: 1.5, justifyContent: "flex-start", borderRadius: 2,
-        textTransform: "none", fontWeight: 600, fontSize: 12, whiteSpace: "nowrap", boxShadow: "none",
-        color: "var(--tq-purple, #5a3e83)", bgcolor: "var(--tq-panel, #f8f5fc)", border: "1px solid var(--tq-edge-purple, #d9cbea)",
-        "&:hover": { bgcolor: "var(--tq-panel, #f1eafa)", borderColor: "var(--tq-edge-purple, #bca3d8)", boxShadow: "none" } }}>
-      {btnLabel("not_ours")}
-      <Box component="span" aria-hidden sx={{ ml: 1, px: 0.65, py: 0.08, borderRadius: 0.8,
-        bgcolor: "rgba(90,62,131,.1)", fontSize: 8.5, fontWeight: 600, letterSpacing: 0.7,
-        lineHeight: 1.5 }}>MEMORY</Box>
-    </Button>
-  );
-  if (!open) return row ? (
-    <ChoiceRow first={first} tint="#e9e3d8" onClick={() => setOpen(true)}
-      icon={<BlockIcon sx={{ fontSize: 15, color: "var(--tq-warning, #867f74)" }} />}
-      label={btnLabel("not_ours")} hint="say why once — triage remembers it for this topic, or this sender" />
-  ) : (
-    <Button size="small" sx={{ color: "var(--tq-warning, #867f74)", fontSize: 11 }} onClick={() => setOpen(true)}
-      title="Not our responsibility — and remember why, so triage learns it">{btnLabel("not_ours")}</Button>
-  );
-  return (
-    <Box sx={{ width: "100%", flexBasis: compact ? "100%" : "auto", mt: row ? 0 : 1, p: 1.25, bgcolor: PANEL2,
-      border: row ? "none" : `1px solid ${BORDER}`, borderRadius: row ? 0 : 1.5 }}>
-      <Typography variant="caption" sx={{ color: DIM, fontWeight: 600, display: "block", mb: 0.5 }}>
-        Not our task — what should triage remember?
-      </Typography>
-      {/* WHAT the verdict is about, in the owner's words. Trimming the subject guesses at the
-          standing part ("resident refund request") and drops the changing one (the resident);
-          being told beats guessing, and a topic keyed too narrowly is a verdict that fires once. */}
-      {scope === "subject" && (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.75 }}>
-          <Typography variant="caption" sx={{ color: FAINT, whiteSpace: "nowrap" }}>mail about</Typography>
-          <TextField fullWidth size="small" value={topic} sx={{ bgcolor: "var(--tq-panel, #fff)" }}
-            inputProps={{ style: { fontSize: 12.5, padding: "4px 8px" } }}
-            onChange={(e) => { setTopicEdited(true); setTopic(e.target.value); }} />
-        </Box>
-      )}
-      <TextField fullWidth multiline minRows={2} size="small" value={note} sx={{ bgcolor: "var(--tq-panel, #fff)" }}
-        onChange={(e) => { setEdited(true); setNote(e.target.value); }} />
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.75, flexWrap: "wrap" }}>
-        <Select size="small" value={scope || "sender"} onChange={(e) => setScope(e.target.value)}
-          sx={{ fontSize: 11.5, height: 26, bgcolor: "var(--tq-panel, #fff)" }}>
-          {/* the topic first, because a verdict is usually about a KIND OF WORK and whoever
-              happens to send it next is not the point */}
-          {topic && <MenuItem value="subject" sx={{ fontSize: 12 }}>any mail about this</MenuItem>}
-          <MenuItem value="sender" sx={{ fontSize: 12 }}>this sender</MenuItem>
-          <MenuItem value="sender_domain" sx={{ fontSize: 12 }}>everyone at their domain</MenuItem>
-          <MenuItem value="global" sx={{ fontSize: 12 }}>every sender</MenuItem>
-        </Select>
-        <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 120 }}>
-          {scope === "subject" && topic
-            ? `Matches any mail about “${topic}”, whoever sends it — the changing part of the subject is ignored.`
-            : "Their mail keeps arriving — only the verdict is learned."}
-        </Typography>
-        <Button size="small" sx={{ color: DIM, fontSize: 11 }} onClick={() => setOpen(false)}>Cancel</Button>
-        <Button size="small" variant="contained" disableElevation
-          disabled={busy || !note.trim() || (scope === "subject" && !topic.trim())} onClick={save}
-          sx={{ fontSize: 11.5 }}>{busy ? "saving…" : "Not for me — remember this"}</Button>
-      </Box>
-      {err && <Typography variant="caption" sx={{ color: ROLES.bad.ink, fontWeight: 600, display: "block", mt: 0.75 }}>
-        {err} — your note is still here.
-      </Typography>}
-    </Box>
-  );
-};
-
 // One door, then an explicit choice. Triage may suggest which kind fits, but it must not silently
 // choose the regular API agent or a coding CLI on the owner's behalf.
 export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, row, first }) => {
@@ -1625,42 +1494,6 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
   );
 };
 
-// The same box behind one button, for places with no room for it (a Board card, the funnel bar).
-export const TellAgentButton = ({ taskId, taskRef, count = 0, small = false }) => {
-  const [open, setOpen] = React.useState(false);
-  const show = (e) => { e.stopPropagation(); setOpen(true); };
-  const label = count ? `${count} waiting` : "Tell the agent";
-  return (
-    <>
-      {small ? (
-        <Box component="span" onClick={show} title="Tell the agent something — queued until it stops"
-          sx={{ display: "inline-flex", alignItems: "center", gap: 0.4, px: 0.6, py: 0.15, borderRadius: 99, cursor: "pointer",
-            bgcolor: "var(--tq-tint-brass, #f1ead9)", color: "var(--tq-warning, #6b5f45)", border: "1px solid var(--tq-edge-brass, #ddd2b9)", fontSize: 9.5, fontWeight: 600, whiteSpace: "nowrap",
-            "&:hover": { bgcolor: "var(--tq-tint-brass, #e9dfc5)" } }}>
-          ✎ {label}
-        </Box>
-      ) : (
-        <Button size="small" disableElevation onClick={show} title="Tell the agent something — queued until it stops"
-          startIcon={<Box component="span" aria-hidden sx={{ fontSize: 13, lineHeight: 1 }}>✎</Box>}
-          sx={{ width: 190, height: 34, px: 1.5, justifyContent: "flex-start", borderRadius: 2,
-            textTransform: "none", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", color: DIM, bgcolor: PANEL,
-            border: `1px solid ${BORDER}`, boxShadow: "none",
-            "&:hover": { color: INK, bgcolor: PANEL, borderColor: "var(--tq-border, #d8cfbe)", boxShadow: "none" } }}>
-          {label}
-        </Button>
-      )}
-      <Dialog open={open} onClose={(e) => { e?.stopPropagation?.(); setOpen(false); }} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3, p: 1.5 }, onClick: (e) => e.stopPropagation() }}>
-        <TellAgent taskId={taskId} taskRef={taskRef} />
-      </Dialog>
-    </>
-  );
-};
-
-// The agent's live session as a black console - the same peephole the Board cards wear, so
-// "the agent is working this now" is a thing you can SEE moving, not a sentence. Last lines of the
-// terminal, the files it has modified, a blinking cursor while it works and a pause mark when
-// it has stopped and is waiting on you. Click opens the task's real terminal.
-const _elapsed = (since) => (since ? durSince(since) : "");
 /* ── Said and did: what the agent HOLDS, in the terminal's own colours ─────────────────────
    The Board pane used to show two raw trace lines - nobody read them. This is the same dark pane
    with lines a person checks: the tool in hand (agent · tool · file · seconds), the agent's own
@@ -1767,175 +1600,6 @@ export const WorkLine = ({ work, who = "agent", waiting = false, asking = false,
       {h.tool && <Box component="span" noWrap sx={{ px: 0.6, borderRadius: 0.75, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0,
         bgcolor: h.muted ? ROLES.muted.tint : ROLES.working.tint, color: h.muted ? ROLES.muted.ink : ROLES.working.ink }}>{h.tool}</Box>}
       {h.t && <Box component="span" sx={{ color: FAINT, flexShrink: 0 }}>{h.t}</Box>}
-    </Box>
-  );
-};
-
-/* The task page's strip: the agent's own list beside the files it wrote, with git's +/- per file,
-   reconciled in plain sentences (taskuary/witness.py decides "late"; nothing is
-   inferred). Provenance pills say where the task came from and who worked it - facts the audit
-   chain already held and the card never showed. Polls only while the session is alive. */
-const pillSx = (r) => ({ height: 16, fontSize: 9, fontWeight: 600, bgcolor: ROLES[r].tint, color: ROLES[r].ink, border: `1px solid ${ROLES[r].bd}`, "& .MuiChip-label": { px: 0.75 } });
-const hhmm = (s) => s ? fmtTime(new Date(String(s).replace(" ", "T")), "en-US", { hour: "numeric", minute: "2-digit" }) : "";
-export const WorkStrip = ({ taskId, live, session, provenance, defaultCollapsed = false }) => {
-  // The terminal list already carries current witness/provenance data. Paint that immediately;
-  // the richer /work response (diff counts, exact audit provenance) replaces it in the background.
-  // Waiting for that request made the whole strip appear to have vanished above a busy terminal.
-  const seed = session ? {
-    work: session.work || null,
-    files: (session.work?.files?.length ? session.work.files : (session.files || [])).map((f) =>
-      typeof f === "string" ? { path: f, n: 0 } : f),
-    prov: provenance || {},
-    session: { sid: session.sid, alive: session.alive, agent: session.agent, cli: session.cli,
-      started: session.started, cwd: session.cwd },
-  } : null;
-  const [d, setD] = useState(seed);
-  const [failed, setFailed] = useState(false);
-  // During a live run the terminal owns the page, so first use starts folded. Once the owner
-  // chooses, keep that choice for this browser; opening the strip is still one click away.
-  const [open, setOpen] = useState(() => { try {
-    const saved = localStorage.getItem("tq.workstrip");
-    return saved == null ? !defaultCollapsed : saved !== "0";
-  } catch { return !defaultCollapsed; } });
-  const toggle = () => { setOpen((o) => { try { localStorage.setItem("tq.workstrip", o ? "0" : "1"); } catch { /* private window */ } return !o; }); };
-  useEffect(() => {
-    if (!taskId) return undefined;
-    let alive = true;
-    setD(seed); setFailed(false);
-    // The terminal roster already supplies the folded summary. Do not fetch detail the owner
-    // cannot see; opening the strip performs the richer read immediately.
-    if (!open) return () => { alive = false; };
-    const load = async (diff) => {
-      try {
-        const { data } = await api.get(`/api/tasks/${taskId}/work`, { params: { diff } });
-        if (alive) { setD(data); setFailed(false); }
-      } catch { if (alive) setFailed(true); }
-    };
-    load(true);
-    // PTY output must not fan out into HTTP. This secondary summary refreshes at a bounded pace.
-    const id = live ? setInterval(() => load(false), 5000) : 0;
-    return () => { alive = false; clearInterval(id); };
-  }, [taskId, live, open]);
-  const w = d?.work;
-  if (!d) return failed ? (
-    <Box sx={{ mb: 0.75, border: `1px solid ${ROLES.you.bd}`, borderRadius: 2, bgcolor: ROLES.you.tint,
-      px: 1.5, py: 0.65, display: "flex", alignItems: "center", gap: 1 }}>
-      <Typography sx={{ ...mono, fontSize: 10, fontWeight: 600, color: ROLES.you.ink }}>agent activity unavailable</Typography>
-      <Typography variant="caption" sx={{ color: DIM }}>the terminal is unaffected · {live ? "retrying" : "reload to retry"}</Typography>
-    </Box>
-  ) : null;
-  const todos = w?.todos || [], files = (d.files || []).slice(0, 12);
-  const tone = { check: "you", note: "info", ok: "done" };
-  const who = d.session?.cli || d.session?.agent || d.prov?.by || "agent";
-  const checks = (w?.flags || []).filter((f) => f.level === "check").length;
-  const summary = `said ${todos.length ? `${w.n_done}/${w.n_todos}` : "—"} · touched ${(d.files || []).length}`;
-  return (
-    // flexShrink 0: the task page stacks this over a terminal with a fixed height in a flex column,
-    // and a shrinkable overflow:hidden box in that column collapsed to nothing - the strip was in
-    // the DOM and never on screen
-    <Box sx={{ mb: 0.75, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL, overflow: "hidden", flexShrink: 0 }}>
-      <Box onClick={toggle} title={open ? "Fold the detail away" : "Open: the agent's list beside the files it wrote"}
-        sx={{ px: 1.5, py: 0.5, display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center", cursor: "pointer", borderBottom: open ? `1px solid ${BORDER}` : 0, "&:hover": { bgcolor: "var(--tq-panel, #faf8f5)" } }}>
-        <Typography component="span" sx={{ ...mono, fontSize: 10, color: FAINT, width: 12 }}>{open ? "▾" : "▸"}</Typography>
-        <Typography component="span" sx={{ ...mono, fontSize: 9.5, color: DIM, fontWeight: 600, letterSpacing: ".06em", mr: 0.25 }}>AGENT ACTIVITY</Typography>
-        {d.prov?.from && <Chip size="small" label={`from: ${d.prov.from}`} sx={pillSx("muted")} />}
-        {d.prov?.kind && <Chip size="small" label={`kind: ${d.prov.kind}`} sx={pillSx("working")} />}
-        {d.prov?.by && <Chip size="small" label={`by: ${who}`} sx={pillSx("working")} />}
-        {d.prov?.approved && <Chip size="small" label={`approved by you · ${hhmm(d.prov.approved)}`} sx={pillSx("info")} />}
-        {w?.done_at && <Chip size="small" label={`agent said done · ${hhmm(w.done_at)}`} sx={pillSx("done")} />}
-        <Chip size="small" label={summary} sx={pillSx("muted")} />
-        {checks > 0 && <Chip size="small" label={`${checks} to check`} sx={pillSx("you")} />}
-        <Box sx={{ flex: 1 }} />
-        {w && <WorkLine work={w} who={who} waiting={false} startedAt={d.session?.started}
-          promptPending={d.session?.promptPending} />}
-      </Box>
-      {open && <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, 1fr) minmax(0, 1fr)" } }}>
-        <Box sx={{ px: 1.5, py: 1, borderRight: { md: `1px solid ${BORDER}` } }}>
-          <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mb: 0.5 }}>
-            <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: FAINT, fontWeight: 600 }}>said it would</Typography>
-            <Typography variant="caption" sx={{ color: DIM }}>{todos.length ? `the agent's own list · ${w.n_done} of ${w.n_todos}` : w?.source ? "no list reported by this agent" : "no signal from this CLI - files only"}</Typography>
-          </Box>
-          {todos.map((t, i) => (
-            <Box key={i} sx={{ display: "flex", gap: 1, alignItems: "flex-start", py: 0.35, borderBottom: i < todos.length - 1 ? `1px dashed ${BORDER}` : 0, color: t.status === "todo" ? FAINT : INK, fontSize: 12.5 }}>
-              <Box sx={{ ...mono, fontSize: 10, width: 15, height: 15, borderRadius: "50%", display: "grid", placeItems: "center", flex: "none", mt: "2px",
-                bgcolor: t.status === "done" ? ROLES.done.solid : t.status === "now" ? ROLES.working.solid : "transparent", color: t.status === "todo" ? FAINT : "#fff",
-                border: t.status === "todo" ? `1.5px solid ${BORDER}` : 0 }}>{t.status === "done" ? "✓" : t.status === "now" ? "▸" : ""}</Box>
-              <span>{t.text}</span>
-            </Box>
-          ))}
-          {!todos.length && w?.said && <Typography variant="caption" sx={{ color: DIM, display: "block" }}>last said: “{w.said.slice(0, 200)}”</Typography>}
-        </Box>
-        <Box sx={{ px: 1.5, py: 1 }}>
-          <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mb: 0.5 }}>
-            <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: FAINT, fontWeight: 600 }}>touched</Typography>
-            <Typography variant="caption" sx={{ color: DIM }}>{plural(files.length, "file")}{d.diffstat?.added != null ? ` · +${d.diffstat.added} −${d.diffstat.removed}` : ""}</Typography>
-          </Box>
-          {files.map((f) => {
-            const top = Math.max(1, ...files.map((x) => x.n || 1));
-            return (
-              <Box key={f.path} title={f.path} sx={{ display: "grid", gridTemplateColumns: "1fr auto auto 64px", gap: 1, alignItems: "center", py: 0.35, borderBottom: `1px dashed ${BORDER}`,
-                "&:last-of-type": { borderBottom: 0 }, color: INK, opacity: f.late || isHot(f.last) || f.n > 0 ? 1 : 0.7 }}>
-                <Typography noWrap sx={{ ...mono, fontSize: 11.5 }}>{f.path}</Typography>
-                <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT, fontVariantNumeric: "tabular-nums" }}>{f.n ? `×${f.n}` : ""}</Typography>
-                <Typography sx={{ ...mono, fontSize: 10.5, color: f.late ? ROLES.you.ink : FAINT, fontVariantNumeric: "tabular-nums" }}>
-                  {f.added != null ? <><span style={{ color: ROLES.done.solid }}>+{f.added}</span> <span style={{ color: ROLES.you.solid }}>−{f.removed}</span></> : hhmm(f.last)}
-                </Typography>
-                <Box sx={{ height: 4, borderRadius: 2, bgcolor: PANEL2 }}><Box sx={{ height: "100%", borderRadius: 2, width: `${Math.round(100 * (f.n || 0.3) / top)}%`, bgcolor: f.late ? ROLES.you.solid : ROLES.working.solid, opacity: isHot(f.last) ? 1 : 0.7 }} /></Box>
-              </Box>
-            );
-          })}
-          {!files.length && <Typography variant="caption" sx={{ color: FAINT }}>nothing written yet</Typography>}
-        </Box>
-      </Box>}
-      {open && !!(w?.flags || []).length && (
-        <Box sx={{ px: 1.5, py: 0.75, borderTop: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", gap: 0.4 }}>
-          {w.flags.map((f, i) => (
-            <Box key={i} sx={{ display: "flex", gap: 1, alignItems: "flex-start", fontSize: 12 }}>
-              <Chip size="small" label={f.level} sx={{ ...pillSx(tone[f.level] || "info"), mt: "1px" }} />
-              <span>{f.text}</span>
-            </Box>
-          ))}
-        </Box>
-      )}
-    </Box>
-  );
-};
-
-// `fill` hands the console the whole pane instead of a five-line letterbox: the Timeline's
-// Agent tab was a small dark box above 600px of nothing while an agent worked in it. Filling,
-// the tail scrolls inside and the header stays put.
-export const LiveConsole = ({ run, agent, lines = 5, onOpen, fill }) => {
-  const waiting = run ? (run.kind === "session" && (run.asking || isWaiting(run))) : false;
-  const tail = (run?.tail || []).slice(-lines);
-  const files = run?.files || [];
-  const who = run ? shownAgent(run) : agent || AGENT_SHOWN;
-  return (
-    <Box onClick={onOpen} title="Open the task - the real terminal"
-      sx={{ bgcolor: CATPPUCCIN.bg, border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 1.5, px: 1.25, py: 0.9, cursor: onOpen ? "pointer" : "default",
-        ...(fill ? { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" } : {}),
-        "&:hover": onOpen ? { borderColor: CATPPUCCIN.overlay } : {} }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: tail.length ? 0.5 : 0, flexShrink: 0 }}>
-        <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, fontWeight: 600, color: waiting ? CATPPUCCIN.yellow : CATPPUCCIN.cyan,
-          ...(waiting ? {} : { "@keyframes tqBlink2": { "50%": { opacity: 0.25 } }, animation: "tqBlink2 1.1s step-end infinite" }) }}>
-          {waiting ? `⏸ ${says(run?.state || (run?.asking ? "asking" : "parked"), who)}` : `▮ ${who} working${run?.StartedAt ? ` · ${_elapsed(run.StartedAt)}` : ""}`}
-        </Typography>
-        <Box sx={{ flex: 1 }} />
-        {files.slice(0, 4).map((f) => (
-          <Typography key={f} variant="caption" sx={{ ...mono, fontSize: 9, color: CATPPUCCIN.dim, bgcolor: CATPPUCCIN.surface, px: 0.6, borderRadius: 0.75 }}>
-            {String(f).split(/[\\/]/).pop()}
-          </Typography>
-        ))}
-        {onOpen && <Typography variant="caption" sx={{ ...mono, fontSize: 9.5, color: CATPPUCCIN.faint }}>open ↗</Typography>}
-      </Box>
-      <Box sx={fill ? { flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", justifyContent: "flex-end" } : {}}>
-      {tail.map((l, i, all) => (
-        <Typography key={i} noWrap variant="caption" sx={{ ...mono, display: "block", fontSize: 10, lineHeight: 1.55,
-          color: l.startsWith("→") ? CATPPUCCIN.blue : l.startsWith("✗") ? CATPPUCCIN.red : CATPPUCCIN.fg, opacity: 0.45 + 0.55 * ((i + 1) / all.length) }}>
-          {l.replace(/\n/g, " ")}
-        </Typography>
-      ))}
-      {!tail.length && <Typography variant="caption" sx={{ ...mono, fontSize: 10, color: CATPPUCCIN.faint }}>…</Typography>}
-      </Box>
     </Box>
   );
 };

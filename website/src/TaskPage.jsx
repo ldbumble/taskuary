@@ -1246,8 +1246,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const findTerm = useCallback(async (tid) => {
     if (!tid) { setTerm(null); return; }
     try {
-      // Selecting a task only needs the session identity/lifecycle. Rich files + witness data is
-      // fetched by WorkStrip if the owner opens it; waiting on git here blocked the terminal pane.
+      // Selecting a task only needs the session identity/lifecycle; waiting on git for its files
+      // here blocked the terminal pane.
       const rows = (await api.get("/api/terminals", { params: { details: false } })).data.data || [];
       keepTerms(rows);
       if (stale(tid)) return;

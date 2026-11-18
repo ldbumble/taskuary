@@ -114,3 +114,17 @@ test("the bar is read again as the rows it counts change, never a second behind 
   assert.ok(reads > first, "the rows changed and the bar was not read again");
   assert.match(R.text(), /3 of 3 · 3 done/);
 });
+
+// A STOPPED RUN HE THEN WROTE PAST: the rest was set aside, greyed, and the bar still said "stopped - the rest still waits"
+test("a stopped run whose rest the chat moved past never says the rest still waits", async () => {
+  const flush = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r)); };
+  const aside = { Status: "superseded", DecideNote: "set aside when you moved on" };
+  const rows = [1, 2, 3, 4].map((i) => ({ ...mail(i, `owner${i}@cedar.example`), ...(i <= 2 ? { Status: "approved" } : aside) }));
+  const run = { key: "b1", state: "stopped", total: 4, done: 2, failed: 0, left: 0, rows: { 1: "ok", 2: "ok" } };
+  globalThis.__R = R; R.reset();
+  Object.assign(globalThis.__api ||= {}, { get: async () => ({ data: run }), post: async () => ({ data: run }) });
+  const BulkCard = await build();
+  R.render(BulkCard, { rows, tid: 7, onChanged: () => {} }); await flush();
+  assert.match(R.text(), /2 of 4 · 2 done/);
+  assert.doesNotMatch(R.text(), /the rest still waits/);
+});

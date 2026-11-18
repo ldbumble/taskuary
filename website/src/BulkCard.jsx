@@ -46,7 +46,7 @@ export default function BulkCard({ rows = [], tid, onChanged }) {
         <LinearProgress variant="determinate" value={progress(run)} sx={{ height: 6, borderRadius: 3 }} />
         <Typography variant="caption" sx={{ color: DIM }}>
           {`${(run.done || 0) + (run.failed || 0) + (run.left || 0)} of ${run.total} · ${run.done || 0} done`}{run.failed ? ` · ${run.failed} failed` : ""}{run.left ? ` · ${run.left} left out` : ""}
-          {run.state === "stopped" ? " · stopped - the rest still waits" : run.state === "cancelling" ? " · stopping after this one" : run.state === "finished" ? " · finished" : ""}</Typography>
+          {run.state === "stopped" ? ` · stopped${waiting.length ? " - the rest still waits" : ""}` : run.state === "cancelling" ? " · stopping after this one" : run.state === "finished" ? " · finished" : ""}</Typography>
       </Box>}
       <Box component="ul" sx={{ listStyle: "none", m: 0, p: 0, maxHeight: 420, overflowY: "auto" }}>
         {states.map(([r, s], i) => { const w = rowOf(r); return (

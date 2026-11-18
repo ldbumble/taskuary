@@ -38,6 +38,11 @@ def clean(outputs) -> list:
     return out
 
 
+# ONE ADDRESS, by its shape (a regex may parse structure): "a@x.example, b@y.example" stood as one recipient the provider refused at Send
+ADDRESS = re.compile(r'[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+')
+def is_address(a) -> bool: return bool(ADDRESS.fullmatch(str(a or '').strip()))
+
+
 def split(to: str) -> tuple:
     """('Ray Colton', 'ray@x.example') out of 'Ray Colton <ray@x.example>' - the recipient is the ADDRESS: the provider was
     handed the whole string as one and an agent writes them that way (TQ-0957). A bare name or address: ('', it)."""
@@ -174,11 +179,13 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         mailbox = box['address']
     cc = [a for a in (split(x)[1] for x in ([cc] if isinstance(cc, str) else cc or [])) if a]
     if cc and channel != 'email': return {'ok': False, 'why': f'{channel} has no cc - only an email can copy somebody in'}
-    if bad := [a for a in cc if '@' not in a]: return {'ok': False, 'why': f"cc takes email addresses - {', '.join(bad)} is not one"}
+    if bad := [a for a in cc if not is_address(a)]: return {'ok': False, 'why': f"cc takes email addresses - {', '.join(bad)} is not one"}
     cc = [a.lower() for a in cc]
     if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return {'ok': False, 'why': 'that task is closed'}
     to = split(to)[1] if channel == 'email' else ' '.join(str(to or '').split())
     if channel == 'email' and _chat_id(to): return {'ok': False, 'why': _NO_MAILBOX.format(to=to)}
+    if channel == 'email' and '@' in to and not is_address(to):
+        return {'ok': False, 'why': f"{to} is not one email address - `to` takes one; copy the others with `cc`, or give each its own email. Nothing was drafted."}
     want = ' '.join(str(to or '').split()).casefold()
     # A GUESS WHERE HIS MAIL KNOWS THE COMPANY IS NOT MADE (the owner, 2026-11-17: an email to a made-up address at a bank bounced while the
     # bank's contact had written three months before - "give it tool to search emails"): refused before anything stands, with the people at

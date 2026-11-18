@@ -63,3 +63,14 @@ def test_nobody_found_leaves_to_empty_until_the_owner_gives_one():
 def test_a_name_never_reaches_the_provider_as_the_recipient():
     with pytest.raises(RuntimeError, match='not an email address'):
         outbound.send_out(MemoryStore(), 'email', ['Northwind Bank'], 'Allowlist', 'Hi')
+
+
+# ...and ONE address: an agent's `to` of "paula@..., gail@..." stood on the card as a single recipient the provider refused at Send, and
+# "paula@" stood as if it were one. Refused at the tool with the way on - the others go in `cc`, or each gets its own email
+@pytest.mark.parametrize('to', ['paula@northwind.example, gail@northwind.example', 'paula@northwind.example; gail@northwind.example', 'paula@'])
+def test_a_to_that_is_not_one_address_is_refused_before_it_stands(to):
+    s = MemoryStore(); tid = own_task(s, 'general')
+    out = slots.draft(s, tid, 'Hi Paula', to=to, subject='Q4')
+    assert out['ok'] is False and 'is not one email address' in out['why'] and '`cc`' in out['why']
+    assert not s._rows("SELECT * FROM review WHERE TaskId=?", (tid,)), 'nothing stands for his Send'
+    assert slots.draft(s, tid, 'Hi Paula', to='paula@northwind.example', subject='Q4', cc=['gail@northwind.example'])['ok']

@@ -537,7 +537,7 @@ def land(store, tid: int, how: str, actor: str = 'owner') -> dict:
     try: return _land(store, tid, how, actor)
     except Refused as e:
         store.audit('task', tid, 'land_refused', actor, detail={'how': how, 'why': str(e)[:300]})
-        _hand_back(store, tid, f"The owner pressed {HOW.get(how, how)} on your work and it was refused: {e}. Nothing went out, and the question "
+        _hand_back(store, tid, f"The owner pressed {HOW.get(how, how)} on your work and it was refused: {e}. The question "
                                "stays on the task. Do what that needs from your side, then ask for it again (propose_land) - or say in a line why you cannot.")
         raise
 
@@ -725,12 +725,15 @@ def _pr(store, tid, s, actor) -> dict:
     from . import ci, github
     cwd, base, br, repo = s['cwd'], s['base'], s['branch'], s['repo']
     if not repo: raise Refused("this checkout's origin is not a GitHub repository - push it and open the pull request by hand")
-    c = ci._conn(store, repo)
+    # ...GITHUB'S NO IS THE LANDING'S NO (stress round, 2026-11-18): its own error passed land()'s handler - no line kept, the agent never told
+    try: c = ci._conn(store, repo)
+    except RuntimeError as e: raise Refused(f'{e} - nothing was pushed') from e
     rc, out, err = _run(cwd, 'push', '-u', 'origin', br, timeout=180)
     if rc: raise Refused(f"the push of {br} was refused: {ci.TOKEN_URL.sub('https://', (err or out))[:300]} - no pull request opened")
     t = store.get_task(tid) or {}
     body = f"Opened by Taskuary for {task_ref(tid)}.\n\n{(t.get('Summary') or '')[:1500]}"
-    pr = github.open_pr(c['Secret'], repo, br, base, f"[{task_ref(tid)}] {t.get('Title') or 'work'}"[:120], body)
+    try: pr = github.open_pr(c['Secret'], repo, br, base, f"[{task_ref(tid)}] {t.get('Title') or 'work'}"[:120], body)
+    except Exception as e: raise Refused(f"{br} was pushed, but no pull request was opened: {str(e)[:300]}") from e
     pr['repo'], pr['checks'], pr['checked_at'] = repo, None, None
     ci._save_pr(store, tid, pr, actor)
     return _landed(store, tid, 'pr', f"Pushed {br} and opened pull request #{pr['number']} into {base}: {pr.get('url')}", actor,

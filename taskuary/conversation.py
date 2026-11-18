@@ -863,6 +863,7 @@ def _items(store, tid: int) -> dict:
             if c['status'] == 'pending' and c.get('was') and (c['what'] in DRAFTS and i < last_in or i < last_his or c['review'] in past): c['status'] = 'passed'
             # ...each says why in what happened (proposals.passed_why), never "you moved on" over a draft he never saw
             if c['status'] == 'passed' and (rv := store.get_review(c['review'])): c['why'] = proposals.passed_why(store, rv)
+            elif c['status'] == 'pending' and c.get('was'): c['aside'] = proposals.WROTE_PAST      # ...and the page says it from his Enter (withMine)
     # ...and a reply with NO words yet - its card said only what its agent needed - is not the one to press above his newer line either
     # (recorded 2026-11-13: he answered the agent's question, and the empty reply box stood lit over his answer while the turn that writes it
     # worked): it has nothing to grey, so it is not drawn there; the turn his line began raises it, written, as its own last thing

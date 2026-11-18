@@ -2,6 +2,45 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.25 - 2026-11-18
+
+- A line typed after a coding agent died reopens its conversation without telling it the owner pressed Resume
+- A failing Test on the organisation AI card no longer tells the owner to press a Connect button the card does not have
+- Record the judges' verdicts on the first hammer commits
+- The day card comes back counted: the trip home no longer flashes Countingâ€¦ between two What's open
+- A file attached to the Assistant's line reached it as a path, never read
+- The email card's field names wear one label: CC, BCC and Subject were green spaced capitals under a plain "To"
+- A failed turn reads as a failure: it was the composer's 9px centred grey hint
+- Undo of a removed connection no longer writes its sign-in over a card added since
+- Record the second round of the judges' verdicts
+- A card of several emails greys under his new line from the same frame, as every other card does
+- The Advisor's daily pass held 14 of its last 15 ideas: its check counted its own holds as raised and never saw the counts
+- A usage limit reads as one failure, and obsolete read-permission cards hide everywhere
+- A turn at work keeps its working line last: what it made, asked or raised stands above the dots, never under them
+- AI used counts the new tokens and says what the cache read back apart
+- Hand a task to another AI from its head
+- Post to Reddit and to X from their cards, on the owner's press
+- A provider's refusal is a failed turn, never the agent's words; the note after a press names the card, not the tool's rows; no API means the browser
+- Next at the bottom of the walk goes to the row above a sender wrote again on
+- A first bill from a vendor is work to check and pay, not an fyi
+- The rail's filter panel closes on a second press and when the page changes
+- An ask to pay is handed to an agent, a refused guess asks the owner, and sent is never "received"
+- A post on a network not connected runs nothing and says Connect; a picture shown twice in a turn is drawn once
+- An email keeps the address of every link its draft was written with
+- A file the owner puts on a reply card reaches the agent and its folder
+- Reddit's card signs in with two-factor accounts: its authenticator key makes the code each time
+- A card raised after the owner's line is never greyed by that line
+- Automated bill reminders stay FYI: revert the triage change that made a lapsing bill a task
+- A browser or desktop press is held at the command itself, on every AI
+- A run of a routine can ask to change that routine, as one card saved by the editor's own save
+- A usage limit, a sign-out or a lost conversation is read by one function on every AI road
+- The agent is told what stands on the owner's screen, in one fact
+- The agent's standing rules say each thing once
+- A ticked to-do is never narrated: no step, no "Ticking a to-do" working line
+- A turn's picture draws at its own shape, and a file another turn made is not drawn again
+- A task made from the Assistant is born with the short title its hand-off named
+- A pressed card is told by what stands, never a second time as a press
+
 ## 0.4.0.24 - 2026-11-18
 
 - A terminal agent's pane that showed its turn and is back at its prompt is no longer "at work"

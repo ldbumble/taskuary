@@ -13,7 +13,7 @@ from . import acp as acp_mod, acpadapter, aiusage, pathcache, redact, spawn
 from . import clis as clis_mod
 from .store import task_ref
 from .clis import preset_args
-from .clipool import TimedOut
+from .clipool import Cancelled, TimedOut
 from .selfclose import without_summary
 
 _CLI_CHILDREN = set()
@@ -1668,7 +1668,7 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     trace('tool', 'cli', f"{name} over acp{' via ' + launch['adapter'] if launch['adapter'] else ''} cwd={cwd or os.getcwd()}"
                          + (f' resume={resume}' if resume else '') + (f' live={keep}' if keep else ''))
     head0 = _git(cwd, 'rev-parse', 'HEAD')
-    held = {}
+    held, asked = {}, threading.Event()            # `asked`: this turn's prompt is on its way to the agent
     steps = ACPSteps(trace, name, held)
     ctx_store, task_id = _RUN.get()
     gate = acpgate.answerer({'store': store if store is not None else ctx_store, 'task_id': task_id, 'cli': _cli_name(name), 'cwd': cwd,
@@ -1683,23 +1683,30 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         # happened since - the stopped turn had ended at once, the lines that waited behind it had begun their turn on this same
         # conversation, and it was closed under them: "died mid-turn", nothing drawn, his lines unanswered. A turn that honoured the stop is
         # over; what runs next is never the one being stopped
+        # ...AND A STOP PRESSED BEFORE ITS PROMPT WAS SENT IS STILL ITS STOP: it looked for this turn's lock, found none taken yet and was lost,
+        # and the turn ran on unstopped. It is sent the moment this turn's prompt is on its way (`sent`), and never once the turn is over
         def _cancel():
-            cancel.wait()
-            if over.is_set() or not conv.lock.locked(): return
+            cancel.wait(); asked.wait()
+            if over.is_set(): return
             client.cancel()
             if not over.wait(STOP_GRACE): clipool.drop(keep, conv) if keep else client.close()
         threading.Thread(target=_cancel, daemon=True, name='acp-stop-backstop').start()
-    stop, ok = None, False
+    stop, ok = None, False               # ...set before anything can raise: the `finally` reads both, whatever ended the turn
     try:
         with conv.lock:
             if launch['adapter']: _acp_gears(client, profile, name, trace)     # a native CLI took its model on its command line
+            # ...A STOP PRESSED BEFORE ITS PROMPT WAS SENT: the prompt is never sent. Sent and then cancelled, an agent quick enough did the work
+            # he stopped (a call the gate allows on its own runs) and only its answer was thrown away. Nothing was asked: the conversation is sound
+            if cancel is not None and cancel.is_set(): stop, ok = 'cancelled', True; raise Cancelled(client.session_id)
             since = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            stop, said = client.prompt(prompt)
+            stop, said = client.prompt(prompt, sent=asked.set)
             conv.turns += 1; conv.used = time.time()
         ok = True
         # WHAT THE TURN USED, onto its route row (aiusage.Metered's meter): the adapter's count, else the CLI's own log (aiusage.acp_turn)
         aiusage.note_turn(aiusage.acp_turn(_cli_name(name), client.last_turn, client.session_id, since))
-        if stop and stop not in ('end_turn', 'cancelled'): trace('progress', 'acp', f'the turn ended early: {stop}')
+        # ONE CONTRACT FOR A STOPPED TURN on every road: Cancelled, with the conversation it was on - never a blank success
+        if stop == 'cancelled': raise Cancelled(client.session_id)
+        if stop and stop != 'end_turn': trace('progress', 'acp', f'the turn ended early: {stop}')
         diff = ''
         if cwd:
             head1 = _git(cwd, 'rev-parse', 'HEAD')
@@ -1708,10 +1715,12 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
             if unc: diff = '\n'.join(x for x in (diff, unc) if x).strip()
         return said, client.session_id, (diff[:150000] or None)
     except acp_mod.ACPAgentError as e:
+        # ...a stopped turn its agent did not end was ended by the backstop: still his stop, never a death
+        if cancel is not None and cancel.is_set(): raise Cancelled(client.session_id) from e
         if _SIGNED_OUT.search(str(e)): raise RuntimeError(signed_out_msg(name, str(e), launch['cmd'][0])) from e
         raise
     finally:
-        over.set()
+        over.set(); asked.set()
         steps.flush(stop if ok else 'error')
         client.on_update, client.permit = None, None
         with _CLI_CHILDREN_LOCK: _CLI_CHILDREN.discard(client.p)
@@ -1911,7 +1920,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
                 final = j; continue
             # Preserve the CLI's structured work for visual clients. The existing readable
             # `live` line remains for Board traces and the terminal renderer.
-            if isinstance(j, dict): claude(j)
+            if isinstance(j, dict): claude(j); streamed_sid = streamed_sid or j.get('session_id')     # claude's init names it: a stop keeps it
             # Codex `exec --json` speaks item lifecycle events instead of Claude content blocks.
             # Normalize both into one stream so assistant-ui does not care which CLI is logged in.
             if isinstance(j, dict) and j.get('type') == 'thread.started':
@@ -1944,7 +1953,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
             except OSError: pass
     err_t.join(5)      # the exit code can land before the stderr reader has appended - 'boom' read as 'no output' on a fast CI box
     if p.returncode != 0:
-        if cancel is not None and cancel.is_set(): raise RuntimeError('cancelled')
+        if cancel is not None and cancel.is_set(): raise Cancelled(streamed_sid or (final or {}).get('session_id'))
         err = ''.join(err_buf)
         said = cli_failure(raw, err)
         why = (f'timed out after {limit}s' if timed.is_set() else said)[:500]
@@ -2098,9 +2107,9 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
                                  resume=resume, cancel=cancel, timeout=profile.get('timeout'), resend=bare)
     except PermissionError as e:
         raise FileNotFoundError(denied_msg(name, cmd[0] if cmd else '', e)) from e
+    except Cancelled: raise
     except RuntimeError as e:
         said = str(e)
-        if said == 'cancelled': raise
         if isinstance(e, clipool.TimedOut): raise clipool.TimedOut(f'{name}: {said[:500]}', e.session_id) from e
         limit = rate_limited(said)
         if limit: raise RateLimited(rate_limit_msg(name, limit), limit)
@@ -2108,7 +2117,7 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
         if resume and gone(said): raise Gone(resume)
         # ...a turn its CLI died in says so in the one sentence an ACP agent's death says too (acp.py), no process name before it and no
         # "(the CLI exited (3))" after it (the overnight walk, 2026-11-11) - that is the log's
-        if said.startswith(clipool.MID_TURN): logger.warning(f'{name}: {said[:500]}'); raise RuntimeError(clipool.MID_TURN)
+        if isinstance(e, clipool.PartWay): logger.warning(f'{name}: {said[:500]}'); raise clipool.PartWay(clipool.MID_TURN, e.session_id) from e
         raise RuntimeError(f'{name}: {said[:500]}')
     aiusage.claude_result(final)                      # a turn that failed still used what it used
     if final.get('is_error'):

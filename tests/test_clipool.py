@@ -60,8 +60,8 @@ def test_a_process_that_died_between_turns_is_resumed_by_its_id(cli):
 
 def test_a_process_that_dies_mid_turn_is_reopened_once_and_answers(cli):
     a = ask(cli, 'chat:1', 'hello')
-    with pytest.raises(clipool.Ended):
-        ask(cli, 'chat:9', 'die')                                   # a first turn that dies is simply an error
+    with pytest.raises(clipool.PartWay):
+        ask(cli, 'chat:9', 'die')                                   # a first turn that dies is simply an error - said as one that ended part-way
     b = ask(cli, 'chat:1', 'fine', resume=a['sid'])
     assert b['said'] == 'fine'
 

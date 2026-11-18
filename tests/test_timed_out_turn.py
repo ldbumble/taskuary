@@ -112,3 +112,113 @@ def test_a_new_turn_clears_the_saved_mark():
     s.tag_task(tid, terminal.SAVED, True, 'owner')
     timed_out_turn(s, tid)
     assert terminal.SAVED not in str(s.get_task(tid).get('Tags') or '')
+
+
+# ── A STOPPED TURN, ON EVERY ROAD (workstream 6): one contract, clipool.Cancelled with its conversation, carried as a time-out's is ────────
+import sys
+from pathlib import Path
+import pytest
+HERE = Path(__file__).parent
+CLAUDE = ['-p', '--output-format', 'stream-json', '--verbose']
+ROADS = {'argv': ({'cmd': 'claude', 'args': CLAUDE}, False),
+         'kept': ({'cmd': 'claude', 'args': CLAUDE + ['--input-format', 'stream-json']}, True),
+         'acp': ({'cmd': sys.executable, 'args': [], 'acp': [str(HERE / 'fake_acp_server.py')], 'acp_ok': True}, True)}
+
+
+import contextlib
+@contextlib.contextmanager
+def on_road(road, monkeypatch, env, rules, keep=None):
+    """A general session whose turns run on a REAL road (agents.run_cli under llm.make_cli_llm, the stand-in CLIs): (session, the resume id
+    each turn was handed, an Event set at the agent's own first event of a turn). `keep` False runs a kept road's turns one-shot."""
+    from taskuary import llm as llm_mod
+    prof, kept = ROADS[road]
+    keep = kept if keep is None else keep
+    for k, v in {'FAKE_CLAUDE_SCRIPT': str(rules), 'FAKE_ACP_SCRIPT': str(rules), 'FAKE_CLAUDE_SPAWN': '0', 'FAKE_CLAUDE_THINK': '0', **env}.items():
+        monkeypatch.setenv(k, v)
+    s = MemoryStore(); tid = task(s); s.upsert_agent('fake', 'fake', 'cli', json.dumps({**prof, 'cwd': str(HERE)}))
+    with mock.patch.object(general, '_selected', return_value=('cli:fake', 'Fake', '')):
+        ses = general.GeneralSession(s, tid)
+    began, resumes, real = threading.Event(), [], agents.run_cli
+    def run_cli(p, prompt, trace, resume=None, **k): resumes.append(resume); return real(p, prompt, trace, resume=resume, **k)
+    def build(store, **kw):
+        def heard(kind, name, detail=None):
+            if kind not in ('prompt', 'tool'): began.set()          # the agent's own first event: its turn is under way
+            kw['trace'](kind, name, detail)
+        return llm_mod.make_cli_llm(store, 'fake', cancel=kw.get('cancel'), resume=kw.get('resume'), keep=kw.get('keep') if keep else None,
+                                    task_id=kw.get('task_id'), trace=heard, cli_tools=True)
+    fake = [sys.executable, str(HERE / 'fake_claude.py')] if prof['cmd'] == 'claude' else [sys.executable]
+    steps = agents.ACPSteps.__call__                                    # ...an ACP agent's first session update is its first event
+    monkeypatch.setattr(agents.ACPSteps, '__call__', lambda self, u: (steps(self, u), began.set())[0])
+    try:
+        with mock.patch.object(general.llm_mod, 'build_llm', side_effect=build), mock.patch.object(agents, 'run_cli', run_cli), \
+             mock.patch.object(agents, '_resolve_cmd', return_value=fake), mock.patch('taskuary.continuity.can_resume', return_value=True), \
+             mock.patch.object(ses, '_end_soon'):
+            yield ses, resumes, began
+    finally: clipool.close(ses.keep())
+
+
+@pytest.mark.parametrize('road', ROADS)
+def test_a_stopped_first_turn_keeps_its_conversation_and_the_next_turn_resumes_it(road, tmp_path, monkeypatch):
+    """ACP answered a Stop with ('', its id) - a blank success - and that id was kept; the one-shot and kept roads raised a bare 'cancelled'
+    and kept none: a stopped FIRST turn lost its conversation and the next opened a fresh one. Every road raises clipool.Cancelled with the
+    conversation it was on, and the turn's caller keeps it as it keeps a time-out's. Driven through the caller (GeneralSession.send_prompt) on
+    the real roads, the stop pressed once the agent has begun (its first event), never on a clock."""
+    rules = tmp_path / 'r.json'; rules.write_text(json.dumps([{'when': 'Pull the first ledger', 'anywhere': True, 'wait': 120, 'first': 'never'}]))
+    with on_road(road, monkeypatch, {'FAKE_ACP_HANG': '1', 'FAKE_ACP_SCRIPT': ''}, rules) as (ses, resumes, began):     # ACP: hangs till stopped
+        pressed = {}
+        def press(): pressed['after it began'] = began.wait(60); ses.stop()
+        threading.Thread(target=press, daemon=True).start()
+        try: ses.send_prompt('Pull the first ledger.', brief=True)
+        except general.Stopped: pass
+        else: raise AssertionError('a stopped turn is stopped')
+        assert pressed == {'after it began': True}, pressed
+        # ...said in one word on every road: "stopped", never the kind's own name ("cancelled")
+        assert [e['detail']['result'] for e in ses.trace if e.get('type') == 'error'][-1:] == ['stopped'], ses.trace[-3:]
+        first = ses.cli_sid
+        assert first, 'the stopped first turn kept the conversation it was on'
+        ses.send_prompt('And the second one.', brief=True)
+    assert resumes == [None, first], resumes                     # ...and the next turn picked that one up, not a fresh one
+
+
+@pytest.mark.parametrize('ends', [lambda: clipool.PartWay(clipool.MID_TURN, 'sess-1'), lambda: clipool.TimedOut('timed out after 300s', 'sess-1')])
+def test_a_turn_that_did_not_finish_on_a_conversation_under_way_is_never_asked_again_on_a_fresh_one(ends):
+    """A failed turn on a conversation under way (cli_sid set) is asked again on a fresh conversation, the whole thing said again - right for a
+    conversation its CLI lost, never for a turn that may have done part of the work. The caller read that off the exception's words (MID_TURN in
+    the text); it reads the kind (clipool.Unfinished) - one call, the conversation kept, and what ended it is what the owner reads."""
+    s = MemoryStore(); tid = task(s); calls = []
+    with mock.patch.object(general, '_selected', return_value=('cli:codex', 'Codex', '')):
+        ses = general.GeneralSession(s, tid)
+    ses.cli_sid = 'sess-1'
+    def brain(*a, **k): calls.append(1); raise ends()
+    with mock.patch.object(general.llm_mod, 'build_llm', return_value=brain), mock.patch.object(ses, '_end_soon'), \
+         mock.patch('taskuary.continuity.can_resume', return_value=True):
+        try: ses.send_prompt('Pull the ledger.', brief=True)
+        except Exception: pass
+    assert len(calls) == 1 and ses.cli_sid == 'sess-1'
+    last = s.last_worker_event(tid, skip=ws.NOTES)
+    assert last['Text'] in (clipool.MID_TURN, general.timed_out_line()), last
+
+
+class Spawned(set):
+    "agents._CLI_CHILDREN, every process it was ever handed remembered."
+    def __init__(self): super().__init__(); self.ever = []
+    def add(self, p): self.ever.append(p); super().add(p)
+
+
+@pytest.mark.parametrize('keep', [True, False], ids=['kept', 'one-shot'])
+@pytest.mark.parametrize('later', [False, True], ids=['first turn', 'later turn'])
+def test_an_acp_agent_that_dies_mid_turn_is_said_as_a_death_and_its_turn_is_cleaned_up(later, keep, tmp_path, monkeypatch):
+    """An ACP agent that died mid-turn read "Cannot access local variable 'ok' ..." to the owner: the run's `ok` was never set before its
+    `try`, so its `finally` raised over the death - and skipped the rest of itself: the dead conversation stayed in the pool, a one-shot
+    process was never closed, its child never forgotten. The owner reads the death's one sentence, its conversation is kept for the next
+    line, and the turn's cleanup ran."""
+    rules = tmp_path / 'r.json'; rules.write_text(json.dumps([{'when': 'Pull the first ledger', 'exit': 3}]))
+    spawned = Spawned(); monkeypatch.setattr(agents, '_CLI_CHILDREN', spawned)
+    with on_road('acp', monkeypatch, {}, rules, keep=keep) as (ses, resumes, began):
+        if later: ses.send_prompt('Hello there.', brief=True)
+        before = ses.cli_sid
+        with pytest.raises(Exception): ses.send_prompt('Pull the first ledger.', brief=True)
+        assert ses.store.last_worker_event(ses.task_id, skip=ws.NOTES)['Text'] == clipool.MID_TURN
+        assert ses.cli_sid and (not later or ses.cli_sid == before), 'the conversation it died on is kept'
+        assert clipool._POOL.get(ses.keep()) is None, 'the dead conversation was dropped'
+        assert spawned.ever and not spawned and all(p.poll() is not None for p in spawned.ever), 'no process is left'

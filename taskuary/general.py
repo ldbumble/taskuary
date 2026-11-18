@@ -39,10 +39,10 @@ class Stopped(RuntimeError):
 # An agent's turn has no limit now (llm.make_cli_llm); a turn that still has one - the dock's look-up - ends `stopped` from this source,
 # its files and thread kept, says so in its own words, and typing carries it on
 TIMED_OUT = 'timeout'
-def _timed_out(e):
-    "The clipool.TimedOut behind a failed turn, however a brain wrapped it - else None."
-    from .clipool import TimedOut
-    while e is not None and not isinstance(e, TimedOut): e = e.__cause__ or e.__context__
+def _unfinished(e, kind=None):
+    "The clipool.Unfinished (or its `kind`: TimedOut) behind a failed turn, however a brain wrapped it - else None."
+    from .clipool import Unfinished
+    while e is not None and not isinstance(e, kind or Unfinished): e = e.__cause__ or e.__context__
     return e
 def timed_out_line(e=None, agent='the agent') -> str:
     "No limit is named: an agent's run has none, and this is only said of a run cut on an old profile's limit or a one-shot cap."
@@ -3193,11 +3193,11 @@ class GeneralSession:
                 # the CLI could not pick that conversation back up (it was restarted, its history
                 # was cleared, the id aged out). Start a fresh one and say the whole thing, once.
                 # ...but never a turn its CLI died part-way through: it may have done some of the work, and a fresh conversation
-                # saying the whole thing again would do it twice (clipool.MID_TURN) - that turn ends, and Continue picks it up
-                from .clipool import MID_TURN
+                # saying the whole thing again would do it twice (clipool.MID_TURN) - that turn ends, and Continue picks it up. Nor any turn that did not
+                # finish on its road (clipool.Unfinished, as the exception says it: died or ended part-way, out of time): its conversation is kept
                 # ...and a card whose own conversation was turned down on the turn's first call (apiagent.Lost) is the same case
                 if (not (self.cli_sid or isinstance(e, apiagent.Lost)) or (cancel is not None and cancel.is_set()) or getattr(self, 'closing', False)
-                        or MID_TURN in str(e)): raise
+                        or _unfinished(e)): raise
                 logger.info(f"assistant could not resume {self.cli_sid or 'its conversation'} on task {self.task_id}; starting a new one ({str(e)[:160]})")
                 self.cli_sid, kept, self.card_msgs = '', self.card_msgs, []
                 # ...ITS CLI NO LONGER HAS IT (hub_agents.Gone, on either road): one plain line in the chat, as a coding pane says it
@@ -3237,14 +3237,19 @@ class GeneralSession:
             return self._file(reply, paths, t0, browser_tools, browser_offer)
         except Exception as e:
             stopped = cancel.is_set() or getattr(self, 'closing', False)
-            timed = None if stopped else _timed_out(e)
+            from .clipool import PartWay, TimedOut
+            timed = None if stopped else _unfinished(e, TimedOut)
+            # ...A TURN THAT DID NOT FINISH KEEPS ITS CONVERSATION, whichever way it ended (clipool.Unfinished: stopped, out of time, died part-way,
+            # on any road): a stopped first turn lost its id and the next opened a fresh conversation
+            from . import continuity
+            if (u := _unfinished(e)) and u.session_id and continuity.can_resume(self.store, self.pick): self.cli_sid = u.session_id; self._remember_session()
             # ...a turn that ran out of time says so in words, not as "Codex exit 1: timed out after 1500s." (2026-11-04)
             said = timed_out_line(e) if timed is not None else (unreached_line(e, self.provider) or refused_line(e, self.provider) or str(e))
             # ...and A TURN TASKUARY STOPPED IS NOT A CLI THAT DIED (the real-CLI walk, 2026-11-11): its process is killed under it by the
             # close or the x, which reads as a death mid-turn (clipool.MID_TURN) - recorded in those words, the rail said "the agent
             # stopped: the agent stopped in the middle of its turn ... type to carry on" of a task its owner had just closed
-            from .clipool import MID_TURN
-            if stopped and MID_TURN in said: said = 'stopped'
+            # ...ONE WORD FOR HIS STOP ON EVERY ROAD: a turn ended by it (clipool.Cancelled) read "cancelled" - error, trace and worker event alike
+            if stopped and _unfinished(e): said = 'stopped'
             self._remember_trace('error', 'assistant', {'result': said, 'is_error': True})
             self._emit(f'\x1b[1;31merror>\x1b[0m {said}\r\n\r\n')
             self._unusable(e)
@@ -3267,8 +3272,6 @@ class GeneralSession:
             if timed is not None:
                 # ...and one that RAN OUT OF TIME paused: its run ends stopped, in words that say why, on the thread it was on - so Continue
                 # resumes it with what it made, and no start queue runs a long build again from the top
-                from . import continuity
-                if timed.session_id and continuity.can_resume(self.store, self.pick): self.cli_sid = timed.session_id; self._remember_session()
                 try:
                     from . import workerstate as ws
                     ws.record(self.store, self.task_id, self.sid, 'stopped', text=said, source=TIMED_OUT)
@@ -3290,7 +3293,7 @@ class GeneralSession:
             # The session ends here, its conversation saved - so the task reads stopped and its row offers Continue, which picks the
             # saved conversation back up; a session left open over a dead process offered Stop and save on nothing (2026-10-21)
             if stopped: raise Stopped(said) from e
-            if MID_TURN in str(e): self._end_soon(learn=False)
+            if _unfinished(e, PartWay): self._end_soon(learn=False)
             # A FAILED TURN IS SAID AS A FAILURE (owner-approved, 2026-10-21): left open, the session read alive and not busy - "waiting
             # on you" on the card, the rail and the Board over an agent that never ran. It ends here, its conversation kept, so every
             # surface reads its last word (workerstate.ended: failed) and the step offers Try again. A turn the owner stopped is not a

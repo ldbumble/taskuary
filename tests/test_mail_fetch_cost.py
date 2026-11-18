@@ -88,5 +88,30 @@ class BodyDownloadTests(unittest.TestCase):
         self.assertEqual(kept['Vendor Create 1']['BodyText'], 'x' * 2000)
 
 
+    def test_a_body_graph_throttles_inside_the_batch_is_asked_again_never_kept_as_its_preview(self):
+        """Graph answers a $batch 200 and throttles single requests inside it (429 - a mailbox takes only a few at once). Those mails
+        were kept with the listing's 255-character preview as their whole body, for good: the agent read a cut mail as the mail."""
+        def batch(answers):
+            r = mock.Mock(status_code=200); r.raise_for_status = lambda: None
+            r.json.return_value = {'responses': answers}
+            return r
+        full = lambda k, x: {'id': str(k), 'status': 200, 'body': {'id': x, 'body': {'content': f'all of {x}'}}}
+        busy = lambda k: {'id': str(k), 'status': 429, 'headers': {'Retry-After': '1'}, 'body': {'error': {'code': 'ApplicationThrottled'}}}
+        sent = []
+        def post(url, json=None, **kw):
+            ids = [q['url'].split('/messages/')[1].split('?')[0] for q in json['requests']]; sent.append(ids)
+            return batch([full(0, ids[0]), busy(1)] if len(sent) == 1 else [full(k, x) for k, x in enumerate(ids)])
+        with mock.patch.object(channels.requests, 'post', side_effect=post), mock.patch.object(channels.time, 'sleep') as slept:
+            got = channels._mail_bodies('T', 'me@x.com', ['m0', 'm1'])
+        self.assertEqual(sorted(b['body']['content'] for b in got), ['all of m0', 'all of m1'])
+        self.assertEqual(sent, [['m0', 'm1'], ['m1']]); slept.assert_called()
+        # ...and one Graph will not give at all holds the folder for the next poll, as a failed page does
+        with mock.patch.object(channels.requests, 'post', side_effect=lambda url, json=None, **kw: batch([busy(k) for k, _ in enumerate(json['requests'])])), \
+             mock.patch.object(channels.time, 'sleep'):
+            with self.assertRaises(RuntimeError): channels._mail_bodies('T', 'me@x.com', ['m2'])
+        # ...while a mail deleted since it was listed (404) has no body to wait for
+        with mock.patch.object(channels.requests, 'post', side_effect=lambda url, json=None, **kw: batch([{'id': '0', 'status': 404}])):
+            self.assertEqual(channels._mail_bodies('T', 'me@x.com', ['m3']), [])
+
 if __name__ == '__main__':
     unittest.main()

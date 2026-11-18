@@ -39,6 +39,7 @@ MAIL_LIST_SELECT = ','.join(f for f in MAIL_SELECT.split(',') if f != 'body')
 MAIL_BODY_SELECT = 'id,body,uniqueBody,internetMessageHeaders'
 MAIL_FULL_SELECT = MAIL_SELECT + ',uniqueBody,internetMessageHeaders'
 BODY_BATCH = 20              # Graph's $batch ceiling
+BODY_RETRIES = 3             # a throttled body is asked again this many times before the folder waits for the next poll
 
 
 def _cfg(c): return json.loads(c.get('ConfigJson') or '{}')
@@ -906,16 +907,32 @@ def _mail_bodies(tok: str, upn: str, ids: list) -> list:
     already carried, which is what the old single-request page would have given a stripped mail."""
     out = []
     for i in range(0, len(ids), BODY_BATCH):
-        chunk = ids[i:i + BODY_BATCH]
-        r = requests.post(f'{GRAPH}/$batch', timeout=60, headers={'Authorization': f'Bearer {tok}'},
-                          json={'requests': [{'id': str(k), 'method': 'GET',
-                                              'url': f'/users/{upn}/messages/{x}?$select={MAIL_BODY_SELECT}'}
-                                             for k, x in enumerate(chunk)]})
-        r.raise_for_status()
-        for resp in r.json().get('responses') or []:
-            body = resp.get('body')
-            if resp.get('status') == 200 and isinstance(body, dict) and body.get('id'): out.append(body)
-            else: logger.debug(f"mail body {resp.get('id')} came back {resp.get('status')}")
+        chunk, tries = ids[i:i + BODY_BATCH], 0
+        while chunk:
+            r = requests.post(f'{GRAPH}/$batch', timeout=60, headers={'Authorization': f'Bearer {tok}'},
+                              json={'requests': [{'id': str(k), 'method': 'GET',
+                                                  'url': f'/users/{upn}/messages/{x}?$select={MAIL_BODY_SELECT}'}
+                                                 for k, x in enumerate(chunk)]})
+            r.raise_for_status()
+            again, wait = [], 1.0
+            for resp in r.json().get('responses') or []:
+                body, status = resp.get('body'), resp.get('status')
+                if status == 200 and isinstance(body, dict) and body.get('id'): out.append(body); continue
+                # ...a request Graph THROTTLED inside the batch (429 - a mailbox takes only a few at once) or failed on its side is asked
+                # again: kept as its listing's preview, the mail's 255 characters stood for its whole body for good
+                if status == 429 or (isinstance(status, int) and status >= 500):
+                    try: again.append(chunk[int(resp.get('id'))])
+                    except (TypeError, ValueError, IndexError): continue
+                    try: wait = max(wait, float(((resp.get('headers') or {}).get('Retry-After')) or 1))
+                    except (TypeError, ValueError): pass
+                else: logger.debug(f"mail body {resp.get('id')} came back {status}")
+            if not again: break
+            tries += 1
+            if tries > BODY_RETRIES:
+                raise RuntimeError(f'Outlook is throttling this mailbox - {len(again)} mail bodies were not given; the folder is read again '
+                                   'on the next poll')
+            time.sleep(min(wait, 10))
+            chunk = again
     return out
 
 

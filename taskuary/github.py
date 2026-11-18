@@ -368,25 +368,45 @@ def checks(tok, repo, sha):
                        for c in bad][:8]}
 
 
+def _pages(tok, path, params=None, cap: int = 20) -> list:
+    """Every row of one GitHub list, following its Link header page by page (100 a page, at most `cap` pages). GitHub serves a pull request's
+    comments oldest first, so the first page alone held the oldest - the newest, the one that asks for a change, was never read."""
+    out, url, q = [], f'{GH}{path}', {'per_page': 100, **(params or {})}
+    for _ in range(cap):
+        r = requests.get(url, headers=_h(tok), timeout=20, params=q)
+        r.raise_for_status()
+        out += r.json() or []
+        url, q = ((getattr(r, 'links', None) or {}).get('next') or {}).get('url'), None
+        if not url: break
+    return out
+
+
+# A REVIEW'S OWN VERDICT (stress round, 2026-11-18): "Request changes" with its summary, or an approval, is neither a line note nor a
+# conversation comment - it lives on /reviews, and nothing read it. An empty COMMENTED review is only the wrapper of its line notes.
+VERDICT = {'CHANGES_REQUESTED': 'requested changes on', 'APPROVED': 'approved', 'COMMENTED': 'reviewed'}
+
+
 def pr_review_comments(tok, repo, number, since=None):
-    """Human comments on a pull request - both kinds: line notes on the diff, and the
-    conversation on the PR itself. `id` and `url` come back too, because a comment that lands
-    on the timeline needs to be de-duplicated across polls and to link to where it was said."""
+    """Human comments on a pull request - all three kinds: line notes on the diff, the conversation on the PR itself, and each review's own
+    verdict (`verb`: 'approved', 'requested changes on'...). `id` and `url` come back too, because a comment that lands on the timeline needs
+    to be de-duplicated across polls (a review's id is 'review-<n>': its own numbering) and to link to where it was said."""
     out = []
     for kind, path in (('review', f'/repos/{repo}/pulls/{number}/comments'),
-                       ('conversation', f'/repos/{repo}/issues/{number}/comments')):
-        try:
-            r = requests.get(f'{GH}{path}', headers=_h(tok), timeout=20,
-                             params={'per_page': 50, **({'since': since} if since else {})})
-            r.raise_for_status()
-            for c in r.json():
-                u = (c.get('user') or {})
-                if u.get('type') == 'Bot': continue
-                out.append({'id': c.get('id'), 'kind': kind, 'who': u.get('login'), 'assoc': c.get('author_association') or '',
-                            'body': (c.get('body') or '')[:2000], 'path': c.get('path'),
-                            'url': c.get('html_url'), 'at': c.get('created_at')})
+                       ('conversation', f'/repos/{repo}/issues/{number}/comments'),
+                       ('verdict', f'/repos/{repo}/pulls/{number}/reviews')):
+        try: rows = _pages(tok, path, {'since': since} if since and kind != 'verdict' else None)
         except requests.RequestException:
             continue
+        for c in rows:
+            u = (c.get('user') or {})
+            if u.get('type') == 'Bot': continue
+            if kind == 'verdict':
+                st = str(c.get('state') or '').upper()
+                if st not in VERDICT or (st == 'COMMENTED' and not str(c.get('body') or '').strip()): continue
+            out.append({'id': f"review-{c.get('id')}" if kind == 'verdict' and c.get('id') else c.get('id'), 'kind': kind,
+                        'verb': VERDICT[st] if kind == 'verdict' else 'commented', 'who': u.get('login'),
+                        'assoc': c.get('author_association') or '', 'body': (c.get('body') or '')[:2000], 'path': c.get('path'),
+                        'url': c.get('html_url'), 'at': c.get('submitted_at') if kind == 'verdict' else c.get('created_at')})
     return sorted(out, key=lambda c: str(c.get('at') or ''))
 
 

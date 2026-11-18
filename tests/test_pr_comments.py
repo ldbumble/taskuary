@@ -113,6 +113,62 @@ class CommentsReachTheTimelineTests(unittest.TestCase):
             self.assertEqual(ci.pull_comments(s, tid, at), 0)
 
 
+class _Gh:
+    """GitHub's three lists on one pull request, served the way GitHub serves them: oldest first, `per_page` at a time, a Link header to the
+    next page. Nothing reaches github.com."""
+    def __init__(self, review=(), conversation=(), reviews=()):
+        self.lists = {f'/pulls/{NUM}/comments': list(review), f'/issues/{NUM}/comments': list(conversation), f'/pulls/{NUM}/reviews': list(reviews)}
+
+    def get(self, url, headers=None, params=None, timeout=None):
+        tail = url.split(f'/repos/{REPO}', 1)[1].split('?')[0]
+        q = dict(params or {})
+        if '?' in url: q.update(dict(x.split('=') for x in url.split('?', 1)[1].split('&')))
+        per, page = min(int(q.get('per_page') or 30), 100), int(q.get('page') or 1)
+        rows = self.lists.get(tail, [])
+        got = rows[(page - 1) * per: page * per]
+        r = mock.Mock(status_code=200, ok=True)
+        r.json.return_value = got
+        r.raise_for_status.return_value = None
+        r.links = {'next': {'url': f"{url.split('?')[0]}?per_page={per}&page={page + 1}"}} if page * per < len(rows) else {}
+        return r
+
+
+def _gh_comment(i, body, user='erin-blake', assoc='MEMBER'):
+    return {'id': i, 'user': {'login': user, 'type': 'User'}, 'author_association': assoc, 'body': body,
+            'html_url': f'https://github.com/{REPO}/pull/{NUM}#c{i}', 'created_at': f'2026-11-{1 + i // 1000:02d}T10:{(i // 60) % 60:02d}:{i % 60:02d}Z'}
+
+
+class EveryCommentAndReviewIsReadTests(unittest.TestCase):
+    def _pull(self, s, tid, gh):
+        with mock.patch.object(github.requests, 'get', side_effect=gh.get), mock.patch('taskuary.terminal.say_to_task', return_value=False):
+            return ci.pull_comments(s, tid, ci.landing_of(s, tid))
+
+    def test_a_long_conversation_is_read_to_its_newest_comment(self):
+        """A pull request with sixty comments: GitHub hands the oldest fifty on the first page, and the newest - the one asking for a change -
+        never came back on any poll."""
+        s, tid = _armed()
+        gh = _Gh(conversation=[_gh_comment(i, f'note {i}') for i in range(1, 61)] + [_gh_comment(61, 'Please add the missing test before merging.')])
+        self.assertEqual(self._pull(s, tid, gh), 61)
+        self.assertTrue(any('missing test' in str(m.get('BodyText')) for m in s.list_messages(tid)))
+        self.assertEqual(self._pull(s, tid, gh), 0)                          # read again: nothing doubled
+
+    def test_a_review_that_requests_changes_lands_with_its_verdict(self):
+        """A review's own summary is neither a line note nor a conversation comment: "Request changes - split this function" was on GitHub only."""
+        s, tid = _armed()
+        gh = _Gh(reviews=[{'id': 7, 'user': {'login': 'gail-moreno', 'type': 'User'}, 'author_association': 'MEMBER', 'state': 'CHANGES_REQUESTED',
+                           'body': 'Split the parser out before this goes in.', 'html_url': f'https://github.com/{REPO}/pull/{NUM}#pullrequestreview-7',
+                           'submitted_at': '2026-11-17T09:00:00Z'},
+                          {'id': 8, 'user': {'login': 'ray-colton', 'type': 'User'}, 'author_association': 'MEMBER', 'state': 'APPROVED', 'body': '',
+                           'html_url': f'https://github.com/{REPO}/pull/{NUM}#pullrequestreview-8', 'submitted_at': '2026-11-17T10:00:00Z'},
+                          {'id': 9, 'user': {'login': 'ray-colton', 'type': 'User'}, 'author_association': 'MEMBER', 'state': 'COMMENTED', 'body': '',
+                           'html_url': f'https://github.com/{REPO}/pull/{NUM}#pullrequestreview-9', 'submitted_at': '2026-11-17T11:00:00Z'}])
+        self.assertEqual(self._pull(s, tid, gh), 2)                          # an empty COMMENTED review is only its line notes' wrapper
+        bodies = [str(m.get('BodyText')) for m in s.list_messages(tid)]
+        self.assertTrue(any('gail-moreno requested changes on pull request' in b and 'Split the parser' in b for b in bodies), bodies)
+        self.assertTrue(any('ray-colton approved pull request' in b for b in bodies), bodies)
+        self.assertEqual(self._pull(s, tid, gh), 0)
+
+
 class CommentsAreNotGatedOnCiWatchTests(unittest.TestCase):
     """ci_watch ships OFF, and it means "hand a red build to the running agent". A human
     reviewing our PR is inbound work arriving, which is the app's whole job."""

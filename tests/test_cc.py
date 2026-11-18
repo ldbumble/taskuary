@@ -35,6 +35,35 @@ class GraphTests(unittest.TestCase):
         return mock.patch.object(outbound.requests, 'post',
                                  side_effect=lambda url, **kw: (sent.update(url=url, body=json.loads(kw['data'])), r)[1])
 
+    def test_a_reply_to_mail_moved_in_outlook_goes_on_its_thread_at_its_new_id(self):
+        """The owner filed the mail in Outlook (or deleted it to Deleted Items, or Taskuary archived it when the task closed) - and a move
+        gives a mail a new Graph id. The reply's /reply answered 404 on every Send and every Try again: the owner could never answer it
+        from here. The mail is found again on its conversation, by when it came and who sent it, and answered there."""
+        from taskuary import channels
+        s = self._store()
+        msg = {'Channel': 'email', 'ExternalId': 'graph:OLD', 'ConversationId': 'conv-9', 'SourceName': 'me@corp.example',
+               'FromEmail': 'them@partner.example', 'Subject': 'Invoice', 'SentAt': channels._local('2026-10-20T09:00:00Z')}
+        calls = []
+        def post(url, **kw):
+            calls.append(url)
+            return mock.Mock(status_code=404, text='{"error":{"code":"ErrorItemNotFound","message":"The specified object was not found in the store."}}',
+                             json=mock.Mock(return_value={'error': {'code': 'ErrorItemNotFound', 'message': 'The specified object was not found in the store.'}})) \
+                if '/OLD/' in url else mock.Mock(status_code=202, text='')
+        listed = {'value': [{'id': 'OTHER', 'receivedDateTime': '2026-10-20T08:00:00Z', 'from': {'emailAddress': {'address': 'them@partner.example'}}},
+                            {'id': 'NEW', 'receivedDateTime': '2026-10-20T09:00:00Z', 'from': {'emailAddress': {'address': 'them@partner.example'}}}]}
+        got = mock.Mock(status_code=200); got.json.return_value = listed
+        with mock.patch.object(outbound, '_graph_token', return_value='t'), mock.patch.object(outbound.requests, 'post', side_effect=post), \
+             mock.patch.object(outbound.requests, 'get', return_value=got):
+            out = outbound.reply_to_message(s, msg, 'Paid today.')
+        self.assertTrue(out['threaded']); self.assertTrue(calls[-1].endswith('/messages/NEW/reply'), calls)
+        # ...and one no longer anywhere in the mailbox says so, with nothing sent
+        got.json.return_value = {'value': []}; calls.clear()
+        with mock.patch.object(outbound, '_graph_token', return_value='t'), mock.patch.object(outbound.requests, 'post', side_effect=post), \
+             mock.patch.object(outbound.requests, 'get', return_value=got):
+            with self.assertRaises(RuntimeError) as e: outbound.reply_to_message(s, msg, 'Paid today.')
+        self.assertIn('not in the mailbox any more', str(e.exception)); self.assertNotIn('{', str(e.exception))
+        self.assertEqual(len(calls), 1)
+
     def test_a_threaded_reply_carries_the_cc_and_keeps_the_recipient(self):
         """Graph replaces its own recipients the moment a message object is sent, so `to` has to
         go back in alongside the cc - otherwise looping someone in drops the person you answered."""

@@ -891,11 +891,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and whether a read brought anything new, for the poll below to calm on (pollCalming): the screen's own lines and idle clock
   // are left out of it - the terminal pane draws those live over its own socket, and they move on every read while an agent prints
   const detailLast = useRef(""), detailMoves = useRef(0), loadFailed = useRef(false);
+  const servedDetail = useRef(null), detailNow = useRef(null); detailNow.current = detail;
   detailReads.current ||= coalesce(async (id, signal) => {
     try {
       const asked = Date.now();             // the read's age, against the rail's (taskDetail.noteRead)
-      const { data } = await api.get(`/api/tasks/${id}`, { signal });
+      // ...the name of the task this page draws rides along (server._revisioned): still it, and only that name comes back - the page draws nothing
+      // again and its calming poll counts the read as unchanged. Only while the page draws exactly what the server last said (an edit made
+      // here in place is not that, and the next read puts the server's word back)
+      const held = servedDetail.current, rev = held && held.data === detailNow.current && held.id === id ? held.data.rev : "";
+      const { data } = await api.get(`/api/tasks/${id}`, { signal, params: rev ? { rev } : {} });
       if (stale(id)) return;
+      if (data?.same) { if (loadFailed.current) { loadFailed.current = false; setErr(""); } return false; }
+      servedDetail.current = { id, data };
       const seen = detailSeen(data);
       if (seen !== detailLast.current) { detailLast.current = seen; detailMoves.current += 1; }
       setDetail(data); keepTask(id, data, undefined, asked);

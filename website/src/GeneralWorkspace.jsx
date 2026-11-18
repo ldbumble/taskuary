@@ -801,8 +801,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     api.patch(`/api/tasks/${task.TaskId}`, { Tags: withoutAsk(task.Tags) }).catch(() => {});
   }, [task.TaskId, task.Tags]);
 
+  const heldRev = useRef("");        // the name of the chat state this view draws (its `rev`), for the poll to ask "still this?"
   const accept = useCallback((payload) => {
-    setData(payload); if (payload) CHATS.set(task.TaskId, payload);
+    setData(payload); heldRev.current = payload?.rev || ""; if (payload) CHATS.set(task.TaskId, payload);
     const provider = pickFor(payload);
     // A LIVE session's own pick outranks whatever the picker opened on. A walk's brain is chosen by
     // the server (general.walk_pick), so a strip frozen on the mount-time default both misnamed the
@@ -880,8 +881,10 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     const read = async () => {
       last = Date.now();
       try {
-        const { data: fresh } = await api.get(`/api/tasks/${task.TaskId}/assistant`);
-        if (!live) return;
+        // ...the name of what this chat holds rides along: unchanged, the answer is that name alone (server._revisioned), and nothing is drawn again
+        const { data: fresh } = await api.get(`/api/tasks/${task.TaskId}/assistant`, { params: heldRev.current ? { rev: heldRev.current } : {} });
+        if (!live || fresh?.same) return;
+        heldRev.current = fresh.rev || "";
         setData(fresh);
         // ...and the page's copy too: it held the session the turn STARTED with, so its heading said "is working" under the
         // finished answer (2026-10-15)

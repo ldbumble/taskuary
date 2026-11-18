@@ -5870,6 +5870,19 @@ def agent_remind(body: AgentRemindBody, request: Request):
         store.add_comment(body.task_id, body.agent, 'agent', f"Reminder set for you: {out['when']}." + (f" {out['warn']}" if out.get('warn') else ''))
     return {'ok': True, **out}
 
+_NEW_TASK_LOCK = threading.Lock()
+
+def _made_from(tid: int, title: str) -> int | None:
+    "The open task the new_task tool already made from task `tid` under `title` (spacing and case aside) - None when there is none."
+    same = lambda x: ' '.join(str(x or '').split()).casefold()
+    for r in store._rows("SELECT EntityId, Detail FROM audit WHERE EntityType='task' AND Action='create' AND Detail LIKE ? ORDER BY Id DESC",
+                         (f'%"from_task": {int(tid)}%',)):
+        try: d = json.loads(r.get('Detail') or '{}')
+        except ValueError: continue
+        t = store.get_task(int(r['EntityId'])) if d.get('from_task') == int(tid) else None
+        if t and t.get('Status') not in ('done', 'dropped') and same(t.get('Title')) == same(title): return int(t['TaskId'])
+    return None
+
 class AgentNewTaskBody(BaseModel): task_id: int; title: str = ''; ask: str = ''; kind: str = 'general'; model: str = ''; repo: str = ''; agent: str = 'agent'
 
 @app.post('/api/agent/new-task')
@@ -5889,11 +5902,20 @@ def agent_new_task(body: AgentNewTaskBody, request: Request):
     kind = str(body.kind or 'general').strip().lower()
     if kind not in task_kinds.AGENT: raise HTTPException(422, f'`kind` is general or coding, not {kind!r} - nothing was started')
     if kind == 'coding' and not hub_agents.developer_mode(store): kind = 'general'
-    new = store.create_task({'Title': title, 'Summary': ask, 'Kind': kind, 'AskedVia': 'agent', 'OriginBase': 'owner'}, body.agent)
-    from . import selfclose
-    selfclose.claim(store, new, ACTOR)           # the owner's own work: its agent never closes it by itself
-    store.audit('task', new, 'create', body.agent, detail={'from_task': body.task_id})
-    store.add_comment(body.task_id, body.agent, 'agent', f'Started {task_ref(new)}: {title}')
+    # ...ONE JOB IS ONE TASK (the stress round, 2026-11-18): the call repeated - a retry, a resumed session replaying its last step - made
+    # a second task and a second agent beside the first. The same title from the same task, still open, is that task: answered as made,
+    # and started only if its first start never went
+    with _NEW_TASK_LOCK:
+        new = _made_from(body.task_id, title)
+        if new and (general.history(store, new) or general.session_for(new)):
+            return {'ok': True, 'task': task_ref(new), 'title': title, 'already': True, 'started': True,
+                    'next': f'{task_ref(new)} was already started from here and is working on it - nothing new was made'}
+        if not new:
+            new = store.create_task({'Title': title, 'Summary': ask, 'Kind': kind, 'AskedVia': 'agent', 'OriginBase': 'owner'}, body.agent)
+            from . import selfclose
+            selfclose.claim(store, new, ACTOR)           # the owner's own work: its agent never closes it by itself
+            store.audit('task', new, 'create', body.agent, detail={'from_task': body.task_id, 'title': title})
+            store.add_comment(body.task_id, body.agent, 'agent', f'Started {task_ref(new)}: {title}')
     out = {'ok': True, 'task': task_ref(new), 'title': title}
     if body.repo and kind == 'coding':
         try: repochoice.use(store, new, body.repo, f'named by the agent on {task_ref(body.task_id)}')

@@ -366,6 +366,30 @@ class NewTaskTool(unittest.TestCase):
             said, err = tool(self.tid, 'new_task', title='Anything', ask='Do it.')
         self.assertTrue(err); go.assert_not_called()
 
+    def test_the_same_job_asked_twice_is_one_task(self):
+        """An agent's tool call repeated - a retry after a timeout, a resumed session replaying its last step - made the job twice: two tasks
+        "Bed board", two agents building it. The second call is answered with the task already made, and nothing is started again."""
+        with mock.patch.object(server, 'dispatch_task', return_value={'started': True}) as go:
+            one, _ = tool(self.tid, 'new_task', title='Bed board', ask='Build it.')
+            with mock.patch('taskuary.general.history', return_value=[{'role': 'user', 'content': 'Build it.'}]):
+                two, err = tool(self.tid, 'new_task', title=' bed  Board ', ask='Build it, please.')
+        self.assertFalse(err, two)
+        self.assertEqual(len(self.s.list_tasks()), 2)
+        self.assertEqual(go.call_count, 1)
+        self.assertEqual(json.loads(one)['task'], json.loads(two)['task'])
+        self.assertEqual(sum('Started TQ-' in str(c.get('Body')) for c in self.s.list_comments(self.tid, internal=True)), 1)
+
+    def test_a_job_made_but_not_started_is_started_on_the_second_ask(self):
+        "...and where the first start was refused (no AI yet), the second call starts that same task - never a second one beside it."
+        with mock.patch.object(server, 'dispatch_task', side_effect=server.HTTPException(422, 'no AI')):
+            one, _ = tool(self.tid, 'new_task', title='Bed board', ask='Build it.')
+        self.assertFalse(json.loads(one)['started'])
+        with mock.patch.object(server, 'dispatch_task', return_value={'started': True}) as go:
+            two, _ = tool(self.tid, 'new_task', title='Bed board', ask='Build it.')
+        self.assertEqual(len(self.s.list_tasks()), 2)
+        self.assertEqual((json.loads(two)['task'], json.loads(two)['started']), (json.loads(one)['task'], True))
+        self.assertEqual(go.call_args[0][0], max(t['TaskId'] for t in self.s.list_tasks()))
+
     def test_one_item_on_a_card_tool_is_one_card_not_a_batch(self):
         said, err = tool(self.tid, 'propose_email', items=[{'to': ['gail@northwind.example'], 'subject': 'Offsite', 'text': 'Friday it is. Alex'}])
         self.assertFalse(err, said)

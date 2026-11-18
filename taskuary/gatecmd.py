@@ -11,11 +11,19 @@ prints why and exits 1 without running; Taskuary unreachable, an act fails close
 What this still does not cover, said plainly: an agent that reaches the real program by its full path or through `npx`, or drives
 Chrome or the desktop some other way. It gates the road agents are told to take (browserview.brief), on every AI."""
 import json, os, shlex, sys
+from pathlib import Path
 
 GATED = ('agent-browser', 'agent-desktop')
 MARK = '/api/agent/gate'
 WAIT = 150                      # a snapshot and one verdict (browsergate.JUDGE_WAIT), and a page launched for its first open
 _DIR: dict = {}
+LAUNCHER = b'-m taskuary.gatecmd'          # ...written in every launcher folder() makes: how one is told from the real program
+
+
+def is_gate(p) -> bool:
+    "Is this file one of the launchers folder() writes (its own command line names this module) - never the real program."
+    try: return LAUNCHER in Path(p).read_bytes()[:400]
+    except OSError: return False
 
 
 def folder() -> str:

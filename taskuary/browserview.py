@@ -87,8 +87,14 @@ def program() -> str:
     cmd.exe, which reads & | < > ^ in an argument as its own: the owner's address bar opened https://portal.example/?app=1&return=...
     as ?app=1 and ran `return=...` as a command, and the page sat on a white loading spinner (2026-11-03). An approved fill or eval
     with an & in it was cut the same way. The shim only starts the .exe beside it, so that is what is run."""
-    from . import browserruntime
-    p = shutil.which('agent-browser') or browserruntime.find()
+    from . import browserruntime, gatecmd
+    # ...the REAL one, never the agents' hold in front of it (gatecmd): Taskuary's own calls - the pane's address bar, an approved press -
+    # found the hold first on a PATH that carried it, and asked the server to approve the server (macOS CI hung on it, 2026-11-18)
+    p = shutil.which('agent-browser')
+    if p and gatecmd.is_gate(p):
+        p = next((x for d in os.environ.get('PATH', '').split(os.pathsep) if d
+                  and (x := shutil.which('agent-browser', path=d)) and not gatecmd.is_gate(x)), None)
+    p = p or browserruntime.find()
     if os.name == 'nt' and p.lower().endswith(('.cmd', '.bat')):
         import platform
         arch = 'arm64' if platform.machine().lower() in ('arm64', 'aarch64') else 'x64'

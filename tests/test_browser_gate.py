@@ -608,3 +608,18 @@ class AFormFieldIsNotTheSending(unittest.TestCase):
         from taskuary import browsergate as bg
         self.assertIn('ticking, choosing or filling a field of a form that is not sent yet', bg.SYSTEM)
         self.assertIn('the sending is judged on its own', bg.SYSTEM)
+
+
+def test_taskuarys_own_browser_calls_run_the_real_program_never_the_agents_hold_in_front_of_it(tmp_path, monkeypatch):
+    """macOS CI, 2026-11-18: with the agents' hold first on PATH, the pane's own navigation ran the hold's launcher - which asked the server
+    to approve the server, and the run hung. Taskuary's own calls find the real agent-browser past any launcher of the hold."""
+    import os, stat
+    from taskuary import browserview, gatecmd
+    gate, real = tmp_path / 'gate', tmp_path / 'real'; gate.mkdir(); real.mkdir()
+    for d, body in ((gate, '#!/bin/sh\nexec python -m taskuary.gatecmd "$(dirname "$0")" agent-browser "$@"\n'), (real, '#!/bin/sh\necho real\n')):
+        for n in ('agent-browser', 'agent-browser.cmd'):
+            (d / n).write_text(body, encoding='utf-8'); (d / n).chmod((d / n).stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv('PATH', os.pathsep.join([str(gate), str(real)]))
+    got = browserview.program()
+    assert got and not gatecmd.is_gate(got) and os.path.dirname(got) == str(real), got
+

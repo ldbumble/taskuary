@@ -303,6 +303,25 @@ def test_a_picture_in_a_bound_chat_reaches_the_agent_as_a_file_it_can_read(w, tm
     assert len(list((config.home() / 'attachments' / 'agentchannel').rglob('*'))) == 3, "a stranger's picture was kept"
 
 
+def test_a_voice_note_in_a_bound_chat_reaches_the_agent_as_words(w, tmp_path):
+    "A teammate's voice note went nowhere and the chat said nothing; it is heard by the one transcriber, or the chat says why not."
+    grp = '120363000000000003@g.us'
+    w.bind('whatsapp', grp, members=[{'name': 'Gail Moreno', 'id': '15550102233', 'role': 'teammate'}])
+    note = tmp_path / 'note.ogg'; note.write_bytes(b'OggS')
+    c = w.s.get_connector(w.s.connectors_by_type('whatsapp')[0]['ConnectorId'], with_secret=True)
+    feed = {'seq': 2, 'messages': [{'id': 'v1', 'jid': grp, 'sender': '15550102233@s.whatsapp.net', 'text': '', 'audio': str(note), 'mime': 'audio/ogg', 'ts': 1},
+                                   {'id': 'v2', 'jid': grp, 'sender': '15550102233@s.whatsapp.net', 'text': '', 'audio': str(note), 'mime': 'audio/ogg', 'ts': 2}]}
+    heard = iter([{'text': 'the rounding test still fails on negatives'}, RuntimeError('no voice connector - add one under Connections')])
+    def hear(*a, **k):
+        x = next(heard)
+        if isinstance(x, Exception): raise x
+        return x
+    with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed), mock.patch('taskuary.voice.transcribe', side_effect=hear):
+        messengers.poll_whatsapp(w.s, c, [])
+    assert len(w.typed) == 1 and 'the rounding test still fails on negatives' in w.typed[0]
+    assert 'I could not hear that voice note - no voice connector' in w.said()
+
+
 def test_conductor_mode_is_the_owners_words_to_any_agent_in_its_repo(w):
     ac.bind(w.s, 'teams', '19:alex-own@thread.v2', None, repo=REPO, members=[])
     out = w.task(cwd=ELSEWHERE)

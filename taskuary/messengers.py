@@ -83,6 +83,13 @@ def keep_files(got: list, folder: str) -> list:
     return out
 
 
+def voice_words(store, data, name: str, mime: str) -> str:
+    "A voice note's words, by the one transcriber (voice.transcribe); raises with what to do when it cannot hear it."
+    from . import voice
+    if data is None: raise RuntimeError('it could not be downloaded')
+    return str(voice.transcribe(store, data, (mime or 'audio/ogg').split(';')[0], name)['text'] or '').strip()
+
+
 def chat_pictures(store, channel: str, chat: str, c, got, missed: list, message_id=None) -> list:
     """What the owner sent the Assistant chat beside their words, kept for the turn (keep_files) - the paths. Telegram hands over
     attachments ([{name, contentBytes}]), the bridge (name, bytes) pairs. One that could not be read is said in the chat, as an
@@ -194,7 +201,9 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
         from . import agentchannels
         if agentchannels.heard(store, 'telegram', cid, [str(frm.get('id') or '')], m.get('text') or m.get('caption') or '',
                                f"telegram:{cid}:{m.get('message_id')}", name=' '.join(x for x in (frm.get('first_name'), frm.get('last_name')) if x),
-                               media=lambda m=m: _files(*_tg_photo(tok, m))):
+                               media=lambda m=m: _files(*_tg_photo(tok, m)),
+                               spoken=(lambda v=v: voice_words(store, *(_tg_file(tok, v, 'voice.ogg') or (None, 'audio/ogg', 'voice.ogg'))))
+                                      if v and not heard else None):
             continue
         # the owner's own words in the ONE private chat their card names as the Assistant chat go to
         # the same walk the desktop is on. A bot only ever hears the other side of a chat, so that
@@ -688,8 +697,11 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
                 took.append(m.get('id')); continue
         # A CHAT BOUND TO AN AGENT (agentchannels.py): the owner's (fromMe) and listed teammates' lines go to the agent, nobody's are work
         if agentchannels.bound(store, 'whatsapp', jid):
-            if text or m.get('image') or m.get('doc'): agentchannels.heard(store, 'whatsapp', jid, [m.get('sender') or jid, _wa_alias(m)], text, f"whatsapp:{jid}:{m.get('id')}",
-                                         from_me=bool(m.get('fromMe')), name=m.get('name') or '', media=lambda m=m: _wa_files(m))
+            if text or m.get('image') or m.get('doc') or m.get('audio'):
+                agentchannels.heard(store, 'whatsapp', jid, [m.get('sender') or jid, _wa_alias(m)], text, f"whatsapp:{jid}:{m.get('id')}",
+                                    from_me=bool(m.get('fromMe')), name=m.get('name') or '', media=lambda m=m: _wa_files(m),
+                                    spoken=(lambda m=m: voice_words(store, _read_media(m['audio']), os.path.basename(m['audio']), m.get('mime')))
+                                           if m.get('audio') and not text else None)
             took.append(m.get('id')); continue
         # A natural message the owner types in their designated private chat goes to the SAME
         # guide conversation as the desktop bubble. Bridge-stamped Taskuary output is swallowed

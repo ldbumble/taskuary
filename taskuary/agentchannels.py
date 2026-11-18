@@ -272,10 +272,11 @@ def choices(store, kind: str) -> list:
 
 
 # ── in ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-def heard(store, kind: str, chat, senders, text: str, ext: str, from_me: bool = False, name: str = '', media=None) -> bool:
+def heard(store, kind: str, chat, senders, text: str, ext: str, from_me: bool = False, name: str = '', media=None, spoken=None) -> bool:
     """One line from a chat. False when the chat is not bound (the poller goes on as before); True when it is - routed, refused or
     ignored, it is never the inbox's. `media`: a call that fetches what the line carried - ([(name, bytes)], [kinds it could not read],
-    messengers.unread_note's list) - made only for a listed member, so a stranger's picture is never downloaded."""
+    messengers.unread_note's list) - made only for a listed member, so a stranger's picture is never downloaded. `spoken`: a call that
+    hears a voice note (messengers.voice_words), for a member's line with no words - the same transcriber the Assistant chat hears by."""
     b = bound(store, kind, chat)
     if not b: return False
     from . import agents
@@ -288,6 +289,12 @@ def heard(store, kind: str, chat, senders, text: str, ext: str, from_me: bool = 
         store.audit('agentchannel', b['ChannelId'], 'agent_channel_ignored', 'router', 'system', {'kind': kind})
         return True
     if not agents.developer_mode(store): return True
+    # A VOICE NOTE IS WORDS: it went nowhere and the chat said nothing
+    if not text and spoken:
+        try: text = str(spoken() or '').strip()
+        except Exception as e:
+            say(store, b, f"I could not hear that voice note - {str(e)[:200].rstrip('.')}. Type it instead."); return True
+        if not text: say(store, b, 'That voice note had no words in it I could hear - type it instead.'); return True
     # A PICTURE IS PART OF THE LINE: only the words went on, so "this is what the page looks like" reached the agent without the page
     try: got, missed = media() if media else ([], [])
     except Exception as e: got, missed = [], ['attachment']; logger.warning(f"agent channel {b['ChannelId']}: what a line carried was not read - {e}")

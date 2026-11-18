@@ -1099,3 +1099,45 @@ class WebFetchReadsWhatItFetchesTests(unittest.TestCase):
     def test_a_page_that_wants_a_sign_in_says_how_to_go_on(self):
         with self.assertRaises(ValueError) as e: self.fetch('/portal')
         self.assertIn('401', str(e.exception)); self.assertIn('browser_open', str(e.exception))
+
+
+class TheRestOfALongAnswerTests(unittest.TestCase):
+    """A long page or file was cut at CAP with "look again for the rest" - and no reading tool took a place to start, so looking again
+    gave the same first part (and the turn served it as already read): a payroll table's last runs could never be reached. The cut says
+    where to start, and the tool starts there."""
+
+    def setUp(self):
+        self.s = MemoryStore()
+        self.tid = self.s.create_task({'Title': 'Payroll runs summary', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        rows = ''.join(f'- row "Run {1000 + i} 2026-03-{i % 28 + 1:02d} $201,345 paid" [ref=e{i}]\n' for i in range(600))
+        self.page = rows + '- row "Run 9999 scheduled - THE LAST ONE" [ref=e999]\n'
+        for p in (mock.patch.object(bv, 'installed', return_value=True), mock.patch('taskuary.browsergate._run', return_value=(0, self.page)),
+                  mock.patch('taskuary.browsergate.address', return_value='https://portal.example/runs')):
+            p.start(); self.addCleanup(p.stop)
+
+    def walk(self, tool, **a):
+        "Follow what each cut says, as a model would, until nothing is cut. Every part read, in order."
+        import re
+        parts = []
+        for _ in range(20):
+            out = apiagent.run_tool(self.s, self.tid, 'sid-l', tool, a)
+            parts.append(out)
+            m = re.search(r'\bfrom=(\d+)', out.rsplit('\n', 1)[-1])
+            if not m: return parts
+            a = {**a, 'from': int(m.group(1))}
+        self.fail('the cut never ended')
+
+    def test_a_long_page_is_read_to_its_end_part_by_part(self):
+        parts = self.walk('browser_look', full=True)
+        self.assertGreater(len(parts), 1)
+        self.assertIn('THE LAST ONE', parts[-1])
+        self.assertTrue(all(len(p) <= apiagent.CAP + 300 for p in parts))
+
+    def test_a_long_file_is_read_to_its_end_part_by_part(self):
+        apiagent.run_tool(self.s, self.tid, "sid-l", "file_write", {"path": "runs.txt", "text": self.page})
+        self.assertIn('THE LAST ONE', self.walk('file_read', path='runs.txt')[-1])
+
+    def test_the_reading_tools_say_they_take_a_place_to_start(self):
+        for t in (*apiagent.BROWSER, *apiagent.FILES, *apiagent.WEB):
+            if t['function']['name'] in ('browser_look', 'file_read', 'web_fetch'):
+                self.assertIn('from', t['function']['parameters']['properties'], t['function']['name'])

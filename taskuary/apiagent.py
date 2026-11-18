@@ -31,13 +31,14 @@ WAIT = 45.0                    # one browser act
 
 _S = lambda props, need=(): {'type': 'object', 'properties': props, 'required': list(need)}
 _REF = {'type': 'string', 'description': 'the element ref from browser_look, like @e12'}
+FROM = {'from': {'type': 'integer', 'description': 'the character to start at, for the rest of a long answer (its cut says where)'}}
 def _fn(name, desc, params): return {'type': 'function', 'function': {'name': name, 'description': desc, 'parameters': params}}
 
 BROWSER = [
     _fn('browser_open', "Open a web address in Taskuary's browser for this task (the owner watches it beside the chat). Answers with the page's "
         'interactive elements.', _S({'url': {'type': 'string'}}, ['url'])),
     _fn('browser_look', 'Read the page the browser is on: its address and interactive elements with refs (@e1 ...); full=true for all of '
-        'its text too (tables, messages).', _S({'full': {'type': 'boolean'}})),
+        'its text too (tables, messages).', _S({'full': {'type': 'boolean'}, **FROM})),
     _fn('browser_click', 'Click an element by its ref.', _S({'ref': _REF}, ['ref'])),
     _fn('browser_fill', 'Type text into a box by its ref (replaces what is there). Never a password: sign-ins are Taskuary\'s.',
         _S({'ref': _REF, 'text': {'type': 'string'}}, ['ref', 'text'])),
@@ -62,7 +63,7 @@ _PATH = {'type': 'string', 'description': "a path - relative to your working fol
 FILES = [
     _fn('files_list', 'List a folder (default: your working folder).', _S({'path': _PATH})),
     _fn('file_read', 'Read a file as text: code, text, CSV, JSON, HTML - and PDF, Word, Excel, PowerPoint through Taskuary\'s readers.',
-        _S({'path': _PATH}, ['path'])),
+        _S({'path': _PATH, **FROM}, ['path'])),
 ]
 WRITE = [
     _fn('file_write', 'Write a whole file (created, or replaced). A .docx or .xlsx path writes a real Word document or Excel workbook from '
@@ -77,7 +78,7 @@ WEB = [
     _fn('web_search', "Search the web - the AI's own search (OpenAI's, Google's, Anthropic's), else a connected search service - and read pages "
         'it finds, with their sources.', _S({'query': {'type': 'string', 'description': 'what to find out; a URL in it is read'}}, ['query'])),
     _fn('web_fetch', 'Read one public web page or file by its address, as text (no sign-in, nothing clicked - browser_open is for that).',
-        _S({'url': {'type': 'string'}}, ['url'])),
+        _S({'url': {'type': 'string'}, **FROM}, ['url'])),
 ]
 # THE CALL IS THE ASK (a live turn, 2026-11-10): told its push "waits for the owner's Approve", one model never made the call - it wrote
 # that the push needed approval and stopped, and the task had no button to press. The gate holds the step and files the button; words do not
@@ -146,7 +147,20 @@ def no_browser_line() -> str: return NO_BROWSER.format(where=_where())
 def no_tools_line() -> str: return NO_TOOLS.format(where=_where())
 
 
-def _cut(s, n=CAP) -> str: s = str(s or ''); return s if len(s) <= n else s[:n] + f'\n... (cut at {n} characters - look again for the rest)'
+def _cut(s, n=CAP) -> str: s = str(s or ''); return s if len(s) <= n else s[:n] + f'\n... (cut at {n:,} of {len(s):,} characters - the rest is not shown)'
+
+
+# A LONG PAGE OR FILE IS READ PART BY PART (the browser-read round, 2026-11-18): cut with "look again for the rest", and no reading tool took a
+# place to start, so looking again gave the same first part (and the turn served it as already read) - a payroll table's last runs were never
+# reached. The reading tools take `from` (FROM), and the cut says where the next part starts.
+def _part(s, a: dict) -> str:
+    "One part of a reading tool's answer: CAP characters from the call's `from`, and where the cut is, where the next part starts."
+    s = str(s or '')
+    try: at = max(0, int(a.get('from') or 0))
+    except (TypeError, ValueError): at = 0
+    part = s[at:at + CAP]
+    if at + CAP >= len(s): return part if part or not at else f'(nothing past character {at:,} - it has {len(s):,})'
+    return part + f'\n... (characters {at:,}-{at + CAP:,} of {len(s):,}; call it again with from={at + CAP} for the rest)'
 
 
 def _act(store, tid, sid, args: list) -> str:
@@ -284,8 +298,8 @@ def _hands(store, tid: int, sid: str, name: str, a: dict) -> str:
         if not p.is_file(): raise ValueError(f'no file at {p}')
         if p.suffix.lower() in ('.pdf', '.docx', '.xlsx', '.pptx'):
             got = attachtext.read(p.name, p.read_bytes())
-            return _cut(got.get('text') or f"{p.name}: {got.get('note') or 'nothing in it to read'}")
-        return _cut(p.read_text(encoding='utf-8', errors='replace'))
+            return _part(got.get('text') or f"{p.name}: {got.get('note') or 'nothing in it to read'}", a)
+        return _part(p.read_text(encoding='utf-8', errors='replace'), a)
     if name in ('file_write', 'file_edit'):
         # A WORD OR EXCEL FILE IS MADE, NOT SPELLED OUT (officefiles): written as text it was a file no one could open, and the agent went on
         # to build one by hand in PowerShell - a script of output a step, for as long as it took
@@ -311,7 +325,7 @@ def _hands(store, tid: int, sid: str, name: str, a: dict) -> str:
         got = linkdocs.read(store, d, auto=False, full=True)
         if 'note' in got: raise ValueError(f"{u} was not read: {got['note']}. If it needs a sign-in or a click, browser_open it instead")
         head = ' - '.join(x for x in (f'PAGE {u}', str(got.get('title') or '').strip(), str(got.get('more') or '')) if x)
-        return _cut(head + chr(10) + str(got.get('text') or '').strip())
+        return _part(head + chr(10) + str(got.get('text') or '').strip(), a)
     if name == 'web_search': return _search(store, tid, sid, str(a.get('query') or ''))
     if name == 'run_command':
         from . import hooks, shellgate, spawn
@@ -397,7 +411,7 @@ def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
     if name == 'browser_look':
         rc, snap = bg._run(sid, ['snapshot', '-c'] if a.get('full') else ['snapshot', '-i', '-c'], 30, 'look')
         if rc != 0: raise ValueError(snap.strip()[-300:] or 'the page could not be read')
-        return _cut(f'PAGE {bg.address(sid)}\n{snap.strip()}')
+        return _part(f'PAGE {bg.address(sid)}\n{snap.strip()}', a)
     if name == 'browser_click': return _act(store, tid, sid, ['click', str(a.get('ref') or '')])
     if name == 'browser_fill': return _act(store, tid, sid, ['fill', str(a.get('ref') or ''), str(a.get('text') or '')])
     if name == 'browser_press': return _act(store, tid, sid, ['press', str(a.get('key') or '')])
@@ -664,7 +678,7 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
                         logger.info(f'apiagent: task {tid} {name} failed - {e}')
                     if name not in reads and name != LOAD: seen.clear()
                 if trace: trace('tool_result', name, {'result': out, 'is_error': err})
-                msgs.append(ans := {'role': 'tool', 'tool_call_id': c.get('id') or name, 'content': _cut(out)})
+                msgs.append(ans := {'role': 'tool', 'tool_call_id': c.get('id') or name, 'content': _cut(out, CAP + 200)})   # ...a part's own line kept
                 if name in reads and not err and not again: seen[key] = (ans, ans['content'])
                 if again: continue                  # ...and it is nothing new read: going in circles is still counted (idle)
                 # PROGRESS IS SOMETHING NEW READ (the owner, 2026-11-10: "are we leaking tokens?"): a small model calling a search again

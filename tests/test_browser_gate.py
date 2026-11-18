@@ -59,6 +59,19 @@ class Reading(unittest.TestCase):
         self.assertEqual(bg.acts('agent-browser find role button "Pay now" click')[0]['verb'], 'find')
         self.assertEqual(bg.acts('agent-browser click "@e12')[0]['verb'], '?')        # cannot be read: judged, never waved through
 
+    def test_a_press_behind_a_launcher_or_a_quote_is_still_an_act(self):
+        """`timeout 30 agent-browser click @e3` - a press on "Pay now" wrapped the way agents wrap a slow command - was read as a call of
+        `timeout` and ran past the gate, and `agent-brows''er` (one word to the shell) did not name the tool at all. A launcher runs what
+        follows it; the name is read as the shell joins it."""
+        for cmd in ('timeout 30 agent-browser click @e3', 'AGENT=1 timeout -s KILL 30 agent-browser click @e3', 'env DEBUG=1 agent-browser click @e3',
+                    'nohup agent-browser click @e3', 'sudo agent-browser click @e3', 'nice -n 5 agent-browser click @e3',
+                    'echo @e3 | xargs agent-browser click', "agent-brows''er click @e3", 'stdbuf -oL agent-browser click @e3'):
+            [a] = bg.acts(cmd)
+            self.assertEqual(a['verb'], 'click', cmd)
+            self.assertTrue(hooks.needs_gate(cmd), cmd)
+        self.assertEqual(bg.acts('timeout 30 agent-browser snapshot -i'), [], 'a look behind a launcher is still a look')
+        self.assertEqual(bg.acts('grep -rn agent-browser notes.md'), [], 'naming the tool to another program is no call of it')
+
     def test_a_line_break_in_typed_text_is_never_plain_typing(self):
         # _segments reads a newline as `;`, so a break inside quotes came back as " ; " and fill passed with no AI (2026-10-31)
         self.assertTrue(bg.typing(bg.acts('agent-browser fill @e1 "Dear Erin"')[0]))

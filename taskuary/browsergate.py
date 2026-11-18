@@ -90,19 +90,32 @@ def _is_exe(tok: str, exe: str = EXE) -> bool:
     return re.sub(r'(?<=.)@[^/]*$', '', re.sub(r'\.(exe|cmd|ps1|bat)$', '', os.path.basename(str(tok).replace('\\', '/')).lower())) == exe
 
 
+def names(cmd: str, exe: str = EXE) -> bool:
+    "The cheap test: does this line name `exe` at all - as the shell will join it (`agent-brows''er` is agent-browser)?"
+    return exe in re.sub(r'[\'"\\`]', '', str(cmd or '')).lower()
+
+
+# THE PROGRAMS THAT ONLY LAUNCH ANOTHER: the command they run is the one that acts (`timeout 30 agent-browser click @e3` pressed "Pay now" past
+# the gate, read as a call of `timeout`). Program names - a launcher's grammar is to run what follows its own options
+LAUNCHERS = frozenset('npx pnpm dlx bunx yarn exec call cmd command timeout env nice ionice nohup time sudo doas xargs stdbuf setsid unbuffer '
+                      'caffeinate chrt taskset'.split())
+
+
 def _head(argv: list, exe: str = EXE) -> list | None:
-    "The agent-browser (or `exe`: desktop.py) arguments of one simple command, through env prefixes, `&`, npx and the like - else None."
+    "The agent-browser (or `exe`: desktop.py) arguments of one simple command, through env prefixes, `&` and any launcher before it - else None."
     i = 0
-    while i < len(argv) and re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', argv[i]): i += 1          # FOO=bar agent-browser ...
-    while i < len(argv) and argv[i].lower() in ('&', 'npx', 'pnpm', 'dlx', 'bunx', 'yarn', '-y', '--yes', 'exec', 'call', 'cmd', '/c', 'command'): i += 1
-    return argv[i + 1:] if i < len(argv) and _is_exe(argv[i], exe) else None
+    while i < len(argv) and (re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', argv[i]) or argv[i] == '&'): i += 1          # FOO=bar agent-browser ...
+    if i < len(argv) and _is_exe(argv[i], exe): return argv[i + 1:]
+    if i < len(argv) and re.sub(r'\.(exe|cmd|bat)$', '', os.path.basename(argv[i].replace('\\', '/')).lower()) in LAUNCHERS:
+        return next((argv[j + 1:] for j in range(i + 1, len(argv)) if _is_exe(argv[j], exe)), None)
+    return None
 
 
 def acts(cmd: str) -> list:
     """Every agent-browser call in a shell command that is not only a look: [{'args': [...], 'verb': 'click'}]. A command
     that names agent-browser where it cannot be read (a quote left open, a call inside another shell's string that will not
     parse) is one act with verb '?' - held to the model like any other, never let through for being hard to read."""
-    if EXE not in str(cmd or '').lower(): return []
+    if not names(cmd): return []
     segs = _segments(cmd)
     if segs is None: return [{'args': [], 'verb': '?', 'raw': str(cmd)[:400]}]
     out = []
@@ -111,7 +124,7 @@ def acts(cmd: str) -> list:
         if a is None:
             # `bash -c "agent-browser click @e1"`, `powershell -Command "..."`: the string is a command of its own
             for t in argv[1:]:
-                if EXE in t.lower() and ' ' in t.strip(): out += acts(t)
+                if names(t) and ' ' in t.strip(): out += acts(t)
             continue
         i = 0
         while i < len(a) and a[i].startswith('-'): i += 2 if a[i] in VALUED and '=' not in a[i] else 1
@@ -136,7 +149,7 @@ def carries(url: str) -> bool:
 
 def opens(cmd: str) -> str:
     "The address the first agent-browser open / goto / navigate in a shell command goes to, else '' (browserview.on_demand)."
-    if EXE not in str(cmd or '').lower(): return ''
+    if not names(cmd): return ''
     for argv in _segments(cmd) or []:
         a = _head(argv)
         a = _own_args(a) if a is not None else []

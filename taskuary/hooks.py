@@ -896,7 +896,7 @@ def browser(payload: dict, brain=None, sid: str = '', task: str = '') -> dict:
 def needs_gate(cmd: str, cwd: str = '') -> bool:
     "The cheap test first: does this shell line touch the browser, the desktop, or leave the machine / delete outside its folder?"
     from . import agentdesktop, browsergate, shellgate
-    return browsergate.EXE in cmd.lower() or agentdesktop.EXE in cmd.lower() or bool(shellgate.acts(cmd, cwd))
+    return browsergate.names(cmd) or browsergate.names(cmd, agentdesktop.EXE) or bool(shellgate.acts(cmd, cwd))
 
 
 def command_gate(st, tid: int, sid: str, cmd: str, tool: str = 'Bash', cwd: str = '', ask: bool = False, about: str = '', brain=None) -> dict:
@@ -905,7 +905,7 @@ def command_gate(st, tid: int, sid: str, cmd: str, tool: str = 'Bash', cwd: str 
     CLI's own prompt). A step that leaves the machine or deletes outside its folder (shellgate), a desktop act or a browser act that can't
     be undone (agentdesktop, browsergate) waits for the owner; everything else runs, as on a CLI."""
     from . import agentdesktop, browsergate, readgate, shellgate
-    browse, out, desk = browsergate.EXE in cmd.lower(), shellgate.acts(cmd, cwd), agentdesktop.EXE in cmd.lower()
+    browse, out, desk = browsergate.names(cmd), shellgate.acts(cmd, cwd), browsergate.names(cmd, agentdesktop.EXE)
     reads, never = readgate.of_command(st, tid, cmd, cwd)
     if never: return browsergate._deny(never)
     if not browse and not out and not desk and not reads: return {}

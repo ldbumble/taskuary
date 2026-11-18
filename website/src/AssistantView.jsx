@@ -1474,8 +1474,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     const stop = new AbortController(); stopRef.current = stop;
     const plain = async () => {
       const endpoint = body.mode === "open" ? "/api/concierge/open" : "/api/concierge/say";
-      return (await api.post(endpoint, body.mode === "say" ? { text: body.text, key: body.key, context_mid: body.context_mid, images: body.images || [], ...(body.view ? { view: body.view } : {}),
-          ...(body.react ? { react: body.react } : {}) } : {})).data;
+      return (await api.post(endpoint, body.mode === "say" ? { text: body.text, key: body.key, context_mid: body.context_mid, images: body.images || [], ...(body.view ? { view: body.view } : {}) } : {})).data;
     };
     // The public demo is intentionally a local script. Do not even attempt the streaming AI
     // endpoint: its invented threads should never look like a model is working behind the page.
@@ -2252,9 +2251,6 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   // and no word, the words left sitting in the box. The line is drawn at once and goes when the table is free (the effect beside
   // openLater), about what is then on it - the task that was coming up. A picture still waits in its tray, the words with it.
   const askLater = useRef([]), sending = useRef(null);
-  // `how.react`: WHAT THE OWNER JUST DID ON THE PAGE, inside a conversation they started about it (pageView.onReact - the owner, 2026-10-30:
-  // "it will know if you change something in the screen ... say i see you changed this"): no line of theirs is drawn, nothing they are
-  // typing is touched, the window is not opened - a shut one counts the answer on its pill. Dropped, never held, while a turn is running
   // A LINE THE PAGE SAYS ONCE THE ACT HAPPENED, KEPT (the owner, 2026-11-03: the reply lines vanished on a reload): drawn here, and kept in the
   // conversation as the receipt it is (concierge.keep_line) - a reload draws it again, the next turn's model reads what was done, and the read
   // after this one knows it by its words (mergeDurableTurns)
@@ -2263,12 +2259,10 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     api.post("/api/concierge/line", { text, status }).catch(() => {});
   };
   const send = async (line, held = false, how = {}) => {
-    const react = how.react || "";
     // a picture alone is a line too: "what is this?" is what it means
     const images = line == null ? pics.paths : [];
     const t = String(line ?? (heard ? `${text} ${heard}` : text)).trim() || (images.length ? "What is this?" : "");
     if (!t || pics.busy) return;
-    if (react && (busy || resetting || turnFlight.current)) return;
     if (busy || resetting || turnFlight.current) {
       // ...but never a second copy: Enter twice in one tick reaches here with the line already going (`sending`)
       if (resetting || images.length || t === sending.current || askLater.current.includes(t)) return;
@@ -2280,20 +2274,19 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     }
     turnFlight.current = answering.current = true; sending.current = t; const drawn0 = rowsDrawn.current;
     if (line == null) { micRef.current?.cancel(); setHeard(""); }   // a send ends the dictation: its words went with the line
-    if (!react) { setText(""); setLit(null); }
+    setText(""); setLit(null);
     setBusy(true); setErr("");
     // THE PAGE ON SCREEN GOES WITH A LINE THE OWNER ASKED (pageView.context - the owner, 2026-10-30: "it reads the screen when the owner asks
     // it something about what is on it"): its fields and buttons, a secret as its state only. Asking about it starts the conversation the
     // page's own edits are heard in
     const view = how.view !== undefined ? how.view : pageView.context();
-    if (view && !react) pageView.startSession(view, !!how.door);
     // ...a TYPED line opens the window (it was typed in its box); a line sent for a press elsewhere never does - the window opens only by
     // the owner's own hand or for an error (the owner, 2026-10-28: "when the walk-through ended, the chat reopened by itself")
     if (winOnRef.current && line == null) setPopOpen(true);
     const shots = line == null ? pics.imgs : [];
     if (images.length) pics.clear();
     // ...a held line is on screen already: it is let go, not drawn twice
-    if (!react) setMsgs((m) => { const i = held ? m.findIndex((x) => x.heldAsk && x.text === t) : -1;
+    setMsgs((m) => { const i = held ? m.findIndex((x) => x.heldAsk && x.text === t) : -1;
       return i >= 0 ? m.map((x, j) => (j === i ? { ...x, heldAsk: false } : x)) : [...m, { id: `u${Date.now()}`, role: "user", text: t, shots }]; });
     try {
       // a card browsed open is what "this" means - not the item folded above it (the final review)
@@ -2308,9 +2301,9 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
       // set up Any mailbox (IMAP)" was answered with that task's story (TQ-1251)
       // ...and NOW NO PAGE CARRIES THE TASK UNDER IT (the owner, 2026-11-05): with Settings, Connections, Reports, the Hub or New on the canvas
       // the question is about that page alone - its view goes, the task beneath does not
-      const subject = how.door || browsing ? null : tableKey || current || cardRef.current;
+      const subject = browsing ? null : tableKey || current || cardRef.current;
       const ask = () => turn({ mode: "say", text: t, key: subject, context_mid: currentItem?.mid && subject === current ? currentItem.mid : null,
-                               open_card: openCardRef.current, images, ...(view ? { view } : {}), ...(react ? { react } : {}) });
+                               open_card: openCardRef.current, images, ...(view ? { view } : {}) });
       const data = await ask().catch(async (e) => { if (!isCoveragePending(e)) throw e; await new Promise((r) => setTimeout(r, 1200)); return ask(); });
       if (data.context_update && noticedRef.current !== data.context_update) {   // not already said by the stream event
         setMsgs((m) => [...m, { id: `context${Date.now()}`, role: "assistant", text: data.context_update }]);
@@ -2335,14 +2328,12 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
         // ...but IN THE CHAT POP-UP a turn that only acted still ends on words (actReceipt): there is no card in it to wear the badge, and the
         // owner's line stood alone over the task (2026-10-27). A drafted reply (`decision`) writes its own receipt
         else if (winOnRef.current && !data.context_update && !data.decision) { const r = actReceipt(data, tableKey || current); receipt(r.text, r.status); }
-        // WHAT IT DOES ON THE PAGE, run there through the page's own buttons (pageView.run): each act a step on this answer as it lands - a
-        // send lit for the owner, never pressed; the owner's own hand on the page drops the rest. What the page answered (a Test) is heard next
+        // WHAT IT BRINGS UP ON THE PAGE (pageView.run): a page opened, a thing pointed at - each a step on this answer as it lands. Nothing is
+        // filled or pressed there (the owner, 2026-11-18: "it should just open the task, not do anything on the tasks")
         if (ops.length) {
-          const { result, steps } = await pageView.run(ops, (steps) => setMsgs((m) => m.map((x) => (x.id === aid ? { ...x, steps } : x))));
+          const { steps } = await pageView.run(ops, (steps) => setMsgs((m) => m.map((x) => (x.id === aid ? { ...x, steps } : x))));
           // ...and the steps are kept on the answer's own line, so a reload draws them again (concierge.keep_line)
           if (steps.length) api.post("/api/concierge/line", { text: data.say || "", steps }).catch(() => {});
-          const s = pageView.sessionNow();
-          if (result && s && s.auto < 3) setTimeout(() => reactRef.current?.({ kind: "result", text: `${result.action} ${result.ok ? "passed" : "failed"}${result.detail ? `: ${result.detail}` : ""}` }), 300);
         }
         // A TYPED PUT-DOWN WAS PRESSED (concierge._put_down - the owner, 2026-10-23: "it should collapse the task and write on it marked done
         // with note"): its card wears the button's badge, and on the table it is put down as the row's own press puts it down - folded, the
@@ -2411,17 +2402,6 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   // ...and a line the bell hands over (askAssistant.js), sent as if typed - or left in the box while a turn is running, never dropped
   const askRef = useRef(null);
   askRef.current = (t, how = {}) => (busy || resetting || turnFlight.current ? setText(t) : send(t, false, how));
-  // THE PAGE'S OWN EDITS, HEARD WHILE HELPING (pageView.onReact - the owner, 2026-10-30: "inside a conversation the owner started about that
-  // page, it notices the owner's own edits"): one turn per settled edit, Save or Test answer - never while a turn runs or the owner is typing
-  // in the chat box, and at most 3 in a row before the owner says something again. Outside a conversation about the page: silence
-  const reactRef = useRef(null);
-  reactRef.current = (ev) => {
-    const s = pageView.sessionNow();
-    if (!s || busy || resetting || turnFlight.current || text.trim() || s.auto >= 3) return;
-    s.auto += 1;
-    send(ev.text, false, { react: ev.text });
-  };
-  useEffect(() => pageView.onReact((ev) => reactRef.current?.(ev)), []);
   // ...the page's acts reach the canvas the way a click does: an area brought up by its sidebar's road, a task's row lit by the Advisor's fill
   const lightRef = useRef(null);
   lightRef.current = (rowId, label) => {
@@ -2435,21 +2415,6 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     pageView.setLighter((rowId, label) => lightRef.current?.(rowId, label));
     return () => { pageView.setOpener(null); pageView.setLighter(null); };
   }, []);
-  // THE DOORS (pageView.openHelp): "Get AI to set it up", "Set up with AI", "Fix with AI" open this window and ask - the page they were
-  // pressed on goes with the ask, and is what the conversation is about. No Board task: the chat is the record (the owner, 2026-10-30)
-  useEffect(() => {
-    const help = (e) => {
-      const line = String(e.detail?.line || "").trim(); if (!line) return;
-      if (!e.detail?.quiet) setPopOpen(true);
-      setTimeout(() => askRef.current?.(line, { door: true }), Number(e.detail?.wait ?? 350));    // ...after the page it opened has drawn
-    };
-    // ...and a card's walk left open from before is said here once, folded, its steps under it (aisetup.move_walk)
-    // ...and a door whose work went to an agent (a playbook's build) says where it is, the window opened by that press
-    const earlier = (e) => { const r = e.detail || {}; if (!r.title) return;
-      setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: r.title, steps: r.steps || [] }]); if (r.open) setPopOpen(true); };
-    window.addEventListener(pageView.HELP, help); window.addEventListener(pageView.EARLIER, earlier);
-    return () => { window.removeEventListener(pageView.HELP, help); window.removeEventListener(pageView.EARLIER, earlier); };
-  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const on = () => { const t = takeAsk(); if (!t) return; setPopOpen(true); askRef.current(t); };   // ...open, as the doors do: the bell asked into a closed window
     on(); window.addEventListener("tq-ask", on);
@@ -3502,8 +3467,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   // ...ONLY ITS × AND ESC SHUT IT (the owner, 2026-10-28: "it randomly closes ... it closed when it responded. Make sure that never happens"):
   // the box's blur and a press on the row used to shut it unless a style read at that instant said the box stood over the canvas - one
   // read away from closing whenever an answer moved the focus (a lit button, a task opened, a page brought up). Nothing reads the focus now
-  const shutBox = () => { setBoxOpen(false); setEnding(false); if (mini) keepMini(null); composeRef.current?.blur(); };
-  const [ending, setEnding] = useState(false);     // the × asked "End this chat?" while it helps with a page (pageView session)
+  const shutBox = () => { setBoxOpen(false); if (mini) keepMini(null); composeRef.current?.blur(); };
   // ...MINIMIZE IS NOT × (the owner, 2026-10-28: the two did the same): it folds the window down to its head, a strip standing on the open box -
   // the title, what came since, expand; a press on the strip brings the whole window back. × is the pill again
   // ...HALF ITS HEIGHT, not a strip (the owner, 2026-10-29: "minimize should be half the size not a tiny bit open"): the newest lines
@@ -3542,8 +3506,6 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   const popLast = winLines[winLines.length - 1]?.[0];
   const [seen, setSeen] = useState(() => mini?.last ?? null);
   useEffect(() => { if (winFull && popLast) setSeen(popLast.id); }, [winFull, popLast?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
-  // ...but a press REFUSED, or one that failed, is said where it can be read: the window comes up for it (the error the owner must see)
-  useEffect(() => { if (popLast && /^[adrw]\d/.test(popLast.id) && (popLast.refused || (popLast.role === "receipt" && popLast.status === "error"))) setPopOpen(true); }, [popLast?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
   // ...and only ANSWERS to what he asked count (assistantTurns.unseenAnswers): nothing a task does raises it
   const unseen = useMemo(() => (winFull ? 0 : unseenAnswers(winLines.map(([m]) => m), seen)), [winFull, seen, winLines]);
   // ...and IT NEVER SHUTS BY ITSELF (the owner, 2026-10-27: "it disappeared when done? not sure what happened"): every turn ends on words
@@ -3551,7 +3513,6 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   // ...and A PRESS THAT FAILED SAYS SO WHERE IT CAN BE READ (the 2026-10-28 flow walk): a Next whose request never got an answer wrote its
   // line under the task view, behind the canvas and the dock - the press looked unheard. The failure comes up in the window
   const popErr = winOn && !!err;
-  useEffect(() => { if (popErr) setPopOpen(true); }, [popErr, err]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!err) return undefined;
     const id = requestAnimationFrame(() => [...document.querySelectorAll("[data-tq-err-line]")].find((e) => e.getBoundingClientRect().height > 0)?.scrollIntoView?.({ block: "nearest" }));
@@ -3604,7 +3565,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
                 {/* an answer that hangs had no way out: New chat is refused while one is being written (dock/new 409) */}
                 {busy && answering.current && !DEMO && (
                   <button type="button" className="tq-chip" style={{ marginLeft: 8 }} title="Stops the answer being written and gives you the chat back."
-                    onClick={() => { api.post("/api/concierge/stop").catch(() => {}); stopRef.current?.abort(); pageView.stop(); }}>Stop</button>
+                    onClick={() => { api.post("/api/concierge/stop").catch(() => {}); stopRef.current?.abort(); }}>Stop</button>
                 )}
                 {busy && !!steps.length && <AgentSteps data={{ steps }} />}
                 {!!work.length && <div className="tq-work">{work.map((w, i) => <div key={i}>{w}</div>)}</div>}
@@ -3860,17 +3821,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
                   ? <Tooltip title="Expand the chat"><IconButton size="small" aria-label="Expand the chat" data-tq-box-expand="" onClick={(e) => { e.stopPropagation(); expand(); }}><OpenInFullIcon sx={{ fontSize: 15, color: DIM }} /></IconButton></Tooltip>
                   : <Tooltip title="Minimize - keeps this conversation"><IconButton size="small" aria-label="Minimize the chat" data-tq-box-mini="" onClick={minimize}><CloseFullscreenIcon sx={{ fontSize: 15, color: DIM }} /></IconButton></Tooltip>}
                 {/* ...its ×: the one way, with Esc, the window shuts to the pill - what is typed stays for the next time it opens */}
-                {/* ...and WHILE IT IS HELPING WITH A PAGE its × asks first (the owner, 2026-10-30: "the owner ends a session by closing the chat
-                    with its ×, which asks to confirm ending the chat") - yes ends the help and shuts the window; Esc only shuts it. A chat that only
-                    asked about the page, with no "with AI" door pressed, shuts as it always did - and stops hearing the page */}
-                <Tooltip title="Close (Esc)"><IconButton size="small" aria-label="Close the chat" data-tq-box-close="" onClick={(e) => { e.stopPropagation(); if (pageView.sessionNow()?.door) setEnding(true); else { pageView.endSession(); shutBox(); } }}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip></div>
-              {ending && (
-                <div className="tq-chat-pop-end" data-tq-chat-end="" role="alertdialog" aria-label="End this chat?">
-                  <span>End this chat? I stop helping with {pageView.sessionNow()?.title || "this page"}.</span>
-                  <button type="button" className="tq-chip" data-tq-chat-end-yes="" onClick={() => { pageView.stop(); pageView.endSession(); setEnding(false); shutBox(); }}>End chat</button>
-                  <button type="button" className="tq-chip" onClick={() => setEnding(false)}>Keep chatting</button>
-                </div>
-              )}
+                <Tooltip title="Close (Esc)"><IconButton size="small" aria-label="Close the chat" data-tq-box-close="" onClick={(e) => { e.stopPropagation(); shutBox(); }}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip></div>
               <div className="tq-chat-pop-body" ref={popBodyRef}>
                 {!winLines.length && !popPending && !popErr && <p className="tq-chat-pop-empty">{browsing ? "Ask about this page, or anything on your list." : currentItem?.ref ? `Ask about ${currentItem.ref}, or anything on your list.` : "Ask about anything on your list."}</p>}
                 {winLines.map(([m, i]) => <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={false} last={!old && i === lastSaidIdx} moves={!old && i === movesIdx} tableChips={tableChips} barHolds={barHolds} pageOver={pageOver}

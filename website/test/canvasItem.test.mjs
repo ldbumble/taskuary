@@ -72,7 +72,7 @@ test("a new line always shows; only a browse card's own steps hold the bottom", 
 // ...and NOW A PAGE ON THE CANVAS IS THE ASK'S ALONE (the owner, 2026-11-05, over the verify of 2026-10-19 that sent both): with Settings,
 // Connections, Reports, the Hub or New open over a task, the question carries the page's view and never the task beneath it
 test("a page open on the canvas goes with the turn alone, never the task under it", () => {
-  assert.match(view, /const subject = how\.door \|\| browsing \? null : tableKey \|\| current \|\| cardRef\.current;/);
+  assert.match(view, /const subject = browsing \? null : tableKey \|\| current \|\| cardRef\.current;/);
   assert.match(view, /key: subject, context_mid: currentItem\?\.mid && subject === current \? currentItem\.mid : null,\n\s+open_card: openCardRef\.current/);
 });
 

@@ -27,18 +27,19 @@ test("the named doors each carry the mark", () => {
   // (a connection's door is the same strip now: <SetupWithAi kind="connection"> - checked above)
   assert.match(read("ConnectorsView.jsx"), /<SetupWithAi kind="connection" refId=\{ai\.conn\.ConnectorId\} ctx=\{ai\.ctx\}/);
   assert.match(read("ReportsView.jsx"), /data-tq-setup-ai="sources" data-tq-view-skip=""/);
+  // ...and "let AI fill this in" asks in its own box on the card, with his words - never the chat in his name (2026-11-18)
+  assert.match(read("ReportsView.jsx"), /api\.post\("\/api\/reports\/compose-sources", \{ ask: ask\.trim\(\)/);
   assert.match(read("RunSteps.jsx"), /onFix && <Button [^>]*data-tq-view-skip=""/);
   assert.match(read("NewPlaybookDialog.jsx"), /onClick=\{start\} data-tq-view-skip=""/);
   // ...New's own press on its Playbook tab is that tab's Set up with AI: skipped there, and only there
   assert.match(read("NewSheet.jsx"), /\{\.\.\.\(kind === "playbook" \? \{ "data-tq-view-skip": "" \} : \{\}\)\}/);
 });
 
-// ...a new door is a new caller of openHelp: this list makes it look at the mark. ConnectorsView opens it from useAiWalk, whose one button is
-// AiWalkButton; WorkflowEditor hands it to RunSteps as its Fix - both marked above
-test("the pages that open the Assistant are the ones whose doors are checked here", () => {
-  const callers = files.filter((f) => f !== "pageView.js" && read(f).includes("openHelp(")).sort();
-  // (Set up with AI builds on its own page now and opens no chat - taskuary/build.py, 2026-11-13)
-  assert.deepEqual(callers, ["ReportsView.jsx", "WorkflowEditor.jsx"]);
+// ...and no door asks the chat in his name: "Fill in the mssql card with me" was drawn as his line (2026-11-18 walk)
+test("no page opens the Assistant with words he did not type", () => {
+  const callers = files.filter((f) => /openHelp\(|sayEarlier\(/.test(read(f)));
+  assert.deepEqual(callers, []);
+  assert.match(read("WorkflowEditor.jsx"), /onFix: canFix \? \(\) => fix\(lastRunRec\.run_id\) : null/, "Fix with AI is the editor's own repair");
 });
 
 // ...AND THE ROUTINE'S OWN WORDS GO THROUGH IT (the visual audit, 2026-11-13): the job typed in What it does, then Set up with AI - and the

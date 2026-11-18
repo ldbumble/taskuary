@@ -32,15 +32,16 @@ class DeskTests(unittest.TestCase):
             self.assertIn('Monthly AR Report', out['say'])
         self.assertTrue(self.s.get_source(self.sid)['Active'])                         # paused by nobody
 
-    def test_over_its_open_builder_run_and_pause_press_its_own_header(self):
-        # the owner, 2026-11-02: a report's builder wears its row's Run now and switch - "run it" there presses them, never the shelf
+    def test_over_its_open_builder_run_and_pause_point_at_its_own_header(self):
+        # the owner, 2026-11-02: a report's builder wears its row's Run now and switch - "run it" there lights them, never the shelf; and
+        # 2026-11-18: the Assistant never presses on his page - it points, he presses
         sw = 'Monthly AR Report on its clock'
         view = {'area': 'reports', 'item': {'kind': 'report', 'id': self.sid}, 'fields': [{'key': 'sw', 'label': sw, 'kind': 'switch', 'value': 'on'}],
                 'buttons': [{'id': 'run_now', 'label': 'Run now'}, {'id': 'remove_report', 'label': 'Remove report'}]}
         say = lambda kind, v=view: concierge.say(self.s, 'do it', llm=call(kind, title='ar report'), view=v)
         out = say('report.run')
-        self.assertEqual(out['view_ops'], [{'op': 'press', 'button': 'run_now'}]); self.assertNotIn('open', out); self.assertIn('Run now', out['say'])
-        self.assertEqual(say('report.pause')['view_ops'], [{'op': 'set', 'field': 'sw', 'value': 'off'}])
+        self.assertEqual(out['view_ops'], [{'op': 'point', 'target': 'run_now'}]); self.assertNotIn('open', out); self.assertIn('Run now', out['say'])
+        self.assertEqual(say('report.pause')['view_ops'], [{'op': 'point', 'target': 'sw'}])
         self.assertIn('already on', say('report.resume')['say'])
         # ...another report's page, or a run already going (Run now greyed), is the road it always was
         self.assertEqual(say('report.run', {**view, 'item': {'kind': 'report', 'id': self.sid + 99}})['open'], '#report=reports')

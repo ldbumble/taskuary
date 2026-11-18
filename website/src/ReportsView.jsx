@@ -2,7 +2,7 @@
 // Connections tab, or an inline one), write the query, optionally an AI summary prompt,
 // preview the whole pipeline, schedule it - results land on the Timeline. Connections
 // stay pure connections; this tab is where reports are built and managed.
-import React, { useCallback, useEffect, useId, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog,
   DialogContent, DialogTitle, IconButton, ListSubheader, Menu, MenuItem, Select, Step, StepButton, StepContent,
@@ -43,7 +43,7 @@ import { routeOfHash } from "./canvasLinks.js";
 import { NewPlaybook, PB_EMPTY, PB_OPEN, PlaybookDetail, PlaybookRow, RecentlyDeleted as PlaybooksDeleted, pbOpen, usePlaybooks } from "./PlaybookShelf.jsx";
 import { NEW_PB, takePlaybookAsk } from "./playbookOpen.js";
 import SetupWithAi, { onBuilt } from "./SetupWithAi.jsx";
-import { openHelp, useViewExtras, viewResult } from "./pageView.js";
+import { useViewExtras } from "./pageView.js";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
   "e.g. Summarize headcount by site. Flag anything under 70 and any day-over-day drop."];
@@ -1860,23 +1860,32 @@ function AwsPicker({ label, which, value, placeholder, service, onChange }) {
    One component for both callers, because they differ only in how many cards come back: a single
    card fills itself in, and the Assistant's Pipeline step gets the whole set of systems the ask
    needs plus the instruction to judge them by. */
-function SourceComposer({ typeHint, one, hint, onSources }) {
-  // ...A DOOR TO THE CHAT NOW (2026-10-30): "let AI fill this in" opens the Assistant on this setup, and the composer that wrote the cards
-  // is a field it fills here (pageView view extras) - the cards land through the same onSources, and what it asks back is heard next
-  const n = useId();
-  const what = one ? `What the ${typeHint || "source"} card should return` : hint;
-  const fill = async (ask) => {
-    const { data } = await api.post("/api/reports/compose-sources", { ask: String(ask || ""), type: typeHint || undefined });
-    if (data.sources?.length) {
-      onSources(data.sources, data.ai_prompt || "");
-      viewResult({ action: "compose", ok: !data.error, detail: data.error || data.explain || (one ? "Filled it in." : "Added them.") });
-    } else viewResult({ action: "compose", ok: false, detail: data.questions?.length ? `It needs to know: ${data.questions.join(" ")}` : data.error || "It could not write that card." });
+function SourceComposer({ typeHint, one, hint, placeholder, onSources }) {
+  // ...HIS WORDS, IN ITS OWN BOX (the owner, 2026-11-18: the Assistant "should just open the task, not do anything"): "let AI fill this in"
+  // opened the side chat and posted "Fill in the mssql card with me" in his name. The box is on the card; what he types is what is asked
+  const [open, setOpen] = useState(false), [ask, setAsk] = useState(""), [busy, setBusy] = useState(false), [said, setSaid] = useState(null);
+  const fill = async () => {
+    if (!ask.trim() || busy) return;
+    setBusy(true); setSaid(null);
+    try {
+      const { data } = await api.post("/api/reports/compose-sources", { ask: ask.trim(), type: typeHint || undefined });
+      if (data.sources?.length) { onSources(data.sources, data.ai_prompt || ""); setSaid({ ok: true, text: data.explain || (one ? "Filled it in." : "Added them.") }); setOpen(false); setAsk(""); }
+      else setSaid({ ok: false, text: data.questions?.length ? `It needs to know: ${data.questions.join(" ")}` : data.error || "It could not write that card.", fix: data.fix });
+    } catch (e) { setSaid({ ok: false, text: e?.response?.data?.detail || "It could not write that card." }); }
+    finally { setBusy(false); }
   };
-  useViewExtras("reports", { fields: [{ key: `sources${n}`, label: what, value: "", set: fill, said: (v) => `Asked for the cards: ${String(v).length > 70 ? `${String(v).slice(0, 69)}…` : v}` }] });
   return (
-    // ...the button is a door to the chat, out of its view (data-tq-view-skip, 2026-11-02): the chat fills the cards through the field above
-    <Button size="small" data-tq-setup-ai="sources" data-tq-view-skip="" onClick={() => openHelp(one ? `Fill in the ${typeHint || "source"} card with me` : `Help me with this: ${hint}`)}
-      startIcon={<AutoAwesomeIcon sx={{ fontSize: 14 }} />} sx={{ fontSize: 11.5, alignSelf: "flex-start" }}>let AI fill this in</Button>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+      {open
+        ? <TextField size="small" autoFocus fullWidth multiline maxRows={4} label={one ? `What the ${typeHint || "source"} card should return` : hint} placeholder={placeholder}
+            value={ask} disabled={busy} onChange={(e) => setAsk(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); fill(); } if (e.key === "Escape") setOpen(false); }}
+            InputProps={{ endAdornment: <Button size="small" disabled={busy || !ask.trim()} onClick={fill}>{busy ? <CircularProgress size={12} /> : "Fill"}</Button> }} />
+        : <Button size="small" data-tq-setup-ai="sources" data-tq-view-skip="" onClick={() => setOpen(true)}
+            startIcon={<AutoAwesomeIcon sx={{ fontSize: 14 }} />} sx={{ fontSize: 11.5, alignSelf: "flex-start" }}>let AI fill this in</Button>}
+      {said && <Typography variant="caption" sx={{ color: said.ok ? DIM : ALERT_INK }}>{said.text}
+        {said.fix?.href && <Button size="small" component="a" href={said.fix.href} sx={{ fontSize: 11.5, ml: 1, py: 0 }}>{said.fix.label || btnLabel("fix")}</Button>}</Typography>}
+    </Box>
   );
 }
 

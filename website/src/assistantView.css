@@ -749,10 +749,6 @@
 .tq-chat-pop-body > .tq-msg:first-child > .avatar { visibility: visible; }
 .tq-chat-pop-body > .tq-msg.receipt { margin-bottom: 8px; font-size: 11.5px; color: var(--tq-secondary, #6e685f); }
 .tq-chat-pop-empty { margin: 4px 0 10px; color: var(--tq-muted, #8f8b84); font-size: 12.5px; }
-/* the ×'s question while it helps with a page: one quiet band under the head, the window's own words and two chips */
-.tq-chat-pop-end { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; flex-shrink: 0; padding: 8px 12px; border-bottom: 1px solid var(--tq-border, #ece7de);
-  background: var(--tq-panel, #f8f6f2); font-size: 12.5px; color: var(--tq-link, #2f3a42); }
-.tq-chat-pop-end span { flex: 1 1 180px; }
 /* ...MINIMIZED, the pill says it can be continued ("Continue chat…") and counts the answers that came while it was put away */
 .tq-compose-box:not([data-tq-open]) { position: relative; }
 .tq-chat-unseen { position: absolute; top: -5px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px;

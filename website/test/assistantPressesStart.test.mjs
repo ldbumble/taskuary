@@ -27,13 +27,6 @@ test("the Assistant's press is made once per line, however often its card is dra
   assert.equal(firstPressOf(null), true); assert.equal(firstPressOf(null), true);   // no line: the card's own once is all there is
 });
 
-test("Send to agent and Send to coding agent are presses the page may make; a Send is not", async () => {
-  const src = read("pageView.js");
-  const words = new RegExp(/const SEND_WORDS = (\/.*\/i);/.exec(src)[1].slice(1, -2), "i");
-  for (const l of ["Send to agent", "Send to coding agent", "Send to a general agent"]) assert.ok(!words.test(l), l);
-  for (const l of ["Send", "Send test message", "Approve", "Forward"]) assert.ok(words.test(l), l);
-});
-
 test("a general agent's job written into New has words to go: its own box holds them, not the field it no longer draws", async () => {
   // New → "have an agent write a welcome note" came back start:true, the card said "pressed Send to agent" and nothing started: the job's
   // words sit in the chat's box (PromptBox), the readiness was the plain field's (AboutField onReady), never drawn for that card

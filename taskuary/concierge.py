@@ -1944,17 +1944,18 @@ def _meeting(store, tid: int, table: dict | None, params: dict, text: str, actor
     return {'say': said, 'options': [], 'chips': [], 'decision': None, 'new': {'kind': 'meeting', 'how': '', 'text': pre['about'], 'meeting': pre, 'line': line}}
 
 
-def _answer_now(store, tid: int, table: dict | None, target: int, said: str, actor: str, owner: str = '') -> dict:
-    """Words to the agent that asked ARE its answer - the box's own purpose, as Answer it says (2026-10-02): they go in, with a receipt.
-    `owner`: what the owner typed - shown under YOU as it was, the Assistant's version of it folded as Taskuary's (general.relayed)."""
-    op = operations.propose(store, 'agent.answer', int(target), {'text': said, **({'owner': owner} if owner else {})}, actor)
-    r = run_proposal(store, op, actor)
-    # ...said as what happened, as Tell the agent is: "Done - Answer it · TQ-0004." was the button's name read out (the overnight run, 2026-11-03)
-    if r.get('status') == 'done' and (r.get('outcome') or {}).get('delivered'):
-        return {**_did(store, tid, f"Answered the agent on {task_ref(target)}: “{_title_cut(' '.join(str(owner or said or '').split()), 120)}”.", 'agent.answer'),
-                'chips': chips_for(store, table)}
-    turn = receipt_turn(store, r, actor, table=True)
-    return {'say': turn['say'], 'options': [], 'chips': turn['chips'] or chips_for(store, table), 'decision': None}
+# INSIDE A TASK ONLY ITS AGENT AND THE OWNER WRITE (the owner, 2026-11-18: "it should just open the task, not do anything on the tasks. That's
+# on the agent to do"): on the desk the Assistant's words to an agent, its answer to one that asked and a note on a task are the task opened,
+# his box there the place to say it. The phone has no task to open, so there they still go in (_tell_now, the proposal's yes)
+IN_TASK = frozenset({'agent.tell', 'agent.answer', 'answer_agent', 'task.comment'})
+
+def _opened(store, tid: int, target: int) -> dict:
+    "The task brought up as a press of its rail row does, and where his words go there - nothing written in it."
+    t = store.get_task(int(target)) or {}
+    live = _agent_running(int(target)) or t.get('RunStatus') == 'running' or _queued(store, int(target))
+    said = f"Opened {task_ref(int(target))} - {'its agent hears what you type in its box' if live else 'type it in its box'}."
+    record(store, tid, 'assistant', said)
+    return {'say': said, 'options': [], 'chips': [], 'decision': None, 'open': f'#task={int(target)}'}
 
 
 def _tell_now(store, tid: int, target: int, said: str, actor: str, owner: str = '') -> dict:
@@ -3281,7 +3282,6 @@ def _issue(store, p: dict) -> str:
     from . import bugreport, origin
     turn = _TURN.get()
     if turn is None: turn = {}
-    if turn.get('react'): return 'Nothing was drafted: a report is drafted only when the owner asks for one in their own words. Say nothing about it.'
     tid = (turn.get('item') or {}).get('tid')
     try: stranger = bool(tid) and origin.of_task(store, int(tid))[0] == 'stranger'
     except Exception: stranger = True                                    # unreadable is not a vouch
@@ -3898,6 +3898,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         from .memoryedit import find
         _r, _l, _own = find(store.get_doc('learned') or '', str(params.get('key') or ''))
         named = named or str((_l or {}).get('text') or (store._one('SELECT Text FROM learned_line WHERE Key=?', (str(params.get('key') or ''),)) or {}).get('Text') or '')[:120].rstrip('.')
+    if routes() and kind in IN_TASK and target: return _opened(store, tid, int(target))
     if tk == 'task' and (wrote := _landed(store, tid, kind, int(target or 0), params,
                                           lambda: _task_writes(store, tid, kind, int(target or 0), params, named, actor, said=text))) is not None: return wrote
     if routes(): return _route(store, tid, kind, int(target or 0), params, named, it, item, text, actor)
@@ -3946,22 +3947,23 @@ REPORT_SAYS = {'report.run': 'run it', 'report.rerun': 'run it again', 'report.p
 # shelf, a page that lists them all. A routine's own page carries both (WorkflowEditor), so a routine still opens at itself
 ON_ITS_ROW = {'report.run': 'press Run now on its row', 'report.rerun': 'press Run now on its row', 'report.pause': 'its row has the switch that turns it off',
               'report.resume': 'its row has the switch that puts it back on'}
-# ...and OVER ITS OWN OPEN PAGE the act is pressed there (the owner, 2026-11-02): a report's builder wears its row's Run now and switch in its
-# header now, as a routine's page always did - "run it" over the AP ageing's builder sent the owner to the shelf for a button on screen
+# ...and OVER ITS OWN OPEN PAGE the act is pointed at there (the owner, 2026-11-02): a report's builder wears its row's Run now and switch in its
+# header, as a routine's page always did - "run it" over the AP ageing's builder sent the owner to the shelf for a button on screen. Pointed
+# at, never pressed: the page is his (the owner, 2026-11-18)
 ON_PAGE = {'report.run': 'Run now', 'report.rerun': 'Run now', 'report.pause': 'off', 'report.resume': 'on'}
 def on_its_page(sid: int, kind: str, named: str) -> tuple:
-    """(the page op that does `kind` to the report open on screen - {} when it is done already, the line that says so); (None, '') when that
+    """(the point at what does `kind` to the report open on screen - {} when it is done already, the line that says so); (None, '') when that
     page is not the one up, or has no such button or switch (a run already going greys Run now)."""
     view = (_TURN.get() or {}).get('view') or {}
     vi = view.get('item') or {}
     if kind not in ON_PAGE or view.get('area') != 'reports' or vi.get('kind') != 'report' or str(vi.get('id')) != str(sid): return None, ''
     if ON_PAGE[kind] == 'Run now':
         b = next((b for b in view.get('buttons') or [] if str(b.get('label') or '').strip() == 'Run now' and b.get('enabled') is not False), None)
-        return ({'op': 'press', 'button': b['id']}, f'Pressed Run now on {named}.') if b else (None, '')
+        return ({'op': 'point', 'target': b['id']}, f'Run now on {named} is lit - press it to run it.') if b else (None, '')
     f = next((f for f in view.get('fields') or [] if f.get('kind') == 'switch' and str(f.get('label') or '').endswith(' on its clock')), None)
     if not f: return None, ''
     if f.get('value') == ON_PAGE[kind]: return {}, f'{named} is already {ON_PAGE[kind]} its clock.'
-    return {'op': 'set', 'field': f['key'], 'value': ON_PAGE[kind]}, f'Switched {named} {ON_PAGE[kind]} its clock.'
+    return {'op': 'point', 'target': f['key']}, f"Its clock's switch is lit - switch it {ON_PAGE[kind]} there."
 
 
 # A LIST OF PEOPLE IS EACH OF THEM (2026-11-17: "email Erin and Gail that ..." was looked up as one person called "Erin, Gail", found
@@ -4121,8 +4123,6 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
     that holds it, opened beside the answer. A tool with neither goes back to the model as a miss it can fix by answering in words."""
     from . import appfacts
     tk = operations.KINDS[kind][0]
-    if kind == 'agent.answer' and it.get('kind') == 'agent' and it.get('asking') and int(it.get('tid') or 0) == target:
-        return _answer_now(store, tid, table, target, str(params.get('text') or text or '').strip(), actor, owner=text)
     if kind == 'agent.stop': return _stop_now(store, tid, table, target or (int(it['tid']) if (it or {}).get('tid') else None), actor)
     if kind == 'script.start':
         # ...its words ride in: "Wrote it into New" over an empty box was the line saying what it had not done (the owner, 2026-10-29)
@@ -4143,7 +4143,7 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
     if tk == 'connector':
         typ = str(params.get('type') or '') or next((c['type'] for c in appfacts.connections(store) if c['connector_id'] == target), '')
         if typ: return _page(store, tid, table, f'#connector={typ}', f"Opened {named or typ}'s card under Connections - {CONN_SAYS.get(kind, 'change it')} there.")
-    # A REPORT'S OWN PAGE UP, its act is pressed there (on_its_page): its Run now, its switch - steps the chat shows as they run
+    # A REPORT'S OWN PAGE UP, its act is pointed at there (on_its_page): its Run now, its switch - lit for his press
     op, said = on_its_page(target, kind, named) if tk == 'source' and target else (None, '')
     if said:
         if op: turn = _TURN.get(); turn['view_ops'] = (turn.get('view_ops') or []) + [op]
@@ -6061,11 +6061,11 @@ def handle_of(i: dict) -> str:
 
 
 def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None,
-        open_card: str | None = None, images: list | None = None, view: dict | None = None, react: str = '') -> dict:
+        open_card: str | None = None, images: list | None = None, view: dict | None = None) -> dict:
     from . import demo, pageview
     # THE PAGE ON SCREEN, when the owner asked with one up (pageview.py, 2026-10-30): read again as the server's own - secrets dropped
-    # whatever the page sent - and `react`, what the owner just did on it inside a conversation they started about it
-    token = _TURN.set({'view': pageview.clean(view), 'react': str(react or '')[:300]})
+    # whatever the page sent
+    token = _TURN.set({'view': pageview.clean(view)})
     # ...the demo's script answers only its suggestions, and its "only those" line carries them as chips (demo.with_prompts)
     try:
         out = demo.with_prompts(_say(store, text, key, llm, actor, trace, cancel, item, open_card, images))
@@ -6169,8 +6169,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     so_far = _turns(store, tid, TURNS - 1) if llm else ''
     # the dock has the owner's words now; the item has them with the answer, once the turn knows it was about the item
     turn = _TURN.get()
-    # ...a REACTION has no words of theirs: what they did on the page is told to the model, never written as a line they said
-    if not turn.get('react'): record(store, tid, 'user', typed); turn['typed'] = typed      # ...and a start made this turn shows it as his (his_words)
+    record(store, tid, 'user', typed); turn['typed'] = typed      # ...and a start made this turn shows it as his (his_words)
     turn['files'] = list(images or [])                                                      # ...with what he attached to it
     if item: turn.update(item=item, said=typed)
     turn['trace'] = trace                           # the app's own trouble draws its steps as they happen (_trouble)
@@ -6216,7 +6215,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       # mean that card - a connector, a settings group, a report - when no item is on the table
                       # ...or the PAGE open with nothing opened on it (2026-10-01): a question over the Connections wall is about connections
                       # ...and WHAT IS ON IT, when the page sent it (pageview.block): fenced as page content, with how to act on it
-                      + (f"{pageview.block(turn['view'], turn.get('react') or '')}\n" if turn.get('view') else '')
+                      + (f"{pageview.block(turn['view'])}\n" if turn.get('view') else '')
                       + (f"ON SCREEN NOW: {_cut(open_card, 300)} - 'this' and 'here' mean what is on screen: answer about it first; its own operations set it up\n\n" if open_card and not item and not turn.get('view') else '')
                       # ...and a page opened BESIDE the item keeps the item on the table: the Assistant's own "turn off background sync" opened
                       # Settings, and the next "mark this done" went out about nothing (verify, 2026-10-19). Both are said; their words say which
@@ -6495,17 +6494,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # words to an agent that asked, which are its answer; a put-down, which is pressed (PUT_DOWN); a new job is New, filled in; a fact to
     # keep goes into the memory, LEARNED.md (memory.remember)
     if decision and verb in PROPOSALS and routes():
-        if verb == 'answer_agent' and target_item and target_item.get('tid'):
-            # ...and to an agent at work on a task, not one that asked, they are its next prompt (_tell_now). WHETHER IT ASKED is the row's
-            # own open question or held step, as the tool road reads it (call_turn) - never the row's kind: a task's one row is its
-            # agent's row while it works, and "tell the agent to skip the empty rows" went in as the answer to a question nobody asked
-            if not (target_item.get('kind') == 'agent' and (target_item.get('asking') or target_item.get('request_kind'))):
-                try: return _tell_now(store, tid, int(target_item['tid']), decision.get('text') or text, actor, owner=text)
-                except CallMiss as e:
-                    say_ = f"That did not reach the agent on {task_ref(int(target_item['tid']))} - {str(e).split(' - say so')[0].rstrip('.')}."
-                    rec('assistant', say_)
-                    return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
-            return _answer_now(store, tid, item, int(target_item['tid']), decision.get('text') or text, actor, owner=text)
+        if verb == 'answer_agent' and target_item and target_item.get('tid'): return _opened(store, tid, int(target_item['tid']))
         if verb == 'remember': return call_turn(store, tid, {'kind': 'memory.remember', 'params': {'note': decision.get('text') or text}}, item, text, actor)
         # ...and Continue on a stopped GENERAL agent has no button on its row to light - its own box is the way on - so "get the agent going
         # again on this" was answered "I can't start it from this item" (the re-check, 2026-11-04): it picks up, the owner's words its note
@@ -6585,8 +6574,6 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         if unreal_refs(store, reply, text): reply = ''
         options = [o for o in options if not unreal_refs(store, o, text)]
     # a brain that answered with nothing is not "no AI": say what happened, never the missing-connector line
-    # ...a REACTION with nothing worth saying is silent (pageview): the owner typed nothing, and a filler line would be noise
-    if not reply and turn.get('react') and failed is None: return {'say': '', 'options': [], 'chips': [], 'decision': None}
     # A BRAIN THAT SAID NO WORDS IS NEVER ANSWERED WITH THE TABLE'S STORY: "Help me set up Any mailbox (IMAP)" came back as VIEW lines alone,
     # and the item's facts filled the gap - a bank's mail, told over a question about a mailbox (TQ-1251; the owner: "it's really dumb").
     # What it did on the page is its answer (the steps draw under it); with nothing done either, it says it got no answer

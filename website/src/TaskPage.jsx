@@ -2469,17 +2469,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     return () => cancelAnimationFrame(f);
   }, [agentUp, t?.TaskId]);
   const pageRef = useRef(null);
-  // WHAT THE ASSISTANT IS TOLD OF THIS TASK when the owner asks about it (pageView.js, 2026-10-30): the task, and its title as a field it may
-  // rewrite - the task tool's own update (task.update), the road every owner act on this page takes. Its boxes (the draft) and its row's
-  // buttons are read off the page
+  // WHAT THE ASSISTANT IS TOLD OF THIS TASK when the owner asks about it (pageView.js): which task it is - it reads the page, and brings up
+  // or points at what is on it; the work in it is its agent's (the owner, 2026-11-18)
   const tref = t ? t.ref || `TQ-${String(t.TaskId).padStart(4, "0")}` : "";
-  useViewExtras(pageRef, t ? {
-    item: { kind: "task", id: t.TaskId, ref: tref, title: t.Title || "" }, title: `${tref} - ${t.Title || ""}`,
-    fields: [{ key: "title", label: "Title", value: t.Title || "", set: async (v) => {
-      await runOperation(api, "task.update", t.TaskId, { title: String(v || "").trim() || t.Title });
-      loadDetail(t.TaskId); onListChanged?.(); onChanged?.();
-    } }],
-  } : {});
+  useViewExtras(pageRef, t ? { item: { kind: "task", id: t.TaskId, ref: tref, title: t.Title || "" }, title: `${tref} - ${t.Title || ""}` } : {});
   const [remindAt, setRemindAt] = useState(null);
   // `saidDay`: the day the owner typed for Remind me (assistantLight's light.day), kept at the press - the light goes out as it is pressed
   // (a ref: the row's registered verbs can hold an older render's closure)

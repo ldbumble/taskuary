@@ -151,13 +151,13 @@ class EverydayAsks(unittest.TestCase):
         r = next(r for r in self.rows if r['q'].text.startswith('write to the Northwind team WhatsApp group'))
         self.assertIn('did:outbox', r['ideal']['got']); self.assertTrue(r['ideal']['say'].startswith('Drafted it on TQ-'), r['ideal']['say'])
 
-    def test_the_assistant_starts_an_agent_and_tells_one_at_work_but_never_sends(self):
-        # the owner, 2026-11-02: "it itself should not be the agent" - "start it" presses Send to agent, "tell the agent ..." reaches the
-        # session as its next prompt, and a send in words still only lights (the page's Send, the row's Send)
+    def test_the_assistant_starts_an_agent_opens_one_at_work_and_never_presses(self):
+        # the owner, 2026-11-02: "it itself should not be the agent" - "start it" starts the agent; and 2026-11-18: "it should just open the
+        # task, not do anything on the tasks" - "tell the agent ..." opens its task on the desk, and nothing on any page is pressed or filled
         rows = {(r['q'].text, r['q'].table, r['q'].view is not None, r['q'].phone, r['q'].live): r['ideal']['got'] for r in self.rows}
         self.assertIn('did:dispatch.prepare', rows[('start it', 'todo', False, False, None)])
-        self.assertIn('view:press:send_to_coding_agent', rows[('go ahead', None, True, False, None)])
-        self.assertIn('did:agent.tell', rows[('tell the agent to use the main branch', 'todo', False, False, 1)])
+        self.assertFalse([g for r in self.rows for g in r['ideal']['got'] if g.startswith(('view:press', 'view:set'))])
+        self.assertTrue([g for g in rows[('tell the agent to use the main branch', 'todo', False, False, 1)] if g.startswith('open:#task=')])
         self.assertIn('did:agent.tell', rows[('tell the agent to use the main branch', 'todo', False, True, 1)])           # by phone too
         self.assertEqual(rows[('tell the agent to use the main branch', 'todo', False, False, None)], ['words'])     # nobody at work
         self.assertIn('light:approve', rows[('send it', 'review', False, False, None)])          # ...and on the page, a point (the test above)
@@ -221,12 +221,11 @@ class EverydayAsks(unittest.TestCase):
         # the Hub's own shelf
         self.assertIn('open:#hub', r['bring back the hub post I removed']['got'])
         self.assertIn("the Hub's own removed shelf", r['bring back the post the vote took off']['told'])
-        # THE DIALOGS ARE VIEWS AND THE BELL A TOOL (the owner, 2026-11-02): Write one's Post it is lit, a Search hit pressed, the bell put down
-        self.assertIn('view:press:write_one', r['write one: the bank feed lags a day at month end']['got'])
+        # THE DIALOGS ARE VIEWS AND THE BELL A TOOL (the owner, 2026-11-02): Search brought up with its words, the bell put down
         self.assertIn('view:open:search', r['search everything for pyodbc and open the first hit']['got'])
         self.assertTrue(r['clear the error on the bell']['say'].startswith('Put down “GitHub'), r['clear the error on the bell']['say'])
         self.assertIn('Work mail', r['clear the bell']['told'])
-        self.assertEqual([g for g in r['comment that the driver is in the build image now']['got'] if g.startswith('view:point')], ['view:point:post'])
+        self.assertIn('view:point:post', r['comment that the driver is in the build image now']['got'])
 
     def test_clear_all_the_fyi_clears_them_and_says_how_many(self):
         r = next(r for r in self.rows if r['q'].text == 'Clear all the FYI, please.')

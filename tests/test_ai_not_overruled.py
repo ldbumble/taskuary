@@ -50,9 +50,9 @@ def test_triage_is_told_which_pull_request_each_task_came_from():
     assert context._threads({'c:mail'}) == {}
 
 
-def test_the_answer_to_the_asking_agent_runs_at_once_by_the_tool_road_too():
-    # the model reached it as the agent.answer TOOL and it waited for a confirm the answer_agent verb skips (live, 2026-10-08) - the
-    # words to an agent that asked ARE its answer: they go in, with a receipt, and no card (the owner, 2026-10-19)
+def test_the_answer_to_the_asking_agent_opens_its_task_by_the_tool_road_too():
+    # the model reached it as the agent.answer TOOL (live, 2026-10-08); since the owner's 2026-11-18 ruling ("it should just open the task, not
+    # do anything on the tasks") the desk brings the task up, his own box there the answer - nothing is run in his name, by either road
     from unittest import mock
     from taskuary import server, terminal
     from taskuary.store import MemoryStore, task_ref
@@ -60,13 +60,11 @@ def test_the_answer_to_the_asking_agent_runs_at_once_by_the_tool_road_too():
     tid = s.create_task({'Title': 'Ship the release', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
     item = {'key': f'agent:{tid}', 'kind': 'agent', 'lane': 'blocked', 'tid': tid, 'ref': task_ref(tid), 'title': 'Ship the release',
             'agent': 'coding', 'asking': True, 'choices': ['main', 'dev'], 'who': 'coding'}
-    line = 'Main it is.' + chr(10) + 'CALL: ' + json.dumps({'kind': 'agent.answer', 'params': {'text': 'Build from main.'}})
-    with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(server, 'store', s), \
-         mock.patch.object(server, '_run_operation', return_value={'delivered': True}) as ran:
-        out = concierge.say(s, 'use main', item=item, llm=lambda *a, **k: line)
-    assert 'proposal' not in out and ran.call_count == 1
-    # ...with the owner's own words beside the Assistant's version: theirs under YOU, its version folded as Taskuary's (2026-11-04)
-    assert ran.call_args[0][0]['kind'] == 'agent.answer' and ran.call_args[0][0]['params'] == {'text': 'Build from main.', 'owner': 'use main'}
+    for kind in ('agent.answer', 'answer_agent'):
+        line = 'Main it is.' + chr(10) + 'CALL: ' + json.dumps({'kind': kind, 'params': {'text': 'Build from main.'}})
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(server, 'store', s),              mock.patch.object(server, '_run_operation', return_value={'delivered': True}) as ran:
+            out = concierge.say(s, 'use main', item=item, llm=lambda *a, **k: line)
+        assert 'proposal' not in out and ran.call_count == 0 and out.get('open') == f'#task={tid}', (kind, out)
 
 
 def test_the_apps_own_words_with_no_ai_open_no_page():

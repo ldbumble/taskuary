@@ -6716,7 +6716,7 @@ class RailWalkBody(BaseModel):
     away: bool = False                  # a close whose row is no longer the one on the page's table: the act, and no move (railwalk.leave)
 class ConciergeSayBody(BaseModel):
     text: str; key: str | None = None; context_mid: int | None = None; open_card: str | None = None; images: list[str] = []
-    view: dict | None = None; react: str = ''
+    view: dict | None = None
 class ConciergeActBody(BaseModel): key: str; verb: str; hours: float | None = None
 
 def _encoded(content) -> Response:
@@ -7061,7 +7061,6 @@ class ConciergeStreamBody(BaseModel):
     open_card: str | None = None                  # the card browsed open in the canvas, said in words
     images: list[str] = []                        # pictures sent with the line (/api/prompt-image)
     view: dict | None = None                      # the page on screen, read when the owner asked (pageview.py) - secrets as their state only
-    react: str = ''                               # what the owner just did on that page, inside a conversation they started about it
     from_key: str | None = None                   # the row the page had on screen: Next and Back move from it (railwalk)
     press: str | None = None
     read: list[str] = []
@@ -7119,7 +7118,7 @@ async def concierge_stream(body: ConciergeStreamBody):
             elif body.mode == 'back': out = railwalk.back(store, body.from_key, ACTOR, press=body.press)
             elif body.mode == 'start': out = railwalk.start(store, ACTOR, press=body.press)
             else: out = concierge.say(store, body.text or '', body.key, actor=ACTOR, trace=trace, cancel=cancel, item=freshness.get('item'),
-                                      open_card=body.open_card, images=prompt_images(body.images), view=body.view, react=body.react)
+                                      open_card=body.open_card, images=prompt_images(body.images), view=body.view)
             if notice: out['context_update'] = notice
             # THE CARD FIRST, THE RAIL AFTER IT (the owner, 2026-10-20): the rail that rides along (design B) is read after the
             # turn's writes, and that read was most of a press - the card waited on it. `done` goes now and says the rail
@@ -7223,7 +7222,7 @@ def concierge_say(body: ConciergeSayBody):
         # Nothing is lost. The act boundary guards itself: operations.propose pins ContextRevision and
         # execute refuses a moved one (409), and verdicts.decide re-checks before a reply can leave.
         return concierge.say(store, body.text, body.key, actor=ACTOR, open_card=body.open_card, images=prompt_images(body.images),
-                             view=body.view, react=body.react)
+                             view=body.view)
     except ValueError as e: raise HTTPException(422, str(e))
 
 class ConciergeLineBody(BaseModel): text: str = ''; status: str = ''; steps: list[dict] = []

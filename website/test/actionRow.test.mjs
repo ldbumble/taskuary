@@ -254,7 +254,7 @@ test("a typed question is about what is OPEN on the table, whatever put it there
   const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
   assert.match(view, /const table = msgs\[tableCardIndex\(msgs, current \|\| cardRef\.current\)\]\?\.card;/);   // the table's own card (tableCard.test)
   // ...but a PAGE open over it is the question's alone (the owner, 2026-11-05): the task under it does not go with the ask
-  assert.match(view, /const subject = how\.door \|\| browsing \? null : tableKey \|\| current \|\| cardRef\.current;/);
+  assert.match(view, /const subject = browsing \? null : tableKey \|\| current \|\| cardRef\.current;/);
   assert.match(view, /turn\(\{ mode: "say", text: t, key: subject,/);
 });
 

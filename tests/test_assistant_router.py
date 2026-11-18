@@ -289,49 +289,32 @@ class DeskRoutes(unittest.TestCase):
         label = lambda rid: concierge.describe_op(s, {'kind': 'review.approve', 'targetKind': 'review', 'target': rid, 'params': {}})[0]
         self.assertEqual((label(held), label(draft)), (buttons.label('approve', 'action'), buttons.label('approve')))
 
-    def test_an_answer_that_went_in_is_said_as_what_happened(self):
-        "The overnight run, 2026-11-03: \"Go with option B\" to an agent that asked came back as \"Done - Answer it · TQ-0004.\" - a button's name."
-        from taskuary import general
-        s = store(); tid, item = on_table(s); dock = general.dock_task(s, 'owner')[0]['TaskId']
-        with mock.patch.object(concierge, 'run_proposal', return_value={'status': 'done', 'outcome': {'delivered': True}}):
-            out = concierge._answer_now(s, dock, None, tid, 'Option B,  three years.', 'owner')
-        self.assertEqual(out['say'], f'Answered the agent on TQ-{tid:04d}: “Option B, three years.”.')
-        with mock.patch.object(concierge, 'run_proposal', return_value={'status': 'error', 'error': 'the agent has gone', 'outcome': {}, 'kind': 'agent.answer', 'id': 'x', 'version': 1}):
-            out = concierge._answer_now(s, dock, None, tid, 'Option B', 'owner')
-        self.assertTrue(out['say'].startswith('Not done'), out['say'])
-
-    def test_a_note_for_a_working_agent_reaches_its_session(self):
-        """The owner, 2026-11-02: "it should be able to, like send a new prompt into the general/coding agent". With an agent WORKING (not
-        asking) on the task, "tell the agent to use the main branch" is the page's Tell the agent (waitroom.add): held while it works,
-        typed in when it stops at its prompt - by whichever road the model takes to it."""
+    def test_words_for_an_agent_open_its_task_and_write_nothing_in_it(self):
+        """The owner, 2026-11-18: the side Assistant "should just open the task, not do anything on the tasks. That's on the agent to do."
+        Words for the agent at work, an answer to one that asked, a note on a task - by whichever road the model takes - bring the task up
+        as its rail row does; nothing is typed into its session, held in its box or filed on it in his name."""
         from taskuary import waitroom
         for model in ('CALL: {"kind": "agent.tell", "params": {"text": "use the main branch"}}',
                       'CALL: {"kind": "agent.answer", "params": {"text": "use the main branch"}}',
-                      'CALL: {"kind": "answer_agent", "params": {"text": "use the main branch"}}'):
-            s = store(); tid, item = on_table(s)
-            s._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (10 ** 9, tid))      # a thread he trusts: an untrusted sender's task starts no agent (origin.hold)
-            with mock.patch.object(concierge, '_agent_running', return_value=True), mock.patch.object(waitroom, 'state', return_value=('working', None)):
+                      'CALL: {"kind": "answer_agent", "params": {"text": "use the main branch"}}',
+                      'CALL: {"kind": "task.comment", "params": {"text": "use the main branch"}}'):
+            s = store(); tid, item = on_table(s); typed = []
+            s._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (10 ** 9, tid))
+            notes = len(s.list_comments(tid))
+            with mock.patch.object(concierge, '_agent_running', return_value=True), mock.patch.object(waitroom, 'state', return_value=('working', None)), \
+                 mock.patch.object(terminal, 'tell', side_effect=lambda t, text: (typed.append(text), 'typed into')[1]):
                 out, _ = say(s, 'tell the agent to use the main branch', item['key'], model)
-            # ...the receipt quotes what the owner typed, never the Assistant's version of it put in their mouth (the desktop run, 2026-11-04:
-            # "closed it, go ahead" came back as "Answered the agent: 'I've saved and closed ledger-locked.xlsx...'")
-            self.assertEqual(out['say'], f'Told the agent on TQ-{tid:04d}: “tell the agent to use the main branch” - they go in when it stops at its prompt.', model)
-            # ...the note keeps the owner's own words and the Assistant's version apart (waitroom.parts, the owner 2026-11-04)
-            self.assertEqual([waitroom.parts(n['Note']) for n in s.waiting_notes(tid)], [('tell the agent to use the main branch', 'use the main branch')])
-            self.assertNotIn('nothing on it is waiting', out['say'])
-        # ...and parked at its prompt it has them at once, typed into the live session (one under the reviewer: the task's sender is outside -
-        # a full-tools session there holds them for the owner's Continue, waitroom.full_on_stranger)
-        from types import SimpleNamespace
-        s = store(); tid, item = on_table(s); typed = []
-        s._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (10 ** 9, tid))
-        with mock.patch.object(concierge, '_agent_running', return_value=True), \
-             mock.patch.object(waitroom, 'state', return_value=('parked', SimpleNamespace(mode='auto'))), \
-             mock.patch.object(terminal, 'tell', side_effect=lambda t, text: (typed.append(text), 'typed into')[1]):
-            out, _ = say(s, 'tell the agent to use the main branch', item['key'], 'CALL: {"kind": "agent.tell", "params": {"text": "use the main branch"}}')
-        self.assertIn('it has them now', out['say']); self.assertIn('use the main branch', typed[0])
-        # ...and with no agent at work nobody would hear it: said, nothing queued
+            self.assertEqual(out.get('open'), f'#task={tid}', model)
+            self.assertEqual(out['say'], f'Opened TQ-{tid:04d} - its agent hears what you type in its box.', model)
+            self.assertEqual((s.waiting_notes(tid), typed, len(s.list_comments(tid))), ([], [], notes), model)
+        # ...and the phone, which has no task to open, still hands them over (the owner: phone left as it is)
         s = store(); tid, item = on_table(s)
-        out, _ = say(s, 'tell the agent to use the main branch', item['key'], 'CALL: {"kind": "agent.tell", "params": {"text": "use the main branch"}}')
-        self.assertEqual(s.waiting_notes(tid), []); self.assertNotIn('Told the agent', out['say'])
+        s._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (10 ** 9, tid))
+        with concierge.delivering(concierge.PHONE), mock.patch.object(concierge, '_agent_running', return_value=True), \
+             mock.patch.object(waitroom, 'state', return_value=('working', None)):
+            out, _ = say(s, 'tell the agent to use the main branch', item['key'], 'CALL: {"kind": "agent.tell", "params": {"text": "use the main branch"}}')
+        self.assertEqual([waitroom.parts(n['Note']) for n in s.waiting_notes(tid)], [('tell the agent to use the main branch', 'use the main branch')])
+        self.assertNotIn('open', out)
 
     def test_an_outward_send_in_words_still_only_lights(self):
         # ...the line the owner kept: what leaves the app is theirs to press (pageview.is_send) - "send it" over a draft lights Send
@@ -570,9 +553,10 @@ class TheModelIsToldTheRow(unittest.TestCase):
 
 class NotesAndDueDays(unittest.TestCase):
     # neither has a button on the row; both are the task page's own writes, run and said (the owner, 2026-10-20)
-    def test_a_note_is_added_and_said(self):
+    def test_a_note_is_added_and_said_on_the_phone(self):
         s = store(); tid, item = on_table(s)
-        out, _ = say(s, 'file a note on it: waiting on the bank', item['key'], 'CALL: {"kind": "task.comment", "params": {"text": "waiting on the bank"}}')
+        with concierge.delivering(concierge.PHONE):
+            out, _ = say(s, 'file a note on it: waiting on the bank', item['key'], 'CALL: {"kind": "task.comment", "params": {"text": "waiting on the bank"}}')
         self.assertEqual(out['did'], 'task.comment'); self.assertTrue(out['say'].startswith(f'Added a note to TQ-{tid:04d}'), out['say'])
         self.assertIn('waiting on the bank', [c.get('Body') for c in s.list_comments(tid)])
 

@@ -121,7 +121,7 @@ def say(s, call, key=None):
 
 def test_a_note_the_store_refused_is_said_plainly_and_kept_as_a_cross(s):
     t = task(s)
-    with mock.patch.object(s, 'add_comment', side_effect=RuntimeError('disk I/O error')):
+    with concierge.delivering(concierge.PHONE), mock.patch.object(s, 'add_comment', side_effect=RuntimeError('disk I/O error')):   # a note is written only by phone
         out = say(s, {'kind': 'task.comment', 'params': {'ref': f'TQ-{t:04d}', 'text': 'waiting on the vendor'}})
     assert out['say'].startswith('Not done - disk I/O error') and out['failed'] == 'task.comment'
     assert not any('Added a note' in (c.get('Body') or '') for c in s.list_comments(general.dock_task(s)[0]['TaskId']))

@@ -665,16 +665,32 @@ def in_words(got, n: int = 300) -> str:
     from pathlib import PurePosixPath, PureWindowsPath
     if not isinstance(got, dict): return ' '.join(str(got or '').split())[:n]
     name = lambda v: next((P(v).name for P in (PureWindowsPath, PurePosixPath) if isinstance(v, str) and P(v).is_absolute()), v)
-    return ', '.join(f"{str(k).replace('_', ' ')}: {' '.join(str(name(v)).split())}" for k, v in got.items()
-                     if isinstance(v, (str, int, float)) and not isinstance(v, bool) and str(v).strip())[:n]
+    # ...AND A TOOL'S ROWS AS THE LINKS IN THEM, never the rows (the owner's live post, 2026-11-18): a connector's output came as a JSON string,
+    # and the agent was handed its ids and account names whole - a note its provider's safety check then refused, and every turn after it
+    def rows(v):
+        try: j = json.loads(v) if isinstance(v, str) and v.strip()[:1] in '[{' else None
+        except ValueError: j = None
+        if j is None: return v
+        found = []
+        def walk(o):
+            if isinstance(o, dict): [walk(x) for x in o.values()]
+            elif isinstance(o, list): [walk(x) for x in o]
+            elif isinstance(o, str) and o.startswith(('http://', 'https://')) and o not in found: found.append(o)
+        walk(j)
+        return ' '.join(found)
+    return ', '.join(f"{str(k).replace('_', ' ')}: {' '.join(str(name(w)).split())}" for k, v in got.items()
+                     if isinstance(v, (str, int, float)) and not isinstance(v, bool) and str(w := rows(v)).strip())[:n]
 
 
 def pressed(store, rv: dict, out: dict) -> tuple:
     "(the press, what it did) of an answered review, in words for its agent."
     if rv.get('Kind') == 'action':
-        from . import proposals
-        a = proposals._action(rv) or 'action'
-        return 'Approve', ' - '.join(x for x in (a.replace('_', ' '), in_words(out.get('result'))) if x)
+        # ...by the card's own press and name (the owner's live post, 2026-11-18): "pressed Approve ... run tool - headline: 1 row" for what
+        # the owner saw as "Post to LinkedIn" on "write linkedin post on LinkedIn"
+        from .cardqueue import _p, what
+        from .connectorcatalog import action_for
+        press = (action_for(_p(rv).get('type')) or {}).get('press') or 'Approve'
+        return press, ' - '.join(x for x in (what(store, {'rids': [rv['ReviewId']], 'rows': [rv]}), in_words(out.get('result'))) if x)
     # ...a calendar answer is no reply: "the reply was sent" told the agent of an accepted invite (the stress round, 2026-11-10)
     if (env := _envelope(rv)).get('kind') == 'calendar':
         from .calwrite import head_of

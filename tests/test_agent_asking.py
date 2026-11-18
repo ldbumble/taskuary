@@ -120,3 +120,12 @@ class AgentFinishedTests(unittest.TestCase):
         from taskuary.processing_unread import finish_evidence
         s = MemoryStore(); t = self._done(s, 'Marked done.', 'owner')
         self.assertIsNone(finish_evidence(s, t))
+
+
+def test_every_worker_is_told_its_browser_is_the_way_where_no_connection_does_a_step():
+    """The owner, 2026-11-18: asked for posts on three sites, the agent posted where a card could and wrote the other two as plain text - "it
+    should use browser if api not available of course". Every worker's rules say so, with the final press still his."""
+    from pathlib import Path
+    rules = (Path(general.__file__).parent / 'templates' / 'agent.md').read_text(encoding='utf-8')
+    assert 'do it in your browser' in rules and 'for their press' in rules and "Never answer that you can't where a browser can" in rules
+

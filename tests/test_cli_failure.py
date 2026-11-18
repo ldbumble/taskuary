@@ -166,3 +166,24 @@ def test_a_one_shot_turn_that_reached_its_limit_reads_the_one_sentence_for_it(tm
     one sentence for a limit (clipool.ended_early). It is that sentence, as a turn that ended part-way, with its conversation."""
     got = one_shot(tmp_path, [{'type': 'result', 'subtype': 'error_max_turns', 'is_error': True, 'errors': ['Reached max turns (3)']}])
     assert isinstance(got, clipool.PartWay) and str(got) == clipool.ended_early('error_max_turns') and got.session_id, got
+
+
+def test_a_turn_its_provider_refused_while_the_cli_exited_clean_is_a_failure_in_its_words_never_the_answer(tmp_path):
+    """The owner's live task, 2026-11-18: Codex said its first sentence, then its provider refused the turn ("This request was blocked by our
+    safety systems") and the CLI exited 0 - the refusal was filed as the agent's answer, glued to that sentence, and drawn as its words."""
+    blocked = 'This request was blocked by our safety systems. Reason: Potentially unintended activity.'
+    lines = [json.dumps({'type': 'thread.started', 'thread_id': 't-1'}),
+             json.dumps({'type': 'item.completed', 'item': {'id': 'i1', 'type': 'agent_message', 'text': 'The portal post is live'}}),
+             json.dumps({'type': 'error', 'message': blocked}), json.dumps({'type': 'turn.failed', 'error': {'message': blocked}})]
+    got = printed(tmp_path, lines, code=0, cmd='codex', args=('exec', '--json'))
+    assert isinstance(got, clipool.PartWay) and blocked in str(got) and got.session_id == 't-1', got
+    assert str(got).startswith('Codex stopped this turn:'), got
+
+
+def test_an_error_the_turn_got_past_is_no_failure(tmp_path):
+    "A provider hiccup the CLI retried through (Codex's 'Reconnecting...') is followed by the answer: the answer stands."
+    lines = [json.dumps({'type': 'thread.started', 'thread_id': 't-2'}), json.dumps({'type': 'error', 'message': 'Reconnecting... 1/5'}),
+             json.dumps({'type': 'item.completed', 'item': {'id': 'i1', 'type': 'agent_message', 'text': 'Done: three posts drafted.'}})]
+    got = printed(tmp_path, lines, code=0, cmd='codex', args=('exec', '--json'))
+    assert not isinstance(got, Exception) and got[0] == 'Done: three posts drafted.', got
+

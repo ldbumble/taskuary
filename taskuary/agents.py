@@ -1923,7 +1923,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     threading.Thread(target=_feed, daemon=True).start()
     raw, final, streamed_out, streamed_sid, open_tools = [], None, '', None, set()
     claude = ClaudeSteps(trace)
-    stream_error, structured_stream = None, False
+    stream_error, structured_stream, turn_error = None, False, ''
     try:
         for line in p.stdout:
             line = line.rstrip('\n')
@@ -1931,6 +1931,11 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
             raw.append(line)
             try: j = json.loads(line)
             except ValueError: trace('live', name, line[:400]); continue
+            # ...the error the turn ENDED on, whichever CLI says it: an answer after it (a retry that got through) clears it
+            if isinstance(j, dict):
+                if (e := _event_error(line)): turn_error = e
+                elif (j.get('type') == 'item.completed' and (j.get('item') or {}).get('type') == 'agent_message'
+                      or j.get('type') == 'result' and not j.get('is_error')): turn_error = ''
             if isinstance(j, dict) and family == 'opencode':
                 structured_stream = True
                 streamed_sid = j.get('sessionID') or streamed_sid
@@ -2042,6 +2047,12 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         raise RuntimeError(f'{name} exit {p.returncode}: {why}')
     # OpenCode can report provider errors in JSON while its process exits successfully.
     if stream_error: raise RuntimeError(f'{name}: {redact.scrub(stream_error)[:500]}')
+    # ...AND A TURN ITS PROVIDER REFUSED OR FAILED WHILE THE CLI EXITED CLEAN (the owner's live task, 2026-11-18: Codex's "This request was blocked
+    # by our safety systems" was filed as the agent's own words, glued to its last sentence): a turn that ended part-way, in the provider's
+    # sentence and whose it is - what it said before stays its steps
+    if turn_error:
+        who = _cli_name(name) or name
+        raise_failure(name, turn_error, cmd[0] if cmd else '', None, raw, part_way=(f'{who.capitalize()} stopped this turn: {turn_error}', streamed_sid))
     if final is not None: aiusage.claude_result(final); out, sid = str(final.get('result') or '').strip(), final.get('session_id')
     elif streamed_out: out, sid = streamed_out, streamed_sid
     elif structured_stream: out, sid = '', streamed_sid

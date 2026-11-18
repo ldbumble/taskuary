@@ -724,3 +724,20 @@ class TheChatMovedOn(unittest.TestCase):
         rid = self.closeout()
         general.wait_line(self.s, self.tid, 'what needs to deploy?', line_id='l-deploy')
         self.assertEqual(proposals.passed_why(self.s, self.s.get_review(rid)), 'Not sent - you wrote "what needs to deploy?" after it')
+
+
+def test_a_post_its_agent_is_told_of_reads_as_the_card_it_was_never_the_tools_rows():
+    """The owner's live task, 2026-11-18: he pressed Post to LinkedIn and his agent was woken with "pressed Approve on what you set up, and it
+    went through: run tool - headline: 1 row, output: [{"id": "urn:...", "author": ...}]" - the tool's raw rows. Its provider's safety check
+    refused that turn, and every turn after it. The note names the press and the card as he saw them, and the result by its link."""
+    s = MemoryStore(); tid = Factory(s).task('Announce the ledger portal')
+    p = {'action': 'run_tool', 'type': 'linkedin_post', 'text': 'The Northwind ledger portal is live.'}
+    rid = Factory(s).review(tid, kind='action', reason='the agent proposes to write linkedin post on LinkedIn - the portal launch', draft=json.dumps(p))
+    rv = s.get_review(rid if isinstance(rid, int) else rid['ReviewId'])
+    rows = json.dumps([{'id': 'urn:li:share:700000001', 'author': 'urn:li:person:alexdoyle', 'visibility': 'PUBLIC',
+                        'url': 'https://www.linkedin.example/feed/update/urn:li:share:700000001'}])
+    press, said = verdicts.pressed(s, rv, {'result': {'headline': '1 row', 'output': rows, 'url': ''}})
+    assert press == 'Post to LinkedIn'
+    assert 'write linkedin post on LinkedIn' in said and 'https://www.linkedin.example/feed/update/urn:li:share:700000001' in said
+    assert 'urn:li:person' not in said and '"author"' not in said and 'run tool' not in said
+

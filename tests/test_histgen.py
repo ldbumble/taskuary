@@ -5,6 +5,10 @@ import unittest
 from unittest import mock
 from taskuary import histgen
 from taskuary.store import MemoryStore
+from datetime import datetime, timedelta
+
+# ...ten days ago, never a fixed day: the fallback reads the last 90 days, and a fixed date fell out of it (CI, 2026-11-18, past 10:00 UTC)
+RECENT = (datetime.now() - timedelta(days=10)).strftime('%Y-%m-%d %H:%M:%S')
 
 GUIDE = ('### What history shows gets answered\n- payroll and import failures, same day\n'
          '### What history shows is ignorable\n- vendor newsletters\n'
@@ -70,7 +74,7 @@ class HistgenTests(unittest.TestCase):
         s = MemoryStore()
         tid = s.create_task({'Title': 't', 'Kind': 'reply', 'Status': 'open'}, 't')
         s.add_message({'TaskId': tid, 'ExternalId': 'x1', 'Channel': 'email', 'Subject': 'q',
-                       'SentAt': '2026-08-20 10:00:00', 'Status': 'context',
+                       'SentAt': RECENT, 'Status': 'context',
                        'BodyText': 'Hi Sarah - yes, rerunning tonight and will confirm before payroll.'})
         with graph([], [], 0), mock.patch('taskuary.llm.build_llm', return_value=fake_llm):
             detail = histgen.generate(s, 'style')
@@ -185,7 +189,7 @@ class VocabularyFromHistoryTests(unittest.TestCase):
         self.assertIn('no mail history', str(e.exception))
         tid = s.create_task({'Title': 't', 'Kind': 'task', 'Status': 'open'}, 't')
         s.add_message({'TaskId': tid, 'ExternalId': 'x1', 'Channel': 'email', 'Subject': 'FW: Yardi roll', 'FromName': 'Dov Blake',
-                       'FromEmail': 'dov@corp.example', 'SentAt': '2026-08-20 10:00:00', 'BodyText': 'see attached'})
+                       'FromEmail': 'dov@corp.example', 'SentAt': RECENT, 'BodyText': 'see attached'})
         seen = {}
         def llm(system, user, max_tokens=0): seen['user'] = user; return 'Dov Blake\nYardi'
         with graph([], [], 0), mock.patch('taskuary.llm.build_llm', return_value=llm):
@@ -290,7 +294,7 @@ class VocabularyFromHistoryTests(unittest.TestCase):
         self.assertIn('no mail history', str(e.exception))
         tid = s.create_task({'Title': 't', 'Kind': 'task', 'Status': 'open'}, 't')
         s.add_message({'TaskId': tid, 'ExternalId': 'x1', 'Channel': 'email', 'Subject': 'FW: Yardi roll', 'FromName': 'Dov Blake',
-                       'FromEmail': 'dov@corp.example', 'SentAt': '2026-08-20 10:00:00', 'BodyText': 'see attached'})
+                       'FromEmail': 'dov@corp.example', 'SentAt': RECENT, 'BodyText': 'see attached'})
         seen = {}
         def llm(system, user, max_tokens=0): seen['user'] = user; return 'Dov Blake\nYardi'
         with graph([], [], 0), mock.patch('taskuary.llm.build_llm', return_value=llm):

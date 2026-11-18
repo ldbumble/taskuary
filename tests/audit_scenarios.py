@@ -812,7 +812,7 @@ def v_attachments(r: Run):
     r.type('here is the pack - tell me what stands out', attach=[pic, pdf])
     prompt = r.at_work()
     for name in ('totals.png', 'october-report.pdf'):
-        named = [x for x in re.findall(r'(/\S*' + re.escape(name) + ')', prompt)]
+        named = [x for x in re.findall(r"((?:[A-Za-z]:)?[\\/][^\s'\"]*" + re.escape(name) + ')', prompt)]     # ...a Windows path too (C:\...)
         assert named, f'{r.backend}: the agent is told where {name} is: {prompt!r}'
         assert all(os.access(x, os.R_OK) and Path(x).is_file() for x in named), f'{r.backend}: {name} is readable at the path it was told: {named}'
         # ...in the task's own folder: under attachments/ an agent's Read is refused as Taskuary's own data (acpgate), whatever it was told

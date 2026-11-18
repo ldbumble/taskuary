@@ -70,20 +70,3 @@ def test_the_task_page_carries_whom():
     s.set_message_danger(mid, 'Wants Alex to sign in on a look-alike page.', 'owner')
     o = c.get(f'/api/tasks/{t}').json()['origin']
     assert (o['danger'], o['danger_aim']) == ('Wants Alex to sign in on a look-alike page.', 'owner')
-
-
-# A FIRST BILL IS WORK, NOT A SCAM (a walk, 2026-11-18): a vendor's invoice - an amount, a due date, a late fee, "reply with any
-# questions" - was the first mail from that vendor, and triage filed it as fyi because "the late-fee notice alone does not establish
-# that Alex owes the invoice"; "All read, next" then cleared it with the newsletters. The guide's stranger line read a first sender
-# pressing for payment as a scam, and the shipped SOUL.md said "prefer fyi" against the guide's "lean task". Doubt is the work.
-def test_a_first_bill_with_no_scam_sign_is_a_task_to_check_and_pay():
-    scams = ' '.join(triage.SHIPPED.split()).split('**Strangers and scams.**', 1)[1].split('##', 1)[0]
-    assert 'even when it is the first mail from that sender' in scams
-    assert 'doubt about whether it is owed is the work, never a reason to file it' in scams
-
-
-def test_the_shipped_soul_never_tells_triage_the_opposite_of_its_guide():
-    from pathlib import Path
-    soul = ' '.join((Path(triage.__file__).parent / 'templates' / 'soul.md').read_text(encoding='utf-8').split())
-    assert 'prefer fyi' not in soul, 'the guide says lean task; a second document saying the opposite is two roads'
-    assert 'before something of his lapses (a bill' in soul

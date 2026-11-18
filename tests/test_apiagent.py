@@ -658,6 +658,14 @@ class TheHandsTests(unittest.TestCase):
         self.assertIn('Excel workbook', self.run_('file_write', path='hours.xlsx', text='Date | Units | Rate | Amount\n2026-10-01 | 4 | 15.00 | =B2*C2'))
         ws = load_workbook(d / 'hours.xlsx').active
         self.assertEqual([ws['B2'].value, ws['C2'].value, ws['D2'].value], [4, 15.0, '=B2*C2'])
+        NL = chr(10)
+        # ...and each formula carries what it comes to, so a viewer that works nothing out shows the number (the 2026-11-18 walk: a caterers'
+        # sheet's "Est. Total for 40" stood empty for every row)
+        self.run_('file_write', path='caterers.xlsx', text='Caterer | Per head | Total for 40' + NL + 'Clover | 17.50 | =B2*40' + NL + 'Flour | 17.95 | =B3*40' + NL +
+                  'All | | =SUM(C2:C3)' + NL + 'Odd | | =VLOOKUP(A2,A2:C3,2)')
+        shown = load_workbook(d / 'caterers.xlsx', data_only=True).active
+        self.assertEqual([shown['C2'].value, shown['C3'].value, shown['C4'].value, shown['C5'].value], [700, 718, 1418, None])
+        self.assertEqual(load_workbook(d / 'caterers.xlsx').active['C4'].value, '=SUM(C2:C3)')       # the formula stays the formula
         wb = Workbook(); ws = wb.active
         ws.append(['Date', 'Units', 'Rate', 'Amount']); ws.append(['2026-10-01', 4, 15, '=B2*C2']); ws.append([None, None, 'Total', '=SUM(D2:D2)'])
         wb.save(d / 'Invoice template.xlsx')

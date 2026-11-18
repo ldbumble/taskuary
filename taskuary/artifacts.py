@@ -9,7 +9,7 @@ Both writers are hand-rolled on the standard library on purpose: xlsx is a zip o
 XML parts, and a bar chart is a few dozen rects. Neither is worth a dependency that has to be
 frozen into the one-file exe.
 """
-import json, math, re, zipfile
+import ast, json, math, operator, re, zipfile
 from datetime import datetime
 from xml.sax.saxutils import escape
 
@@ -51,7 +51,7 @@ def columns(rows: list) -> list:
     return cols[:MAX_COLS]
 
 
-def _cell(ref: str, v, formulas: bool = False) -> str:
+def _cell(ref: str, v, formulas: bool = False, grid: list | None = None) -> str:
     # a missing value writes NO cell (refs are explicit, so nothing shifts): an empty inline
     # string is a value, and Excel treats "" and blank differently in counts and filters
     if v is None or v == '': return ''
@@ -59,9 +59,53 @@ def _cell(ref: str, v, formulas: bool = False) -> str:
     if isinstance(v, (int, float)):
         return f'<c r="{ref}"><v>{v}</v></c>'
     # ...a formula only where the agent wrote the sheet (its total): a report's rows are other systems' data, and `=` in them stays text
-    if formulas and isinstance(v, str) and v.startswith('=') and len(v) > 1: return f'<c r="{ref}"><f>{escape(v[1:])}</f></c>'
+    # ...WITH WHAT IT COMES TO (the 2026-11-18 walk: a caterers' sheet whose "Est. Total for 40" stood empty in every viewer - a formula with no
+    # stored value is a blank to anything but Excel): the plain sums an agent's sheet carries are worked out here and stored with it
+    if formulas and isinstance(v, str) and v.startswith('=') and len(v) > 1:
+        x = formula_value(grid, v) if grid else None
+        return f'<c r="{ref}"><f>{escape(v[1:])}</f>' + ('' if x is None else f'<v>{x}</v>') + '</c>'
     s = json.dumps(v, default=str) if isinstance(v, (dict, list)) else str(v)
     return f'<c r="{ref}" t="inlineStr"><is><t xml:space="preserve">{escape(s)}</t></is></c>'
+
+
+_FREF = re.compile(r'\$?([A-Z]{1,3})\$?([1-9]\d*)')
+_FRANGE = re.compile(r'\b(SUM|AVERAGE|MIN|MAX|COUNT)\(\s*\$?([A-Z]{1,3})\$?(\d+)\s*:\s*\$?([A-Z]{1,3})\$?(\d+)\s*\)', re.I)
+_OPS = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv, ast.Pow: operator.pow}
+_FNS = {'SUM': sum, 'AVERAGE': lambda xs: sum(xs) / len(xs), 'MIN': min, 'MAX': max, 'COUNT': len}
+def _col_index(name: str) -> int:
+    n = 0
+    for ch in name: n = n * 26 + ord(ch) - 64
+    return n - 1
+def _arith(n):
+    if isinstance(n, ast.Constant) and isinstance(n.value, (int, float)) and not isinstance(n.value, bool): return float(n.value)
+    if isinstance(n, ast.UnaryOp) and isinstance(n.op, (ast.USub, ast.UAdd)): return -_arith(n.operand) if isinstance(n.op, ast.USub) else _arith(n.operand)
+    if isinstance(n, ast.BinOp) and type(n.op) in _OPS: return _OPS[type(n.op)](_arith(n.left), _arith(n.right))
+    raise ValueError('not plain arithmetic')
+def formula_value(grid: list, f: str, seen: tuple = ()):
+    """What `=...` comes to over `grid` (its first row is row 1, column A), for the plain arithmetic an agent's sheet carries: + - * / ^, cell
+    references, SUM AVERAGE MIN MAX COUNT of a range. None for anything else - the reader works that out when it opens the book."""
+    def at(c: str, r: int) -> float:
+        if (c, r) in seen: raise ValueError('a circle')
+        row = grid[r - 1] if r - 1 < len(grid) else []
+        v = row[_col_index(c)] if _col_index(c) < len(row) else None
+        if v is None or v == '': return 0.0
+        if isinstance(v, str) and v.startswith('='):
+            x = formula_value(grid, v, seen + ((c, r),))
+            if x is None: raise ValueError('a formula this cannot work out')
+            return float(x)
+        if (n := _num(v)) is None: raise ValueError('text in a sum')
+        return n
+    def rng(m):
+        c1, c2, r1, r2 = _col_index(m[2]), _col_index(m[4]), int(m[3]), int(m[5])
+        xs = [at(_col_name(c), r) for c in range(min(c1, c2), max(c1, c2) + 1) for r in range(min(r1, r2), max(r1, r2) + 1)]
+        return repr(float(_FNS[m[1].upper()](xs)))
+    try:
+        e = _FREF.sub(lambda m: repr(at(m[1], int(m[2]))), _FRANGE.sub(rng, str(f)[1:])).replace('^', '**')
+        if not re.fullmatch(r'[\d.eE\s+\-*/()]+', e): return None
+        x = round(_arith(ast.parse(e, mode='eval').body), 10)
+    except (ValueError, ZeroDivisionError, SyntaxError, RecursionError, OverflowError, TypeError, IndexError): return None
+    if not math.isfinite(x): return None
+    return int(x) if x.is_integer() else x
 
 
 def _col_name(i: int) -> str:
@@ -84,7 +128,7 @@ def grid_xlsx(grid: list, path, sheet: str = 'Report', formulas: bool = False) -
     if not grid: return False
     xml = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
            '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>']
-    xml += [f'<row r="{n}">' + ''.join(_cell(f'{_col_name(i)}{n}', v, formulas) for i, v in enumerate(r[:MAX_COLS])) + '</row>'
+    xml += [f'<row r="{n}">' + ''.join(_cell(f'{_col_name(i)}{n}', v, formulas, grid) for i, v in enumerate(r[:MAX_COLS])) + '</row>'
             for n, r in enumerate(grid[:MAX_SHEET_ROWS + 1], start=1)]
     xml.append('</sheetData></worksheet>')
     name = escape(_SAFE.sub('', str(sheet))[:31] or 'Report')

@@ -114,6 +114,21 @@ class EveryYesCarriesOn(unittest.TestCase):
             while not told and time.time() < end: time.sleep(.01)
         self.assertEqual(len(told), 1); self.assertIn('pressed Approve', told[0])
 
+    def test_a_second_press_while_the_first_wake_is_starting_rides_in_that_turn(self):
+        # two held steps on two cards, pressed a few seconds apart on a resting agent: the second found its answer already woken and no session
+        # up yet, so its words went nowhere - and the turn that started answered past it, so the agent never heard it
+        self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'Two steps are held for you.')
+        told = []
+        def start(*a, **kw): time.sleep(0.3); return SimpleNamespace(send_prompt=lambda text, **k: told.append((text, k)))
+        with mock.patch.object(general, 'start_session', side_effect=start), mock.patch.object(general, 'handles', return_value=True):
+            self.assertEqual(general.tell(self.s, self.tid, 'The owner approved it and Taskuary ran `git push origin deploy`.'), 'woke')
+            self.assertEqual(general.tell(self.s, self.tid, 'The owner approved it and Taskuary ran `git push origin --tags`.'), 'woke')
+            end = time.time() + 5
+            while not told and time.time() < end: time.sleep(.01)
+            time.sleep(0.1)
+        [(text, kw)] = told
+        self.assertIn('origin deploy', text); self.assertIn('origin --tags', text); self.assertFalse(kw.get('as_owner', True))
+
     def test_no_agent_ever_on_it_wakes_nothing(self):
         self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent'), '')
 

@@ -818,21 +818,35 @@ def _changed(store, r) -> str:
 FOLLOW_UP = ('The owner just pressed what your last turn waited on (see what the owner did since your last answer). Carry on from there as '
              'you said you would - check it landed first; never redo it.')
 _WOKEN: set = set()
+# ...AND WHAT IS SAID WHILE THAT WAKE IS STILL STARTING RIDES IN IT (the held-steps round, 2026-11-18): two cards pressed a few seconds apart on a
+# resting agent - the second press found its answer already woken, no session up yet to queue for, and its words went nowhere: the task said
+# "No agent is running on this task to tell" while one was starting, and the turn that started answered past the press, so it was never said
+_STARTING: dict = {}
+_WAKE_LOCK = threading.Lock()
 def follow_up(store, tid, press: str, actor: str = 'owner', said: str = None) -> bool:
     """Start one turn on task `tid` when its agent's newest summary waits on `press` ('send', 'handoff') - or, with `said` (approved), after
-    any answer of its own, `said` its prompt. True when one was started."""
+    any answer of its own, `said` its prompt. True when one was started, or `said` joined one starting."""
     try:
         last = next((c for c in reversed(store.list_comments(int(tid), internal=True)) if c.get('ActorType') in (SUMMARY_TYPE, ASSISTANT_TYPE)), None)
         summ = json.loads(last['Body']) if last and last.get('ActorType') == SUMMARY_TYPE else None
     except (TypeError, ValueError): summ = None
-    if not last or last['CommentId'] in _WOKEN: return False
-    if not said and (not isinstance(summ, dict) or summ.get('after_press') != press): return False
-    _WOKEN.add(last['CommentId'])
+    if not last: return False
+    with _WAKE_LOCK:
+        if last['CommentId'] in _WOKEN:
+            if said and int(tid) in _STARTING: _STARTING[int(tid)].append(said); return True
+            return False
+        if not said and (not isinstance(summ, dict) or summ.get('after_press') != press): return False
+        _WOKEN.add(last['CommentId']); _STARTING[int(tid)] = [said or FOLLOW_UP]
     def go():
-        try: start_session(store, int(tid), actor=actor).send_prompt(said or FOLLOW_UP, as_owner=False, echo=False)
+        try:
+            ses = start_session(store, int(tid), actor=actor)
+            with _WAKE_LOCK: words = _STARTING.pop(int(tid), None) or [said or FOLLOW_UP]
+            ses.send_prompt('\n\n'.join(words), as_owner=False, echo=False)
         # ...a wake that never started woke nobody: the owner's next press on that answer starts it (it was once per answer even so, and
         # every later press was silent - the spine audit, 2026-11-09)
-        except Exception as e: _WOKEN.discard(last['CommentId']); logger.warning(f'task {tid}: the follow-up after {press} did not start - {e}')
+        except Exception as e:
+            with _WAKE_LOCK: _STARTING.pop(int(tid), None)
+            _WOKEN.discard(last['CommentId']); logger.warning(f'task {tid}: the follow-up after {press} did not start - {e}')
     threading.Thread(target=go, daemon=True, name=f'follow-up-{tid}').start()
     return True
 # AN APPROVAL WAKES THE AGENT THAT SET IT UP (the owner, 2026-11-09: "when you hit approve the agent continues and says what it did and what

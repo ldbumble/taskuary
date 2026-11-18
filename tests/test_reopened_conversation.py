@@ -127,6 +127,22 @@ class ClosedConversationTests(unittest.TestCase):
         self.assertEqual(s.get_task(tid)['Status'], 'open')
         start.assert_called_once()
 
+    def test_his_line_is_the_reopen_no_press_line_is_drawn_above_it(self):
+        """The Continue round, 2026-11-18, recorded: a chat marked done, then a line typed into it (Continue). His line was drawn at once, and a
+        frame later "You reopened it" stood ABOVE it - the store's own reopened row, said as a press, though typing's reopen is quiet (QUIET:
+        the line says it). One act, one trace: his line. A Reopen pressed as such still reads "You reopened it"."""
+        s, tid = reopened()
+        s.update_task(tid, {'Status': 'done'}, 'owner')
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.start_session') as start:
+            start.return_value.send_prompt.return_value = 'On it.'
+            TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': 'one more thing'})
+        general.answered(tid, every=True)
+        said = [p['content'][0]['text'] for p in general.press_lines(s, tid)]
+        self.assertNotIn('You reopened it.', said)
+        self.assertNotIn('reopened it', general.latest_block(s, tid, resumed=True))
+        s.update_task(tid, {'Status': 'done'}, 'owner'); s.update_task(tid, {'Status': 'open'}, 'owner')       # ...Reopen, pressed
+        self.assertEqual([p['content'][0]['text'] for p in general.press_lines(s, tid)][-1], 'You reopened it.')
+
     def test_a_closed_coding_task_typed_into_reopens_by_the_same_rule(self):
         """ONE ROAD (general.take_line, the owner 2026-11-10: "coding and general use the same code when it comes to interactions"): a closed
         coding task was refused "press Reopen, then Continue" while a chat task typed into opened again - now both open the same way."""

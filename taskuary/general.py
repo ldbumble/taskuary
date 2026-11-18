@@ -733,10 +733,13 @@ def presses(store, tid: int, since: str = '') -> list:
     who = ','.join('?' * len(OWNER_ACTORS))
     # ...ONLY A ROW THAT HAS WORDS (the owner, 2026-11-11: "You routing learned."): one without was said by its bare name, so any bookkeeping
     # written as the actor it was handed (routingmemory.learn_correction) stood in the chat as a sentence of theirs that is none
+    rows = store._rows(f"SELECT * FROM audit WHERE EntityType='task' AND EntityId=? AND Actor IN ({who}) AND CreatedAt>? ORDER BY Id", (tid, *OWNER_ACTORS, since or ''))
+    # ...A REOPEN HIS TYPED LINE MADE IS SAID BY THAT LINE (QUIET's reopened_by_typing, reopen): the store's own `reopened` row, written by the same
+    # write, stood as "You reopened it" right above his line, a frame after the line was drawn (the Continue round, 2026-11-18)
+    typed = {a['Id'] for a, b in zip(rows, rows[1:]) if a['Action'] == 'reopened' and b['Action'] == 'reopened_by_typing'}
     out = [(r['Id'], r['CreatedAt'], PRESSES[r['Action']](_detail(r)),
             *((_held_result(_detail(r)),) if r['Action'] in HELD_DONE else ()))
-           for r in store._rows(f"SELECT * FROM audit WHERE EntityType='task' AND EntityId=? AND Actor IN ({who}) AND CreatedAt>? ORDER BY Id",
-                                (tid, *OWNER_ACTORS, since or '')) if r['Action'] in PRESSES and not _detail(r).get('review')]   # a card's own act: said by its card (proposals.execute)
+           for r in rows if r['Action'] in PRESSES and r['Id'] not in typed and not _detail(r).get('review')]   # a card's own act: said by its card (proposals.execute)
     out += [(r['Id'], r['CreatedAt'], f"shared it ({r['Action']})") for r in store._rows(
         f"SELECT * FROM audit WHERE EntityType='share' AND Actor IN ({who}) AND CreatedAt>? ORDER BY Id", (*OWNER_ACTORS, since or ''))
         if _detail(r).get('task') == tid]

@@ -112,6 +112,15 @@ def read_attachments(items) -> list:
     return out
 
 
+def _graph_said(r) -> str:
+    """What Graph said when it refused, in its own words - its error's message, never the JSON envelope around it (the task read
+    'graph could not attach x (413): {"error":{"code":...'). The raw text when it sent no JSON."""
+    try: e = (r.json() or {}).get('error') or {}
+    except Exception: e = {}
+    said = (e.get('message') or e.get('code')) if isinstance(e, dict) else None
+    return str(said or getattr(r, 'text', '') or '')[:300]
+
+
 def _attach_to_draft(hdr: dict, box: str, draft_id: str, f: dict):
     """One file onto a draft message: in the request when it is small, through an upload session
     when it is not. 3.3MB of payroll workbooks is exactly the size that needs the second road."""
@@ -120,11 +129,11 @@ def _attach_to_draft(hdr: dict, box: str, draft_id: str, f: dict):
                           data=json.dumps({'@odata.type': '#microsoft.graph.fileAttachment', 'name': f['name'],
                                            'contentType': f['type'],
                                            'contentBytes': base64.b64encode(f['bytes']).decode('ascii')}))
-        if r.status_code >= 300: raise RuntimeError(f'graph could not attach {f["name"]} ({r.status_code}): {r.text[:200]}')
+        if r.status_code >= 300: raise RuntimeError(f'graph could not attach {f["name"]} ({r.status_code}): {_graph_said(r)}')
         return
     r = requests.post(f'{GRAPH}/users/{box}/messages/{draft_id}/attachments/createUploadSession', headers=hdr, timeout=60,
                       data=json.dumps({'AttachmentItem': {'attachmentType': 'file', 'name': f['name'], 'size': f['size']}}))
-    if r.status_code >= 300: raise RuntimeError(f'graph refused an upload for {f["name"]} ({r.status_code}): {r.text[:200]}')
+    if r.status_code >= 300: raise RuntimeError(f'graph refused an upload for {f["name"]} ({r.status_code}): {_graph_said(r)}')
     url = r.json().get('uploadUrl')
     if not url: raise RuntimeError(f'graph gave no upload url for {f["name"]}')
     for start in range(0, f['size'], UPLOAD_CHUNK):
@@ -135,7 +144,7 @@ def _attach_to_draft(hdr: dict, box: str, draft_id: str, f: dict):
                           headers={'Content-Length': str(len(chunk)),
                                    'Content-Range': f'bytes {start}-{end}/{f["size"]}'})
         if rr.status_code >= 300:
-            raise RuntimeError(f'uploading {f["name"]} failed at {start} ({rr.status_code}): {rr.text[:200]}')
+            raise RuntimeError(f'uploading {f["name"]} failed at {start} ({rr.status_code}): {_graph_said(rr)}')
 
 
 def _rcpts_of(xs) -> list: return [{'emailAddress': {'address': a}} for a in xs]
@@ -153,7 +162,7 @@ def _send_with_files(hdr: dict, box: str, to: list, cc: list, subject: str, body
     said = html or _html.escape(body).replace(chr(10), '<br>')
     if reply_to_graph_id:
         r = requests.post(f'{GRAPH}/users/{box}/messages/{reply_to_graph_id}/createReply', headers=hdr, timeout=30, data='{}')
-        if r.status_code >= 300: raise RuntimeError(f'graph could not open a reply ({r.status_code}): {r.text[:200]}')
+        if r.status_code >= 300: raise RuntimeError(f'graph could not open a reply ({r.status_code}): {_graph_said(r)}')
         draft = r.json() or {}
         did = draft.get('id')
         quoted = ((draft.get('body') or {}).get('content') or '')
@@ -170,13 +179,21 @@ def _send_with_files(hdr: dict, box: str, to: list, cc: list, subject: str, body
         if bcc: msg['bccRecipients'] = _rcpts_of(bcc)
         r = requests.post(f'{GRAPH}/users/{box}/messages', headers=hdr, timeout=30, data=json.dumps(msg))
         did = (r.json() or {}).get('id') if r.status_code < 300 else None
-    if r.status_code >= 300: raise RuntimeError(f'graph could not compose the mail ({r.status_code}): {r.text[:200]}')
-    if not did: raise RuntimeError('graph composed no draft to attach to')
-    for f in files: _attach_to_draft(hdr, box, did, f)
+    try:
+        if r.status_code >= 300: raise RuntimeError(f'graph could not compose the mail ({r.status_code}): {_graph_said(r)}')
+        if not did: raise RuntimeError('graph composed no draft to attach to')
+        for f in files: _attach_to_draft(hdr, box, did, f)
+    except Exception:
+        # ...and the half-made draft goes back: left in the owner's Drafts, every Try again added one more beside it. Before /send only -
+        # past it the mail may have gone, and that draft is the record of it
+        if did:
+            try: requests.delete(f'{GRAPH}/users/{box}/messages/{did}', headers=hdr, timeout=30)
+            except Exception as e: logger.warning(f'the unsent draft {did} was not taken back: {e}')
+        raise
     r = requests.post(f'{GRAPH}/users/{box}/messages/{did}/send', headers=hdr, timeout=120)
     if r.status_code >= 300:
         error = UncertainDelivery if r.status_code >= 500 else RuntimeError
-        raise error(f'graph sendMail failed ({r.status_code}): {r.text[:300]}')
+        raise error(f'graph sendMail failed ({r.status_code}): {_graph_said(r)}')
     return {'channel': 'email', 'to': to, 'cc': cc, 'bcc': list(bcc), 'mailbox': box, 'threaded': bool(reply_to_graph_id),
             'attached': [f['name'] for f in files]}
 
@@ -223,7 +240,7 @@ def send_email(store, to: list, subject: str, body: str, reply_to_graph_id: str 
                                            'saveToSentItems': True}))
     if r.status_code >= 300:
         error = UncertainDelivery if r.status_code >= 500 else RuntimeError
-        raise error(f'graph sendMail failed ({r.status_code}): {r.text[:300]}')
+        raise error(f'graph sendMail failed ({r.status_code}): {_graph_said(r)}')
     return {'channel': 'email', 'to': to, 'cc': cc, 'bcc': bcc, 'mailbox': box, 'threaded': bool(reply_to_graph_id)}
 
 
@@ -249,7 +266,7 @@ def send_teams(store, chat_id: str, body: str, connector_id=None, want_id: bool 
     # make - the line deleted, a cloud without the action - still lets the words go, plain, rather than fail the Send
     r = post('/replyWithQuote', {'messageIds': [str(quote)], 'replyMessage': said}) if quote else None
     if r is not None and r.status_code in (400, 404, 405, 501):
-        logger.info(f'teams: the reply goes unquoted - Graph would not quote message {quote} ({r.status_code}): {r.text[:200]}')
+        logger.info(f'teams: the reply goes unquoted - Graph would not quote message {quote} ({r.status_code}): {_graph_said(r)}')
         r = None
     quoted = r is not None
     if r is None: r = post('', said)
@@ -297,7 +314,7 @@ def one_on_one(tok: str, who: str) -> str:
     m = lambda i: {'@odata.type': '#microsoft.graph.aadUserConversationMember', 'roles': ['owner'], 'user@odata.bind': f"{GRAPH}/users('{i}')"}
     r = requests.post(f'{GRAPH}/chats', timeout=30, headers={'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'},
                       data=json.dumps({'chatType': 'oneOnOne', 'members': [m(mid), m(them)]}))
-    if r.status_code >= 300: raise RuntimeError(f'Teams would not open a chat with {who} ({r.status_code}): {r.text[:200]}')
+    if r.status_code >= 300: raise RuntimeError(f'Teams would not open a chat with {who} ({r.status_code}): {_graph_said(r)}')
     return r.json()['id']
 
 

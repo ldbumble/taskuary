@@ -219,6 +219,22 @@ class Holding(unittest.TestCase):
                      {'irreversible': True, 'sure': True, 'what': 'pays $49', 'asked': True, 'money': True}):
             self.assertEqual([v['hold'] for v in bg.judge(self.s, todo, {'url': CHECKOUT}, Brain(None), said=said)], [False, True])
 
+    def test_a_payment_in_a_line_that_also_pushes_is_still_judged_as_a_browser_act(self):
+        """A line that clicks Pay and pushes (`click @e12 && git push`) went to the shell gate alone: its card said "push", its Approve - or
+        a trusted repo, or the terminal's own prompt - ran the payment with it, unseen. Every gate a line touches judges its part of it."""
+        pay = {'irreversible': True, 'sure': True, 'what': 'pays the $412.50 order on toll.example', 'money': True}
+        for trust in (False, True):
+            self.s = MemoryStore(); self.tid = Factory(self.s).task('Pay the toll invoice')
+            with on(), verdict(pay), mock.patch('taskuary.shellgate.trusted', return_value='northwind/ledger' if trust else ''):
+                out = hooks.command_gate(self.s, self.tid, 'run1', 'agent-browser click @e12 && git push origin main', 'Bash', r'C:\work\ledger')
+            self.assertEqual(out['hookSpecificOutput']['permissionDecision'], 'deny', trust)
+            [rv] = self.pending(); p = json.loads(rv['DraftText'])
+            self.assertEqual((p['action'], p['args']), ('browser_act', ['click', '@e12']), trust)
+            for ask in ('terminal', 'chat'):
+                with on(), verdict(pay):
+                    d = hooks.command_gate(self.s, self.tid, 'run1', 'git push origin main; agent-browser click @e12', 'Bash', r'C:\work\ledger', ask)
+                self.assertEqual(d['hookSpecificOutput']['permissionDecision'], 'deny', ask)
+
     def test_a_reversible_act_runs_and_nothing_is_queued(self):
         self.assertEqual(self.held('agent-browser fill @e1 "Northwind"', {'irreversible': False, 'sure': True, 'what': 'types a name'}), {})
         self.assertEqual(self.pending(), [])

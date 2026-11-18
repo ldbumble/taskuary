@@ -914,10 +914,12 @@ def command_gate(st, tid: int, sid: str, cmd: str, tool: str = 'Bash', cwd: str 
         from . import browserview
         try: browserview.on_demand(sid, cmd)
         except Exception as e: logger.warning(f'the browser for {sid} did not start on its first page - {e}')
-    if out or reads: return shellgate.check(st, tid, sid, cmd, tool, cwd, ask, about=about, reads=reads)
-    # a line that drives both is judged desktop first: either one held holds the whole line
+    # EVERY GATE A LINE TOUCHES JUDGES ITS PART, any one held holds the whole line: a line that clicked Pay and pushed went to the shell gate
+    # alone, and its "push" card, a trusted repo or the terminal's own prompt ran the payment with it, unseen. The desktop and the browser are
+    # judged first - their acts are held on their own cards - and only a line whose page and desktop acts all pass reaches the shell's
     if desk and (held := agentdesktop.check(st, tid, sid, cmd, brain)): return held
-    return browsergate.check(st, tid, sid, cmd, brain) if browse else {}
+    if browse and (held := browsergate.check(st, tid, sid, cmd, brain)): return held
+    return shellgate.check(st, tid, sid, cmd, tool, cwd, ask, about=about, reads=reads) if out or reads else {}
 
 
 def run_sid(payload: dict, tid: int) -> str:

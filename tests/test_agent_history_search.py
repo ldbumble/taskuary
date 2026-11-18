@@ -53,6 +53,17 @@ class TheSearchTests(unittest.TestCase):
         self.assertEqual([h['subject'] for h in mailsearch.search(s, since='2026-10-15')], ['Re: Renewal terms before Thursday'])
         self.assertEqual([h['subject'] for h in mailsearch.search(s, until='2026-09-30')], ['Schema sign-off'])
 
+    def test_a_date_it_cannot_read_is_said_never_searched_as_nothing(self):
+        # an agent passed since="yesterday": compared as text it filtered out every message, and the agent was told "no message matches
+        # ... try a wider date range" - an untrue line about the mailbox, when the date itself was the trouble
+        s = world()
+        for bad in ({'since': 'yesterday'}, {'until': '14/10/2026'}, {'since': '2026-13-01'}):
+            with self.assertRaises(ValueError) as e: mailsearch.search(s, **bad)
+            self.assertIn('YYYY-MM-DD', str(e.exception))
+        self.assertEqual(len(mailsearch.search(s, since='2026-10-15T00:00:00')), 1)          # a full stamp is still its date
+        with self.assertRaises(ValueError) as e: mailsearch.search(s, limit='ten')
+        self.assertNotIn('int()', str(e.exception))
+
     def test_the_assistants_own_chat_is_not_mail(self):
         s = world()
         self.assertNotIn('Renewal chat line', [h['subject'] for h in mailsearch.search(s, words='renewal')])
@@ -89,6 +100,11 @@ class TheRouteTests(unittest.TestCase):
         mid = r.json()['data'][0]['id']
         one = self.get(s, f'/api/agent/messages/{mid}', {**AGENT, guard.TASK_HDR: guard.task_proof(SRV, tid)}, task_id=tid)
         self.assertIn('6% uplift', one.json()['body'])
+
+    def test_an_unreadable_date_at_the_door_is_a_422_that_says_why(self):
+        s = world(); tid = researcher(s)
+        r = self.get(s, '/api/agent/messages', {**AGENT, guard.TASK_HDR: guard.task_proof(SRV, tid)}, task_id=tid, since='last week')
+        self.assertEqual(r.status_code, 422, r.text); self.assertIn('YYYY-MM-DD', r.text)
 
     def test_not_on_a_neighbours_task_and_not_without_its_proof(self):
         s = world(); tid = researcher(s); other = researcher(s)

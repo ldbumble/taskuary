@@ -408,7 +408,9 @@ def _call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if name == 'read_attachment':
         from pathlib import Path
         from . import attachtext
-        x = store.get_attachment(int(a['id']))
+        # ...by the id as the attach parameter spells it ("attachment 12"), never Python's "invalid literal for int()"
+        n = _AID.match(str(a['id']))
+        x = store.get_attachment(int(n[1])) if n else None
         if not x or not store.get_message(x.get('MessageId')) or (store.get_message(x['MessageId']) or {}).get('Channel') == 'assistant':
             raise ValueError(f"no attachment {a['id']} - read_message lists a message's attachments with their ids")
         p = Path(x['Path']) if x.get('Path') else None

@@ -122,6 +122,19 @@ class TheServer(unittest.TestCase):
         text, _ = tool(self.tid, 'read_message', id=self.mid)
         self.assertIn('6% uplift', text); self.assertIn('"attachments"', text); self.assertTrue(text.startswith('⟦') and text.endswith('⟧'))
 
+    def test_an_attachment_is_read_by_the_id_as_the_tools_spell_it(self):
+        # the attach parameter names a mail's file as "attachment 12"; read_attachment took only a bare number and answered that spelling
+        # with Python's own "invalid literal for int() with base 10"
+        d = config.home() / 'attachments' / 'toolbox'; d.mkdir(parents=True, exist_ok=True)
+        (d / 'note.txt').write_text('The uplift is capped at 4%.')
+        aid = self.s.add_attachment({'MessageId': self.mid, 'ExternalId': 'r1:n', 'Name': 'note.txt', 'ContentType': 'text/plain', 'Size': 27,
+                                     'Path': str(d / 'note.txt')})
+        for spelt in (f'attachment {aid}', f'#{aid}', str(aid)):
+            text, err = tool(self.tid, 'read_attachment', id=spelt)
+            self.assertFalse(err, text); self.assertIn('capped at 4%', text)
+        text, err = tool(self.tid, 'read_attachment', id='the pdf')
+        self.assertTrue(err); self.assertNotIn('int()', text); self.assertIn('read_message', text)
+
     def test_another_tasks_proof_is_refused(self):
         other = self.s.create_task({'Title': 'Someone else', 'Status': 'open'}, 'owner')
         r = c.post(f'/api/mcp?task={other}', headers=hdr(self.tid), json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'})

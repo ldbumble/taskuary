@@ -5,14 +5,25 @@
 // in the mail too, as a pasted export) for the player to attach when it answers.
 import path from "node:path";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { api, sleep, out } from "./real-lib.mjs";
 
 const day = JSON.parse(await readFile(process.argv[2] || new URL("./user-day.json", import.meta.url), "utf8"));
 const speed = Number(process.env.USER_SPEED || 1), files = path.join(out, "user-files");
 await mkdir(files, { recursive: true });
 for (const [f, text] of Object.entries(day.files || {})) await writeFile(path.join(files, f), text);
+// ...and the repository the day's CI failure is about: an invented ledger with a rounding bug and the test that catches it, a git repo on
+// the player's disk as a person's checkout is - a coding task works in it
+const repo = path.join(out, "ledger");
+if (!existsSync(path.join(repo, ".git"))) {
+  await mkdir(path.join(repo, "tests"), { recursive: true });
+  await writeFile(path.join(repo, "totals.py"), "def total(amounts):\n    return round(sum(amounts))  # rounds to whole dollars\n");
+  await writeFile(path.join(repo, "tests", "test_totals.py"), "from totals import total\n\ndef test_rounding():\n    assert total([10.25, 4.50]) == 14.75\n");
+  for (const a of [["init", "-q"], ["add", "."], ["-c", "user.name=Alex Doyle", "-c", "user.email=alex@northwind.example", "commit", "-qm", "Totals"]]) execFileSync("git", a, { cwd: repo });
+}
 await writeFile(path.join(out, "user-brief.md"), [`# Who you are\n${day.persona}`, `# What you must get done today\n${day.goals.map((g) => `- ${g}`).join("\n")}`,
-  `# Files you have\n${Object.keys(day.files || {}).map((f) => `- ${path.join(files, f)}`).join("\n") || "- none"}`].join("\n\n"));
+  `# Files you have\n${Object.keys(day.files || {}).map((f) => `- ${path.join(files, f)}`).join("\n") || "- none"}\n- the northwind/ledger checkout on your disk: ${repo}`].join("\n\n"));
 const thread = (s) => String(s || "").replace(/^\s*(re|fw|fwd)\s*:\s*/i, "").trim().toLowerCase();
 const t0 = Date.now();
 for (const a of [...day.arrivals].sort((x, y) => x.at - y.at)) {

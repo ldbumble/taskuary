@@ -59,6 +59,7 @@ const R = (() => {
     useEffect: (f, deps) => { const s = slot(() => ({})); if (!deps || !same(s.deps, deps)) { s.deps = deps; effects.push({ s, f }); } },
     jsx: el, jsxs: el, Fragment: "Fragment",
     render: (C, p) => { Comp = C; props = p; draw(); },
+    reset: () => { slots = []; },          // ...a test of its own: no hook state left by the one before
     text: () => { const out = []; const walk = (n) => { if (n == null || typeof n === "boolean") return; if (Array.isArray(n)) return n.forEach(walk);
       if (typeof n !== "object") return void out.push(String(n)); walk(n.props.children); }; walk(tree); return out.join(" "); },
   };
@@ -94,4 +95,22 @@ test("the bar follows the run while every row it does redraws the page with a fr
   assert.ok(reads >= first + 2, `read ${reads - first} more times in 3 s while the page redrew`);
   assert.doesNotMatch(R.text(), /\b3 of 25\b/, "the bar moved past its first read");
   assert.match(R.text(), /(\d+) of 25/);
+});
+
+// THE BAR COUNTS WHAT THE ROWS SHOW (recorded, browser/bulk-card-queue): every row stood ✓ while the bar still read "0 of 30 · 0 done" and
+// Stop the rest stood lit - the rows come with the page's redraw on each row done, the bar only with its own poll a second later.
+test("the bar is read again as the rows it counts change, never a second behind them", async () => {
+  const flush = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r)); };
+  const rows = Array.from({ length: 3 }, (_, i) => mail(i + 1, `owner${i + 1}@cedar.example`));
+  let reads = 0, run = { key: "b1", state: "running", total: 3, done: 0, failed: 0, left: 0, rows: {} };
+  globalThis.__R = R; R.reset();
+  // ...the card is built once per run (its bundle is cached), holding the api it was built with: its calls are swapped in place
+  Object.assign(globalThis.__api ||= {}, { get: async () => { reads += 1; return { data: run }; }, post: async () => ({ data: run }) });
+  const BulkCard = await build();
+  R.render(BulkCard, { rows, tid: 7, onChanged: () => {} }); await flush();
+  const first = reads;
+  run = { ...run, state: "finished", done: 3, rows: { 1: "ok", 2: "ok", 3: "ok" } };
+  R.render(BulkCard, { rows: rows.map((r) => ({ ...r, Status: "approved" })), tid: 7, onChanged: () => {} }); await flush();
+  assert.ok(reads > first, "the rows changed and the bar was not read again");
+  assert.match(R.text(), /3 of 3 · 3 done/);
 });

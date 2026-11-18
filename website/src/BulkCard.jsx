@@ -16,7 +16,9 @@ export default function BulkCard({ rows = [], tid, onChanged }) {
   const key = rows[0]?.Batch, [run, setRun] = useState(null), [skip, setSkip] = useState(() => new Set()), [open, setOpen] = useState(() => new Set());
   const [busy, setBusy] = useState(false), [err, setErr] = useState("");
   const read = useCallback(() => api.get(`/api/reviews/batch/${key}`).then(({ data }) => setRun(data)).catch(() => {}), [key]);
-  useEffect(() => { read(); }, [read]);
+  // ...and read again whenever the rows it counts change (recorded: every row stood ✓ while the bar read "0 of 30" a second behind them)
+  const marks = rows.map((r) => `${r.ReviewId}:${r.Status}`).join(",");
+  useEffect(() => { read(); }, [read, marks]);
   // ...read again while it runs, never blocking the page: a row at a time lands on GitHub or in the outbox
   // ...keyed on WHETHER it runs, never on the page's onChanged (2026-11-17): each row done pokes task-changed, the task page redraws with a
   // new arrow, and a poll keyed on it was torn down before its second came - the bar read "0 of 25" and Stop the rest stood lit to the end

@@ -78,7 +78,7 @@ class ContinueBringsTheMailTests(unittest.TestCase):
         args, kw = session.send_prompt.call_args
         self.assertTrue(args[0].startswith('NEW SINCE YOUR LAST TURN') and args[0].endswith(continuity.RESUME_PROMPT), args[0][:80])
         self.assertIn('What would building it take', args[0])
-        self.assertEqual((kw['brief'], kw['kept'], 'delivery_instructions' in kw), (True, True, False))
+        self.assertEqual((kw['brief'], kw['kept'], bool(kw.get('delivery_instructions'))), (True, True, False))
         said = [(c['Actor'], c['Body']) for c in s.list_comments(tid, internal=True) if c.get('ActorType') == general.USER_TYPE]
         self.assertEqual([a for a, _ in said], [general.BRIEF_ACTOR], "shown in the chat as Taskuary's line, not the owner's")
         self.assertIn('What would building it take', said[0][1])

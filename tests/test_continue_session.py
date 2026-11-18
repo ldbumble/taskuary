@@ -86,6 +86,25 @@ class OneRoadTests(unittest.TestCase):
         self.assertIsNotNone(session.send_prompt.call_args.kwargs['waiting'], 'and the turn does not write it a second time')
         general.OPENING.discard(tid)
 
+    def test_continue_on_a_session_that_just_ended_goes_to_a_fresh_one(self):
+        """The Continue round, 2026-11-18, recorded: a general agent's CLI died mid-turn, and Continue (Try again) was pressed while that session was
+        still closing. The press answered "continued", the turn met "this assistant session has ended", and that was logged and said nowhere -
+        nothing ran, nothing lit. A typed line in the same spot is handed once to a fresh session (say_line); Continue takes that road too."""
+        from taskuary import general
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Compare payroll vendors', 'Kind': 'general', 'Status': 'open'}, 'o')
+        dying, fresh = mock.Mock(alive=False), mock.Mock(alive=True)
+        dying.send_prompt.side_effect = general.Ended()
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=True), \
+             mock.patch('taskuary.general.provider_options', return_value=['x']), \
+             mock.patch('taskuary.general.start_session', side_effect=[dying, fresh]), \
+             mock.patch('threading.Thread', side_effect=lambda target, **k: mock.Mock(start=target)):
+            out = TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={}).json()
+        self.assertTrue(out['continued'])
+        args, kw = fresh.send_prompt.call_args
+        self.assertTrue(args[0].endswith(continuity.RESUME_PROMPT)); self.assertEqual((kw['brief'], kw['kept']), (True, True))
+        self.assertNotIn(tid, general.OPENING)
+
     def test_a_coding_agent_reopens_its_own_session_or_a_fresh_one(self):
         from taskuary import general, ingest, terminal
         s = MemoryStore()

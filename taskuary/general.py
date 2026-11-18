@@ -3776,17 +3776,19 @@ def idle_sweep(now: float = None) -> list:
 
 
 def say_line(store, tid: int, text: str, attachments=None, connector_id=None, model=None, pick=None, actor='owner', trace=None, cancel=None,
-             waiting: int = None, started=None, line_id: str = None, delivery_instructions: str = None):
+             waiting: int = None, started=None, line_id: str = None, delivery_instructions: str = None, **turn):
     """THE ONE ROAD FOR A LINE THE OWNER SENDS TO A TASK'S AGENT (the owner, 2026-11-07): the first line and every one held behind a running
     turn alike. Kept the moment it is sent (send_prompt), handed to the agent's session - started, or brought back, as needed - and, where
     that session ends under it (a turn failed, it idled out, a wrap-up closed it), handed once to a fresh one, which takes the kept line: a
     held line came back "reload the page and ask again" where the first line's road had started again quietly. -> (session, reply);
-    `started(session)` hears each session it is given to. A chat's starter behind the one road (take_line), which kept the line and its files."""
+    `started(session)` hears each session it is given to. A chat's starter behind the one road (take_line), which kept the line and its files.
+    `turn`: what kind of turn it is, as send_prompt takes it (brief, kept, as_owner, echo) - Continue's and Resume's own turns take this road too:
+    on their own they met a session that had just ended and said nothing (the Continue round, 2026-11-18)."""
     for again in (False, True):
         ses = start_session(store, tid, connector_id, model, actor, pick)
         if started: started(ses)
         try: return ses, ses.send_prompt(text, attachments, connector_id, model, pick=pick, trace=trace, cancel=cancel, waiting=waiting, line_id=line_id,
-                                         delivery_instructions=delivery_instructions)
+                                         delivery_instructions=delivery_instructions, **turn)
         except RuntimeError as e:
             if again or 'has ended' not in str(e) or (cancel is not None and cancel.is_set()): raise
             waiting = getattr(e, 'waiting', None) or waiting

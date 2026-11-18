@@ -217,7 +217,7 @@ def test_resume_starts_once_after_owner_click_and_reopens_a_finished_task():
     store = MemoryStore(); tid = task(store); finished = task(store, Status='done')
     dismissed = task(store, Status='dropped'); seen = []
     session = mock.Mock()
-    def start(st, task_id, **kw):
+    def start(st, task_id, *a, **kw):
         assert task_id in general.OPENING; seen.append(task_id); return session
     with mock.patch.object(server, 'store', store), mock.patch.object(general, 'provider_options', return_value=[{}]), \
          mock.patch.object(general, 'start_session', side_effect=start), mock.patch.dict(terminal.SESSIONS, {}, clear=True):
@@ -232,7 +232,8 @@ def test_resume_starts_once_after_owner_click_and_reopens_a_finished_task():
         try: assert client.post(f'/api/tasks/{tid}/resume').json()['action'] == 'open'
         finally: general.OPENING.discard(tid)
     assert seen == [finished, tid]
-    assert session.send_prompt.call_args.kwargs == {'as_owner': False, 'echo': False}
+    kw = session.send_prompt.call_args.kwargs
+    assert (kw['as_owner'], kw['echo'], kw.get('delivery_instructions')) == (False, False, None)
 
 
 def test_a_conversation_its_cli_no_longer_has_is_one_plain_line_and_the_turn_runs_in_full():

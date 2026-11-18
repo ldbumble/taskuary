@@ -1814,7 +1814,9 @@ def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = ''
         return _made_now(store, tid, 'task.create_from_text', {'kind': want, 'text': str(text).strip(), **{k: v for k, v in (job or {}).items() if v}}, lead)
     if kind == 'send':
         ch, to = send_to(store, channel, to)
-        if to and str(text or '').strip(): return _made_now(store, tid, 'outbox', {'channel': ch, 'to': to, 'about': str(text).strip()}, lead)
+        # ...with what he attached to the line that asked for it (his_words' files), as New's own Send something carries them
+        files = (_TURN.get() or {}).get('files')
+        if to and str(text or '').strip(): return _made_now(store, tid, 'outbox', {'channel': ch, 'to': to, 'about': general.with_files(str(text).strip(), files)}, lead)
         # A MESSAGE THAT CANNOT BE PLACED IS HIS SENTENCE TO AN AGENT (2026-11-17): "email Erin and Gail that the offsite moved to Friday"
         # came up in New cut down to the model's "The offsite moved to Friday.", To empty, under a line naming Draft it - and with nothing
         # able to send, New had already switched itself to the agent tab, so the line named a button that was not there. A recipient

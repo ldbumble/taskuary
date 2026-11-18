@@ -203,3 +203,30 @@ class AFileGoesWithTheJob(unittest.TestCase):
         self.assertEqual((line['text'], line['files']), ('summarise this for Erin', [str(kept)]))
         self.assertEqual(s.get_task(tid)['Title'][:9], 'Summarise', 'a title made of his words, never of a path')
         self.assertIn(str(kept), general.prompt_parts(s, tid)[2], "the agent's own prompt names it")
+
+    def test_a_file_attached_to_a_message_goes_on_its_task_and_its_ask(self):
+        from taskuary import config, outbox, outputs
+        s = T.store()
+        d = config.home() / 'attachments' / 'prompt' / '209902'; d.mkdir(parents=True, exist_ok=True)
+        pdf = d / '20990228-101011-abc124-q3 census.pdf'; pdf.write_bytes(b'%PDF-1.4 census'); self.addCleanup(pdf.unlink, missing_ok=True)
+        llm, _ = scripted('CALL: ' + json.dumps({'kind': 'task.create_from_text', 'params': {'kind': 'send', 'channel': 'email',
+                                                                                          'to': 'erin@northwind.example', 'text': 'The Q3 census, attached'}}))
+        with mock.patch('taskuary.capabilities.send_refusal', return_value=''), mock.patch.object(outbox, 'draft_message', return_value='Hi Erin'), \
+                mock.patch.object(outbox, 'subject_for', return_value='Q3 census'), mock.patch('taskuary.server.store', s), \
+                mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'send this to erin@northwind.example', llm=llm, images=[str(pdf)])
+        tid = int(out['open'].split('=')[1])
+        kept = outputs.folder(tid) / 'q3 census.pdf'
+        self.assertTrue(kept.is_file(), 'the file is in the task folder')
+        self.assertIn(str(kept), s.get_task(tid)['Summary'])
+        self.assertIn(str(kept), next(m for m in s.list_messages(tid) if outbox.is_ask(m))['BodyText'], 'his ask names the file')
+
+    def test_a_chat_messages_title_is_his_words_not_the_file_block(self):
+        from taskuary import outbox
+        s = T.store()
+        with mock.patch('taskuary.capabilities.send_refusal', return_value=''), mock.patch.object(outbox, 'draft_message', return_value='Hi'):
+            o = outbox.compose(s, 'whatsapp', 'erin', 'see this', 'draft', llm=None)
+        self.assertEqual(s.get_task(o['taskId'])['Title'], 'see this')
+        with mock.patch('taskuary.capabilities.send_refusal', return_value=''), mock.patch.object(outbox, 'draft_message', return_value='Hi'):
+            o = outbox.compose(s, 'whatsapp', 'erin', 'see this\n\nATTACHED FILES (read these files)\n/x/q3.pdf', 'draft', llm=None)
+        self.assertEqual(s.get_task(o['taskId'])['Title'], 'see this')

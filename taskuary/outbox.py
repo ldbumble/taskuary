@@ -184,12 +184,16 @@ def compose(store, channel: str, to, about: str, mode: str = 'draft', subject: s
     if mode not in MODES: raise ValueError(f"mode must be one of {', '.join(MODES)}")
     no = capabilities.send_refusal(store, channel)
     if no: raise ValueError(no)
-    subject = (subject or '').strip() or (subject_for(store, about, llm) if channel == 'email' else about[:120])
+    from .general import split_files
+    subject = (subject or '').strip() or (subject_for(store, about, llm) if channel == 'email' else split_files(about)['text'].strip()[:120] or about[:120])
 
     tid = store.create_task({'Title': subject[:300], 'Summary': about,
                              'Kind': 'coding' if mode == 'task' else 'reply',
                              'Status': 'open', 'Priority': 'normal', 'Source': 'outbox',
                              'Tags': f'repo:{repo}' if repo else None}, actor)
+    # ...a file he attached is the task's own, in its folder, named there - its drafter and its agent read it where they can (outputs.take_in_summary)
+    from . import outputs
+    about = outputs.take_in_summary(store, tid, actor) or about
     to_text = ', '.join(to) if isinstance(to, list) else to
     mid = ask_row(store, tid, channel, to, cc, subject, about)
     deliver = json.dumps({'channel': channel, 'to': to, 'cc': cc, 'subject': subject})

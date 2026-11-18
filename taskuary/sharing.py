@@ -575,7 +575,8 @@ def _way(store, tid: int, to: str) -> str:
 
 
 def agent_share(store, tid: int, report, to: str, text: str, via: str = '', actor: str = 'agent') -> dict:
-    """{ok, review, via, says} - or ValueError with what to fix. `report` the source the agent made (#report=N)."""
+    """{ok, review, via, says} - or ValueError with what to fix. `report` the number of a report of the owner's (#report=N) - one they have,
+    or a routine saved from this task."""
     from . import dashboards, slots, wrapup
     from .calwrite import people_of
     src = store.get_source(int(report)) if str(report or '').isdigit() else None

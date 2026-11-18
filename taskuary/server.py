@@ -6255,7 +6255,7 @@ def agent_meeting(body: AgentMeetingBody, request: Request):
 
 @app.post('/api/agent/share')
 def agent_share(body: AgentShareBody, request: Request):
-    """A report or dashboard the agent made, set up to share on the session's OWN task (sharing.agent_share) - sent only on the owner's press."""
+    """A report or dashboard of the owner's (one they have, or a routine saved from this task), set up to share on the session's OWN task (sharing.agent_share) - sent only on the owner's press."""
     from . import sharing
     return _agent_set_up(request, body.task_id, lambda: sharing.agent_share(store, body.task_id, body.report, body.to, body.text, body.via))
 

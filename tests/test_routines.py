@@ -103,4 +103,39 @@ class RunTests(unittest.TestCase):
         self.assertEqual(sorted(bool(o.get('busy')) for o in outs), [False, True])
 
 
+
+class ChangeTests(unittest.TestCase):
+    """THE AGENT CAN CHANGE ITS OWN ROUTINE (the design round, 2026-11-18): asked to make tomorrow's run do more, it had no tool and said
+    "I can't". A run asks with change_routine; it is one card the owner presses - a run's repair card - saved by the editor's own save."""
+    def setUp(self):
+        from taskuary import origin
+        self.s = store(); self.sid = routine(self.s); self.tid = run_task(self.s, self.sid)
+        p = mock.patch.object(origin, 'of_task', return_value=('owner', '')); p.start(); self.addCleanup(p.stop)
+
+    def test_a_run_asks_once_and_the_press_saves_its_new_instructions(self):
+        from taskuary import proposals
+        rv = proposals.queue(self.s, self.tid, {'action': 'change_routine', 'prompt': 'Review the open pull requests and list the stale ones.',
+                                                'why': 'you asked for the stale ones every week'})
+        self.assertTrue(rv, 'queued as one card')
+        row = self.s.get_review(rv['reviewId'])
+        self.assertIn('change the routine "Weekly review"', row['Reason'])
+        self.assertEqual(json.loads(self.s.get_source(self.sid)['ConfigJson'])['prompt'], 'Review the open pull requests.', 'nothing before the press')
+        with mock.patch('taskuary.docsync.sync_connections') as synced:
+            proposals.execute(self.s, row, 'owner')
+        cfg = json.loads(self.s.get_source(self.sid)['ConfigJson'])
+        self.assertEqual(cfg['prompt'], 'Review the open pull requests and list the stale ones.')
+        self.assertEqual(cfg['flow'][0]['prompt'], cfg['prompt'])
+        synced.assert_called()                    # ...by the editor's own save (workflows.save), its tail and all
+
+    def test_a_task_that_is_no_run_of_a_routine_is_told_so(self):
+        from taskuary import proposals
+        own = self.s.create_task({'Title': 'Something else', 'Kind': 'general', 'Status': 'open'}, 'o')
+        why = []
+        self.assertIsNone(proposals.queue(self.s, own, {'action': 'change_routine', 'prompt': 'x', 'why': 'y'}, refused=why))
+        self.assertIn('did not come from a routine', why[0])
+
+    def test_the_editor_saves_by_the_same_road(self):
+        with self.assertRaises(ValueError): workflows.save(self.s, {'SourceId': self.sid, 'ConfigPatch': {'flow': [{'id': 's1', 'kind': 'nope'}]}}, 'o')
+
+
 if __name__ == '__main__': unittest.main()

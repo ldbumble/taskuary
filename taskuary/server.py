@@ -7714,37 +7714,13 @@ def save_source(body: SourceBody):
     patch = fields.pop('ConfigPatch', None)
     if patch is not None and (not was or fields.get('ConfigJson') is not None):
         raise HTTPException(422, 'a config patch is for a saved source, and never beside a whole ConfigJson')
-    # a report's card is checked whole (below): its patch is laid over what is stored and saved the old way
-    if patch is not None and channel == 'report':
-        try: base = json.loads(was.get('ConfigJson') or '{}') or {}
-        except ValueError: base = {}
-        fields['ConfigJson'] = json.dumps({k: v for k, v in {**base, **patch}.items() if v is not None}); patch = None
-    # a workflow's steps are checked before they are kept: a broken list would only fail on its first scheduled run (flow.validate)
-    if fields.get('ConfigJson') and channel == 'report':
-        try: rcfg = json.loads(fields['ConfigJson']) or {}; flow_cfg = rcfg.get('flow')
-        except (ValueError, AttributeError): rcfg, flow_cfg = {}, None
-        # a clock the scheduler cannot read is refused, never saved as "scheduled" (reports.schedule_error, B3)
-        from .reports import schedule_error
-        if isinstance(rcfg, dict) and (why := schedule_error(rcfg)): raise HTTPException(422, f'Not saved: {why}.')
-        # ...and a dashboard's spec, the same check its composer ran: a component bound to no source never draws (dashboards.validate)
-        if isinstance(rcfg, dict) and rcfg.get('type') == 'dashboard':
-            from . import dashboards
-            ok, why = dashboards.validate(rcfg, store)
-            if not ok: raise HTTPException(422, f'Not saved: {why}.')
-            if (named := dashboards.keyed(rcfg)) != rcfg: fields['ConfigJson'] = json.dumps(named)     # kept under the names it was checked by
-        if flow_cfg is not None:
-            from . import flow
-            ok, why = flow.validate(store, flow_cfg)
-            if not ok: raise HTTPException(422, f'The steps cannot be saved yet: {why}.')
+    # ...a routine or a report saves by the one save every door of a routine takes (workflows.save): checked whole, then kept
+    if channel == 'report':
+        from . import workflows
+        try: return {'sourceId': workflows.save(store, {**fields, **({'ConfigPatch': patch} if patch is not None else {})}, ACTOR)}
+        except ValueError as e: raise HTTPException(422, str(e))
     sid = store.save_source(fields, ACTOR) if set(fields) - {'SourceId'} else fields['SourceId']
     if patch: store.merge_config('source', sid, patch)
-    # A NEW WORKFLOW STARTS ON ITS NEXT SLOT, not on the next tick. A source never run is due at once (reports.is_due) - right
-    # for a report you want to see, wrong for a job that opens tasks and drafts mail: a weekly Monday workflow saved on a
-    # Wednesday ran seconds later, beside the editor's "Saved - runs Mon at 08:00", and again beside its own Save & run now -
-    # two laptop tasks, two approvals (walk 2026-10-21). Run now is the door for running it now.
-    if not was and channel == 'report':
-        from . import workflows
-        if workflows.is_workflow(store.get_source(sid)): store.touch_source(sid)
     # SWITCHING SOMETHING ON MUST LOOK BACK. The watermark advances on every poll, including
     # polls that deliberately read nothing from this source (a repo whose issues were 'off',
     # a chat not yet approved) - so flipping it on would otherwise only ever catch what

@@ -246,10 +246,11 @@ export const proposalPresentation = (review) => {
     rejectLabel: "Dismiss",
     readOnly: true,
   };
+  // ...a run's own repair, or its agent's change to the routine it runs (workflows.change_of): one card, the steps change only on Approve
   if (proposal?.action === "repair_workflow") return {
     kind: "action",
-    title: "Repair this routine's steps",
-    context: "A step failed · the AI wrote a fix · the steps change only if you approve",
+    title: proposal.flow_run ? "Repair this routine's steps" : `Change the routine${proposal.title ? ` "${proposal.title}"` : ""}`,
+    context: proposal.flow_run ? "A step failed · the AI wrote a fix · the steps change only if you approve" : "Proposed · the routine changes only if you approve",
     destinationLabel: "Changes",
     destination: "the routine's saved steps",
     approveLabel: APPROVE,

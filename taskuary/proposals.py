@@ -376,7 +376,13 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
         if p.get('type') in REGISTRY and not p.get('connector_id'):
             try: p = {**p, **({'connector_id': c['ConnectorId']} if (c := tool_card(store, p['type'])) else {})}
             except ValueError as e: several = str(e)
-    ok, why = validate(store, p)
+    # ...a run's ask to change its own routine is the card a run's own repair is (workflows.change_of): one card, one save
+    routine = ''
+    if p.get('action') == 'change_routine':
+        from . import workflows
+        p, routine = workflows.change_of(store, task_id, p) if actor != 'workflow' else ({}, 'change_routine is an agent\'s ask')
+        p = p or {'action': 'change_routine'}
+    ok, why = validate(store, p) if not routine else (False, routine)
     if ok and several: ok, why = False, several
     # ...a new GitHub issue names its repository and a title, said to the agent now rather than at the press
     if ok and p.get('action') == 'run_tool' and p.get('type') == 'github_issue':
@@ -431,7 +437,8 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
     # a close-out is not the agent's ask ("proposes to merge the pull request this task opened" was said of a stranger's PR), and
     # neither is a workflow's own repair or write, raised by the run itself (flow.py) with no agent anywhere on the task
     said = (tool_words(store, p) if p['action'] == 'run_tool' else break_out_words(p) if p['action'] == 'break_out'
-            else f"save a script as the routine \"{p['title']}\", to run {p['runs']}" if p['action'] == 'save_routine' else why)
+            else f"save a script as the routine \"{p['title']}\", to run {p['runs']}" if p['action'] == 'save_routine'
+            else f"change the routine \"{p['title']}\"" if p['action'] == 'repair_workflow' and actor != 'workflow' else why)
     # ...nor a held browser act: the agent did not propose it, it tried it, and the hook stopped it (browsergate.check)
     # ...a shell step by what it does, never its raw line: the card folds the command under "Show the command"
     reason = (f"held before it ran, {HELD_IN[p['action']]}: {p.get('what') or ('a step' if p['action'] == 'shell_act' else p.get('command'))}"

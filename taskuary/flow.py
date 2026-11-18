@@ -847,7 +847,9 @@ def apply(store, sid: int, new: list, actor: str, why: str = '') -> list:
     ok, bad = validate(store, new)
     if not ok: raise RuntimeError(f'the repaired steps do not hold: {bad}')
     cfg = workflows.cfg_of(src); d = diff(steps_of(cfg), new)
-    store.save_source({'SourceId': src['SourceId'], 'ConfigJson': json.dumps({**cfg, 'flow': new})}, actor)
+    # ...a lone agent step is the routine's own instructions (workflows: its prompt wins over the step's), so they change together
+    lone = {'prompt': new[0].get('prompt') or '', 'skill': new[0].get('skill') or ''} if not is_flow({'flow': new}) else {}
+    workflows.save(store, {'SourceId': src['SourceId'], 'ConfigPatch': {'flow': new, **lone}}, actor)
     store.audit('source', src['SourceId'], 'flow_repaired', actor, detail={'why': why[:300], 'diff': d})
     return d
 

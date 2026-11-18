@@ -295,13 +295,73 @@ def script_routine(store, p: dict) -> tuple:
     return cfg, ''
 
 
+def save(store, fields: dict, actor: str) -> int:
+    """THE ONE SAVE OF A ROUTINE OR REPORT - the editor's (POST /api/sources), an agent's script kept as a routine, a run's change to its
+    own routine and a run's own repair alike: a ConfigPatch laid over what is stored, then its clock, its dashboard and its steps checked
+    whole, and kept. ValueError says why it was not saved."""
+    from . import flow
+    from .reports import schedule_error
+    fields, was = dict(fields), store.get_source(int(fields['SourceId'])) if fields.get('SourceId') else None
+    if (patch := fields.pop('ConfigPatch', None)) is not None:
+        fields['ConfigJson'] = json.dumps({k: v for k, v in {**cfg_of(was or {}), **patch}.items() if v is not None})
+    if fields.get('ConfigJson'):
+        try: cfg = json.loads(fields['ConfigJson']) or {}
+        except ValueError: cfg = {}
+        cfg = cfg if isinstance(cfg, dict) else {}
+        # a clock the scheduler cannot read is refused, never saved as "scheduled" (reports.schedule_error, B3)
+        if why := schedule_error(cfg): raise ValueError(f'Not saved: {why}.')
+        # ...and a dashboard's spec, the same check its composer ran: a component bound to no source never draws (dashboards.validate)
+        if cfg.get('type') == 'dashboard':
+            from . import dashboards
+            ok, why = dashboards.validate(cfg, store)
+            if not ok: raise ValueError(f'Not saved: {why}.')
+            if (named := dashboards.keyed(cfg)) != cfg: fields['ConfigJson'] = json.dumps(named)     # kept under the names it was checked by
+        # ...a workflow's steps are checked before they are kept: a broken list would only fail on its first scheduled run (flow.validate)
+        if cfg.get('flow') is not None:
+            ok, why = flow.validate(store, cfg['flow'])
+            if not ok: raise ValueError(f'The steps cannot be saved yet: {why}.')
+    sid = store.save_source(fields, actor) if set(fields) - {'SourceId'} else fields['SourceId']
+    # A NEW WORKFLOW STARTS ON ITS NEXT SLOT, not on the next tick. A source never run is due at once (reports.is_due) - right
+    # for a report you want to see, wrong for a job that opens tasks and drafts mail: a weekly Monday workflow saved on a
+    # Wednesday ran seconds later, beside the editor's "Saved - runs Mon at 08:00", and again beside its own Save & run now -
+    # two laptop tasks, two approvals (walk 2026-10-21). Run now is the door for running it now.
+    if not was and is_workflow(store.get_source(sid)): store.touch_source(sid)
+    from .docsync import sync_connections
+    sync_connections(store, actor)
+    return sid
+
+
 def save_script_routine(store, p: dict, actor: str) -> dict:
     "The owner's Approve on a save_routine card: the routine, saved as the editor saves one - checked again now, switched on, never run here."
     cfg, why = script_routine(store, p)
     if why: raise RuntimeError(f'{why} - nothing was saved')
-    sid = store.save_source({'Channel': 'report', 'Address': cfg['title'], 'Owner': actor, 'Active': 1, 'ConfigJson': json.dumps(cfg)}, actor)
+    try: sid = save(store, {'Channel': 'report', 'Address': cfg['title'], 'Owner': actor, 'Active': 1, 'ConfigJson': json.dumps(cfg)}, actor)
+    except ValueError as e: raise RuntimeError(f'{e} Nothing was saved.')
     store.audit('source', sid, 'routine_saved', actor, detail={'title': cfg['title'], 'steps': len(cfg['flow']), 'runs': runs_words(cfg)})
     return {'source': sid, 'link': f'#report={sid}', 'said': f"Saved the routine \"{cfg['title']}\" - it runs {runs_words(cfg)}."}
+
+
+# A RUN OF A ROUTINE MAY ASK TO CHANGE IT (the design round, 2026-11-18: the agent had no way to change its own routine, so "I can't"):
+# its instructions or its steps, as one card the owner presses - the card a run's own repair is (proposals 'repair_workflow'), saved by the
+# editor's own save (flow.apply -> save). Never from work a stranger started: what their mail said may be what wrote it.
+def change_of(store, tid: int, p: dict) -> tuple:
+    """(the repair_workflow card a change_routine ask is, '') or ({}, why not). `prompt` alone rewrites the routine's one agent step's
+    instructions; `flow` is its steps whole."""
+    from . import flow, origin
+    src = source_of(store, store.get_task(int(tid)) or {})
+    if not src: return {}, 'change_routine changes the routine this task is a run of - this one did not come from a routine (save_routine keeps a new one)'
+    if origin.of_task(store, tid)[0] == 'stranger': return {}, 'a routine is not changed from work a stranger started'
+    cfg = cfg_of(src); was, new = flow.steps_of(cfg), p.get('flow')
+    if new is None and str(p.get('prompt') or '').strip():
+        agent = [i for i, x in enumerate(was) if x.get('kind') == 'agent']
+        if len(agent) != 1: return {}, "this routine has no one agent step to give new instructions to - send `flow`, its steps whole"
+        new = [{**x, 'prompt': str(p['prompt']).strip()} if i == agent[0] else x for i, x in enumerate(was)]
+    if not isinstance(new, list) or not new: return {}, "change_routine needs `prompt` (its agent step's new instructions) or `flow` (its steps whole)"
+    ok, why = flow.validate(store, new)
+    if not ok: return {}, f'the changed steps do not hold: {why}'
+    if not (d := flow.diff(was, new)): return {}, 'that is the routine as it already is'
+    return {'action': 'repair_workflow', 'source_id': src['SourceId'], 'title': cfg.get('title') or src.get('Address') or '', 'flow': new,
+            'was': was, 'changes': flow.diff_text(d), 'why': ' '.join(str(p.get('why') or '').split())[:300]}, ''
 
 
 def runs_words(cfg: dict) -> str: return when_words(cfg) if any(cfg.get(k) for k in CLOCK) else 'when you run it'

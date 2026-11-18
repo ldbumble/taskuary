@@ -101,14 +101,22 @@ LAUNCHERS = frozenset('npx pnpm dlx bunx yarn exec call cmd command timeout env 
                       'caffeinate chrt taskset'.split())
 
 
-def _head(argv: list, exe: str = EXE) -> list | None:
-    "The agent-browser (or `exe`: desktop.py) arguments of one simple command, through env prefixes, `&` and any launcher before it - else None."
+def launched(argv: list, is_tool) -> list:
+    """One simple command from the program that does the work: past `FOO=bar` and `&`, and past a launcher to the first word `is_tool` names
+    (shellgate's tools, the browser's, the desktop's) - else past the launchers alone. The gates read what this returns, never `timeout`."""
     i = 0
     while i < len(argv) and (re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', argv[i]) or argv[i] == '&'): i += 1          # FOO=bar agent-browser ...
-    if i < len(argv) and _is_exe(argv[i], exe): return argv[i + 1:]
-    if i < len(argv) and re.sub(r'\.(exe|cmd|bat)$', '', os.path.basename(argv[i].replace('\\', '/')).lower()) in LAUNCHERS:
-        return next((argv[j + 1:] for j in range(i + 1, len(argv)) if _is_exe(argv[j], exe)), None)
-    return None
+    if i < len(argv) and not is_tool(argv[i]) and re.sub(r'\.(exe|cmd|bat)$', '', os.path.basename(argv[i].replace('\\', '/')).lower()) in LAUNCHERS:
+        j = next((j for j in range(i + 1, len(argv)) if is_tool(argv[j])), None)
+        if j is not None: return argv[j:]
+        while i < len(argv) and argv[i].lower() in LAUNCHERS: i += 1
+    return argv[i:]
+
+
+def _head(argv: list, exe: str = EXE) -> list | None:
+    "The agent-browser (or `exe`: desktop.py) arguments of one simple command, through env prefixes, `&` and any launcher before it - else None."
+    a = launched(argv, lambda t: _is_exe(t, exe))
+    return a[1:] if a and _is_exe(a[0], exe) else None
 
 
 def acts(cmd: str) -> list:

@@ -36,7 +36,7 @@ somewhere else, a pipe into Remove-Item - is held, never let through for being h
 """
 import contextvars, json, ntpath, os, re, shlex, shutil, subprocess, tempfile, threading
 from loguru import logger
-from .browsergate import _segments, _deny, _tell, not_approved, NEXT, OWNER_NO
+from .browsergate import _segments, _deny, _tell, launched, not_approved, NEXT, OWNER_NO
 
 HELD = 'Taskuary held this for the owner'
 _FILING = threading.Lock()
@@ -73,8 +73,12 @@ _CURL_VAL = 'AbcCdDeEFHKmoPQrtTuUwxXyYz'
 _BODY = ('--data', '--form', '--upload', '--post-', '--body-', '--json', '--raw', '--config')
 _PIE_VAL = 'aAop'
 _VERBS = {'get', 'head', 'options', 'post', 'put', 'patch', 'delete'}
+# the programs whose own grammar says a step goes out - what a launcher (`timeout 60 git push`) is read through to (browsergate.launched)
+_TOOLS = frozenset({'git', 'gh', 'glab', 'twine', 'docker', 'bash', 'sh', 'powershell', 'pwsh', 'cmd', *PUBLISH, *MAIL, *HTTP})
 _LOCAL = re.compile(r'^https?://(localhost|127\.\d+\.\d+\.\d+|\[::1\])(:\d+)?(/|$)', re.I)
-_PREFIX = ('&', 'npx', 'command', 'call', 'exec', 'sudo', 'time', 'nohup')
+
+
+def _tool(t: str) -> bool: return _name(t) in _TOOLS or _name(t) in DELETERS or _name(t) in ('find', 'cd', 'chdir', 'set-location', 'sl', 'pushd', 'push-location')
 
 
 def _name(tok: str) -> str:
@@ -85,11 +89,8 @@ def _name(tok: str) -> str:
 def _words(argv: list) -> tuple:
     """(tool, its words with every option and an option's value taken out) of one simple command, through env prefixes and the like."""
     import re
-    i = 0
-    while i < len(argv) and re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', argv[i]): i += 1
-    while i < len(argv) and argv[i].lower() in _PREFIX: i += 1
-    if i >= len(argv): return '', []
-    tool, rest, out, j = _name(argv[i]), argv[i + 1:], [], 0
+    if not argv: return '', []
+    tool, rest, out, j = _name(argv[0]), argv[1:], [], 0
     # git's own options before the subcommand that take a value (`git -C repo push`, `git -c k=v push`)
     while tool == 'git' and j < len(rest) and rest[j].startswith('-'): j += 2 if rest[j] in ('-C', '-c', '--git-dir', '--work-tree', '--namespace') else 1
     for t in rest[j:]:
@@ -232,7 +233,8 @@ def _deletes(raw: str, cwd: str, env: dict, here='') -> dict:
             continue
         try: w = [x.strip('"\'') for x in shlex.split(seg, posix=False)]
         except ValueError: w = [x.strip('"\'') for x in seg.split()]      # a quote the split cut in two (`cmd /c "cd X && rd Y"`)
-        while w and (w[0].lower() in _PREFIX or w[0].lower() in ('if', 'else', 'elseif', 'then', 'do')): w = w[1:]
+        while w and w[0].lower() in ('if', 'else', 'elseif', 'then', 'do'): w = w[1:]
+        w = launched(w, _tool)
         if not w: continue
         tool = _name(w[0])
         if tool in ('cd', 'chdir', 'set-location', 'sl', 'pushd', 'push-location'):
@@ -292,6 +294,7 @@ def _outward(cmd: str) -> list:
             r'\b(git\s+push|gh\s+(pr|issue|release|repo|api)|glab|publish|sendmail|send-mailmessage)\b', low) else []
     out = []
     for argv in segs:
+        argv = launched(argv, lambda t: _name(t) in _TOOLS)         # `timeout 60 git push` is git's push, read as git's
         tool, w = _words(argv)
         if tool in ('bash', 'sh', 'powershell', 'pwsh', 'cmd'):                 # `bash -c "git push"`: the string is a command of its own
             for t in argv[1:]:

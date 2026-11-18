@@ -45,6 +45,18 @@ class Reading(unittest.TestCase):
                     'wget -q https://docs.vendor.example/rates.csv', 'Invoke-RestMethod https://docs.vendor.example/rates'):
             self.assertEqual(sg.acts(cmd), [], cmd)
 
+    def test_a_step_behind_a_launcher_is_read_as_its_own_tool(self):
+        """`timeout 60 git push` - how agents wrap a slow step - was read as a call of `timeout` and went out unseen; so did `env`, `nice` and
+        `xargs` before a push, a merge, a POST to a payment host or a delete. A launcher runs what follows it: that program is the one read."""
+        for cmd, what in (('timeout 60 git push origin main', 'push'), ('env GIT_TRACE=1 git push', 'push'), ('nice -n 5 git push', 'push'),
+                          ('xargs -n1 gh pr merge', 'merge a pull request'), ('sudo -u build npm publish', 'publish'),
+                          ('timeout 30 curl -X POST https://pay.vendor.example/transfer', 'send data to pay.vendor.example'),
+                          ('timeout 9 rm -rf /srv/northwind/ledger', 'delete ledger')):
+            got = sg.acts(cmd, '/w')
+            self.assertTrue(got, cmd); self.assertIn(what, got[0]['what'], cmd)
+        for cmd in ('timeout 60 git status', 'time pytest -q', 'timeout 30 curl -s https://docs.vendor.example/rates'):
+            self.assertEqual(sg.acts(cmd, '/w'), [], cmd)
+
     def test_looking_and_working_locally_pass(self):
         for cmd in ('git status', 'git commit -m "push the fix"', 'git log --grep push', 'gh pr view 12', 'gh api repos/northwind/ledger',
                     'echo git push', 'npm install', 'pytest -q', 'rm -rf build', 'git pull', 'git fetch origin', 'gh pr list',

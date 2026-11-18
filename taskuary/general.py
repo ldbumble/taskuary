@@ -2727,6 +2727,11 @@ class GeneralSession:
         from . import clipool; self.warm_ = clipool.is_live(self.keep())      # its CLI was already open at the start of this turn: the audit says so
         t0 = time.time(); self._turn_trace(t0)
         self.busy, self.last = True, t0
+        # ...ON DISK FROM THE HAND-OVER (the timeline stress round, 2026-11-18): his lines are heard from the take above, and written only after
+        # the provider was picked and the cards before moved on, a restart in between left them heard with nothing under them and no cut line
+        from . import sessionrecord
+        try: sessionrecord.keep_live(self.task_id, self.trace)
+        except OSError as e: logger.debug(f'task {self.task_id}: the turn now beginning was not kept on disk - {e}')
         if (news := came_in(self.store, conversation.with_turn(self.store, self.task_id), mails)):
             delivery_instructions = f'{delivery_instructions}\n\n{news}' if delivery_instructions else news
         # A NEW TURN MAY FINISH AGAIN (the email walk, 2026-10-29): the mark a self-close leaves stops two hooks wrapping one turn,
@@ -2786,8 +2791,8 @@ class GeneralSession:
             self.store.tag_task(self.task_id, terminal.SAVED, False, 'assistant')
             self._turn_trace(t0)                 # ...again, now its provider is picked: the start names it
             # ...ON DISK FROM ITS START: kept only from its first step, a turn the restart cut while its CLI was still coming up left his line
-            # heard with nothing under it and nothing running (the recorded restart, 2026-11-11) - a turn cut at any point says it was cut
-            from . import sessionrecord
+            # heard with nothing under it and nothing running (the recorded restart, 2026-11-11) - a turn cut at any point says it was cut.
+            # Written again here, its start now naming its provider
             try: sessionrecord.keep_live(self.task_id, self.trace)
             except OSError as e: logger.debug(f'task {self.task_id}: the turn now beginning was not kept on disk - {e}')
             system, late, user = prompt_parts(self.store, self.task_id, turn=True)

@@ -883,6 +883,22 @@ class TheList(unittest.TestCase):
         terminal.recover_after_restart(self.s); general.keep_cut_turns(self.s)
         self.assertFalse([c for c in self.s.list_comments(self.tid) if 'Cut short' in c['Body']])
 
+    def test_a_line_heard_by_a_turn_still_coming_up_is_cut_with_it(self):
+        """His line was taken and heard by the turn before that turn was first written to disk - a provider picked, the cards before it moved
+        on: a restart in between left the line heard with nothing under it, nothing running and nothing saying it was cut."""
+        from taskuary import proposals
+        self.say('Suggest two.', 'l-one'); self.rest()
+        up, go, cut = threading.Event(), threading.Event(), []
+        real = proposals.move_on
+        def coming_up(*a, **k):
+            if not up.is_set(): up.set(); cut.extend(general.keep_cut_turns(self.s)); go.wait(5)      # the next start reads the disk here
+            return real(*a, **k)
+        with mock.patch.object(proposals, 'move_on', coming_up):
+            self.say('Compare both in detail.', 'l-two', wait=False)
+            self.assertTrue(up.wait(5)); go.set()
+            self.rest()
+        self.assertEqual(cut, [self.tid])
+
     def test_a_turn_the_app_closing_cut_is_kept_for_the_next_start(self):
         from taskuary import sessionrecord, terminal
         self.say('Suggest two.', 'l-one'); self.rest()

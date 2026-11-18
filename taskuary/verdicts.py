@@ -646,7 +646,12 @@ def pressed(rv: dict, out: dict) -> tuple:
     if (env := _envelope(rv)).get('kind') == 'calendar':
         from .calwrite import head_of
         return 'Send', f'the calendar was told: {head_of(env)}'
-    return 'Send', f"the {'reply' if rv.get('MessageId') else 'message'} was sent" + (f" ({out['sent']})" if isinstance(out.get('sent'), str) else '')
+    # ...and to whom, as the receipt says it went (the owner may have readdressed it, or copied someone): "the reply was sent" let its next
+    # turn tell him it had answered the person it drafted it for
+    got = out.get('sent')
+    to, cc = ((got.get('to') or [], got.get('cc') or []) if isinstance(got, dict) else ([], []))
+    whom = (f" to {', '.join(map(str, to))}" if to else '') + (f", copying {', '.join(map(str, cc))}" if cc else '')
+    return 'Send', f"the {'reply' if rv.get('MessageId') else 'message'} was sent{whom}" + (f" ({got})" if isinstance(got, str) else '')
 
 
 def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = None,

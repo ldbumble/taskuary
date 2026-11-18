@@ -50,6 +50,13 @@ class Reading(unittest.TestCase):
                     'git status', 'grep -r agent-browser docs', 'agent-browser --session tq-1 snapshot'):
             self.assertEqual(bg.acts(cmd), [], cmd)
 
+    def test_a_read_that_fetches_a_magic_link_is_judged_as_opening_it(self):
+        link = 'https://vendor.example/invoices/approve?token=9f8e7d6c5b4a39281706f5e4d3c2b1a0ffeeddcc'
+        for cmd in (f'agent-browser open {link}', f'agent-browser read {link}', f'agent-browser read --outline {link}'):
+            self.assertEqual([x['verb'] for x in bg.acts(cmd)], ['navigate'], cmd)
+        for cmd in ('agent-browser read', 'agent-browser read https://docs.example/guide', 'agent-browser read --filter Total'):
+            self.assertEqual(bg.acts(cmd), [], cmd)
+
     def test_a_find_that_only_reads_or_points_is_a_look(self):
         "Searching the page is not acting on it - by agent-browser's own grammar for find's actions, never judged, never held."
         for cmd in ('agent-browser find text "Total gross" text', 'agent-browser find role heading text --name Payroll',

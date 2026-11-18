@@ -123,7 +123,10 @@ def acts(cmd: str) -> list:
         # A LOOK THAT IS NOT ONE (M4, 2026-11-08): an address carrying a token or a long query is a magic link ("approve", "confirm",
         # one-click pay) or a way out for what the agent read (`open https://x/?d=...`) - judged like a click; and `get value` reads
         # whatever a box holds, a password the sign-in vault just filled included - checked against the page (check)
+        # ...and `read <url>` FETCHES that address (agent-browser's grammar: a read with no address is the tab's text): the same magic link
+        # passed ungated as a read (the browser-read round, 2026-11-18)
         if verb in NAVS and carries(nxt): verb = 'navigate'
+        elif verb == 'read' and carries(next((t for t in a[i + 1:] if re.match(r'^https?://', t, re.I)), '')): verb = 'navigate'
         elif verb == 'get' and nxt.lower() == 'value': out.append({'args': a, 'verb': 'get value', 'read': True}); continue
         elif verb in LOOKS or (verb == 'find' and _find_action(a[i:]) in FIND_LOOKS): continue
         if verb: out.append({'args': a, 'verb': verb, **({'nl': True} if _NL.search(str(cmd)) else {})})

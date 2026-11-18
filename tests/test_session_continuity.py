@@ -291,3 +291,37 @@ def test_an_attached_file_is_named_once_in_one_block_of_the_one_wording(resumed)
 def test_a_path_in_his_words_that_begins_with_the_files_path_still_leaves_the_file_named(resumed):
     user, f = _turn_with('compare {d}/a.pdf.bak with it', resumed)
     assert _blocked(user).count(f) == 1, user
+
+
+# A LINE STEERED INTO A TURN AT WORK READS AS THE SAME LINE AT REST (the prompt-shape round, 2026-11-18): steered in it arrived bare - a file-only
+# line as blank lines and then the block, no "the owner says" - where at rest the same line is framed as his. One frame over what one steer takes;
+# a steer that finds nothing taken (a line the steer before it already took) sends nothing, never a bare frame into the turn
+def _steered(store, tid, session):
+    from taskuary import clipool
+    got = []
+    with mock.patch.object(session, 'can_steer', return_value=True), \
+         mock.patch.object(clipool, 'steer', side_effect=lambda keep, said: got.append(said() if callable(said) else said) or True):
+        session.steer()
+    return got
+
+
+@pytest.mark.parametrize('words', ['read this'])
+def test_a_steered_line_reads_as_the_same_line_at_rest(words):
+    at_rest, f = _turn_with(words, resumed=True)
+    store = MemoryStore(); connect(store); tid = task(store)
+    session = general.GeneralSession(store, tid, pick='cli:claude')
+    general.wait_line(store, tid, words, [f])
+    [steered] = _steered(store, tid, session)
+    assert steered.startswith(f'TQ-{tid:04d} - the owner says:'), steered
+    assert at_rest.endswith(steered), (steered, at_rest[-300:])
+    assert _blocked(steered) == [f]
+
+
+def test_lines_one_steer_takes_go_under_one_frame_and_a_steer_that_took_nothing_sends_nothing():
+    store = MemoryStore(); connect(store); tid = task(store)
+    session = general.GeneralSession(store, tid, pick='cli:claude')
+    general.wait_line(store, tid, 'use the March export', [])
+    general.wait_line(store, tid, 'and leave Payworth out', [])
+    first, second = _steered(store, tid, session) + _steered(store, tid, session)
+    assert first == general._turn_only(store, tid, 'use the March export\n\nand leave Payworth out'), first
+    assert second == '', 'the second steer found its line taken by the first: nothing goes into the turn'

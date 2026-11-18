@@ -2712,7 +2712,13 @@ class GeneralSession:
         "Words into the turn at work: `said`, or his kept lines - heard in the step they go in (take_kept). False where nothing can take them now."
         from . import clipool
         if not self.can_steer(): return False
-        def lines(): return '\n\n'.join(with_files(**_line_of(r['Body'])) for r in take_kept(self.store, self.task_id, sid=self.sid))
+        # ...SAID AS THE SAME LINES ARE AT REST (send_prompt): his words under "the owner says" (_turn_only), then the one files block - steered in
+        # they arrived bare, a file-only line as blank lines and then the block. One frame over what one steer takes, as one turn at rest takes
+        # its lines under one; a later steer is a later message into the turn and says whose it is again. A steer that took nothing sends nothing
+        def lines():
+            took = [_line_of(r['Body']) for r in take_kept(self.store, self.task_id, sid=self.sid)]
+            return with_files(_turn_only(self.store, self.task_id, '\n\n'.join(x['text'] for x in took)),
+                              list(dict.fromkeys(str(Path(f).resolve()) for x in took for f in x['files']))) if took else ''
         return clipool.steer(self.keep(), lines if said is None else said)
     def tail(self, n=3):
         from .terminal import plain

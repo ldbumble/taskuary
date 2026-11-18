@@ -429,6 +429,7 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
   // ...and never under the turn's own open question (the audit, 2026-11-15: "What is your plate number?" in its words, then "For you to do:
   // Tell me your plate number"): what it asks him IS what is left to him, said once - nor on any turn but the one that `owes` it (onYouTurn)
   const onYou = owes && !live && sum ? turnOnYou(sum) : "";
+  const again = React.useContext(AgainCtx);
   // ...WHILE THE CLI COMPACTS ITS CONTEXT the turn at work says so (the owner, 2026-11-10: "show compacting like claude code does"): its newest
   // step is the compaction, not yet over
   const compacting = live && ((x) => x?.k === "compact" && !!x.status && !["completed", "failed", "cancelled"].includes(x.status))((t.steps || []).at(-1));
@@ -444,6 +445,9 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
       <TurnWorkView data={{ parts }} now={live} ended={!!t.text && !live} k={t.id} />
       {!!words && <SaidText text={words} mid={key} />}
       {!!onYou && <div className="tq-aui-summary" data-tq-on-you="" style={{ marginTop: 10 }}><Md text={onYou} /></div>}
+      {/* ...A TURN THAT COULD NOT FINISH, WORTH ANOTHER TRY (its summary's `retry`): one button, never "send any message on this task to try
+          again" (the 2026-11-18 walks) - pressed, it is his line "Try again." and the agent goes on */}
+      {owes && !live && sum?.retry && !!again && <div style={{ marginTop: 8 }}><button type="button" className="tq-chip primary" data-tq-turn-retry="" onClick={again}>{btn("try_again")}</button></div>}
       {t.state === "failed" && !!t.fail && <div className="tq-aui-note tq-aui-note-error" role="alert" data-tq-turn-failed="">⚠ {t.fail}</div>}
       {!!rest.length && <PublishedPages pages={rest} open />}
       {!!made.length && <TurnFiles files={made} />}
@@ -458,6 +462,9 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
     </div></div>;
 };
 const RetryCtx = React.createContext(null);
+const AgainCtx = React.createContext(null);
+// the line a Try again press puts in his voice - the agent reads it as the go-ahead to try what failed once more
+export const TRY_AGAIN = "Try again.";
 const WaitOnCtx = React.createContext("");
 const ConvLine = ({ x, more }) => {
   const stamp = x.at ? when(x.at instanceof Date ? x.at : String(x.at)) : "", retry = React.useContext(RetryCtx);
@@ -610,6 +617,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
   }, [runtime, attachmentsRef, selectionRef, onClearAttachments, onAttachBack, onSent, road, reloadList, task.TaskId]);
   // ...and a line whose send failed is sent again as it was typed, the failed one taken off the screen
   const retry = useCallback((l) => { setMine((m) => m.filter((x) => x.id !== l.id)); sendLine(String(l.text || "")); }, [sendLine]);
+  const again = useCallback(() => sendLine(TRY_AGAIN), [sendLine]);
   // ...and what waits, taken back or sent in now - the server's word, read again at once (the list moves it, never the page)
   const dropLine = useCallback((l) => { setMine((m) => m.filter((x) => x.id !== l.id)); api.post(`/api/tasks/${task.TaskId}/waiting/${encodeURIComponent(l.id)}/drop`).catch(() => {}).finally(() => reloadList?.()); }, [task.TaskId, reloadList]);
   const sendNow = useCallback(() => { api.post(`/api/tasks/${task.TaskId}/waiting/now`).catch(() => {}).finally(() => reloadList?.()); }, [task.TaskId, reloadList]);
@@ -698,8 +706,8 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
             {!!list && !merged.items.length && !empty && !(chat && reading) && <div className="tq-aui-welcome"><TaskuaryMark size={22} /><div>
               <div className="tq-aui-welcome-title">Work on this with your assistant</div>
               <div className="tq-aui-welcome-copy">Research, plan, write, analyze, or coordinate. This conversation stays on the task.</div></div></div>}
-            <RetryCtx.Provider value={retry}><WaitOnCtx.Provider value={waitingOn(list)}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} reviews={nextAt?.reviews || []} next={askedFirst(asking, nextAt?.reviews) ? null : nextAt?.next || null} nextRid={nextRid}
-              landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} loose={placesLoose(list)} ask={askNode} askAt={askAt} lettersAt={lettersTurn(list, merged.items)} queue={list?.queue || null} /></WaitOnCtx.Provider></RetryCtx.Provider>
+            <RetryCtx.Provider value={retry}><AgainCtx.Provider value={again}><WaitOnCtx.Provider value={waitingOn(list)}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} reviews={nextAt?.reviews || []} next={askedFirst(asking, nextAt?.reviews) ? null : nextAt?.next || null} nextRid={nextRid}
+              landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} loose={placesLoose(list)} ask={askNode} askAt={askAt} lettersAt={lettersTurn(list, merged.items)} queue={list?.queue || null} /></WaitOnCtx.Provider></AgainCtx.Provider></RetryCtx.Provider>
             {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
             {cards}
             {/* ...under everything only while the list names no turn for it (a read behind, a chat with no turn yet) */}

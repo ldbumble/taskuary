@@ -216,6 +216,18 @@ def test_unmark_takes_every_taskuary_tag_and_only_those():
     assert quickwork._unmark('Plain [[link]] text') == 'Plain [[link]] text'        # only Taskuary's own tags come out
     assert quickwork._unmark('Go <TASKUARY-HUB>{"title": "t",\n "x": 1}</TASKUARY-HUB> Friday') == 'Go  Friday'   # the Hub's JSON goes with its tags
 
+def test_a_tag_no_road_read_never_reaches_his_screen():
+    """The 2026-11-18 walk: "[[TASKUARY-FULL-AGENT]] Paying on pay.payworth.example needs a browser..." stood in the chat - the quick lane's
+    hand-on mark, written by a full turn of the same session, which only the quick road read. Whatever no road read comes out where his words
+    are made: the progress line (for_screen) and the filed answer (general._file, by the same selfclose.unmark)."""
+    from taskuary import general, selfclose
+    line = '[[TASKUARY-FULL-AGENT]] Paying on pay.payworth.example needs a browser to sign in.'
+    assert selfclose.for_screen(line) == 'Paying on pay.payworth.example needs a browser to sign in.'
+    assert quickwork._unmark is selfclose.unmark                                    # one function says what is a tag
+    src = open(general.__file__, encoding='utf8').read()
+    assert 'reply = selfclose.unmark(reply)' in src
+
+
 def test_raw_answers_are_told_from_text():
     assert all(quickwork.is_raw(t) for t in ('{"report": "x"}', '```json\n{\n  "report": "Worth', '  { "draft": null, "report": "x"'))
     assert not any(quickwork.is_raw(t) for t in ('Worth going.', '{"title": "t"}', 'The report says {"report": 1}'))

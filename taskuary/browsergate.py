@@ -279,8 +279,8 @@ def page(sid: str) -> dict:
 # and nothing more, which is all the owner was left with (2026-10-28: "it failed, no explanation?")
 NO_PAGE = ('{held}: Taskuary could not read which page your browser is on, so it could not put this in front of the owner - nothing was '
            'done. Run `agent-browser get url`. If that names the page, run your command again; if it fails too, the browser has stopped '
-           'answering: tell the owner in one line "The browser stopped answering, so I could not finish on <the site> - send another '
-           'message and I will open it again" and end your turn.')
+           'answering: tell the owner in one line "The browser stopped answering, so I could not finish on <the site>.", set "retry": true '
+           'in your summary - a Try again button is drawn for the owner - and end your turn.')
 
 
 SYSTEM = ('You guard the browser of an AI agent that works for its owner. Before the agent runs a browser command, you decide '

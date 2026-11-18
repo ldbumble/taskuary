@@ -121,7 +121,7 @@ TOOLS_BRIEF = ("YOUR TASKUARY TOOLS are functions you call, not commands to writ
                "step that leaves this computer, a delete outside your folder or an act that can't be undone waits for the owner's Approve. "
                + ASK_BY_CALLING + " Each tool is listed by one line: find_tools with its name gives its whole instructions - read them "
                "before a first use where the line is not enough - and finds the tools not listed. " + SHOW_WHAT)
-NO_BROWSER = ('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET (agent-browser is not installed), so you cannot open a site this turn. Do not say '
+NO_BROWSER = ('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET, so you cannot open a site this turn. Do not say '
               '"cannot be done from here" and do not ask the owner to paste the page: say in one line that the browser is not set up, and '
               'end with [[TASKUARY-ASK]] Set up the agent browser under {where} so I can do this myself?')
 NO_TOOLS = ('THIS AI CANNOT DRIVE A BROWSER (its card takes no tools). If the work needs a website - signing in to a portal, reading a '
@@ -411,7 +411,7 @@ def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
     if name in HANDS: return _hands(store, tid, sid, name, a)
     if not bv.installed():
         # NO BROWSER ON THIS COMPUTER YET: Taskuary fetches its own and the call waits for it, each step said in the turn (browserruntime)
-        why = bv.set_up(SAY.get((tid, sid))) if bv.can_set_up() else 'agent-browser is not installed'
+        why = bv.set_up(SAY.get((tid, sid))) if bv.can_set_up() else 'the browser is not installed'
         # ...and NO STOP (design round 2, 2026-11-18): told to say it "and that asking again tries again", an API agent ended each turn on the
         # failure and the same either/or - the owner had answered it twenty minutes before. A missing tool is the best version, its gap named
         if why: raise ValueError(f'the browser could not be set up on this computer ({why}) - nothing was done in it. Go on without it: do the '

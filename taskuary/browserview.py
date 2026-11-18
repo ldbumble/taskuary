@@ -69,17 +69,24 @@ def can_set_up() -> bool:
     "No browser here yet, and Taskuary can fetch its own for this computer."
     from . import browserruntime as rt
     return not installed() and rt.can()
+# WHY IT FAILED, IN THE OWNER'S WORDS (the 2026-11-18 walks: "browser fixture blocked outbound socket connection to ('140.82.114.3', 443)" and
+# "go on with agent-browser" were read out to him three times). The raw detail a failure carries in brackets is folded into the log, and the
+# tool is "the browser" - the one road every set-up failure is said by, whoever tells it to him
+def plain_why(why) -> str:
+    s = str(why or '')
+    while (t := re.sub(r'\s*\([^()]*\)', '', s)) != s: s = t
+    return ' '.join(re.sub(r'\bagent-browser\b', 'the browser', s).split()).strip(' .-')
 def set_up(say=None) -> str:
     "Fetch Taskuary's own browser and wait for it, `say` hearing each step. '' once there is one, else why not - in words for the owner."
     if installed(): return ''
     from . import browserruntime as rt
     try: rt.ensure(say); return ''
-    except RuntimeError as e: return str(e)
+    except RuntimeError as e: logger.info(f'the browser could not be set up: {e}'); return plain_why(e)
 def set_up_soon() -> str:
     "The same, behind the turn. '' while the first try is under way, else why the last one failed - and a new try is begun either way."
     from . import browserruntime as rt
     was = rt._STATE['failed']; rt.start()
-    return '' if installed() else was
+    return '' if installed() else plain_why(was)
 
 
 def program() -> str:
@@ -1068,10 +1075,10 @@ HOLD_LINE = ('WHEN THE WORK ENDS AT A PAYMENT, A FORM TO SUBMIT OR ANY BUTTON TH
              'until you hear back; never try the same act another way, and never ask the owner in words whether to submit, register or pay, or to click it. ')
 # ...and a browser that did not come up is said, not hidden: the agent got no brief and answered "no browser here" or sent the owner
 # looking for a connector that does not exist (the 2026-10-02 live check's gap #2, still open on 2026-10-25)
-FAILED_LINE = ('THE BROWSER DID NOT OPEN for this task ({why}). Tell the owner so in one plain line - "The browser did not open: {why}" - '
-               'and that sending another message tries again. Do not offer a connector or another road instead, and do not act as if '
-               'this task never had a browser.')
-FAILED_WHY = f'agent-browser did not answer in {LAUNCH_WAIT:.0f} s'
+FAILED_LINE = ('THE BROWSER DID NOT OPEN for this task ({why}). Do everything the work allows without it, then tell the owner in one '
+               'plain line - "The browser did not open: {why}" - and set "retry": true in your summary - a Try again button is drawn under your answer for the owner; never tell them to send a message or ask again to retry. Do not offer a connector or another road instead, and do not '
+               'act as if this task never had a browser.')
+FAILED_WHY = f'the browser did not answer in {LAUNCH_WAIT:.0f} s'
 
 
 # ONLY TASKUARY'S BROWSER, AND A FAILURE SAID PLAINLY. Asked to sign the owner up for a webinar from a forwarded mail on a task nobody had
@@ -1081,8 +1088,8 @@ FAILED_WHY = f'agent-browser did not answer in {LAUNCH_WAIT:.0f} s'
 OWN_ONLY = ('Use ONLY this browser for web pages: never a browser tool of your own CLI or of another app (its own Chrome, a browser or '
             'computer-use plugin) - Taskuary cannot show those to the owner, hold their presses or sign them in, and they fail here. ')
 SAY_WHY = ('IF A STEP FAILS OR IS REFUSED, your answer says which step, what the browser or Taskuary said in its own words, and the one '
-           'thing the owner can do about it (sign in on the site in the browser pane, approve the held step on the task, send another '
-           'message to open the browser again) - never only that you could not. ')
+           'thing the owner can do about it (sign in on the site in the browser pane, approve the held step on the task; a step worth '
+           'another go: set "retry": true in your summary - a Try again button is drawn under your answer for the owner; never tell them to send a message or ask again to retry) - never only that you could not, and never a raw error, an address or a tool\'s name. ')
 OFFER_HEAD = ('NO BROWSER IS OPEN for this task yet, but Taskuary keeps one for you: if the work needs a web page - a link in a message to '
               'follow, a form to fill, a site to sign in to - {open}; the owner sees it only '
               'when Taskuary shows it to them. Searching and reading PUBLIC pages needs no browser: use your own web search and fetch for that. '
@@ -1092,20 +1099,21 @@ OFFER_HEAD = ('NO BROWSER IS OPEN for this task yet, but Taskuary keeps one for 
               'What answers with a sign-in (a portal, an account) is never fetched from your shell: open it here from the start. '
               'NEVER use --session, --headed, profile listing, or launch Chrome separately. ')
 def offer_head() -> str: return OFFER_HEAD.format(open=OPEN_HOOK) + ASK_LINE
-NOT_SET_UP = ('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET (agent-browser is not installed). Do not use a browser tool of your own CLI '
-              'or of another app instead - Taskuary cannot show those to the owner or hold their presses, and they fail here. If the work needs a web page, do what you can without it (read the message, find the link), then tell the owner in one line: '
-              '"The browser is not set up - install agent-browser under {where}, then ask me again." ')
+NOT_SET_UP = ('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET. Do not use a browser tool of your own CLI or of another app instead - '
+              'Taskuary cannot show those to the owner or hold their presses, and they fail here. If the work needs a web page, do what you '
+              'can without it (read the message, find the link), then tell the owner in one line: "The browser is not set up on this '
+              'computer yet." - and set "retry": true in your summary - a Try again button is drawn under your answer for the owner; never tell them to send a message or ask again to retry. ')
 # ...AND A COMPUTER WITHOUT ONE IS GIVEN ONE, NOT A CHORE (the owner, 2026-11-09: "it asks for cli tool why??"). Taskuary fetches its own
 # browser (browserruntime) - behind the turn for a task that was only offered it, so the agent is told it is on its way; and when the
 # download could not be made, the real reason is the owner's line, never a settings page to go and install something on
 SETTING_UP = ('IT IS STILL BEING SET UP on this computer - a one-time download Taskuary started by itself, a few minutes. If `agent-browser` '
               'is not found when you run it, the download has not finished: do the rest of the work first, then wait a minute and try '
               'again, for up to five minutes. If it is still not there, tell the owner in one line: "The browser is still being set up on '
-              'this computer - ask me again in a few minutes." Never tell them to install anything. ')
+              'this computer." - and set "retry": true in your summary - a Try again button is drawn under your answer for the owner; never tell them to send a message or ask again to retry. Never tell them to install anything. ')
 NO_SET_UP = ('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET: Taskuary tried to set its own up and could not ({why}). Do not use a browser '
              'tool of your own CLI or of another app instead - Taskuary cannot show those to the owner or hold their presses, and they fail '
              'here. If the work needs a web page, do what you can without it, then tell the owner in one line: "The browser could not be '
-             'set up on this computer: {why}. Ask me again and Taskuary tries again." ')
+             'set up on this computer: {why}." - and set "retry": true in your summary - a Try again button is drawn under your answer for the owner; never tell them to send a message or ask again to retry. ')
 COMING = 'The browser is being set up on this computer (a one-time download) - try again in a few minutes'
 GETTING = 'Getting the browser ready on this computer - a one-time download; the agent goes on by itself once it is there.'
 # ...and a stranger's task (origin.py: a message on it is from someone the owner has not vouched for) gets no browser: a link in a

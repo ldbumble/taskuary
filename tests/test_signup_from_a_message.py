@@ -160,7 +160,7 @@ class SignUp(unittest.TestCase):
         with TheBrowser(url=None): out = self.check('agent-browser click @e5')
         why = out['hookSpecificOutput']['permissionDecisionReason']
         self.assertIn('could not read which page your browser is on', why); self.assertIn('nothing was done', why)
-        self.assertIn('send another message', why)
+        self.assertIn('"retry": true', why); self.assertNotIn('send another message', why)   # a Try again button, never a chore (F5, 2026-11-18)
         self.assertEqual(self.pending(), [])                                                # no card that could never be approved
 
     def test_approve_on_a_closed_or_unnamed_browser_does_nothing_and_says_why(self):
@@ -193,8 +193,9 @@ class TheOffer(unittest.TestCase):
         self.assertIn('never a browser tool of your own CLI', b); self.assertIn('IF A STEP FAILS OR IS REFUSED', b)
         self.assertIn('"held for the owner"', b); self.assertIn('THEY press it', b)
         self.assertIn('never a browser tool of your own CLI', browserview.brief())          # the open browser says it too
-        gone = browserview.NOT_SET_UP.format(where='Connections')
-        self.assertIn('The browser is not set up - install agent-browser under Connections', gone)
+        # ...and the owner hears the browser is not set up - never a tool's name to install, nor "ask me again": its Try again (2026-11-18)
+        gone = browserview.NOT_SET_UP
+        self.assertIn('The browser is not set up on this computer yet', gone); self.assertNotIn('agent-browser', gone); self.assertIn('"retry": true', gone)
 
 
 class TheTurn(unittest.TestCase):
@@ -227,7 +228,7 @@ class TheTurn(unittest.TestCase):
 
     def test_no_agent_browser_and_a_strangers_task_each_say_why(self):
         _, _, sess, system, kw = self.turn(installed=False)
-        self.assertIn('install agent-browser under', system)
+        self.assertIn('The browser is not set up on this computer yet', system)
         # ...and its hold hook rides anyway: a launch that gained it once a browser came changed its --settings and reopened the warm
         # conversation on a follow-up (2026-11-16) - the hook only asks whether this chat's browser is held
         self.assertEqual(kw.get('hold_sid'), sess.sid)
@@ -260,5 +261,5 @@ class AWarmConversationStaysWarm(unittest.TestCase):
         (sys1, _), (sys2, user2) = seen
         self.assertEqual(sys1, sys2, 'the system the conversation was opened with is the one it goes on with')
         self.assertEqual(first_kw.get('hold_sid'), kw.get('hold_sid'), 'its --settings (the hold hook) the same')
-        self.assertIn('install agent-browser under', sys1)
+        self.assertIn('The browser is not set up on this computer yet', sys1)
         self.assertIn('NO BROWSER IS OPEN for this task yet', user2, 'the browser now there is told in the turn')

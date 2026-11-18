@@ -63,7 +63,7 @@ test("an ended general session's chat gives the page back to the stage that is f
 // A QUESTION IS SAID ONCE (the audit, 2026-11-15: the agent's words ended on its question, and "For you to do: Tell me ..." said it again under them)
 test("a turn's open question is not said again as what is left to him", async () => {
   const fs = await import("node:fs");
-  const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  const src = read("../src/GeneralWorkspace.jsx");
   assert.match(src, /const onYou = owes && !live && sum \? turnOnYou\(sum\) : "";/);
   assert.match(src, /owes = onYouTurn\(items, \{ askAt, lettersAt, landAt: landIn \}\)/);
 });
@@ -81,4 +81,12 @@ test("every class the chat's stylesheet styles is one some component puts on an 
   const styled = new Set([...css.matchAll(/\.(tq-[a-z0-9-]*[a-z0-9])/g)].map((m) => m[1]));
   const unworn = [...styled].filter((c) => !named.has(c) && !prefixes.some((p) => c.startsWith(p)));
   assert.deepEqual(unworn, []);
+});
+
+// "For you to do: Send any message on this task when you want the portal tried again" (the 2026-11-18 walks): a turn whose summary says it is
+// worth another go draws one Try again under it, the line it sends his - never a sentence asking him to type something
+test("a turn worth another try ends on a Try again button that sends his line", () => {
+  const src = read("../src/GeneralWorkspace.jsx");
+  assert.match(src, /owes && !live && sum\?\.retry && !!again && <div style=\{\{ marginTop: 8 \}\}><button type="button" className="tq-chip primary" data-tq-turn-retry="" onClick=\{again\}>\{btn\("try_again"\)\}<\/button>/);
+  assert.match(src, /const again = useCallback\(\(\) => sendLine\(TRY_AGAIN\), \[sendLine\]\);/);
 });

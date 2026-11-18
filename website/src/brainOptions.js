@@ -46,6 +46,7 @@ export const codingChoice = (v) => String(v).startsWith("cli:") ? { brain: Strin
 // provider of whatever is available in app"): every AI ready here - a coding task's coding_options, any other's general brains - each with
 // its models, the one at work marked (`now`). `current` is its pick (`cli:<key>` / `connector:<id>`), `model` the model it runs.
 // `why` is the reason the control is greyed: there is nothing else to hand it to.
+export const SHOWN = 3;
 const modelRows = (ms = []) => ms.map((m) => (typeof m === "string" ? { id: m, label: m } : { id: m?.id, label: m?.label || m?.id })).filter((m) => m.id);
 export function switchChoices({ coding = false, codingOptions = [], generalBrains = [], brainModels = {}, current = "", model = "", read = true } = {}) {
   const cardModels = (pick) => generalBrains.find((b) => b.pick === pick)?.models;
@@ -54,8 +55,11 @@ export function switchChoices({ coding = false, codingOptions = [], generalBrain
         models: modelRows(o.kind === "cli" ? brainModels[o.key]?.models || brainModels[o.key]?.choices : cardModels(o.value)) }))
     : generalBrains.map((b) => ({ pick: b.pick, label: b.label, models: modelRows(b.models) }));
   const on = ais.find((a) => a.pick === current), named = on?.models.some((m) => m.id === model) ? model : "";
+  // ...EACH AI ITS FEW MODELS (the 2026-11-18 walk: sixteen model names for one AI): its default and the first SHOWN of the list, the one at
+  // work always - the rest `more`, folded under the AI's own "More models" until asked for
   const rows = ais.flatMap((a) => [{ pick: a.pick, model: "", label: a.label, now: a === on && !named },
-    ...a.models.map((m) => ({ pick: a.pick, model: m.id, label: m.label, ai: a.label, now: a === on && m.id === named }))]);
+    ...a.models.map((m, i) => ({ pick: a.pick, model: m.id, label: m.label, ai: a.label, now: a === on && m.id === named,
+      ...(i >= SHOWN && !(a === on && m.id === named) ? { more: true } : {}) }))]);
   const said = on ? `${on.label}${model ? ` · ${model}` : ""}` : "";
   const why = !read ? "Reading which AIs are ready…" : !ais.length ? "No AI is connected - connect one under Connections."
     : rows.length === 1 || rows.every((r) => r.now) ? "Only one AI is ready - connect another under Connections to hand this to it." : "";

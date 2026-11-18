@@ -14,7 +14,7 @@ const PILL = { fontSize: 11.5, fontWeight: 600, height: 26, minHeight: 26, py: 0
   "& .MuiButton-startIcon": { mr: 0.5 }, "&:hover": { borderColor: "var(--tq-border, #d8cfbe)", bgcolor: "var(--tq-panel, #f4f1ec)" } };
 
 export default function SwitchAi({ choices, busy = false, onPick }) {
-  const [at, setAt] = useState(null);
+  const [at, setAt] = useState(null), [open, setOpen] = useState({});
   const { rows, said, why } = choices || switchChoices();
   const title = why || (said ? `Working on ${said} - hand this task to another AI` : "Hand this task to an AI");
   return <>
@@ -24,13 +24,17 @@ export default function SwitchAi({ choices, busy = false, onPick }) {
         onClick={(e) => setAt(e.currentTarget)}>
         <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis" }}>{busy ? "Handing over…" : said || "AI"}</Box>
       </Button></span></Tooltip>
-    <Menu anchorEl={at} open={!!at} onClose={() => setAt(null)} slotProps={{ paper: { sx: { maxHeight: "60vh" } } }}>
-      {rows.map((r) => <MenuItem key={`${r.pick}/${r.model}`} data-tq-switch-option={`${r.pick}/${r.model}`} selected={r.now} disabled={r.now}
+    <Menu anchorEl={at} open={!!at} onClose={() => { setAt(null); setOpen({}); }} slotProps={{ paper: { sx: { maxHeight: "60vh" } } }}>
+      {rows.filter((r) => !r.more || open[r.pick]).map((r) => [<MenuItem key={`${r.pick}/${r.model}`} data-tq-switch-option={`${r.pick}/${r.model}`} selected={r.now} disabled={r.now}
         onClick={() => { setAt(null); onPick?.({ pick: r.pick, model: r.model, label: r.model ? `${r.ai} (${r.model})` : r.label }); }}
         sx={{ fontSize: 12.5, pl: r.model ? 4 : 1.5, fontWeight: r.model ? 400 : 600, color: r.model ? FAINT : INK, gap: 1 }}>
         <Box component="span" sx={{ flex: 1 }}>{r.label}{!r.model && <Box component="span" sx={{ fontWeight: 400, color: FAINT }}> · default model</Box>}</Box>
         {r.now && <CheckIcon sx={{ fontSize: 14 }} aria-label="at work now" />}
-      </MenuItem>)}
+      </MenuItem>,
+      // ...under an AI's last shown model, the rest of its list one press away
+      ...(!r.more && rows.some((x) => x.more && x.pick === r.pick) && !open[r.pick] && r === rows.filter((x) => x.pick === r.pick && !x.more).at(-1)
+        ? [<MenuItem key={`${r.pick}/more`} data-tq-switch-more={r.pick} onClick={() => setOpen((o) => ({ ...o, [r.pick]: true }))}
+            sx={{ fontSize: 12, pl: 4, color: FAINT, fontStyle: "italic" }}>More {r.ai || r.label} models ({rows.filter((x) => x.more && x.pick === r.pick).length})</MenuItem>] : [])])}
     </Menu>
   </>;
 }

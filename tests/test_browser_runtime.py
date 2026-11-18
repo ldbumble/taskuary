@@ -117,7 +117,7 @@ class TheSetUpTests(Base):
     def test_the_way_in_says_why_in_words_and_the_background_try_is_not_made_every_keystroke(self):
         with mock.patch.object(rt, 'ensure', side_effect=RuntimeError('agent-browser could not be downloaded (GitHub: refused)')), \
              mock.patch.object(bv.shutil, 'which', return_value=None):        # the owner's own install is not this computer's story
-            self.assertIn('GitHub: refused', bv.set_up())
+            self.assertEqual(bv.set_up(), 'the browser could not be downloaded')     # in his words; the bracketed detail goes to the log
         with mock.patch.object(rt, 'whole', return_value=True): self.assertEqual(bv.set_up(), '')
         made = []
         with mock.patch.object(rt.threading, 'Thread', side_effect=lambda **kw: made.append(kw) or mock.Mock()):
@@ -174,7 +174,7 @@ class TheCardAgentTests(unittest.TestCase):
         why = 'agent-browser could not be downloaded (GitHub: refused; npm: refused) - check the internet connection, a VPN, or a company firewall'
         sess, brain, m = self.turn(why)
         back = brain.seen[1][2]['content']
-        self.assertIn(why, back); self.assertIn('never send them to a settings page', back); m.start.assert_not_called()
+        self.assertIn(why, back); self.assertIn('never stop on this', back); self.assertIn('or send them to a settings page', back); m.start.assert_not_called()
 
 
 class TheCliAgentTests(unittest.TestCase):
@@ -206,9 +206,23 @@ class TheCliAgentTests(unittest.TestCase):
         self.assertTrue(any(e.get('name') == 'browser' and 'downloading its driver' in str(e.get('detail')) for e in sess.trace))
 
     def test_one_that_could_not_be_set_up_says_the_real_reason(self):
-        sess, system, m = self.turn(wanted=True, why='Chrome could not be downloaded (connection reset)')
-        self.assertIn('THE BROWSER DID NOT OPEN for this task (Chrome could not be downloaded (connection reset))', system)
+        sess, system, m = self.turn(wanted=True, why='Chrome could not be downloaded')
+        self.assertIn('THE BROWSER DID NOT OPEN for this task (Chrome could not be downloaded)', system)
         self.assertNotIn('install agent-browser under', system)
+        # ...and a Try again button is the way past, never "send another message" (the 2026-11-18 walks)
+        self.assertIn('"retry": true', system); self.assertNotIn('sending another message', system)
+
+    def test_the_reason_is_his_words_the_raw_detail_folded(self):
+        """The 2026-11-18 walks: "browser fixture blocked outbound socket connection to ('140.82.114.3', 443)" and "agent-browser" were read
+        out to the owner three times. The set-up's reason keeps its plain clause; the bracketed detail goes to the log."""
+        raw = ("agent-browser could not be downloaded (browser fixture blocked outbound socket connection to ('140.82.114.3', 443)) - "
+               "this computer may be offline or a firewall may block it")
+        self.assertEqual(bv.plain_why(raw), 'the browser could not be downloaded - this computer may be offline or a firewall may block it')
+        from taskuary import browserruntime as rt
+        with mock.patch.object(bv, 'installed', return_value=False), mock.patch.object(rt, 'ensure', side_effect=RuntimeError(raw)):
+            got = bv.set_up()
+        self.assertNotIn('140.82', got); self.assertNotIn('agent-browser', got)
+        self.assertNotIn('agent-browser', bv.FAILED_WHY)
 
     def test_a_task_only_offered_it_is_not_held_up_and_is_told_it_is_on_its_way(self):
         sess, system, m = self.turn(wanted=False)

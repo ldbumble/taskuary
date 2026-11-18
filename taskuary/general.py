@@ -2994,10 +2994,10 @@ class GeneralSession:
                                 + (f' It was last on {was} - open it again only if the work still needs it.' if was else ''))
                 elif self.browser_wanted:
                     # a browser that did not open is SAID - in the turn and to the agent - not left for it to guess at (2026-10-25)
-                    why = browserview.FAILED_WHY if browserview.installed() else setup_why or 'agent-browser is not installed on this computer'
+                    why = browserview.FAILED_WHY if browserview.installed() else setup_why or 'the browser is not installed on this computer'
                     self.browser_failed = why
                     self._emit(f'\x1b[33mThe browser did not open: {why}.\x1b[0m\r\n')
-                    self._remember_trace('progress', 'browser', f'The browser did not open: {why}. Send another message to try again.')
+                    self._remember_trace('progress', 'browser', f'The browser did not open: {why}.')
                     late.append(browserview.FAILED_LINE.format(why=why))
                 elif browser_offered(self.store, self.task_id, self.pick):
                     # ...and a task nobody marked still gets the browser OFFERED, so a link in a message is followed in Taskuary's own
@@ -3008,7 +3008,7 @@ class GeneralSession:
                     elif setup_why: late.append(browserview.NO_SET_UP.format(why=setup_why))
                     else:
                         from . import words as places
-                        late.append(browserview.NOT_SET_UP.format(where=places.name('ai_apps')))
+                        late.append(browserview.NOT_SET_UP)
                 elif not is_dock(self.store.get_task(self.task_id)):
                     # a stranger's task gets no browser, and its agent can say why instead of reaching for one of its own
                     from . import origin
@@ -3437,6 +3437,7 @@ class GeneralSession:
         reply, signing = selfclose.signin_marker(reply)      # a sign-in it needs: Taskuary's to do, never the agent's (signin.py)
         reply, turn = selfclose.turn_marker(reply)           # a step only the owner can do on the page: handed over on the browser view
         reply, asks = selfclose.asked_inline(could_not(self, reply))
+        reply = selfclose.unmark(reply)                     # ...and any tag no road above read is never his to see
         reply = reply or closing or ''
         if signing is not None and not reply: reply = 'Signing up on the site.' if str(signing).startswith('new:') else 'I need the site signed in to go on.'
         if turn is not None and not reply: reply = turn or 'Your turn in the browser.'

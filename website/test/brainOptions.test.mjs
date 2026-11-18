@@ -85,5 +85,11 @@ test("the task's AI switch lists every ready AI and its models, the one at work 
   assert.ok(coding.rows[0].now);
   // nothing else to hand it to: greyed, with the reason
   assert.match(switchChoices({ generalBrains: [{ pick: "cli:claude", label: "Claude Code" }], current: "cli:claude" }).why, /Only one AI is ready/);
+  // the 2026-11-18 walk: one AI listed sixteen models - each AI shows its few, the one at work always, the rest folded under More models
+  const many = Array.from({ length: 16 }, (_, i) => ({ id: `m${i}`, label: `Model ${i}` }));
+  const long = switchChoices({ generalBrains: [{ pick: "cli:claude", label: "Claude Code", models: many }, { pick: "cli:codex", label: "Codex CLI", models: [] }],
+    current: "cli:claude", model: "m9" });
+  assert.deepEqual(long.rows.filter((r) => !r.more).map((r) => r.model), ["", "m0", "m1", "m2", "m9", ""]);
+  assert.equal(long.rows.filter((r) => r.more).length, 12);
   assert.match(switchChoices({ generalBrains: [] }).why, /No AI is connected/);
 });

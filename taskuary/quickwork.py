@@ -72,12 +72,7 @@ def _clean(s) -> str:
     from .selfclose import draft_markers, for_screen, reply_marker
     return _unmark(for_screen(draft_markers(reply_marker(str(s or ''))[0])[0]))
 
-# the [[TASKUARY-...]] tags, and the two envelopes _file also acts on: the Hub's <TASKUARY-HUB>...</TASKUARY-HUB> with what it carries, and a bare
-# TASKUARY-PROPOSE (proposals.MARK)
-_TAG = re.compile(r'<\s*TASKUARY-HUB[^>]*>.*?<\s*/\s*TASKUARY-HUB[^>]*>|\[\[\s*/?\s*TASKUARY[^\]]*\]\]|<\s*/?\s*TASKUARY[^>]*>|TASKUARY-PROPOSE', re.I | re.S)
-def _unmark(text) -> str:
-    "Every Taskuary tag out: a stored field is words for the owner."
-    return _TAG.sub('', str(text or '')).strip()
+from .selfclose import unmark as _unmark       # every Taskuary tag out: a stored field is words for the owner
 
 # A TURN STORED AS THE ONE CALL'S RAW OBJECT (until 2026-11-13 a quick answer was one JSON object, and a few were filed whole, fenced or cut
 # short - the owner, 2026-11-03): it reads back as the report it holds, wherever the chat is read (general._split, sessionrecord)

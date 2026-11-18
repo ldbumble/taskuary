@@ -381,12 +381,16 @@ REPLY_LINE = (f'REPLYING FOR THE OWNER: the answer the person who asked will get
 # is Task 3.5's). Not `SUMMARY:`, which the brief already uses as the task-summary label.
 SUMMARY_OPEN, SUMMARY_CLOSE = '[[TASKUARY-SUMMARY]]', '[[/TASKUARY-SUMMARY]]'
 AFTER_PRESS = ('send', 'handoff')
+from .buttons import label as _label
+RETRY_LABEL = _label('try_again')          # the button a summary's `retry` draws
 SUMMARY_LINE = (f'ENDING EVERY TURN: close with {SUMMARY_OPEN}{{"about": "<two or three plain sentences from the whole thread: which '
                 f'conversation, what about, who asked, for whom, why - naming only people it shows in that role>", "did": "<the RESULT ITSELF '
                 f'first (the path, link, figure or name), then what you did; any part unmet or unchecked>", "on_you": ["<a step for what they '
                 f'asked that only they can take, a line each with why, said nowhere in your words above; [] when nothing_left>"],"nothing_left": <true only when the goal '
                 f'is met and you checked it>, "answer_is_result": <true when your words above ARE what was asked>, "after_press": <"handoff" only if '
-                f'you carry on once the owner hands this to a person - that press wakes you once, as any press on your card does>}}'
+                f'you carry on once the owner hands this to a person - that press wakes you once, as any press on your card does>, "retry": <true when what '
+                f'stopped you may work on another try (a page that did not load, a site that did not answer): Taskuary puts a {RETRY_LABEL} button under '
+                f'your turn - never ask the owner to send a message to try again>}}'
                 f'{SUMMARY_CLOSE} - valid JSON, plain words, no secret, "you" to the owner. A card you set up and a question you ask are never an on_you step. When their newest message CORRECTS you, add "corrections": '
                 f'[{{"kind": "redraft" (their words for the draft) or "ask" (you misread the task), "review": <the draft\'s id or null>, '
                 f'"said": "<the correction, in their words>"}}], never shown. When what came in needs nothing from you or them - judged from '
@@ -428,6 +432,8 @@ def summary_marker(text: str, letters=()) -> tuple:
     if isinstance(j.get('answer_is_result'), bool): out['answer_is_result'] = j['answer_is_result']
     # ...and the one press it waits on to carry on (general.follow_up): that press starts its next turn
     if j.get('after_press') in AFTER_PRESS: out['after_press'] = j['after_press']
+    # ...and that what stopped it is worth another go: the page draws Try again under the turn (GeneralWorkspace), his press the go-ahead
+    if j.get('retry') is True: out['retry'] = True
     if isinstance(j.get('on_you'), list): out['on_you'] = list(dict.fromkeys(x for x in (flat(o, ON_YOU_MAX) for o in j['on_you'] if isinstance(o, str)) if x))[:6]
     if cs := [{'kind': c['kind'], 'review': c['review'] if isinstance(c.get('review'), int) else None, 'said': ' '.join(c['said'].split())[:1000]}
               for c in j.get('corrections') or [] if isinstance(c, dict) and c.get('kind') in ('redraft', 'ask') and isinstance(c.get('said'), str) and c['said'].strip()]:
@@ -674,13 +680,23 @@ def turn_marker(text: str) -> tuple:
 _DONE_LINE = re.compile(r'[ \t]*\[\[\s*TASKUARY[-_ ]?DONE\s*\]\][^\n]*', re.I)
 
 
+# EVERY TAG TASKUARY TOLD AN AGENT TO WRITE, out of what the owner reads (the 2026-11-18 walk: "[[TASKUARY-FULL-AGENT]] Paying on ... needs a
+# browser" stood in his chat - the quick lane's hand-on mark, written by a turn of the same session the quick road no longer read). The
+# markers a turn acts on are read first, each by its own road; this is the last word on what is left: the [[TASKUARY-...]] tags, the Hub's
+# <TASKUARY-HUB>...</TASKUARY-HUB> with what it carries, and a bare TASKUARY-PROPOSE (proposals.MARK)
+_TAG = re.compile(r'<\s*TASKUARY-HUB[^>]*>.*?<\s*/\s*TASKUARY-HUB[^>]*>|\[\[\s*/?\s*TASKUARY[^\]]*\]\][ 	]*|<\s*/?\s*TASKUARY[^>]*>|TASKUARY-PROPOSE', re.I | re.S)
+def unmark(text) -> str:
+    "Every Taskuary tag out: words for the owner."
+    return _TAG.sub('', str(text or '')).strip()
+
+
 def for_screen(text: str) -> str:
     """A progress line as the owner reads it: no ask marker, no attach lines, no done line, and no reply block - the reply is shown
     once, as the answer. A CLI's final text streams in as a progress line too, so the box drew the markers and the answer twice
     (2026-10-15); a done line left in kept the last paragraph from matching the answer, so it was drawn twice again (walk 2026-10-29)."""
     # ...and no show line: its file is drawn under the answer, and left in it kept the answer drawn twice again (stress test 2026-11-02)
     # ...and no summary block: it is the turn's three parts, drawn under the answer from the row it is filed as (Task 3.5)
-    return show_markers(attach_markers(_DONE_LINE.sub('', without_summary(_REPLY_RE.sub('', without_ask(text)))))[0])[0].strip()
+    return unmark(show_markers(attach_markers(_DONE_LINE.sub('', without_summary(_REPLY_RE.sub('', without_ask(text)))))[0])[0])
 
 
 _ASK_ONE = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\]\s*:?', re.I)

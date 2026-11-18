@@ -121,6 +121,18 @@ const taskuaryCall = (path, cmd) => {
   return { kind: "data", summary: `Looked up ${(bits[0] || "data").replace(/[-_]/g, " ")} in Taskuary` };
 };
 
+// ...and TASKUARY'S OWN COMMAND, by its flags (cli.py's grammar): "Running taskuary, and 4 more" stood in the steps (the 2026-11-18 walk) - the
+// app's own name is never the step, what was asked of it is
+const OWN_CLI = { "--search": (v) => ({ kind: "mail", summary: v ? `Searched your mail for ${quoted(v)}` : "Searched your mail" }),
+  "--message": () => ({ kind: "mail", summary: "Read a message in full" }), "--memory": () => ({ kind: "data", summary: "Read what you have told it to keep" }),
+  "--remember": () => ({ kind: "data", summary: "Kept a fact you told it" }), "--reply": () => ({ kind: "edit", summary: "Drafted the reply" }),
+  "--reply-file": () => ({ kind: "edit", summary: "Drafted the reply" }), "--draft": () => ({ kind: "edit", summary: "Drafted an email" }),
+  "--draft-file": () => ({ kind: "edit", summary: "Drafted an email" }),
+  "--check-back": () => ({ kind: "task", summary: "Set a check-back" }), "--done": () => ({ kind: "task", summary: "Said the task is done" }),
+  "--learned": () => ({ kind: "data", summary: "Posted to the Hub" }), "--sign-form": () => ({ kind: "edit", summary: "Filled in a form" }) };
+const ownCli = (args) => { const i = args.findIndex((a) => OWN_CLI[a]);
+  return i < 0 ? { kind: "data", summary: "Looked something up in Taskuary" } : OWN_CLI[args[i]](args[i + 1] && !args[i + 1].startsWith("-") ? args[i + 1] : ""); };
+
 // AGENT-BROWSER IN WORDS, from its own fixed grammar (browsergate.LOOKS / TYPES lists the same verbs): Codex and Gemini read "Ran
 // agent-browser click" with no page or target, while Claude was saved only by its own Bash description (2026-10-25)
 const AB_VALUED = new Set(["--session", "--profile", "--state", "--args", "--user-agent", "--proxy", "--executable-path", "--cdp",
@@ -173,6 +185,7 @@ const commandStep = (cmd, depth = 0) => {
     if (p === "agent-browser" || (["npx", "pnpm", "bunx"].includes(p) && prog(plain[0]) === "agent-browser")) {
       found.push(browserStep(p === "agent-browser" ? args : args.slice(args.indexOf(plain[0]) + 1))); continue;
     }
+    if (p === "taskuary") { found.push(ownCli(args)); continue; }
     if (FETCH.has(p)) {
       const url = args.find((a) => /^https?:\/\//i.test(a) || a.includes("/api/"));
       if (!url) { found.push({ kind: "run", summary: `Ran ${p}` }); continue; }

@@ -290,3 +290,12 @@ test("ticking a to-do is no step and no working line, by tool or by shell", () =
   assert.deepEqual(steps.map((s) => s.id), ["d"]);
   assert.doesNotMatch(fs.readFileSync(new URL("../src/agentSteps.js", import.meta.url), "utf8"), /a to-do"/);
 });
+
+// "Running taskuary, and 4 more" stood in the steps on the 2026-11-18 walk: the app's own command is said by what it was asked
+test("Taskuary's own command reads as what was asked of it, never its name", async () => {
+  const { describeCall } = await import("../src/agentSteps.js");
+  assert.equal(describeCall("Bash", { command: 'taskuary --search "ledger sync" --since 2026-11-01' }).summary, "Searched your mail for 'ledger sync'");
+  assert.equal(describeCall("Bash", { command: "taskuary --message m1073" }).summary, "Read a message in full");
+  assert.equal(describeCall("Bash", { command: "taskuary --board" }).summary, "Looked something up in Taskuary");
+  assert.doesNotMatch(describeCall("Bash", { command: "taskuary --memory" }).summary, /taskuary/i);
+});

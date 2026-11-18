@@ -109,6 +109,23 @@ class TheList(unittest.TestCase):
         self.assertEqual(self.kinds(got)[-4:], [('turn', 'done'), ('line', ''), ('line', ''), ('turn', 'done')])    # both, ONE turn
         self.assertEqual(len(self.brain.calls), 2)
 
+    def test_two_mails_of_one_poll_on_an_ended_session_are_one_turn_and_each_told_once(self):
+        """Two mails of one poll on a task whose conversation had ended (a restart, an idle-out): the first set the turn going with its own
+        words as the turn, the second rode in behind it - and the turn's "came in since your last turn" said the first mail again, under
+        the turn that already carried it."""
+        from taskuary import ingest
+        self.say('Suggest two.', 'l-one'); self.rest(); self.end()
+        opens = general.start_session          # the router's own start, on this stand-in brain
+        p = mock.patch.object(general, 'start_session', lambda store, tid, **k: opens(store, tid, **{**k, 'actor': 'owner'})); p.start(); self.addCleanup(p.stop)
+        mids = [self.mail('ALPHA, the first mail of the poll.'), self.mail('BRAVO, the second mail of the poll.')]
+        for m in mids: self.assertTrue(ingest.thread_moved(self.s, self.tid, ingest._from_row(self.s.get_message(m), self.s), m, {'intent': 'task'}, 'router'))
+        self.assertTrue(until(lambda: len(self.brain.calls) >= 2)); self.rest(); time.sleep(ingest.PASS_GATHER + 0.5)
+        self.assertEqual(len(self.brain.calls), 2, 'two mails of one poll are one turn')
+        came = self.brain.calls[1].split('CAME IN ON THIS TASK SINCE YOUR LAST TURN', 1)[-1].split('\n\n', 1)[0]
+        self.assertIn('BRAVO', came)
+        self.assertNotIn('ALPHA', came, 'the mail the turn itself carries is not said again beside it')
+        self.assertTrue(conversation.heard(self.s, self.tid, 'mail', mids))
+
     def test_a_flood_is_one_hand_over_and_every_input_is_heard_once_and_told_once(self):
         self.brain.delay = 1.0
         self.say('Suggest two.', 'l0', wait=False)

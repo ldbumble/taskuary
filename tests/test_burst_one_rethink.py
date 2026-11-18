@@ -42,7 +42,7 @@ def test_a_line_that_finds_the_session_ended_starts_it_again_instead_of_being_dr
     ses.send_prompt = ended
     again = []
     with mock.patch.object(general, 'session_for', return_value=ses), mock.patch.object(ingest, 'PASS_GATHER', 0.1), \
-         mock.patch.object(ingest, '_replan_general', lambda store, t, turn: again.append(turn)):
+         mock.patch.object(ingest, '_replan_general', lambda store, t, turn, **k: again.append(turn)):
         ingest._pass_general(s, tid, mail('Following up: a late fee was added.'))
     assert len(again) == 1 and 'late fee' in again[0]
     assert not any("couldn't take" in c['Body'] for c in s.list_comments(tid))

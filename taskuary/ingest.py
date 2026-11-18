@@ -2590,7 +2590,7 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
     if not ses:
         # ...a session that ENDED before the line reached it is carried on as one that ends under it is (below): "type to carry on" here
         # was a turn owed with nothing running (the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible")
-        if joinable(store, tid, shut=False): general.OPENING.add(tid); _replan_general(store, tid, turn or _pass_turn(msg)); return
+        if joinable(store, tid, shut=False): general.OPENING.add(tid); _replan_general(store, tid, turn or _pass_turn(msg), mails=(msg.get('message_id'),)); return
         store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message could not be passed in: the assistant's session ended - {general.CARRY_ON}.")
         return
     # A BURST IS ONE RE-THINK (the owner's stress run, 2026-11-05): five mails in a few seconds were five queued turns, the agent re-reading
@@ -2631,7 +2631,7 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
         # ...the session ended under it - the agent closed its own at the end of the turn this line waited behind (the stress run,
         # 2026-11-05): the line is not lost to a Continue, it carries the conversation on in a session of its own, as a mail on a quiet task does
         if getattr(ses, "alive", True) is False and joinable(store, tid, shut=False):
-            general.OPENING.add(tid); _replan_general(store, tid, said); return
+            general.OPENING.add(tid); _replan_general(store, tid, said, mails=kept); return
         logger.warning(f'passing a line to the assistant failed for task {tid}: {e}')
         store.add_comment(tid, 'router', 'agent', f"The assistant couldn't take {_who_said(msg)}'s new message: {' '.join(str(e).split())[:200]} - {general.CARRY_ON}.")
 
@@ -2765,7 +2765,7 @@ def thread_moved(store, tid, msg: dict, mid, follow: dict | None, actor: str, ow
     general.OPENING.add(tid)
     store.add_comment(tid, 'router', 'agent', ('You answered' if own else f'{_who_said(msg)} wrote') +
                       ' on the thread - the assistant looks again at what is left to do here.')
-    _spawn(_replan_general, store, tid, turn)
+    _spawn(_replan_general, store, tid, turn, mails=(mid,))
     return True
 
 
@@ -2775,9 +2775,10 @@ def _replan_pass(store, tid, msg: dict, turn: str):
     else: general.tell(store, tid, turn)
 
 
-def _replan_general(store, tid, turn: str):
+def _replan_general(store, tid, turn: str, mails=()):
+    "`mails`: the messages (ids) `turn` carries in their words - the turn's \"came in since\" leaves them out (general.came_in)."
     from . import general
-    try: general.start_session(store, tid, actor='router').send_prompt(turn, brief=True)
+    try: general.start_session(store, tid, actor='router').send_prompt(turn, brief=True, mails=[m for m in mails if m])
     except general.Stopped: pass
     except Exception as e:
         logger.warning(f'assistant re-plan failed for task {tid}: {e}')

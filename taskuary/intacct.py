@@ -148,7 +148,9 @@ def _filter_xml(parent, filters):
         cond = _el(tgt, name)
         _el(cond, 'field', field)
         if name in ('in', 'notin'):
-            for v in (val if isinstance(val, (list, tuple)) else [val]): _el(cond, 'value', v)
+            # ...a list in words or JSON is that list: "V1, V2" sent as one value matched nothing, an empty answer read as "none"
+            vals = val if isinstance(val, (list, tuple)) else _listed(val, 'values') if isinstance(val, str) and (',' in val or val.strip().startswith('[')) else [val]
+            for v in vals: _el(cond, 'value', v)
         elif name not in ('isnull', 'isnotnull'):
             _el(cond, 'value', val)
 
@@ -169,6 +171,7 @@ def _listed(x, what: str) -> list:
         try: return list(json.loads(s))
         except ValueError: pass
     if what == 'filters': raise IntacctError(f'{FILTER_SHAPE} - not {s[:80]!r}. Nothing was sent.')
+    if what == 'values': return [v.strip() for v in s.split(',') if v.strip()]     # a value may hold a space ("Northwind West"), never a comma
     return [f for f in re.split(r'[\s,]+', s) if f]
 
 def _filters(x) -> list:

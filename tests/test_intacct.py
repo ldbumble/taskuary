@@ -222,6 +222,16 @@ class QueryTests(unittest.TestCase):
         cond = sent[1][1].find('.//filter/in')
         self.assertEqual([v.text for v in cond.findall('value')], ['V1', 'V2'])
 
+    def test_in_takes_a_list_written_as_words_or_json(self):
+        """["VENDORID", "in", "V1, V2"] sent ONE value, "V1, V2", which matches no vendor - an empty answer that read as "none"."""
+        for given in ('V1, V2', '["V1", "V2"]', 'Northwind West, V2'):
+            sent, fake = _posts(LOGIN_OK, _data([]))
+            intacct._sessions.clear()
+            with mock.patch('taskuary.intacct.requests.post', fake):
+                intacct.query(dict(CFG), 'VENDOR', ['X'], [['VENDORID', 'in', given]])
+            self.assertEqual([v.text for v in sent[1][1].findall('.//filter/in/value')][1:], ['V2'], given)
+            self.assertIn(sent[1][1].findtext('.//filter/in/value'), ('V1', 'Northwind West'), given)
+
     def test_isnull_carries_no_value(self):
         sent, fake = _posts(LOGIN_OK, _data([]))
         with mock.patch('taskuary.intacct.requests.post', fake):

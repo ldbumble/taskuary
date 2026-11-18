@@ -329,3 +329,27 @@ class PassInTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+def test_two_mails_of_one_poll_are_typed_into_a_coding_session_in_the_order_they_came():
+    """Two mails of one poll on a coding task whose session was still opening: each pass waited for the opening on its own beat, and the
+    one that woke first was typed in first - the second mail above the first."""
+    import threading, time
+    s = MemoryStore(); tid = s.create_task({'Title': 'Fix login', 'Kind': 'coding', 'Status': 'open'}, 'router')
+    live = type('Live', (), {'task_id': tid, 'alive': True, 'accepted': True})()
+    typed, done = [], threading.Event()
+    def said(st, t, m):
+        typed.append(m['body'])
+        if len(typed) == 2: done.set()
+        return True
+    general.OPENING.add(tid)
+    try:
+        with mock.patch.dict(terminal.SESSIONS, {'s-live': live}), mock.patch.object(ingest, '_said_coding', said), \
+             mock.patch('taskuary.waitroom._screen', return_value=''):
+            ingest._spawn(ingest._pass_coding, s, tid, {'body': 'The first mail.', 'message_id': 11}); time.sleep(0.3)
+            ingest._spawn(ingest._pass_coding, s, tid, {'body': 'The second mail.', 'message_id': 12}); time.sleep(0.3)
+            general.OPENING.discard(tid)               # the session is up: the second pass's beat comes round first
+            assert done.wait(5)
+    finally: general.OPENING.discard(tid)
+    assert typed == ['The first mail.', 'The second mail.']
+    assert not ingest._TYPING

@@ -2131,6 +2131,22 @@ def _hand_to_agent(store, cfg: dict, tid, msg: dict, actor: str):
 
 PASS_GATHER = 3.0           # seconds a passed-in line waits once the session is free, for the rest of a burst to join it (_pass_general)
 _PASSING, _PASS_LOCK = {}, threading.Lock()     # task id -> the turns waiting together for its session
+# ...AND WHAT IS TYPED INTO A CODING SESSION GOES IN THE ORDER IT CAME (two mails of one poll on a coding task whose session was opening: each
+# pass waited on its own beat, and the second was typed in above the first). Each pass is entered here as it is set going (_spawn, in the order
+# ingest got to it) and types once no earlier mail of the task is still on its way - a burst on a chat agent is put in order where it is said
+_TYPING, _TYPING_CV = {}, threading.Condition()  # task id -> the message ids passed to its coding session and not yet typed
+
+
+def _typing_turn(tid, mid, secs: float = None) -> None:
+    "Wait (at most `secs`, else PASS_WAIT) until no message that came before `mid` is still being passed into task `tid`'s coding session."
+    with _TYPING_CV: _TYPING_CV.wait_for(lambda: not any(m < mid for m in _TYPING.get(tid, ())), timeout=max(0., PASS_WAIT if secs is None else secs))
+
+
+def _typed(tid, mid) -> None:
+    with _TYPING_CV:
+        if mid in (q := _TYPING.get(tid, [])): q.remove(mid)
+        if not q: _TYPING.pop(tid, None)
+        _TYPING_CV.notify_all()
 PASS_WAIT = 180             # seconds a passed-in line waits for a session still opening before it is said as not passed
 
 
@@ -2655,6 +2671,7 @@ def _pass_coding(store, tid, msg: dict):
     live = lambda: next((x for x in list(terminal.SESSIONS.values()) if x.task_id == tid and x.alive), None)
     end = time.time() + PASS_WAIT
     while time.time() < end and (tid in general.OPENING or getattr(live(), 'accepted', True) is None): time.sleep(.5)
+    if isinstance(mid := msg.get('message_id'), int): _typing_turn(tid, mid, end - time.time())
     t = live()
     try: chooser = bool(t) and terminal.chooser_in(waitroom._screen(t))
     except Exception: chooser = False
@@ -2782,7 +2799,9 @@ def thread_moved(store, tid, msg: dict, mid, follow: dict | None, actor: str, ow
 def _replan_pass(store, tid, msg: dict, turn: str):
     from . import general           # ...a coding agent's by the one road Taskuary's words to it take (general.tell)
     if general.handles(store.get_task(tid) or {}): _pass_general(store, tid, msg, turn)
-    else: general.tell(store, tid, turn)
+    else:
+        if isinstance(mid := msg.get('message_id'), int): _typing_turn(tid, mid)
+        general.tell(store, tid, turn)
 
 
 def _replan_general(store, tid, turn: str, mails=()):
@@ -3224,6 +3243,11 @@ def _spawn(fn, *args, **kw):
         def fn(*a, _f=fn, **k):
             try: _f(*a, **k)
             finally: general.hand(a[1], -1)
+    elif fn in (_pass_coding, _replan_pass) and isinstance(mid := (args[2] or {}).get('message_id'), int):
+        with _TYPING_CV: _TYPING.setdefault(args[1], []).append(mid)
+        def fn(*a, _f=fn, **k):
+            try: _f(*a, **k)
+            finally: _typed(a[1], mid)
     threading.Thread(target=fn, args=args, kwargs=kw, daemon=True).start()
 
 

@@ -395,6 +395,23 @@ class TheList(unittest.TestCase):
         self.say('And that?', 'l-two'); self.rest()
         self.assertEqual([x['id'] for x in self.list()['items'][-3:-1]], [f'm:{mid}', 'l-two'])        # heard with his line, before it: it did not move
 
+    def test_his_own_reply_that_came_in_mid_turn_with_a_note_stands_after_the_turn_it_came_in_under(self):
+        """The stress round, 2026-11-18 (invented people): the agent was drafting when the owner answered from his mailbox - the sync filed his
+        reply and Taskuary's note that the draft was put down, both while the turn worked. Once the turn had answered, the note (placed at the
+        end of its own second) pushed the answer after the reply, which read at its own time: for a read the finished turn stood UNDER his
+        reply, named as the next turn's, then went back - a turn and its card gone from the canvas and drawn again."""
+        from taskuary.sessionrecord import NOTE_ACTOR
+        self.brain.delay = 3
+        self.say('Suggest two.', 'l-one', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        time.sleep(1.1); mid = self.mail('I booked the Harbour Room myself.', own=True)
+        self.s.add_comment(self.tid, NOTE_ACTOR, 'assistant_agent', 'You replied from your mailbox; I removed the unused draft.')
+        turn = [x['id'] for x in self.list()['items'] if x['kind'] == 'turn']
+        self.rest()
+        got = self.list()
+        self.assertEqual([x['id'] for x in got['items'] if x['kind'] == 'turn'], turn, self.kinds(got))   # the turn keeps its name
+        self.assertEqual(got['items'][-1]['id'], f'm:{mid}')                                              # ...and the reply stands after it
+
     def test_a_coding_run_that_left_without_finishing_says_so_last_in_its_chat(self):
         """Decided 2026-11-12: a stopped coding task said it on its header chip ("agent stopped") and its rail row (cut by the row's width),
         and its chat said nothing of the run. The task's own sentence - the one the row reads - is the chat's last line."""

@@ -406,7 +406,14 @@ def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
             held = bg.check(store, tid, sid, shlex.join([bg.EXE, 'open', u]))       # a magic link is judged like a click (browsergate.carries)
             if held: return (held.get('hookSpecificOutput') or {}).get('permissionDecisionReason') or bg.HELD
             if not bv.start(sid, u): raise ValueError(bv.FAILED_WHY)
-        else: _act(store, tid, sid, ['open', u])
+        else:
+            # ...A PAGE THAT CAME BUT NEVER FINISHED (an image or a tracker on it still loading) is open all the same: agent-browser's
+            # "Timed out ... waiting for load state" over a page whose text was there read as a failed open (the browser-read round,
+            # 2026-11-18). On that address, the agent gets the page and the line; anywhere else, the failure
+            try: _act(store, tid, sid, ['open', u])
+            except ValueError as e:
+                if not bg._same_page(bg.address(sid), u): raise
+                return f'(It had not finished loading - {str(e).strip()} - this is what has arrived.)\n' + run_tool(store, tid, sid, 'browser_look', {})
         return run_tool(store, tid, sid, 'browser_look', {})
     if name == 'browser_look':
         rc, snap = bg._run(sid, ['snapshot', '-c'] if a.get('full') else ['snapshot', '-i', '-c'], 30, 'look')

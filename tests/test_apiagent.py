@@ -1141,3 +1141,33 @@ class TheRestOfALongAnswerTests(unittest.TestCase):
         for t in (*apiagent.BROWSER, *apiagent.FILES, *apiagent.WEB):
             if t['function']['name'] in ('browser_look', 'file_read', 'web_fetch'):
                 self.assertIn('from', t['function']['parameters']['properties'], t['function']['name'])
+
+
+class AnOpenThatNeverFinishedTests(unittest.TestCase):
+    """A page whose text came but whose load never finished - an image or a tracker on it still loading - made agent-browser answer
+    "Timed out after 25000ms waiting for load state 'load'", and browser_open told the agent it had failed over a page it could read."""
+
+    def setUp(self):
+        self.s, self.ran = MemoryStore(), []
+        self.tid = self.s.create_task({'Title': 'Payroll runs summary', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        def run(sid, args, wait, tag):
+            self.ran.append(args[0])
+            if args[0] == 'open': return 1, "✗ Timed out after 25000ms waiting for load state 'load'"
+            return 0, '- heading "Payroll runs" [level=2, ref=e2]\n- link "Next" [ref=e9]'
+        self.on = 'https://portal.example/runs?page=2'
+        for p in (mock.patch.object(bv, 'installed', return_value=True), mock.patch.object(bv, 'state', return_value={'open': True}),
+                  mock.patch('taskuary.browsergate._run', side_effect=run), mock.patch('taskuary.browsergate.check', return_value={}),
+                  mock.patch('taskuary.browsergate.address', side_effect=lambda sid, st=None: self.on)):
+            p.start(); self.addCleanup(p.stop)
+
+    def open(self): return apiagent.run_tool(self.s, self.tid, 'sid-o', 'browser_open', {'url': 'https://portal.example/runs?page=2'})
+
+    def test_the_page_it_reached_is_read_and_said_unfinished(self):
+        got = self.open()
+        self.assertIn('Payroll runs', got); self.assertIn('had not finished loading', got)
+        self.assertEqual(self.ran, ['open', 'snapshot'])
+
+    def test_a_page_it_never_reached_is_still_a_failure(self):
+        self.on = 'https://portal.example/runs?page=1'
+        with self.assertRaises(ValueError) as e: self.open()
+        self.assertIn('Timed out', str(e.exception))

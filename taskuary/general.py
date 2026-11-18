@@ -819,9 +819,9 @@ def _changed(store, r) -> str:
 FOLLOW_UP = ('The owner just pressed what your last turn waited on (see what the owner did since your last answer). Carry on from there as '
              'you said you would - check it landed first; never redo it.')
 _WOKEN: set = set()
-def follow_up(store, tid, press: str, actor: str = 'owner', said: str = None) -> bool:
+def follow_up(store, tid, press: str, actor: str = 'owner', said: str = None, heard=None) -> bool:
     """Start one turn on task `tid` when its agent's newest summary waits on `press` ('send', 'handoff') - or, with `said` (approved), after
-    any answer of its own, `said` its prompt. True when one was started."""
+    any answer of its own, `said` its prompt. True when one was started. `heard()` runs once the prompt is in - never for a start that failed."""
     try:
         last = next((c for c in reversed(store.list_comments(int(tid), internal=True)) if c.get('ActorType') in (SUMMARY_TYPE, ASSISTANT_TYPE)), None)
         summ = json.loads(last['Body']) if last and last.get('ActorType') == SUMMARY_TYPE else None
@@ -830,10 +830,13 @@ def follow_up(store, tid, press: str, actor: str = 'owner', said: str = None) ->
     if not said and (not isinstance(summ, dict) or summ.get('after_press') != press): return False
     _WOKEN.add(last['CommentId'])
     def go():
-        try: start_session(store, int(tid), actor=actor).send_prompt(said or FOLLOW_UP, as_owner=False, echo=False)
+        try:
+            start_session(store, int(tid), actor=actor).send_prompt(said or FOLLOW_UP, as_owner=False, echo=False)
         # ...a wake that never started woke nobody: the owner's next press on that answer starts it (it was once per answer even so, and
         # every later press was silent - the spine audit, 2026-11-09)
-        except Exception as e: _WOKEN.discard(last['CommentId']); logger.warning(f'task {tid}: the follow-up after {press} did not start - {e}')
+        except Exception as e: _WOKEN.discard(last['CommentId']); logger.warning(f'task {tid}: the follow-up after {press} did not start - {e}'); return
+        try: heard and heard()
+        except Exception as e: logger.warning(f'task {tid}: the follow-up began, its mark was not kept - {e}')
     threading.Thread(target=go, daemon=True, name=f'follow-up-{tid}').start()
     return True
 # AN APPROVAL WAKES THE AGENT THAT SET IT UP (the owner, 2026-11-09: "when you hit approve the agent continues and says what it did and what
@@ -841,19 +844,22 @@ def follow_up(store, tid, press: str, actor: str = 'owner', said: str = None) ->
 # words, never the owner's line. A held step tells its own agent (browsergate._tell), in its own words, by the same road (tell); a
 # landing its own (landing._landed)
 APPROVED = 'The owner pressed {press} on what you set up, and it went through: {what}. '
-def tell(store, tid: int, said: str, actor: str = 'owner') -> str:
+def tell(store, tid: int, said: str, actor: str = 'owner', heard=None) -> str:
     """Hand task `tid`'s agent Taskuary's words `said` - THE ONE ROAD every word of Taskuary's to an agent takes (an approval, a held step's
     result, a landing): 'told' through the waiting room (its holds: the owner typing, a stranger, a question) to a live agent, a resting
     coding one, or a coding one whose session ended - reopened on its own run; 'woke' a resting general agent that has answered on it;
-    '' where no agent ever worked it."""
+    '' where no agent ever worked it. `heard(how)` runs once the words are with the agent - for a wake, only once its turn began: marked
+    told before the start, a wake that failed (no AI connected) hid the press from every later turn (the stress round, 2026-11-18)."""
     from . import acpcoding, waitroom, workerstate as ws
     t = store.get_task(int(tid))
     # ...A CODING AGENT WHOSE SESSION ENDED HEARS IT TOO (the north-star audit, 2026-11-10 - the owner: "it shoudl prompt you, should i deploy
     # and respond once deployed??? isnt' this the goal?"): an approved merge or comment was told nobody, and nothing said so, while a
     # landing's word reached the same agent by the waiting room
     if ws._live(int(tid)) or acpcoding.idled(int(tid), store) or (t and not handles(t) and store.last_transcript(int(tid))):
-        waitroom.add(store, int(tid), said, 'router'); return 'told'
-    return 'woke' if t and handles(t) and follow_up(store, tid, 'send', actor, said=said) else ''
+        waitroom.add(store, int(tid), said, 'router')
+        if heard: heard('told')
+        return 'told'
+    return 'woke' if t and handles(t) and follow_up(store, tid, 'send', actor, said=said, heard=heard and (lambda: heard('woke'))) else ''
 TOLD = 'told_agent'          # audit on a review: its agent was handed the yes in Taskuary's words - owner_did never says it again
 def approved(store, tid: int, press: str, what: str, actor: str = 'owner', review: int = None) -> str:
     """Hand task `tid`'s agent the approval that went, as `tell` hands anything: 'told', 'woke' or ''. Said ONCE (the owner's rules, part 3:
@@ -862,10 +868,9 @@ def approved(store, tid: int, press: str, what: str, actor: str = 'owner', revie
     from .browsergate import NEXT
     r = store.get_review(int(review)) if review else None
     from .cardqueue import says
-    got = tell(store, tid, APPROVED.format(press=press, what=' '.join(str(what or 'done').split())[:400] + (_changed(store, r) if r else '')) + NEXT
-               + (f' {line}' if (line := says(store, tid, pressed=True)) else ''), actor)
-    if got and r: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': got})
-    return got
+    mark = r and (lambda how: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': how}))
+    return tell(store, tid, APPROVED.format(press=press, what=' '.join(str(what or 'done').split())[:400] + (_changed(store, r) if r else '')) + NEXT
+                + (f' {line}' if (line := says(store, tid, pressed=True)) else ''), actor, heard=mark)
 # A PRESS THAT FAILED IS HANDED BACK AT ONCE (the owner, 2026-11-16: "we can't have an agent asking to do something then it does nothing or
 # errors out, at least hand back to agent so we are not left hanging"): an approved INSERT failed on its card, the task sat on "waiting on you",
 # and its agent heard of it only with the owner's next line. Told as a yes that went is (approved), in the words owner_did would have said
@@ -876,10 +881,10 @@ def failed(store, tid: int, review: int, actor: str = 'owner') -> str:
     r = store.get_review(int(review))
     if not r or not (failed_act(r) or r['Status'] == 'pending' and (r.get('ActError') or r.get('DeliveryState') in NOT_GONE)): return ''
     from .cardqueue import says
-    got = tell(store, tid, f'The owner {_decided(store, r)}. {FAILED_NEXT}' + (f' {line}' if (line := says(store, tid, pressed=True)) else ''), actor)
+    got = tell(store, tid, f'The owner {_decided(store, r)}. {FAILED_NEXT}' + (f' {line}' if (line := says(store, tid, pressed=True)) else ''), actor,
+               heard=lambda how: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': how, 'failed': True}))
     # ...and its card says so under the error, so the owner is not left wondering who moves next (an act's; a send's line is its own)
     if got and r.get('ActError'): store.review_act_failed(r['ReviewId'], f"{str(r['ActError'])[:250].rstrip('. ')}. {AGENT_TOLD}", r.get('DecidedBy') or actor)
-    if got: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': got, 'failed': True})
     return got
 def last_turn_began(store, tid: int) -> str | None:
     """When the turn task `tid`'s agent last answered BEGAN - the owner's line or Taskuary's brief it answered, or its start on the worker record,

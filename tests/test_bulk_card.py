@@ -39,7 +39,7 @@ def emails(n): return [{'to': f'owner{i}@cedar.example', 'subject': f'Interest i
 
 def press(s, key, skip=(), told=None):
     told = [] if told is None else told
-    with mock.patch.object(general, 'tell', lambda st, t, said, actor='owner': told.append(said) or 'woke'):
+    with mock.patch.object(general, 'tell', lambda st, t, said, actor='owner', heard=None: told.append(said) or (heard and heard('woke')) or 'woke'):
         return bulkcard.run(s, key, skip, wait=True), told
 
 
@@ -94,7 +94,7 @@ def test_cancel_stops_the_rest_and_what_was_not_run_still_waits_on_the_card():
     with mock.patch.object(server, 'store', s):
         out = call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='duplicates', items=[{'number': n} for n in range(1, 41)])
     gh, told = GitHub(delay=0.05), []
-    with mock.patch.object(github.requests, 'patch', gh.patch), mock.patch.object(general, 'tell', lambda st, t, said, actor='owner': told.append(said) or 'woke'):
+    with mock.patch.object(github.requests, 'patch', gh.patch), mock.patch.object(general, 'tell', lambda st, t, said, actor='owner', heard=None: told.append(said) or (heard and heard('woke')) or 'woke'):
         bulkcard.run(s, out['batch'])
         end = time.time() + 20
         while bulkcard.state(s, out['batch'])['done'] < 5 and time.time() < end: time.sleep(0.01)

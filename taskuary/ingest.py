@@ -2152,7 +2152,7 @@ def live_agent(store, tid) -> str:
 WHY = {'not_new': 'not new work', 'live': 'an agent is live on it', 'closed': 'the task is closed', 'off': 'passing lines to the agent is switched off',
        'no_session': 'no live session to pass it to', 'not_assistant': 'not an assistant task', 'no_conversation': 'no agent conversation',
        'degraded': 'triage could not read it', 'channel': 'the channel waits for the owner', 'another': 'another agent is live on it',
-       'no_carry': 'no conversation to carry on', 'own_task': 'it is your own task, so no agent works it', 'no_coding_session': 'no saved coding session to reopen'}
+       'no_carry': 'no conversation to carry on', 'queued': 'its agent is queued to start and hears it then', 'own_task': 'it is your own task, so no agent works it', 'no_coding_session': 'no saved coding session to reopen'}
 class Why(str): code = ''
 def reason(code: str) -> Why: w = Why(WHY[code]); w.code = code; return w
 def code_of(why) -> str: return getattr(why, 'code', '')
@@ -2183,6 +2183,9 @@ def carry_on_why(store, tid, msg: dict, mid, follow: dict | None) -> str:
     t = store.get_task(tid) or {}
     if not follow or follow.get('degraded') or follow.get('intent') != 'task': return reason('not_new')
     if live_agent(store, tid): return reason('live')
+    # ...nor over a START STILL QUEUED (a full house): it opens on the task with every message on it, this one too - "No agent started: no
+    # conversation to carry on" stood under "Waiting its turn". A queued TURN is a conversation's next one: the carry-on joins it (queue_turn)
+    if (q := store.get_dispatch(tid)) and not q.get('Turn'): return reason('queued')
     kind = 'general' if general.handles(t) else t.get('Kind')
     lack = (reason('own_task') if kind not in task_kinds.AGENT else reason('no_carry')
             if kind == 'general' and not general.history(store, tid) else _resumable_coding(store, tid)[1] if kind == 'coding' else '')
@@ -2343,7 +2346,7 @@ def first_agent(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> 
 # answered "not an agent's task" and wrote it nowhere, so a task that needed an agent sat looking as if nobody had got round to it.
 # Silent only where nothing was asked of an agent, the owner switched it off, one is already on it or another road is its own (the line
 # went nowhere an agent was ever going to be): ONE list for carrying on, passing in and waking - three had drifted apart
-QUIET_WHY = ('not_new', 'live', 'closed', 'off', 'no_session', 'not_assistant', 'no_conversation', 'degraded')
+QUIET_WHY = ('not_new', 'live', 'queued', 'closed', 'off', 'no_session', 'not_assistant', 'no_conversation', 'degraded')
 NOT_STARTED = 'No agent started:'
 
 

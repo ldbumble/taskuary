@@ -3132,7 +3132,7 @@ class GeneralSession:
             brain = llm_mod.build_llm(self.store, **build_args, job='quick_work') if quick else llm_mod.build_llm(self.store, **build_args, job='general')
             if not brain: raise RuntimeError('the AI chosen for this is not available - pick another, or connect it again')
             from . import apiagent
-            looped, api_tools, api_box = False, None, ()
+            looped, api_tools, api_box, toolbox = False, None, (), apiagent.TOOLS_BRIEF
             if api_hands:
                 # THE CLI'S TOOLBOX ON AN API CARD (the owner, 2026-11-09: "make sure hipaa thing matches capabilities of claude cli"): Taskuary's
                 # own tools through the same gated server a CLI session reaches (apiagent.tools_for), and the browser on the owner's own task.
@@ -3154,7 +3154,11 @@ class GeneralSession:
                     from . import continuity
                     key = (continuity.context_key(self.store, self.pick, self.model), stranger)
                     if self.card_key != key: self.card_msgs, self.card_key = [], key
-                    system = f'{system}\n\n{apiagent.TOOLS_BRIEF}\n\n{apiagent.where_line(self.store, self.task_id)}'
+                    # ...AND ITS SYSTEMS AND MAILBOXES, as a CLI with hands is told them (docsync.agent_systems): one prompt for every road -
+                    # the card's agent was left to find the owner's connections and the mailboxes it sends from by calling around for them
+                    from . import docsync
+                    toolbox = '\n\n'.join(x for x in (apiagent.TOOLS_BRIEF, '' if stranger else docsync.agent_systems(self.store, True)) if x)
+                    system = f'{system}\n\n{toolbox}\n\n{apiagent.where_line(self.store, self.task_id)}'
                     # ...ONE WAY TO WRITE A REPLY, as on a CLI with the toolbox: propose_reply, not the marker line beside it - and its own
                     # search and tick the same (for_toolbox). Swapped where the turn is asked, never here: a card that then refuses tools
                     # is asked the plain way, and needs the block
@@ -3207,7 +3211,7 @@ class GeneralSession:
                                                   trace=visible, cancel=cancel, images=_images(paths), tools=api_tools, history=self.card_msgs) or '').strip()
                     except apiagent.ToolsRefused as e:
                         logger.info(f'task {self.task_id}: {self.provider} took no tools - asked the plain way ({str(e)[:160]})')
-                        looped, system = False, f"{system.replace(apiagent.BRIEF, '').replace(apiagent.TOOLS_BRIEF, '')}\n\n{apiagent.no_tools_line()}"
+                        looped, system = False, f"{system.replace(apiagent.BRIEF, '').replace(toolbox, '')}\n\n{apiagent.no_tools_line()}"
                 with llm_mod.watching(visible):          # an API brain's own web searches are steps too (llm.watching)
                     return str(brain(system, user, max_tokens=limit, images=_images(paths), **_web(brain)) or '').strip()
             try: reply = ask(brain, user + files(user))

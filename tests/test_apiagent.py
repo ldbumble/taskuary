@@ -499,6 +499,24 @@ class TheSessionTests(unittest.TestCase):
         self.assertEqual(names.count('show'), 1, "the server's show, never a second")
         self.assertTrue({'search_messages', 'propose_reply', 'browser_open'} <= set(names))
 
+    def test_a_card_with_tools_is_told_the_owners_systems_and_mailboxes_as_a_cli_is(self):
+        # design round 2, 2026-11-18: one prompt for every road - a CLI with hands is told the owner's connections and the mailboxes it sends
+        # from (docsync.agent_systems); an AI card's agent with the same tools was not, and called around for them. A card that refuses tools
+        # is asked the plain way, with no word of tools it cannot call
+        from taskuary import docsync
+        SYSTEMS = 'YOUR SYSTEMS - Northwind books (connector_id 4). MAILBOXES you can send FROM: alex@northwind.example (gmail)'
+        seen, plain = [], []
+        class Brain:
+            def chat(self, msgs, tools, max_tokens, **kw): seen.append(msgs[0]['content']); return {'content': 'ok'}
+        class Refuses:
+            def __call__(self, system, user, **kw): plain.append(system); return 'ok'
+            def chat(self, *a, **kw): raise RuntimeError('hipaa_ai error 400 at https://gateway.example: tools are not supported')
+        with mock.patch.object(docsync, 'agent_systems', return_value=SYSTEMS):
+            self._turn(Brain(), toolbox=('search_messages', 'run_system'))
+            self._turn(Refuses(), toolbox=('search_messages', 'run_system'))
+        self.assertIn(SYSTEMS, seen[0])
+        self.assertNotIn(SYSTEMS, plain[0]); self.assertNotIn(apiagent.TOOLS_BRIEF, plain[0])
+
     def test_a_card_with_the_email_tool_hears_the_tool_and_one_that_refuses_tools_the_block(self):
         # the agent walk, 2026-11-10: one road for an email by what the session has - and a model that would not take tools is asked the
         # plain way with the plain way's road, where it used to be left with the name of a tool it had just refused

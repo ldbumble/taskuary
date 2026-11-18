@@ -254,6 +254,8 @@ class Holding(unittest.TestCase):
             with on(), verdict(pay), mock.patch('taskuary.shellgate.trusted', return_value='northwind/ledger' if trust else ''):
                 out = hooks.command_gate(self.s, self.tid, 'run1', 'agent-browser click @e12 && git push origin main', 'Bash', r'C:\work\ledger')
             self.assertEqual(out['hookSpecificOutput']['permissionDecision'], 'deny', trust)
+            # ...and the agent hears that the rest of its line did not run either: told only of the click, it took its push as gone out
+            self.assertIn('Nothing else in your line ran', out['hookSpecificOutput']['permissionDecisionReason'])
             [rv] = self.pending(); p = json.loads(rv['DraftText'])
             self.assertEqual((p['action'], p['args']), ('browser_act', ['click', '@e12']), trust)
             for ask in ('terminal', 'chat'):

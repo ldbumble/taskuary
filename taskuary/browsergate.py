@@ -372,7 +372,14 @@ def _pending(store, tid: int, sid: str, args: list, url: str = ''):
 def check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> dict:
     """_check, and A FAILURE ONCE THERE IS AN ACT IS A HOLD: the hook's route lets a command go on any error (server.cli_hook_browser), so a
     payment whose card could not be written - a busy store, a record that raised - ran with no card and no press."""
-    try: return _check(store, tid, sid, cmd, brain, cwd)
+    try:
+        out = _check(store, tid, sid, cmd, brain, cwd)
+        # ...AND WHAT ELSE THE LINE HELD DID NOT RUN, said: a line that pushed and clicked Pay is held here as the click alone, and told only of
+        # the click the agent took its push as gone out. Only the browser commands before the held one ran (they are named where they failed)
+        if out and any(_head(a) is None for a in _segments(cmd) or []):
+            d = out['hookSpecificOutput']
+            d['permissionDecisionReason'] += ' Nothing else in your line ran, save any browser commands before the held one - run the rest on its own line.'
+        return out
     except Exception as e:
         if not acts(cmd): raise
         logger.warning(f'browsergate: task {tid} - the act was not filed for the owner - {e}')

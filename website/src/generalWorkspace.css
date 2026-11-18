@@ -64,6 +64,8 @@
 [data-tq-prompt-box] .tq-aui-input { field-sizing: content; }
 .tq-aui-send { width: 34px; height: 34px; flex: 0 0 34px; border: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; color: white; background: #738275; }
 .tq-aui-send:disabled { cursor: default; opacity: .4; }
+/* ...the faint 9px line under the box. A turn or a line that FAILED is not one: it is the failed step's own note (agentStepRows.css
+   .tq-aui-note-error), where it happened - drawn here, "It stopped without saying why" was a grey 9px centred whisper (the visual pass, 2026-11-18) */
 .tq-aui-hint { margin: 5px auto 0; text-align: center; color: var(--tq-muted, #a09b92); font: 9px/1.2 'Cascadia Mono', Consolas, monospace; }
 .tq-aui-attachments { box-sizing: border-box; }
 /* on the assistant canvas the room is the agent's answer, not the keyboard help (the owner, 2026-10-18); a closed chat's notice keeps its line */

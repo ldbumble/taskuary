@@ -449,7 +449,7 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
       {live && <div className="tq-aui-thinking" role="status" aria-label="The agent is at work" data-tq-working="" {...(t.state === "starting" ? { "data-tq-starting-line": "" } : {})}><i /><i /><i />{compacting
         ? <span data-tq-compacting="" style={{ marginLeft: 8, fontSize: 12.5 }}>Compacting…</span>
         : doing ? <span className="tq-aui-working-line" data-tq-working-line="" title={doing}>{doing}</span> : null}</div>}
-      {t.state === "failed" && !!t.fail && <div className="tq-aui-hint" role="alert" data-tq-turn-failed="">⚠ {t.fail}</div>}
+      {t.state === "failed" && !!t.fail && <div className="tq-aui-note tq-aui-note-error" role="alert" data-tq-turn-failed="">⚠ {t.fail}</div>}
       {!!rest.length && <PublishedPages pages={rest} open />}
       {!!made.length && <TurnFiles files={made} />}
       {/* ...what this turn asked him, where it asked it (the list's `asking.turn`): above its card, never at the chat's foot */}
@@ -469,7 +469,7 @@ const ConvLine = ({ x, more }) => {
           as on the box he typed it in - from the press (his own line, drawn at once) to the heard line (conversation's `files`) */}
       {(x.files || []).map((f) => <AttachChip key={f} name={fileName(f)} title={`Sent with ${fileName(f)}`} data-tq-line-file="" />)}</div>}{x.text}</div>
     {/* ...a send that failed: ONE plain line under his words, with the way past it - never glued into them */}
-    {!!x.err && <div className="tq-aui-hint" role="alert" data-tq-line-failed="">{x.err}{retry && <> · <button type="button" className="tq-aui-arrived-more-btn"
+    {!!x.err && <div className="tq-aui-note tq-aui-note-error" role="alert" data-tq-line-failed="">{x.err}{retry && <> · <button type="button" className="tq-aui-arrived-more-btn"
       data-tq-try-again="" onClick={() => retry(x)}>{btn("try_again")}</button></>}</div>}</div>;
 };
 /* A DRAFT WHERE IT STOOD, once it is no longer the one to press: rewritten by a later turn, set aside as he wrote again (the owner, 2026-11-12:
@@ -570,7 +570,7 @@ const PendingStrip = ({ items, now = false, onRetry = null, onDrop = null, onNow
     {x.kind === "line" && onDrop && <button type="button" className="tq-conv-pending-act" aria-label="Take it back" title="Take it back - it never reaches the agent"
       data-tq-drop-line="" onClick={() => onDrop(x)}><DeleteOutlineIcon sx={{ fontSize: 15 }} /></button>}</div>)}
   {/* ...a send that failed says so in its own plain line, never inside his words (the owner's live task, 2026-11-12) */}
-  {shown.filter((x) => x.err).map((x) => <div key={`e-${x.id}`} className="tq-aui-hint" role="alert" data-tq-line-failed="">{x.err}{onRetry && <> · <button type="button"
+  {shown.filter((x) => x.err).map((x) => <div key={`e-${x.id}`} className="tq-aui-note tq-aui-note-error" role="alert" data-tq-line-failed="">{x.err}{onRetry && <> · <button type="button"
     className="tq-aui-arrived-more-btn" data-tq-try-again="" onClick={() => onRetry(x)}>{btn("try_again")}</button></>}</div>)}
 </div>; };
 

@@ -25,6 +25,16 @@ class SignInAgainTests(unittest.TestCase):
                   RuntimeError('graph sendMail failed (403): forbidden'), RuntimeError('AADSTS700082: the refresh token has expired')):
             self.assertEqual(outbound.fix_of(e), {'label': 'Sign in again', 'href': outbound.MAIL[1]}, e)
 
+    def test_a_lapsed_google_or_microsoft_sign_in_is_fixed_by_signing_in_too(self):
+        # a Send through Gmail whose Google sign-in lapsed (or Google refused it at SMTP), or a lapsed Microsoft one, said "press Sign in
+        # ... on the card" with no button to it, and offered Try again - which fails the same way every time
+        from taskuary import failures, googlecal, imapmail, msauth
+        for e in (RuntimeError(f'{googlecal.LAPSED} - press {googlecal.G_SIGNIN} on the Gmail card'),
+                  RuntimeError(f'{imapmail.GOOGLE_REFUSED} for alex@northwind.example - press Sign in with Google on the Gmail card again.'),
+                  RuntimeError(f'{msauth.LAPSED} - sign in again')):
+            got = failures.classify(e, act='review.approve')
+            self.assertEqual(got['fix'], {'label': 'Sign in again', 'href': outbound.MAIL[1]}, e); self.assertFalse(got['retry'], e)
+
     def test_a_rejected_recipient_is_not_a_sign_in(self):
         for e in (smtplib.SMTPRecipientsRefused({'x@northwind.example': (550, b'no such user')}), RuntimeError('graph sendMail failed (400): bad')):
             self.assertIsNone(outbound.fix_of(e), e)

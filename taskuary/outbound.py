@@ -35,7 +35,11 @@ def fix_of(e) -> dict | None: return getattr(e, 'fix', None) or auth_fix(e)
 # advising Send, with no button to the mailbox (error sweep, 2026-10-18)
 _AUTH = re.compile(r'\((401|403)\)|\b535\b|authentication (unsuccessful|failed)|invalid_grant|AADSTS\d+|token (has )?expired', re.I)
 def auth_fix(e) -> dict | None:
-    return {'label': 'Sign in again', 'href': MAIL[1]} if isinstance(e, smtplib.SMTPAuthenticationError) or _AUTH.search(str(e)) else None
+    # ...and a sign-in the app itself found lapsed or refused, by the words it wrote (a Gmail Send with a lapsed Google sign-in offered Try again)
+    from . import googlecal, imapmail, msauth
+    s = str(e)
+    lapsed = msauth.LAPSED in s or googlecal.lapsed(s) or imapmail.GOOGLE_REFUSED in s
+    return {'label': 'Sign in again', 'href': MAIL[1]} if isinstance(e, smtplib.SMTPAuthenticationError) or _AUTH.search(s) or lapsed else None
 MAIL = ('Connect a mailbox', words.href('mail'))          # the places, by their one link (words.json)
 # ENVELOPES THAT ARE NOT MAIL: an invoice Zoho sends and a calendar answer (calwrite.py) leave by their own provider - no reply
 # channel, no redraft, no mailbox receipt to check

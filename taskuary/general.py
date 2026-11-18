@@ -3653,6 +3653,12 @@ def line_state(store, tid: int, rows: list = None, was: bool = False) -> dict:
     return {'working': was or starting(tid) or _at_work(s), 'turnStarted': at, 'waiting': waiting_lines(store, tid) if rows is None else rows}
 
 
+def kept_held(ref: str, out) -> str:
+    """What a door that handed a line on says when take_line HELD it (origin.hold: an untrusted sender's task) - '' when it went to the agent.
+    One sentence for every surface: the phone and the Assistant said "Continuing ..." / "Picked up ... again" while nothing ran (2026-11-18)."""
+    return f"Kept your note on {ref} - {out['held']}" if isinstance(out, dict) and out.get('held') else ''
+
+
 def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=None, wait=True, **kw):
     """THE ONE ROAD FOR A LINE THE OWNER TYPES TO A TASK'S AGENT, whatever agent takes it and whatever its session is doing - at work, at rest,
     idled out, ended, never started, closed, after a restart (the owner, 2026-11-10: "coding and general use the same code when it comes to

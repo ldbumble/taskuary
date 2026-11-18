@@ -1853,10 +1853,14 @@ def _continue(store, tid, note: str) -> str:
     """Continue, from the phone: the same road as the desktop's pill (server.continue_work)."""
     from .server import ContinueBody, continue_work
     from fastapi import HTTPException
-    try: continue_work(int(tid), ContinueBody(note=note or None))
+    try: out = continue_work(int(tid), ContinueBody(note=note or None))
     except HTTPException as e: return stuck(store, f'Could not continue it - {e.detail}.')
     ref = f'TQ-{int(tid):04d}'
     from . import concierge
+    # ...A NOTE HELD BEHIND TRUST went to no agent (general.take_line, origin.hold): said as kept, with why - it read "Continuing ... it picks up
+    # where it left off" while nothing ran (the Continue round, 2026-11-18)
+    from .general import kept_held
+    if (held := kept_held(ref, out)): return stuck(store, held)
     said = f'Continuing {ref}' + (' with your note' if note else '') + ' - it picks up where it left off.'
     said += f' {PROMISE_LINE}' if promise(store, tid) else ''
     return turn_text({'say': said, 'item': None}, store=store, extra=[(concierge.CHIP_WORDS['next'], {'t': 'next'})])

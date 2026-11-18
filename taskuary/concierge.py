@@ -4020,6 +4020,7 @@ def _task_writes(store, tid: int, kind: str, target: int, params: dict, named: s
         note = ' '.join(str(said or relay).split())
         r = run_proposal(store, operations.propose(store, 'agent.continue', target, {'note': note, 'context': general.relayed(note, relay)}, actor), actor)
         if r.get('status') != 'done': raise CallMiss(f"{r.get('error') or 'it did not pick up'} - say so in plain words. Nothing was started.")
+        if (held := general.kept_held(task_ref(target), r.get('outcome'))): return _did(store, tid, held, 'agent.continue')
         return _did(store, tid, f"Picked up {task_ref(target)} again" + (f" with your note: “{_title_cut(note, 120)}”." if note else '.'),
                     'agent.continue')
     # ...and WHERE WORK LIKE THIS GOES, taught and said (2026-11-01): a lesson for triage that moves nothing - "bugs like this go to

@@ -250,6 +250,55 @@ class TheDraftHisAnswerRetiredStaysWhereItStood(unittest.TestCase):
         self.assertEqual(card.get('why'), 'Not sent - you answered Erin Blake yourself')
 
 
+class AForwardIsNotTheAnswer(unittest.TestCase):
+    """Erin asked; a reply to her waited. The owner forwarded her mail to Gail from Outlook - the forward keeps the conversation. Stored with
+    no recipients, it read as his answer to Erin: her draft was retired and the chat said "you answered Erin Blake yourself". His mail now
+    keeps whom it went to, and only a draft to someone it reached is answered by it; the rest is the agent's to re-plan."""
+    def _world(self, to, cc=()):
+        from taskuary.channels import ingest_outbound_mail
+        s = _store()
+        mid = s.add_message({'ExternalId': 'in-fw', 'ConversationId': 'c-fw', 'Channel': 'email', 'SourceName': 'alex@northwind.example',
+                             'Subject': 'Budget numbers', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
+                             'SentAt': '2026-11-17 08:00:00', 'BodyText': 'Can you send the Q3 numbers?', 'Status': 'routed'})
+        tid = s.create_task({'Title': 'Send the Q3 numbers', 'Kind': 'reply', 'Status': 'open'}, 'router')
+        s.attach_message(mid, tid)
+        rid = s.add_review({'MessageId': mid, 'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Erin, attached.'})
+        s._exec("UPDATE message SET CreatedAt='2026-11-17 08:00:00' WHERE MessageId=?", (mid,))
+        s._exec("UPDATE route SET CreatedAt='2026-11-17 08:00:00' WHERE MessageId=?", (mid,))
+        s._exec("UPDATE review SET CreatedAt='2026-11-17 08:05:00' WHERE ReviewId=?", (rid,))
+        rcpt = lambda xs: [{'emailAddress': {'address': a}} for a in xs]
+        ingest_outbound_mail(s, 'alex@northwind.example', {'id': 'out-fw', 'subject': 'FW: Budget numbers', 'conversationId': 'c-fw',
+                                                            'bodyPreview': 'Gail - can you pull these?', 'sentDateTime': '2026-11-17T09:00:00',
+                                                            'toRecipients': rcpt(to), 'ccRecipients': rcpt(cc)})
+        return s, tid, rid
+
+    def test_a_forward_to_someone_else_leaves_her_draft_to_the_agent(self):
+        s, tid, rid = self._world(['gail@northwind.example'])
+        self.assertEqual(s.get_review(rid)['Status'], 'pending')
+        self.assertFalse([c for c in s.list_comments(tid) if 'removed the unused draft' in c['Body']])
+        own = s.get_message(s.thread_messages('c-fw')[-1]['MessageId'])
+        self.assertIn('gail@northwind.example', own['RecipientsJson'])
+
+    def test_when_the_agent_hears_it_the_card_says_whom_he_wrote_to(self):
+        from taskuary import conversation
+        s, tid, rid = self._world(['gail@northwind.example'])
+        card = next(c for x in conversation.items(s, tid)['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])
+                    if c['review'] == rid)
+        self.assertEqual(card['status'], 'passed')                      # greyed as every card an input moved past, until its agent hears it
+        self.assertNotIn('Erin', card.get('why') or '', card)
+        self.assertIn('gail@northwind.example', card.get('why') or '', card)
+
+    def test_a_reply_to_her_with_gail_copied_still_answers_her(self):
+        s, tid, rid = self._world(['Erin@northwind.example'], ['gail@northwind.example'])
+        self.assertEqual(s.get_review(rid)['Status'], 'superseded')
+
+    def test_the_agent_is_told_whom_his_mail_went_to(self):
+        from taskuary import ingest
+        turn = ingest.replan_turn({'channel': 'email', 'body': 'Gail - can you pull these?', 'to': ['gail@northwind.example']}, own=True)
+        self.assertIn('to gail@northwind.example', turn.splitlines()[0])
+        self.assertNotIn('already answered', turn.splitlines()[0])
+
+
 class TheBallIsInTheirCourt(unittest.TestCase):
     """You answered and they have not. The row read "on your list - nobody is on this" for the
     whole of that wait, so "needs me" counted every thread the owner had just dealt with."""

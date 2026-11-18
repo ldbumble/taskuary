@@ -2708,7 +2708,10 @@ def replan_turn(msg: dict, follow: dict | None = None, own: bool = False) -> str
     "The turn a change on the thread hands the agent: who wrote and their words, triage's reading when it has one, then REPLAN."
     body = ' '.join(agent_words(msg).split())[:4000]
     ch = senders.channel_name(msg.get('channel')) or 'another channel'
-    head = (f"THE THREAD CHANGED: you already answered on {ch} - the owner's own words:" if own else
+    # ...his mail says whom it went to where it keeps them: a forward to Gail on Erin's thread is no answer to Erin
+    to = ', '.join(str(a) for a in (msg.get('to') or []) + (msg.get('cc') or []) if a) if own else ''
+    head = (f"THE THREAD CHANGED: you wrote on {ch} to {to} - the owner's own words:" if to else
+            f"THE THREAD CHANGED: you already answered on {ch} - the owner's own words:" if own else
             f"THE THREAD CHANGED: {sender_called(msg)} wrote on this task (by {ch}) - their words, not the owner's:")
     th = (follow or {}).get('thread')
     th = th if isinstance(th, dict) else {}

@@ -651,12 +651,18 @@ def passed_why(store, r: dict) -> str:
     # polled together after a restart read "written before the agent read Erin's new message" over a draft his own answer had retired
     mails, who = [], ''
     came = lambda x: max(x['T'], ep(x.get('CreatedAt'))) if x.get('Own') else x['T']
+    # ...and his mail that went to others, not to whom the card was for (a forward to Gail on Erin's thread), says whom it went to
+    from .context import _recipients
+    mine = continuity.addressees(store, r)
     for at, x in sorted(((came(x), x) for x in _mail(store, tid)), key=lambda p: (p[0], p[1]['MessageId'])):
         n = x.get('FromName') or x.get('FromEmail')
         if not x.get('Own'): who = n or who; mails.append((at, f"{n or 'a'}'s new message", f"{n or 'someone'} wrote again after it")); continue
+        if (went := _recipients(x)) and mine and not mine & {a.lower() for a in went}:
+            mails.append((at, f"your mail to {', '.join(went)}", f"you wrote to {', '.join(went)} yourself")); continue
         to = who or continuity.sent_to(store, r, 'them')
         mails.append((at, f'your answer to {to}', f'you answered {to} yourself'))
-    got = max((x for x in lines + mails if x[0] <= end + 1), key=lambda x: x[0], default=None)
+    # ...the later of two in one second (a stamp is no finer): the input listed last came in last
+    got = max(reversed([x for x in lines + mails if x[0] <= end + 1]), key=lambda x: x[0], default=None)
     if not got: return 'Not sent - set aside when the chat moved on'
     return f'Not sent - {got[2]}' if got[0] >= card else f'Not sent - written before the agent read {got[1]}'
 def _cut(w: str, n: int = 60) -> str: return (w := ' '.join(str(w or '').split()))[:n] + ('…' if len(w) > n else '')

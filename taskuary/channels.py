@@ -1083,11 +1083,17 @@ def reread_draft(store, tid, rv: dict, sent: dict, brain=None) -> str:
 
 
 def answered_drafts(store, tid, sent: dict) -> list:
-    "Task `tid`'s pending replies on the conversation the owner's own line `sent` is on, drafted before it: what that line may have answered."
+    """Task `tid`'s pending replies on the conversation the owner's own line `sent` is on, drafted before it: what that line may have answered.
+    ...and, where his line keeps whom it went to, only a reply to someone it reached: a forward to Gail keeps Erin's conversation and is no
+    answer to Erin (her draft stays the agent's to re-plan, as every input it hears)."""
+    from .context import _recipients
+    from .continuity import addressees
     conv, at = sent.get('ConversationId'), sent.get('SentAt')
     if not conv or not at: return []
+    went = {a.lower() for a in _recipients(sent)}
+    reached = lambda rv: not went or not (to := addressees(store, rv)) or bool(to & went)
     return [rv for rv in store.list_reviews('pending') if rv.get('TaskId') == tid and rv.get('Kind') != 'action'
-            and rv.get('ConversationId') == conv and (not rv.get('SentAt') or rv['SentAt'] <= at)]
+            and rv.get('ConversationId') == conv and (not rv.get('SentAt') or rv['SentAt'] <= at) and reached(rv)]
 
 
 # THE OWNER'S LINE ON A CHAT IS THE AGENT'S TO RE-PLAN (the owner, 2026-11-09: "if we respond show on left side and then agent reevaluates if
@@ -1217,6 +1223,9 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
                              'Subject': msg.get('subject'), 'FromName': 'You', 'FromEmail': msg.get('from_email'),
                              'SentAt': msg.get('sent_at'), 'BodyText': msg.get('body'),
                              'OwnText': msg.get('own_text') or None,
+                             # ...and whom it went to, as an arrival keeps them (ingest): a forward to Gail on Erin's thread is no answer to Erin
+                             **({'RecipientsJson': json.dumps({'to': list(msg.get('to') or []), 'cc': list(msg.get('cc') or [])})}
+                                if msg.get('to') or msg.get('cc') else {}),
                              'SourceLink': msg.get('source_link'), 'Status': 'context', 'Direction': 'out',   # yours: outgoing (X1)
                              'MailMetaJson': json.dumps(msg.get('mail_meta')) if msg.get('mail_meta') else None})
     sent = store.get_message(mid) or {}
@@ -1252,7 +1261,7 @@ def ingest_outbound_mail(store, mailbox: str, m: dict) -> int:
     return ingest_own_message(store, {
         'external_id': f"graph:{m['id']}", 'channel': 'email', 'source_name': mailbox,
         'subject': m.get('subject'), 'from_email': mailbox, 'body': _body(m), 'own_text': _own(m),
-        'conversation_id': m.get('conversationId'), 'source_link': m.get('webLink'),
+        'to': _addrs(m.get('toRecipients')), 'cc': _addrs(m.get('ccRecipients')), 'conversation_id': m.get('conversationId'), 'source_link': m.get('webLink'),
         'sent_at': _local(m.get('receivedDateTime') or m.get('sentDateTime') or ''),
         'mail_meta': {'folder': 'sentitems', 'focus': m.get('inferenceClassification'),
                       'flag': (m.get('flag') or {}).get('flagStatus'), 'invite': is_invite(m)}},

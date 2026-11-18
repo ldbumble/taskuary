@@ -102,7 +102,12 @@ def settled(store, rv: dict, sent: bool, actor: str) -> bool:
     sid, tid = of_review(rv), rv.get('TaskId')
     if not (sid and tid): return False
     mark(store, tid, sid, done=True, actor=actor)
-    return _left(store, tid, f"{'Sent' if sent else 'Dropped'}: {rv.get('Reason') or 'one of its emails'}.", actor)
+    # ...said by whom it was to, never by the card's Reason: that is the card's prompt ("approve to send"), and after a failed press the
+    # failure itself - a second press that went read "Sent: Not sent: 550 ..." (the stress round, 2026-11-18)
+    try: to = (json.loads(rv.get('Deliver') or '{}') or {}).get('to') or []
+    except (TypeError, ValueError, AttributeError): to = []
+    to = ', '.join(to) if isinstance(to, list) else str(to)
+    return _left(store, tid, f"{'Sent' if sent else 'Dropped'}: {'the email to ' + to if to else 'one of its emails'}.", actor)
 
 
 def _left(store, tid: int, said: str, actor: str) -> bool:

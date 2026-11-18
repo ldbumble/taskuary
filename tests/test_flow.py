@@ -576,3 +576,21 @@ def test_a_script_is_handed_every_row_the_read_before_it_got():
     assert out['steps'][0]['rows'] == 150 and out['steps'][1]['body'] == '150 bills, total 1500'
     assert 'later rows were NOT shown to you' in seen[0]['user']           # ...and the AI, given less, is told it was given less
     assert len(out['steps'][0]['body']) <= flow.BODY_CAP                    # the run's record stays its size
+
+
+def test_the_run_that_goes_on_after_a_yes_reads_what_the_steps_before_read_whole():
+    # the approved write was step 2; the script after it summed the bills step 1 read - rebuilt from the run's record, cut at BODY_CAP, it
+    # saw 23 of 150 and said a total a sixth of the real one
+    d = tempfile.mkdtemp(); p = os.path.join(d, 'ap.db'); cx = sqlite3.connect(p)
+    cx.execute('CREATE TABLE bill (vendor TEXT, amount REAL, memo TEXT)')
+    cx.executemany('INSERT INTO bill VALUES (?,?,?)', [(f'Vendor {i}', 10, 'x' * 120) for i in range(150)]); cx.commit(); cx.close()
+    script = "import sys, json\nrows = [json.loads(l) for l in sys.stdin if l.strip()]\nprint(f'{len(rows)} bills, total {sum(r[\"amount\"] for r in rows):.0f}')"
+    s = MemoryStore()
+    card = s.get_connector_by_type('smb_file'); s.save_connector({'ConnectorId': card['ConnectorId'], 'Active': True, 'Scope': 'read'}, 'test')
+    src = source(s, [{'id': 's1', 'kind': 'source', 'label': 'Read bills', 'type': 'sqlite', 'db': p, 'query': 'SELECT * FROM bill'},
+                     {'id': 's2', 'kind': 'source', 'label': 'File it', 'type': 'smb_write', 'path': 'exports/ap.csv', 'content': 'x'},
+                     {'id': 's3', 'kind': 'source', 'label': 'Total', 'type': 'python_script', 'script': script, 'input': '{{s1}}'}])
+    out = flow.execute(s, src, run_task(s, src), 'manual', llm=no_model)
+    assert out['waiting']
+    went = flow.resume(s, {'source_id': src['SourceId'], 'run_id': out['run_id'], 'step': 's2'}, {'output': 'written', 'headline': 'wrote exports/ap.csv'})
+    assert went['steps'][2]['body'] == '150 bills, total 1500', went['steps'][2]

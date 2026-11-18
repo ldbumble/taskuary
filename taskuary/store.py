@@ -4786,6 +4786,9 @@ class SQLiteStore:
         """A workflow run's steps as they land (flow.execute), so the run is readable while it works."""
         self._exec('UPDATE report_run SET StepsJson=?, Failed=?, Error=?, Ms=COALESCE(?, Ms), Summary=COALESCE(?, Summary) WHERE RunId=?',
                    (json.dumps(steps or [], default=str), int(bool(failed)), error, ms, summary, int(rid)))
+    def set_report_run_inputs(self, rid: int, inputs: str) -> None:
+        """What a stopped workflow run read in full (flow._walk), for the run that goes on after a yes (flow.resume)."""
+        self._exec('UPDATE report_run SET Inputs=? WHERE RunId=?', (inputs, int(rid)))
     def set_report_run_repairs(self, rid: int, repairs: list) -> None:
         """The repairs a run made to its own steps (flow.execute), each with the steps it replaced - what Undo puts back."""
         self._exec('UPDATE report_run SET RepairsJson=? WHERE RunId=?', (json.dumps(repairs or [], default=str), int(rid)))

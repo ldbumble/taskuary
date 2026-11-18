@@ -15,6 +15,7 @@ KEY = 'batch:'                 # setting: batch:<key> -> the run's state
 YES = 'approve'
 LEFT = 'left out by you'      # a row he unticked: closed, never done
 _CLAIM = threading.Lock()      # a press claims the card's run (run)
+BOOT = uuid.uuid4().hex        # this process: a run marked by another was cut short by a restart (state)
 
 
 def new_key() -> str: return uuid.uuid4().hex[:12]
@@ -28,6 +29,8 @@ def state(store, key: str) -> dict:
     "The run as it stands: {key, tid, total, done, failed, left, state: idle|running|cancelling|stopped|finished, rows: {rid: 'ok'|'left'|error}}."
     try: got = json.loads(store.get_setting(f'{KEY}{key}') or '{}') or {}
     except (TypeError, ValueError): got = {}
+    # ...A RUN CUT SHORT BY A RESTART (its thread went with the old process) is stopped, the rest waiting for his press - never "running" for good
+    if got.get('state') in ('running', 'cancelling') and got.get('boot', BOOT) != BOOT: got['state'] = 'stopped'
     return got or {'key': key, 'state': 'idle', 'rows': {}}
 
 
@@ -65,7 +68,7 @@ def run(store, key: str, skip=(), actor: str = 'owner', wait: bool = False) -> d
         # ...A CARD THE CHAT MOVED PAST PRESSES NOTHING (verdicts._decide's rule): asked here, before the run is marked at work - a bulk card at
         # work is never written past (proposals._older), so each row's own refusal would read it as still standing
         if tid and (past := [r for r in todo if r['ReviewId'] in proposals.written_past(store, tid)]): raise ValueError(proposals.passed_why(store, past[0]))
-        st = {**state(store, key), 'key': key, 'tid': tid, 'total': len(todo), 'done': 0, 'failed': 0, 'left': 0, 'state': 'running', 'rows': {}, 'at': time.time()}
+        st = {**state(store, key), 'key': key, 'tid': tid, 'total': len(todo), 'done': 0, 'failed': 0, 'left': 0, 'state': 'running', 'rows': {}, 'at': time.time(), 'boot': BOOT}
         _save(store, st)
     def go():
         tok = verdicts.QUIET.set(True)

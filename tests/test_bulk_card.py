@@ -209,3 +209,19 @@ def test_two_presses_at_once_are_one_run_and_its_agent_hears_it_once():
     st = bulkcard.state(s, out['batch'])
     assert (st['done'], st['failed']) == (6, 0) and len(sent) == 6, st
     assert len(told) == 1 and '6 done, 0 failed' in told[0], told
+
+
+def test_a_run_cut_short_by_a_restart_reads_stopped_with_the_rest_waiting_for_his_press():
+    """Taskuary restarted with a run under way: its state still read "running", its thread gone with the old process - Stop the rest lit for
+    good, the task "at work" with nothing at work, and a press answered with the dead run. Cut short, it reads stopped (the owner's ruling: a
+    turn cut short by a restart is not resumed by itself), and the rest waits for his press."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        out = call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='duplicates', items=[{'number': n} for n in range(1, 6)])
+    bulkcard._save(s, {'key': out['batch'], 'tid': tid, 'total': 5, 'done': 2, 'failed': 0, 'left': 0, 'state': 'running', 'rows': {}, 'boot': 'a-process-gone'})
+    assert not bulkcard.running(s, out['batch']) and bulkcard.state(s, out['batch'])['state'] == 'stopped'
+    assert taskstate.state(s, s.get_task(tid)) != 'working', 'nothing is at work on it'
+    gh = GitHub()
+    with mock.patch.object(github.requests, 'patch', gh.patch):
+        st, told = press(s, out['batch'])
+    assert (st['state'], st['done']) == ('finished', 5) and len(gh.closed) == 5 and len(told) == 1

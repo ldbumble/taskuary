@@ -90,11 +90,21 @@ def _is_exe(tok: str, exe: str = EXE) -> bool:
     return re.sub(r'(?<=.)@[^/]*$', '', re.sub(r'\.(exe|cmd|ps1|bat)$', '', os.path.basename(str(tok).replace('\\', '/')).lower())) == exe
 
 
+# THE SHELL'S OWN GRAMMAR AROUND A COMMAND: its reserved words open one (`for ...; do agent-browser click`, `if ...; then ...`), and these
+# programs run the command named after their own options (`timeout 30 agent-browser click`, `... | xargs agent-browser click`). Read as no
+# browser act, every one of them ran its click ungated.
+RESERVED = frozenset('do then else elif if while until { ! time'.split())
+RUNNERS = frozenset('sudo doas env nohup timeout nice ionice stdbuf setsid xargs watch caffeinate unbuffer chronic flock nsenter chroot'.split())
+
+
 def _head(argv: list, exe: str = EXE) -> list | None:
-    "The agent-browser (or `exe`: desktop.py) arguments of one simple command, through env prefixes, `&`, npx and the like - else None."
+    "The agent-browser (or `exe`: desktop.py) arguments of one simple command, through env prefixes, `&`, npx, runners and the like - else None."
     i = 0
-    while i < len(argv) and re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', argv[i]): i += 1          # FOO=bar agent-browser ...
+    while i < len(argv) and (re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', argv[i]) or argv[i] in RESERVED): i += 1   # FOO=bar agent-browser, do ...
     while i < len(argv) and argv[i].lower() in ('&', 'npx', 'pnpm', 'dlx', 'bunx', 'yarn', '-y', '--yes', 'exec', 'call', 'cmd', '/c', 'command'): i += 1
+    if i < len(argv) and os.path.basename(argv[i]).lower() in RUNNERS:          # its options and their values, up to the program it runs
+        j = next((j for j in range(i + 1, len(argv)) if _is_exe(argv[j], exe)), None)
+        return argv[j + 1:] if j is not None else None
     return argv[i + 1:] if i < len(argv) and _is_exe(argv[i], exe) else None
 
 

@@ -59,6 +59,19 @@ class Reading(unittest.TestCase):
         self.assertEqual(bg.acts('agent-browser find role button "Pay now" click')[0]['verb'], 'find')
         self.assertEqual(bg.acts('agent-browser click "@e12')[0]['verb'], '?')        # cannot be read: judged, never waved through
 
+    def test_a_command_run_by_another_or_inside_a_loop_is_still_an_act(self):
+        """`timeout 30 agent-browser click @e12`, `echo @e12 | xargs agent-browser click`, `sudo`, `nohup`, `env`, `nice`, and a click in a
+        `for ... do` or an `if ... then` read as no browser act at all - the click ran ungated. The shell's own grammar: its reserved words
+        open a command, and a program that runs the command after it (by its options) is no command of its own."""
+        for cmd in ('timeout 30 agent-browser click @e12', 'echo @e12 | xargs agent-browser click', 'sudo -u alex agent-browser click @e12',
+                    'nohup agent-browser click @e12 &', 'env FOO=1 agent-browser click @e12', 'time agent-browser click @e12',
+                    'nice -n 5 agent-browser click @e12', 'for r in e1 e12; do agent-browser click @$r; done',
+                    'if true; then agent-browser click @e12; fi', 'while true; do agent-browser click @e12; break; done',
+                    '{ agent-browser click @e12; }', '! agent-browser click @e12', 'stdbuf -oL timeout 9 agent-browser click @e12'):
+            self.assertEqual([a['verb'] for a in bg.acts(cmd)], ['click'], cmd)
+        for cmd in ('grep -r agent-browser docs', 'echo agent-browser click', 'which agent-browser', 'timeout 5 agent-browser snapshot -i'):
+            self.assertEqual(bg.acts(cmd), [], cmd)
+
     def test_a_line_break_in_typed_text_is_never_plain_typing(self):
         # _segments reads a newline as `;`, so a break inside quotes came back as " ; " and fill passed with no AI (2026-10-31)
         self.assertTrue(bg.typing(bg.acts('agent-browser fill @e1 "Dear Erin"')[0]))

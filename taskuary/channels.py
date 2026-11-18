@@ -1499,7 +1499,9 @@ def slack_msg(src: dict, m: dict, own: str = '', names: dict | None = None) -> d
     name = ' '.join(str((m.get('user_profile') or {}).get('real_name') or '').split())
     meta = {**({'dm': True} if str(src.get('Address') or '').startswith('D') else {}), **({'team': team} if team else {}),
             **({'internal': team == own} if team and own else {}), **({'team_name': names[team]} if team and (names or {}).get(team) else {}),
-            **({'name': name} if name else {})}
+            **({'name': name} if name else {}),
+            # a reply in a thread shown in the channel too (thread_broadcast): its answer goes under the thread's first line, not under it
+            **({'thread': str(m['thread_ts'])} if m.get('thread_ts') and str(m['thread_ts']) != str(m.get('ts')) else {})}
     return {'external_id': f"slack:{src['Address']}:{m.get('ts')}", 'channel': 'slack', 'subject': None, 'body': m.get('text'),
             'from_name': m.get('user'), 'conversation_id': f"slack:{src['Address']}", 'source_name': src['Address'],
             'sent_at': datetime.fromtimestamp(float(m.get('ts', 0))).strftime('%Y-%m-%d %H:%M:%S'), **({'mail_meta': meta} if meta else {})}

@@ -1026,7 +1026,9 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         from . import chatformat
         chat = str(msg.get('ConversationId') or '').split(':', 1)[-1]   # 'slack:<channel id>'
         if not chat: raise RuntimeError('this chat message has no channel id to answer in')
-        ts = ext.rsplit(':', 1)[-1] if ext.startswith('slack:') else ''  # 'slack:<channel>:<ts>'
+        try: thread = str((json.loads(msg.get('MailMetaJson') or '{}') or {}).get('thread') or '')
+        except (ValueError, TypeError, AttributeError): thread = ''
+        ts = thread or (ext.rsplit(':', 1)[-1] if ext.startswith('slack:') else '')  # 'slack:<channel>:<ts>' - or the thread it is a reply in
         connector_id = _source_connector_id(store, 'slack', chat)
         pieces = [p for p in chatformat.split(chatformat.render(body, 'slack'), 3900) if p.strip()] or [body]
         return _send_parts(lambda p: send_slack(store, chat, p, connector_id, None if chat.startswith('D') else ts or None), pieces)

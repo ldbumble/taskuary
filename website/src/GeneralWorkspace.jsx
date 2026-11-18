@@ -477,7 +477,7 @@ const ConvLine = ({ x, more }) => {
    It never goes from the chat and never moves */
 // ...SET ASIDE IN THE SERVER'S OWN WORDS (proposals.SET_ASIDE): "you wrote again" stood over a draft his first line after a Stop set aside (2026-11-12)
 const PAST = { superseded: () => "Earlier draft - rewritten below", passed: (c) => c.why || (/draft|slot/.test(c.what || "") ? "Earlier draft - not sent; set aside when you moved on" : PASSED_LINE.replace(/\.$/, "")), withdrawn: () => "Earlier draft - not sent; the agent took it back", rejected: () => "Not sent - you said don't send" };
-const PastCard = ({ c }) => <div className="tq-conv-past" data-tq-past-card={c.status} role="note">
+const PastCard = ({ c }) => <div className="tq-conv-past" data-tq-past-card={c.status} data-tq-past-review={c.review} role="note">
   <div className="tq-conv-past-head">{PAST[c.status](c)}</div>
   {!!c.was?.text && <div className="tq-conv-past-words" dir="auto">{c.was.text}</div>}</div>;
 /* `items`: the server's list, with this page's own lines the server has not answered for yet (`mine`) already merged in by their names.

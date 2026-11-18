@@ -168,6 +168,11 @@ for line in sys.stdin:
                 text = directed(said)
                 if _prompt_id == mid: update('agent_message_chunk', content={'type': 'text', 'text': text}); reply(mid, ended()); _prompt_id = None
             __import__('threading').Thread(target=answer_later, daemon=True).start(); continue
+        if os.environ.get('FAKE_ACP_FAIL') == 'quota' and STARTS == 1:
+            notice = "You've hit your 5-hour limit · resets 12:10pm (America/New_York)"
+            update('agent_message_chunk', content={'type': 'text', 'text': notice})
+            send({'jsonrpc': '2.0', 'id': mid, 'error': {'code': -32603, 'message': f'Internal error: {notice}'}})
+            continue
         update('agent_message_chunk', content={'type': 'text', 'text': 'Looking. '})
         if os.environ.get('FAKE_ACP_FAIL') == 'turn' and STARTS == 1:
             send({'jsonrpc': '2.0', 'id': mid, 'error': {'code': -32603, 'message': 'Internal error: API Error: 529 Overloaded'}}); continue

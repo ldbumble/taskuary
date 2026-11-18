@@ -8,12 +8,24 @@ import os, time
 from pathlib import Path
 
 
-MARK = Path(__file__).with_name('.fake-director')     # ...beside the stand-ins: a trimmed env (macOS's has no TMPDIR) cannot move it
+def marker(home: str | Path) -> Path:
+    return Path(home) / '.fake-director'
 
 
 def folder_of() -> str:
-    "The director's folder: FAKE_DIRECTOR, else the mark the scenario leaves beside us - a stranger's run gets a trimmed env (terminal.STRICT_ENV)."
-    return os.environ.get('FAKE_DIRECTOR') or (MARK.read_text(encoding='utf-8').strip() if MARK.is_file() else '')
+    "Use the scenario's own home when a stranger's launch strips FAKE_DIRECTOR."
+    if folder := os.environ.get('FAKE_DIRECTOR'): return folder
+    home = os.environ.get('TASKUARY_HOME')
+    mark = marker(home) if home else None
+    return mark.read_text(encoding='utf-8').strip() if mark and mark.is_file() else ''
+
+
+def read_when_ready(path: Path) -> str | None:
+    try:
+        return path.read_text(encoding='utf-8')
+    except (FileNotFoundError, PermissionError):
+        # Windows can briefly deny a read while the other process publishes the file.
+        return None
 
 
 def directed(prompt: str, folder: str = None) -> str | None:
@@ -28,7 +40,7 @@ def directed(prompt: str, folder: str = None) -> str | None:
         break
     out, end = d / f'{k}.out', time.time() + float(os.environ.get('FAKE_DIRECTOR_WAIT') or 60)
     while time.time() < end:
-        if out.is_file(): return out.read_text(encoding='utf-8')          # the scenario writes it whole, by a rename
+        if (answer := read_when_ready(out)) is not None: return answer
         time.sleep(0.02)
     return 'Ok.'
 

@@ -10,7 +10,7 @@ const src = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8")
 test("a passed card is the server's word, drawn once in its turn, greyed, never as a pressed card", () => {
   const card = src("PassedCard.jsx"), page = src("TaskPage.jsx");
   assert.match(card, /export const PASSED_NOTE = "set aside when you moved on";/, "proposals.SET_ASIDE, word for word");
-  assert.match(card, /r\?\.Status === "superseded" && r\?\.DecideNote === PASSED_NOTE/);
+  assert.match(card, /r\?\.Status === "superseded" && \[PASSED_NOTE, "not needed - the agent finished without it"\]\.includes\(r\?\.DecideNote\)/);
   assert.match(card, /pressed = passed \? "passed"/); assert.match(card, /data-tq-act-state=\{pressed\}/);
   // ...and one nobody can press draws no button at all (the owner, 2026-11-11: "the question has 2 approve buttons?"): its state in words
   assert.doesNotMatch(card, /data-tq-pressed="passed"|btn\("approve"/); assert.match(card, /\{!passed && <PressedButton pressed=\{pressed\} \/>\}/);

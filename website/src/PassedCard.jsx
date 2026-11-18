@@ -11,7 +11,7 @@ import { BORDER, DIM, FAINT, INK } from "./theme.jsx";
 export const PASSED_NOTE = "set aside when you moved on";
 // ...said as what happens next (the owner, 2026-11-12: "the agent should bring it up"): its agent was told, and raises it again if still needed
 export const PASSED_LINE = "Set aside when you moved on - the agent raises it again if it is still needed.";
-export const isPassed = (r) => r?.Status === "superseded" && r?.DecideNote === PASSED_NOTE;
+export const isPassed = (r) => r?.Status === "superseded" && [PASSED_NOTE, "not needed - the agent finished without it"].includes(r?.DecideNote);
 
 // A DRAFT THE AGENT REPLACED IN A LATER TURN (wrapup.REPLACED): its record where it stood - what it said, dimmed, nothing to press
 export const REPLACED_NOTE = "superseded - a later turn's reply took its place";
@@ -34,7 +34,8 @@ export default function PassedCard({ reviews }) {
   const p = proposalPresentation(r), title = p?.lead || p?.title || heldLead(proposalFrom(r) || {}).lead;
   const passed = isPassed(r), done = resultOf(r), failed = failedAsk(r), pressed = passed ? "passed" : done ? "approved" : failed ? "failed" : "dismissed";
   const same = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
-  const line = passed ? PASSED_LINE : done ? (!same(done.what, title) && done.what) || (p?.destination ? `${p.destinationLabel} ${p.destination}` : "") : failed ? String(r.ActError) : "Nothing was done.";
+  const why = r.Kind === "action" ? r.Why?.replace(/^Not sent\b/, "Didn’t run") : r.Why;
+  const line = passed ? why || PASSED_LINE : done ? (!same(done.what, title) && done.what) || (p?.destination ? `${p.destinationLabel} ${p.destination}` : "") : failed ? String(r.ActError) : "Nothing was done.";
   return (
     <Box data-tq-passed={r.ReviewId || ""} data-tq-act-state={pressed} sx={{ mt: 0.5, px: 1.25, py: 0.9, border: `1px solid ${BORDER}`, borderRadius: 1.5,
       bgcolor: "var(--tq-panel, #fff)", opacity: passed ? 0.6 : 1 }}>

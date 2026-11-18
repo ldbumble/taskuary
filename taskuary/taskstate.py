@@ -253,7 +253,7 @@ def waits_press(store, t: dict, row: bool = False) -> bool:
     (the owner's live task, 2026-11-13)."""
     from . import proposals
     pending = t.get('ReviewStatus') == 'pending'
-    if pending and not proposals.written_past(store, t['TaskId']): return True
+    if pending and t.get('ReviewKind') != 'action' and not proposals.written_past(store, t['TaskId']): return True
     return bool(store.waiting_on_owner(t['TaskId'])) if pending or not row else False
 
 

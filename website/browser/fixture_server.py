@@ -306,12 +306,18 @@ def _install_fresh_routes(app, store):
         if body.get("lands"):
             from taskuary import reports
             reports.REGISTRY[body["lands"]] = lambda cfg: {"rows": [{"url": "https://social.example/alex/posts/1", "saw": {k: cfg.get(k) for k in ("text", "body", "publish", "visibility")}}], "columns": ["url"]}
+        if body.get("refuses"):
+            from taskuary import reports
+            def refused(_cfg):
+                raise RuntimeError("The fixture service declined the post.")
+            reports.REGISTRY[body["refuses"]] = refused
         ctype = (body.get("post") or {}).get("type", "jira_comment").split("_")[0]
         cid = store.save_connector({"Type": ctype, "Name": "Northwind " + ctype, "ConfigJson": json.dumps({"base_url": "https://tracker.northwind.example", "email": "alex@northwind.example"}),
                                     "Secret": "fixture-token", "Active": 1}, "owner") if body.get("connected") else None
         p = body.get("post") or {"action": "run_tool", "type": "jira_comment", "item": "NW-12", "body": "Fixed in the ledger totals, Erin - deployed this morning."}
         if cid: p = {**p, "connector_id": cid}
-        rid = store.add_review({"TaskId": tid, "Kind": "action", "Status": "pending", "Origin": "agent", "DraftText": json.dumps(p), "Reason": "the comment Erin asked for"})
+        legacy = {"Status": "rejected", "DecidedBy": "owner"} if body.get("legacy_dismissed_read") else {"Status": "pending"}
+        rid = store.add_review({"TaskId": tid, "Kind": "action", **legacy, "Origin": "agent", "DraftText": json.dumps(p), "Reason": "the comment Erin asked for"})
         return {"taskId": tid, "reviewId": rid}
 
     @app.post("/api/fixture/no-readonly")

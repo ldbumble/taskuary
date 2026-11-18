@@ -34,6 +34,13 @@ def _p(r) -> dict:
     return d if isinstance(d, dict) else {}
 
 
+def obsolete_read(store, tid, review) -> bool:
+    """Hide obsolete requests to read an already allowed folder. Keep successful approvals in the history."""
+    from . import readgate
+    return (bool(tid) and review['Kind'] == 'action' and review['Status'] not in ('approved', 'edited')
+            and readgate.opened(store, tid, _p(review)))
+
+
 def in_line(r: dict) -> bool:
     """A card of the line: one the owner presses, and the agent's or triage's to raise - never a close-out, a playbook or a workflow's own step
     (Taskuary's, beside the reply - proposals._older's rule), an email he wrote himself, nor one nobody has written (a reply owed, a to-do's email)."""
@@ -63,7 +70,7 @@ def _units(store, tid: int, past: set) -> list:
     from .proposals import moved_on
     out, by = [], {}
     for r in store._rows("SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId", (int(tid),)):
-        if r['ReviewId'] in past: continue        # ...one the chat moved past is greyed where it stood (proposals._older): no card of the line
+        if r['ReviewId'] in past or obsolete_read(store, tid, r): continue
         # ...a settled one by what it was while it waited: its run tells how many came together ("2 of 3")
         if r['Status'] != 'pending' and not r.get('DecidedAt'): continue
         if not in_line(r if r['Status'] == 'pending' else {**r, 'Status': 'pending', 'DecideNote': None}): continue

@@ -177,10 +177,14 @@ def open_requests(evs: list) -> list:
     # AN ANSWER ANSWERS WHAT WAS ASKED BEFORE IT: a request named by what it asks for (`signin:<site>`) is asked again when the site signs the
     # session out or wants a code - and the first sign-in's answer closed every later one before it was drawn (the recorded walk, 2026-11-11:
     # "I'm still waiting on the sign-in, which you're doing on the browser page", with no page shown and nothing lit)
+    from .failures import cli_quota
     answered = {e['RequestId']: i for i, e in enumerate(evs) if e['Kind'] == 'answered'}
     spoke = max((i for i, e in enumerate(evs) if e['Kind'] == 'working' and e.get('Text') != WAKE), default=-1)
+    failed = next((i for i in range(len(evs) - 1, spoke, -1)
+                   if evs[i]['Kind'] == 'failed' and cli_quota(evs[i].get('Text'))), -1)
     return [e for i, e in enumerate(evs)
-            if i > spoke and e['Kind'] in REQUESTS and answered.get(e['RequestId'], -1) < i and e.get('Source') != READ_OFF_PROSE]
+            if i > max(spoke, failed) and e['Kind'] in REQUESTS and answered.get(e['RequestId'], -1) < i and e.get('Source') != READ_OFF_PROSE
+            and not (e['Kind'] == 'stalled' and e.get('Source') == 'hook' and str(e.get('Text') or '').strip().lower() == 'unknown')]
 
 
 def _public_request(e: dict) -> dict:

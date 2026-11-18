@@ -15,7 +15,7 @@ import { note, record } from "./recorder.mjs";
 const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, "..", "..");
 const out = path.join(process.env.TEMP || os.tmpdir(), "claude", "act-card");
 
-async function world(t) {
+async function world(t, { claudeConfigDir } = {}) {
   const bin = await mkdtemp(path.join(os.tmpdir(), "taskuary-fake-claude-"));
   t.after(() => rm(bin, { recursive: true, force: true }).catch(() => {}));
   const win = process.platform === "win32";
@@ -25,7 +25,7 @@ async function world(t) {
   if (!win) await chmod(path.join(bin, "claude"), 0o755);
   await writeFile(path.join(bin, "script.json"), "[]");
   Object.assign(process.env, { FAKE_CLAUDE_SCRIPT: path.join(bin, "script.json"), FAKE_CLAUDE_SPAWN: "0.5", FAKE_CLAUDE_THINK: "1" });
-  const h = await startHarness({ fresh: true, bin });
+  const h = await startHarness({ fresh: true, bin, claudeConfigDir });
   t.after(() => h.close());
   const api = (p, body) => fetch(`${h.fixtureApi}${p}`, { method: body ? "POST" : "GET",
     headers: { "Content-Type": "application/json", "X-Taskuary-Token": h.token }, body: body && JSON.stringify(body) }).then((r) => r.json());
@@ -53,9 +53,41 @@ const watch = (page, sel, which, ms = 6000) => page.evaluate((sel, which, ms) =>
 
 const relitAfter = (states) => { const after = states.slice(1); return after.findIndex((x, i) => x.s === "lit" && after.slice(0, i).some((y) => y.s !== "lit")); };
 
+test("an old dismissed read of the CLI's own reference files does not reappear on the task page", { timeout: 120000 }, async (t) => {
+  const claudeConfigDir = await mkdtemp(path.join(os.tmpdir(), "taskuary-reference-fixture-"));
+  t.after(() => rm(claudeConfigDir, { recursive: true, force: true }));
+  const w = await world(t, { claudeConfigDir });
+  const folder = path.join(claudeConfigDir, "skills", "ledger-audit", "reference");
+  await mkdir(folder, { recursive: true });
+  await writeFile(path.join(folder, "rounding.md"), "Round the total once, at the end.");
+  const title = "Check how the ledger rounds totals";
+  const made = await w.api("/api/fixture/act-card", {
+    title,
+    legacy_dismissed_read: true,
+    post: { action: "shell_act", command: "", cwd: w.home, where: folder, reads: [folder], what: "Read rounding.md in reference" },
+  });
+  assert.ok(made.reviewId, JSON.stringify(made));
+  const page = await w.newPage();
+  await page.goto(`${w.ui}/#task=${made.taskId}`, { waitUntil: "domcontentloaded" });
+  const rec = await record(page, path.join(out, "video", "obsolete-reference-read"));
+  try {
+    await page.waitForFunction((title) => document.querySelector("[data-tq-task-page]")?.innerText.includes(title), {}, title);
+    const detail = await w.api(`/api/tasks/${made.taskId}`);
+    assert.ok(!detail.reviews.some((review) => review.ReviewId === made.reviewId), "the task page must not draw the obsolete review from its fallback list");
+    const chat = await w.api(`/api/tasks/${made.taskId}/conversation`);
+    const cards = chat.items.flatMap((item) => item.kind === "card" ? [item] : item.cards || []);
+    assert.ok(!cards.some((card) => card.review === made.reviewId));
+    assert.doesNotMatch(await page.$eval("[data-tq-task-page]", (el) => el.innerText), /Read rounding\.md in reference|nothing was run/i);
+  } finally {
+    await rec.stop();
+  }
+});
+
 // ...`elsewhere`: decided in another window before this one pressed - the press answers `already`, and the card reads what was decided
 for (const [name, which, body, elsewhere, says] of [["dismiss", "[data-tq-act-dismiss]", { connected: true }, null, /dismissed/],
-  ["post-fails", "[data-tq-act-press]", { connected: true }, null, /blocked outbound/],
+  ["post-fails", "[data-tq-act-press]", { connected: true, refuses: "linkedin_post",
+    post: { action: "run_tool", type: "linkedin_post", text: "The change deployed this morning.", visibility: "CONNECTIONS", publish: "now" } },
+    null, /fixture service declined the post/i],
   ["dismissed-elsewhere", "[data-tq-act-press]", { connected: true }, "reject", /dismissed/]]) {
   test(`an act's card pressed (${name}) never lights again before it says what was pressed`, { timeout: 300000 }, async (t) => {
     const w = await world(t), page = await w.newPage();

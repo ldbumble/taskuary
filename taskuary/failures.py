@@ -21,6 +21,16 @@ _SLOW = re.compile(r'timed? ?out|ReadTimeout|ConnectTimeout', re.I)
 # {"error": ...}" reached the agent pane whole - the gateway's address and a page of JSON (2026-11-09). The AI, and its own reason when it gave one
 _REFUSED = re.compile(r'\b(\w+) error (400|422) at \S+?(?: after \d+ tries)?: ?(.*)', re.S)
 _REASON = re.compile(r'"message\\*"\s*:\s*\\*"([^"\\]{8,})')
+_CLI_QUOTA = re.compile(r"(?:you(?:'|’)ve hit your |you have hit your )?(?:(?:\d+[- ]hour|usage|session|rate) limit)(?:[^\r\n]*?\bresets?\b[^\r\n]*)?", re.I)
+
+
+def cli_quota(text) -> str:
+    """The CLI's quota notice, without ACP's RPC wrapper or Taskuary's retry suffix."""
+    text = str(text or '').split(' - type to carry on', 1)[0]
+    if m := _CLI_QUOTA.search(text):
+        notice = m[0].strip().rstrip('.')
+        return notice[0].upper() + notice[1:]
+    return ''
 
 
 def refused(e, who: str = '') -> str:

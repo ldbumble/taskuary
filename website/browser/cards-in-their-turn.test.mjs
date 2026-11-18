@@ -16,6 +16,7 @@ import { note, record } from "./recorder.mjs";
    100 ms from the key press until the new card is live, and recorded. Invented people only. */
 const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, "..", "..");
 const out = path.join(process.env.TEMP || os.tmpdir(), "claude", "n17");
+const OLD = "Hi Erin, here is the full review. The export and sign-on both need work.";
 const NEW = "Hi Erin, short version: two real flaws, the sheet is attached. Alex";
 const SCRIPT = [{ when: "make it shorter", anywhere: true, first: "Rewrote it short, with the sheet attached.",
   post: [{ path: "/api/agent/reply", body: { text: NEW, agent: "assistant", files: [{ name: "flaws.csv", data: Buffer.from("flaw,impact\nexport,high\nsso,medium\n").toString("base64") }] } }] }];
@@ -49,10 +50,12 @@ const look = (page, oldId, said) => page.evaluate((oldId, said) => {
   const words = (el) => [(/To\s+([^<\n]*<[^>]+>)/.exec(el.innerText) || [])[1], (/[\w.-]+\.(csv|pdf|xlsx|docx|png)\b/.exec(el.innerText) || [])[0], ...[...el.querySelectorAll("textarea, input")].map((x) => x.value)].join("|").replace(/\s+/g, " ").trim();
   // ...where the letter stands: its text box, what the eye follows (the card's own box starts at a heading in one place, under it in another)
   const card = (el) => { const r = (el.querySelector("textarea") || el).getBoundingClientRect(), send = [...el.querySelectorAll("button")].filter((b) => b.matches("[data-tq-send]") || /^(Send|Connect email)/.test(b.innerText.trim()));
-    return { id: el.getAttribute("data-tq-review") || el.getAttribute("data-tq-replaced"), record: el.matches("[data-tq-replaced]"), top: y(r), bottom: y({ top: r.bottom }), box: y(el.getBoundingClientRect()), words: words(el), grey: grey(el),
+    return { id: el.getAttribute("data-tq-review") || el.getAttribute("data-tq-replaced") || el.getAttribute("data-tq-past-review"),
+      record: el.matches("[data-tq-past-card]"), letter: el.querySelector(".tq-conv-past-words")?.innerText ?? el.querySelector("textarea")?.value ?? "",
+      top: y(r), bottom: y({ top: r.bottom }), box: y(el.getBoundingClientRect()), words: words(el), grey: grey(el),
       live: send.some((b) => !b.disabled) && !grey(el), sends: send.length }; };
   // ...a replaced draft's record is the old card too, where it stood (PassedCard.ReplacedDraft)
-  const cards = [...(pane?.querySelectorAll("[data-tq-review], [data-tq-replaced]") || [])].filter((e) => e.getBoundingClientRect().height > 0).map(card);
+  const cards = [...(pane?.querySelectorAll("[data-tq-review], [data-tq-replaced], [data-tq-past-review]") || [])].filter((e) => e.getBoundingClientRect().height > 0).map(card);
   const mine = [...(pane?.querySelectorAll(".tq-aui-user-bubble") || [])].filter((e) => e.innerText.includes(said)).pop();
   const ext = [...(pane?.querySelectorAll("[data-tq-file-card], [data-tq-show-file]") || [])].filter((e) => e.getBoundingClientRect().height > 0).length;
   return { cards, old: cards.filter((c) => c.id === String(oldId)), bubble: mine ? { top: y(mine.getBoundingClientRect()), bottom: y({ top: mine.getBoundingClientRect().bottom }) } : null,
@@ -93,10 +96,10 @@ async function rewrite(t, w, page, { tid, rid, name }) {
     // ...where it stands: the letter's own words while it waits; once it is the grey note of a replaced draft, the note's box where the card's was
     if (o && !o.record && Math.abs(o.top - before.old[0].top) > 2) why.push(`the old card moved ${before.old[0].top} -> ${o.top}`);
     if (o?.record && Math.abs(o.box - before.old[0].box) > 16) why.push(`the old draft's note stands away from where its card was: ${before.old[0].box} -> ${o.box}`);
-    // A WAITING CARD STAYS LIT UNTIL A NEWER ONE REPLACES IT (the owner, 2026-11-11: "typing a question never sets it aside") - it went grey
-    // at his press before; once replaced it is one grey note in its place, nothing on it to press
-    if (o && !o.record && !o.live) why.push("the old card is set aside before a newer one has replaced it");
-    if (o?.record && (o.live || o.sends)) why.push("the replaced draft's note can be pressed");
+    // A follow-up sets aside the draft as soon as the owner's line appears.
+    if (s.bubble && o && !o.record) why.push("the old draft has not been set aside");
+    if (o?.record && (o.live || o.sends)) why.push("the old draft's note can be pressed");
+    if (o?.record && o.letter.trim() !== OLD) why.push("the old draft's note lost its words");
     if (s.bubble && o && o.top > s.bubble.top) why.push("the old card is under his line");
     const others = s.cards.filter((c) => c.id !== String(rid));
     if (s.cards.filter((c) => c.live).length > 1) why.push("two live cards");
@@ -132,7 +135,7 @@ async function rewrite(t, w, page, { tid, rid, name }) {
   await writeFile(path.join(dir, "server.log"), w.backend.output());
   const ok = done != null && !bad.length;
   await note(dir, { done: `A reply drafted on arrival waits on the task (${name}); the owner types "${said}" into the task's box and presses Enter; the stand-in agent files a new letter with a file, as taskuary --reply does.`,
-    expect: "At the press: his line, the old card still lit where it stood (typing never sets a waiting card aside). Once the new letter is filed the old one is one grey note in its place, its words under it, nothing to press. Under his line: the agent's head and spin, then the NEW card with the new letter, To, the file, Send - live. Never: the old card rewritten, moved, or under his line; two live cards; a file preview; a 'Files are in' line.",
+    expect: "When his line appears, the old draft becomes one grey note in its place, with its words and no buttons. Under his line: the agent's head and spin, then the new draft with its recipient, file and Send. The old draft stays above his line.",
     saw: done == null ? `no live new card within 90 s. Last: ${JSON.stringify(end.cards).slice(0, 600)}` : bad.length ? bad.slice(0, 6).join("\n") : `as expected; the new card live ${done} ms after the press`,
     verdict: ok ? "PASS" : "FAIL" });
   assert.ok(done != null, `${name}: no new live card under his line within 90 s: ${JSON.stringify(end.cards).slice(0, 800)}\n${end.text.slice(-1200)}`);
@@ -142,13 +145,13 @@ async function rewrite(t, w, page, { tid, rid, name }) {
   assert.ok(after[0].words.includes("flaws.csv"), `the new card names its file: ${after[0].words.slice(0, 300)}`);
 }
 
-test("a reply rewritten after the owner prompts: the old card waits lit until the new one replaces it, then is a grey note in its place", { timeout: 600000 }, async (t) => {
+test("a follow-up in general chat greys the old draft in place and puts the rewritten draft below", { timeout: 600000 }, async (t) => {
   const w = await world(t);
   const page = await w.newPage();
   await page.setViewport({ width: 1600, height: 900 });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  const made = await w.api("/api/fixture/mail-task", {});
+  const made = await w.api("/api/fixture/mail-task", { draft: OLD });
   assert.ok(made.taskId, JSON.stringify(made));
   await page.goto(w.ui, { waitUntil: "domcontentloaded" });
   await rewrite(t, w, page, { tid: made.taskId, rid: made.reviewId, name: process.env.N17_NAME || "rewrite-general" });
@@ -159,7 +162,7 @@ test("a reply rewritten after the owner prompts: the old card waits lit until th
 // letter as the real one's shell does (FAKE_ACP_SCRIPT -> `taskuary --reply`)
 // ...a coding start held the arrival draft, so for the turn's first second the old card was gone from the chat (2026-11-11): it holds only an
 // earlier session's now, as a chat's start does
-test("a reply rewritten in a coding chat: the old card waits lit until the new one replaces it, then is a grey note in its place", { timeout: 600000 }, async (t) => {
+test("a follow-up in coding chat greys the old draft in place and puts the rewritten draft below", { timeout: 600000 }, async (t) => {
   const w = await world(t);
   const page = await w.newPage();
   await page.setViewport({ width: 1600, height: 900 });
@@ -168,17 +171,15 @@ test("a reply rewritten in a coding chat: the old card waits lit until the new o
   const git = execFileSync(process.platform === "win32" ? "where" : "which", ["git"], { encoding: "utf8" }).trim().split(/\s*\n/)[0].trim();
   const repo = await w.api("/api/fixture/coding", { git });
   assert.ok(repo.taskId, `the coding home is set up: ${JSON.stringify(repo)}`);
-  const made = await w.api("/api/fixture/mail-task", { kind: "coding" });
+  const made = await w.api("/api/fixture/mail-task", { kind: "coding", draft: OLD });
   assert.ok(made.taskId, JSON.stringify(made));
   await page.goto(w.ui, { waitUntil: "domcontentloaded" });
   await rewrite(t, w, page, { tid: made.taskId, rid: made.reviewId, name: process.env.N17_NAME || "rewrite-coding" });
   assert.deepEqual(errors, []);
 });
 
-// A STRANGER'S TASK ON A CLI TOO OLD FOR ITS REVIEWER (the walk, 2026-11-10): its first turn drew a running head with nothing behind it and never
-// said why. It reads and answers in the CLI's read-only mode now (origin.launch_mode 'look') - and the reply drafted on arrival, which the
-// answer left alone, stays under the mail it answers: it jumped from over his line to under the answer's Next steps (general.draft_turns)
-test("a stranger's task on a CLI too old for its reviewer answers under the owner's line, the arrival draft staying where it stood", { timeout: 300000 }, async (t) => {
+// An untrusted sender stays held, even on a CLI that used to allow a read-only turn.
+test("an untrusted sender on an old CLI has a visible Trust action and keeps the earlier draft", { timeout: 300000 }, async (t) => {
   process.env.FAKE_CLAUDE_VERSION = "2.1.100";
   t.after(() => { delete process.env.FAKE_CLAUDE_VERSION; });
   const w = await world(t);
@@ -193,24 +194,20 @@ test("a stranger's task on a CLI too old for its reviewer answers under the owne
   const said = "make it shorter and attach the sheet";
   await page.evaluate(() => document.querySelector("[data-tq-task-page] .tq-aui-input")?.focus());
   await page.keyboard.type(said); await page.keyboard.press("Enter");
-  const t0 = Date.now(), bad = []; let answered = false;
-  while (Date.now() - t0 < 90000) {
-    const s = await look(page, made.reviewId, said), card = s.old[0];
-    answered = /\bOk\.|could not|did not start|Trust them/.test(s.text.slice(s.text.lastIndexOf(said)));
-    if (card && s.bubble && card.top > s.bubble.top) bad.push(`${Date.now() - t0} ms: the arrival draft stands under his line`);
-    if (answered && Date.now() - t0 > 2000) { await new Promise((r) => setTimeout(r, 2500)); const e = await look(page, made.reviewId, said);
-      if (e.old[0] && e.bubble && e.old[0].top > e.bubble.top) bad.push("at rest: the arrival draft stands under his line"); break; }
-    await new Promise((r) => setTimeout(r, 100));
-  }
+  await page.waitForFunction(() => document.querySelector("[data-tq-past-card='passed']") &&
+    [...document.querySelectorAll("[data-tq-task-page] button")].some((button) => /^Trust Paula$/.test(button.innerText.trim()) &&
+      !button.disabled && button.getBoundingClientRect().width > 0));
+  const end = await look(page, made.reviewId, said);
+  const running = await page.$("[data-tq-task-page] [data-tq-pending-turn], [data-tq-task-page] [data-tq-run-clock]");
   await page.screenshot({ path: path.join(out, `${name}.png`) });
   await rec.stop();
-  const text = await page.evaluate(() => document.querySelector("[data-tq-task-page] .tq-aui-viewport")?.innerText || "");
   await note(dir, { done: "A stranger's mail task with a reply drafted on arrival; the stand-in CLI reports a version too old for a stranger's reviewer; the owner types a line.",
-    expect: "Under his line the agent's head and its answer (read-only); the arrival draft stays above his line, under the mail, greyed in place.",
-    saw: !answered ? `no answer within 90 s:\n${text.slice(-600)}` : bad.length ? bad.slice(0, 3).join("\n") : "answered under his line; the draft stayed where it stood",
-    verdict: answered && !bad.length ? "PASS" : "FAIL" });
-  assert.ok(answered, `the turn answered under his line:\n${text.slice(-800)}`);
-  assert.deepEqual(bad.slice(0, 3), []);
+    expect: "The task explains the hold and offers Trust Paula. The earlier draft stays in the chat as a note and the agent stays idle.",
+    saw: end.text.slice(-900), verdict: !running && end.old[0]?.record ? "PASS" : "FAIL" });
+  assert.match(end.text, /You have not trusted Paula Vance/);
+  assert.equal(end.old.length, 1);
+  assert.ok(end.old[0].record && !end.old[0].sends);
+  assert.equal(running, null);
 });
 
 // A HELD CARD IS A ROW IN THE CHAT, AND THE AGENT GOES ON UNDER IT (the owner, 2026-11-10: "it's just a row in the chat"; rules part 1: the agent
@@ -317,7 +314,7 @@ test("a stranger's task its AI cannot start says why under the owner's line, wit
         const after = at < 0 ? "" : text.slice(at + said.length);
         const trust = [...document.querySelectorAll("[data-tq-task-page] button")].some((b) => /^Trust/.test(b.innerText.trim()) && b.getBoundingClientRect().width > 0);
         const ran = /ran (\d+)s/.exec(after);
-        return { why: /cannot be kept to only reading|Trust them|Waiting for you|did not start|couldn.t start/i.test(after), trust, ran: ran ? +ran[1] : null,
+        return { why: /cannot be kept to only reading|you have not trusted|did not start|couldn.t start/i.test(after), trust, ran: ran ? +ran[1] : null,
           clock: !!vp?.querySelector("[data-tq-run-clock]"), after: after.slice(0, 400) };
       }, said);
       if (last.why && last.trust) { held = Date.now() - t0; break; }
@@ -369,12 +366,20 @@ test("a coding agent's question stands in its chat; the owner's typed answer is 
   await w.api(`/api/tasks/${made.taskId}/assistant/messages`, { text: "comment the totals" });
   await page.waitForSelector("[data-tq-task-page] .tq-aui-input", { visible: true, timeout: 60000 });
   const rec = await record(page, dir), bad = [], said = "yes, with tax";
-  const vp = () => page.evaluate(() => { const v = document.querySelector("[data-tq-task-page] .tq-aui-viewport");
-    return { text: v?.innerText || "", asks: v?.querySelectorAll("[data-tq-asking]").length || 0 }; });
+  const vp = () => page.evaluate(() => {
+    const pane = document.querySelector("[data-tq-task-page]");
+    const text = pane?.querySelector(".tq-aui-viewport")?.innerText || "";
+    const waiting = pane?.querySelector(".tq-aui-input")?.getAttribute("placeholder")?.includes("Answer the agent's question");
+    return { text, waiting };
+  });
   let asked = null, done = null;
   try {
     const t0 = Date.now();
-    while (Date.now() - t0 < 60000 && !asked) { const s = await vp(); if (s.asks) asked = s; else await new Promise((r) => setTimeout(r, 200)); }
+    while (Date.now() - t0 < 60000 && !asked) {
+      const s = await vp();
+      if (s.waiting && s.text.includes("Should the totals include tax?")) asked = s;
+      else await new Promise((r) => setTimeout(r, 200));
+    }
     if (!asked) bad.push("the question never stood on the chat");
     else if (/TASKUARY-ASK/.test(asked.text)) bad.push("the bare marker is drawn");
     await new Promise((r) => setTimeout(r, 1000));
@@ -388,7 +393,7 @@ test("a coding agent's question stands in its chat; the owner's typed answer is 
       await new Promise((r) => setTimeout(r, 200));
     }
     await new Promise((r) => setTimeout(r, 2000));
-    if ((await vp()).asks) bad.push("the question still stands after the agent answered");
+    if ((await vp()).waiting) bad.push("the composer still waits for an answer after the agent continued");
     if (answers.length) bad.push(`the answer went the terminal's road: ${answers[0]}`);
   } finally {
     await page.screenshot({ path: path.join(out, `${name}.png`) });
@@ -427,8 +432,8 @@ test("two turns of a coding chat each keep the card they raised, under their own
   const where = () => page.evaluate(() => {
     const vp = document.querySelector("[data-tq-task-page] .tq-aui-viewport"), y = (e) => Math.round(e.getBoundingClientRect().top - vp.getBoundingClientRect().top + vp.scrollTop);
     const lines = [...vp.querySelectorAll(".tq-aui-user-bubble")].map((e) => [e.innerText.trim(), y(e)]);
-    const cards = [...vp.querySelectorAll("[data-tq-review], [data-tq-replaced]")].filter((e) => e.getBoundingClientRect().height > 0)
-      .map((e) => [(e.querySelector("textarea")?.value || e.innerText).replace(/\s+/g, " ").slice(0, 80), y(e)]);
+    const cards = [...vp.querySelectorAll("[data-tq-review], [data-tq-replaced], [data-tq-past-review]")].filter((e) => e.getBoundingClientRect().height > 0)
+      .map((e) => [(e.querySelector("textarea")?.value || e.querySelector(".tq-conv-past-words")?.innerText || e.innerText).replace(/\s+/g, " ").slice(0, 80), y(e)]);
     return { lines, cards };
   });
   const at = (xs, re) => (xs.find(([s]) => re.test(s)) || [])[1];

@@ -70,9 +70,12 @@ class Run:
     def at_work(self, *calls, secs=40, label: str = None) -> str:
         """The agent's next turn begun and still at work: waits for its prompt (whatever started it) and makes `calls` [(tool, {args})] - no
         answer yet, so what the owner presses meanwhile lands on a turn under way (`label` snaps it there). -> the prompt it was given."""
+        from fake_director import read_when_ready
         inp = self.d / f'{self.k}.in'
-        assert until(inp.is_file, secs), f'{self.backend}: turn {self.k} never started (no prompt reached the agent)'
-        prompt = inp.read_text(encoding='utf-8'); self.prompts.append(prompt); self.told.append((len(self.snaps), prompt))
+        ready = until(lambda: (prompt,) if (prompt := read_when_ready(inp)) is not None else None, secs)
+        assert ready, f'{self.backend}: turn {self.k} never started (no prompt reached the agent)'
+        (prompt,) = ready
+        self.prompts.append(prompt); self.told.append((len(self.snaps), prompt))
         self.systems.append((self.d / 'system.txt').read_text(encoding='utf-8') if (self.d / 'system.txt').is_file() else '')   # a CLI's own, for a real turn
         was = {r['ReviewId'] for r in self.s._rows('SELECT ReviewId FROM review WHERE TaskId=?', (self.tid,))}
         pace()
@@ -336,11 +339,13 @@ def world(backend: str, tmp: Path, monkeypatch):
     from taskuary.store import MemoryStore
     d = tmp / 'director'; d.mkdir(); (tmp / 'artifacts').mkdir()
     monkeypatch.setenv('FAKE_DIRECTOR', str(d))
-    from fake_director import MARK
-    MARK.write_text(str(d), encoding='utf-8')
+    from fake_director import marker
     monkeypatch.setattr(session_artifacts, 'root', lambda: tmp / 'artifacts')
     from taskuary import config                       # ...a home of its own: a task's files (outputs.folder) never outlive the scenario
-    (tmp / 'home').mkdir(); monkeypatch.setattr(config, 'home', lambda: tmp / 'home')
+    home = tmp / 'home'; home.mkdir()
+    monkeypatch.setattr(config, 'home', lambda: home)
+    mark = marker(os.environ['TASKUARY_HOME'])
+    mark.write_text(str(d), encoding='utf-8')
     s = MemoryStore()
     s.set_setting('owner_email', ME, 't'); s.set_setting('owner_name', 'Alex Doyle', 't')
     monkeypatch.setattr(general, 'idle_for', lambda: 3600)
@@ -419,7 +424,7 @@ def world(backend: str, tmp: Path, monkeypatch):
             try: t.close()
             except Exception: pass
             terminal.SESSIONS.pop(k, None)
-    funnel.invalidate(); MARK.unlink(missing_ok=True)
+    funnel.invalidate(); mark.unlink(missing_ok=True)
 
 
 # ── the goal rules and the parity rule ───────────────────────────────────────────────────────────────────────────────────────────────

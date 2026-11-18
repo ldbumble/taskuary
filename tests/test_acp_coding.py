@@ -188,6 +188,21 @@ def test_a_turn_that_fails_says_so_in_the_chat_and_typing_carries_on(world, monk
     assert 'heard: try again' in [x for k, x in t.history if k == 'said'][-1]
 
 
+def test_quota_failure_leaves_one_notice_and_no_stale_request(world, monkeypatch):
+    from taskuary import conversation, workerstate
+    s, tid, repo = world
+    monkeypatch.setenv('FAKE_ACP_FAIL', 'quota')
+    t = open_(s, tid, repo, seed='look at the totals')
+    assert until(lambda: not t.alive and s.last_transcript(tid))
+    notice = "You've hit your 5-hour limit · resets 12:10pm (America/New_York)"
+    workerstate.record(s, tid, t.sid, 'stalled', request_id='old-hook', text='unknown', source='hook')
+    got = conversation.items(s, tid)
+    assert not got['working'] and got['asking'] is None
+    [turn] = [x for x in got['items'] if x['kind'] == 'turn' and x['state'] == 'failed']
+    assert turn['quota'] and turn['fail'] == notice and turn['steps'] == []
+    assert agents.availability_failure(notice)
+
+
 def test_an_agent_that_dies_mid_turn_is_said_as_a_chat_cli_that_did(world, monkeypatch, tmp_path):
     """ONE SENTENCE FOR ONE FACT (the side-by-side walk, 2026-11-11): a coding agent that died holding a turn read "The turn failed: the agent stopped
     during session/prompt: - type to carry on."; a general chat's CLI that died the same way says clipool.MID_TURN."""

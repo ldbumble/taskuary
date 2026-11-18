@@ -403,7 +403,7 @@ class ACPCoding:
         codingchat.record_update(self.task_id, self.sid, u)
 
     def _turn(self, items: list):
-        from . import agents, acpgate
+        from . import agents, acpgate, failures
         text = '\n\n'.join(t for t, *_ in items)
         self._show(items); self._drawn.difference_update(map(id, items))
         # ...ITS CLOCK IS SET ONCE, HERE (the 0.3.11.50 release run: it read the turn's start, then the CLI's own prompt hook's time, then the
@@ -433,7 +433,7 @@ class ACPCoding:
             if d:
                 try: d(True)
                 except Exception as e: logger.debug(f'acp coding: a done callback raised - {e}')
-        stop, said, ok = None, '', False
+        stop, said, ok, quota = None, '', False, ''
         self.in_turn = True
         since, t0 = datetime.now().strftime('%Y-%m-%d %H:%M:%S'), time.monotonic()
         stop_now, self.stop_next = self.stop_next, False
@@ -446,7 +446,12 @@ class ACPCoding:
             else:
                 logger.warning(f'acp coding {self.sid}: the turn failed - {e}')
                 # ...a sentence that already says how to carry on is said as it is (acp's mid-turn death)
-                self._say('progress', 'acp', why := f'{str(e)[:400]}.' if general.CARRY_ON in str(e) else f'The turn failed: {str(e)[:300]} - {general.CARRY_ON}.')
+                quota = failures.cli_quota(e)
+                if quota:
+                    self.busy = False
+                    general.answered(self.task_id, every=True)
+                why = quota or (f'{str(e)[:400]}.' if general.CARRY_ON in str(e) else f'The turn failed: {str(e)[:300]} - {general.CARRY_ON}.')
+                self._say('progress', 'acp', why)
                 # ...IN THE CHAT, where it happened (rules part 4): said only on its Terminal, the chat - drawn from the kept updates - showed the
                 # turn's first words and stopped. Taskuary's own update, marked as its brief is (chatStream.stepsFromAcp draws it as the turn's error)
                 self._record({'sessionUpdate': 'error', 'content': {'type': 'text', 'text': why}, '_meta': {'taskuary': 'error'}})
@@ -455,6 +460,14 @@ class ACPCoding:
             try: self.steps.flush(stop if ok else 'error')
             except Exception as e: logger.debug(f'acp coding: steps not flushed - {e}')
         self.stop_reason, self.turns = stop, self.turns + 1
+        if quota and self.store and self.task_id:
+            from . import workerstate as ws
+            from .wrapup import PAUSE_MARKER
+            if tail := self.transcript_text(2000).strip():
+                self.store.add_comment(self.task_id, self.agent, 'agent', f'{PAUSE_MARKER}\n{tail}')
+            ws.record(self.store, self.task_id, self.sid, 'failed', text=quota, source='acp')
+            self.client.close()
+            return self._gone()
         if ok: self._used(since, int((time.monotonic() - t0) * 1000))
         if not self.client.alive(): return self._gone()
         # ...a turn the owner STOPPED is recorded so, as a chat's stopped turn is - never as its answer (the audit, 2026-11-10)

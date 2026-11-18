@@ -2226,7 +2226,8 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
     # ONE CARD AT A TIME (cardqueue): what waits behind the card that stands is not the page's to draw yet
     from . import cardqueue
     q = cardqueue.state(store, task_id)
-    if (held := set(q['held'])): d['reviews'] = [r for r in d['reviews'] if r['ReviewId'] not in held]
+    held = set(q['held'])
+    d['reviews'] = [r for r in d['reviews'] if r['ReviewId'] not in held and not cardqueue.obsolete_read(store, task_id, r)]
     # ...and what the chat moved past reads as it will once its agent hears that (proposals.written_past): greyed in place, from this read on
     from .proposals import SET_ASIDE, passed, passed_why
     past = q['past']

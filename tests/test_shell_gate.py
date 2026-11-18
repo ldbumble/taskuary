@@ -454,7 +454,7 @@ class ReadingOutside(unittest.TestCase):
         """The owner, 2026-11-17, on the same task after the fix: the old card still stood, "Read craft-floor.md in reference · Dismissed ·
         nothing was run" - "it told you to get rid of it". A held read the gate would let through now was never his to answer: it is not
         drawn, pending or answered. A read it still holds stays, and so does a card whose command holds something else."""
-        from taskuary import conversation, proposals
+        from taskuary import cardqueue, conversation, proposals, taskstate
         claude = os.path.join(self.docs, 'claude-home'); ref = os.path.join(claude, 'skills', 'impeccable', 'reference'); os.makedirs(ref, exist_ok=True)
         hist = os.path.join(self.docs, 'claude-home-other')
         def held(folder, cmd='', status='rejected'):
@@ -465,9 +465,16 @@ class ReadingOutside(unittest.TestCase):
             return rid
         with mock.patch.dict(os.environ, {'CLAUDE_CONFIG_DIR': claude}):
             gone, gone2, kept, both = held(ref), held(ref, status='pending'), held(hist), held(ref, cmd='git push origin main')
+            self.s._exec("UPDATE review SET DecidedBy='owner' WHERE ReviewId=?", (gone,))
+            allowed = held(ref, status='approved')
             cards = [c['review'] for x in conversation.items(self.s, self.tid)['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])]
+            queue = cardqueue.state(self.s, self.tid)
+            self.assertNotIn(gone2, queue['live'] + queue['held'])
+            self.assertNotIn(gone2, [r['ReviewId'] for r in self.s.waiting_reviews()])
+            self.assertIsNone(self.s.waiting_on_owner(self.tid))
+            self.assertFalse(taskstate.waits_press(self.s, {'TaskId': self.tid, 'ReviewStatus': 'pending', 'ReviewKind': 'action'}, row=True))
         self.assertNotIn(gone, cards); self.assertNotIn(gone2, cards)
-        self.assertIn(kept, cards); self.assertIn(both, cards)
+        self.assertIn(kept, cards); self.assertIn(both, cards); self.assertIn(allowed, cards)
 
     def test_what_its_own_cli_downloaded_is_its_work_and_the_rest_of_that_home_still_asks(self):
         """The owner, 2026-11-16: a research turn's read-back of the PDF its own WebFetch had saved was held as a card under its finished

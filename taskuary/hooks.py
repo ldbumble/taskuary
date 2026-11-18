@@ -489,8 +489,10 @@ def _events(t, p: dict) -> None:
             # THE WALL. A rate limit, a token ceiling, an overloaded API: the turn ends, the CLI sits at its
             # prompt, and on the screen that is indistinguishable from a question. Not terminal - Claude
             # can auto-resume and the owner can retry - so it is a request that stands until the run speaks.
-            kind = str(p.get('error_type') or 'unknown').replace('_', ' ')
-            text = f"{kind}: {str(p.get('error_message') or '').strip()}".rstrip(': ')
+            kind = str(p.get('error_type') or '').replace('_', ' ')
+            message = str(p.get('error_message') or '').strip()
+            text = ': '.join(x for x in (kind if kind.lower() != 'unknown' else '', message) if x)
+            if not text: return
             ws.record(st, tid, sid, 'stalled', request_id=ws.request_id_for(text), text=text, source='hook')
         elif ev == 'Elicitation':
             text = f"{p.get('server_name') or 'an MCP server'} asks: {str(p.get('prompt') or '').strip()}"

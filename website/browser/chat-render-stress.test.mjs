@@ -21,9 +21,12 @@ const result = (id, text, error, ms = 0) => ({ _sleep: ms / 1000, type: "user", 
 test("a general chat grows only at its foot, and says it works under his line at once", { timeout: 600000 }, async (t) => {
   const bin = await mkdtemp(path.join(os.tmpdir(), "taskuary-fake-claude-"));
   t.after(() => rm(bin, { recursive: true, force: true }).catch(() => {}));
-  const py = execFileSync("python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" }).trim();
-  await writeFile(path.join(bin, "claude"), `#!/bin/sh\nexec "${py}" "${path.join(repo, "tests", "fake_claude.py")}" "$@"\n`);
-  await chmod(path.join(bin, "claude"), 0o755);
+  const win = process.platform === "win32";
+  const py = execFileSync(win ? "python" : "python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" }).trim();
+  const fake = path.join(repo, "tests", "fake_claude.py");
+  const cli = path.join(bin, win ? "claude.cmd" : "claude");
+  await writeFile(cli, win ? `@${py} ${fake} %*\r\n` : `#!/bin/sh\nexec "${py}" "${fake}" "$@"\n`);
+  if (!win) await chmod(cli, 0o755);
   await writeFile(path.join(bin, "script.json"), JSON.stringify([
     { when: "what is on my plate", anywhere: true, first: "Two things: the vendor review for Erin and the ledger totals." },
     { when: "check the vendor folder", anywhere: true, first: "The folder is not there, so I looked in the shared drive instead.",
@@ -107,7 +110,10 @@ test("a general chat grows only at its foot, and says it works under his line at
     await p.evaluate(() => document.querySelector("[data-tq-task-page] [data-tq-stop-run]")?.click()); await quiet(); await settle();
     await typeIn("after the stop"); await until(/Back after the stop/); await quiet(); await settle();
     await p.screenshot({ path: path.join(out, "8-stop.png") });
-  } finally { await rec.stop({ sheet: 24 }); }
+  } finally {
+    await rec.stop({ sheet: 24 });
+    await writeFile(path.join(out, "server.log"), h.backend.output());
+  }
   const seen = [...seenAll, ...(await p.evaluate(() => window.__seen))];
   await p.reload({ waitUntil: "domcontentloaded" }); await until(/Back after the stop/); await settle(3000);
   const reloaded = await p.evaluate(() => [...document.querySelectorAll("[data-tq-task-page] .tq-aui-message")].map((e) => (e.innerText || "").replace(/\s+/g, " ").trim().slice(0, 90)));

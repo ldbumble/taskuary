@@ -5630,7 +5630,8 @@ class SQLiteStore:
         gone = lambda r: bool(r.get('TaskId')) and r['ReviewId'] in (past.get(r['TaskId']) if r['TaskId'] in past else past.setdefault(r['TaskId'], proposals.written_past(self, r['TaskId'])))
         # ...nor a card that waits behind another on its task (cardqueue): one stands at a time, on every surface
         waits = lambda r: bool(r.get('TaskId')) and r['ReviewId'] in (held[r['TaskId']] if r['TaskId'] in held else held.setdefault(r['TaskId'], cardqueue.held(self, r['TaskId'])))
-        return [r for r in self.list_reviews('pending') if not gone(r) and not waits(r)]
+        return [r for r in self.list_reviews('pending')
+                if not cardqueue.obsolete_read(self, r.get('TaskId'), r) and not gone(r) and not waits(r)]
     @contextlib.contextmanager
     def review_delivery_edit(self, rid):
         """Exclude send claims while attachment bytes/envelopes change, even in another process."""
@@ -5796,7 +5797,8 @@ class SQLiteStore:
         from . import cardqueue, proposals
         past = proposals.written_past(self, task_id) | cardqueue.held(self, task_id)
         return next((r for r in self._rows(f"SELECT rv.* {_REVIEW_FROM} WHERE rv.TaskId=? AND rv.Status='pending' AND {_NOT_ORPHAN} AND {_VISIBLE_PENDING} "
-                                           "ORDER BY rv.ReviewId DESC", (task_id,)) if r['ReviewId'] not in past), None)
+                                           "ORDER BY rv.ReviewId DESC", (task_id,))
+                     if r['ReviewId'] not in past and not cardqueue.obsolete_read(self, task_id, r)), None)
     def sent_reply(self, message_id=None, task_id=None):
         """The newest reply that actually passed the send gate for this message/task.
 

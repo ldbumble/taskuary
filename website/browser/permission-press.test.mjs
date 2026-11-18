@@ -23,14 +23,20 @@ async function codingWorld(t) {
   const win = process.platform === "win32";
   const py = execFileSync(win ? "python" : "python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" }).trim();
   const fake = path.join(repo, "tests", "fake_claude.py");
-  await writeFile(path.join(bin, win ? "claude.cmd" : "claude"), win ? `@${py} ${fake} %*\r\n` : `#!/bin/sh\nexec "${py}" "${fake}" "$@"\n`);
-  if (!win) await chmod(path.join(bin, "claude"), 0o755);
+  const cli = path.join(bin, win ? "claude.cmd" : "claude");
+  await writeFile(cli, win ? `@"${py}" "${fake}" %*\r\n` : `#!/bin/sh\nexec "${py}" "${fake}" "$@"\n`);
+  if (!win) await chmod(cli, 0o755);
   Object.assign(process.env, { FAKE_ACP_SPAWN: "0.5", FAKE_ACP_THINK: "0.5", FAKE_ACP_ASK: "rm -rf /srv/ledger-archive" });
   const h = await startHarness({ fresh: true, bin });
   t.after(() => h.close());
-  const api = (p, body) => fetch(`${h.fixtureApi}${p}`, { method: body ? "POST" : "GET",
-    headers: { "Content-Type": "application/json", "X-Taskuary-Token": h.token }, body: body && JSON.stringify(body) }).then((r) => r.json());
-  await api("/api/setup/first-run/ai", { name: "claude" });
+  const api = async (p, body, method = body ? "POST" : "GET") => {
+    const r = await fetch(`${h.fixtureApi}${p}`, { method,
+      headers: { "Content-Type": "application/json", "X-Taskuary-Token": h.token }, body: body && JSON.stringify(body) });
+    assert.ok(r.ok, `Fixture request failed: ${p}, ${r.status}`);
+    return r.json();
+  };
+  await api("/api/cli/connections/claude", { cmd: cli }, "PUT");
+  await api("/api/ai/defaults", { slot: "default_brain", value: "cli:claude" });
   await api("/api/setup/dismiss", { dismissed: true });
   return { ...h, api };
 }
@@ -39,7 +45,8 @@ for (const kind of ["allow_once", "reject_once"]) test(`a pressed ${kind} holds 
   const w = await codingWorld(t), page = await w.newPage();
   await page.setViewport({ width: 1600, height: 900 });
   const errors = []; page.on("pageerror", (e) => errors.push(e.message));
-  const made = await w.api("/api/fixture/coding", {});
+  const git = process.platform === "win32" ? execFileSync("where.exe", ["git"], { encoding: "utf8" }).trim().split(/\r?\n/)[0] : "git";
+  const made = await w.api("/api/fixture/coding", { git });
   await page.goto(w.ui, { waitUntil: "domcontentloaded" });
   await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
   const input = "[data-tq-task-page] [data-tq-agent-room] .tq-aui-input";

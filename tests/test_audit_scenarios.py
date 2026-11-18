@@ -12,6 +12,19 @@ import audit_scenarios as A
 
 pytestmark = pytest.mark.acp            # the stand-in adapter is this suite's own (conftest.no_real_acp_adapters)
 RUNS = {}                               # (scenario, backend) -> its run, for the parity check after the cells
+
+
+def test_the_director_stays_in_its_own_test_home(tmp_path, monkeypatch):
+    from fake_director import folder_of, marker
+    first, second = tmp_path / 'first', tmp_path / 'second'
+    first.mkdir(); second.mkdir()
+    marker(first).write_text(str(tmp_path / 'director'), encoding='utf-8')
+    monkeypatch.delenv('FAKE_DIRECTOR', raising=False)
+    monkeypatch.setenv('TASKUARY_HOME', str(first))
+    assert folder_of() == str(tmp_path / 'director')
+    monkeypatch.setenv('TASKUARY_HOME', str(second))
+    assert folder_of() == ''
+
 # (scenario, backend) -> the rules it still breaks, by their mark - each a finding of the audit (2026-11-10), open:
 OPEN = {}
 # (scenario, backend) whose reads are not yet one road with the others', each with its reason - the coding agent's chat and turns are one road

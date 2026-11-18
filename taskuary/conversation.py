@@ -644,6 +644,7 @@ def _items(store, tid: int) -> dict:
     spans = [(e['started'], t) for t, _, _, _, e in ev if e['kind'] == 'turn' and e.get('started')]
     # (one step past it, exactly: at an epoch's size a 1e-7 nudge is under the float's grain and leaves the tie it was to break)
     ev = [(max([t] + [math.nextafter(at, INF) for b, at in spans if b <= t <= at]) if rank == -1 else t, rank, *r) for t, rank, *r in ev]
+    from .failures import cli_quota
     out, held, run = [], [], None
     def close():
         nonlocal run
@@ -653,7 +654,12 @@ def _items(store, tid: int) -> dict:
             if run is None or run['sid'] != e['sid'] or run['seg'] != e['seg']:
                 close(); run = {'kind': 'turn', 'sid': e['sid'], 'seg': e['seg'], 'at': stamp(e['T']), 'state': 'done', 'steps': [], 'text': '', 'cards': [], 'started': e['T'], 'ended': e['T']}
                 out.append(run)
-            run['steps'] += _said([e['step']]); run['ended'] = e['T']
+            step = e['step']
+            if step['k'] == 'error' and (notice := cli_quota(step.get('text'))):
+                run.update(state='failed', fail=notice, quota=True)
+                run['steps'] = [s for s in run['steps'] if s['k'] != 'said' or str(s.get('text') or '').strip().rstrip('.') != notice]
+            else: run['steps'] += _said([step])
+            run['ended'] = e['T']
         elif rank == -1 and run is not None: held.append(e)
         else: close(); out.append(e)
     close()
@@ -680,7 +686,8 @@ def _items(store, tid: int) -> dict:
     for x in turns_[:-1]:
         if x['state'] in ('working', 'starting'): x.update(state='done', ended=x.get('ended') or x.get('started'))
     # the turn at work is the last thing in the list: one the agent has not yet said a word in is there too, the moment its input was heard
-    tail = next((x for x in reversed(out) if x['kind'] in ('turn', 'line', 'arrival')), None)
+    # ACP keeps streaming after a permission press. Show that work below its answered card.
+    tail = next((x for x in reversed(out) if x['kind'] in ('turn', 'line', 'arrival') or (live_sid and x.get('perm'))), None)
     # ...A TURN HE STOPPED IS STOPPED FROM THE PRESS (the recorded stop, 2026-11-11: its CLI took seconds to let go, and all that time the turn
     # spun above "You stopped the agent"): what is at work from there is the turn his waiting lines begin, under the press - with none
     # waiting, nothing is
@@ -719,6 +726,8 @@ def _items(store, tid: int) -> dict:
     begun, opens = min((r['At'] for r in starts if t0 and r['At'] >= t0), default=0.), ({'opening': True} if general.cold(tid) else {})
     if at_work and not mine and unfiled: pass
     elif at_work and not mine:
+        if tail and tail.get('perm') and turns_ and turns_[-1]['state'] in LIVE:
+            turns_[-1].update(state='done', ended=tail.get('_h') or ep(tail.get('at')))
         # ...AND WHAT IT WILL TAKE STANDS ABOVE IT FROM THE FIRST READ (the walks, 2026-11-17: his outside reply, handed to the agent at rest,
         # sat ~3 s as a chip by the box under the turn's bare dots, then jumped up into the chat): where no input heard since begins this turn,
         # what waits - a mail, a line of his - is its input, drawn where it will stand once heard, under its own name. Behind a Trust it waits
@@ -801,10 +810,6 @@ def _items(store, tid: int) -> dict:
     turns_at = {k: i for i, k in enumerate(turn_by)}
     newest = next((x for x in reversed(out) if x['kind'] == 'turn'), None)
     from .proposals import passed as proposals_passed
-    from . import readgate
-    def _payload(r):
-        try: return json.loads(r.get('DraftText') or '{}') or {}
-        except ValueError: return {}
     # ONE CARD AT A TIME (cardqueue): a card that waits behind another is drawn nowhere until its turn comes - and then where the chat has
     # got to, never back in the turn that raised it, above what came since: in the newest turn when nothing came in after it, else under
     # everything. One that waited and was over before it ever stood (taken back, written past) never stands at all
@@ -864,7 +869,7 @@ def _items(store, tid: int) -> dict:
         # ...and one he said Don't send to stays too, greyed where it stood (the real-CLI walk, 2026-11-16: it went from the chat - _card)
         if r['Kind'] == 'slot' and not (str(r.get('DraftText') or '').strip() and (proposals_passed(r) or r['Status'] in (*WENT, 'rejected') or r['ReviewId'] in past)): continue
         if unwritten(r) or r['ReviewId'] in held: continue
-        if r['Kind'] == 'action' and readgate.opened(store, tid, _payload(r)): continue
+        if cardqueue.obsolete_read(store, tid, r): continue
         # ...(one the chat moved past while it waited is over already, before its agent has heard the line that did it)
         if f"r:{r['ReviewId']}" in waited and hosts.get(f"r:{r['ReviewId']}") is None and (r['Status'] != 'pending' or r['ReviewId'] in past) and r.get('DecidedBy') not in OWNER_ACTORS: continue
         left = None if r['Kind'] == 'action' else wrapup.left_by(store, r['ReviewId'])
@@ -948,6 +953,9 @@ def _items(store, tid: int) -> dict:
     if ask and ask.get('source') == 'permission' and perms: ask = None
     flat = lambda v: ' '.join(re.sub(r'[*_`]', '', str(v or '')).split())
     last = next((x for x in reversed(out) if x['kind'] == 'turn'), None)
+    if last and last['state'] == 'failed' and (notice := cli_quota(last.get('fail'))):
+        last.update(fail=notice, quota=True)
+        if not at_work: ask = None
     # ...a coding turn's words are its `said` steps, its text empty: the demo's #214 drew its closing question twice
     words = last and ' '.join([str(last.get('text') or ''), *(s.get('text') or '' for s in last.get('steps') or [] if s.get('k') == 'said')])
     if ask and last and flat(ask.get('text')) and flat(ask['text']) in flat(words): ask = {**ask, 'said': True}

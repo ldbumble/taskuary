@@ -149,7 +149,7 @@ async function warmVite(ui, timeout = 240000) {
 // `fresh`: a first start on a machine with nothing set up instead of the demo world - its PATH holds only the system's own
 // folders and `bin` (a folder of fake CLIs, or none), so no AI tool of the machine running the test can be seen
 // `tour`: the canvas opens on the demo's tour, as a visitor's first view does (demo.opens) - off for the rest, written against the greeting
-export async function startHarness({ fresh = false, bin = "", tour = false } = {}) {
+export async function startHarness({ fresh = false, bin = "", tour = false, claudeConfigDir = "" } = {}) {
   const backendPort = await freePort();
   const frontendPort = await freePort(new Set([backendPort]));
   if (backendPort === frontendPort || forbiddenPorts.has(backendPort) || forbiddenPorts.has(frontendPort)) {
@@ -161,7 +161,7 @@ export async function startHarness({ fresh = false, bin = "", tour = false } = {
   const appData = path.join(home, "appdata");
   const localAppData = path.join(home, "localappdata");
   const codexHome = path.join(home, "codex");
-  const claudeHome = path.join(home, "claude");
+  const claudeHome = claudeConfigDir || path.join(home, "claude");
   const userHome = path.join(home, "user");
   // ...under the scratch profile, by the name the driver itself gives it: a program run with that profile keeps its state where Taskuary reads it
   const agentBrowserHome = path.join(userHome, ".agent-browser");

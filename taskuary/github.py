@@ -431,14 +431,10 @@ def list_items(tok, repo, since=None, state='open', limit=25):
 
 
 
-def issue_comments(tok, repo, number, since=None, limit=50):
-    """The conversation ON an issue or PR. An issue body is what somebody meant to say the day
-    they filed it; the answer to "what changed" is usually down here. `since` is an ISO stamp."""
-    p = {'per_page': min(limit, 100), 'sort': 'created', 'direction': 'asc'}
-    if since: p['since'] = since
-    r = requests.get(f'{GH}/repos/{repo}/issues/{number}/comments', headers=_h(tok), params=p, timeout=30)
-    r.raise_for_status()
-    return r.json()[:limit]
+def issue_comments(tok, repo, number, since=None):
+    """The conversation ON an issue or PR, oldest first, every page of it. An issue body is what somebody meant to say the day
+    they filed it; the answer to "what changed" is usually down here - at its END, which one page of the oldest never reached."""
+    return _pages(tok, f'/repos/{repo}/issues/{number}/comments', {'sort': 'created', 'direction': 'asc', **({'since': since} if since else {})})
 
 
 def whoami(tok) -> str:

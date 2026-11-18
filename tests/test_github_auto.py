@@ -127,3 +127,25 @@ class ADeadRepoDoesNotBlindTheOthersTests(unittest.TestCase):
         by_addr = {r['Address']: r for r in s.list_sources(active_only=False) if r['Channel'] == 'github'}
         self.assertIsNotNone(by_addr['ldbumble/taskuary']['LastPolledAt'])
         self.assertIsNone(by_addr['ldbumble/GoneForever']['LastPolledAt'])
+
+
+class ALongThreadIsReadToItsEndTests(unittest.TestCase):
+    def test_the_newest_comment_on_an_issue_with_many_is_read(self):
+        """GitHub serves an issue's comments oldest first, a page at a time: with seventy on it, the first page was all that was ever
+        read, and the newest - the one that asks for something now - never reached the task."""
+        from unittest import mock
+        from taskuary import github
+        rows = [{'id': i, 'body': f'note {i}', 'user': {'login': 'erin-blake'}} for i in range(1, 71)]
+
+        def get(url, headers=None, params=None, timeout=None):
+            q = dict(params or {})
+            if '?' in url: q.update(dict(x.split('=') for x in url.split('?', 1)[1].split('&')))
+            per, page = min(int(q.get('per_page') or 30), 100), int(q.get('page') or 1)
+            r = mock.Mock(status_code=200)
+            r.json.return_value = rows[(page - 1) * min(per, 50): page * min(per, 50)]     # a server whose page is smaller than asked
+            r.links = {'next': {'url': f"{url.split('?')[0]}?per_page={per}&page={page + 1}"}} if page * min(per, 50) < len(rows) else {}
+            return r
+        with mock.patch.object(github.requests, 'get', side_effect=get):
+            got = github.issue_comments('tok', 'northwind/ledger', 5)
+        self.assertEqual([c['id'] for c in got][-1], 70)
+        self.assertEqual(len(got), 70)

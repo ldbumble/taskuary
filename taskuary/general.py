@@ -149,7 +149,14 @@ def drop_line(store, tid: int, line_id: str) -> dict:
     with store.lock:
         r = next((c for c in store.list_comments(int(tid), internal=True) if c.get('ActorType') == WAITING_TYPE and (c.get('LineId') or '') == str(line_id)), None)
         if not r or conversation.heard(store, tid, 'line', [line_id]): return {'ok': False, 'why': 'the agent has it already'}
+        from . import outputs
+        his = outputs.sent(store, tid)
         store.drop_comment(r['CommentId'])
+        # ...AND THE FILE IT ALONE SENT GOES WITH IT (the attach stress round, 2026-11-18): its copy stayed in the task's folder, where the agent
+        # works and where the chat then listed it as the agent's own. One another line of his sent, or an agent wrote since, stays
+        for gone in his - outputs.sent(store, tid):
+            try: (outputs.folder(tid) / gone).unlink()
+            except OSError as e: logger.debug(f'task {tid}: the file of a line taken back stayed - {e}')
     store.audit('task', int(tid), 'line_dropped', 'owner', 'owner', {'line': str(line_id)})
     answered(int(tid))
     store._poke('task-changed', task_id=int(tid))

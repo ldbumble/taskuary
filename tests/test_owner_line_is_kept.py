@@ -171,6 +171,9 @@ class AttachedFilesReachTheAgent(unittest.TestCase):
         self.pic = self.d / '20991231-235959-abc123-the person.png'; self.pic.write_bytes(b'\x89PNG fake')
         self.addCleanup(self.pic.unlink, missing_ok=True)
         p = mock.patch.object(server, 'store', self.s); p.start(); self.addCleanup(p.stop)
+        import shutil
+        from taskuary import outputs
+        shutil.rmtree(outputs.folder(1), ignore_errors=True)          # ...each store's first task is TQ-0001: no file of another test's in its folder
 
     def inside(self, tid, path):
         from taskuary import outputs
@@ -256,3 +259,15 @@ class AttachedFilesReachTheAgent(unittest.TestCase):
         mine = outputs.named(tid, 'the person.png'); later = time.time() + 30
         os.utime(mine, (later, later))                                          # ...the agent wrote over it: now it is its work
         self.assertEqual(made(), ['the person.png'])
+
+    # ...AND A LINE HE TAKES BACK TAKES ITS FILE BACK (the attach stress round, 2026-11-18): the trash dropped the line, and its copy stayed in the
+    # task's folder - where the agent works, and where the chat then listed it as the agent's own. One another line of his sent stays
+    def test_a_line_taken_back_takes_back_the_file_it_alone_sent(self):
+        from taskuary import outputs
+        tid = self.s.create_task({'Title': 'Who is this', 'Kind': 'general', 'Status': 'in_progress'}, 'o')
+        other = self.d / '20991231-235959-def456-the venue.png'; other.write_bytes(b'\x89PNG venue'); self.addCleanup(other.unlink, missing_ok=True)
+        general.wait_line(self.s, tid, 'this one', outputs.take_in(tid, [str(self.pic), str(other)]), line_id='l-1')
+        general.wait_line(self.s, tid, 'and again', outputs.take_in(tid, [str(other)]), line_id='l-2')
+        self.assertEqual(general.drop_line(self.s, tid, 'l-1'), {'ok': True})
+        self.assertEqual(sorted(o['name'] for o in outputs.listing(tid)), ['the venue.png'])
+        self.assertEqual(server._assistant_payload(tid)['outputs'], [])

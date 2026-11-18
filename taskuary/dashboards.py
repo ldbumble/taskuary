@@ -707,6 +707,7 @@ def file_run(store, src: dict, cfg: dict, trigger: str = 'schedule') -> dict:
     if srcs and (not any(d['rows'] for d in srcs) or (nums and not any(v for _, v in nums))):
         # ...said as it is: a source that failed, and a tile bound to a column its source stopped returning, are not "no number yet"
         why, note = problems(cfg, data), unread(srcs)
+        expire_previous_runs(store, src, cfg, 0)        # ...and the row before it, saying numbers no run says any more, is retired
         return {'message_id': None, 'subject': f'{title} — nothing to show yet{without(srcs)}', 'files': 0, 'said': 0, 'failed': False,
                 'summary': '; '.join(why) or 'Every source was read and none has a number yet', **({'note': note} if note else {})}
     head, text = as_text(cfg, data, nums)          # every panel, not the tiles alone: Send to agent hands over this body (2026-11-17)

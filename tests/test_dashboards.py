@@ -662,3 +662,17 @@ def test_a_run_with_nothing_to_show_still_says_the_source_it_went_without_and_th
     shape = {**SPEC, 'components': [{'kind': 'stat', 'title': 'Open hours', 'source': 'tasks', 'agg': 'sum', 'y': 'hours_open'}]}
     out = reports.run_one(s2, _save(s2, shape), None, 'manual')
     assert out['message_id'] is None and 'no column hours_open' in out['summary']
+
+
+def test_a_run_whose_numbers_fell_to_nothing_retires_the_row_that_still_said_them():
+    """Nothing to show is not news, so no row is put on the rail - but the one before it stayed: "Open tasks 2" stood there the morning
+    after both tasks were closed, a number no run said any more. The run retires it, as a run that drew would have."""
+    s = _store(); src = _save(s)
+    first = reports.run_one(s, src, None, 'manual')['message_id']
+    for t in s.list_tasks(): s.update_task(t['TaskId'], {'Status': 'done'}, 'owner')
+    spec = {**SPEC, 'components': [SPEC['components'][0]]}
+    s.save_source({'SourceId': src['SourceId'], 'ConfigJson': json.dumps(spec)}, 't')
+    out = reports.run_one(s, s.get_source(src['SourceId']), None, 'manual')
+    assert out['message_id'] is None and 'nothing to show yet' in out['subject']
+    st = s._one('SELECT Status FROM funnel_state WHERE Key=?', (f'report:{first}',))
+    assert st and st['Status'] == 'done'

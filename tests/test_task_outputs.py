@@ -109,7 +109,9 @@ class TaskOutputsTests(unittest.TestCase):
         import threading, time
         whole = (self.dir / 'vendor comparison.xlsx').read_bytes(); half = self.dir / 'census.xlsx'
         half.write_bytes(whole[:len(whole) // 2])
-        threading.Timer(1.0, lambda: half.write_bytes(whole)).start()
+        # ...its writer pauses well under the second a file must stand still to count as done (outputs.settled): a pause of a whole second
+        # tied with it, and on a slow runner the check read the half file as finished (Windows CI, 2026-11-18)
+        threading.Timer(0.3, lambda: half.write_bytes(whole)).start()
         got = self.client.get(f'/api/task-outputs/{self.tid}/census.xlsx', params={'preview': 'true'})
         self.assertEqual(got.status_code, 200, got.text)
         self.assertEqual(got.json()['sheet'], 'Vendors')

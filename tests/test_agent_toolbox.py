@@ -400,6 +400,19 @@ class NewTaskTool(unittest.TestCase):
         self.assertEqual(len(ops), 1, said)
         self.assertIn('coding agent', ops[0]['Error'])
 
+    def test_the_new_task_is_asked_from_where_the_owner_asked(self):
+        """The new task was marked asked via "agent" - no door the owner has: the Assistant's list of their asks named it as asked on "Agent",
+        and its moves were said back nowhere they were talking. It is the owner's ask, made where they asked: the task they spoke on's door."""
+        from taskuary import asks
+        self.s._exec('UPDATE task SET AskedVia=? WHERE TaskId=?', ('telegram:42', self.tid))
+        with mock.patch.object(server, 'dispatch_task', return_value={'started': True}):
+            tool(self.tid, 'new_task', title='Bed board', ask='Build it.')
+            other = self.s.create_task({'Title': 'Plan the offsite', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+            self.s.add_comment(other, 'owner', 'assistant_user', 'And book the venue as its own job.')
+            tool(other, 'new_task', title='Book the venue', ask='Book it.')
+        got = {t['Title']: asks.of(t) for t in self.s.list_tasks()}
+        self.assertEqual((got['Bed board'], got['Book the venue']), ('telegram:42', 'desktop'))
+
     def test_one_item_on_a_card_tool_is_one_card_not_a_batch(self):
         said, err = tool(self.tid, 'propose_email', items=[{'to': ['gail@northwind.example'], 'subject': 'Offsite', 'text': 'Friday it is. Alex'}])
         self.assertFalse(err, said)

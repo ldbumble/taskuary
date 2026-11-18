@@ -5911,7 +5911,10 @@ def agent_new_task(body: AgentNewTaskBody, request: Request):
             return {'ok': True, 'task': task_ref(new), 'title': title, 'already': True, 'started': True,
                     'next': f'{task_ref(new)} was already started from here and is working on it - nothing new was made'}
         if not new:
-            new = store.create_task({'Title': title, 'Summary': ask, 'Kind': kind, 'AskedVia': 'agent', 'OriginBase': 'owner'}, body.agent)
+            # ...the owner's ask, made at the door they asked from - the task they spoke on's ("agent" is no door: the Assistant named it one)
+            from . import asks
+            via = asks.of(store.get_task(body.task_id)) or 'desktop'
+            new = store.create_task({'Title': title, 'Summary': ask, 'Kind': kind, 'AskedVia': via, 'OriginBase': 'owner'}, body.agent)
             from . import selfclose
             selfclose.claim(store, new, ACTOR)           # the owner's own work: its agent never closes it by itself
             store.audit('task', new, 'create', body.agent, detail={'from_task': body.task_id, 'title': title})

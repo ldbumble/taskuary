@@ -39,7 +39,10 @@ def row_limit(cfg):
     the headline has to say which one it was, or "capped at 200" points the owner at a
     setting they never made and cannot find."""
     n = cfg.get('max_rows')
-    return (max(1, int(n)), True) if n else (MAX_ROWS, False)
+    if not n: return MAX_ROWS, False
+    # ...as an agent's call sends it, "50" or "50.0"; "all" was Python's "invalid literal for int()"
+    try: return max(1, int(float(str(n).strip()))), True
+    except (TypeError, ValueError, OverflowError): raise ValueError(f'max_rows is a number of rows - not {n!r}') from None
 
 
 # A DASHBOARD keeps the rows, not a summary of them: the 20K body cap is the AI pass's budget, and cut at it a chart drew a

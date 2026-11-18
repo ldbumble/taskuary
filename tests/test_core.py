@@ -744,6 +744,13 @@ class CoreTests(unittest.TestCase):
         self.assertIn('capped at the default 5', rows_out(rows, 5, mine=False)[0])   # nobody set this
         self.assertIn('capped at 5 ', rows_out(rows, 5, mine=True)[0])               # you did
 
+    def test_a_row_cap_given_as_text_is_read_or_said(self):
+        """An agent's run_system sent max_rows "50", "50.0" and "all": the second and third failed as "invalid literal for int() with
+        base 10" - Python's words. A number in text is that number; anything else says what max_rows is."""
+        from taskuary.reports import row_limit
+        self.assertEqual((row_limit({'max_rows': '50'}), row_limit({'max_rows': '50.0'})), ((50, True), (50, True)))
+        with self.assertRaisesRegex(ValueError, "max_rows is a number of rows - not 'all'"): row_limit({'max_rows': 'all'})
+
     def test_interactive_argv_carries_the_model_but_not_the_headless_flags(self):
         from unittest import mock
         from taskuary.terminal import agent_argv

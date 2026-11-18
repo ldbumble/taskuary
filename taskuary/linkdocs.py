@@ -403,9 +403,9 @@ def _graph(store, d, full, offset, limit):
 
 
 def _github(store, d, full, offset, limit):
-    c = store.get_connector_by_type('github', with_secret=True) or {}
-    if not (c.get('Active') and c.get('Secret')): raise Unreadable('no GitHub card connected', FIX['github'])
     repo, n = d['ref'].split('#')
+    c = store.github_for(repo, with_secret=True) or {}                # ...the card that reaches this repo: two accounts are two tokens
+    if not (c.get('Active') and c.get('Secret')): raise Unreadable('no GitHub card connected', FIX['github'])
     h = {'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'}
     i = _http(f'{GH}/repos/{repo}/issues/{n}', c['Secret'], headers=h, who='github')
     cs = _http(f'{GH}/repos/{repo}/issues/{n}/comments', c['Secret'], {'per_page': 100 if full else 20}, headers=h, who='github') if i.get('comments') else []

@@ -106,15 +106,15 @@ def enabled(store) -> bool: return str(store.get_setting('outside_prs') or 'revi
 def _now() -> str: return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
-def _gh(store):
+def _gh(store, repo=''):
     from . import batch, github
-    return github, batch._token(store)
+    return github, batch._token(store, repo)
 
 
 def setup_state(store, repo) -> dict:
     """Is this repository ready: the workflow on its default branch, and the secret it needs? `secret` is None when the
     token may not look (reading a secret's NAME needs admin rights) - the run then says so itself."""
-    github, tok = _gh(store)
+    github, tok = _gh(store, repo)
     out = {'repo': repo, 'workflow': False, 'secret': None,
            'secret_url': f'https://github.com/{repo}/settings/secrets/actions/new', 'secret_name': SECRET}
     if not tok: return {**out, 'why': 'the GitHub card has no token'}
@@ -128,7 +128,7 @@ def setup_state(store, repo) -> dict:
 
 def install(store, repo, actor='owner') -> dict:
     """Commit the workflow to the default branch - the owner's press, never a side effect. Kept as is when it already matches."""
-    github, tok = _gh(store)
+    github, tok = _gh(store, repo)
     if not tok: raise RuntimeError('the GitHub card has no token - connect it under Connections first')
     url = f'{github.GH}/repos/{repo}/contents/{PATH}'
     cur = requests.get(url, headers=github._h(tok), timeout=20)
@@ -153,8 +153,8 @@ def ask_for(it: dict, n: int, extra: str = '') -> str:
 def start(store, tid, it: dict, extra: str = '', actor='owner') -> dict:
     """Fix it, for an outside item: dispatch the workflow on the reviewed head. Polled from the sync (poll)."""
     from . import batch
-    github, tok = _gh(store)
     p = batch.pull(it.get('Link'))
+    github, tok = _gh(store, p)
     if not p: return {'ok': False, 'why': 'only a GitHub pull request can be fixed in the cloud'}
     if not tok: return {'ok': False, 'why': 'the GitHub card has no token - connect it under Connections first'}
     repo, n = p
@@ -193,14 +193,14 @@ def poll(store) -> int:
     """Every running fix: still going, failed, or done - and when done, the fix's own pull request opened and on the item."""
     rows = store.batch_items_fixing()
     if not rows: return 0
-    github, tok = _gh(store)
-    if not tok: return 0
     from . import batch
     moved = 0
     for it in rows:
         p = batch.pull(it.get('Link'))
         if not p: continue
         repo, n = p
+        github, tok = _gh(store, repo)
+        if not tok: continue
         try:
             runs = github._ok(requests.get(f'{github.GH}/repos/{repo}/actions/workflows/{FILE}/runs', headers=github._h(tok), timeout=20,
                                            params={'event': 'workflow_dispatch', 'per_page': 30}), 'read the cloud fix').json().get('workflow_runs') or []

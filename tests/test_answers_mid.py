@@ -227,7 +227,7 @@ def test_a_reply_with_a_merge_close_out_goes_to_the_ask():
     co = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'approved', 'DraftText': json.dumps({'action': 'merge_pr', 'repo': 'northwind/ledger', 'number': 7})})
     assert verdicts._carried(s, s.get_review(co), s.get_review(rid))
     from taskuary import github
-    with mock.patch('taskuary.ci._conn', lambda st: {'Secret': 'x'}), mock.patch.object(github, 'comment_issue', return_value='u') as say:
+    with mock.patch('taskuary.ci._conn', lambda st, repo=None: {'Secret': 'x'}), mock.patch.object(github, 'comment_issue', return_value='u') as say:
         out = verdicts._post_with_closeout(s, s.get_review(co), s.get_review(rid), '', 'owner')
     assert out['ok'] and say.called and s.get_message(pr)['Status'] == 'sent'
 

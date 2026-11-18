@@ -5270,7 +5270,7 @@ def closeout_act(rid: int, act: str):
     p = json.loads(rv.get('DraftText') or '{}')
     seen = ghcloseout.assess(store, p['repo'], int(p['number']))
     if act not in seen['offers']: raise HTTPException(422, f"{'Update branch' if act == 'update' else 'Re-run checks'} is not offered for this pull request now")
-    tok = ci._conn(store)['Secret']
+    tok = ci._conn(store, p['repo'])['Secret']
     try:
         if act == 'update': said = f"Update branch: {github.update_branch(tok, p['repo'], int(p['number']), seen['pr'].get('sha'))}"
         else: said = f"Re-ran the failed checks on {github.rerun_failed(tok, p['repo'], seen['pr']['sha'])} workflow run(s)"

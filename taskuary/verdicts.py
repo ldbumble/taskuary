@@ -558,7 +558,7 @@ def _post_with_closeout(store, closeout: dict, reply: dict, text: str, actor: st
     if not blanks_ok and (gap := _blanked(body)): return gap
     envelope = {'kind': 'closeout_comment', 'channel': 'github', 'to': [f'{repo}#{num}']}
     def post(snapshot):
-        url = github.comment_issue(_conn(store)['Secret'], repo, num, snapshot['body'])
+        url = github.comment_issue(_conn(store, repo)['Secret'], repo, num, snapshot['body'])
         return {'channel': 'github', 'to': [f'{repo}#{num}'], 'url': url}
     verb = 'edit' if body != str(reply.get('DraftText') or '').strip() else 'approve'
     return _deliver_review(store, reply, body, verb, actor, f'posted on {repo}#{num} with the close-out',

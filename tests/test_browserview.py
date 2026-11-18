@@ -487,3 +487,19 @@ class StuckLoadTests(unittest.TestCase):
         with mock.patch.object(bv.spawn, 'popen') as asked:
             self.assertEqual(signin._cdp_url('st'), 'ws://127.0.0.1:9/devtools/browser/x')
         asked.assert_not_called()
+
+
+class TheAddressIsTheTabsOwnTests(unittest.TestCase):
+    """agent-browser rewrites its .target only at its next command: after an open that errored ("This site can't be reached") or never
+    finished, the file still named the page before it - the PAGE an API agent read, and the page an act was judged and approved on."""
+
+    def test_the_tab_agent_browser_names_is_read_live_from_its_chrome(self):
+        from taskuary import browsergate
+        target = json.dumps({'targetId': 'T1', 'url': 'https://portal.example/runs'})
+        tabs = [{'type': 'page', 'id': 'T0', 'url': 'about:blank'}, {'type': 'page', 'id': 'T1', 'url': 'https://portal.example/runs?page=3'}]
+        with mock.patch.object(bv, '_read', side_effect=lambda name, ext: target if ext == 'target' else ''), \
+             mock.patch.object(bv, '_devtools', return_value=tabs):
+            self.assertEqual(browsergate.address('t1', {'url': 'https://portal.example/runs'}), 'https://portal.example/runs?page=3')
+        with mock.patch.object(bv, '_read', side_effect=lambda name, ext: target if ext == 'target' else ''), \
+             mock.patch.object(bv, '_devtools', return_value=None):                     # its Chrome does not answer: the state file, as before
+            self.assertEqual(browsergate.address('t1', {'url': 'https://portal.example/runs'}), 'https://portal.example/runs')

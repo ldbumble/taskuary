@@ -431,6 +431,12 @@ def devtools_url(sid: str) -> str:
     return str((_devtools(sid, '/json/version') or {}).get('webSocketDebuggerUrl') or '')
 
 
+def tab_url(sid: str) -> str:
+    "The address of the tab session `sid` works in (the one agent-browser's .target names), as its own Chrome says it now; '' unknown."
+    tab = active_tab(sid)
+    return next((str(t.get('url') or '') for t in (_devtools(sid, '/json/list') or []) if tab and t.get('id') == tab), '') if tab else ''
+
+
 def unstick(sid: str, since: float = None) -> bool:
     "Stop every load of `sid`'s browser still pending STUCK seconds after `since` (default: its last command's start). True when one was."
     began = _BEGAN.get(str(sid)) if since is None else since

@@ -6,11 +6,6 @@
 .tq-aui-message { width: 100%; max-width: 100%; min-width: 0; margin: 0 auto 18px; display: grid; grid-template-columns: 66px minmax(0, 1fr); gap: 10px; align-items: start; box-sizing: border-box; }
 .tq-aui-role { padding-top: 8px; color: var(--tq-muted, #8b877e); font: 600 9px/1.2 'Cascadia Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; }
 .tq-aui-brief > * { grid-column: 1 / -1; }
-/* the mail that carried a turn on, in its sender's words (GeneralWorkspace CameIn): a row like the owner's, white for someone else's */
-.tq-aui-mail { display: grid; grid-template-columns: 66px minmax(0, 1fr); gap: 10px; align-items: start; margin-bottom: 10px; }
-.tq-aui-mail .tq-aui-role { overflow-wrap: anywhere; }
-.tq-aui-mail-bubble { justify-self: start; min-width: 0; max-width: 88%; border: 1px solid var(--tq-border, #dfdbd3); background: var(--tq-panel, #fff); border-radius: 13px; padding: 9px 13px;
-  font-size: 13px; line-height: 1.48; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .tq-aui-user-bubble { justify-self: start; min-width: 0; max-width: 88%; border: 1px solid var(--tq-border, #dfdbd3); background: var(--tq-inset, #f1eee8); border-radius: 13px; padding: 9px 13px; font-size: 13px; line-height: 1.48; overflow-wrap: anywhere; word-break: break-word; }
 .tq-aui-user-bubble p { margin: 0; white-space: pre-wrap !important; overflow-wrap: anywhere; }
 .tq-aui-agent-body { min-width: 0; max-width: 100%; padding: 5px 3px; overflow-wrap: anywhere; word-break: break-word; }
@@ -32,9 +27,7 @@
 /* ...and so is the agent's own question (2026-11-04): its sentence in the answer's type, the choices under it only when it gave real ones */
 .tq-aui-asked { margin: 2px 0 10px; display: flex; flex-direction: column; gap: 8px; }
 .tq-aui-asked-q { margin: 0; color: var(--tq-text, #292824); font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
-/* "WORKING ON THIS…" (2026-11-04): one quiet line while the turn runs, its steps folded under it; a finished turn's steps fold the same way */
-.tq-aui-working { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 12.5px; color: var(--tq-secondary, #6e685f); }
-.tq-aui-working em { font-style: normal; font-variant-numeric: tabular-nums; color: var(--tq-muted, #8b877e); }
+/* a turn's steps fold under one quiet line (2026-11-04) */
 .tq-aui-working-fold { margin: 0 0 8px; }
 .tq-aui-working-fold > summary { cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--tq-secondary, #6e685f); list-style: none; }
 .tq-aui-working-fold > summary::-webkit-details-marker { display: none; }
@@ -42,21 +35,10 @@
 .tq-aui-working-fold[open] > summary::after { content: "▾"; }
 .tq-aui-working-fold > summary:hover { color: var(--tq-text, #292824); }
 .tq-aui-working-fold > .tq-aui-steps { margin-top: 6px; }
-/* a turn at work shows its steps open (GeneralWorkspace WorkSteps): the last six, the earlier ones one quiet line above them */
-.tq-aui-live-steps { margin: 0 0 8px; }
-.tq-aui-live-steps > .tq-aui-steps { margin: 0; }
-.tq-aui-live-earlier > summary { cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 2px 6px; font-size: 12px; color: var(--tq-muted, #8b877e); list-style: none; }
-.tq-aui-live-earlier > summary::-webkit-details-marker { display: none; }
-.tq-aui-live-earlier > summary::after { content: "▸"; font-size: 10px; color: var(--tq-warning, #a9a294); }
-.tq-aui-live-earlier[open] > summary::after { content: "▾"; }
-.tq-aui-live-earlier > summary:hover { color: var(--tq-text, #292824); }
-.tq-aui-live-earlier > .tq-aui-steps { margin: 2px 0 0; }
-/* the question keeps a readable width and the choices WRAP below it - unshrinkable choices beside a long question squeezed
-   it to one word a line in a half-width chat (the 2026-10-08 portal run) */
 
 /* A finished tool call is history. Six of them, each ending in the word COMPLETE - wrapped mid-word
    to COMPLET/E and WebFetc/h - were the loudest thing on a working page (the owner's screenshots,
-   2026-09-08). The word goes; what is still RUNNING keeps its say. The dock is left as it was. */
+   2026-09-08). The word goes; what is still RUNNING keeps its say. */
 .tq-aui-tool-complete summary { min-height: 26px; }
 .tq-aui-tool-complete summary em { display: none; }
 .tq-aui-tool-running summary em { color: var(--tq-warning, #8a6d1f); white-space: nowrap; }
@@ -80,31 +62,20 @@
    fixed, New's "build me a website - a report on ..." wrapped at 390px into a row and a half under a scrollbar, and typing ran on unseen.
    The chat's own composer sizes itself (assistant-ui's autosize sets its height), so this is the PromptBox's alone */
 [data-tq-prompt-box] .tq-aui-input { field-sizing: content; }
-.tq-aui-send, .tq-aui-cancel { width: 34px; height: 34px; flex: 0 0 34px; border: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; color: white; background: #738275; }
+.tq-aui-send { width: 34px; height: 34px; flex: 0 0 34px; border: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; color: white; background: #738275; }
 .tq-aui-send:disabled { cursor: default; opacity: .4; }
-.tq-aui-cancel { background: #9a6d65; }
-.tq-aui-cancel:disabled { display: none; }
 .tq-aui-hint { margin: 5px auto 0; text-align: center; color: var(--tq-muted, #a09b92); font: 9px/1.2 'Cascadia Mono', Consolas, monospace; }
 .tq-aui-attachments { box-sizing: border-box; }
-.tq-aui-dock .tq-aui-viewport { padding: 14px 13px 8px; }
-.tq-aui-dock .tq-aui-message { width: 100%; grid-template-columns: 54px minmax(0, 1fr); gap: 7px; margin-bottom: 14px; }
-.tq-aui-dock .tq-aui-user-bubble { max-width: 100%; }
-.tq-aui-dock .tq-aui-footer { padding: 8px 10px 7px; }
-.tq-aui-dock .tq-aui-hint { display: none; }
 /* on the assistant canvas the room is the agent's answer, not the keyboard help (the owner, 2026-10-18); a closed chat's notice keeps its line */
 [data-tq-canvas-item] .tq-aui-footer { padding: 8px 14px 7px; }
 [data-tq-canvas-item] .tq-aui-viewport { padding: 14px 18px 2px; }
 [data-tq-canvas-item] .tq-aui-message { margin-bottom: 14px; }
 [data-tq-canvas-item] .tq-aui-hint:not([role]) { display: none; }
-.tq-aui-dock-expanded .tq-aui-message { width: 100%; grid-template-columns: 72px minmax(0, 1fr); gap: 10px; }
-.tq-aui-dock-expanded .tq-aui-viewport { padding: 22px 24px 12px; }
 @media (max-width: 700px) {
   .tq-aui-viewport { padding-left: 10px; padding-right: 10px; }
   .tq-aui-message { width: 100%; grid-template-columns: 1fr; gap: 3px; }
   .tq-aui-role { padding-top: 0; }
   .tq-aui-footer { padding-left: 10px; padding-right: 10px; }
-  .tq-aui-dock-expanded .tq-aui-message { width: 100%; grid-template-columns: 1fr; gap: 3px; }
-  .tq-aui-dock-expanded .tq-aui-viewport { padding: 14px 10px 8px; }
 }
 
 /* ON A PHONE what the box goes with ("From Priya Shah", its files) is a line of its own over the words (the owner, 2026-11-08): beside them it
@@ -146,7 +117,7 @@
 .tq-aui-arrived-files > div { margin-top: 2px; }
 .tq-aui-chat .tq-aui-arrived-more .tq-aui-arrived-head { font-weight: 500; color: var(--tq-muted, #8b877e); }
 /* ...and the summary keeps its breath under the agent's own words when they are shown over it (AgentSummary's first head has no top margin) */
-.tq-aui-chat .tq-aui-agent-body > div:not(.tq-aui-summary):not(.tq-aui-live-steps) + .tq-aui-summary[data-tq-summary=open] { margin-top: 12px; }
+.tq-aui-chat .tq-aui-agent-body > div:not(.tq-aui-summary) + .tq-aui-summary[data-tq-summary=open] { margin-top: 12px; }
 .tq-aui-chat .tq-aui-user-head { justify-self: end; color: var(--tq-warning, #6b6559); font-weight: 600; font-size: 11.5px; margin-bottom: 3px; }
 /* ...the owner's next line in a row sits close under the one before, a new minute's time alone over it (GeneralWorkspace UserMessage) */
 .tq-aui-chat .tq-aui-message:has(+ .tq-aui-user-more) { margin-bottom: 8px; }
@@ -171,9 +142,7 @@
 /* an owner's press on the task (Remind me, Change, a hand-off): an event in the stream, never a bubble that reads as typed */
 .tq-aui-press > * { grid-column: 1 / -1; }
 .tq-aui-press-line { margin: 2px 16px 10px; color: var(--tq-muted, #858078); font-size: 12px; }
-/* ...an approved step's command folded under its line, and the turn a press let go on drawn under the same head (chatStream.continues) */
-.tq-aui-press-cmd summary { cursor: pointer; display: inline; margin-left: 6px; }
-.tq-aui-press-cmd code { display: block; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; font-size: 11.5px; }
+/* ...the turn a press let go on drawn under the same head (chatStream.continues) */
 .tq-aui-chat .tq-aui-agent-more { margin-top: -8px; }
 
 /* THE CONVERSATION'S PENDING STRIP (Conversation.PendingStrip): what was accepted and waits for the agent, by the box - never in the chat until heard */

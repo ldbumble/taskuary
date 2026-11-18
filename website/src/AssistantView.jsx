@@ -101,7 +101,7 @@ import { summarize } from "./walkSummary.js";
 import { refreshToday, useCalendarToday } from "./calendarToday.js";
 import { onFirstRun, readFirstRun } from "./firstRunState.js";
 import FeedView from "./FeedView.jsx";
-import { MORE_PX, backAt, dueWord, holdsNew, levelOf, placed, pressOnto, pulledRow, withWalk } from "./funnelPile.js";
+import { MORE_PX, backAt, dueWord, holdsNew, levelOf, placed, pressOnto, pulledRow, rowOfTask, withWalk } from "./funnelPile.js";
 import { STAYS, dropHeld, ghostsOf, keepHeld, movedEntry } from "./movedFyi.js";
 import { isImportant, level as priorityOf } from "./priority.js";
 import { age, ago, band, bandUntil, plural } from "./timeWords.js";
@@ -195,8 +195,7 @@ const speak = (text) => {
 // the pile's key for a Timeline row, so any row on the rail can be pulled into the chat - the same
 // key the pipe itself carries, so the server puts the same item on the table either way
 export const keyForRow = (r) => r.ReviewStatus === "pending" && r.ReviewId ? `review:${r.ReviewId}`
-  : r.AgentWaiting && r.TaskId ? `agent:${r.TaskId}` : !r.MessageId && r.TaskId ? `task:${r.TaskId}`   // a search hit on a task: never msg:undefined
-  : r.Channel === "report" ? `report:${r.MessageId}` : `msg:${r.MessageId}`;
+  : r.AgentWaiting && r.TaskId ? `agent:${r.TaskId}` : r.Channel === "report" ? `report:${r.MessageId}` : `msg:${r.MessageId}`;
 
 // THE DAY'S ROOM, HELD (2026-10-20): the meetings, the counts and the since-line land moments after the Walk row draws, and
 // each pushed it down under a reaching pointer. While any of them is still loading, the region above the row keeps the height
@@ -2372,7 +2371,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
         // on the work rail"), said in the chat window
         const opens = /^#?task=(\d+)$/.exec(page || "");
         if (opens) {
-          const n = Number(opens[1]), row = (pile?.items || []).find((i) => Number(i.tid) === n);
+          const n = Number(opens[1]), row = rowOfTask(pile?.items, n);
           pressRowRef.current?.(n);
           receipt(`Opened ${row?.ref || `TQ-${String(n).padStart(4, "0")}`}${row?.title ? ` - ${row.title}` : ""}.`);
         } else if (page) {
@@ -3949,9 +3948,10 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     pull(key, null);
   };
   // ...a task by number: its row when the rail holds it, else the task link's own road (a closed task is on no rail)
+  // ...and a Search hit on a task too (FeedView onPress): it pulled `task:N`, which no rail row is keyed by
   const pressRow = (n) => {
     prefetchTask(api, n);
-    const row = (pile?.items || []).find((i) => Number(i.tid) === Number(n) && i.lane !== "unjudged");
+    const row = rowOfTask(pile?.items, n);
     if (row) railPress(row.key); else openAppLink(`task=${n}`);
     return !!row;
   };
@@ -3973,7 +3973,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
         onPull={(key, asUser) => { if (asUser) pull(key, asUser); else railPress(key); }}
         onSection={walkSection} onMoreFyi={moreFyi} onCurrent={() => backToTable()} moved={movedTo} presses={presses} /></>}
       stage={chat}
-      onPull={(r, o) => pull(keyForRow(r), o?.quiet ? null : `Tell me about “${r.Subject || r.Title || "this"}”`)}
+      onPull={(r, o) => pull(keyForRow(r), o?.quiet ? null : `Tell me about “${r.Subject || r.Title || "this"}”`)} onPress={pressRow}
       railOnNarrow={railOpen} setupMode={firstRun} setupRail={firstRun ? <SetupSteps /> : null} />
     </>
   );

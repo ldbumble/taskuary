@@ -264,9 +264,10 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
     // no disableRestoreFocus (verify, 2026-10-20): Esc left focus on the page, and words typed next went nowhere - a cancel gives it
     // back to where it was (the chat's composer); a pick moves it on from there, to what it opened (focusOpened)
     // ...a view of its own to the Assistant (pageView.js: a dialog over the page is the page): its box to type in, its hits to press
+    // ...and a pick puts it away in the frame that draws what it opened: fading out, it stood over the task already drawn under it (2026-11-18)
     <Dialog open={open} onClose={onClose} data-tq-search="true" data-tq-view="search" data-tq-view-label={q.trim() ? `Search everything, for “${q.trim()}”` : "Search everything"}
       slotProps={{ backdrop: { sx: { bgcolor: "rgba(38,37,33,.28)", backdropFilter: "blur(2px)" } } }}
-      sx={{ "& .MuiDialog-container": { alignItems: "flex-start" } }}
+      sx={{ "& .MuiDialog-container": { alignItems: "flex-start" }, ...(open ? {} : { visibility: "hidden" }) }}
       PaperProps={{ sx: { mt: "9vh", width: 680, maxWidth: "calc(100vw - 32px)", borderRadius: "14px", bgcolor: PANEL,
         border: `1px solid var(--tq-border, #dad4cb)`, boxShadow: "0 24px 64px rgba(30,50,38,.22)", overflow: "hidden", m: 2 } }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 2, height: 56, borderBottom: `1px solid ${BORDER}` }}>

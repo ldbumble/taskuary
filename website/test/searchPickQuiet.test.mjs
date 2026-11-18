@@ -8,7 +8,7 @@ const read = (name) => fs.readFileSync(new URL(`../src/${name}`, import.meta.url
 
 test("search hits pull quietly, and a quiet pull draws no user bubble", () => {
   const feed = read("FeedView.jsx"), view = read("AssistantView.jsx");
-  assert.match(feed, /onPull\(\{ TaskId: tid, Title: h\?\.title \}, \{ quiet: true \}\)/);
+  assert.match(feed, /onOpenTask=\{\(tid\) => \{ searchPicked\(\); return onPress \? onPress\(tid\) : onOpenTask\?\.\(tid\); \}\}/);
   assert.match(feed, /onPull\(\{ MessageId: mid, TaskId: h\?\.tid, Subject: h\?\.title \}, \{ quiet: true \}\)/);
   assert.match(view, /onPull=\{\(r, o\) => pull\(keyForRow\(r\), o\?\.quiet \? null : /);
   // ...and the bubble is only ever the asUser text: no asUser, no user row

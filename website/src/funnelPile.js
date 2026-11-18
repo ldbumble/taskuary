@@ -366,6 +366,10 @@ export const holdsNew = (msgs, browsing, rail, key) => !!key && !!browsing
 // ... it should show ... on the agent starting, not randomly on the bottom of the canvas"): the task New just made, as the row the table draws -
 // put up at the press like a rail row (AssistantView pull), its chat's starting turn under his words from there, and the "…" of the move that
 // fetches its real row waiting under the fold, never at the canvas foot under New's card
+// A TASK BY NUMBER IS ITS RAIL ROW, whatever key the row wears (review:, processing:, agent:...): a search hit opened `task:N`, which no row's
+// key is, so nothing drew at the click, the light went out over the task left standing, and the task came a round trip later (the owner,
+// 2026-11-18: "it does nothing then moves to new one slowly ... and then the walk highlight disappears"). Unjudged rows are no row to stand on
+export const rowOfTask = (items, n) => (items || []).find((i) => Number(i.tid) === Number(n) && i.lane !== "unjudged") || null;
 export const madeRow = (tid, title) => ({ key: `task:${tid}`, kind: "task", tid: Number(tid), title: String(title || "").slice(0, 300) });
 // NEXT TURNS BLUE AS SOON AS THE MOVE SAVES (the owner, 2026-11-06): a light walk answer (no rail rides) carries the walk's whole word -
 // below included - and the rail on screen takes it until its own read lands, so a second press draws its row and Back stands at once

@@ -188,7 +188,7 @@ function NextIn({ atRef, render }) {
   return render(atRef.current ? Math.max(0, Math.round((atRef.current - Date.now()) / 1000)) : null);
 }
 
-export default function FeedView({ onOpenTask, active = true, top = null, stage = null, onPull = null, railOnNarrow = false, onInventoryFilter = null, unreadInventory = null, onGo = null, navOn = "", openNew = 0, setupMode = false, setupRail = null }) {
+export default function FeedView({ onOpenTask, active = true, top = null, stage = null, onPull = null, railOnNarrow = false, onInventoryFilter = null, unreadInventory = null, onGo = null, onPress = null, navOn = "", openNew = 0, setupMode = false, setupRail = null }) {
   // below md there is no stage beside the rail; whatever is opened slides over it instead, so a
   // tap on a row is never a tap that did nothing
   const narrow = useMediaQuery("(max-width:899.95px)");
@@ -565,8 +565,10 @@ export default function FeedView({ onOpenTask, active = true, top = null, stage 
               should show up on assistant canvas regardless not on the task view") */}
           {/* ...and QUIET: a pick is not something the owner said, so no "Tell me about ..." bubble rides in above the task
               (the owner, 2026-10-15: "why does the gray thing show up when clicking on searched task. Just show the task") */}
+          {/* ...A TASK HIT IS A PRESS OF ITS RAIL ROW (onPress - AssistantView pressRow, the Assistant's own opens' road): drawn at the click, the
+              walk's light on its row; a task on no row (a closed one) by its link (the owner, 2026-11-18: "it does nothing then moves to new one slowly") */}
           <SearchEverything open={searchOpen} query={searchQ} onClose={() => { setSearchOpen(false); setSearchQ(""); }}
-            onOpenTask={(tid, h) => { searchPicked(); return onPull ? onPull({ TaskId: tid, Title: h?.title }, { quiet: true }) : onOpenTask?.(tid); }}
+            onOpenTask={(tid) => { searchPicked(); return onPress ? onPress(tid) : onOpenTask?.(tid); }}
             onOpenMessage={(mid, h) => { searchPicked(); return onPull ? (onPull({ MessageId: mid, TaskId: h?.tid, Subject: h?.title }, { quiet: true }), true) : false; }}
             onPickSource={(next) => {
               searchPicked();

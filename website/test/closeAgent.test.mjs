@@ -39,7 +39,7 @@ test("search opens over Board and Game; a pick brings Chat up", () => {
   assert.match(page, /<SearchBar onOpen=\{openSearch\} \/>/);
   assert.match(page, /window\.addEventListener\(SEARCH_PICKED, picked\)/);
   assert.match(feed, /window\.addEventListener\(OPEN_SEARCH, o\);\n    return \(\) => window\.removeEventListener\(OPEN_SEARCH, o\);\n  \}, \[\]\);/);
-  assert.match(feed, /onOpenTask=\{\(tid, h\) => \{ searchPicked\(\);/);
+  assert.match(feed, /onOpenTask=\{\(tid\) => \{ searchPicked\(\);/);
 });
 
 test("the Wall's notice after Close agent says the task closes when the write-up is filed, until the close lands", async () => {

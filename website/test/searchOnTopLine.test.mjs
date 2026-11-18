@@ -12,17 +12,17 @@ test("the search bar is on the top line, and the rail no longer draws one", () =
   assert.match(read("FeedView.jsx"), /window\.addEventListener\(OPEN_SEARCH, o\)/);
 });
 
-test("a hit goes on the canvas through the rail's own pull, whatever the mode", () => {
+test("a hit goes on the canvas through the rail's own road, whatever the mode", () => {
   const f = read("FeedView.jsx");
-  // ...quietly: a pick puts the task on the canvas without a "Tell me about" line (searchPickQuiet.test.mjs)
-  assert.match(f, /onOpenTask=\{\(tid, h\) => \{ searchPicked\(\); return onPull \? onPull\(\{ TaskId: tid, Title: h\?\.title \}, \{ quiet: true \}\) : onOpenTask\?\.\(tid\); \}\}/);
+  // ...a task as a press of its rail row, quietly (searchOpensRow.test.mjs); a mail by the pull, without a "Tell me about" line (searchPickQuiet)
+  assert.match(f, /onOpenTask=\{\(tid\) => \{ searchPicked\(\); return onPress \? onPress\(tid\) : onOpenTask\?\.\(tid\); \}\}/);
   assert.match(f, /onOpenMessage=\{\(mid, h\) => \{ searchPicked\(\); return onPull \? \(onPull\(\{ MessageId: mid, TaskId: h\?\.tid, Subject: h\?\.title \}, \{ quiet: true \}\), true\) : false; \}\}/);
 });
 
-test("a row with no message of its own is keyed by its task, never msg:undefined", () => {
+// ...a task hit is no longer keyed here at all: it is a press of its rail row by number (searchOpensRow.test.mjs)
+test("a pulled row is keyed by its message or its report", () => {
   const src = read("AssistantView.jsx").match(/export const keyForRow = [\s\S]*?;\r?\n/)[0].replace("export const keyForRow = ", "return ");
   const keyForRow = new Function(src)();
-  assert.equal(keyForRow({ TaskId: 1065, Title: "Check status" }), "task:1065");
   assert.equal(keyForRow({ MessageId: 7, TaskId: 3 }), "msg:7");
   assert.equal(keyForRow({ MessageId: 9, Channel: "report" }), "report:9");
 });

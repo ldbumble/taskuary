@@ -1817,7 +1817,8 @@ def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = ''
     # A JOB, OR A MESSAGE WITH ITS RECIPIENT, IS MADE AND OPENED - NOT WRITTEN INTO NEW (the owner, 2026-11-12: "assistant tab should not open new
     # but open task directly"): the card came up filled in and pressed itself, a step between the ask and the task. What still needs the owner
     # - a meeting's time, a goal's date, a builder's setup - still comes up in New
-    # ...`job`: the checkout or profile the ask named, which the task is made with (handoff_task)
+    # ...`job`: the checkout or profile the ask named, which the task is made with (handoff_task) - and the short title the same call named, so
+    # the task is born with it, never his whole sentence (the walk, 2026-11-18)
     if kind == 'agent' and str(text or '').strip():
         return _made_now(store, tid, 'task.create_from_text', {'kind': want, 'text': str(text).strip(), **{k: v for k, v in (job or {}).items() if v}}, lead)
     if kind == 'send':
@@ -1830,7 +1831,8 @@ def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = ''
         # able to send, New had already switched itself to the agent tab, so the line named a button that was not there. A recipient
         # nobody could place, two who fit, no chat to send on: the agent gets his words as typed and finds or asks who - one road, no New
         typed = str((_TURN.get() or {}).get('typed') or '').strip()
-        return _made_now(store, tid, 'task.create_from_text', {'kind': 'general', 'text': typed or str(text or '').strip()}, lead)
+        return _made_now(store, tid, 'task.create_from_text', {'kind': 'general', 'text': typed or str(text or '').strip(),
+                                                                **({'title': job['title']} if (job or {}).get('title') else {})}, lead)
     press = buttons.label(verb) if verb else new_press(store, kind)
     # ...in the past, never "below": after a reload New is shut and the line stood over nothing (verify, 2026-10-19)
     # ...and what it did LEADS, what it found after: the receipt at the end of a paragraph read as a turn that did nothing (said_what; the
@@ -3546,7 +3548,8 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         want = str(params.get('kind') or 'general') if kind == 'task.create_from_text' else 'general'
         return _new(store, tid, item, want if want in NEW_TAB else 'general', str(params.get('text') or text or '').strip(), str(params.get('to') or ''),
                     channel=str(params.get('channel') or ''), recurs=recurs or (recurs_of({'objective': params.get('text') or text}) if want == 'routine' else None),
-                    job={'repo': str(params.get('repo') or ''), 'profile': str(params.get('profile') or params.get('as') or '')})
+                    job={'repo': str(params.get('repo') or ''), 'profile': str(params.get('profile') or params.get('as') or ''),
+                         'title': ' '.join(str(params.get('title') or '').split())})
     if recurs or (kind == 'task.create_from_text' and params.get('kind') == 'routine'):
         say_ = f"A routine is set up on the desk, under {places.name('workflows')} - nothing was started."
         record(store, tid, 'assistant', say_); return {'say': say_, 'options': [], 'chips': [], 'decision': None}

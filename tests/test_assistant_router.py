@@ -357,6 +357,16 @@ class DeskRoutes(unittest.TestCase):
         self.assertEqual((out['open'], out['say']), (f"#task={t['TaskId']}", f"Started TQ-{t['TaskId']:04d} - an agent is on it."))
         self.assertEqual(started, [t['TaskId']])
 
+    def test_a_new_job_is_titled_at_birth_by_the_hand_off_that_starts_it(self):
+        """The walk, 2026-11-18: a task made from New wore his whole sentence as its title ("Then make it a task: get PW-2291 paid by Friday.
+        Find whatever way w..."). The hand-off's own call names a short title; the task is born with it - no second call, no rename."""
+        s = store()
+        with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch.object(general, 'start_session', return_value=mock.Mock()):
+            say(s, 'then make it a task: get the vendor invoice paid by Friday, find whatever way works and set it up for my press', None,
+                'CALL: {"kind": "task.create_from_text", "params": {"kind": "general", "title": "Pay the vendor invoice by Friday", '
+                '"text": "get the vendor invoice paid by Friday, find whatever way works and set it up for my press"}}')
+        self.assertIn('Pay the vendor invoice by Friday', [t['Title'] for t in s.list_tasks()])
+
     def test_with_no_ai_nothing_is_made_and_the_line_says_how_to_connect_one(self):
         s = store()
         with mock.patch('taskuary.capabilities.has_ai', return_value=False):

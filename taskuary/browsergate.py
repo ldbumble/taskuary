@@ -345,8 +345,9 @@ def _judge(store, todo: list, pg: dict, brain=None, said: str = '') -> list:
 def _verdict(act: dict, v: dict | None, pg: dict, said: str) -> dict:
     if v is None: return {'hold': True, 'what': target(act, pg) or _cmd(act), 'why': "the AI's answer could not be read, so it waits for you"}
     what = ' '.join(str(v.get('what') or '').split())[:200] or target(act, pg) or _cmd(act)
-    # ...what he asked for in his own words is done, never held for a second yes - save paying or moving money, which always waits for his press
-    if v.get('asked') is True and v.get('money') is not True and said: return {'hold': False, 'what': what, 'why': '', 'asked': True}
+    # ...what he asked for in his own words is done, never held for a second yes - save paying or moving money, which always waits for his press.
+    # Only a verdict that SAYS it moves no money passes so: one that left `money` out (a CLI judge carries no schema) passed a payment he asked for
+    if v.get('asked') is True and v.get('money') is False and said: return {'hold': False, 'what': what, 'why': '', 'asked': True}
     if v['irreversible'] and (v['sure'] or not setting(act)): return {'hold': True, 'what': what, 'why': "it can't be undone"}
     if not v['sure'] and not setting(act): return {'hold': True, 'what': what, 'why': "the AI could not tell whether it can be undone"}
     return {'hold': False, 'what': what, 'why': ''}

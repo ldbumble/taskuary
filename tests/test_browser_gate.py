@@ -153,6 +153,10 @@ class Judging(unittest.TestCase):
         self.assertIn(said, b.seen[0])
         with verdict({'irreversible': True, 'sure': True, 'what': 'pays $49 on dealflow.example', 'asked': True, 'money': True}):
             self.assertTrue(one(self.s, self.act, {'url': CHECKOUT}, Brain(None), said='Sign up and pay for DealFlow Pro')['hold'])
+        # ...and a verdict that does not say whether it moves money is no "it does not": a CLI judge carries no schema, and one that left the
+        # key out passed a payment he had asked for with no press
+        with verdict({'irreversible': True, 'sure': True, 'what': 'pays $49 on dealflow.example', 'asked': True}):
+            self.assertTrue(one(self.s, self.act, {'url': CHECKOUT}, Brain(None), said='Sign up and pay for DealFlow Pro')['hold'])
         from taskuary import general
         self.s.add_comment(self.tid, 'owner', general.USER_TYPE, said)
         self.s.add_comment(self.tid, general.BRIEF_ACTOR, general.USER_TYPE, 'Signed in to x - continue.')

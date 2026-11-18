@@ -43,3 +43,26 @@ def test_a_connector_id_that_is_no_card_is_said_as_that():
         said, err = tool(tid, 'run_system', type='intacct', object='VENDOR', connector_id=card['ConnectorId'] + 9999)
     assert err and 'turned on' not in said and 'not an agent tool' not in said
     assert str(card['ConnectorId'] + 9999) in said and 'list_systems' in said
+
+
+def test_two_cards_of_a_type_are_never_picked_between_silently():
+    """Two Intacct companies, each a card marked a tool: a call with no connector_id ran on whichever row came first - one company's
+    books read as the other's. With one tool card of the type it is that one, even beside a card that is no tool; with two the call
+    names them and runs nothing."""
+    import json
+    from unittest import mock
+    from test_agent_toolbox import server, tool, world
+    from taskuary.reports import REGISTRY
+    s, tid, _ = world()
+    ran = []
+    with mock.patch.object(server, 'store', s), mock.patch.dict(REGISTRY, {'intacct': lambda cfg: ran.append(cfg['connector_id']) or ('1 row', 'x')}):
+        first = s.get_connector_by_type('intacct')
+        s.save_connector({'ConnectorId': first['ConnectorId'], 'Active': 1, 'Roles': 'report'}, 'test')     # on, but no agent tool
+        second = s.save_connector({'Type': 'intacct', 'Name': 'Intacct - Northwind West', 'Active': 1, 'Roles': 'tool'}, 'test')
+        second = second if isinstance(second, int) else second['ConnectorId']
+        said, err = tool(tid, 'run_system', type='intacct', object='VENDOR')
+        assert not err and ran == [second], said
+        s.save_connector({'ConnectorId': first['ConnectorId'], 'Roles': 'tool'}, 'test')
+        said, err = tool(tid, 'run_system', type='intacct', object='VENDOR')
+        assert err and ran == [second], said
+        assert str(first['ConnectorId']) in said and str(second) in said and 'connector_id' in said

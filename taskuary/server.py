@@ -8799,8 +8799,17 @@ def tool_run(body: dict, request: Request):
     from .reports import card_of, query_only
     from . import scopes
     connector_id = (body or {}).get('connector_id')
-    try: conn = store.get_connector(int(connector_id)) if connector_id else store.get_connector_by_type(card_of(t))
+    try: conn = store.get_connector(int(connector_id)) if connector_id else None
     except (TypeError, ValueError): raise HTTPException(422, 'connector_id must be a number')
+    if not connector_id:
+        # ...none named: THE card of the type that is on and a tool - never the first row, which ran one company's books as another's,
+        # or was refused as "not an agent tool" beside the card that is one. Two are named back, and nothing runs
+        rows = store.connectors_by_type(card_of(t))
+        live = [c for c in rows if c.get('Active') and 'tool' in store_mod.roles_of(c)]
+        if len(live) > 1:
+            raise HTTPException(422, f'{len(live)} {card_of(t)} connections are agent tools - say which with connector_id: '
+                                     + ', '.join(f"{c.get('Name') or c['Type']} ({c['ConnectorId']})" for c in live))
+        conn = live[0] if live else (rows[0] if rows else None)
     # ...a number that is no card is said as that: "no connection card an owner turned on" was untrue of a card standing on
     if connector_id and not conn:
         raise HTTPException(404, f'there is no connection {connector_id} - YOUR SYSTEMS (list_systems) names each one with its connector_id')

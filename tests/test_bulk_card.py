@@ -324,3 +324,18 @@ def test_a_bulk_card_that_waited_its_turn_then_stood_and_went_stays_where_it_sto
     with send, mock.patch.object(outbound, 'send_block', lambda *a, **k: ''):
         press(s, bulk['batch'])
     assert chat_cards(s, tid)[first] == ('batch', 'done'), 'pressed, it stays where it stood'
+
+
+def test_its_agent_takes_back_a_bulk_card_by_the_ids_it_was_told():
+    """The agent hears a bulk card as "rv1 + rv2 + ... (5 emails)" and is told to take back one an outcome changed - but `which` took one id:
+    that string matched nothing, and the answer listed every unsent row. One call takes the card back by the ids it was given."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        bulk = call(tid, 'propose_email', items=emails(5))
+        note = call(tid, 'propose_email', to='gail@northwind.example', subject='Done', text='Gail - the five went out.')['review_id']
+        named = cardqueue.says(s, tid).split(': ', 1)[1].split(' (')[0]
+        out = call(tid, 'withdraw_draft', why='the owner wants to wait for the survey', which=named)
+    rids = [r['ReviewId'] for r in bulkcard.rows(s, bulk['batch'])]
+    assert out['ok'] and sorted(out['review_ids']) == rids, out
+    assert {s.get_review(x)['Status'] for x in rids} == {'closed_unsent'}
+    assert cardqueue.state(s, tid)['units'][0]['rids'] == [note], 'the note to Gail is the next card'

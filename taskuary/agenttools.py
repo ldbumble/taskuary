@@ -169,7 +169,7 @@ TOOLS = {
                                 "your turn saying so; draft a new reply if something is still owed.", _S({'why': _STR}, ('why',)), ('POST', '/api/agent/not-needed')),
     'withdraw_draft': ('own', "Take back something you set up here that has not gone out - the reply, an email, a post, another "
                               "proposal - when the goal changed or it no longer answers the newest message. `which`: its review id "
-                              "(each propose tool returns one) or who it was to; none for the reply. `why`: one line on what changed."
+                              "(each propose tool returns one; a card of many, all its ids: 'rv1 + rv2') or who it was to; none for the reply. `why`: one line on what changed."
                               " It is kept under Not sent with the owner's Bring it back; what already went is never touched. To "
                               "correct a reply, just propose the new one; an email IN PLACE of another is the new one's `replaces` - "
                               "one call, one Send left.",

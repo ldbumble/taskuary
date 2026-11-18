@@ -491,15 +491,23 @@ class StuckLoadTests(unittest.TestCase):
 
 class TheAddressIsTheTabsOwnTests(unittest.TestCase):
     """agent-browser rewrites its .target only at its next command: after an open that errored ("This site can't be reached") or never
-    finished, the file still named the page before it - the PAGE an API agent read, and the page an act was judged and approved on."""
+    finished, the file still named the page before it - the PAGE an API agent read, the page an act was judged on, and the site a sign-in
+    ask was pinned to and the owner shown."""
+
+    def setUp(self):
+        files = {'target': json.dumps({'targetId': 'T1', 'url': 'https://portal.example/runs'}), 'stream': '4242'}
+        self.tabs = [{'type': 'page', 'id': 'T0', 'url': 'about:blank'}, {'type': 'page', 'id': 'T1', 'url': 'https://login.vendor.example/signin?next=%2F'}]
+        for p in (mock.patch.object(bv, '_read', side_effect=lambda name, ext: files.get(ext, '')), mock.patch.object(bv, '_listening', return_value=True),
+                  mock.patch.object(bv, '_devtools', side_effect=lambda sid, path: self.tabs)):
+            p.start(); self.addCleanup(p.stop)
+        self.addCleanup(bv._CACHE.pop, 't1', None)
 
     def test_the_tab_agent_browser_names_is_read_live_from_its_chrome(self):
-        from taskuary import browsergate
-        target = json.dumps({'targetId': 'T1', 'url': 'https://portal.example/runs'})
-        tabs = [{'type': 'page', 'id': 'T0', 'url': 'about:blank'}, {'type': 'page', 'id': 'T1', 'url': 'https://portal.example/runs?page=3'}]
-        with mock.patch.object(bv, '_read', side_effect=lambda name, ext: target if ext == 'target' else ''), \
-             mock.patch.object(bv, '_devtools', return_value=tabs):
-            self.assertEqual(browsergate.address('t1', {'url': 'https://portal.example/runs'}), 'https://portal.example/runs?page=3')
-        with mock.patch.object(bv, '_read', side_effect=lambda name, ext: target if ext == 'target' else ''), \
-             mock.patch.object(bv, '_devtools', return_value=None):                     # its Chrome does not answer: the state file, as before
-            self.assertEqual(browsergate.address('t1', {'url': 'https://portal.example/runs'}), 'https://portal.example/runs')
+        from taskuary import browsergate, signin
+        self.assertEqual(bv.state('t1', fresh=True)['url'], 'https://login.vendor.example/signin?next=%2F')
+        self.assertEqual(browsergate.address('t1'), 'https://login.vendor.example/signin?next=%2F')
+        self.assertEqual(signin.site_of(bv.state('t1', fresh=True)['url']), 'vendor.example')
+
+    def test_a_chrome_that_does_not_answer_leaves_the_file_as_before(self):
+        self.tabs = None
+        self.assertEqual(bv.state('t1', fresh=True)['url'], 'https://portal.example/runs')

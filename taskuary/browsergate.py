@@ -200,14 +200,12 @@ def _own_args(args: list) -> list:
 
 
 def address(sid: str, st: dict = None) -> str:
-    """The address of the page this session's browser is on: its own Chrome's word for the tab, else agent-browser's state file, else the
-    browser ASKED (`get url`). The state file alone is not always written - a browser the agent opened itself, an agent-browser that keeps no target file - and an act held
+    """The address of the page this session's browser is on: its state (the tab's own word, browserview.state), else the browser ASKED
+    (`get url`). The state file alone is not always written - a browser the agent opened itself, an agent-browser that keeps no target file - and an act held
     with no address could never be approved ("the browser has moved on"), or two blanks matched and it ran unchecked (2026-10-28).
     '' when even the browser cannot say: then nothing is held or run on a page nobody can name."""
     from . import browserview
-    # ...the tab's live address first: agent-browser rewrites its .target only at its next command, so after an open that errored or never
-    # finished, the file named the page before it - the PAGE an API agent read, the page an act was judged on (the browser-read round, 2026-11-18)
-    u = browserview.tab_url(sid) or str((st if st is not None else browserview.state(sid, fresh=True)).get('url') or '')
+    u = str((st if st is not None else browserview.state(sid, fresh=True)).get('url') or '')
     if u: return u
     try: rc, said = _run(sid, ['get', 'url'], 15, 'url')
     except Exception as e: logger.debug(f'browsergate: no address from {sid} - {e}'); return ''

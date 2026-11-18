@@ -170,7 +170,10 @@ def state(sid: str, fresh: bool = False) -> dict:
     # ...AND ITS CHROME ANSWERS (0.4.0.15: any agent-browser command of the session before Taskuary started its Chrome - the agent's own, a
     # `get url` - left a helper pointed at a port nobody listened on; its stream answered, so the browser read "open", start() launched
     # nothing, and every command after timed out with no Chrome running at all)
-    st = {'open': bool(port) and _listening(port) and chrome_up(sid), 'url': last.get('url') or url, 'port': port}
+    up = bool(port) and _listening(port) and chrome_up(sid)
+    # ...AND THE TAB'S OWN ADDRESS OVER THE FILE'S: agent-browser rewrites .target only at its next command, so after an open that errored or
+    # never finished it named the page before - a sign-in asked and pinned for the last site, a hand-over named for it (2026-11-18)
+    st = {'open': up, 'url': (up and tab_url(sid)) or last.get('url') or url, 'port': port}
     _CACHE[sid] = (now, st)
     return _with_fill(sid, st)
 

@@ -513,11 +513,12 @@ def card_for(store, item, compact, live_state, now, states=None, noise=None, lea
     # stays in Tasks until read"): its task lane, at its arrival place, worded "agent finished" - Next reads it and it leaves
     finished = _agent_finished(store, tid, active, review, processing_all._stamp(read.get('last_read_at')) or read_at, now)
     if finished:
-        from .wrapup import no_one_behind
+        from .wrapup import replies_on
         card.update(kind='agentdone', lane='yours', who=finished['who'], summary=finished['summary'], closed=True,
                     why='the agent finished and closed it - read what it found')
-        # work the owner started here has nobody behind it to answer (a brief typed in the chat)
-        if no_one_behind(row.get('Channel')): card['mid'] = None
+        # work the owner started here has nobody behind it to answer (a brief typed in the chat) - nor has a machine's notice: the one fact
+        # every Reply asks (wrapup.replies_on), where the phone read "Reply to <the notifier> with what it found"
+        if not replies_on(store, {'tid': tid}): card['mid'] = None
         closed = False
         # ...and READ ONCE IS READ (the owner, 2026-09-24: "make the Next button skip reports that have
         # already been read"). The task unit's fingerprint carries its comments and artifacts, so anything

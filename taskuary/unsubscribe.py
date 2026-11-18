@@ -49,7 +49,11 @@ def run(store, mid: int, actor: str = 'owner') -> dict:
     u = of(m)
     if not u: raise LookupError('this message names no way to unsubscribe')
     if u['via'] == 'post':
-        r = _post(u['url'])
+        # ...a POST that never got an answer (a timeout, a refused connection) is the same failure as one the list refused: said, the
+        # button left lit - it went out as a bare 500 the card could only call an error
+        import requests
+        try: r = _post(u['url'])
+        except requests.RequestException as e: raise RuntimeError(f'the list did not answer ({type(e).__name__}) - nothing is marked done; press Unsubscribe again to retry') from None
         if not (200 <= int(getattr(r, 'status_code', 0) or 0) < 300): raise RuntimeError(f'the list answered {getattr(r, "status_code", "nothing")} - it did not take the unsubscribe')
         out = {'via': 'post'}
     else: out = {'via': u['via'], 'link': u.get('url') or u.get('mailto')}

@@ -104,7 +104,7 @@ def test_a_joining_general_verdict_on_a_reply_task_starts_the_assistant():
     t = s.get_task(tid)
     assert t['Kind'] == 'general' and s.task_has_tag(tid, ingest.REPLY_TAG)
     assert spawned == ['_auto_general']                                              # the agent - and no second hand-over beside it
-    assert any('needs the agent before it can be answered' in x and 'drafts the reply for your Send' in x for x in lines(s, tid))
+    assert any("Erin Blake's message needs the agent:" in x and 'drafts the reply to Erin Blake for your Send' in x for x in lines(s, tid))
     assert 'REPLY OWED to Erin Blake' in ingest.reply_job(s, tid)
 
 
@@ -442,3 +442,28 @@ def test_the_offer_on_a_strangers_held_task_starts_no_agent_and_says_why():
     assert not started.called and not ses.send_prompt.called
     assert not [m for m in general.press_lines(s, tid) if 'accepted the offer' in m['content'][0]['text']]
     assert s.get_task(tid)['Kind'] != 'general' and ingest.offer_of(s, tid) == OFFER
+
+
+# ── a machine's line on a person's thread moves the draft's freshness pin, never whom it answers ─────────────────────────────
+def test_a_notice_joining_the_thread_leaves_the_owners_typed_reply_addressed_to_the_person():
+    from taskuary import cardqueue
+    s = store(); tid = reply_task(s)
+    rv = s.pending_review(tid, kind='draft')
+    s.save_review_draft(rv['ReviewId'], 'Yes, Tuesday works.')                  # the owner typed it into the card: no envelope pinned yet
+    notice = mail(external_id='n1', from_email='noreply@helpdesk.example', from_name='Helpdesk', sent_at='2026-10-28 11:00',
+                  body='Your request was updated. Reply above this line to add a comment.', sender_class='automated')
+    ingested(s, notice, says(intent='reply_only', kind='general', sender_class='automated'))
+    rv = s.get_review(rv['ReviewId'])
+    assert rv['MessageId'] != rv['AnswersMid']                                     # the pin moved to the newest line...
+    assert s.get_message(rv['AnswersMid'])['FromEmail'] == ERIN                    # ...and the reply still answers Erin
+    assert cardqueue.what(s, {'rids': [rv['ReviewId']], 'rows': [rv]}) == 'the reply to Erin Blake'
+
+
+def test_a_notice_that_needs_the_agent_on_a_reply_task_says_the_reply_is_still_the_persons():
+    s = store(); tid = reply_task(s)
+    notice = mail(external_id='n1', from_email='noreply@helpdesk.example', from_name='Helpdesk', sent_at='2026-10-28 11:00',
+                  body='Your request was updated. Reply above this line to add a comment.', sender_class='automated')
+    _out, spawned = ingested(s, notice, says(intent='reply_only', kind='general', sender_class='automated'))
+    said = [x for x in lines(s, tid) if x.startswith("Helpdesk's message needs")]
+    assert spawned == ['_auto_general'] and len(said) == 1
+    assert 'drafts the reply to Erin Blake for your Send' in said[0] and 'answered' not in said[0]      # never a reply promised to the notice

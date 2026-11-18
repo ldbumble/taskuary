@@ -830,6 +830,21 @@ class MemoryTests(unittest.TestCase):
             self.assertTrue(card['actionable'])
             self.assertEqual(railwalk.start(s)['item']['tid'], t)
 
+    def test_a_notice_its_agent_finished_offers_no_reply_to_the_notifier(self):
+        """A task a build service's no-reply notice opened, closed by its agent: the card kept the notice as the one to answer, and the phone's
+        move read "Reply to Build Service with what it found" - a reply to nobody, under a card with no Reply on it (wrapup.replies_on)."""
+        from taskuary import processing_unread, remote_assistant as ra
+        s, settle = self._canonical()
+        t = s.create_task({'Title': 'Build 42 failed', 'Kind': 'general', 'Status': 'open'}, 'o')
+        mid = mail(s, 'Build 42 failed', who='Build Service', email='noreply@builds.example', hours=3, tid=t)
+        s._exec("UPDATE message SET SenderClass='automated' WHERE MessageId=?", (mid,))
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        s.add_comment(t, 'assistant', 'agent', 'The agent closed this itself: re-ran the build, it is green.')
+        s.update_task(t, {'Status': 'done'}, 'assistant'); settle()
+        card = next(i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t)
+        self.assertEqual((card['kind'], card.get('mid')), ('agentdone', None))
+        self.assertNotIn('Reply', ra.move_block(s, card))
+
     def test_a_task_its_agent_finished_stays_in_tasks_until_read(self):
         """"same for finished agent task?" - an agent that closed its task left nothing on the rail: the result
         the owner asked for was only on the Tasks tab. It is on the rail until it is read - in TASKS, its task lane, never under

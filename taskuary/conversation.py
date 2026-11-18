@@ -447,7 +447,11 @@ def _items(store, tid: int) -> dict:
     # of the turn the ledger has - the turn not yet handed over read from his press, then went back to its hand-over seconds later
     starts = [r for (k, _), r in led.items() if k in ('turn', 'line')]
     # ...his stops, where heard (else from their own second - a stamp is no finer): each ends the turn it stopped (turn_start)
-    stops = [(h := led.get(('press', str(i)))) and h['At'] or ep(at) for i, at, w, *_ in general.presses(store, tid) if w == general.PRESSES['stopped_turn']({})]
+    # ...and HIS CLOSE, which stops its agent as a stop does (a stress round, 2026-11-18: closed while it worked and reopened by a new mail, the
+    # turn the mail began counted from the stopped one's hand-over - drawn as that old turn at work above "You marked it done", its put-down
+    # card taken into it)
+    ends = (general.PRESSES['stopped_turn']({}), general.PRESSES['close_from_assistant']({}))
+    stops = [(h := led.get(('press', str(i)))) and h['At'] or ep(at) for i, at, w, *_ in general.presses(store, tid) if w in ends]
     backs = [int(r[1:]) for k, r in led if k == 'back' and r[:1] == '>']      # an answer taken back before its row was filed (take_back)
     back_why = lambda cid: next((w for n in sorted(backs, reverse=True) if n < cid and (w := led[('back', f'>{n}')].get('Sid'))), '')
     asked = None                                   # the task's own row: the ask that opened it, where no message did
@@ -524,6 +528,10 @@ def _items(store, tid: int) -> dict:
         answered = max(turn_of, default=0)
         began = max((m['At'] for m in marks if m['Seq'] >= answered), default=0.) or max(last + 1e-7, getattr(ses, 'last', 0) or 0)
         clock = turn_start(starts, answered, stops=stops) or general.PRESSED.get(tid) or began      # its clock, as the finished turn reads it (his press before it is written)
+        # ...and never from before a stop or a close of his that no hand-over has followed yet: the work it begins is under that press (a stamp
+        # is a whole second) - read from the stopped turn's hand-over, it stood as that turn, at work again above the press
+        # ...only for a turn that began since (the session's own turn clock, `last`): one still letting go of the stopped turn stays above the press
+        if (cut := max(stops, default=0.)) >= began and (getattr(ses, 'last', 0) or 0) > cut: began = cut + 1; clock = max(clock or 0., began)
         trace = list(getattr(ses, 'trace', None) or [])
         # ...and the answer it is writing, while that is the newest thing it did (agents.ACPSteps._live): the turn's line of what it is doing
         doing = (lambda e: clean(e.get('detail')) if e and e.get('type') == 'live' and e.get('name') == 'writing' else '')(trace[-1] if trace else None)
@@ -596,18 +604,21 @@ def _items(store, tid: int) -> dict:
     stop =f"You {general.PRESSES['stopped_turn']({})}."
     # ...HIS CLOSE IS ONE LINE (the recorded closed task, 2026-11-12: "You marked it done" and under it the page's "Mark done 4m ago"): the
     # press that closed an open-again-never task is marked `closes`, with the note he closed it with, and the page draws no line of its own
-    shut = (store._one("SELECT Id FROM audit WHERE EntityType='task' AND EntityId=? AND Action='close_from_assistant' ORDER BY Id DESC LIMIT 1", (tid,))
-            if (store.get_task(tid) or {}).get('Status') == 'done' else None)
+    # ...and every close of his, which ends the turn it was pressed under as his stop does (`_shut`, below)
+    closes_ = [str(r['Id']) for r in store._rows("SELECT Id FROM audit WHERE EntityType='task' AND EntityId=? AND Action='close_from_assistant' ORDER BY Id", (tid,))]
+    shut = {'Id': closes_[-1]} if closes_ and (store.get_task(tid) or {}).get('Status') == 'done' else None
     for m in general.press_lines(store, tid):
         aid, text = m['id'].split('-')[1], m['content'][0]['text']
         h, closes = led.get(('press', aid)), bool(shut) and aid == str(shut['Id'])
         if closes and (note := next((c['note'] for c in reversed(store.closeouts(tid)) if c['what'] == 'closed'), '')): text = f"{text.rstrip('.')} - {note.rstrip('.')}."
         it = {'id': f'p:{aid}', 'kind': 'press' if m.get('press') else 'note', 'at': m['createdAt'], 'text': text, **({'closes': True} if closes else {}),
+              **({'_shut': not h} if aid in closes_ else {}),
               **({'perm': m['perm']} if m.get('perm') else {}),
               **({'stop': True, '_hs': bool(h)} if text == stop else {})}
         # ...and one the chat has drawn never goes back by the box, as a drawn mail does not (a stress round, 2026-11-18: his Mark done, drawn,
-        # left the canvas while the turn a reopening mail began was starting, and came back above that mail once it was at work)
-        if not h and it['id'] not in was_shown and at_work and ep(m['createdAt']) + 1 > began and m.get('press') and text != stop: pend.append(it)
+        # left the canvas while the turn a reopening mail began was starting, and came back above that mail once it was at work) - and his
+        # close never waits there at all: like his stop it ends the turn it was pressed under, it is no input for the next
+        if not h and it['id'] not in was_shown and at_work and ep(m['createdAt']) + 1 > began and m.get('press') and text != stop and aid not in closes_: pend.append(it)
         # ...A PRESS NOBODY HEARD YET STANDS AFTER ALL OF ITS OWN SECOND - its stamp is no finer: a stop pressed in the second its turn's line was
         # heard sorted above that line, and the stop's mark fell on the answer before it (a same-second tie, seen as a flash and a red test)
         else: put(h['At'] if h else ep(m['createdAt']) + 0.999, 0 if h else -1, it, h['HId'] if h else 0)
@@ -654,10 +665,13 @@ def _items(store, tid: int) -> dict:
     # waiting, nothing is
     # ...UNTIL A TURN BEGINS UNDER THE STOP: one that heard his stop (its hand-over wrote the press down, `hear`) answers what the stopped
     # turn took in and never spoke to (acpcoding._unanswered) - its lines stand above the stop, so no input of its own is under it
-    halted = bool(tail and tail['kind'] == 'turn' and any(x.get('stop') and not x['_hs'] for x in out[out.index(tail):]))
+    # ...AND HIS CLOSE, the same (a stress round, 2026-11-18): it stopped the agent, so the turn above it is over, and what works after it - a
+    # mail that reopened the task - is the turn under it, never that one at work again above "You marked it done"
+    shut_ = bool(tail and tail['kind'] == 'turn' and any(x.get('_shut') for x in out[out.index(tail):]))
+    halted = shut_ or bool(tail and tail['kind'] == 'turn' and any(x.get('stop') and not x['_hs'] for x in out[out.index(tail):]))
     if halted:
         # ...and from the press too where the stopped turn owes him an answer: that turn is on its way, and nothing else says so meanwhile
-        at_work = bool(pend) or bool(getattr(general._live_of(tid), 'owes_stop', lambda: False)())
+        at_work = bool(pend) or not shut_ and bool(getattr(general._live_of(tid), 'owes_stop', lambda: False)())     # ...a close owes nothing
         if tail['state'] in ('working', 'starting'): tail.update(state='done', ended=tail.get('ended') or time.time())
     # ...A TURN IS MADE ONCE, AT ITS HAND-OVER: the live session's last turn is the one at work only where its work came after the newest
     # hand-over - one that ended before it is finished, and the turn now beginning stands under it (a wake after a press marked the answer
@@ -689,6 +703,7 @@ def _items(store, tid: int) -> dict:
             took = [p for p in pend if p['kind'] in ('line', 'arrival')]
             if took: out += took; pend = [p for p in pend if p not in took]; tail = took[-1]
         began_ =begun or t0 or max(mark if tail and tail['kind'] == 'turn' and mark >= (tail.get('ended') or 0) else 0., (tail or {}).get('_h') or (tail or {}).get('_hm') or 0.) or time.time()      # from its hand-over, where one is written
+        if (cut := max(stops, default=0.)) >= began_: began_ = cut + 1        # ...never from before a stop or a close of his (as the turn at work, above)
         out.append(tail := {'kind': 'turn', 'at': stamp(began_), 'state': 'starting', 'steps': [], 'text': '', 'cards': [], 'started': began_, 'ended': None, **opens})
     elif at_work and tail['state'] != 'working': tail.update(state='working', ended=None, started=t0 or tail['started'])
     # ...AND NEVER ABOVE HIS NEWEST LINE (the owner's live task, 2026-11-12: the dots stood over "try now"; recorded on ACP the same day for a
@@ -849,7 +864,7 @@ def _items(store, tid: int) -> dict:
     was_left = store._one("SELECT Host FROM shown WHERE TaskId=? AND Key='n:left'", (tid,))
     if was_left and was_left['Host'] and not any(x['id'] == 'n:left' for x in out if x.get('id')):
         out.append({'id': 'n:left', 'kind': 'note', 'at': '', 'text': was_left['Host']})
-    for x in out: x.pop('stop', None); x.pop('_h', None); x.pop('_hm', None); x.pop('_hs', None); x.pop('_seg', None)
+    for x in [*out, *pend]: x.pop('stop', None); x.pop('_h', None); x.pop('_hm', None); x.pop('_hs', None); x.pop('_seg', None); x.pop('_shut', None)
     out = served(store, tid, served_back(store, tid, out, was_shown, {p['id'] for p in pend})); keep_shown(store, tid, out, was_shown)
     # (the reply draft above a newer input, greyed - read in the order drawn)
     # (and any card of the agent's above his newer line - every kind, 2026-11-12 - `hear` settles it as his line is heard)

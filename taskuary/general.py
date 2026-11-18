@@ -3620,7 +3620,8 @@ def owed(store, tid: int, s=None) -> bool:
     from . import conversation, funnel
     at = conversation.stamp(r['At'])
     if store._one("SELECT 1 AS x FROM comment WHERE TaskId=? AND ActorType=? AND CreatedAt>=? LIMIT 1", (int(tid), ASSISTANT_TYPE, at)): return False
-    if store._one("SELECT 1 AS x FROM audit WHERE EntityType='task' AND EntityId=? AND Action='stopped_turn' AND CreatedAt>=? LIMIT 1", (int(tid), at)): return False
+    # ...nor once he stopped it, or closed the task (the close stops its agent: a line handed before Mark done read "at work" over the closed task)
+    if store._one("SELECT 1 AS x FROM audit WHERE EntityType='task' AND EntityId=? AND Action IN ('stopped_turn','close_from_assistant') AND CreatedAt>=? LIMIT 1", (int(tid), at)): return False
     if funnel.run_failed(store, tid): return False
     # ...a CLI with no hooks never says its turn began: its own record does (a step after the hand-over)
     return isinstance(s, GeneralSession) or not any(x['T'] > r['At'] for _sid, _live, steps in conversation._session_steps(store, tid) for x in steps)

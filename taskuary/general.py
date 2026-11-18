@@ -2568,7 +2568,10 @@ class GeneralSession:
     # where the CLI cannot (an API card, a turn not reading yet, one he stopped), the line waits for the next turn as before
     def can_steer(self) -> bool:
         from . import clipool
-        return self.busy and not self.letting_go() and clipool.steerable(self.keep())
+        # ...and only while nothing came in since its start that no hand-over took (CI, 2026-11-17): steered in, his lines were heard at once
+        # and the mail that came between them at the turn's end - his line stood above a message that came first. Those wait with it, together
+        from .conversation import unheard
+        return self.busy and not self.letting_go() and clipool.steerable(self.keep()) and not unheard(self.store, self.task_id)
     def steer(self, said: str = None) -> bool:
         "Words into the turn at work: `said`, or his kept lines - heard in the step they go in (take_kept). False where nothing can take them now."
         from . import clipool

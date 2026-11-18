@@ -169,6 +169,15 @@ test("his waiting line is pinned just over the box until the agent takes it - ne
   assert.match(css, /\.tq-conv-pending-row \{[^}]*border: 1px solid/, "each line in its own border");
 });
 
+// ...ONE TABLE WORDS A STEP AT WORK (rule 3): the edit row's running verbs were a pair of its own beside agentSteps' ING; it reads them from there
+test("an edit's running verb is the one table's, never words of its own", async () => {
+  const { editRow } = await import("../src/chatStream.js");
+  assert.equal(editRow({ name: "Write", file: "notes.md", edit: "", running: true }).summary, "Writing notes.md");
+  assert.equal(editRow({ name: "Edit", file: "a/budget.py", edit: "", running: true }).summary, "Editing budget.py");
+  const src = await readFile(new URL("../src/chatStream.js", import.meta.url), "utf8");
+  assert.doesNotMatch(src.slice(src.indexOf("export const editRow"), src.indexOf("// THE PLAN IS A CHECKLIST")), /"Writing"|"Editing"/);
+});
+
 test("an edit still being made is \"Editing x\" in its row and on the working line - never \"Edited x (+1 -1)\" over \"Thinking...\"", async () => {
   const { eventsOf, turnParts, workingLine } = await import("../src/chatStream.js");
   const label = (s) => (s.status === "running" ? s.doing : s.summary);

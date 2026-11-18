@@ -5,7 +5,7 @@
 //   as sessionrecord reads it, an ACP session's updates as conversation.acp_steps does), read into trace events (eventsOf).
 // Trace events are the one currency: turnParts reads them into a turn's parts - its words, its work (agentSteps.stepsOf, one line a step),
 // each edit its own row with its diff ("Edited budget.py (+12 −3)"), its plan a checklist. Whatever drew them, a turn is those parts.
-import { baseName, describeCall, isWork, stepsOf } from "./agentSteps.js";
+import { baseName, describeCall, isWork, present, stepsOf } from "./agentSteps.js";
 import { editHunks, stat } from "./diffView.js";
 import { liveTerminal } from "./taskLayout.js";
 import { filesOf, viewOf } from "./viewSpec.js";
@@ -62,7 +62,8 @@ export const editRow = (s) => {
   const hunks = editHunks(s.edit), { plus, minus } = stat(hunks), file = s.file || "";
   const wrote = /^(write|writefile|createfile)$/i.test(String(s.name || "").replace(/[^a-z]/gi, "")) || (hunks.length && hunks.every((h) => h.lines.every((l) => l[0] === "+")));
   // ...an edit still being made is "Editing x", never "Edited x (+1 −1)" over a call that has not returned (and the working line says it, workingLine)
-  const verb = s.running ? (wrote ? "Writing" : "Editing") : wrote ? "Wrote" : "Edited";
+  // - its verb in the present by the one table every running step is worded by (agentSteps.present), never a pair of its own
+  const did = wrote ? "Wrote" : "Edited", verb = s.running ? present(did) : did;
   return { type: "edit", file, wrote: !!wrote, running: !!s.running, summary: `${verb} ${baseName(file) || "a file"}${hunks.length && !s.running ? ` (+${plus} −${minus})` : ""}`, plus, minus, hunks };
 };
 // THE PLAN IS A CHECKLIST, the newest one of the turn where it was last updated - never "Updated its plan (3 steps)" six times over

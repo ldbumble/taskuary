@@ -92,6 +92,42 @@ class FailureIsNotAnHttpErrorTests(unittest.TestCase):
         self.assertIn('do not have permission', str(e.exception))
 
 
+# Sage's answer to a session it no longer holds: the operation's AUTHENTICATION fails, with no <result> at all
+SESSION_GONE = (b"""<response><control><status>success</status></control><operation><authentication><status>failure</status>
+</authentication><errormessage><error><errorno>XL03000006</errorno><description2>Invalid session</description2></error></errormessage>
+</operation></response>""")
+
+
+class AnExpiredSessionTests(unittest.TestCase):
+    """The session is kept 25 minutes, but Sage drops one sooner (a company's own timeout, a sign-in elsewhere): every call in between
+    failed "Invalid session" from the cache, with nothing to do about it but wait. A session Sage refuses is replaced once, and the call
+    made again on the new one."""
+    def setUp(self): intacct._sessions.clear()
+
+    def test_a_refused_session_logs_in_again_and_the_read_goes_through(self):
+        sent, fake = _posts(LOGIN_OK, _data(['<X>1</X>']), SESSION_GONE, LOGIN_OK, _data(['<X>2</X>']))
+        with mock.patch('taskuary.intacct.requests.post', fake):
+            intacct.query(dict(CFG), 'VENDOR', ['X'])
+            self.assertEqual(intacct.query(dict(CFG), 'VENDOR', ['X']), [{'X': '2'}])
+        self.assertEqual(len(sent), 5)
+        self.assertIsNotNone(sent[3][1].find('.//login'))
+
+    def test_a_write_is_made_again_under_the_same_unique_id(self):
+        sent, fake = _posts(LOGIN_OK, _data([]), SESSION_GONE, LOGIN_OK, CREATED)
+        with mock.patch('taskuary.intacct.requests.post', fake):
+            intacct.query(dict(CFG), 'VENDOR', ['X'])
+            self.assertEqual(intacct.create(dict(CFG), 'APBILL', {'VENDORID': 'V100'})['key'], '1042')
+        ids = [d.findtext('.//control/controlid') for _, d in (sent[2], sent[4])]
+        self.assertEqual(ids[0], ids[1]); self.assertEqual(sent[4][1].findtext('.//control/uniqueid'), 'true')
+
+    def test_a_fresh_session_refused_is_said_not_looped(self):
+        sent, fake = _posts(LOGIN_OK, SESSION_GONE, LOGIN_OK, SESSION_GONE)
+        with mock.patch('taskuary.intacct.requests.post', fake):
+            with self.assertRaisesRegex(intacct.IntacctError, 'Invalid session'):
+                intacct.query(dict(CFG), 'VENDOR', ['X'])
+        self.assertLessEqual(len(sent), 4)
+
+
 class QueryTests(unittest.TestCase):
     def setUp(self): intacct._sessions.clear()
 

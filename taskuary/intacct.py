@@ -121,6 +121,20 @@ def _envelope(cfg, sid, controlid='taskuary', unique=False):
     return root, _el(_el(op, 'content'), 'function', controlid='q')
 
 
+def _send(cfg, fill, controlid='taskuary', unique=False):
+    """ONE call on the session: `fill` writes the function, and the checked answer comes back. A session Sage no longer holds (its own
+    timeout, a sign-in elsewhere - well inside SESSION_TTL) fails the operation's AUTHENTICATION: that one is replaced once and the call
+    made again, under the same controlid, so a write it never took is not refused as a repeat and one it took is not booked twice."""
+    for fresh in (False, True):
+        sid, end = login(cfg, force=fresh)
+        root, fn = _envelope(cfg, sid, controlid, unique)
+        fill(fn)
+        res = _post(end, root)
+        if not fresh and any(a.findtext('status') == 'failure' for a in res.iter('authentication')): continue
+        _check(res)
+        return res
+
+
 def _filter_xml(parent, filters):
     """filters = [[FIELD, op, value], ...], ANDed. One condition needs no <and> wrapper and
     Intacct rejects the empty one, so the single case is spelled separately."""
@@ -188,25 +202,22 @@ def query(cfg, obj, fields=None, filters=None, limit=PAGE, order=None):
     (fields_of - GLBATCH refuses `*`), because a report asking for 'the vendor list' should not have
     to know that vendors carry forty columns - and asking Intacct is cheaper than being wrong about it."""
     fields, filters, order = _listed(fields, 'fields'), _filters(filters), _order(order)
-    sid, end = login(cfg)
     fields = fields or [f['ID'] for f in fields_of(cfg, obj) if f.get('ID')] or ['*']
     out, offset = [], 0
     while len(out) < limit:
-        root, fn = _envelope(cfg, sid)
-        q = _el(fn, 'query')
-        _el(q, 'object', obj)
-        sel = _el(q, 'select')
-        for f in fields: _el(sel, 'field', f)
-        _filter_xml(q, filters)
-        if order:
-            o = _el(q, 'orderby')
-            for f, d in order: _el(_el(o, d), 'field', f)
         page = min(PAGE, limit - len(out))
-        _el(q, 'pagesize', page); _el(q, 'offset', offset)
-        opts = _el(q, 'options'); _el(opts, 'showprivate', 'true'); _el(opts, 'returnformat', 'xml')
-
-        res = _post(end, root)
-        _check(res)
+        def fill(fn):
+            q = _el(fn, 'query')
+            _el(q, 'object', obj)
+            sel = _el(q, 'select')
+            for f in fields: _el(sel, 'field', f)
+            _filter_xml(q, filters)
+            if order:
+                o = _el(q, 'orderby')
+                for f, d in order: _el(_el(o, d), 'field', f)
+            _el(q, 'pagesize', page); _el(q, 'offset', offset)
+            opts = _el(q, 'options'); _el(opts, 'showprivate', 'true'); _el(opts, 'returnformat', 'xml')
+        res = _send(cfg, fill)
         batch = _rows(res)
         out.extend(batch)
         data = next(res.iter('data'), None)
@@ -221,11 +232,7 @@ def query(cfg, obj, fields=None, filters=None, limit=PAGE, order=None):
 def fields_of(cfg, obj):
     """What this company's copy of the object actually has, custom fields included. This is the
     call that lets someone write a report in English and get one built against the real schema."""
-    sid, end = login(cfg)
-    root, fn = _envelope(cfg, sid)
-    _el(_el(fn, 'lookup'), 'object', obj)
-    res = _post(end, root)
-    _check(res)
+    res = _send(cfg, lambda fn: _el(_el(fn, 'lookup'), 'object', obj))
     return [{'ID': f.findtext('ID') or '', 'LABEL': f.findtext('LABEL') or '',
              'DATATYPE': f.findtext('DATATYPE') or ''}
             for f in res.iter('Field')]
@@ -275,15 +282,11 @@ def create(cfg, obj, record):
     if not str(obj or '').strip(): raise IntacctError('no Intacct object to create')
     record = _record(record)
     if not record: raise IntacctError(f'nothing to put in the new {obj} - give it fields')
-    sid, end = login(cfg)
     # the same record posted again is the same controlid, and uniqueid=true has the gateway refuse
     # it instead of booking a second bill (audit 2026-09-02)
     import hashlib
     key = 'tq-' + hashlib.sha1(json.dumps({'obj': obj, 'record': record}, sort_keys=True, default=str).encode()).hexdigest()[:24]
-    root, fn = _envelope(cfg, sid, key, unique=True)
-    _record_xml(_el(_el(fn, 'create'), obj), record)
-    res = _post(end, root)
-    _check(res)
+    res = _send(cfg, lambda fn: _record_xml(_el(_el(fn, 'create'), obj), record), key, unique=True)
     logger.info(f"intacct: created {obj} in company {cfg['company_id']}")
     return _written(res, obj, 'create')
 
@@ -297,11 +300,7 @@ def update(cfg, obj, record):
     keys = [k for k in (record or {}) if k.upper() in ('RECORDNO', 'RECORDKEY', 'KEY', f'{obj.upper()}ID')]
     if not keys:
         raise IntacctError(f'an update to {obj} needs the record it is changing - include RECORDNO or {obj.upper()}ID')
-    sid, end = login(cfg)
-    root, fn = _envelope(cfg, sid)
-    _record_xml(_el(_el(fn, 'update'), obj), record)
-    res = _post(end, root)
-    _check(res)
+    res = _send(cfg, lambda fn: _record_xml(_el(_el(fn, 'update'), obj), record))
     logger.info(f"intacct: updated {obj} {record.get(keys[0])} in company {cfg['company_id']}")
     return _written(res, obj, 'update')
 

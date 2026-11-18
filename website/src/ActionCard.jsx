@@ -26,15 +26,30 @@ const IMG_MAX = 180;
 const PICK = { font: "inherit", fontSize: 11.5, color: INK, border: 0, background: "transparent", padding: 0, cursor: "pointer", outline: 0,
   fieldSizing: "content", borderRadius: "4px", "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } };
 
-export default function ActionCard({ row, tid, live = true, onChanged }) {
+export default function ActionCard({ row: given, tid, live = true, onChanged }) {
+  // ...A PRESS ANSWERED IS THE CARD'S STATE AT ONCE (the card round, 2026-11-18: Dismiss lit Post and Dismiss again for a beat before "dismissed",
+  // a failed post lit them again before its error was kept - the press was over, the row it reads not yet read again): the status the server
+  // answered with stands over a row that still says pending, until that row says it too
+  const [settled, setSettled] = useState(null);
+  // ...one answered elsewhere (`already`: another window, the phone) holds greyed instead, until the row says what that press did - its words
+  // are not this card's to say (the card round, 2026-11-18: this window's unsent edit was said as posted)
+  const answered = !!settled && given?.Status === "pending", row = answered && settled.mine ? { ...given, Status: settled.Status, ActError: settled.ActError || given.ActError } : given;
+  const held = answered && !settled.mine ? "held" : "";
   const p = row?.post || {}, act = actionFor(p.type), st = stateOf(row, live), tk = textKey(act);
   const [text, setText] = useState(String(p[tk] || "")), [vals, setVals] = useState(() => valuesOf(act, p));
-  const [busy, setBusy] = useState(""), [err, setErr] = useState(""), [viewing, setViewing] = useState(null), [done, setDone] = useState(null);
+  const [pressing, setBusy] = useState(""), [err, setErr] = useState(""), [viewing, setViewing] = useState(null);
+  // ...gone by THIS card's press: said in the words of what he picked ("Saved as a draft"), with its link, until the row says what went. One
+  // gone from another window (`already`) is never said in this window's words: that edit was not what went (the card round, 2026-11-18)
+  const done = answered && settled.mine && ["approved", "edited"].includes(settled.Status) ? settled : null;
+  const busy = pressing || held;
   if (!act) return null;
-  const fields = fieldsOf(act, p, !!st.live && !done), post = act.kind === "post", w = wordsOf(act, done || st.live ? vals : p);
+  // ...and gone by it, it reads what he pressed - his words, his picks - not the proposal's until the row comes back with them (a landed draft
+  // said "Post now" over the agent's words for a beat, then "Save as draft" over his: the card round, 2026-11-18)
+  const shown = done ? { ...p, ...vals, [tk]: text } : p;
+  const fields = fieldsOf(act, shown, !!st.live && !done), post = act.kind === "post", w = wordsOf(act, done || st.live ? vals : p);
   const img = fields.find((f) => f.type === "image" && f.value), pic = img ? outputRow(tid ?? row?.TaskId, img.value) : null;
   const max = fields.find((f) => f.key === tk)?.max, over = max && text.length > max;
-  const go = done?.url ?? st.url, gone = !!done || st.done;
+  const go = done?.url || st.url, gone = !!done || st.done;
   // ...a press that failed before this card was drawn is still said on it: the review keeps it (store.review_act_failed), not the press
   const failed = err || (!busy && !gone && ["pending", "superseded"].includes(row?.Status) && row?.ActError) || "";
   const decide = async (verb) => {
@@ -43,9 +58,10 @@ export default function ActionCard({ row, tid, live = true, onChanged }) {
     // and one decided in another window was an error on a card that only had to read itself again
     const o = await press(api, row.ReviewId, { verb, final_text: verb === "approve" ? text : null,
       ...(verb === "approve" && Object.keys(changed(act, p, vals)).length ? { fields: changed(act, p, vals) } : {}) }, 2);
-    if (landed(o) && verb === "approve") setDone({ url: o.data.result?.url || "" });
-    if (!landed(o) && o.kind !== "already") setErr(failLine(o, post ? "posted" : "sent"));
-    if (landed(o) || ["already", "unknown"].includes(o.kind)) onChanged?.();
+    const line = landed(o) || o.kind === "already" ? "" : failLine(o, post ? "posted" : "sent"), status = o.data?.status;
+    if (status && status !== "pending") setSettled({ Status: status, ActError: line, url: o.data.result?.url || "", mine: o.kind !== "already" });
+    else setErr(line);
+    if (o.kind !== "error") onChanged?.();
     setBusy("");
   };
   // ...a choice reads as its label; while it waits, the label is the pick itself - no box around it
@@ -74,7 +90,7 @@ export default function ActionCard({ row, tid, live = true, onChanged }) {
       {st.live && !gone
         ? <Box component="textarea" data-tq-act-text="" value={text} onChange={(e) => setText(e.target.value)} disabled={!!busy} rows={Math.min(14, Math.max(3, text.split("\n").length + 1))}
             sx={{ display: "block", width: "100%", boxSizing: "border-box", resize: "vertical", border: 0, outline: 0, px: 1.5, py: 0.5, font: "inherit", fontSize: 13.5, lineHeight: 1.5, color: INK, bgcolor: "transparent" }} />
-        : <Typography data-tq-act-text="" sx={{ px: 1.5, py: 0.5, fontSize: 13.5, lineHeight: 1.5, color: gone ? INK : DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{p[tk]}</Typography>}
+        : <Typography data-tq-act-text="" sx={{ px: 1.5, py: 0.5, fontSize: 13.5, lineHeight: 1.5, color: gone ? INK : DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{shown[tk]}</Typography>}
       {pic && <Box component="img" data-tq-act-image={img.value} src={attUrl(pic)} alt={p.alt || pic.name} onClick={() => setViewing(pic)}
         sx={{ display: "block", width: "100%", height: IMG_MAX, objectFit: "contain",   /* its room from the first frame: a picture landing grew the card 2 -> 180 px (2026-11-12) */ bgcolor: "var(--tq-canvas, #f6f4f1)", mt: 0.75, cursor: "zoom-in", borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }} />}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.5, py: 1, flexWrap: "wrap" }}>

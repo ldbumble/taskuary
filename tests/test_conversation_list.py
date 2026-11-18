@@ -1145,3 +1145,22 @@ def test_his_answer_to_a_permission_request_is_its_card_greyed_where_it_stood():
     s.audit('task', tid, 'permission_answered', 'owner', detail={'pid': 'p1', 'answer': 'allow_once', 'pattern': 'Bash:git push', 'asked': 'Push the merge to deploy'})
     p = next(x for x in conversation.items(s, tid)['items'] if x['kind'] == 'press')
     assert p['perm'] == {'asked': 'Push the merge to deploy', 'answer': 'allow_once'}
+
+
+def test_an_act_he_dismissed_stays_its_own_card_with_its_words():
+    """The card round, 2026-11-18: Dismiss on a tracker comment's card (ActionCard) said "Not posted · dismissed" over the comment, and a beat
+    later the list's read swapped it for the generic "Not sent - you said don't send" card carrying the agent's reason, the comment's words gone.
+    An act a connector declares a card for is drawn by that card in every state: the list hands it no `was` to draw in its place."""
+    import json
+    from taskuary.store import MemoryStore
+    from taskuary.testing import Factory
+    s = MemoryStore(); tid = Factory(s).task('Comment on the ledger ticket')
+    rid = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'the comment Erin asked for',
+                        'DraftText': json.dumps({'action': 'run_tool', 'type': 'jira_comment', 'item': 'NW-12', 'body': 'Fixed in the ledger totals.'})})
+    s._exec("UPDATE review SET Status='rejected', DecidedBy='owner' WHERE ReviewId=?", (rid,))
+    cards = [c for x in conversation.items(s, tid)['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])]
+    assert [(c['review'], c['status'], 'was' in c) for c in cards] == [(rid, 'rejected', False)], cards
+    # ...a step with no card of its own keeps its words under "not sent", as before
+    step = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'r', 'DraftText': json.dumps({'action': 'shell_act', 'command': 'echo hi', 'what': 'say hi'})})
+    s._exec("UPDATE review SET Status='rejected', DecidedBy='owner' WHERE ReviewId=?", (step,))
+    assert conversation._card(s.get_review(step))['was'] == {'text': 'say hi'}

@@ -276,6 +276,24 @@ def _install_fresh_routes(app, store):
         server._refresh_chat_context = lambda *a, **k: {}          # no mailbox to read before a Send
         return {"ok": True, "outbox": str(box)}
 
+    @app.post("/api/fixture/act-card")
+    def fixture_act_card(body: dict = Body(...)):
+        """A task whose agent set up an act a connector declares a card for (ActionCard): a comment on a tracker item by default (`post`: the
+        proposal itself), waiting on the owner's press - its connection made (`connected`) or not, so the card offers Connect (browser/act-card-press)."""
+        import json
+        tid = store.create_task({"Title": body.get("title") or "Comment on the ledger ticket", "Kind": "general", "Status": "open"}, "owner")
+        # ...`lands`: the connected system takes it - a stand-in executor answering with where it went (nothing leaves the fixture either way)
+        if body.get("lands"):
+            from taskuary import reports
+            reports.REGISTRY[body["lands"]] = lambda cfg: {"rows": [{"url": "https://social.example/alex/posts/1", "saw": {k: cfg.get(k) for k in ("text", "body", "publish", "visibility")}}], "columns": ["url"]}
+        ctype = (body.get("post") or {}).get("type", "jira_comment").split("_")[0]
+        cid = store.save_connector({"Type": ctype, "Name": "Northwind " + ctype, "ConfigJson": json.dumps({"base_url": "https://tracker.northwind.example", "email": "alex@northwind.example"}),
+                                    "Secret": "fixture-token", "Active": 1}, "owner") if body.get("connected") else None
+        p = body.get("post") or {"action": "run_tool", "type": "jira_comment", "item": "NW-12", "body": "Fixed in the ledger totals, Erin - deployed this morning."}
+        if cid: p = {**p, "connector_id": cid}
+        rid = store.add_review({"TaskId": tid, "Kind": "action", "Status": "pending", "Origin": "agent", "DraftText": json.dumps(p), "Reason": "the comment Erin asked for"})
+        return {"taskId": tid, "reviewId": rid}
+
     @app.post("/api/fixture/no-readonly")
     def fixture_no_readonly(body: dict = Body(...)):
         """The stand-in CLI as one with no read-only mode Taskuary can hold it to (clis.READONLY): with a version too old for its reviewer

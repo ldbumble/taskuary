@@ -337,6 +337,10 @@ def _card(r) -> dict:
         try: d = json.loads(r.get('DraftText') or '{}') or {}
         except (TypeError, ValueError): d = {}
         words = ' '.join(str((d.get('what') or d.get('command') or r.get('Reason') or '') if isinstance(d, dict) else r.get('Reason') or '').split())[:300]
+        # ...but an act a connector declares a card for (a post, a tracker comment) is drawn by that card (ActionCard) with its own words,
+        # dismissed too: handed `was`, the page swapped it for "Not sent" over the agent's reason a beat after it said "dismissed" (2026-11-18)
+        from .connectorcatalog import action_for
+        if r['Status'] == 'rejected' and isinstance(d, dict) and d.get('action') == 'run_tool' and action_for(d.get('type')): words = ''
     gone = r['Status'] == 'closed_unsent' and str(r.get('DecideNote') or '').startswith(WITHDRAWN) and words
     # ...AND ONE HE SAID NO TO STAYS TOO, its words under "not sent" (the real-CLI walk, 2026-11-16: Don't send took the card off the chat, and
     # only "You dropped the email" was left - the basic flow's "no card gone from the canvas")

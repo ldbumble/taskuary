@@ -2472,7 +2472,7 @@ def _assistant_payload(task_id: int, session=None):
         cards.append({**{k: r.get(k) for k in ('ReviewId', 'Status', 'CreatedAt', 'DecidedAt', 'Reason', 'ActError')}, 'post': p, 'after': at_turn(r.get('CreatedAt')),
                       'network': _proposals.POSTS.get(p['type']) or (_cat.by_type(act['card']) or {}).get('title') or act['card'],
                       'as': who or (c or {}).get('Name') or '',
-                      'connect': outbound.connect_fix(store, act['card']) if r.get('Status') == 'pending' else None})
+                      'connect': outbound.review_connect(store, r) if r.get('Status') == 'pending' else None})
     # ...AND SO IS EVERY OTHER CARD OF THE TASK (the spine audit, 2026-11-09): a held step, a proposal, a reply waiting or gone - each named
     # with the answer it stands in, by that one rule. The page placed these itself, reading an answer's stamp as when its turn BEGAN: a step
     # held while the second turn worked stood in the first. A reply's turn is the one that last left it (wrapup.left_by); None: no answer yet

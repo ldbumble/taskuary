@@ -1,7 +1,7 @@
 """Agent channels (agentchannels.py): a WhatsApp, Telegram, Slack or Teams chat bound to one coding agent. Named members only; a
 teammate's words reach the agent labelled and are never the owner's authority - no permission, no landing, no answer to what the agent
 asked; the agent stays in its repo; and only its own answers, questions and permission requests reach the chat."""
-import json, os, tempfile, threading, time
+import json, os, re, tempfile, threading, time
 from types import SimpleNamespace
 from unittest import mock
 
@@ -244,6 +244,32 @@ def test_telegram_routes_a_bound_group_before_anything_else(w):
     with mock.patch.object(messengers, 'tg', return_value=ups): messengers.poll_telegram(w.s, c, [])
     assert len(w.typed) == 1 and 'Gail Moreno (teammate) on Telegram' in w.typed[0] and len(w.s.list_tasks()) == tasks
     assert not any(s['Address'] == '-100777' for s in w.s.list_sources(active_only=False)), 'the bound group was registered as a source'
+
+
+def test_a_picture_in_a_bound_chat_reaches_the_agent_as_a_file_it_can_read(w, tmp_path, monkeypatch):
+    """A teammate posts a screenshot with "the total is off here": only the words went on, and a picture with no words went nowhere and
+    said nothing. Now the picture is kept under attachments/ and its path rides with the line, as a picture dropped in the task's box does;
+    one the bridge never wrote is said in the chat."""
+    monkeypatch.setenv('TASKUARY_HOME', str(tmp_path))
+    from taskuary import config, server
+    grp = '120363000000000002@g.us'
+    w.bind('whatsapp', grp, members=[{'name': 'Gail Moreno', 'id': '15550102233', 'role': 'teammate'}])
+    shot = tmp_path / 'shot.png'; shot.write_bytes(b'\x89PNG\r\n\x1a\nfake')
+    c = w.s.get_connector(w.s.connectors_by_type('whatsapp')[0]['ConnectorId'], with_secret=True)
+    feed = {'seq': 3, 'messages': [
+        {'id': 'a', 'jid': grp, 'sender': '15550102233@s.whatsapp.net', 'name': 'Gail', 'text': 'the total is off here', 'image': str(shot), 'ts': 1},
+        {'id': 'b', 'jid': grp, 'sender': '15550102233@s.whatsapp.net', 'name': 'Gail', 'text': '', 'image': str(shot), 'ts': 2},
+        {'id': 'c', 'jid': grp, 'sender': '15550102233@s.whatsapp.net', 'name': 'Gail', 'text': '', 'image': str(tmp_path / 'never.png'), 'ts': 3},
+        {'id': 'd', 'jid': grp, 'sender': '15550999999@s.whatsapp.net', 'name': 'Bob', 'text': '', 'image': str(shot), 'ts': 4}]}
+    with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed): messengers.poll_whatsapp(w.s, c, [])
+    assert len(w.typed) == 2, w.typed
+    assert 'the total is off here' in w.typed[0]
+    for t in w.typed:
+        paths = re.findall(r'(\S+agentchannel\S+shot\.png)', t)
+        assert paths and server.prompt_images(paths) == paths, t            # a path a prompt may name: under attachments/
+        assert open(paths[0], 'rb').read().startswith(b'\x89PNG')
+    assert 'A picture in that message could not be read' in w.said()
+    assert len(list((config.home() / 'attachments' / 'agentchannel').rglob('*'))) == 3, "a stranger's picture was kept"
 
 
 def test_conductor_mode_is_the_owners_words_to_any_agent_in_its_repo(w):

@@ -1568,8 +1568,13 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
         from . import agentchannels
         if cid and agentchannels.bound(store, 'teams', cid):
             addr_ = _graph_user(tok, user['id'], users)[1]
+            raw_ = (m.get('body') or {}).get('content') or ''
+            def media(raw_=raw_):
+                from .messengers import _files
+                got = hosted_images(tok, raw_)
+                return _files(got, ['picture'] * (len(set(_HOSTED.findall(raw_))) - len(got)))
             agentchannels.heard(store, 'teams', cid, [user['id'], addr_], body, f'teams:{cid}:{m["id"]}', from_me=user['id'] == me,
-                                name=user.get('displayName') or '')
+                                name=user.get('displayName') or '', media=media)
             continue
         topic, kind = _chat_meta(tok, cid, chats) if cid else ('', 'chat')
         name, addr = _graph_user(tok, user['id'], users)

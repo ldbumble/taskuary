@@ -68,13 +68,32 @@ def _tg_photo(token: str, m: dict) -> tuple[list, list]:
     return out, missed
 
 
+def _files(atts: list, missed: list) -> tuple[list, list]:
+    "Fetched attachments as an agent channel takes them (agentchannels.heard's `media`): ([(name, bytes)], missed)."
+    return [(a['name'], base64.b64decode(a['contentBytes'])) for a in atts], missed
+
+
+def _wa_files(m: dict) -> tuple[list, list]:
+    "The picture and file the bridge saved for one message, as _files; what it did not write is missed."
+    got, missed = [], []
+    for k, kind, name in (('image', 'picture', None), ('doc', 'file', m.get('docName'))):
+        if not m.get(k): continue
+        data = _read_media(m[k])
+        if data is None: missed.append(kind)
+        else: got.append((name or os.path.basename(m[k]), data))
+    return got, missed
+
+
 def unread_note(missed: list, where: str) -> str:
     """The line a message carries for what it held that could not be read - a picture Telegram refused (403), one the bridge never
     wrote - so it never lands as a sentence with a hole in it, or as "see the attachment" with none there. '' when nothing was missed."""
-    if not missed: return ''
+    return f"[{unread_what(missed)} in this message could not be read - open the chat in {where} to see it.]" if missed else ''
+
+
+def unread_what(missed: list) -> str:
+    "'A picture', '2 pictures', '3 attachments' - what a message held that could not be read."
     n = len(missed)
-    what = (missed[0] if n == 1 else f'{n} {missed[0]}s') if len(set(missed)) == 1 else f'{n} attachments'
-    return f"[{'A ' if n == 1 else ''}{what} in this message could not be read - open the chat in {where} to see it.]"
+    return (f'A {missed[0]}' if n == 1 else f'{n} {missed[0]}s') if len(set(missed)) == 1 else f'{n} attachments'
 
 
 def _tg_file(token: str, f: dict, fallback_name: str, mime: str = 'audio/ogg'):
@@ -146,7 +165,8 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
         # A CHAT BOUND TO AN AGENT (agentchannels.py): a listed member's words go to the agent, anyone else's nowhere - never work
         from . import agentchannels
         if agentchannels.heard(store, 'telegram', cid, [str(frm.get('id') or '')], m.get('text') or m.get('caption') or '',
-                               f"telegram:{cid}:{m.get('message_id')}", name=' '.join(x for x in (frm.get('first_name'), frm.get('last_name')) if x)):
+                               f"telegram:{cid}:{m.get('message_id')}", name=' '.join(x for x in (frm.get('first_name'), frm.get('last_name')) if x),
+                               media=lambda m=m: _files(*_tg_photo(tok, m))):
             continue
         # the owner's own words in the ONE private chat their card names as the Assistant chat go to
         # the same walk the desktop is on. A bot only ever hears the other side of a chat, so that
@@ -630,8 +650,8 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
                 took.append(m.get('id')); continue
         # A CHAT BOUND TO AN AGENT (agentchannels.py): the owner's (fromMe) and listed teammates' lines go to the agent, nobody's are work
         if agentchannels.bound(store, 'whatsapp', jid):
-            if text: agentchannels.heard(store, 'whatsapp', jid, [m.get('sender') or jid, _wa_alias(m)], text, f"whatsapp:{jid}:{m.get('id')}",
-                                         from_me=bool(m.get('fromMe')), name=m.get('name') or '')
+            if text or m.get('image') or m.get('doc'): agentchannels.heard(store, 'whatsapp', jid, [m.get('sender') or jid, _wa_alias(m)], text, f"whatsapp:{jid}:{m.get('id')}",
+                                         from_me=bool(m.get('fromMe')), name=m.get('name') or '', media=lambda m=m: _wa_files(m))
             took.append(m.get('id')); continue
         # A natural message the owner types in their designated private chat goes to the SAME
         # guide conversation as the desktop bubble. Bridge-stamped Taskuary output is swallowed

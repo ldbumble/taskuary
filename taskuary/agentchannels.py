@@ -272,9 +272,24 @@ def choices(store, kind: str) -> list:
 
 
 # ── in ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-def heard(store, kind: str, chat, senders, text: str, ext: str, from_me: bool = False, name: str = '') -> bool:
+def keep_files(got: list) -> list:
+    """Pictures and files a member sent, [(name, bytes)], kept where a prompt may name them (server.prompt_images: under attachments/) -
+    the paths, for general.with_files. A CLI agent reads a picture from a file, as it does one dropped in the task's own box."""
+    from . import config
+    d, out = config.home() / 'attachments' / 'agentchannel' / time.strftime('%Y%m'), []
+    for name, data in got or ():
+        if not data: continue
+        d.mkdir(parents=True, exist_ok=True)
+        safe = re.sub(r'[^\w.-]+', '_', os.path.basename(str(name or 'file'))).strip('._')[:80] or 'file'
+        p = d / f"{time.strftime('%Y%m%d-%H%M%S')}-{os.urandom(3).hex()}-{safe}"
+        p.write_bytes(data); out.append(str(p))
+    return out
+
+
+def heard(store, kind: str, chat, senders, text: str, ext: str, from_me: bool = False, name: str = '', media=None) -> bool:
     """One line from a chat. False when the chat is not bound (the poller goes on as before); True when it is - routed, refused or
-    ignored, it is never the inbox's."""
+    ignored, it is never the inbox's. `media`: a call that fetches what the line carried - ([(name, bytes)], [kinds it could not read],
+    messengers.unread_note's list) - made only for a listed member, so a stranger's picture is never downloaded."""
     b = bound(store, kind, chat)
     if not b: return False
     from . import agents
@@ -286,9 +301,18 @@ def heard(store, kind: str, chat, senders, text: str, ext: str, from_me: bool = 
     if not m:
         store.audit('agentchannel', b['ChannelId'], 'agent_channel_ignored', 'router', 'system', {'kind': kind})
         return True
-    if not text or not agents.developer_mode(store): return True
-    if m['role'] == OWNER and _echo(store, b, text): return True
-    try: (_owner if m['role'] == OWNER else _teammate)(store, b, m, text)
+    if not agents.developer_mode(store): return True
+    # A PICTURE IS PART OF THE LINE: only the words went on, so "this is what the page looks like" reached the agent without the page
+    try: got, missed = media() if media else ([], [])
+    except Exception as e: got, missed = [], ['attachment']; logger.warning(f"agent channel {b['ChannelId']}: what a line carried was not read - {e}")
+    files = keep_files(got)
+    if missed:
+        from .messengers import unread_what
+        say(store, b, f"{unread_what(missed)} in that message could not be read, so the agent did not get it"
+                      + (' - send it again?' if not (text or files) else ' - the rest went on without it.'))
+    if not (text or files): return True
+    if m['role'] == OWNER and not files and _echo(store, b, text): return True
+    try: (_owner if m['role'] == OWNER else _teammate)(store, b, m, text, files)
     except Exception as e:
         logger.warning(f"agent channel {b['ChannelId']}: a line was not passed on - {e}")
         say(store, b, f'That did not reach the agent - {e}')
@@ -311,9 +335,9 @@ def _picked(b: dict, text: str):
     return q, None
 
 
-def _owner(store, b, m, text):
+def _owner(store, b, m, text, files=()):
     from . import permissions, landing
-    q, act = _picked(b, text)
+    q, act = _picked(b, text) if not files else (None, None)
     if act is not None:
         if q['kind'] == 'perm':
             out = permissions.answer(store, q['tid'], q['pid'], act, 'owner')
@@ -325,23 +349,23 @@ def _owner(store, b, m, text):
             except (landing.Refused, ValueError, RuntimeError) as e: return say(store, b, f'Nothing landed - {e}')
             return say(store, b, out['says'])
     tid = b.get('TaskId')
-    if (lm := _LAND.match(text)) and (tid or lm.group(1)): return ask_landing(store, b, int(lm.group(1) or tid))
+    if not files and (lm := _LAND.match(text)) and (tid or lm.group(1)): return ask_landing(store, b, int(lm.group(1) or tid))
     if tid is None:                                                     # the coding agents, as words
-        if _LIST.match(text): return say(store, b, _agents(store, b))
+        if not files and _LIST.match(text): return say(store, b, _agents(store, b))
         if not (rm := _REF.match(text)): return say(store, b, 'Say "agents" for the list, "TQ-0123 your words" to tell one, or "land TQ-0123".')
         tid, text = int(rm.group(1)), rm.group(2).strip()
         ok, why = in_repo(store, b, tid)
         if not ok: return say(store, b, f'Nothing was sent - {why}.')
         _save_state(store, b, follow=list(dict.fromkeys((b['state'].get('follow') or []) + [tid]))[-20:])
-    return _tell(store, b, tid, text, None)
+    return _tell(store, b, tid, text, None, files)
 
 
-def _teammate(store, b, m, text):
-    q, act = _picked(b, text)
+def _teammate(store, b, m, text, files=()):
+    q, act = _picked(b, text) if not files else (None, None)
     if q and act is not None: return say(store, b, f"{OWNER_ONLY} {m.get('name') or 'A teammate'}'s reply was not taken as an answer.")
     if _LAND.match(text): return say(store, b, f'{OWNER_ONLY} Landing is the owner\'s.')
     if not b.get('TaskId'): return                                     # never reached: a conductor chat has no teammates
-    return _tell(store, b, b['TaskId'], text, m)
+    return _tell(store, b, b['TaskId'], text, m, files)
 
 
 def framed(b: dict, m: dict, text: str) -> str:
@@ -349,19 +373,20 @@ def framed(b: dict, m: dict, text: str) -> str:
     return ' '.join(f"[{label(m)} on {LABEL[b['Kind']]} - {GUARD.format(repo=repo_name(b.get('Repo') or '') or 'this repo')}] {text}".split())
 
 
-def _tell(store, b, tid: int, text: str, m):
+def _tell(store, b, tid: int, text: str, m, files=()):
     from . import waitroom
+    from .general import with_files
     ok, why = in_repo(store, b, tid)
     if not ok: return say(store, b, f'Nothing was sent - {why}.')
     if not store.get_task(tid): return say(store, b, f'There is no task {task_ref(tid)}.')
     from . import terminal as term
     if (why := term.stranger_now(store, tid)): return say(store, b, f'Nothing was sent to {task_ref(tid)} - {why}.')
     if m is None:
-        store.add_comment(tid, 'owner', 'human', text)
-        o = waitroom.add(store, tid, text, 'owner')
+        store.add_comment(tid, 'owner', 'human', with_files(text, files))
+        o = waitroom.add(store, tid, with_files(text, files), 'owner')
     else:
-        store.add_comment(tid, 'teammate', 'human', f"{label(m)} on {LABEL[b['Kind']]}: {text}")
-        o = waitroom.add(store, tid, framed(b, m, text), TEAMMATE)
+        store.add_comment(tid, 'teammate', 'human', with_files(f"{label(m)} on {LABEL[b['Kind']]}: {text}", files))
+        o = waitroom.add(store, tid, with_files(framed(b, m, text), files), TEAMMATE)
     store.audit('task', tid, 'agent_channel_tell', 'owner' if m is None else 'teammate', detail={'channel': b['ChannelId'], 'chars': len(text)})
     if b.get('TaskId') is None:
         say(store, b, f"Told {task_ref(tid)} - " + ('it has it now.' if o.get('delivered') else 'it goes in when the agent stops.'))

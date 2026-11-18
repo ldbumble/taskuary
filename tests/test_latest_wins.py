@@ -190,8 +190,9 @@ def test_the_owners_presses_since_the_last_turn_are_in_the_turns_context():
     s.audit('task', tid, 'continue-work', 'owner'); s.audit('task', tid, 'woke', 'assistant')      # the turn itself; not the owner's
     did = [x.split(': ', 1)[1] for x in general.owner_did(s, tid)]
     monday = f"set a reminder for {general.clock_of('2026-11-10 09:00:00')} - put away until then"
-    assert sorted(did) == sorted([f'approved (sent, if it sends) rv{rid} (the email to Gail)', monday,
-                                  'changed its priority from regular to urgent']), did
+    assert sorted(did) == sorted([monday, 'changed its priority from regular to urgent']), did
+    # ...and the card he pressed is said once, by what stands (cardqueue.screen), never a second time as a press
+    assert f'- Sent ' in (b := general.latest_block(s, tid, resumed=True)) and f'rv{rid}, the email' in b, b
     assert 'WHAT THE OWNER DID SINCE YOUR LAST TURN' in general.latest_block(s, tid, resumed=True)
     # ...and each press is the owner's own line in the chat, at its time - a line, never a turn (the owner, 2026-11-08)
     lines = [m for m in general.shown_history(s, tid) if m.get('press')]
@@ -208,8 +209,8 @@ def test_a_coding_turn_is_told_what_any_agent_s_turn_is():
     s._exec("UPDATE worker_event SET CreatedAt='2000-01-01 00:00:00' WHERE TaskId=?", (tid,))
     rid = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'Reason': 'the reply to Ray', 'DraftText': 'Hi Ray - fixed.'})
     s.decide_review(rid, 'approved', 'Hi Ray - fixed.', 'owner')
-    assert [x.split(': ', 1)[1] for x in general.owner_did(s, tid)] == [f'approved (sent, if it sends) rv{rid} (the reply to Ray)']
-    assert 'WHAT THE OWNER DID SINCE YOUR LAST TURN' in general.turn_facts(s, tid, resumed=True)
+    assert general.owner_did(s, tid) == [], 'a card of the line is the screen fact\'s'
+    assert f'rv{rid}, the email' in general.turn_facts(s, tid, resumed=True).split(cardqueue.SCREEN_HEAD)[1].split('- Sent ')[1]
 
 
 def test_what_the_owner_did_is_told_as_lines_already_in_his_chat_never_to_say_again():

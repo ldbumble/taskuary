@@ -848,9 +848,12 @@ def owner_did(store, tid: int) -> list:
     if not (since := _last_answer(store, tid)): return []
     who = ','.join('?' * len(OWNER_ACTORS))
     out = [(at, what) for _, at, what, *_r in presses(store, tid, since)]
+    # ...A CARD OF THE LINE IS SAID BY THE SCREEN FACT (cardqueue.screen - the design round, 2026-11-18), as it stands: sent, done, failed, turned
+    # down. Said here too it was one press in two voices. Only a card the line does not hold (a close-out, a playbook) is said by its press
+    from .cardqueue import in_line
     out += [(r['DecidedAt'], _decided(store, r))
             for r in store._rows(f"SELECT * FROM review WHERE TaskId=? AND DecidedBy IN ({who}) AND DecidedAt>?", (tid, *OWNER_ACTORS, since))
-            if ((r['Status'] in DECIDED and r.get('DecideNote') != DROPPED) or (r['Status'] == 'pending' and (r.get('DeliveryState') in NOT_GONE or r.get('ActError'))) or failed_act(r))
+            if not in_line({**r, 'Status': 'pending', 'DecideNote': None}) and ((r['Status'] in DECIDED and r.get('DecideNote') != DROPPED) or (r['Status'] == 'pending' and (r.get('DeliveryState') in NOT_GONE or r.get('ActError'))) or failed_act(r))
             # ...ONCE: a yes its agent was already handed in Taskuary's words (approved) is not said a second time here (the owner's rules, part 3)
             # ...as it stands now: a no after a failure it was handed is still news
             and not store._one("SELECT 1 AS x FROM audit WHERE EntityType='review' AND EntityId=? AND Action=? AND CreatedAt>=?", (r['ReviewId'], TOLD, r['DecidedAt'] or ''))]
@@ -1027,7 +1030,7 @@ def latest_block(store, tid: int, resumed: bool = False, rules: bool = True, tur
     # ...EVERY OTHER CARD, ITS STATE ON HIS SCREEN AND WHAT CAME OF IT IS ONE FACT (cardqueue.screen - the design round, 2026-11-18): three
     # blocks said parts of it in three voices ("also set up and not sent", "already sent", "moved on past these cards") and none said which
     # card was drawn, held behind another, or greyed - the agent guessed, and told him of buttons that were not there
-    from .cardqueue import screen
+    from .cardqueue import outcome, screen
     shown = screen(store, tid, skip=[rv['ReviewId']] if rv else ())
     handed = [c for c in rows if c.get('ActorType') == 'human' and str(c.get('Body') or '').startswith(HANDED_OFF)]
     did, own = owner_did(store, tid), own_heard(store, tid)
@@ -1064,8 +1067,8 @@ def latest_block(store, tid: int, resumed: bool = False, rules: bool = True, tur
         mine = bool(new and new.get('mid') and m.get('MessageId') == new['mid']) and not rv.get('Stale')
         before = not mine and not heard and bool(new) and (bool(rv.get('Stale')) or at < new['at'])
         out.append(f"THE DRAFT WAITING NOW ({'to ' + to + ', ' if to else ''}drafted at {clock(at)}"
-                   f"{' - written for this message - keep it or improve it' if mine else ' - BEFORE the newest message' if before else ''}): "
-                   f"{_quote(rv['DraftText'], 1500)}{wd}")
+                   f"{' - written for this message - keep it or improve it' if mine else ' - BEFORE the newest message' if before else ''}"
+                   f"{outcome(rv)}): {_quote(rv.get('FinalText') or rv['DraftText'], 1500)}{wd}")     # ...what came of his Send, as the screen says it
     if shown: out.append(shown + ('' if rv else wd))
     if nowhere: out.append('AN EMAIL YOU DRAFTED HAS NO ADDRESS:\n' + '\n'.join(f'- rv{r}: {slots.to_missing(w)}' for r, w in nowhere))
     if refused: out.append('WHAT YOU PROPOSED IN YOUR LAST TURN WAS NOT PUT ON A CARD - the owner has no button for it:\n' + '\n'.join(

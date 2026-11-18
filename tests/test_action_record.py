@@ -100,8 +100,8 @@ class EveryPressOfTheOwnersIsSaidInWords(Acts):
         # Approve on rv1"). What a card's press did is that card's
         self.assertEqual(self.lines(), [], 'the pressed card says it - no line of its own beside it')
         self.answered()
-        [did] = general.owner_did(self.s, self.tid)
-        self.assertIn(f"pressed Approve on rv{q['reviewId']} and it was done", did)
+        self.assertEqual(general.owner_did(self.s, self.tid), [], 'said once, by the card as it stands')
+        self.assertIn(f": rv{q['reviewId']}, ", general.turn_facts(self.s, self.tid).split('- Done ')[1])
 
     def test_a_pull_request_opened_or_a_push_made_by_their_own_press_says_what_it_was(self):
         "The task's own Publish (server /land) writes ci's rows in the owner's name: with no phrase they read \"You pr opened.\"."
@@ -203,9 +203,9 @@ class APressThatFailed(Acts):
     def test_where_no_agent_could_be_told_it_is_said_with_the_owners_next_line(self):
         self.answered(); rv = self.action({'action': 'comment_issue', 'body': 'Fixed.'})
         with mock.patch.object(general, 'tell', return_value=''): self.fail(rv)
-        did = ' | '.join(general.owner_did(self.s, self.tid))
-        self.assertIn(f"rv{rv['ReviewId']}", did); self.assertIn('IT FAILED', did); self.assertIn('the token may not comment', did)
-        self.assertIn('set the corrected one up as a new card', did)
+        did = general.turn_facts(self.s, self.tid).split('- Failed ')[1]
+        self.assertIn(f"rv{rv['ReviewId']}", did); self.assertIn('nothing went', did); self.assertIn('the token may not comment', did)
+        self.assertIn('raised again only as a new card', general.turn_facts(self.s, self.tid))
 
     def test_a_held_step_that_failed_says_so_on_its_row(self):
         sg.check(self.s, self.tid, 'run1', 'git push origin fix-export', 'Bash', HELD)
@@ -246,8 +246,8 @@ class APressARestartCut(Acts):
     def test_its_agent_hears_it_may_have_gone_never_that_nothing_was_done(self):
         self.answered(); rv = self.action({'action': 'comment_issue', 'body': 'Fixed.'})
         self.cut(rv)
-        did = ' | '.join(general.owner_did(self.s, self.tid))
-        self.assertIn(f"rv{rv['ReviewId']}", did); self.assertIn('MAY have been done', did)
+        did = general.turn_facts(self.s, self.tid)
+        self.assertIn(f"rv{rv['ReviewId']}", did); self.assertIn('it MAY have been done', did)
         self.assertNotIn('nothing of it was done', did)
 
     def test_a_press_that_finished_before_the_restart_is_not_cut(self):
@@ -329,8 +329,8 @@ class APartThatIsAnotherJob(Acts):
         self.assertEqual(([i['id'] for i in self.s.task_checklist(new)], [i['id'] for i in self.s.task_checklist(self.tid)]), (['b2'], ['a1']))
         self.assertEqual(self.s.get_task(new)['Title'], 'Renew the parking permits')
         self.answered()
-        self.assertEqual([d.split(': ', 1)[1].split(' (')[0] for d in general.owner_did(self.s, self.tid)], [f"pressed Approve on rv{rv['ReviewId']} and it was done"],
-                         'its agent hears the press - once, by its card')
+        self.assertEqual(general.owner_did(self.s, self.tid), [], 'its agent hears the press - once, by its card')
+        self.assertIn(f": rv{rv['ReviewId']}, ", general.turn_facts(self.s, self.tid).split('- Done ')[1])
 
     def test_what_is_not_on_the_task_is_refused_with_the_way_on(self):
         for kw, said in (({'messages': ['m99999'], 'items': []}, 'not on this task'), ({'messages': [], 'items': []}, 'needs what goes'),
@@ -401,11 +401,11 @@ def test_a_yes_its_agent_was_handed_is_said_once_not_again_under_what_the_owner_
     told, kept = [], s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{}', 'Reason': 'post it'})
     time.sleep(1.1)
     s.decide_review(kept, 'approved', '{}', 'owner')
-    assert any(f'rv{kept}' in d for d in general.owner_did(s, tid)), 'not handed to anyone yet: said under what the owner did'
+    assert f': rv{kept}, ' in general.turn_facts(s, tid).split('- Done ')[1], 'not handed to anyone yet: said as it stands'
     with mock.patch.object(general, 'tell', side_effect=lambda st, t, said, actor='owner', heard=None: told.append(said) or (heard and heard('told')) or 'told'):
         assert general.approved(s, tid, 'Approve', 'post - {"url": "https://social.example/p/1"}', review=kept) == 'told'
     assert len(told) == 1 and 'went through' in told[0]
-    assert not any(f'rv{kept}' in d for d in general.owner_did(s, tid)), 'handed once - never a second time in the prompt'
+    assert not any(f'rv{kept}' in d for d in general.owner_did(s, tid)), 'handed once - never a second time as a press'
 
 
 # HIS FILE ON A CARD IS HIS PRESS (a walk, 2026-11-18): the bar's Attach put the owner's sheet on the agent's reply draft, he typed a line, the

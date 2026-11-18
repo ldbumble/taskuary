@@ -185,9 +185,21 @@ SETTLED = 6                     # the settled cards told, newest last: enough th
 def _words(r) -> str:
     "A card's own words, as its card shows them: what went, else what waits - '' for an act with none."
     if r.get('Kind') == 'action': w = (p := _p(r)).get('text') or p.get('body') or ''
-    else: w = (r.get('FinalText') if r.get('DeliveryState') == 'sent' or r['Status'] in ('approved', 'edited') else '') or r.get('DraftText') or ''
+    else: w = r.get('FinalText') or r.get('DraftText') or ''          # ...his own words where he changed them, sent or not
     w = ' '.join(str(w).split())
     return f'"{w[:300]}{"…" if len(w) > 300 else ""}"' if w else ''
+
+
+def outcome(r) -> str:
+    """What came of his last press on a card that still waits - '' when it went or he has not pressed. A send that MAY have gone is never
+    sent or set up again unasked; one that did not go stays for his Send; an act a restart cut may have been done."""
+    from .general import ACT_CUT
+    err, why = str(r.get('ActError') or ''), _flat(r.get('ActError') or r.get('Reason') or 'no reason was given')
+    if err.startswith(ACT_CUT): return ' - Taskuary restarted while his press ran: it MAY have been done, so check before anything else'
+    if err: return f' - his press failed ({why}) and nothing of it was done'
+    if r.get('DeliveryState') == 'unknown': return f' - his Send MAY have gone ({why}): never send it or set it up again unless he asks'
+    if r.get('DeliveryState') == 'failed': return f' - his Send did not go ({why}); never set it up again'
+    return ''
 
 
 def _result(r) -> str:
@@ -223,8 +235,7 @@ def screen(store, tid: int, skip=()) -> str:
         if u['done'] is None:
             if r and ids <= past: greyed(r, n)
             elif ids & live:
-                bad = r.get('ActError') or (r.get('DeliveryState') in ('failed', 'unknown') and r.get('Reason'))
-                waiting.append(f"Waiting for his press now{f' - his last press did not go through ({_flat(bad)})' if bad else ''}: {n}")
+                waiting.append(f'Waiting for his press now{outcome(r)}: {n}')
             elif u['rids'] == front: waiting.append(f'Comes forward once your turn ends (you are going on from his last press): {n}')
             elif ids & held: waiting.append(f'Not on his screen yet - it comes forward once the one before it is pressed and you have heard how it went: {n}')
             continue

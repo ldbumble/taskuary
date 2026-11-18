@@ -130,8 +130,7 @@ class EveryYesCarriesOn(unittest.TestCase):
             end = time.time() + 5
             while not tried and time.time() < end: time.sleep(.01)
             time.sleep(.1)
-        did = general.owner_did(self.s, self.tid)
-        self.assertEqual(len(did), 1, did); self.assertIn(f'rv{rid}', did[0])
+        self.assertIn(f': rv{rid}, the email to paula@northwind.example', general.turn_facts(self.s, self.tid).split('- Sent ')[1])   # ...as it stands, every turn
     def test_a_second_press_while_the_first_wake_is_starting_rides_in_that_turn(self):
         # two held steps on two cards, pressed a few seconds apart on a resting agent: the second found its answer already woken and no session
         # up yet, so its words went nowhere - and the turn that started answered past it, so the agent never heard it

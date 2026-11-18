@@ -150,8 +150,8 @@ def test_a_send_a_restart_cut_is_told_to_its_agent_as_one_that_may_have_gone(tmp
     second = SQLiteStore(str(path))
     try:
         assert second.get_review(rid)['DeliveryState'] == 'unknown'
-        did = ' | '.join(general.owner_did(second, tid))
-        assert f'rv{rid}' in did and 'MAY have gone' in did, did
+        did = general.turn_facts(second, tid)
+        assert 'his Send MAY have gone' in did and 'never send it or set it up again' in did, did
     finally:
         second.close()
 
@@ -205,8 +205,9 @@ def test_definite_failure_remains_retryable_and_success_sends_it(s, outgoing):
 
 
 def owner_did_after(s, tid):
+    "What its agent's next turn is told of its cards (cardqueue.screen, in its facts)."
     from taskuary import general
-    return ' | '.join(general.owner_did(s, tid))
+    return general.turn_facts(s, tid)
 
 
 @pytest.mark.parametrize('outgoing', [False, True])
@@ -220,11 +221,11 @@ def test_a_send_refused_once_then_sent_is_told_to_its_agent_as_sent(s, outgoing)
     with mock.patch(provider(outgoing), side_effect=RuntimeError('fixture provider refused (403)')):
         verdicts.decide(s, s.get_review(rid), 'approve')
     did = owner_did_after(s, tid)
-    assert f'pressed Send on rv{rid} and IT DID NOT GO' in did and 'still waits' in did, did      # a refused send is the agent's to know too
+    assert 'his Send did not go' in did and 'never set it up again' in did, did      # a refused send is the agent's to know too
     with mock.patch(provider(outgoing), return_value=SENT):
         verdicts.decide(s, s.get_review(rid), 'approve')
     did = owner_did_after(s, tid)
-    assert f'approved and sent rv{rid}' in did and 'not sent' not in did.lower() and 'DID NOT GO' not in did, did
+    assert f'- Sent ' in did and f': rv{rid},' in did and 'did not go' not in did and 'THE DRAFT WAITING NOW' not in did, did
     assert not s.get_review(rid).get('Reason')
 
 
@@ -242,14 +243,14 @@ def test_the_agent_hears_what_went_when_the_owner_changed_its_text(s):
     with mock.patch(provider(True), return_value=SENT):
         assert verdicts.decide(s, s.get_review(rid), 'approve')['status'] == 'edited'
     did = owner_did_after(s, tid)
-    assert 'they changed your text first' in did and 'The totals also match.' in did, did
+    assert '(he changed your words first)' in did and 'The totals also match.' in did, did
     # ...and a text that went as the agent wrote it says nothing of the kind
     tid2, mid2, rid2 = make_review(s, True)
     cid2 = s.add_comment(tid2, 'assistant', general.ASSISTANT_TYPE, 'Set up the answer to Erin.')
     s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00' WHERE CommentId=?", (cid2,))
     s.snap_draft(rid2, cid2)
     with mock.patch(provider(True), return_value=SENT): verdicts.decide(s, s.get_review(rid2), 'approve')
-    assert 'changed your text' not in owner_did_after(s, tid2)
+    assert 'changed your words' not in owner_did_after(s, tid2)
 
 
 @pytest.mark.parametrize('outgoing', [False, True])

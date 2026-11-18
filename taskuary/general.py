@@ -2334,6 +2334,11 @@ def split_files(body) -> dict:
 def his_line(c) -> dict:
     "{'text', 'files'} of a line of his, kept (wait_line's JSON) or heard (with_files' block) - the one read of either, on every surface."
     return _line_of(c.get('Body')) if c.get('ActorType') == WAITING_TYPE else split_files(c.get('Body'))
+def line_words(c) -> str:
+    "A line of his as words, where one is quoted back to him (a greyed card, search): what he typed, then each file by its name - never the block."
+    from .outputs import _STAMPED              # ...by his name for it, as his bubble's pill reads it - never the upload's stamp
+    h = his_line(c)
+    return ' · '.join(x for x in [' '.join(h['text'].split()), *(_STAMPED.sub('', Path(f).name) for f in h['files'])] if x)
 _IMAGE_FILE = re.compile(r'\.(png|jpe?g|gif|webp)$', re.I)
 
 

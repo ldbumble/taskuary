@@ -214,12 +214,12 @@ class AttachedFilesReachTheAgent(unittest.TestCase):
         return tid, proposals.passed_why(self.s, self.s.get_review(rid))
 
     def test_a_card_his_line_with_a_file_greyed_says_his_words(self):
-        self.assertEqual(self.heard_card('it was this person', [str(self.pic)])[1], 'Not sent - you wrote "it was this person" after it')
+        self.assertEqual(self.heard_card('it was this person', [str(self.pic)])[1], 'Not sent - you wrote "it was this person · the person.png" after it')
 
     def test_a_card_a_file_alone_greyed_names_the_file(self):
         why = self.heard_card('', [str(self.pic)])[1]
         self.assertNotIn('ATTACHED', why); self.assertNotIn(str(self.d), why)
-        self.assertIn(self.pic.name, why)
+        self.assertEqual(why, 'Not sent - you wrote "the person.png" after it')
 
     def test_a_heard_line_that_reads_as_json_never_breaks_the_chat(self):
         from taskuary import conversation

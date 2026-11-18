@@ -17,7 +17,6 @@ Unknown actions, bad shapes and unpermitted actions are REFUSED and recorded - a
 proposal is never a partially-executed one.
 """
 import json, re, time
-from pathlib import Path
 from loguru import logger
 from .timewords import plural
 from . import buttons
@@ -646,7 +645,7 @@ def passed_why(store, r: dict) -> str:
     tid = int(r['TaskId'])
     his = [x for x in store.list_comments(tid, internal=True) if x.get('ActorType') in (general.USER_TYPE, general.WAITING_TYPE)
            and not general.is_brief(x) and x.get('Actor') == 'owner']
-    lines = [(ep(x['CreatedAt']), f'your line "{w}"', f'you wrote "{w}" after it') for x in his for h in [general.his_line(x)] for w in [_cut(h['text'] or ', '.join(Path(f).name for f in h['files']))]]
+    lines = [(ep(x['CreatedAt']), f'your line "{w}"', f'you wrote "{w}" after it') for x in his for w in [_cut(general.line_words(x))]]
     # ...his own mail on the thread is his answer to whom it was with, never "you wrote again" (2026-11-17): the newest other sender before it
     mails, who = [], ''
     for x in _mail(store, tid):

@@ -137,6 +137,9 @@ NO_AI = 'This is the demo - no AI runs here, so nothing is read or planned again
 REFUSALS = (
     (r'^/api/(cli|deps|update)(/|$)', 'This is the demo - nothing happens. Its AI tools are pretend, and nothing on your computer is touched.'),
     (r'^/api/connectors', 'This is the demo - these connections are invented, and there is nothing real behind them to change.'),
+    # ...and the top bar's Quit, which reaches nothing: the demo stays up for whoever opens it next - the website's /demo is one server for
+    # every visitor. It read "that would reach something real" (the walk, 2026-11-18)
+    (r'^/api/quit$', 'This is the demo - it stays up for whoever opens it next, so it does not quit from here. Close the tab to leave.'),
     (r'^/api/(tools/run|agents/[^/]+/test)', 'This is the demo - nothing runs, because there are no real systems here to run against.'),
     (r'^/api/(reviews?/\d+/send|tasks/\d+/(handoff|clarify)|board/send|messages/\d+/send)', SENDS),
     # ...and Trust, whose whole effect is that an agent starts on the sender's words: it read "that would reach something real"

@@ -718,6 +718,15 @@ class TheDemoWorldIsConnectedTests(unittest.TestCase):
             for path in ('/api/tasks/7/steps/s2/start', '/api/tasks/7/read-ask', '/api/reports/due', '/api/sources'):
                 self.assertNotEqual(demo.refuse('POST', path), demo.OFF, path)
 
+    def test_quit_says_why_the_demo_stays_up_never_that_it_would_reach_something_real(self):
+        """The walk, 2026-11-18: the top bar's Quit answered "that would reach something real" - quitting reaches nothing; the demo is
+        kept up for whoever opens it next (the website's /demo is one server for every visitor)."""
+        with on():
+            why = demo.refuse('POST', '/api/quit')
+            self.assertTrue(why.startswith('This is the demo - '), why)
+            self.assertNotEqual(why, demo.OFF)
+            self.assertIn('close', why.lower())
+
     def test_trust_says_no_agent_starts_here_never_that_it_would_reach_something_real(self):
         with on(): self.assertEqual(demo.refuse('POST', '/api/tasks/4/trust'), demo.STARTS)
 

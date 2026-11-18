@@ -91,14 +91,44 @@ class WhyNotStartedTests(unittest.TestCase):
 
     def test_a_start_refused_on_its_way_in_says_its_reason_in_the_box(self):
         # a reply owed handed to the agent the day's ceiling held: the line under the box said why, the box said "Nothing has started"
-        from taskuary import ingest
+        from taskuary import brainroute, ingest
         s = MemoryStore(); t = handed(s, who='', Kind='general')
-        ingest.not_started(s, t, "today's AI calls reached 500, so agents do not start or wake by themselves until tomorrow")
-        st = funnel.idle_state(s, t)
-        self.assertEqual((st['kind'], st['row']), ('held', 'held for you - not started'))
-        self.assertEqual(st['line'], "Waiting for you. Today's AI calls reached 500, so agents do not start or wake by themselves until tomorrow.")
-        s.start_run(t, 'claude', 'go', 'owner')                     # ...and once an agent ran, the old refusal is not its state
-        self.assertNotIn('AI calls', funnel.idle_state(s, t)['line'])
+        s.set_setting(brainroute.AUTO_CAP_KEY, '500', 'owner')
+        with mock.patch.object(brainroute, 'calls_today', return_value=500):
+            ingest.not_started(s, t, ingest.gate_why(s, 'general'))
+            st = funnel.idle_state(s, t)
+            self.assertEqual((st['kind'], st['row']), ('held', 'held for you - not started'))
+            self.assertTrue(st['line'].startswith("Waiting for you. Today's AI calls reached 500 (the daily limit"), st['line'])
+            s.start_run(t, 'claude', 'go', 'owner')                     # ...and once an agent ran, the old refusal is not its state
+            self.assertNotIn('AI calls', funnel.idle_state(s, t)['line'])
+
+    def test_a_start_held_by_the_home_says_what_holds_it_now(self):
+        # held for no AI, the owner connected one: the box went on saying "No AI is set up" - and "switched off" after the switch went on
+        from taskuary import general, ingest
+        s = MemoryStore(); t = handed(s, who='', Kind='general')
+        with mock.patch.object(general, 'provider_options', return_value=[]):
+            ingest.not_started(s, t, ingest.gate_why(s, 'general'))
+            self.assertIn('No AI is set up', funnel.idle_state(s, t)['line'])
+            s.set_setting('general_auto_enabled', '0', 'owner')            # ...cleared one way, held another: the box says the one now
+            self.assertIn('switched off', funnel.idle_state(s, t)['line'])
+        with mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude', 'type': 'cli'}]):
+            s.set_setting('general_auto_enabled', '1', 'owner')
+            st = funnel.idle_state(s, t)
+        self.assertEqual((st['kind'], st['row']), ('idle', 'not started yet'))
+        self.assertEqual(st['line'], 'Not started yet. What held it when it came in has cleared - start the agent when you want it; it does not '
+                                     'start by itself.')
+        # ...a reason that is not the home's stays the task's own
+        ingest.not_started(s, t, 'It reads as an attempt to steer an AI (leave the list) - nothing starts until you press.')
+        self.assertEqual(funnel.idle_state(s, t)['kind'], 'held')
+
+    def test_the_days_ceiling_reads_as_held_only_while_it_holds(self):
+        from taskuary import brainroute, ingest
+        s = MemoryStore(); t = handed(s, who='', Kind='coding')
+        s.set_setting(brainroute.AUTO_CAP_KEY, '500', 'owner')
+        with mock.patch.object(brainroute, 'calls_today', return_value=600):
+            ingest.not_started(s, t, ingest.gate_why(s, 'coding'))
+            self.assertIn("Today's AI calls reached 600", funnel.idle_state(s, t)['line'])
+        self.assertEqual(funnel.idle_state(s, t)['kind'], 'idle')             # the next day: nothing of "today" holds it
 
     def test_work_from_before_today_says_it_has_been_waiting(self):
         s = MemoryStore(); t = handed(s)

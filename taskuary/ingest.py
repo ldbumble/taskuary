@@ -242,6 +242,29 @@ def danger(store, msg: dict, mid=None, verdict: dict = None) -> str:
     return ''
 
 
+# WHAT HOLDS EVERY START OF A KIND, the home's own facts and not the task's or its sender's: the day's ceiling, the owner's switch, no AI.
+# One function: the start asks it (auto_start_ok), and the box that says why a start was held asks it again (funnel.idle_state) - a held
+# line whose cause has cleared said "No AI is set up" after one was connected, "switched off" after it was switched on
+def gate_why(store, kind: str, own: bool = False) -> str:
+    "Why no `kind` agent may start by itself now, as the sentence the task says - '' when nothing of the home's holds it."
+    if not own and (held := brainroute.auto_held(store)): return held[0].upper() + held[1:] + '.'
+    if kind == 'coding': return '' if auto_code_enabled(store) else _off_line(kind)
+    if store.get_settings().get('general_auto_enabled', '1') != '1': return _off_line(kind)
+    from . import general
+    return '' if general.provider_options(store) else _no_ai_line()
+
+
+def _off_line(kind: str) -> str:
+    if kind == 'coding': return f"Starting the coding agent by itself is switched off in {words.name('coding')}."
+    return f"Starting an agent by itself is switched off in {words.name('agents')}."
+def _no_ai_line() -> str: return f"No AI is set up for an agent to run on yet ({words.name('ai')})."
+
+
+def gated(said: str, kind: str) -> bool:
+    "Is `said` (a held task's reason, as its box reads it) a sentence gate_why writes for `kind`? Our own sentences, matched as written."
+    return str(said).lower().startswith(brainroute.CEILING_HEAD.lower()) or said in (_off_line(kind), _no_ai_line())
+
+
 def auto_start_ok(store, msg: dict, mid: int, kind: str, own: bool = False) -> tuple:
     """May this task start ITS worker by itself? (ok, why-not). Both kinds start by default (owner,
     2026-09-05, PW-069): coding opens its CLI, general opens its assistant session, a personal `task`
@@ -249,19 +272,12 @@ def auto_start_ok(store, msg: dict, mid: int, kind: str, own: bool = False) -> t
     configured; and the stranger gate (senders.known) is last because it is the expensive one - a
     Sent Items search no task already staying on the Board should pay for. A hold is about the
     unattended start only: the task is still triaged, shown and dispatchable by hand."""
-    cfg = store.get_settings()
     said = senders._said
     # MAIL THAT TRIES TO STEER AN AI STARTS NOTHING BY ITSELF (the Advisor design rev 2, the owner's ruling 2026-10-28): what triage or
     # ranking read it as trying to make an AI do (message.Danger - the model's reading, never a word list) holds the start for the owner
     if not own and (d := danger(store, msg, mid)): return False, said(f'It reads as an attempt to steer an AI ({d}) - nothing starts until you press.')
-    if not own and (held := brainroute.auto_held(store)): return False, said(held[0].upper() + held[1:] + '.')
-    if kind == 'general':
-        if cfg.get('general_auto_enabled', '1') != '1': return False, said(f"Starting an agent by itself is switched off in {words.name('agents')}.")
-        from . import general
-        if not general.provider_options(store): return False, said(f"No AI is set up for an agent to run on yet ({words.name('ai')}).")
-    elif kind == 'coding':
-        if not auto_code_enabled(cfg): return False, said(f"Starting the coding agent by itself is switched off in {words.name('coding')}.")
-    else: return False, said('A person has to do this one, so it is on your list.')
+    if kind not in task_kinds.AGENT: return False, said('A person has to do this one, so it is on your list.')
+    if (held := gate_why(store, kind, own)): return False, said(held)
     return (True, '') if own else senders.start_known(store, msg, mid)      # `own`: the owner's own line or press - no sender to check
 
 

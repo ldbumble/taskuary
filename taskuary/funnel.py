@@ -743,7 +743,16 @@ def idle_state(store, tid, st=None) -> dict:
                           'not started yet')
     # ...and ANY START REFUSED ON ITS WAY IN says its reason here, as the log line that refused it did (ingest.not_started): a reply owed held
     # by the day's ceiling, a switch or no AI read "Nothing has started the agent on this" in the box while the line under it said why
-    if not st.runs and not st.events and (said := refused()): return out('held', f'Waiting for you. {said}' + old, 'held for you - not started')
+    if not st.runs and not st.events and (said := refused()):
+        # ...as it stands NOW where the home held it (ingest.gate_why: the day's ceiling, the switch, no AI): "No AI is set up" stood after one
+        # was connected, "switched off" after it was switched on. Cleared, it says so - and that the start is the owner's, as a lifted hold does
+        from . import ingest
+        gate = 'coding' if t.get('Kind') == 'coding' else 'general'
+        if ingest.gated(said, gate) and (now := ingest.gate_why(store, gate)) != said:
+            if not now: return out('idle', f'Not started yet. What held it when it came in has cleared - start {agent} when you want it; '
+                                            'it does not start by itself.' + old, 'not started yet')
+            said = now
+        return out('held', f'Waiting for you. {said}' + old, 'held for you - not started')
     return out('idle', f'Not started yet. Nothing has started {agent} on this.' + old, 'not started yet')
 
 

@@ -29,7 +29,7 @@ def draft_to(s, tid, who):
     return out, rv, json.loads(rv['Deliver'])
 
 
-@pytest.mark.parametrize('who', ['Northwind Bank', 'Erin Blake', 'Nowhere Credit Union'])
+@pytest.mark.parametrize('who', ['Northwind Bank', 'Erin Blake', 'Nowhere Credit Union'], ids=['bank', 'person', 'credit-union'])
 def test_to_is_always_an_address_or_empty_with_a_reason(who):
     s, tid = store_with_mail()
     out, rv, d = draft_to(s, tid, who)
@@ -67,7 +67,7 @@ def test_a_name_never_reaches_the_provider_as_the_recipient():
 
 # ...and ONE address: an agent's `to` of "paula@..., gail@..." stood on the card as a single recipient the provider refused at Send, and
 # "paula@" stood as if it were one. Refused at the tool with the way on - the others go in `cc`, or each gets its own email
-@pytest.mark.parametrize('to', ['paula@northwind.example, gail@northwind.example', 'paula@northwind.example; gail@northwind.example', 'paula@'])
+@pytest.mark.parametrize('to', ['paula@northwind.example, gail@northwind.example', 'paula@northwind.example; gail@northwind.example', 'paula@'], ids=['comma', 'semicolon', 'cut-short'])
 def test_a_to_that_is_not_one_address_is_refused_before_it_stands(to):
     s = MemoryStore(); tid = own_task(s, 'general')
     out = slots.draft(s, tid, 'Hi Paula', to=to, subject='Q4')

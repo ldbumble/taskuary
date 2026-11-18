@@ -517,6 +517,16 @@ class LooksThatAreNot(unittest.TestCase):
             out = bg.check(s, t, 's1', 'agent-browser open https://bank.example/approve?t=9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c', brain=Brain({}))
         self.assertEqual(out['hookSpecificOutput']['permissionDecision'], 'deny')
 
+    def test_an_address_that_runs_script_or_a_new_tabs_magic_link_is_judged(self):
+        """`open "javascript:document.forms[0].submit()"` sent a form as a look, never judged; and `tab new <address>` opened a magic link
+        with no look at its token - only open/goto/navigate were read for one."""
+        for cmd in ('agent-browser open "javascript:document.forms[0].submit()"', 'agent-browser goto JavaScript:void(0)',
+                    'agent-browser tab new "javascript:document.querySelector(\'#pay\').click()"',
+                    'agent-browser tab new https://bank.example/approve?t=9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c'):
+            self.assertEqual([a['verb'] for a in bg.acts(cmd)], ['navigate'], cmd)
+        for cmd in ('agent-browser tab new https://toll.example', 'agent-browser tab 2', 'agent-browser tab', 'agent-browser open about:blank'):
+            self.assertEqual(bg.acts(cmd), [], cmd)
+
     def test_get_value_on_a_password_box_or_an_unknown_box_is_refused(self):
         snap = '- textbox "Email" [ref=e1]\n- textbox "Password" [ref=e2]'
         s = MemoryStore(); t = Factory(s).task()

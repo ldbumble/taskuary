@@ -130,7 +130,9 @@ def acts(cmd: str) -> list:
         # A LOOK THAT IS NOT ONE (M4, 2026-11-08): an address carrying a token or a long query is a magic link ("approve", "confirm",
         # one-click pay) or a way out for what the agent read (`open https://x/?d=...`) - judged like a click; and `get value` reads
         # whatever a box holds, a password the sign-in vault just filled included - checked against the page (check)
-        if verb in NAVS and carries(nxt): verb = 'navigate'
+        # ...and the address a new tab opens is read as open's is
+        to = nxt if verb in NAVS else a[i + 2] if verb == 'tab' and nxt.lower() == 'new' and i + 2 < len(a) else None
+        if to is not None and carries(to): verb = 'navigate'
         elif verb == 'get' and nxt.lower() == 'value': out.append({'args': a, 'verb': 'get value', 'read': True}); continue
         elif verb in LOOKS: continue
         if verb: out.append({'args': a, 'verb': verb, **({'nl': True} if _NL.search(str(cmd)) else {})})
@@ -138,7 +140,9 @@ def acts(cmd: str) -> list:
 
 
 def carries(url: str) -> bool:
-    "Does this address carry more than a place - a query or fragment past a few short words, or a token-like run in it?"
+    """Does this address carry more than a place - a query or fragment past a few short words, or a token-like run in it? A `javascript:`
+    address carries a script: opened, it runs on the page as an eval does (`open "javascript:document.forms[0].submit()"` sent a form)."""
+    if re.match(r'\s*javascript:', str(url or ''), re.I): return True
     u = urlsplit(str(url or ''))
     tail = f'{u.query}#{u.fragment}' if u.fragment else u.query
     return len(tail) > 40 or bool(re.search(r'[A-Za-z0-9_%=+/.-]{32,}', f'{u.path}?{tail}'.replace('/', ' ')))

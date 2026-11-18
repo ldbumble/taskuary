@@ -49,7 +49,9 @@ exec "$(cygpath -u '${exe}')" "$@"
 // fake_acp_server.py - free, every mechanic and no judgement), `gateway` the test CLIs with an organisation AI card picked as every job's brain
 // (its address, key and model from EVAL_AI_URL/EVAL_AI_KEY/EVAL_AI_MODEL or ~/.taskuary-eval.json - never from the repo)
 const BRAIN = process.env.EVAL_BRAIN || "cli";
-if (BRAIN === "cli") process.env.TASKUARY_BROWSER_REAL_CLI = real.join(path.delimiter);
+// ...`codex`: the person's real Codex CLI picked as the agents' brain (its own budget, not Claude's)
+if (BRAIN === "codex") real.unshift(path.dirname(where("codex")[0]));
+if (BRAIN === "cli" || BRAIN === "codex") process.env.TASKUARY_BROWSER_REAL_CLI = real.join(path.delimiter);
 const h = await startHarness({ fresh: true });
 // ...AND npx RUNS IN IT (the coding walk, 2026-11-12): APPDATA is the scratch home's, with no npm folder, so `npx -y <the ACP adapter>` failed
 // and every coding session fell back to its terminal - a road the owner's own machine does not take
@@ -62,7 +64,7 @@ if (BRAIN === "gateway") {
   const r = await api("/api/setup/first-run/key", { type: "hipaa_ai", key, config: { base_url: url, ...(model ? { model, strong_model: model } : {}) } });
   console.log("ai", JSON.stringify({ ok: r.ok, why: r.why }).slice(0, 300));         // ...never the key
   if (!r.ok) throw new Error(`the gateway card did not take: ${r.why}`);
-} else console.log("ai", JSON.stringify(await api("/api/setup/first-run/ai", { name: "claude" })).slice(0, 300));
+} else console.log("ai", JSON.stringify(await api("/api/setup/first-run/ai", { name: BRAIN === "codex" ? "codex" : "claude" })).slice(0, 300));
 await api("/api/setup/dismiss", { dismissed: true });
 console.log("outbox", JSON.stringify(await api("/api/fixture/outbox", {})));
 const page = await h.newPage();

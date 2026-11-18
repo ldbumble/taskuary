@@ -1,0 +1,516 @@
+{
+ "about": "Every part of the agent experience (CLAUDE.md rule 5 and the owner's lists), each with the scenario that exercises it. `by`: audit:<scenario> runs tests/audit_scenarios.py on every backend (stand-ins, free); walk:<script> <args> runs a recorded walk on a scratch instance (EVAL_BRAIN picks the agent). `gap`: nothing exercises it yet - the orchestrator's first work. `judges`: which rubric reads its bundle.",
+ "parts": [
+  {
+   "id": "live-report-raw-rows",
+   "area": "reports",
+   "what": "A report re-run says what changed in plain words - never raw JSON rows ('new: {\"runId\": ...}', 'gone: {...}') - and its list has no empty bullets or gaps between items",
+   "by": [],
+   "gap": "live 2026-11-18: a changed-rows report drew raw JSON and spaced-out bullets",
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "live-new-box-lost-session",
+   "area": "doors",
+   "what": "New's box on another agent road (Codex): the ask is answered, or one line says what failed and what to do - never 'Started a fresh session - the old one was gone' about a session he never had, never a pencil he must find",
+   "by": [],
+   "gap": "live 2026-11-18: on the Codex road New's first ask failed with an internal recovery sentence",
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "live-routine-input",
+   "area": "doors",
+   "what": "A routine's run opens with the routine's prompt drawn as its input line in the chat, as every other start does - not only a chip in the box over an empty chat",
+   "by": [],
+   "gap": "live 2026-11-18: a routine run showed only 'Thinking...' with its prompt as a chip in the box",
+   "judges": [
+    "ui"
+   ]
+  },
+  {
+   "id": "live-turn-head",
+   "area": "status",
+   "what": "The turn's head reads like the rest of the app - no tiny monospace UPPERCASE 'AGENT · ... · working 12s', and 'Thinking...' in the app's own font",
+   "by": [],
+   "gap": "live 2026-11-18: the head and the working line were tiny mono caps",
+   "judges": [
+    "ui"
+   ]
+  },
+  {
+   "id": "door-new-line",
+   "area": "doors",
+   "what": "A task made with New and his first line: the agent starts at once, nothing above his line, the working line under it",
+   "by": [
+    "walk:real-conv.mjs new rest chat:end"
+   ],
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "door-line-midturn",
+   "area": "doors",
+   "what": "A line typed while the agent works: drawn under the turn, heard once, answered",
+   "by": [
+    "walk:real-conv.mjs general rest busy say:Also_check_the_parking. rest chat:end"
+   ],
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "door-attach-line",
+   "area": "doors",
+   "what": "A picture, a PDF and a sheet on his lines: each on his line as a chip, the agent READ each (its own log)",
+   "by": [
+    "audit:v",
+    "walk:real-attach.mjs"
+   ],
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "door-attach-new",
+   "area": "doors",
+   "what": "Files attached in New before the task exists",
+   "by": [],
+   "gap": "no scenario attaches in New",
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "door-attach-coding",
+   "area": "doors",
+   "what": "Files on a coding task's line reach the coding agent where it runs",
+   "by": [
+    "audit:v"
+   ],
+   "judges": [
+    "truth"
+   ]
+  },
+  {
+   "id": "door-send-to-agent",
+   "area": "doors",
+   "what": "Send to agent from a report, a dashboard, an FYI: the chip on the box, his words start it",
+   "by": [],
+   "gap": "no scenario",
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "door-continue",
+   "area": "doors",
+   "what": "Continue on a stopped task, with and without a file",
+   "by": [],
+   "gap": "no scenario",
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "door-flood",
+   "area": "doors",
+   "what": "A burst of lines and mails at once: order kept, each heard once, nothing stacked or dropped",
+   "by": [
+    "walk:real-conv.mjs general rest flood rest chat:end"
+   ],
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "sender-person",
+   "area": "senders",
+   "what": "A colleague asks: reply card, Send, the agent says it went",
+   "by": [
+    "audit:a"
+   ],
+   "judges": [
+    "truth"
+   ]
+  },
+  {
+   "id": "sender-stranger",
+   "area": "senders",
+   "what": "A stranger writes twice; nothing starts before Trust; Trust pressed twice",
+   "by": [
+    "audit:u"
+   ],
+   "judges": [
+    "truth"
+   ]
+  },
+  {
+   "id": "sender-automated",
+   "area": "senders",
+   "what": "An automated notice: worked, no reply card, a write-up",
+   "by": [
+    "audit:f",
+    "audit:r"
+   ],
+   "judges": [
+    "truth"
+   ]
+  },
+  {
+   "id": "sender-steering",
+   "area": "senders",
+   "what": "A mail written to steer the AI: held and said so, nothing acted on",
+   "by": [
+    "audit:h"
+   ],
+   "judges": [
+    "truth"
+   ]
+  },
+  {
+   "id": "sender-noreply",
+   "area": "senders",
+   "what": "A no-reply address and a mailing list: no card that writes back to them",
+   "by": [],
+   "gap": "no scenario",
+   "judges": [
+    "truth"
+   ]
+  },
+  {
+   "id": "sender-own",
+   "area": "senders",
+   "what": "The owner's own message (he answered outside the app): no leftover draft, the agent says it is not needed",
+   "by": [
+    "audit:j",
+    "walk:real-conv.mjs general rest own:I_booked_it_already. rest chat:end"
+   ],
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "time-sender-again",
+   "area": "timelines",
+   "what": "A draft stands, the sender writes again: the old card passed in place, a new one",
+   "by": [
+    "audit:j",
+    "walk:real-conv.mjs general rest mail:One_more_thing rest chat:end"
+   ],
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "time-restart",
+   "area": "timelines",
+   "what": "A restart in the middle of a turn: the turn kept with what it did, not resumed, he types to carry on",
+   "by": [
+    "walk:real-conv.mjs general busy restart rest chat:end"
+   ],
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "time-late",
+   "area": "timelines",
+   "what": "Someone is late answering: woken once, a chase card",
+   "by": [
+    "audit:i"
+   ],
+   "judges": [
+    "truth"
+   ]
+  },
+  {
+   "id": "time-remind-working",
+   "area": "timelines",
+   "what": "Remind me while the agent works: one line, put away, told once",
+   "by": [
+    "audit:m"
+   ],
+   "judges": [
+    "truth"
+   ]
+  },
+  {
+   "id": "session-silent",
+   "area": "sessions",
+   "what": "A turn that says nothing: one follow-up, then a question",
+   "by": [
+    "audit:o"
+   ],
+   "judges": [
+    "truth"
+   ]
+  },
+  {
+   "id": "session-died",
+   "area": "sessions",
+   "what": "A CLI that dies mid-turn: its steps and the failure kept where it happened, a way on",
+   "by": [],
+   "gap": "audit has no dying-CLI scenario (tests/test_cut_turn_kept is a unit test)",
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "session-limit",
+   "area": "sessions",
+   "what": "The AI's usage limit hit mid-job: said once, with when it resets, the job picked up after - never repeated as the agent's words",
+   "by": [],
+   "gap": "seen live 2026-11-18: the limit line was drawn as three agent turns",
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "session-compacted",
+   "area": "sessions",
+   "what": "A long session the CLI compacted, a resumed one, a tool error",
+   "by": [],
+   "gap": "no scenario",
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "card-send",
+   "area": "cards",
+   "what": "Reply card: Send, edit then Send, Don't send, pressed twice",
+   "by": [
+    "audit:a",
+    "audit:b"
+   ],
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "card-one-at-a-time",
+   "area": "cards",
+   "what": "Two cards in one turn: one stands with '1 of 2', the next only after the press is heard",
+   "by": [
+    "walk:real-cards.mjs emails",
+    "walk:real-cards.mjs push"
+   ],
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "card-bulk",
+   "area": "cards",
+   "what": "Many emails: one card, one press each, greyed from his next line",
+   "by": [
+    "walk:real-cards.mjs emails"
+   ],
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "card-fails",
+   "area": "cards",
+   "what": "A press whose execution fails: the failure on the card, the agent told, a way on",
+   "by": [
+    "audit:k",
+    "walk:real-cards.mjs push-fails"
+   ],
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "card-at-work",
+   "area": "cards",
+   "what": "Send / Send and close pressed while the agent works",
+   "by": [
+    "audit:s",
+    "audit:t"
+   ],
+   "judges": [
+    "truth"
+   ]
+  },
+  {
+   "id": "card-act",
+   "area": "cards",
+   "what": "Approve on a push, a PR, a held shell step, a break-out, a save-routine",
+   "by": [
+    "audit:c",
+    "audit:p",
+    "audit:q"
+   ],
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "card-calendar",
+   "area": "cards",
+   "what": "A clashing invite: Propose card, Send",
+   "by": [
+    "audit:g"
+   ],
+   "judges": [
+    "truth"
+   ]
+  },
+  {
+   "id": "card-flicker",
+   "area": "cards",
+   "what": "Every press: no flicker, no jump, greyed in place saying what was pressed",
+   "by": [
+    "walk:real-cards.mjs emails"
+   ],
+   "judges": [
+    "ui"
+   ]
+  },
+  {
+   "id": "start-full-house",
+   "area": "starts",
+   "what": "Every agent slot busy: queued and said, runs once a slot frees",
+   "by": [
+    "audit:n"
+   ],
+   "judges": [
+    "truth"
+   ]
+  },
+  {
+   "id": "start-no-ai",
+   "area": "starts",
+   "what": "No AI connected / the switch off: says why in one line with the way past",
+   "by": [],
+   "gap": "no scenario",
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "start-no-connector",
+   "area": "starts",
+   "what": "An ask nothing connected can do: said once, the nearest real action offered",
+   "by": [
+    "audit:l"
+   ],
+   "judges": [
+    "truth"
+   ]
+  },
+  {
+   "id": "status-line",
+   "area": "status",
+   "what": "The working line always true: never 'Thinking' after done, waiting on a deploy says so, Stop works at once",
+   "by": [
+    "walk:real-conv.mjs acp say:Add_a_comment_and_take_your_time busy press:Stop rest chat:end"
+   ],
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "job-mail-reply",
+   "area": "jobs",
+   "what": "Real AI: a mail asking for a recommendation, a follow-up mid-turn, draft, Send",
+   "by": [
+    "walk:real-conv.mjs general rest busy say:Also_check_the_parking. rest press:^Send$ rest chat:end"
+   ],
+   "brain": "gateway",
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "job-browser-signups",
+   "area": "jobs",
+   "what": "Real AI: ten sign-ups in the browser, codes from mail, a sheet by city, what could not be done and why",
+   "by": [
+    "walk:real-job.mjs signups"
+   ],
+   "brain": "gateway",
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "job-coding",
+   "area": "jobs",
+   "what": "Real AI: a change in a repo, commit, held push, the land card",
+   "by": [
+    "walk:real-a1.mjs acp"
+   ],
+   "brain": "gateway",
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "job-research-sheet",
+   "area": "jobs",
+   "what": "Real AI: research into a spreadsheet",
+   "by": [
+    "walk:real-research.mjs"
+   ],
+   "brain": "gateway",
+   "judges": [
+    "truth"
+   ]
+  },
+  {
+   "id": "rail-assistant",
+   "area": "rail",
+   "what": "The Assistant on the rail: lights the real button, never acts inside a task, answers about the page",
+   "by": [],
+   "gap": "no eval scenario (tests/test_assistant_router is unit-level)",
+   "judges": [
+    "ui",
+    "truth"
+   ]
+  },
+  {
+   "id": "parity-roads",
+   "area": "roads",
+   "what": "The same task on CLI, ACP, API and coding reads the same on screen and in what the agent is told",
+   "by": [
+    "audit:*"
+   ],
+   "judges": [
+    "truth"
+   ]
+  }
+ ]
+}

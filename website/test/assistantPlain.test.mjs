@@ -89,8 +89,7 @@ test("no screen points at the removed Timeline or Tasks tab", () => {
   }
 });
 
-// THE ANSWER UNDER NEW IS READ AS THE CHAT READS IT (the visual audit, 2026-11-13): the Assistant answered in New's box with a link to the
-// report builder, and the box printed "[Open the report builder](#report=new)" as raw text - a link that went nowhere
-test("New's answer under its box draws its links and bold, never the raw markdown", () => {
-  assert.match(read("NewSheet.jsx"), /data-tq-new-said=""[^>]*><MdLine text=\{saidBack\} \/><\/Alert>/);
+// NEW'S BOX ANSWERS NOTHING ITSELF (F1, the walks 2026-11-18): its words go to the one start and its task opens - there is no answer under it
+test("New's box draws no answer of its own under it", () => {
+  assert.doesNotMatch(read("NewSheet.jsx"), /data-tq-new-said|saidBack/);
 });

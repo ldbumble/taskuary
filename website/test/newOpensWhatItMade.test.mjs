@@ -29,7 +29,7 @@ test("the pull puts New down when the task lands, and New's button spins until t
   assert.match(view, /if \(!held\) browseDown\(\);\s+const going = surface\(key, asUser \|\| null\);\s+if \(held\) Promise\.resolve\(going\)\.finally\(\(\) => browseDownRef\.current\?\.\(\)\);/);
   // every create that opens its task opens it through the one helper, and an inline card stays busy after it
   assert.equal((sheet.match(/onOpenTask\?\.\(data\.taskId\)/g) || []).length, 0);
-  assert.equal((sheet.match(/openIt\(data\.taskId\)/g) || []).length, 3);
+  assert.equal((sheet.match(/openIt\(data\.taskId\)/g) || []).length, 4);
   assert.match(sheet, /if \(!\(inline && opened\)\) setBusy\(false\);/);
 });
 

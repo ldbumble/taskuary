@@ -13,8 +13,9 @@ test("an agent's job the Assistant made opens its task from New's box; no card p
   const canvas = read("CanvasBrowse.jsx"), sheet = read("NewSheet.jsx");
   assert.doesNotMatch(canvas, /state\?\.start/);
   assert.doesNotMatch(sheet, /autoPressed|start = false/);
-  assert.ok(sheet.includes('const made = /^#?task=(\\d+)$/.exec(data?.open || "");'));
-  assert.ok(sheet.includes("if (made) { setOk(String(data.say || \"\")); onDone?.(); openIt(Number(made[1]));"));
+  // ...and New's box itself starts its agent by the one start, its task opened (F1, the walks 2026-11-18)
+  assert.ok(sheet.includes('const { data } = await api.post("/api/start", { text: about, images: pics.paths || [] });'));
+  assert.match(sheet, /onDone\?\.\(\); openIt\(data\.taskId\);/);
 });
 
 test("the Assistant's press is made once per line, however often its card is drawn again", async () => {

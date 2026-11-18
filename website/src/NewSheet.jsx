@@ -26,7 +26,7 @@ import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptIma
 import { emailRecipientOptions, normalizeEmails, recipientId, recipientLabel, recipientOptions, sendPrefill, validEmail } from "./recipientOptions.js";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Checkbox from "@mui/material/Checkbox";
-import SetupWithAi, { NEW_HASH, goStraight } from "./SetupWithAi.jsx";
+import SetupWithAi, { NEW_HASH } from "./SetupWithAi.jsx";
 import { useVerbs } from "./actionRow.js";
 import ConnectAi from "./ConnectAi.jsx";
 import NewMeeting from "./NewMeeting.jsx";
@@ -41,7 +41,6 @@ import { place } from "./words.js";
 import { label as btn } from "./buttons.js";
 import { capabilities, useCapabilities } from "./capabilities.js";
 import { PromptBox } from "./AgentSummary.jsx";
-import { MdLine } from "./md.jsx";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { madeRow } from "./funnelPile.js";
 
@@ -184,7 +183,7 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
 // `line`: the Assistant's line that wrote this card (concierge._new)
 // `initialChannel` / `initialTo`: Send something already addressed - a People hit's Message them (SearchEverything, trust audit F6)
 export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false, initialKind = "chat", initialHow = "", initialText = "", line = null,
-  initialChannel = "", initialTo = "", initialMeeting = null, initialRoutine = null, madeOf = "", initialFiles = null }) {
+  initialChannel = "", initialTo = "", initialMeeting = null }) {
   const [kind, setKind] = useState(initialKind);
   const said = useRef(null);      // the words, as the field debounces them
   const [busy, setBusy] = useState(false);
@@ -203,9 +202,6 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const aboutRef = useRef(null);
   const [mode, setMode] = useState("draft");
   const pics = usePromptImages({ files: true });          // ...a pasted, dropped or picked file of any kind, as every box takes (2026-11-16)
-  // ...and the files the box held when the Assistant wrote this card from its words: they stay on the card (the stress round of New's attachments
-  // - a goal written from "track this, attached" came up with an empty tray, and its press filed the goal without the file)
-  useEffect(() => { if (initialFiles?.length) pics.put(initialFiles); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   // agent
   // NOTHING TO PICK (the owner, TQ-1397: "you ask the agent what you need and it should do it ... never, ever be stuck on a repo thing"): no
   // agent, AI, model or repository picker - Settings names the AI, and a live session opens in its task's own folder and picks its repository
@@ -227,8 +223,6 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   // capability lands after the first draw, so it is followed until the owner picks a side
   const [by, setBy] = useState(""); const [who, setWho] = useState(""); const [plan, setPlan] = useState(!noAi), planPicked = useRef(false);
   useEffect(() => { if (!planPicked.current) setPlan(!noAi); }, [noAi]);
-  const [made, setMade] = useState(null);   // the card the Assistant wrote from New's one box - drawn in New's place
-  const [saidBack, setSaid] = useState(madeOf);  // ...or its answer, said under the box (and on the card it wrote, what it made of the words)
   const filed = useRef(null);      // a task this sheet filed whose start was refused: {taskId, ref, about, how}
 
   useEffect(() => { if (!open) return; setErr(""); setOk(""); setKind(initialKind); }, [open, initialKind]);
@@ -274,7 +268,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const close = () => { if (!busy) onClose?.(); };
 
   const submit = useCallback(async () => {
-    setBusy(true); setErr(""); setErrAi(false); setOk(""); setSaid("");
+    setBusy(true); setErr(""); setErrAi(false); setOk("");
     const about = String((agentBoxRef.current ? wordsRef.current : aboutRef.current?.value) || "").trim();
     // THE BUTTON SPINS UNTIL WHAT IT MADE IS UP (the owner, 2026-11-09: "it should open new task right away or if it needs a second the create
     // new agent button should spin"): the card in the conversation is put down by the task landing on the table (AssistantView pull, holdsNew),
@@ -331,18 +325,12 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         setOk(`${data.ref} — ${outcomeOf({ ...out, ref: "" }).text}.`);      // the line leads with the ref: said once, not twice
         aboutRef.current?.clear(); setText(""); setHasAbout(false); pics.clear(); onDone?.(); openIt(data.taskId);
       } else if (kind === "chat") {
-        // THE ASSISTANT'S OWN ROAD, NEW'S OWN PAGE (the owner, TQ-1397: "the back end should be the same code ... but the UI should look normal"):
-        // the words are one Assistant turn (concierge.say), and what it made comes up HERE - the card it wrote, filled in (an agent's job
-        // pressed), or its answer as a line under the box - never a jump into the chat
-        const { data } = await api.post("/api/concierge/say", { text: about, images: pics.paths || [] });
-        const files = pics.imgs;
-        setText(""); pics.clear();
-        // ...a report, dashboard or routine goes straight into its builder, the setup asked there (goStraight) - no card on the way
-        if (data?.new) { if (!goStraight(data.new, onClose)) setMade({ ...data.new, said: data.say || "", files }); setBusy(false); return; }
-        // ...an agent's job or a message it could address was MADE (concierge._made_now - the owner, 2026-11-12: "open task directly"): its task opens
-        const made = /^#?task=(\d+)$/.exec(data?.open || "");
-        if (made) { setOk(String(data.say || "")); onDone?.(); openIt(Number(made[1])); if (!(inline && opened)) setBusy(false); return; }
-        setSaid(String(data?.say || "").trim() || "Done.");
+        // NEW'S BOX IS THE ONE START (F1, the walks 2026-11-18): his words and files go to the server's one start (/api/start ->
+        // concierge.handoff_task), its task opens with its agent at work. They went through the Assistant's model, which picked a form - "send
+        // me this every Monday" with a CSV landed on an empty SQL report, his words and file gone. What the work is is the agent's to do
+        const { data } = await api.post("/api/start", { text: about, images: pics.paths || [] });
+        setText(""); pics.clear(); setOk(`${data.ref} — ${data.joined ? "already that work: its agent was told." : "an agent is on it."}`);
+        onDone?.(); openIt(data.taskId);
       } else if (kind === "playbook") {
         // the one road to a playbook is the shelf's New playbook: this press is its Set up with AI, made there once with these words
         askPlaybook(about, true); onClose?.(); openAppLink(`report=${NEW_PB}`);
@@ -388,9 +376,6 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         sx: { border: `1px solid ${BORDER}`, borderRadius: "12px", bgcolor: PANEL, overflow: "hidden", scrollMarginTop: "8px" } }
     : { open: !!open, onClose: close, fullWidth: true, maxWidth: "md", "data-tq-keep": true };   // md: the tabs fit on one line, and scroll sideways when they do not
   if (inline && !open) return null;
-  if (made) return <NewSheet key={made.line || made.text} open={open} onClose={onClose} onDone={onDone} onOpenTask={onOpenTask} inline={inline}
-    initialKind={made.kind} initialHow={made.how || ""} initialText={made.text || ""} initialChannel={made.channel || ""} initialTo={made.to || ""}
-    initialMeeting={made.meeting || null} initialRoutine={made.routine || null} line={made.line} madeOf={made.said} initialFiles={made.files} />;
   return (
     <Shell {...shell}>
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, pb: 0.5 }}>
@@ -550,7 +535,6 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         {err && <Alert severity="error" sx={{ py: 0.25, fontSize: 12.5, alignItems: "center" }}
           action={errAi ? <ConnectAi onGo={() => onClose?.()} /> : null}>{err}</Alert>}
         {ok && <Alert severity="success" sx={{ py: 0.25, fontSize: 12.5 }}>{ok}</Alert>}
-        {saidBack && <Alert data-tq-new-said="" severity="info" icon={false} sx={{ py: 0.25, fontSize: 12.5, whiteSpace: "pre-wrap" }}><MdLine text={saidBack} /></Alert>}
       </DialogContent>
 
       <ButtonBar>

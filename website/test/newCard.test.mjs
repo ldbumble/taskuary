@@ -23,13 +23,14 @@ test("New is a card in the conversation, not a popup: the button posts it, a lin
   assert.match(sheet, /if \(e\.key === "Escape"\) close\(\)/);                               // Esc closes the card
 });
 
-test("New is one box that hands the words to the Assistant: no tabs, and no agent, model or repository to pick (TQ-1397)", () => {
+test("New is one box that hands the words to the one start: no tabs, and no agent, model or repository to pick (TQ-1397)", () => {
   const sheet = read("NewSheet.jsx"), browse = read("CanvasBrowse.jsx"), board = read("BoardView.jsx");
   assert.match(sheet, /initialKind = "chat"/);                                                  // opened by the owner: the one box
   assert.match(browse, /initialKind=\{state\?\.kind \|\| "chat"\}/);                            // ...a card the Assistant wrote keeps its kind
   assert.doesNotMatch(board, /initialKind="agent"/);
   assert.doesNotMatch(sheet, /data-tq-new-kinds|role="tab"|NewRepo|AgentPicker|\/api\/repos|Who works it/);
-  assert.match(sheet, /api\.post\("\/api\/concierge\/say", \{ text: about/);                // the Assistant's own road...
-  assert.match(sheet, /if \(data\?\.new\) \{ if \(!goStraight\(data\.new, onClose\)\) setMade\(\{ \.\.\.data\.new, said: data\.say/);                            // ...and what it made comes up in New, not the chat
+  // ...THE ONE START (F1, the walks 2026-11-18): his words and files to /api/start, its task opened - never the Assistant's model picking a form
+  assert.match(sheet, /api\.post\("\/api\/start", \{ text: about, images: pics\.paths \|\| \[\] \}\)/);
+  assert.doesNotMatch(sheet, /concierge\/say|goStraight|setMade/);
   assert.doesNotMatch(sheet, /askAssistant\(/);
 });

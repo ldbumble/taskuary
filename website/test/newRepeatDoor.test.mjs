@@ -37,15 +37,11 @@ test("a draft waits for Reports, and an open Reports hears it at once - taken on
   assert.match(view, /take\(\);\s*\n\s*return onDraftHanded\(take\);/);
 });
 
-// THE ASSISTANT'S PREFILL LANDS IN THE FORM (the owner, 2026-10-29: "Wrote it into New - Build it there starts it" over blank fields):
-// concierge._new's `new` - its words and its `routine` {coding, repo, skill} - rides the browse state into New → Routine's own box
-test("a routine the Assistant wrote up opens New → Routine with its words, carried into the chat's ask", () => {
+// A ROUTINE IS ITS AGENT'S TO SET UP (F1, the walks 2026-11-18): New → Routine prefilled from the Assistant's words is gone - "send me this every
+// Monday" with a CSV landed on an empty form. The builder's strip still starts a build it is handed on its own page (Reports' Set up with AI)
+test("no routine prefill rides into New, and the builder's strip still builds what it is handed", () => {
   const canvas = read("CanvasBrowse.jsx"), sheet = read("NewSheet.jsx");
-  assert.match(canvas, /initialText=\{state\?\.text \|\| ""\}/);
-  assert.match(canvas, /initialRoutine=\{state\?\.routine \|\| null\}/);
-  assert.match(canvas, /JSON\.stringify\(state\?\.routine \|\| ""\)/, "a new prefill remounts the sheet, so its fields are the new ones");
-  assert.match(sheet, /initialRoutine = null, madeOf = "", initialFiles = null \}\) \{/);
-  // ...and the builder's strip starts the build with them, on that page (taskuary/build.py) - the chat is never asked
+  assert.doesNotMatch(canvas + sheet, /initialRoutine|madeOf|initialFiles/);
   const strip = read("SetupWithAi.jsx");
   assert.match(strip, /if \(handed\.current === undefined\) handed\.current = onOpen \? null : takeFor\(kind\);/, "taken in the first draw - no empty beat");
   assert.match(strip, /useEffect\(\(\) => \{ if \(first != null\) go\(first\); \}, \[\]\);/);
@@ -67,6 +63,6 @@ test("a report, dashboard or routine the Assistant wrote up goes straight into i
   assert.doesNotMatch(door, /openHelp/, "no road through the chat");
   // ...one road from New's box and from the chat: the card is drawn only where it did not go (pressed at the card's mount, the chat's
   // road raced the canvas opening its New card, and the setup ask was typed into New's own box instead)
-  assert.match(sheet, /if \(data\?\.new\) \{ if \(!goStraight\(data\.new, onClose\)\) setMade\(/);
+  assert.doesNotMatch(sheet, /goStraight/, "New's box starts an agent (/api/start) - it writes up no builder");
   assert.match(chat, /if \(data\.new && !goStraight\(data\.new\)\) browseRef\.current\?\.\("new", data\.new\);/);
 });

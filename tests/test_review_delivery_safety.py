@@ -204,7 +204,7 @@ def test_a_send_refused_once_then_sent_is_told_to_its_agent_as_sent(s, outgoing)
 
 def test_the_agent_hears_what_went_when_the_owner_changed_its_text(s):
     # ...and the same walk: the owner reworded the mail on its card, the first press was refused (which keeps their words as the draft),
-    # the second went as a plain approval - and the agent was never told its text was not the one that went
+    # the second went as a plain approval - and the agent was never told its text was not the one that went. It goes as the edit it is now
     from taskuary import general
     tid, mid, rid = make_review(s, True)
     cid = s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Set up the answer to Erin.')
@@ -214,7 +214,7 @@ def test_the_agent_hears_what_went_when_the_owner_changed_its_text(s):
     with mock.patch(provider(True), side_effect=RuntimeError('fixture provider refused (403)')):
         verdicts.decide(s, s.get_review(rid), 'approve', changed)
     with mock.patch(provider(True), return_value=SENT):
-        assert verdicts.decide(s, s.get_review(rid), 'approve')['status'] == 'approved'
+        assert verdicts.decide(s, s.get_review(rid), 'approve')['status'] == 'edited'
     did = owner_did_after(s, tid)
     assert 'they changed your text first' in did and 'The totals also match.' in did, did
     # ...and a text that went as the agent wrote it says nothing of the kind

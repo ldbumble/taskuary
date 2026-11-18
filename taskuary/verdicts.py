@@ -261,6 +261,16 @@ def _reconcile_snapshot(store, snapshot):
         return {'state': 'unknown', 'reason': f'the provider could not verify delivery ({str(e)[:160]})'}
 
 
+def _drafted(rv) -> str:
+    """The draft the owner's words are measured against: what was DRAFTED - never the words a refused Send left in the box
+    (finish_review_delivery keeps the attempted text as the draft so the box shows it), while the box still holds them."""
+    if rv.get('DeliveryState') == 'failed':
+        try: snap = json.loads(rv.get('DeliveryEnvelope') or '{}') or {}
+        except (TypeError, ValueError): snap = {}
+        if isinstance(snap.get('drafted'), str) and snap.get('body') == rv.get('DraftText'): return snap['drafted']
+    return rv.get('DraftText')
+
+
 def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=None, send_fn=None, anyway=False, bcc=None, subject=None):
     """Claim, send or reconcile, persist the outcome, then settle the task.
 
@@ -298,7 +308,7 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
         try: mail_file(store, rv.get('TaskId'), f['attachment'], kept=False)
         except ValueError as e:
             return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': f"Nothing was sent: {f.get('name')} - {e}. Take it off and Send again."}
-    snapshot ={'envelope': env, 'message': msg, 'body': final, 'status': VERB2STATUS[verb],
+    snapshot ={'envelope': env, 'message': msg, 'body': final, 'status': VERB2STATUS[verb], 'drafted': _drafted(rv),
                 'actor': actor, 'note': note, 'attempted_at': _now_iso()}
     claim = store.claim_review_delivery(rid, snapshot, rv)
     if not claim: return _delivery_busy(store, rid)
@@ -758,7 +768,7 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
                     'send_error': 'there is only your signature in the box - write the reply (or let the AI draft it) and send that'}
         final = final_text if (final_text or '').strip() or (cal and final_text is not None) else rv.get('DraftText')
         bare = lambda t: signatures.unsigned(t, sig).strip()
-        verb = 'edit' if bare(final) != bare(rv.get('DraftText')) else 'approve'
+        verb = 'edit' if bare(final) != bare(_drafted(rv)) else 'approve'
         if final is not None: final = signatures.as_sent(store, rv, final)     # ...an email as plain text (chatformat.plain_text)
     else:
         final, verb = None, verb_in
@@ -847,7 +857,7 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
             except Exception as e: logger.warning(f'style feedback not saved: {e}')
         ev = (f"rv{rid}: owner verdict '{verb}' on a drafted reply to \"{(m.get('Subject') or rv.get('Kind') or '')[:80]}\" "
               f"from {m.get('FromEmail') or '?'}" + (f"; their note: {note[:200]}" if note and verb != 'edit' else ''))
-        if verb == 'edit': ev += f"\nDRAFT:\n{(rv.get('DraftText') or '')[:700]}\nSENT INSTEAD:\n{(final or '')[:700]}"
+        if verb == 'edit': ev += f"\nDRAFT:\n{(_drafted(rv) or '')[:700]}\nSENT INSTEAD:\n{(final or '')[:700]}"
         if learn_async: learn_async(learn.learn_from, store, ev)
         else: learn.learn_from(store, ev)
     return result or {'ok': True, 'status': VERB2STATUS[verb], 'sent': sent, 'send_error': None}

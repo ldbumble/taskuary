@@ -748,6 +748,24 @@ class TheDemoWorldIsConnectedTests(unittest.TestCase):
             for path in ('/api/reviews/12', '/api/tasks/3', '/api/connectors/2', '/api/policies/1'):
                 self.assertTrue(demo.refuse('DELETE', path), f'only the attachment is let by: {path}')
 
+    def test_a_press_through_a_card_answers_as_its_own_path_does(self):
+        """The walk, 2026-11-18: Change who does it > reply, a report's Pause this report, and every act whose own path the demo lets by
+        answered "that would reach something real" when pressed through a card (/api/operations/<id>/execute): two roads for one act."""
+        op = lambda k, **p: demo.refuse_op({'kind': k, 'params': p})
+        with on():
+            self.assertEqual(op('task.set_kind', kind='reply'), '')
+            self.assertEqual(op('task.set_kind', kind='task'), '')
+            self.assertEqual(op('task.set_kind', kind='general'), demo.STARTS)
+            for k in ('report.pause', 'report.resume', 'report.run', 'report.edit'): self.assertEqual(op(k), demo.REPORTS_FIXED, k)
+            for k in ('connection.test', 'connection.pause'): self.assertEqual(op(k), demo.CONNECTIONS_FIXED, k)
+            self.assertEqual(op('task.trust'), demo.STARTS)
+            self.assertEqual(op('message.retriage'), demo.NO_AI)
+            # ...and each act its path already lets by is let by here too
+            for k, path in (('deleted.restore', '/api/deleted/3/restore'), ('hub.comment', '/api/hub/posts/3/comments'),
+                            ('meeting.new', '/api/meetings')):
+                self.assertEqual(demo.refuse('POST', path), '', path)
+                self.assertEqual(op(k), '', k)
+
     def test_trust_says_no_agent_starts_here_never_that_it_would_reach_something_real(self):
         with on(): self.assertEqual(demo.refuse('POST', '/api/tasks/4/trust'), demo.STARTS)
 

@@ -128,18 +128,23 @@ ALLOWED_WRITES = (
 LOCAL_OPS = {'task.complete', 'task.reopen', 'task.defer', 'task.watching', 'item.settle', 'message.file', 'task.not_a_task', 'message.reply',
              'preference.exclude_sender', 'preference.sender_rule', 'task.let_go', 'task.elsewhere', 'idea.act', 'memory.remember', 'memory.wrong',
              'routing.remember', 'task.split', 'task.update', 'task.check', 'task.checklist', 'task.watch', 'task.comment', 'task.merge',
-             'review.reject', 'calendar.answer', 'hub.publish', 'pipe.clear', 'pipe.defer', 'pipe.close', 'pipe.remove', 'pipe.block', 'pipe.mine', 'script.start'}
+             'review.reject', 'calendar.answer', 'hub.publish', 'pipe.clear', 'pipe.defer', 'pipe.close', 'pipe.remove', 'pipe.block', 'pipe.mine', 'script.start',
+             # ...and the acts whose own path the deny list already lets by (ALLOWED_WRITES): pressed through a card they read "that would
+             # reach something real" (the walk, 2026-11-18) - two roads for one act, answering two ways
+             'deleted.restore', 'hub.comment', 'hub.vote', 'meeting.new', 'problems.dismiss', 'page.open', 'button.light'}
 
 # The sentences the visitor sees, plain and said as the demo, not as a fault: the page posts them as an ordinary line.
 SENDS = 'This is the demo - nothing is sent. In your own Taskuary this is where you approve it and it goes.'
 STARTS = 'This is the demo - the agents here are recordings, so nothing new starts.'
 OFF = 'This is the demo - that would reach something real, so it is switched off. Everything here is invented.'
 NO_AI = 'This is the demo - no AI runs here, so nothing is read or planned again. In your own Taskuary your AI does this.'
+CONNECTIONS_FIXED = 'This is the demo - these connections are invented, and there is nothing real behind them to change.'
+REPORTS_FIXED = 'This is the demo - its documents and reports are fixed: editing, running, pausing and switching them are off here.'
 
 # What is refused, and the sentence the visitor sees. Order matters: the first match wins.
 REFUSALS = (
     (r'^/api/(cli|deps|update)(/|$)', 'This is the demo - nothing happens. Its AI tools are pretend, and nothing on your computer is touched.'),
-    (r'^/api/connectors', 'This is the demo - these connections are invented, and there is nothing real behind them to change.'),
+    (r'^/api/connectors', CONNECTIONS_FIXED),
     # ...and the top bar's Quit, which reaches nothing: the demo stays up for whoever opens it next - the website's /demo is one server for
     # every visitor. It read "that would reach something real" (the walk, 2026-11-18)
     (r'^/api/quit$', 'This is the demo - it stays up for whoever opens it next, so it does not quit from here. Close the tab to leave.'),
@@ -154,8 +159,7 @@ REFUSALS = (
     (r'^/api/(sync|ingest|poll|msauth|hooks)', 'This is the demo - no mail is fetched; what you see was written in advance.'),
     # ...every press on a report - Run now, Run due now, its switch, Pause - answered as what it is: "would reach something real" stood
     # under each of them (the walk, 2026-11-15)
-    (r'^/api/(doc|soul|semantic|reports?/([^/]*/(run|rerun|preview)|due)$|sources(/|$)|dashboards/(compose|preview))',
-     'This is the demo - its documents and reports are fixed: editing, running, pausing and switching them are off here.'),
+    (r'^/api/(doc|soul|semantic|reports?/([^/]*/(run|rerun|preview)|due)$|sources(/|$)|dashboards/(compose|preview))', REPORTS_FIXED),
 )
 
 
@@ -174,8 +178,15 @@ def refuse_op(op) -> str:
     # ...a letter's Send is played wherever it is pressed (refuse_verdict): the rail's Send is the card's
     if kind == 'review.approve' and (st := _store()) is not None and (rv := st.get_review(int(op.get('target') or 0))):
         return refuse_verdict('approve', rv.get('Kind'))
+    # ...WHO DOES IT is a field on the task, unless the answer is an agent, which starts on it (server's task.set_kind: _start_chosen). Each
+    # read "that would reach something real" (the walk, 2026-11-18), and so did every press below whose own path says what it is
+    if kind == 'task.set_kind': return STARTS if str(p.get('kind') or '') in ('general', 'coding') else ''
     if kind in ('review.approve', 'task.clarify', 'task.chase', 'task.handoff', 'task.share', 'task.ask_agent'): return SENDS
-    if kind in ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.tell', 'agent.stop', 'agents.stop', 'task.create_from_message', 'task.create_from_text', 'calendar.prepare'): return STARTS
+    if kind in ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.tell', 'agent.stop', 'agents.stop', 'task.create_from_message', 'task.create_from_text',
+                'calendar.prepare', 'task.trust'): return STARTS
+    if kind == 'message.retriage': return NO_AI
+    if str(kind or '').startswith('report.'): return REPORTS_FIXED
+    if str(kind or '').startswith('connection.'): return CONNECTIONS_FIXED
     return OFF
 
 

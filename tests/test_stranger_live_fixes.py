@@ -317,3 +317,21 @@ def test_a_line_typed_in_a_held_task_s_box_is_kept_and_answered_not_a_500(monkey
     assert st.status_code == 200 and [json.loads(x)['type'] for x in st.text.splitlines()] == ['done'], st.text
     assert r.json()['reply'] == '' and origin.hold(s, t), 'nothing answers for a held task - its line waits behind Trust'
     assert [w['text'] for w in general.waiting_lines(s, t)] == ['what does this mail want?', 'and who sent it?']
+
+def test_continue_on_a_held_task_says_the_hold_and_starts_no_session(monkeypatch):
+    """A worked task a stranger then wrote on is held again, and the rail's Continue still reaches it. Continue answered "continued",
+    opened a session and filed "The owner chose Resume" - the turn was refused for the hold and only the log said so: nothing at work
+    under a press that said it went. It answers the hold's own line now, and starts nothing; a note given with it waits behind Trust."""
+    from taskuary import general
+    s = MemoryStore(); t = _held(s); monkeypatch.setattr(server, 'store', s); opened = []
+    monkeypatch.setattr(general, 'provider_options', lambda *a, **k: [{'pick': 'cli:claude', 'type': 'cli'}])
+    monkeypatch.setattr(general, 'start_session', lambda *a, **k: opened.append(a))
+    c = TestClient(server.app)
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+        r = c.post(f'/api/tasks/{t}/continue-work', json={})
+        assert r.status_code == 409 and r.json()['detail'] == origin.hold(s, t)['line'], r.text
+        n = c.post(f'/api/tasks/{t}/continue-work', json={'note': 'check the tracking number'})
+    assert n.status_code == 200 and n.json()['held'] == origin.hold(s, t)['line'] and not n.json()['continued'], n.text
+    assert [w['text'] for w in general.waiting_lines(s, t)] == ['check the tracking number']
+    assert opened == [] and t not in general.OPENING
+    assert not [x for x in s.list_comments(t, internal=True) if 'chose Resume' in (x['Body'] or '')]

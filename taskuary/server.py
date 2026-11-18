@@ -3089,6 +3089,10 @@ def continue_work(task_id: int, body: ContinueBody = None):
     if task.get('Status') == 'dropped': raise HTTPException(409, 'This task was dismissed.')
     note = ' '.join(str((body.note if body else '') or '').split())[:4000]
     imgs = prompt_images(body.images if body else [])
+    # ...A HELD STRANGER'S TASK CONTINUES BEHIND ITS TRUST, as every start does (origin.hold): its note waits by the box (take_line, below), and a
+    # bare Continue says the hold's line - it opened a session whose turn the hold refused, and answered "continued" with nothing at work
+    from . import origin
+    if (h := origin.hold(store, task_id)) and not note: raise HTTPException(409, h['line'])
     if note:
         # A NOTE IS A LINE THE OWNER TYPED, and takes the one road every typed line takes (general.take_line): kept as his, the turn at work
         # from the press, then whatever agent works the task reopened, woken or started by its own starter - a coding session that ended
@@ -3102,7 +3106,7 @@ def continue_work(task_id: int, body: ContinueBody = None):
         store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': kind, 'note': True})
         from . import outcomes
         outcomes.record(store, 'agent.continued', 'task', task_id, ACTOR, next_move=note, facts={'door': 'continue-work', 'kind': kind})
-        return {'continued': True, 'taskId': task_id, 'kind': kind, **(out if isinstance(out, dict) else {})}
+        return {'continued': not (isinstance(out, dict) and out.get('held')), 'taskId': task_id, 'kind': kind, **(out if isinstance(out, dict) else {})}
     if general.handles(task):
         # THE THREAD MOVED AFTER ITS LAST TURN: the mail that reopened the task goes in first, in the turn's instructions - "pick up
         # where work stopped" alone woke the assistant at "reply sent, task closed" while two people had since asked for more (2026-10-14)

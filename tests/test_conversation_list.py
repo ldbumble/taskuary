@@ -1067,6 +1067,21 @@ class TheCodingRoadsSignInTests(unittest.TestCase):
         ws.record(s, tid, 'acp-1', 'answered', request_id='signin:payworth.example', text='Signed in', source='owner')
         self.assertTrue(general._at_work(sess))
 
+    def test_a_coding_turn_its_protocol_says_ended_is_not_at_work_whatever_its_record_last_said(self):
+        """The owner's live task, 2026-11-17: a coding agent over ACP ended its turn "set up for you to push ... once that runs, I'll watch
+        the deploy" - its push held as a card. Its session read at rest, but the run's record still said `working` (no turn end was
+        written), so the chat spun "Thinking..." for twenty minutes and held the push card back as a turn at work does."""
+        from taskuary import acpcoding, workerstate as ws
+        s = MemoryStore(); tid = s.create_task({'Title': 'Ship the floor board', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
+        sess = acpcoding.ACPCoding.__new__(acpcoding.ACPCoding)
+        sess.store, sess.task_id, sess.sid, sess.alive, sess.busy = s, tid, 'acp-2', True, False
+        ws.record(s, tid, 'acp-2', 'working', source='hook')
+        with mock.patch.object(general, '_live_of', return_value=sess), mock.patch.object(general, 'starting', return_value=False), \
+                mock.patch.object(general, 'owed', return_value=False):
+            self.assertTrue(general.waits(s, sess)); self.assertFalse(general.working(s, tid))
+            sess.busy = True
+            self.assertFalse(general.waits(s, sess)); self.assertTrue(general.working(s, tid), 'a turn its protocol has open is at work')
+
 
 if __name__ == '__main__':
     unittest.main()

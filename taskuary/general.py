@@ -3606,6 +3606,10 @@ OWED = 120                    # seconds a line handed to a live agent reads "at 
 def waits(store, s) -> bool:
     "Does this live session wait on the owner, by its own word - the `waiting` of its info, without building the rest."
     if isinstance(s, GeneralSession): return bool(s.waiting())
+    # ...and a session whose own protocol says when its turn ends (ACP's prompt answered): at rest is waiting, whatever the run's record last
+    # said (the owner's live task, 2026-11-17: a turn that ended on a held push read `working` in the record, and spun "Thinking..." 20 min)
+    from .acpcoding import ACPCoding
+    if isinstance(s, ACPCoding): return bool(s.waiting()) or _asks(s)
     from . import terminal
     # ...and by the one rule of _at_work: a request its agent raised that stands is waiting on him, whatever its process says
     if _asks(s): return True

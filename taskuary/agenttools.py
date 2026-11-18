@@ -49,7 +49,7 @@ TOOLS = {
                          'start': {'type': 'integer', 'description': "where to go on reading a long body - the answer's body_goes_on says it"}},
                         ('id',)), ('GET', '/api/agent/messages/1')),
     'read_attachment': ('read', "The text of one attachment on a saved message (PDF, Word, Excel, PowerPoint, text). Read-only.",
-                        _S({'id': _INT, 'start': {'type': 'integer', 'description': 'where to go on reading a long file - the answer says it'}},
+                        _S({'id': {**_INT, 'description': 'the number read_message lists beside each file of the mail ("attachment 12")'}, 'start': {'type': 'integer', 'description': 'where to go on reading a long file - the answer says it'}},
                            ('id',)), ('GET', '/api/attachments/1')),
     'my_task': ('read', "This task's brief: title, summary, status and checklist with each to-do's id. Re-read it after a long "
                         "stretch of work. Read-only.", _S({}), ('GET', '/api/tasks/1')),
@@ -455,7 +455,8 @@ def fit(name: str, args) -> dict:
         elif t == 'integer' and (isinstance(v, bool) or not isinstance(v, int)):
             if isinstance(v, float) and v.is_integer(): a[k] = int(v); continue
             m = re.fullmatch(r'\s*-?\d+\s*', str(v)) or _NUM.fullmatch(str(v))
-            if not m: raise ValueError(f"{name}'s `{k}` is a number - {v!r} is not one; call it again with the number")
+            if not m: raise ValueError(f"{name}'s `{k}` is a number - {v!r} is not one; call it again with the number"
+                                       + (f" ({p['description']})" if (p or {}).get('description') else ''))
             a[k] = int(m[1] if m.re is _NUM else m[0])
     need = s.get('required') or ([] if a.get('items') else next((x['required'] for x in s.get('anyOf') or []), []))
     if miss := [k for k in need if a.get(k) is None]:

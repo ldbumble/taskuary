@@ -5,8 +5,7 @@ import { says, subState } from "./laneSays.js";
 import {
   AssistantRuntimeProvider, ComposerPrimitive, ThreadPrimitive, useLocalRuntime,
 } from "@assistant-ui/react";
-import { Alert, Box, Button, CircularProgress, IconButton, MenuItem, Select, TextField, Typography } from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
+import { Alert, Box, Button, CircularProgress, MenuItem, Select, TextField, Typography } from "@mui/material";
 import SendIcon from "@mui/icons-material/ArrowUpward";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
@@ -34,7 +33,8 @@ import ViewSpec, { PlanRow } from "./ViewSpec.jsx";
 import { wantsAsk, withoutAsk } from "./newTask.js";
 import { FULL_SX, useFullScreen } from "./fullScreen.js";
 import { pickFor } from "./assistantProvider.js";
-import { agentName, elapsedText, turnStamp } from "./agentWork.js";
+import { agentName, turnStamp } from "./agentWork.js";
+import { RunClock, StopCtx, turnStart, when } from "./RunClock.jsx";
 import { AGENT_TURN, MESSAGE, instructionsHint } from "./kinds.js";
 import { assignedAgent } from "./agentIdentity.js";
 import { LinkPopups, LocalFiles, Md } from "./md.jsx";
@@ -63,7 +63,6 @@ import BriefLine from "./BriefLine.jsx";
 import { OneBox } from "./AgentSummary.jsx";
 import { turnOnYou } from "./agentSummary.js";
 import HeldStart from "./HeldStart.jsx";
-import { dayLabel, fmtTime12 } from "./dates.js";
 import { readingOf } from "./threadReading.js";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
@@ -105,20 +104,6 @@ export const messagesWithTrace = (messages, session, keepStart = true) => {
   if (tail?.role === "assistant") tail.content = [...stepsPart(trace, { keepStart, answer: textOf(tail) }), ...tail.content];
   else out.splice(at + 1, 0, { id: `trace-${session.sid}-${session.trace_revision || 0}`, role: "assistant", content: stepsPart(trace, { keepStart }) });
   return out;
-};
-
-
-// THE TURN'S HEAD, FROM THE PRESS: its time and how long it has run, counting - the same element before the agent's first word and after it
-// ...and the ONE way to stop an agent mid-run, on the turn it stops (the owner, 2026-11-10: "we should have x button for agent to stop in middle
-// of the work"): the chat's own stop road (onStop), nothing else
-const StopCtx = React.createContext(null);
-const RunClock = ({ start }) => {
-  const [now, setNow] = useState(() => Date.now()), stop = React.useContext(StopCtx);
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
-  return <span data-tq-ran="" data-tq-run-clock="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>
-    · {when(new Date(start))} · working {elapsedText(Math.max(0, now - start))}
-    {stop && <IconButton size="small" data-tq-stop-run="" aria-label="Stop the agent" title="Stops this turn - the chat stays, and what you type next carries on"
-      onClick={stop} sx={{ ml: 0.5, p: 0.25, verticalAlign: "-3px" }}><CloseIcon sx={{ fontSize: 13 }} /></IconButton>}</span>;
 };
 
 
@@ -175,11 +160,6 @@ const mailWords = (x) => x.files > 0 && /^\(no text - see the attachments?\)$/.t
 // over the turn it woke - "↓ 2:14 PM · Ray Colton wrote again: …" - its words whole on hover. A brief with no mail (the first) says nothing
 const ChatCtx = React.createContext(false);
 
-const when = (at) => {
-  if (at instanceof Date) { const y = at.getFullYear(), p = (n) => String(n).padStart(2, "0");
-    at = `${y}-${p(at.getMonth() + 1)}-${p(at.getDate())} ${p(at.getHours())}:${p(at.getMinutes())}:${p(at.getSeconds())}`; }
-  const d = dayLabel(at); return [d && d !== "Today" ? d : "", fmtTime12(at)].filter(Boolean).join(" ");
-};
 // IT IS A CHAT (the owner, 2026-11-05: "show the taskuary stuff on left. the inputs on right meaning little email logo like the rail ... that
 // shows trigger says something emails came in from x and was sent to agent.. then as new one comes in another one on right side"): each mail that
 // started or woke a turn is a prompt on the RIGHT - its channel's mark, who, when - with the answer it woke under it on the left. The owner's own
@@ -448,7 +428,7 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
   if (quiet) return null;
   return <div className={`tq-aui-message tq-aui-agent${words && !live ? " tq-copy-host" : ""}${more ? " tq-aui-agent-more" : ""}`} data-tq-item={t.id} data-tq-chat-line={key} data-tq-turn={t.state}>
     {!!words && !live && <CopyCorner text={words} label="Copy this answer" />}
-    {!more && <div className="tq-aui-role">{name}{live ? <RunClock start={(t.started || Date.now() / 1000) * 1000} /> : <TurnTime t={t} />}</div>}
+    {!more && <div className="tq-aui-role">{name}{live ? <RunClock start={turnStart(t)} /> : <TurnTime t={t} />}</div>}
     <div className="tq-aui-agent-body">
       <TurnWorkView data={{ parts }} now={live} ended={!!t.text && !live} k={t.id} />
       {!!words && <SaidText text={words} mid={key} />}

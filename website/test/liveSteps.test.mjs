@@ -65,7 +65,7 @@ test("a running turn shows its words, its steps counted SHUT, and ONE live line 
   assert.match(ws, /: <>\{parts\.filter\(\(p\) => p\.type !== "said"\)\.map\(\(p, i\) => draw\(p, i, "everything"\)\)\}<\/>; \};/, "its notes stand open");
   assert.doesNotMatch(ws, /<Ticking|data-tq-working-for/, "the head's \"working 0:03\" is gone (the owner, 2026-11-06)");
   assert.doesNotMatch(ws, /Working on this…<\/span>/, "no working line: the head's clock (RunClock) and the spin");
-  assert.match(ws, /· \{when\(new Date\(start\)\)\} · working \{elapsedText\(Math\.max\(0, now - start\)\)\}/);
+  assert.match(read("RunClock.jsx"), /· \$\{when\(new Date\(start\)\)\} · working \$\{elapsedText\(Math\.max\(0, now - start\)\)\}/);
   assert.match(ws, /since: session\.turn_started \* 1000/, "the turn's own start, from the server");
   assert.match(read("AgentStepRows.jsx"), /<CircularProgress size=\{10\}/);
 });

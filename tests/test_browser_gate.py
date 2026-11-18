@@ -565,6 +565,19 @@ class LooksThatAreNot(unittest.TestCase):
                 self.assertEqual(bg.check(s, t, 's1', f'agent-browser get value {ref}')['hookSpecificOutput']['permissionDecision'], 'deny', ref)
 
 
+    def test_a_script_run_while_a_password_box_holds_one_is_refused(self):
+        """`get value` on a password box is refused - and `eval` read the same box: judged only on whether it can be undone, a read passed,
+        and the password Taskuary had just typed (a sign-up's, waiting for the owner's press) was the agent's to print."""
+        snap = '- textbox "Email" [ref=e1]\n- textbox "Password" [ref=e2]'
+        cmd = 'agent-browser eval "document.querySelector(\'input[type=password]\').value"'
+        s = MemoryStore(); t = Factory(s).task()
+        with on(snap=snap), verdict({'irreversible': False, 'sure': True, 'what': 'reads the page'}):
+            with mock.patch('taskuary.signin.holds_password', return_value=True):
+                self.assertEqual(bg.check(s, t, 's1', cmd, brain=Brain({}))['hookSpecificOutput']['permissionDecision'], 'deny')
+            with mock.patch('taskuary.signin.holds_password', return_value=False):
+                self.assertEqual(bg.check(s, t, 's1', cmd, brain=Brain({})), {}, 'with no password in the page, a script is judged as before')
+
+
 class AFormFieldIsNotTheSending(unittest.TestCase):
     def test_the_judge_is_told_a_field_of_an_unsent_form_is_reversible(self):
         """Recorded on the real CLI (the browser audit, 2026-11-15): told to tick a sign-in page's "keep this browser verified for 30 days"

@@ -688,12 +688,14 @@ def _items(store, tid: int) -> dict:
     # turn took in and never spoke to (acpcoding._unanswered) - its lines stand above the stop, so no input of its own is under it
     # ...AND HIS CLOSE, the same (a stress round, 2026-11-18): it stopped the agent, so the turn above it is over, and what works after it - a
     # mail that reopened the task - is the turn under it, never that one at work again above "You marked it done"
+    # ...AND ONE STOPPED BEFORE ITS FIRST STEP IS NO ITEM YET (recorded over ACP, 2026-11-17): his line is the newest thing, and the stop under
+    # it was not read as ending its turn - a new turn stood under the stop, "Waiting for the agent to start", then vanished
     shut_ = bool(tail and tail['kind'] == 'turn' and any(x.get('_shut') for x in out[out.index(tail):]))
-    halted = shut_ or bool(tail and tail['kind'] == 'turn' and any(x.get('stop') and not x['_hs'] for x in out[out.index(tail):]))
+    halted = shut_ or bool(tail and any(x.get('stop') and not x['_hs'] for x in out[out.index(tail):]))
     if halted:
         # ...and from the press too where the stopped turn owes him an answer: that turn is on its way, and nothing else says so meanwhile
         at_work = bool(pend) or not shut_ and bool(getattr(general._live_of(tid), 'owes_stop', lambda: False)())     # ...a close owes nothing
-        if tail['state'] in ('working', 'starting'): tail.update(state='done', ended=tail.get('ended') or time.time())
+        if tail.get('state') in ('working', 'starting'): tail.update(state='done', ended=tail.get('ended') or time.time())
     # ...A TURN IS MADE ONCE, AT ITS HAND-OVER: the live session's last turn is the one at work only where its work came after the newest
     # hand-over - one that ended before it is finished, and the turn now beginning stands under it (a wake after a press marked the answer
     # above "working" again, and the card under it lost its place)

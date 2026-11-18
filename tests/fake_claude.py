@@ -71,9 +71,27 @@ def answer(prompt: str) -> str:
             e = dict(e); time.sleep(float(e.pop('_sleep', 0) or 0)); out({'session_id': sid, **e})
         if r.get('exit') is not None: log('exit', code=r['exit']); sys.exit(r['exit'])   # a CLI that dies mid-turn (website/browser/agent-journey)
         for p in r.get('post') or []: act(p)
+        STEPS[:] = r.get('steps') or []
+        TAIL[0] = float(r.get('tail') or 0)
         time.sleep(r.get('wait') or 0)                   # a long turn, for a stop pressed while it works
-        return r.get('then' if then else 'first') or r.get('first') or 'Ok.'
+        said = r.get('then' if then else 'first') or r.get('first')
+        return 'Ok.' if said is None else said             # ..."" a turn that ends on its last step, no words after it
     return 'Ok.'
+
+
+# a rule's `steps`: what the turn does before its words, as the CLI streams it - {"tool": name, "input": {...}, "error": text} a call and its
+# answer (an error when `error`), {"thought": text} a thinking block. A rule whose `first` is "" ends on its last step, no words after it
+STEPS, TAIL = [], [0.0]           # ...`tail`: seconds between its last words and the turn's result, as a CLI's Stop hooks take
+def steps(sid_):
+    for i, st in enumerate(STEPS):
+        if 'thought' in st:
+            out({'type': 'assistant', 'session_id': sid_, 'message': {'role': 'assistant', 'content': [{'type': 'thinking', 'thinking': st['thought'], 'signature': 'x'}]}})
+            continue
+        tid_ = f'toolu_{os.getpid()}_{i}'
+        out({'type': 'assistant', 'session_id': sid_, 'message': {'role': 'assistant', 'content': [{'type': 'tool_use', 'id': tid_, 'name': st['tool'], 'input': st.get('input') or {}}]}})
+        time.sleep(float(st.get('wait') or 0.2))
+        out({'type': 'user', 'session_id': sid_, 'message': {'role': 'user', 'content': [{'type': 'tool_result', 'tool_use_id': tid_, 'is_error': bool(st.get('error')),
+                                                                                     'content': st.get('error') or st.get('output') or 'ok'}]}})
 
 
 QUEUED = lambda: 0          # the sends still waiting behind this turn (the live loop's)
@@ -89,13 +107,15 @@ def turn(prompt: str, n: int):
     # turn a process); a call beside it with no tools (a summary, a lesson) is answered at once
     text = directed(prompt) if folder_of() and (LIVE or '--mcp-config' in args) else answer(prompt)
     log('first_token', n=n)
+    steps(sid)
     chunks = re.findall(r'.{1,4}', text, re.S) or ['']
     start = time.time()
     for i, c in enumerate(chunks):
         if PARTIAL: out({'type': 'stream_event', 'session_id': sid, 'event': {'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'text_delta', 'text': c}}})
         lag = start + (i + 1) / TPS - time.time()
         if lag > 0: time.sleep(lag)
-    out({'type': 'assistant', 'session_id': sid, 'message': {'role': 'assistant', 'content': [{'type': 'text', 'text': text}]}})
+    if text: out({'type': 'assistant', 'session_id': sid, 'message': {'role': 'assistant', 'content': [{'type': 'text', 'text': text}]}})
+    time.sleep(TAIL[0])
     log('result', n=n, out_chars=len(text))
     out({'type': 'result', 'subtype': 'success', 'is_error': False, 'result': text, 'session_id': sid, 'num_turns': n,
          'duration_ms': int((time.time() - t) * 1000), **({'queued_turn_count': QUEUED()} if LIVE else {}),
@@ -147,14 +167,18 @@ def reflowing(n: int):
 def interactive():
     """`claude` with no -p, as a coding agent runs it in a pty: the seed answered, then each line typed answered, until the pty goes.
     The rules match anywhere in what was said - a coding seed is Taskuary's whole prompt, not "The owner says: ..." (browser/agent-presses)."""
+    # FAKE_CLAUDE_CHROME=1: the real CLI's own footer - "esc to interrupt" while a turn works, "? for shortcuts" at rest - which the
+    # server's screen reading knows (terminal.phase_of), as it knows the real one's
+    chrome = os.environ.get('FAKE_CLAUDE_CHROME') == '1'
     def say(text):
+        if chrome: sys.stdout.write('\r\n✻ Thinking… (esc to interrupt)\r\n'); sys.stdout.flush()
         time.sleep(THINK)
         for r in script:
             if re.search(r['when'], text, re.I | re.S):
                 if r.get('exit') is not None: sys.exit(r['exit'])
                 reply = r.get('first') or 'Ok.'; break
         else: reply = 'Ok.'
-        sys.stdout.write(f'\r\n● {reply}\r\n\r\n> '); sys.stdout.flush()
+        sys.stdout.write(f'\r\n● {reply}\r\n\r\n> ' + ('\r\n  ? for shortcuts\x1b[1A\r> ' if chrome else '')); sys.stdout.flush()
     sys.stdout.write(f'fake claude - session {sid}\r\n'); sys.stdout.flush()
     if os.environ.get('FAKE_CLAUDE_HISTORY'): reflowing(int(os.environ['FAKE_CLAUDE_HISTORY']))
     first = seed()

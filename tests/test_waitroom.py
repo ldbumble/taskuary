@@ -310,6 +310,27 @@ class DeliveryTests(unittest.TestCase):
         with self.assertRaises(ValueError): waitroom.add(s, 9999, 'x')
 
 
+class TurnOverTests(unittest.TestCase):
+    def test_a_pane_that_showed_its_turn_and_is_back_at_its_prompt_is_not_at_work(self):
+        """The owner, 2026-11-17: "the agent keeps saying 'Thinking...' even after it is done". A terminal agent with no hooks and no record
+        Taskuary reads (a Qwen Code or OpenCode pane) is handed his line; its screen shows the turn at work, then its prompt again. The chat
+        read at work - "Waiting for the agent to start" - for the two minutes a line is owed (general.owed), over a pane that had answered."""
+        from taskuary import conversation, general
+        s = MemoryStore(); tid = task(s)
+        t = FakeTerm(tid, idle=1, tail=['> ']); t.sid, t.store, t.started, t.cli = 'pane1', s, '2026-11-17 09:00:00', 'qwen'
+        t.status_tail = lambda n=8: t._tail[-n:]; t._phase_stable = 'parked'; t.waiting = lambda: terminal.stable_phase_of(t) == 'parked'
+        with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True), mock.patch.object(terminal, 'PHASE_DWELL', .05):
+            general.wait_line(s, tid, 'comment the totals', line_id='l-one'); conversation.hear(s, tid, ['l-one'], standing=True)
+            self.assertTrue(general.working(s, tid), 'handed over, its pane not yet showing it: owed')
+            t._tail = ['✻ Thinking… (esc to interrupt)']
+            for _ in range(3): self.assertTrue(general.working(s, tid), 'its pane shows the turn: at work'); time.sleep(.06)
+            t._tail = ['● Added the comment.', '> ', '  ? for shortcuts']
+            self.assertTrue(general.working(s, tid), 'one frame of its prompt is no end: the screen holds its dwell first')
+            for _ in range(3): general.working(s, tid); time.sleep(.06)
+            self.assertFalse(general.working(s, tid), 'its pane showed the turn and is back at its prompt: the turn is over')
+            self.assertFalse(conversation.items(s, tid)['working'])
+
+
 class GeneralTests(unittest.TestCase):
     """A general agent's chat says who said what (the overnight run, 2026-11-03): the batch was typed into its conversation and filed
     whole as the owner's, so YOU read "While you were working, the owner queued 1 note for you..." - Taskuary's words in the owner's bubble."""

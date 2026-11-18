@@ -436,10 +436,16 @@ def _draft(store, step, ctx, llm, tid, dry, warns, title):
     return {'head': f'draft for {to}{why} - waiting for your Send', 'review_id': out.get('review_id'), 'task_id': tid, 'body': text}
 
 
-def done_so_far(recs: list) -> list:
+BRIEF_OUT = 1500
+def done_so_far(recs: list, whole: dict = None) -> list:
+    """What the steps before the agent did, for its brief - each output cut to BRIEF_OUT, and where it was cut, saying so and how long it ran
+    (`whole`: the run's full outputs by step id), so the agent never takes the first rows of a read for all of them."""
+    def out(r):
+        full = str(((whole or {}).get(r.get('id')) or r).get('body') or '')
+        return full if len(full) <= BRIEF_OUT else f'{full[:BRIEF_OUT]}\n…(cut here - the output ran to {len(full):,} characters; only this much is shown)'
     return [{'step': r.get('label'), 'kind': r.get('kind'), 'status': r.get('status'), 'head': r.get('head'),
              **({'answer': r['answer']} if r.get('answer') is not None else {}), **({'fields': r['fields']} if r.get('fields') else {}),
-             'output': str(r.get('body') or '')[:1500]} for r in recs]
+             'output': out(r)} for r in recs]
 
 
 def agent_brief(store, src, step, ctx, recs, trigger, when) -> str:
@@ -447,7 +453,7 @@ def agent_brief(store, src, step, ctx, recs, trigger, when) -> str:
     defn = workflows.definition(store, src)
     defn['objective'] = render(str(step.get('prompt') or ''), ctx).strip() or defn['objective']
     if step.get('skill'): defn['skill'] = str(step['skill']).strip().lstrip('/')
-    run = {**({'done_so_far': done_so_far(recs)} if recs else {}), **({'mail': ctx['mail']} if ctx.get('mail') else {})}
+    run = {**({'done_so_far': done_so_far(recs, ctx.get('steps'))} if recs else {}), **({'mail': ctx['mail']} if ctx.get('mail') else {})}
     return workflows.brief(defn, trigger, when, run or None)
 
 

@@ -594,3 +594,19 @@ def test_the_run_that_goes_on_after_a_yes_reads_what_the_steps_before_read_whole
     assert out['waiting']
     went = flow.resume(s, {'source_id': src['SourceId'], 'run_id': out['run_id'], 'step': 's2'}, {'output': 'written', 'headline': 'wrote exports/ap.csv'})
     assert went['steps'][2]['body'] == '150 bills, total 1500', went['steps'][2]
+
+
+def test_the_agent_after_the_steps_is_told_where_an_output_was_cut():
+    # the agent step after a read of 150 bills got the first 1,500 characters as "output" with nothing saying there was more - and took
+    # the dozen bills it could see for all of them
+    d = tempfile.mkdtemp(); p = os.path.join(d, 'ap.db'); cx = sqlite3.connect(p)
+    cx.execute('CREATE TABLE bill (vendor TEXT, amount REAL)')
+    cx.executemany('INSERT INTO bill VALUES (?,?)', [(f'Vendor {i}', 10) for i in range(150)]); cx.commit(); cx.close()
+    s = MemoryStore()
+    src = source(s, [{'id': 's1', 'kind': 'source', 'label': 'Read bills', 'type': 'sqlite', 'db': p, 'query': 'SELECT * FROM bill'},
+                     {'id': 's2', 'kind': 'agent', 'label': 'Chase them', 'prompt': 'Chase the vendors.'}])
+    with mock.patch.object(ingest, '_auto_general') as gen: flow.execute(s, src, run_task(s, src), llm=no_model)
+    brief = gen.call_args[0][2]
+    assert 'Vendor 0' in brief and 'cut here - the output ran to' in brief
+    whole = len('\n'.join(json.dumps({'vendor': f'Vendor {i}', 'amount': 10.0}) for i in range(150)))
+    assert f'{whole:,} characters' in brief

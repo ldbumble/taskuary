@@ -13,7 +13,7 @@ from . import acp as acp_mod, acpadapter, aiusage, pathcache, redact, spawn
 from . import clis as clis_mod
 from .store import task_ref
 from .clis import preset_args
-from .clipool import Cancelled, PartWay, TimedOut
+from .clipool import LIMITS, MID_TURN, Cancelled, PartWay, TimedOut, ended_early
 from .selfclose import without_summary
 
 _CLI_CHILDREN = set()
@@ -445,8 +445,31 @@ def _event_error(line: str) -> str:
     if j.get('type') in ('error', 'turn.failed'):
         inner = j.get('error') if isinstance(j.get('error'), dict) else {}
         return _said(inner.get('message') or j.get('message'))
+    # ...and a bare error object with no event type ({"error": {"code": 401, "message": "API key not valid ..."}}): its own words
+    if 'type' not in j and j.get('error'):
+        e = j['error']
+        return _said(e.get('message') if isinstance(e, dict) else e)
+    # ...and claude's own result for a turn that failed: its words (a credit refusal), else its `errors` beside a bare subtype (error_max_turns)
+    if j.get('type') == 'result' and (j.get('is_error') or str(j.get('subtype') or '').startswith('error')):
+        errs = j.get('errors') if isinstance(j.get('errors'), list) else []
+        return _said(j.get('result')) or '; '.join(map(str, errs)).strip() or str(j.get('subtype') or '').replace('_', ' ')
     item = j.get('item') if isinstance(j.get('item'), dict) else {}
     return _said(item.get('message')) if item.get('type') == 'error' else ''
+
+
+def _is_event(line) -> bool:
+    "One of a CLI's structured event lines (a JSON object), as opposed to words it printed - a dict's repr or a stack dump in braces is words."
+    try: return isinstance(json.loads(str(line)), dict)
+    except ValueError: return False
+
+
+def _events(raw) -> list:
+    """Which of the run's stdout lines are its events: each that is a JSON object - and, in a stream of nothing but events, a LAST line cut off
+    as its process was killed (`{"type": "res`): it opens as one (`{"`) and never closed. Any other line is words the CLI printed."""
+    raw = [str(x) for x in raw or []]
+    ev = [_is_event(x) for x in raw]
+    if raw and not ev[-1] and all(ev[:-1]) and raw[-1].lstrip().startswith('{"'): ev[-1] = True
+    return ev
 
 
 def cli_failure(raw, err: str = '') -> str:
@@ -458,8 +481,14 @@ def cli_failure(raw, err: str = '') -> str:
     for line in reversed(list(raw or [])):
         said = _event_error(str(line))
         if said: return said
-    clean = '\n'.join(ln for ln in str(err or '').splitlines() if ln.strip() and not _NOISE.match(ln))
-    return clean.strip() or '\n'.join(list(raw or [])[-5:]) or 'no output'
+    clean = _said_err(err)
+    # ...and never the events themselves: their JSON is no reason (a stream cut mid-line read "claude exit 137: {"type": "system", ...}")
+    return clean or '\n'.join([ln for ln, e in zip(raw or [], _events(raw)) if not e][-5:]) or ('no reason given' if raw else 'no output')
+
+
+def _said_err(err: str) -> str:
+    "What a CLI said on stderr, without its own notices (_NOISE: \"Reading prompt from stdin...\")."
+    return '\n'.join(ln for ln in str(err or '').splitlines() if ln.strip() and not _NOISE.match(ln)).strip()
 
 
 _DENIED = re.compile(r'access is denied|winerror 5|permission denied|operation not permitted', re.I)
@@ -1974,8 +2003,16 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
             try: os.remove(f)
             except OSError: pass
     err_t.join(5)      # the exit code can land before the stderr reader has appended - 'boom' read as 'no output' on a fast CI box
-    if p.returncode != 0:
-        if cancel is not None and cancel.is_set(): raise Cancelled(streamed_sid or (final or {}).get('session_id'))
+    if p.returncode != 0 and cancel is not None and cancel.is_set(): raise Cancelled(streamed_sid or (final or {}).get('session_id'))
+    # A FINISHED ANSWER IS THE ANSWER, whatever the exit after it: claude printed its words and a successful result, then exited non-zero - the
+    # turn was told "stopped in the middle" and its answer thrown away. It is kept and shown; the exit is the log's, and the launch line's.
+    # ...only a real result event that says it succeeded: any other dict with a `result` ({"result": "partial", "error": ...}) is no finished answer.
+    # A success with no words is finished too - as it is at exit 0 - never "stopped in the middle of its turn"
+    if p.returncode != 0 and final is not None and final.get('type') == 'result' and not final.get('is_error') and final.get('subtype', 'success') == 'success' \
+            and not timed.is_set():
+        logger.warning(f'{name} exited {p.returncode} after a finished answer - the answer is kept')
+        trace('tool', 'cli', f'{name} exited {p.returncode} after its answer')
+    elif p.returncode != 0:
         err = ''.join(err_buf)
         said = cli_failure(raw, err)
         why = (f'timed out after {limit}s' if timed.is_set() else said)[:500]
@@ -1991,6 +2028,15 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         if _DENIED.search(hay) and not raw: raise RuntimeError(denied_msg(name, cmd[0] if cmd else '', said))
         if _NO_HOME.search(hay): raise RuntimeError(no_home_msg(_cli_name(name) or name))
         if timed.is_set(): raise TimedOut(f'{name} exit {p.returncode}: {why}', streamed_sid or (final or {}).get('session_id'))
+        # ...A LIMIT THE TURN REACHED (claude's error_max_turns) is said in the one sentence for it on every road (clipool.ended_early), as the kept
+        # road and ACP say it - never "Reached max turns (3)" or its stop code
+        if final is not None and final.get('type') == 'result' and str(final.get('subtype') or '') in LIMITS:
+            raise_failure(name, said, cmd[0] if cmd else '', None, raw, part_way=(ended_early(str(final['subtype'])), streamed_sid or final.get('session_id')))
+        # ...DIED WITH ONLY EVENTS AND NO WORD OF WHY - no event of its own says (_event_error), nothing on stderr: the one sentence the other
+        # roads say for a death part-way, never the events' JSON. Where an event does say why, its words are the reason (cli_failure)
+        if raw and not _said_err(err) and all(_events(raw)) and not any(_event_error(x) for x in raw):
+            raise_failure(name, f'exit {p.returncode} with no reason given', cmd[0] if cmd else '', None, raw,
+                          part_way=(MID_TURN, streamed_sid or (final or {}).get('session_id')))
         raise RuntimeError(f'{name} exit {p.returncode}: {why}')
     # OpenCode can report provider errors in JSON while its process exits successfully.
     if stream_error: raise RuntimeError(f'{name}: {redact.scrub(stream_error)[:500]}')

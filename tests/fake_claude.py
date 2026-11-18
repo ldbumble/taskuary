@@ -28,6 +28,12 @@ T0 = time.time()
 args = sys.argv[1:]
 def arg(k): return args[args.index(k) + 1] if k in args and args.index(k) + 1 < len(args) else None
 def env(k, d): return float(os.environ.get(k) or d)
+# FAKE_CLAUDE_PRINTS=<file>: any CLI that prints its `lines` as they are (and `err` on stderr), then exits `code` - a text CLI's own words
+if os.environ.get('FAKE_CLAUDE_PRINTS'):
+    _p = json.load(open(os.environ['FAKE_CLAUDE_PRINTS'], encoding='utf-8'))
+    sys.stdout.write(''.join(l + '\n' for l in _p['lines'])); sys.stdout.flush()
+    if _p.get('err'): sys.stderr.write(_p['err'] + '\n')
+    sys.exit(_p['code'])
 if '--version' in args: print(f"{os.environ.get('FAKE_CLAUDE_VERSION') or '2.1.300'} (Claude Code)"); sys.exit(0)   # a stranger's task needs a new one (origin.py)
 if '--help' in args:                     # an older claude has no --setting-sources: FAKE_CLAUDE_OLD=1
     print('Usage: claude [options]\n  -p, --print\n' + ('' if os.environ.get('FAKE_CLAUDE_OLD') else '  --setting-sources <sources>\n')); sys.exit(0)
@@ -61,6 +67,7 @@ def answer(prompt: str) -> str:
         if not re.search(r['when'], prompt if r.get('anywhere') else said, re.I): continue
         # ...`events`: stream-json lines said as they are, in order, each after its own `_sleep` - a tool that fails, a compaction (chat-render)
         for e in r.get('events') or []:
+            if isinstance(e, str): sys.stdout.write(e); sys.stdout.flush(); continue     # ...a line as it is, cut where its process died
             e = dict(e); time.sleep(float(e.pop('_sleep', 0) or 0)); out({'session_id': sid, **e})
         if r.get('exit') is not None: log('exit', code=r['exit']); sys.exit(r['exit'])   # a CLI that dies mid-turn (website/browser/agent-journey)
         for p in r.get('post') or []: act(p)

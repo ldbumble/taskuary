@@ -670,6 +670,17 @@ def last(store, sid) -> dict | None:
     except ValueError: return None
 
 
+def said_on_page(store, sid, cfg: dict, data) -> list:
+    """What the page says over its tiles: what would draw empty, and - when the newest run failed and kept nothing - that the rows shown
+    are the run before it, and why. A failed run keeps the last rows (file_run), so without this a Run now that failed said nothing."""
+    out = problems(cfg, data) if data else []
+    run = next(iter(store.report_runs(sid, 1)), None)
+    if run and run.get('failed'):
+        out.insert(0, f"The last run, {str(run.get('at') or '')[:16]}, failed: {run.get('error') or 'it did not say why'}"
+                      + ('. These are the rows from the run before it.' if data else '.'))
+    return out
+
+
 def file_run(store, src: dict, cfg: dict, trigger: str = 'schedule') -> dict:
     """One run: re-read the sources, keep the rows, and put ONE row under Reports saying it is fresh (the previous run's row
     is retired, as a report's is). Nothing is triaged, summarised, sent or alerted - a dashboard is looked at."""

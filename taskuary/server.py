@@ -8962,7 +8962,7 @@ def dashboard_get(sid: int):
     data = dashboards.last(store, sid)
     # ...every tile with its sentence: one saved before tiles were sentences is described from its config, and kept on the next Save
     return {'source_id': sid, 'active': bool(src.get('Active')), 'config': dashboards.with_said(cfg), 'data': data,
-            'problems': dashboards.problems(cfg, data) if data else []}
+            'problems': dashboards.said_on_page(store, sid, cfg, data)}
 
 
 @app.get('/api/workflows')

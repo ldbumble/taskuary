@@ -593,3 +593,22 @@ def test_a_number_that_is_not_one_is_refused_at_save_not_crashed_on_at_run(chang
         r = _post(TestClient(server.app), None, {**SPEC, **change})
     assert r.status_code == 422 and says in r.json()['detail']
 
+
+def test_a_run_whose_every_source_failed_is_said_on_the_dashboard_it_left_as_it_was():
+    """Run now on a dashboard whose one source broke: no new rows were kept, so the page drew the last run's numbers under the last
+    run's time, and the press said nothing at all. The failed run is said on the page, with its reason, until a run reads again."""
+    from unittest import mock
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    s = _store(); src = _save(s)
+    reports.run_one(s, src, None, 'manual')
+    broken = {**SPEC, 'sources': [{'key': 'tasks', 'label': 'Tasks', 'type': 'taskuary_data', 'dataset': 'gone'}]}
+    s.save_source({'SourceId': src['SourceId'], 'ConfigJson': json.dumps(broken)}, 't')
+    reports.run_one(s, s.get_source(src['SourceId']), None, 'manual')
+    with mock.patch.object(server, 'store', s):
+        c = TestClient(server.app)
+        probs = c.get(f"/api/dashboards/{src['SourceId']}").json()['problems']
+        assert any(p.startswith('The last run') and 'failed' in p and 'gone' in p for p in probs), probs
+        s.save_source({'SourceId': src['SourceId'], 'ConfigJson': json.dumps(SPEC)}, 't')
+        reports.run_one(s, s.get_source(src['SourceId']), None, 'manual')
+        assert c.get(f"/api/dashboards/{src['SourceId']}").json()['problems'] == []

@@ -632,7 +632,7 @@ def signed_in(store, tid: int, rid: str) -> dict:
     """The owner signed in by hand and said so (workerstate.answer). Told as a fill is (_continue), on every kind of agent: a terminal
     CLI's ask had no Signed in press, only a box to type it in, and the bare words reached its prompt with no site and no "continue"
     (the owner, 2026-10-25: both kinds of agent ask alike)."""
-    told = _continue(store, tid, rid, rid[len(PREFIX):], 'owner')
+    told = _through(store, tid, rid, rid[len(PREFIX):], seen=False)
     return {'delivered': True, 'state': 'delivered'} if told else {'delivered': False, 'state': 'failed', 'why': 'the agent could not be told - see the task'}
 
 
@@ -766,6 +766,26 @@ def _code_from_mail(store, tid, site, c, mid, code) -> bool:
     return True
 
 
+def _through(store, tid, rid, site, seen=True):
+    """The sign-in or sign-up is past - seen on the page (watch), or the owner said so (`seen` False, signed_in): keep what was typed for it,
+    and tell the agent once, in words that say who did it."""
+    up = SIGNING_UP.pop((int(tid), site), None)
+    # ...A SIGN-UP'S PASSWORD IS TASKUARY'S OWN, known without hearing it: he said "done" before the watch saw the page through (or no watch
+    # could reach it), and the password the site was sent - typed by Taskuary, seen by nobody - was never kept
+    if up and up.get('pw'):
+        t = _TYPED.get(tid) or {}
+        if t.get('site') != site: t = _TYPED[tid] = {'site': site, 'user': '', 'pw': ''}
+        t['pw'] = t.get('pw') or up['pw']
+    kept = keep_typed(store, tid, site)
+    # ...A SIGN-UP IS SAID AS ONE (the real-CLI walk, 2026-11-16: every account it made read "You signed in to ..."), and one Taskuary
+    # sent is never said as his press
+    if up and up.get('sent'):
+        _audit(store, tid, site, 'vault', True, 'signed up', saved=True)
+        return _continue(store, tid, rid, site, 'taskuary', words=signed_up_words(site, up.get('user') or ''))
+    if seen: _audit(store, tid, site, 'page', True, 'signed up' if up is not None else '', saved=kept)
+    return _continue(store, tid, rid, site, 'owner', words=signed_up_words(site, sent=False) if up is not None else None)
+
+
 def watch(store, tid: int, sid: str, site: str, rid: str, conn=None, every: float = WATCH_EVERY, until: float = WATCH_FOR):
     """While the ask is open: hear what the owner sends on the page, and when the page is past the sign-in, keep it and tell the agent.
     `conn`: the DevTools connection (tests stand one in)."""
@@ -791,17 +811,7 @@ def watch(store, tid: int, sid: str, site: str, rid: str, conn=None, every: floa
             except SignInError: continue                         # mid-navigation: the page cannot be read for a moment
             if not coded and code_step(f) and (got := mailed_code(store, site, after)): coded = _code_from_mail(store, tid, site, c, *got)
             steady = steady + 1 if past(f, site, start) else 0
-            if steady >= PAST_STEADY and _asked(store, tid, rid):
-                kept, up = keep_typed(store, tid, site), SIGNING_UP.pop((int(tid), site), None)
-                # ...A SIGN-UP IS SAID AS ONE (the real-CLI walk, 2026-11-16: every account it made read "You signed in to ..."), and one Taskuary
-                # sent is never said as his press
-                if up and up.get('sent'):
-                    _audit(store, tid, site, 'vault', True, 'signed up', saved=True)
-                    _continue(store, tid, rid, site, 'taskuary', words=signed_up_words(site, up.get('user') or ''))
-                    return True
-                _audit(store, tid, site, 'page', True, 'signed up' if up is not None else '', saved=kept)
-                _continue(store, tid, rid, site, 'owner', words=signed_up_words(site, sent=False) if up is not None else None)
-                return True
+            if steady >= PAST_STEADY and _asked(store, tid, rid): _through(store, tid, rid, site); return True
         return False
     finally:
         _TYPED.pop(tid, None)
@@ -1183,7 +1193,7 @@ def _signup(store, tid, sid, site, rid, fill, watch):
     if not browsergate.judge(store, [{'verb': 'press', 'args': [], 'raw': f'send the filled sign-up form on {site}, creating an account there'}], browsergate.page(sid),
                              said=browsergate.asked(store, tid))[0]['hold']:
         return _sent_up(store, tid, sid, site, rid, pw, since=since, watch=watch)
-    SIGNING_UP[(int(tid), site)] = {'since': since}
+    SIGNING_UP[(int(tid), site)] = {'since': since, 'pw': pw}       # memory only, as what he types on the page is (_TYPED)
     _ask(store, tid, sid, site, rid, f'Sign up on {site}: check the form and press its button - the password is made and kept for you', watch)
 
 

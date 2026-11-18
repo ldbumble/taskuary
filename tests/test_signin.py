@@ -949,3 +949,22 @@ def test_a_sign_up_taskuary_sent_that_asks_an_emailed_code_types_it_from_the_mai
     (actor, (did, said)), = told
     assert actor == 'taskuary' and did == f'Signed up on {site} as {USER}' and 'The owner pressed' not in said, told
     assert not any(r['Actor'] == 'owner' for r in s._rows("SELECT * FROM audit WHERE Action='signin_fill'")), 'nothing of it is said as his press'
+
+
+def test_a_sign_up_he_says_done_to_keeps_the_password_taskuary_made():
+    """A sign-up handed to him: Taskuary typed a password it made, he pressed the site's button and typed "done" in the chat before the page's
+    watch had seen it through (or with no watch able to reach the page). The ask closed as "Signed in", and the password - typed by Taskuary,
+    seen by nobody - was never kept: an account made with a password no one knows."""
+    from taskuary import browsergate
+    s = MemoryStore(); tid = Factory(s).task('Market data'); typed, told = [], []
+    site, rid = 'rentscope.example', 'signin:rentscope.example'
+    signin.SIGNING_UP.clear(); signin._TYPED.clear()
+    with mock.patch.object(browsergate, 'judge', return_value=[{'hold': True, 'what': 'creates an account', 'why': ''}]), \
+         mock.patch.object(browsergate, 'page', return_value={}):
+        signin._signup(s, tid, 'sess1', site, rid, lambda sid, st, pw: typed.append(pw) or 2, None)
+    assert signin.pending(s, tid)['request_id'] == rid
+    with mock.patch.object(signin, '_continue', lambda *a, **k: told.append(k.get('words')) or True):
+        signin.signed_in(s, tid, rid)
+    assert vault.unseal(signin.saved(s, site)['Secret']) == typed[0], 'the password the site was sent is kept'
+    assert told[0][0].startswith(f'Signed up on {site}'), told
+    assert (tid, site) not in signin.SIGNING_UP

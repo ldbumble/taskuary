@@ -5873,6 +5873,19 @@ def agent_remind(body: AgentRemindBody, request: Request):
         store.add_comment(body.task_id, body.agent, 'agent', f"Reminder set for you: {out['when']}." + (f" {out['warn']}" if out.get('warn') else ''))
     return {'ok': True, **out}
 
+_NEW_TASK_LOCK = threading.Lock()
+
+def _made_from(tid: int, title: str) -> int | None:
+    "The open task the new_task tool already made from task `tid` under `title` (spacing and case aside) - None when there is none."
+    same = lambda x: ' '.join(str(x or '').split()).casefold()
+    for r in store._rows("SELECT EntityId, Detail FROM audit WHERE EntityType='task' AND Action='create' AND Detail LIKE ? ORDER BY Id DESC",
+                         (f'%"from_task": {int(tid)}%',)):
+        try: d = json.loads(r.get('Detail') or '{}')
+        except ValueError: continue
+        t = store.get_task(int(r['EntityId'])) if d.get('from_task') == int(tid) else None
+        if t and t.get('Status') not in ('done', 'dropped') and same(t.get('Title')) == same(title): return int(t['TaskId'])
+    return None
+
 class AgentNewTaskBody(BaseModel): task_id: int; title: str = ''; ask: str = ''; kind: str = 'general'; model: str = ''; repo: str = ''; agent: str = 'agent'
 
 @app.post('/api/agent/new-task')
@@ -5880,7 +5893,6 @@ def agent_new_task(body: AgentNewTaskBody, request: Request):
     """The new_task tool: a separate job the owner asked for on this task, made a task of its own and started at once (the owner, 2026-11-17:
     "I think it should be able to create new task from the agent"). It is the owner's own work - made as New makes it, started by the task
     page's own dispatch door - so nothing is held for a press: nothing leaves. Never from a stranger's task, nor one the owner never spoke on."""
-    import asyncio, threading
     from . import general, origin, repochoice
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
@@ -5892,23 +5904,48 @@ def agent_new_task(body: AgentNewTaskBody, request: Request):
     kind = str(body.kind or 'general').strip().lower()
     if kind not in task_kinds.AGENT: raise HTTPException(422, f'`kind` is general or coding, not {kind!r} - nothing was started')
     if kind == 'coding' and not hub_agents.developer_mode(store): kind = 'general'
-    new = store.create_task({'Title': title, 'Summary': ask, 'Kind': kind, 'AskedVia': 'agent', 'OriginBase': 'owner'}, body.agent)
-    from . import selfclose
-    selfclose.claim(store, new, ACTOR)           # the owner's own work: its agent never closes it by itself
-    store.audit('task', new, 'create', body.agent, detail={'from_task': body.task_id})
-    store.add_comment(body.task_id, body.agent, 'agent', f'Started {task_ref(new)}: {title}')
-    out = {'ok': True, 'task': task_ref(new), 'title': title}
+    # ...ONE JOB IS ONE TASK (the stress round, 2026-11-18): the call repeated - a retry, a resumed session replaying its last step - made
+    # a second task and a second agent beside the first. The same title from the same task, still open, is that task: answered as made,
+    # and started only if its first start never went
+    with _NEW_TASK_LOCK:
+        new = _made_from(body.task_id, title)
+        if new and (general.history(store, new) or general.starting(new) or getattr(hub_term.session_for(new), 'alive', False)):
+            return {'ok': True, 'task': task_ref(new), 'title': title, 'already': True, 'started': True,
+                    'next': f'{task_ref(new)} was already started from here and is working on it - nothing new was made'}
+        made = not new
+        if made:
+            # ...the owner's ask, made at the door they asked from - the task they spoke on's ("agent" is no door: the Assistant named it one)
+            from . import asks
+            via = asks.of(store.get_task(body.task_id)) or 'desktop'
+            new = store.create_task({'Title': title, 'Summary': ask, 'Kind': kind, 'AskedVia': via, 'OriginBase': 'owner'}, body.agent)
+            from . import selfclose
+            selfclose.claim(store, new, ACTOR)           # the owner's own work: its agent never closes it by itself
+            store.audit('task', new, 'create', body.agent, detail={'from_task': body.task_id, 'title': title})
+    out = {'ok': True, 'task': task_ref(new), 'title': title, 'kind': kind}
+    # ...a checkout named for what is not a coding task (developer mode off made it general) is said dropped, never silently
+    if body.repo and kind != 'coding': out['repo_not_set'] = f'{body.repo} was not set: {task_ref(new)} is a general task, which works in no checkout'
     if body.repo and kind == 'coding':
         try: repochoice.use(store, new, body.repo, f'named by the agent on {task_ref(body.task_id)}')
         except (PermissionError, ValueError) as e: out['repo_not_set'] = str(e)
+    res = _start_new_task(new, kind, ask, body.model)
+    # ...said on this task once it is known: "Started" was written before the start, and stood over one that was refused
+    if res['started']: store.add_comment(body.task_id, body.agent, 'agent', f'Started {task_ref(new)}: {title}')
+    elif made: store.add_comment(body.task_id, body.agent, 'agent', f"Made {task_ref(new)}: {title} - its agent did not start: {res['why']}")
+    return {**out, **res}
+
+def _start_new_task(new: int, kind: str, ask: str, model: str) -> dict:
+    "The new_task tool's start of task `new` by the task page's own dispatch door: {started, why?, next}."
     bg = BackgroundTasks()
-    try: got = dispatch_task(new, DispatchBody(kind=kind, instruction=ask, model=body.model or None, app_words=True), bg)
+    try: got = dispatch_task(new, DispatchBody(kind=kind, instruction=ask, model=model or None, app_words=True), bg)
     except HTTPException as e:
-        return {**out, 'started': False, 'why': str(e.detail), 'next': f'{task_ref(new)} is made but its agent did not start - say why in your answer'}
+        # ...kept on the new task, where the owner meets it: a refusal said only in this answer left it open with nothing said (StartRefused
+        # is kept by the door that raised it)
+        if not isinstance(e, StartRefused): _start_failed(new, e)
+        return {'started': False, 'why': str(e.detail), 'next': f'{task_ref(new)} is made but its agent did not start - say why in your answer'}
     # ...its first turn runs off this call: the agent that asked goes on with its own turn meanwhile
     if bg.tasks: threading.Thread(target=lambda: asyncio.run(bg()), daemon=True, name=f'new-task-{new}').start()
-    if got.get('dispatch') == 'needs_repo': return {**out, 'started': False, 'why': got.get('reason'), 'next': 'the owner picks its checkout on that task'}
-    return {**out, 'started': bool(got.get('started') or got.get('existing')), 'next': f'say in one line that {task_ref(new)} is working on it'}
+    if got.get('dispatch') == 'needs_repo': return {'started': False, 'why': got.get('reason'), 'next': 'the owner picks its checkout on that task'}
+    return {'started': bool(got.get('started') or got.get('existing')), 'next': f'say in one line that {task_ref(new)} is working on it'}
 
 class AgentRememberBody(BaseModel): task_id: int; note: str = ''; about: str = ''; replaces: str = ''; agent: str = 'agent'
 AGENT_KEEPS = 5          # new memory lines one task's agent may write in a day; a correction (`replaces`) adds none and is always taken
@@ -6147,7 +6184,8 @@ def agent_propose(body: AgentProposeBody, request: Request):
     except ValueError as e: raise HTTPException(422, str(e))
     q = proposals.queue(store, body.task_id, p, 'agent', refused=(miss := []))
     if not q: raise HTTPException(422, proposals.refusal_line(miss[0] if miss else ''))
-    return {'ok': True, 'queued': True, 'review': q['reviewId'], 'says': "Waiting on the owner's press - nothing happens until they approve it."}
+    return {'ok': True, 'queued': True, 'review': q['reviewId'], 'says': f"rv{q['reviewId']} already asks this and waits on the owner's press - no second card."
+            if q.get('already') else "Waiting on the owner's press - nothing happens until they approve it."}
 
 # ...and the calendar and a share, SET UP like an email (calwrite.answer / meeting, sharing.agent_share): a card with the owner's press
 class AgentInviteBody(BaseModel): task_id: int; answer: str; start: str | None = None; end: str | None = None; note: str | None = None

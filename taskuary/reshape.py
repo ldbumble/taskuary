@@ -90,9 +90,11 @@ def split_task(store, tid: int, second: dict, first: dict = None, move_message_i
     # An agent is dispatched at a task, so a new task must not inherit one - but work the owner
     # kept for themselves splits into more work for themselves.
     own = t.get('Assignee') if not str(t.get('Assignee') or '').startswith('agent:') else None
+    # A SourceRef is what a task IS - the issue it closes, the batch an arrival joins, the meeting Prepare finds again - so it stays here:
+    # copied, the part broken out became the newest open batch of its input and its agent could close this task's issue (2026-11-18)
     new = store.create_task({'Title': title[:200], 'Summary': str((second or {}).get('summary') or '')[:MAX_SUMMARY],
                              'Kind': t.get('Kind') or 'general', 'Priority': t.get('Priority') or 'normal',
-                             'Source': t.get('Source') or 'manual', 'SourceRef': t.get('SourceRef'),
+                             'Source': t.get('Source') or 'manual',
                              'Tags': t.get('Tags'), **({'Assignee': own} if own else {})}, actor)
     mine = {m['MessageId'] for m in store.list_messages(tid)}
     moved = [int(m) for m in (move_message_ids or []) if int(m) in mine]

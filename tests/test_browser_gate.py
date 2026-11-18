@@ -197,6 +197,13 @@ class Holding(unittest.TestCase):
         self.assertIn('pays the $412.50 order on toll.example', rv['Reason'])
         self.held()                                                                   # tried again: the same card, not a second
         self.assertEqual(len(self.pending()), 1)
+        # ...but the same ref on ANOTHER page is another act: it was folded into the first card - the agent told its "closes the account"
+        # waited on a card that said "pays $412.50", on a page the browser had left, and it never reached the owner
+        with on('https://pay.toll.example/account/close', '- button "Close my account" [ref=e12]'), \
+                verdict({'irreversible': True, 'sure': True, 'what': 'closes the account on toll.example'}):
+            bg.check(self.s, self.tid, 'run1', 'agent-browser click @e12', Brain(None))
+        self.assertEqual([json.loads(r['DraftText'])['what'] for r in self.pending()],
+                         ['pays the $412.50 order on toll.example', 'closes the account on toll.example'])
 
     def test_the_boxes_filled_before_a_held_press_in_one_line_go_in_and_nothing_after_it_runs(self):
         """The real-CLI walk, 2026-11-16: "fill name && fill email && click Next" was held whole - the boxes were never filled, the owner was

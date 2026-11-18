@@ -358,12 +358,13 @@ def _verdict(act: dict, v: dict | None, pg: dict, said: str) -> dict:
 
 
 # ── held: the proposal, and the agent told why ────────────────────────────────────────────────────────────────────────────
-def _pending(store, tid: int, sid: str, args: list):
-    "The same act already waiting on this task - an agent that tries it again gets the same card, not a second one."
+def _pending(store, tid: int, sid: str, args: list, url: str = ''):
+    """The same act already waiting on this task - an agent that tries it again gets the same card, not a second one. The same ref on
+    another page is another act (@e12 is whatever that page's snapshot named it): folded into the first card, it never reached the owner."""
     for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,)):
         try: p = json.loads(r.get('DraftText') or '{}')
         except ValueError: continue
-        if p.get('action') == 'browser_act' and p.get('sid') == str(sid) and p.get('args') == args: return r
+        if p.get('action') == 'browser_act' and p.get('sid') == str(sid) and p.get('args') == args and _same_page(str(p.get('url') or ''), url): return r
     return None
 
 
@@ -409,7 +410,7 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         except ValueError: site = 'the page'
         browserview.ended_on(sid, 'held', store, tid)                          # its last frame is kept if the session stops here
         if shown(tid, sid, pg): return hand_over(store, tid, sid, a, pg, v, site)    # someone watches: the press is theirs, on the page
-        if not _pending(store, tid, sid, args):
+        if not _pending(store, tid, sid, args, pg['url']):
             from . import proposals
             c = control(a, pg)
             proposals.queue(store, tid, {'action': 'browser_act', 'sid': str(sid), 'args': args, 'command': ' '.join([EXE, *args]),

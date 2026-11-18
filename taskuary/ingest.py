@@ -2356,7 +2356,7 @@ def not_started(store, tid, why) -> None:
     if (last or {}).get('Body') != line: store.add_comment(tid, 'router', 'agent', line)
 
 
-REFUSED = 'held_refused'               # a start refused for a stranger's words (held_start): a release once would be refused again
+REFUSED = 'held_refused'               # a start refused for a stranger's words (held_start), as the task's record has it
 
 
 def held_start(store, tid, err) -> bool:
@@ -2364,7 +2364,7 @@ def held_start(store, tid, err) -> bool:
     from . import origin
     if not isinstance(err, (origin.Refusal, origin.RefusedForStranger)): return False
     store.clear_dispatch(tid); not_started(store, tid, senders._said(str(err)[:1].upper() + str(err)[1:], stranger=True))
-    # ...recorded as a refusal: Run anyway would start it on the same AI and be refused again, so the hold offers only Trust (funnel.held_offer)
+    # ...recorded as a refusal (the task's record: what was refused, and when); the hold's one way on is Trust (senders.trust_offer)
     store.audit('task', tid, REFUSED, 'router')
     return True
 

@@ -244,7 +244,6 @@ const OWN = {
   calendar: () => ({ kind: "data", summary: "Looked at your calendar" }),
   listsystems: () => ({ kind: "data", summary: "Looked at your connected systems" }),
   runsystem: (a) => ({ kind: "data", summary: a.type ? `Looked up data in ${clip(a.type, 30)}` : "Looked up data in a connected system" }),
-  tick: (a) => ({ kind: "plan", summary: a.done === false ? "Unticked a to-do" : "Ticked a to-do" }),
   proposereply: () => ({ kind: "edit", summary: "Drafted a reply" }),
   proposeemail: () => ({ kind: "edit", summary: "Drafted an email" }),
   replynotneeded: () => ({ kind: "plan", summary: "Marked the reply as not needed" }),
@@ -368,6 +367,8 @@ const QUICK_RAW =/^\s*(?:```(?:json)?\s*)?\{\s*"(?:report|draft|question|done|es
 // 'select:WebSearch'", ACP step 1, 2026-11-06) - the call it loads it for is the step. ONE LIST, the server's too (conversation._said, the walks
 // 2026-11-17): it kept a stopped turn for a ToolSearch this page drew as nothing - a "1 step" trail for 100 ms, then gone
 const MACHINERY = new Set(stepKinds.machinery);
+// ...and a shell line of Taskuary's own that is no step either - a tick (stepkinds.json `commands`): a to-do ticked is never narrated
+const TICK = new RegExp(stepKinds.commands, "i");
 export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
   const events = trace || [];
   // A structured backend says everything twice: its tool call and text as events, and the same again as readable `live` lines for
@@ -392,8 +393,8 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
   for (const e of events) {
     if (!e) continue;
     if (e.type === "tool_call") {
-      if (MACHINERY.has(key(e.name))) continue;
       const args = e.detail?.args || e.detail || {};
+      if (MACHINERY.has(key(String(e.name || "").split("__").pop())) || TICK.test(String(parsed(args).command || parsed(args).cmd || ""))) continue;
       const id = e.detail?.tool_call_id || `${e.name}-${steps.length}`;
       const d = describeCall(e.name, args);
       const step = { id, ...d, raw: rawOf(e.name || "tool", args), output: String(e.detail?.output || ""), status: "running", own: ownTool(e.name),

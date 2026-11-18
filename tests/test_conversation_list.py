@@ -1364,3 +1364,11 @@ def test_an_act_he_dismissed_stays_its_own_card_with_its_words():
     step = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'r', 'DraftText': json.dumps({'action': 'shell_act', 'command': 'echo hi', 'what': 'say hi'})})
     s._exec("UPDATE review SET Status='rejected', DecidedBy='owner' WHERE ReviewId=?", (step,))
     assert conversation._card(s.get_review(step))['was'] == {'text': 'say hi'}
+
+
+def test_a_tick_is_machinery_on_the_server_as_on_the_page():
+    "A to-do ticked is never narrated (the owner, 2026-11-18) - by Taskuary's tool or its shell line, read by the list the page reads (stepkinds.json)."
+    from taskuary.conversation import machinery
+    assert machinery({'k': 'tool', 'name': 'mcp__taskuary__tick', 'args': {'id': 3}})
+    assert machinery({'k': 'tool', 'name': 'Bash', 'args': {'command': 'taskuary --tick 4'}})
+    assert not machinery({'k': 'tool', 'name': 'Bash', 'args': {'command': 'git status'}})

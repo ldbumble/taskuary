@@ -56,8 +56,12 @@ def _cleaned(text) -> str:
     return str(j.get('did') or j.get('about') or '').strip() if isinstance(j, dict) else ''
 # ...A CLI'S OWN PLUMBING IS NO STEP, by the one list the page reads too (the walks, 2026-11-17: a stopped turn whose only step was ToolSearch
 # was kept here for that step and drawn as nothing there - a "1 step" trail for 100 ms, then head and trail gone)
-MACHINERY = frozenset(json.loads(Path(__file__).with_name('stepkinds.json').read_text(encoding='utf-8'))['machinery'])
-def machinery(s: dict) -> bool: return s.get('k') == 'tool' and re.sub(r'[^a-z0-9]', '', str(s.get('name') or '').lower()) in MACHINERY
+_KINDS = json.loads(Path(__file__).with_name('stepkinds.json').read_text(encoding='utf-8'))
+MACHINERY, _OWN_LINE = frozenset(_KINDS['machinery']), re.compile(_KINDS['commands'], re.I)
+def machinery(s: dict) -> bool:
+    a = s.get('args') if isinstance(s.get('args'), dict) else {}
+    return s.get('k') == 'tool' and (re.sub(r'[^a-z0-9]', '', str(s.get('name') or '').split('__')[-1].lower()) in MACHINERY
+                                     or bool(_OWN_LINE.search(str(a.get('command') or a.get('cmd') or ''))))
 
 
 def _said(steps: list, body: str = '') -> list:

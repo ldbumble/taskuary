@@ -277,3 +277,16 @@ test("a step says what it did: a seeded file by what is in it, a view by its tit
   assert.equal(said("taskuary__propose_email", JSON.stringify({ to: "erin@northwind.example", subject: "Run sheet" })), "Drafted an email");
   assert.equal(said("write_file", JSON.stringify({ path: "/work/run-sheet.md", content: "see n @path" })), "Wrote run-sheet.md");
 });
+
+// A TICK IS NEVER NARRATED (the owner, 2026-11-18): the working line read "Ticking a to-do" - the checklist shows it ticked, and its call, by
+// Taskuary's tool or its shell line, is no step of the work (stepkinds.json, which the server's conversation reads too)
+test("ticking a to-do is no step and no working line, by tool or by shell", () => {
+  const steps = stepsOf([
+    { type: "tool_call", name: "mcp__taskuary__tick", detail: { tool_call_id: "a", args: { id: 3 } } },
+    { type: "tool_call", name: "Bash", detail: { tool_call_id: "b", args: { command: "taskuary --tick 4" } } },
+    { type: "tool_call", name: "shell", detail: { tool_call_id: "c", args: { command: "taskuary --untick 4" } } },
+    { type: "tool_call", name: "Read", detail: { tool_call_id: "d", args: { file_path: "/x/notes.md" } } },
+  ]);
+  assert.deepEqual(steps.map((s) => s.id), ["d"]);
+  assert.doesNotMatch(fs.readFileSync(new URL("../src/agentSteps.js", import.meta.url), "utf8"), /a to-do"/);
+});

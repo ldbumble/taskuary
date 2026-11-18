@@ -58,6 +58,10 @@ def run(store, key: str, skip=(), actor: str = 'owner', wait: bool = False) -> d
     if not todo: raise ValueError('nothing on this card waits any more')
     if running(store, key): return state(store, key)
     tid, skip = todo[0]['TaskId'], {int(x) for x in skip or ()}
+    # ...A CARD THE CHAT MOVED PAST PRESSES NOTHING (verdicts._decide's rule): asked here, before the run is marked at work - a bulk card at
+    # work is never written past (proposals._older), so each row's own refusal would read it as still standing
+    from . import proposals
+    if tid and (past := [r for r in todo if r['ReviewId'] in proposals.written_past(store, tid)]): raise ValueError(proposals.passed_why(store, past[0]))
     st = {**state(store, key), 'key': key, 'tid': tid, 'total': len(todo), 'done': 0, 'failed': 0, 'left': 0, 'state': 'running', 'rows': {}, 'at': time.time()}
     _save(store, st)
     def go():

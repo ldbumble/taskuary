@@ -168,3 +168,22 @@ def test_sends_that_did_not_go_still_wait_on_the_card_and_its_agent_never_sets_t
     assert '4 that did not go still wait on the card' in said and 'never set them up again' in said, said
     stopped = {**st, 'state': 'stopped'}
     assert 'not run' not in bulkcard.summary(s, out['batch'], stopped), 'a row that ran and failed is no row that was not run'
+
+
+def test_a_press_on_a_bulk_card_the_chat_moved_past_sends_nothing():
+    """He typed "hold off" under 5 emails, the card greyed on every surface - and a press on it from a page not yet redrawn sent all 5: the
+    run marked itself at work before its first row, and a bulk card at work is never written past, so no row's own refusal stood."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        out = call(tid, 'propose_email', items=emails(5))
+    s._exec("UPDATE review SET CreatedAt='2026-11-16 09:00:00', DraftAt='2026-11-16 09:00:00' WHERE Batch=?", (out['batch'],))
+    general.wait_line(s, tid, 'hold off - I want to change the wording', line_id='l-hold')
+    assert len(proposals.written_past(s, tid)) == 5
+    sent = []
+    with mock.patch.object(server, 'store', s), mock.patch.object(outbound, 'send_out', lambda *a, **k: sent.append(1) or {'channel': 'email'}), \
+         mock.patch.object(outbound, 'send_block', lambda *a, **k: ''), mock.patch.object(general, 'tell', lambda *a, **k: 'woke'):
+        r = c.post(f"/api/reviews/batch/{out['batch']}/run", json={'skip': []})
+        time.sleep(0.5)
+    assert r.status_code == 409 and 'hold off' in r.json()['detail'], r.json()
+    assert sent == [] and bulkcard.state(s, out['batch'])['state'] == 'idle'
+    assert len(proposals.written_past(s, tid)) == 5, 'it stays greyed where it stood'

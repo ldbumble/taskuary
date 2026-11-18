@@ -733,6 +733,17 @@ class TheDemoWorldIsConnectedTests(unittest.TestCase):
         for kind in ('email', 'linkedin', 'teams', 'whatsapp', 'github'): self.assertIsNone(outbound.connect_fix(s, kind), kind)
 
 
+    def test_the_system_its_reports_read_is_connected(self):
+        """The walk, 2026-11-18: Connections > Databases read "Microsoft SQL Server - not set up · 3 reports" beside the demo's three
+        reports, each "SQL Server · ran 3m ago" - a world whose reports run off a system it says is not there."""
+        import json
+        from taskuary import connectorcatalog
+        s = MemoryStore(); demo.seed(s)
+        read = {t for src in s.list_sources() if src['Channel'] == 'report'
+                for t in [json.loads(src.get('ConfigJson') or '{}').get('type')] if connectorcatalog.by_type(t)}
+        self.assertTrue(read, 'the demo has reports that read a system')
+        self.assertLessEqual(read, {c['Type'] for c in s.list_connectors() if connectorcatalog.is_connected(c)})
+
 class DemoDashboardTests(unittest.TestCase):
     def test_a_report_named_nightly_or_weekly_has_that_schedule(self):
         # with none, the Reports page framed each in red: "No schedule - it only runs when you press Run now" (the walk, 2026-11-15)

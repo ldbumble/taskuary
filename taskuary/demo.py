@@ -471,6 +471,9 @@ CONNECTIONS = (    # (Type, Name, ConfigJson, a stand-in secret: a card reads "s
     ('whatsapp', 'WhatsApp', {}, None),
     ('linkedin', 'LinkedIn', {'member_name': OWNER}, 'demo'),
     ('github', 'GitHub', {}, 'demo'),
+    # ...and the database its three reports read (REPORTS): without it Connections read "Microsoft SQL Server - not set up · 3 reports"
+    # beside reports that "ran 3m ago" off it (the walk, 2026-11-18). Nothing connects to it: its Test is refused like every POST here
+    ('mssql', 'Northwind SQL', {'server': 'sql.northwind.example', 'database': 'ops'}, 'demo'),
 )
 SOURCES = (('outlook', 'email', OWNER_EMAIL), ('teams', 'teams', OWNER_EMAIL), ('github', 'github', 'northwind/ledger'))
 

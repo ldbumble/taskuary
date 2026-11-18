@@ -140,6 +140,31 @@ class AttachmentReReadTests(unittest.TestCase):
             poll(s, FakeGraph({'inbox': [first, second]}))
         self.assertEqual(fetched, ['inbox-1', 'inbox-2'])
 
+    def test_files_graph_did_not_give_this_poll_are_fetched_on_the_next(self):
+        """A throttle or a dropped token while a mail's files were fetched (a 401 mid-poll) let the mail in without them - and a mail
+        already in never asks for its files again, so "see the attached invoice" stood with no invoice for good. A miss Graph may yet
+        answer holds the mail for the next poll; one it never will (404, the mail is gone) lets it in without."""
+        import requests
+        s, sid = outlook_store()
+        m = {**graph_mail(1, T0), 'hasAttachments': True}
+        def throttled(code):
+            r = requests.Response(); r.status_code = code
+            return requests.HTTPError(f'{code} Client Error', response=r)
+        answers = [throttled(429), [{'id': 'a1', 'name': 'invoice.pdf', 'size': 3, 'contentBytes': 'QUFB', 'contentType': 'application/pdf'}]]
+        def atts(tok, upn, gid):
+            a = answers.pop(0)
+            if isinstance(a, Exception): raise a
+            return a
+        with mock.patch.object(channels, 'mail_attachments', side_effect=atts):
+            poll(s, FakeGraph({'inbox': [m]}))
+            poll(s, FakeGraph({'inbox': [m]}))
+        [row] = inbox_rows(s)
+        self.assertEqual([a['Name'] for a in s.list_attachments(row['MessageId'])], ['invoice.pdf'])
+        s2, _ = outlook_store()
+        with mock.patch.object(channels, 'mail_attachments', side_effect=throttled(404)):
+            poll(s2, FakeGraph({'inbox': [m]}))
+        self.assertEqual(len(inbox_rows(s2)), 1)
+
 
 
 class MailMsgsTests(unittest.TestCase):

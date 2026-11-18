@@ -2323,7 +2323,11 @@ def _poll_one(store, c, file_only, backfill_hours, llm) -> int:
                         atts = []
                         if wants_attachments(m) and not store.message_exists(f"graph:{m['id']}"):
                             try: atts = mail_attachments(tok, s['Address'], m['id'])
-                            except Exception as e: logger.warning(f"attachments for {m['id']} failed: {e}")
+                            except Exception as e:
+                                # ...a miss Graph may yet answer (a throttle, its own trouble, a token that lapsed mid-poll, a dropped
+                                # line) holds this mail for the next poll: let in without its files, it never asked for them again
+                                if _status(e) not in (400, 403, 404): raise
+                                logger.warning(f"attachments for {m['id']} failed: {e}")
                         # an invite is read in full once, as it arrives: the meeting to answer and whether it still needs answering
                         inv = is_invite(m)
                         cal_ = None

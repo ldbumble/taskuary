@@ -199,10 +199,22 @@ export const forTurn = (listed, versions, id) => {
 
 // WHAT A TURN MADE, IN THE TURN (the owner, 2026-11-05: "the post and images are as artifacts separate not inline???"): the files placed on this
 // answer by when they were made (the server's `after`, as a shown page's) and the ones its words or its summary name - each thing once, the
-// newest of a family, whatever its kind - less `skip` (a post's own picture, drawn on the post)
+// newest of a family, whatever its kind - less `skip` (a post's own picture, drawn on the post). A FILE ANOTHER TURN MADE IS DRAWN THERE, never
+// again under every answer that names it (the walk, 2026-11-18: the posts file stood whole under three turns that only spoke of it)
 export const turnFiles = ({ listed = [], id, words = "", did = "", tid, skip = [] } = {}) => {
   const no = new Set((skip || []).map(baseName)), by = new Map();
   for (const r of (listed || []).filter((x) => x?.after != null && x.after === id)) by.set(r.path, r);
-  for (const rel of outputRefs(`${words || ""}\n${did || ""}`, tid, listed).files) if (!by.has(rel)) by.set(rel, outputRow(tid, rel, listed));
+  for (const rel of outputRefs(`${words || ""}\n${did || ""}`, tid, listed).files) {
+    const r = by.has(rel) ? null : outputRow(tid, rel, listed);
+    if (r && (r.after == null || r.after === id)) by.set(rel, r);
+  }
   return deliverables([...by.values()].filter((r) => !no.has(baseName(r.path || r.name)) && !r.missing)).made;
+};
+
+// A PICTURE AT ITS OWN SHAPE (the owner, 2026-11-18: "images should be able to render however the agent wants it or make sense to show"): its
+// pixels, read by the server off the file (outputs.pixels), reserve its room before it loads - as wide as it is, never wider than the chat, its
+// height following, a very tall one fitted inside the window. null where they are not known: that one keeps the fixed room (publishedPages.css)
+export const pictureFit = (f) => {
+  const [w, h] = Array.isArray(f?.dims) ? f.dims : [];
+  return w > 0 && h > 0 ? { width: `min(100%, ${w}px)`, height: "auto", aspectRatio: `${w} / ${h}`, maxHeight: "80vh" } : null;
 };

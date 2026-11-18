@@ -83,7 +83,7 @@ test("a reply card's dashboard is drawn from its last read on its first frame", 
 test("a card's late content holds its room from its first frame", () => {
   const read = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
   assert.match(read("ReviewDecision.jsx"), /const room = !got \|\| got\.data \? \{ height: 420 \} : \{ maxHeight: 420 \};/);
-  assert.match(read("publishedPages.css"), /\.tq-published\[data-tq-turn-files\] \.tq-published-page > :not\(\.tq-published-row\):not\(\.tq-published-media\) \{ box-sizing: border-box; height: min\(60vh, 360px\);/);
+  assert.match(read("publishedPages.css"), /\.tq-published\[data-tq-turn-files\] \.tq-published-page > :not\(\.tq-published-row\):not\(\.tq-published-media\):not\(\[data-tq-natural\]\) \{ box-sizing: border-box; height: min\(60vh, 360px\);/);
   assert.match(read("ActionCard.jsx"), /data-tq-act-image=\{img\.value\}[\s\S]{0,200}height: IMG_MAX, objectFit: "contain"/);
   assert.match(read("PublishedPages.jsx"), /maxHeight: "70vh", aspectRatio: "16 \/ 9"/);
 });

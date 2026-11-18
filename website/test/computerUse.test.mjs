@@ -36,7 +36,8 @@ test("a laptop's pane draws the page at a readable scale", () => {
 test("the brain menu says which AI can use the browser and be held, and names one CLI one way", () => {
   const ui = src("ui.jsx");
   assert.match(ui, /export const brainNote = \(b, browser\)/);
-  assert.match(ui, /"can't use the browser"/); assert.match(ui, /"browser acts not held"/); assert.match(ui, /"not signed in"/);
+  assert.match(ui, /"can't use the browser"/); assert.match(ui, /"not signed in"/);
+  assert.doesNotMatch(ui, /browser acts not held/, "every AI's presses are held where they run (gatecmd)");
   assert.match(ui, /\{b\.label\}\{brainNote\(b, browser\)\}/);
   assert.match(ui, /browser \? "an AI that can use the browser" : "the brain it runs on"/);
   assert.match(src("TaskPage.jsx"), /browser=\{String\(t\?\.Tags \|\| ""\)\.split\(\/\[\\s,\]\+\/\)\.includes\(BROWSER_TAG\)\}/);

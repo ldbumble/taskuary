@@ -61,7 +61,8 @@ test("a turn's files: placed or named, newest of a family, the helper script too
     row("fetch.py", "m2", "2026-11-05 10:00:00"), row("gas.png", "m2", "2026-11-05 10:04:00"), row("older.csv", "m1", "2026-11-05 09:00:00")];
   const got = turnFiles({ listed, id: "m2", tid: 5, skip: ["gas.png"] }).map((f) => f.path).sort();
   assert.deepEqual(got, ["chart.png", "fetch.py", "prices v2.csv"]);
-  assert.deepEqual(turnFiles({ listed, id: "m1", tid: 5, words: "See `/x/scratch/outputs/TQ-0005/chart.png`" }).map((f) => f.path).sort(), ["chart.png", "older.csv"]);
+  // ...and a file another turn made is drawn there, never again under an answer that only names it (the walk, 2026-11-18)
+  assert.deepEqual(turnFiles({ listed, id: "m1", tid: 5, words: "See `/x/scratch/outputs/TQ-0005/chart.png`" }).map((f) => f.path).sort(), ["older.csv"]);
 });
 
 // ...and the card leads Next steps, the action section; Close out never draws it a second time in the chat

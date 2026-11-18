@@ -39,6 +39,18 @@ class TaskOutputsTests(unittest.TestCase):
         p = mock.patch.object(server, 'store', self.store); p.start(); self.addCleanup(p.stop)
         self.client = TestClient(server.app)
 
+    def test_a_picture_carries_its_own_shape_so_the_page_reserves_it(self):
+        """The design round, 2026-11-18: every picture in a turn was squeezed into one fixed height - a square drawn half the chat's width.
+        The page draws it at its own shape, its room reserved before it loads: its pixels, read off the file's header."""
+        import struct, zlib
+        png = b'\x89PNG\r\n\x1a\n' + struct.pack('>I', 13) + b'IHDR' + struct.pack('>IIBBBBB', 1200, 630, 8, 2, 0, 0, 0) + b'\0' * 4 + zlib.compress(b'')
+        gif = b'GIF89a' + struct.pack('<HH', 300, 900) + b'\0' * 8
+        jpg = b'\xff\xd8' + b'\xff\xe0' + struct.pack('>H', 16) + b'JFIF\0' + b'\0' * 9 + b'\xff\xc0' + struct.pack('>HBHH', 17, 8, 768, 1024) + b'\0' * 12
+        for name, body, dims in (('post.png', png, [1200, 630]), ('tall.gif', gif, [300, 900]), ('photo.jpg', jpg, [1024, 768])):
+            (self.dir / name).write_bytes(body)
+            self.assertEqual(outputs.row(self.tid, self.dir / name, name).get('dims'), dims, name)
+        self.assertNotIn('dims', outputs.row(self.tid, self.dir / 'notes.md', 'notes.md'))
+
     def test_the_folder_is_the_one_the_agent_picked(self):
         self.assertEqual(outputs.folder(17), config.home() / 'scratch' / 'outputs' / 'TQ-0017')
 
@@ -313,3 +325,21 @@ class HisFilesAreNotMadeTests(unittest.TestCase):
         turn = outputs.turns_folder(self.tid); turn.mkdir(parents=True, exist_ok=True); self.addCleanup(shutil.rmtree, turn, True)
         (turn / '7.json').write_text('[{"path": "shot.png", "size": 1, "mtime": 1}]', encoding='utf-8')
         self.assertEqual({r['name'] for r in outputs.made(self.s, self.tid)}, {'answer.md', 'shot.png'})
+
+
+def test_a_file_written_back_as_it_was_is_no_change_of_that_turn():
+    """The walk, 2026-11-18: the agent saved its posts file again each turn, word for word, and the chat drew it whole under every answer. A
+    turn that writes a file back as it was is not the turn that made it; one that changes a word is."""
+    import time
+    tid, f = 41, outputs.folder(41) / 'posts.txt'
+    f.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        f.write_text('LinkedIn: the portal launches Monday.', encoding='utf-8'); t0 = time.time() - 5
+        assert [k['path'] for k in outputs.keep_turn(tid, 3, t0)] == ['posts.txt']
+        os.utime(f, (time.time() + 2, time.time() + 2)); f.write_text('LinkedIn: the portal launches Monday.', encoding='utf-8')
+        assert outputs.keep_turn(tid, 9, t0) == []
+        assert outputs.made_by(tid) == {'posts.txt': 'comment-3'} and outputs.turn_versions(tid) == []
+        f.write_text('LinkedIn: the portal launches Tuesday.', encoding='utf-8')
+        assert [k['path'] for k in outputs.keep_turn(tid, 12, t0)] == ['posts.txt'] and outputs.made_by(tid)['posts.txt'] == 'comment-12'
+    finally:
+        shutil.rmtree(outputs.folder(tid), True); shutil.rmtree(outputs.turns_folder(tid), True)

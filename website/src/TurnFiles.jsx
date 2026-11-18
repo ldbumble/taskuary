@@ -5,6 +5,7 @@ import React, { useState } from "react";
 import { Button } from "@mui/material";
 import { attUrl, useSave } from "./fileSave.js";
 import { CopyFile, FileDialog, isText, Preview } from "./PublishedPages.jsx";
+import { pictureFit } from "./taskOutputs.js";
 
 const isPic = (f) => /^image\//.test(f?.content_type || "") && !/svg/.test(f?.content_type || "");
 
@@ -22,7 +23,9 @@ export default function TurnFiles({ files }) {
             <Button size="small" href={attUrl(f, true)} data-tq-download="" onClick={(e) => { e.preventDefault(); save(f); }}>Download</Button>
           </div>
           {isPic(f)
-            ? <div className="tq-published-picture"><img src={attUrl(f)} alt={f.name} style={{ cursor: "zoom-in", maxHeight: 320, objectFit: "contain" }} onClick={() => setViewing(f)} /></div>
+            ? <div className="tq-published-picture" {...(pictureFit(f) ? { "data-tq-natural": "" } : {})}>
+                <img src={attUrl(f)} alt={f.name} width={f.dims?.[0]} height={f.dims?.[1]} onClick={() => setViewing(f)}
+                  style={{ cursor: "zoom-in", objectFit: "contain", ...(pictureFit(f) || { maxHeight: 320 }) }} /></div>
             : f.preview ? <Preview page={f} /> : null}
         </div>))}
       {err && <div className="tq-published-note" data-tq-file-error="">{err}</div>}

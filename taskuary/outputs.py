@@ -152,13 +152,42 @@ def preview_of(p: Path, name: str = ''):
     return None if how == 'sheet' and not can_sheet() else how
 
 
+# A PICTURE DRAWS AT ITS OWN SHAPE (the owner, 2026-11-18: "images should be able to render however the agent wants it or make sense to
+# show"): the page reserves its real width and height before it loads, so nothing jumps - read here off the file's header, no imaging library
+def pixels(p) -> list | None:
+    "[width, height] of a PNG, GIF, JPEG, WebP or BMP picture, read off its header - None for anything else or a header it cannot read."
+    import struct
+    try:
+        with open(p, 'rb') as f: b = f.read(64 * 1024)
+        if b[:8] == b'\x89PNG\r\n\x1a\n': w, h = struct.unpack('>II', b[16:24])
+        elif b[:6] in (b'GIF87a', b'GIF89a'): w, h = struct.unpack('<HH', b[6:10])
+        elif b[:2] == b'BM': w, h = struct.unpack('<ii', b[18:26]); h = abs(h)
+        elif b[:4] == b'RIFF' and b[8:12] == b'WEBP':
+            k = b[12:16]
+            if k == b'VP8X': w, h = 1 + int.from_bytes(b[24:27], 'little'), 1 + int.from_bytes(b[27:30], 'little')
+            elif k == b'VP8L': v = int.from_bytes(b[21:25], 'little'); w, h = 1 + (v & 0x3FFF), 1 + ((v >> 14) & 0x3FFF)
+            else: w, h = (x & 0x3FFF for x in struct.unpack('<HH', b[26:30]))
+        elif b[:2] == b'\xff\xd8':
+            i = 2
+            while i + 9 < len(b):
+                if b[i] != 0xFF: i += 1; continue
+                m, n = b[i + 1], int.from_bytes(b[i + 2:i + 4], 'big')
+                if 0xC0 <= m <= 0xCF and m not in (0xC4, 0xC8, 0xCC): h, w = struct.unpack('>HH', b[i + 5:i + 9]); break
+                i += 2 + n
+            else: return None
+        else: return None
+        return [int(w), int(h)] if w > 0 and h > 0 else None
+    except (OSError, struct.error, ValueError): return None
+
+
 def row(tid: int, p: Path, rel: str) -> dict:
     "One file as the page draws it - the same shape as a shown page (page_row), so one list draws both."
     from urllib.parse import quote
-    ext, sheet = p.suffix.lower(), preview_of(p)
+    ext, sheet, kind = p.suffix.lower(), preview_of(p), content_type(p.name)
     st = p.stat()
-    return {'id': f'output:{rel}', 'name': p.name, 'path': rel, 'kind': 'output', 'content_type': content_type(p.name),
+    return {'id': f'output:{rel}', 'name': p.name, 'path': rel, 'kind': 'output', 'content_type': kind,
             'size': st.st_size, 'at': datetime.fromtimestamp(st.st_mtime).strftime('%Y-%m-%d %H:%M:%S'), 'preview': sheet, 'url': f'/api/task-outputs/{int(tid)}/{quote(rel)}',
+            **({'dims': d} if kind.startswith('image/') and (d := pixels(p)) else {}),
             **({'note': 'No preview on this install - Download opens it in your spreadsheet app.'} if PREVIEW.get(ext) == 'sheet' and not sheet else {})}
 
 
@@ -171,12 +200,26 @@ def turns_folder(tid: int) -> Path: return config.home() / 'scratch' / 'output-t
 def turn_folder(tid: int, turn: int) -> Path: return turns_folder(tid) / str(int(turn))
 
 
+def _kept_copy(tid: int, path: str, made: list):
+    "The newest copy an earlier turn kept of `path`, from turns_made's list - None where none was kept."
+    turn = next((t for t, ks in reversed(made) for k in ks if k['path'] == path and k.get('kept')), None)
+    return resolve(tid, path, turn_folder(tid, turn)) if turn is not None else None
+
+
+def _same(a, b) -> bool:
+    import filecmp
+    try: return bool(a and b) and filecmp.cmp(a, b, shallow=False)
+    except OSError: return False
+
+
 def keep_turn(tid: int, turn: int, since: float) -> list:
-    "The files turn `turn` (its answer's CommentId) wrote - changed at or after `since`, its start - kept as it left them: [{path, size, mtime, kept}]."
-    got = []
+    """The files turn `turn` (its answer's CommentId) wrote - changed at or after `since`, its start - kept as it left them: [{path, size, mtime,
+    kept}]. A FILE WRITTEN BACK AS IT WAS IS NO CHANGE (the walk, 2026-11-18: an agent saved its posts file again each turn, word for word, and
+    the chat drew the whole file under every answer): its turn stays the one that last changed what it says."""
+    got, made = [], [(t, ks) for t, ks in turns_made(tid) if t != int(turn)]
     for r in listing(tid):
         p = resolve(tid, r['path'])
-        if not p or (st := p.stat()).st_mtime < since: continue
+        if not p or (st := p.stat()).st_mtime < since or _same(_kept_copy(tid, r['path'], made), p): continue
         kept = st.st_size <= TURN_COPY_MAX
         if kept:
             (dest := turn_folder(tid, turn).joinpath(*r['path'].split('/'))).parent.mkdir(parents=True, exist_ok=True)
@@ -244,9 +287,11 @@ def turn_versions(tid: int) -> list:
     for turn, made in made_:
         for k in made:
             cur, p = now.get(k['path']), resolve(tid, k['path'])
-            if cur and p and (p.stat().st_mtime, p.stat().st_size) == (k['mtime'], k['size']): continue
+            c = resolve(tid, k['path'], turn_folder(tid, turn)) if k.get('kept') else None
+            # ...nor one written back since as it was (keep_turn): the file as it is now IS this turn's
+            if cur and p and ((p.stat().st_mtime, p.stat().st_size) == (k['mtime'], k['size']) or _same(c, p)): continue
             mine = {'id': f"output:{k['path']}@{turn}", 'turn': f'comment-{turn}', 'after': f'comment-{turn}'}
-            if k.get('kept') and (c := resolve(tid, k['path'], turn_folder(tid, turn))):
+            if c:
                 out.append({**row(tid, c, k['path']), **mine, 'url': f"/api/task-outputs/{int(tid)}/{quote(k['path'])}?turn={turn}"})
             elif cur: out.append({**cur, **mine, 'later': True, 'note': 'Changed later - this opens its newest version.'})
     return out
@@ -344,10 +389,16 @@ def _tids() -> list:
     except OSError: return []
 
 
+def _confined(raw):
+    from .session_artifacts import confined
+    return confined(raw)
+
+
 def page_row(a: dict) -> dict:
     "A task's artifact as the page draws it - a page an agent showed or published among them - here, so a look-up never imports the server."
     return {'id': a['ArtifactId'], 'name': a.get('Name') or 'session artifact.md',
             'content_type': a.get('ContentType') or 'text/markdown', 'size': a.get('Size') or 0,
+            **({'dims': d} if str(a.get('ContentType') or '').startswith('image/') and (f := _confined(a.get('Path'))) and (d := pixels(f)) else {}),
             'kind': a.get('Kind') or 'session', 'created_by': a.get('CreatedBy') or '', 'created_at': a.get('CreatedAt'),
             'url': f"/api/task-artifacts/{a['ArtifactId']}" if a.get('Path') else None,
             # a page a Claude session published: its claude.ai link (claude_artifacts); `url` is the local copy

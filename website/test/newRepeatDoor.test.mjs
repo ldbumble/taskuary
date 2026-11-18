@@ -44,7 +44,7 @@ test("a routine the Assistant wrote up opens New → Routine with its words, car
   assert.match(canvas, /initialText=\{state\?\.text \|\| ""\}/);
   assert.match(canvas, /initialRoutine=\{state\?\.routine \|\| null\}/);
   assert.match(canvas, /JSON\.stringify\(state\?\.routine \|\| ""\)/, "a new prefill remounts the sheet, so its fields are the new ones");
-  assert.match(sheet, /initialRoutine = null, madeOf = "" \}\) \{/);
+  assert.match(sheet, /initialRoutine = null, madeOf = "", initialFiles = null \}\) \{/);
   // ...and the builder's strip starts the build with them, on that page (taskuary/build.py) - the chat is never asked
   const strip = read("SetupWithAi.jsx");
   assert.match(strip, /if \(handed\.current === undefined\) handed\.current = onOpen \? null : takeFor\(kind\);/, "taken in the first draw - no empty beat");

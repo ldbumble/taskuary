@@ -83,6 +83,13 @@ def take_in_text(tid: int, text: str) -> str:
     return re.sub(re.escape(root) + r'[^\r\n]*', lambda m: (take_in(tid, [m.group(0)]) or [m.group(0)])[0], str(text), flags=re.I)
 
 
+def take_in_summary(store, tid: int, actor: str) -> str:
+    "Task `tid`'s Summary with every file it names that this server saved taken into its folder (take_in_text) - kept, and returned."
+    s = str((store.get_task(tid) or {}).get('Summary') or '')
+    if (s2 := take_in_text(tid, s)) != s: store.update_task(tid, {'Summary': s2}, actor)
+    return s2
+
+
 def resolve(tid: int, rel: str, base: Path = None):
     """The file `rel` names inside task `tid`'s outputs folder (or `base`, a turn's kept copies - turn_folder), or None. A name only: never
     absolute, never a drive or a share, no `..` or empty step, no `:` (an NTFS stream), no link anywhere on the way - and after resolving,
@@ -243,6 +250,26 @@ def turn_versions(tid: int) -> list:
                 out.append({**row(tid, c, k['path']), **mine, 'url': f"/api/task-outputs/{int(tid)}/{quote(k['path'])}?turn={turn}"})
             elif cur: out.append({**cur, **mine, 'later': True, 'note': 'Changed later - this opens its newest version.'})
     return out
+
+
+def his(store, tid: int) -> set:
+    """The files in task `tid`'s folder the owner attached, as he attached them: what a line of his sent (sent), and what the task's own
+    words name (New's ask, general.split_files) - one written since is the agent's."""
+    from . import general
+    from .conversation import ep
+    t, out = store.get_task(tid) or {}, sent(store, tid)
+    for f in general.split_files(t.get('Summary'))['files']:
+        try:
+            q = folder(tid) / rel(tid, Path(f))
+            if q.is_file() and q.stat().st_mtime <= ep(t.get('CreatedAt')) + 2: out.add(rel(tid, Path(f)))
+        except (OSError, ValueError): continue
+    return out
+
+
+def made(store, tid: int) -> list:
+    "listing(tid) without what the owner attached (his) - unless a turn wrote it since (made_by): the files the work made."
+    mine, wrote = his(store, tid), made_by(tid)
+    return [r for r in listing(tid) if r['path'] not in mine or r['path'] in wrote]
 
 
 def listing(tid: int) -> list:

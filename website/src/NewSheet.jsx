@@ -184,7 +184,7 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
 // `line`: the Assistant's line that wrote this card (concierge._new)
 // `initialChannel` / `initialTo`: Send something already addressed - a People hit's Message them (SearchEverything, trust audit F6)
 export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false, initialKind = "chat", initialHow = "", initialText = "", line = null,
-  initialChannel = "", initialTo = "", initialMeeting = null, initialRoutine = null, madeOf = "" }) {
+  initialChannel = "", initialTo = "", initialMeeting = null, initialRoutine = null, madeOf = "", initialFiles = null }) {
   const [kind, setKind] = useState(initialKind);
   const said = useRef(null);      // the words, as the field debounces them
   const [busy, setBusy] = useState(false);
@@ -203,6 +203,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const aboutRef = useRef(null);
   const [mode, setMode] = useState("draft");
   const pics = usePromptImages({ files: true });          // ...a pasted, dropped or picked file of any kind, as every box takes (2026-11-16)
+  // ...and the files the box held when the Assistant wrote this card from its words: they stay on the card (the stress round of New's attachments
+  // - a goal written from "track this, attached" came up with an empty tray, and its press filed the goal without the file)
+  useEffect(() => { if (initialFiles?.length) pics.put(initialFiles); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   // agent
   // NOTHING TO PICK (the owner, TQ-1397: "you ask the agent what you need and it should do it ... never, ever be stuck on a repo thing"): no
   // agent, AI, model or repository picker - Settings names the AI, and a live session opens in its task's own folder and picks its repository
@@ -332,9 +335,10 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         // the words are one Assistant turn (concierge.say), and what it made comes up HERE - the card it wrote, filled in (an agent's job
         // pressed), or its answer as a line under the box - never a jump into the chat
         const { data } = await api.post("/api/concierge/say", { text: about, images: pics.paths || [] });
+        const files = pics.imgs;
         setText(""); pics.clear();
         // ...a report, dashboard or routine goes straight into its builder, the setup asked there (goStraight) - no card on the way
-        if (data?.new) { if (!goStraight(data.new, onClose)) setMade({ ...data.new, said: data.say || "" }); setBusy(false); return; }
+        if (data?.new) { if (!goStraight(data.new, onClose)) setMade({ ...data.new, said: data.say || "", files }); setBusy(false); return; }
         // ...an agent's job or a message it could address was MADE (concierge._made_now - the owner, 2026-11-12: "open task directly"): its task opens
         const made = /^#?task=(\d+)$/.exec(data?.open || "");
         if (made) { setOk(String(data.say || "")); onDone?.(); openIt(Number(made[1])); if (!(inline && opened)) setBusy(false); return; }
@@ -348,14 +352,14 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           setErr(NO_AI_PLAN); setErrAi(true); setBusy(false); return;
         }
         const title = about.split(/[.\n]/)[0].trim().slice(0, 120) || about.slice(0, 120);
-        const { data } = await api.post("/api/tasks", { Title: title, Summary: who ? `${about}\nInvolved: ${who}` : about,
+        const { data } = await api.post("/api/tasks", { Title: title, Summary: withImages(who ? `${about}\nInvolved: ${who}` : about, pics.paths),
           DoneWhen: about.slice(0, 1000), DueAt: by || null, Kind: "task", Tags: "goal" });
         // the model writes the steps (server.plan_goal); "Track it" leaves the boxes to you
         if (plan && !noAi) api.post(`/api/tasks/${data.taskId}/read-ask`, { goal: true }).catch(() => null);
         // ...and with no AI nothing plans them: it promised steps that never came (the UI audit, 2026-10-21)
         setOk(`${data.ref} — ${!plan ? "on your rail; add the steps on the task." : noAi ? "on your rail. No AI is connected, so nothing can plan the steps - add them on the task."
           : "planning the steps; they land on the task in a moment."}`);
-        aboutRef.current?.clear(); setHasAbout(false); setBy(""); setWho(""); onDone?.(); openIt(data.taskId);
+        aboutRef.current?.clear(); setHasAbout(false); setBy(""); setWho(""); pics.clear(); onDone?.(); openIt(data.taskId);
       } else {
         const { data } = await api.post("/api/notes", { title: about.slice(0, 300), body: "", when: when || null });
         setOk(`Noted — it sits on ${String(data.at).slice(0, 16)} and nothing will touch it.`);
@@ -386,7 +390,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   if (inline && !open) return null;
   if (made) return <NewSheet key={made.line || made.text} open={open} onClose={onClose} onDone={onDone} onOpenTask={onOpenTask} inline={inline}
     initialKind={made.kind} initialHow={made.how || ""} initialText={made.text || ""} initialChannel={made.channel || ""} initialTo={made.to || ""}
-    initialMeeting={made.meeting || null} initialRoutine={made.routine || null} line={made.line} madeOf={made.said} />;
+    initialMeeting={made.meeting || null} initialRoutine={made.routine || null} line={made.line} madeOf={made.said} initialFiles={made.files} />;
   return (
     <Shell {...shell}>
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, pb: 0.5 }}>

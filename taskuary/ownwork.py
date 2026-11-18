@@ -52,12 +52,22 @@ def yours(store, t: dict) -> str:
     return str((said or {}).get('Body') or t.get('Title') or '').strip()
 
 
+def _words(text) -> str:
+    from .general import split_files
+    return split_files(text)['text'].strip()
+
+
 def ask(store, t: dict, row: dict = None) -> str:
     """HIS OWN WORDS THAT OPENED TASK `t` - what its chat begins with (conversation.items) - '' where something else opened it: a workflow's
     run, the dock's conversation, a task with no owner's words at all. `row`: its own row, where one is filed already (ensure)."""
     if not t or t.get('SourceRef') == 'assistant:dock' or t.get('Source') == 'workflow': return ''
     if not row and t.get('OriginBase') != 'owner': return ''          # ...no row yet: only a task he made himself is known to be his words
-    return str((row or {}).get('BodyText') or '').strip() or yours(store, t) or str(t.get('Title') or '').strip()
+    # ...his words and the files he attached to them, in the one block every line of his is written in (general.with_files): the row holds
+    # the words, the task's own ask the files
+    from .general import split_files, with_files
+    own = split_files(yours(store, t))
+    words = split_files((row or {}).get('BodyText'))['text'].strip() or own['text'].strip() or str(t.get('Title') or '').strip()
+    return with_files(words, own['files']) if words else ''
 
 
 def ensure(store, tid: int, when=None, why: str = '', actor: str = 'owner'):
@@ -77,7 +87,8 @@ def ensure(store, tid: int, when=None, why: str = '', actor: str = 'owner'):
         mid = store.add_message({
             'TaskId': tid, 'ExternalId': f'own:{tid}', 'ConversationId': f'own:{tid}',
             'Channel': CHANNEL, 'SourceName': SOURCE, 'Subject': t.get('Title') or 'Untitled',
-            'FromName': 'You', 'SentAt': at, 'BodyText': yours(store, t),
+            # ...his WORDS: the files he attached are named on his line in the chat (ask), never read out as a path in his message
+            'FromName': 'You', 'SentAt': at, 'BodyText': _words(yours(store, t)),
             'Status': 'routed'})
         store.add_route(mid, tid, 'own', None,
                         why or 'you started this yourself - no message came in, so the timeline '

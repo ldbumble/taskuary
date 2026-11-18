@@ -6,7 +6,7 @@ with the time the next turn took them. And a line held behind a turn that failed
 where the first line's road started again quietly. One road now: kept at once with its typed time, shown on every screen as waiting for the
 agent, taken together when the turn ends, and started again on a fresh session where the old one ended under it.
 """
-import json, threading, time, unittest
+import json, os, threading, time, unittest
 from unittest import mock
 
 from fastapi.testclient import TestClient
@@ -241,7 +241,7 @@ class AttachedFilesReachTheAgent(unittest.TestCase):
             general.take_line(self.s, tid, 'look at these', [str(own), str(self.pic)], 'owner')
             with self.assertRaises(ValueError): general.take_line(self.s, tid, '', [str(own)], 'owner')    # ...nothing left to send: said, never an empty line
         [w] = general.waiting_lines(self.s, tid)
-        self.assertEqual([p.rsplit('/', 1)[-1] for p in w['files']], ['the person.png'])
+        self.assertEqual([os.path.basename(p) for p in w['files']], ['the person.png'])
         self.assertTrue(self.inside(tid, w['files'][0]))
 
     # ...AND WHAT HE SENT IS NEVER DRAWN AS WHAT THE AGENT MADE (the attach stress round, 2026-11-18, recorded): his file is copied into the
@@ -271,3 +271,34 @@ class AttachedFilesReachTheAgent(unittest.TestCase):
         self.assertEqual(general.drop_line(self.s, tid, 'l-1'), {'ok': True})
         self.assertEqual(sorted(o['name'] for o in outputs.listing(tid)), ['the venue.png'])
         self.assertEqual(server._assistant_payload(tid)['outputs'], [])
+
+
+# A TASK MADE IN NEW WITH A FILE OPENS ITS CHAT WITH HIS WORDS AND THE FILE'S PILL (the stress round of New's attachments): its ask line is the
+# task's own Summary - his words, then the block naming the file - and it was drawn with no files at all, so the paths stood in his bubble as
+# text and no pill was drawn. The ask is read the way every other line of his is (general.split_files)
+class NewTasksAskKeepsItsFiles(unittest.TestCase):
+    def setUp(self):
+        from taskuary import config
+        self.s = MemoryStore()
+        self.d = config.home() / 'attachments' / 'prompt' / '209901'; self.d.mkdir(parents=True, exist_ok=True)
+        p = mock.patch.object(server, 'store', self.s); p.start(); self.addCleanup(p.stop)
+
+    def made(self, name, data, words='what does this say?'):
+        f = self.d / f'20991231-235959-abc123-{name}'; f.write_bytes(data); self.addCleanup(f.unlink, missing_ok=True)
+        c = TestClient(server.app)
+        tid = c.post('/api/tasks', json={'Title': words, 'Summary': general.with_files(words, [str(f)]), 'Kind': 'general'}).json()['taskId']
+        from taskuary import ownwork, conversation
+        ownwork.ensure(self.s, tid)
+        return tid, next(x for x in conversation.items(self.s, tid)['items'] if x['kind'] == 'line')
+
+    def test_each_kind_of_file_is_a_pill_on_the_ask_not_a_path_in_its_words(self):
+        from taskuary import outputs
+        for name, data in (('shot.png', b'\x89PNG fake'), ('q3 report.pdf', b'%PDF-1.4'), ('ledger.xlsx', b'PK\x03\x04'),
+                           ('rows.csv', b'a,b\n1,2\n'), ('memo.docx', b'PK\x03\x04')):
+            with self.subTest(name):
+                tid, line = self.made(name, data)
+                self.assertEqual(line['text'], 'what does this say?')
+                self.assertEqual(line['files'], [str(outputs.folder(tid) / name)])
+                self.assertTrue((outputs.folder(tid) / name).is_file())
+                from taskuary import ownwork
+                self.assertEqual(ownwork.row_for(self.s, tid)['BodyText'], 'what does this say?', 'his message in Came from is his words, no path')

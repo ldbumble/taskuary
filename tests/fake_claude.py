@@ -74,7 +74,7 @@ QUEUED = lambda: 0          # the sends still waiting behind this turn (the live
 
 def turn(prompt: str, n: int):
     t = time.time()
-    log('turn', chars=len(prompt), n=n)
+    log('turn', chars=len(prompt), n=n, **({'prompt': prompt} if os.environ.get('FAKE_CLAUDE_LOG_PROMPT') else {}))   # what the agent itself was handed
     if n == 1: out({'type': 'system', 'subtype': 'init', 'session_id': sid, 'model': arg('--model') or 'default', 'tools': []})
     unseen = len(prompt) + (len(system) if n == 1 else 0)
     time.sleep(THINK + PREFILL * unseen / 10_000)

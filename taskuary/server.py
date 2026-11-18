@@ -1261,7 +1261,7 @@ def create_task(body: TaskBody):
     tid = store.create_task({**fields, 'AskedVia': 'desktop', 'OriginBase': 'owner'}, ACTOR)
     # ...and a file attached in New is the task's own, in its folder - named under attachments/, its agent's Read was refused (2026-11-17)
     from . import outputs
-    if (s := fields.get('Summary')) and (s2 := outputs.take_in_text(tid, s)) != s: store.update_task(tid, {'Summary': s2}, ACTOR)
+    outputs.take_in_summary(store, tid, ACTOR)
     # A task created by the owner is their durable TODO. Agent runs may come and go without
     # silently completing it; only routed/triaged work is eligible for automatic completion.
     from . import selfclose
@@ -2498,9 +2498,9 @@ def _assistant_payload(task_id: int, session=None):
             # the files the agent made for this task (outputs.py): listed on the canvas, and a chip where an answer names one
             # ...each under the answer of the turn that made it (`after`, as a published page), so the turn shows what it made
             # ...by the turn that wrote it where that turn kept it (outputs.made_by), else by when it was made
-            # ...never a file a card carries: it is drawn on that card (outputs.on_cards); nor one he sent, as he sent it (outputs.sent)
-            'outputs': [{**o, 'after': by.get(o['path']) or at_turn(o.get('at'))} for by, cards, his in [(outputs.made_by(task_id), outputs.on_cards(store, task_id), outputs.sent(store, task_id))]
-                        for o in outputs.listing(task_id) if o.get('name') not in cards and o['path'] not in his],
+            # ...never a file a card carries: it is drawn on that card (outputs.on_cards); nor one he attached, until a turn writes it (outputs.made)
+            'outputs': [{**o, 'after': by.get(o['path']) or at_turn(o.get('at'))} for by, cards in [(outputs.made_by(task_id), outputs.on_cards(store, task_id))]
+                        for o in outputs.made(store, task_id) if o.get('name') not in cards],
             # ...and each EARLIER turn's own version of a file a later turn changed (outputs.turn_versions): drawn under that turn instead
             'turnOutputs': [o for cards in [outputs.on_cards(store, task_id)] for o in outputs.turn_versions(task_id) if o.get('name') not in cards],
             # ONE ENTRY PER CLI, and only the installed ones: this listed a provider per worker
@@ -7314,10 +7314,11 @@ def with_images(text: str, paths) -> str:
     return with_files(text, prompt_images(paths))
 
 
-def _upload_name(request: Request) -> str:
-    "The name the page gave an upload (X-File-Name), safe as one file name in its folder - '' with none."
+def _upload_name(request: Request, ext: str = '') -> str:
+    "The owner's own name for an upload (X-File-Name), made safe - with `ext`, that extension - or '' where none was sent."
     from urllib.parse import unquote
-    return re.sub(r'[^\w.\- ]+', '_', Path(unquote(request.headers.get('x-file-name') or '')).name).strip(' .')[:80]
+    name = re.sub(r'[^\w.\- ]+', '_', Path(unquote(request.headers.get('x-file-name') or '')).name).strip(' .')[:80]
+    return f'{Path(name).stem[:72].strip(" .")}.{ext}' if name and ext and Path(name).stem.strip(' .') else name if not ext else ''
 
 
 async def _save_prompt_image(tid: int | None, request: Request):
@@ -7331,10 +7332,10 @@ async def _save_prompt_image(tid: int | None, request: Request):
     if len(data) > IMG_MAX: raise HTTPException(413, 'image over 12 MB - crop it')
     d = config.home() / 'attachments' / ('waitroom' if tid is not None else 'prompt') / (str(tid) if tid is not None else time.strftime('%Y%m'))
     d.mkdir(parents=True, exist_ok=True)
-    # ...BY ITS OWN NAME, as a file is (the attach stress round, 2026-11-18): the box's chip read "venue plan.png" and his line's pill, once sent,
-    # the upload's stamp - its type is the picture's own, never the name's
-    stem = Path(_upload_name(request)).stem.strip(' .')
-    p = d / f'{time.strftime("%Y%m%d-%H%M%S")}-{secrets.token_hex(3)}{f"-{stem}" if stem else ""}.{ext}'
+    # ...UNDER HIS NAME FOR IT where the page sent one, as any file is (prompt_file): a picture's pill on his line, and its copy in the task's
+    # folder (outputs.take_in), read "20991231-235959-abc123.png" where his box had said "shot.png" (the stress round of New's attachments)
+    name = _upload_name(request, ext)
+    p = d / (f'{time.strftime("%Y%m%d-%H%M%S")}-{secrets.token_hex(3)}' + (f'-{name}' if name else f'.{ext}'))
     def keep():
         p.write_bytes(data)
         if tid is not None: store.audit('task', tid, 'waitroom_image', ACTOR, detail={'path': str(p), 'size': len(data)})

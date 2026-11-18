@@ -22,8 +22,8 @@ export const isImagePath = (p) => /\.(png|jpe?g|gif|webp)$/i.test(String(p || ""
 export const UPLOAD_MS = 120000;
 export async function savePromptFile(f) {
   const image = IMAGE_TYPES.test(f.type), timeout = UPLOAD_MS;
-  // ...a picture by its own name too, as his line's pill reads it once sent (server._upload_name)
-  const { data } = image ? await api.post("/api/prompt-image", f, { headers: { "Content-Type": f.type, ...(f.name ? { "X-File-Name": encodeURIComponent(f.name) } : {}) }, timeout })
+  const named = f.name ? { "X-File-Name": encodeURIComponent(f.name) } : {};          // ...a picture under his name for it too, as any file
+  const { data } = image ? await api.post("/api/prompt-image", f, { headers: { "Content-Type": f.type, ...named }, timeout })
     : await api.post("/api/prompt-file", f, { headers: { "Content-Type": "application/octet-stream", "X-File-Name": encodeURIComponent(f.name || "file") }, timeout });
   return { path: data.path, name: f.name || (image ? "pasted image" : "file"), image };
 }
@@ -179,5 +179,7 @@ export function ImageTray({ pics, sx, cannot = null }) {
 }
 
 // the words, then the files: how a CLI agent is shown a picture or a file (server.with_images says it the same way)
+// ...and the words alone, from a text withImages wrote (the server's general.split_files): a task's ask quoted on its page, never its paths
+export const wordsOf = (text) => String(text || "").replace(/\n\nATTACHED (?:IMAGES|FILES) \(read these files\)\n[\s\S]+$/, "");
 export const withImages = (text, paths) => (paths?.length
   ? `${text || ""}\n\n${paths.every(isImagePath) ? "ATTACHED IMAGES" : "ATTACHED FILES"} (read these files)\n${paths.join("\n")}` : text || "");

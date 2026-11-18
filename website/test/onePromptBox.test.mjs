@@ -71,7 +71,7 @@ test("a task chat's paste takes the one attach road, on the box, and no upload h
   assert.match(ws, /\{pics && <>\{fileChips\(pics\)\}\{fileState\(pics\)\}<\/>\}/, "its chips and their state in the box");
   assert.doesNotMatch(ws, /Attaching…|waitroom\/image|setUploading/, "no second road, no line of its own over the chat");
   assert.match(pi, /export const UPLOAD_MS = 120000;/);
-  assert.match(pi, /headers: \{ "Content-Type": f\.type, \.\.\.\(f\.name \? \{ "X-File-Name": encodeURIComponent\(f\.name\) \} : \{\}\) \}, timeout \}/, "a picture goes by its own name");
+  assert.match(pi, /headers: \{ "Content-Type": f\.type, \.\.\.named \}, timeout \}/);
   assert.match(pi, /e\?\.code === "ECONNABORTED" \? "the upload took too long - try it again"/);
   assert.match(read("NewSheet.jsx"), /const pics = usePromptImages\(\{ files: true \}\);/, "New's box takes any file");
 });

@@ -1845,10 +1845,14 @@ def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = ''
 
 def no_start(store, kind: str) -> str:
     "Why an agent of `kind` cannot run here, or '' - what New's own press asks before it makes a task (an agent failing a second later is a dead end)."
-    from . import capabilities
+    from . import agents as _ag, capabilities
     if kind == 'general' and not capabilities.has_ai(store): return f"{general.NO_AI}, so an agent can't run this yet"
-    if kind == 'coding' and not capabilities.can_code(store): return 'No coding tool is connected, so a coding agent cannot run this yet'
+    if kind == 'coding' and not capabilities.can_code(store): return f'{_ag.no_coding_why(store)}, so a coding agent cannot run this yet'
     return ''
+def no_start_chip(store, kind: str) -> dict:
+    "The button under no_start's line: the check that refused - Developer mode, the coding tool, the AI - opened where it is switched."
+    from . import agents as _ag
+    return {'verb': 'go', **_ag.no_coding_fix(store)} if kind == 'coding' else connect_ai_chip()
 
 
 def _made_now(store, tid: int, op: str, params: dict, lead: str = '', actor: str = 'owner') -> dict:
@@ -1857,9 +1861,10 @@ def _made_now(store, tid: int, op: str, params: dict, lead: str = '', actor: str
     sent. A start that did not happen says why, with no task to open."""
     # ...an agent with nothing to run it is not made at all: a task whose agent fails a second later is a dead end on the rail
     if no := ('' if op == 'outbox' else no_start(store, params.get('kind'))):
-        say_ = f"{no} - connect one under {places.name('ai')}, then ask again. Nothing was made."
+        chip = no_start_chip(store, params.get('kind'))
+        say_ = f"{no} - [{chip['label']}]({chip['href']}), then ask again. Nothing was made."
         record(store, tid, 'assistant', say_)
-        return {'say': say_, 'options': [], 'chips': [connect_ai_chip()] if routes() else [], 'decision': None}
+        return {'say': say_, 'options': [], 'chips': [chip] if routes() else [], 'decision': None}
     try:
         if op == 'outbox':
             from . import outbox

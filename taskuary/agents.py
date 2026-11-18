@@ -602,6 +602,13 @@ def developer_mode(store) -> bool:
 def no_coding_why(store) -> str:
     "Why there is no coding agent here, in one plain clause - the switch when it is off, else the missing tool."
     return 'Developer mode is off (Settings, Developer mode)' if not developer_mode(store) else 'No coding tool is connected'
+def no_coding_fix(store) -> dict:
+    """...and the button that lifts it, {label, href}: the switch that refused, never a place it is not (the walks, 2026-11-18: "No coding tool
+    is connected" over a connected Codex, its button to Connections, while the block was Developer mode)."""
+    from . import words
+    if not developer_mode(store):
+        return {'label': 'Turn on Developer mode', 'href': '#settings=config&group=Agent%20permissions&key=developer_mode'}
+    return {'label': 'Connect a coding tool', 'href': words.href('ai_apps')}
 
 
 def runs_here(profile: dict) -> bool:

@@ -188,15 +188,27 @@ CONNECTOR_ALLOW = {'github': {'use_as_tracker': 'treat GitHub issues/PRs as the 
 SETTING_VALUES = {'answer_to_agent': ('auto', 'ask', 'off')}   # timeline_fade retired with the Timeline (audit, 2026-11-05)
 
 
+# A REFUSAL NAMES THE SWITCH THAT REFUSED, AND OPENS IT (design round 2, 2026-11-18): "the owner has that switch off" named none, and an agent
+# told the owner to "turn on pull requests under Policies" - a page of mail rules with no such switch. Each switch by its label where the owner
+# sees it, and the link that opens that place; GitHub's are read where its card keeps them (store.github_permissions), never a second copy
+SWITCHES = {'agent_push_enabled': ('Agents may push / deploy', 'the GitHub card', '#connector=github'),
+            'use_as_tracker': ('GitHub is the issue tracker', 'the GitHub card', '#connector=github'),
+            'github_reply': ('Reply to issue/PR authors', 'the GitHub card', '#connector=github'),
+            'playbooks_enabled': ('Use playbooks', 'Settings → How mail is sorted', '#settings=config&group=How%20mail%20is%20sorted&key=playbooks_enabled')}
 def _switch_ok(store, name) -> bool:
     if not name: return True
-    if name in ('agent_push_enabled',): return store.get_setting(name) == '1'
+    if name == 'agent_push_enabled': return store.github_permissions()[1]
+    if name == 'use_as_tracker': return store.github_permissions()[0]
     if name == 'playbooks_enabled': return store.get_setting(name, '1') == '1'
     import json as _j
     c = store.get_connector_by_type('github') or {}
     try: cfg = _j.loads(c.get('ConfigJson') or '{}')
     except ValueError: cfg = {}
     return bool(cfg.get({'github_reply': 'reply_comments'}.get(name, name)))
+def switch_off(name) -> str:
+    "The switch `name` said as the owner finds it, with its link: what an agent passes on, never a place of its own guessing."
+    label, where, href = SWITCHES[name]
+    return f'"{label}" is off on {where} - [open it]({href}); only the owner turns it on'
 
 
 def parse(text: str) -> list:
@@ -261,7 +273,7 @@ def validate(store, p: dict) -> tuple:
     # an AGENT may ask for; the owner pressing Merge or Close issue on their own task needs no agent permission turned on.
     # Only Taskuary raises one (parse strips the mark from anything an agent wrote).
     if not p.get('closeout') and not _switch_ok(store, switch):
-        return False, f'{a} is not permitted - the owner has that switch off'
+        return False, f'{a} is not permitted - {switch_off(switch)}'
     return True, words
 
 

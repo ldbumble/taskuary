@@ -514,9 +514,21 @@ class ProposalTests(unittest.TestCase):
         self.assertEqual([p['action'] for p in ps], ['open_pr'])
         s = MemoryStore()
         ok, why = proposals.validate(s, ps[0])
-        self.assertFalse(ok); self.assertIn('switch off', why)      # push is off by default
+        self.assertFalse(ok); self.assertIn('is off on the GitHub card', why)      # push is off by default
         s.set_setting('agent_push_enabled', '1', 't')
         self.assertTrue(proposals.validate(s, ps[0])[0])
+
+    def test_a_refusal_names_the_switch_that_refused_and_links_to_it(self):
+        # a walk, 2026-11-18: "open_pr is not permitted - the owner has that switch off" named no switch, and the agent told the owner to "turn
+        # on pull requests under Policies" - a page of mail rules with no such switch. The switch is the GitHub card's own, read where the
+        # card keeps it (store.github_permissions), and the refusal names it with the link that opens it
+        s = MemoryStore()
+        cid = s.save_connector({'Type': 'github', 'Name': 'GitHub', 'Active': 1, 'ConfigJson': json.dumps({'agents_push': False})}, 'owner')
+        ok, why = proposals.validate(s, {'action': 'open_pr', 'why': 'tests pass'})
+        self.assertFalse(ok); self.assertIn('"Agents may push / deploy" is off', why); self.assertIn('(#connector=github)', why)
+        self.assertNotIn('Polic', why)
+        s.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps({'agents_push': True})}, 'owner')
+        self.assertTrue(proposals.validate(s, {'action': 'open_pr', 'why': 'tests pass'})[0])     # ...the card's switch is the one that counts
 
     def test_collect_queues_a_review_and_records_refusals(self):
         s = MemoryStore(); s.set_setting('agent_push_enabled', '1', 't')

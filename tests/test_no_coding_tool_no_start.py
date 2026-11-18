@@ -37,4 +37,23 @@ class NoCodingTool(unittest.TestCase):
             self.assertFalse(agents.coding_ready.real(self.s))
 
 
+class TheLineNamesTheCheckThatRefused(unittest.TestCase):
+    """The walks, 2026-11-18: "No coding tool is connected ... connect one under Connections" over a Codex that Connections showed connected -
+    the start was refused by Developer mode. The line is the check that refused, and its button opens that switch (agents.no_coding_fix)."""
+    def test_developer_mode_off_is_said_and_its_switch_is_the_button(self):
+        from taskuary import concierge
+        s = MemoryStore()
+        real = mock.patch.multiple(agents, coding_ready=agents.coding_ready.real, developer_mode=agents.developer_mode.real)
+        real.start(); self.addCleanup(real.stop)
+        with mock.patch.object(agents, 'cli_ready', return_value=True):
+            said, chip = concierge.no_start(s, 'coding'), concierge.no_start_chip(s, 'coding')
+            self.assertTrue(said.startswith('Developer mode is off'), said); self.assertNotIn('No coding tool', said)
+            self.assertEqual((chip['label'], chip['href']), ('Turn on Developer mode', '#settings=config&group=Agent%20permissions&key=developer_mode'))
+            s.set_setting(agents.DEV_MODE, '1', 'owner')
+            self.assertEqual(concierge.no_start(s, 'coding'), '')
+        with mock.patch.object(agents, 'cli_ready', return_value=False):
+            self.assertTrue(concierge.no_start(s, 'coding').startswith('No coding tool is connected'))
+            self.assertEqual(concierge.no_start_chip(s, 'coding')['label'], 'Connect a coding tool')
+
+
 if __name__ == '__main__': unittest.main()

@@ -130,7 +130,7 @@ class AMarkThatWasRefusedIsHeard(Acts):
     """A mark in an answer is read once its turn is over, so nothing answers the agent that wrote it. A refused one was a line on the task
     it never saw - under an answer reading "Proposed - it waits on the task for your yes" (the stress round, 2026-11-10)."""
     MARK = proposals.MARK + ' ' + json.dumps({'action': 'open_pr', 'why': 'the fix is ready'})
-    WHY = 'open_pr is not permitted - the owner has that switch off'
+    WHY = 'open_pr is not permitted - ' + proposals.switch_off('agent_push_enabled')
 
     def test_its_reason_goes_back_to_the_caller_and_into_the_agents_next_turn(self):
         self.answered(); miss = []

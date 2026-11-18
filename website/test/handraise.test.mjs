@@ -2,8 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { REST_LOOK_MS } from "../src/visible.js";
 import { advanceHandRaises, claimHandRaise, dismissHandRaise, enqueueHandRaise,
-  handRaiseDue, HAND_REST_MS, handRaiseWhat, isWatchingTask, loadHandRaiseState, nonOverlapping, pruneHandRaises,
+  handRaiseDue, handRaiseWhat, isWatchingTask, loadHandRaiseState, nonOverlapping, pruneHandRaises,
   saveHandRaiseState } from "../src/handraiseState.js";
 
 const session = (overrides = {}) => ({ TaskId: 247, AgentName: "coding", cli: "codex", kind: "session",
@@ -135,7 +136,7 @@ test("with no agent live and the socket up, the hand-raise watch reads at most t
   assert.ok(reads <= 2, `${reads} reads of the live runs in an idle minute`);
   assert.equal(handRaiseDue({ live: 1, socket: true, last: 0, now: 8000 }), true, "a live agent is read every tick");
   assert.equal(handRaiseDue({ live: 0, socket: false, last: 0, now: 8000 }), true, "with the socket down the tick is the only word");
-  assert.equal(handRaiseDue({ live: 0, socket: true, last: 0, now: HAND_REST_MS }), true, "and a lost event is caught by the slow look");
+  assert.equal(handRaiseDue({ live: 0, socket: true, last: 0, now: REST_LOOK_MS }), true, "and a lost event is caught by the slow look");
 });
 
 test("the hand-raise hook reads the live runs again when an agent's start is pushed", () => {

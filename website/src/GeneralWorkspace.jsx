@@ -11,7 +11,8 @@ import SendIcon from "@mui/icons-material/ArrowUpward";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import api from "./api.js";
-import { onLive, touches } from "./live.js";
+import { liveUp, onLive, touches } from "./live.js";
+import { restLook } from "./visible.js";
 import { aheadChat, heldChat, heldConversation } from "./taskDetail.js";
 import { AttachChip, fileChips, fileState, usePromptImages } from "./promptImages.jsx";
 import { keepUnsent, unsent } from "./unsent.js";
@@ -404,8 +405,15 @@ export function useConversation(tid, on) {
   }).catch(() => false) : Promise.resolve(false)); }, [tid, on]);
   useEffect(() => { const l = listOf(tid); rev.current = l?.rev || ""; setList(l); load(); }, [load]);   // eslint-disable-line react-hooks/exhaustive-deps
   const going = !!list?.working;
-  // ...a turn at work is read as it goes; at rest the server's own poke (task-changed) brings what is new, and a slow look backs it up
-  useEffect(() => { if (!on) return undefined; const t = setInterval(load, going ? 600 : 5000); return () => clearInterval(t); }, [on, going, load]);
+  // ...a turn at work is read as it goes; at rest the server's own poke (task-changed) brings what is new, and a slow look backs it up -
+  // every 5 s only while the socket is down, every 30 s under it (restLook: not every write a chat shows pokes - a comment does not).
+  // Every 5 s under a live socket was 12 reads a minute of a chat nobody was using (stress round, 2026-11-18)
+  useEffect(() => {
+    if (!on) return undefined;
+    let last = Date.now();
+    const t = setInterval(() => { if (going || restLook({ socket: liveUp(), last, now: Date.now() })) { last = Date.now(); load(); } }, going ? 600 : 5000);
+    return () => clearInterval(t);
+  }, [on, going, load]);
   useEffect(() => (on ? onLive("task-changed", (ev) => { if (touches(ev, tid)) load(); }) : undefined), [on, tid, load]);
   return { list, load };
 }

@@ -83,3 +83,9 @@ export function coalesced(fn, ms) {
   }
   return [wake, () => { dead = true; clearTimeout(id); id = 0; }];
 }
+
+// A LOOK AT REST, BESIDE THE SOCKET (stress round, 2026-11-18): a view that a push wakes still looks by itself now and then - for a lost
+// event, a hidden tab whose wake-ups wait, and a write that pokes nothing - at every tick while the socket is down, else once per
+// REST_LOOK_MS since its `last` read. One rule for the chat at rest and the hand-raise watch.
+export const REST_LOOK_MS = 30000;
+export const restLook = ({ socket = false, last = 0, now = Date.now() } = {}) => !socket || now - last >= REST_LOOK_MS;

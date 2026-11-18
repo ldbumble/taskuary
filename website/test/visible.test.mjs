@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pollCalming, pollWhileActive, pollWhileVisible } from "../src/visible.js";
+import { REST_LOOK_MS, pollCalming, pollWhileActive, pollWhileVisible, restLook } from "../src/visible.js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 // Every interval here runs on node:test's fake clock: on real timers a loaded box starved the 20ms
 // poll to one tick inside 55ms, and a failed assertion skipped stop(), so the live interval kept the
@@ -119,4 +121,16 @@ test("a calming poll reads at once only when asked to, and stops when told", asy
   t.mock.timers.tick(10000); await flush();
   assert.equal(n, 1);
   assert.equal(pollCalming(false, () => {}, 1000), undefined);
+});
+
+// AN OPEN CHAT AT REST UNDER A LIVE SOCKET (stress round, 2026-11-18): useConversation read the task's whole list every 5 s while nothing
+// was at work - 12 reads a minute of an idle chat, though a turn's start, a mail and a press all poke task-changed, read at once
+test("an idle chat with the socket up looks at most twice a minute; with it down, every tick", () => {
+  let reads = 0, last = 0;
+  for (let now = 5000; now <= 60000; now += 5000) if (restLook({ socket: true, last, now })) { reads++; last = now; }
+  assert.ok(reads <= 2, `${reads} reads of an idle chat in a minute`);
+  assert.equal(restLook({ socket: false, last: 0, now: 5000 }), true);
+  assert.equal(restLook({ socket: true, last: 0, now: REST_LOOK_MS }), true);
+  const src = readFileSync(fileURLToPath(new URL("../src/GeneralWorkspace.jsx", import.meta.url)), "utf8");
+  assert.match(src, /going \|\| restLook\(\{ socket: liveUp\(\), last, now: Date\.now\(\) \}\)/, "the chat's at-rest tick asks restLook");
 });

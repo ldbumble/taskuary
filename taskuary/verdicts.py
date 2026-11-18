@@ -592,7 +592,7 @@ def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, **kw) -> dic
         from . import demo
         if demo.enabled(): demo.after_send(store, rv['TaskId'])
         elif proposals._action(rv) not in proposals.HELD_ACTS and not (out.get('shut') or {}).get('closed'):
-            try: general.approved(store, rv['TaskId'], *pressed(rv, out), actor, review=rv.get('ReviewId'))
+            try: general.approved(store, rv['TaskId'], *pressed(store, rv, out), actor, review=rv.get('ReviewId'))
             except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: the agent was not told it went - {e}")
     # ...AND EVERY ONE THAT RAN AND FAILED (general.failed): an act's error, a send that did not go or may have - never a refusal before it
     # ran (stale, a blank, already answered), and never a held turn's steps, whose card tells its agent once for all (shellgate.approve_steps)
@@ -626,7 +626,7 @@ def in_words(got, n: int = 300) -> str:
                      if isinstance(v, (str, int, float)) and not isinstance(v, bool) and str(v).strip())[:n]
 
 
-def pressed(rv: dict, out: dict) -> tuple:
+def pressed(store, rv: dict, out: dict) -> tuple:
     "(the press, what it did) of an answered review, in words for its agent."
     if rv.get('Kind') == 'action':
         from . import proposals
@@ -636,7 +636,10 @@ def pressed(rv: dict, out: dict) -> tuple:
     if (env := _envelope(rv)).get('kind') == 'calendar':
         from .calwrite import head_of
         return 'Send', f'the calendar was told: {head_of(env)}'
-    return 'Send', f"the {'reply' if rv.get('MessageId') else 'message'} was sent" + (f" ({out['sent']})" if isinstance(out.get('sent'), str) else '')
+    # ...the card by its number and in the owner's words, as a No names it (cardqueue.said_no): with two emails out, "the message was sent"
+    # left its agent guessing which one went (the stress round, 2026-11-18)
+    from .cardqueue import what
+    return 'Send', f"rv{rv['ReviewId']} ({what(store, {'rids': [rv['ReviewId']], 'rows': [rv]})}) was sent"
 
 
 def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = None,

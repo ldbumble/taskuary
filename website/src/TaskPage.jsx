@@ -795,6 +795,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // right often enough to be trusted, and wrong silently when it was not.
   const [repos, setRepos] = useState([]);
   const sessionAlive = !!detail?.session?.alive;
+  // ...and AT WORK unless it has answered (generalAnswered: only a chat's session says `busy`; a pty never does, and is read by its quiet).
+  // A chat's CLI stays open half an hour after its answer, and this page read the whole task every 12 s of it (stress round, 2026-11-18):
+  // its next turn - his line, a mail it wakes for - pokes task-changed, which reads at once
+  const sessionAtWork = sessionAlive && !generalAnswered(true, detail?.session);
   const hasRunningRun = (detail?.runs || []).some((r) => r.Status === "running");
   const hasAgentReport = (detail?.comments || []).some((c) => /^(?:AGENT|CODER) REPORT(?:\r?\n|$)/.test(String(c.Body || "").trimStart()));
   const hasTranscript = !!detail?.transcript;
@@ -984,8 +988,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // a LIVE SESSION counts as much as a headless run here: the header chip is derived from
     // how long the pty has been quiet, so without re-asking it froze on whatever it said
     // when the task was opened - "needs you" over an agent that was mid-thought
-    const running = hasRunningRun || sessionAlive;
-    if (sessionAlive) sessionSettleUntil.current = Date.now() + 120000;
+    const running = hasRunningRun || sessionAtWork;
+    if (sessionAtWork) sessionSettleUntil.current = Date.now() + 120000;
     const settling = detailTaskStatus === "in_progress" && hasTranscript
       && (hasAgentReport || Date.now() < sessionSettleUntil.current);
     if (!((running || wrapping || settling || writingUp === selected) && selected)) return undefined;
@@ -996,7 +1000,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // ...and it CALMS while nothing moves (2026-11-09): a running agent's page read the same task every 3 s, at up to 4 s a read on a
     // busy home. Unchanged reads stretch the gap to 12 s; a changed one - or a task-changed poke, which reads at once - brings it back.
     return pollCalming(active, async () => { const was = detailMoves.current; await loadDetail(selected); return detailMoves.current !== was; }, 3000, 12000);
-  }, [active, detailTaskStatus, hasAgentReport, hasRunningRun, hasTranscript, loadDetail, selected, sessionAlive, wrapping, writingUp]);
+  }, [active, detailTaskStatus, hasAgentReport, hasRunningRun, hasTranscript, loadDetail, selected, sessionAtWork, wrapping, writingUp]);
 
   // THE MENUS' CHANGES ARE THE TASK TOOLS (Stream B, the owner 2026-10-18: "every act leaves a receipt"): who does it, priority and
   // who holds it run down the operations road, so each is recorded and said in the chat when the task is on the Assistant's table

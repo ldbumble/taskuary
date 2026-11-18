@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pollCalming, pollWhileActive, pollWhileVisible } from "../src/visible.js";
+import { REST_LOOK_MS, pollCalming, pollWhileActive, pollWhileVisible, restLook } from "../src/visible.js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 // Every interval here runs on node:test's fake clock: on real timers a loaded box starved the 20ms
 // poll to one tick inside 55ms, and a failed assertion skipped stop(), so the live interval kept the
@@ -119,4 +121,36 @@ test("a calming poll reads at once only when asked to, and stops when told", asy
   t.mock.timers.tick(10000); await flush();
   assert.equal(n, 1);
   assert.equal(pollCalming(false, () => {}, 1000), undefined);
+});
+
+// AN OPEN CHAT AT REST UNDER A LIVE SOCKET (stress round, 2026-11-18): useConversation read the task's whole list every 5 s while nothing
+// was at work - 12 reads a minute of an idle chat, though a turn's start, a mail and a press all poke task-changed, read at once
+test("an idle chat with the socket up looks at most twice a minute; with it down, every tick", () => {
+  let reads = 0, last = 0;
+  for (let now = 5000; now <= 60000; now += 5000) if (restLook({ socket: true, last, now })) { reads++; last = now; }
+  assert.ok(reads <= 2, `${reads} reads of an idle chat in a minute`);
+  assert.equal(restLook({ socket: false, last: 0, now: 5000 }), true);
+  assert.equal(restLook({ socket: true, last: 0, now: REST_LOOK_MS }), true);
+  const src = readFileSync(fileURLToPath(new URL("../src/GeneralWorkspace.jsx", import.meta.url)), "utf8");
+  assert.match(src, /restLook\(\{ socket: liveUp\(\), last, now: Date\.now\(\), every: going \? 3000 : REST_LOOK_MS \}\)/, "the chat's tick asks restLook");
+});
+
+// A TURN AT WORK IS READ AS IT MOVES, NOT EVERY 600 MS (stress round, 2026-11-18): the chat built the task's whole list ~100 times a minute
+// while a turn ran - as often through half a minute of silent thinking as through a stream of steps. Each step is pushed (run-tail); the
+// tick is the backup, every 3 s under a live socket
+test("a turn at work, socket up: half a minute of silence is at most 10 looks, and a pushed step is read", () => {
+  let reads = 0, last = 0;
+  for (let now = 600; now <= 30000; now += 600) if (restLook({ socket: true, last, now, every: 3000 })) { reads++; last = now; }
+  assert.ok(reads <= 10, `${reads} reads of a silent turn in 30 s`);
+  const src = readFileSync(fileURLToPath(new URL("../src/GeneralWorkspace.jsx", import.meta.url)), "utf8");
+  assert.match(src, /onLive\("run-tail", \(ev\) => \{ if \(touches\(ev, tid\)\) wake\(\); \}\)/, "the chat reads when its turn's step is pushed");
+  assert.match(src, /coalesced\(look, 600\)/, "at most every 600 ms");
+});
+
+// ...AND THE CHAT'S SESSION READ WITH IT (stress round, 2026-11-18): /assistant was read every 1-2.5 s for the whole of a turn
+test("a turn at work reads its session when a step is pushed, with a 5 s look under a live socket", () => {
+  const src = readFileSync(fileURLToPath(new URL("../src/GeneralWorkspace.jsx", import.meta.url)), "utf8");
+  const at = src.indexOf("const [wake, stop] = coalesced(read, 1000);");
+  assert.ok(at > 0, "the session read is coalesced and woken by the push");
+  assert.match(src.slice(at, at + 600), /onLive\("run-tail"[\s\S]*every: 5000/);
 });

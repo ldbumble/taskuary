@@ -758,3 +758,21 @@ def test_a_message_in_the_chat_carries_its_files_both_chats_alike():
     assert (x['mid'], x['files'], x['words']) == (mid, 1, 'This seems to be not working')
     [y] = codingchat.mails(s, tid)
     assert {k: y[k] for k in x} == x and y['joined']
+
+
+def test_a_chat_turn_tells_its_task_s_tabs_as_it_moves():
+    """THE OPEN CHAT READ ITS LIST EVERY 600 MS WHILE A TURN RAN (stress round, 2026-11-18): nothing of a chat's turn was pushed, so the
+    page could only poll - ~100 builds a minute, through silent thinking as much as through steps. A step recorded and a turn's start and
+    end each push run-tail for the task, as a pty's output does; the page reads on it."""
+    from taskuary import live
+    store = MemoryStore()
+    tid = general_task(store)
+    session = general.GeneralSession(store, tid)
+    told = []
+    with mock.patch.object(live, 'emit', lambda kind, **p: told.append((kind, p.get('task_id')))):
+        session._remember_trace('tool_call', 'Read', {'args': {'path': 'vendors.csv'}})
+        assert told == [(live.RUN, tid)], told
+        session.busy = True; session.busy = True; session.busy = False
+        assert told == [(live.RUN, tid)] * 3, 'a start and an end are told once each; the same state again is no news'
+    try: session.close()
+    except Exception: pass

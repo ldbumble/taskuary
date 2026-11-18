@@ -11,7 +11,8 @@ import SendIcon from "@mui/icons-material/ArrowUpward";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import api from "./api.js";
-import { onLive, touches } from "./live.js";
+import { liveUp, onLive, touches } from "./live.js";
+import { REST_LOOK_MS, coalesced, restLook } from "./visible.js";
 import { aheadChat, heldChat, heldConversation } from "./taskDetail.js";
 import { AttachChip, fileChips, fileState, usePromptImages, useSendWhenUp } from "./promptImages.jsx";
 import { holdUnsent } from "./unsent.js";
@@ -404,8 +405,19 @@ export function useConversation(tid, on) {
   }).catch(() => false) : Promise.resolve(false)); }, [tid, on]);
   useEffect(() => { const l = listOf(tid); rev.current = l?.rev || ""; setList(l); load(); }, [load]);   // eslint-disable-line react-hooks/exhaustive-deps
   const going = !!list?.working;
-  // ...a turn at work is read as it goes; at rest the server's own poke (task-changed) brings what is new, and a slow look backs it up
-  useEffect(() => { if (!on) return undefined; const t = setInterval(load, going ? 600 : 5000); return () => clearInterval(t); }, [on, going, load]);
+  // ...a turn at work is read as it moves: each step it records is pushed (run-tail - general.GeneralSession._moved, a pty's output, an ACP
+  // step), read at most every 600 ms. At rest the server's own poke (task-changed) brings what is new. A slow look backs both up - every
+  // tick while the socket is down; under it every 3 s at work and 30 s at rest (restLook: not every write a chat shows pokes - a comment
+  // does not). Reading every 600 ms at work and 5 s at rest was ~100 and 12 builds a minute of the list (stress round, 2026-11-18)
+  useEffect(() => {
+    if (!on) return undefined;
+    let last = Date.now();
+    const look = () => { last = Date.now(); return load(); };
+    const [wake, stop] = coalesced(look, 600);
+    const off = onLive("run-tail", (ev) => { if (touches(ev, tid)) wake(); });
+    const t = setInterval(() => { if (restLook({ socket: liveUp(), last, now: Date.now(), every: going ? 3000 : REST_LOOK_MS })) look(); }, going ? 600 : 5000);
+    return () => { clearInterval(t); off(); stop(); };
+  }, [on, going, load, tid]);
   useEffect(() => (on ? onLive("task-changed", (ev) => { if (touches(ev, tid)) load(); }) : undefined), [on, tid, load]);
   return { list, load };
 }
@@ -853,10 +865,14 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ...and NOT while it only waits on the page (2026-11-17): every way the page's ask is answered - the saved sign-in typed, the fill page,
   // the owner signing in or stepping through on it (signin._continue, browsergate._close) - is a workerstate.record, whose task-changed the
   // quiet pane below reads once. Read every 2.5 s, it was a read of the whole conversation for as long as the page stood unanswered
+  // ...READ WHEN THE TURN MOVES (stress round, 2026-11-18): each step is pushed (run-tail), read at most once a second; the tick only backs it
+  // up - every tick while the socket is down, else every 5 s (restLook). Every 1-2.5 s for the whole turn was ~25 reads a minute of a turn
+  // that was thinking in silence
   useEffect(() => {
     if (!busy) return undefined;
-    let live = true;
-    const timer = setInterval(async () => {
+    let live = true, last = Date.now();
+    const read = async () => {
+      last = Date.now();
       try {
         const { data: fresh } = await api.get(`/api/tasks/${task.TaskId}/assistant`);
         if (!live) return;
@@ -865,8 +881,12 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         // finished answer (2026-10-15)
         onSession?.(fresh.session || null);
       } catch { /* it will still be there next tick */ }
-    }, drawn ? 2500 : 1000);      // a start that has drawn nothing yet is read every second: its first word gives the room at once
-    return () => { live = false; clearInterval(timer); };
+    };
+    const [wake, stop] = coalesced(read, 1000);
+    const off = onLive("run-tail", (ev) => { if (touches(ev, task.TaskId)) wake(); });
+    const timer = setInterval(() => { if (restLook({ socket: liveUp(), last, now: Date.now(), every: 5000 })) read(); },
+      drawn ? 2500 : 1000);      // a start that has drawn nothing yet is read every second with no socket: its first word gives the room at once
+    return () => { live = false; clearInterval(timer); off(); stop(); };
   }, [busy, drawn, task.TaskId, onSession]);
   // ...and what a read brings is handed to the standing thread (a revision bump), as the poll does: taken into `data` alone, the owner's
   // Continue note waited for the next poll to show (the owner, 0.3.9.51: "I did Continue, filled it out and nothing happened")

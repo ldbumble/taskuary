@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
-  AGENT, agentPhase, focusStage, hasCorrespondent, ownerControlsCompletion, replySource, sessionWord, wentOut, pendingProposals, pendingReplyReview, replyPhase,
+  AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, replySource, sessionWord, wentOut, pendingProposals, pendingReplyReview, replyPhase,
   sentReplyReview, taskPhase, timelinePhases,
 } from "../src/taskLifecycle.js";
 
@@ -241,4 +241,19 @@ test("no session offers a Stop and save anywhere on the task page, live or ended
   const page = readFileSync(fileURLToPath(new URL("../src/TaskPage.jsx", import.meta.url)), "utf8");
   assert.doesNotMatch(page, /canSave|endedByStop/, "no second road to the write-up for a session that has ended");
   assert.doesNotMatch(page, /"save-end"|stopSave/);
+});
+
+// A CHAT AT REST IS NOT RE-READ ON A TIMER (stress round, 2026-11-18): a general agent's CLI stays open half an hour after it answers, and
+// the task page counted it as a running agent - the whole task read every 3-12 s for all of that half hour. Only a session at work (or one
+// that cannot say, a pty) keeps the page's calm poll on; a chat's next turn pokes task-changed, read at once
+test("the task page polls its detail for a session at work, never for a chat that has answered", () => {
+
+  const chatAtRest = { alive: true, busy: false, waiting: true }, chatAtWork = { alive: true, busy: true }, pty = { alive: true, waiting: true };
+  const atWork = (s) => !!s?.alive && !generalAnswered(true, s);
+  assert.equal(atWork(chatAtRest), false);
+  assert.equal(atWork(chatAtWork), true);
+  assert.equal(atWork(pty), true, "a pty says no busy: its quiet is watched");
+  const source = taskSource();
+  assert.match(source, /const sessionAtWork = sessionAlive && !generalAnswered\(true, detail\?\.session\);/);
+  assert.match(source, /const running = hasRunningRun \|\| sessionAtWork;/, "the poll runs for a session at work, not one merely alive");
 });

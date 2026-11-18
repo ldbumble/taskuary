@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { REST_LOOK_MS } from "../src/visible.js";
 import { advanceHandRaises, claimHandRaise, dismissHandRaise, enqueueHandRaise,
-  handRaiseWhat, isWatchingTask, loadHandRaiseState, nonOverlapping, pruneHandRaises,
+  handRaiseDue, handRaiseWhat, isWatchingTask, loadHandRaiseState, nonOverlapping, pruneHandRaises,
   saveHandRaiseState } from "../src/handraiseState.js";
 
 const session = (overrides = {}) => ({ TaskId: 247, AgentName: "coding", cli: "codex", kind: "session",
@@ -123,4 +126,21 @@ test("a queued hand whose session has gone is let go - a task deleted while its 
   assert.deepEqual(pruneHandRaises(q, [session()]), [done, other]);
   assert.equal(pruneHandRaises(q, [session(), session({ TaskId: 4 })]), q, "nothing gone: the same queue, no re-render");
   assert.deepEqual(pruneHandRaises([], []), []);
+});
+
+// AT REST THE HAND-RAISE WATCH WAITS FOR THE SOCKET (stress round, 2026-11-18): /api/runs/live was read every 8 s on every page with no
+// agent live - half the requests of an idle minute. A live agent is still read every tick (its quiet is what says it parked).
+test("with no agent live and the socket up, the hand-raise watch reads at most twice a minute", () => {
+  let reads = 0, last = 0;
+  for (let now = 8000; now <= 60000; now += 8000) if (handRaiseDue({ live: 0, socket: true, last, now })) { reads++; last = now; }
+  assert.ok(reads <= 2, `${reads} reads of the live runs in an idle minute`);
+  assert.equal(handRaiseDue({ live: 1, socket: true, last: 0, now: 8000 }), true, "a live agent is read every tick");
+  assert.equal(handRaiseDue({ live: 0, socket: false, last: 0, now: 8000 }), true, "with the socket down the tick is the only word");
+  assert.equal(handRaiseDue({ live: 0, socket: true, last: 0, now: REST_LOOK_MS }), true, "and a lost event is caught by the slow look");
+});
+
+test("the hand-raise hook reads the live runs again when an agent's start is pushed", () => {
+  const src = readFileSync(fileURLToPath(new URL("../src/handraise.js", import.meta.url)), "utf8");
+  assert.match(src, /onLive\(\["task-changed", "run-tail"\]/);
+  assert.match(src, /handRaiseDue\(\{ live, socket: liveUp\(\), last \}\)/);
 });

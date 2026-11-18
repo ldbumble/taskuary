@@ -1,4 +1,5 @@
 import { says, subState } from "./laneSays.js";
+import { restLook } from "./visible.js";
 import { shownAgent } from "./kinds.js";
 // Pure hand-raise state. Keeping this out of React makes the polling edge cases testable:
 // delayed responses, uncertain idle screens, vanished processes, and multiple live rows.
@@ -126,6 +127,12 @@ export const pruneHandRaises = (queue, rows) => {
   return kept.length === q.length ? q : kept;
 };
 export const dismissHandRaise = (queue) => (queue || []).slice(1);
+
+// WHEN THE HAND-RAISE WATCH READS AGAIN (stress round, 2026-11-18): every 8 s while any agent is live - a parked session is told by its
+// quiet, which no event says - but with none live there is nothing to raise, and an agent's start pokes the socket (task-changed,
+// run-tail), which reads at once. It read /api/runs/live every 8 s on every page at rest, ~8 of the ~16 requests an idle minute.
+// The slow look stays for a lost event, a hidden tab (whose wake-ups wait) and a socket that is down.
+export const handRaiseDue = ({ live = 0, ...look } = {}) => live > 0 || restLook(look);
 
 // setInterval does not wait for promises. Without this gate, an older slow response can land
 // after a newer one and rewind the tracker, making the next poll ring again at random.

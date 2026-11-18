@@ -1,17 +1,10 @@
 import { fmtTime } from "./dates.js";
 import { span } from "./timeWords.js";
-// The server's scheduler wakes every 30 seconds. Far from the next scheduled sync the Timeline
-// can check quietly; near (and just after) the due time it must watch closely or a short refresh
-// can start and finish between UI checks and the sync glyph never moves.
-export const syncStatusDelay = ({ running = false, nextAt = null, now = Date.now() } = {}) => {
-  if (running) return 2000;
-  if (!nextAt) return 30000;
-  const untilDue = nextAt - now;
-  if (untilDue > 35000) return Math.min(30000, untilDue - 30000);
-  // A minute overdue the scheduler is off, asleep or stuck (the demo never polls): 2 Hz for ever was ~120 reads an idle minute,
-  // each a full re-render of the rail on a large home (perf 2.8, 2026-10-19). A sync that does start says so on the socket.
-  return untilDue > -60000 ? 500 : 30000;
-};
+// How long the Timeline waits before it asks the sync status again by itself. A sync that starts or ends says so on the
+// socket (store.set_setting('ingest_status') pushes ingest-status, and the observer reads at once), so an idle page only checks
+// slowly in case an event was lost. Watching twice a second for the 35 s before every due sync and the minute after it was
+// ~70-190 reads a cycle that the push already covered (stress round, 2026-11-18); a running sync is still followed closely.
+export const syncStatusDelay = ({ running = false } = {}) => (running ? 2000 : 30000);
 
 // One face for the sync clock, so the Timeline's caption and the pipe's chip can never disagree
 // about when the mail was last read. `lastAt` is a real Date (built from the SERVER's clock, not

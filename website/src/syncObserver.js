@@ -4,10 +4,10 @@ import { syncStatusDelay } from './syncTiming.js';
 // discover completion when an event is lost. Elapsed time never means completion.
 // `gather`: live events that come in a burst are read ONCE, `gather` ms after the last of them - a press of Next sends two or three
 // (the walk's settle, the rail's, the turn's), and each asked the status again (the overnight walk, 2026-10-26)
-export function observeSync({ read, changed, failed, subscribe, now = Date.now,
+export function observeSync({ read, changed, failed, subscribe,
   schedule = setTimeout, cancel = clearTimeout, gather = 0 }) {
   let alive = true, flight = null, again = false, timer = null, soon = null;
-  let running = false, nextAt = null, unavailable = false;
+  let running = false, unavailable = false;
   const refresh = () => {
     if (!alive) return Promise.resolve();
     if (flight) { again = true; return flight; }
@@ -16,12 +16,11 @@ export function observeSync({ read, changed, failed, subscribe, now = Date.now,
       if (!alive) return;
       unavailable = false;
       running = data.status?.state === 'running';
-      nextAt = data.nextPollAt ? now() + (data.nextPollAt - data.now) * 1000 : null;
       changed(data);
     }).catch(error => { if (alive) { unavailable = true; failed(error); } }).finally(() => {
       flight = null;
       if (!alive) return;
-      const delay = again ? 0 : syncStatusDelay({ running: running || unavailable, nextAt, now: now() });
+      const delay = again ? 0 : syncStatusDelay({ running: running || unavailable });
       again = false;
       timer = schedule(refresh, delay);
     });

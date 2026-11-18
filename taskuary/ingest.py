@@ -1682,7 +1682,13 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
         # it is now behind (its freshness marker - whom it answers stays its own, AnswersMid). One nobody wrote stays owed to whom it was
         # raised for: its agent hears the new line (reply_to_agent, thread_moved) and names who its letter goes to where it writes it
         # (wrapup.agent_reply)
+        # ...and the pin is ONLY the freshness marker: a draft that never named whom it answers (the owner's own words typed into the
+        # card) answered its MessageId, so moving that to a line from somebody else readdressed it - a person's reply went "to" the
+        # helpdesk notice that joined the thread, a no-reply address the send then answered. Whom it answers is pinned first
         if v and not talking:
+            from .wrapup import _person
+            if drafted and not behind.get('AnswersMid') and _person(store, behind.get('MessageId')) != _person(store, mid):
+                store.set_review_answers(behind['ReviewId'], behind['MessageId'])
             if drafted: store.update_review_message(behind['ReviewId'], mid)
             if not msg.get('_reply_agent') and not agent_drafts(store, tid, went):
                 if drafted: store.add_comment(tid, 'triage', 'agent', 'The thread moved - the drafted reply is behind it.')

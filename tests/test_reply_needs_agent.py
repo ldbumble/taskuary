@@ -442,3 +442,18 @@ def test_the_offer_on_a_strangers_held_task_starts_no_agent_and_says_why():
     assert not started.called and not ses.send_prompt.called
     assert not [m for m in general.press_lines(s, tid) if 'accepted the offer' in m['content'][0]['text']]
     assert s.get_task(tid)['Kind'] != 'general' and ingest.offer_of(s, tid) == OFFER
+
+
+# ── a machine's line on a person's thread moves the draft's freshness pin, never whom it answers ─────────────────────────────
+def test_a_notice_joining_the_thread_leaves_the_owners_typed_reply_addressed_to_the_person():
+    from taskuary import cardqueue
+    s = store(); tid = reply_task(s)
+    rv = s.pending_review(tid, kind='draft')
+    s.save_review_draft(rv['ReviewId'], 'Yes, Tuesday works.')                  # the owner typed it into the card: no envelope pinned yet
+    notice = mail(external_id='n1', from_email='noreply@helpdesk.example', from_name='Helpdesk', sent_at='2026-10-28 11:00',
+                  body='Your request was updated. Reply above this line to add a comment.', sender_class='automated')
+    ingested(s, notice, says(intent='reply_only', kind='general', sender_class='automated'))
+    rv = s.get_review(rv['ReviewId'])
+    assert rv['MessageId'] != rv['AnswersMid']                                     # the pin moved to the newest line...
+    assert s.get_message(rv['AnswersMid'])['FromEmail'] == ERIN                    # ...and the reply still answers Erin
+    assert cardqueue.what(s, {'rids': [rv['ReviewId']], 'rows': [rv]}) == 'the reply to Erin Blake'

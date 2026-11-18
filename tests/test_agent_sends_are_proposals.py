@@ -210,3 +210,26 @@ class AProposalSaysWhatNeverWhere(unittest.TestCase):
                                   '"record": {"VENDORID": "V1"}, "gateway": "https://evil.example/y"}')
         last = json.loads(max((r for r in s.list_reviews() if r['TaskId'] == tid), key=lambda r: r['ReviewId'])['DraftText'])
         self.assertEqual(last['type'], 'intacct_update'); self.assertNotIn('gateway', last)
+
+    def test_a_proposal_that_names_no_card_is_pinned_to_the_one_or_asked_which(self):
+        """A run_tool proposal with no connector_id ran at the press on the first card of its type (resolve_cfg) - with two Intacct
+        companies, a bill posted to whichever came first, under a card that named that one. It is pinned when filed: the one card of
+        the type that is on and a tool, or refused naming the several."""
+        s = server.store
+        tid = s.create_task({'Title': 'Post the Payworth bill', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        cards = s.connectors_by_type('intacct')
+        for c in cards: s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 0}, 'test')
+        one = cards[0]['ConnectorId']
+        s.save_connector({'ConnectorId': one, 'Active': 1, 'Roles': 'tool'}, 'test')
+        two = s.save_connector({'Type': 'intacct', 'Name': 'Intacct - Northwind West', 'Active': 0, 'Roles': 'tool'}, 'test')
+        try:
+            p = {'action': 'run_tool', 'type': 'intacct_create', 'object': 'VENDOR', 'record': {'NAME': 'Payworth'}}
+            q = proposals.queue(s, tid, dict(p), 'agent')
+            self.assertEqual(json.loads(s.get_review(q['reviewId'])['DraftText'])['connector_id'], one)
+            s.save_connector({'ConnectorId': two, 'Active': 1}, 'test')
+            miss = []
+            self.assertIsNone(proposals.queue(s, tid, dict(p), 'agent', refused=miss))
+            self.assertIn('connector_id', miss[0]); self.assertIn(str(two), miss[0])
+        finally:
+            for c in s.connectors_by_type('intacct'): s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 0}, 'test')
+

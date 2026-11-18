@@ -361,10 +361,16 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
     # ...and an agent's says WHAT to run, never WHERE (reports.query_only, as tools/run): its connection by number, never a host, a
     # credential or a program of its own - which the owner's Approve ran, the body winning over the card (resolve_cfg). A workflow's
     # write is the owner's own saved step and keeps what he saved
+    several = ''
     if p.get('action') == 'run_tool' and actor != 'workflow':
-        from .reports import query_only
+        from .reports import REGISTRY, query_only, tool_card
         p = {**query_only(p), **({'connector_id': p['connector_id']} if str(p.get('connector_id') or '').strip() else {})}
+        # ...on THE card it will run on, pinned now (reports.tool_card): the press ran the first card of its type, under a card naming it
+        if p.get('type') in REGISTRY and not p.get('connector_id'):
+            try: p = {**p, **({'connector_id': c['ConnectorId']} if (c := tool_card(store, p['type'])) else {})}
+            except ValueError as e: several = str(e)
     ok, why = validate(store, p)
+    if ok and several: ok, why = False, several
     # ...a new GitHub issue names its repository and a title, said to the agent now rather than at the press
     if ok and p.get('action') == 'run_tool' and p.get('type') == 'github_issue':
         from .github import issue_check, issue_labels

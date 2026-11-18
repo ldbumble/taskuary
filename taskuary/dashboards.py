@@ -641,6 +641,11 @@ def _panel(spec, data, c, days) -> list:
     return [f'{t}:', *(f'{x}: {fmt(v)}' for x, v in gs)] if gs else [f'{t}: nothing']
 
 
+def without(srcs) -> str:
+    """A source a run went without, named after its headline as a report's run names one (`label: FAILED`): the bell reads it there."""
+    return ''.join(f" · {d.get('label')}: FAILED" for d in srcs if d.get('failed'))
+
+
 def unread(srcs) -> str:
     """The line a run says when some of its sources could not be read - the rest still drew."""
     bad = [d for d in srcs if d.get('failed')]
@@ -653,8 +658,7 @@ def as_text(spec: dict, data: dict, nums: list = None) -> tuple:
     body held the stat tiles only, so an agent sent a dashboard said it "shows only totals" beside a goal, a ranking and a list)."""
     srcs, days = (data.get('sources') or {}).values(), _days(spec)
     head = ' · '.join(f'{t} {v}' for t, v in headline(spec, data, nums)[:3]) or f"{sum(len(d.get('rows') or []) for d in srcs)} rows"
-    # ...and a source it went without, named in the headline as a report's run names one (`label: FAILED`): the bell reads it there
-    head += ''.join(f" · {d.get('label')}: FAILED" for d in srcs if d.get('failed'))
+    head += without(srcs)
     note = unread(srcs)
     span_ = f'Range: the last {days} days' if days else 'Range: everything the sources returned'
     panels = ['\n'.join(_panel(spec, data, c, days)) for c in spec.get('components') or []]
@@ -701,8 +705,10 @@ def file_run(store, src: dict, cfg: dict, trigger: str = 'schedule') -> dict:
     # tasks 0 · Open now 0" stood on the rail beside the tasks opened next, until the next morning's run (the bug hunt, 2026-11-12)
     nums = numbers(cfg, data)
     if srcs and (not any(d['rows'] for d in srcs) or (nums and not any(v for _, v in nums))):
-        return {'message_id': None, 'subject': f'{title} — nothing to show yet', 'files': 0, 'said': 0, 'failed': False,
-                'summary': 'Every source was read and none has a number yet'}
+        # ...said as it is: a source that failed, and a tile bound to a column its source stopped returning, are not "no number yet"
+        why, note = problems(cfg, data), unread(srcs)
+        return {'message_id': None, 'subject': f'{title} — nothing to show yet{without(srcs)}', 'files': 0, 'said': 0, 'failed': False,
+                'summary': '; '.join(why) or 'Every source was read and none has a number yet', **({'note': note} if note else {})}
     head, text = as_text(cfg, data, nums)          # every panel, not the tiles alone: Send to agent hands over this body (2026-11-17)
     note = unread(srcs)
     stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')

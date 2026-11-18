@@ -643,3 +643,22 @@ def test_a_run_without_one_of_its_sources_reaches_the_bell_as_a_reports_does():
     assert out['message_id'] and not out['failed'] and out['subject'].endswith('Bills: FAILED')
     rang = [p for p in problems.collect(s) if p['key'] == f"report:{src['SourceId']}"]
     assert rang and rang[0]['title'] == 'Northwind desk ran without Bills' and 'gone' in rang[0]['detail']
+
+
+def test_a_run_with_nothing_to_show_still_says_the_source_it_went_without_and_the_column_that_went():
+    """A run with no number puts nothing on the rail - but it dropped the note with it: a dashboard whose second source broke while
+    the first was empty said "Every source was read" in its history and nothing in the bell, and one whose table lost the column
+    every tile counted said "none has a number yet"."""
+    from taskuary import problems
+    s = MemoryStore()
+    spec = {**SPEC, 'sources': [{'key': 'replies', 'label': 'Replies', 'type': 'taskuary_data', 'dataset': 'replies'},
+                                {'key': 'bills', 'label': 'Bills', 'type': 'taskuary_data', 'dataset': 'gone'}],
+            'components': [{'kind': 'stat', 'title': 'Replies sent', 'source': 'replies'}]}
+    src = _save(s, spec)
+    out = reports.run_one(s, src, None, 'manual')
+    assert out['message_id'] is None and not out['failed'] and 'gone' in out['note']
+    assert any(p['title'] == 'Northwind desk ran without Bills' for p in problems.collect(s))
+    s2 = _store()
+    shape = {**SPEC, 'components': [{'kind': 'stat', 'title': 'Open hours', 'source': 'tasks', 'agg': 'sum', 'y': 'hours_open'}]}
+    out = reports.run_one(s2, _save(s2, shape), None, 'manual')
+    assert out['message_id'] is None and 'no column hours_open' in out['summary']

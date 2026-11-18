@@ -121,7 +121,7 @@ class OnePress(unittest.TestCase):
         self.assertNotIn('Error', said); self.assertNotIn('Traceback', said)
         def need(name, a): return a['item']
         said = agenttools.rpc({'id': 1, 'method': 'tools/call', 'params': {'name': 'tick', 'arguments': {}}}, need)['result']['content'][0]['text']
-        self.assertEqual(said, 'tick needs `item` - call it again with it')
+        self.assertEqual(said, agenttools.refusal('`item` was not given', 'call tick again with it'))
 
     def test_a_picture_outside_the_task_folder_is_refused(self):
         r = self.propose(text='Hi', image='../../secret.png')

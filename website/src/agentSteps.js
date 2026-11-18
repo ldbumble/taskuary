@@ -12,6 +12,8 @@
 import { forScreen } from "./agentMarkers.js";
 import { plural } from "./timeWords.js";
 import stepKinds from "../../taskuary/stepkinds.json" with { type: "json" };
+import ownTools from "../../taskuary/owntools.json" with { type: "json" };
+import { forOwner } from "./stepWhy.js";
 
 const flat = (s) => String(s || "").split(/\s+/).join(" ").trim();
 const clip = (s, n = 90) => { const t = flat(s); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
@@ -262,10 +264,16 @@ const KIND = Object.fromEntries(Object.entries(TOOLS).flatMap(([k, names]) => na
 // ...and every label is built from PARSED arguments: a call whose arguments came as a JSON string (Codex's function_call, an OpenAI-style
 // tool call) read as none, so a draft fell through to "Running a command" and a write to its own text (the walk, 2026-11-17)
 const parsed = (x) => { if (typeof x !== "string") return x && typeof x === "object" ? x : {}; try { const j = JSON.parse(x); return j && typeof j === "object" ? j : {}; } catch { return {}; } };
+// a server's tool by its own name: Claude's mcp__server__tool, and Codex's server__tool
+const serverOf = (name) => /^(?:mcp__)?(.+?)__(.+)$/.exec(String(name || ""));
+// ...and whether a call is one of Taskuary's own tools: its server is taskuary, or a bare name of the tool table (owntools.json, pinned to
+// agenttools.TOOLS: the general agent's calls carry no server) - the one kind of step whose output is a Taskuary refusal, with the agent's own
+// NEXT_STEP line (stepWhy.whyFailed). Never OWN: that is the labels this page has words for, and 14 tools had none (the robustness judge)
+const OWN_NAMES = new Set(ownTools.tools);
+export const ownTool = (name) => { const mcp = serverOf(name); return mcp ? key(mcp[1]) === "taskuary" : OWN_NAMES.has(String(name || "")); };
 export const describeCall = (name, args = {}) => {
   const a = parsed(args);
-  // a server's tool by its own name: Claude's mcp__server__tool, and Codex's server__tool
-  const mcp = /^(?:mcp__)?(.+?)__(.+)$/.exec(String(name || ""));
+  const mcp = serverOf(name);
   // TASKUARY'S OWN TOOLS (agenttools.TOOLS), by what each one is for, BEFORE any guess from its arguments: a draft kept without them was
   // read as a command ("Running a command" for an email, 2026-11-17)
   const own = OWN[key(mcp ? mcp[2] : name)];
@@ -388,7 +396,7 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
       const args = e.detail?.args || e.detail || {};
       const id = e.detail?.tool_call_id || `${e.name}-${steps.length}`;
       const d = describeCall(e.name, args);
-      const step = { id, ...d, raw: rawOf(e.name || "tool", args), output: String(e.detail?.output || ""), status: "running",
+      const step = { id, ...d, raw: rawOf(e.name || "tool", args), output: String(e.detail?.output || ""), status: "running", own: ownTool(e.name),
         ...(d.kind === "helper" && args.description ? { task: clip(args.description, 70) } : {}) };
       // A HELPER'S OWN CALLS GO UNDER ITS ROW (the owner, 2026-11-06: "it's spinning but not the last thing ... shouldn't it be in order? unless
       // it's in parallel"): a call naming the helper call it runs under (`parent`: stream-json's parent_tool_use_id, ACP's parentToolUseId)
@@ -424,7 +432,8 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
     } else if (e.type === "start" && keepStart) {
       steps.push({ id: `start-${steps.length}`, kind: "note", summary: `Started ${e.session?.provider || "the selected agent"}`, detail: "", status: "done" });
     } else if (e.type === "error") {
-      steps.push({ id: `error-${steps.length}`, kind: "error", summary: `⚠ ${e.detail?.result || e.error || "Taskuary could not answer."}`, detail: "", status: "error" });
+      // ...a failed call kept as its own note says what happened, never the agent's next step (stepWhy.forOwner)
+      steps.push({ id: `error-${steps.length}`, kind: "error", summary: `⚠ ${forOwner(e.detail?.result || e.error, ownTool(e.name)) || "Taskuary could not answer."}`, detail: "", status: "error" });
     }
   }
   // what it said that the answer says again is the answer: a CLI's final text streams in as progress too

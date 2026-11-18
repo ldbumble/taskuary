@@ -200,6 +200,21 @@ class TheSignatureIsTheOwners(Base):
         self.assertEqual(base64.b64decode(body['data'])[:4], b'%PDF'); self.assertEqual(body['sign'], {'field': 'parent_signature'})
         self.assertIn('sign_form', cli.AGENT_ACTS); self.assertNotIn('sign_form', cli.STRANGER_ACTS)
 
+    # A WRONG ATTACHMENT ID SENDS THE SHELL AGENT TO A COMMAND THAT LISTS THEM (the truth judge, 2026-11-18): `taskuary --sign-form 99999` read
+    # "Next: taskuary --message ID lists the ones it has, with their ids", and --message printed no attachment at all
+    def test_a_wrong_attachment_id_is_answered_with_a_command_that_lists_the_right_one(self):
+        import contextlib, io
+        from taskuary import agenttools, cli
+        r = c.post('/api/agent/sign-form', headers=agent(self.tid), json={'task_id': self.tid, 'attachment': 99999, 'sign': {'field': 'parent_signature'}})
+        step = r.json()['detail'].split('\n')[-1]
+        self.assertEqual(step, f'{agenttools.NEXT_STEP}taskuary --message ID lists the ones it has, with their ids')
+        mid = self.s.get_attachment(self.att)['MessageId']
+        out = io.StringIO()
+        with mock.patch.dict('os.environ', {'TASKUARY_TASK': str(self.tid)}), contextlib.redirect_stdout(out), \
+             mock.patch.object(cli, '_get', side_effect=lambda p, q, *a, **k: (lambda r: (r, r.json()))(c.get(p, params=q, headers=agent(self.tid)))):
+            cli._history(mock.Mock(message=f'm{mid}'), None)
+        self.assertIn(f'ATTACHMENTS:\nattachment {self.att} - slip.pdf', out.getvalue())
+
     def test_the_door_is_an_agents_and_the_picture_is_denied_to_one(self):
         self.assertEqual(guard.classify('POST', '/api/agent/sign-form')[0], 'agent')
         for m in ('GET', 'PUT', 'DELETE'): self.assertEqual(guard.classify(m, '/api/hand-signature')[0], 'deny')

@@ -390,7 +390,9 @@ def _await(f, stop):
 
 # ...A NAME THAT IS NO TOOL OF THIS TURN says where its tools are, as the MCP server's refusal does (agenttools.rpc): "no tool named merge_pr"
 # alone left the model to guess again or give up
-def no_tool(name) -> str: return f"no tool named {name} on this task - find_tools names the ones you have, by what they do"
+def no_tool(name) -> str:
+    from .agenttools import echo, refusal
+    return refusal(f"there is no tool named {echo(name)} on this task", see=('find_tools', 'names the ones you have, by what they do'), door='tool')
 
 
 def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
@@ -695,7 +697,8 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
                     try: out, err = (find(tid, sid, tools, a.get('query') or ' '.join(map(str, a.get('names') or []))) if name == LOAD else _await(lambda: run_tool(store, tid, sid, name, a), cancel)), False
                     except Exception as e:
                         if stopped(): raise
-                        out, err = f'{name} failed: {e}', True
+                        from .agenttools import failed          # ...in the words every tool's failure takes: never "{name} failed: " over them
+                        out, err = failed(name, e), True
                         logger.info(f'apiagent: task {tid} {name} failed - {e}')
                     if name not in reads and name != LOAD: seen.clear()
                 if trace: trace('tool_result', name, {'result': out, 'is_error': err})

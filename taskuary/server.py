@@ -5695,9 +5695,16 @@ def _owner_history(request: Request, tid: int):
     o, why = origin.of_task(store, tid)
     if o == 'stranger':
         # ...said with its reason and the way on, which the agent passes to the owner: "refused" alone left it nothing to say (2026-10-28)
-        raise HTTPException(403, f"a stranger's task does not read the owner's mail: this task carries a message from someone the owner has "
-                                 f"not vouched for ({why}). Work from what the task itself holds - read_message opens the task's own "
-                                 f"messages. If the owner knows the sender, they can press Trust by that name on the task.")
+        # ...and the way on is one this session can take (the truth judge, 2026-11-18): the task's own messages it may read - those the owner
+        # vouched for (agenttools.unvouched) - and with none, "read_message opens the task's own messages" answered 403; with some, only those
+        from . import agenttools
+        own = [m['MessageId'] for m in store.list_messages(tid) or [] if agenttools.own_message(store, tid, {'id': m['MessageId']})]
+        may = [m for m in own if not agenttools.unvouched(store, tid, {'id': m})]
+        raise HTTPException(403, agenttools.refusal(
+            f"a stranger's task does not read the owner's mail: this task carries a message from someone the owner has not vouched for ({why}). "
+            "If the owner knows the sender, they can press Trust by that name on the task.",
+            'work from what the task itself holds' if may else 'work from what your brief already shows of this task',
+            see=('read_message', "opens the task's own messages" if len(may) == len(own) else "opens the task's messages you may read") if may else ()))
 
 @app.get('/api/agent/messages')
 def agent_messages(request: Request, task_id: int, sender: str = '', subject: str = '', words: str = '', since: str = '', until: str = '',
@@ -5724,7 +5731,7 @@ def agent_message(mid: str, request: Request, task_id: int):
         if agenttools.unvouched(store, task_id, {'id': n}): raise HTTPException(403, agenttools.UNVOUCHED)
     else: _owner_history(request, task_id)
     m = mailsearch.message(store, n)
-    if not m: raise HTTPException(404, f'Taskuary has no saved message m{n} - `taskuary --search` finds a message and its id')
+    if not m: raise HTTPException(404, agenttools.no_message(n))
     return m
 
 @app.get('/api/agent/memory')
@@ -6004,9 +6011,11 @@ def agent_remember(body: AgentRememberBody, request: Request):
     except LookupError:
         # ...a line to replace that the memory does not hold: the lines about them, to copy one from - or kept beside them, with no `replaces`
         near = [l['text'] for l in memoryedit.about(store, body.about)['lines']][:8] if body.about.strip() else []
-        raise HTTPException(422, f"not kept: no line of the memory reads {body.replaces!r}. " + (f"The lines about {body.about}: {json.dumps(near, ensure_ascii=False)} - "
-                                 "call again with the one it makes untrue copied exactly, or with no `replaces`." if near else
-                                 "Call again with no `replaces`, or read the lines first (owner_memory) and copy the one it makes untrue."))
+        from .agenttools import echo, refusal
+        raise HTTPException(422, refusal(f"not kept: no line of the memory reads {echo(body.replaces)!r}",
+                                         f"call again with the line it makes untrue copied exactly from these about {echo(body.about)}: "
+                                         f"{json.dumps(near, ensure_ascii=False)} - or with no `replaces`" if near else
+                                         "call again with no `replaces`, or copy the line it makes untrue", see=() if near else ('owner_memory', 'reads the lines')))
     except ValueError as e: raise HTTPException(422, str(e))
     if not r.get('already'): store.audit('task', body.task_id, 'agent_remembered', body.agent, 'agent', {'line': r['text'][:400], 'section': r.get('section'), 'closed': (r.get('closed') or {}).get('text')})
     c = r.get('closed') or {}
@@ -6330,6 +6339,8 @@ async def mcp_rpc(request: Request, task: int = 0):
              'propose_land': lambda tid, how, why, deploy='': agent_propose_land(AgentLandBody(task_id=tid, how=how, why=why, deploy=deploy), request),
              'use_repo': lambda tid, target, why: agent_use_repo(AgentUseRepoBody(task_id=tid, path_or_name=target, why=why), request)}
     def run(name, args):
+        with agenttools.door('tool'): return _run(name, args)       # ...the door is known before any check below can refuse
+    def _run(name, args):
         cls = agenttools.TOOLS[name][0]
         if cls == 'read' and name not in ('my_task', 'list_systems', 'run_system', 'ask_stronger', 'show', 'guide', 'find_tools') and not (
                 name == 'read_message' and agenttools.own_message(store, task, args)): _owner_history(request, task)
@@ -8900,7 +8911,9 @@ def tool_run(body: dict, request: Request):
     except ValueError as e: raise HTTPException(422, str(e))
     # ...a number that is no card is said as that: "no connection card an owner turned on" was untrue of a card standing on
     if connector_id and not conn:
-        raise HTTPException(404, f'there is no connection {connector_id} - YOUR SYSTEMS (list_systems) names each one with its connector_id')
+        from .agenttools import echo, refusal
+        raise HTTPException(404, refusal(f'there is no connection {echo(connector_id)}', 'YOUR SYSTEMS in your brief names each one with its connector_id',
+                                         see=('list_systems', 'lists them')))
     if conn and conn.get('Type') != card_of(t):
         raise HTTPException(422, f'connector {connector_id} is {conn.get("Type")}, not {card_of(t)}')
     if not conn:
@@ -8947,7 +8960,7 @@ def tool_run(body: dict, request: Request):
         # ...in the words every Taskuary tool's failure takes (agenttools.failed): a field it needs and was not given is named, never "'query'"
         from .agenttools import failed
         store.audit('tool', (conn or {}).get('ConnectorId', 0), 'run_failed', actor, detail={'type': t, 'error': str(e)[:300]})
-        return {'ok': False, 'error': failed(t, e)[:1000]}
+        return {'ok': False, 'error': failed(t, e)}               # ...bounded there, its next step kept
     store.audit('tool', (conn or {}).get('ConnectorId', 0), 'run', actor, detail={'type': t, 'headline': str(head)[:200]})
     return {'ok': True, 'headline': head, 'output': (out or '')[:20000]}
 

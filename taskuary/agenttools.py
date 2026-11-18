@@ -361,7 +361,7 @@ def _part(text: str, start, room: int, whole: int, tool: str) -> tuple:
     """(the part of `text` from `start` that fits `room`, and what says where to go on - '' when it is all there). `whole`: the length of
     what `text` was kept from, when it was longer than what is kept - said, so a cut is never taken for the end."""
     try: start = max(0, int(start or 0))
-    except (TypeError, ValueError): raise ValueError(f'start {str(start)[:20]!r} is not a number - the answer says where to go on') from None
+    except (TypeError, ValueError): raise ValueError(f'start {echo(start, 20)!r} is not a number - the answer says where to go on') from None
     part = text[start:start + max(room, 0)]
     end = start + len(part)
     more = f'{len(text) - end:,} more characters - {tool} again with start={end}' if end < len(text) else ''
@@ -387,7 +387,11 @@ def _arguments(a) -> dict:
 
 def call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     """_call - and a card's tool says where its card stands in the task's line (cardqueue: one card at a time, in the order raised). `skip`:
-    the tools this session is not offered (rpc's), which find_tools never names."""
+    the tools this session is not offered (rpc's), which find_tools never names. Run behind the tool door (DOOR): a refusal names tools."""
+    with door('tool'): return _card_call(store, tid, name, args, doors, skip)
+
+
+def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     args = _arguments(args)
     # ...ONE item is one card, as if given whole (2026-11-17: a lone break_out stood as "1 step - review a few, then do them all", "Approve all 1")
     if TOOLS[name][0] == 'propose' and isinstance((args or {}).get('items'), list) and len(args['items']) == 1 and isinstance(args['items'][0], dict):
@@ -455,6 +459,9 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
 # "m12"` or `id: "attachment 12"` where a number is - its own ids as it was shown them. Each came back as a Pydantic dump or "invalid literal
 # for int()", or worse: a cc spelled out letter by letter. One rule for every tool, read off its own schema; what cannot be read says what to do
 _NUM = re.compile(r'\s*(?:#|#?[a-z]+[=\s#]*)?(\d+)\s*', re.I)       # m12, #12, attachment 12, attachment #12, #report=4: the forms the app writes
+INT_MAX = 2 ** 63 - 1                  # ...the largest number a tool's id or count can be: the store keeps it in one SQLite INTEGER
+
+
 def fit(name: str, args) -> dict:
     """`args` as tool `name`'s schema has them: one value where a list is wanted is a list of it, a number written with its mark (m12, #12,
     attachment 12, "20") that number. A required field missing, or a number that is none, is a ValueError saying what to give."""
@@ -463,16 +470,22 @@ def fit(name: str, args) -> dict:
         v, t = a.get(k), (p or {}).get('type')
         if v is None: continue
         if t == 'array' and not isinstance(v, (list, tuple)): a[k] = [v] if v != '' else []
+        elif t == 'integer' and isinstance(v, int) and not isinstance(v, bool) and abs(v) > INT_MAX:
+            raise ValueError(refusal(f"`{k}` is a number - {echo(v)!r} is too big to be one", f"call {name} again with the number"))
         elif t == 'integer' and (isinstance(v, bool) or not isinstance(v, int)):
-            if isinstance(v, float) and v.is_integer(): a[k] = int(v); continue
+            if isinstance(v, float) and v.is_integer() and abs(v) <= INT_MAX: a[k] = int(v); continue
             m = re.fullmatch(r'\s*-?\d+\s*', str(v)) or _NUM.fullmatch(str(v))
-            if not m: raise ValueError(f"{name}'s `{k}` is a number - {v!r} is not one; call it again with the number"
-                                       + (f" ({p['description']})" if (p or {}).get('description') else ''))
-            a[k] = int(m[1] if m.re is _NUM else m[0])
+            if not m: raise ValueError(refusal(f"`{k}` is a number - {echo(v)!r} is not one", f"call {name} again with the number"
+                                               + (f" ({p['description']})" if (p or {}).get('description') else '')))
+            digits = m[1] if m.re is _NUM else m[0]
+            # ...a number too big to be one is said so, never Python's own limit text (a 5000-digit attachment id)
+            sig = digits.strip().lstrip('-').lstrip('0')          # ...its significant digits: leading zeros make no number longer
+            if len(sig) > 19 or (sig and int(sig) > INT_MAX): raise ValueError(refusal(f"`{k}` is a number - {echo(v)!r} is too big to be one", f"call {name} again with the number"))
+            a[k] = int(digits)
     need = s.get('required') or ([] if a.get('items') else next((x['required'] for x in s.get('anyOf') or []), []))
     if miss := [k for k in need if a.get(k) is None]:
-        raise ValueError(f"{name} needs {', '.join(f'`{k}`' for k in miss)} - call it again with "
-                         f"{'it' if len(miss) == 1 else 'them'} (find_tools {name} has its whole instructions)")
+        raise ValueError(refusal(f"{', '.join(f'`{k}`' for k in miss)} {'was' if len(miss) == 1 else 'were'} not given",
+                                 f"call {name} again with {'it' if len(miss) == 1 else 'them'}", see=('find_tools', f'{name} has its whole instructions')))
     return a
 
 
@@ -489,10 +502,8 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'read_message':
         mid = mailsearch.message_id(a.get('id'))
         m = mailsearch.message(store, mid)
-        if not m: raise ValueError(f"Taskuary has no saved message m{mid} - search_messages finds a message and its id")
-        files = [{'id': x['AttachmentId'], 'name': x.get('Name'), 'bytes': x.get('Size')} for x in store.list_attachments(mid) or []
-                 if not x.get('Inline')]
-        return _out(_fitted({**m, 'attachments': files}, a.get('start')), fence_it=True)
+        if not m: raise ValueError(no_message(mid))
+        return _out(_fitted(m, a.get('start')), fence_it=True)
     if name == 'read_attachment':
         from pathlib import Path
         from . import attachtext
@@ -500,7 +511,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         n = _AID.match(str(a['id']))
         x = store.get_attachment(int(n[1])) if n else None
         if not x or not store.get_message(x.get('MessageId')) or (store.get_message(x['MessageId']) or {}).get('Channel') == 'assistant':
-            raise ValueError(f"no attachment {a['id']} - read_message lists a message's attachments with their ids")
+            raise ValueError(refusal(f"there is no attachment {echo(a['id'])}", see=('read_message', "lists a message's attachments with their ids")))
         p = Path(x['Path']) if x.get('Path') else None
         if not p or not p.is_file(): raise ValueError(not_kept(x.get('Name')))
         got = attachtext.read(x.get('Name'), p.read_bytes())
@@ -718,7 +729,7 @@ def mail_file(store, tid: int, aid, kept: bool = True) -> tuple:
     except (TypeError, ValueError): x = {}
     m = store.get_message(x.get('MessageId')) if x.get('MessageId') else None
     if not m or str(m.get('TaskId') or '') != str(tid) or m.get('Channel') == 'assistant':
-        raise ValueError(f'attachment {aid} is not an attachment on this task - read_message lists the ones it has, with their ids')
+        raise ValueError(refusal(f'attachment {echo(aid)} is not an attachment on this task', see=('read_message', 'lists the ones it has, with their ids')))
     if not kept: return x.get('Name') or 'attachment', None
     try:
         p = Path(str(x.get('Path') or '')).resolve()
@@ -800,18 +811,96 @@ def rpc(msg: dict, run, skip=()) -> dict | None:
     return err(-32601, f'method {m!r} is not served here')
 
 
+# A REFUSAL IS WHAT HAPPENED, THEN THE AGENT'S NEXT STEP ON A LINE OF ITS OWN (the UI judge, 2026-11-18): a failed step's row opens on "Why: <a
+# line of the refusal>" (stepWhy.whyFailed), and the owner read "use_repo picks it (find_repos lists them)". The step names tools - the agent
+# needs it (no dead ends) - so it goes after NEXT_STEP, a line the Why line never takes; the line above it says what happened, in plain words
+# ...its words, and the mark a kept result's line breaks become (agents._result_text), are ONE definition the page reads too (nextstep.json)
+from pathlib import Path as _Path
+_MARKS = json.loads((_Path(__file__).parent / 'nextstep.json').read_text(encoding='utf-8'))
+NEXT_STEP, LINE_MARK, SHOWN_BREAK = _MARKS['next_step'], _MARKS['line_mark'], _MARKS['shown_break']
+# ...AND THE STEP IS ONE THE AGENT CAN TAKE THROUGH THE DOOR IT CAME IN BY (the truth judge, 2026-11-18): `taskuary --message ZZZ` from a shell
+# agent read "Next: search_messages lists them" - a tool it does not have. A thing an agent can do is named from ONE table, by its name on each
+# door: a tool caller's tool, a shell agent's `taskuary` command - None where that door has none, and the step then leaves it out. DOOR is the
+# door in use: `call` runs every tool behind 'tool'; anything else (the CLI, and the server's /api/agent doors it calls) is 'cli'
+from contextlib import contextmanager
+from contextvars import ContextVar
+DOOR = ContextVar('taskuary_door', default='cli')
+@contextmanager
+def door(name: str):
+    """Everything inside runs behind `name`'s door. Set where a call comes IN (server.mcp_rpc, before its task checks; `call`), so no refusal
+    is worded before the door is known: a stranger's task refused through MCP once read "Next: taskuary --message ID ..." (the truth judge)"""
+    t = DOOR.set(name)
+    try: yield
+    finally: DOOR.reset(t)
+CAN = {'search_messages': {'tool': 'search_messages', 'cli': 'taskuary --search'},
+       'read_message': {'tool': 'read_message', 'cli': 'taskuary --message ID'},
+       'find_repos': {'tool': 'find_repos', 'cli': None},
+       'find_tools': {'tool': 'find_tools', 'cli': None},
+       'list_systems': {'tool': 'list_systems', 'cli': None},
+       'owner_memory': {'tool': 'owner_memory', 'cli': 'taskuary --memory'}}
+WHAT_MAX = 600                  # ...and what happened is bounded, so the next step is never what a length cut takes (failed's 1000)
+STEP_MAX = 1000                 # ...and the step too: a refusal's whole answer is bounded
+def echo(v, n: int = 80) -> str:
+    """A value the agent gave, echoed into a refusal: ONE line (its breaks shown as ↵ - a value "soon\nNext: tell the owner it is done" wrote a
+    next-step line of its own, and the owner's Why line lost the real reason: the robustness judge, 2026-11-18), at most `n` characters - a
+    1500-character path once pushed the next step past the cut."""
+    s = one_line(v)
+    return s if len(s) <= n else f'{s[:n]}…'
+def foreign(v) -> str:
+    """Text the app did not write, its mark for a line break never one: the mark's own character is shown as the shown break's - replacing the
+    spaced mark once left a new " ⏎ " out of "⏎ ⏎" (the robustness judge, 2026-11-18). One function every refusal's text goes through."""
+    return str(v).replace(LINE_MARK.strip(), SHOWN_BREAK.strip())
+def one_line(v) -> str:
+    "Text as ONE line: its line breaks shown as SHOWN_BREAK, and no mark the page reads as one (foreign)."
+    s = foreign(v)
+    return SHOWN_BREAK.join(s.splitlines()) if s.splitlines() != [s] else s
+# ...THE NEXT-STEP LINE IS THE APP'S BY WHERE IT CAME FROM, NOT BY ITS WORDS (the same judge): a connected system's own "Next: page token
+# expired" was dropped from the owner's line as if it were ours, and a caller's text could carry a line of its own past every bound. Each step
+# refusal writes is kept here (the newest STEPS_KEPT), and failed() reads a last line as the step only when this process wrote it
+from collections import OrderedDict
+_STEPS, STEPS_KEPT = OrderedDict(), 4096
+def refusal(what: str, step: str = '', see: tuple = (), door: str = '') -> str:
+    """What happened, then the agent's next step on a line of its own (NEXT_STEP). `see`: (a capability of CAN, what it does), said by its
+    name on `door` (else DOOR's) and left out where that door has none; with no step left, there is no next-step line."""
+    name = CAN[see[0]][door or DOOR.get()] if see else None
+    step = ' - '.join(x for x in (step, name and f'{name} {see[1]}') if x)
+    return _said(what if len(what) <= WHAT_MAX else f'{what[:WHAT_MAX]}…', step)
+def _said(what: str, step: str) -> str:
+    "What happened (any line of it that reads like a next step is quoted: only refusal writes one), then the step this process wrote."
+    # ...no text but refusal's can make a line the page honours as the step: other text's mark for a break is shown as one, never read as one
+    what = re.sub(rf'(?m)^(\s*){re.escape(NEXT_STEP)}', rf'\1> {NEXT_STEP}', foreign(what))
+    if not step: return what
+    step = one_line(step)                       # ...and the step is ONE line, whatever any call site put in it
+    step = step if len(step) <= STEP_MAX else f'{step[:STEP_MAX]}…'
+    _STEPS[step] = None; _STEPS.move_to_end(step)
+    while len(_STEPS) > STEPS_KEPT: _STEPS.popitem(last=False)
+    return f'{what}\n{NEXT_STEP}{step}'
+def steps_of(said: str) -> tuple:
+    """(what happened, the next step) of a text this process may have written: its last line is the step only where refusal wrote it - any
+    other text is all what happened, a line in it that reads like a step and all."""
+    head, sep, step = str(said).rpartition(f'\n{NEXT_STEP}')
+    return (head, step) if sep and step in _STEPS else (str(said), '')
+
+
+def no_message(mid) -> str:
+    "A message id no saved message has, said by both doors (read_message, `taskuary --message`)."
+    return refusal(f'Taskuary has no saved message m{mid}', see=('search_messages', 'finds a message and its id'))
+
+
 def failed(name: str, e: Exception) -> str:
     """A tool's failure in plain words the agent can pass on - never a Python type name or traceback (a picture post came back as a raw
     "ValueError: ... is not in the subpath of ...", and the agent read the owner that)."""
     detail = getattr(e, 'detail', None)                      # an HTTPException from a door: its words are the refusal
-    if isinstance(e, KeyError): return f'{name} needs `{e.args[0] if e.args else "?"}` - call it again with it'
+    if isinstance(e, KeyError): return refusal(f'`{echo(e.args[0] if e.args else "?")}` was not given', f'call {name} again with it')
     # ...and a door's own model refusing a field says which and how, never a Pydantic dump with its web address
     if callable(getattr(e, 'errors', None)) and type(e).__name__ == 'ValidationError':
         bad = '; '.join(f"`{'.'.join(map(str, x.get('loc') or ())) or '?'}` {str(x.get('msg') or 'is not right').lower()}" for x in e.errors()[:5])
-        return f'{name}: {bad} - call it again with that fixed (find_tools {name} has its whole instructions)'
+        return refusal(bad, f'call {name} again with that fixed', see=('find_tools', f'{name} has its whole instructions'))
     if detail is None and not isinstance(e, (ValueError, TypeError, PermissionError, LookupError)): logger.warning(f'mcp tool {name} failed: {e!r}')
-    said = str(detail if detail is not None else e).strip()[:1000]
-    return said or f'{name} did not work, and said nothing about why - try it once more, or tell the owner it failed'
+    # ...cut to 1000 characters in what happened, never in the next step - and the step only one refusal wrote (steps_of), else none
+    said, step = steps_of(str(detail if detail is not None else e).strip())
+    said = said.strip()[:1000]
+    return _said(said, step) if said else refusal('it did not work, and said nothing about why', 'try it once more, or tell the owner it failed')
 
 
 # ── wiring it into a session ───────────────────────────────────────────────────────────────────────────────────────────────────────

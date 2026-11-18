@@ -10,6 +10,7 @@ from datetime import date
 from .routing import tokens
 from .store import task_ref
 from . import textsim
+from .agenttools import echo as _echo                 # a value the agent gave, bounded with its cut marked
 
 SNIP = 240
 
@@ -32,7 +33,7 @@ def _day(x, name: str) -> str:
     d = str(x or '').strip()[:10]
     if not d: return ''
     try: return date.fromisoformat(d).isoformat()
-    except ValueError: raise ValueError(f'{name} {str(x)[:40]!r} is not a date - give it as YYYY-MM-DD') from None
+    except ValueError: raise ValueError(f'{name} {_echo(x, 40)!r} is not a date - give it as YYYY-MM-DD') from None
 
 
 def search(store, sender: str = '', subject: str = '', words: str = '', since: str = '', until: str = '', limit: int = 20) -> list:
@@ -42,7 +43,7 @@ def search(store, sender: str = '', subject: str = '', words: str = '', since: s
     want = tokens(f'{subject or ""} {words or ""}')
     lo, hi = _day(since, 'since'), _day(until, 'until')
     try: limit = max(1, min(int(limit or 20), 100))
-    except (TypeError, ValueError): raise ValueError(f'limit {str(limit)[:20]!r} is not a number - give how many messages, like 20') from None
+    except (TypeError, ValueError): raise ValueError(f'limit {_echo(limit, 20)!r} is not a number - give how many messages, like 20') from None
     ids = store.message_search(want, who, 3650) if (want or who) else None
     if ids is None:                                  # no index (or nothing to match on): the newest, scanned
         from .concierge import newest_rows
@@ -70,19 +71,24 @@ def message_id(x) -> int:
     if isinstance(x, bool): raise ValueError(f'{x!r} is not a message id - one looks like m1073 or 1073')
     if isinstance(x, int): return x
     m = re.fullmatch(r'\s*[\[#(]?\s*[mM]?\s*(\d+)\s*[\])]?\s*', str(x if x is not None else ''))
-    if not m: raise ValueError(f'{str(x)[:40]!r} is not a message id - one looks like m1073 or 1073 (search_messages lists them)')
+    if not m:
+        from .agenttools import refusal
+        raise ValueError(refusal(f'{_echo(x, 40)!r} is not a message id - one looks like m1073 or 1073', see=('search_messages', 'lists them')))
     return int(m.group(1))
 
 
 def message(store, mid) -> dict | None:
-    """One message in full, with the thread it is on (oldest first, the owner's own replies included) - None when there is none."""
+    """One message in full, with the thread it is on (oldest first, the owner's own replies included) and its attachments by the ids
+    read_attachment and sign_form take, by either door - None when there is none."""
     m = store.get_message(message_id(mid))
     if not m or m.get('Channel') == 'assistant': return None
     thread = store.thread_messages(m.get('ConversationId'), m.get('Subject'), 40) or [m]
     # ...with the addresses its words carry (channels.kept_links): "pay at the link below" was read whole and still had no link in it
     from .channels import kept_links
     return {**_hit(m), 'body': str(m.get('BodyText') or ''), 'to': str(m.get('RecipientsJson') or ''), 'links': kept_links(m),
-            'messages': [_hit(x) for x in thread if x.get('Channel') != 'assistant']}
+            'messages': [_hit(x) for x in thread if x.get('Channel') != 'assistant'],
+            'attachments': [{'id': x['AttachmentId'], 'name': x.get('Name'), 'bytes': x.get('Size')}
+                            for x in store.list_attachments(m['MessageId']) or [] if not x.get('Inline')]}
 
 
 def says(hits: list, store=None) -> str:

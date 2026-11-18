@@ -63,6 +63,19 @@ class OneRoundTripTests(unittest.TestCase):
             self.assertEqual(apiagent.turn(Brain(), MemoryStore(), 1, 's', 'sys', 'go', 500), 'The button was gone.')
         self.assertIn('no element @e9', heard[1][-1]['content'])
 
+    # ...IN THE WORDS EVERY TASKUARY TOOL'S FAILURE TAKES (agenttools.failed), never "share failed: " before them: the owner's Why line read the
+    # tool's name over what happened ("Why: share failed: there is no report 9"), and the next step stayed the agent's own line (the UI judge)
+    def test_a_failed_tool_is_told_in_the_words_every_tool_failure_takes(self):
+        from taskuary import agenttools
+        steps = iter([{'tool_calls': [{'id': 'c1', 'function': {'name': 'share', 'arguments': '{"report": 9}'}}]}, {'content': 'No such report.'}])
+        refused, seen = agenttools.refusal('there is no report 9', 'give the number search_tasks gives', door='tool'), []
+        class Brain:
+            def chat(self, msgs, tools, max_tokens, **kw): return next(steps)
+        with mock.patch.object(apiagent, 'run_tool', side_effect=ValueError(refused)):
+            apiagent.turn(Brain(), MemoryStore(), 1, 's', 'sys', 'go', 500, trace=lambda *e: seen.append(e))
+        got = next(d for k, n, d in seen if k == 'tool_result')
+        self.assertEqual((got['result'], got['is_error']), (refused, True))
+
     def test_it_stops_at_its_step_bound_and_says_where_it_got(self):
         call = {'tool_calls': [{'id': 'c', 'function': {'name': 'browser_look', 'arguments': '{}'}}]}
         asked = []

@@ -18,7 +18,9 @@ def ask(store, task_id: int, question: str, context: str = '') -> dict:
     """{'ok', 'answer', 'model', 'brain'} - or {'ok': False, 'says'} when nothing here has a stronger gear, or the call failed."""
     from . import aiusage, brainroute, llm
     q = str(question or '').strip()
-    if not q: raise ValueError('ask_stronger needs a question')
+    if not q:
+        from .agenttools import refusal
+        raise ValueError(refusal('no question was asked', 'call ask_stronger again with the `question`'))
     task = store.get_task(int(task_id))
     if not task: raise ValueError(f'no task {task_id}')
     pick, model = brainroute.strong_for(store, 'general', task)

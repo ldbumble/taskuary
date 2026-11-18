@@ -33,7 +33,7 @@ export const eventsOf = (steps, running, tail = true) => steps.flatMap((s, i) =>
     { type: "tool_result", name: id, detail: { tool_call_id: id, result: "" } }];
   if (s.k === "said") return [{ type: "progress", name: "text", detail: s.text }];
   if (s.k === "thought") return [{ type: "progress", name: "thinking", detail: s.text }];
-  if (s.k === "error") return [{ type: "error", detail: { result: s.text } }];
+  if (s.k === "error") return [{ type: "error", ...(s.name ? { name: s.name } : {}), detail: { result: s.text } }];      // ...by the call it came from
   return s.text ? [{ type: "progress", name: "note", detail: s.text }] : [];
 });
 

@@ -544,3 +544,32 @@ def test_the_turn_at_work_says_when_its_agent_is_still_opening_and_what_it_is_wr
     assert 'opening' not in turn() and turn()['doing'] == 'Option one is Salem.'
     ses.trace.append({'type': 'tool_call', 'name': 'WebSearch', 'detail': {'tool_call_id': 'c1', 'args': {'query': 'Salem hotels'}}})
     assert 'doing' not in turn(), 'a step after the words leads'
+
+
+def test_a_failed_calls_note_is_named_by_its_call():
+    """The UI judge, 2026-11-18: a Taskuary tool's refusal filed as its own "⚠" note on the general road read whole, the agent's next step and
+    all - the page leaves that line out of a Taskuary tool's words only (stepWhy.forOwner), so the note says which call it came from."""
+    steps = sessionrecord.trace_steps([
+        {'type': 'tool_call', 'name': 'mcp__taskuary__share', 'detail': {'tool_call_id': 'c1', 'args': {'report': 9}}},
+        {'type': 'tool_result', 'name': 'c1', 'detail': {'tool_call_id': 'c1', 'result': 'there is no report 9\nNext: ...', 'is_error': True}},
+        {'type': 'error', 'name': 'assistant', 'detail': {'result': 'the turn failed', 'is_error': True}}])
+    assert [(s['k'], s.get('name')) for s in steps] == [('tool', 'mcp__taskuary__share'), ('error', 'mcp__taskuary__share'), ('error', None)], steps
+
+
+def test_a_failed_calls_note_is_cut_in_what_happened_never_across_its_next_step():
+    """The UI judge, 2026-11-18: the note was cut at 400 characters, inside the refusal's " ⏎ Next: ..." line for a 391-399-character one (a
+    stranger's long name and address), and the owner's note ended "...on the task. Nex…" - the page no longer saw a step to leave out."""
+    from taskuary import agenttools
+    who = 'Paula Alexandra Vance-Whitcombe <paula.alexandra.vance-whitcombe@vendor.example>'
+    for n in range(391, 400):
+        what = (f"a stranger's task does not read the owner's mail: this task carries a message from someone the owner has not vouched for ({who}). "
+                "If the owner knows the sender, they can press Trust by that name on the task.")
+        what = what + 'x' * (n - len(what))
+        said = agenttools.refusal(what, 'work from what your brief already shows of this task')
+        for kept in (said, said.replace('\n', agenttools.LINE_MARK)):           # ...as the CLI's road keeps a result: its breaks the app's mark
+            steps = sessionrecord.trace_steps([
+                {'type': 'tool_call', 'name': 'mcp__taskuary__search_messages', 'detail': {'tool_call_id': 'c1', 'args': {}}},
+                {'type': 'tool_result', 'name': 'c1', 'detail': {'tool_call_id': 'c1', 'result': kept, 'is_error': True}}])
+            note = steps[1]['text']
+            assert note.endswith(f'{agenttools.NEXT_STEP}work from what your brief already shows of this task'), (n, note[-80:])
+            assert note.startswith(what), n

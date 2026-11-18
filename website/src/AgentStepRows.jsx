@@ -56,7 +56,7 @@ export const StepRow = ({ step }) => {
     <div className="tq-aui-helper-steps"><AgentSteps data={{ steps: step.kids }} /></div></details>;
   return step.detail
     ? <details className={cls}><summary>{head}</summary>
-      {failed && <div className="tq-aui-step-why" data-tq-step-why="">{whyFailed(step.detail)}{step.status === "recovered" ? " It tried again another way, and that worked." : ""}</div>}
+      {failed && <div className="tq-aui-step-why" data-tq-step-why="">{whyFailed(step.detail, step.own)}{step.status === "recovered" ? " It tried again another way, and that worked." : ""}</div>}
       {failed ? <details className="tq-aui-step-raw"><summary>Raw output</summary><pre>{step.detail}</pre></details> : <pre>{step.detail}</pre>}</details>
     : <div className={cls}><div className="tq-aui-step-line">{head}</div></div>;
 };

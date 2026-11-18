@@ -87,5 +87,20 @@ class RunTests(unittest.TestCase):
             # a REPORT keeps its own clock: today's slot serves it
             self.assertFalse(reports.is_due({'daily_at': daily['daily_at']}, (now - timedelta(days=3)).isoformat(sep=' ', timespec='seconds')))
 
+    def test_two_presses_at_once_start_one_run_not_two(self):
+        # Run now pressed on the desktop and the phone in the same second: each request checked "is a run working?" before either had
+        # made its task, so both said no and two agents went to work on the same job
+        import threading, time
+        s = store(); sid = routine(s); real, outs = workflows.running, []
+        def slow(*a, **k):
+            got = real(*a, **k); time.sleep(0.2); return got
+        with mock.patch.object(workflows, 'running', side_effect=slow), mock.patch.object(workflows, '_spawn', lambda fn: None):
+            ts = [threading.Thread(target=lambda: outs.append(workflows.run(s, s.get_source(sid), trigger='manual'))) for _ in range(2)]
+            for t in ts: t.start()
+            for t in ts: t.join()
+        workflows._STARTING.clear()
+        self.assertEqual(len(s.dock_tasks(f'workflow:{sid}', limit=9)), 1)
+        self.assertEqual(sorted(bool(o.get('busy')) for o in outs), [False, True])
+
 
 if __name__ == '__main__': unittest.main()

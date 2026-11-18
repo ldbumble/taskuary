@@ -113,8 +113,11 @@ def _left(store, tid: int, said: str, actor: str) -> bool:
     """Say on the task what one email's send or drop leaves. False always: the task stays open - it used to close on the
     last one, past the reply's own guards; now only the owner's Mark done closes it."""
     if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return False
-    from . import buttons
+    from . import buttons, workflows
     n = len(open_(store, tid))
+    # ...a routine's steps still walking close their own task when nothing waits (flow._walk): "Mark done when the task is finished" was
+    # said over a run that closed itself the moment after
+    if not n and workflows.at_work(tid): store.add_comment(tid, actor, 'human', said); return False
     store.add_comment(tid, actor, 'human', f"{said} " + (f"{plural(n, 'email')} still to go." if n
                                                        else f"Every email is sent or dropped - {buttons.label('close')} when the task is finished."))
     return False
@@ -265,8 +268,13 @@ def routine_sends(store, tid: int, rid: int, agent: str, missing: str = '') -> d
     try: out = verdicts.decide(store, store.get_review(rid), 'approve', actor=ROUTINE)
     except Exception as e: out = {'ok': False, 'error': str(e)}
     finally: verdicts.QUIET.reset(tok)
-    if out.get('ok') and not out.get('send_error'): return {'sent': True}
-    return {'send_error': out.get('send_error') or out.get('error') or 'it did not go - the card waits for the owner'}
+    try: to = ', '.join((json.loads((store.get_review(rid) or {}).get('Deliver') or '{}') or {}).get('to') or []) or 'them'
+    except (TypeError, ValueError): to = 'them'
+    # ...and said to the agent as it happened: told the card "waits and nothing went", it reported a sent email as waiting for a press
+    if out.get('ok') and not out.get('send_error'):
+        return {'sent': True, 'says': f"Sent to {to} at once - a routine's own email goes without a press; say it went. No card waits on it."}
+    why = out.get('send_error') or out.get('error') or 'it did not go'
+    return {'send_error': why, 'says': f"Not sent to {to}: {str(why).rstrip(' .')}. Its card waits on the task for the owner's Send."}
 
 
 # ...said to the agent in the same words whichever road the draft took: the tool or `taskuary --draft` returns it at once; a draft MARKER in an

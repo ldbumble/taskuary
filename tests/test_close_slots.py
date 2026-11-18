@@ -764,3 +764,32 @@ def test_the_agent_is_told_which_of_its_emails_went(s):
     with mock.patch('taskuary.general.approved', lambda st, t, press, what, *x, **k: told.append(what)):
         assert approve(s, b)['ok']
     assert told == [f'rv{b} (the email to ray@northwind.example) was sent']
+
+def test_the_agent_on_a_routine_run_is_told_its_email_went_not_that_it_waits(s):
+    # a routine run's agent drafted to Ray: the email went at once, and its tool still answered that the card "waits and nothing went" -
+    # so the agent told the owner a sent email was waiting for his Send
+    from taskuary import agenttools
+    from taskuary.selfclose import CARD_SAID
+    run = s.create_task({'Title': 'Weekly vendor follow-up - Mon', 'Kind': 'general', 'Status': 'open', 'Source': 'workflow',
+                         'SourceRef': 'workflow:7'}, 'routine')
+    with mock.patch('taskuary.outbound.send_out', return_value=SENT), mock.patch.object(outbound, 'send_block', return_value=''), \
+            mock.patch('taskuary.learn.learn_from'):
+        went = agenttools.said_once(slots.draft(s, run, 'Hi Ray, any update on the quote? Alex', 'ray@northwind.example', 'Quote'))
+    assert went['shown'] != CARD_SAID and went['shown'].startswith('Sent to ray@northwind.example'), went
+    with mock.patch('taskuary.outbound.send_out', side_effect=RuntimeError('SMTP 535')), mock.patch.object(outbound, 'send_block', return_value=''):
+        held = agenttools.said_once(slots.draft(s, run, 'Hi Erin, the schedule is attached. Alex', 'erin@northwind.example', 'Schedule'))
+    assert held['shown'].startswith('Not sent to erin@northwind.example') and "owner's Send" in held['shown'], held
+
+
+def test_a_sent_email_is_named_by_whom_it_went_to_not_by_its_cards_reason(s):
+    # a routine's email failed at night and the owner's Send got it out in the morning: the task said "Sent: Not sent: ..." - the card's
+    # reason from the failed try - and an email sent at the first press read "Sent: assistant wrote this email - approve to send."
+    tid = s.create_task({'Title': 'Follow up with Ray', 'Kind': 'general', 'Status': 'open', 'Source': 'assistant'}, 'owner')
+    with mock.patch('taskuary.outbound.send_out', side_effect=RuntimeError('SMTP 451 try later')), mock.patch.object(outbound, 'send_block', return_value=''):
+        rid = slots.draft(s, tid, 'Hi Ray, any update on the quote? Alex', 'ray@northwind.example', 'Quote', agent='assistant')['review_id']
+        verdicts.decide(s, s.get_review(rid), 'approve', actor='owner')
+    with mock.patch('taskuary.outbound.send_out', return_value=SENT), mock.patch.object(outbound, 'send_block', return_value=''), \
+            mock.patch('taskuary.learn.learn_from'):
+        assert verdicts.decide(s, s.get_review(rid), 'approve', actor='owner')['ok']
+    said = s.list_comments(tid)[-1]['Body']
+    assert said.startswith('Sent: the email to ray@northwind.example. ') and 'Not sent' not in said and 'approve to send' not in said, said

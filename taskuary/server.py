@@ -215,6 +215,10 @@ async def _lifespan(_app):
     from . import general as _general
     try: _general.keep_cut_turns(store)
     except Exception as e: logger.warning(f'turns cut by the restart not kept: {e}')
+    # ...and a routine's run of steps it cut says so on its task (flow.keep_cut_runs) - never walked again by itself
+    from . import flow as _flow
+    try: _flow.keep_cut_runs(store)
+    except Exception as e: logger.warning(f'routine runs cut by the restart not said: {e}')
     # ...and which coding tasks run on an AI card is known again before anything reads a task (general.recall_cards)
     try: _general.recall_cards(store)
     except Exception as e: logger.warning(f'coding tasks on an AI card not recalled: {e}')

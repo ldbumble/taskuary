@@ -118,13 +118,16 @@ def test_a_routines_email_goes_from_its_run_task_and_opens_nothing_else(db):
              {'id': 's3', 'kind': 'draft', 'label': 'Email Gail', 'to': 'gail@northwind.example', 'about': 'This week: {{s2}}', 'subject': 'Duplicate bills'}]
     src = source(s, steps); tid = run_task(s, src); sent = []
     with mailer(sent), mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learn.learn_from'):
-        out = flow.execute(s, src, tid, 'manual', llm=answering('One duplicate: Payworth INV-1.', 'Hi Gail, one duplicate this week: Payworth INV-1. Alex'))
+        workflows._STARTING.add(tid)                                                # the run has its task, as workflows.run marks it
+        try: out = flow.execute(s, src, tid, 'manual', llm=answering('One duplicate: Payworth INV-1.', 'Hi Gail, one duplicate this week: Payworth INV-1. Alex'))
+        finally: workflows._STARTING.discard(tid)
     assert [m['to'] for m in sent] == [['gail@northwind.example']] and 'Payworth INV-1' in sent[0]['body'] and sent[0]['subject'] == 'Duplicate bills'
     assert [t['TaskId'] for t in s.list_tasks()] == [tid]                              # no second task
     assert s._rows("SELECT * FROM review WHERE Status='pending'") == []                # and no card waiting for a yes
     assert out['steps'][2]['head'] == 'sent to gail@northwind.example' and not out['failed']
     assert any(c['Body'].startswith('Step 3/3 Email Gail: sent to gail@northwind.example') for c in s.list_comments(tid))
     assert taskstate.closed_why(s, s.get_task(tid)).startswith('Closed by the routine: Ran 3 steps')
+    assert not any('Mark done' in c['Body'] for c in s.list_comments(tid))          # ...never told to close what closes itself
 
 
 def test_a_routines_email_that_did_not_go_waits_on_the_run_task(db):
@@ -139,6 +142,7 @@ def test_a_routines_email_that_did_not_go_waits_on_the_run_task(db):
     [rv] = s._rows("SELECT * FROM review WHERE Status='pending'")
     assert sent == [] and rv['TaskId'] == tid and [t['TaskId'] for t in s.list_tasks()] == [tid]
     assert out['steps'][1]['head'] == 'draft for erin@northwind.example - waiting for your Send' and s.get_task(tid)['Status'] != 'done'
+    assert out['summary'].endswith('1 email waits for your Send.'), out['summary']          # ...and the run's outcome says what it left him
 
 
 def test_a_token_that_names_nothing_is_left_visible_and_said():
@@ -525,3 +529,113 @@ def test_every_run_of_a_read_only_flow_is_still_a_task(db):
     with mock.patch.object(workflows, '_spawn', lambda fn: fn()):
         out = workflows.run(s, src, trigger='schedule')
     assert s.get_task(out['task_id'])['Source'] == 'workflow'
+
+
+def test_a_run_of_steps_the_restart_cut_says_so_and_is_not_walked_again(db):
+    # the app closed while a routine's AI step was asking: the run task stood open over step 1 with no outcome, nothing at work and no word
+    s = MemoryStore()
+    src = source(s, [read_dupes(db), {'id': 's2', 'kind': 'ai', 'label': 'Sum up', 'prompt': 'Summarise {{s1}}', 'output': 'text'},
+                     {'id': 's3', 'kind': 'draft', 'label': 'Email Gail', 'to': 'gail@northwind.example', 'about': '{{s2}}'}])
+    class Killed(BaseException): pass
+    def dies(*a, **k): raise Killed()
+    with mock.patch.object(workflows, '_spawn', lambda fn: fn()), mock.patch.object(flow, '_llm', return_value=dies), pytest.raises(Killed):
+        workflows.run(s, src, trigger='schedule')
+    workflows._STARTING.clear()                                                     # the process is gone
+    [t] = s.list_tasks(); tid = t['TaskId']
+    with mock.patch.object(flow, 'execute', side_effect=AssertionError('a cut run is not walked again by itself')):
+        assert flow.keep_cut_runs(s) == [tid]
+        assert flow.keep_cut_runs(s) == []                                          # said once
+    run = s.report_run_of_task(tid)
+    assert run['failed'] and run['summary'].startswith('Cut short when Taskuary restarted, after step 1 of 3') and 'Run now' in run['summary']
+    assert flow.turn(s, tid, False)['text'] == run['summary']
+    assert sum(c['Body'] == run['summary'] for c in s.list_comments(tid)) == 1
+    last = json.loads(s.get_setting(f"report_last_run:{src['SourceId']}"))            # ...and the routine's row on the shelf says it too
+    assert last['failed'] and last['summary'] == run['summary']
+    # ...and a run kept before outcomes were written, that did reach its end or stopped on a yes, is not taken for a cut one
+    done_ = run_task(s, src); s.add_report_run(src['SourceId'], {'type': 'flow', 'task_id': done_, 'steps': [{'id': f's{i}', 'status': 'ok'} for i in (1, 2, 3)]})
+    held = run_task(s, src); s.add_report_run(src['SourceId'], {'type': 'flow', 'task_id': held, 'steps': [{'id': 's1', 'status': 'ok'}, {'id': 's2', 'status': 'waiting'}]})
+    assert flow.keep_cut_runs(s) == []
+
+
+def test_a_repair_whose_answer_cannot_be_read_says_so_never_asks_the_owner_to_say_it_another_way(db):
+    # a scheduled run's script failed and the repair model answered prose: the task told the owner "I couldn't turn that into a report. Say it
+    # another way" - words for an ask he typed, over a repair nobody asked for in words
+    s = MemoryStore()
+    src = source(s, [{'id': 's1', 'kind': 'source', 'label': 'Run the script', 'type': 'python_script', 'script': "import sys\nsys.exit('the ledger file is missing')"}])
+    tid = run_task(s, src)
+    out = flow.execute(s, src, tid, 'schedule', llm=answering('I think the file moved.'))
+    said = [c['Body'] for c in s.list_comments(tid)]
+    assert out['failed'] and not any('Say it another way' in x or 'a report' in x for x in said), said
+    assert f'No repair was found: {flow.REPAIR_GARBLED}' in said
+
+
+def test_a_script_is_handed_every_row_the_read_before_it_got():
+    # a routine read 150 bills and handed them to its script for the total: cut at the AI pass's budget on the way, the script saw 116 and
+    # said "116 bills, total 1160" under a read that said 150 rows - a wrong total the AI step and the email after it would have repeated
+    d = tempfile.mkdtemp(); p = os.path.join(d, 'ap.db'); cx = sqlite3.connect(p)
+    cx.execute('CREATE TABLE bill (vendor TEXT, amount REAL, memo TEXT)')
+    cx.executemany('INSERT INTO bill VALUES (?,?,?)', [(f'Vendor {i}', 10, 'x' * 120) for i in range(150)]); cx.commit(); cx.close()
+    script = "import sys, json\nrows = [json.loads(l) for l in sys.stdin if l.strip()]\nprint(f'{len(rows)} bills, total {sum(r[\"amount\"] for r in rows):.0f}')"
+    s = MemoryStore()
+    src = source(s, [{'id': 's1', 'kind': 'source', 'label': 'Read bills', 'type': 'sqlite', 'db': p, 'query': 'SELECT * FROM bill'},
+                     {'id': 's2', 'kind': 'source', 'label': 'Total', 'type': 'python_script', 'script': script, 'input': '{{s1}}'},
+                     {'id': 's3', 'kind': 'ai', 'label': 'Say it', 'prompt': 'Say the bills read:\n{{s1}}', 'output': 'text'}])
+    seen = []
+    out = flow.execute(s, src, run_task(s, src), 'manual', llm=answering('150 bills.', seen=seen))
+    assert [r['status'] for r in out['steps']] == ['ok', 'ok', 'ok'], out['steps']
+    assert out['steps'][0]['rows'] == 150 and out['steps'][1]['body'] == '150 bills, total 1500'
+    assert 'later rows were NOT shown to you' in seen[0]['user']           # ...and the AI, given less, is told it was given less
+    assert len(out['steps'][0]['body']) <= flow.BODY_CAP                    # the run's record stays its size
+
+
+def test_the_run_that_goes_on_after_a_yes_reads_what_the_steps_before_read_whole():
+    # the approved write was step 2; the script after it summed the bills step 1 read - rebuilt from the run's record, cut at BODY_CAP, it
+    # saw 23 of 150 and said a total a sixth of the real one
+    d = tempfile.mkdtemp(); p = os.path.join(d, 'ap.db'); cx = sqlite3.connect(p)
+    cx.execute('CREATE TABLE bill (vendor TEXT, amount REAL, memo TEXT)')
+    cx.executemany('INSERT INTO bill VALUES (?,?,?)', [(f'Vendor {i}', 10, 'x' * 120) for i in range(150)]); cx.commit(); cx.close()
+    script = "import sys, json\nrows = [json.loads(l) for l in sys.stdin if l.strip()]\nprint(f'{len(rows)} bills, total {sum(r[\"amount\"] for r in rows):.0f}')"
+    s = MemoryStore()
+    card = s.get_connector_by_type('smb_file'); s.save_connector({'ConnectorId': card['ConnectorId'], 'Active': True, 'Scope': 'read'}, 'test')
+    src = source(s, [{'id': 's1', 'kind': 'source', 'label': 'Read bills', 'type': 'sqlite', 'db': p, 'query': 'SELECT * FROM bill'},
+                     {'id': 's2', 'kind': 'source', 'label': 'File it', 'type': 'smb_write', 'path': 'exports/ap.csv', 'content': 'x'},
+                     {'id': 's3', 'kind': 'source', 'label': 'Total', 'type': 'python_script', 'script': script, 'input': '{{s1}}'}])
+    out = flow.execute(s, src, run_task(s, src), 'manual', llm=no_model)
+    assert out['waiting']
+    went = flow.resume(s, {'source_id': src['SourceId'], 'run_id': out['run_id'], 'step': 's2'}, {'output': 'written', 'headline': 'wrote exports/ap.csv'})
+    assert went['steps'][2]['body'] == '150 bills, total 1500', went['steps'][2]
+
+
+def test_the_agent_after_the_steps_is_told_where_an_output_was_cut():
+    # the agent step after a read of 150 bills got the first 1,500 characters as "output" with nothing saying there was more - and took
+    # the dozen bills it could see for all of them
+    d = tempfile.mkdtemp(); p = os.path.join(d, 'ap.db'); cx = sqlite3.connect(p)
+    cx.execute('CREATE TABLE bill (vendor TEXT, amount REAL)')
+    cx.executemany('INSERT INTO bill VALUES (?,?)', [(f'Vendor {i}', 10) for i in range(150)]); cx.commit(); cx.close()
+    s = MemoryStore()
+    src = source(s, [{'id': 's1', 'kind': 'source', 'label': 'Read bills', 'type': 'sqlite', 'db': p, 'query': 'SELECT * FROM bill'},
+                     {'id': 's2', 'kind': 'agent', 'label': 'Chase them', 'prompt': 'Chase the vendors.'}])
+    with mock.patch.object(ingest, '_auto_general') as gen: flow.execute(s, src, run_task(s, src), llm=no_model)
+    brief = gen.call_args[0][2]
+    assert 'Vendor 0' in brief and 'cut here - the output ran to' in brief
+    whole = len('\n'.join(json.dumps({'vendor': f'Vendor {i}', 'amount': 10.0}) for i in range(150)))
+    assert f'{whole:,} characters' in brief
+
+
+def test_a_run_whose_task_the_owner_closes_stops_there_and_asks_no_repair(db):
+    # the owner dropped a routine's run task while its first step ran: the walk went on - opened a task, failed its email on the closed task,
+    # asked a repair model to fix steps that were fine, and told him "Fix it on the workflow"
+    s = MemoryStore()
+    src = source(s, [read_dupes(db), {'id': 's2', 'kind': 'task', 'label': 'Open a task', 'title': 'Follow up'},
+                     {'id': 's3', 'kind': 'draft', 'label': 'Email Gail', 'to': 'gail@northwind.example', 'about': '{{s1}}'}])
+    tid, real = run_task(s, src), flow.run_step
+    def then_dropped(store, step, *a, **k):
+        r = real(store, step, *a, **k)
+        if step['id'] == 's1': store.update_task(tid, {'Status': 'dropped'}, 'owner')
+        return r
+    with mock.patch.object(flow, 'run_step', then_dropped):
+        out = flow.execute(s, src, tid, 'manual', llm=no_model)
+    assert [r['id'] for r in out['steps']] == ['s1'] and not out['failed'] and not out['repairs']
+    assert out['summary'] == 'Stopped before step 2 of 3: the task was closed while the run worked, so nothing after it ran.'
+    assert [t['TaskId'] for t in s.list_tasks()] == [tid] and s.get_task(tid)['Status'] == 'dropped'
+    assert s._rows("SELECT * FROM operation") == []

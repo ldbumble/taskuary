@@ -468,9 +468,9 @@ def main():
         # ...and HOW IT IS SPOKEN OF, said where a coding agent hears it - the chat agent's draft tools answer the same sentence (the recorded
         # coding walk, 2026-11-12: told "waiting on the owner to approve and send it", it said so over the card, and again the turn after)
         from .selfclose import card_said
-        if text or not out.get('ok'): print(out.get('says') or "saved on the task as its result." if out.get('saved') == 'result'
+        if text or not out.get('ok'): print(out.get('says') or ("saved on the task as its result." if out.get('saved') == 'result'
                                             else f"{'email' if drafting else 'reply'}{to} {'sent' if out.get('sent') else 'saved on the task'}. {card_said(out)}" if out.get('ok')
-                                            else f"not saved: {out.get('why') or out.get('detail') or r.text[:200]}")
+                                            else f"not saved: {out.get('why') or out.get('detail') or r.text[:200]}"))
         if out.get('ok') and out.get('people'):
             print(f"this task has more than one person on it ({', '.join(out['people'])}) - if it is meant for someone else, save it again with --to <name or address>")
         if out.get('attached'): print('attached: ' + ', '.join(out['attached']))

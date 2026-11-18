@@ -457,10 +457,11 @@ def flat_schedule(cfg: dict) -> dict:
     return {**{k: v for k, v in cfg.items() if k != 'schedule'}, **{k: s[k] for k in SCHEDULE_KEYS if s.get(k) not in (None, '') and not cfg.get(k)}}
 
 
-def _rounds(store, llm, system, user, rounds, finish):
+def _rounds(store, llm, system, user, rounds, finish, garbled: str = ''):
     """The loop both composers share: the model may go and READ a real schema before it writes
-    anything, a question comes back as a question, and `finish` reads its final answer."""
-    looked = []
+    anything, a question comes back as a question, and `finish` reads its final answer. `garbled`: what an answer that could not be
+    read is said as - the owner's ask is "said another way" only where the owner asked; a repair nobody typed says its own."""
+    looked, garbled = [], garbled or AGAIN.format('a report')
     for _ in range(max(1, rounds + 1)):
         # ...and a brain that fails is the answer too, in its own words with its way past (failures.classify): raised, the builder's describe
         # answered 500 and the Assistant's setup turn ended on nothing to say (an API card's quick model ran out of room, 2026-11-12)
@@ -470,7 +471,7 @@ def _rounds(store, llm, system, user, rounds, finish):
             logger.warning(f'compose: the brain failed - {e}')
             return {'error': classify(e)['sentence']}
         out = _json(said)
-        if not out: return {'error': AGAIN.format('a report')}
+        if not out: return {'error': garbled}
         for k in ('config', 'report'):
             if isinstance(out.get(k), dict): out[k] = flat_schedule(out[k])
         if out.get('questions'):
@@ -484,7 +485,7 @@ def _rounds(store, llm, system, user, rounds, finish):
                 {'you_asked_for': spec, 'result': _peek(store, spec)})
             continue
         return finish(out, looked)
-    return {'error': AGAIN.format('a report')}
+    return {'error': garbled}
 
 
 def _repositories(store) -> dict:

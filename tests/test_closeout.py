@@ -352,6 +352,19 @@ class GithubStateTests(unittest.TestCase):
         upd.assert_called_once()
 
 
+    def test_re_run_with_no_failed_actions_run_says_nothing_re_ran(self):
+        """The red check was another CI's (a commit status): Re-run asked GitHub Actions, found no failed run of its own, and the task read
+        "Re-ran the failed checks on 0 workflow run(s) ... Press Approve again once the checks pass" - nothing was running to pass."""
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s = armed(MemoryStore()); tid = with_pr(s); finish(s, tid)
+        rid = proposals.closeout_pending(s, tid)['ReviewId']
+        with mock.patch.object(server, 'store', s), mock.patch.object(github, 'checks', return_value=RED), \
+             mock.patch.object(github, 'pr', return_value={**OPEN, 'mergeable_state': 'blocked'}), mock.patch.object(github, 'rerun_failed', return_value=0):
+            r = TestClient(server.app).post(f'/api/reviews/{rid}/closeout/rerun')
+        self.assertEqual(r.status_code, 422, r.text); self.assertIn('ci / test', r.json()['detail'])
+        self.assertFalse(any('Re-ran' in str(c.get('Body')) for c in s.list_comments(tid)))
+
 class IssueCloseOutTests(unittest.TestCase):
     def test_a_task_from_an_issue_waits_to_close_it_with_a_comment(self):
         s = armed(MemoryStore(), tracker=True)

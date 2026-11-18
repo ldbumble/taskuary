@@ -179,8 +179,10 @@ def render(text, channel: str, links: bool = False) -> str:
 
 def plain_text(text) -> str:
     """Markdown as a plain-text EMAIL reads it: the marks parsed off (bold, headings, code spans, links, tables), the words kept.
-    A redrafted reply went out with **bold** and ## headings (walk 2026-10-29) - syntax, read here as syntax, never as meaning."""
-    return render(text, 'email')
+    A redrafted reply went out with **bold** and ## headings (walk 2026-10-29) - syntax, read here as syntax, never as meaning.
+    ...AND A LINK KEEPS ITS ADDRESS (a walk, 2026-11-18): a reply's "[Venue parking](https://...)" was filed and sent as "Venue
+    parking" - five link labels pointing nowhere. Every email road (responder.signed, signatures.as_sent / agent_signed) reads it here."""
+    return render(text, 'email', links=True)
 
 
 def split(text: str, limit: int = HARD) -> list:

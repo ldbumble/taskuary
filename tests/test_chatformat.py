@@ -97,6 +97,12 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(cf.render(md, 'slack', links=True),
                          'The agenda is <https://northwind.example/agenda|here>, see TQ-0012 and <https://northwind.example|https://northwind.example>.')
 
+    def test_an_email_keeps_the_address_of_every_link_it_was_written_with(self):
+        """A walk, 2026-11-18: a reply's "[Venue parking](https://...) · [Garage](https://...)" went to the person as the
+        labels alone - the plain-text email road dropped every address. An email is a reply to a person too."""
+        md = 'Hi Gail,\n[Venue parking](https://venue.example/parking) · [Garage](https://garage.example/)\n\n**Alex**'
+        self.assertEqual(cf.plain_text(md), 'Hi Gail,\nVenue parking (https://venue.example/parking) · Garage (https://garage.example/)\n\nAlex')
+
     def test_a_table_becomes_lines_a_phone_can_read(self):
         """Fifteen repos by six columns of pipes is unreadable in a bubble."""
         out = cf.render('| Step | Tool |\n|---|---|\n| Fetch trending | WebFetch |', 'whatsapp')

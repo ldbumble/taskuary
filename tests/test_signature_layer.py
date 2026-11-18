@@ -139,7 +139,8 @@ def test_an_agents_draft_is_filed_with_the_block_once_not_under_its_own_sign_off
 
 
 MD = 'Hi Erin,\n\n## Flights\n\n- **Tue 9:05** out, `NW 12`\n- see [the fares](https://fares.example/x)\n\n| Day | Fare |\n|---|---|\n| Tue | 210 |'
-PLAIN = 'Hi Erin,\n\nFlights\n\n- Tue 9:05 out, NW 12\n- see the fares\n\nDay · Fare\nTue · 210'
+# ...a link keeps its address in the plain text (a walk, 2026-11-18: a reply's links went out as bare labels)
+PLAIN = 'Hi Erin,\n\nFlights\n\n- Tue 9:05 out, NW 12\n- see the fares (https://fares.example/x)\n\nDay · Fare\nTue · 210'
 
 
 def test_a_drafted_email_is_plain_text_not_markdown(s):

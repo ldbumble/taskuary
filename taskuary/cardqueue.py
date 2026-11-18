@@ -160,7 +160,7 @@ def what(store, u: dict) -> str:
 
 def _waits(u: dict) -> list:
     "The rows of a card that still wait - a bulk card part-run (a send that did not go, a stop) is what is left on it, not what it once held."
-    return [r for r in u.get('rows') or [] if r['Status'] == 'pending']
+    return [r for r in u.get('rows') or [] if r.get('Status') == 'pending']
 
 
 def line(s: dict) -> str:

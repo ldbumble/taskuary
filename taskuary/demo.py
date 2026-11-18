@@ -189,7 +189,9 @@ def refuse_op(op) -> str:
         return refuse_verdict('approve', rv.get('Kind'))
     # ...WHO DOES IT is a field on the task, unless the answer is an agent, which starts on it (server's task.set_kind: _start_chosen). Each
     # read "that would reach something real" (the walk, 2026-11-18), and so did every press below whose own path says what it is
-    if kind == 'task.set_kind': return STARTS if str(p.get('kind') or '') in ('general', 'coding') else ''
+    if kind == 'task.set_kind':
+        from .kinds import AGENT
+        return STARTS if str(p.get('kind') or '') in AGENT else ''
     if kind in ('review.approve', 'task.clarify', 'task.chase', 'task.handoff', 'task.share', 'task.ask_agent'): return SENDS
     if kind in ('agent.stop', 'agents.stop'): return RECORDED
     if kind in ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.tell', 'task.create_from_message', 'task.create_from_text',

@@ -525,3 +525,23 @@ def test_every_run_of_a_read_only_flow_is_still_a_task(db):
     with mock.patch.object(workflows, '_spawn', lambda fn: fn()):
         out = workflows.run(s, src, trigger='schedule')
     assert s.get_task(out['task_id'])['Source'] == 'workflow'
+
+
+def test_a_run_of_steps_the_restart_cut_says_so_and_is_not_walked_again(db):
+    # the app closed while a routine's AI step was asking: the run task stood open over step 1 with no outcome, nothing at work and no word
+    s = MemoryStore()
+    src = source(s, [read_dupes(db), {'id': 's2', 'kind': 'ai', 'label': 'Sum up', 'prompt': 'Summarise {{s1}}', 'output': 'text'},
+                     {'id': 's3', 'kind': 'draft', 'label': 'Email Gail', 'to': 'gail@northwind.example', 'about': '{{s2}}'}])
+    class Killed(BaseException): pass
+    def dies(*a, **k): raise Killed()
+    with mock.patch.object(workflows, '_spawn', lambda fn: fn()), mock.patch.object(flow, '_llm', return_value=dies), pytest.raises(Killed):
+        workflows.run(s, src, trigger='schedule')
+    workflows._STARTING.clear()                                                     # the process is gone
+    [t] = s.list_tasks(); tid = t['TaskId']
+    with mock.patch.object(flow, 'execute', side_effect=AssertionError('a cut run is not walked again by itself')):
+        assert flow.keep_cut_runs(s) == [tid]
+        assert flow.keep_cut_runs(s) == []                                          # said once
+    run = s.report_run_of_task(tid)
+    assert run['failed'] and run['summary'].startswith('Cut short when Taskuary restarted, after step 1 of 3') and 'Run now' in run['summary']
+    assert flow.turn(s, tid, False)['text'] == run['summary']
+    assert sum(c['Body'] == run['summary'] for c in s.list_comments(tid)) == 1

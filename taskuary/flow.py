@@ -671,6 +671,28 @@ def _failed_op(store, tid, sid, rid, title, stop, bad, app) -> None:
     except Exception as e: logger.warning(f'workflow {title!r}: the failure was not recorded as an operation - {e}')
 
 
+# A RUN OF STEPS THE RESTART CUT SAYS SO (the stress round, 2026-11-18): its walk went with the process, and the run task stood open over
+# the steps it had got to - no outcome, nothing at work, no word of what happened. Like an agent's cut turn it is not picked up again by
+# itself (a step that sent an email would send it twice): the run's record and its chat say where it stopped, and Run now starts it fresh.
+CUT_RUN = 'Cut short when Taskuary restarted, after step {done} of {n} - nothing after it ran. Run now on the routine starts it again.'
+def keep_cut_runs(store) -> list:
+    "Every run of steps a restart cut, said on its record and its open task: [task ids]. At start-up, before any run can begin."
+    from . import workflows
+    out = []
+    for r in store._rows("SELECT RunId, SourceId, TaskId, StepsJson FROM report_run WHERE Type='flow' AND TaskId IS NOT NULL AND IFNULL(Summary,'')=''"):
+        tid = r['TaskId']
+        if workflows.at_work(tid) or (store.get_task(tid) or {}).get('Status') in (None, 'done', 'dropped'): continue
+        try: recs = json.loads(r.get('StepsJson') or '[]') or []
+        except ValueError: recs = []
+        src = store.get_source(r['SourceId']) if r.get('SourceId') else None
+        n = len(steps_of(workflows.cfg_of(src))) if src else len(recs)
+        words = CUT_RUN.format(done=sum(1 for x in recs if x.get('status') != 'repaired'), n=max(n, len(recs)))
+        store.set_report_run_steps(r['RunId'], recs, True, words, None, words)
+        store.add_comment(tid, 'workflow', 'agent', words)
+        out.append(tid)
+    return out
+
+
 def resume(store, fr: dict, result: dict = None) -> dict | None:
     """The run goes on after the owner's yes (proposals.execute): an approved write is that step done - `result` is what it
     returned - and the run continues below it; an approved repair re-runs the step it fixed. Only while the run still stops on that
@@ -709,6 +731,7 @@ def resume(store, fr: dict, result: dict = None) -> dict | None:
     rec = {'at': run.get('at') or datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'type': 'flow', 'title': cfg.get('title') or run.get('title'),
            'trigger': trigger, 'subject': run.get('subject'), 'task_id': tid, 'steps': recs, 'run_id': run['runId']}
     with workflows._LOCK: workflows._STARTING.add(tid)
+    store.set_report_run_steps(run['runId'], recs, summary='')         # walking again: a restart from here is a cut run (keep_cut_runs)
     llm = _llm(store) if any(s.get('kind') in ('ai', 'draft') for s in steps[start:]) else None
     try: return _walk(store, src, tid, trigger, llm, ctx, recs, list(run.get('repairs') or []), rec, start, time.time() - (run.get('ms') or 0) / 1000)
     finally:

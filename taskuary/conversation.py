@@ -500,7 +500,9 @@ def _items(store, tid: int) -> dict:
             took = (('back', str(cid)) in led or any(n < cid for n in backs)) and body
             if took:
                 st, body, backs = [*st, {'k': 'note', 'text': (led.get(('back', str(cid))) or {}).get('Sid') or back_why(cid) or TOOK_BACK}], '', [n for n in backs if n >= cid]
-            t = {'kind': 'turn', 'at': stamp(clock) or c['CreatedAt'], 'state': 'done', 'steps': st, 'text': body, 'cards': [], 'started': clock or None,
+            # ...and it BEGAN at its own time too (the demo walk, 2026-11-18): with no start it counted as begun at the start of time, so a card
+            # made long before it was "made in" it - a played Send's card was taken into the line said after it, and jumped down under it
+            t = {'kind': 'turn', 'at': stamp(clock) or c['CreatedAt'], 'state': 'done', 'steps': st, 'text': body, 'cards': [], 'started': clock or ep(c['CreatedAt']),
                  'ended': ep(c['CreatedAt']), 'answer': f'comment-{cid}', **({'summary': summ[cid]} if cid in summ and not took else {})}
             # ...and each draft this turn left that a later turn rewrote: greyed where it stood, never moved
             newest = {s['review']: k for k, ss in snaps.items() for s in ss}

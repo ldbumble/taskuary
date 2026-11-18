@@ -83,6 +83,26 @@ class TheDoorsAreShutTests(unittest.TestCase):
         self.assertIsNone(s.last_worker_event(rv['TaskId'], kinds=('failed',)), 'and no agent is woken to fail on "No AI is connected"')
         gone.assert_not_called()
 
+    def test_a_played_send_stays_where_it_stood_above_the_line_after_it(self):
+        """The walk, 2026-11-18, recorded frame by frame: Send on Invoice 88213 - the card settled as sent, then the agent's line after it
+        landed ABOVE it and pushed it down. That line had no marked start, so it counted as begun at the start of time and took in a card
+        made long before it. A card stands where it was; what is said after it is drawn under it."""
+        from taskuary import conversation, verdicts
+        s = MemoryStore()
+        with mock.patch('taskuary.terminal.live_sessions', lambda tail=0: []), on():
+            demo.seed(s)
+            rv = next(r for r in s.list_reviews() if (s.get_task(r['TaskId']) or {}).get('Title') == 'Invoice 88213 - past due')
+            # ...the visitor reads a while before pressing: the draft is minutes older than the press
+            s._exec('UPDATE review SET CreatedAt=? WHERE ReviewId=?', (demo._at(10), rv['ReviewId'])); rv = s.get_review(rv['ReviewId'])
+            before = [x['id'] for x in conversation.items(s, rv['TaskId'])['items']]
+            self.assertEqual(verdicts.decide(s, rv, 'approve').get('ok'), True)
+            items = conversation.items(s, rv['TaskId'])['items']
+        card = f"r:{rv['ReviewId']}"
+        self.assertIn(card, before)
+        self.assertIn(card, [x['id'] for x in items], 'the sent card stands on its own, where it stood')
+        said = next(i for i, x in enumerate(items) if x['kind'] == 'turn' and demo.AFTER_SEND in (x.get('text') or ''))
+        self.assertLess([x['id'] for x in items].index(card), said, 'the line said after the send is drawn under the card')
+
     def test_the_draft_the_tour_points_at_can_be_sent(self):
         # ...its redraft stayed pinned to the first mail, so it read as stale: Redraft alone, and no AI in the demo to redraft with
         from taskuary import verdicts

@@ -516,7 +516,7 @@ def rows_of(body: str) -> list:
     """The rows an executor handed back as JSON lines (reports.rows_out), or one JSON list. Prose is no rows."""
     t = str(body or '').strip()
     if t.startswith('['):
-        try: v = json.loads(t); return [r for r in v if isinstance(r, dict)] if isinstance(v, list) else []
+        try: v = json.loads(t); return [r for r in v if isinstance(r, dict)][:ROWS] if isinstance(v, list) else []
         except ValueError: pass
     out = []
     for line in t.splitlines():

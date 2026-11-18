@@ -612,3 +612,22 @@ def test_a_run_whose_every_source_failed_is_said_on_the_dashboard_it_left_as_it_
         s.save_source({'SourceId': src['SourceId'], 'ConfigJson': json.dumps(SPEC)}, 't')
         reports.run_one(s, s.get_source(src['SourceId']), None, 'manual')
         assert c.get(f"/api/dashboards/{src['SourceId']}").json()['problems'] == []
+
+
+def test_a_web_source_that_answers_hundreds_of_items_draws_every_one(monkeypatch):
+    """A REST answer was pretty-printed and cut at the report's 20K cap even on a dashboard: 500 invoices were no JSON once cut, and no
+    line of an indented list is a whole item - so the source said "500 items" and every tile on it counted nothing."""
+    from taskuary import webguard
+
+    class Answer:
+        def raise_for_status(self): pass
+        def json(self): return [{'id': i, 'vendor': 'Payworth', 'amount': i * 1.5, 'status': 'open'} for i in range(500)]
+    monkeypatch.setattr(webguard, 'get', lambda *a, **k: Answer())
+    spec = {'type': 'dashboard', 'title': 'Bills', 'sources': [{'key': 'bills', 'type': 'rest', 'url': 'https://api.vendor.example/bills'}],
+            'components': [{'kind': 'stat', 'title': 'Open bills', 'source': 'bills', 'where': {'status': 'open'}}]}
+    data = dashboards.collect(MemoryStore(), spec)
+    assert data['sources']['bills']['head'] == '500 items' and len(data['sources']['bills']['rows']) == 500
+    assert dashboards.headline(spec, data) == [('Open bills', '500')]
+    head, body = reports.run_rest({'url': 'https://api.vendor.example/bills'})        # ...and a report still reads it whole-headed, in its cap
+    assert head == '500 items' and len(body) <= reports.BODY_CHARS and json.loads(body.splitlines()[0])['id'] == 0
+

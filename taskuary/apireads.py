@@ -28,7 +28,7 @@ from pathlib import Path
 from urllib.parse import quote, urlsplit, parse_qsl
 import requests
 
-TIMEOUT, BODY_CHARS = 30, 20000
+TIMEOUT = 30
 BORROWED = ('google_drive', 'onedrive', 'office365_files')     # no key of their own: the app's Google and Microsoft sign-ins (STORE_BACKED)
 SIGN_INS = {'google': "the Google Sheets card's Google sign-in", 'graph': "the Outlook card's Microsoft sign-in",
             'powerbi': "the Outlook card's Microsoft sign-in", 'oauth': "the card's own Sign in"}
@@ -335,9 +335,10 @@ def runner(t: str):
         if probe and not s['probe']: raise RuntimeError(f"{s['title']} needs a path to read - e.g. {s['example']}")
         p = cfg.get('path') or s['probe']
         body = (cfg.get('body') if isinstance(cfg.get('body'), (dict, list)) else None) if not probe else s.get('probe_body')
+        from .reports import json_body
         j = call(t, cfg, cfg.get('api_key') or '', p, cfg.get('params') if isinstance(cfg.get('params'), dict) else None, body, cfg.get('store'))
         n = len(j) if isinstance(j, list) else next((len(v) for v in (j.values() if isinstance(j, dict) else ()) if isinstance(v, list)), None)
-        return (f"{s['title']}: {n} items" if n is not None else f"{s['title']} answered"), json.dumps(j, indent=1, default=str)[:BODY_CHARS]
+        return (f"{s['title']}: {n} items" if n is not None else f"{s['title']} answered"), json_body(j)
     verb = f" (POST {', '.join(s['post'])} with \"body\")" if s.get('post') else ''
     run.__doc__ = f'{{"path": "{s.get("example") or s["probe"]}", "params": {{}}}} - a read under {s["title"]}\'s API with the card\'s key{verb}. Reads only.'
     return run

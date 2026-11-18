@@ -300,6 +300,17 @@ def test_a_line_typed_over_the_line_of_cards_greys_what_stood_and_never_draws_wh
     assert chat_cards(s, tid) == {first: ('batch', 'passed')}, 'the same once heard: nothing appears, nothing goes'
 
 
+def test_a_standing_bulk_card_names_the_sentence_his_next_line_greys_it_with():
+    """The real-CLI card walk, 2026-11-18: a card of several emails carried nothing that told the page his line sets it aside, so it stood lit
+    over his new line for a read (~230 ms) - two Sends over the line that had just written past them. It names the sentence, as a draft does."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        call(tid, 'propose_email', items=emails(2))
+        items = conversation.items(s, tid)['items']
+    cards = [k for x in items for k in ([x] if x['kind'] == 'card' else x.get('cards') or [])]
+    assert [(k['what'], k['status'], k.get('aside')) for k in cards] == [('batch', 'pending', proposals.WROTE_PAST)]
+
+
 def test_a_bulk_card_that_waited_behind_another_and_was_written_past_never_stands():
     s, tid = world()
     with mock.patch.object(server, 'store', s):

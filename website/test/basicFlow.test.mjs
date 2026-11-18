@@ -51,6 +51,16 @@ test("his line greys the card above it with the sentence the server will say, in
   assert.equal(got.items[1].cards[0].why, 'Not sent - you wrote "what is on my plate today, and which of it is for Gail Moren…" after it');
 });
 
+// ...A CARD OF SEVERAL EMAILS TOO (the real-CLI card walk, 2026-11-18): it carries no draft words of its own, so the page left it lit under his
+// new line for a read (~230 ms) - two Sends to press over the line that had just set them aside. The server's `aside` says it greys
+test("his line greys a card of several emails above it from the same frame", () => {
+  const card = { id: "r:2", review: 2, what: "batch", batch: "b1", n: 2, status: "pending", aside: 'Not sent - you wrote "{line}" after it' };
+  const read = { items: [mail, { ...answer, cards: [card] }], pending: [], working: false };
+  const got = withMine(read, [{ id: "l-2", kind: "line", text: "draft them again", at: new Date(), rest: true }]);
+  assert.equal(got.items[1].cards[0].status, "passed");
+  assert.equal(got.items[1].cards[0].why, 'Not sent - you wrote "draft them again" after it');
+});
+
 test("a line whose send failed stays where it stands in his own words; the failure is one line under it with Try again", async () => {
   const read = { items: [mail, answer], pending: [], working: false };
   const got = withMine(read, [{ id: "l-2", kind: "line", text: "try now", at: new Date(), rest: true, err: "The agent did not start" }]);

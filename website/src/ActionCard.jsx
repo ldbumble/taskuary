@@ -26,15 +26,22 @@ const IMG_MAX = 180;
 const PICK = { font: "inherit", fontSize: 11.5, color: INK, border: 0, background: "transparent", padding: 0, cursor: "pointer", outline: 0,
   fieldSizing: "content", borderRadius: "4px", "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } };
 
-export default function ActionCard({ row, tid, live = true, onChanged }) {
+export default function ActionCard({ row: given, tid, live = true, onChanged }) {
+  // ...A PRESS ANSWERED IS THE CARD'S STATE AT ONCE (the card round, 2026-11-18: Dismiss lit Post and Dismiss again for a beat before "dismissed",
+  // a failed post lit them again before its error was kept - the press was over, the row it reads not yet read again): the status the server
+  // answered with stands over a row that still says pending, until that row says it too
+  const [settled, setSettled] = useState(null);
+  const row = settled && given?.Status === "pending" ? { ...given, Status: settled.Status, ActError: settled.ActError || given.ActError } : given;
   const p = row?.post || {}, act = actionFor(p.type), st = stateOf(row, live), tk = textKey(act);
   const [text, setText] = useState(String(p[tk] || "")), [vals, setVals] = useState(() => valuesOf(act, p));
-  const [busy, setBusy] = useState(""), [err, setErr] = useState(""), [viewing, setViewing] = useState(null), [done, setDone] = useState(null);
+  const [busy, setBusy] = useState(""), [err, setErr] = useState(""), [viewing, setViewing] = useState(null);
+  // ...gone by this card's own press: said in the words of what he picked ("Saved as a draft"), with its link
+  const done = settled && ["approved", "edited"].includes(settled.Status) ? settled : null;
   if (!act) return null;
   const fields = fieldsOf(act, p, !!st.live && !done), post = act.kind === "post", w = wordsOf(act, done || st.live ? vals : p);
   const img = fields.find((f) => f.type === "image" && f.value), pic = img ? outputRow(tid ?? row?.TaskId, img.value) : null;
   const max = fields.find((f) => f.key === tk)?.max, over = max && text.length > max;
-  const go = done?.url ?? st.url, gone = !!done || st.done;
+  const go = done?.url || st.url, gone = !!done || st.done;
   // ...a press that failed before this card was drawn is still said on it: the review keeps it (store.review_act_failed), not the press
   const failed = err || (!busy && !gone && ["pending", "superseded"].includes(row?.Status) && row?.ActError) || "";
   const decide = async (verb) => {
@@ -43,9 +50,10 @@ export default function ActionCard({ row, tid, live = true, onChanged }) {
     // and one decided in another window was an error on a card that only had to read itself again
     const o = await press(api, row.ReviewId, { verb, final_text: verb === "approve" ? text : null,
       ...(verb === "approve" && Object.keys(changed(act, p, vals)).length ? { fields: changed(act, p, vals) } : {}) }, 2);
-    if (landed(o) && verb === "approve") setDone({ url: o.data.result?.url || "" });
-    if (!landed(o) && o.kind !== "already") setErr(failLine(o, post ? "posted" : "sent"));
-    if (landed(o) || ["already", "unknown"].includes(o.kind)) onChanged?.();
+    const line = landed(o) || o.kind === "already" ? "" : failLine(o, post ? "posted" : "sent"), status = o.data?.status;
+    if (status && status !== "pending") setSettled({ Status: status, ActError: line, url: o.data.result?.url || "" });
+    else setErr(line);
+    if (o.kind !== "error") onChanged?.();
     setBusy("");
   };
   // ...a choice reads as its label; while it waits, the label is the pick itself - no box around it

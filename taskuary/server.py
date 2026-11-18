@@ -2496,9 +2496,9 @@ def _assistant_payload(task_id: int, session=None):
             # the files the agent made for this task (outputs.py): listed on the canvas, and a chip where an answer names one
             # ...each under the answer of the turn that made it (`after`, as a published page), so the turn shows what it made
             # ...by the turn that wrote it where that turn kept it (outputs.made_by), else by when it was made
-            # ...never a file a card carries: it is drawn on that card (outputs.on_cards)
-            'outputs': [{**o, 'after': by.get(o['path']) or at_turn(o.get('at'))} for by, cards in [(outputs.made_by(task_id), outputs.on_cards(store, task_id))]
-                        for o in outputs.listing(task_id) if o.get('name') not in cards],
+            # ...never a file a card carries: it is drawn on that card (outputs.on_cards); nor one he sent, as he sent it (outputs.sent)
+            'outputs': [{**o, 'after': by.get(o['path']) or at_turn(o.get('at'))} for by, cards, his in [(outputs.made_by(task_id), outputs.on_cards(store, task_id), outputs.sent(store, task_id))]
+                        for o in outputs.listing(task_id) if o.get('name') not in cards and o['path'] not in his],
             # ...and each EARLIER turn's own version of a file a later turn changed (outputs.turn_versions): drawn under that turn instead
             'turnOutputs': [o for cards in [outputs.on_cards(store, task_id)] for o in outputs.turn_versions(task_id) if o.get('name') not in cards],
             # ONE ENTRY PER CLI, and only the installed ones: this listed a provider per worker

@@ -194,6 +194,23 @@ def on_cards(store, tid: int) -> set:
     return out
 
 
+# ...NOR A FILE HE SENT (the attach stress round, 2026-11-18): what he attaches is copied in here (take_in), and his picture stood under the answer
+# of the turn at work when he sent it, as the thing it made - until an agent writes it again, it is his
+def sent(store, tid: int) -> set:
+    "The files of task `tid`'s folder that a line of his sent, as he sent them: {path in the folder}. One written since is the agent's."
+    from . import general
+    from .conversation import ep
+    base, out = folder(tid).resolve(), set()
+    for c in store.list_comments(int(tid), internal=True):
+        if c.get('ActorType') not in (general.WAITING_TYPE, general.USER_TYPE) or general.is_brief(c): continue
+        for f in general.his_line(c)['files']:
+            try:
+                p = Path(f).resolve()
+                if p.is_relative_to(base) and p.is_file() and p.stat().st_mtime <= ep(c['CreatedAt']) + 2: out.add(p.relative_to(base).as_posix())
+            except (OSError, ValueError): continue
+    return out
+
+
 def turns_made(tid: int) -> list:
     "[(turn, [what keep_turn kept])], oldest turn first - [] for a task none kept."
     base, out = turns_folder(tid), []

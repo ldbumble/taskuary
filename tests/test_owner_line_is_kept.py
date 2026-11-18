@@ -240,3 +240,19 @@ class AttachedFilesReachTheAgent(unittest.TestCase):
         [w] = general.waiting_lines(self.s, tid)
         self.assertEqual([p.rsplit('/', 1)[-1] for p in w['files']], ['the person.png'])
         self.assertTrue(self.inside(tid, w['files'][0]))
+
+    # ...AND WHAT HE SENT IS NEVER DRAWN AS WHAT THE AGENT MADE (the attach stress round, 2026-11-18, recorded): his file is copied into the
+    # task's folder, and every file there is listed as the agent's work - his picture stood under the answer of the turn at work when he sent
+    # it, a preview card with Download, though that turn never read it. A file on a line of his is his until an agent writes it again
+    def test_a_file_he_sent_is_not_listed_as_the_agents_work_until_it_writes_it(self):
+        import os
+        from taskuary import outputs
+        tid = self.s.create_task({'Title': 'Who is this', 'Kind': 'general', 'Status': 'in_progress'}, 'o')
+        general.wait_line(self.s, tid, 'and this one', outputs.take_in(tid, [str(self.pic)]), line_id='l-1')
+        general.take_kept(self.s, tid)
+        self.s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'That is Gail Moreno at the offsite.')
+        made = lambda: [o['name'] for o in server._assistant_payload(tid)['outputs']]
+        self.assertEqual(made(), [])
+        mine = outputs.named(tid, 'the person.png'); later = time.time() + 30
+        os.utime(mine, (later, later))                                          # ...the agent wrote over it: now it is its work
+        self.assertEqual(made(), ['the person.png'])

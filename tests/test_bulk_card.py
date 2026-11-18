@@ -165,7 +165,7 @@ def test_sends_that_did_not_go_still_wait_on_the_card_and_its_agent_never_sets_t
     assert len(waiting) == 4, 'a send that did not go still waits on its card'
     [said] = told
     assert 'set up again only what failed' not in said
-    assert '4 that did not go still wait on the card' in said and 'never set them up again' in said, said
+    assert 'Did not go and still on the card for their press: 4' in said and 'never set them up again' in said, said
     stopped = {**st, 'state': 'stopped'}
     assert 'not run' not in bulkcard.summary(s, out['batch'], stopped), 'a row that ran and failed is no row that was not run'
 
@@ -187,3 +187,25 @@ def test_a_press_on_a_bulk_card_the_chat_moved_past_sends_nothing():
     assert r.status_code == 409 and 'hold off' in r.json()['detail'], r.json()
     assert sent == [] and bulkcard.state(s, out['batch'])['state'] == 'idle'
     assert len(proposals.written_past(s, tid)) == 5, 'it stays greyed where it stood'
+
+
+def test_two_presses_at_once_are_one_run_and_its_agent_hears_it_once():
+    """A double click, or the phone and the desk together: both presses found the card not yet at work and each started a run - each found the
+    other's row in hand ("already in progress"), counted it failed, and its agent heard the run twice, half of it failed each time."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        out = call(tid, 'propose_email', items=emails(6))
+    sent, told, slow = [], [], bulkcard.running
+    def send(*a, **k): time.sleep(0.02); sent.append(k.get('to')); return {'channel': 'email', 'to': k.get('to') or []}
+    with mock.patch.object(outbound, 'send_out', send), mock.patch.object(outbound, 'send_block', lambda *a, **k: ''), \
+         mock.patch.object(general, 'tell', lambda st, t, said, actor='owner': told.append(said) or 'woke'), \
+         mock.patch.object(bulkcard, 'running', lambda *a: (slow(*a), time.sleep(0.05))[0]):      # ...both presses read it before either marks it
+        presses = [threading.Thread(target=bulkcard.run, args=(s, out['batch'])) for _ in range(2)]
+        for t in presses: t.start()
+        for t in presses: t.join()
+        end = time.time() + 10
+        while not told and time.time() < end: time.sleep(0.02)
+        time.sleep(0.3)
+    st = bulkcard.state(s, out['batch'])
+    assert (st['done'], st['failed']) == (6, 0) and len(sent) == 6, st
+    assert len(told) == 1 and '6 done, 0 failed' in told[0], told

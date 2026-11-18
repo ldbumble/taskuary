@@ -14,6 +14,7 @@ from loguru import logger
 KEY = 'batch:'                 # setting: batch:<key> -> the run's state
 YES = 'approve'
 LEFT = 'left out by you'      # a row he unticked: closed, never done
+_CLAIM = threading.Lock()      # a press claims the card's run (run)
 
 
 def new_key() -> str: return uuid.uuid4().hex[:12]
@@ -53,17 +54,19 @@ def _went(out: dict) -> str:
 def run(store, key: str, skip=(), actor: str = 'owner', wait: bool = False) -> dict:
     """His one press: every waiting row of bulk card `key` done by its own road, in order, in the background (`wait`: here, for a test);
     the rows in `skip` closed as left out. -> the run's state as it starts."""
-    from . import verdicts
-    todo = [r for r in rows(store, key) if r['Status'] == 'pending']
-    if not todo: raise ValueError('nothing on this card waits any more')
-    if running(store, key): return state(store, key)
-    tid, skip = todo[0]['TaskId'], {int(x) for x in skip or ()}
-    # ...A CARD THE CHAT MOVED PAST PRESSES NOTHING (verdicts._decide's rule): asked here, before the run is marked at work - a bulk card at
-    # work is never written past (proposals._older), so each row's own refusal would read it as still standing
-    from . import proposals
-    if tid and (past := [r for r in todo if r['ReviewId'] in proposals.written_past(store, tid)]): raise ValueError(proposals.passed_why(store, past[0]))
-    st = {**state(store, key), 'key': key, 'tid': tid, 'total': len(todo), 'done': 0, 'failed': 0, 'left': 0, 'state': 'running', 'rows': {}, 'at': time.time()}
-    _save(store, st)
+    from . import proposals, verdicts
+    # ...ONE RUN AT A TIME, however many presses (a double click, the phone and the desk): checked and marked at work as one step - two runs each
+    # found the other's row in hand, counted it failed, and its agent heard the run twice, half of it "failed"
+    with _CLAIM:
+        todo = [r for r in rows(store, key) if r['Status'] == 'pending']
+        if not todo: raise ValueError('nothing on this card waits any more')
+        if running(store, key): return state(store, key)
+        tid, skip = todo[0]['TaskId'], {int(x) for x in skip or ()}
+        # ...A CARD THE CHAT MOVED PAST PRESSES NOTHING (verdicts._decide's rule): asked here, before the run is marked at work - a bulk card at
+        # work is never written past (proposals._older), so each row's own refusal would read it as still standing
+        if tid and (past := [r for r in todo if r['ReviewId'] in proposals.written_past(store, tid)]): raise ValueError(proposals.passed_why(store, past[0]))
+        st = {**state(store, key), 'key': key, 'tid': tid, 'total': len(todo), 'done': 0, 'failed': 0, 'left': 0, 'state': 'running', 'rows': {}, 'at': time.time()}
+        _save(store, st)
     def go():
         tok = verdicts.QUIET.set(True)
         try:
@@ -113,7 +116,7 @@ def summary(store, key: str, st: dict) -> str:
     return (f"The owner pressed the bulk card ({st.get('total', 0)} items): {st.get('done', 0)} done, {st.get('failed', 0)} failed, {st.get('left', 0)} left out by them"
             + (f", {len(rest)} not run - they stopped it" if st.get('state') == 'stopped' and rest else '') + '.'
             + (' Failed: ' + '; '.join(f'rv{rid} ({what(rid)}): {why}' for rid, why in bad[:20]) + ('…' if len(bad) > 20 else '') + '.' if bad else '')
-            + (f' The {len(again)} that did not go still wait on the card for their press - never set them up again; take back any no longer wanted.' if again else '')
+            + (f' Did not go and still on the card for their press: {len(again)} - never set them up again; take back any no longer wanted.' if again else '')
             + ' Say in one line how it went and what, if anything, is still to do; set up again only a failed act that is still wanted.')
 
 

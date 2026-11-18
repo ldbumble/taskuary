@@ -49,13 +49,18 @@ class H(BaseHTTPRequestHandler):
     def _in(self, site, email):
         c = f'{r.random():.12f}'; SESS[c] = (site, email); return [('Set-Cookie', f'sid={c}; Path=/s/{site}')]
 
+    def _home(self, site):
+        """A vendor answers only at its own address, as a real one does: answering every vendor's path on every address let an agent sign in to
+        one vendor's page on another's host - where the vault, rightly, filled the other's sign-in (the real-CLI job walk, 2026-11-18)."""
+        return (self.headers.get('Host') or '').split(':')[0] in (HOST[site], 'localhost')
+
     def do_GET(self):
         u = urlparse(self.path); parts = [p for p in u.path.split('/') if p]
         if not parts or parts[0] != 's':
             return self._send(200, page('', 'Data vendors', '<ul>' + ''.join(f'<li><a href="http://{HOST[s]}:{PORT}/s/{s}/">{n}</a> - {d}</li>' for s, n, d, _ in SITES) + '</ul>'))
         site = parts[1] if len(parts) > 1 else ''
         meta = next((x for x in SITES if x[0] == site), None)
-        if not meta: return self._send(404, page('', 'Not found', '<p>No such site.</p>'))
+        if not meta or not self._home(site): return self._send(404, page('', 'Not found', '<p>No such site.</p>'))
         _, name, what, extra = meta; act = parts[2] if len(parts) > 2 else ''
         who = self._who(); mine = who and who[0] == site and USERS.get(who, {}).get('ok')
         if act == '': return self._send(200, page(site, 'Welcome', f'<p>{name} publishes {what} by city. Free accounts see the table.</p>'
@@ -89,7 +94,7 @@ class H(BaseHTTPRequestHandler):
         parts = [p for p in urlparse(self.path).path.split('/') if p]
         site = parts[1] if len(parts) > 1 else ''; act = parts[2] if len(parts) > 2 else ''
         meta = next((x for x in SITES if x[0] == site), None)
-        if not meta: return self._send(404, page('', 'Not found', ''))
+        if not meta or not self._home(site): return self._send(404, page('', 'Not found', ''))
         extra, who = meta[3], self._who()
         # ...a refused form is drawn again as itself: a wizard's first step stays its two boxes and its Next, as a real one does
         def again(err, fields=None):

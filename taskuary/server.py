@@ -5302,7 +5302,8 @@ def closeout_act(rid: int, act: str):
                 try: red = ', '.join(f['name'] or '?' for f in github.checks(tok, p['repo'], seen['pr']['sha'])['failed'])
                 except Exception: red = ''
                 raise HTTPException(422, f"Nothing was re-run: no GitHub Actions run failed on this commit{f' - {red} runs elsewhere; re-run it there' if red else ''}")
-            said = f"Re-ran the failed checks on {n} workflow run{'s' if n != 1 else ''}"
+            from .timewords import plural
+            said = f"Re-ran the failed checks on {plural(n, 'workflow run')}"
     except github.Refused as e:
         github.learn(tok, p['repo'], e); raise HTTPException(422, str(e))
     except (RuntimeError, requests.RequestException) as e: raise HTTPException(422, str(e))

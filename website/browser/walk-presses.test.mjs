@@ -9,13 +9,16 @@ import { note, record } from "./recorder.mjs";
 
 /* THE ITEM'S OWN PRESSES ON THE WALK (rules part 4: "every press leaves a line in the chat in the owner's voice and reaches the agent once"; the
    overnight audit, 2026-11-10). The demo world, walked from the day card: Not for me, Remind me (Tomorrow) and a DOUBLE-CLICKED Mark done, each
-   on the item on the table. Each one moves the walk on to the row the rail marked next, takes its own row off the rail, leaves the other rows
+   on the item on the table. Each one moves the walk on to the row the rail marked next, takes its own row off the rail (Remind me: into For later), leaves the other rows
    where they were, and leaves its line in its task's chat (Not for me, which deletes the task, its "Removed ... Undo" on the rail); the double-click closes one task, never the one drawn under the second click. Then
    the server restarts mid-walk and the page reloads: the walk is where he was. Recorded. */
 const out = path.join(process.env.TEMP || os.tmpdir(), "claude", "n17");
 const read = (page) => page.evaluate(() => {
   const rows = [...document.querySelectorAll("[data-tq-rail] .tq-pile-row[data-tq-key]")].filter((e) => !e.classList.contains("settling"));
-  return { keys: rows.map((e) => e.getAttribute("data-tq-key")), on: rows.filter((e) => /\bcurrent\b/.test(e.className)).map((e) => e.getAttribute("data-tq-key")),
+  // ...each row's section, by the heading drawn above it: Remind me puts its row under For later, still on the rail (lanes.level_of)
+  const heads = [...document.querySelectorAll("[data-tq-rail] [data-tq-section-head]")];
+  const level = (e) => heads.filter((x) => x.compareDocumentPosition(e) & Node.DOCUMENT_POSITION_FOLLOWING).pop()?.getAttribute("data-tq-section-head") || null;
+  return { keys: rows.map((e) => e.getAttribute("data-tq-key")), later: rows.filter((e) => level(e) === "later").map((e) => e.getAttribute("data-tq-key")), on: rows.filter((e) => /\bcurrent\b/.test(e.className)).map((e) => e.getAttribute("data-tq-key")),
     next: rows.find((e) => /\bnext\b/.test(e.className))?.getAttribute("data-tq-key") || null,
     title: document.querySelector("[data-tq-canvas-item] [data-tq-task-page]")?.querySelector("h1, h2, h3, h4, h5, h6, [class*=Typography]")?.innerText || "" };
 });
@@ -58,10 +61,10 @@ test("on the walk, Not for me, Remind me and a double-clicked Mark done each mov
       s = await settled(page, was.on);
       const kept = was.keys.filter((k) => k !== key && s.keys.includes(k)), now = s.keys.filter((k) => kept.includes(k));
       const chat = undo != null ? "" : tid ? JSON.stringify(await api(`/api/tasks/${tid}/assistant`)) : "";
-      const step = { what, from: key, to: s.on, want, ms: s.ms, gone: !s.keys.includes(key), line: undo ?? line.test(chat) };
+      const step = { what, from: key, to: s.on, want, ms: s.ms, gone: !s.keys.includes(key) || (what === "Remind me" && s.later.includes(key)), line: undo ?? line.test(chat) };
       steps.push(step);
       if (JSON.stringify(s.on) !== JSON.stringify([want])) bad.push(`${what}: landed on ${s.on.join(",")}, the rail marked ${want} next`);
-      if (!step.gone) bad.push(`${what}: its row stayed on the rail`);
+      if (!step.gone) bad.push(`${what}: its row stayed ${what === "Remind me" ? "in Tasks, not under For later" : "on the rail"}`);
       if (JSON.stringify(kept) !== JSON.stringify(now)) bad.push(`${what}: the other rows moved`);
       if (!step.line) bad.push(`${what}: ${undo != null ? "no Removed / Undo on the rail" : `no line in its task's chat (TQ ${tid})`}`);
       // ...the second click never reached the row it drew: the one under it is still on the rail, still open

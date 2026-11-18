@@ -865,6 +865,39 @@ class TheList(unittest.TestCase):
         self.assertEqual((got['pending'], [x['kind'] for x in got['items']].count('press'), got['working']), ([], 1, True))
         self.brain.delay = 0; self.rest()
 
+    def test_a_turn_its_session_was_closed_under_is_no_turn_a_restart_cut_days_later(self):
+        """A session closed under its turn while Taskuary ran on (Stop and save, a hand-off) left the turn on disk as one still under way: the
+        next restart, whenever it came, filed its old words at the foot of the chat as "Cut short when Taskuary restarted - type to carry on"
+        - a restart that cut nothing, under lines written since. Only a close that takes the process down keeps it."""
+        from taskuary import sessionrecord, terminal
+        self.say('Suggest two.', 'l-one'); self.rest()
+        self.brain.delay = 30
+        self.say('Compare both in detail.', 'l-two', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        ses = general.session_for(self.tid)
+        ses._remember_trace('progress', 'text', 'The lakeside venue costs more.')
+        ses.close(learn=False, report=False)
+        self.brain.delay = 0
+        self.assertTrue(until(lambda: not ses.busy))
+        self.assertFalse(sessionrecord._live_path(self.tid).exists())
+        terminal.recover_after_restart(self.s); general.keep_cut_turns(self.s)
+        self.assertFalse([c for c in self.s.list_comments(self.tid) if 'Cut short' in c['Body']])
+
+    def test_a_turn_the_app_closing_cut_is_kept_for_the_next_start(self):
+        from taskuary import sessionrecord, terminal
+        self.say('Suggest two.', 'l-one'); self.rest()
+        self.brain.delay = 30
+        self.say('Compare both in detail.', 'l-two', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        ses = general.session_for(self.tid)
+        ses._remember_trace('progress', 'text', 'The lakeside venue costs more.')
+        terminal.shutdown_sessions()
+        self.brain.delay = 0
+        self.assertTrue(until(lambda: not ses.busy))
+        terminal.recover_after_restart(self.s); general.keep_cut_turns(self.s)
+        got = [c['Body'] for c in self.s.list_comments(self.tid) if c['ActorType'] == general.ASSISTANT_TYPE]
+        self.assertTrue(got[-1].startswith('The lakeside venue costs more.') and 'Cut short when Taskuary restarted' in got[-1], got)
+
     def test_a_reply_waiting_for_his_send_stands_with_its_send_through_a_restart_and_the_session_after_it(self):
         """The recorded restart, 2026-11-11, and the owner's ruling on it ("reply cards should survive untouched"): the agent's reply waited
         for his Send, Taskuary restarted with a line of his by the box, the new session held the card as "an earlier session's" and told

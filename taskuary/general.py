@@ -3159,11 +3159,12 @@ class GeneralSession:
             self.busy, self.last, self.spoke = False, time.time(), True
             self._cancel = None
             if not self.alive: self._forget_tools()          # closed under this turn (close): it was not close's to drop while the turn ran
-            from . import clipool
+            from . import clipool, terminal
             self.cli_up = clipool.is_live(f'general:{self.task_id}')       # watched while it sits idle (cli_gone)
-            # ...the turn ended in this process, filed or failed: nothing is left for a restart to keep. One whose session was killed under it
-            # keeps what it said - the process may be going down with it
-            if self.alive:
+            # ...the turn ended in this process, filed or failed: nothing is left for a restart to keep. One the app's close killed under it
+            # keeps what it said - the process is going down with it. ANY OTHER CLOSE IS NO RESTART (the timeline stress round, 2026-11-18):
+            # a turn Stop and save closed was kept too, and the next start, days on, filed its old words at the foot of the chat as cut
+            if self.alive or not terminal.CLOSING.is_set():
                 from . import sessionrecord
                 sessionrecord.drop_live(self.task_id)
             self._emit('\x1b[1;34myou>\x1b[0m ')

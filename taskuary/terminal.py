@@ -3194,6 +3194,7 @@ def release_task(store, task_id, actor='terminal', note=None) -> bool:
 
 def recover_after_restart(store) -> int:
     """Clear persisted worker state that cannot survive a Taskuary process restart."""
+    CLOSING.clear()                 # ...a start: what closes from here is no app's close
     # Sessions and headless-run threads are process-owned; none can be live before the new process
     # has started one. Repair both halves so the Board never invents a worker from yesterday.
     # ...and a permission request a killed run left open is refused and said first, so the run's ending is its last word (permissions.refuse_orphans)
@@ -3220,8 +3221,12 @@ def recover_after_restart(store) -> int:
     return released
 
 
+CLOSING = threading.Event()     # the app is closing: a chat turn its close cuts stays on disk for the next start (general.keep_cut_turns)
+
+
 def shutdown_sessions():
     """Close every in-memory agent session during an orderly application shutdown."""
+    CLOSING.set()
     sessions = list(SESSIONS.items())
     for sid, session in sessions:
         try:

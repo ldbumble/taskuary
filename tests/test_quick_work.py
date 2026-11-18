@@ -479,7 +479,7 @@ def test_a_live_quick_session_does_not_hold_back_a_queued_escalation():
     s.enqueue_dispatch(tid, None, 'assistant', 'full', brief='notes')
     with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(bb, 'live_count', return_value=0), \
          mock.patch.object(ingest, '_start_general', return_value=True) as deep:
-        ses = opened(s, tid); ses.quick = True                                  # the quick answer's session, still live
+        ses = opened(s, tid, quick=True)                                 # the quick answer's session, still live
         bb.drain(s)
         assert deep.call_args[0][1:] == (tid, 'notes') and not s.get_dispatch(tid)
         s.enqueue_dispatch(tid, None, 'assistant', 'full', brief='more'); ses.quick = False      # a real agent working it: the row is cleared

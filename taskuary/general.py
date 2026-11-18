@@ -3879,7 +3879,8 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     # a full house left the row, the rail read "queued - starts when a slot frees" over the working assistant, and the drain started it again.
     # A conversation's queued next TURN stays: the session takes it (blackboard.drain). The queue's own start (`router`) is the drain's to clear:
     # a send that fails after the session opened is counted on that row (blackboard.record_failure), and a row cleared here began again at try 1
-    if actor != 'router' and (q := store.get_dispatch(tid)) and not q.get('Turn'): store.clear_dispatch(tid)
+    # ...and a quick answer's session is no agent's start: the escalation queued behind it still waits (blackboard._occupied)
+    if actor != 'router' and not quick and (q := store.get_dispatch(tid)) and not q.get('Turn'): store.clear_dispatch(tid)
     # the chat is work too: a general task started from the Tasks tab gets its Timeline row
     # here, stamped at the moment the session opened (ownwork.ensure is a no-op when a message
     # already speaks for the task, which is every task that arrived from outside)

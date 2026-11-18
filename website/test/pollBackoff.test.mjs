@@ -11,8 +11,7 @@ import { observeSync } from "../src/syncObserver.js";
 const src = f => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), "utf8");
 
 test("a poll that never comes stops being watched twice a second", () => {
-  assert.equal(syncStatusDelay({ nextAt: 1, now: 30_000 }), 500);          // just due: the scheduler wakes every 30 s
-  assert.equal(syncStatusDelay({ nextAt: 1, now: 60_000 }), 500);          // still inside the minute the scheduler may take
+  assert.equal(syncStatusDelay({ nextAt: 1, now: 30_000 }), 30_000);       // just due: the sync's own push says when it starts
   assert.equal(syncStatusDelay({ nextAt: 1, now: 61_000 }), 30_000);       // a minute late: sync off, asleep or stuck
   assert.equal(syncStatusDelay({ nextAt: 1, now: 40 * 60_000 }), 30_000);  // the demo: never polls at all
   assert.equal(syncStatusDelay({ running: true, nextAt: 1, now: 40 * 60_000 }), 2000);   // a running sync is still followed
@@ -27,6 +26,22 @@ test("an idle page whose poll is 40 minutes overdue reads status at most 3 times
   while (timers.length) { const t = timers.shift(); if (t.at > 60_000) break; clock = t.at; await t.fn(); }
   o.stop();
   assert.ok(reads <= 3, `${reads} status reads in one idle minute`);
+});
+
+// THE MINUTE AROUND A DUE SYNC (stress round, 2026-11-18): the Timeline read the status twice a second from 35 s before every
+// scheduled sync until it started - and for a whole minute after when it did not - ~70 reads each cycle, 190 in the demo, though
+// the sync's start and end are pushed on the socket (ingest-status) and read at once. Idle, a page checks only slowly.
+test("an idle page reads the status at most 3 times in the minute around a due sync, and a pushed start is read at once", async () => {
+  let clock = 0, reads = 0, state = "idle", listener; const timers = [];
+  const o = observeSync({ read: async () => (reads++, { status: { state }, now: clock / 1000, nextPollAt: 20 }),
+    changed() {}, failed() {}, subscribe: (fn) => { listener = fn; return () => {}; },
+    schedule: (fn, ms) => (timers.push({ fn, at: clock + ms }), timers.length), cancel() {} });
+  await new Promise(setImmediate);
+  while (timers.length) { timers.sort((a, b) => a.at - b.at); const t = timers.shift(); if (t.at > 60_000) break; clock = t.at; await t.fn(); }
+  assert.ok(reads <= 3, `${reads} status reads in the minute the sync came due`);
+  const before = reads; state = "running"; listener(); await new Promise(setImmediate);
+  assert.equal(reads, before + 1, "the pushed start is read at once");
+  o.stop();
 });
 
 test("the Timeline's observer lives as long as the view is on screen, not as long as one render", () => {

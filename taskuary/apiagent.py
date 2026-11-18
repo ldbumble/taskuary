@@ -334,7 +334,7 @@ def _hands(store, tid: int, sid: str, name: str, a: dict) -> str:
                 if time.monotonic() > end: _kill(p); raise ValueError(f'it ran past {RUN_WAIT // 60} minutes and was stopped')
         said = (shellgate.text(out) + shellgate.text(errs)).strip()
         return _cut(f'exit {p.returncode} in {cwd}' + chr(10) + (said or '(no output)'))
-    raise ValueError(f'no tool named {name}')
+    raise ValueError(no_tool(name))
 
 
 def _kill(p):
@@ -367,15 +367,20 @@ def _await(f, stop):
     return box['out']
 
 
+# ...A NAME THAT IS NO TOOL OF THIS TURN says where its tools are, as the MCP server's refusal does (agenttools.rpc): "no tool named merge_pr"
+# alone left the model to guess again or give up
+def no_tool(name) -> str: return f"no tool named {name} on this task - find_tools names the ones you have, by what they do"
+
+
 def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
     "One tool call, run by the server. Raises ValueError with words the model can act on."
     from . import browserview as bv, browsergate as bg
-    if (tid, sid) in OFFERED and name not in OFFERED[(tid, sid)]: raise ValueError(f'{name} is not one of your tools on this task')
+    if (tid, sid) in OFFERED and name not in OFFERED[(tid, sid)]: raise ValueError(no_tool(name))
     if SLIMMED in json.dumps(a, ensure_ascii=False, default=str):
         raise ValueError('an argument is the line that stands for text you sent on an earlier call, not the text - nothing was done; '
                          'send the full text itself (read the file again if you need it)')
     if name not in LOCAL or (name == 'show' and TOOLBOX.get((tid, sid))):
-        if name not in (TOOLBOX.get((tid, sid)) or ()): raise ValueError(f'no tool named {name}')
+        if name not in (TOOLBOX.get((tid, sid)) or ()): raise ValueError(no_tool(name))
         return call_taskuary(tid, sid, name, a, stranger=(tid, sid) in STRANGERS)
     if name.startswith('browser_') and (tid, sid) in STRANGERS: raise ValueError("a stranger's task gets no browser")
     if name == 'show':
@@ -410,7 +415,7 @@ def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
         rc, said = bg._run(sid, ['screenshot', str(p)], 30, 'shot')
         if rc != 0 or not p.is_file(): raise ValueError(said.strip()[-300:] or 'no picture was taken')
         return f'Saved {p} - call show with it to put it in the chat.'
-    raise ValueError(f'no tool named {name}')
+    raise ValueError(no_tool(name))
 
 
 TOOLBOX, STRANGERS, OFFERED = {}, set(), {}   # ...and OFFERED: every name a turn was offered - nothing else runs          # (tid, sid) -> the Taskuary tool names this turn was offered; the sessions on a stranger's task

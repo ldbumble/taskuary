@@ -94,5 +94,19 @@ class RemoveIsOnePress(unittest.TestCase):
         self.assertFalse(out['gone'])
         self.assertEqual((c['HasSecret'], c['Active'], c['ConfigJson']), (0, 0, None))
 
+    def test_a_second_remove_of_the_wiped_card_leaves_the_undo_that_brings_the_sign_in_back(self):
+        # the last card stays on the list, blank - and its mailbox source still names it, so its Remove is still lit. A second press
+        # filed the blank row as a new removal, the Undo line named that one, and Undo brought back an empty card
+        cid = self.s.get_connector_by_type('imap')['ConnectorId']
+        self.s.save_connector({'ConnectorId': cid, 'Active': 1, 'Secret': 'app-password',
+                               'ConfigJson': json.dumps({'address': 'alex@northwind.example'})}, 'test')
+        self.s.save_source({'Channel': 'email', 'Address': 'alex@northwind.example', 'Active': 1, 'ConnectorId': cid}, 'test')
+        first = self.c.post(f'/api/connectors/{cid}/reset').json()
+        second = self.c.post(f'/api/connectors/{cid}/reset').json()
+        self.assertEqual(second['deleted'], first['deleted'])
+        self.assertEqual(self.c.post(f"/api/deleted/{second['deleted']}/restore").status_code, 200)
+        c = self.s.get_connector(cid)
+        self.assertEqual((c['HasSecret'], c['Active'], json.loads(c['ConfigJson'])), (1, 1, {'address': 'alex@northwind.example'}))
+
 
 if __name__ == '__main__': unittest.main()

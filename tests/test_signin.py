@@ -1031,3 +1031,21 @@ def test_a_saved_sign_in_whose_site_emails_a_code_types_the_code_from_the_mail()
     with mock.patch.object(signin, '_type_code', lambda c, st, code: typed.append(code())), mock.patch.object(signin, '_continue', lambda *a, **k: True):
         assert signin.watch(s, tid, 'sess1', site, rid, conn=page, every=0)
     assert typed == ['552019']
+
+
+def test_a_sign_up_he_sends_keeps_as_its_user_name_only_a_box_the_page_names_so():
+    """A wizard's last step - its email asked a page before - shows a Company box over the password. He pressed its button, the page's script
+    heard the company as the user name, and the account was kept as it: the next sign-in typed the company into the email box. A plain
+    sign-in's box before the password is still its user name, named or not."""
+    s = MemoryStore(); tid = Factory(s).task('Market data'); signin.SIGNING_UP.clear(); signin._TYPED.clear()
+    for site, up, sent, want in (('capratehub.example', True, {'u': 'Northwind', 'n': False}, ''),
+                                 ('vacancyiq.example', True, {'u': USER, 'n': True}, USER),
+                                 ('bank.example', False, {'u': USER, 'n': False}, USER)):
+        rid = f'signin:{site}'
+        if up: signin.SIGNING_UP[(tid, site)] = {'pw': PW}
+        ws.record(s, tid, 'sess1', 'input_needed', request_id=rid, text='x', choices=None, source='api')
+        form, past = {'top': True, 'href': f'https://{site}/step2', 'password': True}, {'top': True, 'href': f'https://{site}/data'}
+        page = WatchPage([form, form, past], sent=[{**sent, 'p': PW, 'href': f'https://{site}/step2'}])
+        with mock.patch.object(signin, '_continue', lambda *a, **k: True):
+            assert signin.watch(s, tid, 'sess1', site, rid, conn=page, every=0)
+        assert vault.unseal(signin.saved(s, site)['User'] or '') == want, site

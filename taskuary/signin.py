@@ -668,6 +668,8 @@ def _audit(store, tid, site, how, ok, why='', saved=None, code=None):
 #   agent is told as a fill tells it, and a password typed on the way is SEALED to the vault for that site (save) - the one store - with
 #   one line on the task saying so and where to remove it. A password the site refused is never kept: it is only kept once past.
 # Nothing typed is logged, put in an event, a comment or the audit; captures while Taskuary itself types a sign-in (FILLING) are ignored.
+# A BOX THE PAGE NAMES AS THE USER'S, by its own words: the vault's look at the page (FIELDS) and the owner's typing heard (CAPTURE) read it alike
+NAMED = r'/user|mail|login|account|ident|member|customer/i'
 CAPTURE = r'''(() => {
   if (window !== window.top || window.__tqSigninHooked) return;
   window.__tqSigninHooked = true;
@@ -683,12 +685,15 @@ CAPTURE = r'''(() => {
     const coded = (e) => e.autocomplete === 'one-time-code' || /otp|one.?time|totp|2fa|mfa|passcode|verif|auth.*code|security.?code|^code$|^pin$/i
       .test([e.name, e.id, e.getAttribute('aria-label'), e.placeholder].join(' ').trim());
     const user = before.filter((e) => texty(e) && e.value && !coded(e)).pop();
+    const h = user && user.getRootNode().host;
+    const named = !!user && (''' + NAMED + r'''.test([user.name, user.id, user.autocomplete, user.getAttribute('aria-label'), user.placeholder,
+      h && h.id, h && h.getAttribute('name'), h && h.getAttribute('label'), h && h.getAttribute('aria-label')].join(' ')));
     if ((!pw && !user) || typeof __tqSignin !== 'function') return;
     // ...and the form's other boxes the owner filled (a "Customer ID"), by their label - kept with the sign-in, filled by it next time
     const labelOf = (e) => { const r = e.getRootNode(), h = r && r.host, l = e.labels && e.labels[0];
       return String((l && l.textContent) || e.getAttribute('aria-label') || e.placeholder || (h && (h.getAttribute('label') || h.getAttribute('aria-label'))) || e.name || '').trim().slice(0, 40); };
     const o = {}; for (const e of before) if (texty(e) && e !== user && e.value && labelOf(e)) o[labelOf(e)] = e.value;
-    try { __tqSignin(JSON.stringify({ u: user ? user.value : '', p: pw ? pw.value : '', o, href: location.href })); } catch (_) {}
+    try { __tqSignin(JSON.stringify({ u: user ? user.value : '', n: named, p: pw ? pw.value : '', o, href: location.href })); } catch (_) {}
   };
   document.addEventListener('submit', grab, true);
   // ...AND AS IT IS TYPED, not only as the form is sent (the owner's own sign-ins, 2026-11: seen through, and nothing kept). A page sends
@@ -720,7 +725,7 @@ def heard(tid, site: str, raw) -> bool:
     cur = _TYPED.setdefault(tid, {'site': site, 'user': '', 'pw': ''})
     if cur.get('site') != site: cur.update(site=site, user='', pw='')
     # ...and once the password is held, a box typed into WITHOUT one is no user name: the page after the password asks a code, a search
-    if d.get('u') and (d.get('p') or not cur.get('pw')): cur['user'] = str(d['u'])[:256]
+    if d.get('u') and (d.get('p') or not cur.get('pw')): cur['user'], cur['named'] = str(d['u'])[:256], bool(d.get('n'))
     if d.get('p'): cur['pw'] = str(d['p'])[:512]
     if isinstance(d.get('o'), dict) and d['o']:
         cur['extra'] = {str(k)[:60]: str(v)[:256] for k, v in list(d['o'].items())[:5] if str(k).strip() and str(v)}
@@ -831,6 +836,8 @@ def _through(store, tid, rid, site, seen=True):
         t = _TYPED.get(tid) or {}
         if t.get('site') != site: t = _TYPED[tid] = {'site': site, 'user': '', 'pw': ''}
         t['pw'] = t.get('pw') or up['pw']
+    # ...and a sign-up's user name is a box the page names as the user's (NAMED): a wizard's last step shows a Company box over the password
+    if up is not None and not (_TYPED.get(tid) or {}).get('named'): (_TYPED.get(tid) or {}).pop('user', None)
     kept = keep_typed(store, tid, site)
     # ...A SIGN-UP IS SAID AS ONE (the real-CLI walk, 2026-11-16: every account it made read "You signed in to ..."), and one Taskuary
     # sent is never said as his press
@@ -894,7 +901,7 @@ FIELDS = r'''(want) => {
   const texty = (e) => ['text', 'email', 'tel', ''].includes(e.type);
   const words = (e) => { const h = hostOf(e); return [e.name, e.id, e.autocomplete, e.getAttribute('aria-label'), e.placeholder,
     h && h.id, h && h.getAttribute('name'), h && h.getAttribute('label'), h && h.getAttribute('aria-label')].join(' '); };
-  const named = (e) => /user|mail|login|account|ident|member|customer/i.test(words(e));
+  const named = (e) => ''' + NAMED + r'''.test(words(e));
   const before = pw ? ins.slice(0, ins.indexOf(pw)).filter(texty) : [];
   // ...A BOX THE PAGE MARKS AS A CODE IS NEVER THE USER-NAME BOX (recorded 2026-11-14: a code page's one box, alone on it, read as "a user
   // box" - so the saved sign-in's code prompt was not seen, the agent was told "signed in" over it, and the ask that followed read "sign in")

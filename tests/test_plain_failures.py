@@ -44,6 +44,15 @@ class PlainFailureTests(unittest.TestCase):
         self.assertIn('could not be reached', plain_failure(RuntimeError("HTTPSConnectionPool(host='mail.northwind.example', port=443): "
                                                                          "Max retries exceeded with url: /x (Caused by SSLError('bad handshake'))")))
 
+    def test_a_throttled_read_is_said_in_words_and_no_url_reaches_the_card(self):
+        """Graph throttles a mailbox on a long catch-up: "inbox: 429 Client Error: Too Many Requests for url: https://graph.../users/<the
+        mailbox>/..." reached the card and the bell whole. And any other status left as requests words it carried the same URL."""
+        url = 'https://graph.microsoft.com/v1.0/users/alex@northwind.example/mailFolders/inbox/messages'
+        said = plain_failure(RuntimeError(f'inbox: 429 Client Error: Too Many Requests for url: {url}'))
+        self.assertIn('tried again on every poll', said); self.assertNotIn('northwind', said)
+        said = plain_failure(RuntimeError(f'inbox: 400 Client Error: Bad Request for url: {url}'))
+        self.assertIn('400', said); self.assertNotIn('northwind', said); self.assertNotIn('graph.microsoft.com', said)
+
     def test_our_own_words_pass_through(self):
         self.assertEqual(plain_failure(RuntimeError('no mailbox address set')), 'no mailbox address set')
         from taskuary.msauth import LAPSED

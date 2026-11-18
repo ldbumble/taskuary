@@ -198,7 +198,7 @@ def _status(e):
     code = getattr(r, 'status_code', None) or getattr(e, 'code', None) or getattr(e, 'status_code', None)
     if isinstance(code, int): return code
     # requests/httpx spell it "401 Client Error: Unauthorized for url" when only the text survives a re-raise
-    m = re.search(r'\b(401|403|5\d\d)\b[^\n]{0,20}(?:Client Error|Server Error|Unauthori[sz]ed|Forbidden)', str(e), re.I)
+    m = re.search(r'\b(401|403|429|5\d\d)\b[^\n]{0,20}(?:Client Error|Server Error|Unauthori[sz]ed|Forbidden|Too Many Requests)', str(e), re.I)
     if m: return int(m.group(1))
     # ...and an API that answers 200 with its own word for it: Slack's "invalid_auth" was printed to the owner as it came
     return 401 if _AUTH_WORDS.search(str(e)) else None
@@ -224,6 +224,8 @@ def plain_failure(e: Exception, signin: bool = False) -> str:
     if isinstance(code, int) and 500 <= code < 600:
         return (f"The service is having trouble on its side (it answered {code}). Nothing here needs changing - "
                 "it is tried again on every poll, and what came in meanwhile is read once it is back.")
+    if code == 429: return ("The service asked Taskuary to slow down (too many requests at once). Nothing is lost - it is tried again on "
+                            "every poll, and the rest is read then.")
     # ...a sign-in card has no key to paste: its sign-in still renews (a lapsed one says LAPSED above), so the service refused the read
     if code == 401 and signin: return ("Microsoft refused the read though the sign-in still works - usually trouble on its side, and it "
                                        "is tried again on every poll. If it lasts, sign in again on the card.")
@@ -244,7 +246,8 @@ def plain_failure(e: Exception, signin: bool = False) -> str:
     if _DROPPED.search(raw): return ("The connection to the server dropped part-way through the read. Nothing already in is lost, "
                                      "and it is tried again on every poll.")
     if _UNREACHED.search(raw): return ("The server could not be reached - check this computer is online. It is tried again on every poll.")
-    return raw[:500] or type(e).__name__
+    # ...and any other answer as requests words it, without the address it was asked at - the mailbox is in that URL
+    return re.sub(r' for url: \S+', '', raw)[:500] or type(e).__name__
 
 class DraftStore:
     """The store as a card's Test sees it while the values on screen are not saved yet (2026-10-30, the owner: "a connection's Test can

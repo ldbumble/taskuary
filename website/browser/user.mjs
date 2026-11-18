@@ -62,7 +62,9 @@ async function click(words, n = 1) {
 async function type(words, file) {
   const where = await page.evaluate((visSrc) => {
     const vis = eval(visSrc);
-    const box = [document.querySelector("[data-tq-task-page] .tq-aui-input"), ...document.querySelectorAll("textarea, [contenteditable=true], input[type=text]")].find((b) => b && vis(b) && !b.disabled);
+    // ...an open dialog's own box first, as a person's keys go (the walk, 2026-11-18: with Search open, the Ask box behind it got the words)
+    const box = [...document.querySelectorAll("[role=dialog] input:not([type=file]), [role=dialog] textarea"), document.querySelector("[data-tq-task-page] .tq-aui-input"),
+      ...document.querySelectorAll("textarea, [contenteditable=true], input[type=text]")].find((b) => b && vis(b) && !b.disabled);
     if (!box) return "";
     box.focus(); return box.getAttribute("placeholder") || box.getAttribute("aria-label") || "the box";
   }, vis);

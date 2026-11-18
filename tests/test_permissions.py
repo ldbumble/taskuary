@@ -208,3 +208,23 @@ def test_a_request_the_last_run_left_open_is_refused_and_said_when_taskuary_star
     finally:
         with perm._LOCK: perm.PENDING.update(held)
         ws.release(tid); t.join(5)
+
+
+def test_the_answer_is_the_answered_card_the_moment_the_press_returns(s):
+    """THE PRESS RETURNS, THE NEXT READ HAS IT (browser/permission-press). answer() handed the press to the asking thread and returned; the page's
+    read right after could find the card still waiting (its buttons lit again) or neither card - until that thread woke and wrote the answer the
+    greyed card is drawn from. The asking thread is made slow to wake, as a busy server's is: the read after the press has the answered card."""
+    from taskuary import general
+    tid = coding(s)
+    real = ws.wait_held
+    def slow(g, wait):
+        out = real(g, wait); time.sleep(0.4); return out
+    with mock.patch.object(ws, 'wait_held', slow):
+        t, box = asking(s, tid, perm.from_acp(ACP))
+        p = perm.pending(tid, s)[0]
+        assert perm.answer(s, tid, p['id'], 'allow_once')['ok']
+        assert p['id'] not in [x['id'] for x in perm.pending(tid, s)], 'the card is no longer waiting once the press returns'
+        assert [l['perm'] for l in general.press_lines(s, tid) if l.get('perm')] == [{'asked': 'Run the money tests', 'answer': 'allow_once'}]
+        t.join(3)
+    assert box == ['allow_once']
+

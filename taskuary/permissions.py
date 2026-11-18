@@ -156,38 +156,41 @@ def ask(store, tid: int, request: dict, wait: float = None, timed_out=None, move
     # on the rail first, then the card: what draws the card can already read the agent as waiting on the owner
     try: ws.record(store, tid, sid, 'approval_needed', request_id=rid, text=f'The agent {line(r)}', choices=[LABEL[o] for o in r['options']], source='permission')
     except Exception as e: logger.debug(f'permission on {task_ref(tid)}: not on the rail - {e}')
+    done = threading.Event()        # set once what ask() writes of the answer is written: answer() returns only then
     with _LOCK: PENDING[pid] = {'id': pid, 'tid': tid, 'store': store, 'req': r, 'g': g, 'rid': rid, 'sid': sid, 'at': time.strftime('%Y-%m-%d %H:%M:%S'),
-                                'until': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time() + wait))}
+                                'until': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time() + wait)), 'done': done}
     try:
-        store.audit('task', tid, 'permission_asked', 'agent', 'agent', {'pid': pid, 'pattern': pattern(r)})
-        try: agentchannels.permission_asked(store, tid, pid, r)
-        except Exception as e: logger.warning(f'permission on {task_ref(tid)}: not put on its channel - {e}')
-        out = ws.wait_held(g, wait)
-    finally:
-        with _LOCK: PENDING.pop(pid, None)
-    ans = kind_of((out or {}).get(rid), r['options'])
-    if pid in ASIDE:
-        ASIDE.discard(pid)
-        if moved_on: moved_on()
-        return ans or _pick(r, False)
-    if not ans:
-        ans = _pick(r, False)
-        said = (f"No answer in {round(wait / 60) or 1} min{'s' if round(wait / 60) != 1 else ''} - the agent's request was refused: it {line(r)}."
-                if out is None and not ws.STOP.is_set() else CLOSED_FIRST.format(line(r)))
-        try: ws.record(store, tid, sid, 'answered', request_id=rid, text='timed out - refused', source='permission')
-        except Exception: pass
-        store.add_comment(tid, 'taskuary', 'agent', said)
-        try: agentchannels.permission_done(store, tid, pid, said)
-        except Exception as e: logger.debug(f'permission on {task_ref(tid)}: timeout line not posted - {e}')
-        if timed_out: timed_out()
+        try:
+            store.audit('task', tid, 'permission_asked', 'agent', 'agent', {'pid': pid, 'pattern': pattern(r)})
+            try: agentchannels.permission_asked(store, tid, pid, r)
+            except Exception as e: logger.warning(f'permission on {task_ref(tid)}: not put on its channel - {e}')
+            out = ws.wait_held(g, wait)
+        finally:
+            with _LOCK: PENDING.pop(pid, None)
+        ans = kind_of((out or {}).get(rid), r['options'])
+        if pid in ASIDE:
+            ASIDE.discard(pid)
+            if moved_on: moved_on()
+            return ans or _pick(r, False)
+        if not ans:
+            ans = _pick(r, False)
+            said = (f"No answer in {round(wait / 60) or 1} min{'s' if round(wait / 60) != 1 else ''} - the agent's request was refused: it {line(r)}."
+                    if out is None and not ws.STOP.is_set() else CLOSED_FIRST.format(line(r)))
+            try: ws.record(store, tid, sid, 'answered', request_id=rid, text='timed out - refused', source='permission')
+            except Exception: pass
+            store.add_comment(tid, 'taskuary', 'agent', said)
+            try: agentchannels.permission_done(store, tid, pid, said)
+            except Exception as e: logger.debug(f'permission on {task_ref(tid)}: timeout line not posted - {e}')
+            if timed_out: timed_out()
+            return ans
+        if ans.endswith('_always'): store.set_perm_rule(tid, pattern(r), 'allow' if ans.startswith('allow') else 'reject')
+        store.audit('task', tid, 'permission_answered', 'owner', detail={'pid': pid, 'answer': ans, 'pattern': pattern(r), 'asked': asked(r)})
+        try:                                           # ...the turn that waited on it hears it now: his press stands where he made it
+            from . import conversation
+            conversation.hear_press(store, tid, 'permission_answered')
+        except Exception as e: logger.debug(f'permission on {task_ref(tid)}: its answer not written as heard - {e}')
         return ans
-    if ans.endswith('_always'): store.set_perm_rule(tid, pattern(r), 'allow' if ans.startswith('allow') else 'reject')
-    store.audit('task', tid, 'permission_answered', 'owner', detail={'pid': pid, 'answer': ans, 'pattern': pattern(r), 'asked': asked(r)})
-    try:                                           # ...the turn that waited on it hears it now: his press stands where he made it
-        from . import conversation
-        conversation.hear_press(store, tid, 'permission_answered')
-    except Exception as e: logger.debug(f'permission on {task_ref(tid)}: its answer not written as heard - {e}')
-    return ans
+    finally: done.set()
 
 
 def answer(store, tid: int, pid: str, option: str, actor: str = 'owner') -> dict:
@@ -202,6 +205,9 @@ def answer(store, tid: int, pid: str, option: str, actor: str = 'owner') -> dict
     h = ws.HELD.get(p['g'])
     if not h: return {'ok': False, 'why': 'that request is no longer waiting'}
     ws._answer_held(store, int(tid), h, {p['rid']: o}, actor)
+    # ...AND RETURNS ONCE THE ASKING THREAD HAS WRITTEN IT: the page reads the list the moment the press returns, and found the card still
+    # waiting - its buttons lit again - or no card at all, until that thread woke (browser/permission-press)
+    p['done'].wait(5)
     said = f"{LABEL[o]} - {task_ref(tid)} {line(p['req'])}."
     try: agentchannels.permission_done(store, int(tid), pid, said)
     except Exception as e: logger.debug(f'permission on {task_ref(tid)}: answer line not posted - {e}')

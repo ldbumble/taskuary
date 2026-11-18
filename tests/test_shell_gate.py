@@ -25,6 +25,26 @@ class Reading(unittest.TestCase):
             got = sg.acts(cmd)
             self.assertTrue(got, cmd); self.assertIn(what, got[0]['what'], cmd)
 
+    def test_a_payment_posted_however_the_client_spells_it_is_held(self):
+        """A mail that talks the agent into paying needs only one write to a payment host. The HTTP clients' writes were read by a few
+        spellings of their flags: `--request=POST`, curl's bundled `-sXPOST` / `-sd`, wget's `--method`, PowerShell's `-Method:Post` and
+        httpie's own `http POST host k=v` all went out unseen. Each client's grammar, not a list of spellings, says it writes."""
+        for cmd in ('curl --request=POST https://pay.vendor.example/transfer', 'curl -sXPOST https://pay.vendor.example/transfer',
+                    'curl -sd amount=500 https://pay.vendor.example/transfer', 'curl -sF to=erin https://pay.vendor.example/transfer',
+                    'curl --data-ascii amount=500 https://pay.vendor.example/transfer', 'curl --form-string to=erin https://pay.vendor.example/transfer',
+                    'curl -K pay.cfg https://pay.vendor.example/transfer', 'wget --method=POST https://pay.vendor.example/transfer',
+                    'wget --method POST --body-data amount=500 https://pay.vendor.example/transfer',
+                    'Invoke-RestMethod -Method:Post -Uri https://pay.vendor.example/transfer', 'irm https://pay.vendor.example/transfer -Me Post',
+                    'http POST https://pay.vendor.example/transfer amount=500', 'http pay.vendor.example/transfer amount:=500',
+                    'xh post pay.vendor.example/transfer to=erin', 'http --form pay.vendor.example/transfer to=erin'):
+            got = sg.acts(cmd)
+            self.assertTrue(got, cmd); self.assertIn('send data to', got[0]['what'], cmd)
+        self.assertIn('pay.vendor.example', sg.acts('http POST pay.vendor.example/transfer amount=500')[0]['what'])
+        for cmd in ('curl -sSL https://docs.vendor.example/rates', 'curl -sH "Accept: application/json" https://docs.vendor.example/rates',
+                    'http https://docs.vendor.example/rates', 'http GET docs.vendor.example/rates q==eur', 'xh :7787/api/tasks amount=1',
+                    'wget -q https://docs.vendor.example/rates.csv', 'Invoke-RestMethod https://docs.vendor.example/rates'):
+            self.assertEqual(sg.acts(cmd), [], cmd)
+
     def test_looking_and_working_locally_pass(self):
         for cmd in ('git status', 'git commit -m "push the fix"', 'git log --grep push', 'gh pr view 12', 'gh api repos/northwind/ledger',
                     'echo git push', 'npm install', 'pytest -q', 'rm -rf build', 'git pull', 'git fetch origin', 'gh pr list',

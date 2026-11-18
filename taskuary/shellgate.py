@@ -65,11 +65,14 @@ GLAB = {('mr', 'merge'): 'merge a merge request', ('mr', 'create'): 'open a merg
 PUBLISH = {'npm', 'pnpm', 'yarn', 'cargo', 'poetry', 'gem', 'dotnet', 'nuget'}             # `<tool> publish` / `nuget push` publish a package
 MAIL = {'sendmail': 'send an email', 'mailx': 'send an email', 'mutt': 'send an email', 'msmtp': 'send an email', 'send-mailmessage': 'send an email'}
 _WRITES = {'post', 'put', 'patch', 'delete'}
-HTTP = {'curl', 'wget', 'http', 'https', 'xh', 'invoke-webrequest', 'iwr', 'invoke-restmethod', 'irm'}
-# curl's short flags are case-sensitive (-F is a form post, -f is --fail); the long ones and PowerShell's -Body / -InFile are not
-_SHORT = ('-d', '-F', '-T')
-_DATA = ('--data', '--data-raw', '--data-binary', '--data-urlencode', '--json', '--form', '--upload-file', '-body', '-infile',
-         '--post-data', '--post-file', '--body-data', '--body-file')
+HTTP = {'curl', 'wget', 'http', 'https', 'xh', 'xhs', 'invoke-webrequest', 'iwr', 'invoke-restmethod', 'irm'}
+_PS, _PIE = {'invoke-webrequest', 'iwr', 'invoke-restmethod', 'irm'}, {'http', 'https', 'xh', 'xhs'}
+# each client's own grammar for a write: curl's short flags are case-sensitive (-F a form post, -f --fail) and bundle (`-sXPOST`, `-sd x`) - the
+# letters that take a value end a bundle; a long option that sends a body starts with one of these; -K/--config sends what a file it reads says
+_CURL_VAL = 'AbcCdDeEFHKmoPQrtTuUwxXyYz'
+_BODY = ('--data', '--form', '--upload', '--post-', '--body-', '--json', '--raw', '--config')
+_PIE_VAL = 'aAop'
+_VERBS = {'get', 'head', 'options', 'post', 'put', 'patch', 'delete'}
 _LOCAL = re.compile(r'^https?://(localhost|127\.\d+\.\d+\.\d+|\[::1\])(:\d+)?(/|$)', re.I)
 _PREFIX = ('&', 'npx', 'command', 'call', 'exec', 'sudo', 'time', 'nohup')
 
@@ -95,16 +98,43 @@ def _words(argv: list) -> tuple:
 
 
 def _http_write(argv: list) -> str:
-    "'' unless this HTTP client writes to a host off this machine - then what it does, in words. Taskuary's own API answers its own guard."
-    a = [str(t) for t in argv[1:]]
-    urls = [t for t in a if re.match(r'^https?://', t, re.I)]
+    """'' unless this HTTP client writes to a host off this machine - then what it does, in words. Read by each client's own grammar: its
+    method option (`-X`, `--request`, `--method`, PowerShell's `-Method` however abbreviated or `-Method:Post`), an option that sends a body,
+    and httpie's / xh's own `[METHOD] URL item=value`. Taskuary's own API answers its own guard."""
+    tool, a = _name(argv[0]), [str(t) for t in argv[1:]]
+    meth, data, pos, i = '', False, [], 0
+    while i < len(a):
+        t, nxt = a[i], (a[i + 1] if i + 1 < len(a) else '')
+        if t.startswith('--'):
+            k, eq, v = t.partition('=')
+            k = k.lower()
+            if k in ('--request', '--method'): meth = v if eq else nxt; i += not eq
+            elif k.startswith(_BODY) or (tool in _PIE and k == '--form'): data = True
+        elif t.startswith('-') and len(t) > 1 and tool in _PS:
+            k, col, v = t[1:].partition(':')
+            k = k.lower()
+            if len(k) > 1 and 'method'.startswith(k): meth = v if col else nxt; i += not col
+            elif len(k) > 1 and ('body'.startswith(k) or 'infile'.startswith(k)): data = True
+        elif t.startswith('-') and len(t) > 1 and tool == 'curl':
+            for j, c in enumerate(t[1:], 1):
+                if c in 'dFTK': data = True
+                if c == 'X': meth = t[j + 1:] or nxt
+                if c in _CURL_VAL:
+                    i += j == len(t) - 1; break
+        elif t.startswith('-') and len(t) > 1 and tool in _PIE: i += t[-1] in _PIE_VAL
+        elif not t.startswith('-'): pos.append(t)
+        i += 1
+    urls = [t for t in pos if re.match(r'^https?://', t, re.I)]
+    if tool in _PIE and pos:
+        # httpie / xh: [METHOD] URL then items - `k=v`, `k:=json`, `k@file` send a body (a POST), `k==v` is a query and `K:v` a header
+        if len(pos) > 1 and pos[0].lower() in _VERBS: meth, pos = meth or pos[0], pos[1:]
+        u = pos[0]
+        urls = [u if re.match(r'^https?://', u, re.I) else 'http://' + ('localhost' + u if u.startswith(':') else u)]
+        data = data or any(re.match(r'^[^:=@]*(:=|=(?!=)|@)', x) for x in pos[1:])
     if urls and all(_LOCAL.match(u) for u in urls): return ''
-    meth = next((a[i + 1] for i, t in enumerate(a[:-1]) if t.lower() in ('-x', '--request', '-method')), '')
-    meth = meth or next((t[2:] for t in a if t.startswith('-X') and len(t) > 2), '')
-    data = any(t in _SHORT or t.lower().split('=', 1)[0] in _DATA or (t.startswith('-d') and not t.startswith('--') and len(t) > 2) for t in a)
     if meth.lower() not in _WRITES and not data: return ''
     host = re.sub(r'^https?://([^/?#]+).*', r'\1', urls[0]) if urls else 'a web address'
-    return f'send data to {host} ({_name(argv[0])})'
+    return f'send data to {host} ({tool})'
 
 
 def _api_writes(argv: list) -> bool:

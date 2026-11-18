@@ -10,7 +10,7 @@ prints why and exits 1 without running; Taskuary unreachable, an act fails close
 
 What this still does not cover, said plainly: an agent that reaches the real program by its full path or through `npx`, or drives
 Chrome or the desktop some other way. It gates the road agents are told to take (browserview.brief), on every AI."""
-import json, os, shlex, subprocess, sys
+import json, os, shlex, sys
 
 GATED = ('agent-browser', 'agent-desktop')
 MARK = '/api/agent/gate'
@@ -106,7 +106,8 @@ def main(argv: list = None) -> int:
     if not exe: print(f'{name} is not installed on this computer.', file=sys.stderr); return 127
     why = ask(name, args)
     if why: print(why, file=sys.stderr); return 1
-    return subprocess.call([exe, *args])
+    from . import spawn
+    return spawn.run([exe, *args]).returncode
 
 
 if __name__ == '__main__': sys.exit(main())

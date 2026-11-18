@@ -517,7 +517,7 @@ class AtTheCommand(unittest.TestCase):
             return Reply(gatecmd.judge(self.s, self.tid, 'run1', b['cmd'], b['cwd']))
         with on(snap='- button "Post" [ref=e7]'), verdict(said or {'irreversible': True, 'sure': True, 'what': 'posts the announcement on x.example'}), \
                 mock.patch.object(gatecmd, 'real', return_value='real-agent-browser'), mock.patch('urllib.request.urlopen', urlopen), \
-                mock.patch.object(gatecmd.subprocess, 'call', lambda argv: ran.append(argv) or 0), mock.patch.object(browserview, 'on_demand'):
+                mock.patch('taskuary.spawn.run', lambda argv, **k: ran.append(argv) or type('Done', (), {'returncode': 0})()), mock.patch.object(browserview, 'on_demand'):
             rc = gatecmd.main(['gatefolder', 'agent-browser', *args])
         return rc, ran, asked
 

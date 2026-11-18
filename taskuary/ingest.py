@@ -168,6 +168,15 @@ _GH_WHO = {'FIRST_TIME_CONTRIBUTOR': 'a first-time contributor', 'FIRST_TIMER': 
 _GH_WHOM = {'off': 'nobody', 'team': 'the team', 'contributors': 'the team and past contributors'}
 
 
+# A CHANNEL THAT WAITS SAYS WHY ONE WAY, on every road a line takes - its arrival, a reply that needs an agent, a line on a task an agent had:
+# they read "It is from someone outside the repository, and ... only for the team", "items from GitHub wait for you to start them" and "the
+# channel waits for the owner" for one fact
+def channel_hold(store, msg: dict) -> str:
+    "Why an item of a channel that waits for the owner (`no_auto`) started no agent - a GitHub item says who wrote it and whom its repo trusts."
+    if msg.get('channel') == 'github': return gh_hold_why(store, msg)
+    return f'Items from {senders.channel_name(msg.get("channel")) or "this channel"} wait for you to start them.'
+
+
 def gh_hold_why(store, msg: dict) -> str:
     """Why a GitHub item did not start by itself, in words the card can show: WHO wrote it and whom the repo lets
     start an agent. "github items queue for you to promote" read as a queue that clears when a slot frees - and it
@@ -242,6 +251,29 @@ def danger(store, msg: dict, mid=None, verdict: dict = None) -> str:
     return ''
 
 
+# WHAT HOLDS EVERY START OF A KIND, the home's own facts and not the task's or its sender's: the day's ceiling, the owner's switch, no AI.
+# One function: the start asks it (auto_start_ok), and the box that says why a start was held asks it again (funnel.idle_state) - a held
+# line whose cause has cleared said "No AI is set up" after one was connected, "switched off" after it was switched on
+def gate_why(store, kind: str, own: bool = False) -> str:
+    "Why no `kind` agent may start by itself now, as the sentence the task says - '' when nothing of the home's holds it."
+    if not own and (held := brainroute.auto_held(store)): return held[0].upper() + held[1:] + '.'
+    if kind == 'coding': return '' if auto_code_enabled(store) else _off_line(kind)
+    if store.get_settings().get('general_auto_enabled', '1') != '1': return _off_line(kind)
+    from . import general
+    return '' if general.provider_options(store) else _no_ai_line()
+
+
+def _off_line(kind: str) -> str:
+    if kind == 'coding': return f"Starting the coding agent by itself is switched off in {words.name('coding')}."
+    return f"Starting an agent by itself is switched off in {words.name('agents')}."
+def _no_ai_line() -> str: return f"No AI is set up for an agent to run on yet ({words.name('ai')})."
+
+
+def gated(said: str, kind: str) -> bool:
+    "Is `said` (a held task's reason, as its box reads it) a sentence gate_why writes for `kind`? Our own sentences, matched as written."
+    return str(said).lower().startswith(brainroute.CEILING_HEAD.lower()) or said in (_off_line(kind), _no_ai_line())
+
+
 def auto_start_ok(store, msg: dict, mid: int, kind: str, own: bool = False) -> tuple:
     """May this task start ITS worker by itself? (ok, why-not). Both kinds start by default (owner,
     2026-09-05, PW-069): coding opens its CLI, general opens its assistant session, a personal `task`
@@ -249,19 +281,12 @@ def auto_start_ok(store, msg: dict, mid: int, kind: str, own: bool = False) -> t
     configured; and the stranger gate (senders.known) is last because it is the expensive one - a
     Sent Items search no task already staying on the Board should pay for. A hold is about the
     unattended start only: the task is still triaged, shown and dispatchable by hand."""
-    cfg = store.get_settings()
     said = senders._said
     # MAIL THAT TRIES TO STEER AN AI STARTS NOTHING BY ITSELF (the Advisor design rev 2, the owner's ruling 2026-10-28): what triage or
     # ranking read it as trying to make an AI do (message.Danger - the model's reading, never a word list) holds the start for the owner
     if not own and (d := danger(store, msg, mid)): return False, said(f'It reads as an attempt to steer an AI ({d}) - nothing starts until you press.')
-    if not own and (held := brainroute.auto_held(store)): return False, said(held[0].upper() + held[1:] + '.')
-    if kind == 'general':
-        if cfg.get('general_auto_enabled', '1') != '1': return False, said(f"Starting an agent by itself is switched off in {words.name('agents')}.")
-        from . import general
-        if not general.provider_options(store): return False, said(f"No AI is set up for an agent to run on yet ({words.name('ai')}).")
-    elif kind == 'coding':
-        if not auto_code_enabled(cfg): return False, said(f"Starting the coding agent by itself is switched off in {words.name('coding')}.")
-    else: return False, said('A person has to do this one, so it is on your list.')
+    if kind not in task_kinds.AGENT: return False, said('A person has to do this one, so it is on your list.')
+    if (held := gate_why(store, kind, own)): return False, said(held)
     return (True, '') if own else senders.start_known(store, msg, mid)      # `own`: the owner's own line or press - no sender to check
 
 
@@ -1262,8 +1287,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     act = (('a reply draft goes to the task for you' + (f' - {unsendable}, so it cannot be sent from here' if unsendable else '')) if f['kind'] == 'reply'
            else f"under {words.name('watching')} - nothing asked of you until the thread moves" if watching
            else 'on your list - no agent works it' if f['kind'] == 'task'
-           else f'{HELD} {gh_hold_why(store, msg)}' if msg.get('no_auto') and msg.get('channel') == 'github'
-           else f'{HELD} items from {senders.channel_name(msg.get("channel")) or "this channel"} wait for you to start them.' if msg.get('no_auto')
+           else f'{HELD} {channel_hold(store, msg)}' if msg.get('no_auto')
            else f'{HELD} {held}' if held
            else f'{agent_word(f["kind"])} was set to start by itself')
     head = route_head(intent['intent'], f['kind'])
@@ -2163,10 +2187,10 @@ def live_agent(store, tid) -> str:
 # matches, and the words the owner reads. Roads compare the code, never the sentence, so a sentence reworded here changes nothing else
 WHY = {'not_new': 'not new work', 'live': 'an agent is live on it', 'closed': 'the task is closed', 'off': 'passing lines to the agent is switched off',
        'no_session': 'no live session to pass it to', 'not_assistant': 'not an assistant task', 'no_conversation': 'no agent conversation',
-       'degraded': 'triage could not read it', 'channel': 'the channel waits for the owner', 'another': 'another agent is live on it',
-       'no_carry': 'no conversation to carry on', 'own_task': 'it is your own task, so no agent works it', 'no_coding_session': 'no saved coding session to reopen'}
+       'degraded': 'triage could not read it', 'another': 'another agent is live on it',
+       'no_carry': 'no conversation to carry on', 'queued': 'its agent is queued to start and hears it then', 'own_task': 'it is your own task, so no agent works it', 'no_coding_session': 'no saved coding session to reopen'}
 class Why(str): code = ''
-def reason(code: str) -> Why: w = Why(WHY[code]); w.code = code; return w
+def reason(code: str, said: str = '') -> Why: w = Why(said or WHY[code]); w.code = code; return w      # `said`: words of its own (channel_hold)
 def code_of(why) -> str: return getattr(why, 'code', '')
 
 
@@ -2195,6 +2219,9 @@ def carry_on_why(store, tid, msg: dict, mid, follow: dict | None) -> str:
     t = store.get_task(tid) or {}
     if not follow or follow.get('degraded') or follow.get('intent') != 'task': return reason('not_new')
     if live_agent(store, tid): return reason('live')
+    # ...nor over a START STILL QUEUED (a full house): it opens on the task with every message on it, this one too - "No agent started: no
+    # conversation to carry on" stood under "Waiting its turn". A queued TURN is a conversation's next one: the carry-on joins it (queue_turn)
+    if (q := store.get_dispatch(tid)) and not q.get('Turn'): return reason('queued')
     kind = 'general' if general.handles(t) else t.get('Kind')
     lack = (reason('own_task') if kind not in task_kinds.AGENT else reason('no_carry')
             if kind == 'general' and not general.history(store, tid) else _resumable_coding(store, tid)[1] if kind == 'coding' else '')
@@ -2225,7 +2252,7 @@ def reach_why(store, tid, msg: dict, mid, follow: dict | None, kind: str, own: b
     if (follow or {}).get('degraded'): return reason('degraded')
     if not joinable(store, tid): return reason('closed')      # dismissed: a done task new work reopens first (land_on)
     if store.get_setting('answer_to_agent') == 'off': return reason('off')
-    if msg.get('no_auto'): return reason('channel')
+    if msg.get('no_auto'): return reason('channel', channel_hold(store, msg))
     if not own and (held := brainroute.auto_held(store)): return held
     if live and live != kind: return reason('another')
     # ...nor a line that reads as steering an AI (the owner, 2026-10-28): it waits for the owner's press
@@ -2355,7 +2382,7 @@ def first_agent(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> 
 # answered "not an agent's task" and wrote it nowhere, so a task that needed an agent sat looking as if nobody had got round to it.
 # Silent only where nothing was asked of an agent, the owner switched it off, one is already on it or another road is its own (the line
 # went nowhere an agent was ever going to be): ONE list for carrying on, passing in and waking - three had drifted apart
-QUIET_WHY = ('not_new', 'live', 'closed', 'off', 'no_session', 'not_assistant', 'no_conversation', 'degraded')
+QUIET_WHY = ('not_new', 'live', 'queued', 'closed', 'off', 'no_session', 'not_assistant', 'no_conversation', 'degraded')
 NOT_STARTED = 'No agent started:'
 
 
@@ -2419,7 +2446,7 @@ def agent_on_reply(store, tid, msg: dict, mid, verdict: dict | None, actor: str,
     if v.get('degraded') or v.get('intent') != 'task' or kind not in task_kinds.AGENT: return False
     if (store.get_task(tid) or {}).get('Status') == 'dropped': return False
     if msg.get('no_auto'):
-        not_started(store, tid, f'items from {senders.channel_name(msg.get("channel")) or "this channel"} wait for you to start them'); return False
+        not_started(store, tid, channel_hold(store, msg)); return False
     ok, who = auto_start_ok(store, msg, mid, kind)
     if not ok:
         not_started(store, tid, who)

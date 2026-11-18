@@ -205,6 +205,24 @@ class WorkerTests(unittest.TestCase):
         self.assertTrue(any(q['TaskId'] == tid for q in s.queued_dispatches()))
 
 
+    def test_the_owners_own_start_takes_a_queued_start_off_the_queue(self):
+        # a full house queued the assistant's start and the owner started it by hand (his starts never wait on the cap): the row stayed, the
+        # rail read "queued - starts when a slot frees" over the working assistant, and the drain "started" it again when a slot freed.
+        # A coding start leaves the queue whatever the door (terminal.open_session); a chat agent's is the same
+        from taskuary import blackboard, funnel, terminal
+        s = store(); tid = s.create_task({'Title': 'Take the minutes', 'Kind': 'general', 'Status': 'open'}, 'triage')
+        s.enqueue_dispatch(tid, None, 'assistant', '4 agents are already running')
+        try:
+            general.start_session(s, tid, actor='owner')
+            self.assertIsNone(s.get_dispatch(tid))
+            self.assertNotEqual(funnel.idle_state(s, tid)['kind'], 'queued')
+            # ...a conversation's queued NEXT TURN is not a start: the session opened meanwhile takes it (blackboard.drain)
+            s.enqueue_dispatch(tid, None, 'assistant', '4 agents are already running', turn='carry_on')
+            general.start_session(s, tid, actor='owner')
+            self.assertEqual(s.get_dispatch(tid)['Turn'], 'carry_on')
+        finally: general.drop_session(tid)
+
+
 class SettingsTests(unittest.TestCase):
     def test_fresh_installs_default_both_on_and_an_old_opt_out_is_kept_for_both(self):
         s = MemoryStore()

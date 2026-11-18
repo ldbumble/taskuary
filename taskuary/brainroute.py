@@ -659,12 +659,13 @@ def calls_today(store, now: datetime = None) -> int:
     return int(r.get('n') or 0)
 
 
+CEILING_HEAD = "today's AI calls reached"           # how the ceiling's sentence begins: a held task's box knows it by it (ingest.gated)
 def auto_held(store, now: datetime = None) -> str:
     "Why what starts by itself waits today - '' while today's AI calls are under the owner's ceiling (`auto_ai_daily_calls`)."
     v = str(store.get_setting(AUTO_CAP_KEY) or '').strip()
     n = int(v) if v.isdigit() else AUTO_CAP
     if not n or (done := calls_today(store, now)) < n: return ''
-    return (f"today's AI calls reached {done:,} (the daily limit for work nobody asked for is {n:,}), so agents do not start or wake by "
+    return (f"{CEILING_HEAD} {done:,} (the daily limit for work nobody asked for is {n:,}), so agents do not start or wake by "
             "themselves until tomorrow - what you ask for still runs, and the limit is in Settings, under Today")
 
 

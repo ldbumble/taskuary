@@ -187,7 +187,10 @@ export const withMine = (list, mine) => {
   // ...a line sent while a turn works too (the owner, 2026-11-16: "The second a new prompt comes in ... it should gray out the action card but never move")
   // ...in the server's own sentence (`aside`, proposals.WROTE_PAST) with his newest line cut as proposals._cut cuts it: its read never swaps the words
   const by = own.findLast((l) => !l.err), cut = (w) => ((w = String(w || "").trim().split(/\s+/).join(" ")).length > 60 ? `${w.slice(0, 60)}…` : w);
-  const aside = (c) => (by && c.status === "pending" && (c.was || c.aside) ? { ...c, status: "passed", ...(c.aside ? { why: c.aside.replace("{line}", cut(by.text)) } : {}) } : c);
+  // ...ONLY A CARD THAT STOOD BEFORE HIS LINE (a walk, 2026-11-18): a Post card raised twelve seconds after his line was drawn greyed "you wrote
+  // ... after it" - he never saw it lit. A card from his line's own second on is the answer to it (the server's rule: proposals._older)
+  const before = (c) => !c.at || +new Date(String(c.at).replace(" ", "T")) + 1000 <= +new Date(by.at);
+  const aside = (c) => (by && c.status === "pending" && (c.was || c.aside) && before(c) ? { ...c, status: "passed", ...(c.aside ? { why: c.aside.replace("{line}", cut(by.text)) } : {}) } : c);
   const greyed = items.map((x) => (x.kind === "card" ? aside(x) : x.kind === "turn" && (x.cards || []).length ? { ...x, cards: x.cards.map(aside) } : x));
   return { items: [...greyed.slice(0, at), ...rest, ...greyed.slice(at), ...tail], pending: [...pending, ...wait] };
 };

@@ -252,3 +252,14 @@ test("a failed turn and a failed line read as the failed step's note, not the fa
   assert.doesNotMatch(src, /className="tq-aui-hint" role="alert"/);
   assert.equal(src.match(/className="tq-aui-note tq-aui-note-error" role="alert" data-tq-(turn|line)-failed=""/g).length, 3);
 });
+
+// ...ONLY A CARD THAT STOOD BEFORE HIS LINE (a walk, 2026-11-18): the agent's answer to his line raised a Post card twelve seconds later, and
+// while his line was still the page's own it was drawn greyed "you wrote ... after it" - no button he ever saw lit
+test("a card raised after his line is never greyed by it", () => {
+  const pad = (n) => String(n).padStart(2, "0"), stamp = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  const typed = new Date(Date.now() - 20000), later = new Date(typed.getTime() + 12000), earlier = new Date(typed.getTime() - 30000);
+  const card = (n, d) => ({ id: `r:${n}`, review: n, what: "action", status: "pending", at: stamp(d), was: { text: "Post it" }, aside: 'Not sent - you wrote "{line}" after it' });
+  const read = { items: [mail, { ...answer, cards: [card(1, earlier), card(2, later)] }], pending: [], working: false };
+  const got = withMine(read, [{ id: "l-2", kind: "line", text: "where is the button", at: typed, rest: true }]);
+  assert.deepEqual(got.items[1].cards.map((c) => c.status), ["passed", "pending"]);
+});

@@ -469,7 +469,7 @@ def _items(store, tid: int) -> dict:
         # Taskuary's own note to the agent drawn as his bubble: "it's not a prompt if you hit approve?"). What the app tells the agent - a
         # note, a wake, a press's result, whoever's name it is filed under - is no item at all: his press is its own quiet line (press_lines)
         if ty == WAITING_TYPE or (ty == USER_TYPE and c.get('Actor') in OWNER_ACTORS):
-            body = general._line_of(c['Body']) if ty == WAITING_TYPE else general.split_files(c.get('Body'))
+            body = general.his_line(c['Body'], kept=ty == WAITING_TYPE)
             it = {'id': c.get('LineId') or f'c:{cid}', 'kind': 'line', 'at': c['CreatedAt'], **body}
             h = led.get(('line', c.get('LineId') or ''))
             if not h and ty == WAITING_TYPE: pend.append({**it, '_after': _after(c['Body'])}); continue

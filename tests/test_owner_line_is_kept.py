@@ -236,6 +236,24 @@ class SendToAgentCarriesItsFiles(AttachedFilesReachTheAgent):
         self.assertEqual(line['text'], 'Is this invoice theirs?')
         self.assertEqual(len(line['files']), 1); self.assertTrue(self.inside(out['taskId'], line['files'][0]), line['files'])
 
+    def test_an_fyi_handfuls_line_draws_his_words_and_the_agent_still_reads_the_other_lines(self):
+        """Send to agent on one line of an FYI handful: the page writes the handful's other lines under his words for the agent to read - his
+        bubble drew them, minted ids and all, as if he had typed them."""
+        from taskuary import conversation
+        mid = self.s.add_message({'ExternalId': 'f1', 'Channel': 'email', 'FromEmail': 'erin@northwind.example', 'FromName': 'Erin Blake',
+                                  'Subject': 'Office closed Friday', 'BodyText': 'The office is closed on Friday.', 'Status': 'filed'})
+        also = '\n\nTHE OTHER MESSAGES OF THIS LIST IT IS ABOUT (read each with read_message)\nm7 - Gail Moreno: Parking moves Monday'
+        with mock.patch('taskuary.origin.hold', return_value=None):
+            out, said = self.send(mid, f'Which of these change my week?{also}')
+        self.assertIn('m7 - Gail Moreno: Parking moves Monday', said[0])                            # ...the agent is told
+        self.s.add_comment(out['taskId'], 'owner', general.USER_TYPE, said[0])                     # ...and the turn keeps it as his line
+        line = next(x for x in conversation.items(self.s, out['taskId'])['items'] if x['kind'] == 'line')
+        self.assertEqual(line['text'], 'Which of these change my week?')
+        self.assertEqual(len(line['files']), 1)
+        # ...held for a sender not yet trusted, the same line by the box
+        general.wait_line(self.s, out['taskId'], f'And this one?{also}')
+        self.assertEqual([p['text'] for p in conversation.items(self.s, out['taskId'])['pending']], ['And this one?'])
+
 
 def outputs_folder(tid):
     from taskuary import outputs

@@ -2332,6 +2332,13 @@ def split_files(body) -> dict:
     b = str(body or ''); m = _FILES.search(b)
     return {'text': b[:m.start()] if m else b, 'files': [x.strip() for x in m.group(1).splitlines() if x.strip()] if m else []}
 _IMAGE_FILE = re.compile(r'\.(png|jpe?g|gif|webp)$', re.I)
+# ...AND THE OTHER LINES OF AN FYI HANDFUL he sent on with it (the page's FyisCard handAll writes this block under his words, for the agent to
+# read each one): Taskuary's words, never drawn as his - his bubble read "m7 - Gail Moreno: ..." as if he had typed it (the stress round, 2026-11-18)
+_ALSO = re.compile(r'\n\nTHE OTHER MESSAGES OF THIS LIST IT IS ABOUT \(read each with read_message\)\n.*?(?=\n\nATTACHED (?:IMAGES|FILES) \(read these files\)\n|\Z)', re.S)
+def his_line(body, kept: bool = False) -> dict:
+    "{'text', 'files'} of his line as he wrote it: the words he typed and the files he attached, without what Taskuary added for the agent."
+    got = _line_of(body) if kept else split_files(body)
+    return {**got, 'text': _ALSO.sub('', got['text'])}
 
 
 def _images(paths) -> list:

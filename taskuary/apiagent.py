@@ -31,7 +31,7 @@ WAIT = 45.0                    # one browser act
 
 _S = lambda props, need=(): {'type': 'object', 'properties': props, 'required': list(need)}
 _REF = {'type': 'string', 'description': 'the element ref from browser_look, like @e12'}
-FROM = {'from': {'type': 'integer', 'description': 'the character to start at, for the rest of a long answer (its cut says where)'}}
+FROM = {'from': {'type': 'integer', 'description': 'where to go on reading (the cut says)'}}
 def _fn(name, desc, params): return {'type': 'function', 'function': {'name': name, 'description': desc, 'parameters': params}}
 
 BROWSER = [

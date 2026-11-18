@@ -319,7 +319,7 @@ def _outward(cmd: str, own: bool = True) -> list:
             r'\b(git\s+push|gh\s+(pr|issue|release|repo|api)|glab|publish|sendmail|send-mailmessage)\b', low) else []
     out, moved = [], False
     for argv in segs:
-        argv = launched(argv, lambda t: _name(t) in _TOOLS)         # `timeout 60 git push` is git's push, read as git's
+        whole, argv = argv, launched(argv, lambda t: _name(t) in _TOOLS)   # `timeout 60 git push` is git's push, read as git's - its env still aims it
         tool, w = _words(argv)
         if tool in MOVES: moved = True
         if tool in ('bash', 'sh', 'powershell', 'pwsh', 'cmd'):                 # `bash -c "git push"`: the string is a command of its own
@@ -333,7 +333,7 @@ def _outward(cmd: str, own: bool = True) -> list:
         if not what and tool in ('gh', 'glab') and w[:1] == ['api'] and _api_writes(argv): what = 'change something on the code host through its API'
         if not what and tool == 'git' and w[:1] == ['push']: what = GIT['push']
         if not what and tool in HTTP: what = _http_write(argv, own)
-        if what: out.append({'tool': tool, 'what': what, 'why': OUT, 'command': ' '.join(argv)[:400], 'to': '?' if moved else _to(tool, argv, w)})
+        if what: out.append({'tool': tool, 'what': what, 'why': OUT, 'command': ' '.join(argv)[:400], 'to': '?' if moved else _to(tool, whole, w)})
     return out
 
 

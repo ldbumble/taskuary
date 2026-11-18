@@ -281,7 +281,7 @@ SHORT = {
     'person': "Who a name or address is in the owner's mail, and their latest messages.",
     'search_knowledge': "Search the owner's knowledge base (indexed folders, SharePoint).",
     'owner_memory': 'What Taskuary has learned about the owner: their people, priorities and ways.',
-    'remember': 'Keep a fact the owner tells you for future work.',
+    'remember': 'Keep what the owner tells you, for later.',
     'calendar': "The owner's busy times for the next N days.",
     'list_systems': "The owner's other systems you may use, with their connector ids and tool types.",
     'guide': "Read one of Taskuary's how-tos (browser, number, propose ...).",
@@ -306,7 +306,7 @@ SHORT = {
     'set_up_meeting': "Set up a meeting for the owner's press.",
     'share': 'Share a dashboard or report you made with a person.',
     'propose': 'Ask the owner to approve an act Taskuary runs on their press (action, why) - many at once in `items`, one card; save_routine keeps a script you wrote as a routine.',
-    'find_tools': "A tool's full instructions by name, or more tools by need.",
+    'find_tools': "A tool's instructions by name, or more tools by need.",
 }
 def lean(s):
     "A schema as a list shows it: names, types, enums and what is required - no words, no examples (find_tools has them)."

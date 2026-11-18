@@ -181,6 +181,7 @@ def test_a_press_on_a_bulk_card_the_chat_moved_past_sends_nothing():
     with mock.patch.object(server, 'store', s):
         out = call(tid, 'propose_email', items=emails(5))
     s._exec("UPDATE review SET CreatedAt='2026-11-16 09:00:00', DraftAt='2026-11-16 09:00:00' WHERE Batch=?", (out['batch'],))
+    time.sleep(1.1)                                                     # (a stamp is a whole second: his line comes after the task's mail)
     general.wait_line(s, tid, 'hold off - I want to change the wording', line_id='l-hold')
     assert len(proposals.written_past(s, tid)) == 5
     sent = []

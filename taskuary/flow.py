@@ -653,7 +653,9 @@ def _walk(store, src, tid, trigger, llm, ctx, recs, repairs, rec, start, t0) -> 
              else f"Step {stop + 1} failed: {str(recs[-1].get('error') or '').rstrip(' .')}.{nxt}" if failed
              else f"Waiting for your yes on step {stop + 1} - the run goes on from there once you approve it." if stop is not None
              else tally(recs) + (f"; repaired itself {len(repairs)} time{'s' if len(repairs) > 1 else ''}" if repairs else '')
-             + ('; the agent takes it from here.' if agent else '.'))
+             + ('; the agent takes it from here.' if agent else '.')
+             # ...and an email that did not go is what the run left the owner: the outcome says it, not only its step's line
+             + (f" {plural(len(held), 'email')} {'waits' if len(held) == 1 else 'wait'} for your Send." if (held := [r for r in recs if r.get('kind') == 'draft' and r.get('review_id')]) else ''))
     store.set_report_run_steps(rid, recs, failed, error, ms, words)
     # ...A RUN THAT STOPS KEEPS WHAT ITS STEPS READ, WHOLE (the stress round, 2026-11-18): the record holds BODY_CAP of each, and the run that
     # went on after his yes rebuilt its steps from that - a script after the approved write summed 23 of the 150 bills read before it

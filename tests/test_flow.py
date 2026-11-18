@@ -142,6 +142,7 @@ def test_a_routines_email_that_did_not_go_waits_on_the_run_task(db):
     [rv] = s._rows("SELECT * FROM review WHERE Status='pending'")
     assert sent == [] and rv['TaskId'] == tid and [t['TaskId'] for t in s.list_tasks()] == [tid]
     assert out['steps'][1]['head'] == 'draft for erin@northwind.example - waiting for your Send' and s.get_task(tid)['Status'] != 'done'
+    assert out['summary'].endswith('1 email waits for your Send.'), out['summary']          # ...and the run's outcome says what it left him
 
 
 def test_a_token_that_names_nothing_is_left_visible_and_said():

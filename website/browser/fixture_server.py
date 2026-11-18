@@ -181,6 +181,21 @@ def _install_fresh_routes(app, store):
         store._poke("feed-changed", "task-changed")
         return {"ok": True}
 
+    @app.post("/api/fixture/report")
+    def fixture_report(body: dict = Body(...)):
+        """A report run landed on the rail - one the owner set up, its rows in the run (`dashboard`: a dashboard's run): what Send to agent on a
+        report or a dashboard starts from (browser/send-to-agent)."""
+        import json as _json
+        title = body.get("title") or "Weekly AR aging"
+        cfg = {"type": "dashboard" if body.get("dashboard") else "sql", "title": title}
+        sid = store.save_source({"Channel": "report", "Address": title, "Active": 1, "ConfigJson": _json.dumps(cfg)}, "owner")
+        mid = store.add_message({"ExternalId": f"fx-report:{time.time()}", "ConversationId": f"report:{sid}", "Channel": "report", "SourceName": title,
+                                 "Subject": f"{title} - 3 rows", "SentAt": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()), "Status": "filed",
+                                 "BodyText": body.get("body") or "| Customer | Days | Amount |\n|---|---|---|\n| Payworth | 95 | 1200 |\n| Trainly | 40 | 300 |"})
+        from taskuary import funnel
+        funnel._SOURCES["at"] = 0
+        return {"messageId": mid, "sourceId": sid, "key": f"report:{mid}"}
+
     @app.post("/api/fixture/incoming")
     def fixture_incoming(body: dict = Body(...)):
         "A mail from anyone (`from_email`, `from_name`, `subject`, `body`) taken in on the real arrival road, triage and all - a site's code, a vendor's answer."

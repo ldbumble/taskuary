@@ -2215,7 +2215,12 @@ def _offer_of(task_id) -> str:
 
 
 @app.get('/api/tasks/{task_id}')
-def task_detail(task_id: int):
+def task_detail(task_id: int, rev: str = '', opened: bool = False):
+    """ONE TASK AS ITS PAGE DRAWS IT, read every 3 s while an agent works. Each setting and document its many readers ask (the owner's addresses,
+    the AI pick, trusted organisations, SOUL.md for the owner's name) is read once for the whole read (store.held_settings)."""
+    with store.held_settings(): return _task_detail(task_id, rev, opened)
+
+def _task_detail(task_id: int, rev: str = '', opened: bool = False):
     d = store.task_detail(task_id)
     if not d: raise HTTPException(404, 'task not found')
     # ONE CARD AT A TIME (cardqueue): what waits behind the card that stands is not the page's to draw yet
@@ -2234,6 +2239,9 @@ def task_detail(task_id: int):
     tr = store.last_transcript(task_id)
     rs = _resumable(task_id)[0]
     from . import assistant, concierge, general, origin, workflows
+    # ...A TASK PAGE OPENED (`opened`: its page's first read of it - never a prefetch, a rail card or a poll) starts the judgement its chat's
+    # next turn will read (general.warm): made while the owner reads and types, the first turn's prompt no longer waits seconds on it
+    if opened: general.warm(store, task_id, d.get('task'))
     # ...and whether its channel can carry a reply, as /api/reviews says: without it a Teams draft offered Send, and
     # the press came back "not sent" instead of the card offering Copy & close from the start
     memo, sigs, here = {}, {}, {m['MessageId']: m for m in d.get('messages') or []}
@@ -2270,7 +2278,7 @@ def task_detail(task_id: int):
     # table carries (_pile_payload), so the task page and the canvas light one button and neither asks the Advisor
     from . import rulebook
     known = {'task': d['task'], 'story': story, 'judged': judged, 'ended': ran, 'messages': msgs}       # ...and asks nothing this read knows
-    return {**d,'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])}, 'recommended': rulebook.recommended_task(store, task_id, known),
+    return _revisioned({**d,'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])}, 'recommended': rulebook.recommended_task(store, task_id, known),
             'origin': {**o,                                                                  # who's words are on it (origin.py)
                        # ...and the presses that trust them, in the same words as the held box's (senders.trust_offer)
                        **({'trust': _trust_offer(task_id, msgs)} if o['origin'] == 'stranger' else {}),
@@ -2350,7 +2358,7 @@ def task_detail(task_id: int):
             # stays here: the page needs to know a conversation is waiting, not how to address it.
             'resumable': {'sid': rs['Sid'], 'agent': rs['Agent'], 'cwd': rs['Cwd'], 'at': rs['CreatedAt']} if rs else None,
             # ...and a coding task running on an AI card is a chat, as a general task's is (general.on_card)
-            'onCard': _gen_on_card(task_id)}
+            'onCard': _gen_on_card(task_id)}, rev)
 
 
 def _task_state(task_id: int, d: dict, session=None):
@@ -2541,9 +2549,23 @@ def _assistant_payload(task_id: int, session=None):
             'thread': store.task_thread(task_id),
             'session': session.info(tail=3) if session else None}
 
+def _revisioned(got, rev: str = ''):
+    """ONE ANSWER TO "UNCHANGED" FOR EVERY POLLED READ (the conversation's `rev`, now the task's own read and the chat's state): `rev` is the
+    name of what the page holds - when it is still the answer, only that name comes back (`same`), not 5-9 KB the page already draws. A live
+    session's idle clock and screen lines are outside the name: they move on every read of a working agent, and the page draws them over its
+    own socket (the page's calming poll leaves them out the same way)."""
+    if not isinstance(got, dict): return got
+    def calm(v):
+        if isinstance(v, dict):
+            return {k: calm(x) for k, x in v.items() if not ('sid' in v and k in ('idle', 'tail'))}
+        return [calm(x) for x in v] if isinstance(v, list) else v
+    import hashlib
+    name = got.get('rev') or hashlib.sha1(json.dumps(calm(got), default=str, sort_keys=True).encode()).hexdigest()[:16]
+    return {'rev': name, 'same': True} if rev and rev == name else {**got, 'rev': name}
+
 @app.get('/api/tasks/{task_id}/assistant')
-def assistant_state(task_id: int):
-    return _assistant_payload(task_id)
+def assistant_state(task_id: int, rev: str = ''):
+    return _revisioned(_assistant_payload(task_id), rev)
 
 @app.get('/api/tasks/{task_id}/conversation')
 def conversation_list(task_id: int, rev: str = ''):
@@ -2552,7 +2574,7 @@ def conversation_list(task_id: int, rev: str = ''):
     from . import conversation
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     got = conversation.items(store, task_id)
-    return {'rev': got['rev'], 'same': True} if rev and rev == got['rev'] else got
+    return _revisioned(got, rev)
 
 @app.post('/api/tasks/{task_id}/assistant/session')
 def assistant_session(task_id: int, body: AssistantSessionBody = None):

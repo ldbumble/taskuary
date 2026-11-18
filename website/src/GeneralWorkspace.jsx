@@ -11,7 +11,7 @@ import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import api from "./api.js";
 import { liveUp, onLive, touches } from "./live.js";
-import { REST_LOOK_MS, coalesced, restLook } from "./visible.js";
+import { REST_LOOK_MS, changes, coalesced, restLook } from "./visible.js";
 import { aheadChat, heldChat, heldConversation } from "./taskDetail.js";
 import { AttachChip, fileChips, fileState, usePromptImages, useSendWhenUp } from "./promptImages.jsx";
 import { holdUnsent } from "./unsent.js";
@@ -776,8 +776,12 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const conv = useConversation(task.TaskId, true);
   // ..."WORKING" IS ONE FACT ON THE WHOLE PAGE (the recorded walk, 2026-11-11: the chat stood finished under a header that still read "agent
   // working"): the moment the list's own word on it changes, the task's header and its row are read again
+  // ...but only when it CHANGES, and only by itself where no push will say it: an opening that holds the list already read its task and its rail,
+  // and a turn's start and end are pushed (task-changed -> reloadFor, TaskPage's own listener) - asked again here they were a second forced
+  // rebuild of every rail row (measured 2026-11-18). The look stays for a socket that is down, as every poll's safety look does (restLook)
   const convWorks = !!conv.list?.working, answeredRef = useRef(onAnswered); answeredRef.current = onAnswered;
-  useEffect(() => { if (conv.list) answeredRef.current?.(); }, [convWorks]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const workMoved = useRef(null); workMoved.current ||= changes(convWorks);
+  useEffect(() => { if (workMoved.current(convWorks) && conv.list && !liveUp()) answeredRef.current?.(); }, [convWorks]);   // eslint-disable-line react-hooks/exhaustive-deps
   const defaults = useChatDefaults(), own = useOwnDetail(task.TaskId);
   const level = chat ? detailFor({ source, settings: defaults, own }) : "steps";
   // ...and the CLI that runs, what it asks and what it waits on his press for: the list's own (conversation.items `live`, `asking`, `permissions`)
@@ -789,8 +793,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     api.patch(`/api/tasks/${task.TaskId}`, { Tags: withoutAsk(task.Tags) }).catch(() => {});
   }, [task.TaskId, task.Tags]);
 
+  const heldRev = useRef("");        // the name of the chat state this view draws (its `rev`), for the poll to ask "still this?"
   const accept = useCallback((payload) => {
-    setData(payload); if (payload) CHATS.set(task.TaskId, payload);
+    setData(payload); heldRev.current = payload?.rev || ""; if (payload) CHATS.set(task.TaskId, payload);
     const provider = pickFor(payload);
     // A LIVE session's own pick outranks whatever the picker opened on. A walk's brain is chosen by
     // the server (general.walk_pick), so a strip frozen on the mount-time default both misnamed the
@@ -868,8 +873,10 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     const read = async () => {
       last = Date.now();
       try {
-        const { data: fresh } = await api.get(`/api/tasks/${task.TaskId}/assistant`);
-        if (!live) return;
+        // ...the name of what this chat holds rides along: unchanged, the answer is that name alone (server._revisioned), and nothing is drawn again
+        const { data: fresh } = await api.get(`/api/tasks/${task.TaskId}/assistant`, { params: heldRev.current ? { rev: heldRev.current } : {} });
+        if (!live || fresh?.same) return;
+        heldRev.current = fresh.rev || "";
         setData(fresh);
         // ...and the page's copy too: it held the session the turn STARTED with, so its heading said "is working" under the
         // finished answer (2026-10-15)

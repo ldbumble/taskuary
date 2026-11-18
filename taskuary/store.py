@@ -85,6 +85,8 @@ class _TimedLock:
 # what is committed; only the thread that holds the writer's lock (its own open transaction) reads through the writer.
 _OFF_WRITER, _ON_WRITER = threading.local(), threading.local()
 _HELD = threading.local()        # held_settings(): (the store, {name: its row}) for this thread while a build holds them
+# ...and A WRITE TO WHAT IS HELD lets go of it, whoever wrote it (_exec): the statement's own target table, read off its grammar
+_HELD_TABLES = re.compile(r'^\s*(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|REPLACE\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+(?:setting|doc)\b', re.I)
 READERS_KEPT = 16      # reader connections kept open for reuse: a request pool's worth of threads reading at once
 
 _LIVE_UNSET = object()
@@ -2176,7 +2178,12 @@ class SQLiteStore:
         r = self._rows(q, p); return r[0] if r else None
     def _exec(self, q, p=()):
         with self.lock, self._undone():
-            cur = self.cx.execute(q, p); self.cx.commit(); self._writes += 1; return cur.lastrowid
+            cur = self.cx.execute(q, p); self.cx.commit(); self._writes += 1
+        # EVERY WRITER OF A HELD SETTING OR DOCUMENT, ONE ROAD (robustness review, 2026-11-18): this thread's hold (held_settings) lets go
+        # once the write is in - a writer that dropped its own key first and then read the old value back (save_doc's line diff) held it
+        # stale, and one that wrote the table directly dropped nothing
+        if (held := getattr(_HELD, 'settings', None)) is not None and held[0] is self and _HELD_TABLES.match(q): held[1].clear()
+        return cur.lastrowid
     # A WRITE THAT FAILS LEAVES NOTHING OPEN (2026-10-26): another process held the database 5s, one INSERT met "database is
     # locked", and the transaction sqlite3 had opened for it stayed open on the writer - every BEGIN IMMEDIATE after it failed
     # with "cannot start a transaction within a transaction" until a restart, the rail's reads with them, and Next said "still
@@ -6293,7 +6300,6 @@ class SQLiteStore:
         # A write that says what the row already says - the same value from the same writer - changes nothing, so it moves no stamp and
         # empties no cache: a setting rewritten on a loop (a pane's size, a router note) used to throw the whole pile away each time
         # (2026-11-09). str() as SQLite keeps it: a number written as 3 reads back '3' only through the TEXT column's affinity.
-        if (held := getattr(_HELD, 'settings', None)) is not None and held[0] is self: held[1].pop(name, None)   # its own write, read fresh
         was = self._one('SELECT Value, UpdatedBy FROM setting WHERE Name=?', (name,))
         if was is not None and was['UpdatedBy'] == actor and (was['Value'] == value or (value is not None and was['Value'] == str(value))): return
         self._exec('INSERT INTO setting (Name, Value, UpdatedBy) VALUES (?,?,?) ON CONFLICT(Name) DO UPDATE SET Value=?, UpdatedBy=?',
@@ -6579,7 +6585,13 @@ class SQLiteStore:
     def get_doc(self, name):
         """The document AS WRITTEN - placeholders and all. This is what the editor loads and saves;
         every consumer that feeds a doc to an AI wants `doc()` instead."""
-        r = self._one('SELECT Content FROM doc WHERE Name=?', (name,)); return r['Content'] if r else None
+        # ...held with the settings (held_settings) while a read holds them: the owner's name is read from SOUL.md by every reader of a task's page
+        held = getattr(_HELD, 'settings', None)
+        if held is not None and held[0] is self:
+            if ('doc', name) not in held[1]: held[1][('doc', name)] = self._one('SELECT Content FROM doc WHERE Name=?', (name,))
+            r = held[1][('doc', name)]
+        else: r = self._one('SELECT Content FROM doc WHERE Name=?', (name,))
+        return r['Content'] if r else None
     def doc_owner(self, name):
         """Who last wrote it - 'template' means nobody has, and the shipped text still flows in."""
         r = self._one('SELECT UpdatedBy FROM doc WHERE Name=?', (name,)); return r['UpdatedBy'] if r else None

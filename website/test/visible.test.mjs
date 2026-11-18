@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { REST_LOOK_MS, pollCalming, pollWhileActive, pollWhileVisible, restLook } from "../src/visible.js";
+import { REST_LOOK_MS, pollCalming, pollWhileActive, pollWhileVisible, restLook, changes } from "../src/visible.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -153,4 +153,14 @@ test("a turn at work reads its session when a step is pushed, with a 5 s look un
   const at = src.indexOf("const [wake, stop] = coalesced(read, 1000);");
   assert.ok(at > 0, "the session read is coalesced and woken by the push");
   assert.match(src.slice(at, at + 600), /onLive\("run-tail"[\s\S]*every: 5000/);
+});
+
+// A TURN'S START AND END ARE THE PUSH'S TO SAY (speed round, 2026-11-18): the chat's "working" flag told the task page "answered" on its first
+// draw and again at each flip, and the page forced a whole rail rebuild each time beside the one the server's push already brings
+test("changes(): the first call is not a change, a different value is, the same one again is not", () => {
+  const moved = changes(true);
+  assert.equal(moved(true), false, "an opening that holds the list: nothing changed");
+  assert.equal(moved(false), true);
+  assert.equal(moved(false), false);
+  assert.equal(moved(true), true);
 });

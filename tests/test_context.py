@@ -129,6 +129,41 @@ class RecallTests(unittest.TestCase):
         with fake_embed.no_embedder(), mock.patch.object(llm, 'build_llm', return_value=None): text = context.build(s, tid)
         self.assertNotIn(context.KNOWN_HEAD, text); self.assertNotIn('Month-end close', text)
 
+    def test_the_judgement_starts_when_the_line_is_taken_and_the_turn_waits_on_that_one(self):
+        """A FIRST TURN WAITED ON ITS OWN RECALL (speed round, 2026-11-18): the one light model call that reads the closed tasks' titles ran
+        inside the turn, before the CLI was handed its prompt - ~3 s of ~4 on a store of a few hundred tasks. It starts as the owner's line
+        is taken (general.warm); the turn's brief waits on that same judgement. Asserted on the order of what happened, never on time:
+        the judgement was already under way when the turn asked for it, and the model was asked once."""
+        import threading
+        from taskuary import general, llm, terminal
+        s, tid, old = _known_world()
+        s._exec('UPDATE task SET Kind=? WHERE TaskId=?', ('general', tid))       # ...a chat, whose prompt reads the brief (context.for_prompt)
+        context._recalled.clear(); context._judging.clear()                      # ...nothing judged before the line
+        row = s.get_connector_by_type('openai')
+        s.save_connector({'ConnectorId': row['ConnectorId'], 'Active': 1, 'Secret': 'sk-test', 'Name': 'Work model', 'ConfigJson': '{"model":"gpt-test"}'}, 'owner')
+        ranked, asked, turn = [], [], threading.current_thread().name
+        pick = fake_embed.reader(PORTAL)
+        def rank(system, user, **k): ranked.append(threading.current_thread().name); return pick(system, user, **k)
+        def build_llm(*a, job=None, **k): return rank if job == 'rank' else (lambda *a, **k: 'Pay_people has no job code for the hire.')
+        real = context.recall
+        def recall(*a, **k):
+            asked.append(bool(getattr(context, '_judging', None)) or bool(context._recalled))   # under way (or made) as the turn asks?
+            return real(*a, **k)
+        with fake_embed.no_embedder(), mock.patch.object(llm, 'build_llm', build_llm), mock.patch.object(context, 'recall', recall), \
+             mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+            general.take_line(s, tid, 'Why does the new hire still show blank logins?')
+            user = general._prompt(s, tid)[1]
+        self.assertTrue(asked, 'the turn read what is known about its task')
+        self.assertTrue(asked[0], 'the turn asked for the judgement before anything had started it')
+        self.assertEqual(len(ranked), 1, f'the titles were read {len(ranked)} times')
+        self.assertNotEqual(ranked[0], turn, 'the judgement ran in the turn itself')
+        self.assertIn('pay_people', user)                                           # ...and the brief carries its picks
+
+    def test_the_judgements_kept_are_bounded(self):
+        with mock.patch.object(context, 'RECALL_KEPT', 3):
+            for i in range(5): context._keep(('s', i, 'about', ''), context.NOTHING, 60)
+        self.assertEqual([k[1] for k in context._recalled], [2, 3, 4])
+
     def test_a_strangers_task_recalls_nothing(self):
         s, tid, old = _known_world()
         s._exec('UPDATE task SET OriginBase=? WHERE TaskId=?', ('stranger', tid))

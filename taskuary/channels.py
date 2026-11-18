@@ -1102,16 +1102,15 @@ def reread_draft(store, tid, rv: dict, sent: dict, brain=None) -> str:
     line, draft = ' '.join(str(sent.get('BodyText') or '').split())[:2000], str(rv.get('DraftText') or '').strip()
     note = lambda t: tid and store.add_comment(tid, NOTE_ACTOR, 'assistant_agent', t)
     if not draft: return 'none'
-    # ...said in one line that never quotes the owner's words again: their line stands on the chat's left, just above (general.shown_history)
-    m = store.get_message(rv.get('AnswersMid') or rv.get('MessageId')) or {}
-    who = str(m.get('FromName') or '').strip() if m.get('FromName') != 'You' else ''
+    who = _answered_who(store, rv)
     got, left = reread(store, tid, draft, line, brain=brain)
     if got == 'covered':
-        store.decide_review(rv['ReviewId'], 'superseded', None, 'you', SET_ASIDE)      # ...greyed in place, as a mailbox reply's (retire_draft_answered_elsewhere)
+        from .proposals import SET_ASIDE      # ...greyed where it stood, as every card his answer moved past (retire_draft_answered_elsewhere)
+        store.decide_review(rv['ReviewId'], 'superseded', None, 'you', SET_ASIDE)
         if tid:
             from . import verdicts
             verdicts._settle_task_after_sent_reply(store, rv, 'you', True)
-        note(f"You answered {who or 'them'} yourself - no new response needed.")
+        note(answered_line(store, rv))
     elif got == 'partly' and left and store.update_review_draft(rv['ReviewId'], left, rv.get('RunId'), by=rv.get('DraftBy')):
         note(f"You answered {who or 'them'} on part of it yourself - the draft now says only what is still open.")
     elif got != 'none': got = 'unread'; note(CHECK_IT)
@@ -1119,12 +1118,29 @@ def reread_draft(store, tid, rv: dict, sent: dict, brain=None) -> str:
     return got or 'unread'
 
 
+def _answered_who(store, rv) -> str:
+    m = store.get_message(rv.get('AnswersMid') or rv.get('MessageId')) or {}
+    return str(m.get('FromName') or '').strip() if m.get('FromName') != 'You' else ''
+
+
+def answered_line(store, rv) -> str:
+    """What the task says when the owner's own answer settled reply `rv` - ONE line for a chat and a mail alike, that never quotes his words
+    again (they stand on the chat's left, just above - general.shown_history) and never says a draft was removed: it stands greyed where it was."""
+    return f"You answered {_answered_who(store, rv) or 'them'} yourself - no new response needed."
+
+
 def answered_drafts(store, tid, sent: dict) -> list:
-    "Task `tid`'s pending replies on the conversation the owner's own line `sent` is on, drafted before it: what that line may have answered."
+    """Task `tid`'s pending replies on the conversation the owner's own line `sent` is on, drafted before it: what that line may have answered.
+    ...and, where his line keeps whom it went to, only a reply to someone it reached: a forward to Gail keeps Erin's conversation and is no
+    answer to Erin (her draft stays the agent's to re-plan, as every input it hears)."""
+    from .context import _recipients
+    from .continuity import addressees
     conv, at = sent.get('ConversationId'), sent.get('SentAt')
     if not conv or not at: return []
+    went = {a.lower() for a in _recipients(sent)}
+    reached = lambda rv: not went or not (to := addressees(store, rv)) or bool(to & went)
     return [rv for rv in store.list_reviews('pending') if rv.get('TaskId') == tid and rv.get('Kind') != 'action'
-            and rv.get('ConversationId') == conv and (not rv.get('SentAt') or rv['SentAt'] <= at)]
+            and rv.get('ConversationId') == conv and (not rv.get('SentAt') or rv['SentAt'] <= at) and reached(rv)]
 
 
 # THE OWNER'S LINE ON A CHAT IS THE AGENT'S TO RE-PLAN (the owner, 2026-11-09: "if we respond show on left side and then agent reevaluates if
@@ -1172,11 +1188,10 @@ def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict, later: b
         stale = [rv for rv in stale if rv not in worded]
         if not stale: return []
 
-    # ...A CARD THE THREAD MOVED PAST (proposals.SET_ASIDE), as every other is (the stress round, 2026-11-18): retired under a note of its own,
-    # no surface drew it - the chat had no words for it, the page no card - and the draft he had seen waiting went from the chat. Set aside, it
-    # stays greyed where it stood with its words, saying what happened (proposals.passed_why: "Not sent - you answered Erin yourself")
+    # ...SET ASIDE BY THE ONE RULE A CARD THE CHAT MOVED PAST IS (proposals.passed): under a note of its own no surface read it as passed, so
+    # the chat had no words to draw greyed and the card went from it. Now it stays where it stood, greyed, and says why (passed_why: "Not
+    # sent - you answered Erin yourself") - on the chat, the task page and a press alike
     from .proposals import SET_ASIDE
-    place = SENT_FROM.get(sent.get('Channel'), 'outside Taskuary')
     for rv in stale:
         store.decide_review(rv['ReviewId'], 'superseded', None, 'you', SET_ASIDE)
 
@@ -1186,17 +1201,6 @@ def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict, later: b
         from . import verdicts
         verdicts._settle_task_after_sent_reply(store, stale[0], 'you', True)
 
-    task = store.get_task(tid) if tid else {}
-    body = re.sub(r'\s+', ' ', sent.get('BodyText') or '').strip()
-    excerpt = f': "{body[:180]}"' if body else ''
-    if not tid:
-        subject = (store.get_message(stale[0].get('MessageId')) or {}).get('Subject') or 'this thread'
-        where = subject
-        state = ''
-    else:
-        where = f'TQ-{tid:04d}'
-        from . import buttons
-        state = f" The task stays open until you {buttons.label('close')}." if task.get('Status') not in ('done', 'dropped') else ''
     # ...said in the Assistant's conversation - and never as a dead end: the page offers Next under the newest line that has
     # nothing to press (the owner, 2026-09-30: "it can write that and close task ... but then should move to next or at least
     # have buttons to navigate")
@@ -1205,8 +1209,8 @@ def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict, later: b
     # else"). The rail drops the row by itself; the task keeps the record.
     from . import funnel
     from .sessionrecord import NOTE_ACTOR
-    if tid: store.add_comment(tid, NOTE_ACTOR, 'assistant_agent', f'You replied {place} on {where}{excerpt}. '
-                                                                   f'I removed the unused draft; the reply was taken care of.{state}')
+    # ...in the one line a chat answer gets (answered_line): it quoted his words again under his own bubble, and said a draft "removed"
+    if tid: store.add_comment(tid, NOTE_ACTOR, 'assistant_agent', answered_line(store, stale[0]))
     funnel.invalidate()
     # The review transition already wakes the UI, but this final wake happens after the durable
     # Assistant line was written, avoiding a race where an open chat fetched one write too early.
@@ -1254,6 +1258,9 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
                              'Subject': msg.get('subject'), 'FromName': 'You', 'FromEmail': msg.get('from_email'),
                              'SentAt': msg.get('sent_at'), 'BodyText': msg.get('body'),
                              'OwnText': msg.get('own_text') or None,
+                             # ...and whom it went to, as an arrival keeps them (ingest): a forward to Gail on Erin's thread is no answer to Erin
+                             **({'RecipientsJson': json.dumps({'to': list(msg.get('to') or []), 'cc': list(msg.get('cc') or [])})}
+                                if msg.get('to') or msg.get('cc') else {}),
                              'SourceLink': msg.get('source_link'), 'Status': 'context', 'Direction': 'out',   # yours: outgoing (X1)
                              'MailMetaJson': json.dumps(msg.get('mail_meta')) if msg.get('mail_meta') else None})
     sent = store.get_message(mid) or {}
@@ -1276,7 +1283,13 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
         # - at once where its draft waits or it is at work (owner_line)
         if ingest.is_chat(msg): owner_line(store, tid, msg, mid, sent); return 1
         if not ingest.is_ack(store, sent):
-            ingest.thread_moved(store, tid, msg, mid, None, 'router', own=True)
+            went = ingest.thread_moved(store, tid, msg, mid, None, 'router', own=True)
+            # ...and a reply his mail did not answer (it went to others - answered_drafts) where no agent heard it: the arrival writer's draft
+            # on a task no agent worked stood greyed under his newer mail with nothing at work. It is owed still, the agent's to write as an
+            # arrival's is (reply_to_agent) - it reads the thread, his mail with it
+            left = [rv for rv in store.list_reviews('pending') if rv.get('TaskId') == tid and rv.get('Kind') in ('draft', 'draft_reply')
+                    and rv.get('ConversationId') == conv]
+            if not went and left: ingest._spawn(ingest.reply_to_agent, store, tid, left[0]['ReviewId'])
             # ...and every OTHER open task on the thread hears it too (the stress run, 2026-11-05): a follow-up that was a new ask made a
             # second task on one thread, the owner's answer was filed on the newer one, and the first's agent never heard that he had answered
             for other in sorted(set(on) - {tid}):
@@ -1289,7 +1302,7 @@ def ingest_outbound_mail(store, mailbox: str, m: dict) -> int:
     return ingest_own_message(store, {
         'external_id': f"graph:{m['id']}", 'channel': 'email', 'source_name': mailbox,
         'subject': m.get('subject'), 'from_email': mailbox, 'body': _body(m), 'own_text': _own(m),
-        'conversation_id': m.get('conversationId'), 'source_link': m.get('webLink'),
+        'to': _addrs(m.get('toRecipients')), 'cc': _addrs(m.get('ccRecipients')), 'conversation_id': m.get('conversationId'), 'source_link': m.get('webLink'),
         'sent_at': _local(m.get('receivedDateTime') or m.get('sentDateTime') or ''),
         'mail_meta': {'folder': 'sentitems', 'focus': m.get('inferenceClassification'),
                       'flag': (m.get('flag') or {}).get('flagStatus'), 'invite': is_invite(m)}},

@@ -118,6 +118,7 @@ def _install_fresh_routes(app, store):
         who, addr = ("Paula Vance", "paula@vendor.example") if body.get("stranger") else ("Erin Blake", "erin@northwind.example")
         mid = store.add_message({"TaskId": tid, "ExternalId": f"fx-{tid}", "Channel": "email", "FromName": who, "FromEmail": addr,
                                  "ToEmail": "alex@northwind.example", "Subject": body.get("title") or "Your review of the tool?", "SentAt": body.get("sent") or "2026-11-10 08:00:00",
+                                 "ConversationId": body.get("conversation"),
                                  "BodyText": f"Hi Alex, could you send me your review of the tool? Thanks, {who.split()[0]}", "Status": "routed"})
         # ...`owed`: the reply as arrival opens it - no words yet, the agent's to write (ingest: reply_to_agent); `needs`: and its drafter said why not
         if body.get("owed"):
@@ -222,7 +223,7 @@ def _install_fresh_routes(app, store):
         "The owner's own line on the task's channel, read back from it as a poll reads it (channels.ingest_own_message) - a recorded flood's third voice."
         from taskuary.channels import ingest_own_message
         ingest_own_message(store, {"external_id": body["id"], "channel": body.get("channel") or "email", "conversation_id": body["conversation"], "source_name": body.get("source") or "",
-                                   "subject": body.get("subject") or "", "body": body["body"]}, "your own reply on the thread - kept for context")
+                                   "subject": body.get("subject") or "", "body": body["body"], "sent_at": body.get("sent"), "to": body.get("to") or []}, "your own reply on the thread - kept for context")
         return {"ok": True}
 
     @app.post("/api/fixture/session")

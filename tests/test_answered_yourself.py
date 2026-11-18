@@ -211,6 +211,151 @@ class TheReplyHasToSurviveTheTrip(unittest.TestCase):
         self.assertEqual(s.get_review(rid)['Status'], 'pending')
 
 
+class TheDraftHisAnswerRetiredStaysWhereItStood(unittest.TestCase):
+    """A reply was drafted and waited; the owner answered from his mailbox instead. The draft was retired under a note of its own that no
+    surface reads as "passed", so the chat dropped the card: no `was` to draw greyed, and the page draws no superseded draft without one -
+    the card went from the chat (owner ruling: an answered card stays where it stood, greyed, saying why). Invented people only."""
+    def _world(self):
+        from taskuary.channels import ingest_outbound_mail
+        s = _store()
+        mid = s.add_message({'ExternalId': 'in-erin', 'ConversationId': 'c-erin', 'Channel': 'email', 'SourceName': 'alex@northwind.example',
+                             'Subject': 'Budget numbers', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
+                             'SentAt': '2026-11-17 08:00:00', 'BodyText': 'Can you send the Q3 numbers?', 'Status': 'routed'})
+        tid = s.create_task({'Title': 'Send the Q3 numbers', 'Kind': 'reply', 'Status': 'open'}, 'router')
+        s.attach_message(mid, tid)
+        rid = s.add_review({'MessageId': mid, 'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Erin, attached.'})
+        # ...as time had it: her mail came in at 08:00, the draft was written at 08:05, he answered at 09:00
+        s._exec("UPDATE message SET CreatedAt='2026-11-17 08:00:00' WHERE MessageId=?", (mid,))
+        s._exec("UPDATE route SET CreatedAt='2026-11-17 08:00:00' WHERE MessageId=?", (mid,))
+        s._exec("UPDATE review SET CreatedAt='2026-11-17 08:05:00' WHERE ReviewId=?", (rid,))
+        ingest_outbound_mail(s, 'alex@northwind.example', {'id': 'out-1', 'subject': 'RE: Budget numbers', 'conversationId': 'c-erin',
+                                                            'bodyPreview': 'Here they are.', 'sentDateTime': '2026-11-17T09:00:00'})
+        return s, tid, rid
+
+    def test_the_card_stays_greyed_with_its_words_and_says_he_answered(self):
+        from taskuary import conversation
+        s, tid, rid = self._world()
+        card = next(c for x in conversation.items(s, tid)['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])
+                    if c['review'] == rid)
+        self.assertEqual(card['status'], 'passed', card)
+        self.assertEqual(card.get('was', {}).get('text'), 'Hi Erin, attached.')
+        self.assertEqual(card.get('why'), 'Not sent - you answered Erin Blake yourself')
+
+    def test_the_task_says_it_in_one_line_never_his_words_again_nor_a_draft_removed(self):
+        """The note said "You replied from your mailbox on TQ-0001: "Here they are.". I removed the unused draft" - his words a second time
+        under his own bubble, and a draft "removed" that stands greyed in the chat. One line, the one a chat answer gets (reread_draft)."""
+        from taskuary.sessionrecord import NOTE_ACTOR
+        s, tid, rid = self._world()
+        said = [c['Body'] for c in s.list_comments(tid) if c['Actor'] == NOTE_ACTOR]
+        self.assertEqual(said, ['You answered Erin Blake yourself - no new response needed.'])
+
+    def test_the_task_page_reads_it_the_same(self):
+        from fastapi.testclient import TestClient
+        from unittest import mock
+        from taskuary import server
+        s, tid, rid = self._world()
+        with mock.patch.object(server, 'store', s):
+            r = next(r for r in TestClient(server.app).get(f'/api/tasks/{tid}').json()['reviews'] if r['ReviewId'] == rid)
+        self.assertEqual(r.get('Why'), 'Not sent - you answered Erin Blake yourself')
+
+
+    def test_mail_polled_together_after_a_restart_still_says_he_answered(self):
+        """Taskuary was off overnight. Erin wrote at 08:00 and he answered from his phone at 09:00; at 10:00 the poll took her mail in, the
+        draft was written, and the Sent folder's read brought his answer. His mail was placed by when he SENT it, hers by when it ARRIVED, so
+        the card read "written before the agent read Erin Blake's new message" - over a draft his own answer had retired."""
+        from taskuary import conversation
+        from taskuary.channels import ingest_outbound_mail
+        s = _store()
+        mid = s.add_message({'ExternalId': 'in-erin2', 'ConversationId': 'c-erin2', 'Channel': 'email', 'SourceName': 'alex@northwind.example',
+                             'Subject': 'Budget numbers', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
+                             'SentAt': '2026-11-17 08:00:00', 'BodyText': 'Can you send the Q3 numbers?', 'Status': 'routed'})
+        tid = s.create_task({'Title': 'Send the Q3 numbers', 'Kind': 'reply', 'Status': 'open'}, 'router')
+        s.attach_message(mid, tid)
+        rid = s.add_review({'MessageId': mid, 'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Erin, attached.'})
+        s._exec("UPDATE message SET CreatedAt='2026-11-17 10:00:00' WHERE MessageId=?", (mid,))
+        s._exec("UPDATE route SET CreatedAt='2026-11-17 10:00:00' WHERE MessageId=?", (mid,))
+        s._exec("UPDATE review SET CreatedAt='2026-11-17 10:00:05' WHERE ReviewId=?", (rid,))
+        ingest_outbound_mail(s, 'alex@northwind.example', {'id': 'out-2', 'subject': 'RE: Budget numbers', 'conversationId': 'c-erin2',
+                                                            'bodyPreview': 'Here they are.', 'sentDateTime': '2026-11-17T09:00:00'})
+        s._exec("UPDATE message SET CreatedAt='2026-11-17 10:00:10' WHERE ExternalId='graph:out-2'")
+        card = next(c for x in conversation.items(s, tid)['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])
+                    if c['review'] == rid)
+        self.assertEqual(card.get('why'), 'Not sent - you answered Erin Blake yourself')
+
+
+    def test_a_late_press_on_a_taskless_draft_he_answered_says_so(self):
+        """A reply to filed mail has no task. Retired by his answer, a press on it from a stale page crashed reading the task it lacks."""
+        from taskuary import verdicts
+        from taskuary.channels import ingest_outbound_mail
+        s = _store()
+        mid = s.add_message({'ExternalId': 'in-fyi', 'ConversationId': 'c-fyi', 'Channel': 'email', 'FromName': 'Erin Blake',
+                             'FromEmail': 'erin@northwind.example', 'SentAt': '2026-11-17 08:00:00', 'BodyText': 'Quick one?', 'Status': 'filed'})
+        rid = s.add_review({'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Yes.'})
+        ingest_outbound_mail(s, 'alex@northwind.example', {'id': 'out-fyi', 'conversationId': 'c-fyi', 'bodyPreview': 'Yes, go ahead.',
+                                                            'sentDateTime': '2026-11-17T09:00:00'})
+        out = verdicts.decide(s, s.get_review(rid), 'approve', 'Yes.')
+        self.assertFalse(out['ok'])
+        self.assertEqual(out['send_error'], 'Not sent - you answered Erin Blake yourself')
+
+class AForwardIsNotTheAnswer(unittest.TestCase):
+    """Erin asked; a reply to her waited. The owner forwarded her mail to Gail from Outlook - the forward keeps the conversation. Stored with
+    no recipients, it read as his answer to Erin: her draft was retired and the chat said "you answered Erin Blake yourself". His mail now
+    keeps whom it went to, and only a draft to someone it reached is answered by it; the rest is the agent's to re-plan."""
+    def _world(self, to, cc=()):
+        from taskuary.channels import ingest_outbound_mail
+        s = _store()
+        mid = s.add_message({'ExternalId': 'in-fw', 'ConversationId': 'c-fw', 'Channel': 'email', 'SourceName': 'alex@northwind.example',
+                             'Subject': 'Budget numbers', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
+                             'SentAt': '2026-11-17 08:00:00', 'BodyText': 'Can you send the Q3 numbers?', 'Status': 'routed'})
+        tid = s.create_task({'Title': 'Send the Q3 numbers', 'Kind': 'reply', 'Status': 'open'}, 'router')
+        s.attach_message(mid, tid)
+        rid = s.add_review({'MessageId': mid, 'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Erin, attached.'})
+        s._exec("UPDATE message SET CreatedAt='2026-11-17 08:00:00' WHERE MessageId=?", (mid,))
+        s._exec("UPDATE route SET CreatedAt='2026-11-17 08:00:00' WHERE MessageId=?", (mid,))
+        s._exec("UPDATE review SET CreatedAt='2026-11-17 08:05:00' WHERE ReviewId=?", (rid,))
+        rcpt = lambda xs: [{'emailAddress': {'address': a}} for a in xs]
+        ingest_outbound_mail(s, 'alex@northwind.example', {'id': 'out-fw', 'subject': 'FW: Budget numbers', 'conversationId': 'c-fw',
+                                                            'bodyPreview': 'Gail - can you pull these?', 'sentDateTime': '2026-11-17T09:00:00',
+                                                            'toRecipients': rcpt(to), 'ccRecipients': rcpt(cc)})
+        return s, tid, rid
+
+    def test_a_forward_to_someone_else_leaves_her_draft_to_the_agent(self):
+        s, tid, rid = self._world(['gail@northwind.example'])
+        self.assertEqual(s.get_review(rid)['Status'], 'pending')
+        self.assertFalse([c for c in s.list_comments(tid) if 'removed the unused draft' in c['Body']])
+        own = s.get_message(s.thread_messages('c-fw')[-1]['MessageId'])
+        self.assertIn('gail@northwind.example', own['RecipientsJson'])
+
+    def test_when_the_agent_hears_it_the_card_says_whom_he_wrote_to(self):
+        from taskuary import conversation
+        s, tid, rid = self._world(['gail@northwind.example'])
+        card = next(c for x in conversation.items(s, tid)['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])
+                    if c['review'] == rid)
+        self.assertEqual(card['status'], 'passed')                      # greyed as every card an input moved past, until its agent hears it
+        self.assertNotIn('Erin', card.get('why') or '', card)
+        self.assertIn('gail@northwind.example', card.get('why') or '', card)
+
+    def test_with_no_agent_to_hear_it_her_reply_goes_to_an_agent_to_write(self):
+        """The reply was the arrival writer's - no agent conversation on the task, so none hears his forward. Greyed as moved past (the chat
+        moved on), with nothing at work and nothing lit, it was a dead end. The reply owed goes to an agent to write, as an arrival's does."""
+        from unittest import mock
+        from taskuary import ingest
+        with mock.patch.object(ingest, '_spawn') as spawn:
+            s, tid, rid = self._world(['gail@northwind.example'])
+        handed = [c.args for c in spawn.call_args_list if c.args and c.args[0] is ingest.reply_to_agent]
+        self.assertEqual([(a[2], a[3]) for a in handed], [(tid, rid)], spawn.call_args_list)
+
+    def test_a_reply_to_her_with_gail_copied_still_answers_her(self):
+        s, tid, rid = self._world(['Erin@northwind.example'], ['gail@northwind.example'])
+        self.assertEqual(s.get_review(rid)['Status'], 'superseded')
+
+    def test_the_agent_is_told_whom_his_mail_went_to(self):
+        from taskuary import ingest
+        turn = ingest.replan_turn({'channel': 'email', 'body': 'Gail - can you pull these?', 'to': ['gail@northwind.example']}, own=True)
+        self.assertIn('to gail@northwind.example', turn.splitlines()[0])
+        self.assertNotIn('already answered', turn.splitlines()[0])
+
+
 class TheBallIsInTheirCourt(unittest.TestCase):
     """You answered and they have not. The row read "on your list - nobody is on this" for the
     whole of that wait, so "needs me" counted every thread the owner had just dealt with."""

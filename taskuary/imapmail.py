@@ -732,6 +732,7 @@ def poll_sent(store, M, user: str, last_uid: int, days: int, state: dict = None)
                                         validity=state.get('validity'), mode=state.get('mode', 'legacy')),
             'channel': 'email', 'source_name': user,
             'subject': _dec(msg.get('Subject')), 'body': body[:20000], 'from_email': user, 'sent_at': when,
+            'to': _hdr_addrs(msg, 'To'), 'cc': _hdr_addrs(msg, 'Cc'),
             # the SAME thread key the inbound side derives, or the reply lands on nothing
             'conversation_id': conversation_key(store, msg, user, thrid), 'mail_meta': mail_ids(msg, thrid)},
             'your reply on this thread - kept for context')

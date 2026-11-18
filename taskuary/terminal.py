@@ -874,7 +874,7 @@ def _stranger_msg(store, m: dict) -> str:
     return (f"FROM {m.get('FromName') or m.get('FromEmail') or m.get('Channel')} ({m.get('SentAt') or ''}), subject \"{m.get('Subject') or ''}\":\n"
             f"{m.get('BodyText') or ''}" + (f"\nFILES: {files}" if files else ''))
 
-def resume_seed(instruction: str = '', store=None, tid: int = None) -> str:
+def resume_seed(instruction: str = '', store=None, tid: int = None, pressed: bool = True) -> str:
     """What a reopened conversation is told. Not seed_text's dossier: the CLI still holds the task,
     the messages and what it already did - repeating them invites it to start the job again.
 
@@ -887,7 +887,9 @@ def resume_seed(instruction: str = '', store=None, tid: int = None) -> str:
     # THE OWNER'S WORDS LEAD (the owner, 2026-09-27: "i wrote message but it did not show up in prompt"): appended after
     # the canned paragraph they read as part of it, and the pane showed a wall of our text with theirs as its last words
     note = str(instruction or '').strip()
-    parts = ([f'FROM THE OWNER: {note}'] if note else []) + [RESUME_PROMPT]
+    # ...RESUME'S WORDS ONLY FOR HIS RESUME (`pressed`; the coding hammer, 2026-11-18): a line he typed after the agent died reopened it told
+    # "The owner chose Resume ... restate that one question and wait" - nobody had pressed it, and his line is the turn
+    parts = ([f'FROM THE OWNER: {note}'] if note else []) + ([RESUME_PROMPT] if pressed or not note else [])
     if store is not None and tid:
         try:
             from . import context as ctx
@@ -2386,6 +2388,7 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
     `quiet` reopens a `resume`d conversation with nothing typed into it: the agent is back where it stopped, at its prompt
     (server.resume_asking - an agent a restart cut off while it asked the owner gets back to waiting, and does nothing new)."""
     import json
+    from . import workerstate as ws
     t = store.get_task(tid)
     if not t: raise ValueError(f'no task {tid}')
     # ...A FILE HE ATTACHED TO THE START IS THE TASK'S (outputs.take_in_text, as a line's and a New task's are): Start and Restart name it in
@@ -2475,7 +2478,7 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
             term = open_session(store, agent, tid, repo, continued_cwd, 0, 0, actor,
                                 model if i == 0 else None, resume=resume,
                                 brain=candidate or None,
-                                seed_fn=(None if quiet else lambda here: resume_seed(instruction, store, tid)) if resume else
+                                seed_fn=(None if quiet else lambda here: resume_seed(instruction, store, tid, pressed=not ws.ours(actor))) if resume else
                                         (lambda here, r=repo, c=candidate: seed_text(store, tid, instruction, r, here, instruction_theirs,
                                                                             cli=c or cli_named(json.loads(row.get('Config') or '{}')))))
             chosen = candidate or cli_named(json.loads(row.get('Config') or '{}'))

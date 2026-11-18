@@ -63,8 +63,8 @@ const JOBS = {
   email100: { world: "contacts", title: "Invite 100 contacts to the open house",
     ask: () => `Email everyone in ${worlds.contacts()} to invite them to our open house on Thursday 4 December, 5-7pm at Northwind, 12 Harbor St. ` +
       "Personalise each one with their first name and company, and mention their last event if they came to one. Then tell me how many went out." },
-  signups: { world: "signups", title: "Market data from ten vendors",
-    ask: async () => `Sign up for a free account on each of the ten data vendors listed at ${await worlds.signups()}/ using my work email alex@northwind.example, ` +
+  signups: { world: "signups", title: "Market data from every vendor",
+    ask: async () => `Sign up for a free account on each of the data vendors listed at ${await worlds.signups()}/ using my work email alex@northwind.example, ` +
       "collect each one's table, and put them together into one sheet by city with a column per vendor. Tell me which ones you could not get and why." },
   report: { world: null, title: null, ask: "Which site is closest to a cap of 140 people, and draft a note to its manager about it." },
   // ...one letter, to say no to (JOB_REJECT): its card has its own Don't send

@@ -15,7 +15,10 @@ SITES = [('rentscope', 'RentScope', 'asking rent per sq ft', ''), ('vacancyiq', 
          ('parcelpulse', 'ParcelPulse', 'tax-delinquent parcels', 'plan'), ('capratehub', 'CapRateHub', 'average cap rate %', 'wizard'),
          ('permitwatch', 'PermitWatch', 'building permits filed', 'sum'), ('lienlens', 'LienLens', 'new liens filed', 'emailcode'),
          ('footfall', 'Footfall', 'weekly foot traffic (k)', ''), ('zoningnow', 'ZoningNow', 'rezoning applications', 'phone'),
-         ('dealflowpro', 'DealFlow Pro', 'off-market listings', 'payment'), ('tenantpulse', 'TenantPulse', 'lease renewals %', '')]
+         ('dealflowpro', 'DealFlow Pro', 'off-market listings', 'payment'), ('tenantpulse', 'TenantPulse', 'lease renewals %', ''),
+         # ...and the web as it also is: a site that crashes on its form, one that never answers it, one that turns automated visitors away
+         ('quotabase', 'QuotaBase', 'office rents quoted', 'crash'), ('slowstat', 'SlowStat', 'construction starts', 'hang'),
+         ('botwall', 'BotWall', 'retail closures', 'blocked')]
 HOST = {s: f'127.0.0.{i + 2}' for i, (s, *_) in enumerate(SITES)}     # each vendor its own site, as real vendors are
 DATA = {s: [(c, round(r.uniform(5, 95), 1)) for c in CITIES] for s, *_ in SITES}
 USERS, SESS, CODES = {}, {}, {}     # (slug, email) -> {..}; cookie -> (slug, email); (slug, email) -> code
@@ -65,6 +68,8 @@ class H(BaseHTTPRequestHandler):
         who = self._who(); mine = who and who[0] == site and USERS.get(who, {}).get('ok')
         if act == '': return self._send(200, page(site, 'Welcome', f'<p>{name} publishes {what} by city. Free accounts see the table.</p>'
                                                   f'<p><a href="/s/{site}/signup">Sign up</a> · <a href="/s/{site}/login">Sign in</a> · <a href="/s/{site}/data">Data</a></p>'))
+        if act == 'signup' and extra == 'blocked':
+            return self._send(403, page(site, 'Access denied', '<p>Automated access to this site is not allowed. If you are a person, contact sales@ to request an account.</p>'))
         if act == 'signup':
             fields = BASE + ([('Plan (free or pro)', 'plan', 'text')] if extra == 'plan' else []) + ([('What is 7 plus 5?', 'sum', 'text')] if extra == 'sum' else []) \
                 + ([('Mobile phone (we text you a login code)', 'phone', 'tel')] if extra == 'phone' else [])
@@ -100,6 +105,9 @@ class H(BaseHTTPRequestHandler):
         def again(err, fields=None):
             fields = fields or ([('Full name', 'name', 'text'), ('Work email', 'email', 'email')] if extra == 'wizard' else BASE)
             return self._send(400, page(site, 'Create your account', form(site, 'signup', fields, 'Next' if extra == 'wizard' else 'Create account', err=err)))
+        if act == 'signup' and extra == 'crash':
+            return self._send(500, b'<!doctype html><title>500</title><h1>Internal Server Error</h1><p>Something went wrong. Please try again later.</p>')
+        if act == 'signup' and extra == 'hang': time.sleep(600); return
         if act == 'signup':
             email = (f.get('email') or '').strip().lower()
             if '@' not in email or not f.get('name'): return again('Name and a valid email are needed.')

@@ -169,6 +169,11 @@ test("the working line goes when the turn has ended, for every agent and every w
   // ...the server restarted after the turn had ended, and the page read again
   await run("chat-restart-after", { line: "is Wednesday free?", after: async ({ page, tid }) => { await w.restart(); await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForSelector("[data-tq-task-page] [data-tq-agent-room]", { timeout: 60000 }); await watch(page, tid); } });
+  await run("acp-restart-mid", { kind: "acp", line: "take your time on the ledger", during: async () => { await new Promise((r) => setTimeout(r, 4000)); await w.restart(); } });
+  // ...the page read again while its turn works, and again once it has answered
+  await run("chat-reload-mid", { line: "take your time and reload", during: async ({ page, tid }) => {
+    await new Promise((r) => setTimeout(r, 3000)); await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector("[data-tq-task-page] [data-tq-agent-room]", { timeout: 60000 }); await watch(page, tid); } });
   // ...and the terminal road last but one: the fixture switches the home's coding agents to it (agents.ACP_SETTING)
   await run("pty-answer", { kind: "pty", line: "comment the totals in the terminal" });
   // ...last: an adapter that died mid-turn sends the coding tasks after it to their CLI's terminal (acpcoding.FELL_BACK)

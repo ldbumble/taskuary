@@ -3550,7 +3550,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       // (the owner, 2026-10-27) - unless it holds a question the agent is waiting on you for, which is the move itself
                       // ...or that is at work again - a turn under way is the move, never a rest (2026-10-28, CI: a working agent's chat stood hidden)
                       // ...or holds a draft waiting for its Send
-                      ...(!chatPane && (resultRest || (failedRun && !resultOpen)) ? { "&:not(:has([data-tq-asking], [data-tq-agent-notice], .tq-aui-band, .tq-aui-thinking, .tq-aui-thread [data-tq-working], [data-tq-waits], [data-tq-on-you]))": { display: "none" } } : {}) }}>
+                      ...(!chatPane && (resultRest || (failedRun && !resultOpen)) ? { "&:not(:has([data-tq-asking], [data-tq-agent-notice], .tq-aui-thinking, .tq-aui-thread [data-tq-working], [data-tq-waits], [data-tq-on-you]))": { display: "none" } } : {}) }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       {/* ONE CHAT FOR EVERY KIND (the owner, 2026-11-06: "one shared chat object for coding and regular"): the component reads its own
                           source (chatStream.chatSource) - a coding task's sessions, or the general agent's conversation - and the branch's landing

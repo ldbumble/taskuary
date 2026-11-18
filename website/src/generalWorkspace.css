@@ -53,39 +53,12 @@
 .tq-aui-live-earlier > .tq-aui-steps { margin: 2px 0 0; }
 /* the question keeps a readable width and the choices WRAP below it - unshrinkable choices beside a long question squeezed
    it to one word a line in a half-width chat (the 2026-10-08 portal run) */
-.tq-aui-progress { margin: 0 0 8px; border: 1px dashed var(--tq-border, #ddd7cd); border-radius: 9px; color: var(--tq-muted, #77766f); font-size: 11.5px; }
-.tq-aui-progress summary { cursor: pointer; padding: 6px 9px; font-weight: 600; color: var(--tq-secondary, #676b64); }
-.tq-aui-progress > div { padding: 0 9px 8px; white-space: pre-wrap; line-height: 1.45; }
-.tq-aui-tool { margin: 0 0 7px; border: 1px solid var(--tq-border, #ddd8cf); border-radius: 9px; background: var(--tq-panel, #faf8f4); overflow: hidden; }
-.tq-aui-tool summary { min-height: 31px; padding: 5px 9px; display: flex; align-items: center; gap: 7px; cursor: pointer; list-style: none; font-size: 11.5px; }
-.tq-aui-tool summary::-webkit-details-marker { display: none; }
-.tq-aui-tool summary b { color: var(--tq-secondary, #4d514b); }
-.tq-aui-tool summary span:not(.tq-aui-tool-dot) { color: var(--tq-muted, #858078); overflow-wrap: anywhere; word-break: break-word; }
-.tq-aui-tool summary em { margin-left: auto; color: var(--tq-muted, #8d897f); font: 9px/1.2 'Cascadia Mono', Consolas, monospace; font-style: normal; text-transform: uppercase; }
-.tq-aui-tool pre { margin: 0; padding: 8px 10px; max-height: 220px; overflow-x: hidden; overflow-y: auto; border-top: 1px solid var(--tq-border, #e5e0d8); background: #22231f; color: var(--tq-muted, #e8e4dc); font: 10.5px/1.45 'Cascadia Mono', Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
-/* AN AGENT AT WORK. One band above the trail: who, what it is doing right now, how far in, how
-   long - and the sources it is already holding. The dock never renders this; it is the assistant
-   that helps you run Taskuary, not an agent on a job. */
-.tq-aui-band { width: 100%; margin: 0 auto 14px; padding: 9px 12px; background: var(--tq-panel, #fff);
-  border: 1px solid var(--tq-border, #d8d2c6); border-left: 3px solid var(--tq-border-strong, #6f8a6e); border-radius: 0 9px 9px 0; }
-.tq-aui-band-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.tq-aui-band-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #6f8a6e;
-  align-self: center; animation: tqAuiPulse 1.6s ease-in-out infinite; }
-.tq-aui-band-head b { font: 600 10px/1.4 'Cascadia Mono', Consolas, monospace; letter-spacing: .13em;
-  text-transform: uppercase; color: var(--tq-secondary, #4d514b); }
-.tq-aui-band-head span { font-size: 12.5px; font-weight: 600; color: var(--tq-text, #292824); }
-.tq-aui-band-head em { margin-left: auto; font-style: normal; font-variant-numeric: tabular-nums;
-  font: 500 11px/1.4 'Cascadia Mono', Consolas, monospace; color: var(--tq-muted, #8b877e); }
-@media (max-width: 700px) { .tq-aui-band { width: 100%; } }
 
 /* A finished tool call is history. Six of them, each ending in the word COMPLETE - wrapped mid-word
    to COMPLET/E and WebFetc/h - were the loudest thing on a working page (the owner's screenshots,
    2026-09-08). The word goes; what is still RUNNING keeps its say. The dock is left as it was. */
-.tq-aui-tool summary b { white-space: nowrap; flex: 0 0 auto; }
 .tq-aui-tool-complete summary { min-height: 26px; }
 .tq-aui-tool-complete summary em { display: none; }
-.tq-aui-dock .tq-aui-tool-complete summary { min-height: 31px; }
-.tq-aui-dock .tq-aui-tool-complete summary em { display: block; }
 .tq-aui-tool-running summary em { color: var(--tq-warning, #8a6d1f); white-space: nowrap; }
 .tq-aui-thinking { display: flex; align-items: center; gap: 5px; margin: 0 0 10px; }
 /* ...and a drop of room over the dots where the turn has said or done something (the owner, 2026-11-11: "the ... are too close to the line
@@ -125,18 +98,6 @@
 [data-tq-canvas-item] .tq-aui-hint:not([role]) { display: none; }
 .tq-aui-dock-expanded .tq-aui-message { width: 100%; grid-template-columns: 72px minmax(0, 1fr); gap: 10px; }
 .tq-aui-dock-expanded .tq-aui-viewport { padding: 22px 24px 12px; }
-.tq-dock-actions { width: 100%; margin: 2px auto 12px; padding: 10px; border: 1px solid var(--tq-border, #d6cec1); border-left: 4px solid #98743e; border-radius: 12px; background: var(--tq-panel, #fffdf9); box-shadow: 0 5px 18px rgba(51, 45, 35, .07); box-sizing: border-box; }
-.tq-dock-actions-expanded { width: 100%; padding: 13px 14px; }
-.tq-dock-action-kicker { min-height: 22px; display: flex; align-items: center; gap: 7px; color: var(--tq-warning, #8d6b38); font: 600 9px/1.2 'Cascadia Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; }
-.tq-dock-action-kicker em { color: var(--tq-muted, #989188); font-style: normal; letter-spacing: .04em; text-transform: none; }
-.tq-dock-action-nav { margin-left: auto; display: flex; }
-.tq-dock-action-nav button { width: 24px; height: 24px; color: var(--tq-warning, #766f64); }
-.tq-dock-action-head { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
-.tq-dock-action-head > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.tq-dock-action-head b { color: var(--tq-text, #34342f); font-size: 12.5px; line-height: 1.35; overflow-wrap: anywhere; }
-.tq-dock-action-head span { margin-top: 2px; color: var(--tq-muted, #817c73); font-size: 10.5px; overflow-wrap: anywhere; }
-.tq-dock-action-buttons { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.tq-dock-action-buttons button { text-transform: none; font-size: 10.75px; }
 @media (max-width: 700px) {
   .tq-aui-viewport { padding-left: 10px; padding-right: 10px; }
   .tq-aui-message { width: 100%; grid-template-columns: 1fr; gap: 3px; }

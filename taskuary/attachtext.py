@@ -134,6 +134,22 @@ def of_items(items) -> list:
     return out
 
 
+def of_paths(paths) -> list:
+    """Entries for files on this computer - what the owner attached to a line (server.prompt_images has already said they are
+    Taskuary's own uploads). Pictures are skipped: the vision road shows them."""
+    import mimetypes
+    out = []
+    for raw in paths or []:
+        p = Path(str(raw))
+        if _skipped(p.name, mimetypes.guess_type(p.name)[0]): continue
+        try: size = p.stat().st_size
+        except OSError: out.append({'name': p.name, 'note': 'could not be read'}); continue
+        if size > READ_BYTES: out.append({'name': p.name, 'note': f'{_mb(size)}, over the {_mb(READ_BYTES)} read limit'}); continue
+        try: out.append(read(p.name, p.read_bytes()))
+        except OSError: out.append({'name': p.name, 'note': 'could not be read'})
+    return out
+
+
 def of_message(store, mid, links: bool = True) -> list:
     """Entries for the attachments saved on one message (store.list_attachments rows) - and, after them, for the documents its
     body LINKS to (linkdocs: a shared sheet, a SharePoint file, a contract PDF on the web), read through the card that owns each."""

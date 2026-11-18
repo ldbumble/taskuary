@@ -1390,3 +1390,26 @@ class SettleBadge(unittest.TestCase):
             self.assertEqual(c.post('/api/funnel/settle', json={'key': 'fyis:msg:1,msg:2', 'pressed': buttons.label('next', 'batch')}).status_code, 200)
             c.post('/api/funnel/settle', json={'key': 'fyis:msg:3', 'pressed': 'Anything I like'})
         self.assertEqual(cards(), {'fyis:msg:1,msg:2': 'All read, next', 'fyis:msg:3': None})
+
+
+class AttachedFileTests(unittest.TestCase):
+    """A FILE ON THE CHAT LINE IS READ, not named (the hammer round, 2026-11-18): a sheet or a PDF dropped into the Assistant's box reached
+    its prompt as a disk path - the API brain has no way to open a path, and the CLI one runs with its tools off - so "what is the total in
+    this?" was answered without the file. Its text rides in the prompt (attachtext, the triage road's reader), fenced as material."""
+    def test_a_sheet_attached_to_a_line_reaches_the_prompt_as_its_words(self):
+        import tempfile, os
+        from pathlib import Path
+        from taskuary import config
+        home = tempfile.mkdtemp()
+        with mock.patch.dict(os.environ, {'TASKUARY_HOME': home}):
+            d = config.home() / 'attachments' / 'prompt' / '202611'; d.mkdir(parents=True, exist_ok=True)
+            sheet = d / '20261118-090000-abc123-vendor-totals.csv'
+            sheet.write_text('vendor,amount\nPayworth,4180.00\nTrainly,912.50\n', encoding='utf-8')
+            seen = {}
+            def llm(system, user, max_tokens=0, images=None):
+                seen['user'], seen['images'] = user, images; return 'Payworth is 4,180.00 of it.'
+            out = concierge.say(store(), 'what is the biggest line in this?', images=[str(sheet)], llm=llm)
+        self.assertIn('Payworth,4180.00', seen['user'])            # what the sheet SAYS, not only where it lies
+        self.assertIn('⟦', seen['user'])                           # ...fenced: what its author wrote is material, never an order
+        self.assertFalse(seen['images'])                           # a sheet is no picture: nothing goes down the vision road
+        self.assertEqual(out['say'], 'Payworth is 4,180.00 of it.')

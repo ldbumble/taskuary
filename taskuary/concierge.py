@@ -31,7 +31,7 @@ from .timewords import plural
 from . import funnel, general, llm as llm_mod, store as store_mod, toolcatalog
 from .redact import scrub as _scrub
 from .assistant import _ts
-from . import asks, buttons, lanes, operations, timewords, workerstate as ws, words as places
+from . import asks, attachtext, buttons, lanes, operations, timewords, workerstate as ws, words as places
 from . import bulk as bulk_mod
 from .store import task_ref, TQ_REF
 
@@ -6214,6 +6214,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       + f"{OWNER_SAYS}{text}\n"
                       # A PICTURE WITH THE LINE (the owner, 2026-09-30): an API brain sees it, a CLI brain reads the file it names
                       + (f"{general.files_head(images)} (read these files - they are what the owner is showing you)\n" + "\n".join(images) + "\n" if images else '')
+                      # ...and WHAT A FILE SAYS, read here (attachtext): the API brain cannot open a path, and the CLI one runs with its tools off
+                      + (f"{said}\n" if images and (said := attachtext.block(attachtext.of_paths(images), 'WHAT THE ATTACHED FILES SAY')) else '')
                       + 'Answer them, briefly.')                        # the rest of how is the instructions' (TURN_GUIDE)
         raw = _view_lines(str(llm(system, asked, max_tokens=MAX_TOKENS, **({'images': general._images(images)} if images else {})) or '').strip())
         rail_read(llm, tid, rail, rail_sent)

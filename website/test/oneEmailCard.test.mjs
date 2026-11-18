@@ -30,3 +30,14 @@ test("a reply's card reads its subject off the mail it answers, which the task's
   const store = readFileSync(new URL("../../taskuary/store.py", import.meta.url), "utf8");
   assert.match(store, /m\.ConversationId, m\.Subject FROM review rv /);
 });
+
+// the visual pass (2026-11-18): To was the app's plain label while CC, BCC and Subject were green 9.5px capitals spaced out - four field
+// names on one card in two styles, "SUBJECT" shouting under "To"
+test("the email card's field names wear one label", () => {
+  const ui = src("ui.jsx");
+  for (const row of ["export const ToRow", "export const CcRow", "export const SubjectRow"]) {
+    const body = ui.slice(ui.indexOf(row), ui.indexOf("\n};", ui.indexOf(row)));
+    assert.match(body, /<Typography sx=\{\{ \.\.\.label, flexShrink: 0 \}\}>(To|\{name\}|Subject)<\/Typography>/, row);
+    assert.doesNotMatch(body, /letterSpacing: "1\.5px"/, row);
+  }
+});

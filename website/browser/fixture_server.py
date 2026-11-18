@@ -287,7 +287,10 @@ def _install_fresh_routes(app, store):
             if body.get("delay"): time.sleep(float(body["delay"]))          # ...a mailbox that takes its time over each send (browser/bulk-card-queue)
             keep = lambda v: v if isinstance(v, (str, list, int, type(None))) else type(v).__name__
             with box.open("a", encoding="utf-8") as f: f.write(json.dumps({"args": [keep(x) for x in a[1:]], "kw": {n: keep(v) for n, v in k.items()}}, default=str) + "\n")
-            return {"channel": "email", "to": k.get("to") or ["gail@northwind.example"], "cc": k.get("cc") or []}
+            # ...whom it went to as the send was given it: send_out takes `to` third in line, a reply by name - "gail@" for every new email told
+            # its agent both went to the wrong person (the real-CLI card walk, 2026-11-18)
+            to = k.get("to") or (a[2] if len(a) > 2 and isinstance(a[2], (list, str)) and a[0] is not None and isinstance(a[1], str) else None)
+            return {"channel": "email", "to": ([to] if isinstance(to, str) else to) or ["gail@northwind.example"], "cc": k.get("cc") or []}
         outbound.send_out = outbound.reply_to_message = out
         outbound.send_block = lambda *a, **k: ""; outbound.review_connect = lambda *a, **k: None
         server._refresh_chat_context = lambda *a, **k: {}          # no mailbox to read before a Send

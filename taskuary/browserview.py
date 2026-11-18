@@ -170,7 +170,10 @@ def state(sid: str, fresh: bool = False) -> dict:
     # ...AND ITS CHROME ANSWERS (0.4.0.15: any agent-browser command of the session before Taskuary started its Chrome - the agent's own, a
     # `get url` - left a helper pointed at a port nobody listened on; its stream answered, so the browser read "open", start() launched
     # nothing, and every command after timed out with no Chrome running at all)
-    st = {'open': bool(port) and _listening(port) and chrome_up(sid), 'url': last.get('url') or url, 'port': port}
+    up = bool(port) and _listening(port) and chrome_up(sid)
+    # ...AND THE TAB'S OWN ADDRESS OVER THE FILE'S: agent-browser rewrites .target only at its next command, so after an open that errored or
+    # never finished it named the page before - a sign-in asked and pinned for the last site, a hand-over named for it (2026-11-18)
+    st = {'open': up, 'url': (up and tab_url(sid)) or last.get('url') or url, 'port': port}
     _CACHE[sid] = (now, st)
     return _with_fill(sid, st)
 
@@ -394,28 +397,74 @@ def navigate(sid: str, url: str) -> str:
         if re.match(r'^[a-z][a-z0-9+.-]*:', u, re.I):
             raise ValueError('only http:// and https:// addresses can be opened here')
         u = 'https://' + u
-    exe = program()
-    if not exe: raise ValueError('agent-browser is not installed')
+    if not program(): raise ValueError('agent-browser is not installed')
     if not state(sid, fresh=True)['open']: raise ValueError('this session has no browser open')
-    # one log per session, overwritten each time: on Windows the daemon may still hold the handle,
-    # so this is never unlinked - a file per session is a bounded mess, a file per click is not
-    log = Path(tempfile.gettempdir()) / f'{session_name(sid)}-open.log'
-    try:
-        with open(log, 'wb') as f:
-            p = spawn.popen([exe, '--session', session_name(sid), 'open', u], env=_cli_env(sid),
-                            stdout=f, stderr=f, stdin=subprocess.DEVNULL)
-            try: rc = p.wait(timeout=NAV_WAIT)
-            except subprocess.TimeoutExpired:
-                p.kill()
-                raise ValueError('the page did not finish loading in time - the browser still has it, so watch the pane')
-    except OSError as e:
-        raise ValueError(f'could not open that page: {e}')
-    if rc != 0:
-        try: said = log.read_text(encoding='utf-8', errors='replace').strip()
-        except OSError: said = ''
-        raise ValueError(said[-300:].strip() or 'agent-browser could not open that page')
+    from . import browsergate
+    try: rc, said = browsergate._run(sid, ['open', u], NAV_WAIT, 'open')
+    except (RuntimeError, OSError) as e:
+        if not str(e).startswith(browsergate.LATE): raise ValueError(f'could not open that page: {e}')
+        raise ValueError(str(e) if STOPPED in str(e) else 'the page did not finish loading in time - the browser still has it, so watch the pane')
+    if rc != 0: raise ValueError(STOPPED[0].upper() + STOPPED[1:] if STOPPED in said else said.strip()[-300:].strip() or 'agent-browser could not open that page')
     _CACHE.pop(sid, None)
     return u
+
+
+# A PAGE THAT NEVER ANSWERS WEDGES THE BROWSER (the browser-read round, 2026-11-18, measured on agent-browser 0.41.2): `open` of an address
+# whose server takes the connection and never answers gives up after ~30 s - "Failed to read ... it may or may not have run" - with the
+# navigation still pending in Chrome, and every command of that session after it (`get url`, `snapshot`, another `open`, the sign-in's own
+# `get cdp-url`) hung behind it for as long as the load did, which may be for ever. Before a session's next browser command, and after one
+# of Taskuary's own that failed, a navigation still pending STUCK seconds after the command before it began is stopped where it is - over the
+# session's own DevTools port, never through agent-browser, which is what hangs. Pending: the tab's address is not the page its history is on.
+STUCK = 25.0                    # agent-browser's own wait for a page's load (its AGENT_BROWSER_DEFAULT_TIMEOUT)
+STOPPED = f'it had not finished loading after {STUCK:.0f} s, so Taskuary stopped it where it was - look at the page to see what arrived'
+_BEGAN = {}                     # sid -> when the session's last browser command that could move its page began
+
+
+def _devtools(sid: str, path: str):
+    "One answer of session `sid`'s own Chrome on its DevTools port (/json/version, /json/list) - None when it does not answer."
+    import urllib.request
+    try:
+        with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(f'http://127.0.0.1:{cdp_port(sid)}{path}', timeout=3) as r:
+            return json.loads(r.read())
+    except (OSError, ValueError): return None
+
+
+def devtools_url(sid: str) -> str:
+    "The browser-wide DevTools address of session `sid`'s own Chrome, read off its port; '' when it does not answer."
+    return str((_devtools(sid, '/json/version') or {}).get('webSocketDebuggerUrl') or '')
+
+
+def tab_url(sid: str) -> str:
+    "The address of the tab session `sid` works in (the one agent-browser's .target names), as its own Chrome says it now; '' unknown."
+    tab = active_tab(sid)
+    return next((str(t.get('url') or '') for t in (_devtools(sid, '/json/list') or []) if tab and t.get('id') == tab), '') if tab else ''
+
+
+def unstick(sid: str, since: float = None) -> bool:
+    "Stop every load of `sid`'s browser still pending STUCK seconds after `since` (default: its last command's start). True when one was."
+    began = _BEGAN.get(str(sid)) if since is None else since
+    if not began or time.time() - began < STUCK or not (ws := devtools_url(sid)): return False
+    from . import signin
+    stopped, cut = False, lambda u: str(u or '').split('#')[0]
+    for t in [t for t in _devtools(sid, '/json/list') or [] if t.get('type') == 'page']:
+        try:
+            c = signin.Cdp(ws, t['id'])
+            try:
+                h = c.call('Page.getNavigationHistory', timeout=3)
+                on = ((h.get('entries') or [])[h.get('currentIndex', -1)] or {}).get('url') if h.get('entries') else ''
+                if on and cut(on) != cut(t.get('url')):
+                    c.call('Page.stopLoading', timeout=3); stopped = True
+                    logger.info(f'browser {sid}: a page left loading for {time.time() - began:.0f}s was stopped')
+            finally: c.close()
+        except Exception as e: logger.debug(f'browser {sid}: a tab could not be checked for a stuck load - {e}')
+    return stopped
+
+
+def began(sid: str) -> bool:
+    "A browser command that can move session `sid`'s page is about to run: a load the one before it left stuck is stopped first."
+    stopped = unstick(sid)
+    _BEGAN[str(sid)] = time.time()
+    return stopped
 
 
 def close(sid: str, tid: int = None):
@@ -436,7 +485,7 @@ def close(sid: str, tid: int = None):
             try: spawn.run([exe, '--session', session_name(sid), 'close'], env=_cli_env(sid), timeout=20, capture_output=True)
             except (OSError, subprocess.SubprocessError) as e: logger.debug(f'could not close the browser of {sid}: {e}')
         _end_daemon(sid)
-        _CACHE.pop(sid, None); LAST.pop(sid, None); listed(sid, False); _forget_profile(sid)
+        _CACHE.pop(sid, None); LAST.pop(sid, None); _BEGAN.pop(str(sid), None); listed(sid, False); _forget_profile(sid)
     with _START_LOCKS_GUARD:
         if _START_LOCKS.get(sid) is lock: _START_LOCKS.pop(sid, None)
 

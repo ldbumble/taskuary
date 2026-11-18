@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest import mock
 from fastapi.testclient import TestClient
 from taskuary import browserview as bv, server, terminal
+from taskuary.store import MemoryStore
 
 c = TestClient(server.app)
 JPEG = base64.b64encode(b'\xff\xd8\xff\xe0 not really a jpeg \xff\xd9').decode()
@@ -440,3 +441,92 @@ class NavigateTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class StuckLoadTests(unittest.TestCase):
+    """A page whose server takes the connection and never answers: agent-browser's `open` gave up after ~30 s with the load still pending,
+    and every command of the session after it - `get url`, `snapshot`, the next `open`, the sign-in's `get cdp-url` - hung behind it
+    (measured on 0.41.2). The load is stopped over the session's own DevTools port before the next command, and after one of Taskuary's own."""
+
+    def setUp(self):
+        from taskuary import signin
+        self.stopped, self.pages = [], [{'type': 'page', 'id': 'A', 'url': 'https://slow.example/report'},     # pending: history is elsewhere
+                                         {'type': 'page', 'id': 'B', 'url': 'https://portal.example/runs#top'}]  # settled
+        on = {'A': 'https://portal.example/', 'B': 'https://portal.example/runs'}
+        test = self
+        class Cdp:
+            def __init__(self, ws, target): self.t = target
+            def call(self, method, params=None, top=False, timeout=10.0):
+                if method == 'Page.stopLoading': test.stopped.append(self.t)
+                return {'currentIndex': 0, 'entries': [{'url': on[self.t]}]} if method == 'Page.getNavigationHistory' else {}
+            def close(self): pass
+        answers = lambda sid, path: {'webSocketDebuggerUrl': 'ws://127.0.0.1:9/devtools/browser/x'} if path == '/json/version' else self.pages
+        for p in (mock.patch.object(signin, 'Cdp', Cdp), mock.patch.object(bv, '_devtools', side_effect=answers)):
+            p.start(); self.addCleanup(p.stop)
+        self.addCleanup(bv._BEGAN.pop, 'st', None)
+
+    def test_a_load_left_pending_past_its_wait_is_stopped_before_the_next_command(self):
+        bv._BEGAN['st'] = time.time() - bv.STUCK - 5
+        self.assertTrue(bv.began('st'))
+        self.assertEqual(self.stopped, ['A'])
+
+    def test_a_load_still_inside_its_wait_is_left_alone(self):
+        bv._BEGAN['st'] = time.time() - 3                   # a click that is navigating now, and a look right after it
+        self.assertFalse(bv.began('st'))
+        self.assertEqual(self.stopped, [])
+
+    def test_an_open_of_taskuarys_own_that_failed_on_it_says_it_was_stopped_and_the_next_look_runs(self):
+        from taskuary import browsergate
+        def popen(argv, **kw):
+            kw['stdout'].write(b'Failed to read: Resource temporarily unavailable (os error 11)\n')
+            return mock.Mock(wait=mock.Mock(return_value=1), kill=mock.Mock())
+        with mock.patch.object(bv, 'program', return_value='agent-browser'), mock.patch.object(bv.spawn, 'popen', side_effect=popen), \
+             mock.patch.object(bv, 'STUCK', 0):
+            rc, said = browsergate._run('st', ['open', 'https://slow.example/report'], 45, 'api')
+        self.assertEqual(rc, 1); self.assertIn(bv.STOPPED, said); self.assertEqual(self.stopped, ['A'])
+
+    def test_the_owners_address_bar_says_it_in_one_plain_line(self):
+        def popen(argv, **kw):
+            kw['stdout'].write(b'Failed to read: Resource temporarily unavailable (os error 11)\n')
+            return mock.Mock(wait=mock.Mock(return_value=1), kill=mock.Mock())
+        with mock.patch.object(bv, 'program', return_value='agent-browser'), mock.patch.object(bv.spawn, 'popen', side_effect=popen), \
+             mock.patch.object(bv, 'state', return_value={'open': True}), mock.patch.object(bv, 'STUCK', 0):
+            with self.assertRaises(ValueError) as e: bv.navigate('st', 'https://slow.example/report')
+        self.assertTrue(str(e.exception).startswith('It had not finished loading')); self.assertIn('Taskuary stopped it', str(e.exception))
+
+    def test_the_agents_next_browser_line_stops_it_first(self):
+        from taskuary import browsergate, hooks
+        bv._BEGAN['st'] = time.time() - bv.STUCK - 5
+        with mock.patch.object(bv, 'on_demand'), mock.patch.object(browsergate, 'check', return_value={}):
+            hooks.command_gate(MemoryStore(), 1, 'st', 'agent-browser get url')
+        self.assertEqual(self.stopped, ['A'])
+
+    def test_the_sign_in_reaches_chrome_on_its_own_port_not_through_agent_browser(self):
+        from taskuary import signin
+        with mock.patch.object(bv.spawn, 'popen') as asked:
+            self.assertEqual(signin._cdp_url('st'), 'ws://127.0.0.1:9/devtools/browser/x')
+        asked.assert_not_called()
+
+
+class TheAddressIsTheTabsOwnTests(unittest.TestCase):
+    """agent-browser rewrites its .target only at its next command: after an open that errored ("This site can't be reached") or never
+    finished, the file still named the page before it - the PAGE an API agent read, the page an act was judged on, and the site a sign-in
+    ask was pinned to and the owner shown."""
+
+    def setUp(self):
+        files = {'target': json.dumps({'targetId': 'T1', 'url': 'https://portal.example/runs'}), 'stream': '4242'}
+        self.tabs = [{'type': 'page', 'id': 'T0', 'url': 'about:blank'}, {'type': 'page', 'id': 'T1', 'url': 'https://login.vendor.example/signin?next=%2F'}]
+        for p in (mock.patch.object(bv, '_read', side_effect=lambda name, ext: files.get(ext, '')), mock.patch.object(bv, '_listening', return_value=True),
+                  mock.patch.object(bv, '_devtools', side_effect=lambda sid, path: self.tabs)):
+            p.start(); self.addCleanup(p.stop)
+        self.addCleanup(bv._CACHE.pop, 't1', None)
+
+    def test_the_tab_agent_browser_names_is_read_live_from_its_chrome(self):
+        from taskuary import browsergate, signin
+        self.assertEqual(bv.state('t1', fresh=True)['url'], 'https://login.vendor.example/signin?next=%2F')
+        self.assertEqual(browsergate.address('t1'), 'https://login.vendor.example/signin?next=%2F')
+        self.assertEqual(signin.site_of(bv.state('t1', fresh=True)['url']), 'vendor.example')
+
+    def test_a_chrome_that_does_not_answer_leaves_the_file_as_before(self):
+        self.tabs = None
+        self.assertEqual(bv.state('t1', fresh=True)['url'], 'https://portal.example/runs')

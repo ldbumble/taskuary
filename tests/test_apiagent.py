@@ -10,6 +10,7 @@ from unittest import mock
 
 from taskuary import apiagent, browserview as bv, llm
 from taskuary.store import MemoryStore
+from tests.test_linked_documents import pdf
 
 
 class _R:
@@ -335,7 +336,7 @@ class OneRoundTripTests(unittest.TestCase):
 
     def test_an_act_that_cannot_be_undone_is_held_not_run(self):
         held = {'hookSpecificOutput': {'permissionDecisionReason': 'Taskuary held this for the owner: submit the appeal'}}
-        with mock.patch.object(bv, 'installed', return_value=True), \
+        with mock.patch.object(bv, 'installed', return_value=True), mock.patch.object(bv, 'state', return_value={'open': True}), \
              mock.patch('taskuary.browsergate.check', return_value=held), mock.patch('taskuary.browsergate._run') as ran:
             said = apiagent.run_tool(MemoryStore(), 1, 's', 'browser_click', {'ref': '@e4'})
         self.assertIn('held this for the owner', said)
@@ -1045,3 +1046,146 @@ def config_home():
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class WebFetchReadsWhatItFetchesTests(unittest.TestCase):
+    """web_fetch reads "one public web page or file" - a page or a file read by the road a linked document takes (linkdocs), not decoded
+    as UTF-8 whatever it is: a spreadsheet a vendor's page links to came back as zip bytes, a page in Latin-1 as mojibake, and a page that
+    asked for a sign-in as a bare status code with nothing to do next."""
+
+    def setUp(self):
+        import io, threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from openpyxl import Workbook
+        wb, buf = Workbook(), io.BytesIO()
+        wb.active.append(['vendor', 'price']); wb.active.append(['Payworth', 4200]); wb.save(buf)
+        files = {'/rates': ('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buf.getvalue(), 200),
+                 '/about': ('text/html; charset=iso-8859-1', '<html><title>Über</title><body><p>Gail Moreno, Müller Straße</p></body></html>'.encode('latin-1'), 200),
+                 '/portal': ('text/html', b'<html><body>Sign in required</body></html>', 401),
+                 '/terms': ('text/html', '<html><head><meta charset="utf-8"></head><body><p>Zoë at Northwind signs.</p></body></html>'.encode(), 200),
+                 '/download?id=3': ('application/pdf', pdf('Clause 9: payment within 45 days'), 200)}
+        class H(BaseHTTPRequestHandler):
+            def do_GET(self):
+                ct, body, code = files[self.path]
+                self.send_response(code); self.send_header('Content-Type', ct); self.send_header('Content-Length', str(len(body))); self.end_headers()
+                self.wfile.write(body)
+            def log_message(self, *a): pass
+        self.srv = ThreadingHTTPServer(('127.0.0.1', 0), H)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.base = f'http://127.0.0.1:{self.srv.server_address[1]}'
+        self.s = MemoryStore()
+        self.tid = self.s.create_task({'Title': 'Compare two quotes', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        from taskuary import webguard
+        for p in (mock.patch.object(webguard, 'check_url'), mock.patch.dict('os.environ', {'NO_PROXY': '127.0.0.1', 'no_proxy': '127.0.0.1'})):
+            p.start(); self.addCleanup(p.stop)
+
+    def tearDown(self): self.srv.shutdown(); self.srv.server_close()
+
+    def fetch(self, path): return apiagent.run_tool(self.s, self.tid, 'sid-w', 'web_fetch', {'url': self.base + path})
+
+    def test_a_spreadsheet_is_read_as_its_rows(self):
+        got = self.fetch('/rates')
+        self.assertIn('Payworth,4200', got)
+        self.assertNotIn('PK', got.split('\n', 1)[1][:4])
+
+    def test_a_page_in_its_own_charset_reads_as_written(self):
+        self.assertIn('Müller Straße', self.fetch('/about'))
+
+    def test_a_page_whose_charset_is_only_in_its_meta_reads_as_written(self):
+        self.assertIn('Zoë at Northwind', self.fetch('/terms'))
+
+    def test_a_pdf_at_an_address_with_no_extension_is_read_as_a_pdf(self):
+        self.assertIn('Clause 9', self.fetch('/download?id=3'))
+
+    def test_a_page_that_wants_a_sign_in_says_how_to_go_on(self):
+        with self.assertRaises(ValueError) as e: self.fetch('/portal')
+        self.assertIn('401', str(e.exception)); self.assertIn('browser_open', str(e.exception))
+
+
+class TheRestOfALongAnswerTests(unittest.TestCase):
+    """A long page or file was cut at CAP with "look again for the rest" - and no reading tool took a place to start, so looking again
+    gave the same first part (and the turn served it as already read): a payroll table's last runs could never be reached. The cut says
+    where to start, and the tool starts there."""
+
+    def setUp(self):
+        self.s = MemoryStore()
+        self.tid = self.s.create_task({'Title': 'Payroll runs summary', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        rows = ''.join(f'- row "Run {1000 + i} 2026-03-{i % 28 + 1:02d} $201,345 paid" [ref=e{i}]\n' for i in range(600))
+        self.page = rows + '- row "Run 9999 scheduled - THE LAST ONE" [ref=e999]\n'
+        for p in (mock.patch.object(bv, 'installed', return_value=True), mock.patch.object(bv, 'state', return_value={'open': True}),
+                  mock.patch('taskuary.browsergate._run', return_value=(0, self.page)),
+                  mock.patch('taskuary.browsergate.address', return_value='https://portal.example/runs')):
+            p.start(); self.addCleanup(p.stop)
+
+    def walk(self, tool, **a):
+        "Follow what each cut says, as a model would, until nothing is cut. Every part read, in order."
+        import re
+        parts = []
+        for _ in range(20):
+            out = apiagent.run_tool(self.s, self.tid, 'sid-l', tool, a)
+            parts.append(out)
+            m = re.search(r'\bfrom=(\d+)', out.rsplit('\n', 1)[-1])
+            if not m: return parts
+            a = {**a, 'from': int(m.group(1))}
+        self.fail('the cut never ended')
+
+    def test_a_long_page_is_read_to_its_end_part_by_part(self):
+        parts = self.walk('browser_look', full=True)
+        self.assertGreater(len(parts), 1)
+        self.assertIn('THE LAST ONE', parts[-1])
+        self.assertTrue(all(len(p) <= apiagent.CAP + 300 for p in parts))
+
+    def test_a_long_file_is_read_to_its_end_part_by_part(self):
+        apiagent.run_tool(self.s, self.tid, "sid-l", "file_write", {"path": "runs.txt", "text": self.page})
+        self.assertIn('THE LAST ONE', self.walk('file_read', path='runs.txt')[-1])
+
+    def test_the_reading_tools_say_they_take_a_place_to_start(self):
+        for t in (*apiagent.BROWSER, *apiagent.FILES, *apiagent.WEB):
+            if t['function']['name'] in ('browser_look', 'file_read', 'web_fetch'):
+                self.assertIn('from', t['function']['parameters']['properties'], t['function']['name'])
+
+
+class AnOpenThatNeverFinishedTests(unittest.TestCase):
+    """A page whose text came but whose load never finished - an image or a tracker on it still loading - made agent-browser answer
+    "Timed out after 25000ms waiting for load state 'load'", and browser_open told the agent it had failed over a page it could read."""
+
+    def setUp(self):
+        self.s, self.ran = MemoryStore(), []
+        self.tid = self.s.create_task({'Title': 'Payroll runs summary', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        def run(sid, args, wait, tag):
+            self.ran.append(args[0])
+            if args[0] == 'open': return 1, "✗ Timed out after 25000ms waiting for load state 'load'"
+            return 0, '- heading "Payroll runs" [level=2, ref=e2]\n- link "Next" [ref=e9]'
+        self.on = 'https://portal.example/runs?page=2'
+        for p in (mock.patch.object(bv, 'installed', return_value=True), mock.patch.object(bv, 'state', return_value={'open': True}),
+                  mock.patch('taskuary.browsergate._run', side_effect=run), mock.patch('taskuary.browsergate.check', return_value={}),
+                  mock.patch('taskuary.browsergate.address', side_effect=lambda sid, st=None: self.on)):
+            p.start(); self.addCleanup(p.stop)
+
+    def open(self): return apiagent.run_tool(self.s, self.tid, 'sid-o', 'browser_open', {'url': 'https://portal.example/runs?page=2'})
+
+    def test_the_page_it_reached_is_read_and_said_unfinished(self):
+        got = self.open()
+        self.assertIn('Payroll runs', got); self.assertIn('had not finished loading', got)
+        self.assertEqual(self.ran, ['open', 'snapshot'])
+
+    def test_a_page_it_never_reached_is_still_a_failure(self):
+        self.on = 'https://portal.example/runs?page=1'
+        with self.assertRaises(ValueError) as e: self.open()
+        self.assertIn('Timed out', str(e.exception))
+
+
+class NoPageOpenTests(unittest.TestCase):
+    """A look or a click before any page was opened, or after the browser closed: a look answered with a DevTools connect error, a click
+    with "Taskuary held this for the owner ... Run `agent-browser get url`" - nothing was held, and an API agent has no such command."""
+
+    def test_every_browser_tool_but_open_says_to_open_a_page_first(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Vendor invoices', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        with mock.patch.object(bv, 'installed', return_value=True), mock.patch.object(bv, 'state', return_value={'open': False}), \
+             mock.patch('taskuary.browsergate._run') as ran, mock.patch('taskuary.browsergate.check') as judged:
+            for tool, a in (('browser_look', {}), ('browser_click', {'ref': '@e1'}), ('browser_fill', {'ref': '@e2', 'text': 'Northwind'}),
+                            ('browser_press', {'key': 'Enter'}), ('browser_screenshot', {})):
+                with self.assertRaises(ValueError, msg=tool) as e: apiagent.run_tool(s, tid, 'sid-n', tool, a)
+                self.assertIn('browser_open', str(e.exception)); self.assertIn('nothing was done', str(e.exception))
+        ran.assert_not_called(); judged.assert_not_called()

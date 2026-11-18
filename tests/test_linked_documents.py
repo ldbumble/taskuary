@@ -31,7 +31,14 @@ class R:
         self.status_code, self._b, self.headers, self.encoding = code, body, {'content-type': ct}, 'utf-8'
         self.content = content or json.dumps(body or {}).encode()
         self.text = self.content.decode('utf-8', 'replace')
+        self.raw = _Raw(self.content)
     def json(self): return self._b
+    def close(self): pass
+
+
+class _Raw(io.BytesIO):
+    "A streamed body, as requests hands one over with stream=True."
+    def read(self, n=-1, decode_content=False): return super().read(n)
 
 
 def pdf(text) -> bytes:

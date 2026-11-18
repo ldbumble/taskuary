@@ -50,6 +50,9 @@ TYPES, KEY_TYPES = frozenset('fill type'.split()), frozenset('type inserttext'.s
 # unsure verdict on one of them, or on typing, lets it go - the sending is judged on its own. A verdict SURE it can't be undone (a settings
 # toggle that saves itself) still holds it.
 SETS = frozenset('check uncheck select'.split())
+# ...and the actions of its `find` that only LOOK (`find text "Total" text` reads it, `hover` points at it - its grammar, `find --help` 0.41):
+# a search of the page was judged as an act, a model call each time, and with no AI connected held for the owner (2026-11-18)
+FIND_LOOKS = frozenset('text hover'.split())
 SNAP_MAX = 6000                 # the page as the model reads it: the interactive elements, enough for a checkout or a settings page
 JUDGE_WAIT = 45.0
 HELD = 'Taskuary held this for the owner'
@@ -131,13 +134,22 @@ def acts(cmd: str) -> list:
         # A LOOK THAT IS NOT ONE (M4, 2026-11-08): an address carrying a token or a long query is a magic link ("approve", "confirm",
         # one-click pay) or a way out for what the agent read (`open https://x/?d=...`) - judged like a click; and `get value` reads
         # whatever a box holds, a password the sign-in vault just filled included - checked against the page (check)
-        # ...and the address a new tab opens, or `read` fetches, is read as open's is
-        to = nxt if verb in NAVS or verb == 'read' else a[i + 2] if verb == 'tab' and nxt.lower() == 'new' and i + 2 < len(a) else None
+        # ...and the address a new tab opens, or `read <url>` FETCHES (agent-browser's grammar: a read with no address is the tab's text), is
+        # read as open's is - the same magic link passed ungated as a read (the browser-read round, 2026-11-18)
+        to = (nxt if verb in NAVS else next((t for t in a[i + 1:] if re.match(r'^https?://', t, re.I)), '') if verb == 'read'
+              else a[i + 2] if verb == 'tab' and nxt.lower() == 'new' and i + 2 < len(a) else None)
         if to is not None and carries(to): verb = 'navigate'
         elif verb == 'get' and nxt.lower() == 'value': out.append({'args': a, 'verb': 'get value', 'read': True}); continue
-        elif verb in LOOKS: continue
+        elif verb in LOOKS or (verb == 'find' and _find_action(a[i:]) in FIND_LOOKS): continue
         if verb: out.append({'args': a, 'verb': verb, **({'nl': True} if _NL.search(str(cmd)) else {})})
     return out
+
+
+def _find_action(a: list) -> str:
+    "The action word of `find <locator> <value...> [action]` ('click' when none is given), read only where its words stand bare: '' else."
+    n = 4 if len(a) > 1 and a[1].lower() == 'nth' else 3          # nth takes an index and a selector, every other locator one value
+    if any(t.startswith('-') for t in a[1:n + 1]): return ''
+    return a[n].lower() if n < len(a) else 'click'
 
 
 def carries(url: str) -> bool:
@@ -180,19 +192,28 @@ def setting(act: dict) -> bool:
 
 
 # ── the page it would act on, and the model's verdict ─────────────────────────────────────────────────────────────────────
+LATE = 'the browser did not answer in time'
+
+
 def _run(sid: str, args: list, wait: float, tag: str, cwd: str = None) -> tuple:
     """(exit code, output) of one agent-browser command in this session's browser. Output to a FILE (browserview.navigate says
-    why: the daemon inherits a pipe and it never ends). `cwd`: the agent's folder, for an act that names a file by a relative path."""
+    why: the daemon inherits a pipe and it never ends). `cwd`: the agent's folder, for an act that names a file by a relative path. A load
+    an earlier command left stuck is stopped first, and one this command left is stopped after it - its output says so (browserview.unstick)."""
     from . import browserview, spawn
     exe = browserview.program()
     if not exe: raise RuntimeError('agent-browser is not installed')
+    t0 = time.time()
+    _ = browserview.began(sid) if args and (args[0] not in LOOKS or args[0] in NAVS) else browserview.unstick(sid)
     log = Path(tempfile.gettempdir()) / f'{browserview.session_name(sid)}-{tag}.log'
     with open(log, 'wb') as f:
         p = spawn.popen([exe, '--session', browserview.session_name(sid), *args], env=browserview._cli_env(sid), stdout=f, stderr=f,
                         stdin=subprocess.DEVNULL, **({'cwd': cwd} if cwd and os.path.isdir(cwd) else {}))
         try: rc = p.wait(timeout=wait)
-        except subprocess.TimeoutExpired: p.kill(); raise RuntimeError('the browser did not answer in time')
-    return rc, log.read_text(encoding='utf-8', errors='replace')
+        except subprocess.TimeoutExpired:
+            p.kill()
+            raise RuntimeError(LATE + (f' - {browserview.STOPPED}' if browserview.unstick(sid, t0) else ''))
+    said = log.read_text(encoding='utf-8', errors='replace')
+    return rc, said + (f'\n{browserview.STOPPED}' if rc != 0 and browserview.unstick(sid, t0) else '')
 
 
 def _own_args(args: list) -> list:
@@ -206,8 +227,8 @@ def _own_args(args: list) -> list:
 
 
 def address(sid: str, st: dict = None) -> str:
-    """The address of the page this session's browser is on: agent-browser's state file, else the browser ASKED (`get url`). The state
-    file alone is not always written - a browser the agent opened itself, an agent-browser that keeps no target file - and an act held
+    """The address of the page this session's browser is on: its state (the tab's own word, browserview.state), else the browser ASKED
+    (`get url`). The state file alone is not always written - a browser the agent opened itself, an agent-browser that keeps no target file - and an act held
     with no address could never be approved ("the browser has moved on"), or two blanks matched and it ran unchecked (2026-10-28).
     '' when even the browser cannot say: then nothing is held or run on a page nobody can name."""
     from . import browserview

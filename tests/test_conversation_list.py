@@ -126,6 +126,21 @@ class TheList(unittest.TestCase):
         self.assertNotIn('ALPHA', came, 'the mail the turn itself carries is not said again beside it')
         self.assertTrue(conversation.heard(self.s, self.tid, 'mail', mids))
 
+    def test_a_carried_on_turn_says_the_mail_that_woke_it_once(self):
+        """The carry-on road, the same shape: a sender's new work carried the ended conversation on (ingest._continue_general) with their
+        mail as the turn's head, a second mail of the poll beside it - and "came in since your last turn" said the first one again."""
+        from taskuary import ingest
+        self.say('Suggest two.', 'l-one'); self.rest(); self.end()
+        opens = general.start_session
+        p = mock.patch.object(general, 'start_session', lambda store, tid, **k: opens(store, tid, **{**k, 'actor': 'owner'})); p.start(); self.addCleanup(p.stop)
+        mids = [self.mail('ALPHA, the first mail of the poll.'), self.mail('BRAVO, the second mail of the poll.')]
+        ingest._continue_general(self.s, self.tid, ingest._from_row(self.s.get_message(mids[0]), self.s), mids[0]); self.rest()
+        turn = self.brain.calls[-1]
+        came = turn.split('CAME IN ON THIS TASK SINCE YOUR LAST TURN', 1)[-1].split('\n\n', 1)[0]
+        self.assertIn('BRAVO', came)
+        self.assertNotIn('ALPHA', came, 'the mail the turn itself carries is not said again beside it')
+        self.assertTrue(conversation.heard(self.s, self.tid, 'mail', mids))
+
     def test_a_flood_is_one_hand_over_and_every_input_is_heard_once_and_told_once(self):
         self.brain.delay = 1.0
         self.say('Suggest two.', 'l0', wait=False)

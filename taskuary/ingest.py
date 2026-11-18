@@ -2299,7 +2299,8 @@ def queued_turn(store, tid, turn: str, said: str = '') -> None:
     from . import general
     if not general.handles(store.get_task(tid) or {}): general.OPENING.add(tid); return _continue_coding(store, tid, said)
     general.OPENING.add(tid)
-    _replan_general(store, tid, '\n\n---\n\n'.join(x for x in [carry_on_turn(store, tid) if turn == 'carry_on' else '', said] if x))
+    news, carried = carry_on_told(store, tid) if turn == 'carry_on' else ('', [])
+    _replan_general(store, tid, '\n\n---\n\n'.join(x for x in [news, said] if x), mails=carried)
 
 
 # THE FIRST REAL ASK ON A ROW NO AGENT HAS WORKED STARTS ONE (the owner, 2026-11-09): a colleague's opening "Alex!" was read as a watch, his
@@ -2668,12 +2669,17 @@ def _pass_coding(store, tid, msg: dict):
 # A resumed CLI is handed the turn alone, so the news rode only as instructions appended to its system prompt, under a turn that said
 # "the owner chose Resume ... restate that one question and wait" - and nothing on the task showed it had been told. Now the turn
 # leads with what came in, as coding's seed does (terminal.resume_seed), filed as Taskuary's brief so the chat shows the line it got.
-def carry_on_turn(store, tid, msg: dict = None, mid=None) -> str:
-    "A carried-on turn: the mail since its last turn, the line that woke it when that read missed it, then CARRY_ON_PROMPT."
+def carry_on_turn(store, tid, msg: dict = None, mid=None) -> str: return carry_on_told(store, tid, msg, mid)[0]
+def carry_on_told(store, tid, msg: dict = None, mid=None) -> tuple[str, list]:
+    """A carried-on turn: the mail since its last turn, the line that woke it when that read missed it, then CARRY_ON_PROMPT - with the
+    messages (ids) it carries in their words, which the turn's own "came in since" leaves out (general.came_in): said in both, one mail
+    reached the agent twice in one turn."""
     from . import continuity
-    news = continuity.news_block(store, tid)
-    missed = msg and mid not in {m['MessageId'] for m in continuity.mail_since(store, tid)}
-    return '\n\n'.join(x for x in [news, _pass_turn(msg) if missed else '', CARRY_ON_PROMPT] if x)
+    news, since = continuity.news_block(store, tid), continuity.mail_since(store, tid)
+    missed = msg and mid not in {m['MessageId'] for m in since}
+    carried = [m['MessageId'] for m in since[-continuity.NEWS_SHOWN:]] if news and since else []
+    return ('\n\n'.join(x for x in [news, _pass_turn(msg) if missed else '', CARRY_ON_PROMPT] if x),
+            carried + ([mid] if missed and mid else []))
 # ...in words of its own (the owner, 2026-11-09): Resume's "the owner chose Resume ... restate that one question and wait" was false here -
 # nobody pressed anything - and it pushed the agent to wait instead of working
 CARRY_ON_PROMPT = 'New messages came in on this task (above). Pick up where you left off and do what you can now.'
@@ -2682,7 +2688,8 @@ CARRY_ON_PROMPT = 'New messages came in on this task (above). Pick up where you 
 def _continue_general(store, tid, msg: dict = None, mid=None):
     from . import general
     try:
-        general.start_session(store, tid, actor='router').send_prompt(carry_on_turn(store, tid, msg, mid), brief=True)
+        turn, carried = carry_on_told(store, tid, msg, mid)
+        general.start_session(store, tid, actor='router').send_prompt(turn, brief=True, mails=carried)
     except general.Stopped: pass           # the owner stopped the carried-on turn: nothing failed
     except Exception as e:
         # said, not retried: the start queue's retry opens a conversation without a turn (_start_general prompts a fresh one only)

@@ -165,6 +165,7 @@ def sent_block(store, tid, quote: int = 300, cmd: str = '') -> str:
             + (f' (then: {cmd})' if cmd else '') + '.')
 
 
+NEWS_SHOWN = 5            # how many of the messages since its last turn news_block says in their words
 def news_block(store, tid) -> str:
     """What a Continue tells the agent before anything else, when the thread moved after its last turn - or, when it did not, that
     the reply it remembers drafting already went. '' when neither."""
@@ -176,5 +177,5 @@ def news_block(store, tid) -> str:
         return f"- {m.get('FromName') or ''} <{m.get('FromEmail') or ''}> at {m.get('SentAt') or m.get('CreatedAt')}: {m.get('Subject') or ''}\n  {body}"
     return (f"NEW SINCE YOUR LAST TURN ({at}): {plural(len(mail), 'message')} came in on this task's thread after "
             "the conversation you remember - it is from BEFORE them, and the task was reopened because of them. Read them first; "
-            "what they ask is the work now, not what you finished last time.\n" + '\n'.join(one(m) for m in mail[-5:])
+            "what they ask is the work now, not what you finished last time.\n" + '\n'.join(one(m) for m in mail[-NEWS_SHOWN:])
             + (f'\n{s}' if (s := sent_block(store, tid)) else ''))     # ...unless the owner already answered them

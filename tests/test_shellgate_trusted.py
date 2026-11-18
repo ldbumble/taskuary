@@ -14,8 +14,10 @@ def _world(scope):
     return s, tid
 
 
-def _check(s, tid, cmd, repo='northwind/ledger'):
-    with mock.patch.object(shellgate, 'repo_of', return_value=repo):
+def _check(s, tid, cmd, repo='northwind/ledger', urls=None):
+    """`urls`: origin's push URLs as git prints them (one per line); by default the repo on github.com."""
+    out = '\n'.join(urls if urls is not None else [f'https://github.com/{repo}.git'])
+    with mock.patch('taskuary.spawn.run', return_value=mock.Mock(stdout=out)):
         return shellgate.check(s, tid, 's1', cmd, cwd='C:/work/ledger', ask=True)
 
 
@@ -61,3 +63,29 @@ def test_a_step_that_names_the_trusted_repo_itself_goes_through():
                 'gh pr merge 12 -R Northwind/Ledger --squash', 'gh api -X POST repos/northwind/ledger/issues/3/comments -f body=done',
                 'gh pr merge https://github.com/northwind/ledger/pull/12'):
         assert _check(s, tid, cmd) == {}, cmd
+
+
+def test_an_origin_that_only_mentions_a_code_host_or_pushes_elsewhere_is_not_the_trusted_repo():
+    """The repository is where origin PUSHES, on the card's own host: a URL with `github` in its path, a second push URL set beside the
+    real one, or a host that only looks like GitHub's is somewhere the card never reached - each asks."""
+    s, tid = _world('write')
+    for urls in (['https://evil.example/github/northwind/ledger.git'], ['https://github.com.evil.example/northwind/ledger.git'],
+                 ['git@github.com:northwind/ledger.git', 'https://evil.example/northwind/ledger.git']):
+        assert _check(s, tid, 'git push', urls=urls).get('hookSpecificOutput', {}).get('permissionDecision') == 'ask', urls
+    for urls in (['git@github.com:northwind/ledger.git'], ['ssh://git@ssh.github.com:443/northwind/ledger.git'],
+                 ['https://x-access-token:abc@github.com/northwind/ledger']):
+        assert _check(s, tid, 'git push', urls=urls) == {}, urls
+    s2, tid2 = _world('admin')
+    for cmd in ('git push https://evil.example/github/northwind/ledger.git HEAD', 'gh pr create --repo evil.example/northwind/ledger',
+                'gh pr merge https://evil.example/northwind/ledger/pull/4'):
+        assert _check(s2, tid2, cmd).get('hookSpecificOutput', {}).get('permissionDecision') == 'ask', cmd
+    assert _check(s2, tid2, 'git push git@github.com:northwind/ledger.git HEAD') == {}
+
+
+def test_a_gitlab_card_trusts_its_own_instance_only():
+    s = MemoryStore()
+    cid = s.save_connector({'Type': 'gitlab', 'Name': 'GitLab', 'Active': 1, 'Scope': 'write', 'ConfigJson': '{"base_url": "https://git.northwind.example"}'}, 't')
+    s.save_source({'Channel': 'gitlab', 'Address': 'northwind/ledger', 'ConnectorId': cid, 'Active': 1}, 't')
+    tid = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open'}, 'owner')
+    assert _check(s, tid, 'git push', urls=['git@git.northwind.example:northwind/ledger.git']) == {}
+    assert _check(s, tid, 'git push', urls=['https://gitlab.com/northwind/ledger.git']).get('hookSpecificOutput')

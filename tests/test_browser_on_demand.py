@@ -101,6 +101,13 @@ class TheFirstNavigateLaunchesIt(unittest.TestCase):
         self._hook('agent-browser open about:blank').assert_not_called()
         self._hook('curl https://air.example/').assert_not_called()
 
+    def test_a_magic_link_is_never_the_address_launched_before_it_is_judged(self):
+        """The launch on demand ran BEFORE the gate: a first `open` of a one-click approve link launched the browser on it, and the link
+        did its work while the gate was still judging it. A link that carries a token launches on its site's own page; the gate judges the rest."""
+        magic = 'https://bank.example/approve?t=9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c'
+        self._hook(f'agent-browser open {magic}').assert_called_once_with('s-1', 'https://bank.example/')
+        self._hook('agent-browser open "javascript:document.forms[0].submit()"').assert_not_called()
+
     def test_an_open_browser_is_not_launched_again(self):
         self._hook('agent-browser open https://air.example/', open_=True).assert_not_called()
 

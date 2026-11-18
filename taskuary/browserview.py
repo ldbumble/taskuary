@@ -694,8 +694,13 @@ def _page(url) -> bool: u = str(url or '').strip(); return bool(u) and not u.low
 # so the agent's own open lands in it. Or on the page the task's browser was last on, which is an address too (last_page).
 def on_demand(sid: str, cmd: str) -> bool:
     "Launch this session's browser on the address the agent's command navigates to, if it is not up yet. True when one was launched."
-    from .browsergate import opens
-    return launch(sid, opens(cmd))
+    from .browsergate import carries, opens
+    from urllib.parse import urlsplit
+    url = opens(cmd)
+    # ...ON THE SITE'S OWN PAGE WHERE THE ADDRESS CARRIES MORE (a token, a long query): this launch runs before the gate, and a one-click
+    # approve link launched on did its work while the gate was still judging it. The gate judges the open itself, on the page that is up
+    if carries(url): u = urlsplit(url); url = f'{u.scheme}://{u.netloc}/' if u.scheme in ('http', 'https') and u.netloc else ''
+    return launch(sid, url)
 def launch(sid: str, url: str) -> bool:
     "The one launch on demand: this session's browser on an address, if it is not up yet. The hook's road (on_demand) and the agent's own ask (ask_open)."
     return bool(url) and _page(url) and not state(sid, fresh=True).get('open') and start(sid, url)

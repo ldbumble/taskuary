@@ -899,6 +899,32 @@ class TheList(unittest.TestCase):
             self.rest()
         self.assertEqual(cut, [self.tid])
 
+    def test_a_line_a_cut_turn_took_is_heard_by_the_resumed_conversation_after_the_restart(self):
+        """The turn a restart cut had taken his line, and went before its CLI was handed it. The next session picked the CLI's conversation
+        back up, which is told only the new turn: his line stood heard in the chat, and no agent ever read it."""
+        from taskuary import proposals, terminal
+        self.say('Suggest two.', 'l-one'); self.rest()
+        old = general.session_for(self.tid)
+        up, go = threading.Event(), threading.Event()
+        class Gone(BaseException): pass
+        def coming_up(*a, **k):
+            up.set(); general.keep_cut_turns(self.s); go.wait(5); raise Gone()      # the next start reads the disk here; nothing after runs
+        def turn():
+            try: old.send_prompt('Compare both venues on price.', echo=False)
+            except Gone: pass
+        with mock.patch.object(proposals, 'move_on', coming_up):
+            t = threading.Thread(target=turn, daemon=True); t.start()
+            self.assertTrue(up.wait(5)); go.set(); t.join(5)
+        old.alive = False; terminal.SESSIONS.pop(old.sid, None); general.drop_session(self.tid); general.answered(self.tid, every=True)
+        terminal.recover_after_restart(self.s)
+        new = general.start_session(self.s, self.tid)
+        new.cli_sid = 'cli-conversation-1'                       # its CLI's own conversation, picked back up: only the turn is said
+        self.say('And book the cheaper one.', 'l-three'); self.rest()
+        self.assertIn('Compare both venues on price.', self.brain.calls[-1])
+        self.assertIn(getattr(general, 'CUT_HEARD', 'CUT SHORT WHEN TASKUARY RESTARTED'), self.brain.calls[-1])
+        self.say('Thanks.', 'l-four'); self.rest()
+        self.assertNotIn(general.CUT_HEARD, self.brain.calls[-1], 'said once')
+
     def test_a_turn_the_app_closing_cut_is_kept_for_the_next_start(self):
         from taskuary import sessionrecord, terminal
         self.say('Suggest two.', 'l-one'); self.rest()

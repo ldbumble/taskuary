@@ -108,6 +108,17 @@ def say_cut(store, tid: int) -> int:
     line of the chat under it - a chat's turn carries it in its own words (keep_cut_turns)."""
     from .sessionrecord import NOTE_ACTOR
     return store.add_comment(tid, NOTE_ACTOR, ASSISTANT_TYPE, cut_line(store, tid).strip('_'))
+CUT_HEARD = ("YOUR LAST TURN WAS CUT SHORT WHEN TASKUARY RESTARTED - it may never have reached you. What it had said so far stands in the chat; "
+             "it was answering:")
+def cut_heard(store, tid: int) -> str:
+    """The lines the turn a restart cut had taken, for the next turn of a conversation picked back up (send_prompt): its CLI may never have
+    been handed them - the cut can come before it heard the turn - and a resumed conversation is told only the new turn, so his line stood
+    heard in the chat and no agent ever read it (the timeline stress round, 2026-11-18). '' unless the newest answer is a cut one."""
+    rows = store.list_comments(int(tid), internal=True)
+    said = [i for i, c in enumerate(rows) if c.get('ActorType') == ASSISTANT_TYPE]
+    if not said or not str(rows[said[-1]].get('Body') or '').rstrip().endswith((CUT, CUT_ON)): return ''
+    lines = [str(c.get('Body') or '').strip() for c in rows[(said[-2] + 1 if len(said) > 1 else 0):said[-1]] if c.get('ActorType') == USER_TYPE]
+    return f"{CUT_HEARD}\n" + '\n'.join(f'- {_quote(w, 1500)}' for w in lines if w) if any(lines) else ''
 def keep_cut_turns(store) -> list:
     "Every turn a restart cut, filed on its open task: [task ids]."
     from . import sessionrecord
@@ -3033,6 +3044,7 @@ class GeneralSession:
                 user = _turn_only(self.store, self.task_id, text) if as_owner and not brief else text     # a brief is Taskuary's, never "the owner says"
                 if (lb := turn_facts(self.store, self.task_id, resumed=True, rules=False, turn=True)): user = f'{lb}\n\n{user}'      # what is newest, waiting and sent, as of THIS turn
                 if turn_said: user, whole = f'{turn_said}\n\n{user}', f'{turn_said}\n\n{whole}'
+                if (cut := cut_heard(self.store, self.task_id)): user = f'{cut}\n\n{user}'       # ...a conversation said in full has them already
                 if news: user = f'{news}\n\n{user}'
                 if is_dock(self.store.get_task(self.task_id)):
                     user += f'\n\n{dock_snapshot(self.store)}'

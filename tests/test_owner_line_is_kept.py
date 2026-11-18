@@ -199,3 +199,30 @@ class AttachedFilesReachTheAgent(unittest.TestCase):
         self.assertNotIn(str(self.pic), summary)
         from taskuary import outputs
         self.assertIn(str(outputs.folder(tid)), summary)
+
+    # ...AND A CARD HIS LINE GREYED SAYS HIS WORDS, NEVER THE FILE BLOCK (the attach stress round, 2026-11-18): once heard, his line's body is the
+    # words and the block (with_files), and the greyed card's sentence read it as JSON - the block's path ran into "you wrote ... after it",
+    # a line of the file alone read as the path, and a heard "42" (JSON, but no line) threw, taking the whole chat's payload with it
+    def heard_card(self, text, files=()):
+        from taskuary import conversation, proposals
+        tid = self.s.create_task({'Title': 'Price site two', 'Kind': 'general', 'Status': 'in_progress'}, 'o')
+        rid = self.s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'close the issue', 'DraftText': json.dumps({'action': 'close_issue'})})
+        self.s._exec("UPDATE review SET CreatedAt='2026-11-16 09:00:00' WHERE ReviewId=?", (rid,))
+        general.wait_line(self.s, tid, text, list(files), line_id='l-1')
+        general.take_kept(self.s, tid)
+        self.assertEqual(general.split_files(self.s.list_comments(tid, internal=True)[-1]['Body'])['files'], list(files))
+        return tid, proposals.passed_why(self.s, self.s.get_review(rid))
+
+    def test_a_card_his_line_with_a_file_greyed_says_his_words(self):
+        self.assertEqual(self.heard_card('it was this person', [str(self.pic)])[1], 'Not sent - you wrote "it was this person" after it')
+
+    def test_a_card_a_file_alone_greyed_names_the_file(self):
+        why = self.heard_card('', [str(self.pic)])[1]
+        self.assertNotIn('ATTACHED', why); self.assertNotIn(str(self.d), why)
+        self.assertIn(self.pic.name, why)
+
+    def test_a_heard_line_that_reads_as_json_never_breaks_the_chat(self):
+        from taskuary import conversation
+        tid, why = self.heard_card('42')
+        self.assertEqual(why, 'Not sent - you wrote "42" after it')
+        self.assertTrue(conversation.items(self.s, tid)['items'])

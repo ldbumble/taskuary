@@ -2331,6 +2331,9 @@ def split_files(body) -> dict:
     "{'text', 'files'} of a line written by with_files - the words alone where it names no files."
     b = str(body or ''); m = _FILES.search(b)
     return {'text': b[:m.start()] if m else b, 'files': [x.strip() for x in m.group(1).splitlines() if x.strip()] if m else []}
+def his_line(c) -> dict:
+    "{'text', 'files'} of a line of his, kept (wait_line's JSON) or heard (with_files' block) - the one read of either, on every surface."
+    return _line_of(c.get('Body')) if c.get('ActorType') == WAITING_TYPE else split_files(c.get('Body'))
 _IMAGE_FILE = re.compile(r'\.(png|jpe?g|gif|webp)$', re.I)
 
 

@@ -729,3 +729,23 @@ def test_a_conversation_the_cli_no_longer_has_starts_afresh_with_the_task_never_
     assert 'heard:' in said and 'carry on with the totals' in said and 'resumed=' not in said
     notes = [c['Body'] for c in s.list_comments(tid)]
     assert agents.GONE_LINE in notes and not any('No conversation found' in n or 'did not start over ACP' in n for n in notes)
+
+
+def test_stop_while_it_asks_closes_the_card_and_no_press_is_offered_for_a_turn_that_ended(world, monkeypatch):
+    """Stop pressed while the agent waited on Allow once / Reject: session/cancel ended the turn, but the card stayed lit for its ten minutes -
+    a press offered for a step nobody would run, and then "No answer in 10 mins" of a turn he had stopped himself. ACP's own rule: a client
+    that cancels answers every permission it holds as cancelled. The card closes at the Stop, and the agent is refused - by nobody."""
+    s, tid, repo = world
+    monkeypatch.setenv('FAKE_ACP_ASK', 'rm -rf /srv/ledger-archive')
+    monkeypatch.setattr(shellgate, 'trusted', lambda *a, **k: '')
+    t = open_(s, tid, repo, seed='tidy the ledger archive')
+    assert until(lambda: permissions.pending(tid, s))
+    assert t.cancel()
+    assert until(lambda: not permissions.pending(tid, s), 5), 'the card closes at the Stop'
+    assert until(lambda: not t.busy, 5)
+    said = [c['Body'] for c in s.list_comments(tid)]
+    assert not any(b.startswith('No answer in') for b in said), said
+    assert any(b.startswith('Closed when you stopped the agent') and 'rm -rf /srv/ledger-archive' in b for b in said), said
+    time.sleep(1.5)
+    assert t.turns == 1 and not t.busy and not permissions.pending(tid, s), 'a Stop is a stop: nothing starts the agent again'
+    assert t.stop_reason == 'cancelled'

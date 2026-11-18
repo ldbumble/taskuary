@@ -420,10 +420,9 @@ def on_event(store, tid: int, kind: str, text: str = '', source: str = ''):
 def _numbered(options: list) -> str: return '\n'.join(f'{i}. {lbl}' for i, (lbl, _) in enumerate(options, 1))
 
 
-def permission_asked(store, tid: int, pid: str, r: dict):
+def permission_asked(store, tid: int, pid: str, r: dict, bs: list = None):
     from . import permissions
-    bs = following(store, tid)
-    for b in bs:
+    for b in following(store, tid) if bs is None else bs:
         opts = [(permissions.LABEL[o], o) for o in r['options']]
         _save_state(store, b, ask={'kind': 'perm', 'tid': int(tid), 'pid': pid, 'options': opts})
         own = next((x.get('name') for x in b['members'] if x.get('role') == OWNER), '') or 'the owner'
@@ -431,10 +430,14 @@ def permission_asked(store, tid: int, pid: str, r: dict):
 
 
 def permission_done(store, tid: int, pid: str, said: str):
-    for b in following(store, tid):
-        if ((b.get('state') or {}).get('ask') or {}).get('pid') == pid:
-            _save_state(store, b, ask=None)
-            say(store, b, said, tid)
+    from . import permissions
+    done = [b for b in following(store, tid) if ((b.get('state') or {}).get('ask') or {}).get('pid') == pid]
+    for b in done:
+        _save_state(store, b, ask=None)
+        say(store, b, said, tid)
+    # ...AND WHAT STILL WAITS ON THE TASK IS PUT AGAIN where the chat's one open ask just closed (two of the agent's helpers asking at once: the
+    # newer one answered, the older had no number left on the chat to answer it by)
+    if done and (rest := permissions.still_waiting(store, tid)): permission_asked(store, tid, *rest[0], bs=done)
 
 
 def ask_landing(store, b: dict, tid: int):

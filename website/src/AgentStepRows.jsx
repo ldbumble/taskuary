@@ -35,7 +35,8 @@ const Mark = ({ step }) => { const I = iconOf(step); return I ? <I aria-hidden c
 // ...a failure the agent made good by trying again (`recovered`, agentSteps.stepsOf) says so quietly; red is for one it did not
 // ...and one Taskuary held for the owner's yes (`held`) waits, quietly - its card below says what Approve runs
 // ...and a look whose non-zero exit was its answer (`none`: `ls notes*`, nothing there) found none - plainly, no red
-const STATUS_WORD = { running: "working", recovered: "retried - worked", held: "waits for your yes", none: "found none", error: "failed" };
+// ...and one put to the owner that nobody allowed (`refused`: his no, no answer in time) was never run - never its "Deleted …" alone, as done
+const STATUS_WORD = { running: "working", recovered: "retried - worked", held: "waits for your yes", refused: "not run", none: "found none", error: "failed" };
 import { whyFailed } from "./stepWhy.js";
 export const StepRow = ({ step }) => {
   if (step.kind === "said") return <div className="tq-aui-said"><Md text={step.summary} /></div>;

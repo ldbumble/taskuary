@@ -35,7 +35,7 @@ def normal(r: dict) -> dict:
     opts = [o for o in (r.get('options') or OPTIONS) if o in OPTIONS] or ['allow_once', 'reject_once']
     locs, inp = [str(l) for l in (r.get('locations') or []) if str(l or '').strip()], r.get('input') if isinstance(r.get('input'), dict) else {}
     out = {'tool': str(r.get('tool') or r.get('kind') or 'a tool'), 'kind': str(r.get('kind') or 'other').lower(), 'title': str(r.get('title') or r.get('tool') or ''),
-           'locations': locs, 'input': inp, 'sid': str(r.get('sid') or ''), 'command': str(r.get('command') or inp.get('command') or ''),
+           'locations': locs, 'input': inp, 'sid': str(r.get('sid') or ''), 'call': str(r.get('call') or ''), 'command': str(r.get('command') or inp.get('command') or ''),
            'about': cut(' '.join(str(inp.get('description') or '').split()), 300), 'what': '', 'why': ''}        # what/why: held_for, once it is the owner's
     out['risky'] = risky(out)
     if out['risky']: opts = [o for o in opts if o != 'allow_always']            # an "always" for a push is a push nobody saw
@@ -131,20 +131,47 @@ def pending(tid: int = None, store=None) -> list:
              'options': [{'kind': o, 'label': LABEL[o]} for o in p['req']['options']]} for p in sorted(rows, key=lambda p: p['at'])]
 
 
-ASIDE: set = set()      # the requests set aside as the chat moved on (set_aside): refused, and by nobody - never the owner's no
+# THE STEP A REQUEST IS ABOUT (the stress round, 2026-11-18): while the card waited, the call it stopped at read "Deleted ledger-archive" in the
+# chat - a call that never finished, drawn done - and after his Reject it still did. Each tool call put to the owner is `held` while it waits
+# and `refused` once it ended with nobody allowing it (his no, his Always reject, no answer in time, set aside, Taskuary closed first); an allowed one
+# is as it ran
+def calls(store, tid: int) -> dict:
+    "{tool call id: 'held' | 'refused'} for this task's calls the owner was asked about and has not allowed."
+    import json
+    with _LOCK: held = {p['req']['call'] for p in PENDING.values() if p['tid'] == int(tid) and p['store'] is store and p['req']['call']}
+    out = {}
+    # ...and one his remembered Always reject refused without asking (`permission_auto`) is refused as his press would be
+    for r in store._rows("SELECT Action, Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action IN ('permission_asked','permission_answered','permission_auto') ORDER BY Id", (int(tid),)):
+        try: d = json.loads(r['Detail'] or '{}')
+        except ValueError: continue
+        if not (c := str(d.get('call') or '')): continue
+        if r['Action'] == 'permission_asked': out[c] = 'refused'
+        elif str(d.get('answer') or '').startswith('allow'): out.pop(c, None)
+        elif r['Action'] == 'permission_auto': out[c] = 'refused'
+    return out | {c: 'held' for c in held}
+
+
+def still_waiting(store, tid: int) -> list:
+    "[(pid, request)] still waiting on the owner on task `tid`, oldest first - none that is being set aside or already answered."
+    from . import workerstate as ws
+    with _LOCK: rows = sorted((p for p in PENDING.values() if p['tid'] == int(tid) and p['store'] is store and p['id'] not in ASIDE), key=lambda p: p['at'])
+    return [(p['id'], p['req']) for p in rows if (h := ws.HELD.get(p['g'])) and not h.get('answers')]
+
+
+ASIDE: dict = {}      # the requests set aside (set_aside) -> what closed them: refused, and by nobody - never the owner's no
 
 
 def ask(store, tid: int, request: dict, wait: float = None, timed_out=None, moved_on=None) -> str:
     """THE SEAM. Blocks until answered (call it off an event loop). Returns one of the request's options. `timed_out()` is called when
-    nobody answered - the refusal returned then is no owner's word, and a caller may file it for later (acpgate); `moved_on()` when it was
-    still waiting as the chat moved past it (set_aside) - no one's no either, and its agent is told so (the owner, 2026-11-16: the agent wrote
+    nobody answered - the refusal returned then is no owner's word, and a caller may file it for later (acpgate); `moved_on(said)` when it was
+    still waiting as the chat moved past it or he stopped the turn (set_aside, `said` the words it closed with) - no one's no either, and its agent is told so (the owner, 2026-11-16: the agent wrote
     "You declined my search of the FanApp code" of a step he never answered)."""
     from . import agents, agentchannels, workerstate as ws
     tid, r = int(tid), normal(request)
     if not agents.developer_mode(store): return _pick(r, False)
     got, why = auto(store, tid, r)
     if got:
-        store.audit('task', tid, 'permission_auto', 'taskuary', 'system', {'pattern': pattern(r), 'answer': got, 'why': why})
+        store.audit('task', tid, 'permission_auto', 'taskuary', 'system', {'pattern': pattern(r), 'answer': got, 'why': why, 'call': r['call']})
         return got
     pid, wait = uuid.uuid4().hex[:12], TIMEOUT if wait is None else wait
     try: r.update(held_for(r, _cwd(store, tid)))
@@ -156,44 +183,53 @@ def ask(store, tid: int, request: dict, wait: float = None, timed_out=None, move
     # on the rail first, then the card: what draws the card can already read the agent as waiting on the owner
     try: ws.record(store, tid, sid, 'approval_needed', request_id=rid, text=f'The agent {line(r)}', choices=[LABEL[o] for o in r['options']], source='permission')
     except Exception as e: logger.debug(f'permission on {task_ref(tid)}: not on the rail - {e}')
+    done = threading.Event()        # set once what ask() writes of the answer is written: answer() returns only then
     with _LOCK: PENDING[pid] = {'id': pid, 'tid': tid, 'store': store, 'req': r, 'g': g, 'rid': rid, 'sid': sid, 'at': time.strftime('%Y-%m-%d %H:%M:%S'),
-                                'until': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time() + wait))}
+                                'until': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time() + wait)), 'done': done}
     try:
-        store.audit('task', tid, 'permission_asked', 'agent', 'agent', {'pid': pid, 'pattern': pattern(r)})
-        try: agentchannels.permission_asked(store, tid, pid, r)
-        except Exception as e: logger.warning(f'permission on {task_ref(tid)}: not put on its channel - {e}')
-        out = ws.wait_held(g, wait)
-    finally:
-        with _LOCK: PENDING.pop(pid, None)
-    ans = kind_of((out or {}).get(rid), r['options'])
-    if pid in ASIDE:
-        ASIDE.discard(pid)
-        if moved_on: moved_on()
-        return ans or _pick(r, False)
-    if not ans:
-        ans = _pick(r, False)
-        said = (f"No answer in {round(wait / 60) or 1} min{'s' if round(wait / 60) != 1 else ''} - the agent's request was refused: it {line(r)}."
-                if out is None and not ws.STOP.is_set() else CLOSED_FIRST.format(line(r)))
-        try: ws.record(store, tid, sid, 'answered', request_id=rid, text='timed out - refused', source='permission')
-        except Exception: pass
-        store.add_comment(tid, 'taskuary', 'agent', said)
-        try: agentchannels.permission_done(store, tid, pid, said)
-        except Exception as e: logger.debug(f'permission on {task_ref(tid)}: timeout line not posted - {e}')
-        if timed_out: timed_out()
+        try:
+            store.audit('task', tid, 'permission_asked', 'agent', 'agent', {'pid': pid, 'pattern': pattern(r), 'call': r['call']})
+            try: agentchannels.permission_asked(store, tid, pid, r)
+            except Exception as e: logger.warning(f'permission on {task_ref(tid)}: not put on its channel - {e}')
+            end = time.monotonic() + wait
+            out = ws.wait_held(g, wait)
+        finally:
+            with _LOCK: PENDING.pop(pid, None)
+        ans = kind_of((out or {}).get(rid), r['options'])
+        if pid in ASIDE:
+            why = ASIDE.pop(pid)
+            if moved_on: moved_on(why)
+            return ans or _pick(r, False)
+        if not ans:
+            ans = _pick(r, False)
+            # ...let go before its time was up is no timeout: its session ended first (closed, or its process died) - never "No answer in 10 mins"
+            said = (CLOSED_FIRST if ws.STOP.is_set() or out is not None else ENDED_FIRST if time.monotonic() < end - 1 else
+                    f"No answer in {round(wait / 60) or 1} min{'s' if round(wait / 60) != 1 else ''} - the agent's request was refused: it {{}}.").format(line(r))
+            try: ws.record(store, tid, sid, 'answered', request_id=rid, text='timed out - refused', source='permission')
+            except Exception: pass
+            store.add_comment(tid, 'taskuary', 'agent', said)
+            try: agentchannels.permission_done(store, tid, pid, said)
+            except Exception as e: logger.debug(f'permission on {task_ref(tid)}: timeout line not posted - {e}')
+            if timed_out: timed_out()
+            return ans
+        if ans.endswith('_always'): store.set_perm_rule(tid, pattern(r), 'allow' if ans.startswith('allow') else 'reject')
+        store.audit('task', tid, 'permission_answered', 'owner', detail={'pid': pid, 'answer': ans, 'pattern': pattern(r), 'asked': asked(r), 'call': r['call']})
+        try:                                           # ...the turn that waited on it hears it now: his press stands where he made it
+            from . import conversation
+            conversation.hear_press(store, tid, 'permission_answered')
+        except Exception as e: logger.debug(f'permission on {task_ref(tid)}: its answer not written as heard - {e}')
+        # ...AND EVERY CHAT BOUND TO THE TASK HEARS IT, whichever road it came by (the button, the chat, the rail's answer): answered on the
+        # rail, the chat kept its numbered ask open and never heard - its "1" then read "Nothing changed"
+        try: agentchannels.permission_done(store, tid, pid, answered(ans, tid, r))
+        except Exception as e: logger.debug(f'permission on {task_ref(tid)}: answer line not posted - {e}')
         return ans
-    if ans.endswith('_always'): store.set_perm_rule(tid, pattern(r), 'allow' if ans.startswith('allow') else 'reject')
-    store.audit('task', tid, 'permission_answered', 'owner', detail={'pid': pid, 'answer': ans, 'pattern': pattern(r), 'asked': asked(r)})
-    try:                                           # ...the turn that waited on it hears it now: his press stands where he made it
-        from . import conversation
-        conversation.hear_press(store, tid, 'permission_answered')
-    except Exception as e: logger.debug(f'permission on {task_ref(tid)}: its answer not written as heard - {e}')
-    return ans
+    finally: done.set()
 
 
 def answer(store, tid: int, pid: str, option: str, actor: str = 'owner') -> dict:
     """The OWNER's answer - the task chat's button, or the owner's own reply on a bound channel (agentchannels checks who wrote it). A
     teammate's never reaches here: no road hands one in."""
-    from . import agentchannels, workerstate as ws
+    from . import workerstate as ws
     if actor != 'owner': raise PermissionError("only the owner answers an agent's permission request")
     with _LOCK: p = PENDING.get(str(pid))
     if not p or p['tid'] != int(tid) or p['store'] is not store: return {'ok': False, 'why': 'that request is no longer waiting'}
@@ -202,14 +238,20 @@ def answer(store, tid: int, pid: str, option: str, actor: str = 'owner') -> dict
     h = ws.HELD.get(p['g'])
     if not h: return {'ok': False, 'why': 'that request is no longer waiting'}
     ws._answer_held(store, int(tid), h, {p['rid']: o}, actor)
-    said = f"{LABEL[o]} - {task_ref(tid)} {line(p['req'])}."
-    try: agentchannels.permission_done(store, int(tid), pid, said)
-    except Exception as e: logger.debug(f'permission on {task_ref(tid)}: answer line not posted - {e}')
-    return {'ok': True, 'answer': o, 'says': said}
+    # ...AND RETURNS ONCE THE ASKING THREAD HAS WRITTEN IT: the page reads the list the moment the press returns, and found the card still
+    # waiting - its buttons lit again - or no card at all, until that thread woke (browser/permission-press)
+    p['done'].wait(5)
+    return {'ok': True, 'answer': o, 'says': answered(o, tid, p['req'])}
+
+
+def answered(o: str, tid: int, r: dict) -> str: return f"{LABEL[o]} - {task_ref(tid)} {line(r)}."
 
 
 SET_ASIDE_SAID = 'Set aside when you moved on - the agent was refused: it {}. Ask it to bring it back if it is still wanted.'
-def set_aside(store, tid: int) -> list:
+# ...and closed when he stopped the turn that asked (acpcoding.cancel): ACP's own rule, a client that cancels answers what it holds - the card
+# stayed lit ten minutes over a turn already stopped, then read "No answer in 10 mins" of a step nobody would run
+STOPPED_SAID = 'Closed when you stopped the agent - it {}. Ask it to bring it back if it is still wanted.'
+def set_aside(store, tid: int, said: str = SET_ASIDE_SAID) -> list:
     """The conversation on task `tid` moved on past its waiting permission cards (proposals.move_on, the owner 2026-11-10: "once youa re passed
     it, it should stay where it is with buttons grayed out"): each is refused - never allowed on nobody's press - and the line stays in its place."""
     from . import agentchannels, workerstate as ws
@@ -217,11 +259,11 @@ def set_aside(store, tid: int) -> list:
     out = []
     for p in ps:
         if not (h := ws.HELD.get(p['g'])): continue
-        ASIDE.add(p['id'])
+        ASIDE[p['id']] = said
         ws._answer_held(store, int(tid), h, {p['rid']: _pick(p['req'], False)}, 'taskuary')
-        said = SET_ASIDE_SAID.format(line(p['req']))
-        store.add_comment(int(tid), 'taskuary', 'agent', said); out.append(p['id'])
-        try: agentchannels.permission_done(store, int(tid), p['id'], said)
+        words = said.format(line(p['req']))
+        store.add_comment(int(tid), 'taskuary', 'agent', words); out.append(p['id'])
+        try: agentchannels.permission_done(store, int(tid), p['id'], words)
         except Exception as e: logger.debug(f'permission on {task_ref(tid)}: set-aside line not posted - {e}')
     return out
 
@@ -232,6 +274,7 @@ def set_aside(store, tid: int) -> list:
 # a kill says nothing, so the next start says it, before the run's ending is written (terminal.recover_after_restart): the request is
 # closed in the record and the task reads that it was never run. A run the record already ended is history, and is left as it reads
 CLOSED_FIRST = "The agent's request was refused - Taskuary closed first: it {}."
+ENDED_FIRST = "The agent's request was refused - its session ended before you answered: it {}."
 def refuse_orphans(store) -> list:
     "Every permission request the record holds open with nobody in this process asking it: refused, and said on its task - [task ids]."
     from . import workerstate as ws
@@ -258,7 +301,7 @@ def from_acp(params: dict) -> dict:
     raw = tc.get('rawInput') if isinstance(tc.get('rawInput'), dict) else {}
     cmd = raw.get('command') or raw.get('cmd') or ''
     if isinstance(cmd, list): cmd = ' '.join(map(str, cmd))
-    return {'tool': str(((tc.get('_meta') or {}).get('claudeCode') or {}).get('toolName') or tc.get('title') or tc.get('kind') or 'a tool'),
+    return {'tool': str(((tc.get('_meta') or {}).get('claudeCode') or {}).get('toolName') or tc.get('title') or tc.get('kind') or 'a tool'), 'call': str(tc.get('toolCallId') or ''),
             'kind': tc.get('kind') or 'other', 'title': tc.get('title') or '', 'input': raw, 'command': str(cmd), 'sid': (params or {}).get('sessionId') or '',
             'locations': [l.get('path') for l in tc.get('locations') or [] if isinstance(l, dict) and l.get('path')],
             'options': [o.get('kind') for o in (params or {}).get('options') or [] if o.get('kind') in OPTIONS] or ['allow_once', 'reject_once']}

@@ -119,14 +119,14 @@ def test_a_request_the_chat_moved_past_is_nobodys_no_and_its_agent_is_told_it_wa
     from taskuary import acpgate
     tid, past = coding(s), []
     box = []
-    t = threading.Thread(target=lambda: box.append(perm.ask(s, tid, perm.from_acp(ACP), wait=5, moved_on=lambda: past.append(1))), daemon=True); t.start()
+    t = threading.Thread(target=lambda: box.append(perm.ask(s, tid, perm.from_acp(ACP), wait=5, moved_on=lambda said: past.append(1))), daemon=True); t.start()
     for _ in range(200):
         if perm.pending(tid, s): break
         time.sleep(0.02)
     perm.set_aside(s, tid); t.join(5)
     assert box == ['reject_once'] and past == [1]
     told = []
-    with mock.patch.object(perm, 'ask', lambda st, t_, r, **kw: kw['moved_on']() or 'reject_once'), mock.patch('taskuary.shellgate.declined', lambda *a, **k: told.append(a)):
+    with mock.patch.object(perm, 'ask', lambda st, t_, r, **kw: kw['moved_on'](perm.SET_ASIDE_SAID) or 'reject_once'), mock.patch('taskuary.shellgate.declined', lambda *a, **k: told.append(a)):
         got = acpgate.put_to_owner({'store': s, 'task_id': tid, 'sid': 'sess-1', 'cwd': REPO}, ACP, 'it reads outside')
     assert got == (acpgate.REFUSED, acpgate.STILL_WAITING) and told == [], 'never "the owner did not approve it"'
     assert 'nobody said no' in acpgate.STILL_WAITING
@@ -208,3 +208,77 @@ def test_a_request_the_last_run_left_open_is_refused_and_said_when_taskuary_star
     finally:
         with perm._LOCK: perm.PENDING.update(held)
         ws.release(tid); t.join(5)
+
+
+def test_the_answer_is_the_answered_card_the_moment_the_press_returns(s):
+    """THE PRESS RETURNS, THE NEXT READ HAS IT (browser/permission-press). answer() handed the press to the asking thread and returned; the page's
+    read right after could find the card still waiting (its buttons lit again) or neither card - until that thread woke and wrote the answer the
+    greyed card is drawn from. The asking thread is made slow to wake, as a busy server's is: the read after the press has the answered card."""
+    from taskuary import general
+    tid = coding(s)
+    real = ws.wait_held
+    def slow(g, wait):
+        out = real(g, wait); time.sleep(0.4); return out
+    with mock.patch.object(ws, 'wait_held', slow):
+        t, box = asking(s, tid, perm.from_acp(ACP))
+        p = perm.pending(tid, s)[0]
+        assert perm.answer(s, tid, p['id'], 'allow_once')['ok']
+        assert p['id'] not in [x['id'] for x in perm.pending(tid, s)], 'the card is no longer waiting once the press returns'
+        assert [l['perm'] for l in general.press_lines(s, tid) if l.get('perm')] == [{'asked': 'Run the money tests', 'answer': 'allow_once'}]
+        t.join(3)
+    assert box == ['allow_once']
+
+
+def test_the_step_a_request_stopped_at_waits_and_once_refused_reads_not_run(s):
+    """THE STEP ABOVE THE CARD TELLS THE TRUTH (browser/permission-press). The agent asked to delete a folder: while the card waited, the step it
+    stopped at read "Deleted ledger-archive" (a call that never finished, calmed to done in a chat), and after his Reject it still did. The
+    step a request is about is `held` while it waits on him and `refused` once nobody allowed it - an allowed one is left as its run says."""
+    from taskuary import codingchat, conversation
+    tid = coding(s)
+    rm = {**ACP, 'toolCall': {**ACP['toolCall'], 'toolCallId': 'call-rm', 'title': 'rm -rf /srv/ledger-archive', 'rawInput': {'command': 'rm -rf /srv/ledger-archive'}}}
+    ups = [{'sessionUpdate': 'tool_call', 'toolCallId': c, 'kind': 'execute', 'status': 'pending', 'rawInput': {'command': cmd}, '_at': '2026-11-12 09:00:00'}
+           for c, cmd in (('call-7', 'npm test -- money'), ('call-rm', 'rm -rf /srv/ledger-archive'))]
+    def steps():
+        with mock.patch.object(codingchat, 'owned', return_value=[{'sid': 'sess-1', 'source': 'acp', 'updates': ups, 'at': '2026-11-12 09:00:00'}]), \
+             mock.patch.object(codingchat, 'sessions', return_value=[]):
+            (_, _, st), = conversation._session_steps(s, tid)
+        return {x['id']: x.get('status') for x in st if x['k'] == 'tool'}
+    t, box = asking(s, tid, perm.from_acp(rm))
+    assert steps() == {'call-7': 'pending', 'call-rm': 'held'}, 'the call the card is about waits on him'
+    perm.answer(s, tid, perm.pending(tid, s)[0]['id'], 'reject_once'); t.join(3)
+    ups.append({'sessionUpdate': 'tool_call_update', 'toolCallId': 'call-rm', 'status': 'failed'})
+    assert steps() == {'call-7': 'pending', 'call-rm': 'refused'}, 'refused: never "Deleted ledger-archive"'
+    t, box = asking(s, tid, perm.from_acp(ACP))
+    perm.answer(s, tid, perm.pending(tid, s)[0]['id'], 'allow_once'); t.join(3)
+    ups.append({'sessionUpdate': 'tool_call_update', 'toolCallId': 'call-7', 'status': 'completed'})
+    assert steps() == {'call-7': 'completed', 'call-rm': 'refused'}, 'an allowed call is as its run says'
+    assert perm.ask(s, tid, {**perm.from_acp(ACP), 'call': 'call-late'}, wait=0.1) == 'reject_once'
+    assert perm.calls(s, tid)['call-late'] == 'refused', 'no answer in time is a refusal too'
+
+
+def test_a_request_whose_session_ended_says_so_never_that_ten_minutes_passed(s):
+    """The agent's session closed (its process died, the task was closed) seconds after it asked: the ask was let go (workerstate.release) and
+    the task read "No answer in 10 mins - the agent's request was refused" - ten minutes that never passed. It says the session ended first."""
+    tid = coding(s)
+    t, box = asking(s, tid, perm.from_acp(ACP), wait=600)
+    assert perm.pending(tid, s)
+    ws.release(tid); t.join(3)
+    assert box == ['reject_once'] and not perm.pending(tid, s)
+    said = [c['Body'] for c in s.list_comments(tid)]
+    assert not any(b.startswith('No answer in') for b in said), said
+    assert said[-1] == perm.ENDED_FIRST.format("wants to run `npm test -- money` (" + os.path.join(REPO, 'money.js') + ")"), said
+
+
+def test_a_call_his_always_reject_refused_reads_not_run_too(s):
+    """He pressed Always reject; the agent asked the same again and Taskuary's rule answered it - never put to him, so never marked: the
+    refused call read as done in the chat ("Ran npm test -- money"). A call his remembered no refused is `refused` as his press would be;
+    one his Always allow let through is as it ran."""
+    tid = coding(s)
+    t, box = asking(s, tid, perm.from_acp(ACP))
+    perm.answer(s, tid, perm.pending(tid, s)[0]['id'], 'reject_always'); t.join(3)
+    again = {**ACP, 'toolCall': {**ACP['toolCall'], 'toolCallId': 'call-8'}}
+    assert perm.ask(s, tid, perm.from_acp(again), wait=0.2) == 'reject_once'
+    assert perm.calls(s, tid) == {'call-7': 'refused', 'call-8': 'refused'}
+    s.set_perm_rule(tid, perm.pattern(perm.normal(perm.from_acp(ACP))), 'allow')
+    assert perm.ask(s, tid, perm.from_acp({**ACP, 'toolCall': {**ACP['toolCall'], 'toolCallId': 'call-9'}}), wait=0.2) == 'allow_once'
+    assert 'call-9' not in perm.calls(s, tid)

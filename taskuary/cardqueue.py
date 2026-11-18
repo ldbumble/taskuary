@@ -137,8 +137,8 @@ def what(store, u: dict) -> str:
     r = u['rows'][0]
     if r.get('Batch') and len(u['rows']) > 1:
         from .timewords import plural
-        return plural(len(u['rows']), 'email') if r['Kind'] == 'slot' else f"{len(u['rows'])} like {what(store, {'rids': [r['ReviewId']], 'rows': [{**r, 'Batch': None}]})}"
-    if r['Kind'] == 'action':
+        return plural(len(u['rows']), 'email') if r.get('Kind') == 'slot' else f"{len(u['rows'])} like {what(store, {'rids': [r['ReviewId']], 'rows': [{**r, 'Batch': None}]})}"
+    if r.get('Kind') == 'action':
         if (p := _p(r)).get('repo') and p.get('number') is not None: return f"{p['repo']}#{p['number']}"       # ...an issue by its own name
         why = ' '.join(str(r.get('Reason') or '').split())
         for lead in ('the agent proposes to ', 'the workflow asks to '): why = why[len(lead):] if why.lower().startswith(lead) else why
@@ -150,7 +150,7 @@ def what(store, u: dict) -> str:
     to = env.get('to') if isinstance(env, dict) else None
     to = ', '.join(to) if isinstance(to, list) else str(to or '')
     if not to and r.get('MessageId'): m = store.get_message(r.get('AnswersMid') or r['MessageId']) or {}; to = m.get('FromName') or m.get('FromEmail') or ''
-    return f"the {'email' if r['Kind'] == 'slot' else 'reply'}" + (f' to {to}' if to else '')
+    return f"the {'email' if r.get('Kind') == 'slot' else 'reply'}" + (f' to {to}' if to else '')
 
 
 def line(s: dict) -> str:

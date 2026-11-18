@@ -7235,11 +7235,10 @@ async def prompt_file(request: Request):
     """ANY FILE for a prompt (the owner, 2026-11-05: "does drop in the prompt box attach it in all prompt boxes?"): a PDF, a sheet, a log,
     dropped, pasted or picked into any box - the image road's bytes-as-body contract and its 12 MB cap, the name in X-File-Name. Saved
     under attachments/prompt/ like a picture, so the same prompt_images check is the one that lets its path reach a prompt."""
-    from urllib.parse import unquote
     data = await request.body()
     if not data: raise HTTPException(422, 'no file in the request')
     if len(data) > IMG_MAX: raise HTTPException(413, 'file over 12 MB - send a smaller one')
-    name = re.sub(r'[^\w.\- ]+', '_', Path(unquote(request.headers.get('x-file-name') or 'file')).name).strip(' .')[:80] or 'file'
+    name = _upload_name(request) or 'file'
     d = config.home() / 'attachments' / 'prompt' / time.strftime('%Y%m')
     p = d / f'{time.strftime("%Y%m%d-%H%M%S")}-{secrets.token_hex(3)}-{name}'
     def keep(): d.mkdir(parents=True, exist_ok=True); p.write_bytes(data)
@@ -7265,6 +7264,12 @@ def with_images(text: str, paths) -> str:
     return with_files(text, prompt_images(paths))
 
 
+def _upload_name(request: Request) -> str:
+    "The name the page gave an upload (X-File-Name), safe as one file name in its folder - '' with none."
+    from urllib.parse import unquote
+    return re.sub(r'[^\w.\- ]+', '_', Path(unquote(request.headers.get('x-file-name') or '')).name).strip(' .')[:80]
+
+
 async def _save_prompt_image(tid: int | None, request: Request):
     """Store an image that will be named in a CLI prompt, from any prompt surface. The store and the disk off the loop."""
     if tid is not None and not await run_in_threadpool(store.get_task, tid): raise HTTPException(404, 'task not found')
@@ -7276,7 +7281,10 @@ async def _save_prompt_image(tid: int | None, request: Request):
     if len(data) > IMG_MAX: raise HTTPException(413, 'image over 12 MB - crop it')
     d = config.home() / 'attachments' / ('waitroom' if tid is not None else 'prompt') / (str(tid) if tid is not None else time.strftime('%Y%m'))
     d.mkdir(parents=True, exist_ok=True)
-    p = d / f'{time.strftime("%Y%m%d-%H%M%S")}-{secrets.token_hex(3)}.{ext}'
+    # ...BY ITS OWN NAME, as a file is (the attach stress round, 2026-11-18): the box's chip read "venue plan.png" and his line's pill, once sent,
+    # the upload's stamp - its type is the picture's own, never the name's
+    stem = Path(_upload_name(request)).stem.strip(' .')
+    p = d / f'{time.strftime("%Y%m%d-%H%M%S")}-{secrets.token_hex(3)}{f"-{stem}" if stem else ""}.{ext}'
     def keep():
         p.write_bytes(data)
         if tid is not None: store.audit('task', tid, 'waitroom_image', ACTOR, detail={'path': str(p), 'size': len(data)})

@@ -155,13 +155,13 @@ def still_waiting(store, tid: int) -> list:
     return [(p['id'], p['req']) for p in rows if (h := ws.HELD.get(p['g'])) and not h.get('answers')]
 
 
-ASIDE: set = set()      # the requests set aside as the chat moved on (set_aside): refused, and by nobody - never the owner's no
+ASIDE: dict = {}      # the requests set aside (set_aside) -> what closed them: refused, and by nobody - never the owner's no
 
 
 def ask(store, tid: int, request: dict, wait: float = None, timed_out=None, moved_on=None) -> str:
     """THE SEAM. Blocks until answered (call it off an event loop). Returns one of the request's options. `timed_out()` is called when
-    nobody answered - the refusal returned then is no owner's word, and a caller may file it for later (acpgate); `moved_on()` when it was
-    still waiting as the chat moved past it (set_aside) - no one's no either, and its agent is told so (the owner, 2026-11-16: the agent wrote
+    nobody answered - the refusal returned then is no owner's word, and a caller may file it for later (acpgate); `moved_on(said)` when it was
+    still waiting as the chat moved past it or he stopped the turn (set_aside, `said` the words it closed with) - no one's no either, and its agent is told so (the owner, 2026-11-16: the agent wrote
     "You declined my search of the FanApp code" of a step he never answered)."""
     from . import agents, agentchannels, workerstate as ws
     tid, r = int(tid), normal(request)
@@ -193,8 +193,8 @@ def ask(store, tid: int, request: dict, wait: float = None, timed_out=None, move
             with _LOCK: PENDING.pop(pid, None)
         ans = kind_of((out or {}).get(rid), r['options'])
         if pid in ASIDE:
-            ASIDE.discard(pid)
-            if moved_on: moved_on()
+            why = ASIDE.pop(pid)
+            if moved_on: moved_on(why)
             return ans or _pick(r, False)
         if not ans:
             ans = _pick(r, False)
@@ -239,7 +239,10 @@ def answer(store, tid: int, pid: str, option: str, actor: str = 'owner') -> dict
 
 
 SET_ASIDE_SAID = 'Set aside when you moved on - the agent was refused: it {}. Ask it to bring it back if it is still wanted.'
-def set_aside(store, tid: int) -> list:
+# ...and closed when he stopped the turn that asked (acpcoding.cancel): ACP's own rule, a client that cancels answers what it holds - the card
+# stayed lit ten minutes over a turn already stopped, then read "No answer in 10 mins" of a step nobody would run
+STOPPED_SAID = 'Closed when you stopped the agent - it {}. Ask it to bring it back if it is still wanted.'
+def set_aside(store, tid: int, said: str = SET_ASIDE_SAID) -> list:
     """The conversation on task `tid` moved on past its waiting permission cards (proposals.move_on, the owner 2026-11-10: "once youa re passed
     it, it should stay where it is with buttons grayed out"): each is refused - never allowed on nobody's press - and the line stays in its place."""
     from . import agentchannels, workerstate as ws
@@ -247,11 +250,11 @@ def set_aside(store, tid: int) -> list:
     out = []
     for p in ps:
         if not (h := ws.HELD.get(p['g'])): continue
-        ASIDE.add(p['id'])
+        ASIDE[p['id']] = said
         ws._answer_held(store, int(tid), h, {p['rid']: _pick(p['req'], False)}, 'taskuary')
-        said = SET_ASIDE_SAID.format(line(p['req']))
-        store.add_comment(int(tid), 'taskuary', 'agent', said); out.append(p['id'])
-        try: agentchannels.permission_done(store, int(tid), p['id'], said)
+        words = said.format(line(p['req']))
+        store.add_comment(int(tid), 'taskuary', 'agent', words); out.append(p['id'])
+        try: agentchannels.permission_done(store, int(tid), p['id'], words)
         except Exception as e: logger.debug(f'permission on {task_ref(tid)}: set-aside line not posted - {e}')
     return out
 

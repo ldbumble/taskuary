@@ -545,7 +545,12 @@ class ACPCoding:
         """Stop: session/cancel - the turn ends, the conversation stays, and what is typed next carries on. Pressed while its adapter comes up
         (Remind me, the audit 2026-11-10: the chat read "working" for a minute) it stops the turn it was opened for, the moment that is sent."""
         if not (self.alive and self.busy): return False
-        if self.client and self.in_turn: self.client.cancel()
+        if self.client and self.in_turn:
+            self.client.cancel()
+            # ...and what the turn waits on him for closes with it: never a lit Allow once over a turn he stopped (permissions.STOPPED_SAID)
+            if self.store is not None and self.task_id:
+                from . import permissions
+                permissions.set_aside(self.store, int(self.task_id), permissions.STOPPED_SAID)
         else: self.stop_next = True
         return True
 

@@ -119,14 +119,14 @@ def test_a_request_the_chat_moved_past_is_nobodys_no_and_its_agent_is_told_it_wa
     from taskuary import acpgate
     tid, past = coding(s), []
     box = []
-    t = threading.Thread(target=lambda: box.append(perm.ask(s, tid, perm.from_acp(ACP), wait=5, moved_on=lambda: past.append(1))), daemon=True); t.start()
+    t = threading.Thread(target=lambda: box.append(perm.ask(s, tid, perm.from_acp(ACP), wait=5, moved_on=lambda said: past.append(1))), daemon=True); t.start()
     for _ in range(200):
         if perm.pending(tid, s): break
         time.sleep(0.02)
     perm.set_aside(s, tid); t.join(5)
     assert box == ['reject_once'] and past == [1]
     told = []
-    with mock.patch.object(perm, 'ask', lambda st, t_, r, **kw: kw['moved_on']() or 'reject_once'), mock.patch('taskuary.shellgate.declined', lambda *a, **k: told.append(a)):
+    with mock.patch.object(perm, 'ask', lambda st, t_, r, **kw: kw['moved_on'](perm.SET_ASIDE_SAID) or 'reject_once'), mock.patch('taskuary.shellgate.declined', lambda *a, **k: told.append(a)):
         got = acpgate.put_to_owner({'store': s, 'task_id': tid, 'sid': 'sess-1', 'cwd': REPO}, ACP, 'it reads outside')
     assert got == (acpgate.REFUSED, acpgate.STILL_WAITING) and told == [], 'never "the owner did not approve it"'
     assert 'nobody said no' in acpgate.STILL_WAITING

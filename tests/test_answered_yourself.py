@@ -170,6 +170,31 @@ class TheReplyHasToSurviveTheTrip(unittest.TestCase):
         dock, _ = general.dock_task(s)
         self.assertFalse([m for m in concierge.history(s, dock['TaskId']) if 'no new response needed' in (m.get('text') or '')])
 
+    def test_a_draft_his_mailbox_reply_retired_stays_greyed_in_its_place_saying_he_answered(self):
+        """The stress round, 2026-11-18 (invented people): a reply to Erin waited; the owner answered her from his mailbox. The sync retired
+        the draft as `superseded` under a note of its own that no surface knew: the chat drew it with no words and the page had no card for
+        it, so the draft he had seen waiting went from the chat. It is a card the thread moved past - greyed where it stood, its words kept,
+        saying what happened - and a stale Send on it is refused in that same sentence."""
+        from taskuary import conversation, proposals
+        from taskuary.channels import ingest_own_message
+        s = _store()
+        mid = s.add_message({'ExternalId': 'in-1', 'ConversationId': 'conv-venue', 'Channel': 'email', 'SourceName': 'alex@northwind.example',
+                             'Subject': 'Offsite venue', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
+                             'SentAt': '2026-11-10 09:00:00', 'BodyText': 'Which venue did we pick?', 'Status': 'routed'})
+        tid = s.create_task({'Title': 'Erin asks for the venue', 'Kind': 'task', 'Status': 'open'}, 'router')
+        s.attach_message(mid, tid)
+        rid = s.add_review({'MessageId': mid, 'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'We picked the Harbor Hall.'})
+        s._exec("UPDATE message SET CreatedAt='2026-11-10 09:00:05' WHERE MessageId=?", (mid,))         # ...it came in that morning,
+        s._exec("UPDATE review SET CreatedAt='2026-11-10 09:05:00' WHERE ReviewId=?", (rid,))           # ...drafted a few minutes on
+        ingest_own_message(s, {'external_id': 'out-1', 'conversation_id': 'conv-venue', 'channel': 'email', 'source_name': 'alex@northwind.example',
+                               'sent_at': '2026-11-10 09:20:00',
+                               'body': 'Harbor Hall - booked it this morning.'}, 'your reply')
+        self.assertTrue(proposals.passed(s.get_review(rid)))
+        card = next(c for x in conversation.items(s, tid)['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or []) if c.get('review') == rid)
+        self.assertEqual((card['status'], card['was']['text']), ('passed', 'We picked the Harbor Hall.'))
+        self.assertEqual(card['why'], 'Not sent - you answered Erin Blake yourself')
+        self.assertEqual(proposals.passed_why(s, s.get_review(rid)), card['why'])
+
     def test_an_earlier_owner_line_does_not_retire_a_later_ask(self):
         from taskuary.channels import ingest_own_message
         s = _store()

@@ -1040,7 +1040,7 @@ REREAD_SYSTEM = ('You read words written for the owner and not acted on yet - a 
                  'only: {"covered": "covered" | "partly" | "none", "left": "the cut words for partly, else empty"}')
 REREAD_WANT = {'type': 'object', 'properties': {'covered': {'type': 'string', 'enum': ['covered', 'partly', 'none']}, 'left': {'type': 'string'}},
                'required': ['covered']}
-COVERED, CHECK_IT = 'Your line covers this, nothing more to send.', 'You wrote on the thread since - check the draft still fits.'
+CHECK_IT = 'You wrote on the thread since - check the draft still fits.'
 
 
 def reread(store, tid, words: str, line: str, brain=None) -> tuple:
@@ -1057,9 +1057,10 @@ def reread(store, tid, words: str, line: str, brain=None) -> tuple:
 
 def reread_draft(store, tid, rv: dict, sent: dict, brain=None) -> str:
     """A pending draft on a chat, re-read against the line the owner wrote there since (reread):
-    covered -> retired (COVERED), partly -> its text cut to what is still unanswered (same recipient, same quote), none -> left as it is.
+    covered -> set aside (SET_ASIDE), partly -> its text cut to what is still unanswered (same recipient, same quote), none -> left as it is.
     Unreadable, or no AI: the draft stays untouched and the task says CHECK_IT. Returns which it was."""
     from .sessionrecord import NOTE_ACTOR
+    from .proposals import SET_ASIDE
     from . import funnel
     line, draft = ' '.join(str(sent.get('BodyText') or '').split())[:2000], str(rv.get('DraftText') or '').strip()
     note = lambda t: tid and store.add_comment(tid, NOTE_ACTOR, 'assistant_agent', t)
@@ -1069,7 +1070,7 @@ def reread_draft(store, tid, rv: dict, sent: dict, brain=None) -> str:
     who = str(m.get('FromName') or '').strip() if m.get('FromName') != 'You' else ''
     got, left = reread(store, tid, draft, line, brain=brain)
     if got == 'covered':
-        store.decide_review(rv['ReviewId'], 'superseded', None, 'you', COVERED)
+        store.decide_review(rv['ReviewId'], 'superseded', None, 'you', SET_ASIDE)      # ...greyed in place, as a mailbox reply's (retire_draft_answered_elsewhere)
         if tid:
             from . import verdicts
             verdicts._settle_task_after_sent_reply(store, rv, 'you', True)
@@ -1134,10 +1135,13 @@ def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict, later: b
         stale = [rv for rv in stale if rv not in worded]
         if not stale: return []
 
+    # ...A CARD THE THREAD MOVED PAST (proposals.SET_ASIDE), as every other is (the stress round, 2026-11-18): retired under a note of its own,
+    # no surface drew it - the chat had no words for it, the page no card - and the draft he had seen waiting went from the chat. Set aside, it
+    # stays greyed where it stood with its words, saying what happened (proposals.passed_why: "Not sent - you answered Erin yourself")
+    from .proposals import SET_ASIDE
     place = SENT_FROM.get(sent.get('Channel'), 'outside Taskuary')
     for rv in stale:
-        store.decide_review(rv['ReviewId'], 'superseded', None, 'you',
-                            f'The owner replied {place}; this draft was not sent.')
+        store.decide_review(rv['ReviewId'], 'superseded', None, 'you', SET_ASIDE)
 
     # Treat this exactly like a successful send through Review - which closes nothing (the owner, 2026-10-18: "sending and
     # closing are two steps"): the task stays open for Mark done.

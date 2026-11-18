@@ -168,6 +168,15 @@ _GH_WHO = {'FIRST_TIME_CONTRIBUTOR': 'a first-time contributor', 'FIRST_TIMER': 
 _GH_WHOM = {'off': 'nobody', 'team': 'the team', 'contributors': 'the team and past contributors'}
 
 
+# A CHANNEL THAT WAITS SAYS WHY ONE WAY, on every road a line takes - its arrival, a reply that needs an agent, a line on a task an agent had:
+# they read "It is from someone outside the repository, and ... only for the team", "items from GitHub wait for you to start them" and "the
+# channel waits for the owner" for one fact
+def channel_hold(store, msg: dict) -> str:
+    "Why an item of a channel that waits for the owner (`no_auto`) started no agent - a GitHub item says who wrote it and whom its repo trusts."
+    if msg.get('channel') == 'github': return gh_hold_why(store, msg)
+    return f'Items from {senders.channel_name(msg.get("channel")) or "this channel"} wait for you to start them.'
+
+
 def gh_hold_why(store, msg: dict) -> str:
     """Why a GitHub item did not start by itself, in words the card can show: WHO wrote it and whom the repo lets
     start an agent. "github items queue for you to promote" read as a queue that clears when a slot frees - and it
@@ -1278,8 +1287,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     act = (('a reply draft goes to the task for you' + (f' - {unsendable}, so it cannot be sent from here' if unsendable else '')) if f['kind'] == 'reply'
            else f"under {words.name('watching')} - nothing asked of you until the thread moves" if watching
            else 'on your list - no agent works it' if f['kind'] == 'task'
-           else f'{HELD} {gh_hold_why(store, msg)}' if msg.get('no_auto') and msg.get('channel') == 'github'
-           else f'{HELD} items from {senders.channel_name(msg.get("channel")) or "this channel"} wait for you to start them.' if msg.get('no_auto')
+           else f'{HELD} {channel_hold(store, msg)}' if msg.get('no_auto')
            else f'{HELD} {held}' if held
            else f'{agent_word(f["kind"])} was set to start by itself')
     head = route_head(intent['intent'], f['kind'])
@@ -2167,10 +2175,10 @@ def live_agent(store, tid) -> str:
 # matches, and the words the owner reads. Roads compare the code, never the sentence, so a sentence reworded here changes nothing else
 WHY = {'not_new': 'not new work', 'live': 'an agent is live on it', 'closed': 'the task is closed', 'off': 'passing lines to the agent is switched off',
        'no_session': 'no live session to pass it to', 'not_assistant': 'not an assistant task', 'no_conversation': 'no agent conversation',
-       'degraded': 'triage could not read it', 'channel': 'the channel waits for the owner', 'another': 'another agent is live on it',
+       'degraded': 'triage could not read it', 'another': 'another agent is live on it',
        'no_carry': 'no conversation to carry on', 'queued': 'its agent is queued to start and hears it then', 'own_task': 'it is your own task, so no agent works it', 'no_coding_session': 'no saved coding session to reopen'}
 class Why(str): code = ''
-def reason(code: str) -> Why: w = Why(WHY[code]); w.code = code; return w
+def reason(code: str, said: str = '') -> Why: w = Why(said or WHY[code]); w.code = code; return w      # `said`: words of its own (channel_hold)
 def code_of(why) -> str: return getattr(why, 'code', '')
 
 
@@ -2232,7 +2240,7 @@ def reach_why(store, tid, msg: dict, mid, follow: dict | None, kind: str, own: b
     if (follow or {}).get('degraded'): return reason('degraded')
     if not joinable(store, tid): return reason('closed')      # dismissed: a done task new work reopens first (land_on)
     if store.get_setting('answer_to_agent') == 'off': return reason('off')
-    if msg.get('no_auto'): return reason('channel')
+    if msg.get('no_auto'): return reason('channel', channel_hold(store, msg))
     if not own and (held := brainroute.auto_held(store)): return held
     if live and live != kind: return reason('another')
     # ...nor a line that reads as steering an AI (the owner, 2026-10-28): it waits for the owner's press
@@ -2420,7 +2428,7 @@ def agent_on_reply(store, tid, msg: dict, mid, verdict: dict | None, actor: str,
     if v.get('degraded') or v.get('intent') != 'task' or kind not in task_kinds.AGENT: return False
     if (store.get_task(tid) or {}).get('Status') == 'dropped': return False
     if msg.get('no_auto'):
-        not_started(store, tid, f'items from {senders.channel_name(msg.get("channel")) or "this channel"} wait for you to start them'); return False
+        not_started(store, tid, channel_hold(store, msg)); return False
     ok, who = auto_start_ok(store, msg, mid, kind)
     if not ok:
         not_started(store, tid, who)

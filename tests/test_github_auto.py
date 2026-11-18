@@ -127,3 +127,23 @@ class ADeadRepoDoesNotBlindTheOthersTests(unittest.TestCase):
         by_addr = {r['Address']: r for r in s.list_sources(active_only=False) if r['Channel'] == 'github'}
         self.assertIsNotNone(by_addr['ldbumble/taskuary']['LastPolledAt'])
         self.assertIsNone(by_addr['ldbumble/GoneForever']['LastPolledAt'])
+
+
+class TheHoldReadsTheSameOnEveryRoad(unittest.TestCase):
+    """A GitHub item from someone the repo does not let start an agent read three ways for one fact: its arrival said who wrote it and whom
+    the repo trusts, a reply that needed an agent said "items from GitHub wait for you to start them", and a line on a task an agent had
+    worked said "the channel waits for the owner". One function says it (ingest.channel_hold), on every road."""
+    def test_a_line_and_a_reply_say_the_arrivals_sentence(self):
+        s = MemoryStore()
+        s.save_source({**src('team'), 'Active': 1, 'Owner': 'me'}, 't')
+        msg = {'channel': 'github', 'source_name': 'org/repo', 'no_auto': True, 'from_name': 'kai',
+               'body': '[issue comment by kai - association: NONE]\nplease also cover the CSV export'}
+        said = ingest.channel_hold(s, msg)
+        self.assertEqual(said, ingest.gh_hold_why(s, msg))
+        self.assertIn('someone outside the repository', said)
+        tid = s.create_task({'Title': 'Export bug', 'Kind': 'coding', 'Status': 'open'}, 'triage')
+        why = ingest.reach_why(s, tid, msg, None, {'intent': 'task', 'kind': 'coding'}, 'coding')
+        self.assertEqual((str(why), ingest.code_of(why)), (said, 'channel'))
+        reply = s.create_task({'Title': 'Answer kai', 'Kind': 'reply', 'Status': 'open'}, 'triage')
+        self.assertFalse(ingest.agent_on_reply(s, reply, msg, None, {'intent': 'task', 'kind': 'coding'}, 'triage'))
+        self.assertEqual(s.list_comments(reply)[-1]['Body'], f"{ingest.NOT_STARTED} {said}")

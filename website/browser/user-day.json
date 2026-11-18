@@ -10,7 +10,7 @@
   "Get the rounding bug in the northwind/ledger totals fixed (the CI failure) - a real fix with a test, pushed only on your say-so.",
   "Find three Boston caterers that can do 40 people in March, with prices, in a spreadsheet you can forward.",
   "Have the October vendor spend summary come to you automatically every Monday from now on.",
-  "Sign up for the free trial of a vendor portal Erin mentions, using your work email.",
+  "Get Erin the vendor trial accounts she asks for, using your work email.",
   "Sort out the clashing meeting invite."
  ],
  "arrivals": [
@@ -83,7 +83,7 @@
    "channel": "chat",
    "from": "Erin Blake",
    "subject": "",
-   "body": "can you get us a trial on the Trainly admin portal (trainly.example/signup)? want to see the reports before we buy"
+   "body": "can you get us trial accounts on LienLens and VacancyIQ? both are listed at http://127.0.0.1:18791/ - want to see their data before we buy"
   },
   {
    "at": 26,

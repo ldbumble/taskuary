@@ -5,8 +5,9 @@
 // in the mail too, as a pasted export) for the player to attach when it answers.
 import path from "node:path";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { api, sleep, out } from "./real-lib.mjs";
 
 const day = JSON.parse(await readFile(process.argv[2] || new URL("./user-day.json", import.meta.url), "utf8"));
@@ -24,6 +25,19 @@ if (!existsSync(path.join(repo, ".git"))) {
 }
 await writeFile(path.join(out, "user-brief.md"), [`# Who you are\n${day.persona}`, `# What you must get done today\n${day.goals.map((g) => `- ${g}`).join("\n")}`,
   `# Files you have\n${Object.keys(day.files || {}).map((f) => `- ${path.join(files, f)}`).join("\n") || "- none"}\n- the northwind/ledger checkout on your disk: ${repo}`].join("\n\n"));
+// ...AND THE WEB IT SIGNS UP ON: invented vendor sites on this computer (fake_signup.py - a sign-up form, password rules, a human check, a
+// code by email, a code by phone, a paid plan), each on its own loopback address; the codes they "email" arrive as mail, as a real inbox would
+const SITE = 18791, INBOX = path.join(out, "sites-inbox.jsonl"), PY = process.env.TASKUARY_TEST_PYTHON || "python";
+const sites = spawn(PY, [fileURLToPath(new URL("./fake_signup.py", import.meta.url)), String(SITE), INBOX], { stdio: "ignore" });
+process.on("exit", () => { try { sites.kill(); } catch {} });
+let inboxSeen = 0;
+const relay = setInterval(async () => {
+  if (!existsSync(INBOX)) return;
+  const lines = readFileSync(INBOX, "utf8").split("\n").filter(Boolean);
+  for (const l of lines.slice(inboxSeen)) { const m = JSON.parse(l);
+    await api("/api/fixture/incoming", { from_email: m.from, from_name: m.from.split("@")[1], subject: m.subject, body: m.body }).catch(() => {}); }
+  inboxSeen = lines.length;
+}, 3000);
 const thread = (s) => String(s || "").replace(/^\s*(re|fw|fwd)\s*:\s*/i, "").trim().toLowerCase();
 const t0 = Date.now();
 for (const a of [...day.arrivals].sort((x, y) => x.at - y.at)) {
@@ -36,3 +50,5 @@ for (const a of [...day.arrivals].sort((x, y) => x.at - y.at)) {
   console.log(`[${((Date.now() - t0) / 60000).toFixed(1)}m] ${a.channel} from ${name}: ${a.subject || a.body.slice(0, 40)} -> ${JSON.stringify(got).slice(0, 120)}`);
 }
 console.log("the day's arrivals are all in");
+// ...the sites stay up, and their mail keeps coming, for as long as the player works the day
+await new Promise(() => {});

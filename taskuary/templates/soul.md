@@ -13,11 +13,10 @@ do the work agents can do alone, and protect John's time.
   scheduling note. Answering IS the work: the AI drafts the reply, John approves it, and it
   goes back on the channel it came from. No task, no agent, no repository.
 - Automated notices, scheduled reports, newsletters, "thanks!", CC'd-for-visibility
-  threads: **fyi** — file them; no task, no draft.
+  threads: **fyi** — file them; no task, no draft - unless one asks John to act before something
+  of his lapses (a bill, an approval, a renewal).
 - A thread John cares about that a colleague will handle — the one who usually answers
   asks like it — is **watch**: kept under Watching until the thread moves. No draft.
-- When genuinely unsure, prefer fyi over inventing work. A missed task costs less than a
-  noisy funnel.
 
 ## How we respond
 - Plain, brief, warm-professional. Sign letters and emails as John Smith; an answer in chat to John is never signed. No emoji, no boilerplate filler.

@@ -5,9 +5,10 @@ from taskuary import server, origin, terminal
 c = TestClient(server.app)
 agent = lambda: {'X-Taskuary-Token': server.cfg['server']['agent_token']}
 
-def _stranger_task(base=None, frm='someone@vendor.example'):
+def _stranger_task(base=None, frm='someone@vendor.example', meta=None):
     tid = server.store.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'email', **({'OriginBase': base} if base else {})}, 'router')
-    server.store.add_message({'TaskId': tid, 'Channel': 'email', 'SourceName': 'box@northwind.example', 'FromEmail': frm, 'Status': 'routed'})
+    server.store.add_message({'TaskId': tid, 'Channel': 'email', 'SourceName': 'box@northwind.example', 'FromEmail': frm, 'Status': 'routed',
+                              **({'MailMetaJson': meta} if meta else {})})
     return tid
 
 def test_a_task_the_owner_types_is_the_owner_s():
@@ -93,3 +94,33 @@ def test_the_hold_names_the_address_says_trust_is_kept_and_settings_takes_it_bac
     assert c.post('/api/trusted/remove', json={'kind': row['kind'], 'key': row['key']}).json()['ok']
     assert not server.store.trusted_sender('box@northwind.example', 'erin@lookalike.example')
     assert c.post('/api/trusted/remove', json={'kind': row['kind'], 'key': row['key']}).status_code == 404
+
+def test_trust_on_a_forged_from_vouches_the_task_but_never_remembers_the_address(monkeypatch):
+    """A From the receiving server could not verify may be forged: Trust vouches for this task, and its address is NOT kept as trusted
+    (senders.vouch's own rule) - the endpoint used to remember the opener a second way, around that rule, so the forger's next mail
+    started its agent by itself."""
+    from taskuary import ingest
+    tid = _stranger_task(frm='spoof@vendor.example', meta='{"auth": "fail"}')
+    server.store.tag_task(tid, ingest.HOLD_TAG, on=True, actor='t')
+    monkeypatch.setattr(server, 'start_session', lambda *a, **k: 'sid')
+    assert c.post(f'/api/tasks/{tid}/trust').json()['origin'] != 'stranger'
+    assert not server.store.trusted_sender('box@northwind.example', 'spoof@vendor.example')
+
+def test_a_second_stranger_s_trust_remembers_them_not_the_opener_he_took_back(monkeypatch):
+    """Timeline on one task: a stranger opens it, Trust; the owner takes that trust back in Settings; someone else writes on the thread
+    and the task is held again, its button naming THEM. Trust remembers the person the button named - it used to re-trust the opener the
+    owner had just removed and leave the new writer a stranger, held again on their next mail."""
+    from taskuary import ingest
+    tid = _stranger_task(frm='first@vendor.example')
+    monkeypatch.setattr(server, 'start_session', lambda *a, **k: 'sid')
+    c.post(f'/api/tasks/{tid}/trust')
+    assert server.store.trusted_sender('box@northwind.example', 'first@vendor.example')
+    assert c.post('/api/trusted/remove', json={'kind': 'person', 'key': {'mailbox': 'box@northwind.example', 'address': 'first@vendor.example'}}).json()['ok']
+    server.store.add_message({'TaskId': tid, 'Channel': 'email', 'SourceName': 'box@northwind.example', 'FromName': 'Omar Keller',
+                              'FromEmail': 'second@other.example', 'Status': 'routed'})
+    server.store.tag_task(tid, ingest.HOLD_TAG, on=True, actor='t')
+    assert origin.of_task(server.store, tid)[0] == 'stranger'
+    assert c.get(f'/api/tasks/{tid}').json()['origin']['trust']['person'] == 'Trust Omar'
+    c.post(f'/api/tasks/{tid}/trust')
+    assert server.store.trusted_sender('box@northwind.example', 'second@other.example')
+    assert not server.store.trusted_sender('box@northwind.example', 'first@vendor.example')

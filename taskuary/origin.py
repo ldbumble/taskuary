@@ -291,7 +291,7 @@ def raise_to(store, tid: int, to: str, actor: str):
     _HOLDS.pop((id(store), int(tid)), None)
     if to not in ('trusted', 'owner'): raise ValueError(f'cannot raise a task to {to!r}')
     ms = store.list_messages(tid); last = max((m['MessageId'] for m in ms), default=0)
-    senders.vouch(store, ms)          # a chat sender the owner vouched for here is trusted on their next task too
+    senders.vouch(store, ms, int((store.get_task(tid) or {}).get('TrustedThrough') or 0))          # a chat sender the owner vouched for here is trusted on their next task too
     store.update_task(tid, {'TrustedThrough': last, 'OriginBase': 'owner' if 'owner' in (to, (store.get_task(tid) or {}).get('OriginBase')) else to}, actor)
     store.audit('task', tid, 'origin_raised', actor, detail={'to': to, 'through': last})
     of_task(store, tid)

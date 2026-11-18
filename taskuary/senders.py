@@ -415,11 +415,11 @@ def _chat_known(store, msg: dict, ch: str, exclude_mid, on: bool, memo: dict = N
     return False, _said(f"{name} wrote in {room}, and you haven't talked with them one-to-one or answered them there, {NOBODY}.", True)
 
 
-def vouch(store, rows) -> None:
+def vouch(store, rows, through: int = 0) -> None:
     """The owner's say-so for the person the task's presses name (whom: the outsider a forward quoted, else the OPENER - the first
     line on it that is not ours, as ingest.from_opener reads it): remembered per channel and person. Everyone else a group put on the task stays a stranger."""
     from .ingest import CHAT_CHANNELS
-    m = whom(store, rows)
+    m = whom(store, rows, through)          # since the last vouch: the person the Trust button named (trust_offer), not an earlier one
     ch = ((m or {}).get('Channel') or '').lower()
     if ch in CHAT_CHANNELS and (who := chat_key(m)): store.remember_trust(ch, who, 'you vouched for them')
     # a tracker's author, else (no author to name) its project; an alert's source - never "everyone who can raise an alert"

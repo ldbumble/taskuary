@@ -2119,10 +2119,7 @@ def task_trust(task_id: int, scope: str = ''):
     if scope == 'org':
         try: org = senders.trust_org(store, task_id, ACTOR)
         except ValueError as e: raise HTTPException(422, str(e))
-    else: origin.raise_to(store, task_id, 'trusted', ACTOR)
-    # ...and a mail's sender is remembered for the mailbox it came to: their next message starts its agent by itself
-    m = next((m for m in store.list_messages(task_id) if m.get('Channel') == 'email' and m.get('Direction') != 'out'), None)
-    if m: store.remember_trust(m.get('SourceName'), m.get('FromEmail'), 'trusted by the owner')
+    else: origin.raise_to(store, task_id, 'trusted', ACTOR)    # ...which remembers the sender its press named (senders.vouch, the one road)
     o, why = origin.of_task(store, task_id)
     # ...A START THAT BREAKS IS KEPT ON THE TASK with its retry (blackboard.record_failure), never a bare 500 under "You trusted the sender"
     # with nobody at work (2026-11-17)

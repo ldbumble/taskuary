@@ -118,13 +118,16 @@ def test_a_routines_email_goes_from_its_run_task_and_opens_nothing_else(db):
              {'id': 's3', 'kind': 'draft', 'label': 'Email Gail', 'to': 'gail@northwind.example', 'about': 'This week: {{s2}}', 'subject': 'Duplicate bills'}]
     src = source(s, steps); tid = run_task(s, src); sent = []
     with mailer(sent), mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learn.learn_from'):
-        out = flow.execute(s, src, tid, 'manual', llm=answering('One duplicate: Payworth INV-1.', 'Hi Gail, one duplicate this week: Payworth INV-1. Alex'))
+        workflows._STARTING.add(tid)                                                # the run has its task, as workflows.run marks it
+        try: out = flow.execute(s, src, tid, 'manual', llm=answering('One duplicate: Payworth INV-1.', 'Hi Gail, one duplicate this week: Payworth INV-1. Alex'))
+        finally: workflows._STARTING.discard(tid)
     assert [m['to'] for m in sent] == [['gail@northwind.example']] and 'Payworth INV-1' in sent[0]['body'] and sent[0]['subject'] == 'Duplicate bills'
     assert [t['TaskId'] for t in s.list_tasks()] == [tid]                              # no second task
     assert s._rows("SELECT * FROM review WHERE Status='pending'") == []                # and no card waiting for a yes
     assert out['steps'][2]['head'] == 'sent to gail@northwind.example' and not out['failed']
     assert any(c['Body'].startswith('Step 3/3 Email Gail: sent to gail@northwind.example') for c in s.list_comments(tid))
     assert taskstate.closed_why(s, s.get_task(tid)).startswith('Closed by the routine: Ran 3 steps')
+    assert not any('Mark done' in c['Body'] for c in s.list_comments(tid))          # ...never told to close what closes itself
 
 
 def test_a_routines_email_that_did_not_go_waits_on_the_run_task(db):

@@ -113,8 +113,11 @@ def _left(store, tid: int, said: str, actor: str) -> bool:
     """Say on the task what one email's send or drop leaves. False always: the task stays open - it used to close on the
     last one, past the reply's own guards; now only the owner's Mark done closes it."""
     if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return False
-    from . import buttons
+    from . import buttons, workflows
     n = len(open_(store, tid))
+    # ...a routine's steps still walking close their own task when nothing waits (flow._walk): "Mark done when the task is finished" was
+    # said over a run that closed itself the moment after
+    if not n and workflows.at_work(tid): store.add_comment(tid, actor, 'human', said); return False
     store.add_comment(tid, actor, 'human', f"{said} " + (f"{plural(n, 'email')} still to go." if n
                                                        else f"Every email is sent or dropped - {buttons.label('close')} when the task is finished."))
     return False

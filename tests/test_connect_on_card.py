@@ -41,3 +41,21 @@ def test_a_mail_card_that_cannot_send_says_why_on_the_reply_and_its_fix():
     with mock.patch.object(server, 'store', s):
         got = server._review_connect({}, s._rows('SELECT * FROM review WHERE TaskId=?', (tid,))[0])
     assert got and 'Mail.Send' in got['says'] and (got['label'], got['href']) == ('Sign in again', '#connector=outlook'), got
+
+
+def test_a_tracker_comment_whose_tracker_is_not_connected_offers_connect():
+    """The card round, 2026-11-18: a comment on a tracker item (jira, linear, monday) with its tracker not connected had Post comment lit, and
+    the press could only fail - the reply channels that never take a reply (outbound.NEVER: a ticket is answered on its tracker) were read as
+    "nothing to connect" for an act's own connection too. An act's card asks for its connection whatever its kind, on the chat's payload as on
+    the reviews the page reads: one answer (review_connect)."""
+    s = MemoryStore(); tid = s.create_task({'Title': 'Comment on the ledger ticket', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    for tool, name in (('jira_comment', 'Jira'), ('linear_comment', 'Linear'), ('monday_comment', 'monday.com')):
+        rid = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'r',
+                            'DraftText': json.dumps({'action': 'run_tool', 'type': tool, 'item': 'NW-12', 'body': 'Fixed.'})})
+        got = outbound.review_connect(s, s.get_review(rid))
+        assert got and got['says'].endswith("isn't connected") and got['label'].startswith('Connect '), (tool, got)
+        with mock.patch.object(server, 'store', s):
+            card = next(c for c in server._assistant_payload(tid)['cards'] if c['ReviewId'] == rid)
+        assert card['connect'] == got, (tool, card['connect'])
+    # ...while a reply on a tracker's own thread still has nothing to connect here
+    assert outbound.review_connect(s, {'Kind': 'outbound', 'Channel': 'jira', 'Deliver': '{}'}) is None

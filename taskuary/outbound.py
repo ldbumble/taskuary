@@ -460,7 +460,7 @@ def connect_fix(store, kind) -> dict | None:
     `linkedin`). One answer for every card: the reply, an agent's email, a post, a chat reply. An email with no mailbox at all had Send lit,
     and the press came back "no mailbox is connected"."""
     k = str(kind or '').lower()
-    if not k or k in NEVER: return None
+    if not k: return None
     from .imapmail import HOSTS
     from . import connectorcatalog
     cards = store.list_connectors()
@@ -494,6 +494,9 @@ def review_connect(store, r: dict, memo: dict = None) -> dict | None:
     else:
         m = store.get_message(r['MessageId']) if r.get('MessageId') and not (r.get('Channel') or p.get('channel')) else None
         k = None if p.get('kind') in OWN_ROAD else str(r.get('Channel') or p.get('channel') or (m or {}).get('Channel') or '').lower()
+        # ...a reply on a channel that takes none here (a ticket, a report) has nothing to connect; an act's own connection always has
+        # (the card round, 2026-11-18: a tracker comment's card had Post lit with its tracker never connected)
+        if k in NEVER: return None
     if not k: return None
     memo = {} if memo is None else memo
     if ('connect', k) not in memo: memo[('connect', k)] = connect_fix(store, k)

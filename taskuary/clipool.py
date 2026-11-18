@@ -34,16 +34,42 @@ class Gone(Ended):
     """...before the turn's message reached it: nothing of the turn ran, so sending it again repeats nothing."""
 
 
-class TimedOut(RuntimeError):
-    """A turn that ran past its limit and was killed there - not a CLI that broke. It carries the conversation it was on, so the
-    work it did is picked up by Continue (general.send_prompt) instead of started again."""
+class Unfinished(RuntimeError):
+    """A TURN THAT DID NOT FINISH, ON ANY ROAD (the one-shot run, the kept process, ACP): stopped, out of time, ended early. It carries the
+    conversation it was on, which the caller keeps (general.send_prompt), so the next turn picks that conversation up instead of opening
+    another - and it is never sent again, as part of it may have run."""
     def __init__(self, msg='', session_id=None): super().__init__(msg); self.session_id = session_id
+
+
+class TimedOut(Unfinished):
+    """A turn that ran past its limit and was killed there - not a CLI that broke: the work it did is picked up by Continue."""
+
+
+class PartWay(Unfinished):
+    "A turn its agent ended part-way: it died mid-turn (MID_TURN), or ended it early (a refusal, a limit), before a word or after some. Never sent again: part of it may have run."
+
+
+class Cancelled(Unfinished):
+    "A turn the owner stopped - the one way every road says it (str: 'cancelled')."
+    def __init__(self, session_id=None): super().__init__('cancelled', session_id)
 
 
 RESTART_FAILED = 'the AI tool stopped, and stopped again when it was restarted'
 # ...a chat agent's CLI (this pool's only kind): typing carries it on, as no Continue button is there (general.CARRY_ON)
 # ...said as what happened and why nothing ran it again ("nothing was sent again" read, on a mail task, as a word on the mail - the walk, 2026-11-11)
 MID_TURN = 'the agent stopped in the middle of its turn. It may have done part of the work, so the turn was not run again - type to carry on'
+# ...and one its agent ENDED EARLY (an ACP adapter's stopReason, a CLI's own result): the fewest sentences true of each reason - a refusal is
+# the model's no, a limit one it reached (max_tokens, max_turn_requests; claude's error_max_turns), anything else said as no more than it is -
+# in the same voice, with the same way on. A refusal or a limit may come after words, and any of them after tool calls ran: no words does not
+# mean no work, and words do not mean it finished
+ENDED_EARLY = {'refusal': 'the agent declined to finish this turn. It may have done part of the work, so the turn was not run again - '
+                          'type to carry on, or say it another way',
+               'limit': 'the agent reached its limit for one turn before it finished. It may have done part of the work, so the turn was not run '
+                        'again - type to carry on',
+               'other': 'the agent ended its turn before it answered. It may have done part of the work, so the turn was not run again - type to '
+                        'carry on'}
+LIMITS = ('max_tokens', 'max_turn_requests', 'error_max_turns')
+def ended_early(stop: str) -> str: return ENDED_EARLY['refusal' if stop == 'refusal' else 'limit' if stop in LIMITS else 'other']
 
 
 class Live:
@@ -96,7 +122,7 @@ class Live:
         raw, end, said = [], time.time() + timeout if timeout else None, []
         while True:
             if cancel is not None and cancel.is_set():
-                self.close(); raise RuntimeError('cancelled')
+                self.close(); raise Cancelled(self.sid)
             left = end - time.time() if end else 0.5
             if left <= 0:
                 self.close(); raise TimedOut(f'timed out after {int(timeout)}s', self.sid)
@@ -111,6 +137,7 @@ class Live:
             try: j = json.loads(line)
             except ValueError: continue
             if not isinstance(j, dict): continue
+            self.sid = self.sid or j.get('session_id')          # ...named from its init on: a turn stopped or cut before its result keeps it
             if j.get('type') == 'result':
                 self.turns += 1; self.used = time.time()
                 self.sid = j.get('session_id') or self.sid
@@ -246,7 +273,7 @@ def run(key: str, cmd: list, prompt: str, on_event, *, cwd=None, env=None, resum
                 # is the caller's, said plainly (RESTART_FAILED).
                 if attempt == 2: raise Ended(f'{RESTART_FAILED} ({e})') from e
                 # ...but a turn that may have DONE something - an agent with tools, part-way through - is never sent twice
-                if not resend and not isinstance(e, Gone): raise Ended(f'{MID_TURN} ({e})') from e
+                if not resend and not isinstance(e, Gone): raise PartWay(f'{MID_TURN} ({e})', resume) from e
                 logger.info(f'clipool: {key} ended - reopening it{" on " + resume if resume else ""} and sending the turn again')
             except Exception:
                 with _LOCK:

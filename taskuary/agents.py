@@ -13,7 +13,7 @@ from . import acp as acp_mod, acpadapter, aiusage, pathcache, redact, spawn
 from . import clis as clis_mod
 from .store import task_ref
 from .clis import preset_args
-from .clipool import TimedOut
+from .clipool import LIMITS, MID_TURN, Cancelled, PartWay, TimedOut, ended_early
 from .selfclose import without_summary
 
 _CLI_CHILDREN = set()
@@ -247,6 +247,48 @@ def _published(j, trace):
         if doc: trace('artifact', 'claude', doc)
 
 
+class ClaudeSteps:
+    """One claude stream-json turn as the trace events every road speaks (tool_call, tool_result, progress text and thinking, a published
+    page). The one-shot run and the kept conversation each make one per turn and feed it every event. A call the CLI gave no id is numbered
+    here, once per turn (`tool-0`, `tool-1`), and a result with no id closes the oldest such call still open - so on both roads every
+    step is its own and every one closes (agentSteps.js and sessionrecord.trace_steps pair them by id)."""
+    def __init__(self, trace): self.trace, self.n, self.open = trace, 0, []
+
+    def __call__(self, j: dict):
+        kind = j.get('type')
+        if kind not in ('assistant', 'user'): return
+        for c in (j.get('message') or {}).get('content') or []:
+            if not isinstance(c, dict): continue
+            if kind == 'assistant' and c.get('type') == 'tool_use':
+                iid = c.get('id') or f'tool-{self.n}'
+                if not c.get('id'): self.n += 1; self.open.append(iid)
+                self.trace('tool_call', c.get('name') or 'tool', {'tool_call_id': iid, 'args': c.get('input') or {},
+                                                                 **({'parent': j['parent_tool_use_id']} if j.get('parent_tool_use_id') else {})})
+            elif kind == 'assistant' and c.get('type') == 'text' and str(c.get('text') or '').strip(): self.trace('progress', 'text', str(c['text']).strip())
+            elif kind == 'assistant' and c.get('type') == 'thinking' and str(c.get('thinking') or '').strip():
+                self.trace('progress', 'thinking', str(c['thinking']).strip())     # what it thought is part of the record
+            elif kind == 'user' and c.get('type') == 'tool_result':
+                iid = c.get('tool_use_id') or (self.open.pop(0) if self.open else 'tool')
+                if iid in self.open: self.open.remove(iid)
+                self.trace('tool_result', iid, {'result': _result_text(c), 'is_error': bool(c.get('is_error'))})
+        _published(j, self.trace)
+
+
+def raise_failure(name: str, said: str, cmd0: str = '', resume=None, raw=None, part_way=None):
+    """THE ONE WAY A TURN THAT DID NOT FINISH IS REPORTED, on every road that reads a CLI's own account of it (the kept conversation, ACP,
+    the one-shot run's death with no words): its usage allowance, its sign-in, a conversation it no longer has, a turn that ended part-way -
+    else its own words. `raw` is what else it printed, read for the same. `part_way` is (sentence, conversation id) where the road knows the
+    turn ended part-way (it died mid-turn, or ended early (a refusal, a limit), before a word or after some): raised as clipool.PartWay in that sentence alone."""
+    raw = raw if raw is not None else [said]
+    limit = rate_limited(raw) or rate_limited(said)
+    if limit: raise RateLimited(rate_limit_msg(name, limit), limit)
+    if _SIGNED_OUT.search(said): raise RuntimeError(signed_out_msg(name, said, cmd0))
+    if resume and gone('\n'.join(map(str, raw)) or said): raise Gone(resume)
+    # ...no process name before it and no "(the CLI exited (3))" or stop code after it (the overnight walk, 2026-11-11) - those are the log's
+    if part_way: logger.warning(f'{name}: {said[:500]}'); raise PartWay(*part_way)
+    raise RuntimeError(f'{name}: {said[:500]}')
+
+
 def _live_line(j):
     """One readable console line per claude stream-json event; None = not worth showing.
     Tool RESULTS stream too (trimmed), so the console reads like the terminal you'd see
@@ -403,8 +445,31 @@ def _event_error(line: str) -> str:
     if j.get('type') in ('error', 'turn.failed'):
         inner = j.get('error') if isinstance(j.get('error'), dict) else {}
         return _said(inner.get('message') or j.get('message'))
+    # ...and a bare error object with no event type ({"error": {"code": 401, "message": "API key not valid ..."}}): its own words
+    if 'type' not in j and j.get('error'):
+        e = j['error']
+        return _said(e.get('message') if isinstance(e, dict) else e)
+    # ...and claude's own result for a turn that failed: its words (a credit refusal), else its `errors` beside a bare subtype (error_max_turns)
+    if j.get('type') == 'result' and (j.get('is_error') or str(j.get('subtype') or '').startswith('error')):
+        errs = j.get('errors') if isinstance(j.get('errors'), list) else []
+        return _said(j.get('result')) or '; '.join(map(str, errs)).strip() or str(j.get('subtype') or '').replace('_', ' ')
     item = j.get('item') if isinstance(j.get('item'), dict) else {}
     return _said(item.get('message')) if item.get('type') == 'error' else ''
+
+
+def _is_event(line) -> bool:
+    "One of a CLI's structured event lines (a JSON object), as opposed to words it printed - a dict's repr or a stack dump in braces is words."
+    try: return isinstance(json.loads(str(line)), dict)
+    except ValueError: return False
+
+
+def _events(raw) -> list:
+    """Which of the run's stdout lines are its events: each that is a JSON object - and, in a stream of nothing but events, a LAST line cut off
+    as its process was killed (`{"type": "res`): it opens as one (`{"`) and never closed. Any other line is words the CLI printed."""
+    raw = [str(x) for x in raw or []]
+    ev = [_is_event(x) for x in raw]
+    if raw and not ev[-1] and all(ev[:-1]) and raw[-1].lstrip().startswith('{"'): ev[-1] = True
+    return ev
 
 
 def cli_failure(raw, err: str = '') -> str:
@@ -416,8 +481,14 @@ def cli_failure(raw, err: str = '') -> str:
     for line in reversed(list(raw or [])):
         said = _event_error(str(line))
         if said: return said
-    clean = '\n'.join(ln for ln in str(err or '').splitlines() if ln.strip() and not _NOISE.match(ln))
-    return clean.strip() or '\n'.join(list(raw or [])[-5:]) or 'no output'
+    clean = _said_err(err)
+    # ...and never the events themselves: their JSON is no reason (a stream cut mid-line read "claude exit 137: {"type": "system", ...}")
+    return clean or '\n'.join([ln for ln, e in zip(raw or [], _events(raw)) if not e][-5:]) or ('no reason given' if raw else 'no output')
+
+
+def _said_err(err: str) -> str:
+    "What a CLI said on stderr, without its own notices (_NOISE: \"Reading prompt from stdin...\")."
+    return '\n'.join(ln for ln in str(err or '').splitlines() if ln.strip() and not _NOISE.match(ln)).strip()
 
 
 _DENIED = re.compile(r'access is denied|winerror 5|permission denied|operation not permitted', re.I)
@@ -1641,7 +1712,7 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     trace('tool', 'cli', f"{name} over acp{' via ' + launch['adapter'] if launch['adapter'] else ''} cwd={cwd or os.getcwd()}"
                          + (f' resume={resume}' if resume else '') + (f' live={keep}' if keep else ''))
     head0 = _git(cwd, 'rev-parse', 'HEAD')
-    held = {}
+    held, asked = {}, threading.Event()            # `asked`: this turn's prompt is on its way to the agent
     steps = ACPSteps(trace, name, held)
     ctx_store, task_id = _RUN.get()
     gate = acpgate.answerer({'store': store if store is not None else ctx_store, 'task_id': task_id, 'cli': _cli_name(name), 'cwd': cwd,
@@ -1656,23 +1727,37 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         # happened since - the stopped turn had ended at once, the lines that waited behind it had begun their turn on this same
         # conversation, and it was closed under them: "died mid-turn", nothing drawn, his lines unanswered. A turn that honoured the stop is
         # over; what runs next is never the one being stopped
+        # ...AND A STOP PRESSED BEFORE ITS PROMPT WAS SENT IS STILL ITS STOP: it looked for this turn's lock, found none taken yet and was lost,
+        # and the turn ran on unstopped. It is sent the moment this turn's prompt is on its way (`sent`), and never once the turn is over
         def _cancel():
-            cancel.wait()
-            if over.is_set() or not conv.lock.locked(): return
+            cancel.wait(); asked.wait()
+            if over.is_set(): return
             client.cancel()
             if not over.wait(STOP_GRACE): clipool.drop(keep, conv) if keep else client.close()
         threading.Thread(target=_cancel, daemon=True, name='acp-stop-backstop').start()
-    stop, ok = None, False
+    stop, ok = None, False               # ...set before anything can raise: the `finally` reads both, whatever ended the turn
     try:
         with conv.lock:
             if launch['adapter']: _acp_gears(client, profile, name, trace)     # a native CLI took its model on its command line
+            # ...A STOP PRESSED BEFORE ITS PROMPT WAS SENT: the prompt is never sent. Sent and then cancelled, an agent quick enough did the work
+            # he stopped (a call the gate allows on its own runs) and only its answer was thrown away. Nothing was asked: the conversation is sound
+            if cancel is not None and cancel.is_set(): stop, ok = 'cancelled', True; raise Cancelled(client.session_id)
             since = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            stop, said = client.prompt(prompt)
+            stop, said = client.prompt(prompt, sent=asked.set)
             conv.turns += 1; conv.used = time.time()
         ok = True
         # WHAT THE TURN USED, onto its route row (aiusage.Metered's meter): the adapter's count, else the CLI's own log (aiusage.acp_turn)
         aiusage.note_turn(aiusage.acp_turn(_cli_name(name), client.last_turn, client.session_id, since))
-        if stop and stop not in ('end_turn', 'cancelled'): trace('progress', 'acp', f'the turn ended early: {stop}')
+        # ONE CONTRACT FOR A STOPPED TURN on every road: Cancelled, with the conversation it was on - never a blank success
+        if stop == 'cancelled': raise Cancelled(client.session_id)
+        if stop and stop != 'end_turn':
+            trace('progress', 'acp', f'the turn ended early: {stop}')
+            # ...and a turn that ended early with nothing said is a failure, as the kept road reads its CLI's own error result - never an empty reply
+            # filed as done: ended part-way, in the sentence for its reason, its conversation kept for the next line
+            # ...and one it ended at a refusal or a limit AFTER words is the same part-way end, its words kept in the steps - never a half answer
+            # filed as done, as the kept road files claude's own error_max_turns
+            if not said.strip() or stop == 'refusal' or stop in clipool.LIMITS:
+                raise_failure(name, f'the turn ended early: {stop}', launch['cmd'][0], resume, part_way=(clipool.ended_early(stop), client.session_id))
         diff = ''
         if cwd:
             head1 = _git(cwd, 'rev-parse', 'HEAD')
@@ -1681,10 +1766,12 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
             if unc: diff = '\n'.join(x for x in (diff, unc) if x).strip()
         return said, client.session_id, (diff[:150000] or None)
     except acp_mod.ACPAgentError as e:
+        # ...a stopped turn its agent did not end was ended by the backstop: still his stop, never a death
+        if cancel is not None and cancel.is_set(): raise Cancelled(client.session_id) from e
         if _SIGNED_OUT.search(str(e)): raise RuntimeError(signed_out_msg(name, str(e), launch['cmd'][0])) from e
         raise
     finally:
-        over.set()
+        over.set(); asked.set()
         steps.flush(stop if ok else 'error')
         client.on_update, client.permit = None, None
         with _CLI_CHILDREN_LOCK: _CLI_CHILDREN.discard(client.p)
@@ -1833,6 +1920,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         except Exception: pass
     threading.Thread(target=_feed, daemon=True).start()
     raw, final, streamed_out, streamed_sid, open_tools = [], None, '', None, set()
+    claude = ClaudeSteps(trace)
     stream_error, structured_stream = None, False
     try:
         for line in p.stdout:
@@ -1883,22 +1971,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
                 final = j; continue
             # Preserve the CLI's structured work for visual clients. The existing readable
             # `live` line remains for Board traces and the terminal renderer.
-            if isinstance(j, dict) and j.get('type') == 'assistant':
-                for c in (j.get('message') or {}).get('content') or []:
-                    if c.get('type') == 'tool_use':
-                        trace('tool_call', c.get('name') or 'tool', {
-                            'tool_call_id': c.get('id') or f'tool-{len(raw)}', 'args': c.get('input') or {}})
-                    elif c.get('type') == 'text' and str(c.get('text') or '').strip():
-                        trace('progress', 'text', str(c['text']).strip())
-                    elif c.get('type') == 'thinking' and str(c.get('thinking') or '').strip():
-                        trace('progress', 'thinking', str(c['thinking']).strip())     # what it thought is part of the record
-                _published(j, trace)
-            elif isinstance(j, dict) and j.get('type') == 'user':
-                for c in (j.get('message') or {}).get('content') or []:
-                    if isinstance(c, dict) and c.get('type') == 'tool_result':
-                        trace('tool_result', c.get('tool_use_id') or 'tool', {
-                            'result': _result_text(c), 'is_error': bool(c.get('is_error'))})
-                _published(j, trace)
+            if isinstance(j, dict): claude(j); streamed_sid = streamed_sid or j.get('session_id')     # claude's init names it: a stop keeps it
             # Codex `exec --json` speaks item lifecycle events instead of Claude content blocks.
             # Normalize both into one stream so assistant-ui does not care which CLI is logged in.
             if isinstance(j, dict) and j.get('type') == 'thread.started':
@@ -1930,8 +2003,16 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
             try: os.remove(f)
             except OSError: pass
     err_t.join(5)      # the exit code can land before the stderr reader has appended - 'boom' read as 'no output' on a fast CI box
-    if p.returncode != 0:
-        if cancel is not None and cancel.is_set(): raise RuntimeError('cancelled')
+    if p.returncode != 0 and cancel is not None and cancel.is_set(): raise Cancelled(streamed_sid or (final or {}).get('session_id'))
+    # A FINISHED ANSWER IS THE ANSWER, whatever the exit after it: claude printed its words and a successful result, then exited non-zero - the
+    # turn was told "stopped in the middle" and its answer thrown away. It is kept and shown; the exit is the log's, and the launch line's.
+    # ...only a real result event that says it succeeded: any other dict with a `result` ({"result": "partial", "error": ...}) is no finished answer.
+    # A success with no words is finished too - as it is at exit 0 - never "stopped in the middle of its turn"
+    if p.returncode != 0 and final is not None and final.get('type') == 'result' and not final.get('is_error') and final.get('subtype', 'success') == 'success' \
+            and not timed.is_set():
+        logger.warning(f'{name} exited {p.returncode} after a finished answer - the answer is kept')
+        trace('tool', 'cli', f'{name} exited {p.returncode} after its answer')
+    elif p.returncode != 0:
         err = ''.join(err_buf)
         said = cli_failure(raw, err)
         why = (f'timed out after {limit}s' if timed.is_set() else said)[:500]
@@ -1947,6 +2028,15 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         if _DENIED.search(hay) and not raw: raise RuntimeError(denied_msg(name, cmd[0] if cmd else '', said))
         if _NO_HOME.search(hay): raise RuntimeError(no_home_msg(_cli_name(name) or name))
         if timed.is_set(): raise TimedOut(f'{name} exit {p.returncode}: {why}', streamed_sid or (final or {}).get('session_id'))
+        # ...A LIMIT THE TURN REACHED (claude's error_max_turns) is said in the one sentence for it on every road (clipool.ended_early), as the kept
+        # road and ACP say it - never "Reached max turns (3)" or its stop code
+        if final is not None and final.get('type') == 'result' and str(final.get('subtype') or '') in LIMITS:
+            raise_failure(name, said, cmd[0] if cmd else '', None, raw, part_way=(ended_early(str(final['subtype'])), streamed_sid or final.get('session_id')))
+        # ...DIED WITH ONLY EVENTS AND NO WORD OF WHY - no event of its own says (_event_error), nothing on stderr: the one sentence the other
+        # roads say for a death part-way, never the events' JSON. Where an event does say why, its words are the reason (cli_failure)
+        if raw and not _said_err(err) and all(_events(raw)) and not any(_event_error(x) for x in raw):
+            raise_failure(name, f'exit {p.returncode} with no reason given', cmd[0] if cmd else '', None, raw,
+                          part_way=(MID_TURN, streamed_sid or (final or {}).get('session_id')))
         raise RuntimeError(f'{name} exit {p.returncode}: {why}')
     # OpenCode can report provider errors in JSON while its process exits successfully.
     if stream_error: raise RuntimeError(f'{name}: {redact.scrub(stream_error)[:500]}')
@@ -2063,7 +2153,7 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
     # THE WORDS AS THEY ARE WRITTEN, for a conversation that asked for them (--include-partial-messages: the Assistant): the page
     # draws them while the rest is still coming, instead of after the whole answer (the owner, 2026-10-20: "it should respond to
     # things quickly"). Only what the owner would read - the machine's CALL line never - and the finished answer replaces them.
-    written, drawn = [''], ['']
+    written, drawn, claude = [''], [''], ClaudeSteps(trace)
     def on(j):
         if j.get('type') == 'stream_event':
             ev = j.get('event') or {}
@@ -2074,19 +2164,7 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
                 now = spoken(written[0])
                 if now and now != drawn[0]: drawn[0] = now; trace('words', name, now)
             return
-        if j.get('type') == 'assistant':
-            for c in (j.get('message') or {}).get('content') or []:
-                if c.get('type') == 'tool_use':
-                    trace('tool_call', c.get('name') or 'tool', {'tool_call_id': c.get('id') or 'tool', 'args': c.get('input') or {},
-                                                                  **({'parent': j['parent_tool_use_id']} if j.get('parent_tool_use_id') else {})})
-                elif c.get('type') == 'text' and str(c.get('text') or '').strip():
-                    trace('progress', 'text', str(c['text']).strip())
-            _published(j, trace)
-        elif j.get('type') == 'user':
-            for c in (j.get('message') or {}).get('content') or []:
-                if isinstance(c, dict) and c.get('type') == 'tool_result':
-                    trace('tool_result', c.get('tool_use_id') or 'tool', {'result': _result_text(c), 'is_error': bool(c.get('is_error'))})
-            _published(j, trace)
+        claude(j)
         shown = _live_line(j)
         if shown: trace('live', name, shown)
     try:
@@ -2097,26 +2175,19 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
                                  resume=resume, cancel=cancel, timeout=profile.get('timeout'), resend=bare)
     except PermissionError as e:
         raise FileNotFoundError(denied_msg(name, cmd[0] if cmd else '', e)) from e
+    except Cancelled: raise
     except RuntimeError as e:
         said = str(e)
-        if said == 'cancelled': raise
         if isinstance(e, clipool.TimedOut): raise clipool.TimedOut(f'{name}: {said[:500]}', e.session_id) from e
-        limit = rate_limited(said)
-        if limit: raise RateLimited(rate_limit_msg(name, limit), limit)
-        if _SIGNED_OUT.search(said): raise RuntimeError(signed_out_msg(name, said, cmd[0] if cmd else ''))
-        if resume and gone(said): raise Gone(resume)
-        # ...a turn its CLI died in says so in the one sentence an ACP agent's death says too (acp.py), no process name before it and no
-        # "(the CLI exited (3))" after it (the overnight walk, 2026-11-11) - that is the log's
-        if said.startswith(clipool.MID_TURN): logger.warning(f'{name}: {said[:500]}'); raise RuntimeError(clipool.MID_TURN)
-        raise RuntimeError(f'{name}: {said[:500]}')
+        # ...a turn its CLI died in says so in the one sentence an ACP agent's death says too (acp.py), its conversation kept (clipool.PartWay)
+        raise_failure(name, said, cmd[0] if cmd else '', resume, part_way=(clipool.MID_TURN, e.session_id) if isinstance(e, PartWay) else None)
     aiusage.claude_result(final)                      # a turn that failed still used what it used
     if final.get('is_error'):
         said = str(final.get('result') or final.get('subtype') or 'the CLI reported an error')
-        limit = rate_limited(raw) or rate_limited(said)
-        if limit: raise RateLimited(rate_limit_msg(name, limit), limit)
-        if _SIGNED_OUT.search(said): raise RuntimeError(signed_out_msg(name, said, cmd[0] if cmd else ''))
-        if resume and gone('\n'.join(raw)): raise Gone(resume)          # its `errors`, beside a result that says only error_during_execution
-        raise RuntimeError(f'{name}: {said[:500]}')
+        # ...a limit the turn reached (error_max_turns) is said in the one sentence for it on every road (clipool.ended_early) - never its stop code
+        sub = str(final.get('subtype') or '')
+        raise_failure(name, said, cmd[0] if cmd else '', resume, raw,          # its `errors` ride in raw, beside a result that says only error_during_execution
+                      part_way=(clipool.ended_early(sub), final.get('session_id') or resume) if sub in clipool.LIMITS else None)
     out = str(final.get('result') or '').strip()
     trace('output', name, out[-1000:])
     return out, final.get('session_id'), None

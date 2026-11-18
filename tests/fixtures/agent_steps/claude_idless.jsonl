@@ -1,0 +1,10 @@
+{"type": "system", "subtype": "init"}
+{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read", "input": {"file_path": "a.md"}}]}}
+{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read", "input": {"file_path": "b.md"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "content": "ok"}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "content": "ok"}]}}
+{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Task", "input": {"description": "check the ledger"}, "id": "h1"}]}}
+{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Grep", "input": {"pattern": "total"}, "id": "h2"}]}, "parent_tool_use_id": "h1"}
+{"type": "user", "message": {"content": [{"type": "tool_result", "content": "ok", "tool_use_id": "h2"}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "content": "ok", "tool_use_id": "h1"}]}}
+{"type": "result", "result": "done", "session_id": "s2"}

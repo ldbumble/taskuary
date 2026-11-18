@@ -324,11 +324,11 @@ def test_a_stop_ends_its_own_turn_and_never_the_one_that_begins_after_it(monkeyp
         a = threading.Thread(target=turn, args=(1, s1)); a.start()
         assert heard.wait(60), 'the first turn began'
         s1.set(); a.join(60)                                                   # his stop: the turn honours it and ends
-        assert isinstance(said[1], tuple), said                                # ...as an answer, its conversation kept
+        assert isinstance(said[1], clipool.Cancelled) and said[1].session_id, said     # ...as every road says a stop, its conversation named
         for t in backstops(): t.join(10)
         assert not backstops(), 'the stopped turn is over: its backstop let go at once'
-        b = threading.Thread(target=turn, args=(2, s2, said[1][1]), daemon=True); b.start(); b.join(60)
-        c = threading.Thread(target=turn, args=(3, s2, said[1][1]), daemon=True); c.start(); c.join(60)
+        b = threading.Thread(target=turn, args=(2, s2, said[1].session_id), daemon=True); b.start(); b.join(60)
+        c = threading.Thread(target=turn, args=(3, s2, said[1].session_id), daemon=True); c.start(); c.join(60)
         assert 'turn=2' in str(said[2]) and 'turn=3' in str(said[3]), (said.get(2), said.get(3))    # ...both on that one conversation
         assert clipool.is_live(key)
     finally: s1.set(); s2.set(); clipool.close(key)
@@ -455,3 +455,49 @@ def test_the_command_line_says_gone_for_claude_s_own_no_conversation_found(monke
             agents.run_cli({'cmd': 'claude', 'args': args, 'cwd': HERE, **({'keep_alive': keep} if keep else {})}, 'carry on', lambda *a: None,
                            resume='3f1c2b9a-0000-4000-8000-00000000000a')
     finally: clipool.close(keep) if keep else None
+
+
+def test_a_stop_pressed_before_the_turn_took_its_conversation_still_stops_it(monkeypatch):
+    """The stop's backstop looked for the turn's lock, and a stop that landed before the turn took it found none and let go: the turn was
+    prompted anyway and ran on, unstopped, until its time ran out. And a stop already pressed when the turn takes its conversation never sends
+    the prompt at all: sent, then cancelled, a quick agent did the work he had stopped."""
+    stop, got, asked, real = threading.Event(), {}, [], acp.ACPClient.prompt
+    monkeypatch.setattr(acp.ACPClient, 'prompt', lambda self, text, sent=None: (asked.append(text), real(self, text, sent=sent))[1])
+    stop.set()                                                                   # pressed while the turn was still being started
+    def turn():
+        try: got['out'] = agents.run_cli(profile(), 'go', lambda *a: None, extra_env={'FAKE_ACP_HANG': '1'}, cancel=stop)
+        except Exception as e: got['out'] = e
+    with mock.patch.object(agents, '_resolve_cmd', return_value=[FAKE[0]]):
+        t = threading.Thread(target=turn, daemon=True); t.start(); t.join(30)
+    assert isinstance(got.get('out'), clipool.Cancelled) and got['out'].session_id, got or 'the turn ran on, unstopped'
+    assert asked == [], 'the stopped turn was never sent to the agent'
+
+
+# ── ONE CONTRACT ACROSS ROADS: a stopped turn, an early end, a death (the parity matrix, workstream 6) ─────────────────────────────
+@pytest.mark.parametrize('stop', ['refusal', 'max_tokens', 'max_turn_requests', 'other'])
+def test_a_turn_that_ends_early_with_nothing_said_fails_as_the_kept_road_reads_its_error_result(stop, tmp_path):
+    """An adapter that stopped for a refusal or a limit before saying a word came back as a finished turn with an empty reply. The kept claude
+    road raises its CLI's error result; ACP goes the same way (agents.raise_failure)."""
+    rules = tmp_path / 'r.json'; rules.write_text(json.dumps([{'when': '.', 'silent': True}]))
+    with pytest.raises(clipool.PartWay) as e:
+        run(profile(), 'go', env={'FAKE_ACP_SCRIPT': str(rules), 'FAKE_ACP_STOP': stop})
+    # ...said once, plainly, with the way on: no agent's name, no stop code (those are the log's) - and an unknown reason claims no limit
+    kind = {'refusal': 'refusal', 'max_tokens': 'limit', 'max_turn_requests': 'limit'}.get(stop, 'other')
+    assert str(e.value) == clipool.ENDED_EARLY[kind] and stop not in str(e.value) and 'claude' not in str(e.value).lower()
+    assert e.value.session_id, 'its conversation goes with it'
+
+
+@pytest.mark.parametrize('stop', ['max_tokens', 'refusal'])
+def test_a_turn_that_says_words_then_hits_a_limit_or_a_refusal_ended_part_way_its_words_kept(stop, tmp_path):
+    """An adapter that said half an answer and then stopped at max_tokens came back as the turn's answer, filed done ("agent done"), where the
+    kept claude road files the same shape - words, then its error_max_turns - as a turn that ended part-way, its words kept. One way on both."""
+    rules = tmp_path / 'r.json'; rules.write_text(json.dumps([{'when': '.', 'first': 'Half of it.'}]))
+    ev = []
+    with pytest.raises(clipool.PartWay) as e, mock.patch.object(agents, '_resolve_cmd', return_value=[FAKE[0]]):
+        agents.run_cli(profile(), 'go', lambda k, n, d=None: ev.append((k, n, d)), extra_env={'FAKE_ACP_SCRIPT': str(rules), 'FAKE_ACP_STOP': stop})
+    assert str(e.value) == clipool.ended_early(stop) and e.value.session_id
+    assert any(k == 'progress' and 'Half of it.' in str(d) for k, n, d in ev), 'its words stay in its steps'
+
+    # ...and a turn that ended for any other reason after words is still its answer
+    out, ev = run(profile(), 'go', env={'FAKE_ACP_SCRIPT': str(rules), 'FAKE_ACP_STOP': 'budget_gone'})
+    assert out[0] == 'Half of it.'

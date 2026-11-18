@@ -26,6 +26,7 @@ import json, os, queue, subprocess, threading, time
 from loguru import logger
 
 from . import spawn
+from .clipool import MID_TURN, PartWay
 
 VERSION = 1
 # what we tell the agent we can do. Omitted means UNSUPPORTED per the spec, and `fs` is omitted on
@@ -38,6 +39,10 @@ ALLOW_KINDS, REJECT_KINDS = ('allow_once', 'allow_always'), ('reject_once', 'rej
 
 class ACPAgentError(RuntimeError):
     """The agent answered with an error, or died holding a turn."""
+
+
+class DiedMidTurn(ACPAgentError, PartWay):
+    "The agent died holding a turn: said in the one sentence for it (clipool.MID_TURN), with the conversation it was on."
 
 
 class ACPStartError(ACPAgentError):
@@ -133,9 +138,8 @@ class ACPClient:
             if m is None:
                 err = ''.join(self._err).strip()[:300]
                 # ...a turn it died holding is said as a chat CLI's that died mid-turn (clipool.MID_TURN): one sentence for one fact, whatever the agent
-                from .clipool import MID_TURN
                 # ...and nothing of the process after it, which the chat drew as "(the agent exited)" - that detail is the log's
-                if method == 'session/prompt': logger.warning(f"acp: died mid-turn - {err or 'the agent exited'}"); raise ACPAgentError(MID_TURN)
+                if method == 'session/prompt': logger.warning(f"acp: died mid-turn - {err or 'the agent exited'}"); raise DiedMidTurn(MID_TURN, self.session_id)
                 raise ACPAgentError(f'the agent stopped during {method}' + (f': {err}' if err else ''))
             if 'error' in m: raise ACPAgentError(f"{method}: {m['error'].get('message', m['error'])}")
             return m.get('result')

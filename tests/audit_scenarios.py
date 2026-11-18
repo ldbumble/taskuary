@@ -221,10 +221,15 @@ class Run:
         self.snap(label or f'task: {title}')
         return self.tid
 
-    def type(self, text, label=None):
-        "The owner types a line in the task's box - the one road (general.take_line) - and the page reads at once."
+    def upload(self, name: str, data: bytes) -> str:
+        "A file the owner drops on the box, saved by the one door every box uses (/api/prompt-file) -> the path the page then names."
+        r = self.c.post('/api/prompt-file', content=data, headers={'X-File-Name': name}); assert r.status_code < 300, r.text[:200]
+        return r.json()['path']
+
+    def type(self, text, label=None, attach=None):
+        "The owner types a line in the task's box - the one road (general.take_line) - and the page reads at once. `attach`: paths the box saved (upload)."
         self.typed.append(text); pace()
-        threading.Thread(target=lambda: self.c.post(f'/api/tasks/{self.tid}/assistant/messages', json={'text': text}, timeout=120), daemon=True).start()
+        threading.Thread(target=lambda: self.c.post(f'/api/tasks/{self.tid}/assistant/messages', json={'text': text, **({'attachments': attach} if attach else {})}, timeout=120), daemon=True).start()
         assert until(lambda: text in self.payload()['lines'] or text in [w for w in self.payload()['waiting']], 10), f'{self.backend}: his line was kept'
         self.snap(label or f'type: {text[:40]}')
 
@@ -799,9 +804,26 @@ def t_send_at_work(r: Run):
     assert not [x for x in r.payload()['said'] if 'stopped' in x], 'no turn reads as failed'
 
 
+def v_attachments(r: Run):
+    "(v) A picture and a PDF dropped on the box with his line -> the agent is told where each is, and can read it from where it runs."
+    r.task('Look over the October pack')
+    pic = r.upload('totals.png', b'\x89PNG\r\n\x1a\n' + b'0' * 64)
+    pdf = r.upload('october-report.pdf', b'%PDF-1.4 the October numbers')
+    r.type('here is the pack - tell me what stands out', attach=[pic, pdf])
+    prompt = r.at_work()
+    for name in ('totals.png', 'october-report.pdf'):
+        named = [x for x in re.findall(r'(/\S*' + re.escape(name) + ')', prompt)]
+        assert named, f'{r.backend}: the agent is told where {name} is: {prompt!r}'
+        assert all(os.access(x, os.R_OK) and Path(x).is_file() for x in named), f'{r.backend}: {name} is readable at the path it was told: {named}'
+        # ...in the task's own folder: under attachments/ an agent's Read is refused as Taskuary's own data (acpgate), whatever it was told
+        assert not [x for x in named if '/attachments/' in x.replace('\\', '/')], f'{r.backend}: {name} is named where its Read is refused: {named}'
+        r.extra.append((name, named))
+    r.answer('The pack reads fine; the PDF totals match the picture.')
+
+
 SCENARIOS = {k: f for k, f in [('a', a_question_answered), ('b', b_email_rewritten), ('c', c_bug_pushed), ('d', d_page_step), ('e', e_three_asks),
                                ('f', f_ci_notice), ('g', g_invite_clash), ('h', h_steered_mail), ('i', i_late_answer), ('j', j_answered_outside),
                                ('k', k_send_fails), ('l', l_no_connector), ('m', m_remind_while_working), ('n', n_full_house), ('o', o_silent_turn),
                                ('p', p_break_out), ('q', q_save_routine), ('r', r_monitor_notice), ('s', s_send_close_at_work), ('t', t_send_at_work),
-                               ('u', u_stranger_twice)]}
+                               ('u', u_stranger_twice), ('v', v_attachments)]}
 def runs_on(name, backend) -> bool: return backend in getattr(SCENARIOS[name], 'on', BACKENDS)

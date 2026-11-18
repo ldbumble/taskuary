@@ -26,7 +26,7 @@ class TypeToCarryOn(unittest.TestCase):
         """The side-by-side walk, 2026-11-11: the coding chat said "the agent stopped in the middle of its turn ...", the general chat the same
         sentence led by "claude:" - one fact, one sentence, no process name."""
         from taskuary import agents
-        with mock.patch.object(clipool, 'run', side_effect=clipool.Ended(f'{clipool.MID_TURN} (the CLI exited (3))')):
+        with mock.patch.object(clipool, 'run', side_effect=clipool.PartWay(f'{clipool.MID_TURN} (the CLI exited (3))')):
             with self.assertRaises(RuntimeError) as got:
                 agents._run_live({}, 'claude', ['claude'], 'hi', lambda *a: None, 'task:1', None, None, None)
         # ...nor "(the CLI exited (3))" after it: machinery words the coding chat never showed (the overnight walk, 2026-11-11)

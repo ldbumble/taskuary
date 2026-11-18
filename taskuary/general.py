@@ -117,12 +117,15 @@ def keep_cut_turns(store) -> list:
         words = sessionrecord.said(trace)
         cut = cut_line(store, tid)
         rid = store.add_comment(tid, 'assistant', ASSISTANT_TYPE, f'{words}\n\n{cut}' if words else cut)
-        sessionrecord.keep_turn(tid, rid, trace)
+        out.append(tid)
+        # ...its steps under it where they can be written: one that cannot (a full disk) stopped the loop, and every cut turn after it was
+        # lost - each taken off disk as it was read (the timeline stress round, 2026-11-18)
+        try: sessionrecord.keep_turn(tid, rid, trace)
+        except Exception as e: logger.warning(f'task {tid}: the steps of the cut turn were not kept with it - {e}')
         if (t0 := next((e.get('at') for e in trace[:1] if e.get('type') == 'start'), None)):
             from . import outputs
             try: outputs.keep_turn(tid, rid, float(t0))
             except Exception as e: logger.debug(f'task {tid}: the files of the cut turn were not kept with it - {e}')
-        out.append(tid)
 
     return out
 def run_kept(store, tid: int) -> bool:

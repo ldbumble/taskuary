@@ -44,3 +44,22 @@ def test_a_turn_that_said_nothing_yet_still_says_it_was_cut():
     sessionrecord.keep_live(tid, [{'type': 'start'}, {'type': 'tool_call', 'name': 'Read', 'detail': {'args': {'file': 'pack.pdf'}}}])
     general.keep_cut_turns(s)
     assert [c['Body'] for c in s.list_comments(tid) if c['ActorType'] == general.ASSISTANT_TYPE] == [general.CUT]
+
+
+def test_one_cut_turn_that_cannot_be_filed_loses_none_of_the_others():
+    """Every cut turn is taken off disk as it is read; one whose steps could not be written (a full disk) stopped the loop, and every cut
+    turn after it was gone - its owner's line heard, nothing under it, no line saying it was cut."""
+    from unittest import mock
+    s = MemoryStore()
+    a = s.create_task({'Title': 'Venues', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    b = s.create_task({'Title': 'Payroll export', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    turn(s, a); turn(s, b)
+    real = sessionrecord.keep_turn
+    def full(tid, *x):
+        if tid == min(a, b): raise OSError('No space left on device')
+        return real(tid, *x)
+    with mock.patch.object(sessionrecord, 'keep_turn', full):
+        got = general.keep_cut_turns(s)
+    assert max(a, b) in got
+    for t in (a, b):
+        assert [c for c in s.list_comments(t) if c['ActorType'] == general.ASSISTANT_TYPE and c['Body'].endswith(general.CUT)], t

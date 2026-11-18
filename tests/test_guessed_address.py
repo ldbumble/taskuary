@@ -73,3 +73,15 @@ def test_a_guess_his_mail_already_knows_is_drafted_unmarked():
     assert out['ok'], out
     rv = s.get_review(out['review_id'])
     assert 'guessed' not in rv['Reason'] and 'guessed' not in json.loads(rv['Deliver'])
+
+
+# ...and the owner is never "who his mail knows" there: a guess at a colleague on his own domain, where the only mail from it was his own
+# forward to himself, was refused with himself as the one to draft to
+def test_the_owner_is_not_offered_as_who_his_mail_knows_at_his_own_company():
+    from taskuary import store as store_mod
+    s = MemoryStore(); tid = own_task(s, 'general'); store_mod.set_owner(s, 'Alex Doyle', 'alex@northwind.example', 'owner')
+    s.add_message({'ExternalId': 'fw-1', 'ConversationId': 'c-fw', 'Channel': 'email', 'SourceName': 'alex@northwind.example', 'FromName': 'Alex Doyle',
+                   'FromEmail': 'alex@northwind.example', 'Subject': 'Fwd: invoice', 'BodyText': 'fyi', 'SentAt': '2026-08-26 11:58:17', 'Status': 'filed'})
+    out = slots.draft(s, tid, 'Hi Omar', to='omar@northwind.example', subject='Invoice', guessed=['omar@northwind.example'])
+    assert out['ok'], out
+    assert 'guessed, check before Send: omar@northwind.example' in s.get_review(out['review_id'])['Reason']

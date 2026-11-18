@@ -2,6 +2,306 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.23 - 2026-11-17
+
+- A pressed card holds still while it sends: the press is said on its button, no line drawn over the card
+- A browser act in a line that also pushes is judged by the browser gate
+- A guess at a public mail service is not refused by who else uses it
+- Sent mail that delivers a promise no longer closes its task under live work or a waiting draft
+- A picture Telegram or WhatsApp could not hand over is said, never kept broken or lost
+- A screenshot pasted for a coding task is saved in the task's own folder
+- Mail search says a date it cannot read; read_attachment takes "attachment 12"
+- new_task: the same job asked twice from one task is one task
+- An agent's change above a card's Authority waits for the press instead of a 403
+- A burst goes to the agent in the order its mails came, not the order their threads woke
+- A task made in New opens its chat with his words and a pill per file, not the files' paths
+- The chat restarts a bridge this computer runs when asked, even while it answers
+- A second press on an answered held-steps card is not a failure
+- A browser act run by timeout, xargs, sudo or inside a loop is still an act
+- An agent on a routine run is told its email went, not that a card waits
+- new_task: a start refused under the new task is kept on that task
+- A second Remove on a wiped card keeps the Undo that brings its sign-in back
+- Trust remembers the sender its button named, through the one road that checks the From
+- Continue on a coding task with only a picture hands the picture over
+- A greyed card reads his line's words, never the file block - and a heard "42" no longer breaks the chat
+- A line from someone else on the thread no longer readdresses a reply typed into the card
+- A bulk card's sends that did not go still wait on it, with the press lit, and its agent never sets them up again
+- A sign-up keeps as its user name only a box the page names as the user's
+- new_task: the new task is asked from the door the owner asked on
+- readgate: read a shell line's words as the shell does, so a quoted or braced secret is seen
+- A verdict that does not say a payment moves no money holds it
+- A mail that lands while Mark done writes up its task is read once the close has, so a question reopens it
+- A dashboard source saved without a key is read under the name its tiles bind to
+- Next on an FYI batch reads it even when the shared walk has moved
+- A dashboard number that is not one is refused at save, not crashed on at run
+- An agent's new letter no longer writes over the owner's edit of its draft
+- The phone's Trust says an agent took the task only when one did
+- A mail read cut off part-way says so on the card, and that it is retried
+- A routine's run of steps that a restart cut says so on its task
+- An email sent on its second press says which email went, not the failure
+- Intacct takes a flat filter, any order shape and a JSON record as meant
+- A long line to a coding agent is handed over whole, its files with it
+- A dashboard whose last run failed says so on the page it left as it was
+- A split leaves the source ref with the task it names
+- readgate: a sign-in place stays closed inside a work folder and behind a glob
+- A notice that needs the agent on a reply task no longer promises it a reply
+- A press on a bulk card the chat moved past sends nothing
+- A picture sent into a chat bound to a coding agent reaches the agent
+- A trusted repo's pass covers only that repo: a step aimed elsewhere asks
+- A heredoc fed to a program is its data, not shell; a held read the gate now opens leaves the chat
+- A burst says only the mails no turn has heard yet
+- Approve runs a held click only while its ref still names the held control
+- SQL Server's Test without pyodbc offers the Install button, not a module error
+- new_task: a coding job whose session is up is not started a second time
+- A sign-up Taskuary sent that asks an emailed code types the code from the mail
+- An Outlook send that fails part-way takes its draft back and says Graph's words
+- A pressed act a restart cut is said on its card, not relit as never pressed
+- Two presses on a bulk card at once are one run, told once
+- new_task: a coding ask made general says so, and says its checkout was dropped
+- A browser act whose card fails to be filed is still held
+- Slack lines with a picture, and thread replies sent to the channel, arrive
+- Mail search with nothing found says how far the saved mail reaches, or that there is none
+- An unsubscribe POST that gets no answer says so instead of a bare 500
+- A chat line names only the files the owner uploaded - never any path the request carries
+- An Intacct session Sage dropped early is replaced, not failed for 25 minutes
+- A reply goes to the Reply-To the sender asked to be answered at
+- A bulk card's run cut short by a restart reads stopped, the rest waiting for his press
+- new_task: the line on the asking task says whether the new one started
+- Words for an agent waiting its turn to start are kept for it, not refused
+- Two presses of Run now in the same second start one routine run, not two
+- The agent is told the page moved, not that the owner pressed Pay
+- A line on a task whose start is queued no longer says no agent started
+- Send to agent on a report, a dashboard or an FYI hands the agent his attached file in the task's folder, and a held line keeps it as a file
+- A Telegram list answers one tap: a double tap no longer runs twice
+- A draft the owner's own reply retired stays in the chat, greyed, saying he answered
+- The Timeline stops reading the sync status twice a second around every due sync
+- run_system says a wrong connector_id and a missing type as what they are
+- The item's Send to agent box lights Send only once words are in it, so a picture alone never lights a press that does nothing
+- Search quotes his chat line as his words and the files by name, never the block the agent reads
+- A file attached to a coding start is copied into the task's folder
+- Close issue with no comment can be pressed: an act's optional words never grey its press
+- Two files of one name on an IMAP mail are both kept
+- A sign-up the owner says done to keeps the password Taskuary made
+- A Slack thread reply shown in the channel is answered in its thread
+- A bulk card holds only the cards its own call filed
+- A file attached to New's first box goes with the agent's job the Assistant starts from it
+- A routine's failed repair says what happened, not 'say it another way'
+- An Advisor idea's Send to agent pressed twice starts one agent
+- A turn's facts no longer quote the owner's line the turn itself carries
+- Agent tools read an argument as their schema has it, and say a missing one in plain words
+- A file sent over SMTP keeps its name when it has accents or quotes
+- A javascript: address or a new tab's magic link is judged, not a look
+- The browser is never launched on a magic link before the gate judges it
+- An act's card holds its press: the server's answer is its state, no relight before the row is read again
+- A dismissed act stays its own card: the chat list no longer swaps it for a generic "Not sent"
+- A bound chat that will not take the agent's message is said in the task
+- An Advisor rule question answered yes twice makes one rule
+- A bulk card names every item its door refused, and an all-refused run says no card stands
+- QuickBooks' chart of accounts is no longer filtered by its own tool name
+- A notice's task its agent closed no longer offers a reply to the notifier
+- A held step pressed while its agent works waits lit, never failed
+- A press made while the first press's wake is starting rides in that turn
+- The line names a bulk card next in it as the card names itself
+- shellgate: read an HTTP client's write by its grammar, so a payment POST is held
+- find_tools names only the tools this session is offered
+- A page reader called through run_system keeps the page it was asked to read
+- A saved sign-in with no user name says so instead of blaming the password
+- A review's verdict and a long PR conversation reach the task
+- A web source's list answer is one item per line, so a dashboard draws every item
+- A dashboard that ran without one of its sources reaches the bell, as a report does
+- A folder deleted in Outlook no longer stops the mailbox reading new mail
+- The agent hears which of its emails went, in the words a No uses
+- A send that failed hands its agent the owner's own words
+- A dashboard run with nothing to show still says what it went without
+- An unheard reply that came in while a chat turn worked stands after that turn, wherever a note pushed its answer
+- An edited reply whose first Send failed still goes as the owner's edit
+- An issue's comments are read to the newest, not the first page
+- A turn whose CLI died part-way keeps its steps and its failure where it happened
+- A turn its session was closed under is no turn a restart cut later
+- A long turn keeps every step it took, not only its newest 100 trace events
+- A picture he attaches keeps its own name - the box's chip and his line's pill read the same
+- After a bulk run its agent hears what still waits, counted as what is left
+- A read let in never waits on its agent's turn
+- A turn that carries a mail in its own words does not say it again under "came in"
+- A proposal asked twice is the card already waiting
+- A routine's email that went at once is said to have gone, never as a card that waits
+- browsergate: a press behind a launcher or a quote is still an act
+- The call to the owner's own systems from a shell is not held as a send
+- A GitHub poll reads every item that changed in its window, not the newest 25
+- A tracker comment whose tracker is not connected offers Connect, not a Post that can only fail
+- A throttled mail read says so in words, and no service URL reaches the card
+- taskuary --draft says when the email's To is empty for want of an address
+- A code a site emails for the saved sign-in is typed from the mail
+- A send a restart cut is told to its agent as one that may have gone
+- A dashboard run whose numbers fell to nothing retires the row that still said them
+- web_fetch reads a page or file by the linked-document road, not as raw UTF-8
+- A dashboard kept without source keys reaches the page under the names its run reads
+- A file attached to a message asked for in New's box stays with that message's task
+- An act's card read from its review says Connect and a failed press, as the chat's card does
+- A greyed draft's line places the owner's answer by when it came in, as every other input
+- shellgate: a step behind a launcher is read as its own tool
+- Two presses of a bulk card at once are one run, told once
+- A draft his line greys says the server's sentence from the first frame, never a second wording swapped in
+- A picture sent to the Assistant chat on the phone is answered with the picture
+- A picked file stands as its chip at once: the prompt box no longer jumps per upload
+- A code mail with other numbers in it has its code read by the model
+- A sign-up's password is kept before its form is sent, not after
+- An Outlook mail body Graph throttles is asked again, not kept as its preview
+- A connection removed from its page goes back to a list that already says it is wiped
+- The agent's browser downloads into scratch, not the owner's Downloads
+- An address agent-browser read fetches is judged like an open's
+- Outlook mail whose files were not given this poll waits for the next one
+- A routine run's many emails are counted as sent, not said to wait on one card
+- A settings proposal written as one object of switches is read as its changes
+- gates: one reading of a command's words, and a cheap test that joins quotes
+- Push & deploy whose deploy is refused keeps the push that went and says so
+- A chat reply keeps the address its link points to, and Teams gets it spelled
+- A tool call can no longer name the program an MCP card starts
+- An agent's run_tool proposal says what to run, never where
+- No agent script runs while a password box on the page holds a password
+- A draft set up again after the owner's failed Send keeps his pressed card
+- An address the owner's mail knows is no guess, whatever the agent called it
+- An agent's link reaches its bound chat with the address it points to
+- The owner's own start takes a queued assistant start off the queue
+- A start held by the home says what holds it now, not what held it then
+- A post whose network is not connected says Connect on every surface that draws its card
+- His Mark done line, once drawn, never goes back by the box when a reopening mail's turn begins
+- A file the owner sent is never drawn under the agent's answer as what it made
+- A held browser act runs in the agent's folder when it is approved
+- A line a turn heard while still coming up is cut with it on a restart
+- An attachment Taskuary never kept is a failure with its way past it
+- A pull request GitHub will not open is the landing's refusal, kept and told
+- A Send refused for a lapsed Google or Microsoft sign-in offers Sign in again
+- A routine's script is handed every row the read before it got
+- A sign-up with no secure page open is asked as a sign-up, not a sign-in
+- An FYI handful sent on to an agent draws his words on his line, not the list of the other messages Taskuary added for the agent
+- A Trust press that lifts nothing starts nothing
+- One cut turn that cannot be filed loses none of the others
+- A voice note in a chat bound to an agent reaches it as words
+- A line typed on a held task is kept, not a crash or an endless spinner
+- acpgate: a press in the browser or on the desktop is judged on the ACP road too
+- A draft the owner's own reply retired stays greyed where it stood, saying he answered
+- The same ref held on another page is its own card, not the first one
+- A connection is made only of a type something works: a mailbox preset becomes its IMAP card
+- The owner's sent mail keeps whom it went to; a forward is no answer to the sender
+- A sign-up the owner sends keeps as its user name only a box the page names so
+- run_system with no connector_id runs on the one tool card, never the first row
+- read_message fits a long mail into its answer and says where to go on
+- Demo chat: keep the off-script line as it was said, so the chat does not draw it twice
+- A routine that goes on after a yes reads its earlier steps whole
+- cmd's start and PowerShell's Start-Process run a browser act too
+- Taskuary's own short reply, read back from Sent, is not the owner answering again
+- A browser hold in a mixed line says the rest of the line did not run
+- The agent after a routine's steps is told where an earlier output was cut
+- A press that lost to an answer says that answer in words
+- A routine run cut by a restart is said on the routine's own row too
+- The Company Hub card's Test answers instead of failing for want of a branch
+- An API agent's call to a tool it does not have says where its tools are
+- ask_stronger's no-answer is a failure with its way on, never a result
+- Continue on a held task says the hold instead of a run that never starts
+- Demo tour: say that Mark done closes it, not the last tick
+- A permission press returns only once its answer is written where the page reads it
+- A pressed permission card stays pressed until it is the answered card
+- The step a permission card is about says it waits, and once refused says it was not run
+- A routine run whose task the owner closes stops there and asks no repair
+- read_attachment reads a long file in parts and says how much of it is kept
+- A line the owner takes back takes back the file it alone sent
+- A line a cut turn took is heard by the conversation picked back up
+- Fold funnel.held_offer into senders.trust_offer
+- fill_page says an empty user box only when there is one
+- A post that lands reads what the owner pressed, not the agent's proposal, until the row comes back
+- A reply the owner's mail left unanswered goes to an agent when none heard it
+- A line waiting by the box shows a pill for each file he sent with it
+- The hand-raise watch stops reading the live runs every 8 s when no agent is live
+- A send pressed while a file uploads waits for it, in every box
+- A permission still waiting is put to the bound chat again when the one it held is done
+- Words typed in a report's box before Send to agent stay in the box on the Agent canvas, not wiped by the press
+- Every GitHub act on a known repository uses the token of the card that reaches it
+- The chat's box shows each task's own unsent words when its task changes under it
+- A run_tool proposal is pinned to the one card it will run on
+- A tool call's failure names the field it needed, not a KeyError's text
+- A sent email is said by whom it went to, not by its card's reason
+- An MCP call naming no tool is said back, not put before the owner
+- Continue with a picture and no words hands the picture over as his line
+- Re-run checks says nothing re-ran when no failed check is a GitHub Actions run
+- A routine's sent email no longer tells the owner to Mark done a run that closes itself
+- A row cap given as text is read, or said as what it is
+- A sent reply tells its agent whom it went to, as the owner left it
+- A routine run's outcome says when an email it wrote waits for the owner's Send
+- An Intacct 'in' filter written as a list in words is that list
+- A paste that carries words is those words, not a picture of them
+- An agent's email with two addresses in To is refused at the draft, not at Send
+- Reading a repository's issues says how to see more, and refuses a limit it cannot read
+- A run kept before outcomes were written is not taken for one a restart cut
+- Demo world: connect the database its reports read
+- A carried-on turn does not say the mail that woke it twice
+- The owner's outside answer is said in one line on every channel, never "draft removed"
+- A page that never answers no longer wedges the session's browser
+- A trusted repo is where origin pushes, on the card's own host
+- A post sent from another window is never said in this window's words
+- A channel that waits says why the same way on every road
+- A mail the opening turn already heard is not announced as the next turn
+- Demo: Quit says the demo stays up, not that it would reach something real
+- An API agent reads a long page or file to its end, part by part
+- A reply held by the coding switch clears with it
+- Stop closes the permission card it stopped, and never starts the agent again
+- A bulk card's bar counts with its rows, never a second behind them
+- A reply to mail moved in Outlook goes on its thread at the mail's new id
+- A press on a taskless reply the owner's own answer retired says so instead of crashing
+- A picture attached to a prompt keeps the owner's name for it
+- A file the owner attached is never drawn as one the agent's turn made
+- A card the Assistant writes back from New keeps the files that were in the box
+- A mail held up on its way enters the chat after the line typed before it came
+- cardqueue.what reads a review row without assuming its Kind
+- The rail's box holds a line typed while its file uploads, and sends them together
+- A permission whose session ended says so, never that ten minutes passed
+- A line typed over the line of cards greys what stood and never draws what waited behind it
+- A stopped bulk run he then wrote past no longer says the rest still waits
+- The page a browser is on is read from its tab, not a file that lags it
+- browser_open reads a page that came but never finished loading
+- A failed turn stays under the line it failed on once the owner moves on
+- Demo brain: a JSON ask without a script finds nothing, never triage's verdict
+- Demo: a file put on a draft can be taken off again
+- An agent takes back a bulk card by the ids it was told, in one call
+- A bulk run written before runs carried their process reads stopped too
+- A sign-in is asked for the site the tab is on, not the one before it
+- A press held for uploading files is dropped when the box is cleared under it
+- The answered permission card takes the pressed card's place exactly
+- An open chat at rest looks at its conversation every 30 s, not every 5 s, while the socket is up
+- A quick answer's session leaves a queued escalation queued
+- Mails passed into a coding session are typed in the order they came
+- Every answer to a permission is said on its bound chat, whichever road it came by
+- A task's own ask is his words wherever it is quoted, never the paths of what he attached
+- An API agent's look or click with no page open says to open one
+- A find that only reads the page is a look, not an act
+- A close ends the turn above it as a stop does: work a reopening mail begins stands under Mark done
+- A read that fetches a magic link is judged as opening it
+- A call refused by the owner's Always reject reads not run, as his press would
+- Demo: a press through a card answers as its own path does
+- An agent woken by the message that reopened its task is told the close was undone by it
+- Trust's demo refusal is said as the demo's line, not "press again"
+- browser_open reads the page it opened without asking whether one is open
+- A closed chat typed into reopens without a press line above the owner's line
+- A press is marked told only once its agent heard it
+- Demo: stopping a recorded agent says it is a recording
+- The task page stops re-reading a chat task every 12 s for the half hour its answered agent stays open
+- The owner is never offered as who his mail knows at a company
+- Demo: About you says its owner is invented
+- The address bar's stuck-page line keeps Taskuary's capital
+- Demo: the catch-all refusal says only what is true of everything it catches
+- A card stands above a line said after it: an unmarked turn began at its own time
+- A coding turn its protocol says ended is not at work, whatever the run's record last said
+- Continue and Resume hand their turn to a fresh session when the one they got just ended
+- A turn after a failed one keeps its own head when it answers
+- A Continue note held behind Trust is said as kept, not as continuing
+- A chat turn pushes each step to its tabs, and the open chat reads when told instead of every 600 ms
+- An email's To takes one address, refused at the tool when it is not one
+- A chat's session is read when its turn moves, not every 1-2.5 s for the whole turn
+- A number a tool cannot read says where that number is found
+- Merging the stress fleet: a gate keeps a command's env when it reads where it goes; the core tools stay inside their budget
+- After the fleet's merge: the demo reads which kinds an agent works from kinds, and a card read without its status waits on nothing
+- Counts the fleet wrote by hand say themselves through timewords.plural, as the gate requires
+
 ## 0.4.0.22 - 2026-11-17
 
 - An agent asks for a step only the owner can take the moment it meets it, and goes on with what does not need it

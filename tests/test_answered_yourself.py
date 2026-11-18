@@ -258,6 +258,20 @@ class TheDraftHisAnswerRetiredStaysWhereItStood(unittest.TestCase):
         self.assertEqual(card.get('why'), 'Not sent - you answered Erin Blake yourself')
 
 
+    def test_a_late_press_on_a_taskless_draft_he_answered_says_so(self):
+        """A reply to filed mail has no task. Retired by his answer, a press on it from a stale page crashed reading the task it lacks."""
+        from taskuary import verdicts
+        from taskuary.channels import ingest_outbound_mail
+        s = _store()
+        mid = s.add_message({'ExternalId': 'in-fyi', 'ConversationId': 'c-fyi', 'Channel': 'email', 'FromName': 'Erin Blake',
+                             'FromEmail': 'erin@northwind.example', 'SentAt': '2026-11-17 08:00:00', 'BodyText': 'Quick one?', 'Status': 'filed'})
+        rid = s.add_review({'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Yes.'})
+        ingest_outbound_mail(s, 'alex@northwind.example', {'id': 'out-fyi', 'conversationId': 'c-fyi', 'bodyPreview': 'Yes, go ahead.',
+                                                            'sentDateTime': '2026-11-17T09:00:00'})
+        out = verdicts.decide(s, s.get_review(rid), 'approve', 'Yes.')
+        self.assertFalse(out['ok'])
+        self.assertEqual(out['send_error'], 'Not sent - you answered Erin Blake yourself')
+
 class AForwardIsNotTheAnswer(unittest.TestCase):
     """Erin asked; a reply to her waited. The owner forwarded her mail to Gail from Outlook - the forward keeps the conversation. Stored with
     no recipients, it read as his answer to Erin: her draft was retired and the chat said "you answered Erin Blake yourself". His mail now

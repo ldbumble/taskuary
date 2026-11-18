@@ -642,9 +642,10 @@ def passed_why(store, r: dict) -> str:
     from .conversation import _mail, ep
     if r.get('DecideNote') == NOT_NEEDED: return 'Not needed - the agent finished without it'
     card, end = ep(r.get('DraftAt') or r.get('CreatedAt')), ep(r.get('DecidedAt')) or time.time()
-    tid = int(r['TaskId'])
+    # ...A REPLY TO FILED MAIL HAS NO TASK (2026-11-18): retired by his answer, its press crashed reading one - its thread is its own message's
+    tid = int(r['TaskId']) if r.get('TaskId') else None
     his = [x for x in store.list_comments(tid, internal=True) if x.get('ActorType') in (general.USER_TYPE, general.WAITING_TYPE)
-           and not general.is_brief(x) and x.get('Actor') == 'owner']
+           and not general.is_brief(x) and x.get('Actor') == 'owner'] if tid else []
     lines = [(ep(x['CreatedAt']), f'your line "{w}"', f'you wrote "{w}" after it') for x in his for w in [_cut(general._line_of(x.get('Body'))['text'])]]
     # ...his own mail on the thread is his answer to whom it was with, never "you wrote again" (2026-11-17): the newest other sender before it
     # ...each placed by when it CAME IN, his too (2026-11-18): his mail was placed by when he sent it and theirs by when it arrived, so mail
@@ -654,7 +655,11 @@ def passed_why(store, r: dict) -> str:
     # ...and his mail that went to others, not to whom the card was for (a forward to Gail on Erin's thread), says whom it went to
     from .context import _recipients
     mine = continuity.addressees(store, r)
-    for at, x in sorted(((came(x), x) for x in _mail(store, tid)), key=lambda p: (p[0], p[1]['MessageId'])):
+    from .ingest import is_ours
+    m = store.get_message(r.get('MessageId')) if not tid and r.get('MessageId') else None
+    rows = _mail(store, tid) if tid else [{**x, 'Own': is_ours(x), 'T': ep(x.get('CreatedAt'))}
+                                         for x in (store.thread_messages(m['ConversationId']) if m and m.get('ConversationId') else [])]
+    for at, x in sorted(((came(x), x) for x in rows), key=lambda p: (p[0], p[1]['MessageId'])):
         n = x.get('FromName') or x.get('FromEmail')
         if not x.get('Own'): who = n or who; mails.append((at, f"{n or 'a'}'s new message", f"{n or 'someone'} wrote again after it")); continue
         if (went := _recipients(x)) and mine and not mine & {a.lower() for a in went}:

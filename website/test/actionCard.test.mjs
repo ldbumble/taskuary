@@ -93,3 +93,11 @@ test("Close issue with no comment proposed can be pressed; a comment or a post t
   assert.ok(!pressable(actionFor("jira_comment"), { action: "run_tool", type: "jira_comment", item: "NW-12" }, ""));
   assert.ok(!pressable(actionFor("linkedin_post"), { ...POST, text: "" }, ""));
 });
+
+// ...its network not connected is said wherever the card is drawn: a review off the task's list carries `Connect` (outbound.review_connect)
+test("a card drawn from a review carries its Connect while it waits, and none once answered", () => {
+  const fix = { says: "LinkedIn isn't connected", label: "Connect LinkedIn", href: "#connector=linkedin" };
+  assert.deepEqual(cardOf(rv(POST, { Connect: fix })).connect, fix);
+  assert.equal(cardOf(rv(POST, { Connect: fix, Status: "approved" })).connect, null);
+  assert.equal(cardOf(rv(POST)).connect, null);
+});

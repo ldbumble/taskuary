@@ -1076,8 +1076,10 @@ def _send_state(memo: dict, channel, has_message=True) -> tuple:
 
 
 def _review_connect(memo: dict, r: dict) -> dict | None:
-    "A draft's channel not connected: the card's Connect instead of its Send (outbound.connect_fix), once per channel a request."
-    return None if r.get('Kind') == 'action' else outbound.review_connect(store, r, memo)
+    """A draft's channel not connected: the card's Connect instead of its Send (outbound.connect_fix), once per channel a request - and an
+    act's card its connector's (a post's LinkedIn), as the chat's card says it: left out for every act, a review drawn as its ActionCard off
+    this list offered Post over a network nothing had connected. A proposal no catalogue card draws has none (review_connect)."""
+    return outbound.review_connect(store, r, memo)
 
 
 def _review_send_state(memo: dict, r: dict) -> tuple:

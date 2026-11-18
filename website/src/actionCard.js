@@ -15,7 +15,9 @@ export const cardOf = (review) => {
   let p = null;
   try { p = JSON.parse(review.FinalText || review.DraftText || ""); } catch { return null; }
   const act = isCardProposal(p) ? actionFor(p.type) : null;
-  return act ? { ReviewId: review.ReviewId, Status: review.Status, CreatedAt: review.CreatedAt, Reason: review.Reason, post: p, network: act.title, as: "" } : null;
+  // ...its network not connected (server: `Connect` on the review, outbound.review_connect): Connect on the card, as the chat's own card says it
+  return act ? { ReviewId: review.ReviewId, Status: review.Status, CreatedAt: review.CreatedAt, Reason: review.Reason, post: p, network: act.title, as: "",
+    connect: review.Status === "pending" ? review.Connect || null : null } : null;
 };
 
 export const choiceOf = (f, v) => (f?.choices || []).find((c) => String(c.value) === String(v)) || null;

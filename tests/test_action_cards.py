@@ -124,6 +124,19 @@ class OnePress(unittest.TestCase):
         kept = json.loads(server.store.get_review(rv['ReviewId'])['FinalText'])
         self.assertEqual((kept['publish'], kept['result']['url']), ('now', 'https://www.linkedin.com/feed/update/urn:li:share:42'))
 
+    def test_a_post_whose_network_went_off_says_connect_on_every_surface_that_draws_it(self):
+        # the chat's card offered Connect for a post whose LinkedIn was switched off after it was set up; the task's review list - the road
+        # a bulk card's rows and a review drawn on its own take to the same ActionCard - had no Connect for an act, so that card offered
+        # Post to LinkedIn and the press failed on a network nothing had connected. One fact, one answer (outbound.review_connect)
+        rv = self.propose(text='Northwind is at the spring hiring fair on Friday.')
+        server.store.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 0}, 'test')
+        chat = next(x for x in c.get(f'/api/tasks/{self.tid}/assistant').json()['cards'] if x['ReviewId'] == rv['ReviewId'])
+        self.assertTrue(chat['connect'])
+        listed = next(r for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data'] if r['ReviewId'] == rv['ReviewId'])
+        self.assertEqual(listed['Connect'], chat['connect'])
+        on_task = next(r for r in c.get(f'/api/tasks/{self.tid}').json()['reviews'] if r['ReviewId'] == rv['ReviewId'])
+        self.assertEqual(on_task['Connect'], chat['connect'])
+
     def test_a_change_the_card_does_not_offer_posts_nothing(self):
         net = LinkedIn()
         with stubbed(net):

@@ -58,7 +58,8 @@ if (BRAIN === "cli" || BRAIN === "codex") process.env.TASKUARY_BROWSER_REAL_CLI 
 // ...the gateway's address and key, read before the server starts: its host is the one outside address the test server may reach
 const GW = BRAIN !== "gateway" ? {} : (() => { const f = path.join(os.homedir(), ".taskuary-eval.json"), c = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {};
   return { url: process.env.EVAL_AI_URL || c.url, key: process.env.EVAL_AI_KEY || c.key, model: process.env.EVAL_AI_MODEL || c.model }; })();
-if (GW.url) process.env.TASKUARY_FIXTURE_ALLOW = new URL(GW.url).hostname;
+// ...and a walk is the owner's day: its agents reach the web as they would for him (the test server's guard is for the suites, not a walk)
+process.env.TASKUARY_FIXTURE_ALLOW = "*";
 const h = await startHarness({ fresh: true });
 // ...AND npx RUNS IN IT (the coding walk, 2026-11-12): APPDATA is the scratch home's, with no npm folder, so `npx -y <the ACP adapter>` failed
 // and every coding session fell back to its terminal - a road the owner's own machine does not take

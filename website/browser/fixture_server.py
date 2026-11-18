@@ -48,8 +48,10 @@ def _pty_own(address) -> bool:
 LOOPBACK = os.environ.get("TASKUARY_FIXTURE_LOOPBACK") == "1"
 # ...AND THE ONE AI A WALK RUNS ON (TASKUARY_FIXTURE_ALLOW=<host>, set by real-run.mjs under EVAL_BRAIN=gateway): its addresses, read before
 # the guard is put on, are let through - and nothing else of the outside world. Never set in CI.
-ALLOW = {a[4][0] for h in os.environ.get("TASKUARY_FIXTURE_ALLOW", "").split(",") if h for a in socket.getaddrinfo(h, 443)}
-def _local(host) -> bool: return LOOPBACK and str(host) in ("127.0.0.1", "localhost", "::1") or str(host) in ALLOW
+# ...`*`: a walk of the whole app (real-run.mjs), where an agent researches and signs up on the web as it would for the owner - never in CI
+_ALLOW = os.environ.get("TASKUARY_FIXTURE_ALLOW", "")
+ALLOW = {a[4][0] for h in _ALLOW.split(",") if h and h != "*" for a in socket.getaddrinfo(h, 443)}
+def _local(host) -> bool: return LOOPBACK and str(host) in ("127.0.0.1", "localhost", "::1") or str(host) in ALLOW or "*" in _ALLOW.split(",")
 
 
 class NoOutboundSocket(socket.socket):

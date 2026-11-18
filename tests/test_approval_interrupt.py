@@ -89,7 +89,9 @@ class InterruptTests(unittest.TestCase):
         channels.retire_draft_answered_elsewhere(s, tid, {'ConversationId': 'AAQk-x', 'SentAt': '2026-09-06 11:00:00', 'Channel': 'email', 'BodyText': 'Sent it from Outlook.'})
         self.assertEqual(s.get_review(rid)['Status'], 'superseded')
         data, send = self.approve(s, rid, 'Here it is.')
-        self.assertFalse(data['ok']); self.assertTrue(data.get('already')); send.assert_not_called()
+        self.assertFalse(data['ok']); send.assert_not_called()
+        # ...refused as every card the thread moved past is, in the sentence its greyed card reads (proposals.passed_why)
+        self.assertTrue(data.get('passed'))
 
     def test_the_review_list_marks_stale_by_material_change_only(self):
         s = MemoryStore(); tid, first, rid = thread(s)

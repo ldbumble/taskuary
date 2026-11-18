@@ -17,7 +17,7 @@ One item: {id, kind, at, ...}
   turn     t:<the input before it>:<n>   state starting|working|done|stopped|failed, steps, text, cards (last), started, ended, fail
   card     r:<ReviewId>             an action outside any turn
 Ids never change once given, so the page keys by them and a turn that ends, or a line that is heard, redraws in place."""
-import functools, hashlib, json, re, threading, time
+import functools, hashlib, json, math, re, threading, time
 from datetime import datetime
 from pathlib import Path
 
@@ -633,6 +633,12 @@ def _items(store, tid: int) -> dict:
         else: put(h['At'] if h else ep(m['createdAt']) + 0.999, 0 if h else -1, it, h['HId'] if h else 0)
 
     # in order - and an input nobody heard never cuts a turn's work in two: it stands after the turn it came in under
+    # ...A CHAT TURN'S TOO, wherever its answer was placed (the stress round, 2026-11-18): a note filed while the turn worked (his reply from
+    # the mailbox put the draft down) stands at the end of its second and pushes the answer after it - past his reply, read at its own time,
+    # and the finished turn was drawn under the reply as the next turn's, then gone
+    spans = [(e['started'], t) for t, _, _, _, e in ev if e['kind'] == 'turn' and e.get('started')]
+    # (one step past it, exactly: at an epoch's size a 1e-7 nudge is under the float's grain and leaves the tie it was to break)
+    ev = [(max([t] + [math.nextafter(at, INF) for b, at in spans if b <= t <= at]) if rank == -1 else t, rank, *r) for t, rank, *r in ev]
     out, held, run = [], [], None
     def close():
         nonlocal run

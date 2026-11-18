@@ -206,6 +206,12 @@ class Counsel(unittest.TestCase):
         opts = re.search(r'OPTIONS: (.+?)\.\s*$', text, re.M).group(1).split(' | ')
         self.assertEqual(opts, [w for _, w in buttons.choices('agent')])
 
+    # NOTHING HERE DOES IT IS AN AGENT'S WORK (a walk, 2026-11-18): "pay the invoice" got a look-up, then "there's no payment connection,
+    # so the payment hasn't been prepared" - no task, no card, no next step. With no button for it, the ask is handed off
+    def test_an_ask_no_button_does_is_handed_to_an_agent_never_a_dead_end(self):
+        text = ' '.join((TEMPLATES / 'counsel.md').read_text(encoding='utf-8').split())
+        self.assertIn('When no button here does it (a payment, a booking), it is work for an agent: road 3', text)
+
     def test_counsel_stays_under_its_budget(self):
         self.assertLessEqual(len((TEMPLATES / 'counsel.md').read_text(encoding='utf-8')), counsel.BUDGET)
 

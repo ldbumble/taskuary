@@ -793,3 +793,12 @@ def test_a_sent_email_is_named_by_whom_it_went_to_not_by_its_cards_reason(s):
         assert verdicts.decide(s, s.get_review(rid), 'approve', actor='owner')['ok']
     said = s.list_comments(tid)[-1]['Body']
     assert said.startswith('Sent: the email to ray@northwind.example. ') and 'Not sent' not in said and 'approve to send' not in said, said
+
+
+# HIS OWN ASK OWES HIM NO EMAIL (a walk, 2026-11-18): "set it up for my press" was read as an email owed to the owner, its agent drafted
+# "please approve the note" to him, and he had to drop it. He is the sender of his own ask: his press on the card is the approval
+def test_a_handoff_never_owes_the_owner_an_email_to_himself(s):
+    s.set_setting('owner_name', 'Alex Doyle', 'owner'); s.set_setting('owner_email', 'alex@northwind.example', 'owner')
+    out = [{'to': 'Alex', 'about': 'approve the note'}, {'to': 'alex@northwind.example', 'about': 'approve'}, FOUR[0]]
+    made, _ = handoff(s, {'return_value': lambda sys, user, **k: json.dumps({'summary': 's', 'checklist': [], 'outputs': out})})
+    assert [i['out']['to'] for i in slots.open_(s, made['taskId'])] == ['paula@northwind.example']

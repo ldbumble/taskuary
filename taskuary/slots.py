@@ -198,6 +198,8 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     # bank's contact had written three months before - "give it tool to search emails"): refused before anything stands, with the people at
     # that company his mail knows, so the agent drafts to one of them or asks him. A company his mail never saw still takes a marked guess
     # ...and one his mail knows is no guess, whatever the agent called it: it was refused for the others at its company, itself unlisted
+    # ...AND NEVER A GO-BETWEEN (a walk, 2026-11-18): refused a guessed accounts-payable mailbox, told "draft to the one this is for", the
+    # agent sent the payment note to the colleague who had shared a vendor sheet, "as the route to AP". Who it is for, or the one question
     guessed = [a.lower() for a in (split(x)[1] for x in ([guessed] if isinstance(guessed, str) else guessed or [])) if a]
     if channel == 'email' and agent != 'owner':
         from .people import at_domain
@@ -206,8 +208,9 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
             if g in {a.lower() for a, _ in known}: guessed = [a for a in guessed if a != g]; continue
             if known: return {'ok': False, 'why': f"{g} is your guess, and the owner's mail knows {g.rpartition('@')[2]}: "
                                                     + ', '.join(f'{a} ({n})' if n else a for a, n in known[:5])
-                                                    + ' - draft to the one this is for (search_messages and person tell you who each is), '
-                                                      'or ask the owner in one question. Nothing was drafted.'}
+                                                    + ' - draft to one of them only where their mail shows this is theirs (search_messages and '
+                                                      'person tell you who each is), never one as a go-between; else ask the owner in one '
+                                                      f'question with {g} as the answer you recommend. Nothing was drafted.'}
     hit = next((i for i in all_(store, tid) if slot and i['id'] == slot), None) or \
           next((i for i in open_(store, tid) if want and str(i['out'].get('to')).casefold() == want), None) or \
           (want and _reopen(store, tid, want, agent))

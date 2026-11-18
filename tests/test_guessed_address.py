@@ -85,3 +85,16 @@ def test_the_owner_is_not_offered_as_who_his_mail_knows_at_his_own_company():
     out = slots.draft(s, tid, 'Hi Omar', to='omar@northwind.example', subject='Invoice', guessed=['omar@northwind.example'])
     assert out['ok'], out
     assert 'guessed, check before Send: omar@northwind.example' in s.get_review(out['review_id'])['Reason']
+
+
+# ...AND NEVER A GO-BETWEEN (a walk, 2026-11-18): a guessed accounts-payable mailbox at his own company was refused with the colleagues his mail
+# knows there, "draft to the one this is for" - and the agent sent the payment note to the one who had shared a vendor sheet, "as the route".
+# Refused, it is told to draft to one of them only where their mail shows the matter is theirs, else to ask him with its guess as the answer
+def test_a_refused_guess_asks_him_with_the_guess_never_routes_through_whoever_is_known():
+    s = MemoryStore(); tid = own_task(s, 'general')
+    s.add_message({'ExternalId': 'in-p', 'ConversationId': 'c-p', 'Channel': 'email', 'SourceName': 'alex@northwind.example',
+                   'FromName': 'Paula Vance', 'FromEmail': 'paula@northwind.example', 'Subject': 'Vendor spend', 'BodyText': 'Sheet attached',
+                   'SentAt': '2026-11-18 09:00:00', 'Status': 'filed'})
+    out = slots.draft(s, tid, 'Please pay it', to='ap@northwind.example', subject='Invoice', guessed=['ap@northwind.example'])
+    assert out['ok'] is False and 'paula@northwind.example' in out['why']
+    assert 'never one as a go-between' in out['why'] and 'with ap@northwind.example as the answer you recommend' in out['why']

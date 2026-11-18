@@ -741,3 +741,12 @@ def test_a_post_its_agent_is_told_of_reads_as_the_card_it_was_never_the_tools_ro
     assert 'write linkedin post on LinkedIn' in said and 'https://www.linkedin.example/feed/update/urn:li:share:700000001' in said
     assert 'urn:li:person' not in said and '"author"' not in said and 'run tool' not in said
 
+
+
+# AS FAR AS THE RESULT GOES (a walk, 2026-11-18): told "what it did" after a payment note was sent, the agent said Accounts Payable "received"
+# it - nobody had answered. Every approval's note says a thing sent is sent, never received or acted on until someone answers
+def test_the_note_after_a_press_never_lets_sent_read_as_received():
+    s = MemoryStore(); tid = Factory(s).task('Get the vendor invoice paid'); seen = []
+    with mock.patch.object(general, 'tell', lambda st, t, said, *a, **k: seen.append(said) or 'told'):
+        general.approved(s, tid, 'Send', 'the email to ap@northwind.example was sent')
+    assert 'never received, read or acted on until someone answers' in seen[0]

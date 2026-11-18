@@ -4838,8 +4838,13 @@ def _read_outputs(store, made: dict, job: str, actor: str):
     CLI that takes seconds to start. A brain that fails leaves the task as it was."""
     try:
         from . import slots, triage
+        from .ingest import own_addresses
+        from .responder import owner_of
         ask = triage.extract_ask({'body': job}, brain(store, fast=True))
-        if ask.get('outputs'): slots.add(store, made['taskId'], ask['outputs'], actor)
+        # ...HIS OWN ASK OWES HIM NO EMAIL (a walk, 2026-11-18): "set it up for my press" was read as an email owed to the owner, and its
+        # agent drafted "please approve the note" to him - he is this ask's sender, and his press on the card is the approval
+        me = {'name': owner_of(store), 'address': min(own_addresses(store), default='')}
+        if ask.get('outputs'): slots.add(store, made['taskId'], ask['outputs'], actor, sender=me)
     except Exception as e: logger.info(f"could not read what closes {made.get('ref')}: {e}")
 
 

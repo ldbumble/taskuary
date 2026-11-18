@@ -569,8 +569,11 @@ def declined(store, tid: int, p: dict) -> None: _tell(store, tid, not_approved(p
 
 # the turn an approval wakes says what happened. ...AND NOTHING ABOUT WHAT DID NOT (agent walk 2, 2026-11-10): told "(with its link, if it
 # gave one)", the agent closed every sent mail with "No link came back with it."
-NEXT = ('Tell the owner in a line what it did and what comes next, then carry on. A link the result gave goes in that line; where it gave '
-        'none, say nothing about links.')
+# ...AS FAR AS THE RESULT GOES (a walk, 2026-11-18): told "what it did" after a payment note was sent, the agent said "Accounts Payable
+# received the payment request" - a mail that went is sent, not read, and nobody had answered
+NEXT = ('Tell the owner in a line what it did, as far as the result shows - something sent is sent, never received, read or acted on until '
+        'someone answers - and what comes next, then carry on. A link the result gave goes in that line; where it gave none, say nothing '
+        'about links.')
 
 
 def _tell(store, tid: int, text: str, wait: bool = False, wake: bool = False) -> None:

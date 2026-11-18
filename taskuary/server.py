@@ -5919,7 +5919,9 @@ def agent_new_task(body: AgentNewTaskBody, request: Request):
             selfclose.claim(store, new, ACTOR)           # the owner's own work: its agent never closes it by itself
             store.audit('task', new, 'create', body.agent, detail={'from_task': body.task_id, 'title': title})
             store.add_comment(body.task_id, body.agent, 'agent', f'Started {task_ref(new)}: {title}')
-    out = {'ok': True, 'task': task_ref(new), 'title': title}
+    out = {'ok': True, 'task': task_ref(new), 'title': title, 'kind': kind}
+    # ...a checkout named for what is not a coding task (developer mode off made it general) is said dropped, never silently
+    if body.repo and kind != 'coding': out['repo_not_set'] = f'{body.repo} was not set: {task_ref(new)} is a general task, which works in no checkout'
     if body.repo and kind == 'coding':
         try: repochoice.use(store, new, body.repo, f'named by the agent on {task_ref(body.task_id)}')
         except (PermissionError, ValueError) as e: out['repo_not_set'] = str(e)

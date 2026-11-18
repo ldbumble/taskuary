@@ -389,6 +389,16 @@ class NewTaskTool(unittest.TestCase):
         self.assertEqual(go.call_count, 1)
         self.assertTrue(json.loads(two)['already'])
 
+    def test_a_coding_ask_made_general_says_so(self):
+        """With developer mode off a coding ask is made a general task, and its `repo` dropped - the answer said neither, so the agent told the
+        owner a coding agent was at work in northwind/ledger. It says what was made instead."""
+        with mock.patch.object(server, 'dispatch_task', return_value={'started': True}), mock.patch.object(server.hub_agents, 'developer_mode', return_value=False):
+            said, err = tool(self.tid, 'new_task', title='Fix rounding', ask='Fix it.', kind='coding', repo='northwind/ledger')
+        out = json.loads(said)
+        self.assertEqual(self.s.get_task(max(t['TaskId'] for t in self.s.list_tasks()))['Kind'], 'general')
+        self.assertEqual(out['kind'], 'general')
+        self.assertIn('northwind/ledger', out['repo_not_set'])
+
     def test_a_job_made_but_not_started_is_started_on_the_second_ask(self):
         "...and where the first start was refused (no AI yet), the second call starts that same task - never a second one beside it."
         with mock.patch.object(server, 'dispatch_task', side_effect=server.HTTPException(422, 'no AI')):

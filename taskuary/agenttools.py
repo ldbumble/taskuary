@@ -45,7 +45,9 @@ TOOLS = {
                         ('GET', '/api/agent/messages')),
     'read_message': ('read', "One saved message in full - body, recipients, its thread and its attachments' ids. `id`: m1073 or 1073."
                              " Read-only.",
-                     _S({'id': {'type': 'string', 'description': 'the message id - m1073 or 1073'}}, ('id',)), ('GET', '/api/agent/messages/1')),
+                     _S({'id': {'type': 'string', 'description': 'the message id - m1073 or 1073'},
+                         'start': {'type': 'integer', 'description': "where to go on reading a long body - the answer's body_goes_on says it"}},
+                        ('id',)), ('GET', '/api/agent/messages/1')),
     'read_attachment': ('read', "The text of one attachment on a saved message (PDF, Word, Excel, PowerPoint, text). Read-only.",
                         _S({'id': _INT}, ('id',)), ('GET', '/api/attachments/1')),
     'my_task': ('read', "This task's brief: title, summary, status and checklist with each to-do's id. Re-read it after a long "
@@ -338,6 +340,26 @@ def _out(text, fence_it: bool = False) -> str:
 def _j(o) -> str: return json.dumps(o, indent=1, default=str, ensure_ascii=False)
 
 
+def _fitted(m: dict, start=0) -> str:
+    """One message as read_message answers it, inside CAP: everything but the body first - its attachments' ids above all - then as much
+    of the body as fits from `start`, saying where to go on. Cut whole at CAP, a long mail lost its attachments and the rest of its body
+    behind "narrow the search" (a mail is kept to 20,000 characters, an answer to 12,000)."""
+    try: start = max(0, int(start or 0))
+    except (TypeError, ValueError): raise ValueError(f'start {str(start)[:20]!r} is not a number - body_goes_on says where to go on') from None
+    body, head = str(m.get('body') or ''), {k: v for k, v in m.items() if k != 'body'}
+    while len(_j(head)) > CAP // 2 and len(head.get('messages') or []) > 1:        # ...a long thread gives way first, oldest first
+        head['messages'] = head['messages'][1:]
+        head['thread_cut'] = 'older messages on this thread are not shown - read_message opens each by its id (search_messages lists them)'
+    room = CAP - len(_j(head)) - 200
+    while True:
+        part = body[start:start + max(room, 0)]
+        out = {**head, 'body': part}
+        if start + len(part) < len(body):
+            out['body_goes_on'] = f'{len(body) - start - len(part):,} more characters - read_message again with start={start + len(part)}'
+        if len(_j(out)) <= CAP or room <= 0: return _j(out)
+        room -= max(len(_j(out)) - CAP, 50)                                         # escapes made it longer than its characters
+
+
 NOT_LISTED = ("A SITE OR SYSTEM NOT LISTED HERE has no connection: say so in one line, and reach it in Taskuary's browser where you have one "
               "(the guide `browser` first) - a sign-in is done on the page there, by a saved sign-in or by the owner, and kept for next time. "
               "Never ask the owner for a password, and never work a sign-in from your shell.")
@@ -404,7 +426,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         if not m: raise ValueError(f"Taskuary has no saved message m{mid} - search_messages finds a message and its id")
         files = [{'id': x['AttachmentId'], 'name': x.get('Name'), 'bytes': x.get('Size')} for x in store.list_attachments(mid) or []
                  if not x.get('Inline')]
-        return _out(_j({**m, 'attachments': files}), fence_it=True)
+        return _out(_fitted({**m, 'attachments': files}, a.get('start')), fence_it=True)
     if name == 'read_attachment':
         from pathlib import Path
         from . import attachtext

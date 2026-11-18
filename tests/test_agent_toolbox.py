@@ -135,6 +135,27 @@ class TheServer(unittest.TestCase):
         text, err = tool(self.tid, 'read_attachment', id='the pdf')
         self.assertTrue(err); self.assertNotIn('int()', text); self.assertIn('read_message', text)
 
+    def test_a_long_mail_is_read_whole_in_parts_and_never_hides_its_attachments(self):
+        """A mail is kept up to 20,000 characters and a tool's answer is cut at 12,000: read_message cut a long contract mail mid-body, so
+        the attachments listed after the body - the ids read_attachment and attach take - and the rest of the body were never seen, and
+        the cut said to "narrow the search", which a single message cannot do."""
+        words = ' '.join(f'clause{i}' for i in range(2600)) + ' THE END'
+        big = self.s.add_message({'TaskId': None, 'ExternalId': 'L1', 'ConversationId': 'conv-L', 'Channel': 'email', 'FromName': 'Gail Moreno',
+                                  'FromEmail': 'gail@northwind.example', 'Subject': 'Contract', 'BodyText': words,
+                                  'SentAt': '2026-10-21 08:00:00', 'Status': 'routed'})
+        aid = self.s.add_attachment({'MessageId': big, 'ExternalId': 'L1:1', 'Name': 'contract.pdf', 'ContentType': 'application/pdf', 'Size': 9})
+        text, err = tool(self.tid, 'read_message', id=big)
+        self.assertFalse(err, text); self.assertLessEqual(len(text), agenttools.CAP + 4)
+        self.assertIn('contract.pdf', text); self.assertIn(f'"id": {aid}', text); self.assertNotIn('narrow the search', text)
+        got, start = '', 0
+        for _ in range(5):
+            one = json.loads(text.strip('⟦⟧'))
+            got += one['body']
+            if 'body_goes_on' not in one: break
+            start = int(re.search(r'start=(\d+)', one['body_goes_on'])[1])
+            text, err = tool(self.tid, 'read_message', id=big, start=start)
+        self.assertEqual(got, words)
+
     def test_another_tasks_proof_is_refused(self):
         other = self.s.create_task({'Title': 'Someone else', 'Status': 'open'}, 'owner')
         r = c.post(f'/api/mcp?task={other}', headers=hdr(self.tid), json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'})

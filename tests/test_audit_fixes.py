@@ -39,6 +39,16 @@ class PerimeterTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'management.azure.com'): azure.run_azure({'path': 'https://evil.example/subscriptions'})
         with self.assertRaisesRegex(ValueError, 'storage account name'): azure.run_azure_blob({'account': 'evil.com/#', 'container': 'c'})
 
+    def test_a_tool_call_never_names_the_program_a_card_runs(self):
+        """An MCP card's `cmd`, `args` and `env` are the program it starts - and none was a connection key, so resolve_cfg let an agent's
+        run_system {"type": "mcp", "cmd": ..., "args": [...]} replace the owner's server with a command of its choosing, spawned at once
+        to list the server's tools and carried onto the Approve card. The MCP tool's own arguments are `tool_args`; a Redis or Robinhood
+        call keeps its `args`, which are what it asks."""
+        q = reports.query_only({'type': 'mcp', 'tool': 'list', 'tool_args': {'a': 1}, 'cmd': 'sh', 'args': ['-c', 'x'], 'env': {'X': '1'}})
+        self.assertEqual(q, {'type': 'mcp', 'tool': 'list', 'tool_args': {'a': 1}})
+        self.assertEqual(reports.query_only({'type': 'redis', 'command': 'GET', 'args': ['k']})['args'], ['k'])
+        self.assertNotIn('env', reports.query_only({'type': 'quickbooks', 'query': 'SELECT * FROM Bill', 'env': 'sandbox'}))
+
     def test_a_page_reader_keeps_the_page_it_was_asked_to_read(self):
         """`url` is where a REST or MCP card's token goes, so it is never the caller's - but to a page reader it is the page: stripped
         here, run_system {"type": "reader", "url": ...} answered "no url to read" every time. A reader keeps its own `url`; nothing else

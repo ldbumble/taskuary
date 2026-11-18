@@ -6201,7 +6201,14 @@ class SQLiteStore:
             # nothing to change is not "UPDATE connector SET  WHERE" - a syntax error that failed the chat's Create (2026-10-06)
             if cols: self._exec(f"UPDATE connector SET {','.join(f'{c}=?' for c in cols)} WHERE ConnectorId=?", [fields[c] for c in cols] + [cid])
             return cid
-        return self._insert('connector', fields, ('Type', 'Name', 'ConfigJson', 'Secret', 'Active', 'Roles', 'Scope'))
+        # A NEW CARD NEVER TAKES A REMOVED ONE'S ID: SQLite gives the highest id again once its row is deleted, and a card added after a
+        # Remove got the removed card's id - its sources still named it, and Undo wrote the removed card's sign-in over the new one. The id
+        # is past every one a source or a removed card's Undo still names, in the one statement that inserts it.
+        d = {k: fields[k] for k in cols}
+        return self._exec(f"INSERT INTO connector (ConnectorId, {','.join(d)}) VALUES (1 + MAX("
+                          "COALESCE((SELECT MAX(ConnectorId) FROM connector), 0), COALESCE((SELECT MAX(ConnectorId) FROM source), 0), "
+                          "COALESCE((SELECT MAX(CAST(json_extract(DataJson, '$.cid') AS INTEGER)) FROM deleted WHERE Kind='connection'), 0)), "
+                          f"{','.join('?' * len(d))})", list(d.values()))
     def reset_connector(self, cid):
         """'Remove connection': wipe creds/config/test state, deactivate it and its sources."""
         vault.forget((self._one('SELECT Secret FROM connector WHERE ConnectorId=?', (cid,)) or {}).get('Secret'))

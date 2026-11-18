@@ -1645,7 +1645,7 @@ export const CcRow = ({ cc, setCc, channel, label: name = "CC", autoOpen = false
   };
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.75, flexWrap: "wrap", minWidth: 0 }}>
-      <Typography sx={{ color: "var(--tq-success, #6f8a6e)", fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", flexShrink: 0 }}>{name}</Typography>
+      <Typography sx={{ ...label, flexShrink: 0 }}>{name}</Typography>
       {(cc || []).map((a) => (
         <Box key={a} sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, px: 0.8, py: 0.15,
           borderRadius: 99, bgcolor: "var(--tq-inset, #eef1ec)", border: "1px solid var(--tq-border, #d9e0d6)" }}>
@@ -1673,10 +1673,11 @@ export const CcRow = ({ cc, setCc, channel, label: name = "CC", autoOpen = false
 };
 
 // THE SUBJECT, ON THE EMAIL CARD (the owner, 2026-11-08: one email card, every field editable): the line its reader sees, changed in place -
+// its name in the To line's own label (the visual pass, 2026-11-18: a green 9.5px "SUBJECT" sat under a plain "To") -
 // held like CC and sent with Send. `subject`: what goes now; `onChange` takes the owner's words
 export const SubjectRow = ({ subject, onChange, disabled }) => (
   <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.75, minWidth: 0 }}>
-    <Typography sx={{ color: "var(--tq-success, #6f8a6e)", fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", flexShrink: 0 }}>SUBJECT</Typography>
+    <Typography sx={{ ...label, flexShrink: 0 }}>Subject</Typography>
     <Box component="input" data-tq-subject="" value={subject || ""} disabled={disabled} aria-label="Subject" placeholder="(no subject)"
       onChange={(e) => onChange(e.target.value)}
       sx={{ ...FOCUS_RING, flex: 1, minWidth: 0, border: 0, borderBottom: "1px dashed var(--tq-border, #d9e0d6)", bgcolor: "transparent", font: "inherit",

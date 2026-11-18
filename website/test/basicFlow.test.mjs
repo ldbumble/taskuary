@@ -244,3 +244,11 @@ test("the working line names what no row in sight says - at every beat of a turn
   assert.match(fold, /<summary onClick=\{\(e\) => \{ e\.preventDefault\(\); set\(!OPEN_FOLDS\.has\(k\)\); \}\}>/);
   assert.match(fold, /const set = \(o\) => \{ if \(o === OPEN_FOLDS\.has\(k\)\) return;[^\n]*FOLD_HEARD\.forEach/, "the click and the toggle agree on one state");
 });
+
+// the visual pass (2026-11-18): a turn that failed, and a line whose send failed, drew in the box's 9px centred grey hint - a failure kept
+// where it happened read as a footnote. They wear the failed step's own note, the same fact read the same way
+test("a failed turn and a failed line read as the failed step's note, not the faint hint", async () => {
+  const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(src, /className="tq-aui-hint" role="alert"/);
+  assert.equal(src.match(/className="tq-aui-note tq-aui-note-error" role="alert" data-tq-(turn|line)-failed=""/g).length, 3);
+});

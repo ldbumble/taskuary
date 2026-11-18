@@ -228,11 +228,14 @@ function DayHold({ loading, children }) {
 // WHAT ALREADY HAPPENED, under the tiles that say what waits (the row-bot comparison, 2026-10-07): the mail read and filed,
 // the reports that ran, the agents that finished, and what was learned this week - counted on the server, no model, so the
 // opening screen never waits on one. Nothing to say says nothing.
+// ...ITS LAST ANSWER IS KEPT for the next time the card is drawn: drawn anew with nothing read - every trip home by the logo - it said the day was
+// still being counted ("Counting…") for the beat its read took, between two frames that said "What's open" (the hammer round, 2026-11-18)
+let sinceKept = null;
 function SinceBlock({ onOpen, onReading }) {
-  const [d, setD] = useState(null);
+  const [d, setD] = useState(() => sinceKept);
   const [open, setOpen] = useState(false);
   const [writing, setWriting] = useState("");
-  const read = useCallback(() => api.get("/api/since").then(({ data }) => { setD(data); return data; }), []);
+  const read = useCallback(() => api.get("/api/since").then(({ data }) => { sinceKept = data; setD(data); return data; }), []);
   useEffect(() => { let live = true; read().catch(() => {}); return () => { live = false; }; }, [read]);
   // read once on mount, it kept the counts from before the startup catch-up had read a message (B5, 2026-10-11)
   useEffect(() => onLive(["arrive"], () => { read().catch(() => {}); }), [read]);

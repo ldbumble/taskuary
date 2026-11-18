@@ -318,6 +318,15 @@ class GatewayAddressTests(unittest.TestCase):
         self.assertEqual((out['ok'], out['why']), (False, llm.GATEWAY_SILENT))
         self.assertTrue(self.saved().endswith('/v1'), 'the address stays on the card for the next try')
 
+    def test_a_failing_test_on_the_connections_card_names_no_button_it_lacks(self):
+        # the card's Test said "...then press Connect." - a button only Setup's AI step has; the card under Connections has Test
+        self.s.save_connector({'ConnectorId': self.cid, 'Secret': self.CODE,
+                               'ConfigJson': json.dumps({'base_url': f'http://127.0.0.1:{self.allow(_closed_port())}'})}, 'owner')
+        with self.assertRaises(RuntimeError) as e: llm.test_ai(self.s, self.cid)
+        self.assertIn("Couldn't reach", str(e.exception))
+        for line in (llm.GATEWAY_MISSING, llm.GATEWAY_SILENT, llm.GATEWAY_CODE, str(e.exception)):
+            self.assertNotIn('press Connect', line)
+
     def test_a_page_that_is_no_gateway_is_the_wrong_address(self):
         with _Gateway(self.allow) as g: self.assertEqual(llm.gateway_problem({'base_url': f'{g.url}/elsewhere'}, self.CODE), llm.GATEWAY_NOT_GATEWAY)
 

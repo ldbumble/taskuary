@@ -202,6 +202,25 @@ def test_an_agent_that_dies_mid_turn_is_said_as_a_chat_cli_that_did(world, monke
     assert e['content']['text'] == f'{MID_TURN}.', e['content']['text']
 
 
+def test_a_line_typed_after_the_agent_died_reopens_its_conversation_without_saying_he_pressed_resume(world, monkeypatch, tmp_path):
+    """TELL THE TRUTH (rules part 3; the coding hammer, 2026-11-18): a coding agent died mid-turn and the owner typed "carry on please" - the
+    line reopened its own conversation (waitroom.reopen_coding) and the agent was told "The owner chose Resume for this task ... restate that
+    one question and wait". Nobody pressed Resume: his typed line is the turn, as a chat's carried-on turn says in words of its own."""
+    from taskuary import continuity
+    s, tid, repo = world
+    (script := tmp_path / 'script.json').write_text(json.dumps([{'when': 'break now', 'exit': 3}]))
+    monkeypatch.setenv('FAKE_ACP_SCRIPT', str(script))
+    t = open_(s, tid, repo, seed='break now')
+    assert until(lambda: not t.alive)
+    general.take_line(s, tid, 'carry on please')
+    again = lambda: next((x for x in list(terminal.SESSIONS.values()) if x is not t and x.task_id == tid and x.alive), None)
+    assert until(lambda: again() is not None and again().turns >= 1 and not again().busy)
+    assert again().resumed_from == 'sess_fake_1', 'its own conversation reopened'
+    heard = [x for k, x in again().history if k == 'said'][-1]
+    assert 'carry on please' in heard, heard
+    assert continuity.RESUME_PROMPT.split('.')[0] not in heard, heard
+
+
 def test_a_turn_its_own_close_ended_is_stopped_never_said_as_a_failure(world, monkeypatch):
     """THE OWNER'S LIVE APP (2026-11-11: "also says error like agent stopped mid turn????"): Mark done or Send and close while the coding agent
     works closes its session under the turn - its process is killed, the turn's request comes back empty, and the chat read "the agent

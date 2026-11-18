@@ -373,7 +373,10 @@ def propose(store, tid: int, how: str, why: str = '', actor: str = 'agent', depl
     if deploy:                                    # ...read into the question below: its Push & deploy button is drawn from it
         r['proposal'] = {**(r.get('proposal') or {}), 'deploy': deploy}; _save(store, tid, r)
     s = state(store, tid)
-    if not s: raise ValueError('no session of this task started in a git checkout - there is nothing to land')
+    if not s:
+        from .agenttools import refusal
+        raise ValueError(refusal('no session of this task started in a git checkout - there is nothing to land yet',
+                                 'work in the checkout the change belongs in - use_repo picks it (find_repos lists them)'))
     if not s['ask']: raise ValueError(s['line'])
     if how == 'discard' and not s['own']: raise ValueError('discard is only for a branch of your own')
     if how not in {a['how'] for a in s['answers']}: raise ValueError(f"how is one of: {', '.join(a['how'] for a in s['answers'])} here - {s['line']}")

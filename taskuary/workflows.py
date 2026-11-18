@@ -151,6 +151,9 @@ TRIGGER_TAG = 'workflow-trigger:'
 STARTED_BY = {'schedule': 'its schedule', 'manual': 'you (Run now)', 'assistant': ASSISTANT, 'phone': 'you, from your phone',
               'mail': 'a mail that arrived'}
 _STARTING, _LOCK = set(), threading.Lock()      # runs whose worker is on its way: no session yet, and no queue row
+# ...and ONE START AT A TIME: "is a run working?" and the new run's mark are one step, or two presses in the same second (Run now on the
+# desktop and the phone) each heard "no" before either had made its task, and two agents worked the same job
+_CLAIM = threading.Lock()
 
 
 def _spawn(fn): threading.Thread(target=fn, daemon=True, name='workflow-start').start()
@@ -385,6 +388,15 @@ def run(store, src, actor: str = 'schedule', trigger: str = 'schedule', context:
 
     `background`: the task is made now and the worker starts on its own thread - a general session's first turn holds the call
     for as long as the agent works, which kept the owner from their task and held every report behind it on the clock."""
+    with _CLAIM: out = _run(store, src, actor, trigger, context, mail)
+    # ...the run is marked as working before the claim is let go; its work goes on outside it, so the next routine's start never waits on it
+    if start := out.pop('start', None):
+        if background: _spawn(start)
+        else: start()
+    return out
+
+
+def _run(store, src, actor, trigger, context, mail) -> dict:
     from . import ingest, browserview, flow
     from .agents import CODING_KINDS
     defn, steps = definition(store, src), flow.is_flow(cfg_of(src))
@@ -426,6 +438,5 @@ def run(store, src, actor: str = 'schedule', trigger: str = 'schedule', context:
             else: ingest._auto_general(store, tid, text)
         finally:
             with _LOCK: _STARTING.discard(tid)
-    if background: _spawn(start)
-    else: start()
-    return {'task_id': tid, 'ref': task_ref(tid), 'kind': kind, 'title': defn['title'], 'trigger': trigger, 'steps': steps}
+    out = {'task_id': tid, 'ref': task_ref(tid), 'kind': kind, 'title': defn['title'], 'trigger': trigger, 'steps': steps}
+    return {**out, 'start': start}

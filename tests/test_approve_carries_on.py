@@ -492,6 +492,19 @@ class AFailedSendIsHandedBack(unittest.TestCase):
         [n] = self.s.waiting_notes(self.tid)
         self.assertIn('IT DID NOT GO', n['Note']); self.assertEqual(general.owner_did(self.s, self.tid), [])
 
+    def test_the_owners_own_words_on_a_send_that_failed_reach_its_agent(self):
+        """He rewrote the reply in the box and pressed Send, and the provider refused it: its agent heard "IT DID NOT GO" and nothing of his
+        words - so the one it set up again went back to its own (the stress round, 2026-11-18). His words ride with the failure, as with a yes."""
+        from taskuary import outbound
+        self.s.snap_draft(self.rid, self.s.add_comment(self.tid, 'claude', 'agent', 'Drafted the reply.'))     # the turn that left it
+        with mock.patch('taskuary.outbound.reply_to_message', side_effect=RuntimeError('mailbox is over its sending limit')), \
+             mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.waitroom.deliver', return_value={}), \
+             mock.patch.object(verdicts, 'context_moved', return_value=(False, None)):
+            verdicts.decide(self.s, self.s.get_review(self.rid), 'approve', 'Confirmed - and the new rate starts in March.')
+        [n] = self.s.waiting_notes(self.tid)
+        self.assertIn('IT DID NOT GO', n['Note']); self.assertIn('the new rate starts in March', n['Note'])
+        self.assertNotIn('what went:', n['Note'])
+
 
 class OneCardAtATime(unittest.TestCase):
     """THE OWNER, 2026-11-16: "where there are 2 action cards, like approve push then email, it should wait on each approval step or action

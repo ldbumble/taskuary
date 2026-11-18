@@ -804,15 +804,16 @@ def _decided(store, r) -> str:
     n, state, why = f"rv{r['ReviewId']}", r.get('DeliveryState') or '', ' '.join(str(r.get('Reason') or '').split())[:160]
     if failed_act(r) or (r['Status'] == 'pending' and state not in NOT_GONE):
         return ACT_FAILED.format(n=n, why=' '.join(str(r.get('ActError') or '').split())[:200], left='' if failed_act(r) else ' and its card still waits for their press')
-    if r['Status'] == 'pending': return NOT_GONE[state].format(n=n, why=why or 'no reason was given')
+    if r['Status'] == 'pending': return NOT_GONE[state].format(n=n, why=why or 'no reason was given') + _changed(store, r)
     if r.get('Kind') == 'action' and r['Status'] in ('approved', 'edited'): return ACT_DONE.format(n=n) + (f' ({why[:120]})' if why else '')
     return f"{'approved and sent' if state == 'sent' and r['Status'] == 'approved' else DECIDED[r['Status']]} {n}" + (f' ({why[:120]})' if why else '') + _changed(store, r)
 def _changed(store, r) -> str:
-    "' - they changed your text first; what went: ...' where the owner sent the text after changing it, else ''."
+    """' - they changed your text first; what went: ...' where the owner sent the text after changing it, else ''. ...and where his Send of
+    it did not go (NOT_GONE), what he pressed Send on: his words, which a draft set up again would otherwise drop (the stress round, 2026-11-18)."""
     was = (store._one('SELECT Text FROM draft_snapshot WHERE ReviewId=? ORDER BY Id DESC LIMIT 1', (r['ReviewId'],)) or {}).get('Text')
-    went = str(r.get('FinalText') or '')
-    changed = (r.get('DeliveryState') or '') == 'sent' and bool(went.split()) and (was.split() != went.split() if was else r['Status'] == 'edited')
-    return f' - they changed your text first; what went: {_quote(went, 600)}' if changed else ''
+    went, state = str(r.get('FinalText') or ''), r.get('DeliveryState') or ''
+    changed = (state == 'sent' or state in NOT_GONE) and bool(went.split()) and (was.split() != went.split() if was else r['Status'] == 'edited')
+    return f" - they changed your text first; {'what went' if state == 'sent' else 'what they pressed Send on'}: {_quote(went, 600)}" if changed else ''
 # A PRESS THE AGENT SAID IT WAITS ON WAKES IT, ONCE (the owner, 2026-11-08): a press is otherwise a line it hears with the owner's next one -
 # but a turn that asked for Send or a hand-off and said it would follow up (its summary's `after_press`) is started again by that press
 FOLLOW_UP = ('The owner just pressed what your last turn waited on (see what the owner did since your last answer). Carry on from there as '

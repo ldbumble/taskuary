@@ -157,12 +157,37 @@ def _listed(x, what: str) -> list:
     if what == 'filters': raise IntacctError(f'{FILTER_SHAPE} - not {s[:80]!r}. Nothing was sent.')
     return [f for f in re.split(r'[\s,]+', s) if f]
 
+def _filters(x) -> list:
+    "The conditions: one given without its outer list ([FIELD, op, value]) is that one condition, never read an item at a time."
+    got = _listed(x, 'filters')
+    return [got] if got and isinstance(got[0], str) else got
+
+# ...an order the same way: [[FIELD, dir], ...], "FIELD desc, OTHER", a flat [FIELD, dir, ...] or JSON of any of them. Its grammar is
+# FIELD followed by an optional asc/desc, so the words are walked as that, and a field alone is ascending
+_DIRS = {'asc': 'ascending', 'ascending': 'ascending', 'desc': 'descending', 'descending': 'descending'}
+def _order(x) -> list:
+    out = []
+    for w in (w for i in _listed(x, 'order') for w in re.split(r'[\s,]+', ' '.join(map(str, i)) if isinstance(i, (list, tuple)) else str(i)) if w):
+        if w.lower() in _DIRS and out: out[-1] = (out[-1][0], _DIRS[w.lower()])
+        else: out.append((w, 'ascending'))
+    return out
+
+RECORD_SHAPE = 'the record is an object of FIELD: value, e.g. {"VENDORID": "V100", "NAME": "Payworth"}'
+def _record(x):
+    "A write's record as given: an object, or JSON text of one. Anything else says the shape and nothing is sent."
+    if not x or isinstance(x, dict): return x
+    if isinstance(x, str) and x.strip().startswith('{'):
+        try:
+            if isinstance(got := json.loads(x), dict): return got
+        except ValueError: pass
+    raise IntacctError(f'{RECORD_SHAPE} - not {str(x)[:80]!r}. Nothing was sent.')
+
 
 def query(cfg, obj, fields=None, filters=None, limit=PAGE, order=None):
     """readByQuery, paged until `limit` is reached. Fields default to every one the object has
     (fields_of - GLBATCH refuses `*`), because a report asking for 'the vendor list' should not have
     to know that vendors carry forty columns - and asking Intacct is cheaper than being wrong about it."""
-    fields, filters = _listed(fields, 'fields'), _listed(filters, 'filters')
+    fields, filters, order = _listed(fields, 'fields'), _filters(filters), _order(order)
     sid, end = login(cfg)
     fields = fields or [f['ID'] for f in fields_of(cfg, obj) if f.get('ID')] or ['*']
     out, offset = [], 0
@@ -175,7 +200,7 @@ def query(cfg, obj, fields=None, filters=None, limit=PAGE, order=None):
         _filter_xml(q, filters)
         if order:
             o = _el(q, 'orderby')
-            for f, d in order: _el(_el(o, 'descending' if str(d).lower().startswith('desc') else 'ascending'), 'field', f)
+            for f, d in order: _el(_el(o, d), 'field', f)
         page = min(PAGE, limit - len(out))
         _el(q, 'pagesize', page); _el(q, 'offset', offset)
         opts = _el(q, 'options'); _el(opts, 'showprivate', 'true'); _el(opts, 'returnformat', 'xml')
@@ -248,6 +273,7 @@ def create(cfg, obj, record):
     """Create ONE record of `obj` (APBILL, VENDOR, GLBATCH…) from a field dict. Returns the key
     Intacct assigned. Raises IntacctError on the usual 200-with-failure."""
     if not str(obj or '').strip(): raise IntacctError('no Intacct object to create')
+    record = _record(record)
     if not record: raise IntacctError(f'nothing to put in the new {obj} - give it fields')
     sid, end = login(cfg)
     # the same record posted again is the same controlid, and uniqueid=true has the gateway refuse
@@ -267,6 +293,7 @@ def update(cfg, obj, record):
     or the object's own id field such as VENDORID) - without one the gateway would have to guess
     which row is meant, and a write that guesses is the one thing this must never do."""
     if not str(obj or '').strip(): raise IntacctError('no Intacct object to update')
+    record = _record(record)
     keys = [k for k in (record or {}) if k.upper() in ('RECORDNO', 'RECORDKEY', 'KEY', f'{obj.upper()}ID')]
     if not keys:
         raise IntacctError(f'an update to {obj} needs the record it is changing - include RECORDNO or {obj.upper()}ID')

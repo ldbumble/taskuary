@@ -14,7 +14,7 @@ import api from "./api.js";
 import { onLive, touches } from "./live.js";
 import { aheadChat, heldChat, heldConversation } from "./taskDetail.js";
 import { AttachChip, fileChips, fileState, usePromptImages, useSendWhenUp } from "./promptImages.jsx";
-import { keepUnsent, unsent } from "./unsent.js";
+import { holdUnsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
@@ -652,11 +652,8 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
   }, [seed, runtime]);
   // WHAT IS TYPED AND NOT SENT is this task's, and outlives a reload and this pane drawn afresh (unsent.js): put back into an empty box, kept
   // as it is typed, gone once the box is empty - sent or wiped
-  useEffect(() => {
-    const c = runtime.thread.composer, id = task.TaskId;
-    if (!c.getState().text && unsent(id)) c.setText(unsent(id));
-    return c.subscribe(() => keepUnsent(id, c.getState().text));
-  }, [runtime, task.TaskId]);
+  const boxOf = useRef(task.TaskId);
+  useEffect(() => holdUnsent(runtime.thread.composer, task.TaskId, boxOf), [runtime, task.TaskId]);
   // ...a line sent while his files upload waits for them (promptImages.useSendWhenUp) - Enter and Send alike
   const { go: sendBox, waiting: sendHeld } = useSendWhenUp(pics, useCallback(() => sendLine(), [sendLine]));
   const onKey = (e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent?.isComposing) { e.preventDefault(); sendBox(); } };

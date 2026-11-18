@@ -2388,6 +2388,11 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
     import json
     t = store.get_task(tid)
     if not t: raise ValueError(f'no task {tid}')
+    # ...A FILE HE ATTACHED TO THE START IS THE TASK'S (outputs.take_in_text, as a line's and a New task's are): Start and Restart name it in
+    # the instruction, and left under Taskuary's attachments/ the session's Read of it was refused as Taskuary's own data (readgate)
+    if instruction:
+        from . import outputs
+        instruction = outputs.take_in_text(tid, instruction)
     resume_task(store, tid, actor)
     # the owner opening a session makes the task theirs to end (selfclose.claim) - before the seed
     # is built, so the prompt says "stay at the prompt" instead of "run --done"

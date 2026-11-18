@@ -9,7 +9,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import bulkcard, cardqueue, conversation, general, github, outbound, proposals, server, taskstate
+from taskuary import bulkcard, cardqueue, conversation, general, github, outbound, proposals, server, taskstate, verdicts
 from taskuary.store import MemoryStore
 from test_agent_toolbox import hdr
 from test_own_ask_no_reply import own_task
@@ -273,3 +273,54 @@ def test_after_a_bulk_run_its_agent_hears_what_still_waits_behind_it():
         st, told = press(s, out['batch'])
     [said] = told
     assert '10 done' in said and f"rv{last['review_id']} (the email to gail@northwind.example)" in said, said
+
+
+def chat_cards(s, tid):
+    with mock.patch.object(server, 'store', s): got = conversation.items(s, tid)
+    return {k['review']: (k['what'], k['status']) for x in got['items'] for k in ([x] if x['kind'] == 'card' else x.get('cards') or [])}
+
+
+def test_a_line_typed_over_the_line_of_cards_greys_what_stood_and_never_draws_what_waited_behind_it():
+    """He typed under a bulk card with a note to Gail held behind it. The bulk card read "pending" in the chat while every other surface read it
+    set aside, and the note he had never seen was drawn greyed - "Not sent - you wrote ... after it" - until the agent heard his line and
+    it went again: drawn, then gone. What stood greys where it stood; what waited behind it never stands."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        bulk = call(tid, 'propose_email', items=emails(10))
+        note = call(tid, 'propose_email', to='gail@northwind.example', subject='Done', text='Gail - the ten went out.')['review_id']
+    first = bulkcard.rows(s, bulk['batch'])[0]['ReviewId']
+    assert chat_cards(s, tid) == {first: ('batch', 'pending')}, 'the note waits its turn, drawn nowhere'
+    time.sleep(1.1)                                                                      # (a stamp is a whole second)
+    general.wait_line(s, tid, 'wait - leave out the corner lots', line_id='l-corner')
+    assert chat_cards(s, tid) == {first: ('batch', 'passed')}, 'greyed where it stood, and the note never drawn'
+    proposals.set_aside_drafts(s, tid, time.time())                                      # ...as its agent hears the line
+    assert chat_cards(s, tid) == {first: ('batch', 'passed')}, 'the same once heard: nothing appears, nothing goes'
+
+
+def test_a_bulk_card_that_waited_behind_another_and_was_written_past_never_stands():
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        note = call(tid, 'propose_email', to='gail@northwind.example', subject='First', text='Gail - the letters go out next.')['review_id']
+        call(tid, 'propose_email', items=emails(10))
+    assert chat_cards(s, tid) == {}, "the note stands in the page's letters, the bulk card waits its turn"
+    time.sleep(1.1)
+    general.wait_line(s, tid, 'hold everything', line_id='l-hold-all')
+    assert chat_cards(s, tid) == {note: ('slot', 'passed')}
+    proposals.set_aside_drafts(s, tid, time.time())
+    assert chat_cards(s, tid) == {note: ('slot', 'passed')}
+
+
+def test_a_bulk_card_that_waited_its_turn_then_stood_and_went_stays_where_it_stood():
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        note = call(tid, 'propose_email', to='gail@northwind.example', subject='First', text='Gail - the letters go out next.')['review_id']
+        bulk = call(tid, 'propose_email', items=emails(5))
+    first = bulkcard.rows(s, bulk['batch'])[0]['ReviewId']
+    send = mock.patch.object(outbound, 'send_out', lambda *a, **k: {'channel': 'email', 'to': k.get('to') or []})
+    with send, mock.patch.object(outbound, 'send_block', lambda *a, **k: ''), mock.patch.object(general, 'approved', lambda *a, **k: 'woke'):
+        assert verdicts.decide(s, s.get_review(note), 'approve')['ok']
+    time.sleep(1.1); s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Sent to Gail; the letters are next.')
+    assert chat_cards(s, tid)[first] == ('batch', 'pending'), 'its turn came'
+    with send, mock.patch.object(outbound, 'send_block', lambda *a, **k: ''):
+        press(s, bulk['batch'])
+    assert chat_cards(s, tid)[first] == ('batch', 'done'), 'pressed, it stays where it stood'

@@ -421,10 +421,12 @@ def list_accessible_repos(tok):
 def list_items(tok, repo, since=None, state='open', limit=25):
     """Open issues AND pull requests, newest activity first - the /issues endpoint carries
     both, a 'pull_request' key telling them apart. `since` is an ISO timestamp - GitHub
-    returns everything updated after it."""
-    p = {'state': state, 'sort': 'updated', 'direction': 'desc', 'per_page': min(limit, 100)}
-    if since: p['since'] = since
-    r = requests.get(f'{GH}/repos/{repo}/issues', headers=_h(tok), params=p, timeout=30)
+    returns everything updated after it, and EVERY one of those is read: a poll stamps its window
+    done, so a cap there (forty issues closed in one go, the newest 25 read) lost the rest for good.
+    `limit` caps only a read with no window."""
+    p = {'state': state, 'sort': 'updated', 'direction': 'desc'}
+    if since: return _pages(tok, f'/repos/{repo}/issues', {**p, 'since': since})
+    r = requests.get(f'{GH}/repos/{repo}/issues', headers=_h(tok), params={**p, 'per_page': min(limit, 100)}, timeout=30)
     r.raise_for_status()
     return r.json()[:limit]
 

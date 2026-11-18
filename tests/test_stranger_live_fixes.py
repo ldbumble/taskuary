@@ -303,3 +303,17 @@ def test_trust_pressed_twice_hands_the_waiting_line_over_once(monkeypatch):
     assert again.status_code == 200 and again.json()['origin'] == 'trusted'
     assert len(got) == 1, got
     assert again.json()['started']          # ...and it still says an agent has it: the first press's is at work
+
+def test_a_line_typed_in_a_held_task_s_box_is_kept_and_answered_not_a_500(monkeypatch):
+    """The box's own door (assistant/messages): his line on a held task is kept by take_line, which answers {'kept', 'held'} - and the
+    door unpacked that as (session, reply), so 'kept' was taken for a session and the request died; the page read a failed send."""
+    from taskuary import general
+    s = MemoryStore(); t = _held(s); monkeypatch.setattr(server, 'store', s)
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+        c = TestClient(server.app, raise_server_exceptions=False)
+        r = c.post(f'/api/tasks/{t}/assistant/messages', json={'text': 'what does this mail want?'})
+        st = c.post(f'/api/tasks/{t}/assistant/stream', json={'text': 'and who sent it?'})
+    assert r.status_code == 200, r.text
+    assert st.status_code == 200 and [json.loads(x)['type'] for x in st.text.splitlines()] == ['done'], st.text
+    assert r.json()['reply'] == '' and origin.hold(s, t), 'nothing answers for a held task - its line waits behind Trust'
+    assert [w['text'] for w in general.waiting_lines(s, t)] == ['what does this mail want?', 'and who sent it?']

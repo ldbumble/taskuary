@@ -2635,8 +2635,12 @@ def waiting_now(task_id: int):
 def _say(task_id: int, body, **kw):
     "A typed line on the one road (general.take_line), as the chat's doors send it - his words straight to the agent, nothing fetched first."
     from . import general
-    return general.take_line(store, task_id, body.text, body.attachments, ACTOR, _line_id(body),
-                             **({k: v for k, v in (('connector_id', body.connector_id), ('model', body.model), ('pick', body.pick)) if v} if general.handles(store.get_task(task_id)) else {}), **kw)
+    chat = general.handles(store.get_task(task_id))
+    out = general.take_line(store, task_id, body.text, body.attachments, ACTOR, _line_id(body),
+                            **({k: v for k, v in (('connector_id', body.connector_id), ('model', body.model), ('pick', body.pick)) if v} if chat else {}), **kw)
+    # ...a line KEPT, no turn taken (a held stranger's task: take_line's {'kept', 'held'}) is a chat's (no session, no reply) - both chat doors
+    # unpacked the dict as (session, reply) and died on 'kept'.info(), his line drawn with an error under it while it waited behind Trust
+    return (None, '') if chat and kw.get('wait', True) and isinstance(out, dict) else out
 def _line_id(body): return (getattr(body, 'line_id', None) or '')[:80] or None
 
 @app.post('/api/tasks/{task_id}/assistant/browser')

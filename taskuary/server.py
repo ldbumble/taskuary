@@ -3086,8 +3086,8 @@ def continue_work(task_id: int, body: ContinueBody = None):
     if task.get('Status') == 'dropped': raise HTTPException(409, 'This task was dismissed.')
     note = ' '.join(str((body.note if body else '') or '').split())[:4000]
     imgs = prompt_images(body.images if body else [])
-    # ...A PICTURE WITH NO WORDS IS A LINE OF HIS TOO (the attach stress round, 2026-11-18): Continue's box sends one alone, and only a note took
-    # this road - a chat's rode Taskuary's own brief with no pill of his, a coding agent's was dropped
+    # ...A PICTURE WITH NO WORDS IS A LINE OF HIS TOO (the attach stress rounds, 2026-11-18): Continue's box sends one alone, and only a note
+    # took this road - a chat's rode Taskuary's own brief with no pill of his, a coding session reopened on the resume prompt alone
     if note or imgs:
         # A NOTE IS A LINE THE OWNER TYPED, and takes the one road every typed line takes (general.take_line): kept as his, the turn at work
         # from the press, then whatever agent works the task reopened, woken or started by its own starter - a coding session that ended
@@ -7259,7 +7259,7 @@ IMG_MAX = 12 * 1024 * 1024
 async def waitroom_image(tid: int, request: Request):
     """A screenshot pasted into the Tell-the-agent box, posted as the raw body (no multipart
     dependency, like /api/voice/transcribe). The pty carries text only, so the image goes to
-    disk under ~/.taskuary/attachments/waitroom/<task>/ and the NOTE names the file - a coding
+    disk in the task's own folder (outputs.take_in) and the NOTE names the file - a coding
     CLI reads images from a path (Claude Code's Read does), which is how it gets to see it."""
     return await _save_prompt_image(tid, request)
 
@@ -7330,6 +7330,11 @@ async def _save_prompt_image(tid: int | None, request: Request):
         p.write_bytes(data)
         if tid is not None: store.audit('task', tid, 'waitroom_image', ACTOR, detail={'path': str(p), 'size': len(data)})
     await run_in_threadpool(keep)
+    # ...ON A TASK IT IS THE TASK'S OWN (outputs.take_in, as a line's attached file is): its path is typed for the agent to Read, and one left
+    # under attachments/ was refused as Taskuary's own data (readgate) - the agent never saw the screenshot it was handed
+    if tid is not None:
+        from . import outputs
+        p = (await run_in_threadpool(outputs.take_in, tid, [p]))[0]
     return {'path': str(p), 'size': len(data)}
 
 

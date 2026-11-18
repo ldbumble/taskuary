@@ -586,6 +586,42 @@ class TerminalTests(unittest.TestCase):
         finally:
             terminal.close(t.sid)
 
+    def test_an_image_pasted_for_a_coding_task_is_one_its_agent_may_read(self):
+        """A screenshot pasted into a pty task's terminal, or into the Tell-the-agent box, reaches the agent as a path it Reads.
+        Saved under Taskuary's own attachments/, that Read was refused as Taskuary's data (readgate NEVER) and the agent never
+        saw the picture: the path handed back is a file in the task's own folder, as a line's attached file is (outputs.take_in)."""
+        from taskuary import readgate
+        tid = c.post('/api/tasks', json={'Title': 'look at the broken header', 'Kind': 'coding'}).json()['taskId']
+        t = terminal.Term([sys.executable, '-c', 'import time; time.sleep(5)'], os.getcwd(), 'test', tid)
+        terminal.SESSIONS[t.sid] = t
+        try:
+            for url in (f'/api/terminals/{t.sid}/image', f'/api/tasks/{tid}/waitroom/image'):
+                r = c.post(url, content=b'\x89PNG-header-shot', headers={'Content-Type': 'image/png'})
+                self.assertEqual(r.status_code, 200)
+                p = r.json()['path']
+                self.assertEqual(Path(p).read_bytes(), b'\x89PNG-header-shot')
+                self.assertEqual(readgate.judge(server.store, tid, readgate.tool_paths({'file_path': p}, cwd=os.getcwd()), os.getcwd()), ([], ''), url)
+        finally:
+            terminal.close(t.sid)
+
+    def test_a_file_attached_to_a_coding_start_is_the_tasks_own(self):
+        """Start (or Restart) on a coding task with a screenshot names it in the instruction: left under Taskuary's attachments/, the
+        session's Read of it was refused as Taskuary's own data. Every road that starts a coding session starts here, so here the file
+        becomes the task's (outputs.take_in_text, as a New task's summary does)."""
+        from taskuary import config, general, outputs
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Fix the header', 'Kind': 'coding', 'Status': 'open'}, 'owner')
+        shot = config.home() / 'attachments' / 'prompt' / '202611' / '20261118-091500-0a1b2c-header.png'
+        shot.parent.mkdir(parents=True, exist_ok=True); shot.write_bytes(b'\x89PNG-header')
+        got = {}
+        with mock.patch.object(terminal, 'for_task', return_value=None), mock.patch('taskuary.agents.developer_mode', return_value=True), \
+             mock.patch.object(general, 'on_card', return_value={'brain': 'x'}), \
+             mock.patch.object(terminal, '_on_card', side_effect=lambda st, t, card, model, instruction, actor: got.setdefault('i', instruction)):
+            terminal.start_on_task(s, tid, 'coding', instruction=f'the header is broken\n\nATTACHED IMAGES (read these files)\n{shot}', actor='owner')
+        mine = outputs.folder(tid) / 'header.png'
+        self.assertIn(str(mine), got['i']); self.assertNotIn(str(shot), got['i']); self.assertEqual(mine.read_bytes(), b'\x89PNG-header')
+
     def test_wrapping_up_reads_the_screen_then_closes_everything(self):
         """"Done - wrap it up" asks the agent NOTHING. It takes the transcript that is already on
         screen, ends the session, has the main AI write the report from it, and leaves the reply

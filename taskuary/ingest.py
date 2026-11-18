@@ -2615,10 +2615,12 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
     # ...in the order the mails CAME (the store's id), never the order their threads woke: two mails of one poll each polled for the session
     # on its own beat, and the second took the head of the burst
     got.sort(key=lambda x: (x[1] is None, x[1] if isinstance(x[1], int) else 0))
-    lines, mails = [x[0] for x in got], [x[1] for x in got if x[1]]
-    # ...what a turn since has already heard (general.send_prompt hears everything that came in when it begins) is not said a second time
+    # ...what a turn since has already heard (general.send_prompt hears everything that came in when it begins, and tells it) is not said a
+    # second time - each mail by itself: a turn that heard the first of two left the second the burst's to say, and the burst said both
     from . import conversation
-    if mails and len(mails) == len(got) and conversation.heard(store, tid, 'mail', mails): return
+    got = [x for x in got if not (x[1] and conversation.heard(store, tid, 'mail', [x[1]]))]
+    if not got: return
+    lines, mails = [x[0] for x in got], [x[1] for x in got if x[1]]
     said = lines[0] if len(lines) == 1 else f'{len(lines)} NEW LINES ON THIS TASK, in the order they came - one turn for all of them:\n\n' + '\n\n---\n\n'.join(lines)
     try:
         # a session of quick answers re-decides on the task's depth now: still quick, the warm agent's turn on it; else the full agent's

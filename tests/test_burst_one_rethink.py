@@ -75,3 +75,20 @@ def test_two_mails_of_one_poll_go_in_in_the_order_they_came_whichever_thread_wak
     finally: general.OPENING.discard(tid)
     assert len(ses.sent) == 1, ses.sent
     assert ses.sent[0].index('The first mail.') < ses.sent[0].index('The second mail.'), ses.sent[0]
+
+
+def test_a_mail_a_turn_heard_meanwhile_is_not_said_again_by_the_burst_it_waited_in():
+    """Two mails waited together behind a working turn; the owner's line began the next turn first, and that turn heard (and was told) the
+    first mail - the second came after it began. The burst only stood down when it had heard ALL of them, so it said both: the first mail
+    reached the agent twice."""
+    from taskuary import conversation
+    s = MemoryStore(); tid = s.create_task({'Title': 'Badge list', 'Kind': 'general', 'Status': 'open'}, 'router'); ses = Ses()
+    with mock.patch.object(general, 'session_for', return_value=ses), mock.patch.object(ingest, 'PASS_GATHER', 0.2):
+        a = threading.Thread(target=ingest._pass_general, args=(s, tid, {**mail('The first mail.'), 'message_id': 11}))
+        b = threading.Thread(target=ingest._pass_general, args=(s, tid, {**mail('The second mail.'), 'message_id': 12}))
+        a.start(); time.sleep(0.1); b.start(); time.sleep(0.2)
+        s._exec('INSERT INTO heard (TaskId,Kind,Ref,At,Grp,Seq,Sid) VALUES (?,?,?,?,?,?,?)', (tid, 'mail', '11', time.time(), 1, 0, ''))
+        ses.busy = False
+        a.join(5); b.join(5)
+    assert conversation.heard(s, tid, 'mail', [11])
+    assert len(ses.sent) == 1 and 'The second mail.' in ses.sent[0] and 'The first mail.' not in ses.sent[0], ses.sent

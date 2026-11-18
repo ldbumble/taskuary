@@ -80,7 +80,7 @@ def test_each_rule_is_said_once_and_true():
     # question, if you know the answer then just create reply") - said once
     for once in ('A MESSAGE THAT NEEDS AN ANSWER IS YOURS TO ANSWER', 'ask them that one thing here in the task instead of drafting a guess'):
         assert system.count(once) == 1, once
-    assert 'IS the confirmation' in selfclose.SUMMARY_LINE and 'group chat' in selfclose.SUMMARY_LINE
+    assert 'IS the confirmation' not in selfclose.SUMMARY_LINE and 'group chat' in selfclose.SUMMARY_LINE     # ...a card's button is the ask line's to say
     assert 'the thread wins' in general.learned_block(s, chat(s)) or not general.learned_block(s, chat(s))
 
 

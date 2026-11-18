@@ -1663,16 +1663,11 @@ def woke_for_silence(s, reply: str, owned: bool) -> bool:
     s.wake('', said=SILENT); return True
 # SEARCH BEFORE ASKING (the owner, 2026-11-05, from Hermes' session_search): a fact an earlier task already settled - found, confirmed, used
 # - is read from that task's ending (search.outcomes), never asked of the owner again. {where}: how this session reads them
-ASK_AFTER = ("SEARCH BEFORE YOU ASK: before asking the owner for a fact - a vendor id, a login route, the account they prefer - check whether "
-             "an earlier task settled it: {where}. Ask only what none did, and say which task you took it from.")
+ASK_AFTER = "SEARCH BEFORE YOU ASK: what an earlier task settled is {where}; ask the owner only what none did, and say which task you took it from."
 # THE OWNER'S OWN HISTORY FIRST (mailsearch.py): a researcher asked about a colleague's email wrote code of its own to find the mail
 # instead of reading what Taskuary already holds (the owner, 2026-10-21). Told only to a session with a shell, on the owner's task.
-HISTORY_LINE = ("THE OWNER'S HISTORY IS IN TASKUARY - SEARCH IT FIRST. For anything about the owner's mail, messages, tasks or people, "
-                'run `taskuary --search "words" --from "name or address" --subject "..." --since YYYY-MM-DD --until YYYY-MM-DD` '
-                '(any of them; each hit prints its id, when, who, subject, thread and a snippet), then `taskuary --message ID` for one '
-                'in full with its thread; `taskuary --memory` prints what Taskuary has learned about the owner, and `taskuary --remember "fact"` keeps one they tell you. That is the way in: never write scripts or code to read a mailbox, mail files or '
-                "Taskuary's database, and never go around it. If the search finds nothing, say so and say what you searched for.\n"
-                + ASK_AFTER.format(where='`taskuary --search "words"` (or the search_tasks tool) lists WHAT EARLIER TASKS SETTLED under the mail'))
+HISTORY_LINE = ("THE OWNER'S HISTORY IS IN TASKUARY - SEARCH IT FIRST: `taskuary --search \"words\" --from \"name or address\" --since YYYY-MM-DD` finds their mail, messages, tasks and people, `taskuary --message ID` reads one whole with its thread, `taskuary --memory` prints what Taskuary has learned about them and `taskuary --remember \"fact\"` keeps one they tell you - never write scripts or code to read a mailbox or Taskuary's database.\n"
+                + ASK_AFTER.format(where='under WHAT EARLIER TASKS SETTLED in what `taskuary --search` (or the search_tasks tool) lists'))
 # ...AND A BRAIN WITH NO SEARCH OF ITS OWN IS HANDED IT (the owner, 2026-10-28: "why is prior mail not available"): an API card, or a CLI
 # set to look things up only, has no shell and no Taskuary tools, and answered "Prior mail search was unavailable here". On the owner's
 # own or a trusted task Taskuary searches for it - the sender's earlier mail and mail on the subject (mailsearch.meeting_reads, as
@@ -1684,7 +1679,7 @@ _SEARCHED = ("THIS AI HAS NO SEARCH OF ITS OWN, SO TASKUARY SEARCHED THE OWNER'S
 SEARCHED_LINE = (_SEARCHED[0] + ": the sender's earlier messages "
                  "and mail on this subject are under EARLIER MAIL in the material{none}. Use them. Never say mail search was unavailable - "
                  "say what was searched when it matters.\n"
-                 + ASK_AFTER.format(where='what earlier tasks on this subject settled is under WHAT EARLIER TASKS SETTLED in the material, when any did'))
+                 + ASK_AFTER.format(where='under WHAT EARLIER TASKS SETTLED in the material, when any did'))
 
 
 def earlier_mail(store, tid: int) -> str:

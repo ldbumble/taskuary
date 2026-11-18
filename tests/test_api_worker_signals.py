@@ -28,8 +28,9 @@ class AskMarker(unittest.TestCase):
         over the card that already asked it."""
         ask, summary = selfclose.ASK_LINE, selfclose.SUMMARY_LINE
         self.assertIn('a fact or a decision only they can give', ask); self.assertIn('never for permission to do what a card already asks', ask)
-        self.assertIn('IS the confirmation', summary); self.assertNotIn('offer choices', summary)
-        self.assertIn(f'(through {selfclose.ASK_MARKER}) only the question you cannot go on without', summary)
+        self.assertNotIn('offer choices', summary)
+        # ...said ONCE, by the ask line (the design round, 2026-11-18): the summary line said it a second time in other words
+        self.assertIn('(its Send, Post or Approve is that question)', ask); self.assertNotIn('IS the confirmation', summary); self.assertNotIn('shall I send', summary)
 
 
 class ApiWorkerSignals(unittest.TestCase):

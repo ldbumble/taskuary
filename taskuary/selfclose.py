@@ -313,8 +313,8 @@ CARD_SAID = ('A reply, an email or an act you set up is its card under your answ
              'what it is, to whom, its words, the file it carries, that it waits and that nothing went. Say none of that or what it replaced, and never '
              'retell its content in other words. Add only what the card cannot say - what you will do after the press, an assumption in it (a '
              'guessed address, a picked date), the one question - in one short line, or nothing. Raise your cards in the order they should '
-             "happen: each waits for the owner's press before the next is shown, and you hear each outcome. Many of one act (25 emails, 40 issues "
-             'to close) go as ONE card, in one call with `items`.')
+             'happen; what stands on his screen is told you at the head of every turn. Many of one act (25 emails, 40 issues to close) go as '
+             'ONE card, in one call with `items`.')
 # ...AND A ROUTINE'S OWN EMAIL IS NO CARD (slots.routine_sends, the owner 2026-11-17: "routines should send on their own too"): it went at
 # once, and its agent was told the card "shows ... that it waits and that nothing went" - so it said nothing went (the tools stress round)
 def card_said(out: dict) -> str:
@@ -387,10 +387,7 @@ SUMMARY_LINE = (f'ENDING EVERY TURN: close with {SUMMARY_OPEN}{{"about": "<two o
                 f'asked that only they can take, a line each with why, said nowhere in your words above; [] when nothing_left>"],"nothing_left": <true only when the goal '
                 f'is met and you checked it>, "answer_is_result": <true when your words above ARE what was asked>, "after_press": <"handoff" only if '
                 f'you carry on once the owner hands this to a person - that press wakes you once, as any press on your card does>}}'
-                f'{SUMMARY_CLOSE} - valid JSON, plain words, no secret, "you" to the owner. A card you set up and a question you ask are never an on_you step. A draft\'s Send card IS the confirmation: never '
-                f'ask "shall I send?", "anyone to copy?", "does this look right?" or say "check it before you press Send" unless something real '
-                f'is uncertain - then name it. Needing the owner: a sentence or two on what you got and what is unsure, and ask '
-                f'(through [[TASKUARY-ASK]]) only the question you cannot go on without. When their newest message CORRECTS you, add "corrections": '
+                f'{SUMMARY_CLOSE} - valid JSON, plain words, no secret, "you" to the owner. A card you set up and a question you ask are never an on_you step. When their newest message CORRECTS you, add "corrections": '
                 f'[{{"kind": "redraft" (their words for the draft) or "ask" (you misread the task), "review": <the draft\'s id or null>, '
                 f'"said": "<the correction, in their words>"}}], never shown. When what came in needs nothing from you or them - judged from '
                 f'the thread, not its wording; in a group chat banter, a question already answered, a reply that would only say "ok" or '
@@ -630,13 +627,9 @@ def tick_markers(text: str) -> tuple:
 # it?" over the Send card that already asks it, while the summary line said the card IS the confirmation - the two now say one thing
 ASK_MARKER = '[[TASKUARY-ASK]]'
 _ASK_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\]\s*:?\s*(.*)', re.I | re.S)
-ASK_LINE = (f'ASKING THE OWNER: when you cannot continue without their answer - a fact or a decision only they can give - end your reply with a final line: '
-            f'{ASK_MARKER} <the exact question> - that line is the question they see, so do not ask it in your words above it too. '
-            f'The owner answers it in their own words. One a turn: the question the rest hangs on, '
-            f'with your recommended answer in it. '
-            f'Only for a real blocker, never for a rhetorical question, and never for permission to do what a card already asks: a draft\'s '
-            f'Send, a post\'s Post, an Approve is that question, asked once. And never after you have answered: a part you could not '
-            f'do is said in the answer (what you could not check and what would let you), not asked as a question.')
+ASK_LINE = (f'ASKING THE OWNER: a real blocker - a fact or a decision only they can give - is one question, the last line of your reply: '
+            f'{ASK_MARKER} <the exact question, with your recommended answer> - never asked again in your words above it, and never for '
+            f'permission to do what a card already asks (its Send, Post or Approve is that question).')
 
 
 def without_ask(text: str) -> str:

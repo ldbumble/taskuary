@@ -42,12 +42,9 @@ HELD = 'Taskuary held this for the owner'
 _FILING = threading.Lock()
 # ...said to the agent the hold covers, as the browser's hold is (browserview.HOLD_LINE): told nothing, a general agent asked "Should I delete
 # it?" in words, the owner said yes, and the delete was held for a second yes on the task (the overnight run, 2026-11-03)
-HOLD_LINE = ("A DELETE ON THE OWNER'S COMPUTER outside your working folder, a read of files outside this task's own folders, and a step that leaves the machine (a push, a merge, a publish, "
-             "a mail from a script, data sent to a web address), is HELD for the owner's press: the call comes back refused - as \"held for the owner\" or as a permission that was declined, "
-             "which is Taskuary's hold and never the owner's no - and Taskuary puts it on the task as a card, runs it once they approve and tells you what happened. So never ask the owner in words whether to delete - "
-             "run the command and end your turn when it is held. The held step IS the owner's "
-             "button: never ask \"will you run these\", never retry it, never print the commands for them to copy. Draft no reply that says it is done while it waits: the reply is "
-             "written once Taskuary tells you the step ran.")
+HOLD_LINE = ("A delete outside your working folder, a read outside this task's own folders, and a step that leaves the machine (a push, a merge, "
+             "a publish, a mail from a script, data sent to a web address) is HELD for the owner's press: run it and end your turn - the refusal "
+             "is Taskuary's hold, never his no; his press runs it and you are told what happened.")
 ASKS = {'claude'}       # the CLIs whose PreToolUse hook can answer `ask` with their own prompt (measured: Claude 2.1.312 honours it)
 # each tool's own words for a step that goes out, as (what it does, in the owner's words): its subcommand, or (subcommand, action)
 GIT = {'push': 'push the agent\'s commits out of this computer'}

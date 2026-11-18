@@ -461,7 +461,8 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     # ...and who else hears it: `only` is the sender alone, so it copies nobody; an address the thread never had is said on the card
     ccs = _addrs(cc)
     if only and ccs: return {'ok': False, 'why': '--only sends it to that one person - leave --cc out, or drop --only to copy others'}
-    bad = [a for a in ccs or [] if not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', a)]
+    from .slots import is_address
+    bad = [a for a in ccs or [] if not is_address(a)]
     if bad: return {'ok': False, 'why': f"{', '.join(bad)} is not an email address - nothing was saved"}
     new = [a for a in ccs or [] if a not in on_thread(store, task_id)]
     # work the owner started here (a brief typed in the chat) has only their own words behind it: the agent's

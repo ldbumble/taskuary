@@ -1756,10 +1756,13 @@ NEW_TAB = {'general': ('agent', 'general', 'regular_agent'), 'coding': ('agent',
            # ...and New's other tabs (the whole-app design, 2026-10-28): a message the owner starts, drafted for their Send; a goal; a dashboard
            'send': ('send', '', ''), 'goal': ('goal', '', ''), 'dashboard': ('dashboard', '', '')}
 NEW_ONLY = ('send', 'goal', 'dashboard')          # New's tabs alone: no task kind, so on a phone they are the desk's
-# ...each the button New's tab draws (NewSheet.jsx): since 2026-10-30 a report, a dashboard and a routine have no Build it - their describe
-# box became Set up with AI - and a goal reads Plan it while an AI can plan the steps. The line named presses nobody could find (2026-11-02)
-NEW_PRESS = {'note': 'Note it', 'report': 'Set up with AI', 'workflow': 'Set up with AI', 'playbook': 'Set up with AI',
-             'goal': 'Track it', 'dashboard': 'Set up with AI'}
+# ...a report or a routine is an agent's job now (_new): its tools set it up. A playbook and a dashboard keep their builders - the owner asked
+# for the playbook's own page by name (2026-10-22: "this is not playbook ui?"), and no agent tool saves a dashboard
+WORK_KINDS = ('report', 'workflow', 'routine')
+# ...each the button New's tab draws (NewSheet.jsx) for what still comes up in New: a note, a goal (Plan it while an AI can plan the steps),
+# a playbook's and a dashboard's builder
+NEW_PRESS = {'note': 'Note it', 'goal': 'Track it', 'playbook': 'Set up with AI', 'dashboard': 'Set up with AI'}
+OPENED = {'note': 'New on a note', 'goal': 'New on a goal', 'playbook': 'New on a playbook', 'dashboard': 'a new dashboard'}
 def new_press(store, kind: str) -> str:
     from . import capabilities
     return 'Plan it' if kind == 'goal' and capabilities.has_ai(store) else NEW_PRESS[kind]
@@ -1770,19 +1773,6 @@ def recurs_of(raw) -> dict | None:
     out = {k: str(raw.get(k) or '').strip()[:300] for k in ('schedule', 'objective', 'repo', 'skill')}
     out['skill'] = out['skill'].lstrip('/')
     return out if any(out.values()) else None
-
-
-def routine_prefill(recurs: dict, text: str = '') -> tuple:
-    """(the words New → Routine's box opens with, its form's picks): the clock and the job as one sentence for the builder, and the
-    repository and skill the owner named - a named one makes it a coding routine."""
-    r = recurs or {}
-    words = ' - '.join(x for x in (r.get('schedule'), r.get('objective') or str(text or '').strip()) if x)
-    # ...and the repository and skill IN the words: Set up with AI carries only words to the builder since 2026-10-30, so a named
-    # repository and skill were dropped on the way (2026-11-02)
-    named = ', '.join(x for x in (f"in {r['repo']}" if r.get('repo') and r['repo'].lower() not in words.lower() else '',
-                                  f"with the /{r['skill'].lstrip('/')} skill" if r.get('skill') and r['skill'].lstrip('/').lower() not in words.lower() else '') if x)
-    words = f'{words} - {named}' if named else words
-    return words, {'coding': bool(r.get('repo') or r.get('skill')), 'repo': r.get('repo') or '', 'skill': r.get('skill') or ''}
 
 
 # WHO SEND SOMETHING GOES TO, AND ON WHAT (the owner, 2026-11-02: "write to the team WhatsApp group that ..." opened New on email with
@@ -1811,9 +1801,10 @@ def send_to(store, channel: str, who: str) -> tuple:
 
 def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = '', recurs: dict | None = None, lead: str = '',
          channel: str = '', job: dict | None = None) -> dict:
-    # A JOB THAT REPEATS IS A ROUTINE (the owner, 2026-10-29): the model's `recurs` brings up New → Routine filled in - its clock, its job,
-    # its repository and skill - and Set up with AI, then Save, are the owner's presses; nothing is saved from here
-    if recurs: want, (text, runs) = 'workflow', routine_prefill(recurs, text)
+    # A JOB THAT REPEATS OR A REPORT IS AN AGENT'S JOB (the walks, 2026-11-18): "send me this every Monday" with a CSV came up as an
+    # empty SQL "New report" form, his words and file gone, under "Wrote it into New". Every door hands his words and files to the one start
+    # (handoff_task); the agent sets it up with its own tools - propose save_routine - for his press. No form is chosen here
+    if recurs or want in WORK_KINDS: want, text = 'general', ' - '.join(x for x in (str((recurs or {}).get('schedule') or ''), str(text or '')) if x)
     kind, how, verb = NEW_TAB[want]
     # A JOB, OR A MESSAGE WITH ITS RECIPIENT, IS MADE AND OPENED - NOT WRITTEN INTO NEW (the owner, 2026-11-12: "assistant tab should not open new
     # but open task directly"): the card came up filled in and pressed itself, a step between the ask and the task. What still needs the owner
@@ -1838,22 +1829,25 @@ def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = ''
     # ...in the past, never "below": after a reload New is shut and the line stood over nothing (verify, 2026-10-19)
     # ...and what it did LEADS, what it found after: the receipt at the end of a paragraph read as a turn that did nothing (said_what; the
     # live audit, 2026-11-02)
-    said = f"Wrote it into New - {press} there starts it." + (f' {lead}' if lead else '')
+    # ...and it says what it OPENED, never that it wrote or started anything (F1/F2, the walks 2026-11-18: "Wrote it into New" stood over an empty
+    # form): the work itself is a press the owner makes there - or, for an agent's job, the one start's (_made_now)
+    said = f"Opened {OPENED.get(kind, 'New')} with your words - {press} there {'keeps' if kind == 'note' else 'starts'} it." + (f' {lead}' if lead else '')
     line = record(store, tid, 'assistant', said)
-    return {'say': said, 'options': [], 'chips': [], 'decision': None,
-            'new': {'kind': kind, 'how': how, 'text': str(text or '').strip()[:2000], 'line': line, **({'routine': runs} if recurs else {})}}
+    return {'say': said, 'options': [], 'chips': [], 'decision': None, 'new': {'kind': kind, 'how': how, 'text': str(text or '').strip()[:2000], 'line': line}}
 
 
-def no_start(store, kind: str) -> str:
-    "Why an agent of `kind` cannot run here, or '' - what New's own press asks before it makes a task (an agent failing a second later is a dead end)."
-    from . import agents as _ag, capabilities
-    if kind == 'general' and not capabilities.has_ai(store): return f"{general.NO_AI}, so an agent can't run this yet"
-    if kind == 'coding' and not capabilities.can_code(store): return f'{_ag.no_coding_why(store)}, so a coding agent cannot run this yet'
+def start_refusal(store, kind: str) -> str:
+    "Why an agent of `kind` cannot start here, or '' - asked by the one start (handoff_task) before anything is made: a task whose agent fails a second later is a dead end."
+    from . import agents as hub_agents, capabilities
+    if not capabilities.has_ai(store): return f"{general.NO_AI}, so an agent can't run this yet"
+    # ...a coding job with Developer mode off is a general agent's (handoff_task), so only a CLI missing in Developer mode refuses it
+    if kind == 'coding' and hub_agents.developer_mode(store) and not capabilities.can_code(store):
+        return 'No command-line AI (Claude Code, Codex) is connected to run a coding agent'
     return ''
 def no_start_chip(store, kind: str) -> dict:
-    "The button under no_start's line: the check that refused - Developer mode, the coding tool, the AI - opened where it is switched."
-    from . import agents as _ag
-    return {'verb': 'go', **_ag.no_coding_fix(store)} if kind == 'coding' else connect_ai_chip()
+    "The button under start_refusal's line: the check that refused - the AI, or the coding tool - opened where it is switched."
+    from . import agents as _ag, capabilities
+    return {'verb': 'go', **_ag.no_coding_fix(store)} if kind == 'coding' and capabilities.has_ai(store) else connect_ai_chip()
 
 
 def _made_now(store, tid: int, op: str, params: dict, lead: str = '', actor: str = 'owner') -> dict:
@@ -1861,7 +1855,7 @@ def _made_now(store, tid: int, op: str, params: dict, lead: str = '', actor: str
     phone's road (task.create_from_text -> handoff_task), a message to a known recipient drafted on its own task (outbox.compose) - nothing
     sent. A start that did not happen says why, with no task to open."""
     # ...an agent with nothing to run it is not made at all: a task whose agent fails a second later is a dead end on the rail
-    if no := ('' if op == 'outbox' else no_start(store, params.get('kind'))):
+    if op != 'outbox' and (no := start_refusal(store, params.get('kind'))):
         chip = no_start_chip(store, params.get('kind'))
         say_ = f"{no} - [{chip['label']}]({chip['href']}), then ask again. Nothing was made."
         record(store, tid, 'assistant', say_)
@@ -1886,7 +1880,7 @@ def _made_now(store, tid: int, op: str, params: dict, lead: str = '', actor: str
     gone = op != 'outbox' or params.get('channel') in outbound.send_channels(store)
     what = ((f"Drafted it on {ref} - it waits for your Send." if gone else f"Drafted it on {ref} - nothing can send {params.get('channel')} "
              f"yet, so press Connect {params.get('channel')} there first.") if o.get('drafted') else f"Made {ref}, but the draft could not be written - write it there.") if op == 'outbox' \
-        else f"Started {ref} - an agent is on it." if o.get('started') or o.get('existing') else f"Made {ref} - it waits its turn for an agent."
+        else f"Told the agent on {ref} - it is that same work." if o.get('joined')         else f"Started {ref} - an agent is on it." if o.get('started') or o.get('existing') else f"Made {ref} - it waits its turn for an agent."
     return {**_did(store, tid, what + (f' {lead}' if lead else ''), op, o), 'open': f"#task={o['taskId']}"}
 
 
@@ -3498,6 +3492,8 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         # else the model must fix itself, never a silent regular agent.
         k = str(params.get('kind') or '').strip().lower()
         params['kind'] = {'coding_agent': 'coding', 'coder': 'coding', 'regular_agent': 'general'}.get(k, k)
+        # ...a report or a routine is an agent's job, on the desk and the phone alike (F1, _new): its agent sets it up with its tools
+        if params['kind'] in WORK_KINDS: params['kind'] = 'general'
         if params['kind'] in NEW_ONLY and not routes():
             raise CallMiss(f"New → {params['kind']} is on the desk - say so in plain words, and what to write there. Nothing was started.")
         if params['kind'] not in task_kinds.TRIAGE and params['kind'] not in NEW_ONLY:
@@ -3545,7 +3541,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     if kind in ('memory.wrong', 'memory.remember'): return _landed(store, tid, kind, 0, params, lambda: _memory(store, tid, kind, params))
     if kind == 'meeting.new': return _meeting(store, tid, item, params, text, actor)
     # ON THE DESK A NEW JOB IS NEW, FILLED IN (routes): the words on the tab that starts it, its own button the one to press
-    # ...and a job the model said REPEATS (`recurs`) is New → Routine, never a one-off agent started now
+    # ...a job the model said REPEATS (`recurs`) is its agent's job too: its clock rides in the words, and the agent sets the routine up (_new)
     recurs = recurs_of(params.get('recurs')) if kind == 'task.create_from_text' else None
     # ...and a SET-UP is sorted first, with what was said before it (setup_turn): "help me set up a new routine", then "log into <a portal> and
     # review my denials" as task.setup, started a one-off agent - the routine the owner had just asked for never came up (2026-11-09)
@@ -3553,12 +3549,9 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     if routes() and kind == 'task.create_from_text':
         want = str(params.get('kind') or 'general') if kind == 'task.create_from_text' else 'general'
         return _new(store, tid, item, want if want in NEW_TAB else 'general', str(params.get('text') or text or '').strip(), str(params.get('to') or ''),
-                    channel=str(params.get('channel') or ''), recurs=recurs or (recurs_of({'objective': params.get('text') or text}) if want == 'routine' else None),
+                    channel=str(params.get('channel') or ''), recurs=recurs,
                     job={'repo': str(params.get('repo') or ''), 'profile': str(params.get('profile') or params.get('as') or ''),
                          'title': ' '.join(str(params.get('title') or '').split())})
-    if recurs or (kind == 'task.create_from_text' and params.get('kind') == 'routine'):
-        say_ = f"A routine is set up on the desk, under {places.name('workflows')} - nothing was started."
-        record(store, tid, 'assistant', say_); return {'say': say_, 'options': [], 'chips': [], 'decision': None}
     if routes() and kind == 'role.apply':
         return _page(store, tid, item, '#profiles', "Opened Profiles - press Set up beside the job you do.")
     if kind == 'task.create_from_text' and str(params.get('kind') or '') in task_kinds.AGENT:
@@ -4489,7 +4482,7 @@ def his_words(kind: str, params: dict) -> dict:
 
 
 def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: str = SETUP_KIND,
-               agent_job: bool = False, repo: str = None, profile: str = None, said: str = None) -> dict:
+               agent_job: bool = False, repo: str = None, profile: str = None, said: str = None, door: str = 'the Assistant chat') -> dict:
     """'Set up a report that...': a task with the owner's words in it, opened for the agent that can
     walk them through it. `kind` is 'general' for a walk-through and 'coding' for a hand-off the owner
     asked for (concierge's `coding_agent` verb), which is the only path that starts an agent in a checkout.
@@ -4534,7 +4527,7 @@ def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: st
     # a walk that had never started (the owner, 2026-09-14). A hand-off has no conversation to open
     # here - the agent's own brief becomes its first turn - so there the ask stays a note.
     if kind == SETUP_KIND and not agent_job: store.add_comment(tid, actor, general.USER_TYPE, own)
-    else: store.add_comment(tid, actor, 'human', f'Asked in the Assistant chat: {own}')
+    else: store.add_comment(tid, actor, 'human', f'Asked in {door}: {own}')
     # ...and the brief, filed as Taskuary's: a walk-through hears it as its next turn, drawn as Taskuary's (general.is_brief); a coding
     # agent reads it beside his words (brief.handoff). A general hand-off is told it as its first prompt, so it is not filed twice
     if text != own and not agent_job:
@@ -4809,19 +4802,32 @@ def no_brain() -> str:
 
 
 def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', title: str = None, dock_tid: int = None, repo: str = None,
-                 profile: str = None, said: str = None) -> dict:
-    """A hand-off with nothing on the table: the owner's words ARE the brief. The confirmed `task.create_from_text`
-    lands here - the task is made and the agent started only then (PW-124)."""
+                 profile: str = None, said: str = None, door: str = '') -> dict:
+    """THE ONE START FROM THE OWNER'S WORDS (F1, the walks 2026-11-18): New's box (server /api/start), the Assistant's hand-off (the confirmed
+    `task.create_from_text`), a phone's - each hands his words and files here, and the task is made and its agent started only then (PW-124).
+    What the work is - a code fix, a routine, a report, research - is the agent's to do with its tools; nothing here picks a form. A start
+    that cannot happen says why before anything is made; the same work already open is that task's (samework).
+    `door`: '' for the Assistant's chat, whose talk rides to the agent as Taskuary's brief - else where he typed it ("New"), with no chat."""
     job = str(text or '').strip()
     if not job: raise ValueError('say what the agent should do')
+    # ...DEVELOPER MODE OFF, A CODING JOB IS A GENERAL AGENT'S, as at the dispatch door (server._dispatch_one): refused here instead, New said
+    # "No coding tool is connected ... Nothing was made" with Claude Code connected and its own Send to agent fixing the same bug (the walks)
+    from . import agents as hub_agents
+    if kind == 'coding' and not hub_agents.developer_mode(store): kind = 'general'
+    if why := start_refusal(store, kind): raise ValueError(why)
     tid = dock_tid or general.dock_task(store, actor)[0]['TaskId']
-    brief = _handoff_brief(store, tid, job)
+    # ...AND ONE JOB IS ONE TASK (samework): the same work already open hears his line on its own task, its agent told - never a second task
+    from . import samework
+    if (same := samework.same_open_task(store, general.split_files(said)['text'] if said else job, skip={tid})):
+        f = general.split_files(said or job); samework.tell(store, same, f['text'], actor, f['files'] or None)
+        return {'taskId': same, 'ref': task_ref(same), 'joined': True, 'started': True}
+    brief = job if door else _handoff_brief(store, tid, job)
     # ...HIS WORDS ARE THE TASK'S OWN MESSAGE, AND ONLY HIS WORDS (recorded on the real CLI, 2026-11-15: the new task's bubble read his ask
     # and then "What we were talking about: remember that payroll questions go to Gail Got it - ..." - the Assistant's chat, in his name).
     # A general agent hears the brief as Taskuary's first prompt (below); a coding one is seeded from the task itself, so it keeps the brief
     # ...and where the model reworded what he typed, `said` is his and `job` is Taskuary's brief (setup_task, his_words)
     made = setup_task(store, job if kind == 'general' else brief, actor, title=title or _handoff_title(store, tid, general.split_files(said)['text'] if said else job), kind=kind, agent_job=kind == 'general',
-                      repo=repo, profile=profile, said=said)
+                      repo=repo, profile=profile, said=said, door=door or 'the Assistant chat')
     if kind == 'general':
         # ...AT WORK FROM THE MOMENT IT IS MADE (the bug hunt, 2026-11-12: New opened the task at once, and for the seconds its outputs were
         # read before the first turn it said "agent done" with Mark done lit, over an agent that had not begun): a start in flight, as
@@ -4831,7 +4837,8 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
         except Exception: general.OPENING.discard(made['taskId']); raise
         def first_turn():
             try:
-                _read_outputs(store, made, job, actor)
+                from .server import _read_hand_task
+                _read_hand_task(made['taskId'], job, store=store)
                 # ...Taskuary's brief, never a second line in the owner's name: their words are the task's own message already, and the chat
                 # drew them twice (the click-through, 2026-11-12)
                 session.send_prompt(brief, brief=True)
@@ -4839,22 +4846,6 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
         threading.Thread(target=first_turn, daemon=True).start()
         made['started'] = True
     return made
-
-
-def _read_outputs(store, made: dict, job: str, actor: str):
-    """What closes a hand-off, read from the owner's words: "draft an email to each" becomes the slots on the card before
-    the agent's first turn, which sees them in its checklist (spec 2026-10-05). Off the chat's thread - the brain may be a
-    CLI that takes seconds to start. A brain that fails leaves the task as it was."""
-    try:
-        from . import slots, triage
-        from .ingest import own_addresses
-        from .responder import owner_of
-        ask = triage.extract_ask({'body': job}, brain(store, fast=True))
-        # ...HIS OWN ASK OWES HIM NO EMAIL (a walk, 2026-11-18): "set it up for my press" was read as an email owed to the owner, and its
-        # agent drafted "please approve the note" to him - he is this ask's sender, and his press on the card is the approval
-        me = {'name': owner_of(store), 'address': min(own_addresses(store), default='')}
-        if ask.get('outputs'): slots.add(store, made['taskId'], ask['outputs'], actor, sender=me)
-    except Exception as e: logger.info(f"could not read what closes {made.get('ref')}: {e}")
 
 
 def _resolve_named(store, phrase: str, item: dict | None) -> str | None:

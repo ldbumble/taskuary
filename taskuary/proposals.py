@@ -983,6 +983,13 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
         from .store import task_ref
         p, miss = break_out(store, tid, p)
         if miss: raise RuntimeError(f'{miss} - nothing was moved')
+        # ...ONE JOB IS ONE TASK (samework, the owner's live app 2026-11-18): a part broken out that an open task already IS goes there - its
+        # messages and to-dos moved to it, its agent told - never a second task beside the first
+        from . import samework
+        if (same := samework.same_open_task(store, f"{p['title']}. {p.get('summary') or ''}", skip={int(tid)})):
+            reshape.move_part(store, tid, same, p['messages'], p['items'], actor)
+            samework.tell(store, same, f"Moved here from {task_ref(tid)}: {p['title']}" + (f" - {p['summary']}" if p.get('summary') else ''), actor)
+            return {'task': same, 'ref': task_ref(same), 'joined': True, 'said': f"{task_ref(same)} is already that work - moved there, its agent told: {p['title'][:120]}"}
         new = reshape.split_task(store, tid, {'title': p['title'], 'summary': str(p.get('summary') or ''), 'items': p['items']}, None, p['messages'], actor)
         out = {'task': new, 'ref': task_ref(new), 'said': f"{task_ref(new)} is the new task: {p['title'][:120]}"}
     elif a == 'save_routine':

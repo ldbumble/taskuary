@@ -60,21 +60,23 @@ def turn(s, line, call, sort, seen):
     def sorter(system, user, **kw):
         seen.append(json.loads(user)); return json.dumps(sort)
     reply = 'On it.\nCALL: ' + json.dumps(call)
-    with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(concierge, '_compose_llm', return_value=sorter):
+    with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(concierge, '_compose_llm', return_value=sorter),          mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch('taskuary.general.start_session'), mock.patch('taskuary.server.store', s):
         return concierge.say(s, line, llm=lambda *a, **k: reply)
 
 
 ROUTINE = {'kind': 'routine', 'recurs': {'schedule': None, 'objective': 'log into the billing portal and review my denials'},
            'title': 'Review denials', 'signs_in': 'billingportal.example'}
 
-def test_a_routine_asked_for_then_described_opens_new_routine_and_says_where_its_login_comes_from():
+def test_a_routine_asked_for_then_described_starts_its_agent_and_says_where_its_login_comes_from():
     s, seen = store(), []
     turn(s, 'Help me set up a new routine', {'kind': 'task.setup', 'params': {'text': 'set up a new routine'}},
          {'kind': 'routine', 'recurs': {'objective': 'a new routine'}}, [])
     out = turn(s, 'log into the billing portal and review my denials',
                {'kind': 'task.setup', 'params': {'text': 'log into the billing portal and review my denials'}}, ROUTINE, seen)
     assert 'set up a new routine' in seen[-1]['conversation_before'].lower()        # the sort read what came before
-    assert out['new']['kind'] == 'workflow' and 'review my denials' in out['new']['text'] and 'routine' in out['new']
+    # ...a routine is its agent's to set up (save_routine), on a task with his words - never New's routine form (the walks, 2026-11-18)
+    assert 'new' not in out and out['open'].startswith('#task=')
+    assert 'review my denials' in s.get_task(int(out['open'].split('=')[1]))['Summary']
     assert 'billingportal.example' in out['say'] and 'Saved sign-ins' in out['say'] and 'CALL' not in out['say']
     # a sign-in is sealed in the computer's keychain; CI's macOS and Linux have none, so an in-memory one stands in (as test_signin)
     import sys

@@ -113,8 +113,9 @@ class DeskTests(unittest.TestCase):
         self.assertEqual(out['open'], '#connector=outlook'); self.assertIn('switch it off', out['say'])
 
     def test_a_script_is_a_road_not_a_proposal(self):
-        out = self._turn('script.start', name='set up a report')
-        self.assertEqual(out['new']['kind'], 'report')
+        with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch('taskuary.general.start_session'):
+            out = self._turn('script.start', name='set up a report')
+        self.assertTrue(out['open'].startswith('#task='))           # ...a report is its agent's to set up (the walks, 2026-11-18)
         self.assertIsNone(self._turn('script.start', name='set up taskuary').get('proposal'))   # setup is the Setup button, no script
 
 

@@ -83,6 +83,7 @@ class SendToAgentTests(unittest.TestCase):
         # a general hand-off opens its chat session and sends the brief as the first turn (concierge.handoff_task) - no AI here, so a stand-in
         self.session = mock.patch('taskuary.general.start_session').start(); self.addCleanup(mock.patch.stopall)
         mock.patch('taskuary.funnel.next_item', return_value=MEETING).start()
+        mock.patch('taskuary.capabilities.has_ai', return_value=True).start()      # ...the one start refuses with no AI to run on
 
     def test_the_row_offers_prepare_and_send_to_agent(self):
         verbs = [b['verb'] for b in concierge.row_buttons(server.store, MEETING)]

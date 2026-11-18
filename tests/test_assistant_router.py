@@ -434,11 +434,12 @@ class DeskRoutes(unittest.TestCase):
         s = store()
         sorts = iter([{'kind': 'report', 'why': 'a check'}, {'kind': 'connection', 'provider': 'quickbooks', 'why': 'their books'}])
         with mock.patch.object(concierge, '_compose_llm', return_value=lambda *a, **k: json.dumps(next(sorts))):
-            out, _ = say(s, 'every Monday send me the overdue invoices', None, 'CALL: {"kind": "setup", "params": {"text": "every Monday send me the overdue invoices"}}')
-            self.assertEqual({k: out['new'][k] for k in ('kind', 'how', 'text')}, {'kind': 'report', 'how': '', 'text': 'every Monday send me the overdue invoices'})
+            with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch.object(general, 'start_session'):
+                out, _ = say(s, 'every Monday send me the overdue invoices', None, 'CALL: {"kind": "setup", "params": {"text": "every Monday send me the overdue invoices"}}')
+            self.assertNotIn('new', out); self.assertTrue(out['open'].startswith('#task='))          # ...a report is the agent's to set up
             out, _ = say(s, 'connect our books', None, 'CALL: {"kind": "setup", "params": {"text": "connect our books"}}')
             self.assertEqual(out['open'], '#connector=quickbooks&step=1')
-        self.assertNotIn('proposal', out); self.assertEqual(proposals(s), [])
+        self.assertNotIn('proposal', out)
 
     def test_a_system_with_no_card_is_said_so_and_offered_as_a_feature_request(self):
         # "connect me to Runway" opened #connector=None - Connections with nothing on it (TQ-1251); a card is Taskuary's to build, so the
@@ -456,36 +457,43 @@ class DeskRoutes(unittest.TestCase):
         self.assertIn('Runway', c['report']['happened']); self.assertEqual(proposals(s), [])
         self.assertEqual(chat_cards(s)[-1]['chips'], out['chips'], 'the button stays on the line')
 
-    def test_a_job_the_model_says_repeats_is_new_routine_filled_in_never_a_one_off(self):
-        # the owner, 2026-10-29: "every Monday at noon run the user management review skill" made a one-off agent task
-        s = store(); ask = 'every Monday at noon run the weekly review skill in northwind/ledger'; had = len(s.list_sources())
-        recurs = {'schedule': 'every Monday at noon', 'objective': 'run the weekly review', 'repo': 'northwind/ledger', 'skill': '/weekly-review'}
-        call = {'kind': 'task.create_from_text', 'params': {'kind': 'coding', 'text': ask, 'recurs': recurs}}
-        out, spawn = say(s, ask, None, 'CALL: ' + json.dumps(call))
-        self.assertEqual(out['new']['kind'], 'workflow')
-        # ...the repository and skill in the words, which are all Set up with AI carries to the builder (2026-11-02)
-        self.assertEqual(out['new']['text'], 'every Monday at noon - run the weekly review - in northwind/ledger, with the /weekly-review skill')
-        self.assertEqual(out['new']['routine'], {'coding': True, 'repo': 'northwind/ledger', 'skill': 'weekly-review'})
-        self.assertEqual(out['say'], 'Wrote it into New - Set up with AI there starts it.')
-        spawn.assert_not_called(); self.assertEqual(proposals(s), []); self.assertEqual(len(s.list_sources()), had)   # nothing saved
-        # ...the same verdict from the set-up sort
-        sort = {'kind': 'routine', 'why': 'it repeats', 'recurs': {'schedule': 'every weekday at 7', 'objective': 'review the failed imports'}}
-        with mock.patch.object(concierge, '_compose_llm', return_value=lambda *a, **k: json.dumps(sort)):
-            out, spawn = say(s, 'every weekday at 7 review the failed imports', None,
-                             'CALL: ' + json.dumps({'kind': 'setup', 'params': {'text': 'every weekday at 7 review the failed imports'}}))
-        self.assertEqual((out['new']['kind'], out['new']['text'], out['new']['routine']['coding']),
-                         ('workflow', 'every weekday at 7 - review the failed imports', False))
-        spawn.assert_not_called()
-        # ...and an ask with no `recurs` is the one-off it always was
-        with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch.object(general, 'start_session'):
-            out, _ = say(s, 'look into the failed import', None,
-                         'CALL: ' + json.dumps({'kind': 'task.create_from_text', 'params': {'kind': 'general', 'text': 'look into the failed import'}}))
-        self.assertNotIn('new', out); self.assertTrue(out['open'].startswith('#task='))
+    def test_a_job_that_repeats_is_an_agents_job_with_his_words_and_file_never_a_form(self):
+        # the walks, 2026-11-18: "send me the vendor spend summary every Monday" with a CSV attached came up as an empty SQL "New report"
+        # form under "Wrote it into New" - his words and his file gone. Every door hands them to the one start; the agent sets the routine up
+        s = store(); ask = 'Send me the vendor spend summary from this every Monday morning'
+        recurs = {'schedule': 'every Monday morning', 'objective': 'summarise vendor spend'}
+        for call in ({'kind': 'task.create_from_text', 'params': {'kind': 'routine', 'text': ask, 'recurs': recurs}},
+                     {'kind': 'task.create_from_text', 'params': {'kind': 'report', 'text': ask}}):
+            with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch.object(general, 'start_session') as began,                  mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(ingest, '_spawn'):
+                out = concierge.say(s, ask, llm=lambda *a, **k: 'CALL: ' + json.dumps(call), images=['uploads/october-spend.csv'])
+            self.assertNotIn('new', out, call); self.assertTrue(out.get('open', '').startswith('#task='), out)
+            t = s.get_task(int(out['open'].split('=')[1]))
+            self.assertEqual(general.split_files(t['Summary'])['text'].strip(), ask)
+            self.assertIn('october-spend.csv', t['Summary']); self.assertEqual(t['Kind'], 'general'); began.assert_called_once()
+            self.assertNotIn('Wrote it into New', out['say'])
+
+    def test_a_code_fix_with_developer_mode_off_is_a_general_agents_never_no_coding_tool(self):
+        # the walks, 2026-11-18: New refused "fix the rounding bug in <checkout>" with "No coding tool is connected ... Nothing was made" while
+        # Claude Code was connected - the block was Developer mode, and Send to agent on the same CI mail ran the fix as a general agent
+        s = store(); ask = 'Fix the rounding bug in the ledger totals, checkout at C:/work/ledger. Do not push.'
+        call = {'kind': 'task.create_from_text', 'params': {'kind': 'coding', 'text': ask}}
+        with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch('taskuary.agents.cli_ready', return_value=True),              mock.patch('taskuary.agents.developer_mode', return_value=False), mock.patch.object(general, 'start_session') as began:
+            out, spawn = say(s, ask, None, 'CALL: ' + json.dumps(call))
+        self.assertNotIn('No coding tool', out['say']); self.assertTrue(out['open'].startswith('#task='), out['say'])
+        self.assertEqual(s.get_task(int(out['open'].split('=')[1]))['Kind'], 'general'); began.assert_called_once()
+        # ...and in Developer mode with no command-line AI the one line names that, nothing made
+        had = len(s.list_tasks(None))
+        with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch('taskuary.capabilities.can_code', return_value=False):
+            out, _ = say(s, ask, None, 'CALL: ' + json.dumps(call))
+        self.assertIn('No command-line AI (Claude Code, Codex) is connected', out['say']); self.assertNotIn('open', out)
+        self.assertEqual(len(s.list_tasks(None)), had)
 
     def test_a_report_brought_up_by_name_carries_its_words(self):
         s = store()
-        out = concierge._route(s, 0, 'script.start', 0, {'name': 'report', 'text': 'list the AP bills due this month'}, '', {}, None, '', 'owner')
-        self.assertEqual((out['new']['kind'], out['new']['text']), ('report', 'list the AP bills due this month'))
+        with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch.object(general, 'start_session'):
+            out = concierge._route(s, 0, 'script.start', 0, {'name': 'report', 'text': 'list the AP bills due this month'}, '', {}, None, '', 'owner')
+        self.assertNotIn('new', out)
+        self.assertEqual(s.get_task(int(out['open'].split('=')[1]))['Summary'], 'list the AP bills due this month')
 
     def test_a_playbook_asked_for_is_new_playbook_never_an_agents_job(self):
         # the owner, 2026-10-22: "can I build a playbook for it?" opened New on Give an agent a job - "this is not playbook ui?"
@@ -496,7 +504,7 @@ class DeskRoutes(unittest.TestCase):
         with mock.patch.object(concierge, '_compose_llm', return_value=lambda *a, **k: json.dumps({'kind': 'playbook', 'why': 'a recurring ask'})):
             out, spawn = say(s, ask, None, json.dumps({'kind': 'setup', 'params': {'text': ask}}).join(('CALL: ', '')))
         self.assertEqual({k: out['new'][k] for k in ('kind', 'how', 'text')}, {'kind': 'playbook', 'how': '', 'text': ask})
-        self.assertEqual(out['say'], 'Wrote it into New - Set up with AI there starts it.')
+        self.assertEqual(out['say'], 'Opened New on a playbook with your words - Set up with AI there starts it.')
         spawn.assert_not_called(); self.assertEqual(proposals(s), [])
         # ...and a phone, which has no New, is told where a playbook is made - nothing is started from the line
         with concierge.delivering(concierge.PHONE), \

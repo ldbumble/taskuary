@@ -33,9 +33,8 @@ PURPOSE = {
                                  # "generate an image for me" was drawn by the chat's own brain and said "created", with nothing shown (TQ-1251)
                                  'MAKING something - a picture, a flyer, a document, a spreadsheet - is a job for a general agent: write it '
                                  'here, never make it in this chat yourself. '
-                                 'A job that REPEATS on a clock ("every Monday at noon run the review skill") is a routine, never a one-off: '
-                                 'add `recurs`: {schedule (when, in their words), objective (the job without the clock), repo (one they named, '
-                                 'else null), skill (a skill they named, else null)} - it brings up New → Routine filled in for their Save; '
+                                 # ...and a job on a clock or a report is the agent's to set up with its own tools (F1, the walks 2026-11-18)
+                                 'A job that REPEATS on a clock, or a report, is a job for a general agent too - it sets the routine up for their press; '
                                  'and a short `title` in '
                                  'your own words for the job (never "send it to the agent"). Never for a task that '
                                  'already exists (a TQ ref, or a row on THE RAIL BY NAME): starting an agent on one is '

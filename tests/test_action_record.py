@@ -332,6 +332,32 @@ class APartThatIsAnotherJob(Acts):
         self.assertEqual(general.owner_did(self.s, self.tid), [], 'its agent hears the press - once, by its card')
         self.assertIn(f": rv{rv['ReviewId']}, ", general.turn_facts(self.s, self.tid).split('- Done ')[1])
 
+    def test_a_part_an_open_task_already_is_goes_there_and_its_agent_is_told(self):
+        """The owner's live app, 2026-11-18: a chat had made a coding task for adding a daily rate to the bed boards; the next day an agent
+        on another task broke "the bed board" out into a brand-new coding task - two open tasks, one job. The model reads the open tasks
+        first (samework); the same work gets the part and its agent hears it - no second task."""
+        there = Factory(self.s).task('Add a daily rate to the bed boards', kind='coding')
+        self.ask = {**self.ask, 'title': 'Bed board daily rate', 'summary': 'Paula wants the daily rate column on the bed board.'}
+        rv, _ = self.queue()
+        seen, told = [], []
+        def llm(system, user, **k): seen.append(user); return json.dumps({'same_as': there})
+        had = len(self.s.list_tasks(None))
+        with mock.patch('taskuary.concierge.brain', return_value=llm),              mock.patch.object(general, 'take_line', lambda st, tid, text, files=None, actor='owner', **k: told.append((tid, text))):
+            out = verdicts.decide(self.s, rv, 'approve')
+        self.assertTrue(out['ok'], out)
+        self.assertEqual(len(self.s.list_tasks(None)), had, 'no second task')
+        self.assertIn('Add a daily rate to the bed boards', seen[0])                         # the model was shown the open task
+        self.assertEqual((out['result']['task'], [m['MessageId'] for m in self.s.list_messages(there)]), (there, [self.other]))
+        self.assertIn('b2', [i['id'] for i in self.s.task_checklist(there)])
+        self.assertEqual([t for t, _ in told], [there]); self.assertIn('Bed board daily rate', told[0][1])
+
+    def test_a_part_the_model_reads_as_other_work_is_a_task_of_its_own(self):
+        Factory(self.s).task('Add a daily rate to the bed boards', kind='coding')
+        rv, _ = self.queue()
+        with mock.patch('taskuary.concierge.brain', return_value=lambda *a, **k: json.dumps({'same_as': None})):
+            out = verdicts.decide(self.s, rv, 'approve')
+        self.assertEqual(self.s.get_task(out['result']['task'])['Title'], 'Renew the parking permits')
+
     def test_what_is_not_on_the_task_is_refused_with_the_way_on(self):
         for kw, said in (({'messages': ['m99999'], 'items': []}, 'not on this task'), ({'messages': [], 'items': []}, 'needs what goes'),
                          ({'messages': [self.fix, self.other]}, 'every message'), ({'title': ''}, 'needs title')):

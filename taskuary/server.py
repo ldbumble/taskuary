@@ -29,7 +29,7 @@ from . import policy as policy_engine
 from . import reshape
 from . import terminal as hub_term
 from .wrapup import PAUSE_MARKER, REPORTS, pause_note, reply_target, wrap as end_task
-from . import aisetup, assistant, demo, deps, learn, learnedgraph, memorylines, operations, outbound, playbooks, rank, responder, signatures, waitroom
+from . import aisetup, assistant, demo, deps, learn, learnedgraph, memorylines, operations, outbound, playbooks, rank, responder, samework, signatures, waitroom
 from . import live as live_bus
 from . import processing_all
 
@@ -1220,18 +1220,24 @@ def _rail_tids() -> set:
     except Exception as e:
         logger.warning(f'tasks: the rail could not be read for OnWorkToday: {e}'); return set()
 
-def _read_hand_task(tid: int, text: str, goal: bool = False):
+def _read_hand_task(tid: int, text: str, goal: bool = False, store=None):
     """A task typed into + New skips triage, so it had no checklist - one block of words with no boxes (the owner, 2026-10-09:
     "when i create task the task list looks weird?? (no checkboxes?)"). The same reading a promoted message gets
     (triage.extract_ask), off the request: each distinct thing asked becomes a box, an email it asks for becomes one of the
     task's emails. The owner's own words stay the summary. A brain that fails leaves the task as typed. A goal's boxes are
     its steps (plan_goal)."""
     if goal: return plan_goal(tid, text)
+    store = store or globals()['store']          # ...the one start (concierge.handoff_task) reads its task in the store it made it in
     try:
         from . import concierge, slots, triage
+        from .ingest import own_addresses
+        from .responder import owner_of
         ask = triage.extract_ask({'body': text}, concierge.brain(store, fast=True))
         if ask.get('checklist') and not store.task_checklist(tid): store.set_task_checklist(tid, ask['checklist'], 'triage')
-        if ask.get('outputs'): slots.add(store, tid, ask['outputs'], 'triage')
+        # ...HIS OWN ASK OWES HIM NO EMAIL (a walk, 2026-11-18): "set it up for my press" was read as an email owed to the owner, and its
+        # agent drafted "please approve the note" to him - he is this ask's sender, and his press on the card is the approval
+        me = {'name': owner_of(store), 'address': min(own_addresses(store), default='')}
+        if ask.get('outputs'): slots.add(store, tid, ask['outputs'], 'triage', sender=me)
     except Exception as e: logger.info(f'could not read the checklist of {task_ref(tid)}: {e}')
 
 
@@ -1272,6 +1278,24 @@ def create_task(body: TaskBody):
     selfclose.claim(store, tid, ACTOR)
     store.audit('task', tid, 'create', ACTOR)
     return {'taskId': tid, 'ref': task_ref(tid)}
+
+
+class StartBody(BaseModel):
+    text: str = ''
+    images: list[str] = []           # ...the files on his box: saved uploads only (prompt_images)
+
+@app.post('/api/start')
+def start_from_words(body: StartBody):
+    """NEW'S BOX IS THE ONE START (F1, the walks 2026-11-18): his words and files, as typed, to the one start (concierge.handoff_task) - the
+    task made and its agent at work. Its answer went through the Assistant's model, which picked a form: "send me this every Monday" with a
+    CSV landed on an empty SQL report, and a code fix was refused "No coding tool is connected" behind Developer mode. The agent does the
+    kind with its tools; a start that cannot happen is the 422 every start door answers, with its way past it (StartRefused)."""
+    from . import concierge, general
+    words = str(body.text or '').strip()
+    if not words: raise HTTPException(422, 'say what the agent should do')
+    try: made = concierge.handoff_task(store, words, 'general', ACTOR, said=general.with_files(words, prompt_images(body.images)), door='New')
+    except ValueError as e: _start_refused(None, None, e)
+    return {'taskId': made['taskId'], 'ref': made['ref'], 'started': bool(made.get('started')), 'joined': bool(made.get('joined'))}
 
 
 @app.post('/api/assistant/dock')
@@ -6005,6 +6029,12 @@ def agent_new_task(body: AgentNewTaskBody, request: Request):
         if new and (general.history(store, new) or general.starting(new) or getattr(hub_term.session_for(new), 'alive', False)):
             return {'ok': True, 'task': task_ref(new), 'title': title, 'already': True, 'started': True,
                     'next': f'{task_ref(new)} was already started from here and is working on it - nothing new was made'}
+        # ...AND THE SAME WORK ALREADY OPEN ELSEWHERE IS THAT TASK (samework, the owner's live app 2026-11-18): its agent hears the ask there
+        if not new and (same := samework.same_open_task(store, f'{title}. {ask}', skip={body.task_id})):
+            samework.tell(store, same, f'From {task_ref(body.task_id)}: {ask}', ACTOR)
+            store.add_comment(body.task_id, body.agent, 'agent', f'Handed to {task_ref(same)}, which is already that work: {title}')
+            return {'ok': True, 'task': task_ref(same), 'title': title, 'already': True, 'started': True,
+                    'next': f'{task_ref(same)} is already that same work - its agent was told; nothing new was made. Say so in one line'}
         made = not new
         if made:
             # ...the owner's ask, made at the door they asked from - the task they spoke on's ("agent" is no door: the Assistant named it one)

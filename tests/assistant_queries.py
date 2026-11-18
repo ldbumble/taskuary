@@ -221,7 +221,8 @@ CASES = [
     Q('reports', 'run the end of day report', None, c('report.run', title='End of day checkup'), 'open:#report=', freq=4),
     Q('reports', 'run the AP ageing again', 'report', c('rerun'), 'open:#report=', freq=3),
     Q('reports', 'pause the headcount report', None, c('report.pause', title='Headcount by site'), 'open:#report=', freq=2),
-    Q('reports', 'every monday send me the overdue invoices', None, c('setup', text='every monday send me the overdue invoices'), 'new:report', sort={'kind': 'report'}, freq=3),
+    # ...a report or a routine asked for is its agent's job, started with his words (F1, the walks 2026-11-18) - never New's form
+    Q('reports', 'every monday send me the overdue invoices', None, c('setup', text='every monday send me the overdue invoices'), 'did:task.create_from_text', sort={'kind': 'report'}, freq=3),
     Q('reports', 'what did the helpdesk report say?', None, [c('report.read', title='Helpdesk tickets'), 'Fourteen rows.'], 'read:report.read', freq=3),
     Q('reports', 'list my reports', None, [c('reports.list'), 'Five reports.'], 'read:reports.list', freq=2),
     Q('reports', 'delete the headcount report', None, c('report.delete', title='Headcount by site'), 'open:#report=', freq=1),
@@ -423,9 +424,9 @@ POWERS = [
     # ── new things: a meeting, a dashboard, a routine ──
     Q('new', 'set up a meeting with Gail about the budget on friday', None, c('meeting.new', who=['Gail Moreno'], about='the budget', when='friday'),
       'go:#connector', freq=3, note='no calendar in the demo world: the card that connects one, as a button under the line'),
-    Q('new', 'make me a dashboard of open tasks by person', None, c('setup', text='a dashboard of open tasks by person'), 'new:report',
+    Q('new', 'make me a dashboard of open tasks by person', None, c('setup', text='a dashboard of open tasks by person'), 'did:task.create_from_text',
       sort={'kind': 'report'}, freq=2),
-    Q('new', 'walk me through setting up a report', None, c('script.start', name='set up a report'), 'new:report', freq=2),
+    Q('new', 'walk me through setting up a report', None, c('script.start', name='set up a report'), 'did:task.create_from_text', freq=2),
     # ── people and the routing they teach ──
     Q('people', 'Erin is my manager', None, c('people.relate', who='Erin Blake', relation='manager'), 'did:people.relate', freq=3),
     Q('people', 'Ray owns payroll', None, c('people.relate', who='Ray Colton', owns='payroll'), 'did:people.relate', freq=3),
@@ -715,7 +716,7 @@ AREA_CONNECTIONS = [
     # ── data cards feed reports, never the rail ──
     Q('connections', 'will quickbooks put bills on my task list?', None, [c('docs.search', section='help/connections > Data and report sources'),
       'No - a data card feeds reports, dashboards and agent look-ups; it never puts work on your list.'], 'read:docs.search', freq=2),
-    Q('connections', 'make a report of my quickbooks bills over 30 days', None, c('setup', text='a report of QuickBooks bills over 30 days'), 'new:report',
+    Q('connections', 'make a report of my quickbooks bills over 30 days', None, c('setup', text='a report of QuickBooks bills over 30 days'), 'did:task.create_from_text',
       sort={'kind': 'report'}, freq=3),
     # ── the AI brains and voice ──
     Q('connections', 'set up claude as my ai', None, c('connection.create', type='anthropic'), 'open:#connector=anthropic&step=1', freq=3),
@@ -805,7 +806,7 @@ AREA_REPORTS = [
     Q('reports', 'fix the failed step', None, [v(op='point', target='Repair the failed step')], 'view:point:repair', tools=('words',), view=ROUTINEPAGE, freq=2),
     Q('reports', 'every weekday at 9 run the month-end skill', None,
       c('task.create_from_text', kind='general', text='run the month-end skill', title='Month-end skill',
-        recurs={'schedule': 'every weekday at 9', 'objective': 'run the month-end skill', 'repo': None, 'skill': 'month-end'}), 'new:workflow', freq=3,
+        recurs={'schedule': 'every weekday at 9', 'objective': 'run the month-end skill', 'repo': None, 'skill': 'month-end'}), 'did:task.create_from_text', freq=3,
       note='a job on a clock is a routine: New → Routine, filled in for its Save'),
     Q('reports', 'where is the file the routine made?', None, [c('outputs.find', query='routine'), 'No agent has made a file yet.'], 'read:outputs.find', freq=2),
     # ── the rest: what was removed, a report's trouble, and work that is an agent's ──
@@ -1004,8 +1005,8 @@ AREA_NEW = [
       note='a typo: the model reads it'),
     Q('new', 'every friday at 4 summarise the open AP into a task', None,
       c('task.create_from_text', kind='general', text='summarise the open AP', recurs={'schedule': 'every friday at 4', 'objective': 'summarise the open AP'}),
-      'new:workflow', freq=3),
-    Q('new', 'set up a report of AP over 30 days', None, c('setup', text='a report of AP over 30 days'), 'new:report', sort={'kind': 'report'}, freq=3),
+      'did:task.create_from_text', freq=3),
+    Q('new', 'set up a report of AP over 30 days', None, c('setup', text='a report of AP over 30 days'), 'did:task.create_from_text', sort={'kind': 'report'}, freq=3),
     Q('new', 'make me a playbook for leave balance requests', None, c('setup', text='a playbook for leave balance requests'), 'new:playbook',
       sort={'kind': 'playbook'}, freq=2),
 ]
@@ -1350,7 +1351,7 @@ def _guards(stack, sort=None, live=None, agenda=None):
     stack.enter_context(mock.patch.object(general, 'start_session', return_value=mock.Mock()))
     # ...and the AI and coding tool a job is started on count as there (concierge._made_now), and a message is drafted by a stand-in
     from taskuary import outbox
-    stack.enter_context(mock.patch.object(concierge, 'no_start', lambda store, kind: ''))
+    stack.enter_context(mock.patch.object(concierge, 'start_refusal', lambda store, kind: ''))
     stack.enter_context(mock.patch.object(outbox, 'draft_message', lambda *a, **k: 'Drafted by the stand-in.'))
     def never(*a, **k): raise AssertionError('a real model was asked for')
     stack.enter_context(mock.patch.object(llm_mod, 'make_cli_llm', never))

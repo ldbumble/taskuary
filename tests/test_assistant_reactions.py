@@ -534,7 +534,8 @@ class ResponseTests(unittest.TestCase):
         p = decide(s, 'look into why the bulk approve fix did not stick', 'coder', text_arg='look into why the bulk approve fix did not stick')['proposal']
         self.assertEqual((p['kind'], p['params']['kind'], p['label']), ('task.create_from_text', 'coding', buttons.label('coding_agent')))
         self.assertEqual(s.list_tasks(active_only=True), [])           # no task on the words
-        with mock.patch.object(ingest, '_spawn') as spawn:
+        s.set_setting('developer_mode', '1', 'test')          # ...a coding job is a coding agent's in Developer mode (else a general agent's)
+        with mock.patch.object(ingest, '_spawn') as spawn, mock.patch('taskuary.capabilities.has_ai', return_value=True),              mock.patch('taskuary.capabilities.can_code', return_value=True):
             r = run(s, p)
         t = s.get_task(r.json()['outcome']['taskId'])
         self.assertEqual(t['Kind'], 'coding'); self.assertTrue(spawn.called)
@@ -1412,7 +1413,9 @@ class WhichCheckoutTests(unittest.TestCase):
         self.assertIn(prop['label'], prop['say'])                       # a phone chat, with no card, gets it all
         self.assertNotIn(prop['label'], prop['say_card'])
         self.assertNotIn('login crash', prop['say_card'])
-        made = concierge.handoff_task(s, brief, 'coding', 'owner', title='Fan app login crash', repo=prop['params']['repo'])
+        s.set_setting('developer_mode', '1', 'test')
+        with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch('taskuary.capabilities.can_code', return_value=True),              mock.patch.object(ingest, '_spawn'):
+            made = concierge.handoff_task(s, brief, 'coding', 'owner', title='Fan app login crash', repo=prop['params']['repo'])
         self.assertEqual(terminal.guess_repo(s, made['taskId'], self.PROFILE)[0], 'northwind/ledger')
 
     def test_the_phone_sentence_carries_the_whole_ask_the_card_line_may_cut(self):

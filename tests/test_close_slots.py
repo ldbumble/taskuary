@@ -16,7 +16,9 @@ FOUR = [{'to': 'paula@northwind.example', 'about': 'where tab 1 stands'}, {'to':
 
 @pytest.fixture
 def s():
-    v = MemoryStore(); yield v; v.close()
+    # ...an AI to start on: the one start (concierge.handoff_task) refuses before it makes anything without one
+    with mock.patch('taskuary.capabilities.has_ai', return_value=True):
+        v = MemoryStore(); yield v; v.close()
 
 
 def typed(s, outputs=FOUR):
@@ -393,7 +395,8 @@ def test_a_task_the_assistant_starts_is_his_sentence_as_typed_and_its_polished_a
 def test_a_coding_hand_off_and_a_walk_through_keep_his_words_as_his_and_file_the_rewording_as_taskuarys(s):
     from taskuary import brief, general
     his, polished = 'fix the export thing erin hit', 'Fix the CSV export crash Erin Blake reported. Add a test that reproduces it.'
-    with mock.patch('taskuary.ingest._spawn'), mock.patch('taskuary.concierge._handoff_title', return_value='Export crash'):
+    s.set_setting('developer_mode', '1', 'test')              # ...a coding hand-off is a coding agent's only in Developer mode
+    with mock.patch('taskuary.ingest._spawn'), mock.patch('taskuary.concierge._handoff_title', return_value='Export crash'),          mock.patch('taskuary.capabilities.can_code', return_value=True):
         coding = concierge.handoff_task(s, polished, kind='coding', said=his)['taskId']
     walk = concierge.setup_task(s, polished, said=his)['taskId']
     for tid in (coding, walk):
@@ -402,6 +405,19 @@ def test_a_coding_hand_off_and_a_walk_through_keep_his_words_as_his_and_file_the
     assert 'Add a test' in brief.handoff(s, coding)                 # the coding agent reads it as Taskuary's (terminal seed)
     briefs = [c for c in s.list_comments(walk, internal=True) if general.is_brief(c)]
     assert [c['Body'] for c in briefs] == [polished]                # the walk hears it as Taskuary's turn
+
+
+def test_a_start_the_model_reads_as_open_work_goes_to_that_tasks_agent_never_a_second_task(s):
+    """One job is one task at every door (the owner's live app, 2026-11-18): the open tasks go to the model before a task is made, and the
+    same work hears his line on its own task."""
+    from taskuary import general
+    there = s.create_task({'Title': 'Find two venues for the offsite', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    told, had = [], len(s.list_tasks(None))
+    def llm(system, user, **k): return json.dumps({'same_as': there} if 'OPEN TASKS' in user else {'summary': 's', 'checklist': [], 'outputs': []})
+    with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch('taskuary.concierge.brain', return_value=llm),          mock.patch.object(general, 'take_line', lambda st, tid, text, files=None, actor='owner', **k: told.append((tid, text))),          mock.patch('taskuary.general.start_session') as began:
+        made = concierge.handoff_task(s, 'Find venues for the 40-person offsite too', kind='general')
+    assert (made['taskId'], made.get('joined')) == (there, True) and len(s.list_tasks(None)) == had and not began.called
+    assert told == [(there, 'Find venues for the 40-person offsite too')]
 
 
 def test_a_handoff_whose_brain_fails_is_made_anyway(s):

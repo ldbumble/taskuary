@@ -140,10 +140,10 @@ class EverydayAsks(unittest.TestCase):
         from taskuary import capabilities
         drawn = {'send': 'Draft it', 'note': 'Note it',
                  'goal': 'Plan it' if capabilities.has_ai(Q._world()) else 'Track it',
-                 **{k: 'Set up with AI' for k in ('report', 'dashboard', 'workflow', 'playbook')}}
+                 **{k: 'Set up with AI' for k in ('dashboard', 'playbook')}}
         for r in (r for r in self.rows if r['q'].cat == 'new' and r['q'].expect.startswith('new:')):
             with self.subTest(ask=r['q'].text):
-                self.assertEqual(r['ideal']['say'], f"Wrote it into New - {drawn[r['q'].expect[4:]]} there starts it.")
+                self.assertEqual(r['ideal']['say'], f"Opened {concierge.OPENED.get(r['q'].expect[4:], 'New')} with your words - {drawn[r['q'].expect[4:]]} there {'keeps' if r['q'].expect == 'new:note' else 'starts'} it.")
 
     def test_a_message_on_whatsapp_comes_up_on_whatsapp_to_the_group_named(self):
         # the owner, 2026-11-02: "write to the team WhatsApp group that ..." opened Send something on email with To empty - now drafted on a

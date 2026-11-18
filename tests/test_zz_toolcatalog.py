@@ -375,8 +375,10 @@ class ReadsTests(unittest.TestCase):
         self.assertFalse(prop.get('auto'))
         self.assertEqual(set(prop['repo_choices']), {'northwind/ledger', 'northwind/portal'})
         picked = operations.revise(s, prop['id'], {**prop['params'], 'repo': 'northwind/portal'}, 'owner')
-        made = concierge.handoff_task(s, picked['params']['text'], 'coding', 'owner', title=picked['params']['title'],
-                                      repo=picked['params']['repo'])
+        s.set_setting('developer_mode', '1', 'test')
+        with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch('taskuary.capabilities.can_code', return_value=True),              mock.patch('taskuary.ingest._spawn'):
+            made = concierge.handoff_task(s, picked['params']['text'], 'coding', 'owner', title=picked['params']['title'],
+                                          repo=picked['params']['repo'])
         prof = {'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/ledger', 'northwind/portal': 'C:/x/portal'}}
         self.assertEqual(terminal.guess_repo(s, made['taskId'], prof)[0], 'northwind/portal')
 

@@ -570,6 +570,20 @@ class TheDemoOpensOnItsTourTests(unittest.TestCase):
         for b in ('Next', 'Back', 'Send', 'Remind me', 'Not for me'): self.assertIn(b, labels)
         self.assertIn("What's on me right now?", [ask for _, ask, _ in demo.PROMPTS], 'the chat answers the question the tour asks')
 
+    def test_the_tour_says_what_ticking_its_last_step_does(self):
+        """The walk, 2026-11-18: the tour said "ticking the last one closes this task"; every step ticked through the checklist's own road
+        (task.check), and the task stayed open on the rail, Mark done lit - the last tick closes nothing (slots.py, 2026-10-18). What it
+        says is what a tick does."""
+        from taskuary import concierge
+        s, _ = self.seeded()
+        tour = next(t for t in s.list_tasks() if t['Title'] == demo.TOUR)
+        for n in range(len(s.task_checklist(tour['TaskId'])), 0, -1):
+            concierge._task_writes(s, tour['TaskId'], 'task.check', tour['TaskId'], {'item': str(n), 'done': True}, 'it', 'owner')
+        self.assertTrue(all(i.get('done') for i in s.task_checklist(tour['TaskId'])))
+        still_open = s.get_task(tour['TaskId'])['Status'] not in ('done', 'dropped')
+        self.assertEqual(still_open, 'Mark done' in demo.TOUR_BODY, demo.TOUR_BODY)
+        if still_open: self.assertNotIn('closes this task', demo.TOUR_BODY)
+
     def test_a_step_that_shows_an_agents_turns_names_a_task_that_has_them(self):
         """The first step sent the visitor to "Month-end close is short by 4,180" to see "Agent is one chat - its turns and what it set
         up": that task has no agent and its chat is the one email. The turns are on the reconciliation's task. And "the draft under Next

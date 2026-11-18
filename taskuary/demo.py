@@ -1247,8 +1247,8 @@ def seed_agent_day(store, f) -> int:
 # keeps the number the tests and the static demo know it by.
 TOUR = 'Start here - what Taskuary can do'
 TOUR_BODY = ('Welcome to the demo. Northwind, its people and their mail are invented, and nothing you press here reaches anyone. '
-             'The to-do on this task is a short tour - each step is something you can try in the demo. Tick a step as you go; '
-             'ticking the last one closes this task.')
+             'The to-do on this task is a short tour - each step is something you can try in the demo. Tick a step as you go, '
+             'and press Mark done when you are through.')
 TOUR_STEPS = (                           # in the order they are read: the to-do draws newest first, so they are stored the other way round
     'Open "Reconcile the August GL export": Came from is what arrived, Agent is one chat - its turns and what it set up for you',
     'See what an agent sets up for one press: open "Fairhaven safety milestone" - a LinkedIn post with its chart, waiting on Post to LinkedIn',

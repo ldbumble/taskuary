@@ -20,7 +20,7 @@ from .store import task_ref
 
 TAIL_LINES = 6
 WATCH_EVERY = 10          # seconds between looks - delivery lands within IDLE_WAITING + this of the agent parking
-MAX_BATCH = 6000          # chars typed in one go; a TUI paste past this is asking for dropped frames
+MAX_BATCH = 6000          # how much of Taskuary's own notes one hand-over carries (together); the owner's words are never cut to it
 
 
 # A NOTE THE ASSISTANT PASSED ON keeps the owner's own words and what the Assistant added, apart (general.relayed): one row, so the drip
@@ -59,7 +59,7 @@ def batch(notes: list, after_restart: bool = False, remaining: int = 0, waited: 
     once = ends[0] if len(ends) > 1 and ends[0] and len(set(ends)) == 1 else ''
     cut = lambda x: str(x.get('Note') or '')[:-len(once)] if once and x.get('CreatedBy') == 'router' else x.get('Note')
     each = ' '.join(f'({i}) {said(cut(x))}' for i, x in enumerate(notes, 1))
-    return ' '.join((head + ' ' + each + (f' FOR EACH MESSAGE ABOVE: {once}' if once else '') + tail).split())[:MAX_BATCH]
+    return ' '.join((head + ' ' + each + (f' FOR EACH MESSAGE ABOVE: {once}' if once else '') + tail).split())
 def together(lines: list, waiting: list) -> list:
     """What one hand-over takes of the waiting room, behind the owner's typed `lines`. WHAT TASKUARY ITSELF TELLS THE AGENT GOES IN TOGETHER
     (the owner, 2026-11-11: a flood is one hand-over): each message that came in and each press, as many as one message holds whole

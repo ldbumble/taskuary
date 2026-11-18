@@ -448,6 +448,17 @@ class DripTests(unittest.TestCase):
             self.assertEqual(len(waitroom.together([{'Note': 'and the tax line?', 'CreatedBy': 'owner', 'line': 7}], big)), len(fit))      # ...behind a line he typed, too
             self.assertTrue(0 < len(fit) < 9); self.assertLessEqual(len(waitroom.batch(fit, remaining=9 - len(fit))), waitroom.MAX_BATCH - 1)
 
+    def test_a_long_line_with_a_file_reaches_the_agent_whole(self):
+        """He pastes a long log into a coding task's line and attaches a screenshot: the batch was cut at MAX_BATCH, so the file block at
+        its end - the path the agent Reads - and the end of his words never reached the session. Nothing he typed is cut (together()
+        already holds Taskuary's own notes to one message's worth; a pane types any length in frame-sized bites)."""
+        from taskuary import general
+        log = ' '.join(f'line {i}: export row skipped' for i in range(400))
+        note = {'WId': None, 'line': 'l1', 'CreatedBy': 'owner', 'Note': general.with_files(log + ' - why?', ['/w/outputs/TQ-0001/header.png'])}
+        said = waitroom.batch([note], waited=False)
+        self.assertGreater(len(log), waitroom.MAX_BATCH)
+        self.assertIn('export row skipped - why?', said); self.assertIn('/w/outputs/TQ-0001/header.png', said)
+
     def test_split_many_strips_bullets_and_joins_continuations(self):
         self.assertEqual(waitroom.split_many('• one\n* two\n3. three\n  still three\n\nfour'), ['one', 'two', 'three still three', 'four'])
         self.assertEqual(waitroom.split_many('  \n'), [])

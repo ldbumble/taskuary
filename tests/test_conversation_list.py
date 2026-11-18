@@ -731,6 +731,19 @@ class TheList(unittest.TestCase):
             got = self.list()
         self.assertIn(f'm:{mid}', [x['id'] for x in got['items']]); self.assertEqual(got['pending'], [])
 
+    def test_his_close_drawn_never_goes_back_by_the_box_when_the_turn_a_reopening_mail_starts_begins(self):
+        """A stress round, 2026-11-18: Mark done drew "You marked it done"; a question that came in a beat later reopened the task and handed it
+        to the agent, and while that turn was starting the close left the canvas for the waiting room, coming back above the mail once the turn
+        was at work - a jump. A press drawn once stays, as a drawn mail does."""
+        from taskuary import concierge
+        self.say('Suggest two.'); self.rest()
+        self.assertTrue(concierge.close_task(self.s, self.tid, 'owner'))
+        shut = next(x['id'] for x in self.list()['items'] if x.get('closes'))
+        at = conversation.ep(self.s._one("SELECT CreatedAt FROM audit WHERE Id=?", (int(shut[2:]),))['CreatedAt'])
+        with mock.patch.object(general, 'working', return_value=True), mock.patch.object(general, 'turn_started', return_value=at + 0.5):
+            got = self.list()
+        self.assertIn(shut, [x['id'] for x in got['items']]); self.assertEqual(got['pending'], [])
+
     def test_what_was_drawn_keeps_its_place_through_any_read(self):
         """The chat only grows at its foot (`shown`): an item's place is the one it was first served in - an answer filed late for a turn
         whose next input was already drawn stands under that input, never above it, and every later read gives the same order."""

@@ -605,7 +605,9 @@ def _items(store, tid: int) -> dict:
         it = {'id': f'p:{aid}', 'kind': 'press' if m.get('press') else 'note', 'at': m['createdAt'], 'text': text, **({'closes': True} if closes else {}),
               **({'perm': m['perm']} if m.get('perm') else {}),
               **({'stop': True, '_hs': bool(h)} if text == stop else {})}
-        if not h and at_work and ep(m['createdAt']) + 1 > began and m.get('press') and text != stop: pend.append(it)
+        # ...and one the chat has drawn never goes back by the box, as a drawn mail does not (a stress round, 2026-11-18: his Mark done, drawn,
+        # left the canvas while the turn a reopening mail began was starting, and came back above that mail once it was at work)
+        if not h and it['id'] not in was_shown and at_work and ep(m['createdAt']) + 1 > began and m.get('press') and text != stop: pend.append(it)
         # ...A PRESS NOBODY HEARD YET STANDS AFTER ALL OF ITS OWN SECOND - its stamp is no finer: a stop pressed in the second its turn's line was
         # heard sorted above that line, and the stop's mark fell on the answer before it (a same-second tie, seen as a flash and a red test)
         else: put(h['At'] if h else ep(m['createdAt']) + 0.999, 0 if h else -1, it, h['HId'] if h else 0)

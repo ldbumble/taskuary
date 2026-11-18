@@ -5907,7 +5907,7 @@ def agent_new_task(body: AgentNewTaskBody, request: Request):
     # and started only if its first start never went
     with _NEW_TASK_LOCK:
         new = _made_from(body.task_id, title)
-        if new and (general.history(store, new) or general.session_for(new)):
+        if new and (general.history(store, new) or general.starting(new) or getattr(hub_term.session_for(new), 'alive', False)):
             return {'ok': True, 'task': task_ref(new), 'title': title, 'already': True, 'started': True,
                     'next': f'{task_ref(new)} was already started from here and is working on it - nothing new was made'}
         if not new:

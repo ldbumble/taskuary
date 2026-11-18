@@ -379,6 +379,16 @@ class NewTaskTool(unittest.TestCase):
         self.assertEqual(json.loads(one)['task'], json.loads(two)['task'])
         self.assertEqual(sum('Started TQ-' in str(c.get('Body')) for c in self.s.list_comments(self.tid, internal=True)), 1)
 
+    def test_a_coding_job_whose_session_is_up_is_not_started_twice(self):
+        "...a coding job's CLI session keeps no general chat history: its live session is what says the first start went."
+        from types import SimpleNamespace
+        with mock.patch.object(server, 'dispatch_task', return_value={'started': True}) as go:
+            one, _ = tool(self.tid, 'new_task', title='Bed board', ask='Build it.')
+            with mock.patch.object(server.hub_term, 'session_for', return_value=SimpleNamespace(alive=True)):
+                two, _ = tool(self.tid, 'new_task', title='Bed board', ask='Build it.')
+        self.assertEqual(go.call_count, 1)
+        self.assertTrue(json.loads(two)['already'])
+
     def test_a_job_made_but_not_started_is_started_on_the_second_ask(self):
         "...and where the first start was refused (no AI yet), the second call starts that same task - never a second one beside it."
         with mock.patch.object(server, 'dispatch_task', side_effect=server.HTTPException(422, 'no AI')):

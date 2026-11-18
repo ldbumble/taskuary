@@ -801,17 +801,16 @@ def reply_envelope(store, msg: dict, mode: str = 'reply_all'):
     except (TypeError, ValueError): meta = {}
     own = {str(msg.get('SourceName') or '').lower()} | {a.lower() for a in owner_addresses(store)} | {a.lower() for a in own_addresses(store)}
     own.discard('')
-    sender = str(meta.get('reply_to') or msg.get('FromEmail') or '').strip().lower()
     def clean(seq, skip):
         out = []
         for a in seq or []:
             a = str(a or '').strip().lower()
             if a and '@' in a and a not in own and a not in skip and a not in out: out.append(a)
         return out
-    # ...and when the newest line is the owner's OWN mail, the answer goes on to whom they wrote - never back to themselves:
-    # the sender was the one address this never checked against the mailbox's own (2026-10-06)
-    if sender in own: sender = ''
-    to = [sender] if sender else clean(rec.get('to'), set())[:1]
+    # the sender, or where they asked to be answered (Reply-To - the pollers keep it as a list) - and when the newest line is the owner's
+    # OWN mail, the answer goes on to whom they wrote, never back to themselves (2026-10-06)
+    rt = meta.get('reply_to')
+    to = clean([rt] if isinstance(rt, str) else rt, set()) or clean([msg.get('FromEmail')], set()) or clean(rec.get('to'), set())[:1]
     if mode == 'reply_all':
         to += clean(rec.get('to'), set(to))
         cc = clean(rec.get('cc'), set(to))

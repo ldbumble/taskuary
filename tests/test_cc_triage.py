@@ -158,6 +158,23 @@ class RecipientsOffTheWireTests(unittest.TestCase):
         row = s.feed(limit=5)[0]
         self.assertEqual((row['MsgStatus'], row['TaskId']), ('filed', None))
 
+    def test_graph_keeps_where_the_sender_asked_to_be_answered(self):
+        "Reply-To, off the wire and onto the row the reply's envelope reads - it was never requested, so the answer went to the From."
+        from taskuary import outbound
+        s = MemoryStore()
+        cid = s.get_connector_by_type('outlook')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Secret': 'tok', 'Active': 1, 'ConfigJson': '{"tenant_id": "t", "client_id": "c"}'}, 't')
+        s.save_source({'Channel': 'email', 'Address': ME, 'ConnectorId': cid, 'Active': 1}, 't')
+        self.assertIn('replyTo', channels.MAIL_LIST_SELECT.split(','))
+        mail = {**_mail([ME], []), 'replyTo': [{'emailAddress': {'name': 'Dana', 'address': 'dana.r@vendor-mail.example'}}]}
+        with mock.patch.object(channels, 'graph_token', return_value='tok'), \
+             mock.patch.object(channels, '_mail_msgs', side_effect=lambda t, u, since, folder='inbox': [] if folder == 'sentitems' else [mail]), \
+             mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: '{}'), \
+             mock.patch('taskuary.ingest.classify_intent', lambda msg, **kw: {'intent': 'fyi', 'why': 'a note'}):
+            channels.poll_channels(s)
+        row = s._one("SELECT * FROM message WHERE Channel='email'")
+        self.assertEqual(outbound.reply_envelope(s, row)['to'], ['dana.r@vendor-mail.example'])
+
     def test_a_silent_cc_reaches_the_classifier_rather_than_being_settled_for_free(self):
         """The cheap answer was to file it by keyword. The right answer is to let the model read
         it with the signal in hand, because some of that mail is the owner's."""

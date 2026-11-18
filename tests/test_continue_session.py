@@ -104,6 +104,23 @@ class OneRoadTests(unittest.TestCase):
             TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={})
         fresh.assert_called_once()
 
+    def test_a_coding_continue_with_only_a_picture_hands_the_picture_over(self):
+        """Continue on a coding task with a screenshot and no words: the coding branch never looked at the pictures, so the session
+        reopened on the resume prompt alone and what he attached was lost. It is a line like any other (take_line), its file the task's."""
+        from taskuary import config, general, ingest, outputs, terminal
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open'}, 'o')
+        shot = config.home() / 'attachments' / 'prompt' / '202611' / '20261118-101500-abc123-broken-header.png'
+        shot.parent.mkdir(parents=True, exist_ok=True); shot.write_bytes(b'\x89PNG-shot')
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=False), \
+             mock.patch.object(ingest, '_resumable_coding', return_value=({'Agent': 'coding', 'Cwd': '/w', 'ExtId': 'conv-1'}, '')), \
+             mock.patch.object(server, '_brainless', return_value=''), mock.patch.object(server, '_refresh_chat_context', return_value={}), \
+             mock.patch('threading.Thread', side_effect=lambda target, **k: mock.Mock(start=target)), \
+             mock.patch.object(terminal, 'start_on_task', return_value={'sid': 'sid'}) as reopen:
+            TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'images': [str(shot)]}).json()
+        self.assertIn(str(outputs.folder(tid) / 'broken-header.png'), reopen.call_args.kwargs['instruction'])
+        general.answered(tid, every=True)
+
     def test_continue_stays_on_the_cli_that_made_the_conversation_even_when_it_cannot_reopen(self):
         """TQ-0887 shape: codex made the conversation, codex could not reopen it - the way on is a fresh CODEX session with the
         handover, never the default CLI (the owner, 2026-09-30: "it should start as codex if i hit continue of course")."""

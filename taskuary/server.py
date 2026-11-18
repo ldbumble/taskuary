@@ -3086,7 +3086,9 @@ def continue_work(task_id: int, body: ContinueBody = None):
     if task.get('Status') == 'dropped': raise HTTPException(409, 'This task was dismissed.')
     note = ' '.join(str((body.note if body else '') or '').split())[:4000]
     imgs = prompt_images(body.images if body else [])
-    if note:
+    # ...and PICTURES WITHOUT WORDS are his line too where only a line carries them: a coding session reopens on the resume prompt
+    # alone, and the screenshot he attached to Continue was never handed over (a chat's turn below takes them itself)
+    if note or (imgs and not general.handles(task)):
         # A NOTE IS A LINE THE OWNER TYPED, and takes the one road every typed line takes (general.take_line): kept as his, the turn at work
         # from the press, then whatever agent works the task reopened, woken or started by its own starter - a coding session that ended
         # (its own conversation, else a fresh one with the handover), one that idled out, one at rest. What came in since rides as Taskuary's

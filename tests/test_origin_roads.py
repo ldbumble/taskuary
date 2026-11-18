@@ -319,7 +319,7 @@ def test_an_auto_start_that_is_refused_is_held_never_failed(monkeypatch, tmp_pat
     assert s.task_has_tag(t, ingest.HOLD_TAG) and not s.get_dispatch(t)
     from taskuary import funnel
     idle = funnel.idle_state(s, t)                   # ...the task's one sentence, with the Trust presses its held box draws (senders.trust_offer)
-    assert idle['kind'] == 'held' and idle['line'].startswith('Waiting for you.') and 'Trust them' in idle['line'] and idle.get('trust') and idle['trust']['once'] is False
+    assert idle['kind'] == 'held' and idle['line'].startswith('Waiting for you.') and 'Trust them' in idle['line'] and idle.get('trust')
 
 def test_release_all_wakes_a_held_permit_with_a_deny():
     s = MemoryStore(); t = _stranger(s); out = []

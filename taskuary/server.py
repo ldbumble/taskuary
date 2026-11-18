@@ -2119,20 +2119,19 @@ def task_trust(task_id: int, scope: str = ''):
     """The owner vouches for everything on this task so far (origin.raise_to). Not on guard.AGENT_WRITES, so a session
     cannot vouch for itself; a stranger who writes afterwards lowers it again. `scope` 'org': for the sender's whole organisation
     (senders.trust_org) - everyone at that domain, by mail or Teams, from now on."""
-    from . import origin, senders
+    from . import origin, senders, ingest as _ing
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    # ...a press that lifts nothing starts nothing (pressed twice, or on the phone and the desk): the second handed the same thread over again
+    lifts = store.task_has_tag(task_id, _ing.HOLD_TAG) or origin.of_task(store, task_id)[0] == 'stranger'
     org = None
     if scope == 'org':
         try: org = senders.trust_org(store, task_id, ACTOR)
         except ValueError as e: raise HTTPException(422, str(e))
-    else: origin.raise_to(store, task_id, 'trusted', ACTOR)
-    # ...and a mail's sender is remembered for the mailbox it came to: their next message starts its agent by itself
-    m = next((m for m in store.list_messages(task_id) if m.get('Channel') == 'email' and m.get('Direction') != 'out'), None)
-    if m: store.remember_trust(m.get('SourceName'), m.get('FromEmail'), 'trusted by the owner')
+    else: origin.raise_to(store, task_id, 'trusted', ACTOR)    # ...which remembers the sender its press named (senders.vouch, the one road)
     o, why = origin.of_task(store, task_id)
     # ...A START THAT BREAKS IS KEPT ON THE TASK with its retry (blackboard.record_failure), never a bare 500 under "You trusted the sender"
     # with nobody at work (2026-11-17)
-    try: started = _trusted_starts(task_id) if o != 'stranger' else ''
+    try: started = (_trusted_starts(task_id) if lifts else 'already' if _ing.live_agent(store, task_id) or _ing.started(store, task_id) else '') if o != 'stranger' else ''
     except Exception as e:
         from . import blackboard as bb
         logger.warning(f'task {task_id}: the start Trust makes failed - {e}'); bb.record_failure(store, task_id, e, 'assistant'); started = ''
@@ -2378,9 +2377,9 @@ def _ended_line(task_id: int, comments=None):
 
 
 def _trust_offer(task_id: int, msgs=None):
-    "funnel.held_offer, never in the way of opening the task: an offer that could not be worded is the plain Trust them."
-    from . import funnel
-    try: return funnel.held_offer(store, task_id, msgs)
+    "senders.trust_offer, never in the way of opening the task: an offer that could not be worded is the plain Trust them."
+    from . import senders
+    try: return senders.trust_offer(store, task_id, msgs)
     except Exception as e:
         logger.debug(f'task {task_id}: trust offer skipped - {e}'); return {'person': 'Trust them', 'org': None}
 
@@ -2642,8 +2641,12 @@ def waiting_now(task_id: int):
 def _say(task_id: int, body, **kw):
     "A typed line on the one road (general.take_line), as the chat's doors send it - his words straight to the agent, nothing fetched first."
     from . import general
-    return general.take_line(store, task_id, body.text, body.attachments, ACTOR, _line_id(body),
-                             **({k: v for k, v in (('connector_id', body.connector_id), ('model', body.model), ('pick', body.pick)) if v} if general.handles(store.get_task(task_id)) else {}), **kw)
+    chat = general.handles(store.get_task(task_id))
+    out = general.take_line(store, task_id, body.text, body.attachments, ACTOR, _line_id(body),
+                            **({k: v for k, v in (('connector_id', body.connector_id), ('model', body.model), ('pick', body.pick)) if v} if chat else {}), **kw)
+    # ...a line KEPT, no turn taken (a held stranger's task: take_line's {'kept', 'held'}) is a chat's (no session, no reply) - both chat doors
+    # unpacked the dict as (session, reply) and died on 'kept'.info(), his line drawn with an error under it while it waited behind Trust
+    return (None, '') if chat and kw.get('wait', True) and isinstance(out, dict) else out
 def _line_id(body): return (getattr(body, 'line_id', None) or '')[:80] or None
 
 @app.post('/api/tasks/{task_id}/assistant/browser')
@@ -3092,6 +3095,10 @@ def continue_work(task_id: int, body: ContinueBody = None):
     if task.get('Status') == 'dropped': raise HTTPException(409, 'This task was dismissed.')
     note = ' '.join(str((body.note if body else '') or '').split())[:4000]
     imgs = prompt_images(body.images if body else [])
+    # ...A HELD STRANGER'S TASK CONTINUES BEHIND ITS TRUST, as every start does (origin.hold): its note waits by the box (take_line, below), and a
+    # bare Continue says the hold's line - it opened a session whose turn the hold refused, and answered "continued" with nothing at work
+    from . import origin
+    if (h := origin.hold(store, task_id)) and not note and not imgs: raise HTTPException(409, h['line'])
     # ...A PICTURE WITH NO WORDS IS A LINE OF HIS TOO (the attach stress rounds, 2026-11-18): Continue's box sends one alone, and only a note
     # took this road - a chat's rode Taskuary's own brief with no pill of his, a coding session reopened on the resume prompt alone
     if note or imgs:
@@ -3107,7 +3114,7 @@ def continue_work(task_id: int, body: ContinueBody = None):
         store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': kind, 'note': True})
         from . import outcomes
         outcomes.record(store, 'agent.continued', 'task', task_id, ACTOR, next_move=note, facts={'door': 'continue-work', 'kind': kind})
-        return {'continued': True, 'taskId': task_id, 'kind': kind, **(out if isinstance(out, dict) else {})}
+        return {'continued': not (isinstance(out, dict) and out.get('held')), 'taskId': task_id, 'kind': kind, **(out if isinstance(out, dict) else {})}
     if general.handles(task):
         # THE THREAD MOVED AFTER ITS LAST TURN: the mail that reopened the task goes in first, in the turn's instructions - "pick up
         # where work stopped" alone woke the assistant at "reply sent, task closed" while two people had since asked for more (2026-10-14)

@@ -1838,17 +1838,16 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
 
 
 def _trust(store, tid: int, key: str, actor: str) -> str:
-    """Trust them, from the phone: the task page's own vouch (server.task_trust - origin.raise_to), which lifts the hold. The card comes
-    back with its ordinary choices - Send to agent among them now - and nothing has started."""
+    """Trust them, from the phone: the task page's own press (server.task_trust - the vouch, the release, and the start it makes). The card
+    comes back with its ordinary choices, and the line says whether an agent took it - never that one did when the start came back empty."""
     from fastapi import HTTPException
     from . import concierge, server
-    from .ingest import HOLD_TAG
-    try: server.task_trust(tid)
+    try: out = server.task_trust(tid)
     except HTTPException as e: return stuck(store, f'Not done - {e.detail}. Nothing moved.')
-    if store.task_has_tag(tid, HOLD_TAG): store.tag_task(tid, HOLD_TAG, on=False, actor=actor)     # the vouch is the release (release_task)
     from .store import task_ref
     back = concierge.surface(store, key, actor=actor)
-    said = f'Trusted - {task_ref(tid)} is no longer held, and its agent takes it from here.'
+    said = (f'Trusted - {task_ref(tid)} is no longer held, and its agent takes it from here.' if out.get('started')
+            else f'Trusted - {task_ref(tid)} is no longer held, but nothing has started on it.')
     return turn_text(back, said, store=store) if back.get('item') else stuck(store, said)
 
 
@@ -1861,9 +1860,10 @@ def _continue(store, tid, note: str) -> str:
     """Continue, from the phone: the same road as the desktop's pill (server.continue_work)."""
     from .server import ContinueBody, continue_work
     from fastapi import HTTPException
-    try: continue_work(int(tid), ContinueBody(note=note or None))
+    try: out = continue_work(int(tid), ContinueBody(note=note or None))
     except HTTPException as e: return stuck(store, f'Could not continue it - {e.detail}.')
     ref = f'TQ-{int(tid):04d}'
+    if out.get('held'): return stuck(store, f"Your note waits on {ref} - {out['held']}")      # kept behind the sender's Trust (origin.hold)
     from . import concierge
     said = f'Continuing {ref}' + (' with your note' if note else '') + ' - it picks up where it left off.'
     said += f' {PROMISE_LINE}' if promise(store, tid) else ''

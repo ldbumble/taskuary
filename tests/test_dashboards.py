@@ -570,6 +570,9 @@ def test_a_source_saved_without_a_key_is_read_under_the_name_its_tiles_bind_to()
         sid = _post(TestClient(server.app), None, spec).json()['sourceId']
     kept = json.loads(s.get_source(sid)['ConfigJson'])
     assert kept['sources'][0]['key'] == 's1'
+    old = s.save_source({'Channel': 'report', 'Address': 'Kept before', 'Active': 1, 'ConfigJson': json.dumps(spec)}, 't')
+    with mock.patch.object(server, 'store', s):              # ...one kept before reaches the page under the names its run reads
+        assert TestClient(server.app).get(f'/api/dashboards/{old}').json()['config']['sources'][0]['key'] == 's1'
     data = dashboards.collect(s, spec)                       # ...and a spec that still has none reads under the same name
     assert list(data['sources']) == ['s1']
     assert dict((c['title'], v) for c, v in dashboards.numbers(spec, data)) == {'Open tasks': 2}

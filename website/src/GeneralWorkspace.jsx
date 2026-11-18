@@ -520,7 +520,9 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
     const prev = items[i - 1];
     // ...A TURN AT WORK ALWAYS DRAWS ITS HEAD (2026-11-17: one that carried on after the agent's first message folded into the turn above - no
     // clock, no Stop x, and the head over it read that turn's "ran 27s"): only a finished turn after a turn folds into it
-    if (x.kind === "turn") return <ConvTurn key={x.id} t={x} more={prev?.kind === "turn" && x.state !== "working" && x.state !== "starting"} name={name} ask={x.id === askAt ? ask : null}
+    // ...AND NEVER INTO ONE THAT FAILED (the Continue round, 2026-11-18): Try again's turn stands under the failure it is past, and folded, its head
+    // went the moment it answered - its words left under the failure's head, with no time of their own
+    if (x.kind === "turn") return <ConvTurn key={x.id} t={x} more={prev?.kind === "turn" && prev.state !== "failed" && x.state !== "working" && x.state !== "starting"} name={name} ask={x.id === askAt ? ask : null}
       cards={cardsOf(x)} owes={x.id === owes} later={items.slice(0, i).some((y) => y.kind === "turn")} />;
     if (x.kind === "line") return <ConvLine key={x.id} x={x} more={prev?.kind === "line"} />;
     if (x.kind === "arrival") return <div key={x.id} className="tq-aui-message tq-aui-brief" data-tq-item={x.id}><Arrived mail={[x]} prev={prev?.kind === "arrival" ? prev : null} /></div>;

@@ -385,8 +385,11 @@ class HandingOver(unittest.TestCase):
         here = {'href': PAY, 'title': 'Pay for your order', 'there': True}
         done = {'href': 'http://127.0.0.1:8765/checkout/thanks', 'title': 'Thank you - payment received', 'there': False}
         self.assertTrue(bg.watch(self.s, self.tid, 'run1', rid, conn=Page(here, here, done), every=0))
-        self.assertIn('The owner pressed "Pay $42.00" on the page themselves', self.heard()[0])
+        self.assertIn('The page moved on from "Pay $42.00"', self.heard()[0])
         self.assertIn('Thank you - payment received', self.told[0])
+        # ...SAID AS SEEN: the page moving is not the press - "Back to cart" moves it too, and told "The owner pressed Pay", the agent
+        # reported a payment that was never made
+        self.assertNotIn('The owner pressed', self.told[0]); self.assertIn('not which control', self.told[0])
         self.assertIsNone(bg.handing(self.s, self.tid, 'run1'))                       # the hand-over is closed
         self.assertFalse(bg.watch(self.s, self.tid, 'run1', rid, conn=Page(done), every=0))   # ...once
 

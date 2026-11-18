@@ -691,7 +691,11 @@ def pressed(store, tid: int, rid: str, now: dict) -> bool:
                           "Look at it and continue.")
         store.add_comment(tid, 'owner', 'agent', f"You did the step on {h['site']} - the agent goes on.")
     else:
-        _tell(store, tid, f"The owner pressed {h['btn']} on the page themselves; the page now shows {shows}. Look at it and continue.")
+        # ...SAID AS SEEN: the page moving is not the press - a "Back to cart" moves it too, and told "the owner pressed Pay" the agent reported
+        # a payment never made. What the page shows now is the agent's to read
+        _tell(store, tid, f"The page moved on from {h['btn']} while it was the owner's to press - Taskuary saw the page move, not which control "
+                          f"they used; it now shows {shows}. Look at it: if it shows {h['btn']} done, continue; if not, they chose not to, so "
+                          "never press it yourself - tell them in one line where it stands and go on.")
         store.add_comment(tid, 'owner', 'agent', f"You pressed {h['btn']} on {h['site']} - the agent goes on.")
     # ...and the chat says it once, as their press (general.PRESSES): it read "You browser act pressed." under a line by Taskuary saying the same
     store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': h['site'], 'btn': '' if h.get('kind') == 'turn' else h['btn'], 'by': 'page'})

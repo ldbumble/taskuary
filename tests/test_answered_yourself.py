@@ -216,6 +216,14 @@ class TheDraftHisAnswerRetiredStaysWhereItStood(unittest.TestCase):
         self.assertEqual(card.get('was', {}).get('text'), 'Hi Erin, attached.')
         self.assertEqual(card.get('why'), 'Not sent - you answered Erin Blake yourself')
 
+    def test_the_task_says_it_in_one_line_never_his_words_again_nor_a_draft_removed(self):
+        """The note said "You replied from your mailbox on TQ-0001: "Here they are.". I removed the unused draft" - his words a second time
+        under his own bubble, and a draft "removed" that stands greyed in the chat. One line, the one a chat answer gets (reread_draft)."""
+        from taskuary.sessionrecord import NOTE_ACTOR
+        s, tid, rid = self._world()
+        said = [c['Body'] for c in s.list_comments(tid) if c['Actor'] == NOTE_ACTOR]
+        self.assertEqual(said, ['You answered Erin Blake yourself - no new response needed.'])
+
     def test_the_task_page_reads_it_the_same(self):
         from fastapi.testclient import TestClient
         from unittest import mock

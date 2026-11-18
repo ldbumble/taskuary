@@ -1064,9 +1064,7 @@ def reread_draft(store, tid, rv: dict, sent: dict, brain=None) -> str:
     line, draft = ' '.join(str(sent.get('BodyText') or '').split())[:2000], str(rv.get('DraftText') or '').strip()
     note = lambda t: tid and store.add_comment(tid, NOTE_ACTOR, 'assistant_agent', t)
     if not draft: return 'none'
-    # ...said in one line that never quotes the owner's words again: their line stands on the chat's left, just above (general.shown_history)
-    m = store.get_message(rv.get('AnswersMid') or rv.get('MessageId')) or {}
-    who = str(m.get('FromName') or '').strip() if m.get('FromName') != 'You' else ''
+    who = _answered_who(store, rv)
     got, left = reread(store, tid, draft, line, brain=brain)
     if got == 'covered':
         from .proposals import SET_ASIDE      # ...greyed where it stood, as every card his answer moved past (retire_draft_answered_elsewhere)
@@ -1074,12 +1072,23 @@ def reread_draft(store, tid, rv: dict, sent: dict, brain=None) -> str:
         if tid:
             from . import verdicts
             verdicts._settle_task_after_sent_reply(store, rv, 'you', True)
-        note(f"You answered {who or 'them'} yourself - no new response needed.")
+        note(answered_line(store, rv))
     elif got == 'partly' and left and store.update_review_draft(rv['ReviewId'], left, rv.get('RunId'), by=rv.get('DraftBy')):
         note(f"You answered {who or 'them'} on part of it yourself - the draft now says only what is still open.")
     elif got != 'none': got = 'unread'; note(CHECK_IT)
     funnel.invalidate(); store._poke('feed-changed', 'task-changed', task_id=tid)
     return got or 'unread'
+
+
+def _answered_who(store, rv) -> str:
+    m = store.get_message(rv.get('AnswersMid') or rv.get('MessageId')) or {}
+    return str(m.get('FromName') or '').strip() if m.get('FromName') != 'You' else ''
+
+
+def answered_line(store, rv) -> str:
+    """What the task says when the owner's own answer settled reply `rv` - ONE line for a chat and a mail alike, that never quotes his words
+    again (they stand on the chat's left, just above - general.shown_history) and never says a draft was removed: it stands greyed where it was."""
+    return f"You answered {_answered_who(store, rv) or 'them'} yourself - no new response needed."
 
 
 def answered_drafts(store, tid, sent: dict) -> list:
@@ -1141,7 +1150,6 @@ def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict, later: b
         stale = [rv for rv in stale if rv not in worded]
         if not stale: return []
 
-    place = SENT_FROM.get(sent.get('Channel'), 'outside Taskuary')
     # ...SET ASIDE BY THE ONE RULE A CARD THE CHAT MOVED PAST IS (proposals.passed): under a note of its own no surface read it as passed, so
     # the chat had no words to draw greyed and the card went from it. Now it stays where it stood, greyed, and says why (passed_why: "Not
     # sent - you answered Erin yourself") - on the chat, the task page and a press alike
@@ -1155,17 +1163,6 @@ def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict, later: b
         from . import verdicts
         verdicts._settle_task_after_sent_reply(store, stale[0], 'you', True)
 
-    task = store.get_task(tid) if tid else {}
-    body = re.sub(r'\s+', ' ', sent.get('BodyText') or '').strip()
-    excerpt = f': "{body[:180]}"' if body else ''
-    if not tid:
-        subject = (store.get_message(stale[0].get('MessageId')) or {}).get('Subject') or 'this thread'
-        where = subject
-        state = ''
-    else:
-        where = f'TQ-{tid:04d}'
-        from . import buttons
-        state = f" The task stays open until you {buttons.label('close')}." if task.get('Status') not in ('done', 'dropped') else ''
     # ...said in the Assistant's conversation - and never as a dead end: the page offers Next under the newest line that has
     # nothing to press (the owner, 2026-09-30: "it can write that and close task ... but then should move to next or at least
     # have buttons to navigate")
@@ -1174,8 +1171,8 @@ def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict, later: b
     # else"). The rail drops the row by itself; the task keeps the record.
     from . import funnel
     from .sessionrecord import NOTE_ACTOR
-    if tid: store.add_comment(tid, NOTE_ACTOR, 'assistant_agent', f'You replied {place} on {where}{excerpt}. '
-                                                                   f'I removed the unused draft; the reply was taken care of.{state}')
+    # ...in the one line a chat answer gets (answered_line): it quoted his words again under his own bubble, and said a draft "removed"
+    if tid: store.add_comment(tid, NOTE_ACTOR, 'assistant_agent', answered_line(store, stale[0]))
     funnel.invalidate()
     # The review transition already wakes the UI, but this final wake happens after the durable
     # Assistant line was written, avoiding a race where an open chat fetched one write too early.

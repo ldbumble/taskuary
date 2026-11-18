@@ -372,6 +372,17 @@ class NewTaskTool(unittest.TestCase):
         rows = self.s._rows("SELECT Batch FROM review WHERE TaskId=?", (self.tid,))
         self.assertEqual([r['Batch'] for r in rows], [None])
 
+    def test_a_bulk_item_its_door_refused_is_said_never_dropped_and_none_filed_is_no_card(self):
+        "An item with no words is refused by the draft door's {ok: false}: it is named as refused, and a run where every item was says no card stands."
+        said, err = tool(self.tid, 'propose_email', items=[{'to': 'gail@northwind.example', 'subject': 'Offsite', 'text': ''},
+                                                           {'to': 'erin@northwind.example', 'subject': 'Offsite', 'text': 'Friday it is. Alex'}])
+        got = json.loads(said)
+        self.assertEqual(got['on_the_card'], 1); self.assertEqual(len(got['refused']), 1); self.assertIn('item 1', got['refused'][0])
+        said, err = tool(self.tid, 'propose_email', items=[{'to': 'ray@northwind.example', 'subject': 'Offsite', 'text': ''},
+                                                           {'to': 'omar@northwind.example', 'subject': 'Offsite', 'text': ''}])
+        got = json.loads(said)
+        self.assertFalse(got['ok']); self.assertEqual(len(got['refused']), 2); self.assertNotIn('ONE card', got['shown'])
+
     def test_a_list_or_a_number_given_in_another_shape_is_read_as_the_schema_has_it(self):
         "A lone cc address, an `answers` written m12, an attachment named \"attachment 12\": read as meant - never a Pydantic dump or a cc spelled letter by letter."
         mid = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'r0', 'ConversationId': 'conv-r', 'Channel': 'email', 'FromName': 'Gail Moreno',

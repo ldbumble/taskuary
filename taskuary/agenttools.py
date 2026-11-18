@@ -380,12 +380,18 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     key, top = bulkcard.new_key(), (store._one('SELECT MAX(ReviewId) AS m FROM review') or {}).get('m') or 0
     refused = []
     for i, it in enumerate(items):
-        try: _call(store, tid, name, {**base, **it}, doors)
-        except Exception as e: refused.append(f'item {i + 1}: {failed(name, e)}')
+        try: out = _call(store, tid, name, {**base, **it}, doors)
+        except Exception as e: refused.append(f'item {i + 1}: {failed(name, e)}'); continue
+        # ...a door that answers {ok: false, why} filed nothing either: the item was dropped unsaid, and an all-refused run read "ONE card"
+        try: got = json.loads(out.body if hasattr(out, 'body') else out)
+        except (TypeError, ValueError): got = None
+        if isinstance(got, dict) and got.get('ok') is False:
+            refused.append(f"item {i + 1}: {got.get('why') or got.get('says') or 'refused, with no reason given'}")
     store._exec('UPDATE review SET Batch=? WHERE TaskId=? AND ReviewId>? AND Status=?', (key, int(tid), top, 'pending'))
     n = (store._one('SELECT COUNT(*) AS n FROM review WHERE Batch=?', (key,)) or {}).get('n') or 0
-    return _j({'ok': n > 0, 'batch': key, 'on_the_card': n, **({'refused': refused} if refused else {}),
-               'shown': 'They stand as ONE card: the owner reviews a few and does them all with one press; you hear the whole run once.'})
+    return _j({'ok': n > 0, **({'batch': key, 'on_the_card': n} if n else {}), **({'refused': refused} if refused else {}),
+               'shown': 'They stand as ONE card: the owner reviews a few and does them all with one press; you hear the whole run once.' if n else
+                        'Nothing was filed, so no card stands - fix what each item was refused for and call it again.'})
 
 
 # THE ARGUMENTS AS THE SCHEMA HAS THEM (the tools stress round, 2026-11-18): a model writes `cc: "paula@..."` where a list is asked, `answers:

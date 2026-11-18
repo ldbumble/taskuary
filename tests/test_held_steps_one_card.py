@@ -90,6 +90,15 @@ class HeldStepsOneCard(unittest.TestCase):
         r = self.s.get_review(rv['ReviewId']); self.assertEqual(r['Status'], 'pending', 'still lit for the press it asks for'); self.assertFalse(r.get('ActError'))
         self.assertEqual(told, [], 'nothing ran, nothing to tell')
 
+    def test_a_read_let_in_while_its_agent_works_is_granted_at_once(self):
+        # a read outside the task's folders runs nothing in the agent's folder: its yes never waits on the turn
+        sg.check(self.s, self.tid, 'run1', '', 'Bash', HELD, reads=[{'tool': 'read', 'what': 'read files outside this task', 'why': 'outside its folders', 'folder': '/srv/shared'}])
+        rv = self.s._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (self.tid,))[-1]
+        busy = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, busy=True)
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': busy}, clear=True), mock.patch.object(sg, '_tell', lambda *a, **k: None):
+            out = verdicts.decide(self.s, rv, 'approve')
+        self.assertTrue(out['ok'], out); self.assertEqual(self.s.get_review(rv['ReviewId'])['Status'], 'approved')
+
     def test_one_dismiss_dismisses_them_all_and_the_agent_hears_once(self):
         ids, out, ran, told, _ = self.run_all([0, 0, 0], 'reject')
         self.assertEqual(ran, []); self.assertEqual([self.s.get_review(i)['Status'] for i in ids], ['rejected'] * 3)

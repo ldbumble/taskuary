@@ -225,3 +225,21 @@ def test_a_run_cut_short_by_a_restart_reads_stopped_with_the_rest_waiting_for_hi
     with mock.patch.object(github.requests, 'patch', gh.patch):
         st, told = press(s, out['batch'])
     assert (st['state'], st['done']) == ('finished', 5) and len(gh.closed) == 5 and len(told) == 1
+
+
+def test_a_card_raised_beside_a_bulk_call_is_never_swept_onto_it():
+    """The rows of a bulk call were found as every pending card on the task newer than its start: a reply drafted for a mail that came in while
+    the call filed its items (or the agent's own tool call beside it) joined the bulk card, and its one press sent that reply with them."""
+    from taskuary import agenttools
+    s, tid = world()
+    real, other = agenttools._call, []
+    def beside(store, t, name, a, doors):
+        if not other: other.append(s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': 'Gail - the rate is 4%.',
+                                                 'Reason': 'assistant wrote this email - approve to send',
+                                                 'Deliver': json.dumps({'channel': 'email', 'to': ['gail@northwind.example'], 'subject': 'Rate'})}))
+        return real(store, t, name, a, doors)
+    with mock.patch.object(server, 'store', s), mock.patch.object(agenttools, '_call', beside):
+        out = call(tid, 'propose_email', items=emails(5))
+    assert out['on_the_card'] == 5, out
+    assert s.get_review(other[0])['Batch'] is None, 'the email beside it is its own card'
+    assert other[0] not in {r['ReviewId'] for r in bulkcard.rows(s, out['batch'])}

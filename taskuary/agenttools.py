@@ -378,11 +378,17 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if not items: raise ValueError('`items` holds no objects - give each item its own fields')
     if len(items) > 500: raise ValueError(f'{len(items)} items is past what one card holds (500) - split them, or narrow the list')
     key, top = bulkcard.new_key(), (store._one('SELECT MAX(ReviewId) AS m FROM review') or {}).get('m') or 0
-    refused = []
+    refused, mine = [], []
     for i, it in enumerate(items):
-        try: _call(store, tid, name, {**base, **it}, doors)
-        except Exception as e: refused.append(f'item {i + 1}: {failed(name, e)}')
-    store._exec('UPDATE review SET Batch=? WHERE TaskId=? AND ReviewId>? AND Status=?', (key, int(tid), top, 'pending'))
+        try: got = _call(store, tid, name, {**base, **it}, doors)
+        except Exception as e: refused.append(f'item {i + 1}: {failed(name, e)}'); continue
+        # ...the card EACH item filed, by its own answer - never every card raised on the task meanwhile: a reply drafted for a mail that came
+        # in as the items were filed, or the agent's own call beside this one, joined the card and went with its one press
+        try: got = json.loads(got)
+        except (TypeError, ValueError): got = None
+        if isinstance(got, dict) and isinstance(rid := got.get('review_id', got.get('review')), int): mine.append(rid)
+    if mine: store._exec(f"UPDATE review SET Batch=? WHERE TaskId=? AND ReviewId>? AND Status='pending' AND ReviewId IN ({','.join('?' * len(mine))})",
+                         (key, int(tid), top, *mine))
     n = (store._one('SELECT COUNT(*) AS n FROM review WHERE Batch=?', (key,)) or {}).get('n') or 0
     return _j({'ok': n > 0, 'batch': key, 'on_the_card': n, **({'refused': refused} if refused else {}),
                'shown': 'They stand as ONE card: the owner reviews a few and does them all with one press; you hear the whole run once.'})

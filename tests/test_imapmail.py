@@ -130,11 +130,11 @@ class ImapTests(unittest.TestCase):
         m = email.message.EmailMessage()
         m['From'], m['To'], m['Subject'], m['Date'] = 'Erin Blake <erin@vendor.example>', 'me@myco.example', 'two scans', 'Wed, 20 Aug 2026 15:03:00 -0400'
         m.set_content('both pages attached')
-        for page in (b'%PDF-1.4 page one', b'%PDF-1.4 page two'): m.add_attachment(page, maintype='application', subtype='pdf', filename='scan.pdf')
+        for page in (b'page one', b'page two'): m.add_attachment(page, maintype='text', subtype='plain', filename='scan.txt')
         with mock.patch.object(imapmail.imaplib, 'IMAP4_SSL', return_value=FakeImap({1: m.as_bytes()})):
             imapmail.poll_imap(s, c, [], llm=None)
         kept = [open(r['Path'], 'rb').read() for r in s._rows('SELECT * FROM attachment ORDER BY AttachmentId')]
-        self.assertEqual(kept, [b'%PDF-1.4 page one', b'%PDF-1.4 page two'])
+        self.assertEqual(kept, [b'page one', b'page two'])
 
     def test_replies_go_back_over_smtp_in_thread_from_the_same_address(self):
         s, _ = self._store()

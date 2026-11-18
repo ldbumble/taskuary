@@ -287,12 +287,25 @@ class TheDemoChatAnswersItsSuggestionsTests(unittest.TestCase):
             out = concierge.say(self.s, 'close all the tasks from Priya', llm=demo.brain(store=self.s))
             # ...the questions in the line's own words too: the Assistant's window draws no chips, and "the suggested questions" named
             # questions nobody could see (the walk, 2026-11-15)
-            self.assertEqual(out['say'], f'{demo.OUT_OF_SCRIPT} {demo.ASK_ONE}')
+            self.assertEqual(out['say'], demo.OUT_OF_SCRIPT)
             for _, ask, _ in demo.PROMPTS: self.assertIn(f'“{ask}”', out['say'])
             self.assertEqual([c for c in out['chips'] if c.get('prompt')], demo.prompt_chips())
             self.assertTrue(all(c['ask'] == c['label'] for c in demo.prompt_chips()), 'a chip sends exactly the words it shows')
             out = concierge.say(self.s, demo.PROMPTS[2][1], llm=demo.brain(store=self.s))
             self.assertFalse([c for c in out.get('chips') or [] if c.get('prompt')])
+
+    def test_the_honest_line_is_kept_as_it_was_said(self):
+        """The walk, 2026-11-18: a visitor typed something off the script, then a suggestion; the chat read its thread again and the
+        first answer came back a second time, shorter - the line was kept without the questions the answer had carried, so the page
+        could not tell it was the one it had drawn. What is kept is what was said."""
+        from taskuary import concierge, general
+        s = MemoryStore()
+        with mock.patch('taskuary.terminal.live_sessions', lambda tail=0: []):
+            demo.seed(s)
+            out = concierge.say(s, 'tell me a joke', llm=demo.brain(store=s))
+        dock = general.dock_task(s, 'owner')[0]['TaskId']
+        kept = [t['text'] for t in concierge.history(s, dock) if t['role'] == 'assistant' and demo.ONLY_SUGGESTED in t['text']]
+        self.assertEqual(kept, [out['say']])
 
 
 class TheAdvisorSpeaksInTheDemoTests(unittest.TestCase):

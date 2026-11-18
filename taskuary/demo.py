@@ -287,18 +287,18 @@ PROMPTS = (
     # ...and the way in, for a visitor who opened the chat before the rail (seed_tour, the owner 2026-10-30)
     ('tour', 'Where do I start?', "Here: {task:Start here - what Taskuary can do} - its to-do is a short tour of what to try."),
 )
-OUT_OF_SCRIPT = 'In the demo I answer the suggested questions - in your own Taskuary your AI answers anything.'
-
+ONLY_SUGGESTED = 'In the demo I answer the suggested questions - in your own Taskuary your AI answers anything.'
 ASK_ONE = 'Ask one of these: ' + ', '.join(f'“{ask}”' for _, ask, _ in PROMPTS) + '.'
+# ...AND IN ITS OWN WORDS (the walk, 2026-11-15): the Assistant's window draws no chips, so "the suggested questions" named questions nobody
+# could see - a dead end. The line carries them where it is MADE, so the chat keeps what it said: added to the answer on its way out, the
+# kept line was the bare one, and the chat's next read of its thread drew it a second time (the walk, 2026-11-18)
+OUT_OF_SCRIPT = f'{ONLY_SUGGESTED} {ASK_ONE}'
 def prompt_chips() -> list: return [{'ask': ask, 'label': ask, 'prompt': pid} for pid, ask, _ in PROMPTS]
 
 def with_prompts(out):
     """The suggestions under the line that says they are all the demo answers (concierge.say) - and under nothing else."""
     if isinstance(out, dict) and OUT_OF_SCRIPT in str(out.get('say') or ''):
         out['chips'] = [*(out.get('chips') or []), *prompt_chips()]
-        # ...AND IN ITS OWN WORDS (the walk, 2026-11-15): the Assistant's window draws no chips, so "the suggested questions" named
-        # questions nobody could see - a dead end. The line carries them, as the static demo's does (demoApi.js)
-        out['say'] = str(out['say']).replace(OUT_OF_SCRIPT, f'{OUT_OF_SCRIPT} {ASK_ONE}', 1)
     return out
 
 def _task_link(store, title: str) -> str:

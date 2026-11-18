@@ -565,15 +565,16 @@ def test_the_taskuary_command_is_in_reach_of_every_session_however_the_app_was_s
     """The recorded walk, 2026-11-11: a coding agent told the owner "the taskuary command is not installed in this shell, so I could not read
     the board" - its rules send it to `taskuary --board`, and the app had been started by its interpreter with no such script on PATH."""
     import shutil
-    from taskuary import config
-    monkeypatch.setattr(config, 'home', lambda: tmp_path); monkeypatch.setattr(terminal, '_OWN', {})
+    from taskuary import config, gatecmd
+    monkeypatch.setattr(config, 'home', lambda: tmp_path); monkeypatch.setattr(terminal, '_OWN', {}); monkeypatch.setattr(gatecmd, '_DIR', {})
     monkeypatch.setattr(shutil, 'which', lambda name, path=None, **k: None)
     path = terminal.session_env('coding', 7, str(tmp_path), sid='s1')['PATH'].split(terminal.os.pathsep)
-    assert path[0] == str(tmp_path / 'bin') and sys.executable in (tmp_path / 'bin' / 'taskuary.cmd').read_text(encoding='utf-8')
+    # ...behind the browser's and the desktop's hold, which is first on every session's PATH (gatecmd)
+    assert path[:2] == [str(tmp_path / 'bin' / 'gate'), str(tmp_path / 'bin')] and sys.executable in (tmp_path / 'bin' / 'taskuary.cmd').read_text(encoding='utf-8')
     assert '-m taskuary.cli "$@"' in (tmp_path / 'bin' / 'taskuary').read_text(encoding='utf-8')
-    # ...and where PATH finds it already, a session's PATH is the app's own
+    # ...and where PATH finds it already, a session's PATH is the app's own behind the hold
     monkeypatch.setattr(terminal, '_OWN', {}); monkeypatch.setattr(shutil, 'which', lambda name, path=None, **k: 'taskuary')
-    assert 'PATH' not in terminal.session_env('coding', 7, str(tmp_path), sid='s1')
+    assert str(tmp_path / 'bin') not in terminal.session_env('coding', 7, str(tmp_path), sid='s1')['PATH'].split(terminal.os.pathsep)
 
 
 def test_a_peers_note_never_begins_a_turn_on_an_agent_he_stopped_and_rides_the_turn_his_next_line_begins(world, monkeypatch):

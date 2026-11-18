@@ -149,7 +149,14 @@ def drop_line(store, tid: int, line_id: str) -> dict:
     with store.lock:
         r = next((c for c in store.list_comments(int(tid), internal=True) if c.get('ActorType') == WAITING_TYPE and (c.get('LineId') or '') == str(line_id)), None)
         if not r or conversation.heard(store, tid, 'line', [line_id]): return {'ok': False, 'why': 'the agent has it already'}
+        from . import outputs
+        his = outputs.sent(store, tid)
         store.drop_comment(r['CommentId'])
+        # ...AND THE FILE IT ALONE SENT GOES WITH IT (the attach stress round, 2026-11-18): its copy stayed in the task's folder, where the agent
+        # works and where the chat then listed it as the agent's own. One another line of his sent, or an agent wrote since, stays
+        for gone in his - outputs.sent(store, tid):
+            try: (outputs.folder(tid) / gone).unlink()
+            except OSError as e: logger.debug(f'task {tid}: the file of a line taken back stayed - {e}')
     store.audit('task', int(tid), 'line_dropped', 'owner', 'owner', {'line': str(line_id)})
     answered(int(tid))
     store._poke('task-changed', task_id=int(tid))
@@ -2337,6 +2344,14 @@ def split_files(body) -> dict:
     "{'text', 'files'} of a line written by with_files - the words alone where it names no files."
     b = str(body or ''); m = _FILES.search(b)
     return {'text': b[:m.start()] if m else b, 'files': [x.strip() for x in m.group(1).splitlines() if x.strip()] if m else []}
+def his_line(c) -> dict:
+    "{'text', 'files'} of a line of his, kept (wait_line's JSON) or heard (with_files' block) - the one read of either, on every surface."
+    return _line_of(c.get('Body')) if c.get('ActorType') == WAITING_TYPE else split_files(c.get('Body'))
+def line_words(c) -> str:
+    "A line of his as words, where one is quoted back to him (a greyed card, search): what he typed, then each file by its name - never the block."
+    from .outputs import _STAMPED              # ...by his name for it, as his bubble's pill reads it - never the upload's stamp
+    h = his_line(c)
+    return ' · '.join(x for x in [' '.join(h['text'].split()), *(_STAMPED.sub('', Path(f).name) for f in h['files'])] if x)
 _IMAGE_FILE = re.compile(r'\.(png|jpe?g|gif|webp)$', re.I)
 
 
@@ -3668,6 +3683,11 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     `wait=False`: the starter runs behind the answer (a door that answers at once) - everything before it has happened by then.
     -> the starter's answer: (session, reply) for a chat, the waiting room's for a coding session; {'kept': row} when not waited for."""
     text = str(text or '').strip()
+    from . import outputs
+    # ...WHAT HE ATTACHED IS THE TASK'S OWN, whatever agent works it (the owner, 2026-11-17: "if you attach item on prompt it's not being sent to
+    # agnet"): copied into its folder first - left under attachments/, a coding agent's Read of it was refused as Taskuary's own data. First of
+    # all: a line held behind a stranger's Trust keeps the task's copy too, and a line whose only file was no upload is empty, and said so
+    files = outputs.take_in(tid, files) if files else files
     if not text and not files: raise ValueError('empty message')
     t = reopen(store, tid, actor)
     if not t: raise ValueError(f'no task {tid}')
@@ -3683,10 +3703,6 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     if not handles(t):
         from . import selfclose
         selfclose.claim(store, tid, actor)
-    from . import outputs
-    # ...WHAT HE ATTACHED IS THE TASK'S OWN, whatever agent works it (the owner, 2026-11-17: "if you attach item on prompt it's not being sent to
-    # agnet"): copied into its folder first - left under attachments/, a coding agent's Read of it was refused as Taskuary's own data
-    files = outputs.take_in(tid, files) if files else files
     line_id = line_id or new_line_id()
     # ...AND A TURN HE STOPPED IS AT REST FOR HIS NEXT LINE, though its CLI has not let go (the bug hunt's stop, 2026-11-12): the page drew the
     # line under the stop, kept unheard it went down by the box, and came back up seconds later when the stopped turn ended. It begins the

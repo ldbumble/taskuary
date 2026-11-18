@@ -86,6 +86,25 @@ class OneRoadTests(unittest.TestCase):
         self.assertIsNotNone(session.send_prompt.call_args.kwargs['waiting'], 'and the turn does not write it a second time')
         general.OPENING.discard(tid)
 
+    def test_a_picture_with_no_note_is_his_line_too(self):
+        """The attach stress round, 2026-11-18: Continue's box lets a picture go with no words ("(images)", the page says), and the server took the
+        line road only for a note - the picture was dropped and the agent carried on as if nothing was sent. What he attached is a line of his."""
+        from taskuary import config, general, outputs
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Draft the vendor letter', 'Kind': 'general', 'Status': 'open'}, 'o')
+        up = config.home() / 'attachments' / 'prompt' / '209901' / '20991231-235959-abc123-letterhead.png'
+        up.parent.mkdir(parents=True, exist_ok=True); up.write_bytes(b'\x89PNG letterhead'); self.addCleanup(up.unlink, missing_ok=True)
+        session = mock.Mock(alive=True)
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=True), \
+             mock.patch('taskuary.general.provider_options', return_value=['x']), \
+             mock.patch('taskuary.general.start_session', return_value=session), \
+             mock.patch('threading.Thread', side_effect=lambda target, **k: mock.Mock(start=target)):
+            TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': None, 'images': [str(up)]}).json()
+        args, kw = session.send_prompt.call_args
+        self.assertEqual((args[0], args[1]), ('', [str(outputs.folder(tid) / 'letterhead.png')]))
+        self.assertEqual(kw['waiting'], general.waiting_lines(s, tid)[0]['id'], 'his line, kept with its picture')
+        general.answered(tid, every=True)
+
     def test_a_coding_agent_reopens_its_own_session_or_a_fresh_one(self):
         from taskuary import general, ingest, terminal
         s = MemoryStore()

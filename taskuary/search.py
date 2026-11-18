@@ -391,13 +391,13 @@ CHAT_TAG, DRAFTS = 'in agent chat', ('draft_reply', 'draft', 'clarification', 's
 
 
 def _chat(store, words, skip) -> tuple:
-    from .general import ASSISTANT_TYPE, DOCK_TAG, USER_TYPE
+    from .general import ASSISTANT_TYPE, DOCK_TAG, USER_TYPE, line_words
     from .quickwork import report_of
     from .store import is_internal
     TEXT = "COALESCE(rv.FinalText, rv.DraftText, '')"
     lk = lambda col: ' AND '.join(f"tq_fold({col}) LIKE ? ESCAPE '\\'" for _ in words)
     pat = [store._like_pat(w) for w in words]
-    said = [{**c, 'line': f"comment-{c['CommentId']}", 'Body': report_of(c['Body']) if c['ActorType'] == ASSISTANT_TYPE else c['Body']}
+    said = [{**c, 'line': f"comment-{c['CommentId']}", 'Body': report_of(c['Body']) if c['ActorType'] == ASSISTANT_TYPE else line_words(c)}
             for c in store._rows(f"SELECT CommentId, TaskId, Actor, ActorType, Body, CreatedAt FROM comment WHERE ActorType IN (?,?) AND {lk('Body')} "
                                  "ORDER BY CommentId DESC LIMIT 200", (USER_TYPE, ASSISTANT_TYPE, *pat)) if not is_internal(c)]
     drafts = store._rows(f"SELECT rv.TaskId, {TEXT} Body, rv.CreatedAt, (SELECT 'comment-' || s.CommentId FROM draft_snapshot s "

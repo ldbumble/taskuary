@@ -227,6 +227,7 @@
 .tq-conv-pending-act { flex: 0 0 auto; display: inline-flex; align-items: center; padding: 1px 6px; border: 0; border-radius: 10px; background: none; color: var(--tq-muted, #8b877e); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .tq-conv-pending-act:hover { color: var(--tq-text, #292824); background: var(--tq-panel, #fff); }
 .tq-conv-pending-words { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-conv-pending-row > .tq-attach-chip { flex: 0 0 auto; max-width: 200px; }
 .tq-aui-arrived-words.tq-aui-arrived-open { display: block; -webkit-line-clamp: unset; overflow: visible; }
 .tq-aui-arrived-more-btn { align-self: flex-start; margin-top: 2px; padding: 0; border: 0; background: none; color: var(--tq-muted, #8b877e); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .tq-aui-arrived-more-btn:hover { color: var(--tq-text, #292824); text-decoration: underline; }

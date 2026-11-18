@@ -16,6 +16,17 @@ class PromptImageTests(unittest.TestCase):
         self.assertTrue(p.is_file())
         self.assertTrue(p.resolve().is_relative_to((config.home() / 'attachments').resolve()))
 
+    # ...BY ITS OWN NAME, as a file is (the attach stress round, 2026-11-18): the box's chip read "venue plan.png" and, once sent, his line's
+    # pill and the task's copy read "20261118-011844-767322.png" - the picture road dropped the name the file road keeps
+    def test_a_picture_is_saved_by_its_name_its_type_its_own(self):
+        p = Path(c.post('/api/prompt-image', content=PNG, headers={'Content-Type': 'image/png', 'X-File-Name': 'venue%20plan.jpg'}).json()['path'])
+        self.assertTrue(p.is_file() and p.name.endswith('-venue plan.png'), p.name)
+        self.assertTrue(p.resolve().is_relative_to((config.home() / 'attachments' / 'prompt').resolve()))
+        bare = Path(c.post('/api/prompt-image', content=PNG, headers={'Content-Type': 'image/png'}).json()['path'])
+        self.assertRegex(bare.name, r'^\d{8}-\d{6}-[0-9a-f]{6}\.png$')        # ...a paste with no name keeps the stamp alone
+        up = Path(c.post('/api/prompt-image', content=PNG, headers={'Content-Type': 'image/png', 'X-File-Name': '..%2F..%2Fconfig'}).json()['path'])
+        self.assertTrue(up.resolve().is_relative_to((config.home() / 'attachments' / 'prompt').resolve()))
+
     def test_only_an_image_is_taken(self):
         r = c.post('/api/prompt-image', content=b'hello', headers={'Content-Type': 'text/plain'})
         self.assertEqual(r.status_code, 415)

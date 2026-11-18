@@ -522,9 +522,12 @@ class LooksThatAreNot(unittest.TestCase):
         with no look at its token - only open/goto/navigate were read for one."""
         for cmd in ('agent-browser open "javascript:document.forms[0].submit()"', 'agent-browser goto JavaScript:void(0)',
                     'agent-browser tab new "javascript:document.querySelector(\'#pay\').click()"',
-                    'agent-browser tab new https://bank.example/approve?t=9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c'):
+                    'agent-browser tab new https://bank.example/approve?t=9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c',
+                    # ...and `read <address>`, which fetches it without the browser: the same link, the same way out for what the agent read
+                    'agent-browser read https://bank.example/approve?t=9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c', 'agent-browser read https://x.example/?d=' + 'a' * 50):
             self.assertEqual([a['verb'] for a in bg.acts(cmd)], ['navigate'], cmd)
-        for cmd in ('agent-browser tab new https://toll.example', 'agent-browser tab 2', 'agent-browser tab', 'agent-browser open about:blank'):
+        for cmd in ('agent-browser tab new https://toll.example', 'agent-browser tab 2', 'agent-browser tab', 'agent-browser open about:blank',
+                    'agent-browser read', 'agent-browser read https://docs.example/guide --filter auth'):
             self.assertEqual(bg.acts(cmd), [], cmd)
 
     def test_get_value_on_a_password_box_or_an_unknown_box_is_refused(self):

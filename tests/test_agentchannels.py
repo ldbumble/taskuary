@@ -205,6 +205,13 @@ def test_only_the_bound_agents_answers_and_questions_reach_the_chat(w):
     assert len(w.posts) == 2
 
 
+def test_a_link_in_the_agents_answer_keeps_its_address(w):
+    "The agent's \"opened [PR #12](url)\" reached the teammates as \"opened PR #12\" - the one thing they needed, gone."
+    w.bind()
+    ws.record(w.s, w.tid, f's{w.tid}', 'turn_end', text='Opened [PR #12](https://github.example/northwind/ledger/pull/12).')
+    assert w.posts[-1][1] == 'Opened <https://github.example/northwind/ledger/pull/12|PR #12>.'
+
+
 def test_a_post_the_chat_refuses_is_said_in_the_task_once(w):
     "The app was taken out of the Slack channel: every answer was lost with a log line, and the task said nothing."
     w.bind()

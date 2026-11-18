@@ -402,7 +402,7 @@ def _send(store, b: dict, body: str) -> str:
 def say(store, b: dict, text: str, tid=None):
     "Everything that reaches a bound chat leaves through here."
     from . import chatformat
-    body = chatformat.render(str(text or '').strip(), b['Kind'])
+    body = chatformat.render(str(text or '').strip(), b['Kind'], links=True)      # the agent's "[PR #12](url)" keeps its address for teammates
     if not body: return
     def go():
         for part in chatformat.split(body, 3500):

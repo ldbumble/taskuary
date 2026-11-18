@@ -274,6 +274,11 @@ export const askTurn = (asking, items) => (asking?.turn && (items || []).some((x
 // each letter that went, newest first, and the draft with its Send - stood in one stack at the chat's foot, then jumped up into the turns
 // that wrote them. Until the list is read nothing can be placed, so nothing is; nor under a turn at work, which holds its own cards back.
 export const placesLoose = (list) => !!list && !list.working;
+// ...AND ONLY A CARD THAT WAITS (the owner's live app, 2026-11-18: "it never leaves when you put in new prompt. it's broken"): a card moved past -
+// set aside, replaced (`record`) - is a record of where it stood, drawn where the list places it or nowhere; a reply set aside while it waited
+// its turn behind another never stood, the list places it nowhere, and it stood greyed under the newest turn, and under every turn after
+export const looseCards = (nodes = [], { used = new Set(), listed = new Set(), held = new Set() } = {}) =>
+  nodes.filter((n) => !n.record && !used.has(n.key) && !listed.has(n.rid) && !held.has(n.rid));
 // ...and A MISSING FACT IS ONE QUESTION (the owner's rule; recorded on the real CLI, 2026-11-15): while the agent waits on his answer, the reply
 // it could not write yet - no words, no email beside it - is not drawn under the question as an empty box over a greyed Send; his answer's
 // turn writes it (the server's list leaves it out of the turn the same way, conversation.items)

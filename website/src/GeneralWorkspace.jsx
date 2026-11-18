@@ -18,7 +18,7 @@ import { holdUnsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isMade, isPastCard, standing, heldAtEnd,  partsMessage, turnParts, workCount, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, lettersTurn, onYouTurn, placesLoose, askedFirst } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isMade, isPastCard, standing, heldAtEnd,  partsMessage, turnParts, workCount, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, lettersTurn, onYouTurn, placesLoose, looseCards, askedFirst } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
@@ -555,7 +555,7 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next = null
   // should be show action box" - drawn at the foot while the turn worked, its words landed above the card; and greyed in its turn, the same
   // reply stood live again at the foot): a turn's card comes when the list has it, as the turn's last thing
   // ...NOR BEFORE THE LIST IS READ (chatStream.placesLoose): every card of the task stood stacked at the foot until its turns arrived
-  const loose = looseOk ? nodes.filter((n) => !used.has(n.key) && !listed.has(n.rid) && !held.has(n.rid)) : [];
+  const loose = looseOk ? looseCards(nodes, { used, listed, held }) : [];
   const nextLoose = next && !used.has("next") && looseOk && !listed.has(nextRid) && !lettersAt;
   return <>{rows}
     {!!loose.length && <div className="tq-aui-message tq-aui-agent" data-tq-row-cards="loose"><div className="tq-aui-agent-body">{loose.map((n) => <React.Fragment key={n.key}>{n.node}</React.Fragment>)}</div></div>}

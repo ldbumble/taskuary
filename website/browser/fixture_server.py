@@ -121,7 +121,8 @@ def _install_fresh_routes(app, store):
         tid = store.create_task({"Title": body.get("title") or "Vendor review for Erin", "Kind": body.get("kind") or "general", "Status": "open",
                                  "Summary": "Erin Blake asks for our review of the vendor tool"}, "owner")
         who, addr = ("Paula Vance", "paula@vendor.example") if body.get("stranger") else ("Erin Blake", "erin@northwind.example")
-        mid = store.add_message({"TaskId": tid, "ExternalId": f"fx-{tid}", "Channel": "email", "FromName": who, "FromEmail": addr,
+        ch = body.get("channel") or "email"           # ...a chat channel's task (teams, whatsapp): its reply is copied, never sent from here
+        mid = store.add_message({"TaskId": tid, "ExternalId": f"fx-{tid}", "Channel": ch, "FromName": who, "FromEmail": addr,
                                  "ToEmail": "alex@northwind.example", "Subject": body.get("title") or "Your review of the tool?", "SentAt": body.get("sent") or "2026-11-10 08:00:00",
                                  "ConversationId": body.get("conversation"),
                                  "BodyText": f"Hi Alex, could you send me your review of the tool? Thanks, {who.split()[0]}", "Status": "routed"})
@@ -131,9 +132,16 @@ def _install_fresh_routes(app, store):
                                     "Reason": "needs a reply: a question for you"})
             if body.get("needs"): store.set_review_draft_needs(rid, body["needs"])
             return {"taskId": tid, "reviewId": rid, "messageId": mid}
-        rid = store.add_review({"TaskId": tid, "MessageId": mid, "Kind": "draft_reply", "Status": "pending", "Channel": "email",
+        rid = store.add_review({"TaskId": tid, "MessageId": mid, "Kind": "draft_reply", "Status": "pending", "Channel": ch,
                                 "DraftText": body.get("draft") or "Hi Erin, here is a long review of every flaw we found in the tool, one by one. Alex"})
         return {"taskId": tid, "reviewId": rid, "messageId": mid}
+
+    @app.post("/api/fixture/draft")
+    def fixture_draft(body: dict = Body(...)):
+        "A reply drafted on task `taskId` for its first mail, on the mail's channel - a second one waits its turn behind the first (cardqueue)."
+        m = store.list_messages(int(body["taskId"]))[0]
+        return {"reviewId": store.add_review({"TaskId": int(body["taskId"]), "MessageId": m["MessageId"], "Kind": body.get("kind") or "draft",
+                                              "Status": "pending", "Channel": m["Channel"], "DraftText": body["text"]})}
 
     @app.post("/api/fixture/invite")
     def fixture_invite(body: dict = Body(...)):

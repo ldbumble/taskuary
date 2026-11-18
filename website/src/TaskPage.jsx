@@ -2774,7 +2774,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // 2026-11-18: "just keep it with buttons but the buttons grayed out once you moved on") - never a pressed card's "Dismissed", no reason line
   const letterOf = Object.fromEntries((detail?.checklist || []).filter((i) => i.out).map((i) => [i.rid, i]));
   const passedCards = heldGroups(allReviews.filter(isPassed)).map((g) => { const r = g.reviews[0];
-    return { key: `passed:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, node: g.held ? <HeldSteps reviews={g.reviews} past />
+    return { key: `passed:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, record: true, node: g.held ? <HeldSteps reviews={g.reviews} past />
       : r.Kind === "slot" ? <Letter taskId={t?.TaskId} item={letterOf[r.ReviewId] || null} rv={r} past /> : <ReviewDecision review={r} past /> }; });
   const decidedAsks = allReviews.filter((r) => decidedAsk(r) && !isCardReview(r));       // ...pressed, each stays its card in its turn
   const { asks: askCards, past: pressedCards } = splitHeld(allReviews.filter((r) => !isPassed(r)), [...asks, ...decidedAsks]), kept = askCards.flatMap((g) => (g.held ? g.reviews : [])).filter((r) => r.Status !== "pending");

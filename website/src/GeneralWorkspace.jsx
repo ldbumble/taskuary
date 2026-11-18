@@ -445,16 +445,17 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
       <TurnWorkView data={{ parts }} now={live} ended={!!t.text && !live} k={t.id} />
       {!!words && <SaidText text={words} mid={key} />}
       {!!onYou && <div className="tq-aui-summary" data-tq-on-you="" style={{ marginTop: 10 }}><Md text={onYou} /></div>}
-      {/* ...and the dots say what is happening, or what we wait for, on every level: one quiet line that keeps its place (workingLine) */}
-      {live && <div className="tq-aui-thinking" role="status" aria-label="The agent is at work" data-tq-working="" {...(t.state === "starting" ? { "data-tq-starting-line": "" } : {})}><i /><i /><i />{compacting
-        ? <span data-tq-compacting="" style={{ marginLeft: 8, fontSize: 12.5 }}>Compacting…</span>
-        : doing ? <span className="tq-aui-working-line" data-tq-working-line="" title={doing}>{doing}</span> : null}</div>}
       {t.state === "failed" && !!t.fail && <div className="tq-aui-note tq-aui-note-error" role="alert" data-tq-turn-failed="">⚠ {t.fail}</div>}
       {!!rest.length && <PublishedPages pages={rest} open />}
       {!!made.length && <TurnFiles files={made} />}
       {/* ...what this turn asked him, where it asked it (the list's `asking.turn`): above its card, never at the chat's foot */}
       {ask}
       {!!cards?.length && <div data-tq-turn-cards="">{cards}</div>}
+      {/* ...and the dots say what is happening, or what we wait for, on every level: one quiet line that keeps its place (workingLine) -
+          LAST in the turn, under what it has made and asked so far: a chat's newest word is at its foot (the owner, 2026-11-18) */}
+      {live && <div className="tq-aui-thinking" role="status" aria-label="The agent is at work" data-tq-working="" {...(t.state === "starting" ? { "data-tq-starting-line": "" } : {})}><i /><i /><i />{compacting
+        ? <span data-tq-compacting="" style={{ marginLeft: 8, fontSize: 12.5 }}>Compacting…</span>
+        : doing ? <span className="tq-aui-working-line" data-tq-working-line="" title={doing}>{doing}</span> : null}</div>}
     </div></div>;
 };
 const RetryCtx = React.createContext(null);

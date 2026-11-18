@@ -300,8 +300,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // and Approve, which does the same and leaves the task open. Only where the reply rides with it: with none, Approve never closed the task
   const twoApproves = !!co && !r.Stale && closesIt && sendable && !simulated && !delivery.frozen;
   const coDoes = co ? `${co.then}, then sends your reply to ${replyContext(r)}` : "";
-  const pressedWord = pressed === "send_close" ? (co ? closeCo : closeWord) : co ? co.approveLabel : proposal ? proposal.approveLabel : sendWord;
-  const going = busyNow && !sent && ["approve", "send_close"].includes(pressed), goingWord = String((proposal || co)?.busyLabel || pw.busy);
+  const going = busyNow && !sent && ["approve", "send_close"].includes(pressed);
   const closeCoTitle = `${closeCo} ${coDoes} - ${closeThen}`, coTitle = `${co?.approveLabel} ${coDoes} - ${stays}`;
   // ...either pair keeps its line, and folds its open one when tight
   const paired = twoSends || twoApproves;
@@ -651,10 +650,11 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   return (
     <Box sx={{ mt: 0.5 }}>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1 }}>{err}</Alert>}
-      {/* THE PRESS IS SAID AT ONCE, IN HIS WORDS (the owner, 2026-11-16: Accept and close showed nothing for 15 seconds, then the task was gone):
-          what he pressed and what it is doing, from the press until its answer - then the card, pressed, says how it went */}
-      {going ? <Alert severity="info" data-tq-pressed-line="" sx={{ mb: 1 }}>{`You pressed ${pressedWord} - ${goingWord.toLowerCase()}`}</Alert>
-        : delivery.line && <Alert severity={delivery.state === "unknown" ? "warning" : "info"} sx={{ mb: 1 }}>{delivery.line}</Alert>}
+      {/* THE PRESS IS SAID AT ONCE, ON THE BUTTON HE PRESSED (the owner, 2026-11-16: Accept and close showed nothing for 15 seconds): it spins
+          with what it is doing, and nothing else on the card moves until it is the pressed card (the owner, 2026-11-17: "when you click buttons
+          on card it flickers then presses" - a line drawn over the card at the press pushed it down, its subject folded, then the sent card
+          jumped back up: three shapes in a quarter second) */}
+      {!going && delivery.line && <Alert severity={delivery.state === "unknown" ? "warning" : "info"} sx={{ mb: 1 }}>{delivery.line}</Alert>}
       <ApprovalInterrupt it={interrupt} onResolve={(choice) => {
         // the click did not send; the owner's edit stays theirs, the refreshed draft is shown beside it
         const res = resolveInterrupt(interrupt, choice, { [r.ReviewId]: value });
@@ -709,7 +709,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
         </Box>
       )}
       {/* THE ONE EMAIL CARD (the owner, 2026-11-08): the reply and the agent's email alike - To, CC, BCC folded until asked for, Subject, files */}
-      {isEmail && !proposal && !isCal && (busy || delivery.frozen ? (
+      {isEmail && !proposal && !isCal && (sent || delivery.frozen ? (
         <Typography variant="caption" data-tq-delivery-cc sx={{ display: "block", color: DIM, mb: 0.75 }}>
           CC: {ccNow.length ? ccNow.join(", ") : "none"}{bccNow.length ? ` · BCC: ${bccNow.join(", ")}` : ""}{subjNow ? ` · ${subjNow}` : ""}
         </Typography>

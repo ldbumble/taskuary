@@ -76,9 +76,12 @@ test("an invite's Accept and close says Accepting… at once, then Accepted - cl
   assert.equal(sentLine(p), "Accepted - closing the task");
   assert.equal(sentSaid(p), "closing the task");
   const rd = read("ReviewDecision.jsx");
-  // ...his press is a line at once, until its answer: what he pressed and what it is doing
+  // ...his press is said on the button he pressed, and nothing else on the card moves until it is the pressed card (the owner, 2026-11-17:
+  // "when you click buttons on card it flickers then presses"): no line drawn over it at the press, its subject and copies kept in place
   assert.match(rd, /const going = busyNow && !sent && \["approve", "send_close"\]\.includes\(pressed\)/);
-  assert.match(rd, /\{going \? <Alert severity="info" data-tq-pressed-line="" sx=\{\{ mb: 1 \}\}>\{`You pressed \$\{pressedWord\} - \$\{goingWord\.toLowerCase\(\)\}`\}<\/Alert>/);
+  assert.doesNotMatch(rd, /data-tq-pressed-line/);
+  assert.match(rd, /\{!going && delivery\.line && <Alert/);
+  assert.match(rd, /\{isEmail && !proposal && !isCal && \(sent \|\| delivery\.frozen \? \(/);
   // ...and while the review itself says it is going, the card keeps the act's own word - "Checking delivery…" only for a check
   assert.match(rd, /\{delivery\.active \? spinning\(pw\.busy\) : busy \? "Checking delivery…" : delivery\.label\}/);
 });

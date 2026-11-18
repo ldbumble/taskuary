@@ -31,12 +31,17 @@ export default function ActionCard({ row: given, tid, live = true, onChanged }) 
   // a failed post lit them again before its error was kept - the press was over, the row it reads not yet read again): the status the server
   // answered with stands over a row that still says pending, until that row says it too
   const [settled, setSettled] = useState(null);
-  const row = settled && given?.Status === "pending" ? { ...given, Status: settled.Status, ActError: settled.ActError || given.ActError } : given;
+  // ...one answered elsewhere (`already`: another window, the phone) holds greyed instead, until the row says what that press did - its words
+  // are not this card's to say (the card round, 2026-11-18: this window's unsent edit was said as posted)
+  const answered = !!settled && given?.Status === "pending", row = answered && settled.mine ? { ...given, Status: settled.Status, ActError: settled.ActError || given.ActError } : given;
+  const held = answered && !settled.mine ? "held" : "";
   const p = row?.post || {}, act = actionFor(p.type), st = stateOf(row, live), tk = textKey(act);
   const [text, setText] = useState(String(p[tk] || "")), [vals, setVals] = useState(() => valuesOf(act, p));
-  const [busy, setBusy] = useState(""), [err, setErr] = useState(""), [viewing, setViewing] = useState(null);
-  // ...gone by this card's own press: said in the words of what he picked ("Saved as a draft"), with its link
-  const done = settled && ["approved", "edited"].includes(settled.Status) ? settled : null;
+  const [pressing, setBusy] = useState(""), [err, setErr] = useState(""), [viewing, setViewing] = useState(null);
+  // ...gone by THIS card's press: said in the words of what he picked ("Saved as a draft"), with its link, until the row says what went. One
+  // gone from another window (`already`) is never said in this window's words: that edit was not what went (the card round, 2026-11-18)
+  const done = answered && settled.mine && ["approved", "edited"].includes(settled.Status) ? settled : null;
+  const busy = pressing || held;
   if (!act) return null;
   // ...and gone by it, it reads what he pressed - his words, his picks - not the proposal's until the row comes back with them (a landed draft
   // said "Post now" over the agent's words for a beat, then "Save as draft" over his: the card round, 2026-11-18)
@@ -54,7 +59,7 @@ export default function ActionCard({ row: given, tid, live = true, onChanged }) 
     const o = await press(api, row.ReviewId, { verb, final_text: verb === "approve" ? text : null,
       ...(verb === "approve" && Object.keys(changed(act, p, vals)).length ? { fields: changed(act, p, vals) } : {}) }, 2);
     const line = landed(o) || o.kind === "already" ? "" : failLine(o, post ? "posted" : "sent"), status = o.data?.status;
-    if (status && status !== "pending") setSettled({ Status: status, ActError: line, url: o.data.result?.url || "" });
+    if (status && status !== "pending") setSettled({ Status: status, ActError: line, url: o.data.result?.url || "", mine: o.kind !== "already" });
     else setErr(line);
     if (o.kind !== "error") onChanged?.();
     setBusy("");

@@ -132,3 +132,23 @@ test("a post with its words and a choice edited lands as edited, and its card sa
   assert.equal(sent.post.result?.url, "https://social.example/alex/posts/1"); assert.equal(sent.post.text, "Gas rose 5 cents this week."); assert.equal(sent.post.publish, "draft");
   assert.deepEqual(errors, []);
 });
+
+// ...POSTED FROM ANOTHER WINDOW WHILE THIS ONE HELD AN EDIT: the press here answers `already`, and the card says what went - the other window's
+// words - never this window's edit as if it had been posted
+test("a post sent from another window is said in the words that went, not this window's edit", { timeout: 300000 }, async (t) => {
+  const w = await world(t), page = await w.newPage();
+  await page.setViewport({ width: 1600, height: 900 });
+  const made = await w.api("/api/fixture/act-card", { connected: true, lands: "linkedin_post", title: "Gas prices post",
+    post: { action: "run_tool", type: "linkedin_post", text: "Gas rose 4 cents this week.", visibility: "CONNECTIONS", publish: "now" } });
+  await page.goto(w.ui, { waitUntil: "domcontentloaded" });
+  await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
+  const sel = `[data-tq-task-page] [data-tq-act="${made.reviewId}"]`;
+  await page.waitForSelector(`${sel} [data-tq-act-press]`, { visible: true, timeout: 60000 });
+  await page.$eval(`${sel} textarea[data-tq-act-text]`, (x) => { x.focus(); x.select(); }); await page.keyboard.type("An edit never sent.");
+  await w.api(`/api/reviews/${made.reviewId}/decide`, { verb: "approve", final_text: "Gas rose 6 cents this week.", note: null });
+  const states = await watch(page, sel, "[data-tq-act-press]", 4000);
+  assert.notEqual(states[0]?.s, "no-button", "the card had already turned before the press");
+  assert.ok(!states.filter((x) => x.s === "pressed").some((x) => /never sent/.test(x.text)), `this window's edit was said as posted: ${JSON.stringify(states)}`);
+  assert.equal(relitAfter(states), -1, `relit: ${JSON.stringify(states)}`);
+  assert.match(await page.$eval(sel, (c) => c.innerText), /6 cents/);
+});

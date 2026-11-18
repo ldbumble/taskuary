@@ -862,10 +862,14 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ...and NOT while it only waits on the page (2026-11-17): every way the page's ask is answered - the saved sign-in typed, the fill page,
   // the owner signing in or stepping through on it (signin._continue, browsergate._close) - is a workerstate.record, whose task-changed the
   // quiet pane below reads once. Read every 2.5 s, it was a read of the whole conversation for as long as the page stood unanswered
+  // ...READ WHEN THE TURN MOVES (stress round, 2026-11-18): each step is pushed (run-tail), read at most once a second; the tick only backs it
+  // up - every tick while the socket is down, else every 5 s (restLook). Every 1-2.5 s for the whole turn was ~25 reads a minute of a turn
+  // that was thinking in silence
   useEffect(() => {
     if (!busy) return undefined;
-    let live = true;
-    const timer = setInterval(async () => {
+    let live = true, last = Date.now();
+    const read = async () => {
+      last = Date.now();
       try {
         const { data: fresh } = await api.get(`/api/tasks/${task.TaskId}/assistant`);
         if (!live) return;
@@ -874,8 +878,12 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         // finished answer (2026-10-15)
         onSession?.(fresh.session || null);
       } catch { /* it will still be there next tick */ }
-    }, drawn ? 2500 : 1000);      // a start that has drawn nothing yet is read every second: its first word gives the room at once
-    return () => { live = false; clearInterval(timer); };
+    };
+    const [wake, stop] = coalesced(read, 1000);
+    const off = onLive("run-tail", (ev) => { if (touches(ev, task.TaskId)) wake(); });
+    const timer = setInterval(() => { if (restLook({ socket: liveUp(), last, now: Date.now(), every: 5000 })) read(); },
+      drawn ? 2500 : 1000);      // a start that has drawn nothing yet is read every second with no socket: its first word gives the room at once
+    return () => { live = false; clearInterval(timer); off(); stop(); };
   }, [busy, drawn, task.TaskId, onSession]);
   // ...and what a read brings is handed to the standing thread (a revision bump), as the poll does: taken into `data` alone, the owner's
   // Continue note waited for the next poll to show (the owner, 0.3.9.51: "I did Continue, filled it out and nothing happened")

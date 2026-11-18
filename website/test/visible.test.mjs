@@ -146,3 +146,11 @@ test("a turn at work, socket up: half a minute of silence is at most 10 looks, a
   assert.match(src, /onLive\("run-tail", \(ev\) => \{ if \(touches\(ev, tid\)\) wake\(\); \}\)/, "the chat reads when its turn's step is pushed");
   assert.match(src, /coalesced\(look, 600\)/, "at most every 600 ms");
 });
+
+// ...AND THE CHAT'S SESSION READ WITH IT (stress round, 2026-11-18): /assistant was read every 1-2.5 s for the whole of a turn
+test("a turn at work reads its session when a step is pushed, with a 5 s look under a live socket", () => {
+  const src = readFileSync(fileURLToPath(new URL("../src/GeneralWorkspace.jsx", import.meta.url)), "utf8");
+  const at = src.indexOf("const [wake, stop] = coalesced(read, 1000);");
+  assert.ok(at > 0, "the session read is coalesced and woken by the push");
+  assert.match(src.slice(at, at + 600), /onLive\("run-tail"[\s\S]*every: 5000/);
+});

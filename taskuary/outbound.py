@@ -1005,7 +1005,9 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         chat = (msg.get('ConversationId') or '')[6:]        # 'teams:19:...'
         if not chat: raise RuntimeError('this chat message has no chat id to answer in')
         q = chat_quote(msg)
-        return send_teams(store, chat, body, _source_connector_id(store, 'teams', msg.get('SourceName')), quote=q and q['id'])
+        from . import chatformat                            # a text post shows **, # and [](...) as typed: spelled for the chat, as every chat's is
+        return send_teams(store, chat, chatformat.render(body, 'teams', links=True) or body,
+                          _source_connector_id(store, 'teams', msg.get('SourceName')), quote=q and q['id'])
     if ch in ('telegram', 'whatsapp'):
         from . import chatformat, messengers
         chat = str(msg.get('ConversationId') or '').split(':', 1)[-1]   # 'telegram:<id>' / 'whatsapp:<jid>'
@@ -1016,7 +1018,7 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         # reach for markdown - and the person reading it is on the same WhatsApp that prints **
         # as punctuation and folds a long bubble behind "Read more". Spell it for the channel and
         # send it whole; the first piece is the reply, so its receipt is the one that answers.
-        said = [p for p in chatformat.split(chatformat.render(body, ch)) if p.strip()] or [body]
+        said = [p for p in chatformat.split(chatformat.render(body, ch, links=True)) if p.strip()] or [body]
         # ...and as a REPLY to the very line it answers (the owner, 2026-11-08: two answers in one chat, neither said which
         # message it was for): the first piece quotes it, so each reply quotes its own
         q = chat_quote(msg)
@@ -1030,7 +1032,7 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         except (ValueError, TypeError, AttributeError): thread = ''
         ts = thread or (ext.rsplit(':', 1)[-1] if ext.startswith('slack:') else '')  # 'slack:<channel>:<ts>' - or the thread it is a reply in
         connector_id = _source_connector_id(store, 'slack', chat)
-        pieces = [p for p in chatformat.split(chatformat.render(body, 'slack'), 3900) if p.strip()] or [body]
+        pieces = [p for p in chatformat.split(chatformat.render(body, 'slack', links=True), 3900) if p.strip()] or [body]
         return _send_parts(lambda p: send_slack(store, chat, p, connector_id, None if chat.startswith('D') else ts or None), pieces)
     if ch == 'imessage':
         from .imessage import send_text

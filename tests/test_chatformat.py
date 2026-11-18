@@ -89,6 +89,14 @@ class RenderTests(unittest.TestCase):
             self.assertEqual(cf.render('[cloudflare/audit](https://github.com/x)', channel),
                              'cloudflare/audit')
 
+    def test_a_reply_to_a_person_keeps_the_address_its_link_points_to(self):
+        """A drafted reply's "the agenda is [here](url)" reached the person as "the agenda is here." - the link it was written for gone."""
+        md = 'The agenda is [here](https://northwind.example/agenda), see [TQ-0012](#task=12) and [https://northwind.example](https://northwind.example).'
+        self.assertEqual(cf.render(md, 'whatsapp', links=True),
+                         'The agenda is here (https://northwind.example/agenda), see TQ-0012 and https://northwind.example.')
+        self.assertEqual(cf.render(md, 'slack', links=True),
+                         'The agenda is <https://northwind.example/agenda|here>, see TQ-0012 and <https://northwind.example|https://northwind.example>.')
+
     def test_a_table_becomes_lines_a_phone_can_read(self):
         """Fifteen repos by six columns of pipes is unreadable in a bubble."""
         out = cf.render('| Step | Tool |\n|---|---|\n| Fetch trending | WebFetch |', 'whatsapp')

@@ -365,8 +365,11 @@ class NavigateTests(unittest.TestCase):
             self.calls.append((argv, kw))
             return mock.Mock(wait=mock.Mock(return_value=0), kill=mock.Mock())
         self.popen = mock.patch.object(bv.spawn, 'popen', side_effect=popen); self.popen.start()
+        # ...and the session's own Chrome, which a command first asks over its DevTools port whether a load is stuck (browserview.unstick):
+        # none answers here - left real, it reached for a port on this machine, and macOS CI's guard refused it (2026-11-18)
+        self.cdp = mock.patch.object(bv, '_devtools', return_value=None); self.cdp.start()
     def tearDown(self):
-        for p in (self.open, self.which, self.popen): p.stop()
+        for p in (self.open, self.which, self.popen, self.cdp): p.stop()
 
     def test_a_bare_host_is_https_and_the_argv_is_a_list(self):
         self.assertEqual(bv.navigate('s', ' adp.com/login '), 'https://adp.com/login')

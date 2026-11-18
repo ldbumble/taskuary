@@ -985,3 +985,26 @@ def test_a_sign_up_he_says_done_to_keeps_the_password_taskuary_made():
     assert vault.unseal(signin.saved(s, site)['Secret']) == typed[0], 'the password the site was sent is kept'
     assert told[0][0].startswith(f'Signed up on {site}'), told
     assert (tid, site) not in signin.SIGNING_UP
+
+
+def test_a_saved_sign_in_whose_site_emails_a_code_types_the_code_from_the_mail():
+    """The saved sign-in went in and the site emailed a login code as the password was sent. The code step was raised a turn later (its agent
+    made the page ready first), and its watch read mail only from then on - the code, already in the inbox, was never typed."""
+    s = MemoryStore(); tid = Factory(s).task('Rent data'); signin._TRIED.clear(); signin.SIGNING_UP.clear()
+    site, rid = 'rentscope.example', 'signin:rentscope.example'
+    signin.save(s, site, USER, PW)
+    def fill(sid, st, user, pw, **k):
+        s.add_message({'Channel': 'email', 'FromEmail': 'no-reply@rentscope.example', 'FromName': 'RentScope', 'Subject': 'Your sign-in code',
+                       'BodyText': 'Your RentScope sign-in code is 552019.', 'Status': 'filed'})
+        return {}
+    asked = []
+    with mock.patch.object(signin, 'asks_code', side_effect=[False, True]), mock.patch.object(signin, '_ready_code', return_value=False):
+        signin._auto(s, tid, 'sess1', site, rid, fill, lambda said=None: asked.append(said))
+    assert asked == [signin.CODE_ASK.format(site=site)], asked
+    ws.record(s, tid, 'sess1', 'input_needed', request_id=rid, text=asked[0], choices=None, source='api')
+    code_page = {'top': True, 'href': 'https://rentscope.example/verify', 'otp': True}
+    page = WatchPage([code_page, code_page, {'top': True, 'href': 'https://rentscope.example/data'}])
+    typed = []
+    with mock.patch.object(signin, '_type_code', lambda c, st, code: typed.append(code())), mock.patch.object(signin, '_continue', lambda *a, **k: True):
+        assert signin.watch(s, tid, 'sess1', site, rid, conn=page, every=0)
+    assert typed == ['552019']

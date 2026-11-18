@@ -491,6 +491,7 @@ def _auto(store, tid, sid, site, rid, fill, ask=None):
         # (the owner's own sign-in, 2026-11-14: the agent asked again on the code page, the saved sign-in was tried on it, "there is no
         # sign-in form", and the task read "the saved sign-in was not used")
         if ask and not code and asks_code(sid) and not on_password_page(sid): return _ready_code(store, tid, sid, site) or ask(CODE_ASK.format(site=site))
+        typing(store, tid, site)
         got = fill(sid, site, user, pw, **({'code': code} if code else {}), **({'extra': ex} if ex else {})) or {}
         _used(store, site)
         # THE PASSWORD WENT IN AND THE SITE ASKS A CODE NOBODY KEEPS: that step is the owner's, on the page, and it is said in one line - the
@@ -753,6 +754,23 @@ def mailed_code(store, site: str, after: int):
     return None
 
 
+_TYPING = {}                    # (task, site) -> (the newest mail, when) as Taskuary typed a password there: a code the site mails for it comes after
+CODE_FRESH = 10 * 60            # ...and is looked for from there this long; past it, from when the ask's watch begins
+
+
+def _newest_mail(store) -> int: return (store._one('SELECT MAX(MessageId) AS m FROM message') or {}).get('m') or 0
+
+
+def typing(store, tid, site): _TYPING[(int(tid), site)] = (_newest_mail(store), _now())
+
+
+def mail_since(store, tid, site) -> int:
+    """The mail a code for this sign-in can be in: from just before Taskuary typed its password - the site mails the code as the password goes,
+    and the code step is raised a turn later (its agent makes the page ready), when the code was in the inbox already - else from now."""
+    mid, at = _TYPING.pop((int(tid), site), (None, 0))
+    return mid if mid is not None and _now() - at < CODE_FRESH else _newest_mail(store)
+
+
 def _code_from_mail(store, tid, site, c, mid, code) -> bool:
     mail = f'"{str((store.get_message(mid) or {}).get("Subject") or "").strip()[:120]}"'
     if not code:
@@ -800,8 +818,7 @@ def watch(store, tid: int, sid: str, site: str, rid: str, conn=None, every: floa
             c.js(CAPTURE)
         except SignInError as e: logger.debug(f'signin: the {site} page of task {tid} could not be listened to - {e}')
         start, end, steady = (c.fields('') or {}).get('href') or '', time.time() + until, 0
-        up = SIGNING_UP.get((int(tid), site)) or {}
-        after, coded = (up['since'] if up.get('since') is not None else _newest_mail(store)), False      # mail from here on (mailed_code)
+        after, coded = mail_since(store, tid, site), False      # mail from here on (mailed_code)
         while time.time() < end and _asked(store, tid, rid):
             time.sleep(every)
             for ev in c.drain():
@@ -1107,8 +1124,8 @@ def type_in(sid: str, site: str, user: str, pw: str, code=None, extra=None) -> d
 # Next on the same walk), so the page is then his, as a sign-in's is - and what he sends on it is kept and the agent told (watch). The agent
 # never sees the password, and he never types one.
 ENDED_WAIT = 30                 # how long a sign-up's answer waits for the turn that asked to end
-SIGNING_UP = {}                 # (task, site) whose open ask is a sign-up -> {since: the newest mail before its password was typed, sent: Taskuary
-                                # sent the form, user}: the watch says "signed up" when it goes through, never "signed in", and reads mail from `since`
+SIGNING_UP = {}                 # (task, site) whose open ask is a sign-up -> {pw, sent: Taskuary sent the form, user}: the watch says "signed up"
+                                # when it goes through, never "signed in"
 MAILED_ASK = '{site} emailed a code to finish the sign-up - Taskuary types it from the mail when it comes, or type it on the page'
 NEW = 'new:'                    # signin_marker's claim for a sign-up: this, then the site the agent named
 def signing_up(claimed) -> bool: return str(claimed or '').startswith(NEW)
@@ -1173,9 +1190,6 @@ def new_account(store, tid, sid, site, rid, fill=None, watch=...) -> dict:
     return {'site': site, 'auto': False}
 
 
-def _newest_mail(store) -> int: return (store._one('SELECT MAX(MessageId) AS m FROM message') or {}).get('m') or 0
-
-
 def signed_up_words(site, user='', sent=True) -> tuple[str, str]:
     "(the task's receipt, what the agent is told) for a sign-up that went through - sent by Taskuary as he asked, or by his press on the page."
     who = f' as {user}' if user else ''
@@ -1185,7 +1199,7 @@ def signed_up_words(site, user='', sent=True) -> tuple[str, str]:
 
 
 def _signup(store, tid, sid, site, rid, fill, watch):
-    pw, since = new_password(), _newest_mail(store)      # ...a code the site emails as the form goes is in a mail from here on
+    pw = new_password(); typing(store, tid, site)
     try: fill(sid, site, pw)
     except Exception as e:
         why = str(e) if isinstance(e, SignInError) else 'the browser could not be reached'
@@ -1198,8 +1212,8 @@ def _signup(store, tid, sid, site, rid, fill, watch):
     from . import browsergate
     if not browsergate.judge(store, [{'verb': 'press', 'args': [], 'raw': f'send the filled sign-up form on {site}, creating an account there'}], browsergate.page(sid),
                              said=browsergate.asked(store, tid))[0]['hold']:
-        return _sent_up(store, tid, sid, site, rid, pw, since=since, watch=watch)
-    SIGNING_UP[(int(tid), site)] = {'since': since, 'pw': pw}       # memory only, as what he types on the page is (_TYPED)
+        return _sent_up(store, tid, sid, site, rid, pw, watch=watch)
+    SIGNING_UP[(int(tid), site)] = {'pw': pw}       # memory only, as what he types on the page is (_TYPED)
     _ask(store, tid, sid, site, rid, f'Sign up on {site}: check the form and press its button - the password is made and kept for you', watch)
 
 
@@ -1231,7 +1245,7 @@ def send_new(sid: str, site: str) -> dict:
         finally: c.close()
 
 
-def _sent_up(store, tid, sid, site, rid, pw, send=None, since=None, watch=None):
+def _sent_up(store, tid, sid, site, rid, pw, send=None, watch=None):
     try: got = (send or send_new)(sid, site)
     except Exception as e: got = {'ok': False, 'why': str(e) if isinstance(e, SignInError) else 'the browser could not be reached'}
     if not got.get('ok'):
@@ -1244,10 +1258,10 @@ def _sent_up(store, tid, sid, site, rid, pw, send=None, since=None, watch=None):
     except ValueError as e: kept = f' The password could not be kept: {e}.'
     # ...AND A CODE PAGE AFTER IT IS NO SIGN-UP YET: the site emailed its code as the form went, and the agent was told "signed up - continue"
     # over the page asking for it - the mail had come before any watch began, so nothing ever typed it. The ask's watch reads mail from before
-    # the password was typed (SIGNING_UP since) and types the code; the code step is his only when no mail holds one
+    # the password was typed (typing) and types the code; the code step is his only when no mail holds one
     if asks_code(sid):
         _audit(store, tid, site, 'vault', True, 'a code was asked', saved=not kept)
-        SIGNING_UP[(int(tid), site)] = {'since': since, 'sent': True, 'user': user}
+        SIGNING_UP[(int(tid), site)] = {'sent': True, 'user': user}
         return _ask(store, tid, sid, site, rid, MAILED_ASK.format(site=site), watch)
     _audit(store, tid, site, 'vault', True, 'signed up', saved=not kept)
     did, said = signed_up_words(site, user)

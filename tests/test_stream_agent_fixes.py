@@ -177,7 +177,7 @@ def test_a_file_sent_in_the_chat_lands_in_the_task_folder():
     up.parent.mkdir(parents=True, exist_ok=True); up.write_bytes(b'%PDF-1.4 slip')
     try:
         got = outputs.take_in(tid, [str(up), 'C:/elsewhere/not-ours.txt'])
-        assert got[0] == str(outputs.folder(tid) / 'permission slip.pdf') and got[1] == 'C:/elsewhere/not-ours.txt'
+        assert got == [str(outputs.folder(tid) / 'permission slip.pdf')]          # ...and a path that is no upload is no file of his
         assert outputs.named(tid, 'permission slip.pdf').read_bytes() == b'%PDF-1.4 slip'
         assert outputs.take_in(tid, [str(up)]) == got[:1]                    # the same file twice is one copy
     finally: shutil.rmtree(outputs.folder(tid), True); up.unlink()

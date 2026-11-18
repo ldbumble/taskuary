@@ -3661,6 +3661,11 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     `wait=False`: the starter runs behind the answer (a door that answers at once) - everything before it has happened by then.
     -> the starter's answer: (session, reply) for a chat, the waiting room's for a coding session; {'kept': row} when not waited for."""
     text = str(text or '').strip()
+    from . import outputs
+    # ...WHAT HE ATTACHED IS THE TASK'S OWN, whatever agent works it (the owner, 2026-11-17: "if you attach item on prompt it's not being sent to
+    # agnet"): copied into its folder first - left under attachments/, a coding agent's Read of it was refused as Taskuary's own data. First of
+    # all: a line held behind a stranger's Trust keeps the task's copy too, and a line whose only file was no upload is empty, and said so
+    files = outputs.take_in(tid, files) if files else files
     if not text and not files: raise ValueError('empty message')
     t = reopen(store, tid, actor)
     if not t: raise ValueError(f'no task {tid}')
@@ -3676,10 +3681,6 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     if not handles(t):
         from . import selfclose
         selfclose.claim(store, tid, actor)
-    from . import outputs
-    # ...WHAT HE ATTACHED IS THE TASK'S OWN, whatever agent works it (the owner, 2026-11-17: "if you attach item on prompt it's not being sent to
-    # agnet"): copied into its folder first - left under attachments/, a coding agent's Read of it was refused as Taskuary's own data
-    files = outputs.take_in(tid, files) if files else files
     line_id = line_id or new_line_id()
     # ...AND A TURN HE STOPPED IS AT REST FOR HIS NEXT LINE, though its CLI has not let go (the bug hunt's stop, 2026-11-12): the page drew the
     # line under the stop, kept unheard it went down by the box, and came back up seconds later when the stopped turn ended. It begins the

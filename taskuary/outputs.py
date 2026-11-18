@@ -55,28 +55,32 @@ _DRIVE = re.compile(r'^[A-Za-z]:|^[\\/]{2}')
 # A FILE THE OWNER ATTACHES IN THE CHAT IS THE TASK'S (the owner, 2026-11-09): a PDF dropped in the box stayed under attachments/prompt/, and
 # sign_form and the propose tools - which take a file in the task folder only - refused it, so the agent had to copy it over first
 _STAMPED = re.compile(r'^\d{8}-\d{6}-[0-9a-f]{6}-')       # the upload's own prefix (server.prompt_file), not the owner's name for it
+# ...AND ONLY WHAT HE UPLOADED IS HIS FILE (the attach stress round, 2026-11-18): any other path a request names - Taskuary's own config with
+# its tokens - went to the agent as "read these files", and to an API brain as a picture; one already in the task's folder is his already
 def take_in(tid: int, paths) -> list:
-    "`paths` as files in task `tid`'s folder: each one this server saved under attachments/ copied in under its own name; the rest as given."
+    "`paths` as files in task `tid`'s folder: each one this server saved under attachments/ copied in under its own name; one there already kept; no other."
     root, out = (config.home() / 'attachments').resolve(), []
     for raw in paths or []:
         try:
             p = Path(str(raw)).resolve()
-            if not (p.is_file() and p.is_relative_to(root)): out.append(raw); continue
+            if not p.is_file(): continue
+            if p.parent == folder(tid).resolve(): out.append(str(p)); continue
+            if not p.is_relative_to(root): continue
             d = folder(tid); d.mkdir(parents=True, exist_ok=True)
             stem, ext = Path(_STAMPED.sub('', p.name) or p.name).stem, p.suffix
             q = next(d / f'{stem}{f"-{i}" if i else ""}{ext}' for i in range(1000) if not (d / f'{stem}{f"-{i}" if i else ""}{ext}').exists()
                      or (d / f'{stem}{f"-{i}" if i else ""}{ext}').read_bytes() == p.read_bytes())
             if not q.exists(): shutil.copyfile(p, q)
             out.append(str(q))
-        except (OSError, ValueError, StopIteration): out.append(raw)
-    return out
+        except (OSError, ValueError, StopIteration): continue
+    return list(dict.fromkeys(out))
 
 
 def take_in_text(tid: int, text: str) -> str:
     "`text` with every file this server saved under attachments/ that it names copied into task `tid`'s folder and named there (take_in)."
     if not text: return text
     root = str((config.home() / 'attachments').resolve())
-    return re.sub(re.escape(root) + r'[^\r\n]*', lambda m: take_in(tid, [m.group(0)])[0], str(text), flags=re.I)
+    return re.sub(re.escape(root) + r'[^\r\n]*', lambda m: (take_in(tid, [m.group(0)]) or [m.group(0)])[0], str(text), flags=re.I)
 
 
 def resolve(tid: int, rel: str, base: Path = None):

@@ -226,3 +226,17 @@ class AttachedFilesReachTheAgent(unittest.TestCase):
         tid, why = self.heard_card('42')
         self.assertEqual(why, 'Not sent - you wrote "42" after it')
         self.assertTrue(conversation.items(self.s, tid)['items'])
+
+    # ...AND ONLY A FILE HE UPLOADED IS HIS FILE (the attach stress round, 2026-11-18): the chat's box handed the agent whatever path the request
+    # named - Taskuary's own config, with its tokens, read "ATTACHED FILES (read these files)" on his line and in the turn - where Continue's door
+    # names only what this server saved under attachments/ (server.prompt_images). One rule, where every door's line goes (take_line)
+    def test_a_line_names_only_the_files_this_server_saved(self):
+        from taskuary import config, conversation, waitroom
+        tid = self.s.create_task({'Title': 'Who is this', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
+        own = config.home() / 'config.toml'; own.write_text('token = "x"')
+        with mock.patch.object(waitroom, 'deliver', return_value={'delivered': 0, 'state': 'working'}):
+            general.take_line(self.s, tid, 'look at these', [str(own), str(self.pic)], 'owner')
+            with self.assertRaises(ValueError): general.take_line(self.s, tid, '', [str(own)], 'owner')    # ...nothing left to send: said, never an empty line
+        [w] = general.waiting_lines(self.s, tid)
+        self.assertEqual([p.rsplit('/', 1)[-1] for p in w['files']], ['the person.png'])
+        self.assertTrue(self.inside(tid, w['files'][0]))

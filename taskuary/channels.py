@@ -854,6 +854,10 @@ def source_folders(s: dict) -> list:
     return [f for f in fs if f] or ['inbox']
 
 
+GONE_FOLDER = ("One of the folders this mailbox reads is not in it any more - deleted or moved in Outlook. Choose its folders again "
+               "on the card; the rest of its mail is read meanwhile.")
+
+
 MAIL_BATCH = 500   # one _mail_msgs call; _mail_folder keeps asking until a short batch comes back
 
 
@@ -2358,7 +2362,11 @@ def _poll_one(store, c, file_only, backfill_hours, llm) -> int:
                         broken.append(f'{folder}: {e}')
                         break                           # disabled/retargeted source: make no more provider calls
                     except Exception as e:
-                        logger.warning(f"outlook {s['Address']} {folder}: {e}"); broken.append(f'{folder}: {e}')
+                        logger.warning(f"outlook {s['Address']} {folder}: {e}")
+                        # ...a folder the card chose that is not there any more (deleted in Outlook: 404 on every poll) has nothing left
+                        # to wait for - held as unfinished, it froze the cycle's cutoff, and mail into the Inbox after it was never read
+                        if folder not in ('inbox', 'sentitems') and _status(e) == 404: errors.append(GONE_FOLDER); continue
+                        broken.append(f'{folder}: {e}')
                 if broken:
                     errors += broken; continue     # the watermark waits for the folders that did not finish
                 if not store.patch_source_poll_state(

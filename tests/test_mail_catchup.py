@@ -484,5 +484,25 @@ class CatchUpTests(unittest.TestCase):
         self.assertEqual(s.get_source(sid)['LastPolledAt'], (T0 - timedelta(hours=1)).astimezone().strftime('%Y-%m-%d %H:%M:%S'))
 
 
+    def test_a_folder_deleted_in_outlook_does_not_blind_the_rest_of_the_mailbox(self):
+        """A folder the card reads was deleted in Outlook: Graph answers 404 for it on every poll, the catch-up cycle never finished, its
+        frozen cutoff never moved - and mail arriving in the Inbox after it was never read again, behind a raw 404 and its URL on the
+        card. A folder that is not there any more has nothing to wait for: the rest is read and the card says which way to fix it."""
+        import requests
+        class Gone(FakeGraph):
+            def __call__(self, tok, upn, since, folder='inbox', **kw):
+                if folder == 'AAMk-gone':
+                    r = requests.Response(); r.status_code = 404
+                    raise requests.HTTPError(f'404 Client Error: Not Found for url: https://graph.microsoft.com/v1.0/users/{upn}/mailFolders/{folder}/messages', response=r)
+                return super().__call__(tok, upn, since, folder, **kw)
+        s, sid = outlook_store(folders=('inbox', 'AAMk-gone'))
+        box = {'inbox': [graph_mail(1, T0 + timedelta(seconds=1))]}
+        with mock.patch.object(channels, '_mail_cutoff', return_value=_iso(T0 + timedelta(minutes=1))): poll(s, Gone(box))
+        box['inbox'].append(graph_mail(2, T0 + timedelta(minutes=5)))            # ...and the next mail comes in after that poll's cutoff
+        with mock.patch.object(channels, '_mail_cutoff', return_value=_iso(T0 + timedelta(minutes=10))): poll(s, Gone(box))
+        self.assertEqual([r['Subject'] for r in inbox_rows(s)], ['mail 1', 'mail 2'])
+        card = channels.card_error(s.get_connector(s.get_source(sid)['ConnectorId']))
+        self.assertIn('not in it any more', card); self.assertNotIn('graph.microsoft.com', card)
+
 if __name__ == '__main__':
     unittest.main()

@@ -28,6 +28,16 @@ test("each row stands where its run left it, and the bar counts what is over", (
   assert.deepEqual(rowState({ ...close(4), Status: "superseded", DecideNote: "set aside when you moved on" }, null), { aside: true });
 });
 
+// A SEND THAT DID NOT GO STILL WAITS ON THE CARD (taskuary/bulkcard.summary): its row was drawn failed, with no tick box, and with every other
+// row done the press was gone - the card stood in front of the line with nothing to press, the card behind it held for good.
+test("a row whose send did not go still waits for the press, its error said beside it", () => {
+  const run = { state: "finished", total: 3, done: 2, failed: 1, left: 0, rows: { 1: "ok", 2: "ok", 3: "mailbox refused: over quota" } };
+  const rows = [{ ...mail(1, "a@cedar.example"), Status: "approved" }, { ...mail(2, "b@cedar.example"), Status: "approved" }, mail(3, "c@cedar.example")];
+  assert.deepEqual(rows.map((r) => rowState(r, run)), [{ done: true }, { done: true }, { waiting: true, failed: "mailbox refused: over quota" }]);
+  assert.deepEqual(rowState({ ...close(4), Status: "superseded", ActError: "issue was deleted" }, { rows: { 4: "issue was deleted" } }), { failed: "issue was deleted" },
+    "an act that failed is off the card");
+});
+
 // THE CARD READS ITS RUN WHILE THE PAGE AROUND IT REDRAWS (2026-11-17: the bar read "0 of 25" until the run ended and Stop the rest stayed lit).
 // Each row the run does pokes task-changed, the task page redraws and hands the card a fresh onChanged - and the poll, keyed on it, was torn
 // down before its one second came. Rendered here with a stand-in React (hooks with their deps, no DOM) so the effect's deps are what is tested.

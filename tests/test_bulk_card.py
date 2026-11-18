@@ -144,3 +144,27 @@ def test_a_task_whose_card_is_running_reads_at_work_not_waiting_on_him():
     assert taskstate.state(s, s.get_task(tid)) == 'working', 'stopping after the row in hand'
     st['state'] = 'stopped'; bulkcard._save(s, st)
     assert taskstate.state(s, s.get_task(tid)) != 'working', 'what was not run waits on him again'
+
+
+def test_sends_that_did_not_go_still_wait_on_the_card_and_its_agent_never_sets_them_up_again():
+    """A run of 20 emails where the mailbox refused every fifth: those rows did not go and still wait for a Send, as a single card's failed
+    send does (general.NOT_GONE) - its agent was told to "set up again only what failed", the road to every one of them twice; and a
+    stop after the failures counted them as "not run"."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        out = call(tid, 'propose_email', items=emails(20))
+    n = [0]
+    def send(*a, **k):
+        n[0] += 1
+        if n[0] % 5 == 0: raise RuntimeError('mailbox refused: over quota')
+        return {'channel': 'email', 'to': k.get('to') or []}
+    with mock.patch.object(outbound, 'send_out', send), mock.patch.object(outbound, 'send_block', lambda *a, **k: ''):
+        st, told = press(s, out['batch'])
+    assert (st['done'], st['failed']) == (16, 4)
+    waiting = [r for r in bulkcard.rows(s, out['batch']) if r['Status'] == 'pending']
+    assert len(waiting) == 4, 'a send that did not go still waits on its card'
+    [said] = told
+    assert 'set up again only what failed' not in said
+    assert '4 that did not go still wait on the card' in said and 'never set them up again' in said, said
+    stopped = {**st, 'state': 'stopped'}
+    assert 'not run' not in bulkcard.summary(s, out['batch'], stopped), 'a row that ran and failed is no row that was not run'

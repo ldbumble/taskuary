@@ -103,11 +103,14 @@ def summary(store, key: str, st: dict) -> str:
     rs = {str(r['ReviewId']): r for r in rows(store, key)}
     what = lambda rid: cardqueue.what(store, {'rids': [int(rid)], 'rows': [rs[rid]]}) if rid in rs else f'rv{rid}'
     bad = [(rid, why) for rid, why in st.get('rows', {}).items() if why not in ('ok', 'left')]
-    rest = [r for r in rs.values() if r['Status'] == 'pending']
+    # ...a send that did not go still waits on the card for his press, as a single card's does (general.NOT_GONE); an act that failed is off it
+    again = [rid for rid, _ in bad if rid in rs and rs[rid]['Status'] == 'pending']
+    rest = [r for r in rs.values() if r['Status'] == 'pending' and str(r['ReviewId']) not in st.get('rows', {})]
     return (f"The owner pressed the bulk card ({st.get('total', 0)} items): {st.get('done', 0)} done, {st.get('failed', 0)} failed, {st.get('left', 0)} left out by them"
             + (f", {len(rest)} not run - they stopped it" if st.get('state') == 'stopped' and rest else '') + '.'
             + (' Failed: ' + '; '.join(f'rv{rid} ({what(rid)}): {why}' for rid, why in bad[:20]) + ('…' if len(bad) > 20 else '') + '.' if bad else '')
-            + ' Say in one line how it went and what, if anything, is still to do; set up again only what failed and is still wanted.')
+            + (f' The {len(again)} that did not go still wait on the card for their press - never set them up again; take back any no longer wanted.' if again else '')
+            + ' Say in one line how it went and what, if anything, is still to do; set up again only a failed act that is still wanted.')
 
 
 def told(store, key: str, st: dict, actor: str = 'owner') -> str:

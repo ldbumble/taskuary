@@ -338,6 +338,20 @@ class ReadingOutside(unittest.TestCase):
             self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], rg.NEVER), cmd)
         self.assertEqual(rg.command_paths('cat ${HOME:-/x}/.ssh/id_ed25519', self.work), [None], 'a default it cannot follow is held, never skipped')
 
+    def test_a_sign_in_place_stays_closed_inside_a_work_folder_or_behind_a_glob(self):
+        """The never-list was judged after the work area and after a glob was cut to its folder: a task whose checkout is the home folder
+        (a dotfiles repository) read the sign-ins in it freely, and once the owner let a task read his home folder, `cat ~/.s*/<key>`
+        ran - its glob judged only as the home it lists. A work folder inside Taskuary's home (scratch, outputs) still reads."""
+        from pathlib import Path
+        from taskuary import config, readgate as rg
+        ssh = Path.home() / '.ssh'; ssh.mkdir(exist_ok=True); key = ssh / 'id_ed25519'; key.touch()
+        self.assertEqual(rg.judge(self.s, self.tid, [str(key)], str(Path.home())), ([], rg.NEVER), 'a checkout at home')
+        self.assertEqual(rg.judge(self.s, self.tid, [str(config.home() / 'scratch' / 'a.md')], str(Path.home()))[1], '')
+        rg.grant(self.s, self.tid, [str(Path.home())])
+        for cmd in ('cat ~/.s*/id_ed25519', 'grep -r token ~/.[a-z]*', 'cat ~/.ss?/*'):
+            self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], rg.NEVER), cmd)
+        self.assertEqual(rg.of_command(self.s, self.tid, 'ls ~/*', self.work), ([], ''), 'a plain * takes no dot-folder, as the shell')
+
     def test_work_in_its_own_folders_runs_and_a_read_outside_is_the_held_card(self):
         from taskuary import acpgate, outputs
         self.assertEqual(acpgate.decide(self.read(os.path.join(self.work, 'notes.md')), self.ctx)[0], acpgate.ALLOWED)

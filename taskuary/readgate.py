@@ -121,16 +121,32 @@ def judge(store, tid, paths, cwd: str = '') -> tuple:
     held, blind = {}, False
     for raw in paths or []:
         if raw is None: blind = True; continue
-        p = _n(raw)
-        if any(_in(p, r) for r in mine) or fetched(p, cwd, sids): continue
-        if any(_in(p, r) for r in nev): return [], NEVER
+        p, pat = _n(_cut(raw)), _n(raw)
+        # ...a never-place is never the work's: only a work folder INSIDE it (the task's scratch, outputs, mail in Taskuary's home) lets a
+        # read there through - a checkout at the home folder does not open the sign-ins in it. A glob that can reach one is that one
+        sec = [r for r in nev if _in(p, r) or (pat != p and _reaches(pat, r))]
+        if any(_in(p, r) and (not sec or any(_in(r, n) for n in sec)) for r in mine) or (not sec and fetched(p, cwd, sids)): continue
+        if sec: return [], NEVER
         if any(_in(p, r) for r in ok): continue
-        p = os.path.realpath(os.path.expanduser(str(raw)))           # ...said as the owner's own spelling of it, never case-folded
+        p = os.path.realpath(os.path.expanduser(_cut(str(raw))))     # ...said as the owner's own spelling of it, never case-folded
         folder = p if os.path.isdir(p) else os.path.dirname(p)
         held.setdefault(folder, []).append('' if folder == p else os.path.basename(p))
     out = [{'tool': 'read', 'what': _said(f, ns), 'why': WHY, 'where': f, 'folder': f} for f, ns in held.items()]
     if blind: out.append({'tool': 'read', 'what': 'read files at a path it builds from a variable', 'why': WHY, 'where': '', 'folder': ''})
     return out, ''
+
+
+def _cut(p: str) -> str:
+    "A glob's path up to the folder it lists - the part that names a real place."
+    return re.split(r'[\\/](?=[^\\/]*' + _WILD.pattern + ')', str(p), maxsplit=1)[0]
+
+
+def _reaches(pat: str, root: str) -> bool:
+    """Can glob `pat` (normalised) match `root` or reach inside it? Matched name by name as a shell does: `*` takes no leading dot, so
+    `~/*` is not `~/.ssh`, while `~/.s*` is."""
+    import fnmatch
+    ps, rs = pat.split(os.sep), root.split(os.sep)
+    return len(ps) > 1 and all(fnmatch.fnmatchcase(r, q) and (q == r or not r.startswith('.') or q.startswith('.')) for r, q in zip(rs, ps))
 
 
 def _said(folder: str, names: list) -> str:
@@ -209,11 +225,11 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None) -> list:
             if e is None: out.append(None); continue
             e = re.sub(r'^/([A-Za-z])(?=/|$)', r'\1:', e) if os.name == 'nt' else e
             if not os.path.isabs(e): e = os.path.join(here or os.getcwd(), e)
-            e = re.split(r'[\\/](?=[^\\/]*' + _WILD.pattern + ')', e, maxsplit=1)[0]     # a glob reads the folder it lists
-            # ...a rooted token whose first folder does not exist is a pattern or an API path, not a file (`grep /api/ x`)
-            parts = Path(e).parts
+            # ...a rooted token whose first folder does not exist is a pattern or an API path, not a file (`grep /api/ x`). A glob stays
+            # whole: judge reads the folder it lists, and whether it can reach a sign-in place
+            parts = Path(_cut(e)).parts
             if len(parts) > 1 and not os.path.exists(os.path.join(parts[0], parts[1])): continue
-            if cd: here = e; break
+            if cd: here = _cut(e); break
             out.append(e)
         else:
             if cd and len(w) == 1: here = os.path.expanduser('~')          # a bare `cd` goes home
@@ -231,7 +247,7 @@ def tool_paths(inp: dict, locations=None, cwd: str = '') -> list:
     for p in ps:
         p = os.path.expanduser(p)
         if not os.path.isabs(p): p = os.path.join(cwd or os.getcwd(), p)
-        out.append(re.split(r'[\\/](?=[^\\/]*' + _WILD.pattern + ')', p, maxsplit=1)[0])
+        out.append(p)
     return out
 
 

@@ -743,14 +743,36 @@ def _asked(store, tid, rid) -> bool: return (pending(store, tid) or {}).get('req
 # (the agent never sees it), the mail named on the task by its subject. A mail with no single code is his to read, said in one line. The
 # mail stays where triage filed it: put on the task, a site's no-reply mail made his own task a stranger's, held until he trusted the site.
 CODE_RE = re.compile(r'(?<![\w-])\d{4,8}(?![\w-])')
-def mailed_code(store, site: str, after: int):
+CODE_SYSTEM = ('A site sent this email while the owner was signing in or signing up there. Which of the numbers listed is the one-time code '
+               '(verification, sign-in or security code) the site asks to be typed? Answer JSON {"code": "<that number exactly as listed>"}, '
+               'or {"code": ""} when none of them is one.')
+CODE_WANT = {'type': 'object', 'properties': {'code': {'type': 'string'}}, 'required': ['code']}
+
+
+def _pick_code(store, text: str, found: set, brain=None) -> str:
+    """WHICH NUMBER IS THE CODE, when the mail holds several - the footer's year, a street address, a zip (real code mails all do): the model's
+    to read, and only one of the numbers the mail holds may come back. '' - no AI, or no clear answer: his to read."""
+    from .llm import build_llm, ask_json
+    from .terminal import fence
+    try:
+        b = brain or build_llm(store, job='judge')
+        if not b: return ''
+        v = ask_json(b, CODE_SYSTEM, f"THE EMAIL:\n{fence(text[:4000])}\nTHE NUMBERS IN IT: {', '.join(sorted(found))}", want=CODE_WANT, need=('code',)).data
+    except Exception as e: logger.debug(f'signin: no reading of which number a code mail holds - {e}'); return ''
+    c = str((v or {}).get('code') or '').strip() if isinstance(v, dict) else ''
+    return c if c in found else ''
+
+
+def mailed_code(store, site: str, after: int, brain=None):
     """(message id, code) of the newest mail from `site` - its sender's registrable domain the page's pinned site - since message `after`,
-    holding exactly one code-shaped number; (message id, '') for one with none or several; None for no such mail."""
+    and the one code it holds (one code-shaped number, or the one the model reads as the code among several); (message id, '') for one with
+    none, or none clear; None for no such mail."""
     for r in store._rows('SELECT MessageId, FromEmail, Subject, BodyText FROM message WHERE MessageId>? ORDER BY MessageId DESC', (int(after or 0),)):
         dom = str(r.get('FromEmail') or '').rsplit('@', 1)[-1]
         if '@' not in str(r.get('FromEmail') or '') or registrable(dom) != site: continue
-        found = set(CODE_RE.findall(f"{r.get('Subject') or ''}\n{r.get('BodyText') or ''}"))
-        return r['MessageId'], (found.pop() if len(found) == 1 else '')
+        text = f"{r.get('Subject') or ''}\n{r.get('BodyText') or ''}"
+        found = set(CODE_RE.findall(text))
+        return r['MessageId'], (found.pop() if len(found) == 1 else _pick_code(store, text, found, brain) if found else '')
     return None
 
 

@@ -897,6 +897,21 @@ class CodeByMail(unittest.TestCase):
         self.assertEqual(signin.mailed_code(self.s, 'lienlens.example', after), (two, ''), 'two codes: his to read, never a guess')
         self.assertTrue(before)
 
+    def test_a_code_mail_with_other_numbers_has_its_code_read_by_the_model(self):
+        """Real code mails carry other numbers - the year in the footer, a street address, a zip. Every such mail read as "several codes",
+        so none was ever typed. Which number is the code is the model's to read; it may only answer one of the numbers the mail holds."""
+        after = (self.s._one('SELECT MAX(MessageId) AS m FROM message') or {})['m'] or 0
+        mid = self.mail('no-reply@lienlens.example', 'Your LienLens verification code is 383972. It expires in 30 minutes.\n\n'
+                                                     'LienLens Inc, 1200 Harbor Way, Millbrook 02139\n(c) 2026 LienLens')
+        seen = []
+        def brain(system, user, **k): seen.append(user); return '{"code": "383972"}'
+        self.assertEqual(signin.mailed_code(self.s, 'lienlens.example', after, brain=brain), (mid, '383972'))
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(signin.mailed_code(self.s, 'lienlens.example', after, brain=lambda *a, **k: '{"code": "999999"}'), (mid, ''),
+                         'a number the mail does not hold is never typed')
+        with mock.patch('taskuary.llm.build_llm', return_value=None):
+            self.assertEqual(signin.mailed_code(self.s, 'lienlens.example', after), (mid, ''), 'no AI: his to read')
+
     def test_the_code_is_typed_on_the_pinned_page_and_the_mail_goes_on_the_task(self):
         mid = self.mail('no-reply@lienlens.example', 'Your LienLens verification code is 383972.')
         typed = []

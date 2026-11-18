@@ -23,7 +23,7 @@ import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import ViewSidebarIcon from "@mui/icons-material/ViewSidebar";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import api from "./api.js";
-import { DEMO_SAID } from "./apiError.js";
+import { DEMO_SAID, demoNo } from "./apiError.js";
 import { runOperation } from "./taskOps.js";
 import { SIDE_NAV } from "./sideNav.js";
 import { draftJob, openReply, rewriteReceipt } from "./replyDraft.js";
@@ -176,7 +176,6 @@ const errText = (e) => {
 // red with "Report this bug" under it, as if the app had broken. setErr below routes any sentence in this set to the chat - the set every
 // refusal lands in as it is answered (apiError.DEMO_SAID), so a card's own catch passing one on is the demo's line too.
 const picksOf = (providers) => (providers || []).map((p) => p.pick).join("|");
-const demoNo = (e) => (e?.response?.status === 403 && e.response.data?.demo ? String(e.response.data.detail || "This is the demo - nothing is sent.") : "");
 // a press the server answered with a reason and no proposal fails as a refused request does: every catch that draws a row's or a card's
 // own line (errText, failOf, proposeFailed) reads its `detail`
 const refusedPress = (say) => Object.assign(new Error(say || "That did not go through."), { response: { data: { detail: say || "That did not go through." } } });

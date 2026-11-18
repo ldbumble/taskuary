@@ -29,8 +29,10 @@ export const plainError = (e, fallback = "That didn't save. Try again in a momen
 // (AssistantView setErr), but knew only the ones that reached it through its own error reader - Hand it to a person's refusal came back
 // through the card's own catch and stood in red with "Report this bug" under it. Every refusal is noted here, as it is answered.
 export const DEMO_SAID = new Set();
+// ...and the sentence itself, '' when the error is not the demo saying no: a press it refuses is never "didn't go through - press again"
+export const demoNo = (e) => (e?.response?.status === 403 && e.response.data?.demo ? String(e.response.data.detail || "This is the demo - nothing is sent.") : "");
 export function keepDetail(e) {
-  if (e?.response?.status === 403 && e.response.data?.demo && typeof e.response.data.detail === "string") DEMO_SAID.add(e.response.data.detail);
+  if (demoNo(e) && typeof e.response.data.detail === "string") DEMO_SAID.add(e.response.data.detail);
   const d = e?.response?.data?.detail;
   if (d && typeof d !== "string") { e.detail = d; e.response.data.detail = detailText(d); }
   return e;

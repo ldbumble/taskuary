@@ -260,9 +260,10 @@ def _outward(cmd: str) -> list:
         import re
         return [{'tool': '?', 'what': 'run a command that may push, publish or send', 'why': OUT, 'command': raw[:400]}] if re.search(
             r'\b(git\s+push|gh\s+(pr|issue|release|repo|api)|glab|publish|sendmail|send-mailmessage)\b', low) else []
-    out = []
+    out, moved = [], False
     for argv in segs:
         tool, w = _words(argv)
+        if tool in MOVES: moved = True
         if tool in ('bash', 'sh', 'powershell', 'pwsh', 'cmd'):                 # `bash -c "git push"`: the string is a command of its own
             for t in argv[1:]:
                 if ' ' in t.strip(): out += _outward(t)
@@ -274,8 +275,44 @@ def _outward(cmd: str) -> list:
         if not what and tool in ('gh', 'glab') and w[:1] == ['api'] and _api_writes(argv): what = 'change something on the code host through its API'
         if not what and tool == 'git' and w[:1] == ['push']: what = GIT['push']
         if not what and tool in HTTP: what = _http_write(argv)
-        if what: out.append({'tool': tool, 'what': what, 'why': OUT, 'command': ' '.join(argv)[:400]})
+        if what: out.append({'tool': tool, 'what': what, 'why': OUT, 'command': ' '.join(argv)[:400], 'to': '?' if moved else _to(tool, argv, w)})
     return out
+
+
+# WHERE A STEP GOES, as its tool's own grammar names it (trusted): '' the checkout's own origin, else the owner/name it names, '?' when the
+# line names some other place - a URL or another remote for git, another folder, a `cd` before it. The trust is one repository's.
+MOVES = {'cd', 'pushd', 'popd', 'chdir', 'set-location', 'sl', 'push-location', 'pop-location'}
+_SLUG = re.compile(r'^(?:https?://[^/\s]+/|git@[^:\s]+:|[\w.-]+\.\w+/)?([\w.-]+/[\w.-]+?)(?:\.git)?(?:/.*)?$')
+
+
+_API_VALUED = {'-X', '--method', '-H', '--header', '-f', '-F', '--field', '--raw-field', '--input', '-q', '--jq', '-t', '--template', '--hostname',
+               '--cache', '-p', '--preview'}
+
+
+def _to(tool: str, argv: list, w: list) -> str:
+    a = [str(t) for t in argv]
+    env = {t.split('=', 1)[0].upper() for t in a if re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', t)}
+    if env & {'GIT_DIR', 'GIT_WORK_TREE', 'GH_REPO', 'GH_HOST', 'GITLAB_HOST'}: return '?'
+    if tool == 'git':
+        if any(t in ('-C', '--git-dir', '--work-tree') or t.startswith(('--git-dir=', '--work-tree=', '--repo', '--receive-pack', '--exec')) for t in a): return '?'
+        remote = w[1] if len(w) > 1 else ''
+        if remote in ('', 'origin'): return ''
+        m = _SLUG.match(remote) if re.match(r'^(https?://|git@)', remote) else None
+        return m.group(1) if m and ('github' in remote or 'gitlab' in remote) else '?'
+    named = [a[i + 1] for i, t in enumerate(a[:-1]) if t in ('-R', '--repo')] + [t.split('=', 1)[1] for t in a if t.startswith('--repo=')]
+    named += [t[2:] for t in a if t.startswith('-R') and len(t) > 2]
+    if w[:1] == ['api']:
+        rest, end = a[a.index('api') + 1:] if 'api' in a else [], ''
+        while rest and not end:
+            t = rest.pop(0)
+            if t in _API_VALUED: rest = rest[1:]
+            elif not t.startswith('-'): end = t
+        m = re.match(r'^/?(?:repos|projects)/([^/]+/[^/]+)(?:/|$)', end)
+        named.append(m.group(1) if m else '?')
+    named += [m.group(1) for t in w if re.match(r'^https?://', t) and (m := _SLUG.match(t))]
+    got = {('?' if n == '?' else (_SLUG.match(n).group(1) if _SLUG.match(n) else '?')).lower() for n in named}
+    got.discard('{owner}/{repo}')                                                       # gh fills these from the checkout itself
+    return '' if not got else got.pop() if len(got) == 1 else '?'
 
 
 def _pending(store, tid: int, sid: str, cmd: str, reads: list = ()):
@@ -333,7 +370,7 @@ def trusted(store, cwd: str, todo: list) -> str:
     if not card: return ''
     level = RANK.get(str(card.get('Scope') or card.get('ScopeDefault') or 'read').lower(), 0)
     ok = ADMIN_OK if level >= 2 else WRITE_OK if level >= 1 else set()
-    return repo if all(a.get('what') in ok and a.get('why') == OUT for a in todo) else ''
+    return repo if all(a.get('what') in ok and a.get('why') == OUT and str(a.get('to', '?')).lower() in ('', repo.lower()) for a in todo) else ''
 
 
 def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '', ask: bool | str = False, about: str = '', reads: list = ()) -> dict:

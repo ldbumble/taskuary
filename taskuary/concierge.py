@@ -458,6 +458,7 @@ def task_now(store, tid: int) -> str:
     elif t.get('RunStatus') == 'running': state = f"{t.get('RunAgent') or 'an agent'} is running headless - nothing for the owner until it stops"
     # ...and whether its last session can be picked up, so "no agent" comes with the road that is real (2026-10-18)
     # ...in the words of its kind: a chat task has no Continue, typing in it carries it on (general.carry_on, the owner 2026-11-07)
+    elif _queued(store, tid): state = 'its agent waits its turn to start - words told to it go in once it starts'
     else:
         from .general import carry_on
         state = 'no agent on it right now' + (f" - its last session is saved ({carry_on(t)})" if continuable(store, tid) else '')
@@ -825,6 +826,13 @@ def _agent_running(tid) -> bool:
     from . import terminal
     try: return terminal.for_task(int(tid), details=False) is not None
     except Exception: return False
+
+
+def _queued(store, tid) -> bool:
+    """An agent's start stands in line for this task (dispatchq: a full house, a start trying again) - one that gave up is not: it waits on
+    the owner's Retry. Words told to a queued agent wait in its box and go in once it starts (waitroom), so they are heard."""
+    q = store.get_dispatch(int(tid)) if str(tid or '').isdigit() else None
+    return bool(q) and q.get('State') != 'failed'
 
 
 def closed_note(store, item: dict | None) -> str:
@@ -1402,7 +1410,7 @@ def _start_agent(store, tid: int, table: dict | None, it: dict, verb: str, words
     # 2026-11-04) - the task's ref was taken for the start. One waiting its turn is said as waiting (funnel 'queued')
     on = o.get('started') or o.get('existing') or o.get('chat')
     t_ = o.get('taskId') or it.get('tid')
-    queued = not on and bool(t_) and bool(store.get_dispatch(int(t_)))
+    queued = not on and bool(t_) and _queued(store, t_)
     if done.get('status') == 'done' and not str(o.get('start_error') or '').strip() and not (on or queued):
         done = {**done, 'status': 'error', 'error': f"the agent on {o.get('ref') or it.get('ref') or 'it'} did not start"}
     if done.get('status') != 'done' or str(o.get('start_error') or '').strip():
@@ -1949,7 +1957,9 @@ def _tell_now(store, tid: int, target: int, said: str, actor: str, owner: str = 
     if r.get('status') != 'done': raise CallMiss(f"{r.get('error') or 'it did not go in'} - say so in plain words. Nothing was sent.")
     o = r.get('outcome') or {}
     when = ('it has them now' if o.get('delivered') else
-            "they wait until you trust its sender" if o.get('state') == 'held_stranger' else 'they go in when it stops at its prompt')
+            "they wait until you trust its sender" if o.get('state') == 'held_stranger' else
+            'they go in when its agent starts - it waits its turn' if _queued(store, target) and not _agent_running(target) else
+            'they go in when it stops at its prompt')
     return _did(store, tid, f"Told the agent on {task_ref(target)}: “{_title_cut(' '.join(str(owner or said).split()), 120)}” - {when}.", 'agent.tell')
 
 
@@ -3774,7 +3784,8 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         # ...and an ANSWER with nobody to hear it (real-AI walk, 2026-10-18): "tell the agent on TQ-n ..." with no session on TQ-n
         # came back as a card, and on the next try as a coding agent nobody asked for. The fact goes back, with the real roads
         # (an agent's own card on the table was built from its live session: it is the run that asked)
-        live = kind in ('agent.answer', 'agent.tell') and (_agent_running(t) or (store.get_task(t) or {}).get('RunStatus') == 'running')
+        # ...and an agent waiting its turn to start hears them too: they wait in its box until it starts (_queued)
+        live = kind in ('agent.answer', 'agent.tell') and (_agent_running(t) or (store.get_task(t) or {}).get('RunStatus') == 'running' or _queued(store, t))
         # ...but words for an agent the owner stopped, or a restart cut off, ARE "carry on" (the overnight run, 2026-11-03: "carry on with the
         # vendor notes" was answered "press Try again or Run another agent"): its saved conversation picks up with them as the owner's note
         if kind in ('agent.answer', 'agent.tell') and not live and continuable(store, t):

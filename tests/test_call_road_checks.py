@@ -70,6 +70,21 @@ class TheCallRoadChecksWhatTheButtonsCheckTests(unittest.TestCase):
         self.assertIn(f'No agent is on TQ-{tid:04d}', said); self.assertIn('dispatch.prepare', said)
         self.assertEqual(s._rows("SELECT * FROM operation WHERE Kind='agent.answer'"), [], 'no card nobody hears')
 
+    def test_words_for_an_agent_waiting_its_turn_are_kept_for_it_never_refused(self):
+        # a full house queued the task's agent (dispatchq): "tell the agent to use the main branch" was refused "No agent is on TQ-n -
+        # nothing would hear that" while its start stood in line. The words wait in its box and go in once it starts - said as that
+        from taskuary import ingest, origin, server, waitroom
+        s, tid, mid, item = table()
+        s.enqueue_dispatch(tid, None, 'claude', 'no slot free')
+        dock = concierge.general.dock_task(s, 'owner')[0]['TaskId']
+        with mock.patch.object(concierge, '_agent_running', return_value=False), mock.patch.object(ingest, 'has_room', return_value=False), \
+             mock.patch.object(server, 'store', s), mock.patch.object(origin, 'hold', return_value=None):
+            out = concierge.call_turn(s, dock, {'kind': 'agent.tell', 'params': {'ref': f'TQ-{tid}', 'text': 'use the main branch'}}, None,
+                                      'tell the agent to use the main branch')
+        self.assertEqual([waitroom.parts(w['Note'])[0] for w in s.waiting_notes(tid)], ['tell the agent to use the main branch'])
+        self.assertIn('when its agent starts', out['say'])
+        self.assertNotIn('stops at its prompt', out['say'])
+
     def test_an_answer_to_an_agent_at_work_on_the_named_task_is_told_it(self):
         # the owner, 2026-11-02: words for a working agent go in as its next prompt (agent.tell), no card
         s, tid, mid, item = table()

@@ -2612,6 +2612,9 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
         time.sleep(PASS_GATHER)                    # ...and the rest of a burst still landing
     finally:
         with _PASS_LOCK: got = _PASSING.pop(tid, None) or [(turn or _pass_turn(msg), msg.get('message_id'))]
+    # ...in the order the mails CAME (the store's id), never the order their threads woke: two mails of one poll each polled for the session
+    # on its own beat, and the second took the head of the burst
+    got.sort(key=lambda x: (x[1] is None, x[1] if isinstance(x[1], int) else 0))
     lines, mails = [x[0] for x in got], [x[1] for x in got if x[1]]
     # ...what a turn since has already heard (general.send_prompt hears everything that came in when it begins) is not said a second time
     from . import conversation

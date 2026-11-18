@@ -57,3 +57,21 @@ def test_a_change_on_the_thread_is_said_plainly_first():
     # ...and in the summary too: a chat task draws a turn's summary in place of its words, and the line that said "I see you answered Ray
     # there" was in the words alone - the re-think read as if it had not seen the owner's reply (the chat-model stress run, 2026-11-05)
     assert '''Start the summary's "did" with that same line''' in own
+
+
+def test_two_mails_of_one_poll_go_in_in_the_order_they_came_whichever_thread_wakes_first():
+    """Two mails of one poll on a task whose turn was still opening: each line's thread polled for the session on its own beat, and the
+    one that woke first took the head of the burst - the second mail went in above the first, under "in the order they came"."""
+    s = MemoryStore(); tid = s.create_task({'Title': 'Badge list', 'Kind': 'general', 'Status': 'open'}, 'router'); ses = Ses(); ses.busy = False
+    general.OPENING.add(tid)
+    try:
+        with mock.patch.object(general, 'session_for', return_value=ses), mock.patch.object(ingest, 'PASS_GATHER', 0.3):
+            first = threading.Thread(target=ingest._pass_general, args=(s, tid, {**mail('The first mail.'), 'message_id': 11}))
+            second = threading.Thread(target=ingest._pass_general, args=(s, tid, {**mail('The second mail.'), 'message_id': 12}))
+            first.start(); time.sleep(0.15); second.start()
+            time.sleep(0.15); ses.busy = True              # the opening turn has the session: the second line's beat comes round first
+            time.sleep(0.4); ses.busy = False
+            first.join(5); second.join(5)
+    finally: general.OPENING.discard(tid)
+    assert len(ses.sent) == 1, ses.sent
+    assert ses.sent[0].index('The first mail.') < ses.sent[0].index('The second mail.'), ses.sent[0]

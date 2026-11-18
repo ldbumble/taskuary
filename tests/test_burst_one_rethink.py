@@ -92,3 +92,21 @@ def test_a_mail_a_turn_heard_meanwhile_is_not_said_again_by_the_burst_it_waited_
         a.join(5); b.join(5)
     assert conversation.heard(s, tid, 'mail', [11])
     assert len(ses.sent) == 1 and 'The second mail.' in ses.sent[0] and 'The first mail.' not in ses.sent[0], ses.sent
+
+
+def test_a_mail_the_opening_turn_heard_is_not_said_to_be_the_next_turn():
+    """Two mails of one poll on an ended conversation: the first started the turn, and the second waited for that turn to open - the turn
+    heard it when it began, and answered it. Its pass then wrote "Passed ... it is the assistant's next turn" under that answer, and no
+    turn came: a line saying something was being done when nothing was."""
+    s = MemoryStore(); tid = s.create_task({'Title': 'Badge list', 'Kind': 'general', 'Status': 'open'}, 'router'); ses = Ses(); ses.busy = False
+    general.OPENING.add(tid)
+    try:
+        with mock.patch.object(general, 'session_for', return_value=ses), mock.patch.object(ingest, 'PASS_GATHER', 0.1):
+            t = threading.Thread(target=ingest._pass_general, args=(s, tid, {**mail('The second mail.'), 'message_id': 12})); t.start()
+            time.sleep(0.3)
+            s._exec('INSERT INTO heard (TaskId,Kind,Ref,At,Grp,Seq,Sid) VALUES (?,?,?,?,?,?,?)', (tid, 'mail', '12', time.time(), 1, 0, ''))
+            general.OPENING.discard(tid)           # the opening turn heard it, answered, and let go
+            t.join(5)
+    finally: general.OPENING.discard(tid)
+    assert ses.sent == []
+    assert not [c['Body'] for c in s.list_comments(tid) if 'Passed' in c['Body']]

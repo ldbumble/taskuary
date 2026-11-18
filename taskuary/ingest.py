@@ -2583,6 +2583,10 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
     # a conversation still opening (carry-on, Continue) takes ITS turn first: this one waits until that turn has the session -
     # past the deadline while a quick call is in flight, whose session opens only once its answer is in (a wait for a quick slot plus the call)
     while (time.time() < end or tid in quickwork.RUNNING) and tid in general.OPENING and not getattr(general.session_for(tid), 'busy', False): time.sleep(.25)
+    # ...and the turn that opened heard it as it began (general.send_prompt hears all that came in): that turn answers for it - "it is the
+    # assistant's next turn" written under its answer was a turn nobody was going to take
+    from . import conversation
+    if (mid := msg.get('message_id')) and conversation.heard(store, tid, 'mail', [mid]): return
     ses = general.session_for(tid)
     # an agent that idled out is started again, as the same run on its saved conversation, to take the line (general.idle_out)
     if not ses and general.idled(tid, store):
@@ -2618,7 +2622,6 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
     got.sort(key=lambda x: (x[1] is None, x[1] if isinstance(x[1], int) else 0))
     # ...what a turn since has already heard (general.send_prompt hears everything that came in when it begins, and tells it) is not said a
     # second time - each mail by itself: a turn that heard the first of two left the second the burst's to say, and the burst said both
-    from . import conversation
     got = [x for x in got if not (x[1] and conversation.heard(store, tid, 'mail', [x[1]]))]
     if not got: return
     lines, mails = [x[0] for x in got], [x[1] for x in got if x[1]]

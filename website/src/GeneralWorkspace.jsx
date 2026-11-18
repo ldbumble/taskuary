@@ -12,7 +12,7 @@ import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import api from "./api.js";
 import { liveUp, onLive, touches } from "./live.js";
-import { REST_LOOK_MS, coalesced, restLook } from "./visible.js";
+import { REST_LOOK_MS, changes, coalesced, restLook } from "./visible.js";
 import { aheadChat, heldChat, heldConversation } from "./taskDetail.js";
 import { AttachChip, fileChips, fileState, usePromptImages, useSendWhenUp } from "./promptImages.jsx";
 import { holdUnsent } from "./unsent.js";
@@ -784,8 +784,12 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const conv = useConversation(task.TaskId, true);
   // ..."WORKING" IS ONE FACT ON THE WHOLE PAGE (the recorded walk, 2026-11-11: the chat stood finished under a header that still read "agent
   // working"): the moment the list's own word on it changes, the task's header and its row are read again
+  // ...but only when it CHANGES, and only by itself where no push will say it: an opening that holds the list already read its task and its rail,
+  // and a turn's start and end are pushed (task-changed -> reloadFor, TaskPage's own listener) - asked again here they were a second forced
+  // rebuild of every rail row (measured 2026-11-18). The look stays for a socket that is down, as every poll's safety look does (restLook)
   const convWorks = !!conv.list?.working, answeredRef = useRef(onAnswered); answeredRef.current = onAnswered;
-  useEffect(() => { if (conv.list) answeredRef.current?.(); }, [convWorks]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const workMoved = useRef(null); workMoved.current ||= changes(convWorks);
+  useEffect(() => { if (workMoved.current(convWorks) && conv.list && !liveUp()) answeredRef.current?.(); }, [convWorks]);   // eslint-disable-line react-hooks/exhaustive-deps
   const defaults = useChatDefaults(), own = useOwnDetail(task.TaskId);
   const level = chat ? detailFor({ source, settings: defaults, own }) : "steps";
   // ...and the CLI that runs, what it asks and what it waits on his press for: the list's own (conversation.items `live`, `asking`, `permissions`)

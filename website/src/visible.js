@@ -89,3 +89,7 @@ export function coalesced(fn, ms) {
 // REST_LOOK_MS (or `every`) since its `last` read. One rule for the chat, at rest and at work, and the hand-raise watch.
 export const REST_LOOK_MS = 30000;
 export const restLook = ({ socket = false, last = 0, now = Date.now(), every = REST_LOOK_MS } = {}) => !socket || now - last >= every;
+
+// A VALUE'S CHANGE, ONCE (speed round, 2026-11-18): `moved(now)` is true when `now` is not what the previous call saw - the first call only
+// remembers `first`, so an effect that runs on its first draw is not a change. The chat's "working" flag tells the page through it.
+export const changes = (first) => { let was = first; return (now) => { const moved = was !== now; was = now; return moved; }; };

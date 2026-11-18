@@ -5,7 +5,7 @@ owns a small, persistent conversation on the task.  The object implements the sa
 live-session surface as ``terminal.Term`` so assistant-ui and xterm are only renderers: queueing,
 attachments, the Wall, browser association, and session lifetime all point at one session id.
 """
-import base64, json, mimetypes, re, threading, time, uuid
+import base64, contextvars, json, mimetypes, re, threading, time, uuid
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -2494,7 +2494,9 @@ class GeneralSession:
     # WHAT THE OPEN CHAT IS TOLD AS THE TURN MOVES (stress round, 2026-11-18): the page read the task's whole conversation every 600 ms while
     # a turn ran - 100 builds a minute, through half a minute of silent thinking as much as through a stream of steps - because nothing of a
     # chat's turn was pushed. Every step it records bumps trace_revision and a turn's start and end flip busy: each tells the task's tabs
-    # (run-tail, as a pty's output does), and the chat reads when told
+    # (run-tail, as a pty's output does), and the chat reads when told. ...AND A FLIP OF BUSY IS THE TASK'S NEWS TOO (speed round, 2026-11-18): a
+    # turn files its answer (task-changed) while still busy, so the rail row and header read on that push kept "working" over a finished
+    # turn until a slow safety look - each flip also wakes every view on the task (handraise.moved), as a pane's own transition does
     @property
     def trace_revision(self): return self.__dict__.get('_trace_rev', 0)
     @trace_revision.setter
@@ -2506,13 +2508,16 @@ class GeneralSession:
     @busy.setter
     def busy(self, v):
         was, self.__dict__['_busy'] = self.__dict__.get('_busy'), v
-        if was is not None and bool(was) != bool(v): self._moved()
-    def _moved(self):
+        if was is not None and bool(was) != bool(v): self._moved(flipped=True)
+    def _moved(self, flipped=False):
         tid = self.__dict__.get('task_id')
         if not tid: return
         try:
-            from . import live
+            from . import handraise, live
             live.emit(live.RUN, task_id=int(tid))
+            # ...the END is the turn's news, never the answer to the press that started it: the turn runs in that request's context (live.TAB),
+            # and a wake-up naming his tab as its writer made that tab's rail wait out its own writes' window (~1.5 s) over a finished turn
+            if flipped: handraise.moved(int(tid)) if self.busy else contextvars.Context().run(handraise.moved, int(tid))
         except Exception as e: logger.debug(f'general: run-tail not sent for task {tid}: {e}')
     label = 'Agent'                     # how a task's agent is named everywhere (kinds.SHOWN)
     agent = 'assistant'

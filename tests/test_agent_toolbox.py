@@ -156,6 +156,23 @@ class TheServer(unittest.TestCase):
             text, err = tool(self.tid, 'read_message', id=big, start=start)
         self.assertEqual(got, words)
 
+    def test_a_long_attachment_is_read_in_parts_and_says_how_far_it_was_kept(self):
+        """read_attachment cut a long file's text at the answer's 12,000 characters behind "narrow the search" - nothing an attachment can
+        be narrowed by - and never said the file ran on past the 20,000 Taskuary keeps of it."""
+        from taskuary import attachtext
+        d = config.home() / 'attachments' / 'toolbox'; d.mkdir(parents=True, exist_ok=True)
+        words = ' '.join(f'row{i}' for i in range(6000))
+        (d / 'ledger.txt').write_text(words)
+        aid = self.s.add_attachment({'MessageId': self.mid, 'ExternalId': 'r1:l', 'Name': 'ledger.txt', 'ContentType': 'text/plain',
+                                     'Size': len(words), 'Path': str(d / 'ledger.txt')})
+        text, err = tool(self.tid, 'read_attachment', id=aid)
+        self.assertFalse(err, text); self.assertNotIn('narrow the search', text); self.assertLessEqual(len(text), agenttools.CAP + 4)
+        start = int(re.search(r'start=(\d+)', text)[1])
+        rest, err = tool(self.tid, 'read_attachment', id=aid, start=start)
+        self.assertFalse(err, rest)
+        self.assertIn(f'{len(words):,}', rest)                       # ...the whole file's length, past what is kept of it
+        self.assertTrue(words[:attachtext.KEEP_CHARS].endswith(rest.split('⟧')[0].lstrip('⟦')))      # ...the rest of what is kept, to its end
+
     def test_another_tasks_proof_is_refused(self):
         other = self.s.create_task({'Title': 'Someone else', 'Status': 'open'}, 'owner')
         r = c.post(f'/api/mcp?task={other}', headers=hdr(self.tid), json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'})

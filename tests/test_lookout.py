@@ -330,3 +330,33 @@ def test_the_days_pass_runs_from_the_morning_not_a_day_after_the_last(monkeypatc
     s.set_setting(lookout.LAST_KEY, '2026-11-05 07:30:00', 't'); s.set_setting(lookout.TRIED_KEY, '2026-11-05 07:30:00', 't')
     monkeypatch.setattr(lookout, '_now', lambda: datetime(2026, 11, 5, 18, 0))
     assert lookout.due(s) is False, 'ran today: not again'
+
+
+def test_a_theme_the_check_held_is_never_held_again_as_already_raised_and_the_check_sees_the_counts():
+    """The owner's live Advisor, 2026-11-14..18: 15 ideas proposed, 14 held. Ten were held as "already raised in substance" - raised by
+    nobody: the check's own earlier hold was listed to it as raised, so a theme held once was held every morning after. The rest were held as
+    "the cited lines do not support the count" - the proposal read counted subject groups, the check single messages. Invented world."""
+    s, ids = world()
+    a, b = ids['dup']
+    first = brain({'ideas': [idea('money', 'Vendor billing sent invoice 4471 twice', [f'msg{a}', f'msg{b}'])]}, {'keep': [], 'why': {'1': 'not sure'}})
+    assert lookout.tick(s, first, force=True)['raised'] == []
+    w = ids['backlog'][0]
+    again = brain({'ideas': [idea('pitch', 'The approval backlog has grown four Mondays running', [f'msg{w}'])]}, {'keep': [1]})
+    assert len(lookout.tick(s, again, force=True)['raised']) == 1
+    told = again.seen[1][1]
+    assert 'Vendor billing sent invoice 4471 twice' not in told, 'what the check held never reached the owner: no "already raised"'
+    assert 'counted, as the proposal saw it:' in told and 'Invoices waiting approval' in told, 'the check reads the count the idea rests on'
+    assert 'held by the check' in lookout.window(s)[0], '...while the proposing call still learns from what was held'
+
+
+def test_a_newer_idea_on_a_theme_replaces_the_one_raised_before():
+    """The owner, 2026-11-18: "when you run the next advisor it replaces it or does not say the same thing twice". A theme raised before
+    passes again only with new evidence, and then it stands in the earlier one's place - one idea on it, the newest, unread."""
+    s, ids = world()
+    a, b = ids['dup']
+    old = lookout.tick(s, brain({'ideas': [idea('money', 'Vendor billing sent invoice 4471 twice', [f'msg{a}', f'msg{b}'])]}, {'keep': [1]}), force=True)['raised'][0]
+    new = lookout.tick(s, brain({'ideas': [idea('money', 'Vendor billing has now billed invoice 4471 three times', [f'msg{a}', f'msg{b}'])]},
+                                {'keep': [1], 'replaces': {'1': 'Vendor billing sent invoice 4471 twice'}}), force=True)['raised']
+    assert len(new) == 1 and s.get_idea(old)['Status'] == 'done' and s.get_idea(new[0])['Status'] == 'open'
+    assert [i['Text'] for i in lookout.open_ideas(s)] == ['Vendor billing has now billed invoice 4471 three times']
+

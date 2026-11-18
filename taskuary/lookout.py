@@ -93,9 +93,12 @@ CHECK = (
     "message, and their own sent words do not show them already on it; (4) WORTH A BOSS'S TIME - money, time, risk or credit at a scale "
     "that matters - for a CREDIT idea, the work and its size must be in the cited lines; that leadership has not seen it is the idea's premise, not something the lines must prove; (5) about a person: factual, private and kind - no diagnosis, motive, blame or private life; (6) NEW - not the same point as one under ALREADY RAISED, however reworded, unless the cited lines show something has changed since; (7) STILL TRUE TODAY - a person it names still works with the owner (the window has no departure notice, account removal or 'no longer with' reply, and they still write or are written to), and a process it names still runs. Reject anything generic "
     "('communicate more', 'hold a meeting', 'document it', 'monitor more') however well it is worded. "
-    'Answer JSON only: {"keep": [<numbers of the ideas to keep>], "why": {"<number>": "<one line: why it was rejected>"}}')
+    "An idea ALREADY RAISED to the owner passes only when it brings evidence that is new since - then name the earlier one it replaces. "
+    'Answer JSON only: {"keep": [<numbers of the ideas to keep>], "why": {"<number>": "<one line: why it was rejected>"}, '
+    '"replaces": {"<number of a kept idea>": "<the earlier idea, word for word as listed>"}}')
 CHECK_WANT = {'name': 'lookout_check', 'schema': {'type': 'object', 'additionalProperties': False, 'required': ['keep', 'why'], 'properties': {
-    'keep': {'type': 'array', 'items': {'type': 'integer'}}, 'why': {'type': 'object', 'additionalProperties': {'type': 'string'}}}}}
+    'keep': {'type': 'array', 'items': {'type': 'integer'}}, 'why': {'type': 'object', 'additionalProperties': {'type': 'string'}},
+    'replaces': {'type': 'object', 'additionalProperties': {'type': 'string'}}}}}
 
 
 # ── WHEN ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -214,8 +217,10 @@ def families(store) -> list:
     return [f for f in FAMILIES if f not in turned_down(store) and f not in quiet]
 
 
-def before(store) -> list:
-    """What it raised before and what the owner did with each - and what its own check held back - as evidence for the next pass."""
+def before(store, held_too: bool = True) -> list:
+    """What it raised before and what the owner did with each - and what its own check held back - as evidence for the next pass.
+    `held_too` False for the check: what it held never reached the owner, so it is no "already raised" - read as one, a theme held once
+    was held as a repeat every morning after (the owner's live Advisor, 2026-11-14..18: 14 of 15 ideas held, 10 of them so)."""
     from . import ideagrade
     from .assistant import VERDICT_WORD
     v, now = _verdicts(store), _ts(_now())
@@ -224,7 +229,7 @@ def before(store) -> list:
     for i in store._rows('SELECT * FROM idea WHERE Key LIKE ? ORDER BY IdeaId DESC LIMIT 60', (KEY + '%',)):
         said = VERDICT_WORD.get((v.get(i['Key']) or {}).get('verdict')) or word.get(ideagrade.grade(store._rows, i, now), 'not answered yet')
         out.append(f"- [{i.get('Kind')}] {_one(i.get('Text'), 140)} - the owner: {said}")
-    out += [f"- [{h.get('family')}] {_one(h.get('title'), 140)} - held by the check: {_one(h.get('why'), 120)}" for h in held(store)]
+    out += [f"- [{h.get('family')}] {_one(h.get('title'), 140)} - held by the check: {_one(h.get('why'), 120)}" for h in held(store)] if held_too else []
     return out
 
 
@@ -268,6 +273,13 @@ def _clean(store, d: dict, shown: set, fams: list) -> dict | None:
     return x | {'family': d['family'], 'title': x['title'][:140], 'refs': refs}
 
 
+def counted(store, days: int = DAYS) -> dict:
+    """Each message id of the window -> its subject group's counted line, as the proposing call read it: the check was shown single messages
+    only, and held every idea resting on a count ("the cited lines do not support the 39-message pattern") it had no way to see."""
+    rows = [m for m in _rows(store, days) if str(m['SentAt']) >= _ago(days=days)]
+    return {f'msg{i}': group_line(g) for g in groups(store, rows) for i in g['ids']}
+
+
 def ref_line(store, ref: str) -> str:
     """What one cited id is, for the check and the card: a message's day, sender and subject, a task's title."""
     k, n = _ID.match(ref).groups()
@@ -294,10 +306,12 @@ def check(store, llm, ideas: list) -> tuple:
     """The second call: (kept, [(idea, why held)]). A check that cannot run holds everything - an unchecked idea is never raised."""
     from .llm import ask_json
     if not ideas: return [], []
+    seen = counted(store)
     user = '\n\n'.join(f"IDEA {n} [{x['family']}]: {x['title']}\nevidence: {x['evidence']}\nwhy: {x['why']}\nnext step: {x['next_step']}\n"
                        f"pitch: {x['pitch']}\nwhat it cites:\n" + '\n'.join(f"  {r}: {ref_line(store, r)}" for r in x['refs'])
+                       + ''.join(f"\n  counted, as the proposal saw it: {g}" for g in dict.fromkeys(seen[r] for r in x['refs'] if r in seen))
                        for n, x in enumerate(ideas, 1))
-    said = before(store)
+    said = before(store, held_too=False)
     if said: user += '\n\nALREADY RAISED (and how the owner answered):\n' + '\n'.join(said)
     try:
         got = ask_json(llm, CHECK, user, want=CHECK_WANT, max_tokens=CHECK_TOKENS)
@@ -306,7 +320,8 @@ def check(store, llm, ideas: list) -> tuple:
         logger.info(f'lookout: the check did not run, nothing is raised - {e}')
         return [], [(x, 'the check did not run') for x in ideas]
     keep, why = {int(k) for k in got.data.get('keep') or [] if str(k).lstrip('-').isdigit()}, got.data.get('why') or {}
-    return ([x for n, x in enumerate(ideas, 1) if n in keep],
+    swap = got.data.get('replaces') or {}
+    return ([x | ({'replaces': str(swap[str(n)])} if swap.get(str(n)) else {}) for n, x in enumerate(ideas, 1) if n in keep],
             [(x, _one(why.get(str(n)) or 'it did not clear the bar', 160)) for n, x in enumerate(ideas, 1) if n not in keep])
 
 
@@ -321,6 +336,11 @@ def land(store, x: dict) -> dict | None:
     evidence), with the ids it rests on kept on the action for the agent and the card. A key said before is never said again."""
     k = key_of(x)
     if store._one('SELECT 1 x FROM idea WHERE Key=?', (k,)): return None
+    # ...A NEWER IDEA ON A THEME REPLACES THE OLDER (the owner, 2026-11-18: "when you run the next advisor it replaces it or does not say the
+    # same thing twice"): the one it names is put down, and the new one stands in its place, unread
+    if (old := x.get('replaces')) and (was := store._one("SELECT IdeaId FROM idea WHERE Key LIKE ? AND Status IN ('open','snoozed') AND Text=?",
+                                                         (KEY + '%', ' '.join(str(old).split())))):
+        store.set_idea_status(was['IdeaId'], 'done', 'advisor')
     ev = [{'ref': r, 'label': ref_line(store, r)} for r in x['refs']]
     # ...the pitch on a line of its own, apart from the next step (the owner, 2026-11-02)
     act = {'type': 'lookout', 'family': x['family'], 'title': x['title'], 'whose': 'yours - nobody asked for it',

@@ -90,11 +90,22 @@ def _is_exe(tok: str, exe: str = EXE) -> bool:
     return re.sub(r'(?<=.)@[^/]*$', '', re.sub(r'\.(exe|cmd|ps1|bat)$', '', os.path.basename(str(tok).replace('\\', '/')).lower())) == exe
 
 
+# THE SHELL'S OWN GRAMMAR AROUND A COMMAND: its reserved words open one (`for ...; do agent-browser click`, `if ...; then ...`), and these
+# programs run the command named after their own options (`timeout 30 agent-browser click`, `... | xargs agent-browser click`). Read as no
+# browser act, every one of them ran its click ungated.
+RESERVED = frozenset('do then else elif if while until { ! time'.split())
+RUNNERS = frozenset('sudo doas env nohup timeout nice ionice stdbuf setsid xargs watch caffeinate unbuffer chronic flock nsenter chroot '
+                    'start start-process saps'.split())       # ...and cmd's `start`, PowerShell's Start-Process
+
+
 def _head(argv: list, exe: str = EXE) -> list | None:
-    "The agent-browser (or `exe`: desktop.py) arguments of one simple command, through env prefixes, `&`, npx and the like - else None."
+    "The agent-browser (or `exe`: desktop.py) arguments of one simple command, through env prefixes, `&`, npx, runners and the like - else None."
     i = 0
-    while i < len(argv) and re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', argv[i]): i += 1          # FOO=bar agent-browser ...
+    while i < len(argv) and (re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', argv[i]) or argv[i] in RESERVED): i += 1   # FOO=bar agent-browser, do ...
     while i < len(argv) and argv[i].lower() in ('&', 'npx', 'pnpm', 'dlx', 'bunx', 'yarn', '-y', '--yes', 'exec', 'call', 'cmd', '/c', 'command'): i += 1
+    if i < len(argv) and os.path.basename(argv[i]).lower() in RUNNERS:          # its options and their values, up to the program it runs
+        j = next((j for j in range(i + 1, len(argv)) if _is_exe(argv[j], exe)), None)
+        return argv[j + 1:] if j is not None else None
     return argv[i + 1:] if i < len(argv) and _is_exe(argv[i], exe) else None
 
 
@@ -120,7 +131,9 @@ def acts(cmd: str) -> list:
         # A LOOK THAT IS NOT ONE (M4, 2026-11-08): an address carrying a token or a long query is a magic link ("approve", "confirm",
         # one-click pay) or a way out for what the agent read (`open https://x/?d=...`) - judged like a click; and `get value` reads
         # whatever a box holds, a password the sign-in vault just filled included - checked against the page (check)
-        if verb in NAVS and carries(nxt): verb = 'navigate'
+        # ...and the address a new tab opens, or `read` fetches, is read as open's is
+        to = nxt if verb in NAVS or verb == 'read' else a[i + 2] if verb == 'tab' and nxt.lower() == 'new' and i + 2 < len(a) else None
+        if to is not None and carries(to): verb = 'navigate'
         elif verb == 'get' and nxt.lower() == 'value': out.append({'args': a, 'verb': 'get value', 'read': True}); continue
         elif verb in LOOKS: continue
         if verb: out.append({'args': a, 'verb': verb, **({'nl': True} if _NL.search(str(cmd)) else {})})
@@ -128,7 +141,9 @@ def acts(cmd: str) -> list:
 
 
 def carries(url: str) -> bool:
-    "Does this address carry more than a place - a query or fragment past a few short words, or a token-like run in it?"
+    """Does this address carry more than a place - a query or fragment past a few short words, or a token-like run in it? A `javascript:`
+    address carries a script: opened, it runs on the page as an eval does (`open "javascript:document.forms[0].submit()"` sent a form)."""
+    if re.match(r'\s*javascript:', str(url or ''), re.I): return True
     u = urlsplit(str(url or ''))
     tail = f'{u.query}#{u.fragment}' if u.fragment else u.query
     return len(tail) > 40 or bool(re.search(r'[A-Za-z0-9_%=+/.-]{32,}', f'{u.path}?{tail}'.replace('/', ' ')))
@@ -165,16 +180,16 @@ def setting(act: dict) -> bool:
 
 
 # ── the page it would act on, and the model's verdict ─────────────────────────────────────────────────────────────────────
-def _run(sid: str, args: list, wait: float, tag: str) -> tuple:
+def _run(sid: str, args: list, wait: float, tag: str, cwd: str = None) -> tuple:
     """(exit code, output) of one agent-browser command in this session's browser. Output to a FILE (browserview.navigate says
-    why: the daemon inherits a pipe and it never ends)."""
+    why: the daemon inherits a pipe and it never ends). `cwd`: the agent's folder, for an act that names a file by a relative path."""
     from . import browserview, spawn
     exe = browserview.program()
     if not exe: raise RuntimeError('agent-browser is not installed')
     log = Path(tempfile.gettempdir()) / f'{browserview.session_name(sid)}-{tag}.log'
     with open(log, 'wb') as f:
         p = spawn.popen([exe, '--session', browserview.session_name(sid), *args], env=browserview._cli_env(sid), stdout=f, stderr=f,
-                        stdin=subprocess.DEVNULL)
+                        stdin=subprocess.DEVNULL, **({'cwd': cwd} if cwd and os.path.isdir(cwd) else {}))
         try: rc = p.wait(timeout=wait)
         except subprocess.TimeoutExpired: p.kill(); raise RuntimeError('the browser did not answer in time')
     return rc, log.read_text(encoding='utf-8', errors='replace')
@@ -335,24 +350,44 @@ def _judge(store, todo: list, pg: dict, brain=None, said: str = '') -> list:
 def _verdict(act: dict, v: dict | None, pg: dict, said: str) -> dict:
     if v is None: return {'hold': True, 'what': target(act, pg) or _cmd(act), 'why': "the AI's answer could not be read, so it waits for you"}
     what = ' '.join(str(v.get('what') or '').split())[:200] or target(act, pg) or _cmd(act)
-    # ...what he asked for in his own words is done, never held for a second yes - save paying or moving money, which always waits for his press
-    if v.get('asked') is True and v.get('money') is not True and said: return {'hold': False, 'what': what, 'why': '', 'asked': True}
+    # ...what he asked for in his own words is done, never held for a second yes - save paying or moving money, which always waits for his press.
+    # Only a verdict that SAYS it moves no money passes so: one that left `money` out (a CLI judge carries no schema) passed a payment he asked for
+    if v.get('asked') is True and v.get('money') is False and said: return {'hold': False, 'what': what, 'why': '', 'asked': True}
     if v['irreversible'] and (v['sure'] or not setting(act)): return {'hold': True, 'what': what, 'why': "it can't be undone"}
     if not v['sure'] and not setting(act): return {'hold': True, 'what': what, 'why': "the AI could not tell whether it can be undone"}
     return {'hold': False, 'what': what, 'why': ''}
 
 
 # ── held: the proposal, and the agent told why ────────────────────────────────────────────────────────────────────────────
-def _pending(store, tid: int, sid: str, args: list):
-    "The same act already waiting on this task - an agent that tries it again gets the same card, not a second one."
+def _pending(store, tid: int, sid: str, args: list, url: str = ''):
+    """The same act already waiting on this task - an agent that tries it again gets the same card, not a second one. The same ref on
+    another page is another act (@e12 is whatever that page's snapshot named it): folded into the first card, it never reached the owner."""
     for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,)):
         try: p = json.loads(r.get('DraftText') or '{}')
         except ValueError: continue
-        if p.get('action') == 'browser_act' and p.get('sid') == str(sid) and p.get('args') == args: return r
+        if p.get('action') == 'browser_act' and p.get('sid') == str(sid) and p.get('args') == args and _same_page(str(p.get('url') or ''), url): return r
     return None
 
 
-def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
+def check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> dict:
+    """_check, and A FAILURE ONCE THERE IS AN ACT IS A HOLD: the hook's route lets a command go on any error (server.cli_hook_browser), so a
+    payment whose card could not be written - a busy store, a record that raised - ran with no card and no press."""
+    try:
+        out = _check(store, tid, sid, cmd, brain, cwd)
+        # ...AND WHAT ELSE THE LINE HELD DID NOT RUN, said: a line that pushed and clicked Pay is held here as the click alone, and told only of
+        # the click the agent took its push as gone out. Only the browser commands before the held one ran (they are named where they failed)
+        if out and any(_head(a) is None for a in _segments(cmd) or []):
+            d = out['hookSpecificOutput']
+            d['permissionDecisionReason'] += ' Nothing else in your line ran, save any browser commands before the held one - run the rest on its own line.'
+        return out
+    except Exception as e:
+        if not acts(cmd): raise
+        logger.warning(f'browsergate: task {tid} - the act was not filed for the owner - {e}')
+        return _deny(f"{HELD}: Taskuary could not put this in front of the owner ({str(e)[:160]}), so nothing was done. Run the command again "
+                     "on its own line; if it is held like this again, tell the owner in one line what you were about to do and end your turn.")
+
+
+def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> dict:
     """The hook's answer for one shell command: {} lets it run; a refusal holds it and puts the act on the task. ONE act held
     holds the rest of the command - the shell line is the agent's, and running what comes after the held act is not what it asked for.
     THE ACTS BEFORE IT THAT PASSED ON THEIR OWN RUN FIRST, in order (the real-CLI walk, 2026-11-16: "fill name && fill email && click Next"
@@ -374,7 +409,7 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
         if not args: return _deny(f"{HELD}: a browser command it could not read. Run each agent-browser command on its own line.")
         if not pg['url']: return _deny(NO_PAGE.format(held=HELD))
         for b in passed:
-            try: rc, out = _run(sid, _own_args(b['args']), 30, 'before-held')
+            try: rc, out = _run(sid, _own_args(b['args']), 30, 'before-held', **({'cwd': cwd} if cwd else {}))
             except Exception as e: rc, out = 1, str(e)
             if rc != 0: return _deny(f"{HELD}: {v['what']} waits for the owner, and `{' '.join([EXE, *_own_args(b['args'])])}` before it in your line did "
                                      f"not go in ({' '.join(str(out).split())[:160]}). Nothing after it ran. Run the commands before the held one on their own "
@@ -383,10 +418,12 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
         except ValueError: site = 'the page'
         browserview.ended_on(sid, 'held', store, tid)                          # its last frame is kept if the session stops here
         if shown(tid, sid, pg): return hand_over(store, tid, sid, a, pg, v, site)    # someone watches: the press is theirs, on the page
-        if not _pending(store, tid, sid, args):
+        if not _pending(store, tid, sid, args, pg['url']):
             from . import proposals
+            c = control(a, pg)
             proposals.queue(store, tid, {'action': 'browser_act', 'sid': str(sid), 'args': args, 'command': ' '.join([EXE, *args]),
-                                         'url': pg['url'], 'site': site, 'what': v['what'], 'why': v['why']}, 'agent')
+                                         'url': pg['url'], 'site': site, 'what': v['what'], 'why': v['why'], **({'cwd': cwd} if cwd else {}),
+                                         **({'control': {'name': c['name'], 'role': c['role']}} if c.get('role') else {})}, 'agent')
             store.audit('task', tid, 'browser_act_held', 'taskuary', 'system', {'verb': a['verb'], 'site': site, 'why': v['why']})
         from .selfclose import CARD_TAIL
         return _deny(f"{HELD}: {v['what']} ({v['why']}). Once they approve it, Taskuary runs this exact command in your browser and tells you "
@@ -439,7 +476,13 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
                            f"{p.get('site') or 'the page'} - nothing was done. {AGAIN}")
     if not _same_page(here, str(p.get('url') or '')):
         raise RuntimeError(f"the agent's browser has moved on from the page this was held on ({p.get('site') or 'its site'}) - nothing was done. {AGAIN}")
-    rc, said = (run or (lambda s, a: _run(s, a, 60, 'act')))(sid, args)
+    # ...AND THE REF STILL NAMES THE CONTROL IT WAS HELD ON: a page that re-draws itself on one address (a checkout's next step, a list that
+    # reloaded) gives @e12 to another control at its next snapshot, and the owner's yes to "Continue" clicked "Remove item"
+    if (was := p.get('control')) and (now := control({'args': args}, page(sid))) and (now.get('role'), now.get('name')) != (was.get('role'), was.get('name')):
+        raise RuntimeError(f"the {was.get('role') or 'control'} \"{was.get('name')}\" this was held on is no longer where it was on "
+                           f"{p.get('site') or 'the page'} - the page has changed since, so nothing was done. {AGAIN}")
+    # ...WHERE THE AGENT RAN IT: `upload @e5 ./resume.pdf` approved ran from the server's own folder, and its relative path named another file
+    rc, said = (run or (lambda s, a: _run(s, a, 60, 'act', **({'cwd': p['cwd']} if p.get('cwd') else {}))))(sid, args)
     said = ' '.join(str(said or '').split())[-600:]
     if rc != 0:
         # THE OWNER SAID YES AND THE PAGE SAID NO (the browser-agent walk, 2026-11-04: a click held for a yes landed under a menu the page
@@ -662,7 +705,11 @@ def pressed(store, tid: int, rid: str, now: dict) -> bool:
                           "Look at it and continue.")
         store.add_comment(tid, 'owner', 'agent', f"You did the step on {h['site']} - the agent goes on.")
     else:
-        _tell(store, tid, f"The owner pressed {h['btn']} on the page themselves; the page now shows {shows}. Look at it and continue.")
+        # ...SAID AS SEEN: the page moving is not the press - a "Back to cart" moves it too, and told "the owner pressed Pay" the agent reported
+        # a payment never made. What the page shows now is the agent's to read
+        _tell(store, tid, f"The page moved on from {h['btn']} while it was the owner's to press - Taskuary saw the page move, not which control "
+                          f"they used; it now shows {shows}. Look at it: if it shows {h['btn']} done, continue; if not, they chose not to, so "
+                          "never press it yourself - tell them in one line where it stands and go on.")
         store.add_comment(tid, 'owner', 'agent', f"You pressed {h['btn']} on {h['site']} - the agent goes on.")
     # ...and the chat says it once, as their press (general.PRESSES): it read "You browser act pressed." under a line by Taskuary saying the same
     store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': h['site'], 'btn': '' if h.get('kind') == 'turn' else h['btn'], 'by': 'page'})

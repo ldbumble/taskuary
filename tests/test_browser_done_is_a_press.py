@@ -98,7 +98,7 @@ class DoneIsAPress(unittest.TestCase):
     def test_the_press_the_page_saw_is_one_line_in_plain_words(self):
         rid = self.press()
         self.assertTrue(bg.pressed(self.s, self.tid, rid, {'href': PAY + '/thanks', 'title': 'Thank you'}))
-        self.assertIn('pressed "Pay $42.00" on the page themselves', self.heard()[0][0])
+        self.assertIn('The page moved on from "Pay $42.00"', self.heard()[0][0])
         self.assertEqual(self.lines(), [f'You pressed {BTN} on {SITE}.'])
         self.assertEqual(self.said(), [], 'said once: no second line by Taskuary above it')
         rid = self.turn()

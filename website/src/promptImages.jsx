@@ -4,11 +4,12 @@
 // file, and the assistant's own model is handed the picture itself (server.prompt_images).
 // ...AND ANY FILE, where the box asks for them (`files`; the owner, 2026-11-05: "does drop in the prompt box attach it in all prompt boxes?"):
 // a PDF, a sheet, a log goes to /api/prompt-file under its own name, the same 12 MB cap, and is drawn as a chip with that name
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Box, IconButton, Popover, Tooltip } from "@mui/material";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import CloseIcon from "@mui/icons-material/Close";
 import api from "./api";
+import { pastedFiles } from "./promptPaste.js";
 
 export const IMAGE_TYPES = /^image\/(png|jpeg|gif|webp)$/;
 export const MAX_IMAGES = 8;
@@ -29,32 +30,53 @@ export async function savePromptFile(f) {
 
 export function usePromptImages({ files: anyFile = false } = {}) {
   const [imgs, setImgs] = useState([]);                 // [{ path, url, name, image }]
-  const [busy, setBusy] = useState(false);
+  // ...EACH FILE IS ITS CHIP FROM THE PICK (the owner, 2026-11-18: pressing the paperclip again and again made the box jump): an upload drew
+  // "uploading…" in the row, then took it away for the chip - the words stepped right twice per file, and on a phone the chips' line grew in two
+  // steps, the paperclip with it. Now a picked file stands as its chip at once, faded until it is up, and the row reaches its size once
+  const [pending, setPending] = useState([]);           // [{ key, url, name, image }] - picked, still uploading
   const [err, setErr] = useState("");
+  const held = useRef({ imgs: 0, pending: 0 }), dropped = useRef(new Set()), seq = useRef(0);
+  held.current = { imgs: imgs.length, pending: pending.length };
   const takes = useCallback((f) => anyFile || IMAGE_TYPES.test(f.type), [anyFile]);
   const add = useCallback(async (files) => {
     const list = [...(files || [])].filter(takes);
     if (!list.length) return false;
-    setBusy(true); setErr("");
+    const room = Math.max(0, MAX_IMAGES - held.current.imgs - held.current.pending), go = list.slice(0, room);
+    const left = list.length - go.length;
+    setErr(left ? `${MAX_IMAGES} go with one message - ${left} left out` : "");
+    const mine = go.map((f) => ({ f, key: `up${++seq.current}`, name: f.name || (IMAGE_TYPES.test(f.type) ? "pasted image" : "file"), image: IMAGE_TYPES.test(f.type) }))
+      .map((p) => ({ ...p, url: p.image ? URL.createObjectURL(p.f) : "" }));
+    held.current.pending += mine.length;
+    setPending((cur) => [...cur, ...mine.map(({ f, ...p }) => p)]);
+    let i = 0;
     try {
-      for (const f of list.slice(0, MAX_IMAGES)) {
-        const got = await savePromptFile(f);
-        setImgs((cur) => (cur.length >= MAX_IMAGES ? cur : [...cur, { ...got, url: got.image ? URL.createObjectURL(f) : "" }]));
+      for (; i < mine.length; i++) {
+        const { f, key, url } = mine[i], got = await savePromptFile(f);
+        // ...the chip it stood as becomes the file, in one paint; one taken off while it uploaded stays off
+        if (!dropped.current.delete(key)) setImgs((cur) => [...cur, { ...got, key, url }]);
+        setPending((cur) => cur.filter((p) => p.key !== key));
       }
     } catch (e) {
+      const off = new Set(mine.slice(i).map((p) => p.key));
+      setPending((cur) => cur.filter((p) => !off.has(p.key)));
       setErr(e?.response?.data?.detail || (e?.code === "ECONNABORTED" ? "the upload took too long - try it again"
         : anyFile ? "the file did not upload - try it again" : "the image did not upload - try it again"));
     }
-    finally { setBusy(false); }
     return true;
   }, [takes, anyFile]);
-  const remove = useCallback((path) => setImgs((cur) => cur.filter((i) => i.path !== path)), []);
-  const clear = useCallback(() => { setImgs([]); setErr(""); }, []);
+  // a chip's x: a file that is up, by its path - or one still uploading, by its key, which then never lands
+  const remove = useCallback((path) => {
+    setImgs((cur) => cur.filter((i) => i.path !== path));
+    setPending((cur) => { if (cur.some((p) => p.key === path)) dropped.current.add(path); return cur.filter((p) => p.key !== path); });
+  }, []);
+  // ...`cleared` counts the clears: a press held for files that a clear then took away is not made (useSendWhenUp)
+  const [cleared, setCleared] = useState(0);
+  const clear = useCallback(() => { setImgs([]); setErr(""); setCleared((n) => n + 1); setPending((cur) => { cur.forEach((p) => dropped.current.add(p.key)); return []; }); }, []);
   // ...and files a send could not take, put back in front of what was added since (a task chat's failed line)
   const put = useCallback((files) => setImgs((cur) => [...files.filter((f) => !cur.some((c) => c.path === f.path)), ...cur]), []);
-  // a paste that carries an image (or, with `files`, any file) is that, not text; anything else pastes as it always did
+  // a paste that carries an image (or, with `files`, any file) and no words is that file; anything else pastes as it always did (promptPaste)
   const onPaste = useCallback((e) => {
-    const files = [...(e.clipboardData?.files || [])].filter(takes);
+    const files = pastedFiles(e.clipboardData, takes);
     if (files.length) { e.preventDefault(); add(files); }
   }, [add, takes]);
   const onDrop = useCallback((e) => {
@@ -62,7 +84,22 @@ export function usePromptImages({ files: anyFile = false } = {}) {
     if (files.length) { e.preventDefault(); add(files); }
   }, [add, takes]);
   const onDragOver = useCallback((e) => { if ([...(e.dataTransfer?.types || [])].includes("Files")) e.preventDefault(); }, []);
-  return { imgs, paths: imgs.map((i) => i.path), busy, err, add, remove, clear, put, files: anyFile, drop: { onPaste, onDrop, onDragOver } };
+  return { imgs, pending, paths: imgs.map((i) => i.path), busy: pending.length > 0, cleared, err, add, remove, clear, put, files: anyFile, drop: { onPaste, onDrop, onDragOver } };
+}
+
+// SEND WAITS FOR ITS FILES (2026-11-18): Enter pressed while a picked file was still uploading sent the words without it - the file then
+// landed alone in the emptied box (a task's chat), or was dropped with New's closed box. One road for every box: a press while files upload is
+// held, and goes once they are up, with them; an upload that failed leaves the words in the box under its error. `waiting`: a press is held
+export function useSendWhenUp(pics, send) {
+  const want = useRef(null), [waiting, setWaiting] = useState(false), busy = !!pics?.busy;
+  useEffect(() => {
+    if (want.current == null || busy) return;
+    const held = want.current; want.current = null; setWaiting(false);
+    // ...not when the upload failed, nor when the box was cleared under it (its task changed, or it closed)
+    if (!pics?.err && held === pics?.cleared) send();
+  }, [busy]);   // ...on the change alone: the send of that render reads what it holds then
+  const go = useCallback(() => { if (busy) { want.current = pics?.cleared; setWaiting(true); return; } send(); }, [busy, send, pics?.cleared]);
+  return { go, waiting };
 }
 
 // the paperclip: opens the file picker - images only, or any file where the box takes them
@@ -105,12 +142,15 @@ export function AttachChip({ name, icon = null, thumb = "", warn = "", note = ""
 export const ATTACH_FEW = 3;
 export const attachSplit = (n, few = ATTACH_FEW) => (n > few + 1 ? few : n);   // how many chips stand in the row: "+1 more" is never worth its chip
 const isChip = (c) => React.isValidElement(c) && c.type === AttachChip;
+// ...a box hands its chips in fragments ({came}{his files}): read through them, or no chip was counted and "+N more" never came - the rest ran
+// off the box's edge, out of sight and out of reach of their x
+const flat = (children) => React.Children.toArray(children).flatMap((c) => (React.isValidElement(c) && c.type === React.Fragment ? flat(c.props.children) : [c]));
 // ...INSIDE THE BOX, on its one line: left of the words, never more than a third of it, so the box stays one thin line (the owner, 2026-11-06)
 export const INLINE_CHIPS = { flex: "0 1 auto", maxWidth: "34%", pb: 0 };
 
 export function AttachRow({ children, sx, few = ATTACH_FEW, ...rest }) {
   const [at, setAt] = useState(null);
-  const all = React.Children.toArray(children), chips = all.filter(isChip), other = all.filter((c) => !isChip(c)), k = attachSplit(chips.length, few), more = chips.slice(k);
+  const all = flat(children), chips = all.filter(isChip), other = all.filter((c) => !isChip(c)), k = attachSplit(chips.length, few), more = chips.slice(k);
   return <Box data-tq-attach-row="" {...rest} sx={{ display: "flex", flexWrap: "nowrap", alignItems: "center", gap: 0.5, minWidth: 0, maxWidth: "100%", overflow: "hidden",
     pb: 0.25, "& > .tq-attach-chip": { flexShrink: 1, minWidth: 56 }, "& > [data-tq-attach-more]": { flexShrink: 0 }, ...sx }}>
     {chips.slice(0, k)}
@@ -124,11 +164,14 @@ export function AttachRow({ children, sx, few = ATTACH_FEW, ...rest }) {
     </Popover>
   </Box>;
 }
-// the files waiting to go, as chips: `cannot(i)` says what this box's road cannot do with one
-export const fileChips = (pics, cannot = null) => pics.imgs.map((i) => <AttachChip key={i.path} data-tq-file-chip={i.name} data-tq-file-cannot={cannot?.(i) || undefined}
-  name={i.name} thumb={i.image === false ? "" : i.url || ""} warn={cannot?.(i) || ""} onRemove={() => pics.remove(i.path)} />);
-export const fileState = (pics) => <>{pics.busy && <Box component="span" sx={{ fontSize: 11, color: "var(--tq-warning, #a09889)", flexShrink: 0 }}>uploading…</Box>}
-  {!!pics.err && <Box component="span" sx={{ fontSize: 11, color: "var(--tq-danger, #7a2f3c)", flexShrink: 0 }}>{pics.err}</Box>}</>;
+// the files waiting to go, as chips: `cannot(i)` says what this box's road cannot do with one. One still uploading is the same chip, faded - the
+// same size it will have, so nothing moves when it is up
+export const fileChips = (pics, cannot = null) => [
+  ...pics.imgs.map((i) => <AttachChip key={i.key || i.path} data-tq-file-chip={i.name} data-tq-file-cannot={cannot?.(i) || undefined}
+    name={i.name} thumb={i.image === false ? "" : i.url || ""} warn={cannot?.(i) || ""} onRemove={() => pics.remove(i.path)} />),
+  ...(pics.pending || []).map((p) => <AttachChip key={p.key} data-tq-file-chip={p.name} data-tq-file-pending="" aria-busy="true" title={`${p.name} - uploading…`}
+    name={p.name} thumb={p.url} onRemove={() => pics.remove(p.key)} sx={{ opacity: 0.55 }} />)];
+export const fileState = (pics) => <>{!!pics.err && <Box component="span" sx={{ fontSize: 11, color: "var(--tq-danger, #7a2f3c)", flexShrink: 0 }}>{pics.err}</Box>}</>;
 // a box that keeps its files OUTSIDE it (the dock, Continue, New): the same chips, the same one line
 export function ImageTray({ pics, sx, cannot = null }) {
   if (!pics.imgs.length && !pics.err && !pics.busy) return null;

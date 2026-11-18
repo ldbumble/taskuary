@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { keepUnsent, unsent } from "../src/unsent.js";
+import { holdUnsent, keepUnsent, unsent } from "../src/unsent.js";
 
 const box = () => { const m = new Map(); return { m, getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) }; };
 const src = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
@@ -35,8 +35,7 @@ test("no task, no storage and a storage that refuses are all the box alone", () 
 
 test("both of a task's boxes keep them: the chat's composer and the box before its first agent", () => {
   const chat = src("GeneralWorkspace.jsx"), first = src("AgentSummary.jsx");
-  assert.match(chat, /if \(!c\.getState\(\)\.text && unsent\(id\)\) c\.setText\(unsent\(id\)\);/, "put back into an empty box only");
-  assert.match(chat, /return c\.subscribe\(\(\) => keepUnsent\(id, c\.getState\(\)\.text\)\);/);
+  assert.match(chat, /useEffect\(\(\) => holdUnsent\(runtime\.thread\.composer, task\.TaskId, boxOf\), \[runtime, task\.TaskId\]\);/);
   assert.match(first, /useState\(\(\) => unsent\(task\.TaskId\)\)/);
   assert.match(first, /else keepUnsent\(task\.TaskId, text\);/);
 });
@@ -47,4 +46,32 @@ test("words sent from the box before the first agent are not kept: the chat that
   const cleared = send.indexOf('keepUnsent(task.TaskId, "");'), posted = send.indexOf("await api.post(`/api/tasks/${task.TaskId}/dispatch`");
   assert.ok(cleared > 0 && cleared < posted, "cleared at the press, before the start is asked for");
   assert.match(send, /catch \(e\) \{ keepUnsent\(task\.TaskId, text\);/, "a start that failed keeps them");
+});
+
+// a composer as assistant-ui's: its text, and who listens to it
+const composer = (text = "") => { const fns = new Set(); let t = text;
+  return { getState: () => ({ text: t }), setText: (x) => { t = x; fns.forEach((f) => f()); }, subscribe: (f) => { fns.add(f); return () => fns.delete(f); }, type: (x) => { t = x; fns.forEach((f) => f()); } }; };
+
+test("a box that stays while its task changes under it (the Assistant's walk) shows each task's own words", () => {
+  const s = box(), c = composer(), was = { current: 7 };
+  keepUnsent(8, "for Gail: the totals are fixed", s);
+  let off = holdUnsent(c, 7, was, s);
+  c.type("tell Erin Thursday works");                      // typed on the first task, not sent
+  off(); off = holdUnsent(c, 8, was, s);                    // ...the walk moves on to the next
+  assert.equal(c.getState().text, "for Gail: the totals are fixed", "the next task's box shows its own words");
+  assert.equal(unsent(8, s), "for Gail: the totals are fixed", "and they are not overwritten with the last task's");
+  assert.equal(unsent(7, s), "tell Erin Thursday works", "the first task keeps its own");
+  off(); off = holdUnsent(c, 9, was, s);
+  assert.equal(c.getState().text, "", "a task with nothing typed shows an empty box");
+  assert.equal(unsent(9, s), "");
+  off(); holdUnsent(c, 7, was, s);
+  assert.equal(c.getState().text, "tell Erin Thursday works", "back on the first task, its words are back");
+});
+
+test("a box drawn afresh on its task puts its words back, and never over words already in it", () => {
+  const s = box(); keepUnsent(7, "half a line", s);
+  const c = composer(); holdUnsent(c, 7, { current: 7 }, s);
+  assert.equal(c.getState().text, "half a line");
+  const seeded = composer("rerun it with these notes"); holdUnsent(seeded, 7, { current: 7 }, s);
+  assert.equal(seeded.getState().text, "rerun it with these notes");
 });

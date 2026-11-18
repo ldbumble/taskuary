@@ -13,8 +13,8 @@ import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import api from "./api.js";
 import { onLive, touches } from "./live.js";
 import { aheadChat, heldChat, heldConversation } from "./taskDetail.js";
-import { AttachChip, fileChips, fileState, usePromptImages } from "./promptImages.jsx";
-import { keepUnsent, unsent } from "./unsent.js";
+import { AttachChip, fileChips, fileState, usePromptImages, useSendWhenUp } from "./promptImages.jsx";
+import { holdUnsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
@@ -655,12 +655,11 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
   }, [seed, runtime]);
   // WHAT IS TYPED AND NOT SENT is this task's, and outlives a reload and this pane drawn afresh (unsent.js): put back into an empty box, kept
   // as it is typed, gone once the box is empty - sent or wiped
-  useEffect(() => {
-    const c = runtime.thread.composer, id = task.TaskId;
-    if (!c.getState().text && unsent(id)) c.setText(unsent(id));
-    return c.subscribe(() => keepUnsent(id, c.getState().text));
-  }, [runtime, task.TaskId]);
-  const onKey = (e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent?.isComposing) { e.preventDefault(); sendLine(); } };
+  const boxOf = useRef(task.TaskId);
+  useEffect(() => holdUnsent(runtime.thread.composer, task.TaskId, boxOf), [runtime, task.TaskId]);
+  // ...a line sent while his files upload waits for them (promptImages.useSendWhenUp) - Enter and Send alike
+  const { go: sendBox, waiting: sendHeld } = useSendWhenUp(pics, useCallback(() => sendLine(), [sendLine]));
+  const onKey = (e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent?.isComposing) { e.preventDefault(); sendBox(); } };
   // ...what the card read (LandingCard's onState) places it, and is handed back so it draws at once wherever it lands
   const [landS, setLandS] = useState(undefined);
   const landNode = landing ? React.cloneElement(landing, { onState: setLandS, rev: list?.rev || "", ...(landS ? { initial: landS } : {}) }) : null;
@@ -725,7 +724,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
             {/* THE ONE BOX (AgentSummary.OneBox): paperclip, chips, words, mic, Send - the same component as every other box, assistant-ui's
                 composer its root and input. Its files inside it, the one attachment look in one line (the owner, 2026-11-05), and WHERE IT CAME
                 FROM a chip at its left (2026-11-06) - a press opens it. A turn at work stops on the x of its own head, never in the box */}
-            <OneBox root={ComposerPrimitive.Root} rootProps={{ onSubmit: (e) => { e.preventDefault(); sendLine(); } }} onFiles={onAttach}
+            <OneBox root={ComposerPrimitive.Root} rootProps={{ onSubmit: (e) => { e.preventDefault(); sendBox(); } }} onFiles={onAttach}
               chips={attachmentsRef.current.length || pics?.busy || pics?.err || came || chipsWaiting.length ? <>
                 {came && ((w) => <AttachChip data-tq-came-chip="" {...(w ? { "data-tq-pending-ids": w.ids.join(" ") } : {})} name={w ? w.label : came.label}
                   title={came.title || came.label} icon={came.icon || false} onClick={came.onOpen} sx={{ cursor: came.onOpen ? "pointer" : "default" }} />)(chipsWaiting.find((c) => c.came))}
@@ -735,7 +734,8 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
                 {pics && <>{fileChips(pics)}{fileState(pics)}</>}</> : null}
               input={<ComposerPrimitive.Input className="tq-aui-input" onKeyDown={onKey} placeholder={askWords || placeholder || MESSAGE} />}
               onMic={(t) => { const c = runtime.thread.composer, was = c.getState().text; c.setText(was.trim() ? `${was.trimEnd()} ${t}` : t); }}
-              send={<button type="button" className="tq-aui-send" aria-label="Send" data-tq-send="" onClick={() => sendLine()}><SendIcon fontSize="small" /></button>} />
+              send={<button type="button" className="tq-aui-send" aria-label="Send" data-tq-send="" disabled={sendHeld} onClick={sendBox}>
+                {sendHeld ? <CircularProgress size={14} color="inherit" /> : <SendIcon fontSize="small" />}</button>} />
             <div className="tq-aui-hint">{hint || "Enter sends · Shift+Enter adds a line · paste, drop or attach a file"}</div></>}
           </div>
       </ThreadPrimitive.Root>

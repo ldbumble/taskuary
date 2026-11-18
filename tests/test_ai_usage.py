@@ -132,6 +132,19 @@ def test_the_task_endpoint_lists_every_call_with_its_totals():
     assert (top['what'], top['tier'], top['model'], top['tokens'], top['seconds'], top['run']) == ('general work', 'normal', 'claude-sonnet-4-5', 94000, 60.0, True)
 
 
+def test_an_agent_turn_that_rereads_its_context_from_the_cache_counts_the_cache_apart():
+    # a Codex agent's turns of 3 minutes each: every model step re-sends the whole conversation, the provider reads ~96% of it back from
+    # its cache - "1.3M tokens" for a turn whose new words were ~40K read as millions spent in ten minutes (2026-11-18)
+    s = MemoryStore(); tid = s.create_task({'Title': 'Quarter close', 'Status': 'open', 'Kind': 'general'}, 'owner')
+    for i, c, o in ((988243, 947584, 5664), (941470, 921472, 5050), (1340118, 1322624, 5901)):
+        rid = brainroute.log(s, brainroute.Route('general', 'standard', 'cli:codex', '', 'light', [], 'fixed', 'x'), tid)
+        s.add_brain_usage(rid, 200000, {'in': i, 'cached': c, 'out': o, 'model': 'gpt-5-codex'})
+    got = aiusage.for_task(s, tid)
+    assert [r['tokens'] for r in got['rows']] == [1340118 - 1322624 + 5901, 941470 - 921472 + 5050, 988243 - 947584 + 5664]
+    assert [r['cached'] for r in got['rows']] == [1322624, 921472, 947584]
+    assert got['total']['tokens'] == 94766 and got['total']['cached'] == 3191680 and got['total']['tokens_in'] == 3269831
+
+
 def test_the_dataset_keeps_a_run_whole_and_rolls_the_one_calls_up_per_day():
     s, tid = _usage_store()
     rows = dashboards.DATASETS['ai_usage'][0](s, 90)

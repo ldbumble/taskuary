@@ -9,6 +9,13 @@ test("a call reads as its job, model, how hard, tokens and time", () => {
   assert.equal(usedLine({ what: "triage", model: "gemini-flash", tier: "as set", tokens: null, seconds: 1.4, calls: 1 }), "triage · gemini-flash · 1s");
 });
 
+test("what the cache read back is said apart from the new tokens, never added into them", () => {
+  assert.equal(usedLine({ what: "general work", model: "gpt-5-codex", tier: "normal", tokens: 46323, cached: 947584, seconds: 210, calls: 1 }),
+    "general work · gpt-5-codex · normal · 46K tokens · 948K cached · 4m");
+  assert.equal(usedTotal({ calls: 6, tokens: 94766, cached: 3191680, seconds: 600 }), "6 calls · 95K tokens · 3.2M cached · 10m");
+  assert.equal(usedTotal({ calls: 1, tokens: 900, cached: 0, seconds: 2 }), "1 call · 900 tokens · 2s");
+});
+
 test("a call another model answered says so on its line", () => {
   const fell = "Asked for Claude Sonnet 5.5 - answered by Gemini 2.5 Pro: the gateway fell back (Claude not available - e.g. its quota)";
   assert.equal(usedLine({ what: "general work", model: "gemini-2.5-pro", tier: "normal", seconds: 4, calls: 1, fell_back: fell }),

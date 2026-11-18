@@ -224,8 +224,7 @@ def _col(k): return str(k or '').replace('_', ' ').strip()
 
 def describe(c: dict, spec: dict = None) -> str:
     """A plain sentence for a tile from its config alone - what a person would have written for it. No AI: deterministic."""
-    srcs = {s.get('key'): s for s in (spec or {}).get('sources') or [] if isinstance(s, dict)}
-    src, k, agg = _col((srcs.get(c.get('source')) or {}).get('label') or c.get('source')) or 'rows', c.get('kind'), c.get('agg') or 'count'
+    src, k, agg = _col(source_of(spec, c.get('source')).get('label') or c.get('source')) or 'rows', c.get('kind'), c.get('agg') or 'count'
     src = src[:1].lower() + src[1:] if src[1:2].islower() else src           # "Tasks" reads tasks mid-sentence, "AI used" stays
     what = f'the count of {src}' if agg == 'count' else f"{_AGG_SAID.get(agg, agg)} {_col(c.get('y'))} of {src}"
     head = (f"{what} per {_col(c.get('x'))}" if k in ('line', 'area', 'bar') else
@@ -300,7 +299,7 @@ def check_tile(spec: dict, c, seen: dict = None) -> tuple:
         want = [c[k] for k in COLUMN_KEYS if isinstance(c.get(k), str) and c.get(k)] + list(c.get('columns') or []) + list((c.get('where') or {}).keys())
         if c.get('sort'): want.append(str(c['sort']).lstrip('-'))
         if miss := sorted({w for w in want if w not in cols}):
-            label = next((s.get('label') for s in spec.get('sources') or [] if isinstance(s, dict) and s.get('key') == c['source']), None) or c['source']
+            label = source_of(spec, c['source']).get('label') or c['source']
             return None, f"{name}: {label} has no column {', '.join(miss)} - it has {', '.join(sorted(cols))}"
     return c, ''
 
@@ -427,6 +426,17 @@ def migrate_priorities(store) -> int:
     return n
 
 
+def source_of(spec: dict, key) -> dict:
+    """The source a tile's `source` names - by the name validate gives it (_key), so one saved without a key is still s1."""
+    return next((s for i, s in enumerate((spec or {}).get('sources') or [], 1) if isinstance(s, dict) and _key(s, i) == key), {})
+
+
+def keyed(spec: dict) -> dict:
+    """The spec with every source carrying the name its tiles bind to - what is kept, so the page reads the name the check read."""
+    if not isinstance(spec, dict) or not isinstance(spec.get('sources'), list): return spec
+    return {**spec, 'sources': [{**s, 'key': _key(s, i)} if isinstance(s, dict) else s for i, s in enumerate(spec['sources'], 1)]}
+
+
 # ── the spec ────────────────────────────────────────────────────────────────────────────────
 def _key(s, i): return str(s.get('key') or f's{i}').strip()
 
@@ -495,7 +505,7 @@ def problems(spec: dict, data: dict) -> list:
         if d.get('failed') or not d.get('rows'): continue
         cols = set(d.get('columns') or [])
         want = [c[k] for k in COLUMN_KEYS if isinstance(c.get(k), str) and c.get(k)] + list(c.get('columns') or []) + list((c.get('where') or {}).keys())
-        if (date := (next((s for s in spec.get('sources') or [] if s.get('key') == c.get('source')), {}) or {}).get('date')): want.append(date)
+        if (date := source_of(spec, c.get('source')).get('date')): want.append(date)
         miss = sorted({w for w in want if w not in cols})
         if miss: out.append(f"{c.get('title') or c['kind']}: no column {', '.join(miss)} in {d.get('label') or c['source']}")
     return out
@@ -525,8 +535,8 @@ def collect(store, spec: dict) -> dict:
     with reports.wide_rows():
         parts = reports.run_source_parts(store, subs)
     out = {}
-    for s, (_k, label, head, body) in zip(srcs, parts):
-        key, failed = s.get('key'), head == 'FAILED'
+    for i, (s, (_k, label, head, body)) in enumerate(zip(srcs, parts), 1):
+        key, failed = _key(s, i), head == 'FAILED'
         rows = [] if failed else rows_of(body)
         cols = list(dict.fromkeys(c for r in rows[:200] for c in r))
         out[key] = {'label': s.get('label') or label, 'head': head, 'rows': rows, 'columns': cols, 'failed': failed,
@@ -572,7 +582,7 @@ def fmt(v) -> str:
 def tile_rows(spec: dict, data: dict, c: dict, days: int) -> list:
     """A component's rows as the page cuts them (slice.componentRows, no segment chosen): its own window, then its where."""
     rows = ((data.get('sources') or {}).get(c.get('source')) or {}).get('rows') or []
-    date = None if c.get('range') is False else next((s.get('date') for s in spec.get('sources') or [] if s.get('key') == c.get('source')), None)
+    date = None if c.get('range') is False else source_of(spec, c.get('source')).get('date')
     return where(in_range(rows, date, span(c, days)), c.get('where'))     # "range": false counts what is true now
 
 

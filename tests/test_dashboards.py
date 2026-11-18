@@ -549,3 +549,28 @@ def test_a_run_says_every_panel_so_send_to_agent_hands_over_the_whole_dashboard(
     # ...and the preview a report reads a dashboard by says it in the same words
     with mock.patch.object(dashboards, 'collect', lambda store, cfg: data):
         assert reports._dashboard_preview({**spec, 'store': s}) == (out['subject'].split(' — ', 1)[1], body)
+
+
+# ── stress round: a spec saved by hand, a run that fails, a number that is not one ──────────────────────
+def _post(c, sid, spec):
+    return c.post('/api/sources', json={**({'SourceId': sid} if sid else {}), 'Channel': 'report', 'Address': spec['title'],
+                                        'ConfigJson': json.dumps(spec), 'Active': True})
+
+
+def test_a_source_saved_without_a_key_is_read_under_the_name_its_tiles_bind_to():
+    """validate names a keyless source s1 and lets a tile read "s1"; the run kept its rows under no name at all, so every tile read
+    nothing - and the page looked the source up by a key the spec never carried. The saved spec carries the name the check gave it."""
+    from unittest import mock
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    s = _store()
+    spec = {**SPEC, 'sources': [{k: v for k, v in SPEC['sources'][0].items() if k != 'key'}],
+            'components': [{**c, 'source': 's1'} for c in SPEC['components']]}
+    with mock.patch.object(server, 'store', s):
+        sid = _post(TestClient(server.app), None, spec).json()['sourceId']
+    kept = json.loads(s.get_source(sid)['ConfigJson'])
+    assert kept['sources'][0]['key'] == 's1'
+    data = dashboards.collect(s, spec)                       # ...and a spec that still has none reads under the same name
+    assert list(data['sources']) == ['s1']
+    assert dict((c['title'], v) for c, v in dashboards.numbers(spec, data)) == {'Open tasks': 2}
+

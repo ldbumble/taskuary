@@ -7565,6 +7565,7 @@ def save_source(body: SourceBody):
             from . import dashboards
             ok, why = dashboards.validate(rcfg, store)
             if not ok: raise HTTPException(422, f'Not saved: {why}.')
+            if (named := dashboards.keyed(rcfg)) != rcfg: fields['ConfigJson'] = json.dumps(named)     # kept under the names it was checked by
         if flow_cfg is not None:
             from . import flow
             ok, why = flow.validate(store, flow_cfg)

@@ -280,6 +280,15 @@ class Holding(unittest.TestCase):
         run.assert_not_called()
         self.assertEqual(self.pending(), [], 'over, its error kept - the agent holds it anew (the owner, 2026-11-16: no Try again)')
 
+    def test_a_hold_that_fails_to_be_filed_still_holds(self):
+        """The hook's route lets a command go on any error (server.cli_hook_browser), so a payment judged irreversible whose card failed to be
+        written - a busy store, a record that raised - ran with no card and no press. Once there is an act, a failure is a hold."""
+        with on(), verdict({'irreversible': True, 'sure': True, 'what': 'pays the $412.50 order on toll.example'}), \
+                mock.patch('taskuary.proposals.queue', side_effect=RuntimeError('database is locked')):
+            out = hooks.command_gate(self.s, self.tid, 'run1', 'agent-browser click @e12', 'Bash', '')
+        d = out['hookSpecificOutput']
+        self.assertEqual(d['permissionDecision'], 'deny'); self.assertIn('nothing was done', d['permissionDecisionReason'])
+
     def test_a_ref_that_names_another_control_by_the_press_is_not_acted_on(self):
         """A checkout on one address re-draws itself: held as @e12 "Continue", by the owner's Approve a fresh snapshot gave @e12 to "Remove
         item" - the address was the same, so the click ran on a control nobody approved. The ref must still name what was held."""

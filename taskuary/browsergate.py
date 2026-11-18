@@ -364,6 +364,17 @@ def _pending(store, tid: int, sid: str, args: list):
 
 
 def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
+    """_check, and A FAILURE ONCE THERE IS AN ACT IS A HOLD: the hook's route lets a command go on any error (server.cli_hook_browser), so a
+    payment whose card could not be written - a busy store, a record that raised - ran with no card and no press."""
+    try: return _check(store, tid, sid, cmd, brain)
+    except Exception as e:
+        if not acts(cmd): raise
+        logger.warning(f'browsergate: task {tid} - the act was not filed for the owner - {e}')
+        return _deny(f"{HELD}: Taskuary could not put this in front of the owner ({str(e)[:160]}), so nothing was done. Run the command again "
+                     "on its own line; if it is held like this again, tell the owner in one line what you were about to do and end your turn.")
+
+
+def _check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
     """The hook's answer for one shell command: {} lets it run; a refusal holds it and puts the act on the task. ONE act held
     holds the rest of the command - the shell line is the agent's, and running what comes after the held act is not what it asked for.
     THE ACTS BEFORE IT THAT PASSED ON THEIR OWN RUN FIRST, in order (the real-CLI walk, 2026-11-16: "fill name && fill email && click Next"

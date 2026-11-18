@@ -830,6 +830,22 @@ class SigningUp(unittest.TestCase):
             self.assertEqual(signin.type_new('sess1', 'rentscope.example', 'Np9!x'), 2)
         self.assertEqual((page.typed, page.sent), ([(0, 'Np9!x'), (1, 'Np9!x')], False))
 
+    def test_a_box_the_page_does_not_name_as_the_user_is_never_kept_as_the_user_name(self):
+        """A wizard's last step (its email asked a page before) shows a Company box over the password: read as the user box, the account was
+        kept as "Northwind" and said "Signed up ... as Northwind" - and the next sign-in typed the company into the email box."""
+        class Page:
+            def __init__(self, named): self.named, self.sent = named, False
+            def fields(self, want=''): return {'top': True, 'href': 'https://www.capratehub.example/step2', 'password': not self.sent,
+                                               'user': not self.sent, 'named': self.named, 'focused': bool(want)}
+            def js(self, expr): return 'Northwind' if expr == signin.USER else ({} if expr == signin.CLEAR else '')
+            def enter(self): self.sent = True
+            def close(self): pass
+        with mock.patch.object(browserview, 'filling', mock.MagicMock()), mock.patch.object(signin, 'SETTLE', 0), mock.patch.object(signin, 'REJECT_WAIT', 0):
+            with mock.patch.object(signin, 'connect', return_value=Page(False)):
+                self.assertEqual(signin.send_new('sess1', 'capratehub.example'), {'ok': True, 'user': '', 'why': ''})
+            with mock.patch.object(signin, 'connect', return_value=Page(True)):
+                self.assertEqual(signin.send_new('sess1', 'capratehub.example')['user'], 'Northwind', 'a box the page names as the user\'s is read')
+
     def test_the_answer_waits_for_the_turn_that_asked_to_end(self):
         """The real-CLI walk, 2026-11-16: "already signed up" was told in the instant the asking turn was still ending - send_prompt took it for
         news a later turn had worked past and dropped it, and the agent never woke. It is told once that turn is over."""

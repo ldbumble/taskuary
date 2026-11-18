@@ -1183,7 +1183,9 @@ def send_new(sid: str, site: str) -> dict:
         c = connect(sid)
         try:
             f, user = _guard(c, site, ''), ''
-            if f.get('user'): _guard(c, site, 'user'); user = str(c.js(USER) or '')
+            # ...the user box only where the page NAMES it so (FIELDS `named`): a wizard's last step shows a Company box over the password, and
+            # read as the user box the account was kept as the company - and the next sign-in typed it into the email box
+            if f.get('user') and f.get('named'): _guard(c, site, 'user'); user = str(c.js(USER) or '')
             _guard(c, site, 'password'); c.enter()
             time.sleep(SETTLE)
             ok, why = accepted(c, site), ''

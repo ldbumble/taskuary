@@ -243,3 +243,32 @@ test("the rail's box: the paperclip again and again holds it still, and Enter wh
   assert.equal(said[0].images?.length, 1, `the line went without its file: ${JSON.stringify(said)}`);
   assert.deepEqual(errors, []);
 });
+
+// ...AND AN UPLOAD THAT FAILS while Enter is held: nothing goes alone - the words stay in the box under the upload's error, the chip is gone
+test("Enter held while the upload fails: the words stay in the box under its error, nothing is sent", { timeout: 300000 }, async (t) => {
+  const w = await world(t), page = await w.newPage();
+  await page.setViewport({ width: 1600, height: 900 });
+  const errors = []; page.on("pageerror", (e) => errors.push(e.message));
+  const made = await w.api("/api/fixture/mail-task", {});
+  const posted = [], guard = page.fixtureRequestGuard;
+  page.off("request", guard);
+  page.on("request", (r) => {
+    if (r.method() === "POST" && /assistant\/messages|dispatch/.test(r.url())) posted.push(r.url());
+    if (/\/api\/prompt-(image|file)/.test(r.url())) setTimeout(() => r.respond({ status: 500, contentType: "application/json", body: JSON.stringify({ detail: "the disk is full" }) }), 1500);
+    else guard(r);
+  });
+  await page.goto(w.ui, { waitUntil: "domcontentloaded" });
+  await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
+  const sel = "[data-tq-task-page] [data-tq-one-box]";
+  await page.waitForSelector(sel, { visible: true, timeout: 60000 });
+  await new Promise((r) => setTimeout(r, 2000));
+  await typeThenPick(page, w, sel, "Here is the chart");
+  const box = await page.$eval(sel, (b) => ({ words: b.querySelector(".tq-aui-input").value, text: b.innerText, chips: b.querySelectorAll("[data-tq-file-chip]").length,
+    send: !b.querySelector("[data-tq-send]").disabled }));
+  assert.deepEqual(posted, [], "the words went alone");
+  assert.equal(box.words, "Here is the chart");
+  assert.match(box.text, /the disk is full/);
+  assert.equal(box.chips, 0);
+  assert.ok(box.send, "Send is lit again for the next press");
+  assert.deepEqual(errors, []);
+});

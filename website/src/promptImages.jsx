@@ -68,7 +68,9 @@ export function usePromptImages({ files: anyFile = false } = {}) {
     setImgs((cur) => cur.filter((i) => i.path !== path));
     setPending((cur) => { if (cur.some((p) => p.key === path)) dropped.current.add(path); return cur.filter((p) => p.key !== path); });
   }, []);
-  const clear = useCallback(() => { setImgs([]); setErr(""); setPending((cur) => { cur.forEach((p) => dropped.current.add(p.key)); return []; }); }, []);
+  // ...`cleared` counts the clears: a press held for files that a clear then took away is not made (useSendWhenUp)
+  const [cleared, setCleared] = useState(0);
+  const clear = useCallback(() => { setImgs([]); setErr(""); setCleared((n) => n + 1); setPending((cur) => { cur.forEach((p) => dropped.current.add(p.key)); return []; }); }, []);
   // ...and files a send could not take, put back in front of what was added since (a task chat's failed line)
   const put = useCallback((files) => setImgs((cur) => [...files.filter((f) => !cur.some((c) => c.path === f.path)), ...cur]), []);
   // a paste that carries an image (or, with `files`, any file) and no words is that file; anything else pastes as it always did (promptPaste)
@@ -81,20 +83,21 @@ export function usePromptImages({ files: anyFile = false } = {}) {
     if (files.length) { e.preventDefault(); add(files); }
   }, [add, takes]);
   const onDragOver = useCallback((e) => { if ([...(e.dataTransfer?.types || [])].includes("Files")) e.preventDefault(); }, []);
-  return { imgs, pending, paths: imgs.map((i) => i.path), busy: pending.length > 0, err, add, remove, clear, put, files: anyFile, drop: { onPaste, onDrop, onDragOver } };
+  return { imgs, pending, paths: imgs.map((i) => i.path), busy: pending.length > 0, cleared, err, add, remove, clear, put, files: anyFile, drop: { onPaste, onDrop, onDragOver } };
 }
 
 // SEND WAITS FOR ITS FILES (2026-11-18): Enter pressed while a picked file was still uploading sent the words without it - the file then
 // landed alone in the emptied box (a task's chat), or was dropped with New's closed box. One road for every box: a press while files upload is
 // held, and goes once they are up, with them; an upload that failed leaves the words in the box under its error. `waiting`: a press is held
 export function useSendWhenUp(pics, send) {
-  const want = useRef(false), [waiting, setWaiting] = useState(false), busy = !!pics?.busy;
+  const want = useRef(null), [waiting, setWaiting] = useState(false), busy = !!pics?.busy;
   useEffect(() => {
-    if (!want.current || busy) return;
-    want.current = false; setWaiting(false);
-    if (!pics?.err) send();
+    if (want.current == null || busy) return;
+    const held = want.current; want.current = null; setWaiting(false);
+    // ...not when the upload failed, nor when the box was cleared under it (its task changed, or it closed)
+    if (!pics?.err && held === pics?.cleared) send();
   }, [busy]);   // ...on the change alone: the send of that render reads what it holds then
-  const go = useCallback(() => { if (busy) { want.current = true; setWaiting(true); return; } send(); }, [busy, send]);
+  const go = useCallback(() => { if (busy) { want.current = pics?.cleared; setWaiting(true); return; } send(); }, [busy, send, pics?.cleared]);
   return { go, waiting };
 }
 

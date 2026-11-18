@@ -52,3 +52,22 @@ class PromptImageTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# A PICTURE KEEPS HIS NAME FOR IT, as any file does (the stress round of New's attachments): saved under a stamp alone, its pill on his line
+# and its copy in the task's folder read "20991231-235959-abc123.png" where his box had said "shot.png"
+class APictureKeepsItsName(unittest.TestCase):
+    def test_a_named_picture_is_saved_and_taken_in_under_its_name(self):
+        from taskuary import outputs
+        r = c.post('/api/prompt-image', content=PNG, headers={'Content-Type': 'image/png', 'X-File-Name': 'shot%20one.png'})
+        p = Path(r.json()['path'])
+        self.assertTrue(p.name.endswith('-shot one.png'), p.name)
+        self.assertEqual(Path(outputs.take_in(9901, [str(p)])[0]).name, 'shot one.png')
+
+    def test_its_extension_is_the_pictures_own_and_no_name_is_still_a_picture(self):
+        p = Path(c.post('/api/prompt-image', content=PNG, headers={'Content-Type': 'image/png', 'X-File-Name': 'clip.exe'}).json()['path'])
+        self.assertTrue(p.name.endswith('-clip.png'), p.name)
+        p = Path(c.post('/api/prompt-image', content=PNG, headers={'Content-Type': 'image/png', 'X-File-Name': '..%2F..%2F'}).json()['path'])
+        self.assertTrue(p.name.endswith('.png') and p.resolve().is_relative_to((config.home() / 'attachments' / 'prompt').resolve()), p.name)
+        p = Path(c.post('/api/prompt-image', content=PNG, headers={'Content-Type': 'image/png'}).json()['path'])
+        self.assertRegex(p.name, r'^\d{8}-\d{6}-[0-9a-f]{6}\.png$')

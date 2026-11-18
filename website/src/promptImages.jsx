@@ -21,7 +21,8 @@ export const isImagePath = (p) => /\.(png|jpe?g|gif|webp)$/i.test(String(p || ""
 export const UPLOAD_MS = 120000;
 export async function savePromptFile(f) {
   const image = IMAGE_TYPES.test(f.type), timeout = UPLOAD_MS;
-  const { data } = image ? await api.post("/api/prompt-image", f, { headers: { "Content-Type": f.type }, timeout })
+  const named = f.name ? { "X-File-Name": encodeURIComponent(f.name) } : {};          // ...a picture under his name for it too, as any file
+  const { data } = image ? await api.post("/api/prompt-image", f, { headers: { "Content-Type": f.type, ...named }, timeout })
     : await api.post("/api/prompt-file", f, { headers: { "Content-Type": "application/octet-stream", "X-File-Name": encodeURIComponent(f.name || "file") }, timeout });
   return { path: data.path, name: f.name || (image ? "pasted image" : "file"), image };
 }

@@ -16,10 +16,13 @@ const argsOf = (s) => (s.args && Object.keys(s.args).length ? s.args
   : { file_path: s.file || s.text, command: s.detail || s.text, ...(s.detail ? { description: s.text } : {}), pattern: s.text, query: s.text, url: s.text });
 // ...a call over ACP is running until ACP says it ran (`status`); a log's, until something came after it. A turn that is over has nothing running
 const OVER = ["completed", "failed"];
-const runs = (s, running, last) => running && (s.status ? !OVER.includes(s.status) : last);
+// ...and a call put to the owner (permissions.calls) is neither: `held` waits on his answer, `refused` was never run - drawn as either, it read
+// "Deleted ledger-archive" over the card that asked for it, and after his Reject too (the stress round, 2026-11-18)
+const ASKED = { held: "Taskuary held this for the owner - it waits for your answer on its card.", refused: "Not run - nobody allowed it." };
+const runs = (s, running, last) => running && !ASKED[s.status] && (s.status ? !OVER.includes(s.status) : last);
 // ...and one ACP still called pending or running when nothing runs any more NEVER FINISHED - a permission left open when Taskuary restarted, a
 // session that died mid-call: drawn done, "Edited totals.py" read as made (the stress round, 2026-11-10)
-const ended = (s, output) => (s.status && !OVER.includes(s.status) ? { result: output || "It never finished.", is_error: true }
+const ended = (s, output) => (ASKED[s.status] ? { result: ASKED[s.status], is_error: true, state: s.status } : s.status && !OVER.includes(s.status) ? { result: output || "It never finished.", is_error: true }
   : { result: output, is_error: s.status === "failed" });
 export const eventsOf = (steps, running, tail = true) => steps.flatMap((s, i) => {
   const id = s.id || `t${i}`, output = String(s.output || "").trim();

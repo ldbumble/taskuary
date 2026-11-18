@@ -56,13 +56,13 @@ def code_done(granted):
         old = open(path, encoding='utf-8').read()
         new = '# keeps the ledger totals\n' + old
         open(path, 'w', encoding='utf-8', newline='\n').write(new)
-        update('tool_call_update', toolCallId='call_1', status='completed',
+        update('tool_call_update', toolCallId=f'call_{STARTS}', status='completed',
                content=[{'type': 'diff', 'path': path, 'oldText': old, 'newText': new}])
         update('tool_call', toolCallId='call_2', title='git status', kind='execute', status='in_progress', rawInput={'command': 'git status --short'})
         update('tool_call_update', toolCallId='call_2', _meta={'terminal_output_delta': {'data': ' M ' + os.path.basename(path) + '\n'}})
         update('tool_call_update', toolCallId='call_2', status='completed', _meta={'terminal_exit': {'exit_code': 0}})
         update('plan', entries=[{'content': 'Read the file', 'status': 'completed'}, {'content': 'Add the comment', 'status': 'completed'}])
-    else: update('tool_call_update', toolCallId='call_1', status='failed')
+    else: update('tool_call_update', toolCallId=f'call_{STARTS}', status='failed')
     update('agent_message_chunk', content={'type': 'text', 'text': ('Added the comment.' if granted else 'denied') + f' - {_heard}'})
 
 
@@ -94,7 +94,7 @@ for line in sys.stdin:
                 'reject' not in str(((msg.get('result') or {}).get('outcome') or {}).get('optionId'))
             if os.environ.get('FAKE_ACP_CODE'): code_done(granted)
             else:
-                update('tool_call_update', toolCallId='call_1', status='completed' if granted else 'failed')
+                update('tool_call_update', toolCallId=f'call_{STARTS}', status='completed' if granted else 'failed')
                 update('agent_message_chunk', content={'type': 'text', 'text': ('granted' if granted else 'denied') + f' - {_heard}'})
             reply(_prompt_id, ended())
             _prompt_id = None
@@ -162,7 +162,7 @@ for line in sys.stdin:
         if os.environ.get('FAKE_ACP_CODE'):
             path = os.environ['FAKE_ACP_CODE']
             update('plan', entries=[{'content': 'Read the file', 'status': 'completed'}, {'content': 'Add the comment', 'status': 'in_progress'}])
-            tc = {'toolCallId': 'call_1', 'title': f'Edit {os.path.basename(path)}', 'kind': 'edit', 'rawInput': {'file_path': path},
+            tc = {'toolCallId': f'call_{STARTS}', 'title': f'Edit {os.path.basename(path)}', 'kind': 'edit', 'rawInput': {'file_path': path},
                   'locations': [{'path': path, 'line': 1}]}
             update('tool_call', **tc, status='pending')
             _prompt_id = mid
@@ -170,8 +170,8 @@ for line in sys.stdin:
                   'options': [{'optionId': 'reject-once', 'name': 'Reject', 'kind': 'reject_once'}, {'optionId': 'allow-once', 'name': 'Allow once', 'kind': 'allow_once'}]}})
             continue
         ask = os.environ.get('FAKE_ACP_ASK')
-        tc = {'toolCallId': 'call_1', 'title': ask, 'kind': 'execute', 'rawInput': {'command': ask}} if ask else \
-             {'toolCallId': 'call_1', 'title': 'read the ledger'}
+        tc = {'toolCallId': f'call_{STARTS}', 'title': ask, 'kind': 'execute', 'rawInput': {'command': ask}} if ask else \
+             {'toolCallId': f'call_{STARTS}', 'title': 'read the ledger'}
         update('tool_call', **tc, status='pending')
         _prompt_id = mid
         send({'jsonrpc': '2.0', 'id': PERM_ID, 'method': 'session/request_permission',

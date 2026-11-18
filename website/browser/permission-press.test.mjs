@@ -12,7 +12,8 @@ import { note, record } from "./recorder.mjs";
 /* A PRESSED PERMISSION CARD NEVER LIGHTS AGAIN, AND IS NEVER GONE, BEFORE IT IS THE ANSWERED CARD (permissions.py; the owner, 2026-11-17:
    "when you click buttons on card it flickers then presses", "keep the action cards but gray out if passed"). A coding task on the stand-in
    ACP agent asks to run a command; the owner presses a button. Every DOM change from the press is read: the pressed card may spin or grey,
-   then it is the greyed card saying what was pressed - never its buttons lit again, never no card at all in between. Invented people only. */
+   then it is the greyed card saying what was pressed - never its buttons lit again, never no card at all in between - and the step it stopped at
+   reads as waiting, then as not run once refused. Invented people only. */
 const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, "..", "..");
 const out = path.join(process.env.TEMP || os.tmpdir(), "claude", "permission-press");
 
@@ -48,6 +49,9 @@ for (const kind of ["allow_once", "reject_once"]) test(`a pressed ${kind} holds 
   await page.keyboard.type("tidy the ledger archive"); await page.keyboard.press("Enter");
   await page.waitForSelector(`[data-tq-task-page] [data-tq-permission-answer="${kind}"]`, { visible: true, timeout: 90000 });
   await new Promise((r) => setTimeout(r, 1500));
+  // ...and the step the card is about says it waits on him - never "Deleted ledger-archive" as done (permissions.calls)
+  const stepNow = () => page.evaluate(() => [...document.querySelectorAll("[data-tq-task-page] .tq-aui-step")].map((e) => e.querySelector("summary, .tq-aui-step-line")?.textContent || e.textContent).find((x) => /ledger-archive/.test(x)) || "");
+  assert.match(await stepNow(), /waits for your yes/, "the step it stopped at waits on him");
   const dir = path.join(out, kind); await mkdir(dir, { recursive: true });
   const rec = await record(page, dir);
   const states = await page.evaluate((kind) => new Promise((done) => {
@@ -71,5 +75,6 @@ for (const kind of ["allow_once", "reject_once"]) test(`a pressed ${kind} holds 
   assert.equal(relit, -1, `the card lit its buttons again after the press: ${JSON.stringify(states)}`);
   assert.equal(blank, -1, `no card at all for a beat after the press: ${JSON.stringify(states)}`);
   assert.ok(states.some((x) => x.s === `answered:${kind}`), `never the answered card: ${JSON.stringify(states)}`);
+  if (kind === "reject_once") assert.match(await stepNow(), /not run/, "a refused step was never run");
   assert.deepEqual(errors, []);
 });

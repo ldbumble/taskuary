@@ -228,3 +228,29 @@ def test_the_answer_is_the_answered_card_the_moment_the_press_returns(s):
         t.join(3)
     assert box == ['allow_once']
 
+
+def test_the_step_a_request_stopped_at_waits_and_once_refused_reads_not_run(s):
+    """THE STEP ABOVE THE CARD TELLS THE TRUTH (browser/permission-press). The agent asked to delete a folder: while the card waited, the step it
+    stopped at read "Deleted ledger-archive" (a call that never finished, calmed to done in a chat), and after his Reject it still did. The
+    step a request is about is `held` while it waits on him and `refused` once nobody allowed it - an allowed one is left as its run says."""
+    from taskuary import codingchat, conversation
+    tid = coding(s)
+    rm = {**ACP, 'toolCall': {**ACP['toolCall'], 'toolCallId': 'call-rm', 'title': 'rm -rf /srv/ledger-archive', 'rawInput': {'command': 'rm -rf /srv/ledger-archive'}}}
+    ups = [{'sessionUpdate': 'tool_call', 'toolCallId': c, 'kind': 'execute', 'status': 'pending', 'rawInput': {'command': cmd}, '_at': '2026-11-12 09:00:00'}
+           for c, cmd in (('call-7', 'npm test -- money'), ('call-rm', 'rm -rf /srv/ledger-archive'))]
+    def steps():
+        with mock.patch.object(codingchat, 'owned', return_value=[{'sid': 'sess-1', 'source': 'acp', 'updates': ups, 'at': '2026-11-12 09:00:00'}]), \
+             mock.patch.object(codingchat, 'sessions', return_value=[]):
+            (_, _, st), = conversation._session_steps(s, tid)
+        return {x['id']: x.get('status') for x in st if x['k'] == 'tool'}
+    t, box = asking(s, tid, perm.from_acp(rm))
+    assert steps() == {'call-7': 'pending', 'call-rm': 'held'}, 'the call the card is about waits on him'
+    perm.answer(s, tid, perm.pending(tid, s)[0]['id'], 'reject_once'); t.join(3)
+    ups.append({'sessionUpdate': 'tool_call_update', 'toolCallId': 'call-rm', 'status': 'failed'})
+    assert steps() == {'call-7': 'pending', 'call-rm': 'refused'}, 'refused: never "Deleted ledger-archive"'
+    t, box = asking(s, tid, perm.from_acp(ACP))
+    perm.answer(s, tid, perm.pending(tid, s)[0]['id'], 'allow_once'); t.join(3)
+    ups.append({'sessionUpdate': 'tool_call_update', 'toolCallId': 'call-7', 'status': 'completed'})
+    assert steps() == {'call-7': 'completed', 'call-rm': 'refused'}, 'an allowed call is as its run says'
+    assert perm.ask(s, tid, {**perm.from_acp(ACP), 'call': 'call-late'}, wait=0.1) == 'reject_once'
+    assert perm.calls(s, tid)['call-late'] == 'refused', 'no answer in time is a refusal too'

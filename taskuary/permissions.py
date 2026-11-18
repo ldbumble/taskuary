@@ -35,7 +35,7 @@ def normal(r: dict) -> dict:
     opts = [o for o in (r.get('options') or OPTIONS) if o in OPTIONS] or ['allow_once', 'reject_once']
     locs, inp = [str(l) for l in (r.get('locations') or []) if str(l or '').strip()], r.get('input') if isinstance(r.get('input'), dict) else {}
     out = {'tool': str(r.get('tool') or r.get('kind') or 'a tool'), 'kind': str(r.get('kind') or 'other').lower(), 'title': str(r.get('title') or r.get('tool') or ''),
-           'locations': locs, 'input': inp, 'sid': str(r.get('sid') or ''), 'command': str(r.get('command') or inp.get('command') or ''),
+           'locations': locs, 'input': inp, 'sid': str(r.get('sid') or ''), 'call': str(r.get('call') or ''), 'command': str(r.get('command') or inp.get('command') or ''),
            'about': cut(' '.join(str(inp.get('description') or '').split()), 300), 'what': '', 'why': ''}        # what/why: held_for, once it is the owner's
     out['risky'] = risky(out)
     if out['risky']: opts = [o for o in opts if o != 'allow_always']            # an "always" for a push is a push nobody saw
@@ -131,6 +131,23 @@ def pending(tid: int = None, store=None) -> list:
              'options': [{'kind': o, 'label': LABEL[o]} for o in p['req']['options']]} for p in sorted(rows, key=lambda p: p['at'])]
 
 
+# THE STEP A REQUEST IS ABOUT (the stress round, 2026-11-18): while the card waited, the call it stopped at read "Deleted ledger-archive" in the
+# chat - a call that never finished, drawn done - and after his Reject it still did. Each tool call put to the owner is `held` while it waits
+# and `refused` once it ended with nobody allowing it (his no, no answer in time, set aside, Taskuary closed first); an allowed one is as it ran
+def calls(store, tid: int) -> dict:
+    "{tool call id: 'held' | 'refused'} for this task's calls the owner was asked about and has not allowed."
+    import json
+    with _LOCK: held = {p['req']['call'] for p in PENDING.values() if p['tid'] == int(tid) and p['store'] is store and p['req']['call']}
+    out = {}
+    for r in store._rows("SELECT Action, Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action IN ('permission_asked','permission_answered') ORDER BY Id", (int(tid),)):
+        try: d = json.loads(r['Detail'] or '{}')
+        except ValueError: continue
+        if not (c := str(d.get('call') or '')): continue
+        if r['Action'] == 'permission_asked': out[c] = 'refused'
+        elif str(d.get('answer') or '').startswith('allow'): out.pop(c, None)
+    return out | {c: 'held' for c in held}
+
+
 ASIDE: set = set()      # the requests set aside as the chat moved on (set_aside): refused, and by nobody - never the owner's no
 
 
@@ -161,7 +178,7 @@ def ask(store, tid: int, request: dict, wait: float = None, timed_out=None, move
                                 'until': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time() + wait)), 'done': done}
     try:
         try:
-            store.audit('task', tid, 'permission_asked', 'agent', 'agent', {'pid': pid, 'pattern': pattern(r)})
+            store.audit('task', tid, 'permission_asked', 'agent', 'agent', {'pid': pid, 'pattern': pattern(r), 'call': r['call']})
             try: agentchannels.permission_asked(store, tid, pid, r)
             except Exception as e: logger.warning(f'permission on {task_ref(tid)}: not put on its channel - {e}')
             out = ws.wait_held(g, wait)
@@ -184,7 +201,7 @@ def ask(store, tid: int, request: dict, wait: float = None, timed_out=None, move
             if timed_out: timed_out()
             return ans
         if ans.endswith('_always'): store.set_perm_rule(tid, pattern(r), 'allow' if ans.startswith('allow') else 'reject')
-        store.audit('task', tid, 'permission_answered', 'owner', detail={'pid': pid, 'answer': ans, 'pattern': pattern(r), 'asked': asked(r)})
+        store.audit('task', tid, 'permission_answered', 'owner', detail={'pid': pid, 'answer': ans, 'pattern': pattern(r), 'asked': asked(r), 'call': r['call']})
         try:                                           # ...the turn that waited on it hears it now: his press stands where he made it
             from . import conversation
             conversation.hear_press(store, tid, 'permission_answered')
@@ -264,7 +281,7 @@ def from_acp(params: dict) -> dict:
     raw = tc.get('rawInput') if isinstance(tc.get('rawInput'), dict) else {}
     cmd = raw.get('command') or raw.get('cmd') or ''
     if isinstance(cmd, list): cmd = ' '.join(map(str, cmd))
-    return {'tool': str(((tc.get('_meta') or {}).get('claudeCode') or {}).get('toolName') or tc.get('title') or tc.get('kind') or 'a tool'),
+    return {'tool': str(((tc.get('_meta') or {}).get('claudeCode') or {}).get('toolName') or tc.get('title') or tc.get('kind') or 'a tool'), 'call': str(tc.get('toolCallId') or ''),
             'kind': tc.get('kind') or 'other', 'title': tc.get('title') or '', 'input': raw, 'command': str(cmd), 'sid': (params or {}).get('sessionId') or '',
             'locations': [l.get('path') for l in tc.get('locations') or [] if isinstance(l, dict) and l.get('path')],
             'options': [o.get('kind') for o in (params or {}).get('options') or [] if o.get('kind') in OPTIONS] or ['allow_once', 'reject_once']}

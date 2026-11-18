@@ -401,8 +401,8 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
       if (!step) continue;
       step.output = String(e.detail?.result || "");
       // a step Taskuary HELD for the owner's yes (shellgate, browsergate) did not fail: it waits - red "failed" over a held delete read
-      // as something gone wrong (the desktop stress test, 2026-11-03)
-      step.status = !e.detail?.is_error ? "done" : /Taskuary held this for the owner/.test(step.output) ? "held" : foundNone(step) ? "none" : "error";
+      // as something gone wrong (the desktop stress test, 2026-11-03); a call the server marked as put to the owner says how it stands (`state`)
+      step.status = e.detail?.state || (!e.detail?.is_error ? "done" : /Taskuary held this for the owner/.test(step.output) ? "held" : foundNone(step) ? "none" : "error");
       if (step.kind === "mail" && step.q !== undefined) { const n = countOf(step.output); if (n !== null) step.count = n; }
     } else if (e.type === "progress" && e.detail) {
       const name = String(e.name || "");
@@ -465,7 +465,7 @@ const together = (run) => {
   return run.every((s) => s.summary === run[0].summary) ? `${run[0].summary} (${n} times)` : null;
 };
 const statusOf = (run) => run.some((s) => s.status === "running") ? "running" : run.some((s) => s.status === "error") ? "error"
-  : run.some((s) => s.status === "held") ? "held" : run.some((s) => s.status === "recovered") ? "recovered" : run.every((s) => s.status === "none") ? "none" : "done";
+  : run.some((s) => s.status === "held") ? "held" : run.some((s) => s.status === "refused") ? "refused" : run.some((s) => s.status === "recovered") ? "recovered" : run.every((s) => s.status === "none") ? "none" : "done";
 const detailOf = (s) => [s.raw, s.output && `→ ${s.output.length > 1500 ? `${s.output.slice(0, 1500)}…` : s.output}`].filter(Boolean).join("\n");
 const withCount = (summary, run) => run[0].kind === "mail" && run.every((s) => s.count !== undefined)
   ? `${summary} (${plural(run.reduce((t, s) => t + s.count, 0), "result")})` : summary;

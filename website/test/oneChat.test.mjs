@@ -151,3 +151,18 @@ test("regression: AI used and Talk to this agent from… sit in the header's cor
 
 
 
+
+// THE STEP A PERMISSION CARD IS ABOUT (permissions.calls; the stress round, 2026-11-18): the agent asked to delete a folder, and while the card
+// waited - and after his Reject - the step above it read "Deleted ledger-archive". A call the server marks `held` waits on him (never spinning,
+// never "never finished"), and one marked `refused` was not run - never calmed to done in a chat
+test("a step waiting on his answer waits, and one he refused reads not run", () => {
+  const rm = (status) => [{ k: "tool", id: "c1", name: "Bash", args: { command: "rm -rf /srv/ledger-archive" }, status }];
+  for (const running of [true, false]) {
+    const [held] = turnParts(eventsOf(rm("held"), running)).flatMap((p) => p.steps || []);
+    assert.equal(held.status, "held", `while the turn ${running ? "works" : "rests"}`);
+  }
+  const [no] = turnParts(eventsOf(rm("refused"), false)).flatMap((p) => p.steps || []);
+  assert.equal(no.status, "refused");
+  assert.match(read("AgentStepRows.jsx"), /refused: "not run"/);
+  assert.match(gw, /chat && \(st\.status === "error" \|\| st\.status === "recovered"\)/, "only a failure is calmed in a chat - a refusal is not");
+});

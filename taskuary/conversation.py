@@ -305,10 +305,13 @@ def acp_steps(updates: list) -> list:
 # ── the list ─────────────────────────────────────────────────────────────────────────────────────
 def _session_steps(store, tid: int) -> list:
     "Every coding session of the task, oldest first: (sid, live, its steps in the one shape, each with `T`)."
-    from . import codingchat
-    out = []
+    from . import codingchat, permissions
+    out, asked = [], permissions.calls(store, tid)
     for s in codingchat.owned(store, tid, codingchat.sessions(store, tid, local=False)):
         steps, t = acp_steps(s['updates']) if s.get('source') == 'acp' else [dict(x) for x in s.get('steps') or []], ep(s.get('at'))
+        # ...a call put to the owner reads as he left it: waiting on him, or never run - never "Deleted ledger-archive" (permissions.calls)
+        for x in steps:
+            if x.get('k') == 'tool' and x.get('status') != 'completed' and (was := asked.get(str(x.get('id') or ''))): x['status'] = was
         # ...A SESSION'S `at` IS ITS START WHILE IT LIVES AND ITS END ONCE IT CLOSED (the filing of its transcript): read from there, every
         # step of a closed session stood at its close - his lines first, then all its turns (recorded 2026-11-12, a coding task opened
         # again after Send and close). Never later than its own first dated step

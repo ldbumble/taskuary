@@ -44,11 +44,13 @@ const HANDS = new Map();
 export const handToItem = (key, hand) => { const f = key && HANDS.get(key); if (!f) return false; f(hand); return true; };
 const ASK_ONLY = "the answer here reads the item only";
 // `came`: what the item is, a chip on the box while nothing is handed on (the owner, 2026-11-06: Came-from rides the one box as a chip)
-export function ItemAsk({ ask, hand = null, onHand = null, came = "", hint = "" }) {
+// `draft`: { text, setText, pics } - his words and files, held by the item (ItemSections) so they stay his when Send to agent moves the box to the
+// Agent section: a box of its own lost what he had typed at the press (the stress round, 2026-11-18)
+export function ItemAsk({ ask, hand = null, onHand = null, came = "", hint = "", draft }) {
   const ls = hand ? [] : itemLines(readingOf(ask?.reading));
-  const [text, setText] = useState(""), [said, setSaid] = useState([]), [busy, setBusy] = useState(false), [err, setErr] = useState("");
-  const pics = usePromptImages({ files: true }), input = useRef(null);
-  useEffect(() => { setText(""); setSaid([]); setErr(""); pics.clear(); }, [ask?.key]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const { text, setText, pics } = draft;
+  const [busy, setBusy] = useState(false), [said, setSaid] = useState([]), [err, setErr] = useState(""), input = useRef(null);
+  useEffect(() => { setSaid([]); setErr(""); }, [ask?.key]);
   useEffect(() => { if (hand) setTimeout(() => input.current?.focus(), 0); }, [hand]);
   const title = typeof ask?.title === "string" ? ask.title : "";
   const drop = (k) => { const left = hand.items.filter((i) => i.key !== k); onHand?.(left.length ? { ...hand, items: left } : null); };
@@ -113,6 +115,9 @@ export default function ItemSections({ kind, label, title, aside, sections: all,
         body: <Box data-tq-item-agent="" sx={{ flex: "1 1 auto" }} /> }]
     : all.filter((s) => !(s.key === "agent" && !s.body));
   useEffect(() => { setOpen(about); setHand(null); }, [itemKey, about]);
+  // ...the box's words and files are the item's, wherever the box stands - a new item starts them empty
+  const [text, setText] = useState(""), pics = usePromptImages({ files: true }), draft = { text, setText, pics };
+  useEffect(() => { setText(""); pics.clear(); }, [itemKey]);   // eslint-disable-line react-hooks/exhaustive-deps
   const fadeMemo = useRef(null); fadeMemo.current = sectionFade(fadeMemo.current, open, itemKey, about);
   const fades = fadeMemo.current.moved;
   const takes = !!ask || hands, boxAt = sections.some((s) => s.key === "agent") ? "agent" : about;
@@ -124,7 +129,7 @@ export default function ItemSections({ kind, label, title, aside, sections: all,
   }, [itemKey, takes, boxAt]);
   // ...opened where its box now is, the moment it is handed on - and back on the item once the chip is off and the section with it
   useEffect(() => { if (hand) setOpen(boxAt); else setOpen((o) => (sections.some((x) => x.key === o) ? o : about)); }, [hand, boxAt]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const box = (ask || hand) && <ItemAsk ask={ask} hand={hand} onHand={setHand} came={typeof title === "string" ? title : label}
+  const box = (ask || hand) && <ItemAsk ask={ask} hand={hand} onHand={setHand} draft={draft} came={typeof title === "string" ? title : label}
     hint={hand ? `What do you want to know about this ${noun}?` : ""} />;
   // ...and none once it is handed on: the press is made, the box is where it goes now
   const skip = (v) => (noAgent || !!hand) && AGENT_STARTS.has(String(v?.id || "").split(":").pop());

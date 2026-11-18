@@ -109,3 +109,15 @@ test("the item's Send is lit only once words are in it, so a file alone never li
   assert.match(send[1], /^!q\b/, "no words, no send");
   assert.match(src, /<PromptBox [^>]*sendOff=\{!text\.trim\(\)\}/, "...and the button says so: unlit while no words are in it");
 });
+
+// ...AND WHAT HE TYPED BEFORE HE PRESSED IT STAYS HIS (the stress round, 2026-11-18): Send to agent moves the item's box from the section it is
+// about to the blank Agent section, and a box holding its own words was a new box there - empty. The item holds the box's words and files
+test("the item's box keeps his words and files when Send to agent moves it to the Agent section", async () => {
+  const fs = await import("node:fs");
+  const src = fs.readFileSync(new URL("../src/ItemSections.jsx", import.meta.url), "utf8");
+  const ask = src.slice(src.indexOf("export function ItemAsk"), src.indexOf("export default function ItemSections"));
+  assert.doesNotMatch(ask, /\[text, setText\] = useState|usePromptImages\(/, "the box keeps no words or files of its own");
+  assert.match(ask, /const \{ text, setText, pics \} = draft;/);
+  assert.match(src, /const \[text, setText\] = useState\(""\), pics = usePromptImages\(\{ files: true \}\), draft = \{ text, setText, pics \};/);
+  assert.match(src, /useEffect\(\(\) => \{ setText\(""\); pics\.clear\(\); \}, \[itemKey\]\);/, "...a new item starts them empty");
+});

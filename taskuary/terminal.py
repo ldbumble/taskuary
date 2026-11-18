@@ -3203,6 +3203,11 @@ def recover_after_restart(store) -> int:
     except Exception as e: logger.warning(f'permission requests left open by the last run not closed: {e}')
     for run in store.running_runs():
         store.update_run(run['RunId'], {'Status': 'stopped'}, finished=True)
+    # ...and an act a press had under way is said on its card as cut - it may have gone (verdicts.cut_acts)
+    try:
+        from . import verdicts
+        verdicts.cut_acts(store)
+    except Exception as e: logger.warning(f'acts cut by the restart not said on their cards: {e}')
     # ...and a reply an earlier build held out of sight as "an earlier session's" is back with its Send (wrapup.STALE_HOLD)
     from . import wrapup
     for r in store._rows("SELECT ReviewId FROM review WHERE Status='held' AND Reason=?", (wrapup.STALE_HOLD,)):

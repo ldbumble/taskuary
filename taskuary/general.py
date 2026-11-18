@@ -795,6 +795,9 @@ NOT_GONE = {'failed': 'pressed Send on {n} and IT DID NOT GO ({why}) - it still 
 # ...and an ACT whose press failed (store.review_act_failed): the agent that set it up heard nothing, and read its card as still unpressed
 ACT_FAILED = ('pressed Approve on {n} and IT FAILED ({why}) - nothing of it was done{left}. Where it is still needed, set the corrected one up '
               'as a new card for their press; never do it another way')
+# ...and one a restart cut while it ran (verdicts.cut_acts): it MAY have gone - never "nothing of it was done", never done again unasked
+ACT_CUT = 'Cut short when Taskuary restarted while this ran - it may have been done. Check before pressing it again.'
+ACT_MAYBE = 'pressed Approve on {n} and Taskuary restarted while it ran - it MAY have been done and its card still waits for their press; check what stands, and never do it again unless they ask'
 def failed_act(r) -> bool: return r.get('Kind') == 'action' and r['Status'] == 'superseded' and bool(r.get('ActError'))
 # ...and one that WENT is said as done: an approved merge, post or split read "approved (sent, if it sends)" - a letter's words for an act that
 # sends nothing, leaving its agent to guess whether it had run (the stress round, 2026-11-10)
@@ -802,6 +805,7 @@ ACT_DONE = 'pressed Approve on {n} and it was done'
 def _decided(store, r) -> str:
     "One review the owner pressed, in words for its agent: what became of it - and what went, when they changed its text first."
     n, state, why = f"rv{r['ReviewId']}", r.get('DeliveryState') or '', ' '.join(str(r.get('Reason') or '').split())[:160]
+    if r['Status'] == 'pending' and str(r.get('ActError') or '').startswith(ACT_CUT): return ACT_MAYBE.format(n=n)
     if failed_act(r) or (r['Status'] == 'pending' and state not in NOT_GONE):
         return ACT_FAILED.format(n=n, why=' '.join(str(r.get('ActError') or '').split())[:200], left='' if failed_act(r) else ' and its card still waits for their press')
     if r['Status'] == 'pending': return NOT_GONE[state].format(n=n, why=why or 'no reason was given')

@@ -60,7 +60,10 @@ for (const kind of ["allow_once", "reject_once"]) test(`a pressed ${kind} holds 
       const live = pane()?.querySelector("[data-tq-permission]"), was = pane()?.querySelector("[data-tq-permission-answered]");
       const lit = live && [...live.querySelectorAll("button")].some((b) => !b.disabled);
       const s = live ? `${lit ? "lit" : "busy"}:${live.getAttribute("data-tq-permission")}` : was ? `answered:${was.getAttribute("data-tq-permission-answered")}` : "none";
-      if (seen.at(-1)?.s !== s) seen.push({ at: Math.round(performance.now() - t0), s });
+      // ...its place in the conversation, not on screen: the chat scrolls on to what the agent says next
+      const card = live || was, port = card?.closest(".tq-aui-viewport");
+      const y = card ? Math.round(card.getBoundingClientRect().top - (port ? port.getBoundingClientRect().top - port.scrollTop : 0)) : null;
+      if (seen.at(-1)?.s !== s || seen.at(-1)?.y !== y) seen.push({ at: Math.round(performance.now() - t0), s, y });
     };
     const obs = new MutationObserver(read); obs.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
     read();
@@ -75,6 +78,9 @@ for (const kind of ["allow_once", "reject_once"]) test(`a pressed ${kind} holds 
   assert.equal(relit, -1, `the card lit its buttons again after the press: ${JSON.stringify(states)}`);
   assert.equal(blank, -1, `no card at all for a beat after the press: ${JSON.stringify(states)}`);
   assert.ok(states.some((x) => x.s === `answered:${kind}`), `never the answered card: ${JSON.stringify(states)}`);
+  // ...and the answered card stands where the card he pressed stood: no jump as it turns grey
+  const landed = states.find((x) => x.s === `answered:${kind}`), moved = states.filter((x) => x.y != null && x.at <= landed.at && Math.abs(x.y - states[0].y) > 2);
+  assert.deepEqual(moved, [], `the card moved as it was answered: ${JSON.stringify(states)}`);
   if (kind === "reject_once") assert.match(await stepNow(), /not run/, "a refused step was never run");
   assert.deepEqual(errors, []);
 });

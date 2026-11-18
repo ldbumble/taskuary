@@ -133,18 +133,21 @@ def pending(tid: int = None, store=None) -> list:
 
 # THE STEP A REQUEST IS ABOUT (the stress round, 2026-11-18): while the card waited, the call it stopped at read "Deleted ledger-archive" in the
 # chat - a call that never finished, drawn done - and after his Reject it still did. Each tool call put to the owner is `held` while it waits
-# and `refused` once it ended with nobody allowing it (his no, no answer in time, set aside, Taskuary closed first); an allowed one is as it ran
+# and `refused` once it ended with nobody allowing it (his no, his Always reject, no answer in time, set aside, Taskuary closed first); an allowed one
+# is as it ran
 def calls(store, tid: int) -> dict:
     "{tool call id: 'held' | 'refused'} for this task's calls the owner was asked about and has not allowed."
     import json
     with _LOCK: held = {p['req']['call'] for p in PENDING.values() if p['tid'] == int(tid) and p['store'] is store and p['req']['call']}
     out = {}
-    for r in store._rows("SELECT Action, Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action IN ('permission_asked','permission_answered') ORDER BY Id", (int(tid),)):
+    # ...and one his remembered Always reject refused without asking (`permission_auto`) is refused as his press would be
+    for r in store._rows("SELECT Action, Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action IN ('permission_asked','permission_answered','permission_auto') ORDER BY Id", (int(tid),)):
         try: d = json.loads(r['Detail'] or '{}')
         except ValueError: continue
         if not (c := str(d.get('call') or '')): continue
         if r['Action'] == 'permission_asked': out[c] = 'refused'
         elif str(d.get('answer') or '').startswith('allow'): out.pop(c, None)
+        elif r['Action'] == 'permission_auto': out[c] = 'refused'
     return out | {c: 'held' for c in held}
 
 
@@ -168,7 +171,7 @@ def ask(store, tid: int, request: dict, wait: float = None, timed_out=None, move
     if not agents.developer_mode(store): return _pick(r, False)
     got, why = auto(store, tid, r)
     if got:
-        store.audit('task', tid, 'permission_auto', 'taskuary', 'system', {'pattern': pattern(r), 'answer': got, 'why': why})
+        store.audit('task', tid, 'permission_auto', 'taskuary', 'system', {'pattern': pattern(r), 'answer': got, 'why': why, 'call': r['call']})
         return got
     pid, wait = uuid.uuid4().hex[:12], TIMEOUT if wait is None else wait
     try: r.update(held_for(r, _cwd(store, tid)))

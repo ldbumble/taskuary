@@ -267,3 +267,18 @@ def test_a_request_whose_session_ended_says_so_never_that_ten_minutes_passed(s):
     said = [c['Body'] for c in s.list_comments(tid)]
     assert not any(b.startswith('No answer in') for b in said), said
     assert said[-1] == perm.ENDED_FIRST.format("wants to run `npm test -- money` (" + os.path.join(REPO, 'money.js') + ")"), said
+
+
+def test_a_call_his_always_reject_refused_reads_not_run_too(s):
+    """He pressed Always reject; the agent asked the same again and Taskuary's rule answered it - never put to him, so never marked: the
+    refused call read as done in the chat ("Ran npm test -- money"). A call his remembered no refused is `refused` as his press would be;
+    one his Always allow let through is as it ran."""
+    tid = coding(s)
+    t, box = asking(s, tid, perm.from_acp(ACP))
+    perm.answer(s, tid, perm.pending(tid, s)[0]['id'], 'reject_always'); t.join(3)
+    again = {**ACP, 'toolCall': {**ACP['toolCall'], 'toolCallId': 'call-8'}}
+    assert perm.ask(s, tid, perm.from_acp(again), wait=0.2) == 'reject_once'
+    assert perm.calls(s, tid) == {'call-7': 'refused', 'call-8': 'refused'}
+    s.set_perm_rule(tid, perm.pattern(perm.normal(perm.from_acp(ACP))), 'allow')
+    assert perm.ask(s, tid, perm.from_acp({**ACP, 'toolCall': {**ACP['toolCall'], 'toolCallId': 'call-9'}}), wait=0.2) == 'allow_once'
+    assert 'call-9' not in perm.calls(s, tid)

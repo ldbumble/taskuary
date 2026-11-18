@@ -988,7 +988,9 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
         from . import samework
         if (same := samework.same_open_task(store, f"{p['title']}. {p.get('summary') or ''}", skip={int(tid)})):
             reshape.move_part(store, tid, same, p['messages'], p['items'], actor)
-            samework.tell(store, same, f"Moved here from {task_ref(tid)}: {p['title']}" + (f" - {p['summary']}" if p.get('summary') else ''), actor)
+            # ...in Taskuary's words (general.tell): the owner pressed the card, he never typed this line
+            from . import general
+            general.tell(store, same, f"Moved here from {task_ref(tid)}: {p['title']}" + (f" - {p['summary']}" if p.get('summary') else ''), actor)
             return {'task': same, 'ref': task_ref(same), 'joined': True, 'said': f"{task_ref(same)} is already that work - moved there, its agent told: {p['title'][:120]}"}
         new = reshape.split_task(store, tid, {'title': p['title'], 'summary': str(p.get('summary') or ''), 'items': p['items']}, None, p['messages'], actor)
         out = {'task': new, 'ref': task_ref(new), 'said': f"{task_ref(new)} is the new task: {p['title'][:120]}"}

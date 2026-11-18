@@ -342,14 +342,29 @@ class APartThatIsAnotherJob(Acts):
         seen, told = [], []
         def llm(system, user, **k): seen.append(user); return json.dumps({'same_as': there})
         had = len(self.s.list_tasks(None))
-        with mock.patch('taskuary.concierge.brain', return_value=llm),              mock.patch.object(general, 'take_line', lambda st, tid, text, files=None, actor='owner', **k: told.append((tid, text))):
+        with mock.patch('taskuary.concierge.brain', return_value=llm),              mock.patch.object(general, 'tell', lambda st, tid, text, actor='owner', **k: told.append((tid, text))):
             out = verdicts.decide(self.s, rv, 'approve')
         self.assertTrue(out['ok'], out)
         self.assertEqual(len(self.s.list_tasks(None)), had, 'no second task')
         self.assertIn('Add a daily rate to the bed boards', seen[0])                         # the model was shown the open task
         self.assertEqual((out['result']['task'], [m['MessageId'] for m in self.s.list_messages(there)]), (there, [self.other]))
         self.assertIn('b2', [i['id'] for i in self.s.task_checklist(there)])
-        self.assertEqual([t for t, _ in told], [there]); self.assertIn('Bed board daily rate', told[0][1])
+        moved = [w for t, w in told if t == there]                       # ...the task that pressed it hears its own approval, as ever
+        self.assertEqual(len(moved), 1); self.assertIn('Bed board daily rate', moved[0])
+
+    def test_a_joined_part_reaches_its_agent_as_taskuarys_words_never_a_line_in_the_owners_name(self):
+        """Only his words are his (the coordinator, 2026-11-18): the joined part rode take_line, the road of a line he types, and the receiving
+        chat drew "Moved here from TQ-x ..." under You. It is Taskuary's note, by general.tell - into its agent's next prompt."""
+        from taskuary import waitroom, workerstate
+        there = Factory(self.s).task('Add a daily rate to the bed boards', kind='coding')
+        self.ask = {**self.ask, 'title': 'Bed board daily rate'}
+        rv, _ = self.queue()
+        with mock.patch('taskuary.concierge.brain', return_value=lambda *a, **k: json.dumps({'same_as': there})),              mock.patch.object(workerstate, '_live', lambda tid: tid == there), mock.patch.object(waitroom, 'deliver', return_value={'delivered': 0}):
+            self.assertTrue(verdicts.decide(self.s, rv, 'approve')['ok'])
+        self.assertEqual(general.waiting_lines(self.s, there), [], 'no line kept in his name')
+        self.assertFalse([c for c in self.s.list_comments(there, internal=True) if c.get('ActorType') == general.USER_TYPE])
+        notes = self.s.waiting_notes(there)
+        self.assertEqual([n['CreatedBy'] for n in notes], ['router']); self.assertIn('Bed board daily rate', notes[0]['Note'])
 
     def test_a_part_the_model_reads_as_other_work_is_a_task_of_its_own(self):
         Factory(self.s).task('Add a daily rate to the bed boards', kind='coding')

@@ -6031,7 +6031,7 @@ def agent_new_task(body: AgentNewTaskBody, request: Request):
                     'next': f'{task_ref(new)} was already started from here and is working on it - nothing new was made'}
         # ...AND THE SAME WORK ALREADY OPEN ELSEWHERE IS THAT TASK (samework, the owner's live app 2026-11-18): its agent hears the ask there
         if not new and (same := samework.same_open_task(store, f'{title}. {ask}', skip={body.task_id})):
-            samework.tell(store, same, f'From {task_ref(body.task_id)}: {ask}', ACTOR)
+            general.tell(store, same, f'From {task_ref(body.task_id)}: {ask}', ACTOR)        # ...Taskuary's words, never a line in his name
             store.add_comment(body.task_id, body.agent, 'agent', f'Handed to {task_ref(same)}, which is already that work: {title}')
             return {'ok': True, 'task': task_ref(same), 'title': title, 'already': True, 'started': True,
                     'next': f'{task_ref(same)} is already that same work - its agent was told; nothing new was made. Say so in one line'}

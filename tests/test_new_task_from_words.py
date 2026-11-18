@@ -92,7 +92,7 @@ class AgentsNewTaskIsTheSameRoadTests(unittest.TestCase):
         here = s.create_task({'Title': 'Weekly census review', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
         llm = lambda system, user, **k: json.dumps({'same_as': there})
         body = server.AgentNewTaskBody(task_id=here, title='Bed board daily rate', ask='Add the daily rate column to the bed board', kind='coding')
-        with mock.patch.object(server, 'store', s), mock.patch.object(server, '_own_task_only'), mock.patch('taskuary.concierge.brain', return_value=llm),              mock.patch.object(general, 'take_line') as told, mock.patch.object(server, '_start_new_task') as started:
+        with mock.patch.object(server, 'store', s), mock.patch.object(server, '_own_task_only'), mock.patch('taskuary.concierge.brain', return_value=llm),              mock.patch.object(general, 'tell') as told, mock.patch.object(server, '_start_new_task') as started:
             out = server.agent_new_task(body, None)
         self.assertEqual((out['task'], out['already']), ('TQ-%04d' % there, True)); self.assertEqual(len(s.list_tasks(None)), 2)
         started.assert_not_called(); self.assertEqual(told.call_args.args[1], there)

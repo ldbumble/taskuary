@@ -34,6 +34,7 @@ def same_open_task(store, words: str, skip=(), llm=None) -> int | None:
 
 
 def tell(store, tid: int, words: str, actor: str = 'owner', files=None):
-    "The ask, heard by the agent on the task that is already that work - a line on the one road a line takes (general.take_line)."
+    """HIS words, heard by the agent on the task that is already that work - a line on the one road a line he types takes (general.take_line).
+    An agent's ask or a break-out is Taskuary's, never his: those go by general.tell."""
     from . import general
     return general.take_line(store, int(tid), words, files, actor, wait=False)

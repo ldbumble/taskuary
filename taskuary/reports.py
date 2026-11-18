@@ -121,10 +121,14 @@ CONNECTION_KEYS = frozenset({'base_url', 'site', 'account', 'gateway', 'server',
                              # tenant or connection string would carry the card's secret to an address the owner never typed
                              'conn_str', 'uri', 'user', 'token_url', 'kid', 'subdomain', 'environment', 'access_token', 'consumer_key',
                              'consumer_secret', 'token_id', 'tenant', 'org_uuid', 'cert_file', 'key_file'})
+# ...save where one of those names is the executor's WHAT: a page reader's `url` is the page it reads (its key goes to its own provider,
+# never there) - stripped, run_system {"type": "reader", "url": ...} answered "no url to read" every time
+ASKED = {'reader': {'url'}, 'firecrawl': {'url'}, 'scrapingbee': {'url'}}
 def query_only(body: dict) -> dict:
     """The body minus every connection field - what an agent may say about a tool call. `_write` goes too: whether a
     query may commit is the card's Authority (tools/run) or the owner's approval, never the caller's say-so."""
-    return {k: v for k, v in (body or {}).items() if k not in CONNECTION_KEYS and k != '_write'}
+    keep = ASKED.get(str((body or {}).get('type') or ''), set())
+    return {k: v for k, v in (body or {}).items() if (k not in CONNECTION_KEYS or k in keep) and k != '_write'}
 
 
 def run_sqlite(cfg):

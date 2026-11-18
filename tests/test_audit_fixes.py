@@ -39,6 +39,16 @@ class PerimeterTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'management.azure.com'): azure.run_azure({'path': 'https://evil.example/subscriptions'})
         with self.assertRaisesRegex(ValueError, 'storage account name'): azure.run_azure_blob({'account': 'evil.com/#', 'container': 'c'})
 
+    def test_a_page_reader_keeps_the_page_it_was_asked_to_read(self):
+        """`url` is where a REST or MCP card's token goes, so it is never the caller's - but to a page reader it is the page: stripped
+        here, run_system {"type": "reader", "url": ...} answered "no url to read" every time. A reader keeps its own `url`; nothing else
+        does, and its key still goes only to its own provider."""
+        for t in ('reader', 'firecrawl', 'scrapingbee'):
+            self.assertEqual(reports.query_only({'type': t, 'url': 'https://northwind.example/a', 'api_key': 'x'}),
+                             {'type': t, 'url': 'https://northwind.example/a'})
+        self.assertNotIn('url', reports.query_only({'type': 'rest', 'url': 'http://evil.example'}))
+        self.assertNotIn('url', reports.query_only({'url': 'http://evil.example'}))
+
     def test_f01_sqlite_reports_cannot_write(self):
         d = tempfile.mkdtemp(); p = str(Path(d) / 'r.db')
         cx = sqlite3.connect(p); cx.execute('CREATE TABLE t (v)'); cx.execute('INSERT INTO t VALUES (1)'); cx.commit(); cx.close()

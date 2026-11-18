@@ -104,3 +104,59 @@ for (const [width, height] of [[1600, 900], [390, 844]]) {
     assert.deepEqual(errors, []);
   });
 }
+
+// ENTER WHILE A FILE UPLOADS (2026-11-18): the words went without it, and the file landed alone in the emptied box. The upload is held back
+// two seconds; Enter is pressed in it. What the server is sent must carry the words and the file together, once
+const slowUploads = async (page, ms = 2000) => {
+  const posted = [], guard = page.fixtureRequestGuard;
+  page.off("request", guard);
+  page.on("request", (r) => {
+    if (r.method() === "POST" && /\/api\/(tasks\/\d+\/(assistant\/messages|dispatch)|tasks|concierge\/say)$/.test(r.url().split("?")[0])) posted.push({ url: r.url(), body: r.postData() || "" });
+    if (/\/api\/prompt-(image|file)/.test(r.url())) setTimeout(() => guard(r), ms); else guard(r);
+  });
+  return posted;
+};
+const typeThenPick = async (page, w, sel, words) => {
+  await page.click(`${sel} .tq-aui-input`); await page.keyboard.type(words);
+  const [chooser] = await Promise.all([page.waitForFileChooser({ timeout: 5000 }), page.click(`${sel} [data-tq-box-attach]`)]);
+  await chooser.accept([path.join(w.bin, "a.png")]);
+  await new Promise((r) => setTimeout(r, 300));
+  await page.focus(`${sel} .tq-aui-input`); await page.keyboard.press("Enter");
+  await new Promise((r) => setTimeout(r, 4000));
+};
+
+test("Enter on a task's chat while its file uploads: the line goes with the file", { timeout: 300000 }, async (t) => {
+  const w = await world(t), page = await w.newPage();
+  await page.setViewport({ width: 1600, height: 900 });
+  const errors = []; page.on("pageerror", (e) => errors.push(e.message));
+  const made = await w.api("/api/fixture/mail-task", {});
+  const posted = await slowUploads(page);
+  await page.goto(w.ui, { waitUntil: "domcontentloaded" });
+  await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
+  const sel = "[data-tq-task-page] [data-tq-one-box]";
+  await page.waitForSelector(sel, { visible: true, timeout: 60000 });
+  await new Promise((r) => setTimeout(r, 2000));
+  await typeThenPick(page, w, sel, "Here is the screenshot Erin asked for");
+  const lines = posted.filter((p) => /assistant\/messages/.test(p.url)).map((p) => JSON.parse(p.body));
+  assert.equal(lines.length, 1, JSON.stringify(posted));
+  assert.equal(lines[0].text, "Here is the screenshot Erin asked for");
+  assert.equal(lines[0].attachments.length, 1, `the line went without its file: ${JSON.stringify(lines)}`);
+  const left = await page.$$eval(`${sel} [data-tq-file-chip]`, (x) => x.length);
+  assert.equal(left, 0, "the file was left behind in the box");
+  assert.deepEqual(errors, []);
+});
+
+test("Enter in New while its file uploads: the task is made with the file", { timeout: 300000 }, async (t) => {
+  const w = await world(t), page = await w.newPage();
+  await page.setViewport({ width: 1600, height: 900 });
+  const errors = []; page.on("pageerror", (e) => errors.push(e.message));
+  const posted = await slowUploads(page);
+  await page.goto(`${w.ui}#new-task`, { waitUntil: "domcontentloaded" });
+  const sel = "[data-tq-new] [data-tq-prompt-box]";
+  await page.waitForSelector(sel, { visible: true, timeout: 60000 });
+  await new Promise((r) => setTimeout(r, 2000));
+  await typeThenPick(page, w, sel, "Make a one-page summary of this chart");
+  assert.equal(posted.length, 1, JSON.stringify(posted));
+  assert.match(posted[0].body, /ATTACHED IMAGES|"images":\["/, `the task was made without its file: ${JSON.stringify(posted)}`);
+  assert.deepEqual(errors, []);
+});

@@ -4,7 +4,7 @@
 // file, and the assistant's own model is handed the picture itself (server.prompt_images).
 // ...AND ANY FILE, where the box asks for them (`files`; the owner, 2026-11-05: "does drop in the prompt box attach it in all prompt boxes?"):
 // a PDF, a sheet, a log goes to /api/prompt-file under its own name, the same 12 MB cap, and is drawn as a chip with that name
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Box, IconButton, Popover, Tooltip } from "@mui/material";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import CloseIcon from "@mui/icons-material/Close";
@@ -81,6 +81,20 @@ export function usePromptImages({ files: anyFile = false } = {}) {
   }, [add, takes]);
   const onDragOver = useCallback((e) => { if ([...(e.dataTransfer?.types || [])].includes("Files")) e.preventDefault(); }, []);
   return { imgs, pending, paths: imgs.map((i) => i.path), busy: pending.length > 0, err, add, remove, clear, put, files: anyFile, drop: { onPaste, onDrop, onDragOver } };
+}
+
+// SEND WAITS FOR ITS FILES (2026-11-18): Enter pressed while a picked file was still uploading sent the words without it - the file then
+// landed alone in the emptied box (a task's chat), or was dropped with New's closed box. One road for every box: a press while files upload is
+// held, and goes once they are up, with them; an upload that failed leaves the words in the box under its error. `waiting`: a press is held
+export function useSendWhenUp(pics, send) {
+  const want = useRef(false), [waiting, setWaiting] = useState(false), busy = !!pics?.busy;
+  useEffect(() => {
+    if (!want.current || busy) return;
+    want.current = false; setWaiting(false);
+    if (!pics?.err) send();
+  }, [busy]);   // ...on the change alone: the send of that render reads what it holds then
+  const go = useCallback(() => { if (busy) { want.current = true; setWaiting(true); return; } send(); }, [busy, send]);
+  return { go, waiting };
 }
 
 // the paperclip: opens the file picker - images only, or any file where the box takes them

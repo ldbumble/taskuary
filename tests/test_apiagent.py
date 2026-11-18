@@ -336,7 +336,7 @@ class OneRoundTripTests(unittest.TestCase):
 
     def test_an_act_that_cannot_be_undone_is_held_not_run(self):
         held = {'hookSpecificOutput': {'permissionDecisionReason': 'Taskuary held this for the owner: submit the appeal'}}
-        with mock.patch.object(bv, 'installed', return_value=True), \
+        with mock.patch.object(bv, 'installed', return_value=True), mock.patch.object(bv, 'state', return_value={'open': True}), \
              mock.patch('taskuary.browsergate.check', return_value=held), mock.patch('taskuary.browsergate._run') as ran:
             said = apiagent.run_tool(MemoryStore(), 1, 's', 'browser_click', {'ref': '@e4'})
         self.assertIn('held this for the owner', said)
@@ -1111,7 +1111,8 @@ class TheRestOfALongAnswerTests(unittest.TestCase):
         self.tid = self.s.create_task({'Title': 'Payroll runs summary', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
         rows = ''.join(f'- row "Run {1000 + i} 2026-03-{i % 28 + 1:02d} $201,345 paid" [ref=e{i}]\n' for i in range(600))
         self.page = rows + '- row "Run 9999 scheduled - THE LAST ONE" [ref=e999]\n'
-        for p in (mock.patch.object(bv, 'installed', return_value=True), mock.patch('taskuary.browsergate._run', return_value=(0, self.page)),
+        for p in (mock.patch.object(bv, 'installed', return_value=True), mock.patch.object(bv, 'state', return_value={'open': True}),
+                  mock.patch('taskuary.browsergate._run', return_value=(0, self.page)),
                   mock.patch('taskuary.browsergate.address', return_value='https://portal.example/runs')):
             p.start(); self.addCleanup(p.stop)
 
@@ -1171,3 +1172,19 @@ class AnOpenThatNeverFinishedTests(unittest.TestCase):
         self.on = 'https://portal.example/runs?page=1'
         with self.assertRaises(ValueError) as e: self.open()
         self.assertIn('Timed out', str(e.exception))
+
+
+class NoPageOpenTests(unittest.TestCase):
+    """A look or a click before any page was opened, or after the browser closed: a look answered with a DevTools connect error, a click
+    with "Taskuary held this for the owner ... Run `agent-browser get url`" - nothing was held, and an API agent has no such command."""
+
+    def test_every_browser_tool_but_open_says_to_open_a_page_first(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Vendor invoices', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        with mock.patch.object(bv, 'installed', return_value=True), mock.patch.object(bv, 'state', return_value={'open': False}), \
+             mock.patch('taskuary.browsergate._run') as ran, mock.patch('taskuary.browsergate.check') as judged:
+            for tool, a in (('browser_look', {}), ('browser_click', {'ref': '@e1'}), ('browser_fill', {'ref': '@e2', 'text': 'Northwind'}),
+                            ('browser_press', {'key': 'Enter'}), ('browser_screenshot', {})):
+                with self.assertRaises(ValueError, msg=tool) as e: apiagent.run_tool(s, tid, 'sid-n', tool, a)
+                self.assertIn('browser_open', str(e.exception)); self.assertIn('nothing was done', str(e.exception))
+        ran.assert_not_called(); judged.assert_not_called()

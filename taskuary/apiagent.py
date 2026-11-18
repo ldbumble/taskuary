@@ -400,6 +400,10 @@ def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
         why = bv.set_up(SAY.get((tid, sid))) if bv.can_set_up() else 'agent-browser is not installed'
         if why: raise ValueError(f'the browser could not be set up on this computer: {why}. Tell the owner that in one plain line, in these '
                                  'words, and that asking again tries again - never send them to a settings page to install it')
+    # ...AND A LOOK OR A CLICK WITH NO PAGE OPEN SAYS SO: a DevTools connect error came back for a look, and for a click "Taskuary held this
+    # for the owner ... Run `agent-browser get url`" - nothing was held, and an API agent has no such command (the browser-read round, 2026-11-18)
+    if name != 'browser_open' and not bv.state(sid, fresh=True).get('open'):
+        raise ValueError("this task's browser has no page open (none was opened yet, or it closed) - nothing was done; browser_open the address first")
     if name == 'browser_open':
         u = _url(a.get('url'))
         if not bv.state(sid, fresh=True).get('open'):

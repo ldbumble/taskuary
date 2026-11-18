@@ -215,6 +215,10 @@ def ask(store, tid: int, request: dict, wait: float = None, timed_out=None, move
             from . import conversation
             conversation.hear_press(store, tid, 'permission_answered')
         except Exception as e: logger.debug(f'permission on {task_ref(tid)}: its answer not written as heard - {e}')
+        # ...AND EVERY CHAT BOUND TO THE TASK HEARS IT, whichever road it came by (the button, the chat, the rail's answer): answered on the
+        # rail, the chat kept its numbered ask open and never heard - its "1" then read "Nothing changed"
+        try: agentchannels.permission_done(store, tid, pid, answered(ans, tid, r))
+        except Exception as e: logger.debug(f'permission on {task_ref(tid)}: answer line not posted - {e}')
         return ans
     finally: done.set()
 
@@ -222,7 +226,7 @@ def ask(store, tid: int, request: dict, wait: float = None, timed_out=None, move
 def answer(store, tid: int, pid: str, option: str, actor: str = 'owner') -> dict:
     """The OWNER's answer - the task chat's button, or the owner's own reply on a bound channel (agentchannels checks who wrote it). A
     teammate's never reaches here: no road hands one in."""
-    from . import agentchannels, workerstate as ws
+    from . import workerstate as ws
     if actor != 'owner': raise PermissionError("only the owner answers an agent's permission request")
     with _LOCK: p = PENDING.get(str(pid))
     if not p or p['tid'] != int(tid) or p['store'] is not store: return {'ok': False, 'why': 'that request is no longer waiting'}
@@ -234,10 +238,10 @@ def answer(store, tid: int, pid: str, option: str, actor: str = 'owner') -> dict
     # ...AND RETURNS ONCE THE ASKING THREAD HAS WRITTEN IT: the page reads the list the moment the press returns, and found the card still
     # waiting - its buttons lit again - or no card at all, until that thread woke (browser/permission-press)
     p['done'].wait(5)
-    said = f"{LABEL[o]} - {task_ref(tid)} {line(p['req'])}."
-    try: agentchannels.permission_done(store, int(tid), pid, said)
-    except Exception as e: logger.debug(f'permission on {task_ref(tid)}: answer line not posted - {e}')
-    return {'ok': True, 'answer': o, 'says': said}
+    return {'ok': True, 'answer': o, 'says': answered(o, tid, p['req'])}
+
+
+def answered(o: str, tid: int, r: dict) -> str: return f"{LABEL[o]} - {task_ref(tid)} {line(r)}."
 
 
 SET_ASIDE_SAID = 'Set aside when you moved on - the agent was refused: it {}. Ask it to bring it back if it is still wanted.'

@@ -67,8 +67,10 @@ class Reading(unittest.TestCase):
                     'nohup agent-browser click @e12 &', 'env FOO=1 agent-browser click @e12', 'time agent-browser click @e12',
                     'nice -n 5 agent-browser click @e12', 'for r in e1 e12; do agent-browser click @$r; done',
                     'if true; then agent-browser click @e12; fi', 'while true; do agent-browser click @e12; break; done',
-                    '{ agent-browser click @e12; }', '! agent-browser click @e12', 'stdbuf -oL timeout 9 agent-browser click @e12'):
+                    '{ agent-browser click @e12; }', '! agent-browser click @e12', 'stdbuf -oL timeout 9 agent-browser click @e12',
+                    'start /b agent-browser click @e12'):
             self.assertEqual([a['verb'] for a in bg.acts(cmd)], ['click'], cmd)
+        self.assertTrue(bg.acts('Start-Process agent-browser -ArgumentList "click @e12"'))       # PowerShell's: judged, never a look
         for cmd in ('grep -r agent-browser docs', 'echo agent-browser click', 'which agent-browser', 'timeout 5 agent-browser snapshot -i'):
             self.assertEqual(bg.acts(cmd), [], cmd)
 

@@ -94,7 +94,8 @@ def _is_exe(tok: str, exe: str = EXE) -> bool:
 # programs run the command named after their own options (`timeout 30 agent-browser click`, `... | xargs agent-browser click`). Read as no
 # browser act, every one of them ran its click ungated.
 RESERVED = frozenset('do then else elif if while until { ! time'.split())
-RUNNERS = frozenset('sudo doas env nohup timeout nice ionice stdbuf setsid xargs watch caffeinate unbuffer chronic flock nsenter chroot'.split())
+RUNNERS = frozenset('sudo doas env nohup timeout nice ionice stdbuf setsid xargs watch caffeinate unbuffer chronic flock nsenter chroot '
+                    'start start-process saps'.split())       # ...and cmd's `start`, PowerShell's Start-Process
 
 
 def _head(argv: list, exe: str = EXE) -> list | None:

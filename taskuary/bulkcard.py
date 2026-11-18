@@ -14,6 +14,7 @@ from loguru import logger
 KEY = 'batch:'                 # setting: batch:<key> -> the run's state
 YES = 'approve'
 LEFT = 'left out by you'      # a row he unticked: closed, never done
+_START = threading.Lock()
 
 
 def new_key() -> str: return uuid.uuid4().hex[:12]
@@ -54,12 +55,15 @@ def run(store, key: str, skip=(), actor: str = 'owner', wait: bool = False) -> d
     """His one press: every waiting row of bulk card `key` done by its own road, in order, in the background (`wait`: here, for a test);
     the rows in `skip` closed as left out. -> the run's state as it starts."""
     from . import verdicts
-    todo = [r for r in rows(store, key) if r['Status'] == 'pending']
-    if not todo: raise ValueError('nothing on this card waits any more')
-    if running(store, key): return state(store, key)
-    tid, skip = todo[0]['TaskId'], {int(x) for x in skip or ()}
-    st = {**state(store, key), 'key': key, 'tid': tid, 'total': len(todo), 'done': 0, 'failed': 0, 'left': 0, 'state': 'running', 'rows': {}, 'at': time.time()}
-    _save(store, st)
+    # ...THE LOOK AND THE START ARE ONE STEP (stress round, 2026-11-18): two presses in the same moment both found it idle, both ran it, and
+    # the agent was told twice - each run counting the other's rows as failed
+    with _START:
+        todo = [r for r in rows(store, key) if r['Status'] == 'pending']
+        if running(store, key): return state(store, key)
+        if not todo: raise ValueError('nothing on this card waits any more')
+        tid, skip = todo[0]['TaskId'], {int(x) for x in skip or ()}
+        st = {**state(store, key), 'key': key, 'tid': tid, 'total': len(todo), 'done': 0, 'failed': 0, 'left': 0, 'state': 'running', 'rows': {}, 'at': time.time()}
+        _save(store, st)
     def go():
         tok = verdicts.QUIET.set(True)
         try:

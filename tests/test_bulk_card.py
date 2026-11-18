@@ -144,3 +144,23 @@ def test_a_task_whose_card_is_running_reads_at_work_not_waiting_on_him():
     assert taskstate.state(s, s.get_task(tid)) == 'working', 'stopping after the row in hand'
     st['state'] = 'stopped'; bulkcard._save(s, st)
     assert taskstate.state(s, s.get_task(tid)) != 'working', 'what was not run waits on him again'
+
+
+def test_two_presses_at_once_are_one_run_and_one_true_telling():
+    """Pressed on the phone and the desk in the same moment: both presses started a run, each row went once (its own road refuses a second),
+    and the agent was told twice - each telling "5 done, 5 failed" over ten issues that had all closed."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        out = call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='duplicates', items=[{'number': n} for n in range(1, 11)])
+    gh, told, go = GitHub(delay=0.02), [], threading.Barrier(2)
+    with mock.patch.object(github.requests, 'patch', gh.patch), mock.patch.object(general, 'tell', lambda st, t, said, actor='owner': told.append(said) or 'woke'):
+        def press_it():
+            go.wait()
+            try: bulkcard.run(s, out['batch'], wait=True)
+            except ValueError: pass                                   # the second found nothing waiting: said so, nothing run
+        ts = [threading.Thread(target=press_it) for _ in range(2)]
+        [t.start() for t in ts]; [t.join() for t in ts]
+    st = bulkcard.state(s, out['batch'])
+    assert sorted(gh.closed) == list(range(1, 11)) and (st['done'], st['failed']) == (10, 0), st
+    [said] = told
+    assert '10 done, 0 failed' in said

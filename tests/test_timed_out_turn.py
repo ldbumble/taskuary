@@ -180,6 +180,25 @@ def test_a_stopped_first_turn_keeps_its_conversation_and_the_next_turn_resumes_i
     assert resumes == [None, first], resumes                     # ...and the next turn picked that one up, not a fresh one
 
 
+@pytest.mark.parametrize('later', [False, True], ids=['first turn', 'later turn'])
+def test_an_acp_turn_that_ended_early_is_said_once_and_the_next_line_resumes_its_conversation(later, tmp_path, monkeypatch):
+    """An ACP turn that ended early before a word (a refusal, a limit) raised an error with no conversation id: on a first turn the next line
+    opened a fresh conversation that knew nothing of it, and on a later one the caller asked the whole turn again on a fresh conversation
+    (it re-asks any failure but a death it read by its words) - the turn run twice, the sentence never shown. It is clipool.PartWay: one
+    call, its sentence what the owner reads, its conversation the next line's."""
+    rules = tmp_path / 'r.json'; rules.write_text(json.dumps([{'when': 'Pull the first ledger', 'silent': True, 'stop': 'max_tokens'}]))
+    with on_road('acp', monkeypatch, {}, rules) as (ses, resumes, began):
+        if later: ses.send_prompt('Hello there.', brief=True)
+        before = ses.cli_sid
+        with pytest.raises(Exception): ses.send_prompt('Pull the first ledger.', brief=True)
+        assert len(resumes) == 1 + later, resumes                     # ...asked once, never again on a fresh conversation
+        assert ses.store.last_worker_event(ses.task_id, skip=ws.NOTES)['Text'] == clipool.ended_early('max_tokens')
+        sid = ses.cli_sid
+        assert sid and (not later or sid == before)
+        ses.send_prompt('And then the second.', brief=True)
+    assert resumes[-1] == sid, resumes                                 # the next line goes on in that conversation
+
+
 @pytest.mark.parametrize('ends', [lambda: clipool.PartWay(clipool.MID_TURN, 'sess-1'), lambda: clipool.TimedOut('timed out after 300s', 'sess-1')])
 def test_a_turn_that_did_not_finish_on_a_conversation_under_way_is_never_asked_again_on_a_fresh_one(ends):
     """A failed turn on a conversation under way (cli_sid set) is asked again on a fresh conversation, the whole thing said again - right for a
@@ -222,3 +241,14 @@ def test_an_acp_agent_that_dies_mid_turn_is_said_as_a_death_and_its_turn_is_clea
         assert ses.cli_sid and (not later or ses.cli_sid == before), 'the conversation it died on is kept'
         assert clipool._POOL.get(ses.keep()) is None, 'the dead conversation was dropped'
         assert spawned.ever and not spawned and all(p.poll() is not None for p in spawned.ever), 'no process is left'
+
+
+def test_a_turn_that_reached_its_limit_reads_the_one_sentence_for_it_on_the_kept_road_too(tmp_path, monkeypatch):
+    """The same fact read two ways: ACP said a turn that hit its limit in the early-end sentence, while kept claude's own error_max_turns result
+    read "Claude: error_max_turns" - a stop code, no way on. One function says it on every road (clipool.ended_early), and the conversation
+    is kept for the next line."""
+    rules = tmp_path / 'r.json'; rules.write_text(json.dumps([{'when': 'Pull the first ledger', 'first': 'Half of the ledger.'}]))
+    with on_road('kept', monkeypatch, {'FAKE_CLAUDE_RESULT': json.dumps({'subtype': 'error_max_turns', 'is_error': True, 'result': ''})}, rules) as (ses, resumes, began):
+        with pytest.raises(Exception): ses.send_prompt('Pull the first ledger.', brief=True)
+        assert ses.store.last_worker_event(ses.task_id, skip=ws.NOTES)['Text'] == clipool.ended_early('error_max_turns')
+        assert ses.cli_sid and len(resumes) == 1

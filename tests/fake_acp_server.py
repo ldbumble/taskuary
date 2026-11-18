@@ -21,13 +21,14 @@ Set in its environment, for the tests that need more:
   FAKE_ACP_STEER_ECHO=1  ...and echoes the steered words back as a user_message_chunk before it answers the steer
   FAKE_ACP_STEER_HOLD=1  ...and the turn goes on after a steer, as a real one at a tool does: only session/cancel ends it; `said`: it
                          says a word after taking the steer in, then goes on
+  FAKE_ACP_STOP=<reason> every turn ends with that stopReason (refusal, max_tokens, max_turn_requests), as an adapter's PromptResponse says it
   FAKE_ACP_USAGE=1       each turn's answer carries its usage and _meta.quota, as both adapters' PromptResponses do
   FAKE_ACP_MODELS=<a,b>  the model values it offers (default opus,sonnet)
   FAKE_DIRECTOR=<folder> each turn's words come from a scenario (fake_director.py), no permission asked; a session/cancel ends it meanwhile
   FAKE_ACP_SCRIPT=<file>  fake_claude's script: the first rule whose `when` the owner's words match answers `first`, after its `post`s ran
                          as the agent's own `taskuary --reply` would (fake_director.post) - a coding agent filing a reply, no permission asked;
                          `wait` seconds before it answers, `exit` a code it dies with mid-turn (after its `updates`),
-                         `updates` raw session updates said first
+                         `updates` raw session updates said first, `silent` it says no words at all and ends the turn, `stop` the stopReason its turn ends with
 It offers config options (mode, model, effort) the way claude-agent-acp and codex-acp do, and says what they were set to.
 """
 import json, os, re, sys
@@ -67,8 +68,9 @@ def code_done(granted):
     update('agent_message_chunk', content={'type': 'text', 'text': ('Added the comment.' if granted else 'denied') + f' - {_heard}'})
 
 
-def ended(stop='end_turn'):
+def ended(stop=None):
     "A turn's answer - with what it used, the shape claude-agent-acp and codex-acp give, when FAKE_ACP_USAGE asks."
+    stop = stop or os.environ.get('FAKE_ACP_STOP') or 'end_turn'
     if os.environ.get('FAKE_ACP_USAGE') != '1': return {'stopReason': stop}
     n = {'inputTokens': 12 * STARTS, 'cachedReadTokens': 3000, 'cachedWriteTokens': 400, 'outputTokens': 250}
     return {'stopReason': stop, 'usage': {**n, 'totalTokens': sum(n.values())},
@@ -150,7 +152,8 @@ for line in sys.stdin:
                     __import__('time').sleep(wait)
                     if _prompt_id == mid: update('agent_message_chunk', content={'type': 'text', 'text': text}); reply(mid, ended()); _prompt_id = None
                 __import__('threading').Thread(target=finish, daemon=True).start(); continue
-            update('agent_message_chunk', content={'type': 'text', 'text': rule.get('first') or 'Ok.'}); reply(mid, ended()); continue
+            if not rule.get('silent'): update('agent_message_chunk', content={'type': 'text', 'text': rule.get('first') or 'Ok.'})
+            reply(mid, ended(rule.get('stop'))); continue           # ...`stop`: this rule's turn ends with that stopReason
         if folder_of():                                # a scenario's own turn (fake_director.py): its words, no permission asked
             _prompt_id = mid                           # ...on a thread, so a session/cancel meanwhile ends the turn as a real adapter's does
             def answer_later(mid=mid, said=said):

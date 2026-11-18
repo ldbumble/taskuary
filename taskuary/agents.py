@@ -13,7 +13,7 @@ from . import acp as acp_mod, acpadapter, aiusage, pathcache, redact, spawn
 from . import clis as clis_mod
 from .store import task_ref
 from .clis import preset_args
-from .clipool import Cancelled, TimedOut
+from .clipool import Cancelled, PartWay, TimedOut
 from .selfclose import without_summary
 
 _CLI_CHILDREN = set()
@@ -272,6 +272,21 @@ class ClaudeSteps:
                 if iid in self.open: self.open.remove(iid)
                 self.trace('tool_result', iid, {'result': _result_text(c), 'is_error': bool(c.get('is_error'))})
         _published(j, self.trace)
+
+
+def raise_failure(name: str, said: str, cmd0: str = '', resume=None, raw=None, part_way=None):
+    """THE ONE WAY A TURN THAT DID NOT FINISH IS REPORTED, on every road that reads a CLI's own account of it (the kept conversation, ACP,
+    the one-shot run's death with no words): its usage allowance, its sign-in, a conversation it no longer has, a turn that ended part-way -
+    else its own words. `raw` is what else it printed, read for the same. `part_way` is (sentence, conversation id) where the road knows the
+    turn ended part-way (it died mid-turn, or ended early (a refusal, a limit), before a word or after some): raised as clipool.PartWay in that sentence alone."""
+    raw = raw if raw is not None else [said]
+    limit = rate_limited(raw) or rate_limited(said)
+    if limit: raise RateLimited(rate_limit_msg(name, limit), limit)
+    if _SIGNED_OUT.search(said): raise RuntimeError(signed_out_msg(name, said, cmd0))
+    if resume and gone('\n'.join(map(str, raw)) or said): raise Gone(resume)
+    # ...no process name before it and no "(the CLI exited (3))" or stop code after it (the overnight walk, 2026-11-11) - those are the log's
+    if part_way: logger.warning(f'{name}: {said[:500]}'); raise PartWay(*part_way)
+    raise RuntimeError(f'{name}: {said[:500]}')
 
 
 def _live_line(j):
@@ -1706,7 +1721,14 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         aiusage.note_turn(aiusage.acp_turn(_cli_name(name), client.last_turn, client.session_id, since))
         # ONE CONTRACT FOR A STOPPED TURN on every road: Cancelled, with the conversation it was on - never a blank success
         if stop == 'cancelled': raise Cancelled(client.session_id)
-        if stop and stop != 'end_turn': trace('progress', 'acp', f'the turn ended early: {stop}')
+        if stop and stop != 'end_turn':
+            trace('progress', 'acp', f'the turn ended early: {stop}')
+            # ...and a turn that ended early with nothing said is a failure, as the kept road reads its CLI's own error result - never an empty reply
+            # filed as done: ended part-way, in the sentence for its reason, its conversation kept for the next line
+            # ...and one it ended at a refusal or a limit AFTER words is the same part-way end, its words kept in the steps - never a half answer
+            # filed as done, as the kept road files claude's own error_max_turns
+            if not said.strip() or stop == 'refusal' or stop in clipool.LIMITS:
+                raise_failure(name, f'the turn ended early: {stop}', launch['cmd'][0], resume, part_way=(clipool.ended_early(stop), client.session_id))
         diff = ''
         if cwd:
             head1 = _git(cwd, 'rev-parse', 'HEAD')
@@ -2111,22 +2133,15 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
     except RuntimeError as e:
         said = str(e)
         if isinstance(e, clipool.TimedOut): raise clipool.TimedOut(f'{name}: {said[:500]}', e.session_id) from e
-        limit = rate_limited(said)
-        if limit: raise RateLimited(rate_limit_msg(name, limit), limit)
-        if _SIGNED_OUT.search(said): raise RuntimeError(signed_out_msg(name, said, cmd[0] if cmd else ''))
-        if resume and gone(said): raise Gone(resume)
-        # ...a turn its CLI died in says so in the one sentence an ACP agent's death says too (acp.py), no process name before it and no
-        # "(the CLI exited (3))" after it (the overnight walk, 2026-11-11) - that is the log's
-        if isinstance(e, clipool.PartWay): logger.warning(f'{name}: {said[:500]}'); raise clipool.PartWay(clipool.MID_TURN, e.session_id) from e
-        raise RuntimeError(f'{name}: {said[:500]}')
+        # ...a turn its CLI died in says so in the one sentence an ACP agent's death says too (acp.py), its conversation kept (clipool.PartWay)
+        raise_failure(name, said, cmd[0] if cmd else '', resume, part_way=(clipool.MID_TURN, e.session_id) if isinstance(e, PartWay) else None)
     aiusage.claude_result(final)                      # a turn that failed still used what it used
     if final.get('is_error'):
         said = str(final.get('result') or final.get('subtype') or 'the CLI reported an error')
-        limit = rate_limited(raw) or rate_limited(said)
-        if limit: raise RateLimited(rate_limit_msg(name, limit), limit)
-        if _SIGNED_OUT.search(said): raise RuntimeError(signed_out_msg(name, said, cmd[0] if cmd else ''))
-        if resume and gone('\n'.join(raw)): raise Gone(resume)          # its `errors`, beside a result that says only error_during_execution
-        raise RuntimeError(f'{name}: {said[:500]}')
+        # ...a limit the turn reached (error_max_turns) is said in the one sentence for it on every road (clipool.ended_early) - never its stop code
+        sub = str(final.get('subtype') or '')
+        raise_failure(name, said, cmd[0] if cmd else '', resume, raw,          # its `errors` ride in raw, beside a result that says only error_during_execution
+                      part_way=(clipool.ended_early(sub), final.get('session_id') or resume) if sub in clipool.LIMITS else None)
     out = str(final.get('result') or '').strip()
     trace('output', name, out[-1000:])
     return out, final.get('session_id'), None

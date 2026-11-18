@@ -3239,7 +3239,7 @@ class GeneralSession:
             stopped = cancel.is_set() or getattr(self, 'closing', False)
             from .clipool import PartWay, TimedOut
             timed = None if stopped else _unfinished(e, TimedOut)
-            # ...A TURN THAT DID NOT FINISH KEEPS ITS CONVERSATION, whichever way it ended (clipool.Unfinished: stopped, out of time, died part-way,
+            # ...A TURN THAT DID NOT FINISH KEEPS ITS CONVERSATION, whichever way it ended (clipool.Unfinished: stopped, out of time, ended early,
             # on any road): a stopped first turn lost its id and the next opened a fresh conversation
             from . import continuity
             if (u := _unfinished(e)) and u.session_id and continuity.can_resume(self.store, self.pick): self.cli_sid = u.session_id; self._remember_session()

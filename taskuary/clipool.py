@@ -35,7 +35,7 @@ class Gone(Ended):
 
 
 class Unfinished(RuntimeError):
-    """A TURN THAT DID NOT FINISH, ON ANY ROAD (the one-shot run, the kept process, ACP): stopped, out of time, died part-way. It carries the
+    """A TURN THAT DID NOT FINISH, ON ANY ROAD (the one-shot run, the kept process, ACP): stopped, out of time, ended early. It carries the
     conversation it was on, which the caller keeps (general.send_prompt), so the next turn picks that conversation up instead of opening
     another - and it is never sent again, as part of it may have run."""
     def __init__(self, msg='', session_id=None): super().__init__(msg); self.session_id = session_id
@@ -46,7 +46,7 @@ class TimedOut(Unfinished):
 
 
 class PartWay(Unfinished):
-    "A turn its agent ended part-way: it died mid-turn (MID_TURN). Never sent again: part of it may have run."
+    "A turn its agent ended part-way: it died mid-turn (MID_TURN), or ended it early (a refusal, a limit), before a word or after some. Never sent again: part of it may have run."
 
 
 class Cancelled(Unfinished):
@@ -58,6 +58,18 @@ RESTART_FAILED = 'the AI tool stopped, and stopped again when it was restarted'
 # ...a chat agent's CLI (this pool's only kind): typing carries it on, as no Continue button is there (general.CARRY_ON)
 # ...said as what happened and why nothing ran it again ("nothing was sent again" read, on a mail task, as a word on the mail - the walk, 2026-11-11)
 MID_TURN = 'the agent stopped in the middle of its turn. It may have done part of the work, so the turn was not run again - type to carry on'
+# ...and one its agent ENDED EARLY (an ACP adapter's stopReason, a CLI's own result): the fewest sentences true of each reason - a refusal is
+# the model's no, a limit one it reached (max_tokens, max_turn_requests; claude's error_max_turns), anything else said as no more than it is -
+# in the same voice, with the same way on. A refusal or a limit may come after words, and any of them after tool calls ran: no words does not
+# mean no work, and words do not mean it finished
+ENDED_EARLY = {'refusal': 'the agent declined to finish this turn. It may have done part of the work, so the turn was not run again - '
+                          'type to carry on, or say it another way',
+               'limit': 'the agent reached its limit for one turn before it finished. It may have done part of the work, so the turn was not run '
+                        'again - type to carry on',
+               'other': 'the agent ended its turn before it answered. It may have done part of the work, so the turn was not run again - type to '
+                        'carry on'}
+LIMITS = ('max_tokens', 'max_turn_requests', 'error_max_turns')
+def ended_early(stop: str) -> str: return ENDED_EARLY['refusal' if stop == 'refusal' else 'limit' if stop in LIMITS else 'other']
 
 
 class Live:

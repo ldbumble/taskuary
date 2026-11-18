@@ -91,7 +91,8 @@ def turn(prompt: str, n: int):
     out({'type': 'assistant', 'session_id': sid, 'message': {'role': 'assistant', 'content': [{'type': 'text', 'text': text}]}})
     log('result', n=n, out_chars=len(text))
     out({'type': 'result', 'subtype': 'success', 'is_error': False, 'result': text, 'session_id': sid, 'num_turns': n,
-         'duration_ms': int((time.time() - t) * 1000), **({'queued_turn_count': QUEUED()} if LIVE else {})})
+         'duration_ms': int((time.time() - t) * 1000), **({'queued_turn_count': QUEUED()} if LIVE else {}),
+         **json.loads(os.environ.get('FAKE_CLAUDE_RESULT') or '{}')})      # ...FAKE_CLAUDE_RESULT: its result as claude ends a turn otherwise
 
 
 TAKES = {'--session-id', '--resume', '-r', '--settings', '--model', '--system-prompt-file', '--append-system-prompt-file', '--append-system-prompt', '--permission-mode',

@@ -324,6 +324,20 @@ class ReadingOutside(unittest.TestCase):
                     'dir /s', 'python script.py 2>/dev/null', 'cat "$TASKUARY_OUTPUTS/total.txt"'):
             self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], ''), cmd)
 
+    def test_a_secret_is_seen_however_the_shell_line_spells_it(self):
+        """Taskuary's home (its config.toml carries the owner token) is never read - but the line was split as words with their quotes
+        left on, and `{`/`}` cut as blocks: a quoted variable glued to a path, `${...}`, a redirect stuck to its program and a bare `cd`
+        all passed the gate unread, as if they named nothing. Each is how a shell spells the same file."""
+        from pathlib import Path
+        from taskuary import readgate as rg
+        ssh = Path.home() / '.ssh'; ssh.mkdir(exist_ok=True); (ssh / 'id_ed25519').touch()
+        for cmd in ('cat "$TASKUARY_HOME"/config.toml', 'cat ${TASKUARY_HOME}/config.toml', 'cat "${TASKUARY_HOME}/config.toml"',
+                    'cat<"$TASKUARY_HOME/config.toml"', 'echo "$(<"$TASKUARY_HOME/config.toml")"', f'cat "{Path(self.secret).parent}"/config.toml',
+                    f"cat '{Path(self.secret).parent}'/'config.toml'", f'cd "{Path(self.secret).parent}" && cat config.toml',
+                    'cd && cat .ssh/id_ed25519', 'cd ~; base64 .ssh/id_ed25519'):
+            self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], rg.NEVER), cmd)
+        self.assertEqual(rg.command_paths('cat ${HOME:-/x}/.ssh/id_ed25519', self.work), [None], 'a default it cannot follow is held, never skipped')
+
     def test_work_in_its_own_folders_runs_and_a_read_outside_is_the_held_card(self):
         from taskuary import acpgate, outputs
         self.assertEqual(acpgate.decide(self.read(os.path.join(self.work, 'notes.md')), self.ctx)[0], acpgate.ALLOWED)

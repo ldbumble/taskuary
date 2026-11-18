@@ -23,7 +23,8 @@ ALLOWED = 'Allowed - this task may read that folder'      # a read's Approve, sa
 GRANT = 'read:'                                         # a folder the owner let this task read (store.set_perm_rule)
 READ_TOOLS = ('Read', 'Glob', 'Grep', 'LS', 'NotebookRead')
 _KEYS = ('file_path', 'notebook_path', 'path', 'pattern', 'dir', 'directory')
-_SPLIT = re.compile(r'\r?\n|;|&&|\|\||\||\{|\}|\(|\)')
+# ...a `${NAME}` is one word, never a block's braces: cut there, `cat ${HOME}/.ssh/x` named only `/.ssh/x`, which exists nowhere
+_SPLIT = re.compile(r'(\$\{[^}\s]*\})|\r?\n|;|&&|\|\||\||\{|\}|\(|\)')
 _VAR = re.compile(r'\$\{?(?:env:)?(\w+)\}?|%(\w+)%', re.I)
 _WILD = re.compile(r'[*?\[]')
 
@@ -145,6 +146,7 @@ def _expand(t: str, cwd: str, env: dict) -> str | None:
         if v is None and n == 'home': v = os.path.expanduser('~')
         if v is None: raise KeyError(n)
         return v
+    if re.search(r'\$\{(?:env:)?\w+[^\w}]', t): return None          # `${HOME:-/x}` and its kin pick their value at run time: unread, held
     try: t = _VAR.sub(sub, t)
     except KeyError: return None
     return os.path.expanduser(t)
@@ -157,18 +159,37 @@ def _pathish(t: str) -> bool:
     return t.startswith('/') and (bool(re.match(r'^/[A-Za-z](?=/|$)', t)) if os.name == 'nt' else len(t) > 1)
 
 
+def _segments(cmd: str) -> list:
+    "The line cut where one command ends and another begins - a `${NAME}` kept whole."
+    out, cur = [''], 0
+    for m in _SPLIT.finditer(cmd):
+        out[-1] += cmd[cur:m.start()] + (m[1] or ''); cur = m.end()
+        if not m[1]: out.append('')
+    out[-1] += cmd[cur:]
+    return out
+
+
+def _words(seg: str) -> list:
+    """One command's words as the shell will see them: quotes joined to what they touch (`"$HOME"/.ssh/x` is one path) and a redirect cut
+    from the word it is stuck to (`cat<x`). On Windows a backslash is a path's separator, never an escape."""
+    try:
+        lx = shlex.shlex(seg.replace('\\', '\\\\') if os.name == 'nt' else seg, posix=True, punctuation_chars=True)
+        lx.whitespace_split = True
+        return list(lx)
+    except ValueError: return [x.strip('"\'') for x in seg.split()]      # a quote the split cut in two (`cmd /c "cd X && rd Y"`)
+
+
 def command_paths(cmd: str, cwd: str = '', env: dict = None) -> list:
     """Every path a shell line names as an argument, through `cd`, `bash -c "..."` and `--opt=value` - None for one built from a variable
     it cannot read. The program itself, options, URLs and switches (`/s`) are not paths."""
     out, here, env = [], cwd, dict(env or {})
-    for seg in _SPLIT.split(str(cmd or '')):
+    for seg in _segments(str(cmd or '')):
         # ...a path kept in a variable is read where the variable is (`$p='C:/x.csv'; Get-Content $p` - the real-CLI walk, 2026-11-16)
         if (m := re.match(r'^\s*\$?([A-Za-z_]\w*)\s*=\s*([^=].*)$', seg)):
             v = m[2].strip().strip('"\'')
             env[m[1].lower()] = v
             seg = f'= {v}'
-        try: w =[x.strip('"\'') for x in shlex.split(seg, posix=False)]
-        except ValueError: w = [x.strip('"\'') for x in seg.split()]
+        w = _words(seg)
         while w and (re.match(r'^[A-Za-z_]\w*=', w[0]) or w[0].lower() in ('&', 'sudo', 'time', 'nohup', 'command', 'exec', 'call', 'then', 'do', 'if', 'else')): w = w[1:]
         if not w: continue
         tool = re.sub(r'\.(exe|cmd|ps1|bat)$', '', os.path.basename(w[0].replace('\\', '/')).lower())
@@ -181,7 +202,9 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None) -> list:
             x = re.sub(r'^\d?[<>]+&?', '', x)
             if x.startswith('-'): x = x.split('=', 1)[1] if '=' in x else ''
             if (v := _VAR.fullmatch(x)) and (v[1] or v[2]).lower() in env: x = env[(v[1] or v[2]).lower()]
-            if not x or '://' in x or re.match(r'^/\w$', x) or re.match(r'^(/dev/|\d$)', x) or not _pathish(x): continue
+            # ...after a `cd` away, a plain name that is there is read there (`cd ~ && cat .ssh/x`)
+            near = here != cwd and here and x and not x.startswith('-') and os.path.exists(os.path.join(here, x))
+            if not x or '://' in x or re.match(r'^/\w$', x) or re.match(r'^(/dev/|\d$)', x) or not (near or _pathish(x)): continue
             e = _expand(x, here, env)
             if e is None: out.append(None); continue
             e = re.sub(r'^/([A-Za-z])(?=/|$)', r'\1:', e) if os.name == 'nt' else e
@@ -192,6 +215,8 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None) -> list:
             if len(parts) > 1 and not os.path.exists(os.path.join(parts[0], parts[1])): continue
             if cd: here = e; break
             out.append(e)
+        else:
+            if cd and len(w) == 1: here = os.path.expanduser('~')          # a bare `cd` goes home
         # ...a step that names no path reads where the line has moved to: `cd ~/Documents && ls`
         if not cd and len(out) == named and here != cwd: out.append(here)
     return out

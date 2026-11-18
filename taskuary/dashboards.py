@@ -10,7 +10,7 @@ the page slices them - the date range and the segment filter re-slice every comp
 The rules the presets follow (docs/notes/dashboards.md): one screen, the number first, one palette in both themes,
 one axis, thin marks, recessive chrome, filters in one row above everything they scope, a table behind every chart.
 """
-import json, re, time
+import json, math, re, time
 from datetime import datetime, timedelta
 from loguru import logger
 
@@ -290,10 +290,6 @@ def check_tile(spec: dict, c, seen: dict = None) -> tuple:
     ok, why = validate({'title': 'tile', 'sources': spec.get('sources') or [], 'components': [c]})
     if not ok: return None, why
     name = c.get('title') or c['kind']
-    for k in ('target', 'limit'):
-        if c.get(k) is not None and (isinstance(c[k], bool) or not isinstance(c[k], (int, float))): return None, f'{name}: "{k}" is a number'
-    if c.get('w') is not None and c['w'] not in (1, 2, 3, 4): return None, f'{name}: "w" is 1 to 4 columns'
-    if c.get('columns') is not None and not isinstance(c['columns'], list): return None, f'{name}: "columns" is a list'
     cols = set(((seen or {}).get(c['source']) or {}).get('columns') or [])
     if cols:
         want = [c[k] for k in COLUMN_KEYS if isinstance(c.get(k), str) and c.get(k)] + list(c.get('columns') or []) + list((c.get('where') or {}).keys())
@@ -426,6 +422,10 @@ def migrate_priorities(store) -> int:
     return n
 
 
+# ── the spec ────────────────────────────────────────────────────────────────────────────────
+def _key(s, i): return str(s.get('key') or f's{i}').strip()
+
+
 def source_of(spec: dict, key) -> dict:
     """The source a tile's `source` names - by the name validate gives it (_key), so one saved without a key is still s1."""
     return next((s for i, s in enumerate((spec or {}).get('sources') or [], 1) if isinstance(s, dict) and _key(s, i) == key), {})
@@ -435,10 +435,6 @@ def keyed(spec: dict) -> dict:
     """The spec with every source carrying the name its tiles bind to - what is kept, so the page reads the name the check read."""
     if not isinstance(spec, dict) or not isinstance(spec.get('sources'), list): return spec
     return {**spec, 'sources': [{**s, 'key': _key(s, i)} if isinstance(s, dict) else s for i, s in enumerate(spec['sources'], 1)]}
-
-
-# ── the spec ────────────────────────────────────────────────────────────────────────────────
-def _key(s, i): return str(s.get('key') or f's{i}').strip()
 
 
 # A DASHBOARD SOURCE'S `key` IS ITS OWN NAME (what a component reads), and one executor reads a `key` of its own: an S3 source's object
@@ -490,8 +486,13 @@ def validate(spec: dict, store=None) -> tuple:
         if r is not None and r is not False and (isinstance(r, bool) or r not in RANGES[:-1]):
             return False, f'{name}: its own "range" is false (what is true now) or one of {", ".join(map(str, RANGES[:-1]))} days'
         if c.get('order') is not None and not isinstance(c['order'], list): return False, f'{name}: "order" is a list of its x values'
+        for k in ('target', 'limit'):
+            if c.get(k) is not None and (isinstance(c[k], bool) or _num(c[k]) is None): return False, f'{name}: "{k}" is a number'
+        if c.get('w') is not None and c['w'] not in (1, 2, 3, 4): return False, f'{name}: "w" is 1 to 4 columns'
+        if c.get('columns') is not None and not isinstance(c['columns'], list): return False, f'{name}: "columns" is a list'
+    if not isinstance(spec.get('filters') or {}, dict): return False, 'the filters are name: value pairs, as {"range": 30}'
     rng = (spec.get('filters') or {}).get('range')
-    if rng is not None and int(rng) not in RANGES: return False, f'the date range is one of {", ".join(map(str, RANGES))} days'
+    if rng is not None and (isinstance(rng, bool) or _num(rng) not in RANGES): return False, f'the date range is one of {", ".join(map(str, RANGES))} days'
     return True, ''
 
 
@@ -546,8 +547,9 @@ def collect(store, spec: dict) -> dict:
 
 # ── the one number a run says (its rail row's headline): the stat tiles, read the way the page reads them ──
 def _num(v):
-    try: return float(v)
+    try: f = float(v)
     except (TypeError, ValueError): return None
+    return f if math.isfinite(f) else None              # "nan" and "inf" are words, not numbers - nothing counts or cuts by them
 
 
 def in_range(rows, date_col, days, now=None):
@@ -586,7 +588,7 @@ def tile_rows(spec: dict, data: dict, c: dict, days: int) -> list:
     return where(in_range(rows, date, span(c, days)), c.get('where'))     # "range": false counts what is true now
 
 
-def _days(spec): return int((spec.get('filters') or {}).get('range') or 0)
+def _days(spec): return int(_num((spec.get('filters') or {}).get('range')) or 0)
 
 
 def numbers(spec: dict, data: dict) -> list:
@@ -627,7 +629,7 @@ def _panel(spec, data, c, days) -> list:
     if k == 'list':
         if s := c.get('sort'):
             col = s.lstrip('-'); rows = sorted(rows, key=lambda r: (_num(r.get(col)) is None, _num(r.get(col)) or 0, str(r.get(col) or '')), reverse=s.startswith('-'))
-        rows = rows[:int(c.get('limit') or 50)]
+        rows = rows[:int(_num(c.get('limit')) or 50)]
         return [f'{t}:', *(f"- {r.get(c.get('label'))}" + (f" — {r.get(c['meta'])}" if c.get('meta') and r.get(c['meta']) not in (None, '') else '')
                            for r in rows)] if rows else [f'{t}: nothing']
     if k == 'table': return [f'{t}:', *(json.dumps(r, default=str) for r in rows[:50])] if rows else [f'{t}: nothing']
@@ -635,7 +637,7 @@ def _panel(spec, data, c, days) -> list:
         by = {}
         for r in rows: by.setdefault(_key_of(r.get(c.get('x'))), []).append(r)
         return [f'{t}:', *(f"{x}: " + ', '.join(f'{s} {fmt(v)}' for s, v in _groups(rs, c.get('series'), agg, y)) for x, rs in sorted(by.items()))]
-    gs = _groups(rows, c.get('x'), agg, y, int(c.get('limit') or 8), c.get('order')) if k == 'bar' else sorted(_groups(rows, c.get('x'), agg, y))
+    gs = _groups(rows, c.get('x'), agg, y, int(_num(c.get('limit')) or 8), c.get('order')) if k == 'bar' else sorted(_groups(rows, c.get('x'), agg, y))
     return [f'{t}:', *(f'{x}: {fmt(v)}' for x, v in gs)] if gs else [f'{t}: nothing']
 
 

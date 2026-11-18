@@ -574,3 +574,22 @@ def test_a_source_saved_without_a_key_is_read_under_the_name_its_tiles_bind_to()
     assert list(data['sources']) == ['s1']
     assert dict((c['title'], v) for c, v in dashboards.numbers(spec, data)) == {'Open tasks': 2}
 
+
+@pytest.mark.parametrize('change, says', [
+    ({'filters': {'range': 'a month'}}, 'date range'),
+    ({'filters': 'last month'}, 'filters'),
+    ({'components': [{'kind': 'list', 'title': 'Open now', 'source': 'tasks', 'label': 'title', 'limit': 'many'}]}, '"limit" is a number'),
+    ({'components': [{'kind': 'progress', 'title': 'Goal', 'source': 'tasks', 'target': 'ten'}]}, '"target" is a number'),
+])
+def test_a_number_that_is_not_one_is_refused_at_save_not_crashed_on_at_run(change, says):
+    """The tile check refused a "limit" that was not a number, but a spec saved whole only met validate, which let it through - and
+    the run crashed on int('many'); a date range in words crashed the save itself with a 500."""
+    from unittest import mock
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    ok, why = dashboards.validate({**SPEC, **change}, MemoryStore())
+    assert not ok and says in why
+    with mock.patch.object(server, 'store', _store()):
+        r = _post(TestClient(server.app), None, {**SPEC, **change})
+    assert r.status_code == 422 and says in r.json()['detail']
+

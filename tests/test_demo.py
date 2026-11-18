@@ -766,6 +766,13 @@ class TheDemoWorldIsConnectedTests(unittest.TestCase):
                 self.assertEqual(demo.refuse('POST', path), '', path)
                 self.assertEqual(op(k), '', k)
 
+    def test_stopping_a_recorded_agent_says_it_is_a_recording(self):
+        """The walk, 2026-11-18: Stop and save on the replayed coding session read "that would reach something real"."""
+        with on():
+            for path in ('/api/tasks/12/wrap', '/api/tasks/12/pause', '/api/tasks/12/agent/stop', '/api/tasks/12/agent/cancel'):
+                self.assertEqual(demo.refuse('POST', path), demo.RECORDED, path)
+            self.assertEqual(demo.refuse_op({'kind': 'agent.stop', 'params': {}}), demo.RECORDED)
+
     def test_trust_says_no_agent_starts_here_never_that_it_would_reach_something_real(self):
         with on(): self.assertEqual(demo.refuse('POST', '/api/tasks/4/trust'), demo.STARTS)
 

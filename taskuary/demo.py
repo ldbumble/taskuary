@@ -138,6 +138,9 @@ SENDS = 'This is the demo - nothing is sent. In your own Taskuary this is where 
 STARTS = 'This is the demo - the agents here are recordings, so nothing new starts.'
 OFF = 'This is the demo - that would reach something real, so it is switched off. Everything here is invented.'
 NO_AI = 'This is the demo - no AI runs here, so nothing is read or planned again. In your own Taskuary your AI does this.'
+# ...and a stop: the coding sessions here REPLAY a recording, so Stop and save, Pause and Stop have no agent to reach - each read "that
+# would reach something real" (the walk, 2026-11-18)
+RECORDED = 'This is the demo - the agents here are recordings, so there is nothing to stop or save.'
 CONNECTIONS_FIXED = 'This is the demo - these connections are invented, and there is nothing real behind them to change.'
 REPORTS_FIXED = 'This is the demo - its documents and reports are fixed: editing, running, pausing and switching them are off here.'
 
@@ -154,6 +157,7 @@ REFUSALS = (
     # ...and a goal's step sent to an agent, which is a start like any other
     (r'^/api/(terminals|agents)(/|$)|^/api/tasks/\d+/(dispatch|code|continue|continue-session|continue-work|resume|trust|steps/[^/]+/start)$'
      r'|^/api/messages/\d+/dispatch$|^/api/calendar/prepare$', STARTS),
+    (r'^/api/tasks/\d+/(wrap|pause|agent/(cancel|stop))$', RECORDED),
     # ...what would ask an AI to read or plan again (a goal's Re-plan): none runs here
     (r'^/api/tasks/\d+/read-ask$', NO_AI),
     (r'^/api/(sync|ingest|poll|msauth|hooks)', 'This is the demo - no mail is fetched; what you see was written in advance.'),
@@ -182,7 +186,8 @@ def refuse_op(op) -> str:
     # read "that would reach something real" (the walk, 2026-11-18), and so did every press below whose own path says what it is
     if kind == 'task.set_kind': return STARTS if str(p.get('kind') or '') in ('general', 'coding') else ''
     if kind in ('review.approve', 'task.clarify', 'task.chase', 'task.handoff', 'task.share', 'task.ask_agent'): return SENDS
-    if kind in ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.tell', 'agent.stop', 'agents.stop', 'task.create_from_message', 'task.create_from_text',
+    if kind in ('agent.stop', 'agents.stop'): return RECORDED
+    if kind in ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.tell', 'task.create_from_message', 'task.create_from_text',
                 'calendar.prepare', 'task.trust'): return STARTS
     if kind == 'message.retriage': return NO_AI
     if str(kind or '').startswith('report.'): return REPORTS_FIXED

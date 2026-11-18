@@ -236,8 +236,9 @@ class AttachedFilesReachTheAgent(unittest.TestCase):
     def test_a_line_names_only_the_files_this_server_saved(self):
         from taskuary import config, conversation, waitroom
         tid = self.s.create_task({'Title': 'Who is this', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
-        own = config.home() / 'config.toml'          # ...Taskuary's own file, as it is: never rewritten here (every later test reads it)
-        if not own.exists(): own.write_text('token = "x"'); self.addCleanup(own.unlink, missing_ok=True)
+        # ...a file of Taskuary's own home - never its config.toml, which every later test reads (made here, it held one line, was cached
+        # as the whole config, and every test after it in CI's shard read no AI connected and an out-of-date token)
+        own = config.home() / 'kept-by-taskuary.txt'; own.write_text('token = "x"'); self.addCleanup(own.unlink, missing_ok=True)
         with mock.patch.object(waitroom, 'deliver', return_value={'delivered': 0, 'state': 'working'}):
             general.take_line(self.s, tid, 'look at these', [str(own), str(self.pic)], 'owner')
             with self.assertRaises(ValueError): general.take_line(self.s, tid, '', [str(own)], 'owner')    # ...nothing left to send: said, never an empty line

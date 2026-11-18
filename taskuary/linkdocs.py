@@ -428,11 +428,18 @@ def _charset(ct: str, data: bytes) -> str:
     except LookupError: return 'utf-8'
 
 
+_TYPES = {'text/csv': '.csv', 'text/tab-separated-values': '.tsv', 'application/pdf': '.pdf', 'text/plain': '.txt', 'application/json': '.json',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx'}
 def _typed(name: str, ct: str) -> str:
     "A fetched file's name with the extension its Content-Type says, where the name has none a reader knows."
     import mimetypes
     if _ext(name) in FILE_EXTS: return name
-    ext = mimetypes.guess_extension(ct.split(';', 1)[0].strip()) or ''
+    # ...from our own table first: Windows answers mimetypes from its registry, and a machine with no Office there gave a workbook no
+    # extension at all - "files are not read" (CI's Windows runner, 2026-11-18)
+    t = ct.split(';', 1)[0].strip().lower()
+    ext = _TYPES.get(t) or mimetypes.guess_extension(t) or ''
     return f'{name}{ext}' if ext.lstrip('.') in FILE_EXTS else name
 
 

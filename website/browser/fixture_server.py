@@ -350,7 +350,8 @@ async def run() -> None:
         raise RuntimeError(f"browser fixture blocked event-loop connection to {target!r}")
 
     loop.create_connection = no_outbound_connection
-    for operation in () if LOOPBACK else ("connect", "connect_ex"):
+    WALK = "*" in _ALLOW.split(",")          # ...a walk of the whole app lets the web through on purpose: nothing to prove shut
+    for operation in () if LOOPBACK or WALK else ("connect", "connect_ex"):
         probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             getattr(probe, operation)((HOST, PORT))
@@ -362,7 +363,7 @@ async def run() -> None:
         finally:
             probe.close()
     try:
-        if LOOPBACK: raise RuntimeError("blocked event-loop connection: loopback is let through on this walk")
+        if LOOPBACK or WALK: raise RuntimeError("blocked event-loop connection: loopback is let through on this walk")
         await loop.create_connection(asyncio.Protocol, HOST, PORT)
     except RuntimeError as error:
         if "blocked event-loop connection" not in str(error):

@@ -994,6 +994,19 @@ class CoreTests(unittest.TestCase):
         self.assertIn(task_ref(new), s.list_comments(tid)[-1]['Body'])                 # each side says where
         self.assertIn(task_ref(tid), s.list_comments(new)[-1]['Body'])
 
+    def test_split_leaves_the_source_ref_with_the_task_it_names(self):
+        """A task's SourceRef is what it IS - the issue it closes, the batch an arrival joins, the meeting Prepare finds again. The split copied
+        it onto the part broken out: that part became the newest open batch of its input and took the next arrivals, a Prepare pressed again
+        landed on it, and its agent could close the original's issue. The ref stays with the task it names; the part is another matter."""
+        s, tid, mid = self._two_job_task()
+        for ref in ('https://github.com/northwind/ledger/issues/7', 'calendar:2026-11-20 10:00:Offsite'):
+            with self.subTest(ref):
+                s.update_task(tid, {'SourceRef': ref}, 'owner')
+                new = reshape.split_task(s, tid, {'title': 'Book the venue'})
+                self.assertFalse(s.get_task(new).get('SourceRef'))
+                self.assertEqual(s.open_batch(ref), tid)
+                self.assertEqual(s.get_task(new)['Source'], 'email')
+
     def test_split_never_hands_the_new_task_an_agent_but_keeps_your_own_name_on_it(self):
         s, tid, _mid = self._two_job_task()
         s.update_task(tid, {'Assignee': 'agent:coding'}, 'owner')

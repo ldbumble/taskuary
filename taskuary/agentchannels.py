@@ -272,9 +272,11 @@ def choices(store, kind: str) -> list:
 
 
 # ── in ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-def heard(store, kind: str, chat, senders, text: str, ext: str, from_me: bool = False, name: str = '') -> bool:
+def heard(store, kind: str, chat, senders, text: str, ext: str, from_me: bool = False, name: str = '', media=None, spoken=None) -> bool:
     """One line from a chat. False when the chat is not bound (the poller goes on as before); True when it is - routed, refused or
-    ignored, it is never the inbox's."""
+    ignored, it is never the inbox's. `media`: a call that fetches what the line carried - ([(name, bytes)], [kinds it could not read],
+    messengers.unread_note's list) - made only for a listed member, so a stranger's picture is never downloaded. `spoken`: a call that
+    hears a voice note (messengers.voice_words), for a member's line with no words - the same transcriber the Assistant chat hears by."""
     b = bound(store, kind, chat)
     if not b: return False
     from . import agents
@@ -286,9 +288,25 @@ def heard(store, kind: str, chat, senders, text: str, ext: str, from_me: bool = 
     if not m:
         store.audit('agentchannel', b['ChannelId'], 'agent_channel_ignored', 'router', 'system', {'kind': kind})
         return True
-    if not text or not agents.developer_mode(store): return True
-    if m['role'] == OWNER and _echo(store, b, text): return True
-    try: (_owner if m['role'] == OWNER else _teammate)(store, b, m, text)
+    if not agents.developer_mode(store): return True
+    # A VOICE NOTE IS WORDS: it went nowhere and the chat said nothing
+    if not text and spoken:
+        try: text = str(spoken() or '').strip()
+        except Exception as e:
+            say(store, b, f"I could not hear that voice note - {str(e)[:200].rstrip('.')}. Type it instead."); return True
+        if not text: say(store, b, 'That voice note had no words in it I could hear - type it instead.'); return True
+    # A PICTURE IS PART OF THE LINE: only the words went on, so "this is what the page looks like" reached the agent without the page
+    try: got, missed = media() if media else ([], [])
+    except Exception as e: got, missed = [], ['attachment']; logger.warning(f"agent channel {b['ChannelId']}: what a line carried was not read - {e}")
+    from .messengers import keep_files
+    files = keep_files(got, 'agentchannel')
+    if missed:
+        from .messengers import unread_what
+        say(store, b, f"{unread_what(missed)} in that message could not be read, so the agent did not get it"
+                      + (' - send it again?' if not (text or files) else ' - the rest went on without it.'))
+    if not (text or files): return True
+    if m['role'] == OWNER and not files and _echo(store, b, text): return True
+    try: (_owner if m['role'] == OWNER else _teammate)(store, b, m, text, files)
     except Exception as e:
         logger.warning(f"agent channel {b['ChannelId']}: a line was not passed on - {e}")
         say(store, b, f'That did not reach the agent - {e}')
@@ -311,9 +329,9 @@ def _picked(b: dict, text: str):
     return q, None
 
 
-def _owner(store, b, m, text):
+def _owner(store, b, m, text, files=()):
     from . import permissions, landing
-    q, act = _picked(b, text)
+    q, act = _picked(b, text) if not files else (None, None)
     if act is not None:
         if q['kind'] == 'perm':
             out = permissions.answer(store, q['tid'], q['pid'], act, 'owner')
@@ -325,23 +343,23 @@ def _owner(store, b, m, text):
             except (landing.Refused, ValueError, RuntimeError) as e: return say(store, b, f'Nothing landed - {e}')
             return say(store, b, out['says'])
     tid = b.get('TaskId')
-    if (lm := _LAND.match(text)) and (tid or lm.group(1)): return ask_landing(store, b, int(lm.group(1) or tid))
+    if not files and (lm := _LAND.match(text)) and (tid or lm.group(1)): return ask_landing(store, b, int(lm.group(1) or tid))
     if tid is None:                                                     # the coding agents, as words
-        if _LIST.match(text): return say(store, b, _agents(store, b))
+        if not files and _LIST.match(text): return say(store, b, _agents(store, b))
         if not (rm := _REF.match(text)): return say(store, b, 'Say "agents" for the list, "TQ-0123 your words" to tell one, or "land TQ-0123".')
         tid, text = int(rm.group(1)), rm.group(2).strip()
         ok, why = in_repo(store, b, tid)
         if not ok: return say(store, b, f'Nothing was sent - {why}.')
         _save_state(store, b, follow=list(dict.fromkeys((b['state'].get('follow') or []) + [tid]))[-20:])
-    return _tell(store, b, tid, text, None)
+    return _tell(store, b, tid, text, None, files)
 
 
-def _teammate(store, b, m, text):
-    q, act = _picked(b, text)
+def _teammate(store, b, m, text, files=()):
+    q, act = _picked(b, text) if not files else (None, None)
     if q and act is not None: return say(store, b, f"{OWNER_ONLY} {m.get('name') or 'A teammate'}'s reply was not taken as an answer.")
     if _LAND.match(text): return say(store, b, f'{OWNER_ONLY} Landing is the owner\'s.')
     if not b.get('TaskId'): return                                     # never reached: a conductor chat has no teammates
-    return _tell(store, b, b['TaskId'], text, m)
+    return _tell(store, b, b['TaskId'], text, m, files)
 
 
 def framed(b: dict, m: dict, text: str) -> str:
@@ -349,19 +367,20 @@ def framed(b: dict, m: dict, text: str) -> str:
     return ' '.join(f"[{label(m)} on {LABEL[b['Kind']]} - {GUARD.format(repo=repo_name(b.get('Repo') or '') or 'this repo')}] {text}".split())
 
 
-def _tell(store, b, tid: int, text: str, m):
+def _tell(store, b, tid: int, text: str, m, files=()):
     from . import waitroom
+    from .general import with_files
     ok, why = in_repo(store, b, tid)
     if not ok: return say(store, b, f'Nothing was sent - {why}.')
     if not store.get_task(tid): return say(store, b, f'There is no task {task_ref(tid)}.')
     from . import terminal as term
     if (why := term.stranger_now(store, tid)): return say(store, b, f'Nothing was sent to {task_ref(tid)} - {why}.')
     if m is None:
-        store.add_comment(tid, 'owner', 'human', text)
-        o = waitroom.add(store, tid, text, 'owner')
+        store.add_comment(tid, 'owner', 'human', with_files(text, files))
+        o = waitroom.add(store, tid, with_files(text, files), 'owner')
     else:
-        store.add_comment(tid, 'teammate', 'human', f"{label(m)} on {LABEL[b['Kind']]}: {text}")
-        o = waitroom.add(store, tid, framed(b, m, text), TEAMMATE)
+        store.add_comment(tid, 'teammate', 'human', with_files(f"{label(m)} on {LABEL[b['Kind']]}: {text}", files))
+        o = waitroom.add(store, tid, with_files(framed(b, m, text), files), TEAMMATE)
     store.audit('task', tid, 'agent_channel_tell', 'owner' if m is None else 'teammate', detail={'channel': b['ChannelId'], 'chars': len(text)})
     if b.get('TaskId') is None:
         say(store, b, f"Told {task_ref(tid)} - " + ('it has it now.' if o.get('delivered') else 'it goes in when the agent stops.'))
@@ -390,15 +409,26 @@ def _send(store, b: dict, body: str) -> str:
 def say(store, b: dict, text: str, tid=None):
     "Everything that reaches a bound chat leaves through here."
     from . import chatformat
-    body = chatformat.render(str(text or '').strip(), b['Kind'])
+    body = chatformat.render(str(text or '').strip(), b['Kind'], links=True)      # the agent's "[PR #12](url)" keeps its address for teammates
     if not body: return
     def go():
         for part in chatformat.split(body, 3500):
             try: ext = _send(store, b, part)
             except Exception as e:
-                logger.warning(f"agent channel {b['ChannelId']} ({b['Kind']}): not posted - {e}"); return
+                logger.warning(f"agent channel {b['ChannelId']} ({b['Kind']}): not posted - {e}"); return _down(store, b, e, tid)
             store.agent_channel_log(b['ChannelId'], ext if ext and not ext.endswith(':') else f"out:{time.time_ns()}", 'out', 'taskuary', '', tid or b.get('TaskId'), part)
+        if (b.get('state') or {}).get('down'): _save_state(store, b, down=None)
     _go(go)
+
+
+def _down(store, b: dict, e, tid=None):
+    """A post the chat would not take is said where the owner works - in the task, once while it keeps failing - instead of only in the
+    log: a Slack app taken out of the channel lost every answer while the teammates waited on it."""
+    if (b.get('state') or {}).get('down'): return
+    _save_state(store, b, down=str(e)[:200] or type(e).__name__)
+    if (t := tid or b.get('TaskId')):
+        store.add_comment(int(t), 'taskuary', 'agent', f"The {LABEL.get(b['Kind'], b['Kind'])} chat this agent talks on did not take its last "
+                          f"message - {str(e)[:200] or type(e).__name__}. Fix the connection, or unbind the chat; the next message tries again.")
 
 
 def on_event(store, tid: int, kind: str, text: str = '', source: str = ''):
@@ -463,7 +493,8 @@ def landing_proposed(store, tid: int):
 # ── Slack: a bound channel is read here, by its own cursor ───────────────────────────────────────────────────────────
 def poll_slack(store, c: dict, tok: str) -> int:
     "Each Slack channel bound on this connection, read since its cursor; top-level lines only (a thread's replies are not in history)."
-    from .channels import _slack
+    from .channels import _slack, slack_said, slack_files
+    from .messengers import _files
     n = 0
     for b in [x for x in rows(store) if x['Kind'] == 'slack' and x.get('ConnectorId') in (None, c['ConnectorId'])]:
         since = float(b['state'].get('cursor') or b['state'].get('since') or time.time())
@@ -472,7 +503,8 @@ def poll_slack(store, c: dict, tok: str) -> int:
             logger.warning(f"slack agent channel {b['Chat']}: not read - {e}"); continue
         msgs = sorted(hist.get('messages') or [], key=lambda m: float(m.get('ts') or 0))
         for m in msgs:
-            if m.get('subtype') or m.get('bot_id'): continue           # the app's own posts, joins, edits
-            n += heard(store, 'slack', b['Chat'], [m.get('user')], m.get('text') or '', f"slack:{b['Chat']}:{m.get('ts')}")
+            if not slack_said(m) or m.get('bot_id'): continue          # the app's own posts, joins, edits
+            n += heard(store, 'slack', b['Chat'], [m.get('user')], m.get('text') or '', f"slack:{b['Chat']}:{m.get('ts')}",
+                       media=lambda m=m: _files(*slack_files(tok, m)))
         if msgs: _save_state(store, b, cursor=max(float(m.get('ts') or 0) for m in msgs))
     return n

@@ -1499,10 +1499,39 @@ def slack_msg(src: dict, m: dict, own: str = '', names: dict | None = None) -> d
     name = ' '.join(str((m.get('user_profile') or {}).get('real_name') or '').split())
     meta = {**({'dm': True} if str(src.get('Address') or '').startswith('D') else {}), **({'team': team} if team else {}),
             **({'internal': team == own} if team and own else {}), **({'team_name': names[team]} if team and (names or {}).get(team) else {}),
-            **({'name': name} if name else {})}
+            **({'name': name} if name else {}),
+            # a reply in a thread shown in the channel too (thread_broadcast): its answer goes under the thread's first line, not under it
+            **({'thread': str(m['thread_ts'])} if m.get('thread_ts') and str(m['thread_ts']) != str(m.get('ts')) else {})}
     return {'external_id': f"slack:{src['Address']}:{m.get('ts')}", 'channel': 'slack', 'subject': None, 'body': m.get('text'),
             'from_name': m.get('user'), 'conversation_id': f"slack:{src['Address']}", 'source_name': src['Address'],
             'sent_at': datetime.fromtimestamp(float(m.get('ts', 0))).strftime('%Y-%m-%d %H:%M:%S'), **({'mail_meta': meta} if meta else {})}
+
+
+# A PERSON'S LINE in Slack's history: no subtype, or one of these - "also send to the channel" (a thread reply shown in it), a line with a file
+# or a picture in it, and /me. Every other subtype is Slack's own (a join, a topic, an edit) or an app's.
+SLACK_SAID = frozenset({'thread_broadcast', 'file_share', 'me_message'})
+def slack_said(m: dict) -> bool: return not m.get('subtype') or m['subtype'] in SLACK_SAID
+
+
+def slack_files(tok: str, m: dict, cap: int = 4) -> tuple[list, list]:
+    """The files on one Slack line, shaped like a Graph fileAttachment (save_attachments, vision), and the kinds that could not be read
+    (messengers.unread_note). Without files:read Slack answers the download with its sign-in PAGE, 200 OK - that is not the picture."""
+    from urllib.parse import urlparse
+    out, missed = [], []
+    for f in (m.get('files') or [])[:cap]:
+        kind, ct = ('picture' if str(f.get('mimetype') or '').startswith('image/') else 'file'), str(f.get('mimetype') or 'application/octet-stream')
+        url = f.get('url_private_download') or f.get('url_private') or ''
+        try:
+            if (urlparse(url).hostname or '').lower().rsplit('.', 2)[-2:] != ['slack', 'com']: raise ValueError('not a Slack address')
+            if int(f.get('size') or 0) > 25 * 2**20: raise ValueError('over 25 MB')
+            r = requests.get(url, headers={'Authorization': f'Bearer {tok}'}, timeout=60)
+            r.raise_for_status()
+            if 'text/html' in (r.headers.get('Content-Type') or '') and 'html' not in ct: raise ValueError('Slack sent its sign-in page - the app lacks files:read')
+        except Exception as e:
+            logger.warning(f"slack file {f.get('id')} not readable: {str(e)[:160]}"); missed.append(kind); continue
+        out.append({'id': str(f.get('id') or '')[:60], 'name': f.get('name') or f"{kind}.{ct.split('/')[-1]}", 'contentType': ct.split(';')[0],
+                    'size': len(r.content), 'contentBytes': base64.b64encode(r.content).decode(), 'isInline': kind == 'picture'})
+    return out, missed
 
 
 def slack_own_team(store, c: dict, tok: str) -> str:
@@ -1568,8 +1597,13 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
         from . import agentchannels
         if cid and agentchannels.bound(store, 'teams', cid):
             addr_ = _graph_user(tok, user['id'], users)[1]
+            raw_ = (m.get('body') or {}).get('content') or ''
+            def media(raw_=raw_):
+                from .messengers import _files
+                got = hosted_images(tok, raw_)
+                return _files(got, ['picture'] * (len(set(_HOSTED.findall(raw_))) - len(got)))
             agentchannels.heard(store, 'teams', cid, [user['id'], addr_], body, f'teams:{cid}:{m["id"]}', from_me=user['id'] == me,
-                                name=user.get('displayName') or '')
+                                name=user.get('displayName') or '', media=media)
             continue
         topic, kind = _chat_meta(tok, cid, chats) if cid else ('', 'chat')
         name, addr = _graph_user(tok, user['id'], users)
@@ -2446,13 +2480,22 @@ def _poll_one(store, c, file_only, backfill_hours, llm) -> int:
                 except Exception as e:
                     logger.warning(f"slack poll failed ({s['Address']}): {e}"); errors.append(f"{s['Address']}: {e}")
                     continue
-                msgs = [m for m in reversed(hist_all) if not m.get('subtype')]
+                msgs = [m for m in reversed(hist_all) if slack_said(m)]
                 # the channel's read cursor is ONE timestamp - the newest line we took
                 if read_it and msgs: mark_slack_read(tok, s['Address'], msgs[-1].get('ts'))
                 own = slack_own_team(store, full, tok)
                 names = {t: slack_team_name(tok, t) for t in {str(m.get('user_team') or m.get('team') or '') for m in msgs} - {'', own}}
                 for m in msgs:
-                    n += ingest_message(store, file_only=file_only, msg=slack_msg(s, m, own, names), llm=llm)['status'] != 'duplicate'
+                    msg = slack_msg(s, m, own, names)
+                    # files fetched once: a line read again (an edit is judged by ingest) does not download them again
+                    atts, missed = slack_files(tok, m) if m.get('files') and not store.message_exists(msg['external_id']) else ([], [])
+                    from .messengers import unread_note
+                    msg['body'] = '\n\n'.join(x for x in (msg['body'], unread_note(missed, 'Slack')) if x) or ('(no text - see the attachment)' if atts else '')
+                    out = ingest_message(store, file_only=file_only, msg={**msg, 'images': images_for_triage(store, atts), **files_for_triage(atts)}, llm=llm)
+                    n += out['status'] != 'duplicate'
+                    if atts and out.get('message_id') and out['status'] != 'duplicate':
+                        try: save_attachments(store, out['message_id'], atts, msg['external_id'])
+                        except Exception as e: logger.warning(f'slack attachments failed: {e}')
             store.touch_source(s['SourceId'])
         store.touch_connector(c['ConnectorId'], '; '.join(errors) if errors else None)
         _watch(store, full, '; '.join(errors) if errors else None)

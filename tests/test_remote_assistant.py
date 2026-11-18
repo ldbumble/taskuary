@@ -61,6 +61,40 @@ class DoorwayBoundaryTests(unittest.TestCase):
         store.set_setting('phone_assistant', '0', 'test')
         self.assertFalse(remote_assistant.intercept(store, 'whatsapp', JID, 'mine', from_me=True, connector=connector))
 
+    def test_a_picture_sent_to_the_assistant_chat_is_answered_with_the_picture(self):
+        """A Telegram photo carries its words as `caption`: a screenshot captioned "what is this error?" fell past the doorway - no
+        `text` - and was never answered. On WhatsApp the words were answered and the picture dropped. Now the picture is kept and shown
+        to the Assistant with the words, as one pasted on the desktop is; one sent alone is answered too."""
+        import tempfile, os, base64
+        from pathlib import Path
+        home = tempfile.mkdtemp()
+        png = b'\x89PNG\r\n\x1a\nshot'
+        with mock.patch.dict(os.environ, {'TASKUARY_HOME': home}):
+            store, connector = armed_store('telegram', TG_CHAT)
+            ups = [{'update_id': 3, 'message': {'message_id': 41, 'date': 2_000_000_000, 'chat': {'id': int(TG_CHAT), 'type': 'private'},
+                                                'from': {'id': int(TG_CHAT), 'first_name': 'Alex'}, 'caption': 'what is this error?',
+                                                'photo': [{'file_id': 'small'}, {'file_id': 'big'}]}}]
+            tg = lambda tok, method, **p: ups if method == 'getUpdates' else {'file_path': 'photos/f.jpg'} if method == 'getFile' else True
+            started = []
+            with mock.patch.object(messengers, 'tg', tg), \
+                 mock.patch.object(messengers.requests, 'get', return_value=mock.Mock(content=png, raise_for_status=lambda: None)), \
+                 mock.patch.object(remote_assistant.threading, 'Thread', side_effect=lambda target, args, **kw: started.append(args) or mock.Mock()):
+                messengers.poll_telegram(store, connector, [])
+            self.assertEqual(len(started), 1)
+            question, images = started[0][3], started[0][-1]
+            self.assertEqual(question, 'what is this error?')
+            self.assertEqual(len(images), 1)
+            self.assertEqual(Path(images[0]).read_bytes(), png)
+            from taskuary import server
+            self.assertEqual(server.prompt_images(images), images, 'kept where a prompt may name it')
+            # ...and the turn shows it to the Assistant; a picture alone is a turn as well
+            for words in ('what is this error?', ''):
+                with mock.patch.object(concierge, 'say', return_value={'say': 'A failed import.', 'options': [], 'chips': [], 'decision': None}) as model, \
+                     mock.patch.object(remote_assistant, 'send'):
+                    remote_assistant.respond(store, 'telegram', TG_CHAT, words, connector['ConnectorId'], images=images)
+                self.assertEqual(model.call_args.kwargs['images'], images)
+                self.assertEqual(model.call_args.args[1], words or remote_assistant.PICTURE_ONLY)
+
     def test_a_live_handoff_is_the_permission_while_it_lasts(self):
         """The switch is standing permission; the button is the owner asking for it right now."""
         store, connector = armed_store(on='0')
@@ -118,7 +152,7 @@ class DoorwayBoundaryTests(unittest.TestCase):
              mock.patch.object(remote_assistant, 'intercept', return_value=True) as intercept:
             self.assertEqual(messengers.poll_whatsapp(store, connector, [], llm=None), 0)
         intercept.assert_called_once_with(store, 'whatsapp', JID, 'Walk me through important email',
-                                          from_me=True, connector=connector, message_id='q', poll=False, arrived=None, heard=False, closed=None)
+                                          from_me=True, connector=connector, message_id='q', poll=False, arrived=None, heard=False, closed=None, images=mock.ANY)
         self.assertEqual(json.loads(store.get_connector(connector['ConnectorId'])['ConfigJson'])['wa_seq'], 9)
 
     def test_telegram_routes_only_the_named_private_chat(self):

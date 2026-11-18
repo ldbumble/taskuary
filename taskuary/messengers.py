@@ -53,32 +53,93 @@ def tg_test(store, c) -> str:
             f"yours; every other chat stays out (a public bot can be messaged by anyone)")
 
 
-def _tg_photo(token: str, m: dict) -> list:
+def _tg_photo(token: str, m: dict) -> tuple[list, list]:
     """The largest rendition of an attached photo/document, shaped like a Graph fileAttachment
-    so channels.save_attachments and vision reuse the one pipeline."""
-    out = []
+    so channels.save_attachments and vision reuse the one pipeline - and what could not be fetched, by kind (unread_note)."""
+    out, missed = [], []
     for kind, meta in (('photo', (m.get('photo') or [])[-1:]), ('document', [m['document']] if m.get('document') else [])):
         for f in meta:
-            try:
-                path = tg(token, 'getFile', file_id=f['file_id']).get('file_path') or ''
-                data = requests.get(f'{TG_API}/file/bot{token}/{path}', timeout=60).content
-                name = f.get('file_name') or (path.rsplit('/', 1)[-1] or f'{kind}.jpg')
-                ct = f.get('mime_type') or ('image/jpeg' if kind == 'photo' else 'application/octet-stream')
-                out.append({'id': f['file_id'][:60], 'name': name, 'contentType': ct,
-                            'size': len(data), 'contentBytes': base64.b64encode(data).decode(),
-                            'isInline': kind == 'photo'})
-            except Exception as e:
-                logger.warning(f'telegram file fetch failed: {e}')
+            got = _tg_file(token, f, f'{kind}.jpg', 'image/jpeg' if kind == 'photo' else 'application/octet-stream')
+            if not got: missed.append('picture' if kind == 'photo' else 'file'); continue
+            data, name, ct = got
+            out.append({'id': f['file_id'][:60], 'name': name, 'contentType': ct,
+                        'size': len(data), 'contentBytes': base64.b64encode(data).decode(),
+                        'isInline': kind == 'photo'})
+    return out, missed
+
+
+def keep_files(got: list, folder: str) -> list:
+    """Pictures and files a chat handed over, [(name, bytes)], kept where a prompt may name them (server.prompt_images: under
+    attachments/) - the paths, for general.with_files or the Assistant's `images`. A CLI agent reads a picture from a file, as it does one
+    dropped in a task's own box; the Assistant's model is handed the picture itself."""
+    from . import config
+    d, out = config.home() / 'attachments' / folder / time.strftime('%Y%m'), []
+    for name, data in got or ():
+        if not data: continue
+        d.mkdir(parents=True, exist_ok=True)
+        safe = re.sub(r'[^\w.-]+', '_', os.path.basename(str(name or 'file'))).strip('._')[:80] or 'file'
+        p = d / f"{time.strftime('%Y%m%d-%H%M%S')}-{os.urandom(3).hex()}-{safe}"
+        p.write_bytes(data); out.append(str(p))
     return out
 
 
-def _tg_file(token: str, f: dict, fallback_name: str):
-    """One Telegram file by file_id -> (bytes, name, mime), or None with a warning."""
+def voice_words(store, data, name: str, mime: str) -> str:
+    "A voice note's words, by the one transcriber (voice.transcribe); raises with what to do when it cannot hear it."
+    from . import voice
+    if data is None: raise RuntimeError('it could not be downloaded')
+    return str(voice.transcribe(store, data, (mime or 'audio/ogg').split(';')[0], name)['text'] or '').strip()
+
+
+def chat_pictures(store, channel: str, chat: str, c, got, missed: list, message_id=None) -> list:
+    """What the owner sent the Assistant chat beside their words, kept for the turn (keep_files) - the paths. Telegram hands over
+    attachments ([{name, contentBytes}]), the bridge (name, bytes) pairs. One that could not be read is said in the chat, as an
+    unheard voice note is, so the turn is never answered as if nothing had been shown."""
+    pairs = [(a['name'], base64.b64decode(a['contentBytes'])) if isinstance(a, dict) else a for a in got or ()]
+    if missed:
+        from . import remote_assistant
+        try: remote_assistant.send(store, channel, chat, f"{unread_what(missed)} in that message could not be read - send it again, or say "
+                                                         f"what it shows.", c.get('ConnectorId'))
+        except Exception as e: logger.warning(f'{channel}: could not say a picture was unreadable - {e}')
+    return keep_files(pairs, 'phone')
+
+
+def _files(atts: list, missed: list) -> tuple[list, list]:
+    "Fetched attachments as an agent channel takes them (agentchannels.heard's `media`): ([(name, bytes)], missed)."
+    return [(a['name'], base64.b64decode(a['contentBytes'])) for a in atts], missed
+
+
+def _wa_files(m: dict) -> tuple[list, list]:
+    "The picture and file the bridge saved for one message, as _files; what it did not write is missed."
+    got, missed = [], []
+    for k, kind, name in (('image', 'picture', None), ('doc', 'file', m.get('docName'))):
+        if not m.get(k): continue
+        data = _read_media(m[k])
+        if data is None: missed.append(kind)
+        else: got.append((name or os.path.basename(m[k]), data))
+    return got, missed
+
+
+def unread_note(missed: list, where: str) -> str:
+    """The line a message carries for what it held that could not be read - a picture Telegram refused (403), one the bridge never
+    wrote - so it never lands as a sentence with a hole in it, or as "see the attachment" with none there. '' when nothing was missed."""
+    return f"[{unread_what(missed)} in this message could not be read - open the chat in {where} to see it.]" if missed else ''
+
+
+def unread_what(missed: list) -> str:
+    "'A picture', '2 pictures', '3 attachments' - what a message held that could not be read."
+    n = len(missed)
+    return (f'A {missed[0]}' if n == 1 else f'{n} {missed[0]}s') if len(set(missed)) == 1 else f'{n} attachments'
+
+
+def _tg_file(token: str, f: dict, fallback_name: str, mime: str = 'audio/ogg'):
+    """One Telegram file by file_id -> (bytes, name, mime), or None with a warning. A refused download (403, 404) is None too:
+    its error page is not the file, and kept as one it reached vision as a broken picture."""
     try:
         path = tg(token, 'getFile', file_id=f['file_id']).get('file_path') or ''
-        data = requests.get(f'{TG_API}/file/bot{token}/{path}', timeout=60).content
+        r = requests.get(f'{TG_API}/file/bot{token}/{path}', timeout=60)
+        r.raise_for_status()
         name = f.get('file_name') or (path.rsplit('/', 1)[-1] or fallback_name)
-        return data, name, (f.get('mime_type') or 'audio/ogg').split(';')[0]
+        return r.content, name, (f.get('mime_type') or mime).split(';')[0]
     except Exception as e:
         # the token never reaches a log: requests names the whole URL, /file/bot<token>/..., in its exception
         logger.warning(f"telegram file fetch failed: {str(e).replace(token, '<token>') if token else e}"); return None
@@ -109,9 +170,9 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
     from . import remote_assistant
     # WHAT WAITED OUT A CLOSED TASKUARY in the Assistant chat: only the newest is acted on, the rest get their thumb and are named (A10)
     mine = lambda x: (((x.get('chat') or {}).get('type') or 'private') == 'private' and not (x.get('from') or {}).get('is_bot')
-                      and ((x.get('text') or '').strip() or x.get('voice') or x.get('audio'))
+                      and ((x.get('text') or x.get('caption') or '').strip() or x.get('voice') or x.get('audio') or x.get('photo') or x.get('document'))
                       and remote_assistant.enabled(store, 'telegram', str((x.get('chat') or {}).get('id') or ''), c))
-    late = remote_assistant.queued_while_closed([(str(x['chat']['id']), x.get('message_id'), x.get('date'), (x.get('text') or '').strip() or 'a voice note')
+    late = remote_assistant.queued_while_closed([(str(x['chat']['id']), x.get('message_id'), x.get('date'), (x.get('text') or x.get('caption') or '').strip() or ('a voice note' if x.get('voice') or x.get('audio') else 'a picture'))
                                                  for u in ups if (x := u.get('message')) and x.get('chat') and mine(x)])
     for u in ups:
         if u.get('callback_query'):                     # a button under one of the Assistant's messages
@@ -139,14 +200,21 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
         # A CHAT BOUND TO AN AGENT (agentchannels.py): a listed member's words go to the agent, anyone else's nowhere - never work
         from . import agentchannels
         if agentchannels.heard(store, 'telegram', cid, [str(frm.get('id') or '')], m.get('text') or m.get('caption') or '',
-                               f"telegram:{cid}:{m.get('message_id')}", name=' '.join(x for x in (frm.get('first_name'), frm.get('last_name')) if x)):
+                               f"telegram:{cid}:{m.get('message_id')}", name=' '.join(x for x in (frm.get('first_name'), frm.get('last_name')) if x),
+                               media=lambda m=m: _files(*_tg_photo(tok, m)),
+                               spoken=(lambda v=v: voice_words(store, *(_tg_file(tok, v, 'voice.ogg') or (None, 'audio/ogg', 'voice.ogg'))))
+                                      if v and not heard else None):
             continue
         # the owner's own words in the ONE private chat their card names as the Assistant chat go to
         # the same walk the desktop is on. A bot only ever hears the other side of a chat, so that
         # named private chat is what says the words are the owner's - there is no fromMe to read.
-        if ((m.get('text') or '').strip() and (chat.get('type') or 'private') == 'private'
-                and remote_assistant.intercept(store, 'telegram', cid, m['text'], from_me=True, connector=c,
-                                               message_id=m.get('message_id'), heard=heard, closed=closed)):
+        # ...A PICTURE included, with its caption: a photo carries its words as `caption`, not `text`, so a screenshot sent to the
+        # Assistant - caption and all - fell past it and was never answered
+        said = (m.get('text') or m.get('caption') or '').strip()
+        if ((said or m.get('photo') or m.get('document')) and (chat.get('type') or 'private') == 'private'
+                and remote_assistant.intercept(store, 'telegram', cid, said, from_me=True, connector=c,
+                                               message_id=m.get('message_id'), heard=heard, closed=closed,
+                                               images=lambda m=m: chat_pictures(store, 'telegram', cid, c, *_tg_photo(tok, m), m.get('message_id')))):
             continue
         if cid not in want:
             # ...and a private chat nobody chose is not met with silence: one fixed line, with nothing about the owner in it (A4)
@@ -162,7 +230,7 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
                 logger.info(f'telegram: chat {cid} ({title}) discovered - registered OFF under Sources')
             continue
         text = m.get('text') or m.get('caption') or ''
-        atts = _tg_photo(tok, m) if (m.get('photo') or m.get('document')) else []
+        atts, missed = _tg_photo(tok, m) if (m.get('photo') or m.get('document')) else ([], [])
         # a voice message (or an audio file with no caption): fetched, transcribed if a voice
         # connector exists, filed with the reason if not - and attached either way (voice.py)
         transcribed, why = True, ''
@@ -170,12 +238,14 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
         if v and not text:
             from . import voice
             got = _tg_file(tok, v, 'voice.ogg')
+            if not got: missed.append('voice note')
             if got:
                 data, name, mime = got
                 text, transcribed, why = voice.note_body(store, data, mime, name, v.get('duration') or 0, 'Telegram')
                 atts.append({'id': v['file_id'][:60], 'name': name, 'contentType': mime, 'size': len(data),
                              'contentBytes': base64.b64encode(data).decode()})
-        if not text and not atts: continue
+        if not text and not atts and not missed: continue
+        text = '\n\n'.join(x for x in (text, unread_note(missed, 'Telegram')) if x)
         who = ' '.join(x for x in (frm.get('first_name'), frm.get('last_name')) if x) or frm.get('username') or 'someone'
         out = ingest_message(store, file_only=file_only or not transcribed, msg={
             'external_id': f"telegram:{cid}:{m.get('message_id')}", 'channel': 'telegram',
@@ -198,6 +268,7 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
     return n
 
 
+_TAPS = __import__('threading').Lock()      # tg_tap: one tap at a time reads and spends a list
 TG_BUTTONS = 'tg_buttons'              # tg_buttons:<chat> -> {"msg": id, "labels": [...]} - the one message whose buttons answer
 
 
@@ -240,12 +311,17 @@ def tg_tap(store, c, q: dict) -> bool:
     cid = str((msg.get('chat') or {}).get('id') or '')
     if not cid or frm.get('is_bot') or ((msg.get('chat') or {}).get('type') or 'private') != 'private': return False
     if not remote_assistant.enabled(store, 'telegram', cid, c): return False
-    try: shown = json.loads(store.get_setting(f'{TG_BUTTONS}:{cid}') or '{}') or {}
-    except ValueError: shown = {}
-    data, labels = str(q.get('data') or ''), shown.get('labels') or []
-    i = int(data[1:]) if data[:1] == 'p' and data[1:].isdigit() else -1
-    if shown.get('msg') != msg.get('message_id') or not 0 <= i < len(labels):
-        remote_assistant.stale_tap(store, 'telegram', cid, c.get('ConnectorId')); return True
+    # ONE PICK PER LIST: a double tap is two callback queries on the same message, and both ran - the second as a pick on whatever list
+    # the first one's answer drew. The first marks the list spent before anything runs; a later one is told, as a spent WhatsApp poll is.
+    with _TAPS:
+        try: shown = json.loads(store.get_setting(f'{TG_BUTTONS}:{cid}') or '{}') or {}
+        except ValueError: shown = {}
+        data, labels = str(q.get('data') or ''), shown.get('labels') or []
+        i = int(data[1:]) if data[:1] == 'p' and data[1:].isdigit() else -1
+        mine = shown.get('msg') == msg.get('message_id')
+        if not mine or shown.get('spent') or not 0 <= i < len(labels):
+            remote_assistant.stale_tap(store, 'telegram', cid, c.get('ConnectorId'), spent=mine and bool(shown.get('spent'))); return True
+        store.set_setting(f'{TG_BUTTONS}:{cid}', json.dumps({**shown, 'spent': True}), 'assistant')
     return remote_assistant.intercept(store, 'telegram', cid, labels[i], from_me=True, connector=c, poll=True)
 
 
@@ -592,9 +668,9 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         return _group_named(store, jid, wanames.name_of(store, jid, known))
     # WHAT WAITED OUT A CLOSED TASKUARY in the Assistant chat: only the newest is acted on, the rest get their thumb and are named (A10)
     late = remote_assistant.queued_while_closed([
-        (assistant_chat, x.get('id'), x.get('ts'), (x.get('text') or '').strip() or 'a voice note') for x in out.get('messages', [])
+        (assistant_chat, x.get('id'), x.get('ts'), (x.get('text') or '').strip() or ('a voice note' if x.get('audio') else 'a picture')) for x in out.get('messages', [])
         if assistant_chat and x.get('jid') == assistant_chat and x.get('fromMe') and not x.get('taskuary') and not x.get('stalePoll')
-        and ((x.get('text') or '').strip() or x.get('audio')) and remote_assistant.enabled(store, 'whatsapp', assistant_chat, c)])
+        and ((x.get('text') or '').strip() or x.get('audio') or x.get('image') or x.get('doc')) and remote_assistant.enabled(store, 'whatsapp', assistant_chat, c)])
     for m in out.get('messages', []):
         jid = m.get('jid') or ''
         if not jid: continue
@@ -621,15 +697,19 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
                 took.append(m.get('id')); continue
         # A CHAT BOUND TO AN AGENT (agentchannels.py): the owner's (fromMe) and listed teammates' lines go to the agent, nobody's are work
         if agentchannels.bound(store, 'whatsapp', jid):
-            if text: agentchannels.heard(store, 'whatsapp', jid, [m.get('sender') or jid, _wa_alias(m)], text, f"whatsapp:{jid}:{m.get('id')}",
-                                         from_me=bool(m.get('fromMe')), name=m.get('name') or '')
+            if text or m.get('image') or m.get('doc') or m.get('audio'):
+                agentchannels.heard(store, 'whatsapp', jid, [m.get('sender') or jid, _wa_alias(m)], text, f"whatsapp:{jid}:{m.get('id')}",
+                                    from_me=bool(m.get('fromMe')), name=m.get('name') or '', media=lambda m=m: _wa_files(m),
+                                    spoken=(lambda m=m: voice_words(store, _read_media(m['audio']), os.path.basename(m['audio']), m.get('mime')))
+                                           if m.get('audio') and not text else None)
             took.append(m.get('id')); continue
         # A natural message the owner types in their designated private chat goes to the SAME
         # guide conversation as the desktop bubble. Bridge-stamped Taskuary output is swallowed
         # here too, so a notification or answer can never loop back as a fresh question.
-        if text and remote_assistant.intercept(
+        if (text or m.get('image') or m.get('doc')) and remote_assistant.intercept(
                 store, 'whatsapp', jid, text, from_me=bool(m.get('fromMe')),
-                connector=c, message_id=m.get('id'), poll=bool(m.get('poll')), arrived=m.get('ts'), heard=heard, closed=closed):
+                connector=c, message_id=m.get('id'), poll=bool(m.get('poll')), arrived=m.get('ts'), heard=heard, closed=closed,
+                images=lambda m=m, jid=jid: chat_pictures(store, 'whatsapp', jid, c, *_wa_files(m), m.get('id'))):
             continue
         if m.get('group') or jid.endswith('@g.us'):
             if jid not in want: continue                      # groups are opt-in, always
@@ -642,10 +722,9 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         if not body and not audio and not image and not doc: continue
         # a voice note lands like any message: transcribed when a voice connector exists, and
         # otherwise filed with the reason and the audio attached (voice.py) - it never vanishes
-        atts, transcribed, why = [], True, ''
-        if audio and not body:
-            data = _read_media(audio)
-            if data is None: continue
+        atts, transcribed, why, missed = [], True, '', []
+        if audio and not body and (data := _read_media(audio)) is None: missed.append('voice note')
+        elif audio and not body:
             mime, name = (m.get('mime') or 'audio/ogg').split(';')[0], os.path.basename(audio)
             body, transcribed, why = voice.note_body(store, data, mime, name, m.get('seconds') or 0, 'WhatsApp')
             atts.append({'id': f"voice:{m.get('id')}", 'name': name, 'contentType': mime, 'size': len(data),
@@ -655,18 +734,21 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         # sentence about nothing and gets filed as nothing (the owner, 2026-08-31).
         if image:
             data = _read_media(image)
-            if data is not None:
+            if data is None: missed.append('picture')
+            else:
                 mime, name = (m.get('imageMime') or 'image/jpeg').split(';')[0], os.path.basename(image)
                 atts.append({'id': f"image:{m.get('id')}", 'name': name, 'contentType': mime, 'size': len(data),
                              'contentBytes': base64.b64encode(data).decode(), 'isInline': True})
         # a file is the message when nothing was typed with it
         if doc:
             data = _read_media(doc)
-            if data is not None:
+            if data is None: missed.append('file')
+            else:
                 mime = (m.get('docMime') or 'application/octet-stream').split(';')[0]
                 name = m.get('docName') or os.path.basename(doc)
                 atts.append({'id': f"doc:{m.get('id')}", 'name': name, 'contentType': mime,
                              'size': len(data), 'contentBytes': base64.b64encode(data).decode()})
+        body = '\n\n'.join(x for x in (body, unread_note(missed, 'WhatsApp')) if x)
         if m.get('fromMe'):
             # the owner's OWN line in a chat the funnel reads - typed on their phone, not here. It
             # used to be dropped, so a WhatsApp thread the owner had answered still read as waiting

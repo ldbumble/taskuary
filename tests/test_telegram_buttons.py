@@ -92,6 +92,16 @@ class TelegramButtonsTests(unittest.TestCase):
         self.assertTrue(heard.call_args.kwargs['poll'])
         self.assertIn(('answerCallbackQuery', {'callback_query_id': 'q1'}), self.calls)
 
+    def test_a_second_tap_on_the_same_buttons_runs_nothing_and_is_answered(self):
+        """A double tap (or a tap, then another while the answer is still on its way) came back as two callback queries on the
+        same message: both ran, the second as a pick on whatever list came next. A list answers once, as a WhatsApp poll does."""
+        ra.send(self.s, 'telegram', TG_CHAT, 'Send the reply to Erin?\n\nReply with one of:\n1 · Send\n2 · Next', self.c['ConnectorId'])
+        with mock.patch.object(ra, 'intercept', return_value=True) as heard:
+            messengers.tg_tap(self.s, self.c, tap(51, 'p0', qid='q1'))
+            messengers.tg_tap(self.s, self.c, tap(51, 'p0', qid='q2'))
+        self.assertEqual(heard.call_count, 1)
+        self.assertIn('already used', self.sent()[-1]['text'])
+
     def test_a_tap_on_an_older_message_runs_nothing_and_is_answered(self):
         ra.send(self.s, 'telegram', TG_CHAT, 'One?\n\nReply with one of:\n1 · Close out\n2 · Next', self.c['ConnectorId'])
         ra.send(self.s, 'telegram', TG_CHAT, 'Two?\n\nReply with one of:\n1 · Mark done\n2 · Next', self.c['ConnectorId'])

@@ -82,6 +82,23 @@ class TelegramTests(unittest.TestCase):
         self.assertEqual(atts[0]['ContentType'], 'image/jpeg')
         self.assertTrue(atts[0]['Path'])                       # the bytes are on disk
 
+    def test_a_picture_telegram_refuses_is_said_not_kept_as_a_broken_image(self):
+        """The download answered 403: its error page was saved as photo.jpg and handed to vision, and a photo with no caption whose
+        fetch failed outright vanished. Now nothing false is attached, and the message says a picture was there."""
+        s, c = self._store()
+        def fake_tg(tok, method, **p):
+            if method == 'getUpdates': return [_tg_update(5, text='', photo=True), _tg_update(6, mid=2, text='see above', photo=True)]
+            if method == 'getFile': return {'file_path': 'photos/file_1.jpg'}
+        refused = mock.Mock(status_code=403, content=b'{"ok":false,"error_code":403}')
+        refused.raise_for_status.side_effect = messengers.requests.HTTPError('403 Forbidden for url .../file/botTOKEN/photos/file_1.jpg')
+        with mock.patch.object(messengers, 'tg', fake_tg), mock.patch.object(messengers.requests, 'get', return_value=refused):
+            n = messengers.poll_telegram(s, c, s.list_sources(), llm=None)
+        rows = s._rows("SELECT * FROM message WHERE Channel='telegram' ORDER BY MessageId")
+        self.assertEqual((n, len(rows)), (2, 2))
+        line = '[A picture in this message could not be read - open the chat in Telegram to see it.]'
+        self.assertEqual([r['BodyText'] for r in rows], [line, f'see above\n\n{line}'])
+        self.assertEqual([s.list_attachments(r['MessageId']) for r in rows], [[], []])
+
     def test_replies_go_back_into_the_same_chat(self):
         s, _ = self._store()
         sent = {}
@@ -391,7 +408,7 @@ class TeamsQuoteTests(unittest.TestCase):
     "A Teams reply goes as Teams' own quoted reply to the line it answers (Graph replyWithQuote), like WhatsApp's - in a group chat and a 1:1."
     G, CHAT = outbound.GRAPH, '19:ops@thread.v2'
 
-    def _send(self, msg, *codes):
+    def _send(self, msg, *codes, body='Friday works.\nSee you then.'):
         s = MemoryStore()
         c = s.get_connector_by_type('teams')
         s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Secret': 'trt',
@@ -402,7 +419,7 @@ class TeamsQuoteTests(unittest.TestCase):
             code = codes.pop(0) if codes else 201
             return mock.Mock(status_code=code, json=lambda: {'id': '900'}, text='' if code < 300 else '{"error":{"message":"Invalid message id"}}')
         with mock.patch.object(outbound, '_graph_token', return_value='tok'), mock.patch('requests.post', side_effect=post):
-            out = outbound.reply_to_message(s, msg, 'Friday works.\nSee you then.')
+            out = outbound.reply_to_message(s, msg, body)
         return out, posted
 
     def msg(self, chat=CHAT, mid='1731000000001'):
@@ -415,6 +432,12 @@ class TeamsQuoteTests(unittest.TestCase):
             self.assertEqual(posted, [(f'{chat}/messages/replyWithQuote', {'messageIds': ['1731000000001'],
                                        'replyMessage': {'body': {'contentType': 'text', 'content': 'Friday works.\nSee you then.'}}})])
             self.assertEqual(out, {'channel': 'teams', 'chat': chat, 'quoted': True})
+
+    def test_a_drafted_reply_is_spelled_for_teams_not_sent_as_markdown(self):
+        """Graph posts a text body as it is: a model's **Friday** reached Gail with its stars and a [link](url) as brackets, where the
+        same draft on Telegram, WhatsApp and Slack is spelled for that chat first (chatformat.render)."""
+        _, posted = self._send(self.msg(), body='**Friday** works - the agenda is [here](https://northwind.example/agenda).')
+        self.assertEqual(posted[0][1]['replyMessage']['body']['content'], 'Friday works - the agenda is here (https://northwind.example/agenda).')
 
     def test_a_quote_graph_refuses_still_sends_the_reply_once_plain(self):
         out, posted = self._send(self.msg(), 400)

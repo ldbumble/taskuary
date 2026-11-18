@@ -39,6 +39,19 @@ class SlackReply(unittest.TestCase):
         self.assertEqual(data['text'], 'Hi Erin - *yes*, Thursday works.')      # Slack's bold is one star
         self.assertTrue(out['threaded'])
 
+    def test_a_thread_reply_shown_in_the_channel_is_answered_in_its_thread(self):
+        """A reply in a thread also sent to the channel is read as a line of its own: its answer goes under the thread's first line,
+        where the conversation is - Slack's thread_ts names a thread's parent, never a reply in it."""
+        from taskuary.channels import slack_msg
+        row = slack_msg({'Address': 'C0123'}, {'ts': '1730800500.000300', 'thread_ts': '1730800000.000100', 'subtype': 'thread_broadcast', 'user': 'U1', 'text': 'done'})
+        self.assertEqual(row['mail_meta']['thread'], '1730800000.000100')
+        s, sent = slack_store(), []
+        msg = {'Channel': 'slack', 'ExternalId': row['external_id'], 'ConversationId': 'slack:C0123', 'SourceName': 'C0123',
+               'MailMetaJson': json.dumps(row['mail_meta'])}
+        with mock.patch('taskuary.channels.requests.post', side_effect=lambda url, data=None, **kw: sent.append(data) or Resp({'ok': True})):
+            outbound.reply_to_message(s, msg, 'Thanks.')
+        self.assertEqual(sent[0]['thread_ts'], '1730800000.000100')
+
     def test_a_direct_message_is_answered_plainly(self):
         s, sent = slack_store(), []
         msg = {'Channel': 'slack', 'ExternalId': 'slack:D0456:1730800000.000200', 'ConversationId': 'slack:D0456', 'SourceName': 'D0456'}

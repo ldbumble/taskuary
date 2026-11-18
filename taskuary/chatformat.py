@@ -32,7 +32,7 @@ _CODE = re.compile(r'`+([^`\n]+?)`+')
 _HEAD = re.compile(r'^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$')
 _RULE = re.compile(r'^\s*\|?[\s:|-]*-{2,}[\s:|-]*\|?\s*$')      # a table's ---|--- rule, or an hr
 _ROW = re.compile(r'^\s*\|(.+)\|\s*$')
-_LINK = re.compile(r'!?\[([^\]]+)\]\([^)]*\)')
+_LINK = re.compile(r'!?\[([^\]]+)\]\(([^)]*)\)')
 _BOLD = re.compile(r'(\*\*|__)(.+?)\1', re.S)
 _ITAL = re.compile(r'(?<![\w*])\*(?!\s)([^*\n]+?)(?<!\s)\*(?![\w*])')
 _UNDER = re.compile(r'(?<![\w_])_(?!\s)([^_\n]+?)(?<!\s)_(?![\w_])')
@@ -126,9 +126,19 @@ def table(rows: list) -> list:
     return out[:-1] if out else out
 
 
-def render(text, channel: str) -> str:
+def _keep_link(m, channel: str) -> str:
+    "A web link the reader needs: its address kept - Slack's own <url|words>, else the words and the address beside them."
+    words, url = m.group(1), m.group(2).strip()
+    if not re.match(r'(?i)https?://', url): return words
+    if channel == 'slack': return f'<{url}|{words}>'
+    return url if words.strip() in (url, url.split('://', 1)[-1]) else f'{words} ({url})'
+
+
+def render(text, channel: str, links: bool = False) -> str:
     """Markdown as this channel actually draws it. Code spans come out first and go back last,
-    so `snake_case_name` is never read as an italic."""
+    so `snake_case_name` is never read as an italic.
+    `links`: a web link keeps its address (_keep_link) - a reply to a person, where "the agenda is [here](...)" sent as "the agenda is
+    here." lost the one thing it pointed to. Without it a link is its words, as the Assistant's own lines always were."""
     kept = []
     def hold(m):
         kept.append(m.group(1)); return f'\x00{len(kept) - 1}\x00'
@@ -152,7 +162,7 @@ def render(text, channel: str) -> str:
         lines.append(line)
     out = '\n'.join(lines)
     out = _SUMMARY.sub(r'\1', out); out = _LI.sub(chr(10) + '- ', out); out = _BR.sub('\n', out); out = _TAG.sub('', out)
-    out = _LINK.sub(r'\1', out)                     # the link's words; a chat linkifies bare urls itself
+    out = _LINK.sub((lambda m: _keep_link(m, channel)) if links else r'\1', out)    # the link's words; a chat linkifies bare urls itself
     if channel in ('whatsapp', 'slack'):
         # ITALIC FIRST. Bold emits a single star, which is precisely what the italic rule matches -
         # the other way round and every *bold* came back out as _italic_.

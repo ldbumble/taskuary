@@ -1,7 +1,7 @@
 """Agent channels (agentchannels.py): a WhatsApp, Telegram, Slack or Teams chat bound to one coding agent. Named members only; a
 teammate's words reach the agent labelled and are never the owner's authority - no permission, no landing, no answer to what the agent
 asked; the agent stays in its repo; and only its own answers, questions and permission requests reach the chat."""
-import json, os, tempfile, threading, time
+import json, os, re, tempfile, threading, time
 from types import SimpleNamespace
 from unittest import mock
 
@@ -205,6 +205,25 @@ def test_only_the_bound_agents_answers_and_questions_reach_the_chat(w):
     assert len(w.posts) == 2
 
 
+def test_a_link_in_the_agents_answer_keeps_its_address(w):
+    "The agent's \"opened [PR #12](url)\" reached the teammates as \"opened PR #12\" - the one thing they needed, gone."
+    w.bind()
+    ws.record(w.s, w.tid, f's{w.tid}', 'turn_end', text='Opened [PR #12](https://github.example/northwind/ledger/pull/12).')
+    assert w.posts[-1][1] == 'Opened <https://github.example/northwind/ledger/pull/12|PR #12>.'
+
+
+def test_a_post_the_chat_refuses_is_said_in_the_task_once(w):
+    "The app was taken out of the Slack channel: every answer was lost with a log line, and the task said nothing."
+    w.bind()
+    with mock.patch.object(ac, '_send', side_effect=RuntimeError('slack chat.postMessage: not_in_channel')):
+        ws.record(w.s, w.tid, f's{w.tid}', 'turn_end', text='Fixed the rounding.')
+        ws.record(w.s, w.tid, f's{w.tid}', 'turn_end', text='Tests pass too.')
+    said = [c['Body'] for c in w.s.list_comments(w.tid, internal=True) if 'did not take' in str(c.get('Body') or '')]
+    assert len(said) == 1 and 'not_in_channel' in said[0]
+    ws.record(w.s, w.tid, f's{w.tid}', 'turn_end', text='Back again.')               # it works again: the next failure is said again
+    assert w.posts and not ac.bound(w.s, 'slack', CHAN)['state'].get('down')
+
+
 def test_our_own_post_read_back_is_not_the_owners_line(w):
     w.bind()
     ws.record(w.s, w.tid, f's{w.tid}', 'turn_end', text='Fixed the rounding.')
@@ -235,6 +254,18 @@ def test_slack_reads_a_bound_channel_by_its_own_cursor(w):
     assert len(w.typed) == 2, 'a re-read routed a line twice'
 
 
+def test_a_slack_line_with_a_screenshot_reaches_the_bound_agent(w, tmp_path, monkeypatch):
+    "Slack marks a line with a file in it file_share: the bound channel skipped every subtype, so it never reached the agent."
+    monkeypatch.setenv('TASKUARY_HOME', str(tmp_path))
+    w.bind()
+    hist = {'messages': [{'ts': '1767000005.0', 'user': 'U0GAIL', 'subtype': 'file_share', 'text': 'the total is off here',
+                          'files': [{'id': 'F1', 'name': 'total.png', 'mimetype': 'image/png', 'url_private': 'https://files.slack.com/x/total.png'}]}]}
+    got = mock.Mock(content=b'\x89PNGfake', headers={'Content-Type': 'image/png'}, raise_for_status=lambda: None)
+    with mock.patch('taskuary.channels._slack', return_value=hist), mock.patch('taskuary.channels.requests.get', return_value=got):
+        ac.poll_slack(w.s, w.s.connectors_by_type('slack')[0], 'tok')
+    assert len(w.typed) == 1 and 'the total is off here' in w.typed[0] and re.search(r'agentchannel\S+total\.png', w.typed[0])
+
+
 def test_telegram_routes_a_bound_group_before_anything_else(w):
     w.bind('telegram', '-100777', members=[{'name': 'Alex Doyle', 'id': '4242', 'role': 'owner'}, {'name': 'Gail Moreno', 'id': '5151', 'role': 'teammate'}])
     ups = [{'update_id': 1, 'message': {'message_id': 10, 'chat': {'id': -100777, 'type': 'supergroup', 'title': 'ledger'}, 'from': {'id': 5151, 'first_name': 'Gail'}, 'text': 'tests pass now'}},
@@ -244,6 +275,51 @@ def test_telegram_routes_a_bound_group_before_anything_else(w):
     with mock.patch.object(messengers, 'tg', return_value=ups): messengers.poll_telegram(w.s, c, [])
     assert len(w.typed) == 1 and 'Gail Moreno (teammate) on Telegram' in w.typed[0] and len(w.s.list_tasks()) == tasks
     assert not any(s['Address'] == '-100777' for s in w.s.list_sources(active_only=False)), 'the bound group was registered as a source'
+
+
+def test_a_picture_in_a_bound_chat_reaches_the_agent_as_a_file_it_can_read(w, tmp_path, monkeypatch):
+    """A teammate posts a screenshot with "the total is off here": only the words went on, and a picture with no words went nowhere and
+    said nothing. Now the picture is kept under attachments/ and its path rides with the line, as a picture dropped in the task's box does;
+    one the bridge never wrote is said in the chat."""
+    monkeypatch.setenv('TASKUARY_HOME', str(tmp_path))
+    from taskuary import config, server
+    grp = '120363000000000002@g.us'
+    w.bind('whatsapp', grp, members=[{'name': 'Gail Moreno', 'id': '15550102233', 'role': 'teammate'}])
+    shot = tmp_path / 'shot.png'; shot.write_bytes(b'\x89PNG\r\n\x1a\nfake')
+    c = w.s.get_connector(w.s.connectors_by_type('whatsapp')[0]['ConnectorId'], with_secret=True)
+    feed = {'seq': 3, 'messages': [
+        {'id': 'a', 'jid': grp, 'sender': '15550102233@s.whatsapp.net', 'name': 'Gail', 'text': 'the total is off here', 'image': str(shot), 'ts': 1},
+        {'id': 'b', 'jid': grp, 'sender': '15550102233@s.whatsapp.net', 'name': 'Gail', 'text': '', 'image': str(shot), 'ts': 2},
+        {'id': 'c', 'jid': grp, 'sender': '15550102233@s.whatsapp.net', 'name': 'Gail', 'text': '', 'image': str(tmp_path / 'never.png'), 'ts': 3},
+        {'id': 'd', 'jid': grp, 'sender': '15550999999@s.whatsapp.net', 'name': 'Bob', 'text': '', 'image': str(shot), 'ts': 4}]}
+    with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed): messengers.poll_whatsapp(w.s, c, [])
+    assert len(w.typed) == 2, w.typed
+    assert 'the total is off here' in w.typed[0]
+    for t in w.typed:
+        paths = re.findall(r'(\S+agentchannel\S+shot\.png)', t)
+        assert paths and server.prompt_images(paths) == paths, t            # a path a prompt may name: under attachments/
+        assert open(paths[0], 'rb').read().startswith(b'\x89PNG')
+    assert 'A picture in that message could not be read' in w.said()
+    assert len(list((config.home() / 'attachments' / 'agentchannel').rglob('*'))) == 3, "a stranger's picture was kept"
+
+
+def test_a_voice_note_in_a_bound_chat_reaches_the_agent_as_words(w, tmp_path):
+    "A teammate's voice note went nowhere and the chat said nothing; it is heard by the one transcriber, or the chat says why not."
+    grp = '120363000000000003@g.us'
+    w.bind('whatsapp', grp, members=[{'name': 'Gail Moreno', 'id': '15550102233', 'role': 'teammate'}])
+    note = tmp_path / 'note.ogg'; note.write_bytes(b'OggS')
+    c = w.s.get_connector(w.s.connectors_by_type('whatsapp')[0]['ConnectorId'], with_secret=True)
+    feed = {'seq': 2, 'messages': [{'id': 'v1', 'jid': grp, 'sender': '15550102233@s.whatsapp.net', 'text': '', 'audio': str(note), 'mime': 'audio/ogg', 'ts': 1},
+                                   {'id': 'v2', 'jid': grp, 'sender': '15550102233@s.whatsapp.net', 'text': '', 'audio': str(note), 'mime': 'audio/ogg', 'ts': 2}]}
+    heard = iter([{'text': 'the rounding test still fails on negatives'}, RuntimeError('no voice connector - add one under Connections')])
+    def hear(*a, **k):
+        x = next(heard)
+        if isinstance(x, Exception): raise x
+        return x
+    with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed), mock.patch('taskuary.voice.transcribe', side_effect=hear):
+        messengers.poll_whatsapp(w.s, c, [])
+    assert len(w.typed) == 1 and 'the rounding test still fails on negatives' in w.typed[0]
+    assert 'I could not hear that voice note - no voice connector' in w.said()
 
 
 def test_conductor_mode_is_the_owners_words_to_any_agent_in_its_repo(w):

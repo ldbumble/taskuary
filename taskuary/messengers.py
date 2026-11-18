@@ -53,32 +53,39 @@ def tg_test(store, c) -> str:
             f"yours; every other chat stays out (a public bot can be messaged by anyone)")
 
 
-def _tg_photo(token: str, m: dict) -> list:
+def _tg_photo(token: str, m: dict) -> tuple[list, list]:
     """The largest rendition of an attached photo/document, shaped like a Graph fileAttachment
-    so channels.save_attachments and vision reuse the one pipeline."""
-    out = []
+    so channels.save_attachments and vision reuse the one pipeline - and what could not be fetched, by kind (unread_note)."""
+    out, missed = [], []
     for kind, meta in (('photo', (m.get('photo') or [])[-1:]), ('document', [m['document']] if m.get('document') else [])):
         for f in meta:
-            try:
-                path = tg(token, 'getFile', file_id=f['file_id']).get('file_path') or ''
-                data = requests.get(f'{TG_API}/file/bot{token}/{path}', timeout=60).content
-                name = f.get('file_name') or (path.rsplit('/', 1)[-1] or f'{kind}.jpg')
-                ct = f.get('mime_type') or ('image/jpeg' if kind == 'photo' else 'application/octet-stream')
-                out.append({'id': f['file_id'][:60], 'name': name, 'contentType': ct,
-                            'size': len(data), 'contentBytes': base64.b64encode(data).decode(),
-                            'isInline': kind == 'photo'})
-            except Exception as e:
-                logger.warning(f'telegram file fetch failed: {e}')
-    return out
+            got = _tg_file(token, f, f'{kind}.jpg', 'image/jpeg' if kind == 'photo' else 'application/octet-stream')
+            if not got: missed.append('picture' if kind == 'photo' else 'file'); continue
+            data, name, ct = got
+            out.append({'id': f['file_id'][:60], 'name': name, 'contentType': ct,
+                        'size': len(data), 'contentBytes': base64.b64encode(data).decode(),
+                        'isInline': kind == 'photo'})
+    return out, missed
 
 
-def _tg_file(token: str, f: dict, fallback_name: str):
-    """One Telegram file by file_id -> (bytes, name, mime), or None with a warning."""
+def unread_note(missed: list, where: str) -> str:
+    """The line a message carries for what it held that could not be read - a picture Telegram refused (403), one the bridge never
+    wrote - so it never lands as a sentence with a hole in it, or as "see the attachment" with none there. '' when nothing was missed."""
+    if not missed: return ''
+    n = len(missed)
+    what = (missed[0] if n == 1 else f'{n} {missed[0]}s') if len(set(missed)) == 1 else f'{n} attachments'
+    return f"[{'A ' if n == 1 else ''}{what} in this message could not be read - open the chat in {where} to see it.]"
+
+
+def _tg_file(token: str, f: dict, fallback_name: str, mime: str = 'audio/ogg'):
+    """One Telegram file by file_id -> (bytes, name, mime), or None with a warning. A refused download (403, 404) is None too:
+    its error page is not the file, and kept as one it reached vision as a broken picture."""
     try:
         path = tg(token, 'getFile', file_id=f['file_id']).get('file_path') or ''
-        data = requests.get(f'{TG_API}/file/bot{token}/{path}', timeout=60).content
+        r = requests.get(f'{TG_API}/file/bot{token}/{path}', timeout=60)
+        r.raise_for_status()
         name = f.get('file_name') or (path.rsplit('/', 1)[-1] or fallback_name)
-        return data, name, (f.get('mime_type') or 'audio/ogg').split(';')[0]
+        return r.content, name, (f.get('mime_type') or mime).split(';')[0]
     except Exception as e:
         # the token never reaches a log: requests names the whole URL, /file/bot<token>/..., in its exception
         logger.warning(f"telegram file fetch failed: {str(e).replace(token, '<token>') if token else e}"); return None
@@ -162,7 +169,7 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
                 logger.info(f'telegram: chat {cid} ({title}) discovered - registered OFF under Sources')
             continue
         text = m.get('text') or m.get('caption') or ''
-        atts = _tg_photo(tok, m) if (m.get('photo') or m.get('document')) else []
+        atts, missed = _tg_photo(tok, m) if (m.get('photo') or m.get('document')) else ([], [])
         # a voice message (or an audio file with no caption): fetched, transcribed if a voice
         # connector exists, filed with the reason if not - and attached either way (voice.py)
         transcribed, why = True, ''
@@ -170,12 +177,14 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
         if v and not text:
             from . import voice
             got = _tg_file(tok, v, 'voice.ogg')
+            if not got: missed.append('voice note')
             if got:
                 data, name, mime = got
                 text, transcribed, why = voice.note_body(store, data, mime, name, v.get('duration') or 0, 'Telegram')
                 atts.append({'id': v['file_id'][:60], 'name': name, 'contentType': mime, 'size': len(data),
                              'contentBytes': base64.b64encode(data).decode()})
-        if not text and not atts: continue
+        if not text and not atts and not missed: continue
+        text = '\n\n'.join(x for x in (text, unread_note(missed, 'Telegram')) if x)
         who = ' '.join(x for x in (frm.get('first_name'), frm.get('last_name')) if x) or frm.get('username') or 'someone'
         out = ingest_message(store, file_only=file_only or not transcribed, msg={
             'external_id': f"telegram:{cid}:{m.get('message_id')}", 'channel': 'telegram',
@@ -642,10 +651,9 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         if not body and not audio and not image and not doc: continue
         # a voice note lands like any message: transcribed when a voice connector exists, and
         # otherwise filed with the reason and the audio attached (voice.py) - it never vanishes
-        atts, transcribed, why = [], True, ''
-        if audio and not body:
-            data = _read_media(audio)
-            if data is None: continue
+        atts, transcribed, why, missed = [], True, '', []
+        if audio and not body and (data := _read_media(audio)) is None: missed.append('voice note')
+        elif audio and not body:
             mime, name = (m.get('mime') or 'audio/ogg').split(';')[0], os.path.basename(audio)
             body, transcribed, why = voice.note_body(store, data, mime, name, m.get('seconds') or 0, 'WhatsApp')
             atts.append({'id': f"voice:{m.get('id')}", 'name': name, 'contentType': mime, 'size': len(data),
@@ -655,18 +663,21 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         # sentence about nothing and gets filed as nothing (the owner, 2026-08-31).
         if image:
             data = _read_media(image)
-            if data is not None:
+            if data is None: missed.append('picture')
+            else:
                 mime, name = (m.get('imageMime') or 'image/jpeg').split(';')[0], os.path.basename(image)
                 atts.append({'id': f"image:{m.get('id')}", 'name': name, 'contentType': mime, 'size': len(data),
                              'contentBytes': base64.b64encode(data).decode(), 'isInline': True})
         # a file is the message when nothing was typed with it
         if doc:
             data = _read_media(doc)
-            if data is not None:
+            if data is None: missed.append('file')
+            else:
                 mime = (m.get('docMime') or 'application/octet-stream').split(';')[0]
                 name = m.get('docName') or os.path.basename(doc)
                 atts.append({'id': f"doc:{m.get('id')}", 'name': name, 'contentType': mime,
                              'size': len(data), 'contentBytes': base64.b64encode(data).decode()})
+        body = '\n\n'.join(x for x in (body, unread_note(missed, 'WhatsApp')) if x)
         if m.get('fromMe'):
             # the owner's OWN line in a chat the funnel reads - typed on their phone, not here. It
             # used to be dropped, so a WhatsApp thread the owner had answered still read as waiting

@@ -84,8 +84,23 @@ class APhotoArrivesTests(unittest.TestCase):
         s, c = _store()
         n = _poll(s, c, {'id': 'p5', 'name': 'Sam', 'text': 'look at this', 'image': 'C:/gone/nope.png'})
         rows = s._rows("SELECT * FROM message WHERE Channel='whatsapp'")
-        self.assertEqual((n, rows[0]['BodyText']), (1, 'look at this'))
+        # ...and it says the picture was there and could not be read, rather than a sentence with a hole in it
+        self.assertEqual((n, rows[0]['BodyText']),
+                         (1, 'look at this\n\n[A picture in this message could not be read - open the chat in WhatsApp to see it.]'))
         self.assertEqual(s.list_attachments(rows[0]['MessageId']), [])
+
+    def test_a_picture_alone_that_could_not_be_read_never_says_see_the_attachment(self):
+        """No caption and the bridge's file gone: it landed as "(no text - see the attachment)" with no attachment - untrue."""
+        s, c = _store()
+        _poll(s, c, {'id': 'p8', 'name': 'Sam', 'text': '', 'image': 'C:/gone/nope.png'})
+        row = s._rows("SELECT * FROM message WHERE Channel='whatsapp'")[0]
+        self.assertNotIn('see the attachment', row['BodyText'])
+        self.assertIn('picture in this message could not be read', row['BodyText'])
+
+    def test_a_voice_note_the_bridge_could_not_write_still_arrives(self):
+        s, c = _store()
+        self.assertEqual(_poll(s, c, {'id': 'p9', 'name': 'Sam', 'text': '', 'audio': 'C:/gone/note.ogg'}), 1)
+        self.assertIn('voice note in this message could not be read', s._rows("SELECT * FROM message WHERE Channel='whatsapp'")[0]['BodyText'])
 
     def test_vision_switched_off_still_files_the_attachment(self):
         """Settings → vision off means the model does not look; it does not mean we throw the

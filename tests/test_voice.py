@@ -404,7 +404,7 @@ class TelegramVoiceToTheAssistantTests(unittest.TestCase):
         s = _voice_store('groq_stt'); c = self._setup(s)
         heard = []
         with mock.patch.object(messengers, 'tg', self._tg), \
-             mock.patch.object(messengers.requests, 'get', return_value=types.SimpleNamespace(content=b'OggS')), \
+             mock.patch.object(messengers.requests, 'get', return_value=types.SimpleNamespace(content=b'OggS', raise_for_status=lambda: None)), \
              mock.patch.object(voice.requests, 'post', return_value=R(200, {'text': 'walk me through my tasks'})), \
              mock.patch.object(remote_assistant, 'enabled', return_value=True), \
              mock.patch.object(remote_assistant, 'intercept', lambda store, ch, chat, text, **kw: heard.append((ch, chat, text)) or True):
@@ -416,7 +416,7 @@ class TelegramVoiceToTheAssistantTests(unittest.TestCase):
         s = MemoryStore(); c = self._setup(s)                       # no voice connector at all
         said, heard = [], []
         with mock.patch.object(messengers, 'tg', self._tg), \
-             mock.patch.object(messengers.requests, 'get', return_value=types.SimpleNamespace(content=b'OggS')), \
+             mock.patch.object(messengers.requests, 'get', return_value=types.SimpleNamespace(content=b'OggS', raise_for_status=lambda: None)), \
              mock.patch.object(remote_assistant, 'enabled', return_value=True), \
              mock.patch.object(remote_assistant, 'send', lambda store, ch, chat, text, cid=None: said.append((ch, text))), \
              mock.patch.object(remote_assistant, 'intercept', lambda *a, **kw: heard.append(a) or True):
@@ -436,7 +436,7 @@ class TelegramVoiceToTheAssistantTests(unittest.TestCase):
         from taskuary import remote_assistant
         s = _voice_store('groq_stt'); c = self._setup(s)
         with mock.patch.object(messengers, 'tg', self._tg), \
-             mock.patch.object(messengers.requests, 'get', return_value=types.SimpleNamespace(content=b'OggS')), \
+             mock.patch.object(messengers.requests, 'get', return_value=types.SimpleNamespace(content=b'OggS', raise_for_status=lambda: None)), \
              mock.patch.object(voice.requests, 'post') as stt, \
              mock.patch.object(remote_assistant, 'enabled', return_value=False):
             messengers.poll_telegram(s, c, s.list_sources())

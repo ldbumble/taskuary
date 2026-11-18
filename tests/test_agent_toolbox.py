@@ -741,6 +741,24 @@ class NewTaskTool(unittest.TestCase):
             self.assertTrue(err); self.assertIn('too big to be one', said); self.assertTrue(said.split('\n')[-1].startswith(agenttools.NEXT_STEP), said)
         self.assertEqual(agenttools.fit('read_attachment', {'id': ' -0000000000000000000001 '})['id'], -1)
 
+    # WHAT SHARE CAN NAME (the same round): share said "a dashboard or report you made". What a task's agent can make is a routine - save_routine,
+    # kept on the owner's Approve as a report source with a number - and that one it can share, found by the number search_tasks gives
+    def test_a_routine_saved_from_the_task_is_found_and_shared_by_its_number(self):
+        from taskuary import proposals
+        said, err = tool(self.tid, 'propose', action='save_routine', why='the same totals every Monday', title='Monday vendor totals',
+                         script='print("vendor totals")', daily_at='08:00')
+        self.assertFalse(err, said)
+        rv = self.s.get_review(json.loads(said)['review'])
+        out = proposals.execute(self.s, rv, 'owner')
+        sid = out['source']; self.assertEqual(out['link'], f'#report={sid}')
+        raw = tool(self.tid, 'search_tasks', words='Monday vendor totals')[0]
+        hits = json.loads(raw[raw.index('['):raw.rindex(']') + 1])
+        self.assertEqual([h['report'] for h in hits if h.get('report')], [sid])
+        said, err = tool(self.tid, 'share', report=sid, to='gail@northwind.example', text='Totals every Monday.', via='email')
+        self.assertFalse(err, said); self.assertTrue(json.loads(said)['ok'])
+        # ...and the tool says it so: it shares the owner's reports and a routine saved from this task, never one the agent "made" itself
+        self.assertIn('routine saved from this task', agenttools.TOOLS['share'][1]); self.assertNotIn('you made', agenttools.TOOLS['share'][1])
+
     def test_a_cc_written_as_one_string_is_told_to_be_a_list(self):
         said, _ = tool(self.tid, 'propose_email', to='erin@northwind.example', subject='Plans', text='See the sheet.', cc='gail@northwind.example, ray@northwind.example')
         got = json.loads(said)

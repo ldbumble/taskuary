@@ -224,7 +224,7 @@ TOOLS = {
                        _S({'with': {'type': 'array', 'items': _STR}, 'title': _STR, 'minutes': _INT, 'within': _STR, 'start': _STR, 'end': _STR,
                            'note': _STR, 'online': {'type': 'boolean'}, 'guessed': {'type': 'array', 'items': _STR}}, ('with', 'title')),
                        ('POST', '/api/agent/meeting')),
-    'share': ('propose', "Share a dashboard or report you made: `report` its number (the N of #report=N), `to` the person, `text` the"
+    'share': ('propose', "Share a report or dashboard of the owner's - one they have, or a routine saved from this task (search_tasks finds it): `report` its number (the N of #report=N), `to` the person, `text` the"
                          " message with it - what it shows, the numbers that matter. `via`: chat (this task's chat with them) or "
                          "email; none = the way they wrote to the owner. A Share with <name> card in this chat - nothing is sent "
                          "until the owner presses it. Use it instead of telling the owner to share.",
@@ -304,7 +304,7 @@ SHORT = {
     'sign_form': "Fill and sign a PDF form with the owner's saved signature.",
     'answer_invite': "Answer this task's meeting invite: accept, decline or propose.",
     'set_up_meeting': "Set up a meeting for the owner's press.",
-    'share': 'Share a dashboard or report you made with a person.',
+    'share': "Share a report or dashboard of the owner's with a person.",
     'propose': 'Ask the owner to approve an act Taskuary runs on their press (action, why) - many at once in `items`, one card; save_routine keeps a script you wrote as a routine.',
     'find_tools': "A tool's instructions by name, or more tools by need.",
 }

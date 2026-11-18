@@ -1401,6 +1401,18 @@ def is_dock(task: dict | None) -> bool:
     return str((task or {}).get('SourceRef') or '') == DOCK_TAG
 
 
+def reads_hub(task: dict | None) -> bool:
+    "Whether a chat's prompt carries what the Hub knows about its task (context.for_prompt): not the guide's chat's, nor a setup walk's."
+    return not is_dock(task) and (task or {}).get('SourceRef') not in ('connector:setup', SETUP_REF)
+
+
+def warm(store, tid: int, task: dict | None) -> None:
+    "A chat's next turn will read what is known about its task: that judgement starts now, behind the caller (context.warm)."
+    if handles(task) and reads_hub(task):
+        from . import context
+        context.warm(store, tid)
+
+
 def dock_task(store, actor='owner') -> tuple[dict, bool]:
     """Return the one durable guide conversation shared by desktop and remote chat."""
     raw = store.get_setting('assistant_dock_task_id')
@@ -2252,7 +2264,7 @@ def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
     # had the thread and nothing around it (the owner picked the richer read, 2026-10-22). In the user turn, not the system
     # prompt: it is drawn from other people's mail. Never on a stranger's task, the guide's chat or a setup walk.
     from . import context as _ctx
-    hub_read = '' if stranger or dock or task.get('SourceRef') in ('connector:setup', SETUP_REF) else _ctx.for_prompt(store, tid)
+    hub_read = _ctx.for_prompt(store, tid) if not stranger and reads_hub(task) else ''
     # ...and how this task ENDS. Only where an ending means something: a task somebody wrote in
     # about has an answer owed, and closing it drafts that answer. A task the owner opened to
     # think out loud in has nobody waiting, so it stays open until they say otherwise.
@@ -3837,6 +3849,7 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     # "on you"): back under Tasks before the turn starts, as every other move he makes on it (server.WATCH_ENDS) - from any door
     from . import watch
     watch.stop(store, tid, actor)
+    warm(store, tid, t)               # ...what is known about the task is judged while the line is kept and the turn starts (context.warm)
     # ...A TASK HE TYPES INTO IS HIS TO END (selfclose.claim, as a session he opened): its agent answers and waits - told to close the task when
     # finished, a coding agent spent a plain question's answer on wrapping up (the recorded walk, 2026-11-11)
     if not handles(t):

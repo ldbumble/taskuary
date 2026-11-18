@@ -899,7 +899,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // again and its calming poll counts the read as unchanged. Only while the page draws exactly what the server last said (an edit made
       // here in place is not that, and the next read puts the server's word back)
       const held = servedDetail.current, rev = held && held.data === detailNow.current && held.id === id ? held.data.rev : "";
-      const { data } = await api.get(`/api/tasks/${id}`, { signal, params: rev ? { rev } : {} });
+      // ...and the page's first read of a task says it was OPENED: its chat's next turn starts being prepared (server: general.warm)
+      const opened = held?.id !== id;
+      const { data } = await api.get(`/api/tasks/${id}`, { signal, params: rev ? { rev } : opened ? { opened: 1 } : {} });
       if (stale(id)) return;
       if (data?.same) { if (loadFailed.current) { loadFailed.current = false; setErr(""); } return false; }
       servedDetail.current = { id, data };

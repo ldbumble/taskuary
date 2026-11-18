@@ -2215,12 +2215,12 @@ def _offer_of(task_id) -> str:
 
 
 @app.get('/api/tasks/{task_id}')
-def task_detail(task_id: int, rev: str = ''):
+def task_detail(task_id: int, rev: str = '', opened: bool = False):
     """ONE TASK AS ITS PAGE DRAWS IT, read every 3 s while an agent works. Each setting and document its many readers ask (the owner's addresses,
     the AI pick, trusted organisations, SOUL.md for the owner's name) is read once for the whole read (store.held_settings)."""
-    with store.held_settings(): return _task_detail(task_id, rev)
+    with store.held_settings(): return _task_detail(task_id, rev, opened)
 
-def _task_detail(task_id: int, rev: str = ''):
+def _task_detail(task_id: int, rev: str = '', opened: bool = False):
     d = store.task_detail(task_id)
     if not d: raise HTTPException(404, 'task not found')
     # ONE CARD AT A TIME (cardqueue): what waits behind the card that stands is not the page's to draw yet
@@ -2239,6 +2239,9 @@ def _task_detail(task_id: int, rev: str = ''):
     tr = store.last_transcript(task_id)
     rs = _resumable(task_id)[0]
     from . import assistant, concierge, general, origin, workflows
+    # ...A TASK PAGE OPENED (`opened`: its page's first read of it - never a prefetch, a rail card or a poll) starts the judgement its chat's
+    # next turn will read (general.warm): made while the owner reads and types, the first turn's prompt no longer waits seconds on it
+    if opened: general.warm(store, task_id, d.get('task'))
     # ...and whether its channel can carry a reply, as /api/reviews says: without it a Teams draft offered Send, and
     # the press came back "not sent" instead of the card offering Copy & close from the start
     memo, sigs, here = {}, {}, {m['MessageId']: m for m in d.get('messages') or []}

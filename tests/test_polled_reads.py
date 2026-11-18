@@ -39,6 +39,76 @@ class PolledReadsAnswerUnchanged(unittest.TestCase):
             self.assertFalse(after.get('same'), path)
             self.assertNotEqual(after['rev'], before, path)
 
+    def test_only_a_task_page_opened_starts_what_its_chats_first_turn_will_read(self):
+        """The first turn's prompt waited seconds on the judgement of what is known about its task (context.recall). The task page's own first
+        read (`opened`) starts it (general.warm); a prefetch, a rail card's read and a poll - none of them an open - start nothing."""
+        from unittest import mock
+        from taskuary import context
+        tid, warmed = made(), []
+        with mock.patch.object(context, 'warm', lambda st, t: warmed.append(t)):
+            rev = c.get(f'/api/tasks/{tid}').json()['rev']                     # ...a prefetch under the pointer, a rail card
+            c.get(f'/api/tasks/{tid}', params={'rev': rev})                     # ...a poll
+            self.assertEqual(warmed, [], 'a read that is not an open asked for a judgement')
+            c.get(f'/api/tasks/{tid}', params={'opened': 1})
+            self.assertEqual(warmed, [tid])
+
+    def own(self):
+        "A task the owner opened himself - not a stranger's, whose agent is told nothing known (context.recall)."
+        tid = store.create_task({'Title': 'Plan the vendor review with Erin', 'Kind': 'general', 'Status': 'open', 'Summary': 'Erin Blake and the sheet'}, 'owner')
+        store._exec('UPDATE task SET OriginBase=? WHERE TaskId=?', ('owner', tid))
+        store.create_task({'Title': 'Vendor sheet for Paula, closed', 'Kind': 'general', 'Status': 'done'}, 'owner')
+        from taskuary import origin
+        self.assertNotEqual(origin.of_task(store, tid)[0], 'stranger')
+        return tid
+
+    def judged(self, tid, **params):
+        "One read, and whatever judgement it started, to its end: claimed as the read runs (context._judging), so nothing is left to time."
+        from taskuary import context
+        c.get(f'/api/tasks/{tid}', params=params)
+        for f in list(context._judging.values()): f.result(10)
+
+    def test_a_task_opened_with_no_ai_connected_writes_nothing(self):
+        from unittest import mock
+        from taskuary import capabilities, context, textsim
+        context._recalled.clear(); tid = self.own()
+        n = lambda: store._one('SELECT COUNT(*) n FROM brainroute')['n']
+        with mock.patch.object(textsim, 'embedder', lambda st: None), mock.patch.object(capabilities, 'has_ai', lambda st: False):
+            was = n()
+            for _ in range(3): self.judged(tid, opened=1)
+            self.assertEqual(n() - was, 0, 'a read recorded the route of a brain that was never going to answer')
+
+    def test_a_ranking_that_failed_is_not_asked_again_on_every_open(self):
+        from unittest import mock
+        from taskuary import capabilities, context, llm, textsim
+        context._recalled.clear(); tid = self.own()
+        asked = []
+        def failing(system, user, **k): asked.append(1); raise RuntimeError('the model is down')
+        with mock.patch.object(textsim, 'embedder', lambda st: None), mock.patch.object(capabilities, 'has_ai', lambda st: True), \
+             mock.patch.object(llm, 'build_llm', lambda *a, **k: failing):
+            for _ in range(3): self.judged(tid, opened=1)
+            self.assertEqual(len(asked), 1, f'a failing model was asked {len(asked)} times by 3 opens of one task')
+
+    def test_an_open_whose_ranking_failed_does_not_leave_the_turn_without_what_is_known(self):
+        """The failure an open met is held against the NEXT OPENS only: the model came back, the owner typed, and his turn's own recall asks
+        again - it never reads the open's failure as its answer (the turn's prompt would lead with nothing known and no model asked)."""
+        from unittest import mock
+        from taskuary import capabilities, context, llm, textsim
+        context._recalled.clear(); tid = self.own()
+        up, asked = [False], []
+        def flaky(system, user, **k):
+            asked.append(up[0])
+            if not up[0]: raise RuntimeError('rate limited')
+            return json.dumps({'picks': ['PAST1']})
+        with mock.patch.object(textsim, 'embedder', lambda st: None), mock.patch.object(capabilities, 'has_ai', lambda st: True), \
+             mock.patch.object(llm, 'build_llm', lambda *a, **k: flaky):
+            self.judged(tid, opened=1)
+            self.judged(tid, opened=1)
+            self.assertEqual(asked, [False], 'a second open asked the failing model again')
+            up[0] = True
+            got = context.recall(store, tid, context.brief_messages(store, tid))
+        self.assertEqual(asked, [False, True], 'the turn read the open\'s failure instead of asking')
+        self.assertTrue(got['past'], got)
+
     def test_a_sessions_idle_clock_is_not_a_change(self):
         got = {'session': {'sid': 's1', 'idle': 3, 'tail': ['a'], 'busy': True}, 'x': 1}
         a = server._revisioned(got)['rev']

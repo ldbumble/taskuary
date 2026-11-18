@@ -61,7 +61,7 @@ test("moving to another task aborts the read of the last one, and its queued re-
 test("the task page, the conversation read and the pile each hold one read in flight", () => {
   const page = read("TaskPage.jsx"), view = read("AssistantView.jsx");
   assert.match(page, /detailReads\.current \|\|= coalesce\(async \(id, signal\) =>/);
-  assert.match(page, /api\.get\(`\/api\/tasks\/\$\{id\}`, \{ signal, params: rev \? \{ rev \} : \{\} \}\)/);
+  assert.match(page, /api\.get\(`\/api\/tasks\/\$\{id\}`, \{ signal, params: rev \? \{ rev \} : opened \? \{ opened: 1 \} : \{\} \}\)/);
   assert.match(page, /return detailReads\.current\.run\(id, id\);/);
   assert.match(page, /useEffect\(\(\) => \{ detailReads\.current\.drop\(selected \|\| null\); \}, \[selected\]\);/);
   assert.equal((page.match(/api\.get\(`\/api\/tasks\/\$\{id\}`/g) || []).length, 1, "every task read goes through the one coalesced reader");

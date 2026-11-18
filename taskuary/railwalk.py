@@ -166,6 +166,14 @@ def _below(ln: list, place, skip=()) -> int | None:
     return _first((n for n, r in enumerate(ln) if funnel.order_key(r) > place and not any(_is(r, k) for k in skip)), None)
 
 
+def _down(ln: list, place, skip=()) -> int | None:
+    """Where Next goes: the row below - and at the bottom, the first row above that something landed on since the owner last saw it
+    (its +N). A reply never moves its row (rule 1), so a task the walk had passed when its sender wrote again was out of reach: Next from
+    the last task ended the walk with that mail waiting above (2026-11-18). Not a skip - it is the one row with news, like a row arrived."""
+    n = _below(ln, place, skip)
+    return n if n is not None else _first((i for i, r in enumerate(ln) if r.get('new_n') and not any(_is(r, k) for k in skip)), None)
+
+
 def _above(ln: list, place, inclusive: bool = False) -> int | None:
     hits = [n for n, r in enumerate(ln) if (funnel.order_key(r) <= place if inclusive else funnel.order_key(r) < place)]
     return hits[-1] if hits else None
@@ -375,12 +383,16 @@ def next(store, from_key: str = None, actor: str = 'owner', press: str = None, r
         # ...what was read has left the rail: taken off the rows in hand, never the whole rail rebuilt to see it gone
         if gone: rows = [r for r in rows if r['key'] not in set(gone)]
         ln = line(rows)
-        n = _below(ln, place[1], skip=members_of(frm))
+        n = _down(ln, place[1], skip=members_of(frm))
         if n is None:
             was_end = st.get('ended') and not frm
             st.update(ended=True, on=None, members=[], first=list(place[0]), last=list(place[1]), kind='none')
             _write(store, st)
             return _remember(press, _answer(store, st, rows, {**_end(store, st, rows, actor, record=not was_end), 'read': gone}))
+        if ln[n].get('new_n') and funnel.order_key(ln[n]) <= place[1]:     # ...news above: what landed on it is seen now, as an open clears it
+            try: funnel.settle(store, ln[n]['key'], 'surfaced', actor, note=ln[n].get('sig'), read=True)
+            except Exception as e: logger.debug(f'railwalk: the +N on {ln[n]["key"]} was not cleared - {e}')
+            ln[n] = {**ln[n], 'new_n': 0}; rows = [ln[n] if r['key'] == ln[n]['key'] else r for r in rows]   # ...and so in the line held
         item = as_item(store, _batch(store, ln, n, True))
         _put(st, item, rows)
         _write(store, st)
@@ -571,6 +583,6 @@ def peek(store, actor: str = 'owner') -> dict:
         walk, ln = _walk(store, st, rows), line(rows)
         if st.get('on') or st.get('ended'):
             last = _tuple(st.get('last'))
-            n = (0 if ln else None) if last is None else _below(ln, last, skip=st.get('members') or ())
+            n = (0 if ln else None) if last is None else _down(ln, last, skip=st.get('members') or ())
         else: n = 0 if ln else None
         return {**walk, 'below': as_key(store, ln, n) if n is not None else None}

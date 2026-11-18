@@ -238,6 +238,30 @@ def test_next_says_what_it_read(world):
 
 
 
+def test_next_at_the_bottom_goes_to_the_row_above_its_sender_wrote_again_on(world):
+    """The walk passed T1; its sender wrote again (a +N on the row - a reply never moves it); the owner opened a row far below and pressed
+    Next down to the bottom. The walk ended with that mail waiting above it (2026-11-18): Next at the bottom goes to the row with news,
+    once - seen there, the bottom is the end again. Rows above with nothing new stay where they are (W36)."""
+    from taskuary.testing import Factory
+    s, src = world
+    w = Walk(s, src)
+    w.do('open T1'); w.do('next')
+    f = Factory(s); f.actor = 'triage'
+    mid = f.message(task_id=src['T1']['tid'], subject='Re: Northwind ledger close - the June variance', from_name='Gail Moreno',
+                    from_email='gail@northwind.example', sent_at=walkworld._stamp(walkworld.datetime.now()), body='Any update on this?',
+                    conversation_id='walkworld:T1')
+    f.route(mid, src['T1']['tid'], 'attach', 'a follow-up')
+    walkworld.reconcile(s)
+    assert next(r for r in walkworld.rows(s) if walkworld.matches(r, src['T1'])).get('new_n'), 'the reply is not a +N on T1'
+    w.do('open R3')
+    for _ in range(20):
+        out = w.do('next')
+        if out.get('item') is None or out['item'].get('tid') == src['T1']['tid']: break
+    assert (out.get('item') or {}).get('tid') == src['T1']['tid'], f'Next at the bottom ended with the new mail on T1 waiting above: {out.get("item")}'
+    assert w.do('next-to-end').get('item') is None, 'past the news, the bottom is the end'
+
+
+
 def test_next_on_a_batch_reads_it_after_the_other_surface_moved_the_walk(world):
     """The desk and the phone share one walk (Q5). The desk has an FYI batch on its table; the phone opens a task, so the stored walk is
     on that task; then the desk's Next names its batch. The batch was not the walk's held row and no rail row carries a batch's key, so its

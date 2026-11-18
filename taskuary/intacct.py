@@ -121,6 +121,20 @@ def _envelope(cfg, sid, controlid='taskuary', unique=False):
     return root, _el(_el(op, 'content'), 'function', controlid='q')
 
 
+def _send(cfg, fill, controlid='taskuary', unique=False):
+    """ONE call on the session: `fill` writes the function, and the checked answer comes back. A session Sage no longer holds (its own
+    timeout, a sign-in elsewhere - well inside SESSION_TTL) fails the operation's AUTHENTICATION: that one is replaced once and the call
+    made again, under the same controlid, so a write it never took is not refused as a repeat and one it took is not booked twice."""
+    for fresh in (False, True):
+        sid, end = login(cfg, force=fresh)
+        root, fn = _envelope(cfg, sid, controlid, unique)
+        fill(fn)
+        res = _post(end, root)
+        if not fresh and any(a.findtext('status') == 'failure' for a in res.iter('authentication')): continue
+        _check(res)
+        return res
+
+
 def _filter_xml(parent, filters):
     """filters = [[FIELD, op, value], ...], ANDed. One condition needs no <and> wrapper and
     Intacct rejects the empty one, so the single case is spelled separately."""
@@ -134,7 +148,9 @@ def _filter_xml(parent, filters):
         cond = _el(tgt, name)
         _el(cond, 'field', field)
         if name in ('in', 'notin'):
-            for v in (val if isinstance(val, (list, tuple)) else [val]): _el(cond, 'value', v)
+            # ...a list in words or JSON is that list: "V1, V2" sent as one value matched nothing, an empty answer read as "none"
+            vals = val if isinstance(val, (list, tuple)) else _listed(val, 'values') if isinstance(val, str) and (',' in val or val.strip().startswith('[')) else [val]
+            for v in vals: _el(cond, 'value', v)
         elif name not in ('isnull', 'isnotnull'):
             _el(cond, 'value', val)
 
@@ -155,33 +171,56 @@ def _listed(x, what: str) -> list:
         try: return list(json.loads(s))
         except ValueError: pass
     if what == 'filters': raise IntacctError(f'{FILTER_SHAPE} - not {s[:80]!r}. Nothing was sent.')
+    if what == 'values': return [v.strip() for v in s.split(',') if v.strip()]     # a value may hold a space ("Northwind West"), never a comma
     return [f for f in re.split(r'[\s,]+', s) if f]
+
+def _filters(x) -> list:
+    "The conditions: one given without its outer list ([FIELD, op, value]) is that one condition, never read an item at a time."
+    got = _listed(x, 'filters')
+    return [got] if got and isinstance(got[0], str) else got
+
+# ...an order the same way: [[FIELD, dir], ...], "FIELD desc, OTHER", a flat [FIELD, dir, ...] or JSON of any of them. Its grammar is
+# FIELD followed by an optional asc/desc, so the words are walked as that, and a field alone is ascending
+_DIRS = {'asc': 'ascending', 'ascending': 'ascending', 'desc': 'descending', 'descending': 'descending'}
+def _order(x) -> list:
+    out = []
+    for w in (w for i in _listed(x, 'order') for w in re.split(r'[\s,]+', ' '.join(map(str, i)) if isinstance(i, (list, tuple)) else str(i)) if w):
+        if w.lower() in _DIRS and out: out[-1] = (out[-1][0], _DIRS[w.lower()])
+        else: out.append((w, 'ascending'))
+    return out
+
+RECORD_SHAPE = 'the record is an object of FIELD: value, e.g. {"VENDORID": "V100", "NAME": "Payworth"}'
+def _record(x):
+    "A write's record as given: an object, or JSON text of one. Anything else says the shape and nothing is sent."
+    if not x or isinstance(x, dict): return x
+    if isinstance(x, str) and x.strip().startswith('{'):
+        try:
+            if isinstance(got := json.loads(x), dict): return got
+        except ValueError: pass
+    raise IntacctError(f'{RECORD_SHAPE} - not {str(x)[:80]!r}. Nothing was sent.')
 
 
 def query(cfg, obj, fields=None, filters=None, limit=PAGE, order=None):
     """readByQuery, paged until `limit` is reached. Fields default to every one the object has
     (fields_of - GLBATCH refuses `*`), because a report asking for 'the vendor list' should not have
     to know that vendors carry forty columns - and asking Intacct is cheaper than being wrong about it."""
-    fields, filters = _listed(fields, 'fields'), _listed(filters, 'filters')
-    sid, end = login(cfg)
+    fields, filters, order = _listed(fields, 'fields'), _filters(filters), _order(order)
     fields = fields or [f['ID'] for f in fields_of(cfg, obj) if f.get('ID')] or ['*']
     out, offset = [], 0
     while len(out) < limit:
-        root, fn = _envelope(cfg, sid)
-        q = _el(fn, 'query')
-        _el(q, 'object', obj)
-        sel = _el(q, 'select')
-        for f in fields: _el(sel, 'field', f)
-        _filter_xml(q, filters)
-        if order:
-            o = _el(q, 'orderby')
-            for f, d in order: _el(_el(o, 'descending' if str(d).lower().startswith('desc') else 'ascending'), 'field', f)
         page = min(PAGE, limit - len(out))
-        _el(q, 'pagesize', page); _el(q, 'offset', offset)
-        opts = _el(q, 'options'); _el(opts, 'showprivate', 'true'); _el(opts, 'returnformat', 'xml')
-
-        res = _post(end, root)
-        _check(res)
+        def fill(fn):
+            q = _el(fn, 'query')
+            _el(q, 'object', obj)
+            sel = _el(q, 'select')
+            for f in fields: _el(sel, 'field', f)
+            _filter_xml(q, filters)
+            if order:
+                o = _el(q, 'orderby')
+                for f, d in order: _el(_el(o, d), 'field', f)
+            _el(q, 'pagesize', page); _el(q, 'offset', offset)
+            opts = _el(q, 'options'); _el(opts, 'showprivate', 'true'); _el(opts, 'returnformat', 'xml')
+        res = _send(cfg, fill)
         batch = _rows(res)
         out.extend(batch)
         data = next(res.iter('data'), None)
@@ -196,11 +235,7 @@ def query(cfg, obj, fields=None, filters=None, limit=PAGE, order=None):
 def fields_of(cfg, obj):
     """What this company's copy of the object actually has, custom fields included. This is the
     call that lets someone write a report in English and get one built against the real schema."""
-    sid, end = login(cfg)
-    root, fn = _envelope(cfg, sid)
-    _el(_el(fn, 'lookup'), 'object', obj)
-    res = _post(end, root)
-    _check(res)
+    res = _send(cfg, lambda fn: _el(_el(fn, 'lookup'), 'object', obj))
     return [{'ID': f.findtext('ID') or '', 'LABEL': f.findtext('LABEL') or '',
              'DATATYPE': f.findtext('DATATYPE') or ''}
             for f in res.iter('Field')]
@@ -248,16 +283,13 @@ def create(cfg, obj, record):
     """Create ONE record of `obj` (APBILL, VENDOR, GLBATCH…) from a field dict. Returns the key
     Intacct assigned. Raises IntacctError on the usual 200-with-failure."""
     if not str(obj or '').strip(): raise IntacctError('no Intacct object to create')
+    record = _record(record)
     if not record: raise IntacctError(f'nothing to put in the new {obj} - give it fields')
-    sid, end = login(cfg)
     # the same record posted again is the same controlid, and uniqueid=true has the gateway refuse
     # it instead of booking a second bill (audit 2026-09-02)
     import hashlib
     key = 'tq-' + hashlib.sha1(json.dumps({'obj': obj, 'record': record}, sort_keys=True, default=str).encode()).hexdigest()[:24]
-    root, fn = _envelope(cfg, sid, key, unique=True)
-    _record_xml(_el(_el(fn, 'create'), obj), record)
-    res = _post(end, root)
-    _check(res)
+    res = _send(cfg, lambda fn: _record_xml(_el(_el(fn, 'create'), obj), record), key, unique=True)
     logger.info(f"intacct: created {obj} in company {cfg['company_id']}")
     return _written(res, obj, 'create')
 
@@ -267,14 +299,11 @@ def update(cfg, obj, record):
     or the object's own id field such as VENDORID) - without one the gateway would have to guess
     which row is meant, and a write that guesses is the one thing this must never do."""
     if not str(obj or '').strip(): raise IntacctError('no Intacct object to update')
+    record = _record(record)
     keys = [k for k in (record or {}) if k.upper() in ('RECORDNO', 'RECORDKEY', 'KEY', f'{obj.upper()}ID')]
     if not keys:
         raise IntacctError(f'an update to {obj} needs the record it is changing - include RECORDNO or {obj.upper()}ID')
-    sid, end = login(cfg)
-    root, fn = _envelope(cfg, sid)
-    _record_xml(_el(_el(fn, 'update'), obj), record)
-    res = _post(end, root)
-    _check(res)
+    res = _send(cfg, lambda fn: _record_xml(_el(_el(fn, 'update'), obj), record))
     logger.info(f"intacct: updated {obj} {record.get(keys[0])} in company {cfg['company_id']}")
     return _written(res, obj, 'update')
 

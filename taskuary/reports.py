@@ -39,7 +39,10 @@ def row_limit(cfg):
     the headline has to say which one it was, or "capped at 200" points the owner at a
     setting they never made and cannot find."""
     n = cfg.get('max_rows')
-    return (max(1, int(n)), True) if n else (MAX_ROWS, False)
+    if not n: return MAX_ROWS, False
+    # ...as an agent's call sends it, "50" or "50.0"; "all" was Python's "invalid literal for int()"
+    try: return max(1, int(float(str(n).strip()))), True
+    except (TypeError, ValueError, OverflowError): raise ValueError(f'max_rows is a number of rows - not {n!r}') from None
 
 
 # A DASHBOARD keeps the rows, not a summary of them: the 20K body cap is the AI pass's budget, and cut at it a chart drew a
@@ -120,11 +123,22 @@ CONNECTION_KEYS = frozenset({'base_url', 'site', 'account', 'gateway', 'server',
                              # ...and where a keyed read's sign-in goes (apireads.json, nosql.py, 2026-11-08): a tool call naming its own token URL,
                              # tenant or connection string would carry the card's secret to an address the owner never typed
                              'conn_str', 'uri', 'user', 'token_url', 'kid', 'subdomain', 'environment', 'access_token', 'consumer_key',
-                             'consumer_secret', 'token_id', 'tenant', 'org_uuid', 'cert_file', 'key_file'})
+                             'consumer_secret', 'token_id', 'tenant', 'org_uuid', 'cert_file', 'key_file',
+                             # ...and WHAT PROGRAM a card starts (mcp.py's stdio server): an agent's `cmd`/`env` replaced the owner's
+                             # server with a command of its choosing, spawned to list its tools before any gate (2026-11-18)
+                             'cmd', 'env'})
+# ...save where one of those names is the executor's WHAT: a page reader's `url` is the page it reads (its key goes to its own provider,
+# never there) - stripped, run_system {"type": "reader", "url": ...} answered "no url to read" every time
+ASKED = {'reader': {'url'}, 'firecrawl': {'url'}, 'scrapingbee': {'url'}}
+# ...and the other way: where a name that is a WHAT elsewhere (a Redis or Robinhood call's `args`) is the card's own place - an MCP stdio
+# server's `args` are its command line; the tool's own arguments are `tool_args`
+PLACED = {'mcp': {'args'}}
 def query_only(body: dict) -> dict:
     """The body minus every connection field - what an agent may say about a tool call. `_write` goes too: whether a
     query may commit is the card's Authority (tools/run) or the owner's approval, never the caller's say-so."""
-    return {k: v for k, v in (body or {}).items() if k not in CONNECTION_KEYS and k != '_write'}
+    t = str((body or {}).get('type') or '')
+    keep, drop = ASKED.get(t, set()), PLACED.get(t, set())
+    return {k: v for k, v in (body or {}).items() if (k not in CONNECTION_KEYS or k in keep) and k not in drop and k != '_write'}
 
 
 def run_sqlite(cfg):
@@ -1140,6 +1154,20 @@ def _connector(store, typ, connector_id=None, with_secret=False):
     c = store.get_connector(int(connector_id), with_secret=with_secret) if connector_id else \
         store.get_connector_by_type(typ, with_secret=with_secret)
     return c if c and c.get('Type') == typ else None
+
+
+def tool_card(store, t: str, connector_id=None):
+    """THE card an agent's call to tool `t` runs on: the one it names (None when that number is no card), else the one of its type that
+    is on and a tool - never the first row, which read one company's books as another's, or refused "not an agent tool" beside the
+    card that is one. With none such, the first of the type, for the refusal that says why; ValueError naming them when several are."""
+    from .store import roles_of
+    if connector_id not in (None, ''): return store.get_connector(int(connector_id))
+    rows = store.connectors_by_type(card_of(t))
+    live = [c for c in rows if c.get('Active') and 'tool' in roles_of(c)]
+    if len(live) > 1:
+        raise ValueError(f'{len(live)} {card_of(t)} connections are agent tools - say which with connector_id: '
+                         + ', '.join(f"{c.get('Name') or c['Type']} ({c['ConnectorId']})" for c in live))
+    return live[0] if live else (rows[0] if rows else None)
 
 
 def mssql_connection(store, connector_id=None) -> dict:

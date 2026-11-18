@@ -71,6 +71,10 @@ _SHORT = ('-d', '-F', '-T')
 _DATA = ('--data', '--data-raw', '--data-binary', '--data-urlencode', '--json', '--form', '--upload-file', '-body', '-infile',
          '--post-data', '--post-file', '--body-data', '--body-file')
 _LOCAL = re.compile(r'^https?://(localhost|127\.\d+\.\d+\.\d+|\[::1\])(:\d+)?(/|$)', re.I)
+# ...and Taskuary's own address as it hands it to a session (terminal.session_env), the way docsync.agent_systems spells the call to the
+# owner's systems: held as "send data to a web address", a read of his own books was an Approve card. Never where the command sets it
+_OWN = re.compile(r'^\$(TASKUARY_URL|\{TASKUARY_URL\})(/|$)')
+_SETS_OWN = re.compile(r'\bTASKUARY_URL\s*=')
 _PREFIX = ('&', 'npx', 'command', 'call', 'exec', 'sudo', 'time', 'nohup')
 
 
@@ -94,11 +98,12 @@ def _words(argv: list) -> tuple:
     return tool, out
 
 
-def _http_write(argv: list) -> str:
-    "'' unless this HTTP client writes to a host off this machine - then what it does, in words. Taskuary's own API answers its own guard."
+def _http_write(argv: list, own: bool = False) -> str:
+    """'' unless this HTTP client writes to a host off this machine - then what it does, in words. Taskuary's own API answers its own guard.
+    `own`: $TASKUARY_URL is Taskuary's (nothing in the command set it)."""
     a = [str(t) for t in argv[1:]]
-    urls = [t for t in a if re.match(r'^https?://', t, re.I)]
-    if urls and all(_LOCAL.match(u) for u in urls): return ''
+    urls = [t for t in a if re.match(r'^https?://', t, re.I) or (own and _OWN.match(t))]
+    if urls and all(_LOCAL.match(u) or (own and _OWN.match(u)) for u in urls): return ''
     meth = next((a[i + 1] for i, t in enumerate(a[:-1]) if t.lower() in ('-x', '--request', '-method')), '')
     meth = meth or next((t[2:] for t in a if t.startswith('-X') and len(t) > 2), '')
     data = any(t in _SHORT or t.lower().split('=', 1)[0] in _DATA or (t.startswith('-d') and not t.startswith('--') and len(t) > 2) for t in a)
@@ -266,11 +271,12 @@ def acts(cmd: str, cwd: str = '') -> list:
     return _outward(cmd) + deletes(cmd, cwd)
 
 
-def _outward(cmd: str) -> list:
+def _outward(cmd: str, own: bool = True) -> list:
     """Every step in a shell command that goes out: [{'tool', 'what', 'why', 'command'}]. A command that cannot be read and names one of
     these tools is one step - held, never let through for being hard to read."""
     raw = shell_text(str(cmd or ''))
     low = raw.lower()
+    own = own and not _SETS_OWN.search(raw)
     if not any(w in low for w in ('git', 'gh', 'glab', 'publish', 'push', 'upload', 'mail', 'mutt', 'msmtp', 'http', 'curl', 'wget', 'xh', 'iwr', 'irm',
                                   'invoke-')): return []      # the cheap test first
     segs = _segments(raw)
@@ -283,7 +289,7 @@ def _outward(cmd: str) -> list:
         tool, w = _words(argv)
         if tool in ('bash', 'sh', 'powershell', 'pwsh', 'cmd'):                 # `bash -c "git push"`: the string is a command of its own
             for t in argv[1:]:
-                if ' ' in t.strip(): out += _outward(t)
+                if ' ' in t.strip(): out += _outward(t, own)
             continue
         what = (GIT.get(w[0]) if tool == 'git' and w else
                 GH.get(tuple(w[:2])) if tool == 'gh' else GLAB.get(tuple(w[:2])) if tool == 'glab' else
@@ -291,7 +297,7 @@ def _outward(cmd: str) -> list:
                 or (tool == 'docker' and w[:1] == ['push']) else MAIL.get(tool))
         if not what and tool in ('gh', 'glab') and w[:1] == ['api'] and _api_writes(argv): what = 'change something on the code host through its API'
         if not what and tool == 'git' and w[:1] == ['push']: what = GIT['push']
-        if not what and tool in HTTP: what = _http_write(argv)
+        if not what and tool in HTTP: what = _http_write(argv, own)
         if what: out.append({'tool': tool, 'what': what, 'why': OUT, 'command': ' '.join(argv)[:400]})
     return out
 

@@ -6,7 +6,7 @@ gets posted. So the card carries five verbs, split the way the scope ladder want
 
   quickbooks           read   {"query": "SELECT * FROM Bill WHERE TxnDate > '2026-08-01'"}  - QBO's own SQL
   quickbooks_vendors   read   {"name": "amex"}                                              - vendors, by name
-  quickbooks_accounts  read   {"type": "Expense"}                                           - the chart of accounts
+  quickbooks_accounts  read   {"account_type": "Expense"}                                    - the chart of accounts
   quickbooks_bill      WRITE  {"vendor", "amount", "account", "date", "memo", "doc_number"}  - an AP bill
   quickbooks_expense   WRITE  {"vendor", "amount", "account", "paid_from", "date", "memo"}   - a card/bank purchase
 
@@ -259,11 +259,12 @@ def run_quickbooks_vendors(cfg):
 
 
 def run_quickbooks_accounts(cfg):
-    """{"type": "Expense"} - the chart of accounts, optionally one AccountType (Expense, Bank,
-    Credit Card, Accounts Payable...)."""
+    """{"account_type": "Expense"} - the chart of accounts, optionally one AccountType (Expense, Bank,
+    Credit Card, Accounts Payable...). Not `type`: that names this tool on every run, and read as the kind it asked for accounts of
+    type "quickbooks_accounts" - none, every time."""
     from .reports import rows_out, row_limit
     lim, mine = row_limit(cfg)
-    return rows_out(accounts(cfg, cfg.get('type'), lim + 1), lim, unit='accounts', mine=mine)
+    return rows_out(accounts(cfg, cfg.get('account_type'), lim + 1), lim, unit='accounts', mine=mine)
 
 
 def run_quickbooks_bill(cfg):

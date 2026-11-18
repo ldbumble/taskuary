@@ -75,6 +75,20 @@ class ReadsAndWrites(unittest.TestCase):
         self.assertIn('MAXRESULTS', req.call_args.kwargs['params']['query'])
         self.assertIn('sandbox-quickbooks', req.call_args.args[1])
 
+    def test_the_chart_of_accounts_is_not_filtered_by_its_own_tool_name(self):
+        """`type` names the tool on every run (tools/run, a report): run_quickbooks_accounts read it as the AccountType too, so every call
+        asked for accounts of type 'quickbooks_accounts' and came back empty. The kind is `account_type`; none is every active account."""
+        from taskuary.reports import REGISTRY
+        seen = []
+        def fake(method, url, **kw):
+            seen.append(kw['params']['query'])
+            return _resp(200, {'QueryResponse': {'Account': [{'Id': '80', 'Name': 'Office Supplies', 'AccountType': 'Expense'}]}})
+        with mock.patch.object(qb.requests, 'request', side_effect=fake):
+            head, _ = REGISTRY['quickbooks_accounts']({**self.cfg, 'type': 'quickbooks_accounts'})
+            REGISTRY['quickbooks_accounts']({**self.cfg, 'type': 'quickbooks_accounts', 'account_type': 'Expense'})
+        self.assertIn('WHERE Active = true', seen[0]); self.assertNotIn('quickbooks_accounts', seen[0])
+        self.assertIn("AccountType = 'Expense'", seen[1])
+
     def test_a_bill_posts_to_a_vendor_that_exists_and_never_invents_one(self):
         def fake(method, url, **kw):
             q = (kw.get('params') or {}).get('query', '')
@@ -122,9 +136,10 @@ class TheLadder(unittest.TestCase):
             r = c.post('/api/tools/run', json={'type': 'quickbooks_vendors', 'name': 'ac'}, headers=AGENT)
         self.assertEqual(r.status_code, 200, r.text)
         self.assertIn('Acme', r.text)
+        # ...and a bill past the card's Authority waits for the owner's press on a task: with none named, the refusal says how to name it
         r = c.post('/api/tools/run', json={'type': 'quickbooks_bill', 'vendor': 'Acme', 'amount': 5, 'account': 'x'}, headers=AGENT)
-        self.assertEqual(r.status_code, 403, r.text)
-        self.assertIn('write', r.text)
+        self.assertEqual(r.status_code, 422, r.text)
+        self.assertIn('write', r.text); self.assertIn('task_id', r.text)
 
     def test_the_status_route_hands_the_card_its_redirect_uri(self):
         s = server.store; card = _card(s)

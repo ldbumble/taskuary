@@ -8809,8 +8809,14 @@ def tool_run(body: dict, request: Request):
     from .reports import card_of, query_only
     from . import scopes
     connector_id = (body or {}).get('connector_id')
-    try: conn = store.get_connector(int(connector_id)) if connector_id else store.get_connector_by_type(card_of(t))
+    from .reports import tool_card
+    try: int(connector_id or 0)
     except (TypeError, ValueError): raise HTTPException(422, 'connector_id must be a number')
+    try: conn = tool_card(store, t, connector_id)
+    except ValueError as e: raise HTTPException(422, str(e))
+    # ...a number that is no card is said as that: "no connection card an owner turned on" was untrue of a card standing on
+    if connector_id and not conn:
+        raise HTTPException(404, f'there is no connection {connector_id} - YOUR SYSTEMS (list_systems) names each one with its connector_id')
     if conn and conn.get('Type') != card_of(t):
         raise HTTPException(422, f'connector {connector_id} is {conn.get("Type")}, not {card_of(t)}')
     if not conn:
@@ -8831,6 +8837,11 @@ def tool_run(body: dict, request: Request):
     if guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
         tool = _mcp_tool(conn, body) if t == 'mcp' else None
         if why := scopes.reaches(t, body, tool): return _agent_proposes(request, t, conn, body, why)
+        # ...and a change above the card's Authority is the same proposal (docsync.agent_systems tells the agent so): the 403 below said
+        # "raise it under the card", a step only the owner can take, and lit nothing for them to press
+        if not scopes.allows(conn, t):
+            return _agent_proposes(request, t, conn, body, f"needs {scopes.needs(t)} Authority on {conn.get('Name') or t}, which is set to "
+                                                           f"{scopes.scope_of(conn)}")
     try:
         scopes.require(conn, t)
     except PermissionError as e:
@@ -8849,8 +8860,10 @@ def tool_run(body: dict, request: Request):
             tool_cfg['author'] = actor
         head, out = REGISTRY[t](resolve_cfg(store, tool_cfg))
     except Exception as e:
+        # ...in the words every Taskuary tool's failure takes (agenttools.failed): a field it needs and was not given is named, never "'query'"
+        from .agenttools import failed
         store.audit('tool', (conn or {}).get('ConnectorId', 0), 'run_failed', actor, detail={'type': t, 'error': str(e)[:300]})
-        return {'ok': False, 'error': str(e)[:1000]}
+        return {'ok': False, 'error': failed(t, e)[:1000]}
     store.audit('tool', (conn or {}).get('ConnectorId', 0), 'run', actor, detail={'type': t, 'headline': str(head)[:200]})
     return {'ok': True, 'headline': head, 'output': (out or '')[:20000]}
 

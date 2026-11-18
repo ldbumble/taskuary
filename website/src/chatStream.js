@@ -228,19 +228,27 @@ export const waitingChips = (pending, came = "") => {
 // agent to start" is the app's mechanics) - a `later` turn starting is the work going on, and reads as the turn it becomes: bare dots stood
 // over it, then words (the walks, 2026-11-17). One whose CLI is opening is not `later` (ConvTurn), so a later line never steps back
 // `doing`: the answer it is writing, while that is the newest thing it did (conversation `doing`)
-export const workingLine = (parts, label, { starting = false, later = false, ask = "", doing = "" } = {}) => {
+// ...AND NEVER THE WORDS OF A ROW IN SIGHT (the status walk, 2026-11-18: a short thought's row and the line under it read "The budget note comes
+// first, then the archive" at one beat; with the fold opened, "Reading budget.md" stood as a row and again on the line under it at every tool
+// beat). One structural test, for a thought and a step alike: is the row that holds those words drawn open right now - a turn's rows stand open
+// while it has no work to fold (TurnWorkView), and inside a fold he opened or the dock's trail (`open`); shut in the fold, the line names it
+export const workingLine = (parts, label, { starting = false, later = false, ask = "", doing = "", open = false } = {}) => {
   if (ask) return ask;
-  const steps = (parts || []).filter((p) => p.type === "work").flatMap((p) => p.steps || []), last = steps.at(-1);
-  // ...an edit being made is the newest thing at work, in its own words (editRow `running`)
-  const edit = (parts || []).findLast((p) => p.type === "work" || p.type === "edit");
-  if (edit?.type === "edit" && edit.running) return edit.summary;
-  if (last?.status === "running") return String(label(last) || "").split(/\r?\n/)[0].trim() || "Working…";
+  // the newest thing the turn did: its last step, or an edit made after it (an edit is a part of its own, editRow)
+  const newest = (parts || []).flatMap((p) => (p.type === "work" ? (p.steps || []).map((st) => ({ st, row: String(label(st) || "") }))
+    : p.type === "edit" ? [{ edit: p, row: p.summary }] : [])).at(-1);
+  const inSight = open || workCount(parts) === 0;
+  const say = (line, held) => (line && !(inSight && flat(newest.row).includes(flat(line))) ? line : held);
+  // ...an edit being made, or a step at work, is the newest thing at work, in its own words (editRow `running`, stepLabel)
+  if (newest?.edit?.running) return say(newest.edit.summary, "Working…");
+  if (newest?.st?.status === "running") return say(newest.row.split(/\r?\n/)[0].trim(), "Working…");
   if (doing && thinkingLine(doing)) return `Writing: ${thinkingLine(doing)}`;
-  if (!last) return starting && !later ? "Waiting for the agent to start" : "Thinking…";
+  if (!newest) return starting && !later ? "Waiting for the agent to start" : "Thinking…";
   // ...and WHAT IT IS THINKING, where its newest step is a thought (the owner, 2026-11-16: "Thinking..." for three minutes with nothing else):
-  // that thought's latest words, as it writes them (agents.ACPSteps._thinking) - never a bare word for minutes
-  return last.kind === "thought" ? thinkingLine(last.detail || last.summary) || "Thinking…" : "Thinking…";
+  // that thought's latest words, as it writes them (agents.ACPSteps._thinking) - never a bare word for minutes. An edit made after it is newer
+  return newest.st?.kind === "thought" ? say(thinkingLine(newest.st.detail || newest.st.summary), "Thinking…") : "Thinking…";
 };
+const flat = (t) => String(t || "").replace(/\s+/g, " ").replace(/[.…]+$/, "").trim();
 // a thought as one short line: its last sentence, cut at a word
 export const thinkingLine = (text) => {
   const t = String(text || "").replace(/\s+/g, " ").trim().replace(/[.…]+$/, "");

@@ -230,11 +230,21 @@ const EditRow = ({ p }) => { const chat = React.useContext(ChatCtx); return (
       : <div className="tq-dv-empty">Its log keeps no diff for this one.</div>}</div>
   </details>); };
 // ...a fold the owner opened stays open across the live turn's new ids (OPEN_FOLDS)
-const Fold = ({ k, label, quiet = false, children }) => {
+// ...and what reads it beside the fold (the working line, ConvTurn) hears it open and shut as the fold does
+const FOLD_HEARD = new Set();
+const useFoldOpen = (k) => {
   const [open, setOpen] = useState(() => OPEN_FOLDS.has(k));
-  useEffect(() => { setOpen(OPEN_FOLDS.has(k)); }, [k]);
-  const toggle = (e) => { const o = e.currentTarget.open; if (o) OPEN_FOLDS.add(k); else OPEN_FOLDS.delete(k); setOpen(o); };
-  return <details className="tq-aui-working-fold" data-tq-steps-fold={quiet ? "summary" : ""} open={open} onToggle={toggle}><summary>{label}</summary>{children}</details>;
+  useEffect(() => { const heard = () => setOpen(OPEN_FOLDS.has(k)); heard(); FOLD_HEARD.add(heard); return () => { FOLD_HEARD.delete(heard); }; }, [k]);
+  return open;
+};
+const Fold = ({ k, label, quiet = false, children }) => {
+  const open = useFoldOpen(k);
+  // ...FROM HIS CLICK, in the render it causes (the judges' recording, 2026-11-18): heard from the native toggle, which fires a task later,
+  // the working line on ACP followed the opened fold 75-90 ms late - "Editing budget.py" as a row and on the line under it. The click sets it;
+  // the toggle only agrees (a fold opened another way)
+  const set = (o) => { if (o === OPEN_FOLDS.has(k)) return; if (o) OPEN_FOLDS.add(k); else OPEN_FOLDS.delete(k); FOLD_HEARD.forEach((f) => f()); };
+  return <details className="tq-aui-working-fold" data-tq-steps-fold={quiet ? "summary" : ""} open={open} onToggle={(e) => set(e.currentTarget.open)}>
+    <summary onClick={(e) => { e.preventDefault(); set(!OPEN_FOLDS.has(k)); }}>{label}</summary>{children}</details>;
 };
 // ONE RULE FOR EVERY FOLD OF A TURN'S WORK: it is drawn round steps of work. One with none in it - only Taskuary's own notes, as a turn the app
 // started holds before its first step - read "Along the way ▸" over nothing he could see (the overnight walk, 2026-11-11): its notes stand open
@@ -424,7 +434,9 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
   // step is the compaction, not yet over
   const compacting = live && ((x) => x?.k === "compact" && !!x.status && !["completed", "failed", "cancelled"].includes(x.status))((t.steps || []).at(-1));
   // ...`opening`: its agent's process really is starting (conversation.items) - said on any turn then, and only then; `doing`: the answer as it is written
-  const doing = live ? workingLine(parts, stepLabel, { starting: t.state === "starting" || !!t.opening, later: later && !t.opening, ask: React.useContext(WaitOnCtx), doing: t.doing || "" }) : "";
+  // ...naming what no row in sight says: its rows stand open inside the fold he opened, and on the dock's trail (no WorkCtx) always
+  const folded = useFoldOpen(`${foldKey(t.id)}:all`), work = React.useContext(WorkCtx), open = folded || !work;
+  const doing = live ? workingLine(parts, stepLabel, { starting: t.state === "starting" || !!t.opening, later: later && !t.opening, ask: React.useContext(WaitOnCtx), doing: t.doing || "", open }) : "";
   if (quiet) return null;
   return <div className={`tq-aui-message tq-aui-agent${words && !live ? " tq-copy-host" : ""}${more ? " tq-aui-agent-more" : ""}`} data-tq-item={t.id} data-tq-chat-line={key} data-tq-turn={t.state}>
     {!!words && !live && <CopyCorner text={words} label="Copy this answer" />}

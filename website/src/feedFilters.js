@@ -24,3 +24,11 @@ export const availablePickerChannels = (category, discovered = []) => {
   return (scoped || available).filter((channel) => available.includes(channel));
 };
 
+
+// THE FILTER'S PANEL (2026-11-18 walk): a second press on "All items" opened it again over itself, and a move to another page left it
+// standing over the rail - only Refresh took it down. A press on the button toggles it; a page change closes it. `at`: the open
+// panel's anchor, or null; `on`: the page it was opened on.
+export const filterPanel = (st, ev) =>
+  ev.type === "press" ? (st.at ? { at: null, on: ev.page } : { at: ev.target, on: ev.page })
+    : ev.type === "page" ? (st.at && ev.page !== st.on ? { at: null, on: ev.page } : st)
+      : { at: null, on: st.on };

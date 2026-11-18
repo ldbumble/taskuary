@@ -27,3 +27,16 @@ test("the detailed picker offers only channels that are actually available", () 
   assert.deepEqual(availablePickerChannels("", available), available);
 });
 
+
+test("the rail's filter panel closes on a second press and when the page changes (2026-11-18 walk)", async () => {
+  const { filterPanel } = await import("../src/feedFilters.js");
+  const btn = { id: "filter" };
+  let st = filterPanel({ at: null, on: "" }, { type: "press", target: btn, page: "" });
+  assert.equal(st.at, btn, "the first press opens it");
+  assert.equal(filterPanel(st, { type: "page", page: "" }), st, "the same page keeps it open");
+  assert.equal(filterPanel(st, { type: "press", target: btn, page: "" }).at, null, "a second press on All items closes it");
+  assert.equal(filterPanel(st, { type: "page", page: "reports" }).at, null, "going to Reports closes it");
+  assert.equal(filterPanel(st, { type: "close" }).at, null, "a click outside or Esc closes it");
+  const src = (await import("node:fs")).readFileSync(new URL("../src/FeedView.jsx", import.meta.url), "utf8");
+  assert.match(src, /<FilterButton[^>]*page=\{navOn\}/, "the rail's filter is told which page is up");
+});

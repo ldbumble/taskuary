@@ -16,7 +16,7 @@ import { fadeBand } from "./timelineFade.js";
 import { syncFace, syncLine, syncPhaseLabel } from "./syncTiming.js";
 import { observeSync } from "./syncObserver.js";
 import { onWrote } from "./wrote.js";
-import { availablePickerChannels, channelsForCategory } from "./feedFilters.js";
+import { availablePickerChannels, channelsForCategory, filterPanel } from "./feedFilters.js";
 import { splitTimelineMeetings } from "./timelineMeetings.js";
 import { onLive } from "./live.js";
 import { feedHeaders, feedOk, takeFeed } from "./feedLoad.js";
@@ -82,9 +82,11 @@ export const filterLabel = (cat, pick, cats = CATEGORIES, labels = CHANNEL_LABEL
 // the sidebar buttons' marks, one per SIDE_NAV key
 const NAV_ICONS = { new: AddIcon, reports: BarChartIcon, connections: PowerOutlinedIcon, hub: TravelExploreIcon, settings: TuneIcon };
 
-function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChange }) {
-  const [el, setEl] = useState(null);
-  const close = () => { setEl(null); setSrcQ(""); };
+function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChange, page = "" }) {
+  const [panel, setPanel] = useState({ at: null, on: page });
+  const el = panel.at;
+  const close = () => { setPanel((st) => filterPanel(st, { type: "close" })); setSrcQ(""); };
+  useEffect(() => { setPanel((st) => filterPanel(st, { type: "page", page })); }, [page]);
   const narrowed = !!cat || !!pick;
   const q = srcQ.trim().toLowerCase();
   const label = filterLabel(cat, pick);
@@ -93,8 +95,8 @@ function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChan
       {/* THE ROW'S ONE CONTROL since the Timeline tab went (the owner, 2026-10-15: "replace it with the filter being a little
           larger"): full width, and it says on its face what the rail is narrowed to - it was an icon beside Work | Timeline
           that left that to its tooltip. It fills in when the rail is narrowed. */}
-      <Box component="button" type="button" onClick={(e) => setEl(e.currentTarget)}
-        data-tq-filter="true" aria-label={`Filter the rail - ${label}`}
+      <Box component="button" type="button" onClick={(e) => { setPanel((st) => filterPanel(st, { type: "press", target: e.currentTarget, page })); setSrcQ(""); }}
+        data-tq-filter="true" aria-expanded={!!el} aria-label={`Filter the rail - ${label}`}
         sx={{ flex: 1, minWidth: 0, height: 30, display: "flex", alignItems: "center", gap: 0.75, px: 1.25,
           borderRadius: "8px", border: `1px solid ${narrowed ? "var(--tq-border, #b9c3cb)" : BORDER}`, bgcolor: narrowed ? "var(--tq-inset, #e4e9ee)" : PANEL,
           cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 600, color: narrowed ? INK : DIM, textAlign: "left",
@@ -575,7 +577,7 @@ export default function FeedView({ onOpenTask, active = true, top = null, stage 
           {/* THE FILTER TAKES THE ROW. Work | Timeline sat here; with the Timeline gone (the owner, 2026-10-15) the filter
               is the row's one control and says on its face what the rail is narrowed to. */}
           <Box sx={{ display: setupMode ? "none" : "flex", alignItems: "center", minWidth: 0 }}>
-            <FilterButton cat={cat} pick={pickerChannels.length ? pick : ""} channels={pickerChannels}
+            <FilterButton cat={cat} pick={pickerChannels.length ? pick : ""} channels={pickerChannels} page={navOn}
               srcByChannel={srcByChannel} srcQ={srcQ} setSrcQ={setSrcQ}
               onChange={(nextCat, nextPick) => {
                 loadRequest.current += 1;

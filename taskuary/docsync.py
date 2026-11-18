@@ -154,6 +154,7 @@ def not_a_tool(store, t) -> str:
     elif cat and cat.get('planned'): why = f'"{t}" ({cat["title"]}) is not built yet - say so to the owner instead of working round it.'
     elif cat: why = (f'"{t}" ({cat["title"]}) brings work in or sends replies, it is no tool - an answer on it is a draft the owner sends '
                      '(propose_reply / propose_email).')
+    elif not t: why = 'run_system needs a `type`: the name of one tool on one of the systems.'
     else:
         near = difflib.get_close_matches(t, real, 3, 0.6)
         why = f'unknown tool type: {t}' + (f' - did you mean {", ".join(near)}?' if near else '')

@@ -23,3 +23,23 @@ def test_a_near_miss_offers_the_real_name():
 
 def test_every_answer_says_where_the_list_is():
     for t in ('gmail', 'nothing_like_this', 'handbook'): assert 'YOUR SYSTEMS' in docsync.not_a_tool(MemoryStore(), t)
+
+def test_no_type_at_all_says_run_system_needs_one():
+    "run_system {} read 'unknown tool type:  YOUR SYSTEMS...' - a blank where the name should be."
+    w = docsync.not_a_tool(MemoryStore(), '')
+    assert 'unknown tool type' not in w and '`type`' in w and 'YOUR SYSTEMS' in w
+
+
+def test_a_connector_id_that_is_no_card_is_said_as_that():
+    """A wrong connector_id was answered "intacct has no connection card an owner turned on - it is not an agent tool" while the Intacct
+    card stood on, marked a tool: untrue, and it sent the agent away from a system it could use. A number that is no card says so."""
+    import json
+    from unittest import mock
+    from test_agent_toolbox import server, tool, world
+    s, tid, _ = world()
+    with mock.patch.object(server, 'store', s):
+        card = s.get_connector_by_type('intacct')
+        s.save_connector({'ConnectorId': card['ConnectorId'], 'Active': 1, 'Roles': 'tool'}, 'test')
+        said, err = tool(tid, 'run_system', type='intacct', object='VENDOR', connector_id=card['ConnectorId'] + 9999)
+    assert err and 'turned on' not in said and 'not an agent tool' not in said
+    assert str(card['ConnectorId'] + 9999) in said and 'list_systems' in said

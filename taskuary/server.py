@@ -8801,6 +8801,9 @@ def tool_run(body: dict, request: Request):
     connector_id = (body or {}).get('connector_id')
     try: conn = store.get_connector(int(connector_id)) if connector_id else store.get_connector_by_type(card_of(t))
     except (TypeError, ValueError): raise HTTPException(422, 'connector_id must be a number')
+    # ...a number that is no card is said as that: "no connection card an owner turned on" was untrue of a card standing on
+    if connector_id and not conn:
+        raise HTTPException(404, f'there is no connection {connector_id} - YOUR SYSTEMS (list_systems) names each one with its connector_id')
     if conn and conn.get('Type') != card_of(t):
         raise HTTPException(422, f'connector {connector_id} is {conn.get("Type")}, not {card_of(t)}')
     if not conn:

@@ -109,6 +109,55 @@ class TheList(unittest.TestCase):
         self.assertEqual(self.kinds(got)[-4:], [('turn', 'done'), ('line', ''), ('line', ''), ('turn', 'done')])    # both, ONE turn
         self.assertEqual(len(self.brain.calls), 2)
 
+    def test_two_mails_of_one_poll_on_an_ended_session_are_one_turn_and_each_told_once(self):
+        """Two mails of one poll on a task whose conversation had ended (a restart, an idle-out): the first set the turn going with its own
+        words as the turn, the second rode in behind it - and the turn's "came in since your last turn" said the first mail again, under
+        the turn that already carried it."""
+        from taskuary import ingest
+        self.say('Suggest two.', 'l-one'); self.rest(); self.end()
+        opens = general.start_session          # the router's own start, on this stand-in brain
+        p = mock.patch.object(general, 'start_session', lambda store, tid, **k: opens(store, tid, **{**k, 'actor': 'owner'})); p.start(); self.addCleanup(p.stop)
+        mids = [self.mail('ALPHA, the first mail of the poll.'), self.mail('BRAVO, the second mail of the poll.')]
+        for m in mids: self.assertTrue(ingest.thread_moved(self.s, self.tid, ingest._from_row(self.s.get_message(m), self.s), m, {'intent': 'task'}, 'router'))
+        self.assertTrue(until(lambda: len(self.brain.calls) >= 2)); self.rest(); time.sleep(ingest.PASS_GATHER + 0.5)
+        self.assertEqual(len(self.brain.calls), 2, 'two mails of one poll are one turn')
+        came = self.brain.calls[1].split('CAME IN ON THIS TASK SINCE YOUR LAST TURN', 1)[-1].split('\n\n', 1)[0]
+        self.assertIn('BRAVO', came)
+        self.assertNotIn('ALPHA', came, 'the mail the turn itself carries is not said again beside it')
+        self.assertTrue(conversation.heard(self.s, self.tid, 'mail', mids))
+
+    def test_a_carried_on_turn_says_the_mail_that_woke_it_once(self):
+        """The carry-on road, the same shape: a sender's new work carried the ended conversation on (ingest._continue_general) with their
+        mail as the turn's head, a second mail of the poll beside it - and "came in since your last turn" said the first one again."""
+        from taskuary import ingest
+        self.say('Suggest two.', 'l-one'); self.rest(); self.end()
+        opens = general.start_session
+        p = mock.patch.object(general, 'start_session', lambda store, tid, **k: opens(store, tid, **{**k, 'actor': 'owner'})); p.start(); self.addCleanup(p.stop)
+        mids = [self.mail('ALPHA, the first mail of the poll.'), self.mail('BRAVO, the second mail of the poll.')]
+        ingest._continue_general(self.s, self.tid, ingest._from_row(self.s.get_message(mids[0]), self.s), mids[0]); self.rest()
+        turn = self.brain.calls[-1]
+        came = turn.split('CAME IN ON THIS TASK SINCE YOUR LAST TURN', 1)[-1].split('\n\n', 1)[0]
+        self.assertIn('BRAVO', came)
+        self.assertNotIn('ALPHA', came, 'the mail the turn itself carries is not said again beside it')
+        self.assertTrue(conversation.heard(self.s, self.tid, 'mail', mids))
+
+    def test_a_mail_delayed_in_delivery_enters_after_the_line_typed_before_it_came(self):
+        """A line typed while the agent worked, then a mail that came in a moment later - sent an hour before, held up on its way. The hand-
+        over placed the mail by the sender's own clock (its Date), above the line that came first: by the box it waited after the line, and
+        on the hand-over it jumped above it."""
+        self.brain.delay = 2.5
+        self.say('Suggest two.', 'l0', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        t = time.time(); self.assertTrue(until(lambda: time.time() >= t + 1.1))
+        self.say('LINE typed while it works.', 'l1', wait=False)
+        t = time.time(); self.assertTrue(until(lambda: time.time() >= t + 1.1))
+        late = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'late', 'ConversationId': 'conv-1', 'Channel': 'email', 'Subject': 'Offsite venue',
+                                   'BodyText': 'MAIL delayed in delivery.', 'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example',
+                                   'Status': 'routed', 'SentAt': conversation.stamp(time.time() - 3600)})
+        self.rest()
+        ids = [x['id'] for x in self.list()['items']]
+        self.assertLess(ids.index('l1'), ids.index(f'm:{late}'), ids)
+
     def test_a_flood_is_one_hand_over_and_every_input_is_heard_once_and_told_once(self):
         self.brain.delay = 1.0
         self.say('Suggest two.', 'l0', wait=False)

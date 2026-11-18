@@ -2167,6 +2167,22 @@ def _hand_to_agent(store, cfg: dict, tid, msg: dict, actor: str):
 
 PASS_GATHER = 3.0           # seconds a passed-in line waits once the session is free, for the rest of a burst to join it (_pass_general)
 _PASSING, _PASS_LOCK = {}, threading.Lock()     # task id -> the turns waiting together for its session
+# ...AND WHAT IS TYPED INTO A CODING SESSION GOES IN THE ORDER IT CAME (two mails of one poll on a coding task whose session was opening: each
+# pass waited on its own beat, and the second was typed in above the first). Each pass is entered here as it is set going (_spawn, in the order
+# ingest got to it) and types once no earlier mail of the task is still on its way - a burst on a chat agent is put in order where it is said
+_TYPING, _TYPING_CV = {}, threading.Condition()  # task id -> the message ids passed to its coding session and not yet typed
+
+
+def _typing_turn(tid, mid, secs: float = None) -> None:
+    "Wait (at most `secs`, else PASS_WAIT) until no message that came before `mid` is still being passed into task `tid`'s coding session."
+    with _TYPING_CV: _TYPING_CV.wait_for(lambda: not any(m < mid for m in _TYPING.get(tid, ())), timeout=max(0., PASS_WAIT if secs is None else secs))
+
+
+def _typed(tid, mid) -> None:
+    with _TYPING_CV:
+        if mid in (q := _TYPING.get(tid, [])): q.remove(mid)
+        if not q: _TYPING.pop(tid, None)
+        _TYPING_CV.notify_all()
 PASS_WAIT = 180             # seconds a passed-in line waits for a session still opening before it is said as not passed
 
 
@@ -2338,7 +2354,8 @@ def queued_turn(store, tid, turn: str, said: str = '') -> None:
     from . import general
     if not general.handles(store.get_task(tid) or {}): general.OPENING.add(tid); return _continue_coding(store, tid, said)
     general.OPENING.add(tid)
-    _replan_general(store, tid, '\n\n---\n\n'.join(x for x in [carry_on_turn(store, tid) if turn == 'carry_on' else '', said] if x))
+    news, carried = carry_on_told(store, tid) if turn == 'carry_on' else ('', [])
+    _replan_general(store, tid, '\n\n---\n\n'.join(x for x in [news, said] if x), mails=carried)
 
 
 # THE FIRST REAL ASK ON A ROW NO AGENT HAS WORKED STARTS ONE (the owner, 2026-11-09): a colleague's opening "Alex!" was read as a watch, his
@@ -2629,6 +2646,10 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
     # a conversation still opening (carry-on, Continue) takes ITS turn first: this one waits until that turn has the session -
     # past the deadline while a quick call is in flight, whose session opens only once its answer is in (a wait for a quick slot plus the call)
     while (time.time() < end or tid in quickwork.RUNNING) and tid in general.OPENING and not getattr(general.session_for(tid), 'busy', False): time.sleep(.25)
+    # ...and the turn that opened heard it as it began (general.send_prompt hears all that came in): that turn answers for it - "it is the
+    # assistant's next turn" written under its answer was a turn nobody was going to take
+    from . import conversation
+    if (mid := msg.get('message_id')) and conversation.heard(store, tid, 'mail', [mid]): return
     ses = general.session_for(tid)
     # an agent that idled out is started again, as the same run on its saved conversation, to take the line (general.idle_out)
     if not ses and general.idled(tid, store):
@@ -2637,7 +2658,7 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
     if not ses:
         # ...a session that ENDED before the line reached it is carried on as one that ends under it is (below): "type to carry on" here
         # was a turn owed with nothing running (the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible")
-        if joinable(store, tid, shut=False): general.OPENING.add(tid); _replan_general(store, tid, turn or _pass_turn(msg)); return
+        if joinable(store, tid, shut=False): general.OPENING.add(tid); _replan_general(store, tid, turn or _pass_turn(msg), mails=(msg.get('message_id'),)); return
         store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message could not be passed in: the assistant's session ended - {general.CARRY_ON}.")
         return
     # A BURST IS ONE RE-THINK (the owner's stress run, 2026-11-05): five mails in a few seconds were five queued turns, the agent re-reading
@@ -2659,10 +2680,14 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
         time.sleep(PASS_GATHER)                    # ...and the rest of a burst still landing
     finally:
         with _PASS_LOCK: got = _PASSING.pop(tid, None) or [(turn or _pass_turn(msg), msg.get('message_id'))]
+    # ...in the order the mails CAME (the store's id), never the order their threads woke: two mails of one poll each polled for the session
+    # on its own beat, and the second took the head of the burst
+    got.sort(key=lambda x: (x[1] is None, x[1] if isinstance(x[1], int) else 0))
+    # ...what a turn since has already heard (general.send_prompt hears everything that came in when it begins, and tells it) is not said a
+    # second time - each mail by itself: a turn that heard the first of two left the second the burst's to say, and the burst said both
+    got = [x for x in got if not (x[1] and conversation.heard(store, tid, 'mail', [x[1]]))]
+    if not got: return
     lines, mails = [x[0] for x in got], [x[1] for x in got if x[1]]
-    # ...what a turn since has already heard (general.send_prompt hears everything that came in when it begins) is not said a second time
-    from . import conversation
-    if mails and len(mails) == len(got) and conversation.heard(store, tid, 'mail', mails): return
     said = lines[0] if len(lines) == 1 else f'{len(lines)} NEW LINES ON THIS TASK, in the order they came - one turn for all of them:\n\n' + '\n\n---\n\n'.join(lines)
     try:
         # a session of quick answers re-decides on the task's depth now: still quick, the warm agent's turn on it; else the full agent's
@@ -2673,7 +2698,7 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
         # ...the session ended under it - the agent closed its own at the end of the turn this line waited behind (the stress run,
         # 2026-11-05): the line is not lost to a Continue, it carries the conversation on in a session of its own, as a mail on a quiet task does
         if getattr(ses, "alive", True) is False and joinable(store, tid, shut=False):
-            general.OPENING.add(tid); _replan_general(store, tid, said); return
+            general.OPENING.add(tid); _replan_general(store, tid, said, mails=kept); return
         logger.warning(f'passing a line to the assistant failed for task {tid}: {e}')
         store.add_comment(tid, 'router', 'agent', f"The assistant couldn't take {_who_said(msg)}'s new message: {' '.join(str(e).split())[:200]} - {general.CARRY_ON}.")
 
@@ -2693,6 +2718,7 @@ def _pass_coding(store, tid, msg: dict):
     live = lambda: next((x for x in list(terminal.SESSIONS.values()) if x.task_id == tid and x.alive), None)
     end = time.time() + PASS_WAIT
     while time.time() < end and (tid in general.OPENING or getattr(live(), 'accepted', True) is None): time.sleep(.5)
+    if isinstance(mid := msg.get('message_id'), int): _typing_turn(tid, mid, end - time.time())
     t = live()
     try: chooser = bool(t) and terminal.chooser_in(waitroom._screen(t))
     except Exception: chooser = False
@@ -2710,12 +2736,17 @@ def _pass_coding(store, tid, msg: dict):
 # A resumed CLI is handed the turn alone, so the news rode only as instructions appended to its system prompt, under a turn that said
 # "the owner chose Resume ... restate that one question and wait" - and nothing on the task showed it had been told. Now the turn
 # leads with what came in, as coding's seed does (terminal.resume_seed), filed as Taskuary's brief so the chat shows the line it got.
-def carry_on_turn(store, tid, msg: dict = None, mid=None) -> str:
-    "A carried-on turn: the mail since its last turn, the line that woke it when that read missed it, then CARRY_ON_PROMPT."
+def carry_on_turn(store, tid, msg: dict = None, mid=None) -> str: return carry_on_told(store, tid, msg, mid)[0]
+def carry_on_told(store, tid, msg: dict = None, mid=None) -> tuple[str, list]:
+    """A carried-on turn: the mail since its last turn, the line that woke it when that read missed it, then CARRY_ON_PROMPT - with the
+    messages (ids) it carries in their words, which the turn's own "came in since" leaves out (general.came_in): said in both, one mail
+    reached the agent twice in one turn."""
     from . import continuity
-    news = continuity.news_block(store, tid)
-    missed = msg and mid not in {m['MessageId'] for m in continuity.mail_since(store, tid)}
-    return '\n\n'.join(x for x in [news, _pass_turn(msg) if missed else '', CARRY_ON_PROMPT] if x)
+    news, since = continuity.news_block(store, tid), continuity.mail_since(store, tid)
+    missed = msg and mid not in {m['MessageId'] for m in since}
+    carried = [m['MessageId'] for m in since[-continuity.NEWS_SHOWN:]] if news and since else []
+    return ('\n\n'.join(x for x in [news, _pass_turn(msg) if missed else '', CARRY_ON_PROMPT] if x),
+            carried + ([mid] if missed and mid else []))
 # ...in words of its own (the owner, 2026-11-09): Resume's "the owner chose Resume ... restate that one question and wait" was false here -
 # nobody pressed anything - and it pushed the agent to wait instead of working
 CARRY_ON_PROMPT = 'New messages came in on this task (above). Pick up where you left off and do what you can now.'
@@ -2724,7 +2755,8 @@ CARRY_ON_PROMPT = 'New messages came in on this task (above). Pick up where you 
 def _continue_general(store, tid, msg: dict = None, mid=None):
     from . import general
     try:
-        general.start_session(store, tid, actor='router').send_prompt(carry_on_turn(store, tid, msg, mid), brief=True)
+        turn, carried = carry_on_told(store, tid, msg, mid)
+        general.start_session(store, tid, actor='router').send_prompt(turn, brief=True, mails=carried)
     except general.Stopped: pass           # the owner stopped the carried-on turn: nothing failed
     except Exception as e:
         # said, not retried: the start queue's retry opens a conversation without a turn (_start_general prompts a fresh one only)
@@ -2807,19 +2839,22 @@ def thread_moved(store, tid, msg: dict, mid, follow: dict | None, actor: str, ow
     general.OPENING.add(tid)
     store.add_comment(tid, 'router', 'agent', ('You answered' if own else f'{_who_said(msg)} wrote') +
                       ' on the thread - the assistant looks again at what is left to do here.')
-    _spawn(_replan_general, store, tid, turn)
+    _spawn(_replan_general, store, tid, turn, mails=(mid,))
     return True
 
 
 def _replan_pass(store, tid, msg: dict, turn: str):
     from . import general           # ...a coding agent's by the one road Taskuary's words to it take (general.tell)
     if general.handles(store.get_task(tid) or {}): _pass_general(store, tid, msg, turn)
-    else: general.tell(store, tid, turn)
+    else:
+        if isinstance(mid := msg.get('message_id'), int): _typing_turn(tid, mid)
+        general.tell(store, tid, turn)
 
 
-def _replan_general(store, tid, turn: str):
+def _replan_general(store, tid, turn: str, mails=()):
+    "`mails`: the messages (ids) `turn` carries in their words - the turn's \"came in since\" leaves them out (general.came_in)."
     from . import general
-    try: general.start_session(store, tid, actor='router').send_prompt(turn, brief=True)
+    try: general.start_session(store, tid, actor='router').send_prompt(turn, brief=True, mails=[m for m in mails if m])
     except general.Stopped: pass
     except Exception as e:
         logger.warning(f'assistant re-plan failed for task {tid}: {e}')
@@ -3255,6 +3290,11 @@ def _spawn(fn, *args, **kw):
         def fn(*a, _f=fn, **k):
             try: _f(*a, **k)
             finally: general.hand(a[1], -1)
+    elif fn in (_pass_coding, _replan_pass) and isinstance(mid := (args[2] or {}).get('message_id'), int):
+        with _TYPING_CV: _TYPING.setdefault(args[1], []).append(mid)
+        def fn(*a, _f=fn, **k):
+            try: _f(*a, **k)
+            finally: _typed(a[1], mid)
     threading.Thread(target=fn, args=args, kwargs=kw, daemon=True).start()
 
 

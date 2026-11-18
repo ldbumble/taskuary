@@ -42,7 +42,7 @@ def test_a_line_that_finds_the_session_ended_starts_it_again_instead_of_being_dr
     ses.send_prompt = ended
     again = []
     with mock.patch.object(general, 'session_for', return_value=ses), mock.patch.object(ingest, 'PASS_GATHER', 0.1), \
-         mock.patch.object(ingest, '_replan_general', lambda store, t, turn: again.append(turn)):
+         mock.patch.object(ingest, '_replan_general', lambda store, t, turn, **k: again.append(turn)):
         ingest._pass_general(s, tid, mail('Following up: a late fee was added.'))
     assert len(again) == 1 and 'late fee' in again[0]
     assert not any("couldn't take" in c['Body'] for c in s.list_comments(tid))
@@ -57,3 +57,56 @@ def test_a_change_on_the_thread_is_said_plainly_first():
     # ...and in the summary too: a chat task draws a turn's summary in place of its words, and the line that said "I see you answered Ray
     # there" was in the words alone - the re-think read as if it had not seen the owner's reply (the chat-model stress run, 2026-11-05)
     assert '''Start the summary's "did" with that same line''' in own
+
+
+def test_two_mails_of_one_poll_go_in_in_the_order_they_came_whichever_thread_wakes_first():
+    """Two mails of one poll on a task whose turn was still opening: each line's thread polled for the session on its own beat, and the
+    one that woke first took the head of the burst - the second mail went in above the first, under "in the order they came"."""
+    s = MemoryStore(); tid = s.create_task({'Title': 'Badge list', 'Kind': 'general', 'Status': 'open'}, 'router'); ses = Ses(); ses.busy = False
+    general.OPENING.add(tid)
+    try:
+        with mock.patch.object(general, 'session_for', return_value=ses), mock.patch.object(ingest, 'PASS_GATHER', 0.3):
+            first = threading.Thread(target=ingest._pass_general, args=(s, tid, {**mail('The first mail.'), 'message_id': 11}))
+            second = threading.Thread(target=ingest._pass_general, args=(s, tid, {**mail('The second mail.'), 'message_id': 12}))
+            first.start(); time.sleep(0.15); second.start()
+            time.sleep(0.15); ses.busy = True              # the opening turn has the session: the second line's beat comes round first
+            time.sleep(0.4); ses.busy = False
+            first.join(5); second.join(5)
+    finally: general.OPENING.discard(tid)
+    assert len(ses.sent) == 1, ses.sent
+    assert ses.sent[0].index('The first mail.') < ses.sent[0].index('The second mail.'), ses.sent[0]
+
+
+def test_a_mail_a_turn_heard_meanwhile_is_not_said_again_by_the_burst_it_waited_in():
+    """Two mails waited together behind a working turn; the owner's line began the next turn first, and that turn heard (and was told) the
+    first mail - the second came after it began. The burst only stood down when it had heard ALL of them, so it said both: the first mail
+    reached the agent twice."""
+    from taskuary import conversation
+    s = MemoryStore(); tid = s.create_task({'Title': 'Badge list', 'Kind': 'general', 'Status': 'open'}, 'router'); ses = Ses()
+    with mock.patch.object(general, 'session_for', return_value=ses), mock.patch.object(ingest, 'PASS_GATHER', 0.2):
+        a = threading.Thread(target=ingest._pass_general, args=(s, tid, {**mail('The first mail.'), 'message_id': 11}))
+        b = threading.Thread(target=ingest._pass_general, args=(s, tid, {**mail('The second mail.'), 'message_id': 12}))
+        a.start(); time.sleep(0.1); b.start(); time.sleep(0.2)
+        s._exec('INSERT INTO heard (TaskId,Kind,Ref,At,Grp,Seq,Sid) VALUES (?,?,?,?,?,?,?)', (tid, 'mail', '11', time.time(), 1, 0, ''))
+        ses.busy = False
+        a.join(5); b.join(5)
+    assert conversation.heard(s, tid, 'mail', [11])
+    assert len(ses.sent) == 1 and 'The second mail.' in ses.sent[0] and 'The first mail.' not in ses.sent[0], ses.sent
+
+
+def test_a_mail_the_opening_turn_heard_is_not_said_to_be_the_next_turn():
+    """Two mails of one poll on an ended conversation: the first started the turn, and the second waited for that turn to open - the turn
+    heard it when it began, and answered it. Its pass then wrote "Passed ... it is the assistant's next turn" under that answer, and no
+    turn came: a line saying something was being done when nothing was."""
+    s = MemoryStore(); tid = s.create_task({'Title': 'Badge list', 'Kind': 'general', 'Status': 'open'}, 'router'); ses = Ses(); ses.busy = False
+    general.OPENING.add(tid)
+    try:
+        with mock.patch.object(general, 'session_for', return_value=ses), mock.patch.object(ingest, 'PASS_GATHER', 0.1):
+            t = threading.Thread(target=ingest._pass_general, args=(s, tid, {**mail('The second mail.'), 'message_id': 12})); t.start()
+            time.sleep(0.3)
+            s._exec('INSERT INTO heard (TaskId,Kind,Ref,At,Grp,Seq,Sid) VALUES (?,?,?,?,?,?,?)', (tid, 'mail', '12', time.time(), 1, 0, ''))
+            general.OPENING.discard(tid)           # the opening turn heard it, answered, and let go
+            t.join(5)
+    finally: general.OPENING.discard(tid)
+    assert ses.sent == []
+    assert not [c['Body'] for c in s.list_comments(tid) if 'Passed' in c['Body']]

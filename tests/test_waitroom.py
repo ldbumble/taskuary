@@ -392,7 +392,8 @@ class SteerGeneralTests(unittest.TestCase):
                 general.answered(tid, every=True); clipool.close('')
         # ...the CLI had both lines before its turn's one result, which answered them - no second turn did the job again
         [reply] = [b for k, b in said if k == general.ASSISTANT_TYPE]
-        self.assertIn(':1:heard use the March export | and leave Payworth out', reply)
+        # ...each steer a message into the turn, said as his as the same line at rest is (GeneralSession.steer: one frame per steer)
+        self.assertIn(':1:heard ' + ' | '.join(general._turn_only(s, tid, w) for w in ('use the March export', 'and leave Payworth out')), reply)
         # ...and the chat files them inside that turn: his three lines, then its answer
         self.assertEqual([b for k, b in said if k == general.USER_TYPE][1:], ['use the March export', 'and leave Payworth out'])
         self.assertEqual(said[-1][0], general.ASSISTANT_TYPE)

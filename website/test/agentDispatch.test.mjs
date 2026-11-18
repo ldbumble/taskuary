@@ -21,16 +21,6 @@ test("the assistant offers ONE Send to agent, and the card asks coding or not", 
   assert.doesNotMatch(cards, /kind: coding \? "coding" : "general"/);
 });
 
-test("the timeline handoff asks for an agent type before Send is enabled", () => {
-  const ui = src("ui.jsx");
-  const handoff = ui.slice(ui.indexOf("export const SendToAgent"), ui.indexOf("export const TASK_STATES"));
-  assert.match(handoff, /Which kind of agent\?/);
-  assert.match(handoff, /choice\("agent", "coding_agent"\)/);       // the answers are buttons.json's choices
-  assert.match(handoff, /choice\("agent", "regular_agent"\)/);
-  assert.match(handoff, /disabled=\{busy \|\| !agentKind\}/);
-  assert.match(handoff, /\{ kind: agentKind/);
-});
-
 test("opening a general task reads state without starting an agent", () => {
   const workspace = src("GeneralWorkspace.jsx");
   const mount = workspace.slice(workspace.indexOf("useEffect(() => {", workspace.indexOf("export function GeneralWorkspace")));

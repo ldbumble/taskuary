@@ -872,7 +872,7 @@
       "phase": "5",
       "requirement": "Use a consistent pre-launch repository picker on the task page, timeline",
       "status": "partial: the pre-launch repository picker now exists on the task page, the chat cards and the timeline row, preselecting the suggestion with its reason (`/api/tasks/{id}/repos`); conversational dispatch in the assistant chat is Phase 8",
-      "test": "`website/test/startupSurfaces.test.mjs` (the timeline offers the picker on a needs_repo decision) plus `website/test/repoChoice.test.mjs`",
+      "test": "`website/test/repoChoice.test.mjs` (an item's Send to agent, the task page and the chat cards offer the picker on a needs_repo decision)",
       "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
     },
     {
@@ -1907,7 +1907,7 @@
       "phase": "5",
       "requirement": "Audit finding: ui.jsx SendToAgent treats a successful HTTP response with",
       "status": "implemented",
-      "test": "`website/test/startupSurfaces.test.mjs` (ui.jsx SendToAgent reads `outcomeOf(data)`, offers the RepoPicker on needs_repo and never reports it as a start)",
+      "test": "`website/test/startupSurfaces.test.mjs` (`outcomeOf` reads needs_repo as a decision, never a start) plus `website/test/repoChoice.test.mjs` (the item's Send to agent - ui.jsx's SendToAgent is deleted, every item now opens `RunForm.AgentAsk` - asks which repository on needs_repo and retries with his words)",
       "commit": "4f32c35, CI run 34051581086 (all ten jobs passed)"
     },
     {

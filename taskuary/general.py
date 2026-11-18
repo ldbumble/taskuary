@@ -2712,7 +2712,13 @@ class GeneralSession:
         "Words into the turn at work: `said`, or his kept lines - heard in the step they go in (take_kept). False where nothing can take them now."
         from . import clipool
         if not self.can_steer(): return False
-        def lines(): return '\n\n'.join(with_files(**_line_of(r['Body'])) for r in take_kept(self.store, self.task_id, sid=self.sid))
+        # ...SAID AS THE SAME LINES ARE AT REST (send_prompt): his words under "the owner says" (_turn_only), then the one files block - steered in
+        # they arrived bare, a file-only line as blank lines and then the block. One frame over what one steer takes, as one turn at rest takes
+        # its lines under one; a later steer is a later message into the turn and says whose it is again. A steer that took nothing sends nothing
+        def lines():
+            took = [_line_of(r['Body']) for r in take_kept(self.store, self.task_id, sid=self.sid)]
+            return with_files(_turn_only(self.store, self.task_id, '\n\n'.join(x['text'] for x in took)),
+                              list(dict.fromkeys(str(Path(f).resolve()) for x in took for f in x['files']))) if took else ''
         return clipool.steer(self.keep(), lines if said is None else said)
     def tail(self, n=3):
         from .terminal import plain
@@ -3175,7 +3181,13 @@ class GeneralSession:
             # Paths are harmless context to an API brain and essential if its CLI backup takes
             # over after a quota failure. The source message already names its files too; this
             # line also carries images attached directly in the composer.
-            files = '\n\nATTACHED FILES (read these when relevant)\n' + '\n'.join(str(Path(p).resolve()) for p in paths) if paths else ''
+            # ...IN THE ONE BLOCK (with_files: "read these files", as every door writes it), for each file no block in the turn already carries -
+            # the first turn names his line's files in his line's own block, and said once more under a second wording the agent read it three
+            # times. Carried means in a block (split_files: each block stands as a paragraph of its own), never a path met in prose - "compare
+            # /d/a.pdf.bak with it" names no /d/a.pdf
+            def files(u):
+                named = {str(Path(f).resolve()) for part in u.split('\n\n') for f in split_files('\n\n' + part)['files']}
+                return with_files('', rest) if (rest := [r for p in paths if (r := str(Path(p).resolve())) not in named]) else ''
             limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS
             def ask(brain, user):
                 "The turn, asked of this brain: with its tools where it takes them (apiagent.turn), else the plain way."
@@ -3188,7 +3200,7 @@ class GeneralSession:
                         looped, system = False, f"{system.replace(apiagent.BRIEF, '').replace(apiagent.TOOLS_BRIEF, '')}\n\n{apiagent.no_tools_line()}"
                 with llm_mod.watching(visible):          # an API brain's own web searches are steps too (llm.watching)
                     return str(brain(system, user, max_tokens=limit, images=_images(paths), **_web(brain)) or '').strip()
-            try: reply = ask(brain, user + files)
+            try: reply = ask(brain, user + files(user))
             except Exception as e:
                 # the CLI could not pick that conversation back up (it was restarted, its history
                 # was cleared, the id aged out). Start a fresh one and say the whole thing, once.
@@ -3214,10 +3226,10 @@ class GeneralSession:
                 system = freeze(self, head, late, False)[0]      # ...and a fresh conversation is told what is true now, frozen from here
                 brain = llm_mod.build_llm(self.store, **anew, job='quick_work') if quick else llm_mod.build_llm(self.store, **anew, job='general')
                 if not brain: raise RuntimeError('the AI chosen for this is not available - pick another, or connect it again')
-                try: reply = ask(brain, whole + files)
+                try: reply = ask(brain, whole + files(whole))
                 except Exception:
                     # nothing answered at all (the network): what it had is still its own, with the line it was just told
-                    if kept and not self.card_msgs: self.card_msgs = [*kept, {'role': 'user', 'content': user + files}]
+                    if kept and not self.card_msgs: self.card_msgs = [*kept, {'role': 'user', 'content': user + files(user)}]
                     raise
             actual = getattr(brain, 'last_pick', '')
             if isinstance(actual, str) and actual and actual != self.pick:

@@ -7,7 +7,7 @@ import { AGENT, NOT_SENT, READY } from "./taskLifecycle.js";
 import { WORD } from "./lanes.js";
 import { ago, agoMins, dur, durSince, plural } from "./timeWords.js";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useCapabilities, NO_CODING_TOOL } from "./capabilities.js";
+import { NO_CODING_TOOL } from "./capabilities.js";
 import { bareAddresses } from "./replyDelivery.js";
 import { keepAddresses, linkParts } from "./mailLinks.js";
 import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogContent,
@@ -20,8 +20,6 @@ import api from "./api";
 import { browserRecogniser, dictate, dictationError, inAppWindow, micFix } from "./dictation.js";
 import { chooseVoice, voiceChoice, micRoute } from "./voiceChoice.js";
 import { onLive, touches } from "./live.js";
-import { outcomeOf } from "./dispatchOutcome.js";
-import { RepoPicker } from "./RepoPicker.jsx";
 import { Md } from "./md.jsx";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import GroupsIcon from "@mui/icons-material/Groups";
@@ -1027,114 +1025,6 @@ export const NotMine = ({ messageId, onDone, onLock, row, first, compact = false
       {err && <Typography variant="caption" sx={{ color: ROLES.bad.ink, fontWeight: 600, display: "block", mt: 0.75 }}>
         {err} — your note is still here.
       </Typography>}
-    </Box>
-  );
-};
-
-// One door, then an explicit choice. Triage may suggest which kind fits, but it must not silently
-// choose the regular API agent or a coding CLI on the owner's behalf.
-export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, row, first }) => {
-  const canCode = useCapabilities().coding;                   // no coding tool connected: no Coding agent, and nothing suggests one (capabilities.js)
-  const suggestedKind = canCode && (!taskKind || String(taskKind).toLowerCase() === "coding") ? "coding" : "general";
-  const [agentKind, setAgentKind] = useState("");
-  const coding = agentKind === "coding";
-  const [open, setOpen] = useState(false);
-  const { agents, models, kinds, brainList, brainModels, generalBrains } = useAgents();
-  const [agent, setAgent] = useState("");          // the coding profile, by kind; blank = the server finds it
-  const [brain, setBrain] = useState("");          // WHICH CLI runs it; blank = the brain settings name
-  const [pick, setPick] = useState("");            // ...or which AI card (`connector:<id>`)
-  const [model, setModel] = useState("");
-  const [prompt, setPrompt] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [sent, setSent] = useState(null);
-  const [repoAsk, setRepoAsk] = useState(null);     // a repository DECISION, never reported as a start (PW-212)
-  const [err, setErr] = useState("");
-  useEffect(() => { if (!agents.includes(agent)) setAgent(codingProfile(agents, kinds)); }, [agents, kinds, agent]);
-  const send = async () => {
-    if (!agentKind) return;
-    setBusy(true); setErr("");
-    try {
-      const { data } = await api.post(`/api/messages/${messageId}/dispatch`,
-        { kind: agentKind, agent: coding ? (agent || null) : null, brain: coding ? (brain || null) : null, pick: coding && !brain ? (pick || null) : null,
-          model: model || null, instruction: prompt.trim() || null });
-      const outcome = outcomeOf(data);
-      if (outcome.state === "needs_repo") { setRepoAsk({ taskId: data.taskId, agent: data.agent || agent }); }
-      else {
-        setRepoAsk(null); setSent({ ...data, outcome }); setPrompt("");
-        onOpenTask?.(data.taskId);          // the session IS the page - go watch it
-      }
-    } catch (e) { setErr(e?.response?.data?.detail || "Could not reach the agent"); }
-    setBusy(false);
-  };
-  if (repoAsk) return (
-    <Box sx={{ mt: 1, p: 1.25, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
-      <Typography variant="caption" sx={{ color: DIM, fontWeight: 600, display: "block", mb: 0.5 }}>Which repository should the coding agent use?</Typography>
-      <RepoPicker taskId={repoAsk.taskId} agent={repoAsk.agent}
-        onDone={(data) => { if (data?.repo) { setRepoAsk(null); send(); } }} />
-      <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setRepoAsk(null)}>Not now - nothing was started</Button>
-    </Box>
-  );
-  if (sent) return (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: dense ? 0.5 : 1 }}>
-      <TaskuaryMark size={16} />
-      <Typography variant="caption" sx={{ color: "var(--tq-success, #47654a)", fontWeight: 600 }}>
-        {sent.outcome?.text || `${sent.agent || "The agent"} is on it in a live session — ${sent.ref}`}
-      </Typography>
-      <Button size="small" sx={{ fontSize: 11 }} onClick={() => onOpenTask?.(sent.taskId)}>watch it live →</Button>
-      <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setSent(null)}>send another</Button>
-    </Box>
-  );
-  if (!open) return row ? (
-    <ChoiceRow first={first} tint="#e3e6e1" onClick={() => setOpen(true)}
-      icon={<TaskuaryMark size={17} />}
-      label="Send to agent…" hint="choose a coding agent or a regular agent" />
-  ) : (
-    <Button size="small" disableElevation startIcon={<TaskuaryMark size={15} />}
-      onClick={() => setOpen(true)}
-      sx={{ width: 190, height: 34, px: 1.5, borderRadius: 2, textTransform: "none", fontSize: 12,
-        justifyContent: "flex-start", fontWeight: 600, whiteSpace: "nowrap", color: DIM, bgcolor: PANEL,
-        border: `1px solid ${BORDER}`, boxShadow: "none",
-        "&:hover": { color: INK, bgcolor: PANEL, borderColor: "var(--tq-border, #d8cfbe)", boxShadow: "none" } }}>
-      Send to agent…
-    </Button>
-  );
-  return (
-    <Box sx={{ mt: 1, p: 1.25, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75, flexWrap: "wrap" }}>
-        <TaskuaryMark size={17} />
-        <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>Which kind of agent?</Typography>
-        <Box sx={{ flex: 1, minWidth: 8 }} />
-        {coding && <AgentPicker agents={agents} models={models} agent={agent} model={model} coding
-          brains={brainList} brainModels={brainModels} brain={brain} onBrain={(b) => { setBrain(b); setModel(""); }}
-          generalBrains={generalBrains} pick={pick} onPick={setPick}
-          onAgent={setAgent} onModel={setModel} size={26} />}
-      </Box>
-      <Box sx={{ display: "flex", gap: 0.75, mb: agentKind ? 0.75 : 0, flexWrap: "wrap" }}>
-        {canCode && <Button size="small" variant={agentKind === "coding" ? "contained" : "outlined"} disableElevation
-          onClick={() => setAgentKind("coding")}>{choice("agent", "coding_agent")}</Button>}
-        <Button size="small" variant={agentKind === "general" ? "contained" : "outlined"} disableElevation
-          onClick={() => setAgentKind("general")}>{choice("agent", "regular_agent")}</Button>
-      </Box>
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: agentKind ? 0.5 : 0 }}>
-        Triage tagged this {suggestedKind}; your choice here is what actually runs.
-      </Typography>
-      {agentKind && <TextField fullWidth multiline minRows={2} size="small" autoFocus value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder={coding ? `What should it do? e.g. "Find why this failed and fix it, then tell me what changed."`
-            : MESSAGE}
-          sx={{ bgcolor: "var(--tq-panel, #fff)" }} />}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.75 }}>
-        <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 0 }} noWrap>
-          it gets the full message{subject ? ` “${subject}”` : ""} + your operator docs as context
-        </Typography>
-        <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setOpen(false)}>Cancel</Button>
-        <Button size="small" variant="contained" disableElevation disabled={busy || !agentKind} onClick={send}
-          startIcon={busy ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : null}
-          sx={{ fontSize: 11.5, color: "#fff", bgcolor: "#6f8a6e", "&:hover": { bgcolor: "#5b7259" } }}>
-          {busy ? "sending…" : btnLabel(agentKind === "coding" ? "coding_agent" : "regular_agent")}
-        </Button>
-      </Box>
-      {err && <Typography variant="caption" sx={{ color: "var(--tq-danger, #6b2733)", display: "block", mt: 0.5 }}>{err}</Typography>}
     </Box>
   );
 };

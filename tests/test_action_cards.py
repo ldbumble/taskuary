@@ -137,6 +137,22 @@ class OnePress(unittest.TestCase):
         on_task = next(r for r in c.get(f'/api/tasks/{self.tid}').json()['reviews'] if r['ReviewId'] == rv['ReviewId'])
         self.assertEqual(on_task['Connect'], chat['connect'])
 
+    def test_a_press_on_a_post_whose_network_is_not_connected_posts_nothing_and_says_connect(self):
+        # the walk, 2026-11-18: Post to LinkedIn was pressed on a network never connected and came back in developer words (Client ID, Client
+        # Secret, the OAuth token generator), the card set aside. The press is refused before anything runs, in the card's own Connect words,
+        # and the card stays waiting with its Connect - the same answer for every network (outbound.review_connect)
+        net = LinkedIn()
+        rv = self.propose(text='Northwind is at the spring hiring fair on Friday.')
+        server.store.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 0, 'ConfigJson': '{}'}, 'test')
+        with stubbed(net):
+            out = verdicts.decide(server.store, rv, 'approve', 'Northwind is at the spring hiring fair on Friday.')
+        self.assertFalse(out['ok']); self.assertEqual(net.calls, [])
+        self.assertEqual(out['status'], 'pending')
+        self.assertIn("LinkedIn isn't connected", out['send_error'])
+        self.assertNotIn('Client', out['send_error'])
+        kept = server.store.get_review(rv['ReviewId'])
+        self.assertEqual((kept['Status'], kept.get('ActError')), ('pending', None))
+
     def test_a_change_the_card_does_not_offer_posts_nothing(self):
         net = LinkedIn()
         with stubbed(net):

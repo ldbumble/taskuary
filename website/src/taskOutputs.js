@@ -147,9 +147,12 @@ export function outputRefs(text, tid, listed) {
 // ONE FILE, ONE CARD: a file the answer names AND showed ([[TASKUARY-SHOW]]) is the same file twice - its output row from the path in
 // the words, and the copy the turn kept - and the owner saw two cards for one picture ("why are there 2 of them? looks broken").
 // The named row stays (Preview, Download, its size) and opens as the shown one did; the copy is drawn only when the words never named it.
+// ...and a file shown twice in one turn is drawn once, the last showing (the walk, 2026-11-18: one picture shown beside an X draft and again
+// beside a Reddit draft stood twice over the cards)
 export function shownOnce(cited, shown) {
-  const names = new Set((cited || []).map(baseName)), seen = new Set((shown || []).map((p) => p.name));
-  return { isShown: (rel) => seen.has(baseName(rel)), rest: (shown || []).filter((p) => !names.has(p.name)) };
+  const names = new Set((cited || []).map(baseName)), all = shown || [], seen = new Set(all.map((p) => p.name));
+  const last = (p, i) => all.findLastIndex((q) => q.name === p.name) === i;
+  return { isShown: (rel) => seen.has(baseName(rel)), rest: all.filter((p, i) => !names.has(p.name) && last(p, i)) };
 }
 
 // A FILE IS IN THE TURN THAT MADE IT, OR NOT IN THE CHAT (the owner, 2026-11-13: nothing is pinned at the chat's foot): one the server named no

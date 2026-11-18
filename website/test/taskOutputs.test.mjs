@@ -29,6 +29,12 @@ test("a file the answer names and also showed is one card, open - the shown copy
   assert.deepEqual(shownOnce([], undefined).rest, []);
 });
 
+test("a picture shown twice in one turn is drawn once, the last showing (the walk, 2026-11-18)", () => {
+  const shown = [{ id: 9, name: "Northwind ledger portal.png", kind: "shown" }, { id: 11, name: "Northwind ledger portal.png", kind: "shown" },
+    { id: 12, name: "notes.md", kind: "shown" }];
+  assert.deepEqual(shownOnce([], shown).rest.map((p) => p.id), [11, 12]);
+});
+
 const HOME = "C:/Users/alex/.taskuary/scratch/outputs";
 
 test("Codex's citation marker becomes a chip and leaves the words", () => {

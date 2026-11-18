@@ -843,6 +843,12 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
             from . import shellgate
             if (busy := shellgate.mid_turn(store, rv['TaskId'], p_.get('sid'))):
                 return {'ok': False, 'status': 'pending', 'sent': None, 'busy': busy, 'send_error': busy}
+        # ...AN ACT ON A NETWORK NOT CONNECTED runs nothing (the walk, 2026-11-18): Post to LinkedIn on a card never connected went out to LinkedIn
+        # and came back in developer words, the card set aside. Refused before it runs, in the card's own Connect words; the card waits with its Connect
+        from . import outbound
+        if verb in ('approve', 'edit') and (fix := outbound.review_connect(store, rv)):
+            return {'ok': False, 'status': 'pending', 'sent': None, 'connect': fix,
+                    'send_error': f"{fix['says']} - press {fix['label']} on this card first. Nothing was sent."}
         if not _claim_act(store, rid): return _act_busy(store, rid)   # every verb: a No over a running Yes would mark a merged pull request rejected
         runs = verb in ('approve', 'edit', 'merge_anyway', 'close_pr')
         if runs: store.audit('review', rid, ACT_STARTED, actor)      # ...and written down before it runs, so a restart under it is known (cut_acts)

@@ -523,6 +523,13 @@ class NewTaskTool(unittest.TestCase):
         r = rpc(self.tid, 'tools/call', {'name': 'propose_reply', 'arguments': {'text': 'x'}}).json()
         self.assertIn('tools/list names', r['error']['message'])
 
+    # WORK NO TOOL OF TASKUARY'S DOES (the any-job round, 2026-11-18): "make me a spreadsheet of the plans" asked find_tools, which answered
+    # "No tool fits - name one" and stopped: the agent read it as "Taskuary cannot", when its own shell makes the file
+    def test_a_need_no_tool_meets_is_sent_on_to_the_session_s_own_tools_and_the_outputs_folder(self):
+        said, err = tool(self.tid, 'find_tools', query='spreadsheet')
+        self.assertFalse(err)
+        self.assertIn("No tool fits 'spreadsheet'", said); self.assertIn("session's own tools", said); self.assertIn('outputs folder', said)
+
     def test_a_routines_email_that_went_at_once_is_never_spoken_of_as_a_waiting_card(self):
         "A routine run's own email is sent by the draft itself (slots.routine_sends): the agent was told its card \"shows that it waits and that nothing went\"."
         from taskuary import selfclose, slots

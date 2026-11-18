@@ -50,6 +50,9 @@ TYPES, KEY_TYPES = frozenset('fill type'.split()), frozenset('type inserttext'.s
 # unsure verdict on one of them, or on typing, lets it go - the sending is judged on its own. A verdict SURE it can't be undone (a settings
 # toggle that saves itself) still holds it.
 SETS = frozenset('check uncheck select'.split())
+# ...and the actions of its `find` that only LOOK (`find text "Total" text` reads it, `hover` points at it - its grammar, `find --help` 0.41):
+# a search of the page was judged as an act, a model call each time, and with no AI connected held for the owner (2026-11-18)
+FIND_LOOKS = frozenset('text hover'.split())
 SNAP_MAX = 6000                 # the page as the model reads it: the interactive elements, enough for a checkout or a settings page
 JUDGE_WAIT = 45.0
 HELD = 'Taskuary held this for the owner'
@@ -122,9 +125,16 @@ def acts(cmd: str) -> list:
         # whatever a box holds, a password the sign-in vault just filled included - checked against the page (check)
         if verb in NAVS and carries(nxt): verb = 'navigate'
         elif verb == 'get' and nxt.lower() == 'value': out.append({'args': a, 'verb': 'get value', 'read': True}); continue
-        elif verb in LOOKS: continue
+        elif verb in LOOKS or (verb == 'find' and _find_action(a[i:]) in FIND_LOOKS): continue
         if verb: out.append({'args': a, 'verb': verb, **({'nl': True} if _NL.search(str(cmd)) else {})})
     return out
+
+
+def _find_action(a: list) -> str:
+    "The action word of `find <locator> <value...> [action]` ('click' when none is given), read only where its words stand bare: '' else."
+    n = 4 if len(a) > 1 and a[1].lower() == 'nth' else 3          # nth takes an index and a selector, every other locator one value
+    if any(t.startswith('-') for t in a[1:n + 1]): return ''
+    return a[n].lower() if n < len(a) else 'click'
 
 
 def carries(url: str) -> bool:

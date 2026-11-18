@@ -50,6 +50,15 @@ class Reading(unittest.TestCase):
                     'git status', 'grep -r agent-browser docs', 'agent-browser --session tq-1 snapshot'):
             self.assertEqual(bg.acts(cmd), [], cmd)
 
+    def test_a_find_that_only_reads_or_points_is_a_look(self):
+        "Searching the page is not acting on it - by agent-browser's own grammar for find's actions, never judged, never held."
+        for cmd in ('agent-browser find text "Total gross" text', 'agent-browser find role heading text --name Payroll',
+                    "agent-browser find first 'td.total' text", 'agent-browser find nth 2 ".run" hover'):
+            self.assertEqual(bg.acts(cmd), [], cmd)
+        for cmd in ('agent-browser find text "Pay now"', 'agent-browser find text "Pay now" click', 'agent-browser find role button --name Pay click',
+                    'agent-browser find nth 2 ".run" click', 'agent-browser find label "Amount" fill "412.50"'):
+            self.assertEqual([x['verb'] for x in bg.acts(cmd)], ['find'], cmd)
+
     def test_every_other_command_is_an_act_however_it_is_spelled(self):
         self.assertEqual([a['verb'] for a in bg.acts('agent-browser fill @e1 "alex" && agent-browser click @e12')], ['fill', 'click'])
         self.assertEqual(bg.acts('npx agent-browser click @e12')[0]['args'], ['click', '@e12'])

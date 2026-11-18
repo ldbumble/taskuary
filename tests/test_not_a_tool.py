@@ -79,4 +79,20 @@ def test_a_field_the_tool_needs_and_did_not_get_is_named():
         card = s.get_connector_by_type('intacct')
         s.save_connector({'ConnectorId': card['ConnectorId'], 'Active': 1, 'Roles': 'tool'}, 'test')
         said, _ = tool(tid, 'run_system', type='intacct')
-    assert 'needs `object`' in said, said
+    assert '`object` was not given' in said, said
+
+
+def test_a_long_failure_keeps_its_next_step():
+    """tool_run cut agenttools.failed's answer at 1000 characters AGAIN, after failed had bounded what happened to keep the next step whole:
+    a long failure lost its next step (the robustness judge, 2026-11-18)."""
+    from unittest import mock
+    from test_agent_toolbox import server, tool, world
+    from taskuary import agenttools
+    from taskuary.reports import REGISTRY
+    def long(cfg): raise ValueError(agenttools.refusal('y' * 1200, 'z' * 500 + ' - call it again with a shorter `object`'))
+    s, tid, _ = world()
+    with mock.patch.object(server, 'store', s), mock.patch.dict(REGISTRY, {'intacct': long}):
+        card = s.get_connector_by_type('intacct')
+        s.save_connector({'ConnectorId': card['ConnectorId'], 'Active': 1, 'Roles': 'tool'}, 'test')
+        said, _ = tool(tid, 'run_system', type='intacct')
+    assert ' - call it again with a shorter `object`"' in said and f'\\n{agenttools.NEXT_STEP}zzz' in said, said[-200:]       # ...the error's last line, whole

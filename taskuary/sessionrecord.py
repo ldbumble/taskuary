@@ -525,6 +525,18 @@ def keep_turn(tid: int, reply_id, trace: list):
     with _gen_path(tid).open('a', encoding='utf-8') as f: f.write(json.dumps({'reply': reply_id, 'steps': steps}) + '\n')
 
 
+def _cut_said(text) -> str:
+    """A failed call's words, cut in what happened and never across the agent's next-step line after it (the UI judge, 2026-11-18: cut at
+    400 characters, a 395-character refusal ended "...on the task. Nex…" in the owner's note, its step no longer a line the page leaves out).
+    The step's line starts after a line break or the app's own mark for one (agenttools.LINE_MARK, as agents._result_text joins them)."""
+    from .agenttools import LINE_MARK, NEXT_STEP, STEP_MAX, WHAT_MAX
+    s = str(text or '').strip()
+    for sep in (f'\n{NEXT_STEP}', f'{LINE_MARK}{NEXT_STEP}'):
+        head, at, step = s.rpartition(sep)
+        if at: return _cut(head, WHAT_MAX + 1) + at + _cut(step, STEP_MAX + 1)
+    return _cut(s, WHAT_MAX + 1)
+
+
 def trace_steps(trace: list) -> list:
     "A chat turn's trace as steps, the one shape every road's record reads in - the turn at work's too (conversation.items)."
     from .viewspec import MARK
@@ -549,7 +561,10 @@ def trace_steps(trace: list) -> list:
             if steps and steps[-1].get('live'): steps.pop()
             steps.append({'k': 'thought', 'text': _cut(d, THOUGHT_N)})
         elif k == 'progress' and name in ('text', 'agent_message') and str(d or '').strip(): steps.append({'k': 'said', 'text': _cut(d, SAID_N)})
-        elif k == 'tool_result' and isinstance(d, dict) and d.get('is_error'): steps.append({'k': 'error', 'text': _cut(d.get('result'), 400)})
+        # ...named by the call it came from, so the page reads a Taskuary tool's refusal as the owner's words alone (stepWhy.forOwner)
+        elif k == 'tool_result' and isinstance(d, dict) and d.get('is_error'):
+            s = calls.get(d.get('tool_call_id') or name)
+            steps.append({'k': 'error', 'text': _cut_said(d.get('result')), **({'name': s['name']} if s else {})})
         elif k == 'error': steps.append({'k': 'error', 'text': _cut((d or {}).get('result') if isinstance(d, dict) else d, 400)})
     return steps
 

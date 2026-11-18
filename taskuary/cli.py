@@ -215,6 +215,8 @@ def _history(args, stranger):
     if args.message is None: print(out.get('says') or ''); return
     print(f"[{out['id']}] {out['when']} - {out['from']}\n{out['subject']}" + (f"\nto {out['to']}" if out.get('to') else '')
           + (f"\nthread {out['thread']}" if out.get('thread') else '') + f"\n\n{out.get('body') or ''}")
+    # ...and its attachments by the id --sign-form takes: a refusal of a wrong id sends a shell agent here to find the right one
+    if out.get('attachments'): print('\nATTACHMENTS:\n' + '\n'.join(f"attachment {x['id']} - {x.get('name') or 'file'}" for x in out['attachments']))
     rest = [m for m in out.get('messages') or [] if m['id'] != out['id']]
     if rest: print('\nTHE REST OF THE THREAD, oldest first:\n' + '\n'.join(f"[{m['id']}] {m['when']} - {m['from']}: {m['snippet']}" for m in rest))
 

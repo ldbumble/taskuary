@@ -4,7 +4,7 @@ temp folder, no network."""
 import os, subprocess, tempfile, time, unittest
 from unittest import mock
 
-from taskuary import guard, landing, shellgate
+from taskuary import agenttools, guard, landing, shellgate
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -184,6 +184,14 @@ class LandingTests(unittest.TestCase):
         self.assertEqual(s['proposal']['how'], 'merge'); self.assertTrue(s['ask'])
         self.assertEqual(self.sha('master'), before)
         with self.assertRaises(ValueError): landing.propose(self.s, self.tid, 'force-push')
+
+    def test_a_landing_asked_before_any_checkout_is_picked_says_how_to_pick_one(self):
+        "A coding agent that called propose_land on a task that never started in a checkout read 'nothing to land' and no next step."
+        bare = Factory(self.s).task(title='Fix the portal login', kind='coding')
+        with self.assertRaisesRegex(ValueError, 'use_repo') as e: landing.propose(self.s, bare, 'pr', 'the fix is ready')
+        # ...the tool names on the agent's own line, never the line the owner's Why line shows (agenttools.refusal)
+        what, step = str(e.exception).split('\n')
+        self.assertNotIn('use_repo', what); self.assertTrue(step.startswith(agenttools.NEXT_STEP))
 
     def test_a_pr_pushes_and_opens_through_the_github_card(self):
         self.branch()

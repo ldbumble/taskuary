@@ -27,7 +27,8 @@ def parse(until, now: datetime = None) -> str | None:
     now = now or datetime.now()
     s = str(until or '').strip().lower()
     if s in NONE_WORDS: return None
-    unreadable = f'"{until}" is not a day I can read - say a date (2026-10-09), "in 2 weeks" or "today 3pm"'
+    from .agenttools import echo                # ...the value bounded and its cut marked, so the way on is never what a length cut takes
+    unreadable = f'"{echo(until)}" is not a day I can read - say a date (2026-10-09), "in 2 weeks" or "today 3pm"'
     if m := _SOON.fullmatch(s):
         n = {'a': 1, 'an': 1, 'one': 1, 'two': 2, 'three': 3, 'four': 4}.get(m.group(1)) or (0.5 if m.group(1).startswith('half') else int(m.group(1)))
         if not n: raise ValueError(unreadable)

@@ -207,6 +207,22 @@ class UseRepoTests(unittest.TestCase):
         tags = str(self.s.get_task(self.tid).get('Tags') or '')
         self.assertIn('repo:northwind/portal', tags); self.assertNotIn('agent-repo:', tags)
 
+    # A REFUSAL'S NEXT STEP BY THE DOOR (the truth judge, 2026-11-18): `taskuary --use-repo nonesuch`, made for a CLI without the use_repo
+    # tool, read "Next: find_repos lists the checkouts you may use" - and the shell has no find_repos. Its step is one it can take
+    def test_a_checkout_refusal_names_a_step_the_door_can_take(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        door = {'use_repo': lambda tid, target, why: repochoice.use(self.s, tid, target, why)}
+        for target, step in (('nonesuch', 'name a repository Taskuary knows, or the folder of a checkout'), (self.plain, 'pick the folder that holds .git'),
+                             ('/no/such/' + 'deep/' * 300, 'name a repository Taskuary knows, or the folder of a checkout')):
+            with self.assertRaises(ValueError) as e: agenttools.call(self.s, self.tid, 'use_repo', {'path_or_name': target, 'why': 'w'}, door)
+            said = agenttools.failed('use_repo', e.exception)
+            what, step_line = said.split('\n')
+            self.assertTrue(step_line.startswith(f'{agenttools.NEXT_STEP}{step} - find_repos '), said); self.assertLess(len(what), 200)
+            with mock.patch.object(server, 'store', self.s):
+                r = TestClient(server.app).post('/api/agent/use-repo', json={'task_id': self.tid, 'path_or_name': target, 'why': 'w'})
+            self.assertEqual(r.status_code, 422); self.assertEqual(r.json()['detail'].split('\n')[1], f'{agenttools.NEXT_STEP}{step}')
+
     def test_the_tools_are_listed_and_their_doors_are_the_agents(self):
         names = {t['name'] for t in agenttools.listing()}
         self.assertTrue({'use_repo', 'find_repos'} <= names)

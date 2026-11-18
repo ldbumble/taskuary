@@ -178,10 +178,13 @@ def resolve(store, target: str) -> tuple:
         from .terminal import find_checkout
         found = find_checkout(r['repo'], {'cwd_map': {}})
         if found: return found, r['repo']
-        raise ValueError(f"no local checkout of {r['repo']} is known - find_repos lists the checkouts here; give its folder")
+        from .agenttools import refusal
+        raise ValueError(refusal(f"no local checkout of {r['repo']} is known", 'give its folder', see=('find_repos', 'lists the checkouts here')))
     p = os.path.abspath(os.path.expanduser(want))
     if os.path.isdir(p): return p, next((r['repo'] for r in rows if r['path'] and norm(r['path']) == norm(p)), '')
-    raise ValueError(f'{want} is neither a repository Taskuary knows nor a folder - find_repos lists the checkouts you may use')
+    from .agenttools import echo, refusal
+    raise ValueError(refusal(f'{echo(want)} is neither a repository Taskuary knows nor a folder', 'name a repository Taskuary knows, or the folder of a checkout',
+                             see=('find_repos', 'lists the checkouts you may use')))
 
 
 def allowed(store, path: str) -> bool:
@@ -205,7 +208,9 @@ def use(store, tid: int, target: str, why: str = '', actor: str = 'agent') -> di
     if pinned == term.NO_REPO: raise PermissionError('the owner marked this task as not code work - do it from your folder, or ask them')
     if pinned: raise PermissionError(f'the owner set this task\'s code to {pinned} - work there; to move it, ask them (Change where the code is)')
     path, name = resolve(store, target)
-    if not is_checkout(path): raise ValueError(f'{path} is not a git checkout - pick the folder that holds .git (find_repos lists them)')
+    if not is_checkout(path):
+        from .agenttools import echo, refusal
+        raise ValueError(refusal(f'{echo(path)} is not a git checkout', 'pick the folder that holds .git', see=('find_repos', 'lists them')))
     if not allowed(store, path):
         raise PermissionError(f"{path} is outside the folders agents may look in for code ({', '.join(folders(store)) or 'none set'}) - "
                               f"the owner adds a folder under {words.name('agents')}")

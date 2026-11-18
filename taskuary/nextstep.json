@@ -1,0 +1,6 @@
+{
+ "_": "A REFUSAL'S NEXT-STEP LINE AND THE APP'S OWN LINE-BREAK MARK, one definition for both sides: agenttools writes them (refusal, echo, _said), agents._result_text joins a kept result's lines with the mark, and the page (website/src/stepWhy.js) reads both. Pinned by tests/test_agent_toolbox.py and website/test/whyFailed.test.mjs.",
+ "next_step": "Next: ",
+ "line_mark": " ⏎ ",
+ "shown_break": " ↵ "
+}

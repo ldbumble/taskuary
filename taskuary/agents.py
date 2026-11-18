@@ -223,7 +223,8 @@ def _result_text(c) -> str:
     """A tool_result's content is a string or a list of {type: text} blocks."""
     v = c.get('content')
     if isinstance(v, list): v = ' '.join(str(b.get('text') or '') for b in v if isinstance(b, dict))
-    return re.sub(r'\s*\n\s*', ' ⏎ ', str(v or '').strip())
+    from .agenttools import LINE_MARK                    # ...the one mark for a break (nextstep.json): the page reads it as one
+    return re.sub(r'\s*\n\s*', LINE_MARK, str(v or '').strip())
 
 
 _DOC_CREATES = {}                                    # tool_use id -> a Claude Docs create's input, until its result

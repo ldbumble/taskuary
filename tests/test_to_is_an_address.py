@@ -67,7 +67,7 @@ def test_a_name_never_reaches_the_provider_as_the_recipient():
 
 # ...and ONE address: an agent's `to` of "paula@..., gail@..." stood on the card as a single recipient the provider refused at Send, and
 # "paula@" stood as if it were one. Refused at the tool with the way on - the others go in `cc`, or each gets its own email
-@pytest.mark.parametrize('to', ['paula@northwind.example, gail@northwind.example', 'paula@northwind.example; gail@northwind.example', 'paula@'], ids=['comma', 'semicolon', 'cut-short'])
+@pytest.mark.parametrize('to', ['paula@northwind.example, gail@northwind.example', 'paula@northwind.example; gail@northwind.example', 'paula@', 'Paula Vance <paula@northwind.example>, gail@northwind.example'], ids=['comma', 'semicolon', 'cut-short', 'named-and-bare'])
 def test_a_to_that_is_not_one_address_is_refused_before_it_stands(to):
     s = MemoryStore(); tid = own_task(s, 'general')
     out = slots.draft(s, tid, 'Hi Paula', to=to, subject='Q4')

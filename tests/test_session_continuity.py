@@ -255,3 +255,39 @@ def test_a_conversation_its_cli_no_longer_has_is_one_plain_line_and_the_turn_run
     notes = [c['Body'] for c in store.list_comments(tid)]
     assert notes.count(agents.GONE_LINE) == 1 and not any('No conversation found' in n for n in notes)
     assert not session.info()['resume_notice'] and session.cli_sid == 'replacement'
+
+
+# THE FILES A TURN CARRIES, EACH IN ONE BLOCK OF THE ONE WORDING (the prompt-shape round, 2026-11-18): the first turn named an attached file three
+# times - twice in his line's own block and once more under "(read these when relevant)", a second wording of the block with_files writes. The
+# turn adds the block for each file no block in it carries; a path met in his words is not a block - "compare /d/a.pdf.bak with it" names no a.pdf
+def _blocked(user):
+    "Each file the files blocks of a turn name, as often as they name it."
+    return [f for part in user.split('\n\n') for f in general.split_files('\n\n' + part)['files']]
+
+
+def _turn_with(words, resumed):
+    import tempfile
+    from pathlib import Path
+    store = MemoryStore(); connect(store); tid = task(store)
+    d = Path(tempfile.mkdtemp()); f = d / 'a.pdf'; f.write_text('x'); (d / 'a.pdf.bak').write_text('y')
+    session = general.GeneralSession(store, tid, pick='cli:claude')
+    if resumed: session.cli_sid = 'live'; session._remember_session()
+    seen = []
+    def answered(system, user, **kw): seen.append(user); return 'Read it.'
+    answered.session_id = 'live'
+    with mock.patch.object(llm, 'build_llm', return_value=answered):
+        session.send_prompt(words.format(d=d), attachments=[str(f)])
+    return seen[0], str(f.resolve())
+
+
+@pytest.mark.parametrize('resumed', [False, True])
+def test_an_attached_file_is_named_once_in_one_block_of_the_one_wording(resumed):
+    user, f = _turn_with('read this', resumed)
+    assert 'when relevant' not in user, user
+    assert _blocked(user).count(f) == 1, user
+
+
+@pytest.mark.parametrize('resumed', [False, True])
+def test_a_path_in_his_words_that_begins_with_the_files_path_still_leaves_the_file_named(resumed):
+    user, f = _turn_with('compare {d}/a.pdf.bak with it', resumed)
+    assert _blocked(user).count(f) == 1, user

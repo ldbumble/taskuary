@@ -555,7 +555,10 @@ const PendingStrip = ({ items, now = false, onRetry = null, onDrop = null, onNow
   const rows = items.filter((x) => x.kind !== "arrival"), shown = waitingShown(rows, 2), more = rows.length - shown.length;
   return !rows.length ? null : <div className="tq-conv-pending" data-tq-pending="" role="status" aria-label="Waiting for the agent">
   {more > 0 && <div className="tq-conv-pending-more" data-tq-pending-more="" data-tq-pending-ids={rows.filter((x) => !shown.includes(x)).map((x) => x.id).join(" ")}>+{more} more</div>}
-  {shown.map((x) => <div key={x.id} className="tq-conv-pending-row" data-tq-pending-item={x.id} dir="auto" title={x.text || x.words || ""}>
+  {shown.map((x) => <div key={x.id} className="tq-conv-pending-row" data-tq-pending-item={x.id} dir="auto" title={[x.text || x.words, ...(x.files || []).map(fileName)].filter(Boolean).join(" · ")}>
+    {/* ...WITH A PILL FOR EACH FILE HE SENT WITH IT, as his heard line has (the attach stress round, 2026-11-18): waiting here it drew its words
+        alone, and a picture sent alone was an empty row with a trash can */}
+    {(x.files || []).map((f) => <AttachChip key={f} name={fileName(f)} title={`Sent with ${fileName(f)}`} data-tq-line-file="" />)}
     <span className="tq-conv-pending-words">{x.text || x.words || ""}</span>
     {x.kind === "line" && now && onNow && <button type="button" className="tq-conv-pending-act" data-tq-send-now="" onClick={() => onNow(x)}>Send now</button>}
     {x.kind === "line" && onDrop && <button type="button" className="tq-conv-pending-act" aria-label="Take it back" title="Take it back - it never reaches the agent"

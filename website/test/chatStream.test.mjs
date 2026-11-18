@@ -299,3 +299,12 @@ test("an answered permission request is drawn as its card, greyed, never a bare 
   assert.match(ws, /if \(x\.kind === "press" && x\.perm\) return [^\n]*\n\s+<AnsweredPermission perm=\{x\.perm\}/);
   assert.match(ac, /export function AnsweredPermission\(\{ perm, at = "" \}\)[^]*?PERM_SAID\[perm\.answer\]/);
 });
+
+// ...AND WHILE IT WAITS BY THE BOX (the attach stress round, 2026-11-18): the strip over the box drew his words alone - a picture sent with words
+// lost its pill until heard, and one sent alone was an empty row with a trash can (browser/line-file-pill records it)
+test("a line waiting by the box draws a pill for every file he sent with it", () => {
+  const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  const strip = src.slice(src.indexOf("const PendingStrip"), src.indexOf("function AssistantThread"));
+  assert.match(strip, /\(x\.files \|\| \[\]\)\.map\(\(f\) => <AttachChip key=\{f\} name=\{fileName\(f\)\}/);
+  assert.match(fs.readFileSync(new URL("../src/generalWorkspace.css", import.meta.url), "utf8"), /\.tq-conv-pending-row > \.tq-attach-chip \{ flex: 0 0 auto;/, "never squeezed to a few letters");
+});

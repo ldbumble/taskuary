@@ -217,9 +217,11 @@ def parse(text: str) -> list:
 def setting_changes(p: dict) -> tuple:
     """(changes, reason). Every named switch checked against the allow-list BEFORE it is proposed -
     so a proposal the owner sees is one that could actually be applied."""
-    out = []
-    for c in (p.get('changes') or []):
-        if not isinstance(c, dict): return [], 'a change must be an object'
+    out, got = [], p.get('changes') or []
+    # ...{switch: value} is the same changes written as one object - read as such: its keys came through below as "a change must be an object"
+    if isinstance(got, dict): got = [got] if 'name' in got else [{'name': k, 'value': v} for k, v in got.items()]
+    for c in (got if isinstance(got, list) else [got]):
+        if not isinstance(c, dict): return [], 'each change is {"name": a switch, "value": its new value} - {"connector", "name", "value"} for a connection\'s own switch'
         conn, name, val = str(c.get('connector') or '').strip().lower(), str(c.get('name') or '').strip(), c.get('value')
         if conn:
             if name not in CONNECTOR_ALLOW.get(conn, {}): return [], f'{conn}.{name} is not a switch a proposal may touch'

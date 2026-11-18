@@ -411,6 +411,13 @@ class NewTaskTool(unittest.TestCase):
             got = json.loads(tool(self.tid, 'propose_email', to='paula@northwind.example', subject='Quote', text='Any update? Alex')[0])
             self.assertIn('did not go (the mailbox refused the sign-in)', got['shown'])
 
+    def test_a_settings_proposal_written_as_one_object_of_switches_is_read_as_its_changes(self):
+        "`changes: {poll_minutes: 5}` came back \"a change must be an object\" - an object, refused for not being one, with no shape said."
+        said, err = tool(self.tid, 'propose', action='settings', why='Mail should come in faster.', changes={'poll_minutes': 5})
+        self.assertFalse(err, said); self.assertTrue(json.loads(said)['queued'])
+        said, err = tool(self.tid, 'propose', action='settings', why='x', changes=['poll_minutes'])
+        self.assertTrue(err); self.assertIn('"name"', said)
+
     def test_a_list_or_a_number_given_in_another_shape_is_read_as_the_schema_has_it(self):
         "A lone cc address, an `answers` written m12, an attachment named \"attachment 12\": read as meant - never a Pydantic dump or a cc spelled letter by letter."
         mid = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'r0', 'ConversationId': 'conv-r', 'Channel': 'email', 'FromName': 'Gail Moreno',

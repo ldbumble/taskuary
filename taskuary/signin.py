@@ -427,10 +427,13 @@ def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=...) ->
     if not site:
         # no page to sign in on (or not one a password goes to): the owner reads the agent's words, and no fill is ever offered
         # ...said as what to DO (2026-10-25): "a sign-in page Taskuary can fill" explained the app, and plain-http portals are common
-        text = (f"Sign in to {said or 'the site'} yourself in the browser pane, then say {DONE} - Taskuary only types passwords into "
+        # ...and a sign-up is asked as one: "Sign in to ... then say Signed in" stood over a sign-up form on plain http
+        up = signing_up(claimed)
+        do, then, page = ('Sign up on', 'Signed up', 'sign-up') if up else ('Sign in to', DONE, 'sign-in')
+        text = (f"{do} {said or 'the site'} yourself in the browser pane, then say {then} - Taskuary only types passwords into "
                 "secure (https) pages" if st.get('open') and st.get('url') and not str(st.get('url')).startswith('about:') else
-                f"Sign in to {said or 'the site'} to continue - the agent has no sign-in page open; ask it to open one")
-        ws.record(store, tid, sid, 'input_needed', request_id=ws.request_id_for(text), text=text, choices=[DONE] if _chat(sid) else None,
+                f"{do} {said or 'the site'} to continue - the agent has no {page} page open; ask it to open one")
+        ws.record(store, tid, sid, 'input_needed', request_id=ws.request_id_for(text), text=text, choices=[then] if _chat(sid) else None,
                   source='api')
         return {'site': '', 'auto': False}
     rid, text = f'{PREFIX}{site}', f'Sign in to {site} to continue'

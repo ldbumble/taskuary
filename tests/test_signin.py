@@ -847,6 +847,14 @@ class SigningUp(unittest.TestCase):
             self.assertEqual(signin.type_new('sess1', 'rentscope.example', 'Np9!x'), 2)
         self.assertEqual((page.typed, page.sent), ([(0, 'Np9!x'), (1, 'Np9!x')], False))
 
+    def test_a_sign_up_with_no_page_a_password_goes_to_is_asked_as_a_sign_up(self):
+        """A sign-up marker over a plain-http form (or no page at all) was asked of the owner as "Sign in to ... then say Signed in"."""
+        for url in ('http://rentscope.example/signup', 'about:blank'):
+            with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': url}):
+                signin.needs(self.s, self.tid, 'sess1', 'new:rentscope.example', watch=None)
+            said = ws.status(self.s, self.tid)['requests'][-1]['text']
+            self.assertTrue(said.startswith('Sign up on rentscope.example'), said); self.assertNotIn('Sign in', said)
+
     def test_a_box_the_page_does_not_name_as_the_user_is_never_kept_as_the_user_name(self):
         """A wizard's last step (its email asked a page before) shows a Company box over the password: read as the user box, the account was
         kept as "Northwind" and said "Signed up ... as Northwind" - and the next sign-in typed the company into the email box."""

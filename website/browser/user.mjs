@@ -24,7 +24,7 @@ async function look(note = "") {
     const vis = eval(visSrc), txt = (e) => (e?.innerText || "").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
     const tp = document.querySelector("[data-tq-task-page]");
     const head = txt(tp?.querySelector("[data-tq-task-head], header, h1, h2")) || txt(document.querySelector("main h1, main h2"));
-    const rail = [...document.querySelectorAll("[data-tq-rail-row], [data-tq-row]")].filter(vis).map((e) => "- " + txt(e).split("\n").slice(0, 2).join(" | ")).slice(0, 25);
+    const rail = [...document.querySelectorAll("[data-tq-rail] .tq-pile-row[data-tq-key]")].filter(vis).map((e) => "- " + txt(e).split("\n").slice(0, 2).join(" | ")).slice(0, 25);
     const chat = txt(tp?.querySelector(".tq-aui-viewport"));
     const main = tp ? "" : txt(document.querySelector("main") || document.body).slice(0, 2500);
     const btns = [...document.querySelectorAll("button, a[href], [role=button]")].filter(vis)
@@ -80,7 +80,7 @@ async function type(words, file) {
 async function row(words) {
   const ok = await page.evaluate((w, visSrc) => {
     const vis = eval(visSrc), want = w.toLowerCase();
-    const r = [...document.querySelectorAll("[data-tq-rail-row], [data-tq-row]")].filter(vis).find((e) => e.innerText.toLowerCase().includes(want));
+    const r = [...document.querySelectorAll("[data-tq-rail] .tq-pile-row[data-tq-key]")].filter(vis).find((e) => e.innerText.toLowerCase().includes(want));
     if (!r) return false; (r.querySelector("button, a") || r).click(); return true;
   }, words, vis);
   await sleep(2000); return look(ok ? `opened the row "${words}"` : `no rail row says "${words}"`);

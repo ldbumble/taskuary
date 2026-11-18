@@ -557,3 +557,22 @@ def test_a_repair_whose_answer_cannot_be_read_says_so_never_asks_the_owner_to_sa
     said = [c['Body'] for c in s.list_comments(tid)]
     assert out['failed'] and not any('Say it another way' in x or 'a report' in x for x in said), said
     assert f'No repair was found: {flow.REPAIR_GARBLED}' in said
+
+
+def test_a_script_is_handed_every_row_the_read_before_it_got():
+    # a routine read 150 bills and handed them to its script for the total: cut at the AI pass's budget on the way, the script saw 116 and
+    # said "116 bills, total 1160" under a read that said 150 rows - a wrong total the AI step and the email after it would have repeated
+    d = tempfile.mkdtemp(); p = os.path.join(d, 'ap.db'); cx = sqlite3.connect(p)
+    cx.execute('CREATE TABLE bill (vendor TEXT, amount REAL, memo TEXT)')
+    cx.executemany('INSERT INTO bill VALUES (?,?,?)', [(f'Vendor {i}', 10, 'x' * 120) for i in range(150)]); cx.commit(); cx.close()
+    script = "import sys, json\nrows = [json.loads(l) for l in sys.stdin if l.strip()]\nprint(f'{len(rows)} bills, total {sum(r[\"amount\"] for r in rows):.0f}')"
+    s = MemoryStore()
+    src = source(s, [{'id': 's1', 'kind': 'source', 'label': 'Read bills', 'type': 'sqlite', 'db': p, 'query': 'SELECT * FROM bill'},
+                     {'id': 's2', 'kind': 'source', 'label': 'Total', 'type': 'python_script', 'script': script, 'input': '{{s1}}'},
+                     {'id': 's3', 'kind': 'ai', 'label': 'Say it', 'prompt': 'Say the bills read:\n{{s1}}', 'output': 'text'}])
+    seen = []
+    out = flow.execute(s, src, run_task(s, src), 'manual', llm=answering('150 bills.', seen=seen))
+    assert [r['status'] for r in out['steps']] == ['ok', 'ok', 'ok'], out['steps']
+    assert out['steps'][0]['rows'] == 150 and out['steps'][1]['body'] == '150 bills, total 1500'
+    assert 'later rows were NOT shown to you' in seen[0]['user']           # ...and the AI, given less, is told it was given less
+    assert len(out['steps'][0]['body']) <= flow.BODY_CAP                    # the run's record stays its size

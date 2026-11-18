@@ -338,7 +338,11 @@ def _source(store, step, ctx, llm, tid, dry, warns, title):
     raw = {k: v for k, v in step.items() if k not in STEP_KEYS and not str(k).startswith('_')}
     if pasted_sql(raw): raise RuntimeError(SQL_PASTE)       # saved before validate refused it: what a step read never rewrites a query
     if pasted_code(raw): raise RuntimeError(CODE_PASTE)
-    cfg = {**render(raw, ctx, warns), **{k: raw[k] for k in (*fixed_keys(), *code_keys(raw)) if k in raw}}; t, w = cfg.get('type'), writes(cfg.get('type'))
+    # ...A SCRIPT IS HANDED EVERY ROW THE READ BEFORE IT GOT (the stress round, 2026-11-18): cut at the AI pass's budget, a read of 150 rows reached
+    # the script as 116 and its total was a quarter short, said as the total. A step keeps what its read returned (wide_rows), each reader
+    # caps it as it must - an AI prompt saying where it was cut (render), the run's record at BODY_CAP - and a script takes it whole
+    cfg = {**render(raw, ctx, warns, reports.WIDE_CHARS if code_keys(raw) else None), **{k: raw[k] for k in (*fixed_keys(), *code_keys(raw)) if k in raw}}
+    t, w = cfg.get('type'), writes(cfg.get('type'))
     try: reports.gate(store, cfg)
     except PermissionError as e:
         if not w: raise
@@ -350,7 +354,7 @@ def _source(store, step, ctx, llm, tid, dry, warns, title):
         if not p: raise RuntimeError(f'{e} - and the proposal to run it was refused')
         return {'status': 'waiting', 'head': 'waiting for your yes', 'why': str(e)[:300], 'review_id': p['reviewId']}
     if dry and w: return {'status': 'dry', 'head': f'would run {t}', 'body': json.dumps(cfg, indent=1, default=str)}
-    head, body = reports.executor_for(t)(reports.resolve_cfg(store, cfg))
+    with reports.wide_rows(): head, body = reports.executor_for(t)(reports.resolve_cfg(store, cfg))
     return {'head': str(head)[:300], 'body': body or '', 'rows': len(artifacts.rows_from_body(body or ''))}
 
 

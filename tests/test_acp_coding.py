@@ -558,6 +558,31 @@ def test_a_peers_note_never_begins_a_turn_on_an_agent_he_stopped_and_rides_the_t
     assert 'totals.py is free again' in told and 'Carry on.' in told, told
 
 
+def test_a_turn_he_stops_before_its_first_step_leaves_nothing_at_work_under_his_stop(world, monkeypatch, tmp_path):
+    """The owner, 2026-11-17: "the agent keeps saying 'Thinking...' even after it is done". Recorded on a coding agent over ACP: he typed a
+    line and pressed Stop before the agent had streamed a word. The turn was no item yet - his line was the last thing in the chat - so the
+    stop was not read as ending it, and for the beat its session took to let go a NEW turn stood under "You stopped the agent", "working 3s
+    - Waiting for the agent to start", then vanished. Every read from the press on: nothing at work under the stop."""
+    from taskuary import conversation
+    s, tid, repo = world
+    rules = tmp_path / 'rules.json'; rules.write_text(json.dumps([{'when': 'take your time', 'wait': 60, 'first': 'Done.'}]), encoding='utf-8')
+    monkeypatch.setenv('FAKE_ACP_SCRIPT', str(rules))
+    t = open_(s, tid, repo, seed=''); assert until(lambda: t.client and not t.busy)
+    general.take_line(s, tid, 'Take your time on the totals.', line_id='l-one'); assert until(lambda: t.in_turn)
+    real = t.client.cancel                    # ...its adapter lets go a beat after the press, as a real one does
+    monkeypatch.setattr(t.client, 'cancel', lambda *a, **k: threading.Timer(.6, real, a, k).start())
+    done, bad = threading.Event(), []
+    def read():
+        while not done.is_set():
+            got = conversation.items(s, tid); xs = got['items']; at = next((i for i, x in enumerate(xs) if x['kind'] == 'press'), None)
+            if at is not None and (got['working'] or [x for x in xs[at:] if x.get('state') in ('working', 'starting')]): bad.append([(x['kind'], x.get('state')) for x in xs])
+            time.sleep(.02)
+    r = threading.Thread(target=read, daemon=True); r.start()
+    assert general.stop_turn(s, tid) and idle(t)
+    time.sleep(.3); done.set(); r.join(2)
+    assert not bad, bad[:3]
+
+
 @pytest.mark.parametrize('hold', ['1', 'said'], ids=['never answered', 'answered before the stop'])
 def test_a_line_typed_into_a_turn_he_then_stops_is_answered_by_one_turn_under_the_stop(world, monkeypatch, tmp_path, hold):
     """The recorded stop, 2026-11-11: two lines typed into a coding turn joined it (steered), he pressed Stop, and nothing ever answered them -

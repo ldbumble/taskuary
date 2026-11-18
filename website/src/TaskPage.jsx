@@ -38,6 +38,7 @@ import api from "./api";
 import { useViewExtras } from "./pageView.js";
 import { openReply as draftReply } from "./replyDraft.js";   // the component's own openReply below would shadow it, and call itself
 import { opError, runOperation } from "./taskOps.js";
+import { demoNo } from "./apiError.js";
 import { ClosingCard, WriteupBlock, WriteupLine, closeAfterSend, completeTask, writeUpThenClose } from "./closeAgent.jsx";
 import { writeupView } from "./writeupState.js";
 import { agentName } from "./agentWork.js";
@@ -1904,7 +1905,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     const word = scope === "org" ? strangerLine(detail)?.trustOrg : strangerLine(detail)?.trust;
     setTrusting(scope || "person");
     try { await runOperation(api, "task.trust", selected, scope ? { scope } : undefined); await loadDetail(selected); loadTasks(); onChanged?.(); }
-    catch (e) { setErr(`That didn't go through - ${opError(e, "Taskuary didn't answer")}.${word ? ` Press ${word} again.` : ""}`); }
+    // ...the demo's no as its own line: "That didn't go through - This is the demo - ... Press Trust Priya again" asked for a press that
+    // can never work (the walk, 2026-11-18)
+    catch (e) { setErr(demoNo(e) || `That didn't go through - ${opError(e, "Taskuary didn't answer")}.${word ? ` Press ${word} again.` : ""}`); }
     finally { setTrusting(null); }
   };
   // the one white section on the shaded body (taskLayout.focusOf); a live session has no shade and no focus - it is the page

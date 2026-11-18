@@ -62,6 +62,9 @@ READ_ONLY_METHODS = {'GET', 'HEAD', 'OPTIONS'}
 # The methods an allowance can be given for at all: a DELETE is never the demo, and PUT is how
 # agents and connectors are configured. Both fall through to the refusal.
 ALLOWED_METHODS = {'POST', 'PATCH'}
+# ...but for the undo of a write the demo lets by, named one by one: a file put on a draft is a copy in the demo's own home, and its
+# Remove answered "that would reach something real" - nothing could take it off again (the walk, 2026-11-18)
+ALLOWED_DELETES = (r'^/api/reviews/\d+/attachment$',)
 
 # POSTs that change nothing outside the demo's own database, and are the demo itself
 ALLOWED_WRITES = (
@@ -125,31 +128,47 @@ ALLOWED_WRITES = (
 LOCAL_OPS = {'task.complete', 'task.reopen', 'task.defer', 'task.watching', 'item.settle', 'message.file', 'task.not_a_task', 'message.reply',
              'preference.exclude_sender', 'preference.sender_rule', 'task.let_go', 'task.elsewhere', 'idea.act', 'memory.remember', 'memory.wrong',
              'routing.remember', 'task.split', 'task.update', 'task.check', 'task.checklist', 'task.watch', 'task.comment', 'task.merge',
-             'review.reject', 'calendar.answer', 'hub.publish', 'pipe.clear', 'pipe.defer', 'pipe.close', 'pipe.remove', 'pipe.block', 'pipe.mine', 'script.start'}
+             'review.reject', 'calendar.answer', 'hub.publish', 'pipe.clear', 'pipe.defer', 'pipe.close', 'pipe.remove', 'pipe.block', 'pipe.mine', 'script.start',
+             # ...and the acts whose own path the deny list already lets by (ALLOWED_WRITES): pressed through a card they read "that would
+             # reach something real" (the walk, 2026-11-18) - two roads for one act, answering two ways
+             'deleted.restore', 'hub.comment', 'hub.vote', 'meeting.new', 'problems.dismiss', 'page.open', 'button.light'}
 
 # The sentences the visitor sees, plain and said as the demo, not as a fault: the page posts them as an ordinary line.
 SENDS = 'This is the demo - nothing is sent. In your own Taskuary this is where you approve it and it goes.'
 STARTS = 'This is the demo - the agents here are recordings, so nothing new starts.'
-OFF = 'This is the demo - that would reach something real, so it is switched off. Everything here is invented.'
+# ...the catch-all, for whatever the lists here do not name: true of every one of them. It said "that would reach something real", and most
+# of what fell to it reached nothing - a Quit, a picture's Keep, a file taken off a draft, a press through a card (the walk, 2026-11-18)
+OFF = 'This is the demo - that is switched off here, so nothing changed. Everything here is invented.'
 NO_AI = 'This is the demo - no AI runs here, so nothing is read or planned again. In your own Taskuary your AI does this.'
+# ...and a stop: the coding sessions here REPLAY a recording, so Stop and save, Pause and Stop have no agent to reach - each read "that
+# would reach something real" (the walk, 2026-11-18)
+RECORDED = 'This is the demo - the agents here are recordings, so there is nothing to stop or save.'
+CONNECTIONS_FIXED = 'This is the demo - these connections are invented, and there is nothing real behind them to change.'
+REPORTS_FIXED = 'This is the demo - its documents and reports are fixed: editing, running, pausing and switching them are off here.'
 
 # What is refused, and the sentence the visitor sees. Order matters: the first match wins.
 REFUSALS = (
     (r'^/api/(cli|deps|update)(/|$)', 'This is the demo - nothing happens. Its AI tools are pretend, and nothing on your computer is touched.'),
-    (r'^/api/connectors', 'This is the demo - these connections are invented, and there is nothing real behind them to change.'),
+    (r'^/api/connectors', CONNECTIONS_FIXED),
+    # ...and the top bar's Quit, which reaches nothing: the demo stays up for whoever opens it next - the website's /demo is one server for
+    # every visitor. It read "that would reach something real" (the walk, 2026-11-18)
+    (r'^/api/quit$', 'This is the demo - it stays up for whoever opens it next, so it does not quit from here. Close the tab to leave.'),
+    # ...and About you's own fields - the name, the picture's Keep, the signature: they change the invented owner, and read "that would
+    # reach something real" (the walk, 2026-11-18)
+    (r'^/api/(whoami|owner|hand-signature)$', 'This is the demo - its owner is invented, and stays as written.'),
     (r'^/api/(tools/run|agents/[^/]+/test)', 'This is the demo - nothing runs, because there are no real systems here to run against.'),
     (r'^/api/(reviews?/\d+/send|tasks/\d+/(handoff|clarify)|board/send|messages/\d+/send)', SENDS),
     # ...and Trust, whose whole effect is that an agent starts on the sender's words: it read "that would reach something real"
     # ...and a goal's step sent to an agent, which is a start like any other
     (r'^/api/(terminals|agents)(/|$)|^/api/tasks/\d+/(dispatch|code|continue|continue-session|continue-work|resume|trust|steps/[^/]+/start)$'
      r'|^/api/messages/\d+/dispatch$|^/api/calendar/prepare$', STARTS),
+    (r'^/api/tasks/\d+/(wrap|pause|agent/(cancel|stop))$', RECORDED),
     # ...what would ask an AI to read or plan again (a goal's Re-plan): none runs here
     (r'^/api/tasks/\d+/read-ask$', NO_AI),
     (r'^/api/(sync|ingest|poll|msauth|hooks)', 'This is the demo - no mail is fetched; what you see was written in advance.'),
     # ...every press on a report - Run now, Run due now, its switch, Pause - answered as what it is: "would reach something real" stood
     # under each of them (the walk, 2026-11-15)
-    (r'^/api/(doc|soul|semantic|reports?/([^/]*/(run|rerun|preview)|due)$|sources(/|$)|dashboards/(compose|preview))',
-     'This is the demo - its documents and reports are fixed: editing, running, pausing and switching them are off here.'),
+    (r'^/api/(doc|soul|semantic|reports?/([^/]*/(run|rerun|preview)|due)$|sources(/|$)|dashboards/(compose|preview))', REPORTS_FIXED),
 )
 
 
@@ -168,8 +187,16 @@ def refuse_op(op) -> str:
     # ...a letter's Send is played wherever it is pressed (refuse_verdict): the rail's Send is the card's
     if kind == 'review.approve' and (st := _store()) is not None and (rv := st.get_review(int(op.get('target') or 0))):
         return refuse_verdict('approve', rv.get('Kind'))
+    # ...WHO DOES IT is a field on the task, unless the answer is an agent, which starts on it (server's task.set_kind: _start_chosen). Each
+    # read "that would reach something real" (the walk, 2026-11-18), and so did every press below whose own path says what it is
+    if kind == 'task.set_kind': return STARTS if str(p.get('kind') or '') in ('general', 'coding') else ''
     if kind in ('review.approve', 'task.clarify', 'task.chase', 'task.handoff', 'task.share', 'task.ask_agent'): return SENDS
-    if kind in ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.tell', 'agent.stop', 'agents.stop', 'task.create_from_message', 'task.create_from_text', 'calendar.prepare'): return STARTS
+    if kind in ('agent.stop', 'agents.stop'): return RECORDED
+    if kind in ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.tell', 'task.create_from_message', 'task.create_from_text',
+                'calendar.prepare', 'task.trust'): return STARTS
+    if kind == 'message.retriage': return NO_AI
+    if str(kind or '').startswith('report.'): return REPORTS_FIXED
+    if str(kind or '').startswith('connection.'): return CONNECTIONS_FIXED
     return OFF
 
 
@@ -232,6 +259,7 @@ def refuse(method: str, path: str, store=None) -> str:
     if method.upper() in READ_ONLY_METHODS: return ''
     for pattern, why in REFUSALS:
         if re.match(pattern, path): return why
+    if method.upper() == 'DELETE' and any(re.match(p, path) for p in ALLOWED_DELETES): return ''
     if method.upper() in ALLOWED_METHODS:
         for pattern in ALLOWED_WRITES:
             if not re.match(pattern, path): continue
@@ -287,18 +315,18 @@ PROMPTS = (
     # ...and the way in, for a visitor who opened the chat before the rail (seed_tour, the owner 2026-10-30)
     ('tour', 'Where do I start?', "Here: {task:Start here - what Taskuary can do} - its to-do is a short tour of what to try."),
 )
-OUT_OF_SCRIPT = 'In the demo I answer the suggested questions - in your own Taskuary your AI answers anything.'
-
+ONLY_SUGGESTED = 'In the demo I answer the suggested questions - in your own Taskuary your AI answers anything.'
 ASK_ONE = 'Ask one of these: ' + ', '.join(f'“{ask}”' for _, ask, _ in PROMPTS) + '.'
+# ...AND IN ITS OWN WORDS (the walk, 2026-11-15): the Assistant's window draws no chips, so "the suggested questions" named questions nobody
+# could see - a dead end. The line carries them where it is MADE, so the chat keeps what it said: added to the answer on its way out, the
+# kept line was the bare one, and the chat's next read of its thread drew it a second time (the walk, 2026-11-18)
+OUT_OF_SCRIPT = f'{ONLY_SUGGESTED} {ASK_ONE}'
 def prompt_chips() -> list: return [{'ask': ask, 'label': ask, 'prompt': pid} for pid, ask, _ in PROMPTS]
 
 def with_prompts(out):
     """The suggestions under the line that says they are all the demo answers (concierge.say) - and under nothing else."""
     if isinstance(out, dict) and OUT_OF_SCRIPT in str(out.get('say') or ''):
         out['chips'] = [*(out.get('chips') or []), *prompt_chips()]
-        # ...AND IN ITS OWN WORDS (the walk, 2026-11-15): the Assistant's window draws no chips, so "the suggested questions" named
-        # questions nobody could see - a dead end. The line carries them, as the static demo's does (demoApi.js)
-        out['say'] = str(out['say']).replace(OUT_OF_SCRIPT, f'{OUT_OF_SCRIPT} {ASK_ONE}', 1)
     return out
 
 def _task_link(store, title: str) -> str:
@@ -356,8 +384,11 @@ def brain(seed: int = 0, store=None):
         if 'You looked up issue.draft and it says:' in text:
             return ('That is drafted - the button under this opens it, with names and mail taken out, for you to read and submit on GitHub.'
                     if 'Drafted.' in text else "I can't draft that one here.")
-        if 'JSON' in str(system or '') or 'intent' in str(system or '').lower():
+        if 'intent' in str(system or '').lower():
             return json.dumps({'intent': 'fyi', 'why': 'the demo files everything it is not sure about'})
+        # ...and only triage (the walk, 2026-11-18): every JSON ask got triage's verdict, and its reason was drawn wherever a `why` is -
+        # "The AI reads this as one job - the demo files everything it is not sure about" under Split. One the script has no answer for finds nothing
+        if 'JSON' in str(system or ''): return '{}'
         # what the person actually typed, out of a prompt that also carries the task, the
         # documents and the conversation - quoting the whole thing back reads as a bug
         asked = [l[len(OWNER_SAYS):].strip() for l in text.splitlines() if l.startswith(OWNER_SAYS)] \
@@ -471,6 +502,9 @@ CONNECTIONS = (    # (Type, Name, ConfigJson, a stand-in secret: a card reads "s
     ('whatsapp', 'WhatsApp', {}, None),
     ('linkedin', 'LinkedIn', {'member_name': OWNER}, 'demo'),
     ('github', 'GitHub', {}, 'demo'),
+    # ...and the database its three reports read (REPORTS): without it Connections read "Microsoft SQL Server - not set up · 3 reports"
+    # beside reports that "ran 3m ago" off it (the walk, 2026-11-18). Nothing connects to it: its Test is refused like every POST here
+    ('mssql', 'Northwind SQL', {'server': 'sql.northwind.example', 'database': 'ops'}, 'demo'),
 )
 SOURCES = (('outlook', 'email', OWNER_EMAIL), ('teams', 'teams', OWNER_EMAIL), ('github', 'github', 'northwind/ledger'))
 
@@ -1247,8 +1281,8 @@ def seed_agent_day(store, f) -> int:
 # keeps the number the tests and the static demo know it by.
 TOUR = 'Start here - what Taskuary can do'
 TOUR_BODY = ('Welcome to the demo. Northwind, its people and their mail are invented, and nothing you press here reaches anyone. '
-             'The to-do on this task is a short tour - each step is something you can try in the demo. Tick a step as you go; '
-             'ticking the last one closes this task.')
+             'The to-do on this task is a short tour - each step is something you can try in the demo. Tick a step as you go, '
+             'and press Mark done when you are through.')
 TOUR_STEPS = (                           # in the order they are read: the to-do draws newest first, so they are stored the other way round
     'Open "Reconcile the August GL export": Came from is what arrived, Agent is one chat - its turns and what it set up for you',
     'See what an agent sets up for one press: open "Fairhaven safety milestone" - a LinkedIn post with its chart, waiting on Post to LinkedIn',

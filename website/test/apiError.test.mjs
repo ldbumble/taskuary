@@ -73,3 +73,16 @@ test("api.js normalizes through the one helper, so this cannot drift back apart"
   assert.match(src, /keepDetail/);
   assert.doesNotMatch(src, /JSON\.stringify\(d\)/);   // the flattening lives in apiError.js only
 });
+
+// THE DEMO'S NO IS ITS OWN LINE (the walk, 2026-11-18): Trust on a closed task read "That didn't go through - This is the demo - ...
+// Press Trust Priya again." - a press that can never work, asked for again. One reader says whether an error is the demo saying no.
+test("the demo's refusal is read as its own sentence, and nothing else is", async () => {
+  const { demoNo } = await import("../src/apiError.js");
+  const no = { response: { status: 403, data: { demo: true, detail: "This is the demo - the agents here are recordings, so nothing new starts." } } };
+  assert.equal(demoNo(no), no.response.data.detail);
+  assert.equal(demoNo({ response: { status: 403, data: { detail: "forbidden" } } }), "");
+  assert.equal(demoNo({ response: { status: 500, data: { demo: true, detail: "x" } } }), "");
+  const page = readFileSync(fileURLToPath(new URL("../src/TaskPage.jsx", import.meta.url)), "utf8");
+  const trust = page.slice(page.indexOf("const trustPress"), page.indexOf("finally { setTrusting(null)"));
+  assert.match(trust, /setErr\(demoNo\(e\) \|\|/, "the Trust press says the demo's no as it is");
+});

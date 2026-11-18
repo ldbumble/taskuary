@@ -83,6 +83,26 @@ class TheDoorsAreShutTests(unittest.TestCase):
         self.assertIsNone(s.last_worker_event(rv['TaskId'], kinds=('failed',)), 'and no agent is woken to fail on "No AI is connected"')
         gone.assert_not_called()
 
+    def test_a_played_send_stays_where_it_stood_above_the_line_after_it(self):
+        """The walk, 2026-11-18, recorded frame by frame: Send on Invoice 88213 - the card settled as sent, then the agent's line after it
+        landed ABOVE it and pushed it down. That line had no marked start, so it counted as begun at the start of time and took in a card
+        made long before it. A card stands where it was; what is said after it is drawn under it."""
+        from taskuary import conversation, verdicts
+        s = MemoryStore()
+        with mock.patch('taskuary.terminal.live_sessions', lambda tail=0: []), on():
+            demo.seed(s)
+            rv = next(r for r in s.list_reviews() if (s.get_task(r['TaskId']) or {}).get('Title') == 'Invoice 88213 - past due')
+            # ...the visitor reads a while before pressing: the draft is minutes older than the press
+            s._exec('UPDATE review SET CreatedAt=? WHERE ReviewId=?', (demo._at(10), rv['ReviewId'])); rv = s.get_review(rv['ReviewId'])
+            before = [x['id'] for x in conversation.items(s, rv['TaskId'])['items']]
+            self.assertEqual(verdicts.decide(s, rv, 'approve').get('ok'), True)
+            items = conversation.items(s, rv['TaskId'])['items']
+        card = f"r:{rv['ReviewId']}"
+        self.assertIn(card, before)
+        self.assertIn(card, [x['id'] for x in items], 'the sent card stands on its own, where it stood')
+        said = next(i for i, x in enumerate(items) if x['kind'] == 'turn' and demo.AFTER_SEND in (x.get('text') or ''))
+        self.assertLess([x['id'] for x in items].index(card), said, 'the line said after the send is drawn under the card')
+
     def test_the_draft_the_tour_points_at_can_be_sent(self):
         # ...its redraft stayed pinned to the first mail, so it read as stale: Redraft alone, and no AI in the demo to redraft with
         from taskuary import verdicts
@@ -221,6 +241,18 @@ class TheScriptedBrainTests(unittest.TestCase):
         self.assertIn(out['intent'], ('fyi', 'task', 'reply_only'))
 
 
+    def test_a_json_ask_without_a_script_never_gets_triages_answer(self):
+        """The walk, 2026-11-18: Change > Split or merge read "The AI reads this as one job - the demo files everything it is not sure
+        about": every JSON ask was answered with triage's verdict, and its reason was quoted wherever a `why` is drawn. An ask the
+        script has no answer for finds nothing; triage still gets its verdict."""
+        from taskuary import reshape
+        s = MemoryStore(); demo.seed(s)
+        tid = next(t['TaskId'] for t in s.list_tasks() if t['Title'] == 'Trainly renewal - how many seats?')
+        out = reshape.propose_split(s, tid, demo.brain(store=s))
+        self.assertFalse(out['two'])
+        self.assertNotIn('files everything', out['why'])
+        self.assertNotIn('intent', demo.brain()(reshape.SPLIT_SYSTEM, '{}'))
+
     def test_the_canned_count_is_the_rails_own(self):
         """B23: "Three things are waiting on you" stood beside a rail of nine - and "25 things are on it, and 5 are waiting" beside an
         ON YOU of 9 (2026-10-19 UI walk): the count is the ON YOU band's, the greeting's own (lanes.on_you)."""
@@ -287,12 +319,25 @@ class TheDemoChatAnswersItsSuggestionsTests(unittest.TestCase):
             out = concierge.say(self.s, 'close all the tasks from Priya', llm=demo.brain(store=self.s))
             # ...the questions in the line's own words too: the Assistant's window draws no chips, and "the suggested questions" named
             # questions nobody could see (the walk, 2026-11-15)
-            self.assertEqual(out['say'], f'{demo.OUT_OF_SCRIPT} {demo.ASK_ONE}')
+            self.assertEqual(out['say'], demo.OUT_OF_SCRIPT)
             for _, ask, _ in demo.PROMPTS: self.assertIn(f'“{ask}”', out['say'])
             self.assertEqual([c for c in out['chips'] if c.get('prompt')], demo.prompt_chips())
             self.assertTrue(all(c['ask'] == c['label'] for c in demo.prompt_chips()), 'a chip sends exactly the words it shows')
             out = concierge.say(self.s, demo.PROMPTS[2][1], llm=demo.brain(store=self.s))
             self.assertFalse([c for c in out.get('chips') or [] if c.get('prompt')])
+
+    def test_the_honest_line_is_kept_as_it_was_said(self):
+        """The walk, 2026-11-18: a visitor typed something off the script, then a suggestion; the chat read its thread again and the
+        first answer came back a second time, shorter - the line was kept without the questions the answer had carried, so the page
+        could not tell it was the one it had drawn. What is kept is what was said."""
+        from taskuary import concierge, general
+        s = MemoryStore()
+        with mock.patch('taskuary.terminal.live_sessions', lambda tail=0: []):
+            demo.seed(s)
+            out = concierge.say(s, 'tell me a joke', llm=demo.brain(store=s))
+        dock = general.dock_task(s, 'owner')[0]['TaskId']
+        kept = [t['text'] for t in concierge.history(s, dock) if t['role'] == 'assistant' and demo.ONLY_SUGGESTED in t['text']]
+        self.assertEqual(kept, [out['say']])
 
 
 class TheAdvisorSpeaksInTheDemoTests(unittest.TestCase):
@@ -557,6 +602,20 @@ class TheDemoOpensOnItsTourTests(unittest.TestCase):
         for b in ('Next', 'Back', 'Send', 'Remind me', 'Not for me'): self.assertIn(b, labels)
         self.assertIn("What's on me right now?", [ask for _, ask, _ in demo.PROMPTS], 'the chat answers the question the tour asks')
 
+    def test_the_tour_says_what_ticking_its_last_step_does(self):
+        """The walk, 2026-11-18: the tour said "ticking the last one closes this task"; every step ticked through the checklist's own road
+        (task.check), and the task stayed open on the rail, Mark done lit - the last tick closes nothing (slots.py, 2026-10-18). What it
+        says is what a tick does."""
+        from taskuary import concierge
+        s, _ = self.seeded()
+        tour = next(t for t in s.list_tasks() if t['Title'] == demo.TOUR)
+        for n in range(len(s.task_checklist(tour['TaskId'])), 0, -1):
+            concierge._task_writes(s, tour['TaskId'], 'task.check', tour['TaskId'], {'item': str(n), 'done': True}, 'it', 'owner')
+        self.assertTrue(all(i.get('done') for i in s.task_checklist(tour['TaskId'])))
+        still_open = s.get_task(tour['TaskId'])['Status'] not in ('done', 'dropped')
+        self.assertEqual(still_open, 'Mark done' in demo.TOUR_BODY, demo.TOUR_BODY)
+        if still_open: self.assertNotIn('closes this task', demo.TOUR_BODY)
+
     def test_a_step_that_shows_an_agents_turns_names_a_task_that_has_them(self):
         """The first step sent the visitor to "Month-end close is short by 4,180" to see "Agent is one chat - its turns and what it set
         up": that task has no agent and its chat is the one email. The turns are on the reconciliation's task. And "the draft under Next
@@ -691,6 +750,63 @@ class TheDemoWorldIsConnectedTests(unittest.TestCase):
             for path in ('/api/tasks/7/steps/s2/start', '/api/tasks/7/read-ask', '/api/reports/due', '/api/sources'):
                 self.assertNotEqual(demo.refuse('POST', path), demo.OFF, path)
 
+    def test_quit_says_why_the_demo_stays_up_never_that_it_would_reach_something_real(self):
+        """The walk, 2026-11-18: the top bar's Quit answered "that would reach something real" - quitting reaches nothing; the demo is
+        kept up for whoever opens it next (the website's /demo is one server for every visitor)."""
+        with on():
+            why = demo.refuse('POST', '/api/quit')
+            self.assertTrue(why.startswith('This is the demo - '), why)
+            self.assertNotEqual(why, demo.OFF)
+            self.assertIn('close', why.lower())
+
+    def test_a_file_put_on_a_draft_can_be_taken_off_again(self):
+        """The walk, 2026-11-18: a file could be attached to a draft (copied into the demo's own home) but its Remove answered "that
+        would reach something real" - nothing could take it back off. Taking it off is the same local write as putting it on."""
+        with on():
+            self.assertEqual(demo.refuse('POST', '/api/reviews/12/attachment'), '')
+            self.assertEqual(demo.refuse('DELETE', '/api/reviews/12/attachment'), '')
+            for path in ('/api/reviews/12', '/api/tasks/3', '/api/connectors/2', '/api/policies/1'):
+                self.assertTrue(demo.refuse('DELETE', path), f'only the attachment is let by: {path}')
+
+    def test_a_press_through_a_card_answers_as_its_own_path_does(self):
+        """The walk, 2026-11-18: Change who does it > reply, a report's Pause this report, and every act whose own path the demo lets by
+        answered "that would reach something real" when pressed through a card (/api/operations/<id>/execute): two roads for one act."""
+        op = lambda k, **p: demo.refuse_op({'kind': k, 'params': p})
+        with on():
+            self.assertEqual(op('task.set_kind', kind='reply'), '')
+            self.assertEqual(op('task.set_kind', kind='task'), '')
+            self.assertEqual(op('task.set_kind', kind='general'), demo.STARTS)
+            for k in ('report.pause', 'report.resume', 'report.run', 'report.edit'): self.assertEqual(op(k), demo.REPORTS_FIXED, k)
+            for k in ('connection.test', 'connection.pause'): self.assertEqual(op(k), demo.CONNECTIONS_FIXED, k)
+            self.assertEqual(op('task.trust'), demo.STARTS)
+            self.assertEqual(op('message.retriage'), demo.NO_AI)
+            # ...and each act its path already lets by is let by here too
+            for k, path in (('deleted.restore', '/api/deleted/3/restore'), ('hub.comment', '/api/hub/posts/3/comments'),
+                            ('meeting.new', '/api/meetings')):
+                self.assertEqual(demo.refuse('POST', path), '', path)
+                self.assertEqual(op(k), '', k)
+
+    def test_stopping_a_recorded_agent_says_it_is_a_recording(self):
+        """The walk, 2026-11-18: Stop and save on the replayed coding session read "that would reach something real"."""
+        with on():
+            for path in ('/api/tasks/12/wrap', '/api/tasks/12/pause', '/api/tasks/12/agent/stop', '/api/tasks/12/agent/cancel'):
+                self.assertEqual(demo.refuse('POST', path), demo.RECORDED, path)
+            self.assertEqual(demo.refuse_op({'kind': 'agent.stop', 'params': {}}), demo.RECORDED)
+
+    def test_about_you_says_the_owner_is_invented(self):
+        """The walk, 2026-11-18: About you > a picture's Keep answered "that would reach something real"."""
+        with on():
+            for m, path in (('PATCH', '/api/whoami'), ('PUT', '/api/owner'), ('PUT', '/api/hand-signature')):
+                why = demo.refuse(m, path)
+                self.assertNotEqual(why, demo.OFF, path)
+                self.assertIn('owner is invented', why)
+
+    def test_the_catch_all_claims_nothing_it_cannot_know(self):
+        """The walk, 2026-11-18: whatever the deny list does not name answered "that would reach something real" - most of it reached
+        nothing. The catch-all says only what is true of all of it."""
+        self.assertNotIn('real', demo.OFF)
+        self.assertTrue(demo.OFF.startswith('This is the demo - '))
+
     def test_trust_says_no_agent_starts_here_never_that_it_would_reach_something_real(self):
         with on(): self.assertEqual(demo.refuse('POST', '/api/tasks/4/trust'), demo.STARTS)
 
@@ -705,6 +821,17 @@ class TheDemoWorldIsConnectedTests(unittest.TestCase):
         self.assertEqual(connectorcatalog.connected_count(s, demo.cli_connections()), len(demo.CONNECTIONS) + len(demo.CLIS_ON))
         for kind in ('email', 'linkedin', 'teams', 'whatsapp', 'github'): self.assertIsNone(outbound.connect_fix(s, kind), kind)
 
+
+    def test_the_system_its_reports_read_is_connected(self):
+        """The walk, 2026-11-18: Connections > Databases read "Microsoft SQL Server - not set up · 3 reports" beside the demo's three
+        reports, each "SQL Server · ran 3m ago" - a world whose reports run off a system it says is not there."""
+        import json
+        from taskuary import connectorcatalog
+        s = MemoryStore(); demo.seed(s)
+        read = {t for src in s.list_sources() if src['Channel'] == 'report'
+                for t in [json.loads(src.get('ConfigJson') or '{}').get('type')] if connectorcatalog.by_type(t)}
+        self.assertTrue(read, 'the demo has reports that read a system')
+        self.assertLessEqual(read, {c['Type'] for c in s.list_connectors() if connectorcatalog.is_connected(c)})
 
 class DemoDashboardTests(unittest.TestCase):
     def test_a_report_named_nightly_or_weekly_has_that_schedule(self):

@@ -211,7 +211,7 @@ def health(store, name: str = '', connector_id=None, n: int = 0, chat: str = '')
         b = _bridge(store, c)
         steps.append(step(n + 2, 'read', f"Asked the WhatsApp bridge: {b['line'] or 'no answer'}",
                           '\n'.join([f"manager: {b['manager']}", *b['log']]), ok=b['up'] and not b['fix']))
-        out.update(log=b['log'], bridge=b['line'])
+        out.update(log=b['log'], bridge=b['line'], managed=b['managed'])
         if not b['node']: return {**out, 'ok': False, 'why': 'Node.js, which the bridge runs on, is not installed on this computer', 'fix': card}
         if b['fix'] == 'restart' and b['managed']: return {**out, 'ok': False, 'why': f"the bridge is {b['line'] or 'not answering'}", 'repair': 'restart_bridge'}
         if b['fix'] == 'restart': return {**out, 'ok': False, 'why': 'the bridge runs somewhere else, not on this computer - it is started where it runs', 'fix': card}
@@ -256,8 +256,12 @@ def repair(store, name: str, how: str, n: int = 0, chat: str = '') -> dict:
     if not h['cid']: return {**h, 'did': '', 'said': f'There is no connection called {name!r}.'}
     how = how if how in HOW else h['repair']
     # a sync and a test are safe on any connection that is on; a bridge is restarted only where this computer runs it
-    if not how or h['why'].endswith(('switched off', 'not set up yet')) or (how == 'restart_bridge' and h['repair'] != how):
+    if not how or h['why'].endswith(('switched off', 'not set up yet')):
         return {**h, 'did': '', 'said': f"{h['name']} has no {how or 'repair'} to run here - {h['why']}."}
+    # ...where this computer runs it - whether health named the restart or not: the owner's "restart the bridge" over one that still answers
+    # is the card's own Restart bridge, pressed in words
+    if how == 'restart_bridge' and not h.get('managed'):
+        return {**h, 'did': '', 'said': f"{h['name']} has no restart_bridge to run here - the bridge runs somewhere else, not on this computer."}
     # what it read before the press is not drawn twice: the model read it a step ago (app.health), and the press reads it again after
     nm, ok, detail = h['name'], True, ''
     try:

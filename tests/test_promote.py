@@ -143,6 +143,14 @@ class Promotion(unittest.TestCase):
         self.assertEqual(policy.evaluate({'from_email': NEWS}, s.list_policies())['action'], 'ignore')
         self.assertEqual(promote.ideas(s), [], 'covered now')
 
+    def test_yes_pressed_twice_makes_one_rule(self):
+        # a double click, or the desk and the phone a beat apart: the second yes saved a second rule for the same sender
+        s = _store(); mails(s, NEWS, 12, down=12)
+        i = s.upsert_idea(promote.ideas(s)[0], '2026-10-20 08:00:00')
+        first, again = assistant.act(s, i['IdeaId'], 'rule'), assistant.act(s, i['IdeaId'], 'rule')
+        self.assertEqual(again['policyId'], first['policyId'])
+        self.assertEqual(len([p for p in s.list_policies(active_only=False) if p['Pattern'] == NEWS]), 1)
+
     def test_the_post_raises_it_without_a_model_and_triage_never_opens_work_for_it(self):
         s = _store(); mails(s, NEWS, 12, down=12)
         with mock.patch('taskuary.llm.build_llm', return_value=None):

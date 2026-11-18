@@ -66,6 +66,7 @@ export function ItemAsk({ ask, hand = null, onHand = null, came = "", hint = "" 
   };
   // ...A CHAT, as a task's is (the owner, 2026-11-05: "add the reports/advisor/fyi to chat thing as well without close out"): what it says and what
   // matters as plain paragraphs, the owner's words a right-hand bubble, the answer the full width - no labels, no card around it, the box the one box
+  // ...its Send lit by words only (2026-11-18): the item's box goes on his words, and a file alone lit a press that did nothing
   // ...THE SAME BOX IN THE SAME PLACE (the owner, 2026-11-05: "the box should be where it always is, not moved up. Don't have separate code"): the
   // task chat's own PromptBox, held at the foot of the pane whatever is above it; Send to agent puts the item on it as a chip - nothing moves
   return <Box data-tq-item-ask={ask?.kind || (hand ? "agent" : "")} data-tq-item-hand={hand ? hand.items.length : undefined}
@@ -79,7 +80,7 @@ export function ItemAsk({ ask, hand = null, onHand = null, came = "", hint = "" 
     </React.Fragment>)}
     <Box aria-hidden sx={{ flex: "1 1 auto" }} />
     <Box sx={{ position: "sticky", bottom: 0, bgcolor: SHADE, pt: 0.5, mx: -0.5, px: 0.5 }}>
-      <PromptBox text={text} setText={setText} pics={pics} busy={busy} onSend={send} inputRef={input} cannot={hand ? null : () => ASK_ONLY}
+      <PromptBox text={text} setText={setText} pics={pics} busy={busy} onSend={send} inputRef={input} sendOff={!text.trim()} cannot={hand ? null : () => ASK_ONLY}
         placeholder={hint || MESSAGE}
         label={hand ? btn(hand.verb) : "Ask about this"} sendAttrs={{ "data-tq-item-send": hand ? "agent" : "ask" }}
         chips={hand?.items.length ? hand.items.map((i) => <AttachChip key={i.key} data-tq-item-chip={i.key} name={i.title} onRemove={busy ? null : () => drop(i.key)}

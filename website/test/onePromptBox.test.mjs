@@ -98,3 +98,14 @@ test("his first line on a report he sent on draws the report as a pill, then his
   assert.match(gw, /<div data-tq-line-came=""[^]*?\{!!x\.came && <AttachChip name=\{x\.came\}/);          // ...beside his files' pills (2026-11-17)
   assert.doesNotMatch(tp, /setReportOpen|>The report</);
 });
+
+// ...HIS WORDS START IT, AND SEND IS LIT ONLY WHEN THEY CAN (the stress round, 2026-11-18): a picture put on the item's box with nothing typed
+// lit Send - the box counts a file as something to send - and the press did nothing, since the item's box goes on words alone
+test("the item's Send is lit only once words are in it, so a file alone never lights a press that does nothing", async () => {
+  const fs = await import("node:fs");
+  const src = fs.readFileSync(new URL("../src/ItemSections.jsx", import.meta.url), "utf8");
+  const send = src.match(/const send = async \(\) => \{\n\s*const q = text\.trim\(\);\n\s*if \(([^)]*)\) return;/);
+  assert.ok(send, "send reads its words first");
+  assert.match(send[1], /^!q\b/, "no words, no send");
+  assert.match(src, /<PromptBox [^>]*sendOff=\{!text\.trim\(\)\}/, "...and the button says so: unlit while no words are in it");
+});

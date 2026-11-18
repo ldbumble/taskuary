@@ -236,3 +236,19 @@ def test_next_says_what_it_read(world):
     w.do('open T1')
     assert w.do('next')['read'] == [], 'Next on a task reads nothing'
 
+
+
+def test_next_on_a_batch_reads_it_after_the_other_surface_moved_the_walk(world):
+    """The desk and the phone share one walk (Q5). The desk has an FYI batch on its table; the phone opens a task, so the stored walk is
+    on that task; then the desk's Next names its batch. The batch was not the walk's held row and no rail row carries a batch's key, so its
+    kind read as `none`: nothing was read, the answer said so, and the page gave the batch back unread under a walk that had moved on."""
+    from taskuary import railwalk
+    s, src = world
+    w = Walk(s, src)
+    w.do('open I1'); w.do('next')
+    batch = w.on
+    assert batch == w.key('F1-F4')
+    railwalk.open(s, w.key('T1'))                     # ...the phone's pick: the shared walk now stands on T1
+    out = railwalk.next(s, batch)
+    assert sorted(out['read']) == sorted(railwalk.members_of(batch)), f'the batch Next left was not read: {out["read"]}'
+    assert not any(walkworld.matches(r, src[f'F{n}']) for r in walkworld.rows(s) for n in range(1, 5))

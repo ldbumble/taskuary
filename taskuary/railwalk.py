@@ -326,8 +326,10 @@ def _effect(store, st, rows, frm, actor, dock):
     if not frm: return []
     held = frm == st.get('on') or frm in (st.get('members') or ())
     keys = (st.get('members') or members_of(frm)) if held else members_of(frm)
-    kind = st.get('kind') if held else kind_of(find(rows, frm))
     read, batch = [], len(keys) > 1 or str(frm).startswith('fyis:')
+    # ...a batch the walk no longer holds (the phone moved the shared walk) is still a batch: no rail row carries its key, and found by
+    # it, it read as `none` - the desk's Next left it unread and the page gave it back
+    kind = st.get('kind') if held else kind_of({'kind': 'fyis'} if batch else find(rows, frm))
     if kind == 'reads':
         with store.one_poke() if hasattr(store, 'one_poke') else _null():
             for k in keys:

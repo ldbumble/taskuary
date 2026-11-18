@@ -2229,12 +2229,10 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
     held = set(q['held'])
     d['reviews'] = [r for r in d['reviews'] if r['ReviewId'] not in held and not cardqueue.obsolete_read(store, task_id, r)]
     # ...and what the chat moved past reads as it will once its agent hears that (proposals.written_past): greyed in place, from this read on
-    from .proposals import SET_ASIDE, passed, passed_why
+    from .proposals import SET_ASIDE
     past = q['past']
     for r in d['reviews']:
         if r['ReviewId'] in past: r.update(Status='superseded', DecideNote=SET_ASIDE)
-        # ...and why, in the sentence the chat and a press say (2026-11-17): the kept draft read "closed without sending" over his own answer
-        if passed(r): r['Why'] = passed_why(store, r)
     # a session that has ended still leaves work to close out, so the page has to know one
     # happened - the Done and Pause buttons used to vanish with the pty
     tr = store.last_transcript(task_id)

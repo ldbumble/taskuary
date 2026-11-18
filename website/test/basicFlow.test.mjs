@@ -40,15 +40,13 @@ test("his line greys the reply card above it in the same frame, before the serve
   assert.deepEqual(withMine(read, []).items[1].cards.map((c) => c.status), ["pending"]);     // ...and only then
 });
 
-// ...IN THE SERVER'S OWN WORDS FROM THAT FRAME (chat-render, 2026-11-18): greyed by the page it read "Earlier draft - not sent; set aside when you
-// moved on", and a beat later, as the read came back, "Not sent - you wrote "what is on my plate" after it" - one fact said two ways, swapped
-// under his eyes. The list names the sentence a line of his would grey it with (`aside`, proposals.WROTE_PAST); the page fills in his line
-test("his line greys the card above it with the sentence the server will say, in the same frame", () => {
+// ...THE SAME CARD, ITS BUTTONS GREYED, NO REASON (the owner, 2026-11-18: "don't need reason. just keep it with buttons but the buttons grayed
+// out once you moved on"): greyed from the frame he presses Enter, and no sentence of why rides on it for the chat to draw
+test("his line greys the card above it in the same frame, with no reason line", () => {
   const card = { id: "r:1", review: 1, what: "draft_reply", status: "pending", was: { text: "Hi Gail, yes." }, aside: 'Not sent - you wrote "{line}" after it' };
   const read = { items: [mail, { ...answer, cards: [card] }], pending: [], working: false };
-  const long = "what is   on my plate today, and which of it is for Gail Moreno before the vendor call";
-  const got = withMine(read, [{ id: "l-2", kind: "line", text: long, at: new Date(), rest: true }]);
-  assert.equal(got.items[1].cards[0].why, 'Not sent - you wrote "what is on my plate today, and which of it is for Gail Moren…" after it');
+  const got = withMine(read, [{ id: "l-2", kind: "line", text: "what is on my plate today", at: new Date(), rest: true }]);
+  assert.deepEqual(got.items[1].cards[0], { ...card, status: "passed" });
 });
 
 // ...A CARD OF SEVERAL EMAILS TOO (the real-CLI card walk, 2026-11-18): it carries no draft words of its own, so the page left it lit under his
@@ -57,8 +55,7 @@ test("his line greys a card of several emails above it from the same frame", () 
   const card = { id: "r:2", review: 2, what: "batch", batch: "b1", n: 2, status: "pending", aside: 'Not sent - you wrote "{line}" after it' };
   const read = { items: [mail, { ...answer, cards: [card] }], pending: [], working: false };
   const got = withMine(read, [{ id: "l-2", kind: "line", text: "draft them again", at: new Date(), rest: true }]);
-  assert.equal(got.items[1].cards[0].status, "passed");
-  assert.equal(got.items[1].cards[0].why, 'Not sent - you wrote "draft them again" after it');
+  assert.equal(got.items[1].cards[0].status, "passed"); assert.equal(got.items[1].cards[0].why, undefined);
 });
 
 test("a line whose send failed stays where it stands in his own words; the failure is one line under it with Try again", async () => {
@@ -104,8 +101,9 @@ test("a card is drawn where the list has it and nowhere else - never loose under
   assert.match(src, /const loose = looseOk \? nodes\.filter\(\(n\) => !used\.has\(n\.key\) && !listed\.has\(n\.rid\) && !held\.has\(n\.rid\)\) : \[\]/);
   assert.match(src, /const nextLoose = next && !used\.has\("next"\) && looseOk && !listed\.has\(nextRid\)/);
   assert.match(src, /loose=\{placesLoose\(list\)\}/);
-  // ...a draft no longer to press is greyed in its place with its words: rewritten, set aside as he wrote again, taken back by its agent
-  assert.match(src, /const PAST = \{ superseded: .*passed: .*withdrawn: /);
+  // ...a draft no longer to press is its own card in its place, greyed, from its words: rewritten, set aside as he wrote again, taken back
+  assert.match(src, /if \(past && !got\.length && !post\) return c\.was \? \[wasCard\(c, rv\(c\.review\)\)\] : \[\];/);
+  assert.match(src, /past \? React\.cloneElement\(n\.node, \{ past: true \}\) : n\.node/);
   assert.doesNotMatch(src, /stands below, under a later answer/);
 });
 
@@ -114,7 +112,7 @@ test("a card is drawn where the list has it and nowhere else - never loose under
 // its turn, loose at the foot or as the landing question, and says over the card that stands how many come and which is next
 test("a card that waits behind another is drawn nowhere, and the one that stands says what comes next", async () => {
   const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(src, /if \(held\.has\(c\.review\)\) return \[\];/);
+  assert.match(src, /if \(held\.has\(c\.review\) && !past\) return \[\];/);
   assert.match(src, /landing = held\.has\("land"\) \? null : landed/);
   assert.match(src, /data-tq-card-queue=""/);
   assert.match(src, /return out\.length && live\.has\(c\.review\) && c\.status === "pending" \? \[\.\.\.qLine\(\), \.\.\.out\] : out;/);
@@ -124,12 +122,13 @@ test("a card that waits behind another is drawn nowhere, and the one that stands
   assert.doesNotMatch(page, /MoreDrafts/); assert.doesNotMatch(slots, /Approve all/);
 });
 
-// the bug hunt's stop, 2026-11-12: after Stop his next line set the stopped turn's draft aside, and it read "Earlier draft - not sent; you
-// wrote again" - he had written once, his next line. A card set aside says what the server and its agent say of it (proposals.SET_ASIDE)
-test("a card set aside reads \"set aside when you moved on\" on every surface, never \"you wrote again\"", async () => {
-  const ws = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8"), pc = await readFile(new URL("../src/PassedCard.jsx", import.meta.url), "utf8");
-  const past = /const PAST = \{[^\n]*\};/.exec(ws)[0], line = /export const PASSED_LINE = [^\n]*/.exec(pc)[0];
-  for (const s of [past, line]) { assert.doesNotMatch(s, /wrote again/); assert.match(s, /set aside when you moved on/i); }
+// A CARD SET ASIDE SAYS NO REASON on any surface (the owner, 2026-11-18): the chat, the task page, the bulk card and the push card draw the card
+// it was, greyed
+test("a card set aside draws no reason line on any surface", async () => {
+  for (const f of ["GeneralWorkspace.jsx", "PassedCard.jsx", "BulkCard.jsx", "landing.js", "LandingCard.jsx", "chatStream.js"]) {
+    const src = await readFile(new URL(`../src/${f}`, import.meta.url), "utf8");
+    assert.doesNotMatch(src, /Earlier draft -|Set aside when you moved on -|moved on before you pressed|PASSED_LINE|c\.aside\.replace|w\.passed/, f);
+  }
 });
 
 test("the box says what the header says: never \"pick the session back up\" while a turn is at work", async () => {

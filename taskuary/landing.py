@@ -288,7 +288,9 @@ def state(store, tid: int, full: bool = False) -> dict | None:
     since, moved = ep(p_.get('at') or out.get('at')), max(float(r.get('moved') or 0), proposals.moved_on(store, tid))
     out['passed'] = bool(out['ask'] and not r.get('landed') and (p_.get('passed') or since and moved > since))
     if out['passed']: out['ask'] = False
-    hows = (OWN_HOW if mine else PUSH_HOW[:1 + bool((out['push'] or {}).get('deploy'))]) if out['ask'] else ()
+    # ...and a passed one keeps its answers: the page draws it as the card it was, its buttons greyed (the owner, 2026-11-18) - a press still
+    # needs `ask` (land), so nothing it names can go
+    hows = (OWN_HOW if mine else PUSH_HOW[:1 + bool((out['push'] or {}).get('deploy'))]) if out['ask'] or out['passed'] else ()
     out['answers'] = [{'how': k, 'label': HOW[k]} for k in hows]
     out['line'] = said(out)
     if full: out['diff'] = (_git(cwd, 'diff', _fork(cwd, base, br, start), br) if mine else _own_diff(cwd, o))[:DIFF_CAP]

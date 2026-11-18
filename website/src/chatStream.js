@@ -114,7 +114,7 @@ export const workCount = (parts) => (parts || []).reduce((n, p) => n + (p.type =
 // WHAT IT WROTE OUT FOR HIM IS NEVER FOLDED WITH ITS STEPS (the owner, 2026-11-15: "if it returns something you need to see it"): a message of the
 // turn that holds a block - a query, a script, a table - is a thing it made, not a note on its way; said before its last step, it stays in the turn
 export const isMade = (text) => /^[ \t]*(?:\x60{3}|~~~)/m.test(String(text || "")) || /^[ \t]*\|.+\|[ \t]*\n[ \t]*\|[ :|-]+\|[ \t]*$/m.test(String(text || ""));
-// A DRAFT WHERE IT STOOD, no longer the one to press (GeneralWorkspace PastCard): the list's card in one of these states, carrying what it said
+// A DRAFT WHERE IT STOOD, no longer the one to press (GeneralWorkspace wasCard, NotSent): the list's card in one of these states, carrying what it said
 export const isPastCard = (c) => ["superseded", "passed", "withdrawn", "rejected"].includes(c?.status) && !!c.was;
 // ...AND AN EARLIER VERSION NEVER TAKES ITS REVIEW'S OWN CARD (recorded 2026-11-15: a reply the agent rewrote and he then sent - the rewrite
 // is the same review - left no "Sent" card at all: the earlier draft's record, drawn first, had claimed every card of that review): the
@@ -185,12 +185,12 @@ export const withMine = (list, mine) => {
   // ...AND A REPLY DRAFT ABOVE IT GREYS IN ITS PLACE FROM THE SAME FRAME (the owner, 2026-11-12: "grey out buttons right away"): what the
   // server does as it hears the line (proposals.set_aside_drafts), drawn before its read comes back - its buttons stood lit ~300 ms
   // ...a line sent while a turn works too (the owner, 2026-11-16: "The second a new prompt comes in ... it should gray out the action card but never move")
-  // ...in the server's own sentence (`aside`, proposals.WROTE_PAST) with his newest line cut as proposals._cut cuts it: its read never swaps the words
-  const by = own.findLast((l) => !l.err), cut = (w) => ((w = String(w || "").trim().split(/\s+/).join(" ")).length > 60 ? `${w.slice(0, 60)}…` : w);
+  // ...the same card, its buttons greyed, no line saying why (the owner, 2026-11-18): the server marks each card his line would grey (`aside`)
+  const by = own.findLast((l) => !l.err);
   // ...ONLY A CARD THAT STOOD BEFORE HIS LINE (a walk, 2026-11-18): a Post card raised twelve seconds after his line was drawn greyed "you wrote
   // ... after it" - he never saw it lit. A card from his line's own second on is the answer to it (the server's rule: proposals._older)
   const before = (c) => !c.at || +new Date(String(c.at).replace(" ", "T")) + 1000 <= +new Date(by.at);
-  const aside = (c) => (by && c.status === "pending" && (c.was || c.aside) && before(c) ? { ...c, status: "passed", ...(c.aside ? { why: c.aside.replace("{line}", cut(by.text)) } : {}) } : c);
+  const aside = (c) => (by && c.status === "pending" && (c.was || c.aside) && before(c) ? { ...c, status: "passed" } : c);
   const greyed = items.map((x) => (x.kind === "card" ? aside(x) : x.kind === "turn" && (x.cards || []).length ? { ...x, cards: x.cards.map(aside) } : x));
   return { items: [...greyed.slice(0, at), ...rest, ...greyed.slice(at), ...tail], pending: [...pending, ...wait] };
 };

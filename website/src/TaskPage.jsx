@@ -111,7 +111,6 @@ import { completionFact, completionLine, waitingEmails, wentOut,
 } from "./taskLifecycle.js";
 import { askNote, closeoutOf, decidedAsk, heldGroups, splitHeld } from "./reviewProposal.js";
 import PassedCard, { isPassed, isReplaced } from "./PassedCard.jsx";
-import ReplacedDraft from "./ReplacedDraft.jsx";
 import SentCard from "./SentCard.jsx";
 import { sentStands, WENT } from "./sentLine.js";
 import { FullText } from "./assistantCards.jsx";
@@ -2778,10 +2777,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...an act with its card (a post, a tracker comment) is drawn in the turn that set it up (GeneralWorkspace, ActionCard) - never here again
   const asks = proposals.filter((p) => !isCardReview(p));
   // ...a turn's held steps are ONE card, and a pressed one stays in the turn, pressed (heldGroups, keptHeld; the owner, 2026-11-09)
-  // ...A CARD THE CONVERSATION MOVED PAST stays in its turn, greyed (PassedCard; proposals.move_on, the owner 2026-11-10: "it should stay where
-  // it is with buttons grayed out") - never a pressed card's "Dismissed"
-  const passedCards = heldGroups(allReviews.filter(isPassed)).map((g) => ({ key: `passed:${g.reviews[0].ReviewId}`, at: g.reviews[0].CreatedAt || "",
-    rid: g.reviews[0].ReviewId, node: <PassedCard reviews={g.reviews} /> }));
+  // ...A CARD THE CONVERSATION MOVED PAST stays in its turn as the card it was, its buttons greyed (`past`; proposals.move_on, the owner
+  // 2026-11-18: "just keep it with buttons but the buttons grayed out once you moved on") - never a pressed card's "Dismissed", no reason line
+  const letterOf = Object.fromEntries((detail?.checklist || []).filter((i) => i.out).map((i) => [i.rid, i]));
+  const passedCards = heldGroups(allReviews.filter(isPassed)).map((g) => { const r = g.reviews[0];
+    return { key: `passed:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, node: g.held ? <HeldSteps reviews={g.reviews} past />
+      : r.Kind === "slot" ? <Letter taskId={t?.TaskId} item={letterOf[r.ReviewId] || null} rv={r} past /> : <ReviewDecision review={r} past /> }; });
   const decidedAsks = allReviews.filter((r) => decidedAsk(r) && !isCardReview(r));       // ...pressed, each stays its card in its turn
   const { asks: askCards, past: pressedCards } = splitHeld(allReviews.filter((r) => !isPassed(r)), [...asks, ...decidedAsks]), kept = askCards.flatMap((g) => (g.held ? g.reviews : [])).filter((r) => r.Status !== "pending");
   // ...AND ONCE THE OWNER WRITES AGAIN EACH PRESSED CARD STAYS IN ITS TURN (the owner, 2026-11-09: "leave the card in the turn with the pressed
@@ -2795,10 +2796,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...AND A DRAFT THE AGENT REPLACED stays a dimmed record where it stood (the owner, 2026-11-10: "it should go gray and then it should generate
   // new email action box under it"): by its time, as it stood while it waited (agentSummary.draftHome), the new card in the turn that wrote it
   const sentBox = sentStands(sentHere, allReviews, inTurns);
-  const letterOf = Object.fromEntries((detail?.checklist || []).filter((i) => i.out).map((i) => [i.rid, i]));
   const letters = new Set(letterItems(detail?.checklist, allReviews).map((x) => x.rv.ReviewId));
   const replacedCards = allReviews.filter(isReplaced).map((r) => ({ key: `replaced:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, byRow: true, record: true,
-    node: <ReplacedDraft review={r} /> }));
+    node: <ReviewDecision review={r} past /> }));
   const turnCards = [...passedCards, ...batches.map((rs) => ({ key: `batch:${rs[0].Batch}`, at: rs[0].CreatedAt || "", rid: rs[0].ReviewId, waits: true,
       node: <BulkCard rows={rs} tid={t?.TaskId} onChanged={decided} /> })), ...replacedCards, ...pressedCards.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
       node: g.held ? <HeldSteps reviews={g.reviews} onChanged={decided} /> : <PassedCard reviews={g.reviews} /> })),

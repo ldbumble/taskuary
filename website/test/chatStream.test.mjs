@@ -241,7 +241,7 @@ test("an earlier version of a draft never takes its review's own card", async ()
   const items = [{ kind: "turn", cards: [old] }, { kind: "arrival" }, { kind: "turn", cards: [own] }, { kind: "card", ...gone }];
   assert.deepEqual([...standing(items)], [12], "review 12 still has its own card; review 7 is only its record");
   const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(src, /if \(isPastCard\(c\)\) \{ if \(!stands\.has\(c\.review\)\) nodes\.forEach/);
+  assert.match(src, /if \(isPastCard\(c\) && stands\.has\(c\.review\)\) return \[wasCard\(c, rv\(c\.review\)\)\];/);
 });
 
 // NOTHING IT WROTE IS INVISIBLE (the owner, 2026-11-15): the agent decides what to show, and where it saved a file and never showed it, the
@@ -270,12 +270,13 @@ test("a missing fact is one question: the reply not written yet waits under no o
 });
 
 // A CARD HE SAID NO TO STAYS WHERE IT STOOD (the real-CLI walk, 2026-11-16: Don't send took the email off the chat, only "You dropped the email"
-// was left - the basic flow's "no card gone from the canvas"): drawn greyed with its words, under "Not sent"
+// was left - the basic flow's "no card gone from the canvas"): drawn with its words, under what he pressed - "Not sent"
 test("a card he said no to is drawn where it stood, with its words", async () => {
   const { isPastCard } = await import("../src/chatStream.js");
   assert.ok(isPastCard({ id: "r:9", review: 9, status: "rejected", was: { text: "Hi Erin, the open house moved" } }));
   const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(src, /rejected: \(\) => "Not sent - you said don't send"/);
+  assert.match(src, /if \(isPastCard\(c\) && c\.status === "rejected"\) \{ if \(!stands\.has\(c\.review\)\) claim\(\); return \[<NotSent key=\{c\.id\} c=\{c\} \/>\]; \}/);
+  assert.match(src, /<div className="tq-conv-past-head">\{"Not sent - you said don't send"\}<\/div>/);
 });
 
 // A TURN AT WORK SHOWS ITS STEPS COUNTED, SHUT (the owner, 2026-11-17: "7 minutes this is all the agent did? and that little feedback?" - 19 steps

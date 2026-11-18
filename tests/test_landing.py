@@ -344,6 +344,8 @@ class LandingTests(unittest.TestCase):
         self.assertIn(proposals.LAND, proposals.set_aside_drafts(self.s, self.tid, ep(landing.record(self.s, self.tid)['proposal']['at']) + 0.5))
         s = landing.state(self.s, self.tid)
         self.assertTrue(s['passed']); self.assertFalse(s['ask'], 'nothing pressable')
+        # ...yet it keeps its answers: the page draws the same card, its buttons greyed (the owner, 2026-11-18) - and a press is still refused
+        self.assertEqual([a['how'] for a in s['answers']], ['push'])
         with self.assertRaises(ValueError) as e: landing.land(self.s, self.tid, 'push')
         self.assertTrue(str(e.exception).startswith('Not sent - '), e.exception); self.assertFalse(self.pushed())
         from taskuary import cardqueue

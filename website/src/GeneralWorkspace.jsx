@@ -55,7 +55,6 @@ import { ModelSelect, TaskuaryMark } from "./ui.jsx";
 import { label as btn } from "./buttons.js";
 import { placeName } from "./words.js";
 import { plural } from "./timeWords.js";
-import { PASSED_LINE } from "./PassedCard.jsx";
 import ConnectAi from "./ConnectAi.jsx";
 import ReviewDecision from "./ReviewDecision.jsx";
 import { askNote, heldActsLine, proposalFrom } from "./reviewProposal.js";
@@ -473,17 +472,18 @@ const ConvLine = ({ x, more }) => {
     {!!x.err && <div className="tq-aui-note tq-aui-note-error" role="alert" data-tq-line-failed="">{x.err}{retry && <> · <button type="button" className="tq-aui-arrived-more-btn"
       data-tq-try-again="" onClick={() => retry(x)}>{btn("try_again")}</button></>}</div>}</div>;
 };
-/* A DRAFT WHERE IT STOOD, once it is no longer the one to press: rewritten by a later turn, set aside as he wrote again (the owner, 2026-11-12:
-   "I thought we keep it but grey out buttons right away"), or taken back by its agent - greyed in its own place with its words, nothing to press.
-   It never goes from the chat and never moves */
-// ...SET ASIDE IN THE SERVER'S OWN WORDS (proposals.SET_ASIDE): "you wrote again" stood over a draft his first line after a Stop set aside (2026-11-12)
-const PAST = { superseded: () => "Earlier draft - rewritten below", passed: (c) => c.why || (/draft|slot/.test(c.what || "") ? "Earlier draft - not sent; set aside when you moved on" : PASSED_LINE.replace(/\.$/, "")), withdrawn: () => "Earlier draft - not sent; the agent took it back", rejected: () => "Not sent - you said don't send" };
-const PastCard = ({ c }) => <div className="tq-conv-past" data-tq-past-card={c.status} data-tq-past-review={c.review} role="note">
-  <div className="tq-conv-past-head">{PAST[c.status](c)}</div>
+/* A DRAFT HE SAID NO TO says what he pressed, with its words, in its own place (answered cards stay greyed saying what was pressed) */
+const NotSent = ({ c }) => <div className="tq-conv-past" data-tq-past-card={c.status} data-tq-past-review={c.review} role="note">
+  <div className="tq-conv-past-head">{"Not sent - you said don't send"}</div>
   {!!c.was?.text && <div className="tq-conv-past-words" dir="auto">{c.was.text}</div>}</div>;
+/* A CARD THE CHAT MOVED PAST IS THE CARD IT WAS, ITS BUTTONS GREYED (the owner, 2026-11-18: "don't need reason. just keep it with buttons but
+   the buttons grayed out once you moved on"): rewritten by a later turn, set aside as he wrote again, or taken back by its agent - drawn in its
+   own place from the words it had then (`was`), never moved, never gone, and no line saying why */
+const wasCard = (c, rv) => <ReviewDecision key={c.id} past review={c.what !== "action" ? { ...(rv || { ReviewId: c.review, Kind: c.what }), DraftText: c.was.text }
+  : rv || { ReviewId: c.review, Kind: "action", DraftText: JSON.stringify({ what: c.was.text }) }} />;
 /* `items`: the server's list, with this page's own lines the server has not answered for yet (`mine`) already merged in by their names.
    `nodes`: the cards the page draws, by the review each is of ([{key, rid, node}]); `next`: the reply that waits, at the card it is. */
-function Conversation({ items, nodes = [], posts = [], next = null, nextRid = null, landing: landed = null, landAt, name, tid, onChanged, loose: looseOk = true, ask = null, askAt = "", lettersAt = "", queue = null }) {
+function Conversation({ items, nodes = [], posts = [], reviews = [], next = null, nextRid = null, landing: landed = null, landAt, name, tid, onChanged, loose: looseOk = true, ask = null, askAt = "", lettersAt = "", queue = null }) {
   // ONE CARD AT A TIME (cardqueue.py): what waits behind the card that stands is drawn nowhere - the landing question too - and the card that
   // stands says, over itself, how many come and which is next ("1 of 2 · next: the email to Erin")
   const held = new Set(queue?.held || []), live = new Set(queue?.live || []), landing = held.has("land") ? null : landed;
@@ -495,19 +495,24 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
   // ...every review the list places, in whatever state: a card is drawn where the list has it and nowhere else
   const used = new Set(), listed = new Set(items.flatMap((x) => (x.kind === "card" ? [x] : x.kind === "turn" ? x.cards || [] : [])).map((c) => c.review));
   const stands = standing(items), owes = onYouTurn(items, { askAt, lettersAt, landAt: landIn });
+  const rv = (id) => reviews.find((r) => r.ReviewId === id);
   const draw = (cs) => (cs || []).flatMap((c) => {
-    // ...a draft no longer to press carries what it said (`was`); any other card the server settled is its own node, in its place
-    // ...and it takes its review's node with it only where the review has no card of its own left in the list (chatStream.standing)
-    if (isPastCard(c)) { if (!stands.has(c.review)) nodes.forEach((n) => { if (n.rid === c.review) used.add(n.key); }); return [<PastCard key={c.id} c={c} />]; }
-    if (held.has(c.review)) return [];
+    // ...a draft no longer to press carries what it said (`was`); one he said no to says so. Either takes its review's node with it only where
+    // the review has no card of its own left in the list (chatStream.standing) - an earlier version is drawn from its own words beside it
+    const past = isPastCard(c) || c.status === "passed", claim = () => nodes.forEach((n) => { if (n.rid === c.review) used.add(n.key); });
+    if (isPastCard(c) && c.status === "rejected") { if (!stands.has(c.review)) claim(); return [<NotSent key={c.id} c={c} />]; }
+    if (isPastCard(c) && stands.has(c.review)) return [wasCard(c, rv(c.review))];
+    if (held.has(c.review) && !past) return [];
     const got = nodes.filter((n) => n.rid === c.review && !used.has(n.key)), post = posts.find((p) => p.ReviewId === c.review);
     got.forEach((n) => used.add(n.key));
+    // ...a card moved past is its own card with `past`: greyed in its place, nothing to press
+    if (past && !got.length && !post) return c.was ? [wasCard(c, rv(c.review))] : [];
     // ...ONE REVIEW IS ONE CARD: a post or a tracker comment an earlier build set aside has its settled card among the nodes, and was drawn
     // again under it as the act's own card reading "Not posted · dismissed" (the card round, 2026-11-12)
-    const out = [...got.map((n) => <React.Fragment key={n.key}>{n.node}</React.Fragment>),
-      ...(post && !got.length && !used.has(`post:${c.review}`) && used.add(`post:${c.review}`) ? [<ActionCard key={`post:${c.review}`} row={post} tid={tid} onChanged={onChanged} />] : []),
+    const out = [...got.map((n) => <React.Fragment key={n.key}>{past ? React.cloneElement(n.node, { past: true }) : n.node}</React.Fragment>),
+      ...(post && !got.length && !used.has(`post:${c.review}`) && used.add(`post:${c.review}`) ? [<ActionCard key={`post:${c.review}`} row={post} tid={tid} onChanged={onChanged} past={past} />] : []),
       // ...the letters that wait: at the end of the turn the list names (`lettersAt`, below); only where it names none, on the reply's own card
-      ...(next && !lettersAt && c.review === nextRid && !used.has("next") && used.add("next") ? [...lettersHere(), nextBox()] : [])];
+      ...(!past && next && !lettersAt && c.review === nextRid && !used.has("next") && used.add("next") ? [...lettersHere(), nextBox()] : [])];
     return out.length && live.has(c.review) && c.status === "pending" ? [...qLine(), ...out] : out;
   });
   // ...over the letters' block when the card that stands is one of them: an email (the list places none that wait) or the reply
@@ -693,7 +698,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
             {!!list && !merged.items.length && !empty && !(chat && reading) && <div className="tq-aui-welcome"><TaskuaryMark size={22} /><div>
               <div className="tq-aui-welcome-title">Work on this with your assistant</div>
               <div className="tq-aui-welcome-copy">Research, plan, write, analyze, or coordinate. This conversation stays on the task.</div></div></div>}
-            <RetryCtx.Provider value={retry}><WaitOnCtx.Provider value={waitingOn(list)}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} next={askedFirst(asking, nextAt?.reviews) ? null : nextAt?.next || null} nextRid={nextRid}
+            <RetryCtx.Provider value={retry}><WaitOnCtx.Provider value={waitingOn(list)}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} reviews={nextAt?.reviews || []} next={askedFirst(asking, nextAt?.reviews) ? null : nextAt?.next || null} nextRid={nextRid}
               landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} loose={placesLoose(list)} ask={askNode} askAt={askAt} lettersAt={lettersTurn(list, merged.items)} queue={list?.queue || null} /></WaitOnCtx.Provider></RetryCtx.Provider>
             {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
             {cards}

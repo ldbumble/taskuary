@@ -30,9 +30,6 @@ export function landingWords(s) {
     // ...the second button: the other way a push goes, or on its own branch the next likeliest land
     first: firstHow(s, p), second: secondHow(s, p),
     done: s.landed ? `✓ ${DONE[s.landed.how] || HOW[s.landed.how] || s.landed.how}` : "",
-    // ...and passed once the conversation moved on (proposals.move_on, the owner 2026-11-10: "it should stay where it is with buttons grayed
-    // out"): the agent raised it, and raises it again if it is still wanted - the line under its title, nothing pressable
-    passed: s.passed ? "Set aside when you moved on - ask the agent to bring it back." : "",
     doneLine: s.landed ? [String(s.landed.sha || "").slice(0, 7), s.landed.deploy && s.landed.how === "deploy" ? `to ${s.base} and ${s.landed.deploy}` : s.landed.how === "push" ? `to ${s.base}` : ""]
       .filter(Boolean).join(" · ") : "",
   };
@@ -41,8 +38,9 @@ export function landingWords(s) {
 const files = (s) => n(s.changed || 0, "file");
 function landingTitle(s) {
   const p = s.push;
-  if (p && s.ask) return `Push ${n(p.ahead || 0, "commit")} to ${s.base}${p.deploy ? " and deploy" : ""} - ${files(s)}`;
-  if (s.own && (s.ask || s.landed)) return `Land ${s.branch} into ${s.base} - ${n(s.commits || s.ahead || 0, "commit")}, ${files(s)}`;
+  // ...a passed card keeps the title it asked with: the same card, greyed (LandingCard `past`)
+  if (p && (s.ask || s.passed)) return `Push ${n(p.ahead || 0, "commit")} to ${s.base}${p.deploy ? " and deploy" : ""} - ${files(s)}`;
+  if (s.own && (s.ask || s.passed || s.landed)) return `Land ${s.branch} into ${s.base} - ${n(s.commits || s.ahead || 0, "commit")}, ${files(s)}`;
   if (s.landed) return `${s.landed.how === "deploy" ? "Push and deploy" : "Push"} ${s.base} - ${files(s)}`;
   return `Worked on ${s.branch} - ${files(s)}`;
 }

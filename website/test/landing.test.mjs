@@ -59,7 +59,7 @@ test("unpushed commits on the shared base are Push and Push & deploy buttons, an
   assert.equal(landingWords({ own: true, ask: true, answers: [] }).question, "How should it land?");
   const body = fs.readFileSync(path.join(process.cwd(), "src", "LandingCard.jsx"), "utf8");
   assert.match(body, /data-tq-land=\{h\}[\s\S]*onClick=\{\(\) => answer\(h\)\}/);
-  assert.match(body, /\{s\.ask \? <Box[\s\S]*\{w\.first && press\(w\.first, "p"\)\}\{w\.second && press\(w\.second, "s"\)\}/);
+  assert.match(body, /\{s\.ask \|\| s\.passed \? <Box[\s\S]*\{w\.first && press\(w\.first, "p"\)\}\{w\.second && press\(w\.second, "s"\)\}/);
   assert.match(body, /api\.post\(`\/api\/tasks\/\$\{taskId\}\/landing`, \{ how \}\)/, "Push and Push & deploy go down the landing road");
 });
 
@@ -90,15 +90,18 @@ test("the landing card is one title, the files folded, one filled button and the
 
 // NO NOT NOW (the owner, 2026-11-10: "why ddo we need not now card? just hit next and you go to the next task and it stays on the rail"): the
 // push card the agent raised is passed like every card once the conversation moves on (proposals.move_on) - greyed, nothing to press
-test("the push card has no Not now; a passed one is greyed with no button, the way back said under its title", () => {
+// ...AND A PASSED ONE IS THE SAME CARD, ITS BUTTONS GREYED, NO REASON (the owner, 2026-11-18: "don't need reason. just keep it with buttons but
+// the buttons grayed out once you moved on")
+test("the push card has no Not now; a passed one is the same card with its buttons greyed and no reason line", () => {
   const s = { own: false, shared: true, base: "master", commits: 1, changed: 5, plus: 116, minus: 9, ask: false, passed: true,
-    push: { tip: "3a1b9a81c0ffee", ahead: 1, to: "master", deploy: "" }, answers: [] };
-  assert.equal(landingWords(s).passed, "Set aside when you moved on - ask the agent to bring it back.");
-  assert.equal(landingWords({ ...s, passed: false }).passed, "");
+    push: { tip: "3a1b9a81c0ffee", ahead: 1, to: "master", deploy: "" }, answers: [{ how: "push", label: "Push" }] };
+  assert.equal(landingWords(s).title, landingWords({ ...s, passed: false, ask: true }).title, "the title it asked with");
+  assert.equal(landingWords(s).passed, undefined);
   const body = fs.readFileSync(path.join(process.cwd(), "src", "LandingCard.jsx"), "utf8");
   assert.doesNotMatch(body, /landing\/hold|data-tq-land-hold|Not now|s\.held/);
   assert.match(body, /data-tq-act-state=\{s\.passed \? "passed" : s\.ask \? "waiting"/);
-  assert.match(body, /const sub = s\.passed \? w\.passed :/);
+  assert.match(body, /return \(<MovedPast on=\{s\.passed\}>\n\s+<Box data-tq-landing=""/);
+  assert.doesNotMatch(body, /w\.passed|!s\.passed &&/);
 });
 
 // REVIEW CHANGES STAYS AFTER THE SESSION IS GONE (the owner, 2026-11-10: "yes, keep it"): lit on work left to review, the row's button opens

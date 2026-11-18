@@ -12,6 +12,7 @@ import { filesPromised, filesShort } from "./replyFiles.js";
 import { proposalPresentation, resultOf, reviewText } from "./reviewProposal.js";
 import { cardOf } from "./actionCard.js";
 import ActionCard from "./ActionCard.jsx";
+import { asLive, MovedPast } from "./PassedCard.jsx";
 import { withoutSignature } from "./signature.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
@@ -80,9 +81,9 @@ export const InvoiceLine = ({ meta }) => (
 // ...and ONE DRAFT IN TWO PLACES reads the same in both (the agent's draft, 2026-11-02: Close out and the pop-up over the terminal): an edit in
 // either is told to the other card on the same draft, so a Send from either sends what the owner last typed
 const edits = new Map(), heard = new Set();
-const heldOf = (r) => { const e = edits.get(r?.ReviewId); return e && e.filed === reviewText(r) ? e : null; };
+const heldEdit = (r) => { const e = edits.get(r?.ReviewId); return e && e.filed === reviewText(r) ? e : null; };
 const hold = (r, part) => {
-  const e = { text: null, cc: null, bcc: null, subject: null, ...heldOf(r), ...part, filed: reviewText(r) };
+  const e = { text: null, cc: null, bcc: null, subject: null, ...heldEdit(r), ...part, filed: reviewText(r) };
   if (e.text == null && e.cc == null && e.bcc == null && e.subject == null) edits.delete(r.ReviewId); else edits.set(r.ReviewId, e);
   heard.forEach((f) => f(r.ReviewId));
 };
@@ -155,11 +156,15 @@ export const BlankAsk = ({ line, onSend, onCancel }) => (
 // `went`: on a card whose Send went, what the press did to the task beside it ({closing, kept}, TaskPage sentHere) - its sent card says it.
 // ...an act a connector declares a card for (a post, a tracker comment) is drawn as that card (ActionCard.jsx), wherever its proposal shows -
 // the same decide road, its own face
-export default function ReviewDecision(props) {
-  const act = cardOf(props.review);
-  return act ? <ActionCard row={act} tid={props.review?.TaskId} onChanged={props.onChanged} /> : <Decision {...props} />;
+// `past`: the chat moved past it - the card as it stood while it waited, every button greyed, nothing registered on the row (MovedPast)
+export default function ReviewDecision({ past = false, ...props }) {
+  const r = past ? asLive(props.review) : props.review, act = cardOf(r);
+  return act ? <ActionCard row={act} tid={r?.TaskId} onChanged={props.onChanged} past={past} />
+    : <MovedPast on={past}><Decision {...props} review={r} past={past} toRow={!past && props.toRow} /></MovedPast>;
 }
-function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, toRow = false, simulated = false, onDrop = null, onEmailInstead = null, why = "", went = null }) {
+function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, toRow = false, simulated = false, onDrop = null, onEmailInstead = null, why = "", went = null, past = false }) {
+  // ...a card moved past shows the words it was filed with, never an edit held for the live card of the same review
+  const heldOf = (x) => (past ? null : heldEdit(x));
   const [text, setTextNow] = useState(() => heldOf(r)?.text ?? null);   // the owner's edit; null means "the draft as filed"
   const setText = (v) => { hold(r, { text: v ?? null }); setTextNow(v); };
   const [cc, setCcNow] = useState(() => heldOf(r)?.cc ?? null);         // null means "the CC the draft was filed with"
@@ -178,7 +183,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // reads "Sent" and stays off - a blue Send again over a reply already gone invited a second press
   // ...and the send's press is the REVIEW'S (sentLine.markOf, 2026-11-17): this card drawn again mid-send, or after it went, reads where it stands
   // (the demo's own review is its own: its number may be a real one's)
-  const rid = simulated ? `demo:${r.ReviewId}` : r.ReviewId, mark = useSyncExternalStore(hearMarks, () => markOf(rid)), look = cardLook(r, mark);
+  const rid = simulated ? `demo:${r.ReviewId}` : r.ReviewId, mark = useSyncExternalStore(hearMarks, () => (past ? null : markOf(rid))), look = cardLook(r, mark);
   const setMark = (m) => pressMark(rid, m);
   const [busyHere, setBusyHere] = useState(false);
   const setBusy = (b) => { setBusyHere(b); if (!b && markOf(rid)?.state === "going") setMark(null); };
@@ -222,7 +227,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const proposal = proposalPresentation(r);
   // A REPLY OPENED AT ONCE is drawn before its draft exists (replyDraft.js, 2026-10-01): "Drafting…" until the model is done,
   // then the task is read again and the draft is in the box; one that could not be written says why here
-  const job = useDraftJob(r.ReviewId);
+  const jobNow = useDraftJob(r.ReviewId), job = past ? null : jobNow;
   // A REDRAFT IS NOT A SEND (the email walk, 2026-10-29: Redraft turned Send into "Sending…"): its own state holds every button off
   // while the model writes, and only Redraft says what is happening
   const [redrafting, setRedrafting] = useState(false);
@@ -320,7 +325,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const [said, setSaid] = useState("");              // what Update branch / Re-run checks just did
   // THE CARD READS GITHUB FIRST (closeoutState.js): Close out is live only when this repo's rules let it merge now
   const coRid = closeout?.ReviewId || (proposal?.kind === "closeout" ? r.ReviewId : null);
-  const { gh, reload: reloadGh, act } = useCloseoutState(coRid);
+  const { gh, reload: reloadGh, act } = useCloseoutState(past ? null : coRid);
   const blocked = !!gh && !gh.ok;
   const off = busy || drafting;
   useEffect(() => {
@@ -463,7 +468,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // reads what stands over it and scrolls it clear, and holds it there while the dock's line and row fill in; marked
   // [data-tq-lit] so the conversation's pin (AssistantView keepTable) holds it clear too, instead of pulling the card's top back.
   useEffect(() => {
-    if (!lit.startsWith(`${r.ReviewId}:`)) return undefined;
+    if (past || !lit.startsWith(`${r.ReviewId}:`)) return undefined;
     const el = movesRef.current?.querySelector(".MuiButton-contained");
     el?.setAttribute("data-tq-lit", "");
     const stop = holdInView(el);
@@ -572,13 +577,13 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // ...and behind More where the decision does not carry it already (a close-out; a stale draft's Refresh is the move itself)
   // The draft's own buttons are drawn under it, never on the task's bar (2026-10-06) - but they are REGISTERED as `card` verbs, so
   // the row knows the card holds the move and the Advisor's Send finds this Send instead of drawing a second one (B4, 2026-10-17)
-  useVerbs(`decision:${r.ReviewId}`, [...moves, ...(canRedraft && moves.length && !moves.some((v) => v.id === no("redraft")) ? [{ id: no("redraft"), group: "more", tone: "s", label: redraftLabel, disabled: off || delivery.frozen, run: redraft,
+  useVerbs(`decision:${r.ReviewId}`, past ? [] : [...moves, ...(canRedraft && moves.length && !moves.some((v) => v.id === no("redraft")) ? [{ id: no("redraft"), group: "more", tone: "s", label: redraftLabel, disabled: off || delivery.frozen, run: redraft,
     title: btnHint("redraft") }] : [])].map((v) => ({ ...v, card: true })), toRow);
   // A FAILED SEND'S FIX IS A BUTTON ON THE ROW, not directions in the error ("add one under Connections" with nothing to press,
   // 2026-10-17) - and an ordinary row verb, so the Advisor can pick it like any other
   const failure = sendErr || (!busy && !shutErr && savedSendFailure(r)) || null;
   const fix = sendFix(r, failure);
-  useVerbs(`fix:${r.ReviewId}`, fix ? [{ id: no("fix"), group: "decide", tone: "s", label: fix.label, title: "Opens where this is fixed",
+  useVerbs(`fix:${r.ReviewId}`, fix && !past ? [{ id: no("fix"), group: "decide", tone: "s", label: fix.label, title: "Opens where this is fixed",
     run: () => openAppLink(fix.href) }] : [], !!fix && toRow);
   // THE CARD'S LAST LOOK IS ITS OWN (the walk, 2026-11-17): once its Send went it is the sent card, here where it stood - never its form lit
   // again, nor gone until another card says it somewhere else. `went`: what the press did to the task beside it (TaskPage sentHere)

@@ -16,6 +16,7 @@ import { actionFor, changed, choiceOf, fieldsOf, pressable, stateOf, textKey, va
 import { outputRow } from "./taskOutputs.js";
 import { hint } from "./buttons.js";
 import { failLine, landed, press } from "./press.js";
+import { asLive, MovedPast } from "./PassedCard.jsx";
 import { ACCENT, ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
 const initials = (s) => String(s || "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("") || "in";
@@ -26,7 +27,9 @@ const IMG_MAX = 180;
 const PICK = { font: "inherit", fontSize: 11.5, color: INK, border: 0, background: "transparent", padding: 0, cursor: "pointer", outline: 0,
   fieldSizing: "content", borderRadius: "4px", "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } };
 
-export default function ActionCard({ row: given, tid, live = true, onChanged }) {
+// `past`: the chat moved past it - drawn as it stood while it waited, its buttons greyed (MovedPast)
+export default function ActionCard({ row: was, tid, live = true, onChanged, past = false }) {
+  const given = past ? asLive(was) : was;
   // ...A PRESS ANSWERED IS THE CARD'S STATE AT ONCE (the card round, 2026-11-18: Dismiss lit Post and Dismiss again for a beat before "dismissed",
   // a failed post lit them again before its error was kept - the press was over, the row it reads not yet read again): the status the server
   // answered with stands over a row that still says pending, until that row says it too
@@ -73,7 +76,7 @@ export default function ActionCard({ row: given, tid, live = true, onChanged }) 
   const meta = [row?.network, ...fields.filter((f) => f.type === "choice").map(choice)].filter(Boolean);
   // ...a `heading` line is the act's own title, drawn bold over its words (a GitHub issue's title), never "Title ..." in the header
   const lines = fields.filter((f) => f.type === "line" && f.value && !f.heading), heads = fields.filter((f) => f.heading && f.value);
-  return (
+  return (<MovedPast on={past}>
     <Box data-tq-act={row?.ReviewId} data-tq-act-kind={act.kind} data-tq-act-state={gone ? "done" : st.live ? "waiting" : "not-done"}
       sx={{ mt: 1, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: "var(--tq-panel, #fff)", overflow: "hidden" }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.5, pt: 1.25, pb: 0.75 }}>
@@ -111,6 +114,6 @@ export default function ActionCard({ row: given, tid, live = true, onChanged }) 
       </Box>
       {failed && <Typography role="alert" sx={{ px: 1.5, pb: 1, fontSize: 12.5, color: ALERT_INK }}>{failed}</Typography>}
       <FileDialog file={viewing} onClose={() => setViewing(null)} />
-    </Box>
+    </Box></MovedPast>
   );
 }

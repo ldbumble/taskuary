@@ -59,6 +59,7 @@ const R = (() => {
     useEffect: (f, deps) => { const s = slot(() => ({})); if (!deps || !same(s.deps, deps)) { s.deps = deps; effects.push({ s, f }); } },
     jsx: el, jsxs: el, Fragment: "Fragment",
     render: (C, p) => { Comp = C; props = p; draw(); },
+    root: () => tree,
     reset: () => { slots = []; },          // ...a test of its own: no hook state left by the one before
     text: () => { const out = []; const walk = (n) => { if (n == null || typeof n === "boolean") return; if (Array.isArray(n)) return n.forEach(walk);
       if (typeof n !== "object") return void out.push(String(n)); walk(n.props.children); }; walk(tree); return out.join(" "); },
@@ -71,7 +72,8 @@ const build = async () => {
     "react/jsx-runtime": "export const { jsx, jsxs, Fragment } = globalThis.__R;",
     "@mui/material": "const C = (n) => n; export const Box = C('Box'), Button = C('Button'), Checkbox = C('Checkbox'), LinearProgress = C('LinearProgress'), Typography = C('Typography');",
     "./api": "export default globalThis.__api;", "./theme.jsx": "export const BORDER = '', DIM = '', FAINT = '', INK = '';",
-    "./ReviewDecision.jsx": "export default 'ReviewDecision';", "./ActionCard.jsx": "export default 'ActionCard';" };
+    "./ReviewDecision.jsx": "export default 'ReviewDecision';", "./ActionCard.jsx": "export default 'ActionCard';",
+    "./PassedCard.jsx": "export const MovedPast = ({ children }) => children;" };
   const out = await esb({ entryPoints: [fileURLToPath(new URL("../src/BulkCard.jsx", import.meta.url))], bundle: true, write: false, format: "esm",
     jsx: "automatic", logLevel: "silent", plugins: [{ name: "stubs", setup(b) {
       b.onResolve({ filter: /.*/ }, (a) => (a.path in stub ? { path: a.path, namespace: "stub" } : undefined));
@@ -127,4 +129,23 @@ test("a stopped run whose rest the chat moved past never says the rest still wai
   R.render(BulkCard, { rows, tid: 7, onChanged: () => {} }); await flush();
   assert.match(R.text(), /2 of 4 · 2 done/);
   assert.doesNotMatch(R.text(), /the rest still waits/);
+});
+
+// A BULK CARD THE CHAT MOVED PAST IS THE SAME CARD, ITS BUTTONS GREYED (the owner, 2026-11-18: "don't need reason. just keep it with buttons but
+// the buttons grayed out once you moved on"): its rows with their tick boxes, its one press - all under MovedPast - and no line saying why
+test("a bulk card the chat moved past is the same card with its press, greyed, and no reason line", async () => {
+  const flush = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r)); };
+  const aside = { Status: "superseded", DecideNote: "set aside when you moved on" };
+  const rows = [1, 2].map((i) => ({ ...mail(i, `owner${i}@cedar.example`), ...aside }));
+  globalThis.__R = R; R.reset();
+  Object.assign(globalThis.__api ||= {}, { get: async () => ({ data: {} }), post: async () => ({ data: {} }) });
+  const BulkCard = await build();
+  R.render(BulkCard, { rows, tid: 7, onChanged: () => {} }); await flush();
+  assert.deepEqual([R.root().type.name, R.root().props.on], ["MovedPast", true]);
+  assert.match(R.text(), /Send 2 emails/); assert.doesNotMatch(R.text(), /Not done|moved on/);
+  // ...and greyed from the frame his line is drawn, before the server sets it aside: the chat hands it `past`
+  R.reset(); R.render(BulkCard, { rows: rows.map((r) => ({ ...r, Status: "pending", DecideNote: null })), tid: 7, onChanged: () => {}, past: true }); await flush();
+  assert.deepEqual([R.root().type.name, R.root().props.on], ["MovedPast", true]);
+  R.reset(); R.render(BulkCard, { rows: rows.map((r) => ({ ...r, Status: "pending", DecideNote: null })), tid: 7, onChanged: () => {} }); await flush();
+  assert.equal(R.root().props.on, false);
 });

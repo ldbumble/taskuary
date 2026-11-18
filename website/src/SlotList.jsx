@@ -13,7 +13,7 @@ export const letterItems = (checklist = [], reviews = []) => {
 };
 // ONE EMAIL IS ONE NODE, FROM ITS DRAFT TO ITS SENT (the walk, 2026-11-17): where a chat has turns it is drawn in its turn by its review
 // (TaskPage turnCards, `rv:<id>`) and its card turns Sent in place (ReviewDecision); over a to-do's box, which has none, the list below holds it
-export function Letter({ taskId, item = null, rv, onChanged, went = null }) {
+export function Letter({ taskId, item = null, rv, onChanged, went = null, past = false }) {
   // letting one email go - its draft (if any) is never sent; the task stays open
   const drop = async () => {
     try { await api.patch(`/api/tasks/${taskId}/checklist/${item.id}`, { done: true }); } catch { /* the card reloads either way */ }
@@ -26,7 +26,7 @@ export function Letter({ taskId, item = null, rv, onChanged, went = null }) {
         {out.name && <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>{out.name}</Typography>}
         {!!out.candidates?.length && <Typography variant="caption" sx={{ color: FAINT }}>{`could be ${out.candidates.slice(0, 3).join(" or ")}`}</Typography>}
       </Box>}
-      <ReviewDecision review={rv} onChanged={onChanged} onDrop={item ? drop : null} went={went} />
+      <ReviewDecision review={rv} onChanged={onChanged} onDrop={item && !past ? drop : null} went={went} past={past} />
     </Box>
   );
 }

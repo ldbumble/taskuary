@@ -10,13 +10,14 @@ import { heldCard } from "./reviewProposal.js";
 import { useVerbs } from "./actionRow.js";
 import { label as btn } from "./buttons.js";
 import { failLine, pressSteps } from "./press.js";
-import { PressedButton } from "./PassedCard.jsx";
+import { asLive, MovedPast, PressedButton } from "./PassedCard.jsx";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
 const MARK = { ran: "✓", dismissed: "✗", failed: "✗", waiting: "" };
-export default function HeldSteps({ reviews, onChanged, toRow = false }) {
-  const c = heldCard(reviews), n = c.steps.length;
+// `past`: the chat moved past it - its steps as they waited, Approve and Dismiss greyed (MovedPast)
+export default function HeldSteps({ reviews, onChanged, toRow = false, past = false }) {
+  const c = heldCard(past ? reviews.map(asLive) : reviews), n = c.steps.length;
   const [busy, setBusy] = useState(""), [err, setErr] = useState(""), [open, setOpen] = useState(false);
   const go = async (verb) => {
     setBusy(verb); setErr("");
@@ -27,10 +28,10 @@ export default function HeldSteps({ reviews, onChanged, toRow = false }) {
     setBusy(""); onChanged?.();
   };
   const id = (v) => `${c.steps[0]?.id}:${v}`, live = !c.pressed;
-  useVerbs(`held:${c.steps[0]?.id}`, live ? [
+  useVerbs(`held:${c.steps[0]?.id}`, live && !past ? [
     { id: id("approve"), group: "decide", tone: "p", label: btn("approve", "action"), disabled: !!busy, run: () => go("approve"), card: true },
     { id: id("reject"), group: "decide", tone: "s", label: "Dismiss", disabled: !!busy, run: () => go("reject"), card: true }] : [], toRow);
-  return (
+  return (<MovedPast on={past}>
     <Box data-tq-held-steps={n} data-tq-act-state={c.pressed || "waiting"} sx={{ mt: 0.5, px: 1.25, py: 0.9, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>
       <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: INK, lineHeight: 1.3, overflowWrap: "anywhere" }}>{c.title}</Typography>
       <Typography noWrap title={c.folder} sx={{ fontSize: 11.5, color: FAINT }}>{live ? `${c.why.replace(/\.$/, "")} · in ` : "In "}
@@ -65,6 +66,6 @@ export default function HeldSteps({ reviews, onChanged, toRow = false }) {
       {/* ...IN THE CARD'S OWN SENTENCE, the same at the press as after a reload (the card round, 2026-11-12: the press's own line read "Step 1
           failed: The held step failed: ..." over a single step, and "It failed: ..." once the page was read again) */}
       {(err || (!busy && (live || c.pressed === "failed") && c.error)) && <Typography role="alert" sx={{ mt: 0.5, fontSize: 12, color: ALERT_INK }}>{(!busy && c.error) || err}</Typography>}
-    </Box>
+    </Box></MovedPast>
   );
 }

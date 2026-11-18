@@ -108,6 +108,17 @@ def say_cut(store, tid: int) -> int:
     line of the chat under it - a chat's turn carries it in its own words (keep_cut_turns)."""
     from .sessionrecord import NOTE_ACTOR
     return store.add_comment(tid, NOTE_ACTOR, ASSISTANT_TYPE, cut_line(store, tid).strip('_'))
+CUT_HEARD = ("YOUR LAST TURN WAS CUT SHORT WHEN TASKUARY RESTARTED - it may never have reached you. What it had said so far stands in the chat; "
+             "it was answering:")
+def cut_heard(store, tid: int) -> str:
+    """The lines the turn a restart cut had taken, for the next turn of a conversation picked back up (send_prompt): its CLI may never have
+    been handed them - the cut can come before it heard the turn - and a resumed conversation is told only the new turn, so his line stood
+    heard in the chat and no agent ever read it (the timeline stress round, 2026-11-18). '' unless the newest answer is a cut one."""
+    rows = store.list_comments(int(tid), internal=True)
+    said = [i for i, c in enumerate(rows) if c.get('ActorType') == ASSISTANT_TYPE]
+    if not said or not str(rows[said[-1]].get('Body') or '').rstrip().endswith((CUT, CUT_ON)): return ''
+    lines = [str(c.get('Body') or '').strip() for c in rows[(said[-2] + 1 if len(said) > 1 else 0):said[-1]] if c.get('ActorType') == USER_TYPE]
+    return f"{CUT_HEARD}\n" + '\n'.join(f'- {_quote(w, 1500)}' for w in lines if w) if any(lines) else ''
 def keep_cut_turns(store) -> list:
     "Every turn a restart cut, filed on its open task: [task ids]."
     from . import sessionrecord
@@ -158,7 +169,10 @@ def file_turn(store, tid: int, trace: list, line: str) -> int:
     from . import sessionrecord
     words = sessionrecord.said(trace)
     rid = store.add_comment(tid, 'assistant', ASSISTANT_TYPE, f'{words}\n\n{line}' if words else line)
-    sessionrecord.keep_turn(tid, rid, trace)
+    # ...its steps under it where they can be written: one that cannot (a full disk) stopped the restart's loop, and every cut turn after it
+    # was lost - each taken off disk as it was read (the timeline stress round, 2026-11-18)
+    try: sessionrecord.keep_turn(tid, rid, trace)
+    except Exception as e: logger.warning(f'task {tid}: the steps of the cut turn were not kept with it - {e}')
     if (t0 := next((e.get('at') for e in trace[:1] if e.get('type') == 'start'), None)):
         from . import outputs
         try: outputs.keep_turn(tid, rid, float(t0))
@@ -853,6 +867,9 @@ NOT_GONE = {'failed': 'pressed Send on {n} and IT DID NOT GO ({why}) - it still 
 # ...and an ACT whose press failed (store.review_act_failed): the agent that set it up heard nothing, and read its card as still unpressed
 ACT_FAILED = ('pressed Approve on {n} and IT FAILED ({why}) - nothing of it was done{left}. Where it is still needed, set the corrected one up '
               'as a new card for their press; never do it another way')
+# ...and one a restart cut while it ran (verdicts.cut_acts): it MAY have gone - never "nothing of it was done", never done again unasked
+ACT_CUT = 'Cut short when Taskuary restarted while this ran - it may have been done. Check before pressing it again.'
+ACT_MAYBE = 'pressed Approve on {n} and Taskuary restarted while it ran - it MAY have been done and its card still waits for their press; check what stands, and never do it again unless they ask'
 def failed_act(r) -> bool: return r.get('Kind') == 'action' and r['Status'] == 'superseded' and bool(r.get('ActError'))
 # ...and one that WENT is said as done: an approved merge, post or split read "approved (sent, if it sends)" - a letter's words for an act that
 # sends nothing, leaving its agent to guess whether it had run (the stress round, 2026-11-10)
@@ -860,6 +877,7 @@ ACT_DONE = 'pressed Approve on {n} and it was done'
 def _decided(store, r) -> str:
     "One review the owner pressed, in words for its agent: what became of it - and what went, when they changed its text first."
     n, state, why = f"rv{r['ReviewId']}", r.get('DeliveryState') or '', ' '.join(str(r.get('Reason') or '').split())[:160]
+    if r['Status'] == 'pending' and str(r.get('ActError') or '').startswith(ACT_CUT): return ACT_MAYBE.format(n=n)
     if failed_act(r) or (r['Status'] == 'pending' and state not in NOT_GONE):
         return ACT_FAILED.format(n=n, why=' '.join(str(r.get('ActError') or '').split())[:200], left='' if failed_act(r) else ' and its card still waits for their press')
     if r['Status'] == 'pending': return NOT_GONE[state].format(n=n, why=why or 'no reason was given') + _changed(store, r)
@@ -2818,6 +2836,11 @@ class GeneralSession:
         from . import clipool; self.warm_ = clipool.is_live(self.keep())      # its CLI was already open at the start of this turn: the audit says so
         t0 = time.time(); self._turn_trace(t0)
         self.busy, self.last = True, t0
+        # ...ON DISK FROM THE HAND-OVER (the timeline stress round, 2026-11-18): his lines are heard from the take above, and written only after
+        # the provider was picked and the cards before moved on, a restart in between left them heard with nothing under them and no cut line
+        from . import sessionrecord
+        try: sessionrecord.keep_live(self.task_id, self.trace)
+        except OSError as e: logger.debug(f'task {self.task_id}: the turn now beginning was not kept on disk - {e}')
         if (news := came_in(self.store, conversation.with_turn(self.store, self.task_id), mails)):
             delivery_instructions = f'{delivery_instructions}\n\n{news}' if delivery_instructions else news
         # A NEW TURN MAY FINISH AGAIN (the email walk, 2026-10-29): the mark a self-close leaves stops two hooks wrapping one turn,
@@ -2877,8 +2900,8 @@ class GeneralSession:
             self.store.tag_task(self.task_id, terminal.SAVED, False, 'assistant')
             self._turn_trace(t0)                 # ...again, now its provider is picked: the start names it
             # ...ON DISK FROM ITS START: kept only from its first step, a turn the restart cut while its CLI was still coming up left his line
-            # heard with nothing under it and nothing running (the recorded restart, 2026-11-11) - a turn cut at any point says it was cut
-            from . import sessionrecord
+            # heard with nothing under it and nothing running (the recorded restart, 2026-11-11) - a turn cut at any point says it was cut.
+            # Written again here, its start now naming its provider
             try: sessionrecord.keep_live(self.task_id, self.trace)
             except OSError as e: logger.debug(f'task {self.task_id}: the turn now beginning was not kept on disk - {e}')
             system, late, user = prompt_parts(self.store, self.task_id, turn=True)
@@ -3116,6 +3139,7 @@ class GeneralSession:
                 user = _turn_only(self.store, self.task_id, text) if as_owner and not brief else text     # a brief is Taskuary's, never "the owner says"
                 if (lb := turn_facts(self.store, self.task_id, resumed=True, rules=False, turn=True)): user = f'{lb}\n\n{user}'      # what is newest, waiting and sent, as of THIS turn
                 if turn_said: user, whole = f'{turn_said}\n\n{user}', f'{turn_said}\n\n{whole}'
+                if (cut := cut_heard(self.store, self.task_id)): user = f'{cut}\n\n{user}'       # ...a conversation said in full has them already
                 if news: user = f'{news}\n\n{user}'
                 if is_dock(self.store.get_task(self.task_id)):
                     user += f'\n\n{dock_snapshot(self.store)}'
@@ -3255,11 +3279,12 @@ class GeneralSession:
             self.busy, self.last, self.spoke = False, time.time(), True
             self._cancel = None
             if not self.alive: self._forget_tools()          # closed under this turn (close): it was not close's to drop while the turn ran
-            from . import clipool
+            from . import clipool, terminal
             self.cli_up = clipool.is_live(f'general:{self.task_id}')       # watched while it sits idle (cli_gone)
-            # ...the turn ended in this process, filed or failed: nothing is left for a restart to keep. One whose session was killed under it
-            # keeps what it said - the process may be going down with it
-            if self.alive:
+            # ...the turn ended in this process, filed or failed: nothing is left for a restart to keep. One the app's close killed under it
+            # keeps what it said - the process is going down with it. ANY OTHER CLOSE IS NO RESTART (the timeline stress round, 2026-11-18):
+            # a turn Stop and save closed was kept too, and the next start, days on, filed its old words at the foot of the chat as cut
+            if self.alive or not terminal.CLOSING.is_set():
                 from . import sessionrecord
                 sessionrecord.drop_live(self.task_id)
             self._emit('\x1b[1;34myou>\x1b[0m ')

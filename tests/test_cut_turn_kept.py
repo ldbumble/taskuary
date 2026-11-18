@@ -93,3 +93,21 @@ def test_a_long_turn_keeps_every_step_it_took():
     assert tools == [f'vendor-{i}.txt' for i in range(60)], tools[:3]
     assert me.trace[0]['type'] == 'start', 'the turn keeps its start (keep_cut_turns: its files)'
     assert len(json.dumps(me.trace)) < 160_000, 'and no more is served on a read than the newest 100 events were (~150K here)'
+
+def test_one_cut_turn_that_cannot_be_filed_loses_none_of_the_others():
+    """Every cut turn is taken off disk as it is read; one whose steps could not be written (a full disk) stopped the loop, and every cut
+    turn after it was gone - its owner's line heard, nothing under it, no line saying it was cut."""
+    from unittest import mock
+    s = MemoryStore()
+    a = s.create_task({'Title': 'Venues', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    b = s.create_task({'Title': 'Payroll export', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    turn(s, a); turn(s, b)
+    real = sessionrecord.keep_turn
+    def full(tid, *x):
+        if tid == min(a, b): raise OSError('No space left on device')
+        return real(tid, *x)
+    with mock.patch.object(sessionrecord, 'keep_turn', full):
+        got = general.keep_cut_turns(s)
+    assert max(a, b) in got
+    for t in (a, b):
+        assert [c for c in s.list_comments(t) if c['ActorType'] == general.ASSISTANT_TYPE and c['Body'].endswith(general.CUT)], t

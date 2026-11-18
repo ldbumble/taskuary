@@ -5666,8 +5666,12 @@ class SQLiteStore:
                 if claim:
                     state = 'unknown'; env['delivery'] = state
                     reason = 'Delivery unknown after an interrupted attempt; check with the provider before any retry.'
-                    self.cx.execute("UPDATE review SET DeliveryState=?, DeliveryClaim=NULL, Deliver=?, Reason=? WHERE ReviewId=? AND DeliveryClaim=?",
-                                    (state, json.dumps(env), reason, row['ReviewId'], claim))
+                    # ...with who pressed it, as an attempt that ends unknown in its own process keeps them (finish_review_delivery): without them
+                    # its agent heard nothing of a send that may have gone (general.owner_did), and could set it up again
+                    try: by = json.loads(row.get('DeliveryEnvelope') or '{}').get('actor') or 'owner'
+                    except (TypeError, ValueError, AttributeError): by = 'owner'
+                    self.cx.execute("UPDATE review SET DeliveryState=?, DeliveryClaim=NULL, Deliver=?, Reason=?, DecidedBy=?, DecidedAt=? WHERE ReviewId=? AND DeliveryClaim=?",
+                                    (state, json.dumps(env), reason, by, _now(), row['ReviewId'], claim))
                 elif state in ('sent', 'failed', 'unknown'):
                     self.cx.execute('UPDATE review SET DeliveryState=? WHERE ReviewId=? AND DeliveryState IS NULL', (state, row['ReviewId']))
                 else: continue

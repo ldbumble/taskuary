@@ -3199,6 +3199,7 @@ def release_task(store, task_id, actor='terminal', note=None) -> bool:
 
 def recover_after_restart(store) -> int:
     """Clear persisted worker state that cannot survive a Taskuary process restart."""
+    CLOSING.clear()                 # ...a start: what closes from here is no app's close
     # Sessions and headless-run threads are process-owned; none can be live before the new process
     # has started one. Repair both halves so the Board never invents a worker from yesterday.
     # ...and a permission request a killed run left open is refused and said first, so the run's ending is its last word (permissions.refuse_orphans)
@@ -3208,6 +3209,11 @@ def recover_after_restart(store) -> int:
     except Exception as e: logger.warning(f'permission requests left open by the last run not closed: {e}')
     for run in store.running_runs():
         store.update_run(run['RunId'], {'Status': 'stopped'}, finished=True)
+    # ...and an act a press had under way is said on its card as cut - it may have gone (verdicts.cut_acts)
+    try:
+        from . import verdicts
+        verdicts.cut_acts(store)
+    except Exception as e: logger.warning(f'acts cut by the restart not said on their cards: {e}')
     # ...and a reply an earlier build held out of sight as "an earlier session's" is back with its Send (wrapup.STALE_HOLD)
     from . import wrapup
     for r in store._rows("SELECT ReviewId FROM review WHERE Status='held' AND Reason=?", (wrapup.STALE_HOLD,)):
@@ -3220,8 +3226,12 @@ def recover_after_restart(store) -> int:
     return released
 
 
+CLOSING = threading.Event()     # the app is closing: a chat turn its close cuts stays on disk for the next start (general.keep_cut_turns)
+
+
 def shutdown_sessions():
     """Close every in-memory agent session during an orderly application shutdown."""
+    CLOSING.set()
     sessions = list(SESSIONS.items())
     for sid, session in sessions:
         try:

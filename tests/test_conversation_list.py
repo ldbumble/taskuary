@@ -990,6 +990,81 @@ class TheList(unittest.TestCase):
         self.assertEqual((got['pending'], [x['kind'] for x in got['items']].count('press'), got['working']), ([], 1, True))
         self.brain.delay = 0; self.rest()
 
+    def test_a_turn_its_session_was_closed_under_is_no_turn_a_restart_cut_days_later(self):
+        """A session closed under its turn while Taskuary ran on (Stop and save, a hand-off) left the turn on disk as one still under way: the
+        next restart, whenever it came, filed its old words at the foot of the chat as "Cut short when Taskuary restarted - type to carry on"
+        - a restart that cut nothing, under lines written since. Only a close that takes the process down keeps it."""
+        from taskuary import sessionrecord, terminal
+        self.say('Suggest two.', 'l-one'); self.rest()
+        self.brain.delay = 30
+        self.say('Compare both in detail.', 'l-two', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        ses = general.session_for(self.tid)
+        ses._remember_trace('progress', 'text', 'The lakeside venue costs more.')
+        ses.close(learn=False, report=False)
+        self.brain.delay = 0
+        self.assertTrue(until(lambda: not ses.busy))
+        self.assertFalse(sessionrecord._live_path(self.tid).exists())
+        terminal.recover_after_restart(self.s); general.keep_cut_turns(self.s)
+        self.assertFalse([c for c in self.s.list_comments(self.tid) if 'Cut short' in c['Body']])
+
+    def test_a_line_heard_by_a_turn_still_coming_up_is_cut_with_it(self):
+        """His line was taken and heard by the turn before that turn was first written to disk - a provider picked, the cards before it moved
+        on: a restart in between left the line heard with nothing under it, nothing running and nothing saying it was cut."""
+        from taskuary import proposals
+        self.say('Suggest two.', 'l-one'); self.rest()
+        up, go, cut = threading.Event(), threading.Event(), []
+        real = proposals.move_on
+        def coming_up(*a, **k):
+            if not up.is_set(): up.set(); cut.extend(general.keep_cut_turns(self.s)); go.wait(5)      # the next start reads the disk here
+            return real(*a, **k)
+        with mock.patch.object(proposals, 'move_on', coming_up):
+            self.say('Compare both in detail.', 'l-two', wait=False)
+            self.assertTrue(up.wait(5)); go.set()
+            self.rest()
+        self.assertEqual(cut, [self.tid])
+
+    def test_a_line_a_cut_turn_took_is_heard_by_the_resumed_conversation_after_the_restart(self):
+        """The turn a restart cut had taken his line, and went before its CLI was handed it. The next session picked the CLI's conversation
+        back up, which is told only the new turn: his line stood heard in the chat, and no agent ever read it."""
+        from taskuary import proposals, terminal
+        self.say('Suggest two.', 'l-one'); self.rest()
+        old = general.session_for(self.tid)
+        up, go = threading.Event(), threading.Event()
+        class Gone(BaseException): pass
+        def coming_up(*a, **k):
+            up.set(); general.keep_cut_turns(self.s); go.wait(5); raise Gone()      # the next start reads the disk here; nothing after runs
+        def turn():
+            try: old.send_prompt('Compare both venues on price.', echo=False)
+            except Gone: pass
+        with mock.patch.object(proposals, 'move_on', coming_up):
+            t = threading.Thread(target=turn, daemon=True); t.start()
+            self.assertTrue(up.wait(5)); go.set(); t.join(5)
+        old.alive = False; terminal.SESSIONS.pop(old.sid, None); general.drop_session(self.tid); general.answered(self.tid, every=True)
+        terminal.recover_after_restart(self.s)
+        new = general.start_session(self.s, self.tid)
+        new.cli_sid = 'cli-conversation-1'                       # its CLI's own conversation, picked back up: only the turn is said
+        self.say('And book the cheaper one.', 'l-three'); self.rest()
+        self.assertIn('Compare both venues on price.', self.brain.calls[-1])
+        self.assertIn(getattr(general, 'CUT_HEARD', 'CUT SHORT WHEN TASKUARY RESTARTED'), self.brain.calls[-1])
+        self.say('Thanks.', 'l-four'); self.rest()
+        self.assertNotIn(general.CUT_HEARD, self.brain.calls[-1], 'said once')
+
+    def test_a_turn_the_app_closing_cut_is_kept_for_the_next_start(self):
+        from taskuary import sessionrecord, terminal
+        self.say('Suggest two.', 'l-one'); self.rest()
+        self.brain.delay = 30
+        self.say('Compare both in detail.', 'l-two', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        ses = general.session_for(self.tid)
+        ses._remember_trace('progress', 'text', 'The lakeside venue costs more.')
+        terminal.shutdown_sessions()
+        self.brain.delay = 0
+        self.assertTrue(until(lambda: not ses.busy))
+        terminal.recover_after_restart(self.s); general.keep_cut_turns(self.s)
+        got = [c['Body'] for c in self.s.list_comments(self.tid) if c['ActorType'] == general.ASSISTANT_TYPE]
+        self.assertTrue(got[-1].startswith('The lakeside venue costs more.') and 'Cut short when Taskuary restarted' in got[-1], got)
+
     def test_a_reply_waiting_for_his_send_stands_with_its_send_through_a_restart_and_the_session_after_it(self):
         """The recorded restart, 2026-11-11, and the owner's ruling on it ("reply cards should survive untouched"): the agent's reply waited
         for his Send, Taskuary restarted with a line of his by the box, the new session held the card as "an earlier session's" and told

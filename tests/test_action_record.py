@@ -216,6 +216,48 @@ class APressThatFailed(Acts):
         self.assertIn('Permission to northwind/ledger denied', self.s.get_review(rv['ReviewId'])['ActError'])
 
 
+class APressARestartCut(Acts):
+    """Taskuary restarted while a pressed act ran - a public comment going up, a push. Its only guard was in memory: the next start drew the
+    card waiting as if never pressed, Approve lit, so a second press ran it twice, and its agent heard nothing of the first. Invented people."""
+    def cut(self, rv):
+        import threading
+        going, hold = threading.Event(), threading.Event()
+        class Gone(BaseException): pass                       # the old process: it never comes back to settle the card
+        def run(*a, **k): going.set(); hold.wait(5); raise Gone()
+        def press():
+            try: verdicts.decide(self.s, rv, 'approve')
+            except Gone: pass
+        with mock.patch.object(proposals, '_run', run), mock.patch.object(proposals, 'validate', return_value=(True, 'comment')), \
+                mock.patch.object(general, 'tell', return_value=''):
+            t = threading.Thread(target=press, daemon=True); t.start()
+            self.assertTrue(going.wait(5))
+            term.recover_after_restart(self.s)                # what the next start reads: the act under way, its process gone
+            now = self.s.get_review(rv['ReviewId'])
+            hold.set(); t.join(5)
+        return now
+
+    def test_its_card_says_it_was_cut_and_may_have_gone(self):
+        rv = self.action({'action': 'comment_issue', 'body': 'Fixed.'})
+        now = self.cut(rv)
+        self.assertEqual(now['Status'], 'pending', 'his to press again, or not - never settled as if it ran or failed')
+        self.assertIn('Cut short when Taskuary restarted', now['ActError'] or '')
+        self.assertIn('may have', now['ActError'])
+
+    def test_its_agent_hears_it_may_have_gone_never_that_nothing_was_done(self):
+        self.answered(); rv = self.action({'action': 'comment_issue', 'body': 'Fixed.'})
+        self.cut(rv)
+        did = ' | '.join(general.owner_did(self.s, self.tid))
+        self.assertIn(f"rv{rv['ReviewId']}", did); self.assertIn('MAY have been done', did)
+        self.assertNotIn('nothing of it was done', did)
+
+    def test_a_press_that_finished_before_the_restart_is_not_cut(self):
+        rv = self.action({'action': 'comment_issue', 'body': 'Fixed.'})
+        with mock.patch.object(proposals, '_run', side_effect=RuntimeError('GitHub refused it')), mock.patch.object(proposals, 'validate', return_value=(True, 'comment')):
+            verdicts.decide(self.s, rv, 'approve')
+        term.recover_after_restart(self.s)
+        self.assertEqual(self.s.get_review(rv['ReviewId'])['ActError'], 'GitHub refused it')
+
+
 class AnApprovedHeldStepWakesItsAgent(Acts):
     def setUp(self):
         super().setUp()

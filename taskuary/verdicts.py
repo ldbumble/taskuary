@@ -189,6 +189,24 @@ def _envelope(rv: dict) -> dict:
 _RUNNING, _RUNNING_LOCK = set(), threading.Lock()   # action reviews whose act is running right now (one server process per home)
 
 
+# AN ACT A RESTART CUT IS SAID ON ITS CARD (the timeline stress round, 2026-11-18): the claim above lives in the process, so the next start drew
+# a card whose comment or push was going up as never pressed - Approve lit, a second press ran it twice, and its agent heard nothing. The
+# press is written down when it starts and when it ends; one started and never ended is told at start-up, its card left for his press
+ACT_STARTED, ACT_ENDED = 'act_started', 'act_ended'
+def cut_acts(store) -> list:
+    "At start-up: every pressed act the last run did not see end, kept on its card as cut (general.ACT_CUT): [review ids]."
+    from . import general
+    out = []
+    for r in store._rows("SELECT ReviewId FROM review WHERE Kind='action' AND Status IN ('pending','held')"):
+        last = store._one("SELECT Action, Actor FROM audit WHERE EntityType='review' AND EntityId=? AND Action IN (?,?) ORDER BY Id DESC LIMIT 1",
+                          (r['ReviewId'], ACT_STARTED, ACT_ENDED))
+        if not last or last['Action'] != ACT_STARTED: continue
+        store.review_act_failed(r['ReviewId'], general.ACT_CUT, last['Actor'])
+        store.audit('review', r['ReviewId'], ACT_ENDED, 'startup', 'system', {'cut': True})
+        out.append(r['ReviewId'])
+    return out
+
+
 def _claim_act(store, rid) -> bool:
     """This press may run the act: no other press is running it and its row still waits. A reply's send is claimed in the store before it
     leaves (claim_review_delivery); an action ran first and was marked answered after, so a double click - or the desk and the phone -
@@ -810,6 +828,8 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
             if (busy := shellgate.mid_turn(store, rv['TaskId'], p_.get('sid'))):
                 return {'ok': False, 'status': 'pending', 'sent': None, 'busy': busy, 'send_error': busy}
         if not _claim_act(store, rid): return _act_busy(store, rid)   # every verb: a No over a running Yes would mark a merged pull request rejected
+        runs = verb in ('approve', 'edit', 'merge_anyway', 'close_pr')
+        if runs: store.audit('review', rid, ACT_STARTED, actor)      # ...and written down before it runs, so a restart under it is known (cut_acts)
         try:
             if verb == 'close_pr':
                 try: out = proposals.close_pr(store, rv, actor)
@@ -842,7 +862,9 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
             store.add_comment(rv['TaskId'], actor, 'human', f'Proposal {VERB2STATUS[verb]} - nothing was done.')
             proposals.settle(store, rv, verb, actor)
             return {'ok': True, 'status': VERB2STATUS[verb], 'sent': None, 'send_error': None}
-        finally: _RUNNING.discard(rid)
+        finally:
+            _RUNNING.discard(rid)
+            if runs: store.audit('review', rid, ACT_ENDED, actor)
     # A BLANK LEFT IN IT (the owner, 2026-10-30): "[REASON]" went out as written. The one door refuses it, so the phone and the
     # assistant meet the same "Fill in [REASON] first" the Send button does - nothing is decided, the draft stays as it is
     # ...but a send already attempted is checked as attempted (Check delivery), its text frozen - never a new refusal over it

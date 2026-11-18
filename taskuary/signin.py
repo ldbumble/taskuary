@@ -933,6 +933,8 @@ class Cdp:
 def _cdp_url(sid: str) -> str:
     """The session's Chrome DevTools address, from agent-browser itself. Output to a FILE, not a pipe: see browserview.navigate."""
     from . import browserview, spawn
+    # ...read off the Chrome Taskuary started for the session first: asking agent-browser hung while a page it was loading never answered
+    if (own := browserview.devtools_url(sid)): return own
     exe = browserview.program()
     if not exe: raise SignInError('agent-browser is not installed')
     log = Path(tempfile.gettempdir()) / f'{browserview.session_name(sid)}-cdp.log'

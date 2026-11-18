@@ -165,19 +165,28 @@ def setting(act: dict) -> bool:
 
 
 # ── the page it would act on, and the model's verdict ─────────────────────────────────────────────────────────────────────
+LATE = 'the browser did not answer in time'
+
+
 def _run(sid: str, args: list, wait: float, tag: str) -> tuple:
     """(exit code, output) of one agent-browser command in this session's browser. Output to a FILE (browserview.navigate says
-    why: the daemon inherits a pipe and it never ends)."""
+    why: the daemon inherits a pipe and it never ends). A load an earlier command left stuck is stopped first, and one this command
+    left is stopped after it - its output says so (browserview.unstick)."""
     from . import browserview, spawn
     exe = browserview.program()
     if not exe: raise RuntimeError('agent-browser is not installed')
+    t0 = time.time()
+    _ = browserview.began(sid) if args and (args[0] not in LOOKS or args[0] in NAVS) else browserview.unstick(sid)
     log = Path(tempfile.gettempdir()) / f'{browserview.session_name(sid)}-{tag}.log'
     with open(log, 'wb') as f:
         p = spawn.popen([exe, '--session', browserview.session_name(sid), *args], env=browserview._cli_env(sid), stdout=f, stderr=f,
                         stdin=subprocess.DEVNULL)
         try: rc = p.wait(timeout=wait)
-        except subprocess.TimeoutExpired: p.kill(); raise RuntimeError('the browser did not answer in time')
-    return rc, log.read_text(encoding='utf-8', errors='replace')
+        except subprocess.TimeoutExpired:
+            p.kill()
+            raise RuntimeError(LATE + (f' - {browserview.STOPPED}' if browserview.unstick(sid, t0) else ''))
+    said = log.read_text(encoding='utf-8', errors='replace')
+    return rc, said + (f'\n{browserview.STOPPED}' if rc != 0 and browserview.unstick(sid, t0) else '')
 
 
 def _own_args(args: list) -> list:

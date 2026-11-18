@@ -342,13 +342,14 @@ NOT_LISTED = ("A SITE OR SYSTEM NOT LISTED HERE has no connection: say so in one
               "(the guide `browser` first) - a sign-in is done on the page there, by a saved sign-in or by the owner, and kept for next time. "
               "Never ask the owner for a password, and never work a sign-in from your shell.")
 
-def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
-    """_call - and a card's tool says where its card stands in the task's line (cardqueue: one card at a time, in the order raised)."""
+def call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
+    """_call - and a card's tool says where its card stands in the task's line (cardqueue: one card at a time, in the order raised). `skip`:
+    the tools this session is not offered (rpc's), which find_tools never names."""
     # ...ONE item is one card, as if given whole (2026-11-17: a lone break_out stood as "1 step - review a few, then do them all", "Approve all 1")
     if TOOLS[name][0] == 'propose' and isinstance((args or {}).get('items'), list) and len(args['items']) == 1 and isinstance(args['items'][0], dict):
         args = {**{k: v for k, v in args.items() if k != 'items'}, **args['items'][0]}
     if TOOLS[name][0] == 'propose' and isinstance((args or {}).get('items'), list): out = _many(store, tid, name, args, doors)
-    else: out = _call(store, tid, name, args, doors)
+    else: out = _call(store, tid, name, args, doors, skip)
     if TOOLS[name][0] != 'propose' or not isinstance(out, str): return out
     from . import cardqueue
     if not (line := cardqueue.says(store, tid)): return out
@@ -418,7 +419,7 @@ def fit(name: str, args) -> dict:
     return a
 
 
-def _call(store, tid: int, name: str, args: dict, doors: dict) -> str:
+def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     """Run one tool for the session on task `tid`. `doors` are the server's own handlers for the acts that have one (tool_run, tick,
     reply, draft, propose), called with the caller's request so their own checks - owns_task, scopes, the send-to-proposal rule -
     are the ones that hold. Raises ValueError for a call the model can correct; the answer is text the model reads."""
@@ -492,7 +493,10 @@ def _call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         from . import guides
         return _out(guides.read(a.get('topic')))
     if name == 'find_tools':
-        hits = found(a.get('query'), {n: d for n, (_, d, _s, _) in TOOLS.items()})
+        # ...only this session's own: on the owner's own ask "reply to the sender" found propose_reply, and calling it answered "unknown tool"
+        hits = found(a.get('query'), {n: d for n, (_, d, _s, _) in TOOLS.items() if n not in skip})
+        if not hits and str(a.get('query') or '').strip().lower() in skip:
+            return f"{a['query'].strip()} is not offered on this task - tools/list names the ones it has; say what you need in words to find one of them."
         return '\n\n'.join(map(instructions, hits)) if hits else f"No tool fits {a.get('query')!r} - name one, or say what it should do in other words."
     if name == 'run_system':
         r = doors['tool_run']({**a, 'task_id': tid})
@@ -719,7 +723,7 @@ def rpc(msg: dict, run, skip=()) -> dict | None:
     if m == 'tools/list': return ok({'tools': listing(skip)})
     if m == 'tools/call':
         name = p.get('name')
-        if name not in TOOLS or name in skip: return err(-32602, f'unknown tool {name!r}')
+        if name not in TOOLS or name in skip: return err(-32602, f"unknown tool {name!r} - this task's tools are the ones tools/list names")
         try: return ok({'content': [{'type': 'text', 'text': run(name, p.get('arguments') or {})}], 'isError': False})
         except Exception as e: return ok({'content': [{'type': 'text', 'text': failed(name, e)}], 'isError': True})
     return err(-32601, f'method {m!r} is not served here')

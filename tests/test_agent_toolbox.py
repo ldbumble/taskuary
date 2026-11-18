@@ -383,6 +383,17 @@ class NewTaskTool(unittest.TestCase):
         got = json.loads(said)
         self.assertFalse(got['ok']); self.assertEqual(len(got['refused']), 2); self.assertNotIn('ONE card', got['shown'])
 
+    def test_find_tools_names_only_the_tools_this_session_is_offered(self):
+        "The owner's own ask has no reply tools: find_tools for a reply named propose_reply anyway, and calling it answered \"unknown tool\"."
+        said, err = tool(self.tid, 'find_tools', query='reply to the sender')
+        self.assertFalse(err); self.assertNotIn('propose_reply', said); self.assertNotIn('reply_not_needed', said)
+        said, _ = tool(self.tid, 'find_tools', query='propose_reply')
+        self.assertIn('not offered on this task', said)
+        said, _ = tool(self.tid, 'find_tools', query='pick the git checkout')         # a coding agent's tool, on a general task
+        self.assertNotIn('use_repo', said)
+        r = rpc(self.tid, 'tools/call', {'name': 'propose_reply', 'arguments': {'text': 'x'}}).json()
+        self.assertIn('tools/list names', r['error']['message'])
+
     def test_a_list_or_a_number_given_in_another_shape_is_read_as_the_schema_has_it(self):
         "A lone cc address, an `answers` written m12, an attachment named \"attachment 12\": read as meant - never a Pydantic dump or a cc spelled letter by letter."
         mid = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'r0', 'ConversationId': 'conv-r', 'Channel': 'email', 'FromName': 'Gail Moreno',

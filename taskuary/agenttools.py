@@ -447,7 +447,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         if not x or not store.get_message(x.get('MessageId')) or (store.get_message(x['MessageId']) or {}).get('Channel') == 'assistant':
             raise ValueError(f"no attachment {a['id']} - read_message lists a message's attachments with their ids")
         p = Path(x['Path']) if x.get('Path') else None
-        if not p or not p.is_file(): return f"{x.get('Name')}: not kept here - open the original message"
+        if not p or not p.is_file(): raise ValueError(not_kept(x.get('Name')))
         got = attachtext.read(x.get('Name'), p.read_bytes())
         return _out(got.get('text') or got.get('note') or '(no text in it)', fence_it=bool(got.get('text')))
     if name == 'my_task':
@@ -641,6 +641,13 @@ def attached(store, tid: int, names) -> list:
     return out
 
 
+# ...and ONE THAT WAS NEVER KEPT is said as a fact with its way past it: "open the original message" asked of an agent that cannot open a
+# mailbox, and read_attachment said it as a plain answer, not a failure - an agent went on as if it had read the file
+def not_kept(name) -> str:
+    return (f"{name or 'that file'} was not kept by Taskuary, so it cannot be read or attached from here - tell the owner in one line that it "
+            "is on the original message in their mailbox, and go on with what you have")
+
+
 def mail_file(store, tid: int, aid, kept: bool = True) -> tuple:
     """(name, path) of attachment `aid` - a file that came on a message ON task `tid`, kept under Taskuary's own attachments folder (a Path
     column pointing anywhere else would make this a local file read). A ValueError says why not. `kept=False`: only whether it is this
@@ -657,7 +664,7 @@ def mail_file(store, tid: int, aid, kept: bool = True) -> tuple:
         p = Path(str(x.get('Path') or '')).resolve()
         if not x.get('Path') or not p.is_relative_to((config.home() / 'attachments').resolve()) or not p.is_file(): p = None
     except (OSError, ValueError): p = None
-    if not p: raise ValueError(f"{x.get('Name') or 'that file'} is not kept here - open the original message")
+    if not p: raise ValueError(not_kept(x.get('Name')))
     return x.get('Name') or p.name, p
 
 

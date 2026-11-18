@@ -418,6 +418,17 @@ class NewTaskTool(unittest.TestCase):
         said, err = tool(self.tid, 'propose', action='settings', why='x', changes=['poll_minutes'])
         self.assertTrue(err); self.assertIn('"name"', said)
 
+    def test_an_attachment_that_was_never_kept_is_a_failure_with_its_way_past_it(self):
+        "read_attachment answered \"not kept here - open the original message\" as if it were the file's text - to an agent that has no mailbox to open."
+        mid = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'r9', 'ConversationId': 'conv-r', 'Channel': 'email', 'FromName': 'Gail Moreno',
+                                  'FromEmail': 'gail@northwind.example', 'Subject': 'Renewal terms', 'BodyText': 'Terms attached.',
+                                  'SentAt': '2026-10-21 08:00:00', 'Status': 'routed'})
+        aid = self.s.add_attachment({'MessageId': mid, 'Name': 'terms.pdf', 'Size': 900, 'Path': ''})
+        from taskuary import origin
+        with mock.patch.object(origin, 'of_message', return_value=('person', None)), mock.patch.object(origin, 'of_task', return_value=('person', None)):
+            said, err = tool(self.tid, 'read_attachment', id=aid)
+        self.assertTrue(err, said); self.assertIn('tell the owner', said); self.assertNotIn('open the original', said)
+
     def test_a_list_or_a_number_given_in_another_shape_is_read_as_the_schema_has_it(self):
         "A lone cc address, an `answers` written m12, an attachment named \"attachment 12\": read as meant - never a Pydantic dump or a cc spelled letter by letter."
         mid = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'r0', 'ConversationId': 'conv-r', 'Channel': 'email', 'FromName': 'Gail Moreno',

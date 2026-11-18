@@ -267,8 +267,9 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
 
 
 # A ROUTINE'S OWN EMAIL GOES (the owner, 2026-11-17: "routines should send on their own too" - approval is only for what answers input from
-# outside): a routine run is his own work, so its agent's email is sent at once by the very press his Send makes (verdicts.decide, as the
-# bulk card's own run presses it), quietly - the agent is mid-turn, it hears the send in what this returns. One with no address waits for him.
+# outside): a routine run is his own work, so its agent's email to what he saved into the routine - himself, an address in its words - is sent
+# at once through the one door his Send takes (verdicts.decide, which holds any other), quietly - the agent is mid-turn, it hears the send in
+# what this returns. One with no address, or to someone the run chose, waits for him.
 ROUTINE = 'routine'
 def routine_sends(store, tid: int, rid: int, agent: str, missing: str = '') -> dict:
     "{'sent': True} where the task is a routine's run and its email went; {'send_error': why} where it did not; {} for any other task."
@@ -278,11 +279,12 @@ def routine_sends(store, tid: int, rid: int, agent: str, missing: str = '') -> d
     try: out = verdicts.decide(store, store.get_review(rid), 'approve', actor=ROUTINE)
     except Exception as e: out = {'ok': False, 'error': str(e)}
     finally: verdicts.QUIET.reset(tok)
+    if out.get('held'): return {}                 # ...one the owner did not save into the routine is its card (verdicts.saved_for)
     try: to = ', '.join((json.loads((store.get_review(rid) or {}).get('Deliver') or '{}') or {}).get('to') or []) or 'them'
     except (TypeError, ValueError): to = 'them'
     # ...and said to the agent as it happened: told the card "waits and nothing went", it reported a sent email as waiting for a press
     if out.get('ok') and not out.get('send_error'):
-        return {'sent': True, 'says': f"Sent to {to} at once - a routine's own email goes without a press; say it went. No card waits on it."}
+        return {'sent': True, 'says': f"Sent to {to} at once - a routine's email to what its owner saved into it goes without a press; say it went. No card waits on it."}
     why = out.get('send_error') or out.get('error') or 'it did not go'
     return {'send_error': why, 'says': f"Not sent to {to}: {str(why).rstrip(' .')}. Its card waits on the task for the owner's Send."}
 

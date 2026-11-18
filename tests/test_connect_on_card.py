@@ -14,7 +14,9 @@ def test_one_answer_says_what_is_not_connected_and_where_to_connect_it():
     s.save_connector({'Type': 'outlook', 'Name': 'Outlook', 'Active': 0}, 'owner')
     assert outbound.connect_fix(s, 'email') == {'says': 'No mailbox is connected', 'label': 'Connect email', 'href': '#connector=outlook'}
     assert outbound.connect_fix(s, 'own') is None and outbound.connect_fix(s, '') is None      # nothing to connect for those
-    s.save_connector({'Type': 'linkedin', 'Name': 'LinkedIn', 'Active': 1}, 'owner'); s.save_connector({'Type': 'gmail', 'Name': 'Mail', 'Active': 1}, 'owner')
+    li = s.save_connector({'Type': 'linkedin', 'Name': 'LinkedIn', 'Active': 1}, 'owner')
+    assert outbound.connect_fix(s, 'linkedin')['label'] == 'Connect LinkedIn'      # switched on, never signed in: not connected (the walks, 2026-11-18)
+    s.save_connector({'ConnectorId': li, 'Secret': 'tok'}, 'owner'); s.save_connector({'Type': 'gmail', 'Name': 'Mail', 'Active': 1}, 'owner')
     assert outbound.connect_fix(s, 'linkedin') is None and outbound.connect_fix(s, 'email') is None
 
 

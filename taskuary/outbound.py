@@ -530,8 +530,10 @@ def connect_fix(store, kind) -> dict | None:
         # ...its button opens the mailbox's own card - one set up and switched off, else Email's section, where each mailbox has its card
         had = next((str(c.get('Type')).lower() for c in cards if str(c.get('Type') or '').lower() in (*MAILBOXES, *HOSTS)), '')
         return {'says': 'No mailbox is connected', 'label': 'Connect email', 'href': f'#connector={had}' if had else MAIL[1]}
+    # ...an act's network by the Connections page's own rule (connectorcatalog.signed_in): a LinkedIn card switched on and never signed in
+    # had Post to LinkedIn lit over it (the walks, 2026-11-18)
     card = connectorcatalog.by_type(k)
-    if not card or k in live: return None
+    if not card or any(str(c.get('Type') or '').lower() == k and connectorcatalog.signed_in(c) for c in cards): return None
     name = card.get('title') or k
     return {'says': f"{name} isn't connected", 'label': f'Connect {name}', 'href': f'#connector={k}'}
 

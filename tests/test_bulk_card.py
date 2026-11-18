@@ -387,7 +387,9 @@ def test_a_routine_runs_many_emails_go_at_once_and_its_agent_hears_the_true_coun
     # a routine run's agent raised three emails in one call: a routine's own email goes without a press, so each went as it was filed - and
     # the answer read 0 on the card, ok false and "they stand as ONE card", so the agent told the owner three sent emails were waiting
     s = MemoryStore()
-    tid = s.create_task({'Title': 'Monday vendor nudges - Mon', 'Kind': 'general', 'Status': 'open', 'Source': 'workflow', 'SourceRef': 'workflow:7'}, 'routine')
+    sid = s.save_source({'Channel': 'report', 'Address': 'Monday vendor nudges', 'Owner': 'o', 'Active': 1, 'ConfigJson': json.dumps(
+        {'type': 'agent', 'title': 'Monday vendor nudges', 'prompt': 'Ask ' + ', '.join(e['to'] for e in emails(3)) + ' about the listings.'})}, 'o')
+    tid = s.create_task({'Title': 'Monday vendor nudges - Mon', 'Kind': 'general', 'Status': 'open', 'Source': 'workflow', 'SourceRef': f'workflow:{sid}'}, 'routine')
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Set up.'); s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00'")
     sent = []
     def send(store, channel, to, *a, **k):

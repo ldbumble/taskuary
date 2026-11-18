@@ -36,9 +36,12 @@ def own_groups() -> tuple:
 def by_type(t: str) -> dict | None: return next((c for c in cards() if c['type'] == t), None)
 
 
+def signed_in(c: dict) -> bool:
+    "A card that is on and holds what it needs to reach its system - a card switched on and never signed in is not (the walks, 2026-11-18)."
+    return bool(c.get('Active') and (c.get('HasSecret') or c.get('LastSyncAt') or c.get('Secret')))
 def is_connected(c: dict) -> bool:
     """A card that is on, has what it needs to reach its system, and is not failing - the one rule the Connections page counts by."""
-    return bool(c.get('Active') and (c.get('HasSecret') or c.get('LastSyncAt') or c.get('Secret')) and not c.get('LastError'))
+    return signed_in(c) and not c.get('LastError')
 
 
 def connected_count(store, cli_connections: dict) -> int:

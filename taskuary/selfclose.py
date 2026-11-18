@@ -319,7 +319,7 @@ CARD_SAID = ('A reply, an email or an act you set up is its card under your answ
 # once, and its agent was told the card "shows ... that it waits and that nothing went" - so it said nothing went (the tools stress round)
 def card_said(out: dict) -> str:
     "How a draft that stood is spoken of, on every road (the draft tools, `taskuary --draft`): sent at once, failed to go, or its card."
-    if out.get('sent'): return ("It went at once - a routine's own email is sent without a press, so there is no card: say in a few words that "
+    if out.get('sent'): return ("It went at once - a routine's email to what its owner saved into it is sent without a press, so there is no card: say in a few words that "
                                 "it was sent, and to whom.")
     if out.get('send_error'): return (f"It did not go ({out['send_error']}), so it stands as its card for the owner's Send - say that in one "
                                       f"line. {CARD_SAID}")

@@ -449,7 +449,7 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
                          (key, int(tid), top, *mine))
     n = (store._one('SELECT COUNT(*) AS n FROM review WHERE Batch=?', (key,)) or {}).get('n') or 0
     card = 'They stand as ONE card: the owner reviews a few and does them all with one press; you hear the whole run once.'
-    shown = ((f"{len(went)} of {len(items)} sent at once - a routine's own email goes without a press; say they went."
+    shown = ((f"{len(went)} of {len(items)} sent at once - a routine's email to what its owner saved into it goes without a press; say they went."
               + (f" Not sent: {'; '.join(held)}." if held else '') + (f" The {n} unsent stand as ONE card for the owner's Send." if n else '')) if went
              else card if n else 'Nothing was filed, so no card stands - fix what each item was refused for and call it again.')
     return _j({'ok': n > 0 or bool(went), **({'batch': key, 'on_the_card': n} if n else {}), **({'sent': len(went)} if went else {}),

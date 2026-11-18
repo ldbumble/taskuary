@@ -8968,6 +8968,11 @@ def tool_run(body: dict, request: Request):
         # card (sqlite, local_file, agent, rest) used to run for anyone holding the API: any file on
         # disk, any database, another agent run (audit 2026-09-02)
         raise HTTPException(403, f'{t} has no connection card an owner turned on - it is not an agent tool')
+    # ...AN AGENT'S POST ON A NETWORK NOT CONNECTED is its card all the same, Connect where Post would be (outbound.review_connect): "the
+    # connection is off - turn it on" sent the agent to say in words what the card's own Connect does (design round 2, 2026-11-18)
+    from . import connectorcatalog
+    if not conn.get('Active') and connectorcatalog.action_for(t) and guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
+        return _agent_proposes(request, t, conn, body, scopes.reaches(t, body) or f'{t} reaches people')
     if not conn.get('Active'):
         raise HTTPException(403, f"the {t} connection is off - turn it on under {words.name('connections')}")
     if 'tool' not in store_mod.roles_of(conn):

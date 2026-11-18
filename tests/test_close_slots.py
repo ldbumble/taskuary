@@ -738,22 +738,46 @@ def test_without_a_written_email_the_reply_is_still_drafted(s):
     raised.assert_called_once()
 
 
+def routine_run(s, job='Total the newest vendor spend export and email the summary to ray@northwind.example every Monday.'):
+    "A run task of a routine the owner saved with `job` as its agent's instructions."
+    sid = s.save_source({'Channel': 'report', 'Address': 'Weekly vendor follow-up', 'Owner': 'o', 'Active': 1,
+                         'ConfigJson': json.dumps({'type': 'agent', 'title': 'Weekly vendor follow-up', 'prompt': job})}, 'o')
+    return s.create_task({'Title': 'Weekly vendor follow-up - Mon', 'Kind': 'general', 'Status': 'open', 'Source': 'workflow',
+                          'SourceRef': f'workflow:{sid}'}, 'routine')
+
+
 def test_a_routines_own_email_goes_at_once_and_his_own_task_waits_for_his_send(s):
     """The owner, 2026-11-17: "routines should send on their own too" - approval is only for what answers input from outside. A routine run's
-    agent email is sent by the very press his Send makes, at once; the same email on a task of his own still waits on his Send."""
-    run = s.create_task({'Title': 'Weekly vendor follow-up - Mon', 'Kind': 'general', 'Status': 'open', 'Source': 'workflow',
-                         'SourceRef': 'workflow:7'}, 'routine')
+    agent email to an address he saved into the routine is sent by the very press his Send makes, at once; the same email on a task of his
+    own still waits on his Send."""
+    run = routine_run(s)
     own = s.create_task({'Title': 'Follow up with Ray', 'Kind': 'general', 'Status': 'open', 'Source': 'assistant'}, 'owner')
-    with mock.patch('taskuary.outbound.send_out', return_value=SENT) as send, mock.patch.object(outbound, 'send_block', return_value=''), \
-            mock.patch('taskuary.learn.learn_from'):
+    with mock.patch('taskuary.outbound.send_out', return_value=SENT) as send, mock.patch.object(outbound, 'send_block', return_value=''),             mock.patch('taskuary.learn.learn_from'):
         went = slots.draft(s, run, 'Hi Ray, any update on the quote? Alex', 'ray@northwind.example', 'Quote')
         held = slots.draft(s, own, 'Hi Ray, any update on the quote? Alex', 'ray@northwind.example', 'Quote')
     assert went['sent'] is True and send.call_count == 1, went
     assert s.get_review(went['review_id'])['Status'] == 'approved'
     assert 'sent' not in held and s.get_review(held['review_id'])['Status'] == 'pending', held
     with mock.patch('taskuary.outbound.send_out', side_effect=RuntimeError('SMTP 535')), mock.patch.object(outbound, 'send_block', return_value=''):
-        failed = slots.draft(s, run, 'Hi Erin, the schedule is attached. Alex', 'erin@northwind.example', 'Schedule')
+        failed = slots.draft(s, routine_run(s, 'Send erin@northwind.example the schedule.'), 'Hi Erin, the schedule is attached. Alex',
+                             'erin@northwind.example', 'Schedule')
     assert failed.get('send_error') and 'sent' not in failed, failed
+
+
+# ONE HOLD, WHOEVER CALLS (design round 2, 2026-11-18): a routine run's agent used the draft tool, "and this run sent it before you could
+# approve it". What a routine sends without a press is what the owner saved into it - an address in its own words, or himself; an address the
+# run's agent chose is its card, held at the one door every send goes through (verdicts.decide), nothing sent
+def test_a_routine_runs_email_to_an_address_its_agent_chose_is_a_card_and_nothing_goes(s):
+    s.set_setting('owner_email', 'alex@northwind.example', 'owner')
+    run = routine_run(s, 'Total the newest vendor spend export and email me the top five.')
+    with mock.patch('taskuary.outbound.send_out', return_value=SENT) as send, mock.patch.object(outbound, 'send_block', return_value=''),             mock.patch('taskuary.learn.learn_from'):
+        chose = slots.draft(s, run, 'Hi Gail, the October spend is attached. Alex', 'gail@northwind.example', 'October spend')
+        assert send.call_count == 0 and 'sent' not in chose and s.get_review(chose['review_id'])['Status'] == 'pending', chose
+        # ...and no other caller gets past it by pressing in the routine's name
+        out = verdicts.decide(s, s.get_review(chose['review_id']), 'approve', actor=slots.ROUTINE)
+        assert not out['ok'] and out.get('held') and send.call_count == 0, out
+        mine = slots.draft(s, run, 'October spend: 103,190 in all. Alex', 'alex@northwind.example', 'October spend')
+    assert mine['sent'] is True and send.call_count == 1, mine
 
 
 # THE AGENT HEARS WHICH EMAIL WENT (the stress round, 2026-11-18): with two emails out, a Send told it "the message was sent" - no card, no
@@ -770,8 +794,7 @@ def test_the_agent_on_a_routine_run_is_told_its_email_went_not_that_it_waits(s):
     # so the agent told the owner a sent email was waiting for his Send
     from taskuary import agenttools
     from taskuary.selfclose import CARD_SAID
-    run = s.create_task({'Title': 'Weekly vendor follow-up - Mon', 'Kind': 'general', 'Status': 'open', 'Source': 'workflow',
-                         'SourceRef': 'workflow:7'}, 'routine')
+    run = routine_run(s, 'Ask ray@northwind.example and erin@northwind.example where the quote and the schedule stand.')
     with mock.patch('taskuary.outbound.send_out', return_value=SENT), mock.patch.object(outbound, 'send_block', return_value=''), \
             mock.patch('taskuary.learn.learn_from'):
         went = agenttools.said_once(slots.draft(s, run, 'Hi Ray, any update on the quote? Alex', 'ray@northwind.example', 'Quote'))

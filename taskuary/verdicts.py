@@ -714,6 +714,27 @@ def pressed(store, rv: dict, out: dict) -> tuple:
     return 'Send', f"rv{rv['ReviewId']} ({named}) was sent{whom}" + (f" ({got})" if isinstance(got, str) else '')
 
 
+# ONE HOLD, WHOEVER CALLS (design round 2, 2026-11-18): a routine run's agent used the draft tool, "and this run sent it before you could approve
+# it" - the hold hung on what the act was called. Every send and act goes through this door, and a yes no person pressed here sends or runs
+# nothing - save a routine's email to what the owner saved into the routine: himself, or an address in its own saved words (his Save was that
+# press; one its agent or an earlier step chose is not - flow._draft keeps that one for his Send the same way)
+UNPRESSED = ('routine', 'workflow', 'agent', 'assistant')
+HELD = "it waits for the owner's press - nothing was sent"
+ADDRESS = re.compile(r"[\w.+'-]+@[\w-]+(?:\.[\w-]+)+")
+def unpressed(actor) -> bool: return str(actor or '').split(':')[0].strip().lower() in UNPRESSED
+
+
+def saved_for(store, rv: dict) -> bool:
+    "May this card go with no press: a routine run's email whose every recipient the owner saved into the routine, or is himself."
+    from . import senders, workflows
+    env, task = _envelope(rv), store.get_task(rv.get('TaskId')) if rv.get('TaskId') else None
+    src = workflows.source_of(store, task) if rv.get('Kind') != 'action' else None
+    who = [str(x).strip().lower() for k in ('to', 'cc', 'bcc') for x in (env.get(k) or []) if str(x).strip()]
+    if not src or not who: return False
+    ok = senders.own_addresses(store) | {a.lower() for a in ADDRESS.findall(json.dumps(workflows.cfg_of(src), ensure_ascii=False))}
+    return all(x in ok for x in who)
+
+
 def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = None,
            actor: str = 'owner', learn_async=None, cc: list = None, reply_text: str = None, anyway: bool = False, fields: dict = None,
            blanks_ok: bool = False, bcc: list = None, subject: str = None) -> dict:
@@ -738,6 +759,8 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
     # ...refused with the one sentence its greyed card reads (passed_why, 2026-11-17), never a fixed "set aside when you moved on"
     if proposals.passed(rv) or rv.get('Status') == 'pending' and rv.get('TaskId') and rv['ReviewId'] in proposals.written_past(store, rv['TaskId']):
         return {'ok': False, 'status': rv['Status'], 'sent': None, 'passed': True, 'send_error': proposals.passed_why(store, rv)}
+    if unpressed(actor) and verb_in in ('approve', 'edit', 'merge_anyway', 'close_pr') and not saved_for(store, rv):
+        return {'ok': False, 'status': rv.get('Status'), 'sent': None, 'held': True, 'send_error': HELD}
     if rv.get('Status') == 'pending' and verb_in in ('approve', 'edit'):
         def content_envelope(row):
             return {k: v for k, v in _envelope(row).items() if k not in ('delivery', 'attempted_at', 'attempts')}

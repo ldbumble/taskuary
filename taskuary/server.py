@@ -7218,7 +7218,7 @@ IMG_MAX = 12 * 1024 * 1024
 async def waitroom_image(tid: int, request: Request):
     """A screenshot pasted into the Tell-the-agent box, posted as the raw body (no multipart
     dependency, like /api/voice/transcribe). The pty carries text only, so the image goes to
-    disk under ~/.taskuary/attachments/waitroom/<task>/ and the NOTE names the file - a coding
+    disk in the task's own folder (outputs.take_in) and the NOTE names the file - a coding
     CLI reads images from a path (Claude Code's Read does), which is how it gets to see it."""
     return await _save_prompt_image(tid, request)
 
@@ -7281,6 +7281,11 @@ async def _save_prompt_image(tid: int | None, request: Request):
         p.write_bytes(data)
         if tid is not None: store.audit('task', tid, 'waitroom_image', ACTOR, detail={'path': str(p), 'size': len(data)})
     await run_in_threadpool(keep)
+    # ...ON A TASK IT IS THE TASK'S OWN (outputs.take_in, as a line's attached file is): its path is typed for the agent to Read, and one left
+    # under attachments/ was refused as Taskuary's own data (readgate) - the agent never saw the screenshot it was handed
+    if tid is not None:
+        from . import outputs
+        p = (await run_in_threadpool(outputs.take_in, tid, [p]))[0]
     return {'path': str(p), 'size': len(data)}
 
 

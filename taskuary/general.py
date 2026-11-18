@@ -961,10 +961,10 @@ def approved(store, tid: int, press: str, what: str, actor: str = 'owner', revie
     prompt's WHAT THE OWNER DID does not say it a second time."""
     from .browsergate import NEXT
     r = store.get_review(int(review)) if review else None
-    from .cardqueue import says
+    from .cardqueue import screen
     mark = r and (lambda how: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': how}))
     return tell(store, tid, APPROVED.format(press=press, what=' '.join(str(what or 'done').split())[:400] + (_changed(store, r) if r else '')) + NEXT
-                + (f' {line}' if (line := says(store, tid, pressed=True)) else ''), actor, heard=mark)
+                + (f'\n\n{line}' if (line := screen(store, tid)) else ''), actor, heard=mark)
 # A PRESS THAT FAILED IS HANDED BACK AT ONCE (the owner, 2026-11-16: "we can't have an agent asking to do something then it does nothing or
 # errors out, at least hand back to agent so we are not left hanging"): an approved INSERT failed on its card, the task sat on "waiting on you",
 # and its agent heard of it only with the owner's next line. Told as a yes that went is (approved), in the words owner_did would have said
@@ -974,8 +974,8 @@ def failed(store, tid: int, review: int, actor: str = 'owner') -> str:
     "Hand task `tid`'s agent the press on `review` that failed: 'told', 'woke' or '' - said once, as `approved` marks it."
     r = store.get_review(int(review))
     if not r or not (failed_act(r) or r['Status'] == 'pending' and (r.get('ActError') or r.get('DeliveryState') in NOT_GONE)): return ''
-    from .cardqueue import says
-    got = tell(store, tid, f'The owner {_decided(store, r)}. {FAILED_NEXT}' + (f' {line}' if (line := says(store, tid, pressed=True)) else ''), actor,
+    from .cardqueue import screen
+    got = tell(store, tid, f'The owner {_decided(store, r)}. {FAILED_NEXT}' + (f'\n\n{line}' if (line := screen(store, tid)) else ''), actor,
                heard=lambda how: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': how, 'failed': True}))
     # ...and its card says so under the error, so the owner is not left wondering who moves next (an act's; a send's line is its own)
     if got and r.get('ActError'): store.review_act_failed(r['ReviewId'], f"{str(r['ActError'])[:250].rstrip('. ')}. {AGENT_TOLD}", r.get('DecidedBy') or actor)
@@ -1015,7 +1015,7 @@ def latest_block(store, tid: int, resumed: bool = False, rules: bool = True, tur
     `turn`: said to the turn that just began (newest_message)."""
     from . import selfclose
     from .continuity import clock
-    new, sent = newest_message(store, tid, turn), wrapup.sent_replies(store, tid)
+    new = newest_message(store, tid, turn)
     rv = store.pending_review(tid, 'draft_reply', live_only=False) or store.pending_review(tid, 'draft', live_only=False)
     rv = rv if rv and str(rv.get('DraftText') or '').strip() else None
     rows = store.list_comments(tid, internal=True)
@@ -1024,8 +1024,11 @@ def latest_block(store, tid: int, resumed: bool = False, rules: bool = True, tur
     # ...NEWEST ONLY UNTIL IT IS ANSWERED (selfclose.NO_NEW_LINE): the owner's line by the answer filed after it - a coding turn's by its end, it
     # files none - a mail by the turn that began once it had joined - one that joined while a turn worked was not in that turn's prompt, and is still new
     heard = bool(new) and ((any(a > new['cid'] for a in answers) or str(new['at']) < last) if new.get('cid') else new['at'] <= (last_turn_began(store, tid) or ''))
-    from . import verdicts                    # ...and the rest it set up and has not sent: named, so a marker can take one back by its id
-    others = [x for x in verdicts.unsent(store, tid) if not rv or x['rid'] != rv['ReviewId']]
+    # ...EVERY OTHER CARD, ITS STATE ON HIS SCREEN AND WHAT CAME OF IT IS ONE FACT (cardqueue.screen - the design round, 2026-11-18): three
+    # blocks said parts of it in three voices ("also set up and not sent", "already sent", "moved on past these cards") and none said which
+    # card was drawn, held behind another, or greyed - the agent guessed, and told him of buttons that were not there
+    from .cardqueue import screen
+    shown = screen(store, tid, skip=[rv['ReviewId']] if rv else ())
     handed = [c for c in rows if c.get('ActorType') == 'human' and str(c.get('Body') or '').startswith(HANDED_OFF)]
     did, own = owner_did(store, tid), own_heard(store, tid)
     from . import slots
@@ -1036,14 +1039,11 @@ def latest_block(store, tid: int, resumed: bool = False, rules: bool = True, tur
     except Exception: asked = []
     from . import proposals
     refused = proposals.unheard(store, tid, last_turn_began(store, tid) or '') if last else []
-    # ...and the cards it raised that the conversation moved past (proposals.move_on): old news, said once in the turn after
-    # ...a first turn too (2026-11-17): his first line set aside the draft the New box wrote, and its agent never heard there was one
-    passed = proposals.passed_since(store, tid, last or '')
     # ...and ITS OWN CHECK-BACK, as it waits on the task (2026-11-17: the wake after Send spent a turn setting the same one again - it was
     # told nowhere that one stood): a stored fact, said where every turn's facts are
     from . import checkback, remind
     cb = checkback.of_task(store.get_task(tid))
-    if not (rv or sent or answered or others or handed or did or own or asked or nowhere or refused or passed or cb): return ''
+    if not (rv or shown or answered or handed or did or own or asked or nowhere or refused or cb): return ''
     # `rules` False: an agent whose startup context says the rules once (selfclose.DRAFTS_ONCE) - the turn carries the facts alone
     out = [selfclose.FACTS_HEAD, (selfclose.NO_NEW_LINE if heard else selfclose.LATEST_LINE) if rules else selfclose.NO_NEW_HEAD if heard else selfclose.LATEST_HEAD]
     wd = f'\n{selfclose.WITHDRAW_LINE}' if rules else ''
@@ -1066,19 +1066,10 @@ def latest_block(store, tid: int, resumed: bool = False, rules: bool = True, tur
         out.append(f"THE DRAFT WAITING NOW ({'to ' + to + ', ' if to else ''}drafted at {clock(at)}"
                    f"{' - written for this message - keep it or improve it' if mine else ' - BEFORE the newest message' if before else ''}): "
                    f"{_quote(rv['DraftText'], 1500)}{wd}")
-    # ...each letter with its words (the audit's real turn, 2026-11-10: asked to make the email shorter, the agent read only "the email to
-    # paula@..." and asked the owner what it said)
-    # ...each that waits its turn behind another said so (cardqueue): the owner has not seen it yet
-    from .cardqueue import held as held_
-    waits = held_(store, tid) if others else set()
-    if others: out.append('ALSO SET UP AND NOT SENT - take back any the newest message undoes or the work no longer needs:\n' + '\n'.join(
-        f"- rv{x['rid']}{' (waits its turn - not shown to the owner yet)' if x['rid'] in waits else ''}: {x['what']}" + (f": {_quote(x['text'], 600)}" if x.get('text') else '') for x in others)
-        + ('' if rv else wd))
+    if shown: out.append(shown + ('' if rv else wd))
     if nowhere: out.append('AN EMAIL YOU DRAFTED HAS NO ADDRESS:\n' + '\n'.join(f'- rv{r}: {slots.to_missing(w)}' for r, w in nowhere))
     if refused: out.append('WHAT YOU PROPOSED IN YOUR LAST TURN WAS NOT PUT ON A CARD - the owner has no button for it:\n' + '\n'.join(
         f'- {a}: {proposals.refusal_line(why)}' for a, why in refused))
-    if sent: out.append('ALREADY SENT ON THIS TASK - never draft these again:\n' + '\n'.join(
-        f"- {clock(x['at'])}, to {x['to']}: {_quote(x['text'], 400)}" for x in sent))
     if asked: out.append('YOUR QUESTION STILL WAITING FOR THE OWNER - it stays on their screen until they answer; never ask it again:\n'
                          + '\n'.join(f'- {_quote(q, 300)}' for q in asked))
     if own:
@@ -1096,7 +1087,6 @@ def latest_block(store, tid: int, resumed: bool = False, rules: bool = True, tur
     # Settings ...)" stood in the chat, and the agent's answer said the same two sentences again under it): context, never something to restate
     if did: out.append('WHAT THE OWNER DID SINCE YOUR LAST TURN - each is a line in the chat already: take it as said, never undo it, never '
                        'say it again:\n' + '\n'.join(f'- {x}' for x in did))
-    if passed: out.append(proposals.PASSED_TOLD + '\n' + '\n'.join(passed))
     if cb: out.append(CHECK_SET.format(when=remind.when(cb['at']), what=_quote(cb['what'], 300)))
     if handed: out.append('THE OWNER HANDED THIS TO A PERSON - it is theirs now; never send them what they were already sent:\n' + '\n'.join(
         f"- {clock(c['CreatedAt'])}: {c['Body'].partition(chr(10))[0].rstrip(':')} - {_quote(c['Body'].partition(chr(10))[2], 400)}" for c in handed))

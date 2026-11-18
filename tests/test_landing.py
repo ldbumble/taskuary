@@ -346,7 +346,8 @@ class LandingTests(unittest.TestCase):
         self.assertTrue(s['passed']); self.assertFalse(s['ask'], 'nothing pressable')
         with self.assertRaises(ValueError) as e: landing.land(self.s, self.tid, 'push')
         self.assertTrue(str(e.exception).startswith('Not sent - '), e.exception); self.assertFalse(self.pushed())
-        self.assertIn(proposals.LAND_LINE, proposals.passed_note(self.s, [proposals.LAND]))
+        from taskuary import cardqueue
+        self.assertIn('Greyed, will not go (the chat moved on past it): the push question you raised', cardqueue.screen(self.s, self.tid))
         # ...its own `git push` over a passed card is still held - raised again, never run
         self.assertTrue(landing.push_asked(self.s, self.tid, 'git push origin master', self.cwd)[0]); self.assertFalse(self.pushed())
         self.assertTrue(landing.state(self.s, self.tid)['ask'])

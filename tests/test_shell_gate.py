@@ -170,7 +170,8 @@ class Holding(unittest.TestCase):
         with mock.patch('taskuary.general.tell', lambda st, tid, note, actor='owner': told.append(note) or 'told'):
             hooks._events(t, {'hook_event_name': 'UserPromptSubmit', 'prompt': 'no, leave the checkout - is it ready to push?'})
         self.assertEqual(self.pending(), []); self.assertTrue(proposals.passed(self.s.get_review(rv['ReviewId'])))
-        self.assertTrue(told and proposals.PASSED_TOLD in told[0] and f"rv{rv['ReviewId']}" in told[0], told)
+        from taskuary import cardqueue
+        self.assertTrue(told and cardqueue.SCREEN_HEAD in told[0] and f"rv{rv['ReviewId']}" in told[0].split('Greyed, will not go')[1], told)
 
     def test_the_agents_own_words_for_the_call_ride_on_the_card(self):
         sg.check(self.s, self.tid, 'run1', 'git push origin fix-export', 'Bash', r'C:\work\ledger', about='  ship the export fix  ')
@@ -516,7 +517,8 @@ class ReadingOutside(unittest.TestCase):
         r = self.s.get_review(rv['ReviewId'])
         self.assertTrue(proposals.passed(r), 'nothing presses it')
         self.assertEqual(proposals.passed_why(self.s, r), 'Not needed - the agent finished without it')
-        self.assertEqual(proposals.passed_since(self.s, self.tid, ''), [], 'never told back as a card he moved past')
+        from taskuary import cardqueue
+        self.assertIn('(Not needed - the agent finished without it)', cardqueue.screen(self.s, self.tid), 'told as what it is, never as a card he moved past')
 
     def test_approve_lets_the_task_read_that_folder_from_then_on_and_tells_the_agent(self):
         from taskuary import acpgate

@@ -401,7 +401,7 @@ def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> 
     else: out = _call(store, tid, name, args, doors, skip)
     if TOOLS[name][0] != 'propose' or not isinstance(out, str): return out
     from . import cardqueue
-    if not (line := cardqueue.says(store, tid)): return out
+    if not (line := cardqueue.screen(store, tid)): return out
     try: got = json.loads(out)
     except ValueError: got = None
     return _j({**got, 'your_cards': line}) if isinstance(got, dict) else f'{out} {line}'

@@ -72,7 +72,7 @@ def test_an_agent_with_no_shell_takes_back_an_email_by_its_marker():
     paula = slots.draft(s, tid, 'Hi Paula - the table.', to='paula@northwind.example', subject='The tools table')['review_id']
     gail = slots.draft(s, tid, 'Hi Gail - the table.', to='gail@northwind.example', subject='The tools table')['review_id']
     brief = general.latest_block(s, tid)
-    assert f'rv{paula}: the email to paula@northwind.example' in brief and 'which=' in brief
+    assert f'rv{paula}, the email to paula@northwind.example' in brief and 'which=' in brief
     text, found = selfclose.withdraw_markers(f'Done.\n[[TASKUARY-WITHDRAW which=rv{paula}: sent to Gail instead]]\n'
                                              '[[TASKUARY-WITHDRAW which="gail@northwind.example": Gail is away]]\n[[TASKUARY-WITHDRAW: no reply]]')
     assert text == 'Done.' and found == [(f'rv{paula}', 'sent to Gail instead'), ('gail@northwind.example', 'Gail is away'), ('', 'no reply')]

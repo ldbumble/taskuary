@@ -451,10 +451,15 @@ def broken(r: Run) -> list:
         # ...and the ask that opened a task he made, where no typed line did (conversation.items: the first thing in its chat)
         ls = s['lines'][1:] if s['lines'][:1] == [getattr(r, 'asked', None)] and r.asked not in r.typed else s['lines']
         if ls != r.typed[:len(ls)] or [x for x in ls if x not in r.typed]: say('v', i, f"lines {s['lines']} != typed {r.typed}")
-        # (vii) told the truth: no draft told as waiting that is not, no unsent card told as unsent that went
-        for rid in re.findall(r'^- rv(\d+):', s['told'].split('ALSO SET UP AND NOT SENT')[-1], re.M) * ('ALSO SET UP' in s['told']):
+        # (vii) told the truth: what the agent is told stands on his screen is what the page draws (cardqueue.screen) - a card told as waiting
+        # waits, one told as greyed is no longer pressable, one told as sent or done went
+        from taskuary.cardqueue import SCREEN_HEAD
+        want = {'Waiting': lambda c: c['status'] == 'pending' and not c['passed'], 'Not on his screen yet': lambda c: c['status'] == 'pending' and not c['passed'],
+                'Greyed': lambda c: c['passed'] or c['status'] == 'pending', 'Sent': lambda c: c['status'] in ('approved', 'edited', 'sent'),
+                'Done': lambda c: c['status'] in ('approved', 'edited', 'sent')}
+        for told, rid in re.findall(r'^- (Waiting|Not on his screen yet|Greyed|Sent|Done)[^\n]*?: rv(\d+)', s['told'].split(SCREEN_HEAD)[-1], re.M) * (SCREEN_HEAD in s['told']):
             c = next((c for c in s['cards'] if c['id'] == int(rid)), None)
-            if not c or c['status'] not in ('pending', 'held'): say('vii', i, f"told rv{rid} waits, but it is {c and c['status']}")
+            if not c or not want[told](c): say('vii', i, f"told rv{rid} is {told!r}, but it is {c and c['status']}")
     # (iii) a card stands in the turn that raised it, from its first answer on, and never moves
     # ...BUT A RUN IS ONE TURN'S WORK (conversation.items, the owner 2026-11-13): a turn Taskuary woke with no line of his between - a press's
     # outcome handed back (general.approved, general.failed) - goes on from the one before it, and what still waits stands at the run's end

@@ -539,7 +539,6 @@ def held_pending(store, tid) -> dict | None:
 # Nor the task's own finish (its close-out, its playbook): Taskuary raises those when the work ends, no turn of the agent's does
 SET_ASIDE = 'set aside when you moved on'
 LAND = 'land'                  # move_on's mark for the landing question (landing.pass_over) among the review ids
-LAND_LINE = '- the push/landing question you raised'
 
 
 NOT_NEEDED = 'not needed - the agent finished without it'
@@ -586,7 +585,7 @@ def set_aside_drafts(store, tid: int, before: float, actions: float = 0) -> list
     """A CARD THE CHAT MOVED PAST IS SET ASIDE FOR GOOD AS ITS AGENT HEARS THE INPUT (the owner, 2026-11-16, said ~20 times: "The second a new
     prompt comes in, from manual or email, it should gray out the action card but never move"): every card older than the input at `before`
     (`_older` - one rule, every kind), and the landing question, stays where it stood, greyed, and its agent is told it was set aside because
-    the chat moved on (passed_since / passed_note - never that he declined), to raise it again under the newest line if it is still wanted.
+    the chat moved on (cardqueue.screen - never that he declined), to raise it again under the newest line if it is still wanted.
     From the moment the input came in until then every surface already reads it greyed (written_past). Every road hears an input through
     conversation.hear, which calls this. `actions`: the old split by kind, read as the same input. -> the review ids (and LAND)."""
     from . import landing
@@ -653,23 +652,9 @@ def _written_past(store, tid: int) -> set:
     return set(_older(store, tid, moved_on(store, tid, ep(first['a']))))      # ...an input in a card's own second moves nothing (_older)
 
 
-# what its agent is told of a card it raised that the conversation moved past - ONE sentence for every kind and both agent kinds
+# what an agent is told to do about a step that is no longer on his screen - one sentence, every road
 AGAIN = ('If a step is still needed, raise it again as a new card (a step held for their press: run it again - Taskuary holds it anew); never '
          'say it still waits on them, and never ask them in words to press it.')
-PASSED_TOLD = ('THE OWNER MOVED ON PAST THESE CARDS OF YOURS WITHOUT PRESSING THEM - they are old news and nothing waits on the owner for '
-               f'them now. {AGAIN}')
-# ...a letter with whom it was to and its words (2026-11-17): told "your reply draft, which began: Hi Gail," the agent asked whom it was for
-def _passed_line(store, r: dict) -> str:
-    from .continuity import sent_to
-    to = sent_to(store, r, '')
-    said = ' '.join(str(r.get('DraftText') or '').split())[:600] + (f' (to {to})' if to else '')
-    if r.get('Kind') in ('draft_reply', 'draft'): return f"- rv{r['ReviewId']}: your reply draft, which began: {said}"
-    if r.get('Kind') == 'slot': return f"- rv{r['ReviewId']}: the email you wrote, which began: {said}"
-    try: p = json.loads(r.get('DraftText') or '{}') or {}
-    except (TypeError, ValueError): p = {}
-    return f"- rv{r['ReviewId']}: " + ' '.join(str(p.get('what') or p.get('command') or r.get('Reason') or p.get('action') or 'a card').split())[:200]
-
-
 def passed_why(store, r: dict) -> str:
     """WHY A CARD STANDS GREYED, IN WHAT HAPPENED (the owner's live task, 2026-11-16: "there was no earlier draft. This is broken?" - he typed a
     line while the agent worked, the turn that never read it finished its draft after it, and the draft stood greyed reading "set aside when
@@ -711,21 +696,6 @@ def passed_why(store, r: dict) -> str:
 # presses Enter, his line cut as _cut cuts it (chatStream.withMine), never words of its own that the read then swaps
 WROTE_PAST = 'Not sent - you wrote "{line}" after it'
 def _cut(w: str, n: int = 60) -> str: return (w := ' '.join(str(w or '').split()))[:n] + ('…' if len(w) > n else '')
-
-
-def passed_since(store, tid: int, since: str) -> list:
-    "The cards of task `tid` passed since `since` (its agent's last answer), as lines for its prompt: '- rv<n>: <what>'."
-    from . import landing
-    p = (landing.record(store, int(tid)).get('proposal') or {})
-    # ...from the answer's own second on: a stamp is no finer, and a draft he wrote past in the second of that answer was never told
-    return [_passed_line(store, r) for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='superseded' AND DecideNote=? AND DecidedAt>=? "
-                                                 "ORDER BY ReviewId", (int(tid), SET_ASIDE, since or ''))] + ([LAND_LINE] if str(p.get('passed') or '') > (since or '') else [])
-
-
-def passed_note(store, rids: list) -> str:
-    "PASSED_TOLD with the cards `rids` - for a coding agent, whose next prompt is the line that passed them; '' with none."
-    rows = [_passed_line(store, r) for r in (store.get_review(int(x)) for x in rids or [] if x != LAND) if r] + ([LAND_LINE] if LAND in (rids or []) else [])
-    return f"{PASSED_TOLD}\n" + '\n'.join(rows) if rows else ''
 
 
 def owed(store, tid: int) -> bool:

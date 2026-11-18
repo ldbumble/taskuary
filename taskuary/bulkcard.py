@@ -127,10 +127,10 @@ def summary(store, key: str, st: dict) -> str:
 def told(store, key: str, st: dict, actor: str = 'owner') -> str:
     "Its agent hears the whole run once, by the one road (general.tell) - and nothing is said of it again with his next line."
     from . import general
-    from .cardqueue import says
+    from .cardqueue import screen
     def heard(how):
         for rid in st.get('rows', {}): store.audit('review', int(rid), general.TOLD, actor, 'system', {'task': st['tid'], 'how': how, 'batch': key})
     # ...with what still waits in the line behind it, as a yes, a failure or a no on one card tells it (general.approved / failed, said_no)
     if not st.get('tid'): return ''
-    line = says(store, st['tid'], pressed=True)
-    return general.tell(store, st['tid'], summary(store, key, st) + (f' {line}' if line else ''), actor, heard=heard)
+    line = screen(store, st['tid'])
+    return general.tell(store, st['tid'], summary(store, key, st) + (f'\n\n{line}' if line else ''), actor, heard=heard)

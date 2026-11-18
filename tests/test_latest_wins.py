@@ -11,7 +11,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import general, selfclose, server, wrapup
+from taskuary import cardqueue, general, selfclose, server, wrapup
 from taskuary.store import MemoryStore
 
 SENT = 'Hi Gail - the October list is attached.'
@@ -63,14 +63,13 @@ def test_a_correction_after_a_pending_draft_names_the_newest_message_and_the_dra
 def test_already_sent_replies_are_in_the_turns_context():
     s = MemoryStore(); tid, *_ = the_owners_day(s)
     _, turn = general._prompt(s, tid)
-    assert 'ALREADY SENT ON THIS TASK - never draft these again' in turn
-    line = next(l for l in turn.split('ALREADY SENT ON THIS TASK')[1].splitlines() if SENT in l)
-    assert 'to Gail Moreno' in line and line.startswith('- 06:10 PM')
+    line = next(l for l in turn.split(cardqueue.SCREEN_HEAD)[1].splitlines() if SENT in l)
+    assert 'to Gail Moreno' in line and line.startswith('- Sent 06:10 PM')
 
 def test_a_resumed_turn_carries_the_draft_and_the_sent_but_not_a_bare_answer():
     s = MemoryStore(); tid, *_ = the_owners_day(s)
     b = general.latest_block(s, tid, resumed=True)
-    assert 'THE DRAFT WAITING NOW' in b and 'ALREADY SENT ON THIS TASK' in b
+    assert 'THE DRAFT WAITING NOW' in b and '- Sent ' in b.split(cardqueue.SCREEN_HEAD)[1]
     t = s.create_task({'Title': 'x', 'Kind': 'general', 'Status': 'open'}, 'owner')
     s.add_comment(t, 'owner', general.USER_TYPE, 'hi'); s.add_comment(t, 'assistant', general.ASSISTANT_TYPE, 'Hello.')
     assert general.latest_block(s, t) and not general.latest_block(s, t, resumed=True)    # the CLI has the chat; its turn is the newest

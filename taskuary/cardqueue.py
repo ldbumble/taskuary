@@ -175,16 +175,80 @@ def line(s: dict) -> str:
     return f"{s['n']} of {s['of']} · next: {s['next']}" if s['live'] and s['of'] > s['n'] else ''
 
 
-def says(store, tid: int, pressed: bool = False) -> str:
-    """What the agent is told of the line: as it raises a card, while another waits too; after a press (`pressed`), whatever still waits -
-    '' when nothing does."""
-    us = (st := state(store, tid))['units']
-    mark(store, tid, st)
-    if len(us) < (1 if pressed else 2): return ''
-    name = lambda u: ' + '.join(f"rv{x['ReviewId']}" for x in _waits(u)) + f" ({what(store, u)})" if u['rows'] else f"the landing question ({what(store, u)})"
-    return (f"YOUR CARDS STILL WAITING, IN ORDER: {name(us[0])} {'stands in front of the owner' if st['live'] else 'is shown to the owner once this turn ends'}"
-            + (f"; then {', then '.join(map(name, us[1:]))}" if len(us) > 1 else '')
-            + '. Each is shown once the one before it is pressed and you have heard how it went; take back or replace one that an outcome changes.')
+SCREEN_HEAD = ("WHAT THE OWNER'S SCREEN SHOWS ON THIS TASK NOW, AND WHAT CAME OF EACH CARD (Taskuary's record - a card it does not name is not "
+               'on his screen; never say otherwise). Take back or replace one the newest message changes; one greyed or turned down is raised '
+               'again only as a new card:')
+NOTHING = 'Nothing waits for his press.'
+SETTLED = 6                     # the settled cards told, newest last: enough that a sent letter is never drafted again
+
+
+def _words(r) -> str:
+    "A card's own words, as its card shows them: what went, else what waits - '' for an act with none."
+    if r.get('Kind') == 'action': w = (p := _p(r)).get('text') or p.get('body') or ''
+    else: w = (r.get('FinalText') if r.get('DeliveryState') == 'sent' or r['Status'] in ('approved', 'edited') else '') or r.get('DraftText') or ''
+    w = ' '.join(str(w).split())
+    return f'"{w[:300]}{"…" if len(w) > 300 else ""}"' if w else ''
+
+
+def _result(r) -> str:
+    "What a done act gave back, as its card says it - its link."
+    from .verdicts import in_words
+    try: got = (json.loads(r.get('FinalText') or '{}') or {}).get('result')
+    except (TypeError, ValueError, AttributeError): got = None
+    return in_words(got, 200) if got else ''
+
+
+def screen(store, tid: int, skip=()) -> str:
+    """THE ONE FACT OF WHAT STANDS ON THE OWNER'S SCREEN FOR TASK `tid`, AND WHAT CAME OF EACH CARD (the design round, 2026-11-18: an agent told
+    him "each has its own Post button" when one stood and his next line had greyed it): the line the page draws (state), each card greyed
+    where the chat moved past it (written_past, proposals.passed_why) and each settled one by the state the chat draws it in
+    (conversation._card) - sent, done with its link, failed and why, turned down. Told at the head of every turn and after every press and
+    every card raised. `skip`: review ids said elsewhere in the same words (the reply draft's own block). '' on a task that never had a card."""
+    from .continuity import clock
+    from .conversation import _card
+    from .proposals import SET_ASIDE, passed_why
+    from . import general, landing
+    st = state(store, tid); mark(store, tid, st)
+    live, held, past, front = set(st['live']), set(st['held']), st['past'], st['units'][0]['rids'] if st['units'] else []
+    since = str(general._last_answer(store, int(tid)) or '')
+    waiting, settled, seen = [], [], set()
+    def name(u, r):
+        ids = [w['ReviewId'] for w in _waits(u)] or u['rids']
+        return (f"{' + '.join(f'rv{x}' for x in ids)}, {what(store, u)}" if u['rows'] else what(store, u)) + (f': {w}' if r and (w := _words(r)) else '')
+    def greyed(r, n): settled.append((r.get('DecidedAt') or r.get('CreatedAt') or '', f'Greyed, will not go ({passed_why(store, r)}): {n}'))
+    for u in _units(store, tid, set()):
+        seen.update(u['rids'])
+        if set(u['rids']) & set(skip): continue
+        r = (_waits(u) or u['rows'] or [{}])[0]; n, ids = name(u, r), set(u['rids'])
+        if u['done'] is None:
+            if r and ids <= past: greyed(r, n)
+            elif ids & live:
+                bad = r.get('ActError') or (r.get('DeliveryState') in ('failed', 'unknown') and r.get('Reason'))
+                waiting.append(f"Waiting for his press now{f' - his last press did not go through ({_flat(bad)})' if bad else ''}: {n}")
+            elif u['rids'] == front: waiting.append(f'Comes forward once your turn ends (you are going on from his last press): {n}')
+            elif ids & held: waiting.append(f'Not on his screen yet - it comes forward once the one before it is pressed and you have heard how it went: {n}')
+            continue
+        s, at = (_card(r)['status'] if r else 'approved'), clock(r.get('DecidedAt')) if r else ''
+        if s == 'passed': str(r.get('DecidedAt') or '') >= since and greyed(r, n)
+        elif s == 'failed': settled.append((r['DecidedAt'], f"Failed {at}, nothing went ({_flat(r.get('ActError') or r.get('DecideNote'))}): {n}"))
+        elif s in ('approved', 'edited', 'sent'):
+            got = _result(r) if r else ''
+            settled.append((r.get('DecidedAt') or '', f"{'Done' if r.get('Kind') == 'action' or not u['rows'] else 'Sent'} {at}"
+                                                      f"{' (he changed your words first)' if s == 'edited' else ''}: {n}" + (f' - {got}' if got else '')))
+        elif s == 'rejected': settled.append((r['DecidedAt'], f'Turned down by him {at}: {n}'))
+        elif s == 'closed_unsent' and r.get('DecidedBy') not in ('agent', 'assistant'): settled.append((r['DecidedAt'], f'Closed by him without sending {at}: {n}'))
+    # ...and Taskuary's own cards the chat moved past (a close-out, the landing question): greyed on his screen as the agent's are
+    for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='superseded' AND DecideNote=? AND DecidedAt>=?", (int(tid), SET_ASIDE, since)):
+        if r['ReviewId'] not in seen | set(skip): greyed(r, name({'rids': [r['ReviewId']], 'rows': [r]}, r))
+    q = landing.record(store, int(tid)).get('proposal') or {}
+    if (gone := str(q.get('passed') or '')) and gone >= since:
+        settled.append((gone, f"Greyed, will not go (the chat moved on past it): the {landing.HOW.get(q.get('how'), 'push').lower()} question you raised"))
+    if not (waiting or settled): return ''
+    lines = [f'- {x}' for _, x in sorted(settled, key=lambda p: str(p[0]))][-SETTLED:] + ([f'- {x}' for x in waiting] or [NOTHING])
+    return '\n'.join([SCREEN_HEAD, *lines])
+
+
+def _flat(x, n: int = 200) -> str: return ' '.join(str(x or '').split())[:n]
 
 
 def said_no(store, rv: dict, verb: str, actor: str = 'owner') -> str:
@@ -195,7 +259,7 @@ def said_no(store, rv: dict, verb: str, actor: str = 'owner') -> str:
     tid = rv.get('TaskId')
     # ...(a held step turned down tells its agent by its own road, the gate's; and Close without sending a reply closes the task)
     if _p(rv).get('action') in HELD_ACTS or verb == 'close_unsent' and rv.get('Kind') != 'slot': return ''
-    if not tid or not (rest := says(store, tid, pressed=True)): return ''
+    if not tid or not state(store, tid)['units']: return ''
     no = {'reject': 'turned down', 'no_reply': 'said no reply is needed for', 'close_unsent': 'closed without sending', 'close_pr': 'turned down'}.get(verb, 'turned down')
-    return general.tell(store, tid, f"The owner {no} rv{rv['ReviewId']} ({what(store, {'rids': [rv['ReviewId']], 'rows': [rv]})}) - their own no. {rest}", actor,
+    return general.tell(store, tid, f"The owner {no} rv{rv['ReviewId']} ({what(store, {'rids': [rv['ReviewId']], 'rows': [rv]})}) - their own no.\n\n{screen(store, tid)}", actor,
                         heard=lambda how: store.audit('review', int(rv['ReviewId']), general.TOLD, actor, 'system', {'task': int(tid), 'how': how, 'no': verb}))

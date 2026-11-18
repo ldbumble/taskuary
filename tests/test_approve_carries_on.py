@@ -344,7 +344,7 @@ def test_a_card_he_writes_past_greys_in_its_place_on_every_agents_road_and_its_a
     heard = _line(s, tid, agent, 'What does that step change?')
     rv = s.get_review(rid)
     assert proposals.passed(rv), rv
-    assert proposals.PASSED_TOLD in heard and f'rv{rid}' in heard, heard
+    assert cardqueue.SCREEN_HEAD in heard and f'rv{rid}' in heard.split('Greyed, will not go')[1], heard
     # ...and it keeps its record: never pressable, said so
     out = verdicts.decide(s, s.get_review(rid), 'approve')
     assert (out['ok'], out['send_error']) == (False, proposals.passed_why(s, rv)), out
@@ -581,7 +581,7 @@ class OneCardAtATime(unittest.TestCase):
             out = self.press(push)
         self.assertFalse(out['ok']); [n] = self.s.waiting_notes(tid)
         self.assertIn('branch is protected', n['Note'])
-        self.assertIn(f'rv{note} (the email to erin@northwind.example) is shown to the owner once this turn ends', n['Note'], 'it hears what waits, in the same hand-back')
+        self.assertIn(f'Comes forward once your turn ends (you are going on from his last press): rv{note}, the email to erin@northwind.example', n['Note'], 'it hears what waits, in the same hand-back')
         self.assertEqual(cardqueue.held(self.s, tid), {note}, 'never shown as-is while its agent goes on from the failure')
         verdicts.withdraw(self.s, tid, 'the push was refused - nothing is live', 'agent', which=str(note))
         self.answered(tid, 'GitHub refused the push; I took the note to Erin back.')
@@ -647,7 +647,7 @@ class TheChatMovedOn(unittest.TestCase):
         conversation.hear(self.s, self.tid, ['l-deploy'])                                          # ...its agent takes the line
         r = self.s.get_review(rid)
         self.assertTrue(proposals.passed(r), 'set aside for good as the agent hears it')
-        self.assertTrue(any(f"rv{rid}" in x for x in proposals.passed_since(self.s, self.tid, '')), 'and the agent is told, to raise it again')
+        self.assertIn(f'rv{rid}', cardqueue.screen(self.s, self.tid).split('Greyed, will not go')[1], 'and the agent is told, to raise it again')
 
     def test_a_mail_that_came_in_after_it_greys_it_too(self):
         self.s.set_setting('owner_email', 'alex@northwind.example', 'owner')                  # ...a colleague's mail: no stranger held behind trust
@@ -750,3 +750,29 @@ def test_the_note_after_a_press_never_lets_sent_read_as_received():
     with mock.patch.object(general, 'tell', lambda st, t, said, *a, **k: seen.append(said) or 'told'):
         general.approved(s, tid, 'Send', 'the email to ap@northwind.example was sent')
     assert 'never received, read or acted on until someone answers' in seen[0]
+
+
+# WHAT STANDS ON HIS SCREEN, IN ONE FACT (the design round, 2026-11-18): a walk's agent set up three posts that stood one at a time, then told
+# him "each has its own Post button" when only the first was drawn and his next line had greyed it - nothing told it what the page showed.
+# cardqueue.screen reads the same line the page draws (state, written_past, each card's settled state) and says it in plain words, every turn
+def test_the_screen_fact_says_what_waits_what_is_held_what_is_greyed_and_what_happened():
+    s = MemoryStore(); f = Factory(s); tid = f.task('Announce the ledger portal')
+    general_answer = s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Three posts are set up.')
+    s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00' WHERE CommentId=?", (general_answer,))
+    post = lambda kind, words: s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': f'post on {kind}',
+                                              'DraftText': json.dumps({'action': 'run_tool', 'type': f'{kind.lower()}_post', 'text': words})})
+    sent = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': 'Gail - the portal launches Monday.', 'Reason': 'assistant wrote this email',
+                         'Deliver': json.dumps({'channel': 'email', 'to': ['gail@northwind.example'], 'subject': 'Portal'})})
+    s.decide_review(sent, 'approved', 'Gail - the portal launches Monday.', 'owner')
+    s._exec("UPDATE review SET DeliveryState='sent', DecidedAt='1999-12-31 09:00:00' WHERE ReviewId=?", (sent,))     # ...heard by the answer after it
+    x, reddit = post('X', 'The portal launches Monday.'), post('Reddit', 'Northwind ledger portal: invoices in one place.')
+    said = cardqueue.screen(s, tid)
+    assert f'rv{x}' in said.split('Waiting for his press now:')[1].split('\n')[0] and 'The portal launches Monday.' in said, said
+    assert f'rv{reddit}' in said.split('Not on his screen yet')[1].split('\n')[0], said
+    assert f'rv{sent}' in said.split('Sent')[1].split('\n')[0] and 'gail@northwind.example' in said, said
+    s._exec("UPDATE review SET CreatedAt='2000-01-01 00:00:01' WHERE ReviewId IN (?,?)", (x, reddit))
+    general.wait_line(s, tid, 'Give me a button for each', line_id='l-each')                 # ...his line greys both, the moment it is sent
+    said = cardqueue.screen(s, tid)
+    assert 'Waiting for his press now' not in said and 'Nothing waits for his press' in said, said
+    assert said.count('Greyed') == 2 and 'Not sent - you wrote "Give me a button for each" after it' in said, said
+    assert 'run_tool' not in said and 'superseded' not in said and 'pending' not in said, 'his words, never the rows'

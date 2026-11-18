@@ -5,7 +5,7 @@ Invented people only."""
 import threading, time, unittest
 from unittest import mock
 
-from taskuary import conversation, general, selfclose
+from taskuary import cardqueue, conversation, general, selfclose
 from taskuary.store import MemoryStore
 
 
@@ -613,7 +613,7 @@ class TheList(unittest.TestCase):
         self.assertTrue(proposals.passed(s.get_review(its))); self.assertEqual(s.get_review(his)['Status'], 'pending')
         now = self.list(); old = next(x for x in now['items'] if x['id'] == turn['id'])
         self.assertEqual([(c['what'], c['status'], c['was']['text']) for c in old['cards']], [('slot', 'passed', 'Paula - we are going with the Mill. Alex')])
-        self.assertIn('the email you wrote, which began: Paula - we are going with the Mill.', self.brain.calls[-1])       # ...and its agent is told
+        self.assertIn('the email to paula@northwind.example: "Paula - we are going with the Mill. Alex"', self.brain.calls[-1].split('Greyed, will not go')[1])       # ...and its agent is told
         self.assertEqual(conversation.flow_breaks(now, got), [])
 
 
@@ -716,7 +716,7 @@ class TheList(unittest.TestCase):
         self.assertEqual([(x['kind'], x.get('state', '')) for x in got['items']][-3:], [('turn', 'done'), ('line', ''), ('turn', got['items'][-1]['state'])])
         self.assertIn(got['items'][-1]['state'], ('starting', 'working'))
         self.assertEqual([(c['review'], c['status']) for c in got['items'][-3]['cards']], [(rid, 'passed')])          # greyed at once, where it stood
-        self.assertTrue(until(lambda: len(self.brain.calls) == 2)); self.assertIn(f'rv{rid}: your reply draft', self.brain.calls[-1])   # ...and its agent told so
+        self.assertTrue(until(lambda: len(self.brain.calls) == 2)); self.assertIn(f'rv{rid}, the reply', self.brain.calls[-1].split('Greyed, will not go')[1])   # ...and its agent told so
         self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
         rid2 = wrapup.agent_reply(self.s, self.tid, 'Hi Gail, Leeds it is. Alex', 'assistant', sid=general.session_for(self.tid).sid)['review_id']
         got = self.list()
@@ -926,7 +926,7 @@ class TheList(unittest.TestCase):
         got = self.list()['items']; turns = [x for x in got if x['kind'] == 'turn']
         self.assertEqual([[(c['id'], c['status']) for c in t['cards']] for t in turns], [[(f'r:{rid}', 'passed')], []])
         told = self.brain.calls[-1]
-        self.assertIn(proposals.PASSED_TOLD, told); self.assertIn(f'- rv{rid}:', told); self.assertNotIn('declin', proposals.PASSED_TOLD)
+        self.assertIn(cardqueue.SCREEN_HEAD, told); self.assertIn(f': rv{rid}', told.split('- Greyed, will not go')[1]); self.assertNotIn('declin', told.split(cardqueue.SCREEN_HEAD)[1])
         # ...and one an earlier build set aside is that record in its OWN turn, by its own name - never moved, never read as a rewritten draft
         old = self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps({**step, 'command': 'sqlcmd -Q "SELECT 1"'}), 'Reason': 'r'})
         self.s._exec('UPDATE review SET CreatedAt=(SELECT CreatedAt FROM review WHERE ReviewId=?) WHERE ReviewId=?', (rid, old))

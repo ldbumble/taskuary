@@ -97,6 +97,23 @@ class AgentsNewTaskIsTheSameRoadTests(unittest.TestCase):
         self.assertEqual((out['task'], out['already']), ('TQ-%04d' % there, True)); self.assertEqual(len(s.list_tasks(None)), 2)
         started.assert_not_called(); self.assertEqual(told.call_args.args[1], there)
 
+    def test_an_open_task_no_agent_ever_worked_starts_its_agent_with_the_ask(self):
+        """A dead end (rule 4): general.tell hands nothing to a task no agent ever worked, and the joined ask vanished. That task's agent is
+        started by the dispatch door with the ask as its opening Taskuary note."""
+        from taskuary import server
+        s = MemoryStore()
+        there = s.create_task({'Title': 'Add a daily rate to the bed boards', 'Kind': 'coding', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        here = s.create_task({'Title': 'Weekly census review', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        llm = lambda system, user, **k: json.dumps({'same_as': there})
+        body = server.AgentNewTaskBody(task_id=here, title='Bed board daily rate', ask='Add the daily rate column to the bed board', kind='coding')
+        seen = []
+        with mock.patch.object(server, 'store', s), mock.patch.object(server, '_own_task_only'), mock.patch('taskuary.concierge.brain', return_value=llm),              mock.patch.object(server, 'dispatch_task', side_effect=lambda tid, b, bg: seen.append((tid, b)) or {'started': True, 'taskId': tid}):
+            out = server.agent_new_task(body, None)
+        self.assertEqual(out['task'], 'TQ-%04d' % there); self.assertEqual(len(s.list_tasks(None)), 2)
+        (tid, b), = seen
+        self.assertEqual((tid, b.kind, b.app_words), (there, 'coding', True))
+        self.assertIn('Add the daily rate column to the bed board', b.instruction)
+
 
 class AdvisorMarkTests(unittest.TestCase):
     def test_only_an_advisor_idea_wears_the_advisor_mark(self):

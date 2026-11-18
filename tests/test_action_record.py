@@ -342,7 +342,7 @@ class APartThatIsAnotherJob(Acts):
         seen, told = [], []
         def llm(system, user, **k): seen.append(user); return json.dumps({'same_as': there})
         had = len(self.s.list_tasks(None))
-        with mock.patch('taskuary.concierge.brain', return_value=llm),              mock.patch.object(general, 'tell', lambda st, tid, text, actor='owner', **k: told.append((tid, text))):
+        with mock.patch('taskuary.concierge.brain', return_value=llm),              mock.patch.object(general, 'tell', lambda st, tid, text, actor='owner', **k: told.append((tid, text)) or 'told'):
             out = verdicts.decide(self.s, rv, 'approve')
         self.assertTrue(out['ok'], out)
         self.assertEqual(len(self.s.list_tasks(None)), had, 'no second task')

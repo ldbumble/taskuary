@@ -38,3 +38,14 @@ def tell(store, tid: int, words: str, actor: str = 'owner', files=None):
     An agent's ask or a break-out is Taskuary's, never his: those go by general.tell."""
     from . import general
     return general.take_line(store, int(tid), words, files, actor, wait=False)
+
+
+def hand(store, tid: int, words: str, actor: str = 'owner') -> str:
+    """Taskuary's words - an agent's ask, a part broken out - to the agent of the open task that is already that work: by general.tell, the one
+    road Taskuary's notes take; and where no agent ever worked it (tell hands nothing), that task's agent STARTED by the dispatch door with
+    the words as its opening Taskuary note - kept nowhere, they vanished (rule 4). -> 'told', 'woke', 'started', or '' when it could not."""
+    from . import general, kinds
+    if (how := general.tell(store, int(tid), words, actor)): return how
+    from .server import _start_new_task
+    k = str((store.get_task(int(tid)) or {}).get('Kind') or '').lower()
+    return 'started' if _start_new_task(int(tid), k if k in kinds.AGENT else 'general', words, '')['started'] else ''

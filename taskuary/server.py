@@ -4558,6 +4558,11 @@ def _no_brain(task: dict | None, body: DispatchBody, kind: str = '') -> str:
 
 
 def _dispatch_task_to_its_agent(tid: int, body: DispatchBody, background: BackgroundTasks) -> dict:
+    # ...WHAT HE ATTACHED ON THE BOX IS THE TASK'S OWN at this door too, as on his typed line (general.take_line): Send to agent on a report,
+    # a dashboard or an FYI named the upload under Taskuary's own attachments, a path the agent's Read is refused
+    if body is not None and body.instruction and not body.app_words:
+        from . import outputs
+        body = body.model_copy(update={'instruction': outputs.take_in_text(tid, body.instruction)})
     with _STARTING_LOCK: gate = _STARTING.setdefault(int(tid), threading.Lock())
     waited = not gate.acquire(blocking=False)
     if waited: gate.acquire()
@@ -4626,7 +4631,7 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         from . import origin
         if (h := origin.hold(store, tid)):
             if (typed := str(body.instruction or '').strip()) and not body.app_words:
-                general.wait_line(store, tid, typed)
+                general.wait_line(store, tid, **general.split_files(typed))      # ...its files kept as files, a pill each, as take_line keeps them
                 return {'dispatch': 'held', 'started': False, 'existing': False, 'held': h['line'], 'taskId': tid, 'ref': task_ref(tid)}
             # ...and a press with no words of his is a start refused at the door, said with its way on (Trust) - as the offer's press is
             # (accept_offer): kept on the task for the Advisor, said as not done on the phone (2026-11-17, CI)

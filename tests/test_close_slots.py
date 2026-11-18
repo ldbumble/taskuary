@@ -763,7 +763,7 @@ def test_the_agent_is_told_which_of_its_emails_went(s):
     told = []
     with mock.patch('taskuary.general.approved', lambda st, t, press, what, *x, **k: told.append(what)):
         assert approve(s, b)['ok']
-    assert told == [f'rv{b} (the email to ray@northwind.example) was sent']
+    assert len(told) == 1 and told[0].startswith(f'rv{b} (the email to ray@northwind.example) was sent'), told
 
 def test_the_agent_on_a_routine_run_is_told_its_email_went_not_that_it_waits(s):
     # a routine run's agent drafted to Ray: the email went at once, and its tool still answered that the card "waits and nothing went" -

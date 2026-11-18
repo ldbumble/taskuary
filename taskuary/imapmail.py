@@ -862,7 +862,9 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
                 from .calendar import tz_of
                 incoming.update(protocol_marks(msg, me=(user,), tz=tz_of(store)))
                 from .channels import att_marks
-                incoming['mail_meta'] = {**(incoming.get('mail_meta') or {}), **mail_ids(msg, thrid), **html_links(msg), **att_marks(atts)}
+                incoming['mail_meta'] = {**(incoming.get('mail_meta') or {}), **mail_ids(msg, thrid), **html_links(msg), **att_marks(atts),
+                                         # ...and where the sender asked to be answered (Reply-To): the reply's envelope reads it (outbound.reply_envelope)
+                                         **({'reply_to': rt} if (rt := _hdr_addrs(msg, 'Reply-To')) else {})}
             except Exception as e:
                 raise _UIDFetchFailure(f'uid {uid} headers could not be decoded: {e}') from e
             # ...and the thread a mail already here files under wins over the header root. Outside the decode guard:

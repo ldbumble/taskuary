@@ -515,6 +515,22 @@ class AFailedSendIsHandedBack(unittest.TestCase):
         self.rid = self.s.add_review({'TaskId': self.tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Confirmed.',
                                       'Deliver': json.dumps({'kind': 'reply', 'to': ['erin@northwind.example'], 'cc': [], 'mode': 'reply_to'})})
 
+    def test_a_send_tells_its_agent_whom_it_went_to_as_the_owner_left_it(self):
+        """The owner moved the reply off Erin and onto Gail, copying Ray, and pressed Send. Its agent heard only "the reply was sent", and
+        its next turn told the owner it had answered Erin. It hears whom the reply went to and who was copied - the card's envelope as sent."""
+        from taskuary import outbound
+        self.s.set_review_envelope(self.rid, {'kind': 'reply', 'mode': 'reply_to', 'to': ['gail@northwind.example'], 'cc': []})
+        heard = []
+        sent = lambda st, m, body, to=None, cc=None, **k: {'channel': 'email', 'to': to, 'cc': cc or []}
+        with mock.patch('taskuary.outbound.reply_to_message', side_effect=sent), mock.patch.object(outbound, 'send_block', return_value=''), \
+             mock.patch.object(verdicts, 'context_moved', return_value=(False, None)), \
+             mock.patch.object(general, 'tell', side_effect=lambda st, tid, said, actor='owner', **k: heard.append(said) or 'told'):
+            out = verdicts.decide(self.s, self.s.get_review(self.rid), 'approve', None, None, 'owner', cc=['ray@northwind.example'])
+        self.assertTrue(out['ok'], out)
+        [said] = heard
+        self.assertIn('gail@northwind.example', said); self.assertIn('ray@northwind.example', said)
+        self.assertNotIn('erin', said.lower())
+
     def test_a_send_the_provider_refused_wakes_its_agent_once(self):
         from taskuary import outbound
         with mock.patch('taskuary.outbound.reply_to_message', side_effect=RuntimeError('mailbox is over its sending limit')), \

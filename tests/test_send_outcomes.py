@@ -53,6 +53,22 @@ class OutcomeTests(unittest.TestCase):
             out2 = verdicts.decide(s, s.get_review(rid), 'approve')
         self.assertTrue(out2['ok']); send.assert_called_once(); self.assertEqual(s.get_task(tid)['Status'], 'open')
 
+    def test_an_edit_whose_send_failed_is_still_an_edit_when_it_goes(self):
+        """The owner rewrote the draft and pressed Send; the server refused it, and his words were kept in the box. His next Send was
+        then judged against his own words - "approved" as drafted, the edit's lesson never learned and the draft counted as one that stood."""
+        s, tid, mid, rid = thread()
+        mine = 'Here it is - the totals match the ledger now.'
+        with mock.patch.object(outbound, 'reply_to_message', side_effect=RuntimeError('550 mailbox unavailable')):
+            verdicts.decide(s, s.get_review(rid), 'approve', mine)
+        self.assertEqual(s.get_review(rid)['DraftText'], mine)
+        learned = []
+        with mock.patch.object(outbound, 'reply_to_message', return_value=SENT), \
+             mock.patch('taskuary.learn.learn_from', side_effect=lambda st, ev: learned.append(ev)):
+            out = verdicts.decide(s, s.get_review(rid), 'approve')
+        self.assertEqual(out['status'], 'edited')
+        self.assertEqual(s.get_review(rid)['Status'], 'edited')
+        self.assertTrue(learned and 'DRAFT:\nHere it is.\nSENT INSTEAD:\n' + mine in learned[0], learned)
+
     def test_a_provider_that_did_not_answer_is_delivery_unknown_not_a_failure(self):
         s, tid, mid, rid = thread()
         with mock.patch.object(outbound, 'reply_to_message', side_effect=requests.exceptions.ReadTimeout('read timed out')), \

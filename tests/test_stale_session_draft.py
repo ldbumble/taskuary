@@ -50,6 +50,25 @@ class StaleSessionDraftTests(Base):
         self.assertEqual(s.get_review(rid)['DraftSid'], wrapup.OWNER_SID)
         self.assertFalse(wrapup.stale_draft(s, s.get_review(rid), 's-new'))
 
+    def test_an_agents_new_letter_never_writes_over_the_owners_edit(self):
+        """The owner rewrote the agent's draft in the box and copied a colleague; the agent, woken on the thread, then saved a new letter.
+        It was written over his words in place - nothing kept, nothing said. His edit is closed as replaced, kept under Not sent with his
+        recipients, the agent's letter is a new card that goes to whom he chose, and the agent hears what he had written."""
+        s = MemoryStore(); tid, _ = task_with(s)
+        rid = wrapup.agent_reply(s, tid, OLD, 'assistant', sid='s-1')['review_id']
+        mine = OLD + ' I will send the credit memos on Friday.'
+        with mock.patch.object(server, 'store', s):
+            c = TestClient(server.app, base_url='http://127.0.0.1', headers={'X-Taskuary-Token': server.cfg['server'].get('token') or ''})
+            c.patch(f'/api/reviews/{rid}', json={'body': mine})
+            c.put(f'/api/reviews/{rid}/envelope', json={'to': ['gail@northwind.example'], 'cc': ['ray@northwind.example']})
+        out = wrapup.agent_reply(s, tid, NEW, 'assistant', sid='s-1')
+        self.assertNotEqual(out['review_id'], rid, 'a new card - his words are never written over')
+        o, n = s.get_review(rid), s.get_review(out['review_id'])
+        self.assertEqual((o['Status'], o['DraftText']), ('closed_unsent', mine))
+        self.assertEqual((n['Status'], n['DraftText']), ('pending', NEW))
+        self.assertEqual(s.review_envelope(n['ReviewId'])['cc'], ['ray@northwind.example'], 'the copy he added rides on')
+        self.assertEqual(out.get('replaced_the_owners_version'), mine)
+
     def test_taskuarys_own_draft_is_not_an_agent_sessions(self):
         s = MemoryStore(); tid, mid = task_with(s)
         rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'Reason': 'r'})

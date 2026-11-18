@@ -501,6 +501,12 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     # greys it for good, so a letter filed after his line - the same words kept, too - is this turn's new card, the old one its record
     if live and (an_earlier_turns(store, live) and _words(live.get('DraftText')) != _words(text) or _turn_after(store, task_id, live)):
         store.decide_review(live['ReviewId'], 'closed_unsent', None, agent, note=REPLACED); live = None
+    # ...AND THE OWNER'S HAND ON IT MAKES IT HIS (OWNER_SID): a new letter is never written over his edit or his readdress - his version is
+    # closed as replaced, kept under Not sent, the new card goes to whom he chose, and the agent is told what he had left there
+    mine = next((r for r in (held, live) if r and r.get('DraftSid') == OWNER_SID and _words(r.get('DraftText')) != _words(text)), None)
+    if mine:
+        store.decide_review(mine['ReviewId'], 'closed_unsent', None, agent, note=REPLACED)
+        held, live = ({} if mine is held else held), (None if mine is live else live)
     why = f'{agent} wrote this reply in its session - approve to send'
     if sent:
         from .continuity import clock
@@ -533,6 +539,8 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         if (env := reply_envelope(store, m, 'reply_to' if only else 'reply_all')):
             if ccs is not None: env = {**env, 'cc': [a for a in ccs if a not in env['to']]}
             store.set_review_envelope(rid, env)
+    if mine and not (str(to or '').strip() or answers or only or ccs is not None) and (his := store.review_envelope(mine['ReviewId'])):
+        store.set_review_envelope(rid, his)
     from .signatures import agent_signed, for_review
     wrote = str(text or '').strip()
     text = agent_signed(store, store.get_review(rid) or rv, text, m) or text
@@ -557,6 +565,7 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     meanwhile = [' '.join(str(x.get('OwnText') or x.get('BodyText') or '').split())[:300] for x in own_replies(store, task_id, turn)] if turn else []
     return {'ok': True, 'review_id': rid, 'message_id': mid, 'answers': ans or mid, 'to': m.get('FromName') or m.get('FromEmail') or '', **ends,
             **({'owner_wrote_on_the_thread_while_you_worked': meanwhile} if meanwhile else {}),
+            **({'replaced_the_owners_version': str(mine.get('DraftText') or '')} if mine else {}),
             **({'recipients': {'to': env.get('to') or [], 'cc': env.get('cc') or []}} if env else {}),
             **({'new_on_thread': new} if new else {}),
             **({'people': many} if len(many) > 1 else {}), **_told(store, rid, attach_files(store, rid, files, agent))}

@@ -22,7 +22,7 @@ from .inboxes import TYPES as INBOXES      # helpdesks and the newer project too
 BOOT = datetime.now().isoformat(sep=' ', timespec='seconds')
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
-MAIL_SELECT = ('id,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,bodyPreview,body,'
+MAIL_SELECT = ('id,subject,from,replyTo,toRecipients,ccRecipients,receivedDateTime,sentDateTime,bodyPreview,body,'
                'conversationId,webLink,hasAttachments,isRead,inferenceClassification,flag')
 # ...and the same thing without the one field that carries the weight. A folder page LISTS; the
 # bodies come back afterwards (_mail_bodies) for the mail that survives the policy, so a flood
@@ -1063,8 +1063,12 @@ def _same_words(a: str, b: str, n: int = 160) -> bool:
     """Two renderings of the SAME reply. The copy that comes back from the Sent folder went out
     through the provider's HTML and back through our stripper, so it is never byte-identical to
     the text approved here - the opening words are what survive both, and the quoted thread the
-    provider appends is what makes a prefix the only honest comparison."""
-    x, y = (re.sub(r'\s+', ' ', a or '').strip().lower()[:n], re.sub(r'\s+', ' ', b or '').strip().lower()[:n])
+    provider appends is what makes a prefix the only honest comparison. ...and both are read down to
+    their own words first (triage.split_own: cut at the quote head), each the same way: a reply
+    shorter than `n` came back with the quoted thread under it and never matched its own copy."""
+    from .triage import split_own
+    norm = lambda t: re.sub(r'\s+', ' ', split_own(t or '', floor=1)[0]).strip().lower()[:n]
+    x, y = norm(a), norm(b)
     return bool(x) and x == y
 
 
@@ -2400,6 +2404,7 @@ def _poll_one(store, c, file_only, backfill_hours, llm) -> int:
                             'images': images_for_triage(store, atts), **files_for_triage(atts), 'invite': inv, **({'cal': cal_} if cal_ else {}),
                             **_header_marks(m),
                             'mail_meta': {'folder': folder, 'focus': m.get('inferenceClassification'),
+                                          **({'reply_to': rt} if (rt := _addrs(m.get('replyTo'))) else {}),
                                           'flag': (m.get('flag') or {}).get('flagStatus'),
                                           'invite': inv, **({'cal': cal_} if cal_ else {}), **att_marks(atts),
                                           **links_meta((m.get('body') or {}).get('content'))}}, llm=llm)

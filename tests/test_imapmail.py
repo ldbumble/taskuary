@@ -75,6 +75,19 @@ class ImapTests(unittest.TestCase):
         rows = s._rows("SELECT ConversationId FROM message WHERE Channel='email' ORDER BY MessageId")
         self.assertEqual([r['ConversationId'] for r in rows], ['<abc123@partner.example>'] * 2)
 
+    def test_a_reply_goes_to_the_reply_to_the_person_asked_for(self):
+        """A person writes from one address and asks for answers at another (Reply-To). The envelope read the header off the stored row,
+        but no poller ever kept it, so the reply went to the From the sender asked not to be answered at."""
+        s, c = self._store()
+        m = __import__('email').message_from_bytes(_mime())
+        m['Reply-To'] = 'Rita Vole <rita.vole@partner-mail.example>'
+        fake = FakeImap({101: m.as_bytes()})
+        with mock.patch.object(imapmail.imaplib, 'IMAP4_SSL', return_value=fake):
+            imapmail.poll_imap(s, c, [], llm=None)
+        row = s._one("SELECT * FROM message WHERE Channel='email'")
+        self.assertEqual(outbound.reply_envelope(s, row)['to'], ['rita.vole@partner-mail.example'])
+        self.assertEqual(outbound.reply_envelope(s, row, mode='reply_to')['to'], ['rita.vole@partner-mail.example'])
+
     def test_the_mailbox_is_left_untouched_unless_the_switch_is_on(self):
         s, c = self._store()
         fake = FakeImap({101: _mime()})

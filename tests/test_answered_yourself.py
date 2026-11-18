@@ -140,6 +140,26 @@ class TheReplyHasToSurviveTheTrip(unittest.TestCase):
         self.assertEqual(len(s.list_messages(tid)), 2)                        # still on the thread
         self.assertFalse([c for c in s.list_comments(tid) if 'You replied' in c['Body']])
 
+    def test_taskuarys_own_short_send_coming_back_with_the_thread_under_it_is_not_a_second_reply(self):
+        """...and the copy that comes back carries the quoted thread under our words. Only a reply of 160 characters or more
+        was recognised: a short one ("Thanks, will do") never matched its own copy, so it read "You replied from your mailbox"
+        under "Sent by email" and the thread was told the owner had answered outside."""
+        from taskuary.channels import ingest_outbound_mail
+        s = _store()
+        mid = self._inbound(s, status='routed')
+        tid = s.create_task({'Title': 'Financial request', 'Kind': 'task', 'Status': 'open'}, 'o')
+        s.attach_message(mid, tid)
+        rid = s.add_review({'MessageId': mid, 'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'March thru June attached.'})
+        s.decide_review(rid, 'sent', 'March thru June attached.\n\nAlex Doyle', 'o')
+        copy = {**self._sent(), 'body': {'contentType': 'text', 'content': 'March thru June attached.\r\n\r\nAlex Doyle\r\n\r\n'
+                                         'From: Client <client@vendor.example>\r\nSent: Sunday, August 16, 2026 8:00 AM\r\nsend March thru June'}}
+        ingest_outbound_mail(s, 'me@x.com', copy)
+        self.assertEqual(len(s.list_messages(tid)), 2)
+        self.assertFalse([c for c in s.list_comments(tid) if 'You replied' in c['Body']])
+        # ...while the owner's own different words on the thread still are his reply
+        ingest_outbound_mail(s, 'me@x.com', {**self._sent(i='sm2'), 'bodyPreview': 'March attached; June next week.'})
+        self.assertTrue([c for c in s.list_comments(tid) if 'You replied' in c['Body']])
+
     def test_a_whatsapp_reply_retires_the_unused_draft_and_says_so(self):
         """Tess answered in WhatsApp after Taskuary drafted a reply. Read against the draft, the line covers it: never leave the old
         Approve button asking the owner to send a second answer (on a chat only when it covers it - the owner, 2026-11-09)."""

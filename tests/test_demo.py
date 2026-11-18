@@ -221,6 +221,18 @@ class TheScriptedBrainTests(unittest.TestCase):
         self.assertIn(out['intent'], ('fyi', 'task', 'reply_only'))
 
 
+    def test_a_json_ask_without_a_script_never_gets_triages_answer(self):
+        """The walk, 2026-11-18: Change > Split or merge read "The AI reads this as one job - the demo files everything it is not sure
+        about": every JSON ask was answered with triage's verdict, and its reason was quoted wherever a `why` is drawn. An ask the
+        script has no answer for finds nothing; triage still gets its verdict."""
+        from taskuary import reshape
+        s = MemoryStore(); demo.seed(s)
+        tid = next(t['TaskId'] for t in s.list_tasks() if t['Title'] == 'Trainly renewal - how many seats?')
+        out = reshape.propose_split(s, tid, demo.brain(store=s))
+        self.assertFalse(out['two'])
+        self.assertNotIn('files everything', out['why'])
+        self.assertNotIn('intent', demo.brain()(reshape.SPLIT_SYSTEM, '{}'))
+
     def test_the_canned_count_is_the_rails_own(self):
         """B23: "Three things are waiting on you" stood beside a rail of nine - and "25 things are on it, and 5 are waiting" beside an
         ON YOU of 9 (2026-10-19 UI walk): the count is the ON YOU band's, the greeting's own (lanes.on_you)."""

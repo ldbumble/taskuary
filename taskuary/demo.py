@@ -359,8 +359,11 @@ def brain(seed: int = 0, store=None):
         if 'You looked up issue.draft and it says:' in text:
             return ('That is drafted - the button under this opens it, with names and mail taken out, for you to read and submit on GitHub.'
                     if 'Drafted.' in text else "I can't draft that one here.")
-        if 'JSON' in str(system or '') or 'intent' in str(system or '').lower():
+        if 'intent' in str(system or '').lower():
             return json.dumps({'intent': 'fyi', 'why': 'the demo files everything it is not sure about'})
+        # ...and only triage (the walk, 2026-11-18): every JSON ask got triage's verdict, and its reason was drawn wherever a `why` is -
+        # "The AI reads this as one job - the demo files everything it is not sure about" under Split. One the script has no answer for finds nothing
+        if 'JSON' in str(system or ''): return '{}'
         # what the person actually typed, out of a prompt that also carries the task, the
         # documents and the conversation - quoting the whole thing back reads as a bug
         asked = [l[len(OWNER_SAYS):].strip() for l in text.splitlines() if l.startswith(OWNER_SAYS)] \

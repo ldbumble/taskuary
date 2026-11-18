@@ -263,11 +263,14 @@ def pull_comments(store, task_id: int, at: dict) -> int:
         ext = f"ghc:{at['repo']}#{at['number']}:{cm.get('id')}"
         if not cm.get('id') or store.message_exists(ext): continue
         where = f" on {cm['path']}" if cm.get('path') else ''
-        body = f"{cm['who']} commented{where} on pull request #{at['number']}:\n\n{cm['body']}"
+        verb = cm.get('verb') or 'commented'
+        said = f":\n\n{cm['body']}" if str(cm.get('body') or '').strip() else '.'
+        body = (f"{cm['who']} {verb} pull request #{at['number']}{said}" if verb != 'commented' else
+                f"{cm['who']} commented{where} on pull request #{at['number']}{said}")
         mid = store.add_message({
             'TaskId': task_id, 'ExternalId': ext, 'Channel': 'github',
             'ConversationId': f"pr:{at['repo']}#{at['number']}", 'SourceName': at['repo'],
-            'Subject': f"PR #{at['number']} - {cm['kind']} comment from {cm['who']}",
+            'Subject': f"PR #{at['number']} - {cm['who']} {verb} it" if verb != 'commented' else f"PR #{at['number']} - {cm['kind']} comment from {cm['who']}",
             'FromName': cm['who'], 'FromEmail': f"{cm['who']}@users.noreply.github.com",
             'SentAt': str(cm.get('at') or '').replace('T', ' ').rstrip('Z'),
             'BodyText': body, 'SourceLink': cm.get('url') or at.get('url'), 'Status': 'routed'})

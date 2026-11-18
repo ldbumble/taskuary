@@ -64,7 +64,7 @@ def assess(store, repo: str, number: int, pr: dict = None) -> dict:
     import time
     from . import github
     from .ci import _conn
-    tok, c = _conn(store)['Secret'], cfg(store, repo)
+    tok, c = _conn(store, repo)['Secret'], cfg(store, repo)
     p = pr or github.pr(tok, repo, number)
     if p.get('mergeable_state') == 'unknown' and not p.get('merged') and p.get('state') == 'open':
         time.sleep(1.5); p = github.pr(tok, repo, number)          # GitHub computes it on the first read; ask once more
@@ -130,12 +130,12 @@ def check(store) -> list:
     reports its user's admin role."""
     from . import github
     from .ci import _conn
-    tok = _conn(store)['Secret']
     rows = []
     for s in store.list_sources(active_only=True):
         if s.get('Channel') != 'github': continue
         repo, c = s['Address'], cfg(store, s['Address'])
-        try: info = github.repo_info(tok, repo)
+        # ...each repository with the token of the card that reaches it (store.github_for): two accounts are two tokens
+        try: tok = _conn(store, repo)['Secret']; info = github.repo_info(tok, repo)
         except Exception as e:
             rows.append({'repo': repo, 'error': str(e)[:200]}); continue
         perms, g = info['permissions'], github.grants(tok, repo, fresh=True)

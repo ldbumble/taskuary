@@ -202,7 +202,7 @@ def test_two_presses_at_once_are_one_run_and_its_agent_hears_it_once():
     sent, told, slow = [], [], bulkcard.running
     def send(*a, **k): time.sleep(0.02); sent.append(k.get('to')); return {'channel': 'email', 'to': k.get('to') or []}
     with mock.patch.object(outbound, 'send_out', send), mock.patch.object(outbound, 'send_block', lambda *a, **k: ''), \
-         mock.patch.object(general, 'tell', lambda st, t, said, actor='owner': told.append(said) or 'woke'), \
+         mock.patch.object(general, 'tell', lambda st, t, said, actor='owner', **k: told.append(said) or 'woke'), \
          mock.patch.object(bulkcard, 'running', lambda *a: (slow(*a), time.sleep(0.05))[0]):      # ...both presses read it before either marks it
         presses = [threading.Thread(target=bulkcard.run, args=(s, out['batch'])) for _ in range(2)]
         for t in presses: t.start()
@@ -341,3 +341,33 @@ def test_its_agent_takes_back_a_bulk_card_by_the_ids_it_was_told():
     assert out['ok'] and sorted(out['review_ids']) == rids, out
     assert {s.get_review(x)['Status'] for x in rids} == {'closed_unsent'}
     assert cardqueue.state(s, tid)['units'][0]['rids'] == [note], 'the note to Gail is the next card'
+
+def test_two_presses_at_once_are_one_run_and_one_true_telling():
+    """Pressed on the phone and the desk in the same moment: both presses started a run, each row went once (its own road refuses a second),
+    and the agent was told twice - each telling "5 done, 5 failed" over ten issues that had all closed."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        out = call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='duplicates', items=[{'number': n} for n in range(1, 11)])
+    gh, told, go = GitHub(delay=0.02), [], threading.Barrier(2)
+    with mock.patch.object(github.requests, 'patch', gh.patch), mock.patch.object(general, 'tell', lambda st, t, said, actor='owner', **k: told.append(said) or 'woke'):
+        def press_it():
+            go.wait()
+            try: bulkcard.run(s, out['batch'], wait=True)
+            except ValueError: pass                                   # the second found nothing waiting: said so, nothing run
+        ts = [threading.Thread(target=press_it) for _ in range(2)]
+        [t.start() for t in ts]; [t.join() for t in ts]
+    st = bulkcard.state(s, out['batch'])
+    assert sorted(gh.closed) == list(range(1, 11)) and (st['done'], st['failed']) == (10, 0), st
+    [said] = told
+    assert '10 done, 0 failed' in said
+
+
+def test_reading_issues_says_how_to_see_more_and_refuses_a_limit_it_cannot_read():
+    page = [{'number': n, 'title': f'Stale question {n}', 'labels': [], 'comments': 0, 'updated_at': '2022-03-04T10:00:00Z',
+             'user': {'login': 'user1'}, 'body': 'How do I export?'} for n in range(1, 11)]
+    with mock.patch.object(github.requests, 'get', lambda *a, **k: SimpleNamespace(status_code=200, ok=True, text='[]', json=lambda: page)):
+        head, _ = github.run_github_issues({'repo': REPO, 'token': 'ghp_stand_in', 'limit': 5})
+        assert 'larger `limit`' in head and 'max rows' not in head, head     # the tool's own argument - there is no source setting here
+        assert github.run_github_issues({'repo': REPO, 'token': 'ghp_stand_in', 'limit': 'all'})[0].startswith('10 issues')
+        try: github.run_github_issues({'repo': REPO, 'token': 'ghp_stand_in', 'limit': 'lots'}); raise AssertionError('read')
+        except RuntimeError as e: assert 'number of issues' in str(e)

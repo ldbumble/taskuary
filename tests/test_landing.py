@@ -198,6 +198,29 @@ class LandingTests(unittest.TestCase):
         self.assertTrue(git(remote, 'rev-parse', 'fix-rounding'))
 
 
+    def test_a_pull_request_github_will_not_open_is_kept_and_its_agent_told(self):
+        """The branch went out, then GitHub refused the pull request (a token without Pull requests: write). That refusal is GitHub's own
+        error, not the landing's: it passed the land's handler - no line kept, the agent never told, the press's toast the only trace."""
+        from taskuary import github
+        self.branch()
+        remote = tempfile.mkdtemp(); git(remote, 'init', '-q', '--bare')
+        git(self.cwd, 'remote', 'add', 'origin', remote)
+        no = github.Refused('the GitHub token may not open a pull request - it needs Pull requests: write for this repository', 403, 'Pull requests: write')
+        with mock.patch('taskuary.shellgate.repo_of', return_value='northwind/ledger'), mock.patch('taskuary.waitroom.add') as told, \
+             mock.patch('taskuary.ci._conn', return_value={'Secret': 'tok'}), mock.patch('taskuary.github.open_pr', side_effect=no):
+            with self.assertRaises(landing.Refused) as e: landing.land(self.s, self.tid, 'pr')
+        self.assertIn('Pull requests: write', str(e.exception)); self.assertIn('was pushed', str(e.exception))
+        said = told.call_args[0][2]
+        self.assertIn('Pull requests: write', said); self.assertNotIn('Nothing went out', said)
+        self.assertTrue(any(a['Action'] == 'land_refused' for a in self.s._rows("SELECT * FROM audit WHERE EntityId=?", (self.tid,))))
+        self.assertTrue(landing.state(self.s, self.tid)['ask'], 'the question stands: pressed again it opens the pull request')
+        # ...and a GitHub card with no token says so before anything is pushed
+        git(remote, 'branch', '-D', 'fix-rounding')
+        with mock.patch('taskuary.shellgate.repo_of', return_value='northwind/ledger'), mock.patch('taskuary.waitroom.add') as told, \
+             mock.patch('taskuary.ci._conn', side_effect=RuntimeError('no GitHub PAT saved')):
+            with self.assertRaises(landing.Refused): landing.land(self.s, self.tid, 'pr')
+        self.assertIn('no GitHub PAT saved', told.call_args[0][2]); self.assertFalse(git(remote, 'branch', '--list', 'fix-rounding'))
+
     # ── WORK ON THE SHARED BASE IS A PUSH, ASKED WITH BUTTONS (the owner, 2026-11-09: "i thought actions should be cards/buttons??? why is this
     # text??") - an agent committed straight on master, ended "Ready to push <sha> and deploy (master -> deploy) - go ahead?", and the card
     # under it had no button, so the owner typed "yes"
@@ -263,6 +286,25 @@ class LandingTests(unittest.TestCase):
         with self.assertRaises(landing.Refused) as e: landing.land(self.s, self.tid, 'push')
         self.assertIn('nothing was pushed', str(e.exception))
         with self.assertRaises(ValueError): landing.land(self.s, self.tid, 'deploy')           # not offered: no deploy branch known
+
+    def test_push_and_deploy_whose_deploy_is_refused_says_the_base_went_and_keeps_it(self):
+        """Push & deploy: the base went out, then the deploy branch refused (it had moved on). The press answered "refused ... - master was
+        pushed", the agent was told "Nothing went out, and the question stays on the task" - and nothing stayed: the base had nothing left
+        to push, so the question was gone and asking again was refused. What went is kept as a push; what did not is said, to both."""
+        from taskuary import ci
+        self.on_master_with_origin(); tip = self.sha('master')
+        other = tempfile.mkdtemp(); git(other, 'clone', '-q', self.remote, '.'); git(other, 'checkout', '-q', '-b', 'deploy')
+        commit(other, 'hotfix.py', 'x\n'); git(other, 'push', '-q', 'origin', 'deploy')                  # the deploy branch is ahead of us
+        landing.propose(self.s, self.tid, 'push', 'live is the ask', deploy='deploy')
+        with mock.patch('taskuary.waitroom.add') as told, mock.patch('taskuary.shellgate.repo_of', return_value='northwind/ledger'):
+            out = landing.land(self.s, self.tid, 'deploy')
+        self.assertEqual(git(self.remote, 'rev-parse', 'master'), tip, 'the base went out')
+        self.assertNotEqual(git(self.remote, 'rev-parse', 'deploy'), tip, 'the deploy did not')
+        self.assertIn('master', out['says']); self.assertIn('deploy', out['says']); self.assertIn('refused', out['says'])
+        said = told.call_args[0][2]
+        self.assertNotIn('Nothing went out', said); self.assertIn('refused', said); self.assertIn(tip[:7], said)
+        self.assertEqual(landing.state(self.s, self.tid)['landed']['how'], 'push')
+        self.assertEqual((ci.landing_of(self.s, self.tid) or {}).get('sha'), tip, 'the CI watch follows what was pushed')
 
     # ── AN AGENT'S OWN `git push` IS THE CARD'S QUESTION TOO (the agent walk, 2026-11-09): told to call propose_land, a coding agent ran
     # `git add ... && git commit ... && git push` in its shell. With Developer mode on the owner got "THE AGENT ASKS - It wants to run

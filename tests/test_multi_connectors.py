@@ -177,6 +177,31 @@ class TwoGithubAccounts(unittest.TestCase):
         self.assertEqual(ci._conn(self.store, 'northwind/portal')['Secret'], 'pat-two')
         self.assertEqual(ci._conn(self.store)['Secret'], 'pat-one')
 
+    def test_a_close_out_on_the_second_accounts_repo_reads_acts_and_comments_with_its_token(self):
+        """The close-out card (and so its merge, which reads the same), close without merging, Update branch / Re-run, a linked issue's
+        comment and the close-out's reply all reached GitHub with the DEFAULT card's token - which cannot see the second account's repository: a 404 drawn as "GitHub could not
+        be read", a merge that could never happen."""
+        from taskuary import ghcloseout, github
+        used = []
+        pr = {'number': 4, 'sha': 'abc', 'state': 'open', 'merged': False, 'mergeable_state': 'clean', 'draft': False, 'base': 'main',
+              'head': 'fix', 'url': 'https://github.example/northwind/portal/pull/4', 'node_id': 'n'}
+        spy = lambda name, ret: (lambda tok, *a, **k: used.append((name, tok)) or ret)
+        with mock.patch.object(github, 'pr', spy('pr', pr)), mock.patch.object(github, 'grants', spy('grants', {})), \
+             mock.patch.object(github, 'repo_info', spy('repo_info', {'methods': ['squash'], 'permissions': {'admin': True}})), \
+             mock.patch.object(github, 'checks', spy('checks', {'failed': []})):
+            ghcloseout.assess(self.store, 'northwind/portal', 4)
+            self.assertEqual([r['repo'] for r in ghcloseout.check(self.store)], ['northwind/ledger', 'northwind/portal'])
+        by_repo = {}
+        for name, tok in used: by_repo.setdefault(tok, []).append(name)
+        self.assertNotIn('pr', by_repo.get('pat-one', []), 'the pull request on the second account was read with the first token')
+        self.assertIn('pr', by_repo.get('pat-two', []))
+        self.assertEqual(by_repo.get('pat-one', []).count('repo_info'), 1, "check: each repository read with its own card's token")
+        self.assertEqual(by_repo.get('pat-two', []).count('repo_info'), 2)
+        # ...and an outside pull request's review, merge and cloud fix (batch, cloudfix) the same
+        from taskuary import batch
+        self.assertEqual(batch._token(self.store, batch.pull('https://github.com/northwind/portal/pull/4')), 'pat-two')
+        self.assertEqual(batch._token(self.store, 'northwind/ledger'), 'pat-one')
+
 
 def teams(store, name, account, rt, cid=None):
     """A Teams card signed in as its own Microsoft account (MsSignIn), its chats under that UPN."""

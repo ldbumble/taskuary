@@ -746,7 +746,7 @@ def closeout_due(store, tid: int):
         # a merge that already happened nor pins a commit older than the last push
         try:
             from . import github
-            cur = github.pr(ci._conn(store)['Secret'], repo, num)
+            cur = github.pr(ci._conn(store, repo)['Secret'], repo, num)
             if cur.get('state') == 'closed': return None
             sha = cur.get('sha') or sha
         except Exception as e: logger.warning(f'task {tid}: the pull request could not be read before its close-out ({e})')
@@ -836,7 +836,8 @@ def close_pr(store, rv: dict, actor='owner') -> dict:
     ok, why = validate(store, p)
     if not ok: raise RuntimeError(f'refused at execution: {why}')
     from . import ci, github
-    c, repo, num = ci._conn(store), p['repo'], int(p['number'])
+    repo, num = p['repo'], int(p['number'])
+    c = ci._conn(store, repo)
     cur = github.pr(c['Secret'], repo, num)
     if cur.get('merged'): raise RuntimeError(f'#{num} is already merged on GitHub - nothing to close')
     if cur.get('state') != 'closed': github.close_pr(c['Secret'], repo, num)
@@ -904,7 +905,8 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
         from . import github
         from .ci import _conn
         if not (at := linked(store, tid)): raise RuntimeError(NO_LINK)
-        c, (repo, num) = _conn(store), at
+        repo, num = at
+        c = _conn(store, repo)
         if a == 'comment_issue':
             url = github.comment_issue(c['Secret'], repo, num, p['body'])
             out = {'commented': f'{repo}#{num}', 'url': url}
@@ -913,7 +915,8 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
             out = {'closed': f'{repo}#{num}'}
     elif a == 'merge_pr':
         from . import ci, github, ghcloseout
-        c, repo, num = ci._conn(store), p['repo'], int(p['number'])
+        repo, num = p['repo'], int(p['number'])
+        c = ci._conn(store, repo)
         # GITHUB'S STATE DECIDES, the same reading that drew the card (ghcloseout.assess): what this repo's rules say about
         # this pull request, never our guess at them. "Close out anyway" passes only what the card offered it for.
         seen = ghcloseout.assess(store, repo, num)

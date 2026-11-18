@@ -147,3 +147,39 @@ class TheHoldReadsTheSameOnEveryRoad(unittest.TestCase):
         reply = s.create_task({'Title': 'Answer kai', 'Kind': 'reply', 'Status': 'open'}, 'triage')
         self.assertFalse(ingest.agent_on_reply(s, reply, msg, None, {'intent': 'task', 'kind': 'coding'}, 'triage'))
         self.assertEqual(s.list_comments(reply)[-1]['Body'], f"{ingest.NOT_STARTED} {said}")
+
+def _paged(rows, page_max=50):
+    "A GitHub list served as GitHub serves it: a page at a time (never more than `page_max`), a Link header to the next one."
+    from unittest import mock
+    def get(url, headers=None, params=None, timeout=None):
+        q = dict(params or {})
+        if '?' in url: q.update(dict(x.split('=') for x in url.split('?', 1)[1].split('&')))
+        per, page = min(int(q.get('per_page') or 30), page_max), int(q.get('page') or 1)
+        r = mock.Mock(status_code=200)
+        r.json.return_value = rows[(page - 1) * per: page * per]
+        r.links = {'next': {'url': f"{url.split('?')[0]}?per_page={per}&page={page + 1}"}} if page * per < len(rows) else {}
+        return r
+    return get
+
+
+class ALongThreadIsReadToItsEndTests(unittest.TestCase):
+    def test_the_newest_comment_on_an_issue_with_many_is_read(self):
+        """GitHub serves an issue's comments oldest first, a page at a time: with seventy on it, the first page was all that was ever
+        read, and the newest - the one that asks for something now - never reached the task."""
+        from unittest import mock
+        from taskuary import github
+        rows = [{'id': i, 'body': f'note {i}', 'user': {'login': 'erin-blake'}} for i in range(1, 71)]
+        with mock.patch.object(github.requests, 'get', side_effect=_paged(rows)):
+            got = github.issue_comments('tok', 'northwind/ledger', 5)
+        self.assertEqual([c['id'] for c in got][-1], 70)
+        self.assertEqual(len(got), 70)
+
+    def test_every_item_that_changed_in_one_poll_window_is_read(self):
+        """Forty issues closed in one go (the bulk Close card) between two polls: the poll read the newest 25 and stamped the window
+        done, so fifteen tasks never heard their issue had ended."""
+        from unittest import mock
+        from taskuary import github
+        rows = [{'number': n, 'state': 'closed', 'updated_at': f'2026-11-18T10:{60 - n:02d}:00Z'} for n in range(1, 41)]
+        with mock.patch.object(github.requests, 'get', side_effect=_paged(rows)):
+            got = github.list_items('tok', 'northwind/ledger', since='2026-11-18T09:00:00Z', state='all')
+        self.assertEqual(sorted(i['number'] for i in got), list(range(1, 41)))

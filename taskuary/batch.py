@@ -59,7 +59,7 @@ def repo_public(store, repo: str) -> bool:
     key = f'gh_public:{repo}'
     got = str(store.get_setting(key) or '')
     if got in ('0', '1'): return got == '1'
-    tok = _token(store)
+    tok = _token(store, repo)
     if not tok or not repo: return True
     from . import github
     try: pub = not github.repo_info(tok, repo).get('private', False)
@@ -246,7 +246,7 @@ REPORT = 'taskuary --item'
 def follow(store, it) -> bool:
     """Is this item's live head still the one it was reviewed at - or that one plus only the owner's own commits (the agent's fix
     pushed to the contributor's branch)? Then its Sha moves with it, so Merge pins to what is there. Any doubt: no."""
-    p, tok, t = pull(it.get('Link')), _token(store), it.get('Sha')
+    p = pull(it.get('Link')); tok, t = _token(store, p), it.get('Sha')
     if not (p and tok and t): return False
     from . import github
     try:
@@ -274,12 +274,14 @@ def pull(link: str):
     return (hit.group(1), int(hit.group(2))) if hit else None
 
 
-def _token(store) -> str: return (store.get_connector_by_type('github', with_secret=True) or {}).get('Secret') or ''
+def _token(store, repo='') -> str:
+    "The token of the GitHub card that reaches `repo` (owner/name, or pull()'s (repo, number)) - two accounts are two cards, two tokens."
+    return (store.github_for((repo[0] if isinstance(repo, tuple) else repo) or None, with_secret=True) or {}).get('Secret') or ''
 
 
 def _diff(store, link: str) -> tuple:
     """(diff, head sha) of a pull request - the sha is what the review was OF, and a merge is pinned to it."""
-    p, tok = pull(link), _token(store)
+    p = pull(link); tok = _token(store, p)
     if not p or not tok: return '', ''
     from . import github
     try: return github.pr_diff(tok, *p), github.pr(tok, *p).get('sha') or ''
@@ -292,7 +294,7 @@ DIFF_CHARS = 40000
 
 def _ci(store, link: str, sha: str) -> str:
     """GitHub's own verdict on this head, in words: the tests of a stranger's change run there, never here."""
-    p, tok = pull(link), _token(store)
+    p = pull(link); tok = _token(store, p)
     if not (p and sha and tok): return ''
     from . import github
     try: c = github.checks(tok, p[0], sha)
@@ -594,7 +596,7 @@ def act(store, tid, place: int, action: str, actor: str = 'owner') -> dict:
     if action == 'settle':
         set_item(store, tid, it['ConversationId'], actor, State='done'); return {'ok': True, 'state': 'done'}
     if action == 'fix': return fix(store, tid, it, actor)
-    p, tok = pull(it.get('Link')), _token(store)
+    p = pull(it.get('Link')); tok = _token(store, p)
     if not p: return {'ok': False, 'why': 'only a GitHub pull request can be merged or closed from here - open it where it lives'}
     if not tok: return {'ok': False, 'why': 'the GitHub card has no token - connect it under Connections first'}
     from . import github

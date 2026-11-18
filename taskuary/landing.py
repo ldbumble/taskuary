@@ -537,7 +537,7 @@ def land(store, tid: int, how: str, actor: str = 'owner') -> dict:
     try: return _land(store, tid, how, actor)
     except Refused as e:
         store.audit('task', tid, 'land_refused', actor, detail={'how': how, 'why': str(e)[:300]})
-        _hand_back(store, tid, f"The owner pressed {HOW.get(how, how)} on your work and it was refused: {e}. Nothing went out, and the question "
+        _hand_back(store, tid, f"The owner pressed {HOW.get(how, how)} on your work and it was refused: {e}. The question "
                                "stays on the task. Do what that needs from your side, then ask for it again (propose_land) - or say in a line why you cannot.")
         raise
 
@@ -693,21 +693,29 @@ def _push(store, tid, s, how, actor) -> dict:
     follows it as it follows any push."""
     from . import ci
     cwd, base, p = s['cwd'], s['base'], s['push']
-    tip, done = p['tip'], []
+    tip, done, refused = p['tip'], [], ''
     for b in [base] + ([p['deploy']] if how == 'deploy' else []):
         rc, out, err = _run(cwd, 'push', 'origin', f'{tip}:refs/heads/{b}', timeout=180)
         if rc:
             why = ci.TOKEN_URL.sub('https://', (err or out))[:300]
             fix = ' - pull and rebase, then push again (never forced)' if re.search(r'non-fast-forward|fetch first|rejected', why) else ''
-            raise Refused(f"the push of {tip[:7]} to {b} was refused: {why}{fix}" + (f' - {done[0]} was pushed' if done else ' - nothing was pushed'))
+            if not done: raise Refused(f"the push of {tip[:7]} to {b} was refused: {why}{fix} - nothing was pushed")
+            # ...THE BASE WENT, THE DEPLOY DID NOT (stress round, 2026-11-18): refused as a whole, the agent heard "Nothing went out, and the
+            # question stays" - and none stayed, the base having nothing left to push. What went is kept as the push it is; the rest is said
+            refused = f" The deploy to {b} was refused: {why}{fix}."
+            break
         done.append(b)
-    if how == 'deploy' and s['repo']: store.set_setting(f"{DEPLOY_KEY}:{s['repo'].lower()}", p['deploy'], actor)
+    went = 'deploy' if how == 'deploy' and not refused else 'push'
+    if went == 'deploy' and s['repo']: store.set_setting(f"{DEPLOY_KEY}:{s['repo'].lower()}", p['deploy'], actor)
     ci._save_push(store, tid, {'repo': s['repo'], 'branch': base, 'from': base, 'sha': tip, 'commits': p['ahead'], 'state': 'pushed',
                                'url': f"https://github.com/{s['repo']}/commit/{tip}" if s['repo'] else '', 'checks': None, 'checked_at': None}, actor)
-    said_ = f"Pushed {plural(p['ahead'], 'commit')} to origin/{base} ({tip[:7]})" + (f" and deployed it to {p['deploy']}." if how == 'deploy' else '.')
-    out = _landed(store, tid, how, said_, actor, tip, **({'deploy': p['deploy']} if how == 'deploy' else {}))
+    said_ = f"Pushed {plural(p['ahead'], 'commit')} to origin/{base} ({tip[:7]})" + (f" and deployed it to {p['deploy']}." if went == 'deploy' else '.') + refused
+    out = _landed(store, tid, went, said_, actor, tip, **({'deploy': p['deploy']} if went == 'deploy' else {}))
     # ...the press was the go-ahead the agent waits on: its next turn checks it and finishes
-    _hand_back(store, tid, f"{said_} The owner pressed {HOW[how]} on your proposal. " + ("Check it is live, then finish." if how == 'deploy' else "Finish the task."))
+    _hand_back(store, tid, f"{said_} The owner pressed {HOW[how]} on your proposal. " + (
+        "Check it is live, then finish." if went == 'deploy' else
+        f"Do what the refusal needs, then deploy {tip[:7]} to {p['deploy']} with your own `git push` - it is held for the owner's press - or say in a line why you cannot."
+        if refused else "Finish the task."))
     return out
 
 
@@ -717,12 +725,15 @@ def _pr(store, tid, s, actor) -> dict:
     from . import ci, github
     cwd, base, br, repo = s['cwd'], s['base'], s['branch'], s['repo']
     if not repo: raise Refused("this checkout's origin is not a GitHub repository - push it and open the pull request by hand")
-    c = ci._conn(store, repo)
+    # ...GITHUB'S NO IS THE LANDING'S NO (stress round, 2026-11-18): its own error passed land()'s handler - no line kept, the agent never told
+    try: c = ci._conn(store, repo)
+    except RuntimeError as e: raise Refused(f'{e} - nothing was pushed') from e
     rc, out, err = _run(cwd, 'push', '-u', 'origin', br, timeout=180)
     if rc: raise Refused(f"the push of {br} was refused: {ci.TOKEN_URL.sub('https://', (err or out))[:300]} - no pull request opened")
     t = store.get_task(tid) or {}
     body = f"Opened by Taskuary for {task_ref(tid)}.\n\n{(t.get('Summary') or '')[:1500]}"
-    pr = github.open_pr(c['Secret'], repo, br, base, f"[{task_ref(tid)}] {t.get('Title') or 'work'}"[:120], body)
+    try: pr = github.open_pr(c['Secret'], repo, br, base, f"[{task_ref(tid)}] {t.get('Title') or 'work'}"[:120], body)
+    except Exception as e: raise Refused(f"{br} was pushed, but no pull request was opened: {str(e)[:300]}") from e
     pr['repo'], pr['checks'], pr['checked_at'] = repo, None, None
     ci._save_pr(store, tid, pr, actor)
     return _landed(store, tid, 'pr', f"Pushed {br} and opened pull request #{pr['number']} into {base}: {pr.get('url')}", actor,

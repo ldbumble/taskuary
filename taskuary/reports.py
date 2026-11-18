@@ -58,7 +58,7 @@ def wide_rows():
     finally: _WIDE.reset(tok)
 
 
-def rows_out(rows, limit, unit='rows', mine=True):
+def rows_out(rows, limit, unit='rows', mine=True, how='set "max rows" on this source'):
     """(headline, body) from executor rows, SAYING SO when the result was cut. A silent cap
     made the AI describe 20 rows of a TOP 500 query as 'all of them' - fetch one extra row
     and the headline can tell the truth instead."""
@@ -67,7 +67,7 @@ def rows_out(rows, limit, unit='rows', mine=True):
         n = rows[0]['rows_affected']; return f"{n} row{'s' * (n != 1)} changed", json.dumps(rows[0])
     more = len(rows) > limit
     rows = rows[:limit]
-    why = (f'capped at {limit}' if mine else f'capped at the default {limit}') + ' — set "max rows" on this source to see more'
+    why = (f'capped at {limit}' if mine else f'capped at the default {limit}') + f' — {how} to see more'
     # one row is "1 row", one sign-in "1 sign-in": the unit's first word loses its plural s ("1 rows" was every one-row report)
     w, _, rest = unit.partition(' ')
     one = (w[:-1] if len(rows) == 1 and w.endswith('s') and not w.endswith(('ss', 'ings', 'ies')) else w) + (f' {rest}' if rest else '')

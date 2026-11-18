@@ -5274,10 +5274,17 @@ def closeout_act(rid: int, act: str):
     p = json.loads(rv.get('DraftText') or '{}')
     seen = ghcloseout.assess(store, p['repo'], int(p['number']))
     if act not in seen['offers']: raise HTTPException(422, f"{'Update branch' if act == 'update' else 'Re-run checks'} is not offered for this pull request now")
-    tok = ci._conn(store)['Secret']
+    tok = ci._conn(store, p['repo'])['Secret']
     try:
         if act == 'update': said = f"Update branch: {github.update_branch(tok, p['repo'], int(p['number']), seen['pr'].get('sha'))}"
-        else: said = f"Re-ran the failed checks on {github.rerun_failed(tok, p['repo'], seen['pr']['sha'])} workflow run(s)"
+        else:
+            n = github.rerun_failed(tok, p['repo'], seen['pr']['sha'])
+            # ...none of the red checks is a GitHub Actions run (another CI's status): nothing re-ran, and nothing will pass by waiting
+            if not n:
+                try: red = ', '.join(f['name'] or '?' for f in github.checks(tok, p['repo'], seen['pr']['sha'])['failed'])
+                except Exception: red = ''
+                raise HTTPException(422, f"Nothing was re-run: no GitHub Actions run failed on this commit{f' - {red} runs elsewhere; re-run it there' if red else ''}")
+            said = f"Re-ran the failed checks on {n} workflow run{'s' if n != 1 else ''}"
     except github.Refused as e:
         github.learn(tok, p['repo'], e); raise HTTPException(422, str(e))
     except (RuntimeError, requests.RequestException) as e: raise HTTPException(422, str(e))

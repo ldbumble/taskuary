@@ -284,9 +284,10 @@ def _outward(cmd: str, own: bool = True) -> list:
         import re
         return [{'tool': '?', 'what': 'run a command that may push, publish or send', 'why': OUT, 'command': raw[:400]}] if re.search(
             r'\b(git\s+push|gh\s+(pr|issue|release|repo|api)|glab|publish|sendmail|send-mailmessage)\b', low) else []
-    out = []
+    out, moved = [], False
     for argv in segs:
         tool, w = _words(argv)
+        if tool in MOVES: moved = True
         if tool in ('bash', 'sh', 'powershell', 'pwsh', 'cmd'):                 # `bash -c "git push"`: the string is a command of its own
             for t in argv[1:]:
                 if ' ' in t.strip(): out += _outward(t, own)
@@ -298,8 +299,51 @@ def _outward(cmd: str, own: bool = True) -> list:
         if not what and tool in ('gh', 'glab') and w[:1] == ['api'] and _api_writes(argv): what = 'change something on the code host through its API'
         if not what and tool == 'git' and w[:1] == ['push']: what = GIT['push']
         if not what and tool in HTTP: what = _http_write(argv, own)
-        if what: out.append({'tool': tool, 'what': what, 'why': OUT, 'command': ' '.join(argv)[:400]})
+        if what: out.append({'tool': tool, 'what': what, 'why': OUT, 'command': ' '.join(argv)[:400], 'to': '?' if moved else _to(tool, argv, w)})
     return out
+
+
+# WHERE A STEP GOES, as its tool's own grammar names it (trusted): '' the checkout's own origin, else the owner/name it names, '?' when the
+# line names some other place - a URL or another remote for git, another folder, a `cd` before it. The trust is one repository's.
+MOVES = {'cd', 'pushd', 'popd', 'chdir', 'set-location', 'sl', 'push-location', 'pop-location'}
+
+
+def _named(n: str) -> str:
+    "owner/name of a repository a GitHub or GitLab CLI flag or URL names - `owner/name`, `HOST/owner/name` or an item's URL; '?' off the code hosts."
+    if n == '?': return '?'
+    m = re.match(r'^(?:https?://)?(?:([^/\s]+\.[^/\s]+)/)?([\w.-]+/[\w.-]+?)(?:\.git)?(?:/.*)?$', n, re.I)
+    if not m or (m.group(1) and m.group(1).lower() not in HOSTS): return '?'
+    return m.group(2).lower()
+
+
+_API_VALUED = {'-X', '--method', '-H', '--header', '-f', '-F', '--field', '--raw-field', '--input', '-q', '--jq', '-t', '--template', '--hostname',
+               '--cache', '-p', '--preview'}
+
+
+def _to(tool: str, argv: list, w: list) -> str:
+    a = [str(t) for t in argv]
+    env = {t.split('=', 1)[0].upper() for t in a if re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', t)}
+    if env & {'GIT_DIR', 'GIT_WORK_TREE', 'GH_REPO', 'GH_HOST', 'GITLAB_HOST'}: return '?'
+    if tool == 'git':
+        if any(t in ('-C', '--git-dir', '--work-tree') or t.startswith(('--git-dir=', '--work-tree=', '--repo', '--receive-pack', '--exec')) for t in a): return '?'
+        remote = w[1] if len(w) > 1 else ''
+        if remote in ('', 'origin'): return ''
+        h, r = host_repo(remote) if re.match(r'^([a-z][a-z0-9+.-]*://|[^@/\s]+@)', remote, re.I) else ('', '')
+        return r if h in HOSTS and r else '?'
+    named = [a[i + 1] for i, t in enumerate(a[:-1]) if t in ('-R', '--repo')] + [t.split('=', 1)[1] for t in a if t.startswith('--repo=')]
+    named += [t[2:] for t in a if t.startswith('-R') and len(t) > 2]
+    if w[:1] == ['api']:
+        rest, end = a[a.index('api') + 1:] if 'api' in a else [], ''
+        while rest and not end:
+            t = rest.pop(0)
+            if t in _API_VALUED: rest = rest[1:]
+            elif not t.startswith('-'): end = t
+        m = re.match(r'^/?(?:repos|projects)/([^/]+/[^/]+)(?:/|$)', end)
+        named.append(m.group(1) if m else '?')
+    named += [t for t in w if re.match(r'^https?://', t, re.I)]
+    got = {_named(n) for n in named}
+    got.discard('{owner}/{repo}')                                                       # gh fills these from the checkout itself
+    return '' if not got else got.pop() if len(got) == 1 else '?'
 
 
 def _pending(store, tid: int, sid: str, cmd: str, reads: list = ()):
@@ -337,12 +381,39 @@ RANK = {'read': 0, 'write': 1, 'admin': 2}
 
 def repo_of(cwd: str) -> str:
     "owner/repo of the checkout the command runs in, from its origin - '' when it is not one."
-    if not cwd: return ''
+    return next((r for _, r in _remote(cwd)), '')
+
+
+_URL = re.compile(r'^(?:[a-z][a-z0-9+.-]*://)?(?:[^@/\s]+@)?([^/:\s]+)(?::\d+)?[:/]+(.+?)(?:\.git)?/*$', re.I)
+
+
+def host_repo(url: str) -> tuple:
+    "(host, owner/name) of a git remote's URL - https, ssh or scp form - else ('', '')."
+    m = _URL.match(str(url or '').strip())
+    if not m: return '', ''
+    parts = [p for p in m.group(2).split('/') if p]
+    return (m.group(1).lower(), '/'.join(parts[-2:])) if len(parts) >= 2 else ('', '')
+
+
+def _remote(cwd: str, push: bool = False) -> list:
+    "[(host, owner/name)] of origin's URLs, insteadOf rewrites applied by git itself - every push URL when `push`, else only a code host's."
+    if not cwd: return []
     from . import spawn
-    try: url = spawn.run(['git', '-C', cwd, 'remote', 'get-url', 'origin'], capture_output=True, text=True, timeout=5).stdout.strip()
-    except (OSError, subprocess.SubprocessError): return ''
-    m = re.search(r'[:/]([^/:]+/[^/]+?)(?:\.git)?/?$', url)
-    return m.group(1) if m and ('github' in url or 'gitlab' in url) else ''
+    try: out = spawn.run(['git', '-C', cwd, 'remote', 'get-url', *(['--push', '--all'] if push else []), 'origin'], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError): return []
+    urls = [u.strip() for u in str(out or '').splitlines() if u.strip()]
+    return [host_repo(u) for u in urls if push or 'github' in u or 'gitlab' in u]       # a push's every URL counts: the card's host decides
+
+
+def card_host(card: dict) -> str:
+    "The host a code-host card reaches: github.com, or a GitLab card's own instance (gitlab.com unless its base_url says otherwise)."
+    if str(card.get('Type') or '').lower() != 'gitlab': return 'github.com'
+    try: base = str((json.loads(card.get('ConfigJson') or '{}') or {}).get('base_url') or '')
+    except (TypeError, ValueError): base = ''
+    return (host_repo((base or 'https://gitlab.com').rstrip('/') + '/x/y')[0]) or 'gitlab.com'
+
+
+HOSTS = {'github.com', 'gitlab.com'}
 
 
 def trusted(store, cwd: str, todo: list) -> str:
@@ -350,14 +421,17 @@ def trusted(store, cwd: str, todo: list) -> str:
     # ...asked of git only when some code-host card trusts its repos at all: a command on a machine with none never runs `git remote`
     srcs = [s for s in store.list_sources(active_only=False) if s.get('Channel') in ('github', 'gitlab') and s.get('ConnectorId')]
     if not any(RANK.get(str((store.get_connector(s['ConnectorId']) or {}).get('Scope') or 'read').lower(), 0) >= 1 for s in srcs): return ''
-    repo = repo_of(cwd)
-    if not repo: return ''
+    # ...WHERE A PUSH GOES, not what the fetch URL says: origin's push URLs, every one of them on the card's own host. An origin that only
+    # mentions a code host (`https://evil.example/github/northwind/ledger.git`) or a pushurl set apart from it is not that repository
+    got = set(_remote(cwd, push=True))
+    if len(got) != 1: return ''
+    host, repo = got.pop()
     src = next((s for s in srcs if str(s.get('Address') or '').lower() == repo.lower()), None)
     card = store.get_connector(src['ConnectorId']) if src else None
-    if not card: return ''
+    if not card or host not in (card_host(card), 'ssh.' + card_host(card)): return ''
     level = RANK.get(str(card.get('Scope') or card.get('ScopeDefault') or 'read').lower(), 0)
     ok = ADMIN_OK if level >= 2 else WRITE_OK if level >= 1 else set()
-    return repo if all(a.get('what') in ok and a.get('why') == OUT for a in todo) else ''
+    return repo if all(a.get('what') in ok and a.get('why') == OUT and str(a.get('to', '?')).lower() in ('', repo.lower()) for a in todo) else ''
 
 
 def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '', ask: bool | str = False, about: str = '', reads: list = ()) -> dict:

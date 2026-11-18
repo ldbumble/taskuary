@@ -87,7 +87,7 @@ test("a card read from its review keeps the review's Connect", () => {
   assert.deepEqual(cardOf(rv({ action: "run_tool", type: "jira_comment", item: "NW-12", body: "Done." }, { Connect: fix })).connect, fix);
   assert.equal(cardOf(rv(POST)).connect, null);
   assert.equal(cardOf(rv(POST, { Connect: fix, Status: "approved" })).connect, null);
-  // ...and a press that failed is said as failed, never "Not posted Â· dismissed" - he dismissed nothing
+  // ...and a press that failed is said as failed, never "Not posted · dismissed" - he dismissed nothing
   const failed = cardOf(rv(POST, { Status: "superseded", ActError: "the network refused the post" }));
   assert.equal(stateOf(failed).failed, true);
 });

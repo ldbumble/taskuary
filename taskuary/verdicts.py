@@ -787,6 +787,13 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
         return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': 'only a pull request close-out can be closed or merged that way'}
     if rv.get('Kind') == 'action':
         from . import proposals
+        # ...A HELD STEP ITS AGENT IS STILL WORKING BESIDE is not run, and not failed (shellgate.mid_turn): it waits, lit, for the press it asks
+        # for - raised inside the act, it was settled as failed under "press it again" and its agent, mid-turn, was woken with "IT FAILED"
+        # ...a read let in runs nothing in that folder, so it never waits on the turn (readgate)
+        if verb in ('approve', 'edit') and proposals._action(rv) == 'shell_act' and (p_ := json.loads(rv.get('DraftText') or '{}') or {}).get('command'):
+            from . import shellgate
+            if (busy := shellgate.mid_turn(store, rv['TaskId'], p_.get('sid'))):
+                return {'ok': False, 'status': 'pending', 'sent': None, 'busy': busy, 'send_error': busy}
         if not _claim_act(store, rid): return _act_busy(store, rid)   # every verb: a No over a running Yes would mark a merged pull request rejected
         try:
             if verb == 'close_pr':

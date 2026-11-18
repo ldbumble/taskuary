@@ -77,10 +77,57 @@ class HeldStepsOneCard(unittest.TestCase):
         self.assertFalse(out['ok']); self.assertEqual(out['busy'], sg.BUSY); self.assertEqual(ran, [])
         self.assertEqual([self.s.get_review(i)['Status'] for i in ids], ['pending'] * 3); self.assertEqual(told, [])
 
+    def test_a_single_press_while_its_agent_works_waits_lit_and_wakes_nobody(self):
+        # the phone's or the assistant's Approve on one held step (verdicts.decide, not the card's /steps): the busy refusal was raised inside
+        # the act, so the card was settled as failed - "press it again once its turn has ended" over a card with no Approve left - and the
+        # agent, mid-turn, was woken with "IT FAILED"
+        rv, told = self.hold('git push origin deploy'), []
+        busy = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, busy=True)
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': busy}, clear=True), \
+             mock.patch.object(general, 'tell', lambda st, t, said, *a, **k: told.append(said) or 'told'):
+            out = verdicts.decide(self.s, rv, 'approve')
+        self.assertFalse(out['ok']); self.assertEqual(out['busy'], sg.BUSY); self.assertFalse(out.get('act_failed'))
+        r = self.s.get_review(rv['ReviewId']); self.assertEqual(r['Status'], 'pending', 'still lit for the press it asks for'); self.assertFalse(r.get('ActError'))
+        self.assertEqual(told, [], 'nothing ran, nothing to tell')
+
+    def test_a_read_let_in_while_its_agent_works_is_granted_at_once(self):
+        # a read outside the task's folders runs nothing in the agent's folder: its yes never waits on the turn
+        sg.check(self.s, self.tid, 'run1', '', 'Bash', HELD, reads=[{'tool': 'read', 'what': 'read files outside this task', 'why': 'outside its folders', 'folder': '/srv/shared'}])
+        rv = self.s._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (self.tid,))[-1]
+        busy = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, busy=True)
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': busy}, clear=True), mock.patch.object(sg, '_tell', lambda *a, **k: None):
+            out = verdicts.decide(self.s, rv, 'approve')
+        self.assertTrue(out['ok'], out); self.assertEqual(self.s.get_review(rv['ReviewId'])['Status'], 'approved')
+
     def test_one_dismiss_dismisses_them_all_and_the_agent_hears_once(self):
         ids, out, ran, told, _ = self.run_all([0, 0, 0], 'reject')
         self.assertEqual(ran, []); self.assertEqual([self.s.get_review(i)['Status'] for i in ids], ['rejected'] * 3)
         [t] = told; self.assertIn('NOT done', t)
+
+    def test_a_second_press_on_an_answered_card_runs_nothing_and_tells_nobody(self):
+        # a double click, or the card pressed again from a page or phone that had not read the first press: the steps were already approved
+        # (or dismissed), so nothing failed - the agent was woken with "step 1 failed: this one was already approved" and the card read it
+        for verb in ('approve', 'reject'):
+            with self.subTest(verb=verb):
+                self.setUp(); ids, *_ = self.run_all([0, 0, 0], verb)
+                told = []
+                with mock.patch.object(sg, '_tell', lambda st, tid, t, **k: told.append(t)):
+                    again = sg.approve_steps(self.s, ids, verdicts.decide, 'owner', verb)
+                self.assertEqual(told, [], 'the agent heard the press once, at the first')
+                self.assertFalse(again['ok']); self.assertIsNone(again['failed'], 'nothing failed'); self.assertTrue(again.get('already'))
+                self.assertEqual({self.s.get_review(i)['Status'] for i in ids}, {'approved' if verb == 'approve' else 'rejected'})
+
+    def test_a_step_answered_on_its_own_stops_the_card_without_a_failure_and_the_agent_hears_what_ran(self):
+        ids = [self.hold(c)['ReviewId'] for c in ('git push origin deploy', 'git push origin master')]
+        verdicts.decide(self.s, self.s.get_review(ids[1]), 'reject')           # step 2 dismissed from an older card
+        told = []
+        def run(argv, **k): return SimpleNamespace(returncode=0, stdout=b'ok', stderr=b'')
+        with mock.patch('taskuary.spawn.run', run), mock.patch.object(sg.os.path, 'isdir', lambda p: p == HELD), \
+             mock.patch.object(sg, 'git_bash', return_value='bash'), mock.patch.object(sg, '_tell', lambda st, tid, t, **k: told.append(t)):
+            out = sg.approve_steps(self.s, ids, verdicts.decide)
+        self.assertIsNone(out['failed']); self.assertEqual([d['review'] for d in out['done']], [ids[0]])
+        self.assertEqual(self.s.get_review(ids[1])['Status'], 'rejected', 'its own answer stands')
+        [t] = told; self.assertIn('git push origin deploy', t); self.assertNotIn('failed', t)
 
     def test_only_held_shell_steps_go_together(self):
         rid = Factory(self.s).review(self.tid, kind='action', reason='x', draft=json.dumps({'action': 'comment_issue', 'body': 'hi'}))

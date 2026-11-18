@@ -2498,7 +2498,7 @@ def _assistant_payload(task_id: int, session=None):
             # ...by the turn that wrote it where that turn kept it (outputs.made_by), else by when it was made
             # ...never a file a card carries: it is drawn on that card (outputs.on_cards)
             'outputs': [{**o, 'after': by.get(o['path']) or at_turn(o.get('at'))} for by, cards in [(outputs.made_by(task_id), outputs.on_cards(store, task_id))]
-                        for o in outputs.listing(task_id) if o.get('name') not in cards],
+                        for o in outputs.made(store, task_id) if o.get('name') not in cards],      # ...never a file he attached (outputs.made)
             # ...and each EARLIER turn's own version of a file a later turn changed (outputs.turn_versions): drawn under that turn instead
             'turnOutputs': [o for cards in [outputs.on_cards(store, task_id)] for o in outputs.turn_versions(task_id) if o.get('name') not in cards],
             # ONE ENTRY PER CLI, and only the installed ones: this listed a provider per worker

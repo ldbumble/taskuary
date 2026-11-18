@@ -231,6 +231,24 @@ def turn_versions(tid: int) -> list:
     return out
 
 
+def his(store, tid: int) -> set:
+    "The names in task `tid`'s folder of the files the owner attached - named by the task's own words or a line of his (general.split_files)."
+    from . import general
+    t, out = store.get_task(tid) or {}, set()
+    lines = [general.split_files(t.get('Summary'))] + [general._line_of(c.get('Body')) if c.get('ActorType') == general.WAITING_TYPE else general.split_files(c.get('Body'))
+                                                       for c in store.list_comments(tid, internal=True) if c.get('ActorType') in (general.USER_TYPE, general.WAITING_TYPE)]
+    for f in (f for x in lines for f in x['files']):
+        try: out.add(rel(tid, Path(f)))
+        except (OSError, ValueError): continue
+    return out
+
+
+def made(store, tid: int) -> list:
+    "listing(tid) without what the owner attached (his) - unless a turn wrote it since (made_by): the files the work made."
+    mine, wrote = his(store, tid), made_by(tid)
+    return [r for r in listing(tid) if r['path'] not in mine or r['path'] in wrote]
+
+
 def listing(tid: int) -> list:
     "Every file in the task's outputs folder, newest first. Lock files and hidden files are not outputs; links are never followed."
     base = folder(tid)

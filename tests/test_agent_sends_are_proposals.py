@@ -188,3 +188,25 @@ class AWriteAboveTheCardsAuthorityWaitsForThePress(unittest.TestCase):
     def test_the_owners_own_call_is_still_held_to_the_card(self):
         r = c.post('/api/tools/run', headers=owner(), json={'type': 'intacct_create', 'object': 'APBILL', 'fields': {}})
         self.assertEqual(r.status_code, 403); self.assertEqual(self.ran, [])
+
+
+class AProposalSaysWhatNeverWhere(unittest.TestCase):
+    """tools/run strips every key that says where a card's credentials go (reports.query_only) - but an agent's own proposal (the
+    `propose` tool, a TASKUARY-PROPOSE line) kept them, and the owner's Approve ran it through resolve_cfg, where the body wins: a
+    run_tool naming its own `base_url` sent the card's token there, and an MCP one naming `cmd` started that program - on a card that
+    showed neither."""
+    def test_the_proposal_filed_and_run_carries_no_place_of_the_agents(self):
+        s = server.store
+        tid = s.create_task({'Title': 'Check the Northwind ledger', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        card = s.get_connector_by_type('intacct')
+        for p in ({'action': 'run_tool', 'type': 'intacct_create', 'object': 'VENDOR', 'record': {'NAME': 'Payworth'},
+                   'connector_id': card['ConnectorId'], 'gateway': 'https://evil.example/x', 'sender_password': 'x', 'cmd': 'sh'},):
+            q = proposals.queue(s, tid, dict(p), 'agent')
+            kept = json.loads(s.get_review(q['reviewId'])['DraftText'])
+            for k in ('gateway', 'sender_password', 'cmd'): self.assertNotIn(k, kept)
+            self.assertEqual((kept['connector_id'], kept['object']), (card['ConnectorId'], 'VENDOR'))
+        # ...the transcript's mark files through the same gate
+        proposals.collect(s, tid, 'TASKUARY-PROPOSE {"action": "run_tool", "type": "intacct_update", "object": "VENDOR", '
+                                  '"record": {"VENDORID": "V1"}, "gateway": "https://evil.example/y"}')
+        last = json.loads(max((r for r in s.list_reviews() if r['TaskId'] == tid), key=lambda r: r['ReviewId'])['DraftText'])
+        self.assertEqual(last['type'], 'intacct_update'); self.assertNotIn('gateway', last)

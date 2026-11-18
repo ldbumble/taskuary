@@ -388,12 +388,36 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
                'shown': 'They stand as ONE card: the owner reviews a few and does them all with one press; you hear the whole run once.'})
 
 
+# THE ARGUMENTS AS THE SCHEMA HAS THEM (the tools stress round, 2026-11-18): a model writes `cc: "paula@..."` where a list is asked, `answers:
+# "m12"` or `id: "attachment 12"` where a number is - its own ids as it was shown them. Each came back as a Pydantic dump or "invalid literal
+# for int()", or worse: a cc spelled out letter by letter. One rule for every tool, read off its own schema; what cannot be read says what to do
+_NUM = re.compile(r'\s*(?:[a-z]+[\s#-]*|#)?(\d+)\s*', re.I)
+def fit(name: str, args) -> dict:
+    """`args` as tool `name`'s schema has them: one value where a list is wanted is a list of it, a number written with its mark (m12, #12,
+    attachment 12, "20") that number. A required field missing, or a number that is none, is a ValueError saying what to give."""
+    s, a = TOOLS[name][2], dict(args or {}) if isinstance(args, dict) else {}
+    for k, p in (s.get('properties') or {}).items():
+        v, t = a.get(k), (p or {}).get('type')
+        if v is None: continue
+        if t == 'array' and not isinstance(v, (list, tuple)): a[k] = [v] if v != '' else []
+        elif t == 'integer' and (isinstance(v, bool) or not isinstance(v, int)):
+            if isinstance(v, float) and v.is_integer(): a[k] = int(v); continue
+            m = re.fullmatch(r'\s*-?\d+\s*', str(v)) or _NUM.fullmatch(str(v))
+            if not m: raise ValueError(f"{name}'s `{k}` is a number - {v!r} is not one; call it again with the number")
+            a[k] = int(m[1] if m.re is _NUM else m[0])
+    need = s.get('required') or ([] if a.get('items') else next((x['required'] for x in s.get('anyOf') or []), []))
+    if miss := [k for k in need if a.get(k) is None]:
+        raise ValueError(f"{name} needs {', '.join(f'`{k}`' for k in miss)} - call it again with "
+                         f"{'it' if len(miss) == 1 else 'them'} (find_tools {name} has its whole instructions)")
+    return a
+
+
 def _call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     """Run one tool for the session on task `tid`. `doors` are the server's own handlers for the acts that have one (tool_run, tick,
     reply, draft, propose), called with the caller's request so their own checks - owns_task, scopes, the send-to-proposal rule -
     are the ones that hold. Raises ValueError for a call the model can correct; the answer is text the model reads."""
     from . import mailsearch, verdicts
-    a = args or {}
+    a = fit(name, args)
     if name == 'search_messages':
         hits = mailsearch.search(store, a.get('sender', ''), a.get('subject', ''), a.get('words', ''), a.get('since', ''), a.get('until', ''),
                                  a.get('limit') or 20)
@@ -700,6 +724,10 @@ def failed(name: str, e: Exception) -> str:
     "ValueError: ... is not in the subpath of ...", and the agent read the owner that)."""
     detail = getattr(e, 'detail', None)                      # an HTTPException from a door: its words are the refusal
     if isinstance(e, KeyError): return f'{name} needs `{e.args[0] if e.args else "?"}` - call it again with it'
+    # ...and a door's own model refusing a field says which and how, never a Pydantic dump with its web address
+    if callable(getattr(e, 'errors', None)) and type(e).__name__ == 'ValidationError':
+        bad = '; '.join(f"`{'.'.join(map(str, x.get('loc') or ())) or '?'}` {str(x.get('msg') or 'is not right').lower()}" for x in e.errors()[:5])
+        return f'{name}: {bad} - call it again with that fixed (find_tools {name} has its whole instructions)'
     if detail is None and not isinstance(e, (ValueError, TypeError, PermissionError, LookupError)): logger.warning(f'mcp tool {name} failed: {e!r}')
     said = str(detail if detail is not None else e).strip()[:1000]
     return said or f'{name} did not work, and said nothing about why - try it once more, or tell the owner it failed'

@@ -141,7 +141,7 @@ class TheServer(unittest.TestCase):
             self.assertIn('unknown tool', r['error']['message'])
         # ...with no day, on a task with no reminder, nothing is "taken off": it says what to give
         r = rpc(theirs, 'tools/call', {'name': 'remind', 'arguments': {}}, headers=st).json()['result']
-        self.assertTrue(r['isError'], r); self.assertIn('no reminder is set', str(r))
+        self.assertTrue(r['isError'], r); self.assertIn('remind needs `when`', str(r)); self.assertFalse(self.s.get_task(theirs).get('RemindAt'))
         r = rpc(theirs, 'tools/call', {'name': 'remind', 'arguments': {'when': 'in 2 days'}}, headers=st).json()['result']
         self.assertFalse(r['isError'], r); self.assertTrue(self.s.get_task(theirs).get('RemindAt'))
         r = rpc(theirs, 'tools/call', {'name': 'check_back', 'arguments': {'when': 'tomorrow 9am', 'what': 'the export ran'}}, headers=st).json()['result']
@@ -371,6 +371,28 @@ class NewTaskTool(unittest.TestCase):
         self.assertFalse(err, said)
         rows = self.s._rows("SELECT Batch FROM review WHERE TaskId=?", (self.tid,))
         self.assertEqual([r['Batch'] for r in rows], [None])
+
+    def test_a_list_or_a_number_given_in_another_shape_is_read_as_the_schema_has_it(self):
+        "A lone cc address, an `answers` written m12, an attachment named \"attachment 12\": read as meant - never a Pydantic dump or a cc spelled letter by letter."
+        mid = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'r0', 'ConversationId': 'conv-r', 'Channel': 'email', 'FromName': 'Gail Moreno',
+                                  'FromEmail': 'gail@northwind.example', 'Subject': 'Renewal terms', 'BodyText': 'Ready for the call?',
+                                  'SentAt': '2026-10-21 08:00:00', 'Status': 'routed'})
+        from taskuary import origin
+        with mock.patch.object(origin, 'of_message', return_value=('person', None)), mock.patch.object(origin, 'of_task', return_value=('person', None)):
+            said, err = tool(self.tid, 'propose_reply', text='Yes - see you at ten.', cc='paula@northwind.example', answers=f'm{mid}')
+            self.assertFalse(err, said)
+            self.assertEqual(json.loads(said)['recipients']['cc'], ['paula@northwind.example'])
+            said, err = tool(self.tid, 'propose_email', to='erin@northwind.example', subject='Renewal', text='Notes attached.', cc='ray@northwind.example')
+            self.assertNotIn('p, a', said); self.assertNotIn('r, a, y', said)
+            self.assertEqual(json.loads(self.s.get_review(json.loads(said)['review_id'])['Deliver']).get('cc'), ['ray@northwind.example'])
+            said, err = tool(self.tid, 'read_attachment', id='attachment 77')
+            self.assertTrue(err); self.assertIn('no attachment 77', said)
+            said, err = tool(self.tid, 'search_messages', limit='ten')
+            self.assertTrue(err); self.assertIn('`limit` is a number', said)
+            for name, args, need in (('answer_invite', {}, '`answer`'), ('propose', {'why': 'x'}, '`action`'), ('person', {}, '`name`'),
+                                     ('set_up_meeting', {'title': 'Renewal'}, '`with`')):
+                said, err = tool(self.tid, name, **args)
+                self.assertTrue(err, said); self.assertIn(f'{name} needs {need}', said); self.assertNotIn('pydantic', said)
 
 
 def test_an_agent_is_told_to_offer_to_keep_code_it_wrote_as_a_routine():

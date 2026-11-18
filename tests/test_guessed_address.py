@@ -60,3 +60,16 @@ def test_a_guess_at_a_public_mail_service_is_not_refused_by_who_else_uses_it():
     out = slots.draft(s, tid, 'Hi Omar', to=f'omar.keller@{FREE}', subject='Saturday', guessed=[f'omar.keller@{FREE}'])
     assert out['ok'], out
     assert f'guessed, check before Send: omar.keller@{FREE}' in s.get_review(out['review_id'])['Reason']
+
+
+# ...and an address his mail knows is no guess, whatever the agent called it: marked guessed, anna@ was refused for the OTHER person his mail
+# knows at that company, and left out of the list - the agent was steered off the right address. It is drafted, and the card says no guess
+def test_a_guess_his_mail_already_knows_is_drafted_unmarked():
+    s = MemoryStore(); tid = own_task(s, 'general')
+    for i, (n, a) in enumerate((('Anna Lee', 'anna@bank.example'), ('Bob Ray', 'bob@bank.example'))):
+        s.add_message({'ExternalId': f'in-{i}', 'ConversationId': f'c-{i}', 'Channel': 'email', 'SourceName': 'alex@northwind.example',
+                       'FromName': n, 'FromEmail': a, 'Subject': 'Your account', 'BodyText': 'Hi', 'SentAt': '2026-08-26 11:58:17', 'Status': 'filed'})
+    out = slots.draft(s, tid, 'Hi Anna', to='Anna@bank.example', subject='Allowlist', guessed=['Anna@bank.example'])
+    assert out['ok'], out
+    rv = s.get_review(out['review_id'])
+    assert 'guessed' not in rv['Reason'] and 'guessed' not in json.loads(rv['Deliver'])

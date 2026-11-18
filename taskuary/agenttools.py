@@ -454,7 +454,7 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
 # THE ARGUMENTS AS THE SCHEMA HAS THEM (the tools stress round, 2026-11-18): a model writes `cc: "paula@..."` where a list is asked, `answers:
 # "m12"` or `id: "attachment 12"` where a number is - its own ids as it was shown them. Each came back as a Pydantic dump or "invalid literal
 # for int()", or worse: a cc spelled out letter by letter. One rule for every tool, read off its own schema; what cannot be read says what to do
-_NUM = re.compile(r'\s*(?:[a-z]+[\s#-]*|#)?(\d+)\s*', re.I)
+_NUM = re.compile(r'\s*(?:#|#?[a-z]+[=\s#]*)?(\d+)\s*', re.I)       # m12, #12, attachment 12, attachment #12, #report=4: the forms the app writes
 def fit(name: str, args) -> dict:
     """`args` as tool `name`'s schema has them: one value where a list is wanted is a list of it, a number written with its mark (m12, #12,
     attachment 12, "20") that number. A required field missing, or a number that is none, is a ValueError saying what to give."""

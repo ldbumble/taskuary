@@ -539,6 +539,16 @@ class NewTaskTool(unittest.TestCase):
             r = rpc(self.tid, 'tools/call', {'name': 'remember', 'arguments': bad}).json()['result']
             self.assertTrue(r['isError']); self.assertIn('arguments', r['content'][0]['text']); self.assertNotIn("has no attribute", r['content'][0]['text'])
 
+    # A NUMBER AS ITS LINK WRITES IT (the same round): share's `report` is "the N of #report=N", and an agent that copied the link whole -
+    # "#report=4" - was told it was "not a number"; and only the forms the app itself writes are numbers, never a sign or a stray mark
+    def test_a_number_written_as_the_link_that_carries_it_is_that_number(self):
+        for given in ('#report=4', 'report=4', 'report 4', '4', 4):
+            self.assertEqual(agenttools.fit('share', {'report': given, 'to': 'Gail Moreno', 'text': 'x'})['report'], 4)
+        for bad in ('x-5', '-5x', 'report/4', '4 or 5', '- 4', '#-4', '= 4'):
+            with self.assertRaises(ValueError): agenttools.fit('share', {'report': bad, 'to': 'Gail Moreno', 'text': 'x'})
+        self.assertEqual(agenttools.fit('read_attachment', {'id': 'attachment #12'})['id'], 12)
+        self.assertEqual(agenttools.fit('read_attachment', {'id': 'm12'})['id'], 12)
+
     def test_a_cc_written_as_one_string_is_told_to_be_a_list(self):
         said, _ = tool(self.tid, 'propose_email', to='erin@northwind.example', subject='Plans', text='See the sheet.', cc='gail@northwind.example, ray@northwind.example')
         got = json.loads(said)

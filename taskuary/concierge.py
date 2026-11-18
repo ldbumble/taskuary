@@ -1412,7 +1412,8 @@ def _start_agent(store, tid: int, table: dict | None, it: dict, verb: str, words
     t_ = o.get('taskId') or it.get('tid')
     queued = not on and bool(t_) and _queued(store, t_)
     if done.get('status') == 'done' and not str(o.get('start_error') or '').strip() and not (on or queued):
-        done = {**done, 'status': 'error', 'error': f"the agent on {o.get('ref') or it.get('ref') or 'it'} did not start"}
+        from . import effects
+        done = {**done, 'status': 'error', 'error': effects.held_why(store, t_)}
     if done.get('status') != 'done' or str(o.get('start_error') or '').strip():
         r = receipt_turn(store, done, actor, table=True)
         return {'say': r['say'], 'options': [], 'chips': r['chips'], 'decision': {'verb': 'setting'}, 'did': op['kind']}

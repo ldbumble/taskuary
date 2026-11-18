@@ -61,7 +61,17 @@ def _started(store, n, p, was, out):
     if o.get('started') or o.get('existing') or o.get('chat') or o.get('dispatch') == 'needs_repo': return ''
     t = o.get('taskId') or (n if p.get('_on') == 'task' else None)
     if t and store.get_dispatch(int(t)): return ''                                    # waiting its turn: queued, said so (funnel 'queued')
-    return f"the agent on {task_ref(t) if t else 'it'} did not start"
+    return held_why(store, t)
+
+
+def held_why(store, t) -> str:
+    """WHAT HELD A START, read from what the start itself read (the walks, 2026-11-18: "the agent on TQ-0005 did not start" over a task that
+    waited on the owner's Trust, and started the moment he gave it): a stranger's hold (origin.hold), else the reason the task keeps for a
+    start that did not happen (ingest.not_started) - "did not start" only where nothing says why."""
+    from . import ingest, origin
+    if t and (h := origin.hold(store, int(t))): return h['line'].rstrip('.')
+    why = next((c['Body'] for c in reversed(store.list_comments(int(t), internal=True)) if str(c.get('Body') or '').startswith(ingest.NOT_STARTED)), '') if t else ''
+    return why.rstrip('.') if why else f"the agent on {task_ref(t) if t else 'it'} did not start"
 
 def _continued(store, n, p, was, out):
     o = out if isinstance(out, dict) else {}

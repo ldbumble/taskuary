@@ -159,6 +159,21 @@ def test_an_agent_is_said_on_it_only_when_it_started(s):
     assert 'on it now' not in out['say'] and 'did not start' in out['say'], out['say']
 
 
+def test_a_start_that_did_not_happen_says_the_state_that_held_it(s):
+    # the walks, 2026-11-18: "Not done - the agent on TQ-0005 did not start" - it was waiting on the owner's Trust, and started the moment he
+    # gave it. The line reads what held the start, from the same state the start read: a stranger's hold, else the reason the task keeps
+    from taskuary import ingest, origin
+    t = task(s)
+    held = {'line': origin.HELD_LINE.format(who='Payworth Billing (billing@payworth.example)'), 'person': 'Trust Payworth', 'org': None,
+            'who': 'Payworth Billing', 'mids': [1]}
+    with mock.patch.object(origin, 'hold', return_value=held):
+        out = run(s, 'dispatch.prepare', t, {'kind': 'general'}, lambda: {'started': False, 'taskId': t})
+    assert out['status'] == 'error' and out['error'].startswith('You have not trusted Payworth Billing') and 'did not start' not in out['error'], out
+    t2 = task(s); ingest.not_started(s, t2, 'the agents are switched off under Settings')
+    out = run(s, 'dispatch.prepare', t2, {'kind': 'general'}, lambda: {'started': False, 'taskId': t2})
+    assert 'the agents are switched off under Settings' in out['error'], out
+
+
 def test_a_start_the_door_refused_says_its_reason(s):
     t = task(s)
     # ...the door's refusal is raised with its way past it (server.StartRefused), never handed back as an answer to misread

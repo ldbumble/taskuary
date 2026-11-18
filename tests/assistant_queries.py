@@ -96,11 +96,11 @@ CASES = [
     Q('bulk', 'approve all the drafts', 'review', c('review.each'), 'light:approve', freq=2),
     Q('bulk', 'mark all the approvals as done', 'review', c('pipe.close', select={'kind': 'review'}), 'did:pipe.close', freq=1),
     # ── item actions over the table ──
-    Q('item', 'reply to this', 'todo', c('reply'), 'draft:reply', freq=5),
-    Q('item', 'tell Marcus I will look at it this afternoon', 'todo', c('reply', text='I will look at it this afternoon'), 'draft:reply', freq=5),
-    Q('item', 'reply and loop Priya in', 'todo', c('reply', cc=['Priya Shah']), 'draft:reply', freq=3),
+    Q('item', 'reply to this', 'todo', c('reply'), 'open:#task=', freq=5),
+    Q('item', 'tell Marcus I will look at it this afternoon', 'todo', c('reply', text='I will look at it this afternoon'), 'open:#task=', freq=5),
+    Q('item', 'reply and loop Priya in', 'todo', c('reply', cc=['Priya Shah']), 'open:#task=', freq=3),
     Q('item', 'send it', 'review', c('approve'), 'light:approve', freq=5),
-    Q('item', 'redraft it shorter', 'review', c('redraft', text='shorter'), 'draft:redraft', freq=4),
+    Q('item', 'redraft it shorter', 'review', c('redraft', text='shorter'), 'open:#task=', freq=4),
     # THE ASSISTANT MAY START AN AGENT (the owner, 2026-11-02: "why can't assistant start an agent. i'm okay with that. it itself should not be
     # the agent"): the words press the row's own Send to agent - the task page's start, dispatch.prepare's road
     Q('item', 'send this to an agent', 'todo', c('regular_agent', text='find the 4,180 gap in the month-end close'), 'did:dispatch.prepare', freq=4),
@@ -243,7 +243,7 @@ CASES = [
     Q('typos', 'mark tihs done', 'todo', c('close'), 'pressed:close', freq=3),
     Q('typos', 'whats waitng on me', None, [c('pipe.list'), 'Ten things.'], 'read:pipe.list', freq=3),
     Q('typos', 'opne settigns', None, 'Here: [Settings](#settings=config).', 'link:#settings', tools=('pages',), freq=2),
-    Q('typos', 'repyl to marcus', 'todo', c('reply'), 'draft:reply', freq=3),
+    Q('typos', 'repyl to marcus', 'todo', c('reply'), 'open:#task=', freq=3),
     # ── WhatsApp-style short replies ──
     Q('short', 'yes', 'review', c('approve'), 'light:approve', freq=5),
     # a digit names a numbered chip only where numbered chips are drawn - a card under its line; a task drawn as its own view has none,
@@ -509,7 +509,7 @@ AREA_TASK = [
     Q('task', 'this is the same as TQ-0004, merge them', 'todo', c('task.merge', into=T4), 'light:split', view=TASK1V, freq=2),
     Q('task', 'hand this to Paula', 'todo', c('task.handoff', who='Paula Vance'), 'light:forward', view=TASK1V, freq=3),
     Q('task', 'share this with erin@northwind.example', 'todo', c('task.share', who='erin@northwind.example'), 'light:share_result', view=TASK1V, freq=2),
-    Q('task', 'reply to marcus saying we are looking into it', 'todo', c('reply', text='we are looking into it'), 'draft:reply', view=TASK1V, freq=4),
+    Q('task', 'reply to marcus saying we are looking into it', 'todo', c('reply', text='we are looking into it'), 'open:#task=', view=TASK1V, freq=4),
     # ── the Agent section: Send to agent with the job in its box, pressed for the owner (2026-11-02); a live one stopped ──
     Q('task', 'get an agent to find the 4,180', 'todo', c('regular_agent', text='find the 4,180 gap in the month-end close'), 'did:dispatch.prepare', view=TASK1V, freq=4),
     Q('task', 'put "reconcile against the bank statement" in the agent box and start it', 'todo',
@@ -535,11 +535,11 @@ AREA_TASK = [
     # ── the draft under Close out: fixed in its box, redrafted, its Send lit for the owner ──
     Q('task', 'fix the typo in the draft', 'review', ['Fixed "recieved".\n' + v(op='point', target='draft')],
       'view:point:', tools=('words',), view=TASK4V, freq=3),
-    Q('task', 'redraft it shorter', 'review', c('redraft', text='shorter'), 'draft:redraft', view=TASK4V, freq=3),
-    Q('task', 'cc gail on the reply', 'review', c('redraft', text='copy Gail Moreno'), 'draft:redraft', view=TASK4V, freq=2),
+    Q('task', 'redraft it shorter', 'review', c('redraft', text='shorter'), 'open:#task=', view=TASK4V, freq=3),
+    Q('task', 'cc gail on the reply', 'review', c('redraft', text='copy Gail Moreno'), 'open:#task=', view=TASK4V, freq=2),
     Q('task', 'scrap the draft, no reply needed', 'review', c('close'), 'pressed:close', view=TASK4V, freq=3,
       note='a reply draft is never rejected (the owner, 2026-10-01): Mark done closes it with nothing sent'),
-    Q('task', 'reject the draft', 'review', [c('review.reject'), c('redraft', text='write it again')], 'draft:redraft', view=TASK4V, freq=2,
+    Q('task', 'reject the draft', 'review', [c('review.reject'), c('redraft', text='write it again')], 'open:#task=', view=TASK4V, freq=2,
       tools=('review.reject',), note="the miss names Redraft and Mark done, the draft's real ways out"),
     Q('task', 'ask tom when it was paid', 'review', c('task.clarify', text='When was it paid?'), 'light:reply', view=TASK4V, freq=2),
     Q('task', 'aprove and send', 'review', ['Send is yours to press.\n' + v(op='point', target='row:approve')], 'view:point:row:approve', tools=('words',),

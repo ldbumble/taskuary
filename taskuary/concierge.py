@@ -6427,6 +6427,9 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # Only when the card cannot carry the verb itself: a reply to the person who wrote is still a reply.
     if decision and verb in ('reply', 'approve') and target_item and target_item.get('kind') == 'agent' and cannot(target_item, verb, store):
         decision, verb = {**decision, 'verb': 'answer_agent', 'text': decision.get('text') or text}, 'answer_agent'
+    # ...and A REPLY OR A REWRITE IS THE TASK'S AGENT'S (the owner, 2026-11-18: "it should just open the task, not do anything on the tasks"):
+    # on the desk the task comes up, and its agent drafts when he asks it there - the Assistant asks for no draft in his name
+    if decision and verb in ('reply', 'redraft') and routes() and (target_item or {}).get('tid'): return _opened(store, tid, int(target_item['tid']))
     if decision and verb and target_item:
         why = cannot(target_item, verb, store)
         # A PUT-DOWN ON THE BATCH ON THE TABLE is its own button's (the 2026-10-25 sweep): "done" over the open 4 fyi was answered "There is

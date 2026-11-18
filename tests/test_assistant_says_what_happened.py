@@ -37,17 +37,12 @@ def test_the_walk_is_thirty_asks_and_every_family_has_a_failure(walk):
             'handoff', 'email', 'search'} <= fams
 
 
-@pytest.mark.parametrize('family,fault', [('redraft', 'drafter returns nothing'), ('redraft', 'drafter returns the same words'),
-                                          ('redraft', 'drafter times out'), ('reply', 'drafter returns nothing')])
-def test_a_draft_that_did_not_change_never_wears_the_tick(walk, family, fault):
-    r = next(r for r in walk if r['ask'].family == family and r['ask'].note == fault)
-    assert '✓' not in r['said'] and '✗' in r['said'], r['said']
-    assert r['claim'] == 'failed'
-
-
-def test_a_rewrite_that_landed_says_so_from_the_box(walk):
-    r = next(r for r in walk if r['ask'].family == 'redraft' and not r['ask'].note)
-    assert r['did'] and '✓ Rewrote the draft on TQ-0004' in r['said']
+def test_a_reply_or_a_rewrite_opens_its_task_and_claims_no_draft(walk):
+    """The owner, 2026-11-18: the Assistant "should just open the task, not do anything on the tasks" - on the desk "reply to this" and
+    "rewrite the draft" open the task, its agent drafts there; the line says it opened it, never that a draft was written or rewritten."""
+    rs = [r for r in walk if r['ask'].family in ('reply', 'redraft')]
+    assert rs
+    for r in rs: assert r['said'].startswith('Opened TQ-') and '✓' not in r['said'] and 'draft' not in r['said'].lower(), r['said']
 
 
 # ---- operations: what an act promised is looked at after it ran ---------------------------------------------------------------------

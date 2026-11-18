@@ -208,12 +208,15 @@ class DeskRoutes(unittest.TestCase):
         self.assertEqual((out['say'], out['light']['line']), ('', ''))          # the lit button is the whole answer (2026-10-23)
         self.assertFalse(s.get_task(other).get('RemindAt'))
 
-    def test_send_erin_the_answer_drafts_and_sends_nothing(self):
-        s = store(); tid, item = on_table(s)
-        out, _ = say(s, 'send Erin the answer', item['key'], 'CALL: {"kind": "reply", "params": {"text": "the May numbers are attached"}}')
-        self.assertNotIn('proposal', out)
-        self.assertEqual(out['decision']['verb'], 'reply')                            # the page drafts it and lights Send (AssistantView)
-        self.assertEqual(s._rows("SELECT * FROM review WHERE TaskId=?", (tid,)), [])  # nothing drafted, nothing sent by the words
+    def test_send_erin_the_answer_opens_her_task_and_drafts_nothing(self):
+        """The owner's ruling (2026-11-18): the Assistant "should just open the task, not do anything on the tasks" - a reply or a redraft
+        asked of it on the walk opens the task, where its agent drafts when he asks it there. Nothing is drafted, nothing asked for, by the words."""
+        for model in ('CALL: {"kind": "reply", "params": {"text": "the May numbers are attached"}}', 'CALL: {"kind": "redraft", "params": {"text": "shorter"}}'):
+            s = store(); tid, item = on_table(s)
+            out, _ = say(s, 'send Erin the answer', item['key'], model)
+            self.assertNotIn('proposal', out)
+            self.assertEqual((out.get('open'), out.get('decision')), (f'#task={tid}', None), model)
+            self.assertEqual(s._rows("SELECT * FROM review WHERE TaskId=?", (tid,)), [])
 
     def test_turn_off_background_sync_opens_the_setting(self):
         s = store(); _, item = on_table(s)

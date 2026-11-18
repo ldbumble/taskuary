@@ -144,7 +144,8 @@ class TurnTests(unittest.TestCase):
         s = store()
         t, m, r = drafted(s)
         concierge.surface(s, key=f'review:{r}', llm=lambda *a, **k: 'Dana needs the corrected export.')
-        out = concierge.say(s, 'make it warmer', key=f'review:{r}', llm=lambda *a, **k: 'CALL: {"kind": "redraft", "params": {"text": "warmer"}}')
+        # ...on the phone; on the desk the task opens and its agent rewrites there (the owner, 2026-11-18 - test_assistant_router)
+        with phone(): out = concierge.say(s, 'make it warmer', key=f'review:{r}', llm=lambda *a, **k: 'CALL: {"kind": "redraft", "params": {"text": "warmer"}}')
         self.assertEqual(out['decision']['verb'], 'redraft')
         self.assertTrue(out['say'].startswith('Rewriting the draft on'), out['say'])
         self.assertNotIn('waits for', out['say'])
@@ -348,11 +349,11 @@ class DecisionTests(unittest.TestCase):
         # ...run at once by the page, just this once - no "are you sure" (owner-approved, 2026-10-21): From now on follows as a chip
         self.assertTrue(p.get('auto')); self.assertNotIn(concierge.WAITS, out['say'])
         # a reply request drafts at once and sends nothing (PW-126): the words ride into the draft
-        out = concierge.say(s, 'tell her the file is with the developer, Friday', key=f'review:{r}',
+        with phone(): out = concierge.say(s, 'tell her the file is with the developer, Friday', key=f'review:{r}',
                             llm=lambda sy, u, **k: "I'll draft that.\nCALL: {\"kind\": \"reply\", \"params\": {\"text\": \"the file is with the developer, Friday\"}}")
         self.assertEqual(_verb(out['decision']), ('reply', 'the file is with the developer, Friday')); self.assertIsNone(out.get('proposal'))
         told = lambda sy, u, **k: "I'll draft that.\nCALL: {\"kind\": \"reply\", \"params\": {\"text\": \"mention the Friday delivery\"}}"
-        out = concierge.say(s, 'can you mention the Friday delivery in the response', key=f'review:{r}', llm=told)
+        with phone(): out = concierge.say(s, 'can you mention the Friday delivery in the response', key=f'review:{r}', llm=told)
         self.assertEqual(_verb(out['decision']), ('reply', 'mention the Friday delivery'))
         # a remark is not a decision
         out = concierge.say(s, 'who is Dana again?', key=f'review:{r}', llm=lambda *a, **k: 'Dana is the vendor contact on the export.')

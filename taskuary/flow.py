@@ -701,13 +701,18 @@ def keep_cut_runs(store) -> list:
     "Every run of steps a restart cut, said on its record and its open task: [task ids]. At start-up, before any run can begin."
     from . import workflows
     out = []
-    for r in store._rows("SELECT RunId, SourceId, TaskId, StepsJson FROM report_run WHERE Type='flow' AND TaskId IS NOT NULL AND IFNULL(Summary,'')=''"):
+    for r in store._rows("SELECT RunId, SourceId, TaskId, StepsJson FROM report_run WHERE Type='flow' AND TaskId IS NOT NULL AND IFNULL(Summary,'')='' "
+                         "AND IFNULL(Failed,0)=0"):
         tid = r['TaskId']
         if workflows.at_work(tid) or (store.get_task(tid) or {}).get('Status') in (None, 'done', 'dropped'): continue
         try: recs = json.loads(r.get('StepsJson') or '[]') or []
         except ValueError: recs = []
         src = store.get_source(r['SourceId']) if r.get('SourceId') else None
         n = len(steps_of(workflows.cfg_of(src))) if src else len(recs)
+        # ...the walk's own shape says it was cut, not only the missing outcome (a run kept before outcomes were written has none): short of
+        # its last step, and not stopped on a yes or handed to its agent
+        if len([x for x in recs if x.get('status') != 'repaired']) >= n or (recs and (recs[-1].get('status') in ('waiting', 'failed')
+                                                                                       or recs[-1].get('kind') == 'agent')): continue
         words = CUT_RUN.format(done=sum(1 for x in recs if x.get('status') != 'repaired'), n=max(n, len(recs)))
         store.set_report_run_steps(r['RunId'], recs, True, words, None, words)
         # ...and the routine's row says it too, where its last run is this one (the Reports shelf reads LAST_RUN, never the run row)

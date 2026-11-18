@@ -551,6 +551,10 @@ def test_a_run_of_steps_the_restart_cut_says_so_and_is_not_walked_again(db):
     assert sum(c['Body'] == run['summary'] for c in s.list_comments(tid)) == 1
     last = json.loads(s.get_setting(f"report_last_run:{src['SourceId']}"))            # ...and the routine's row on the shelf says it too
     assert last['failed'] and last['summary'] == run['summary']
+    # ...and a run kept before outcomes were written, that did reach its end or stopped on a yes, is not taken for a cut one
+    done_ = run_task(s, src); s.add_report_run(src['SourceId'], {'type': 'flow', 'task_id': done_, 'steps': [{'id': f's{i}', 'status': 'ok'} for i in (1, 2, 3)]})
+    held = run_task(s, src); s.add_report_run(src['SourceId'], {'type': 'flow', 'task_id': held, 'steps': [{'id': 's1', 'status': 'ok'}, {'id': 's2', 'status': 'waiting'}]})
+    assert flow.keep_cut_runs(s) == []
 
 
 def test_a_repair_whose_answer_cannot_be_read_says_so_never_asks_the_owner_to_say_it_another_way(db):

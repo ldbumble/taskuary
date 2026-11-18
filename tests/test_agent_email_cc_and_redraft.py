@@ -30,6 +30,17 @@ def test_a_cc_that_is_no_address_is_refused_out_loud():
     assert slots.draft(s, tid, 'Hi', to='19:abc@thread.v2', channel='teams', cc=[GAIL])['ok'] is False
 
 
+def test_two_addresses_in_to_are_refused_at_the_draft_never_at_the_send():
+    # "paula@...; gail@..." (Outlook's own way of writing a list) stood on the card as ONE recipient, and failed only when the owner pressed
+    # Send - the provider refused the whole string. A mailto: link copied as the address went the same way
+    s = MemoryStore(); tid = own_task(s, 'general')
+    for to in (f'{PAULA}; {GAIL}', f'{PAULA}, {GAIL}'):
+        out = slots.draft(s, tid, 'Hi both', to=to, subject='Q4')
+        assert out['ok'] is False and 'cc' in out['why'] and not waiting(s, tid), out
+    out = slots.draft(s, tid, 'Hi Paula', to=f'mailto:{PAULA}', subject='Q4')
+    assert out['ok'] and deliver(s, out['review_id'])['to'] == [PAULA]
+
+
 def test_after_a_withdraw_the_corrected_email_to_the_same_person_is_written():
     s = MemoryStore(); tid = own_task(s, 'general')
     with mock.patch.object(server, 'store', s):

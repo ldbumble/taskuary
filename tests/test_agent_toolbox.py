@@ -539,6 +539,11 @@ class NewTaskTool(unittest.TestCase):
             r = rpc(self.tid, 'tools/call', {'name': 'remember', 'arguments': bad}).json()['result']
             self.assertTrue(r['isError']); self.assertIn('arguments', r['content'][0]['text']); self.assertNotIn("has no attribute", r['content'][0]['text'])
 
+    def test_a_cc_written_as_one_string_is_told_to_be_a_list(self):
+        said, _ = tool(self.tid, 'propose_email', to='erin@northwind.example', subject='Plans', text='See the sheet.', cc='gail@northwind.example, ray@northwind.example')
+        got = json.loads(said)
+        self.assertFalse(got['ok']); self.assertIn('list', got['why'])
+
     def test_a_routines_email_that_went_at_once_is_never_spoken_of_as_a_waiting_card(self):
         "A routine run's own email is sent by the draft itself (slots.routine_sends): the agent was told its card \"shows that it waits and that nothing went\"."
         from taskuary import selfclose, slots

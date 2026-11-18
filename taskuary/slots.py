@@ -183,7 +183,7 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         mailbox = box['address']
     cc = [a for a in (split(x)[1] for x in ([cc] if isinstance(cc, str) else cc or [])) if a]
     if cc and channel != 'email': return {'ok': False, 'why': f'{channel} has no cc - only an email can copy somebody in'}
-    if bad := [a for a in cc if not is_address(a)]: return {'ok': False, 'why': f"cc takes email addresses - {', '.join(bad)} is not one"}
+    if bad := [a for a in cc if not is_address(a)]: return {'ok': False, 'why': f"cc is a list of email addresses, one to an entry - {', '.join(bad)} is not one"}
     cc = [a.lower() for a in cc]
     if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return {'ok': False, 'why': 'that task is closed'}
     to = split(to)[1] if channel == 'email' else ' '.join(str(to or '').split())

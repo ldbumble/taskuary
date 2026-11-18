@@ -2263,6 +2263,16 @@ def _make_task(store, i: dict, a: dict, agent: bool, actor: str) -> dict:
     return {'taskId': tid, 'ref': task_ref(tid)}
 
 
+def taken_up(store, idea_id: int, a: dict, verb: str) -> dict | None:
+    "What an earlier press of this idea made, while it stands: the open task a Make a task or Send to agent made, the rule a Make it a rule made."
+    took = a.get('took')
+    if verb == 'rule':
+        pid = a.get('policyId') if took == 'rule' else None
+        return {'ok': True, 'policyId': pid, 'already': 'rule'} if pid and any(p['PolicyId'] == pid for p in store.list_policies(active_only=False)) else None
+    t = linked_task(store, idea_id, a) if took in ('task', 'agent') else None
+    return {'taskId': t['TaskId'], 'ref': task_ref(t['TaskId']), 'already': took} if t else None
+
+
 def act(store, idea_id: int, verb: str, actor: str = 'owner', days: int = 1, until: str = None, line: str = None, yes: bool = None) -> dict:
     """One word on one idea. Every word writes the IDEA's own status - the rail's used to write only the rail's,
     and the Advisor went on listing an idea the owner had put down as open (I4, 2026-09-27)."""
@@ -2299,12 +2309,13 @@ def act(store, idea_id: int, verb: str, actor: str = 'owner', days: int = 1, unt
     elif verb == 'accept': raise ValueError('only a workstream card is added')
     # PRESSED TWICE (a double click, the desk and the phone a beat apart): the idea was taken up already, and its task is still open - the
     # second press finds it and starts nothing. Put to the agent again, the brief went in twice; taught again, the verdict counted twice
-    if verb in ('task', 'agent') and a.get('took') and (t := linked_task(store, idea_id, a)):
-        return out | {'taskId': t['TaskId'], 'ref': task_ref(t['TaskId']), 'already': a['took']}
+    # ...and so is its rule: made twice, it was two rules for one sender and the ledger's "ignored" counted twice
+    if verb in ('task', 'agent', 'rule') and (been := taken_up(store, idea_id, a, verb)): return out | been
     if verb in ('task', 'agent'): out |= _make_task(store, i, a, verb == 'agent', actor)
     if verb == 'rule':
         from . import promote
         out |= promote.accept(store, i, a, actor)
+        store.set_idea_action(idea_id, a | {'took': 'rule', 'policyId': out.get('policyId')})
     store.set_idea_status(idea_id, 'dismissed' if verb in ('dismiss', 'dismiss_kind') else 'done', actor)
     store.audit('idea', idea_id, verb, actor, detail={'kind': i.get('Kind')})
     _keep_verdict(store, i, verb, actor)

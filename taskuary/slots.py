@@ -102,7 +102,11 @@ def settled(store, rv: dict, sent: bool, actor: str) -> bool:
     sid, tid = of_review(rv), rv.get('TaskId')
     if not (sid and tid): return False
     mark(store, tid, sid, done=True, actor=actor)
-    return _left(store, tid, f"{'Sent' if sent else 'Dropped'}: {rv.get('Reason') or 'one of its emails'}.", actor)
+    # ...named by whom it was to: its card's Reason is a sentence about the card ("routine wrote this email - approve to send", or after a
+    # failed try "Not sent: ..."), and read "Sent: Not sent: the mail server refused.." over an email that had just gone
+    try: to = ', '.join((json.loads(rv.get('Deliver') or '{}') or {}).get('to') or [])
+    except (TypeError, ValueError): to = ''
+    return _left(store, tid, f"{'Sent' if sent else 'Dropped'}: the email to {to}." if to else f"{'Sent' if sent else 'Dropped'}: one of its emails.", actor)
 
 
 def _left(store, tid: int, said: str, actor: str) -> bool:

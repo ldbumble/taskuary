@@ -2307,8 +2307,8 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
             # task's reply source, so Close out says "Answering <them>" and the row leads with Reply (store.promised_in, 2026-10-26)
             'owed': _owed(d),
             'artifacts': [_artifact_row(a) for a in d.get('artifacts') or []],
-            # The detail page only needs lifecycle here; its terminal pane and optional WorkStrip
-            # load their own rich data. Do not block selecting a task on git status.
+            # The detail page only needs lifecycle here; its terminal pane loads its own rich data.
+            # Do not block selecting a task on git status.
             'session': session,
             # ...and a start UNDER WAY before it has a session (general.OPENING: a quick call, a Continue, a carried-on turn), or one waiting
             # on a free agent slot: the Agent section says "Starting…" or "Waiting its turn" at once, not when the session first speaks (2026-11-04)

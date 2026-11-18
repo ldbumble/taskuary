@@ -139,6 +139,7 @@ AGENT_WRITES = (
     (r'POST', r'^/api/hooks/claude/(floor|permit)$', "a stranger's session asking the floor, or the owner, before a tool call"),
     (r'POST', r'^/api/hooks/claude/reason$', "the Reason Network hook - a message to someone untrusted is refused, an approval goes to the owner"),
     (r'POST', r'^/api/hooks/claude/browser$', "the browser hook - an act that can't be undone is held for the owner (browsergate)"),
+    (r'POST', r'^/api/agent/gate$', "a browser or desktop command asking before it runs (gatecmd) - a press that can't be undone is held for the owner"),
     (r'POST', r'^/api/agent/(reply|done|draft|item|tick|waiting|not-needed|withdraw-draft|check-back|todos|remind|remember|new-task)$',
      "`taskuary --reply/--done/--draft/--item/--tick/--waiting-on/--reply-not-needed/--withdraw-draft/--check-back`, the todos, remind and "
      "remember tools, on the session's OWN task (owns_task); nothing leaves"),
@@ -299,7 +300,7 @@ def stranger_tid(server: dict, presented) -> int | None:
 # --draft/--item/--tick`, whose task id owns_task checks in the handler - and `taskuary --note`, whose note the board door pins to
 # the token's own task, so it never reaches another session's seed (blackboard.live_notes, wave B). Not the Hub, the data
 # tools or a report rerun: each of those reaches past its own task.
-_STRANGER_WRITES = (re.compile(r'^/api/hooks/[a-z]+$'), re.compile(r'^/api/agent/(reply|done|draft|item|tick|waiting|not-needed|withdraw-draft)$'), re.compile(r'^/api/board/notes$'))
+_STRANGER_WRITES = (re.compile(r'^/api/hooks/[a-z]+$'), re.compile(r'^/api/agent/(reply|done|draft|item|tick|waiting|not-needed|withdraw-draft|gate)$'), re.compile(r'^/api/board/notes$'))
 # ...and Taskuary's tools on its own task alone (server.mcp_rpc serves it agenttools.STRANGER_TOOLS only, 2026-11-09)
 _STRANGER_TASK_HOOK = re.compile(r'^/api/(hooks/claude/(floor|permit)|mcp)$')
 _STRANGER_FILE = re.compile(r'^/api/(attachments|task-artifacts)/(\d+)$')

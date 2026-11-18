@@ -1,11 +1,12 @@
 """BROWSER ACTS THAT CAN'T BE UNDONE WAIT FOR THE OWNER'S PRESS (browsergate.py): a look passes without a model; any other
 agent-browser command is judged by the model over the page; irreversible, unsure or unjudged is held as a proposal on the task and
 refused to the agent; the owner's Approve runs that exact command on that same page and tells the agent; Dismiss tells it no."""
-import json, re, time, unittest
+import json, os, re, time, unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from taskuary import browsergate as bg, browserview, hooks, proposals, verdicts
+from taskuary import browsergate as bg, browserview, gatecmd, hooks, proposals, verdicts
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -99,7 +100,6 @@ class Reading(unittest.TestCase):
                     'echo @e3 | xargs agent-browser click', "agent-brows''er click @e3", 'stdbuf -oL agent-browser click @e3'):
             [a] = bg.acts(cmd)
             self.assertEqual(a['verb'], 'click', cmd)
-            self.assertTrue(hooks.needs_gate(cmd), cmd)
         self.assertEqual(bg.acts('timeout 30 agent-browser snapshot -i'), [], 'a look behind a launcher is still a look')
         self.assertEqual(bg.acts('grep -rn agent-browser notes.md'), [], 'naming the tool to another program is no call of it')
 
@@ -236,20 +236,6 @@ class Holding(unittest.TestCase):
         self.assertEqual([json.loads(r['DraftText'])['what'] for r in self.pending()],
                          ['pays the $412.50 order on toll.example', 'closes the account on toll.example'])
 
-    def test_the_boxes_filled_before_a_held_press_in_one_line_go_in_and_nothing_after_it_runs(self):
-        """The real-CLI walk, 2026-11-16: "fill name && fill email && click Next" was held whole - the boxes were never filled, the owner was
-        handed an empty form "left as you filled it", and every press of his was refused by the site. The acts the gate passes on their own,
-        before the held one, run first and in order; the held one waits; what comes after it does not run. One ask for the line (2026-11-17)."""
-        ran, calls, ok = [], [], {'irreversible': False, 'sure': True, 'what': 'fills the sign-up'}
-        cmd = ("agent-browser fill @e1 'Alex Doyle' && agent-browser fill @e2 alex@northwind.example && agent-browser check @e4 && "
-               "agent-browser click @e12 && agent-browser fill @e3 x")
-        with on(), answers(ok, ok, ok, {'irreversible': True, 'sure': True, 'what': 'goes to step 2 of the sign-up'}, ok, calls=calls),                 mock.patch.object(bg, '_run', lambda sid, args, wait, tag: ran.append(args) or (0, '')):
-            out = bg.check(self.s, self.tid, 'run1', cmd, Brain(None))
-        self.assertEqual(out['hookSpecificOutput']['permissionDecision'], 'deny')
-        self.assertEqual(ran, [['fill', '@e1', 'Alex Doyle'], ['fill', '@e2', 'alex@northwind.example'], ['check', '@e4']])
-        [rv] = self.pending(); self.assertEqual(json.loads(rv['DraftText'])['args'], ['click', '@e12'])
-        self.assertEqual(len(calls), 1)
-
     def test_a_line_of_acts_is_one_ask_not_one_per_act(self):
         # 2026-11-17: a sign-up's four fills and ticks were four model calls in a row, each with the same page, before the hook could answer
         calls, ok = [], {'irreversible': False, 'sure': True, 'what': 'fills the form'}
@@ -258,15 +244,6 @@ class Holding(unittest.TestCase):
                                                      'agent-browser click @e4', Brain(None))
         self.assertEqual((out, len(calls)), ({}, 1))
 
-    def test_an_answer_short_of_the_line_holds_from_the_first_act_it_left_out(self):
-        ran, ok = [], {'irreversible': False, 'sure': True, 'what': 'fills the form'}
-        with on(), answers(ok, ok), mock.patch.object(bg, '_run', lambda sid, args, wait, tag: ran.append(args) or (0, '')):
-            out = bg.check(self.s, self.tid, 'run1', 'agent-browser fill @e1 "a" && agent-browser fill @e2 "b" && agent-browser check @e3 && '
-                                                     'agent-browser click @e4', Brain(None))
-        self.assertIn("could not be read", out['hookSpecificOutput']['permissionDecisionReason'])
-        self.assertEqual(ran, [['fill', '@e1', 'a'], ['fill', '@e2', 'b']])
-        [rv] = self.pending(); self.assertEqual(json.loads(rv['DraftText'])['args'], ['check', '@e3'])
-
     def test_his_words_pass_each_act_on_its_own_and_never_a_payment(self):
         said = 'Sign up for DealFlow and buy the Pro plan.'
         todo = bg.acts('agent-browser fill @e1 "a" && agent-browser click @e12')
@@ -274,23 +251,15 @@ class Holding(unittest.TestCase):
                      {'irreversible': True, 'sure': True, 'what': 'pays $49', 'asked': True, 'money': True}):
             self.assertEqual([v['hold'] for v in bg.judge(self.s, todo, {'url': CHECKOUT}, Brain(None), said=said)], [False, True])
 
-    def test_a_payment_in_a_line_that_also_pushes_is_still_judged_as_a_browser_act(self):
-        """A line that clicks Pay and pushes (`click @e12 && git push`) went to the shell gate alone: its card said "push", its Approve - or
-        a trusted repo, or the terminal's own prompt - ran the payment with it, unseen. Every gate a line touches judges its part of it."""
+    def test_a_payment_in_a_line_that_also_pushes_is_held_where_it_runs(self):
+        """A line that clicks Pay and pushes (`click @e12 && git push`): the shell's gate judges the push, and the click is held where it
+        runs (gatecmd) - never waved through with the push's card, a trusted repo or the terminal's own prompt."""
         pay = {'irreversible': True, 'sure': True, 'what': 'pays the $412.50 order on toll.example', 'money': True}
-        for trust in (False, True):
-            self.s = MemoryStore(); self.tid = Factory(self.s).task('Pay the toll invoice')
-            with on(), verdict(pay), mock.patch('taskuary.shellgate.trusted', return_value='northwind/ledger' if trust else ''):
-                out = hooks.command_gate(self.s, self.tid, 'run1', 'agent-browser click @e12 && git push origin main', 'Bash', r'C:\work\ledger')
-            self.assertEqual(out['hookSpecificOutput']['permissionDecision'], 'deny', trust)
-            # ...and the agent hears that the rest of its line did not run either: told only of the click, it took its push as gone out
-            self.assertIn('Nothing else in your line ran', out['hookSpecificOutput']['permissionDecisionReason'])
-            [rv] = self.pending(); p = json.loads(rv['DraftText'])
-            self.assertEqual((p['action'], p['args']), ('browser_act', ['click', '@e12']), trust)
-            for ask in ('terminal', 'chat'):
-                with on(), verdict(pay):
-                    d = hooks.command_gate(self.s, self.tid, 'run1', 'git push origin main; agent-browser click @e12', 'Bash', r'C:\work\ledger', ask)
-                self.assertEqual(d['hookSpecificOutput']['permissionDecision'], 'deny', ask)
+        with on(), verdict(pay), mock.patch('taskuary.shellgate.trusted', return_value='northwind/ledger'):
+            self.assertEqual(hooks.command_gate(self.s, self.tid, 'run1', 'agent-browser click @e12 && git push origin main', 'Bash', r'C:\work\ledger'), {})
+            self.assertIn(bg.HELD, gatecmd.judge(self.s, self.tid, 'run1', 'agent-browser click @e12', r'C:\work\ledger'))
+        [rv] = self.pending(); p = json.loads(rv['DraftText'])
+        self.assertEqual((p['action'], p['args']), ('browser_act', ['click', '@e12']))
 
     def test_a_reversible_act_runs_and_nothing_is_queued(self):
         self.assertEqual(self.held('agent-browser fill @e1 "Northwind"', {'irreversible': False, 'sure': True, 'what': 'types a name'}), {})
@@ -325,7 +294,7 @@ class Holding(unittest.TestCase):
         `download @e5 ./invoice.pdf` saved where nobody looks. The held command runs where the agent ran it, as a held shell step does."""
         work = r'C:\work\offsite'
         with on(snap='- button "Attach your resume" [ref=e5]'), verdict({'irreversible': True, 'sure': True, 'what': 'uploads resume.pdf to jobs.example'}):
-            hooks.command_gate(self.s, self.tid, 'run1', 'agent-browser upload @e5 ./resume.pdf', 'Bash', work)
+            gatecmd.judge(self.s, self.tid, 'run1', 'agent-browser upload @e5 ./resume.pdf', work)
         [rv] = self.pending(); self.assertEqual(json.loads(rv['DraftText'])['cwd'], work)
         ran = []
         def run(sid, args, wait, tag, cwd=None):
@@ -336,13 +305,11 @@ class Holding(unittest.TestCase):
         self.assertIn((['upload', '@e5', './resume.pdf'], work), ran)
 
     def test_a_hold_that_fails_to_be_filed_still_holds(self):
-        """The hook's route lets a command go on any error (server.cli_hook_browser), so a payment judged irreversible whose card failed to be
-        written - a busy store, a record that raised - ran with no card and no press. Once there is an act, a failure is a hold."""
+        """A payment judged irreversible whose card failed to be written - a busy store, a record that raised - ran with no card and no
+        press. Once there is an act, a failure is a hold."""
         with on(), verdict({'irreversible': True, 'sure': True, 'what': 'pays the $412.50 order on toll.example'}), \
                 mock.patch('taskuary.proposals.queue', side_effect=RuntimeError('database is locked')):
-            out = hooks.command_gate(self.s, self.tid, 'run1', 'agent-browser click @e12', 'Bash', '')
-        d = out['hookSpecificOutput']
-        self.assertEqual(d['permissionDecision'], 'deny'); self.assertIn('nothing was done', d['permissionDecisionReason'])
+            self.assertIn('nothing was done', gatecmd.judge(self.s, self.tid, 'run1', 'agent-browser click @e12'))
 
     def test_a_ref_that_names_another_control_by_the_press_is_not_acted_on(self):
         """A checkout on one address re-draws itself: held as @e12 "Continue", by the owner's Approve a fresh snapshot gave @e12 to "Remove
@@ -522,40 +489,65 @@ class HandingOver(unittest.TestCase):
         handed = self.hand()['hookSpecificOutput']['permissionDecisionReason']
         with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True): self.s._exec("DELETE FROM worker_event"); carded = self.hand()
         carded = carded['hookSpecificOutput']['permissionDecisionReason']
-        for said in (handed, carded, browserview.brief(held=True), browserview.offer(held=True)):
+        for said in (handed, carded, browserview.brief(), browserview.offer()):
             self.assertNotIn('beside', said); self.assertNotIn('WATCHING', said)
         self.assertNotIn('in this browser', handed)
         for said in (handed, carded, browserview.HOLD_LINE):
             self.assertIn('card in this task', said); self.assertIn('never ask', said.lower())
 
     def test_the_brief_says_to_fill_it_and_leave_the_last_press_to_the_owner(self):
-        self.assertIn('fill in everything first', browserview.brief(held=True))
-        self.assertIn('TASKUARY-YOURTURN', browserview.ASK_FIRST_LINE); self.assertIn('NEVER press it', browserview.ASK_FIRST_LINE)
+        self.assertIn('fill in everything first', browserview.brief())
 
 
-class Hook(unittest.TestCase):
-    def test_the_hook_reads_shell_commands_of_our_panes_only(self):
-        s = MemoryStore(); tid = Factory(s).task('Pay the toll invoice')
-        pane = SimpleNamespace(sid='run1', alive=True, task_id=tid, cwd=r'C:\work', argv=['claude'], ext_id='c-1', resumed_from='', store=s)
-        pay = {'tool_name': 'Bash', 'tool_input': {'command': 'agent-browser click @e12'}, 'session_id': 'c-1', 'cwd': r'C:\work'}
-        with mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': pane}, clear=True), on(), \
-                verdict({'irreversible': True, 'sure': True, 'what': 'pays'}):
-            self.assertEqual(hooks.browser({**pay, 'tool_name': 'Read'}, Brain(None)), {})
-            self.assertEqual(hooks.browser({**pay, 'tool_input': {'command': 'ls'}}, Brain(None)), {})
-            self.assertEqual(hooks.browser({**pay, 'session_id': 'someone-else'}, Brain(None)), {})      # not our pane: Claude's own
-            self.assertEqual(hooks.browser(pay, Brain(None))['hookSpecificOutput']['permissionDecision'], 'deny')
+class AtTheCommand(unittest.TestCase):
+    """THE HOLD IS UNDER THE ROAD (the design round, 2026-11-18): on Codex the agent's browser pressed a site's final Post itself - the hold
+    lived in Claude's hook. Every task session runs Taskuary's `agent-browser` first (gatecmd), which asks before the real one runs."""
+    def setUp(self): self.s = MemoryStore(); self.tid = Factory(self.s).task('Post the portal launch')
 
-    def test_every_session_carries_the_hook(self):
-        pre = hooks.session_hooks(token='t', base='http://127.0.0.1:1')['PreToolUse']
-        g = [x for x in pre if x['matcher'] == hooks.BROWSER_MATCH]
-        self.assertEqual(len(g), 1); self.assertIn(hooks.BROWSER_MARK, g[0]['hooks'][0]['command'])
+    def run_shim(self, *args, said=None):
+        "The shim run as a Codex shell runs it: no hook, the server asked over HTTP (stood in by judge on this store), the real program recorded."
+        ran, asked = [], []
+        class Reply:
+            def __init__(self, why): self.why = why
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self, *a): return json.dumps({'why': self.why}).encode()
+        def urlopen(req, timeout=None):
+            b = json.loads(req.data); asked.append(b['cmd'])
+            return Reply(gatecmd.judge(self.s, self.tid, 'run1', b['cmd'], b['cwd']))
+        with on(snap='- button "Post" [ref=e7]'), verdict(said or {'irreversible': True, 'sure': True, 'what': 'posts the announcement on x.example'}), \
+                mock.patch.object(gatecmd, 'real', return_value='real-agent-browser'), mock.patch('urllib.request.urlopen', urlopen), \
+                mock.patch.object(gatecmd.subprocess, 'call', lambda argv: ran.append(argv) or 0), mock.patch.object(browserview, 'on_demand'):
+            rc = gatecmd.main(['gatefolder', 'agent-browser', *args])
+        return rc, ran, asked
 
-    def test_an_agent_token_may_call_it(self):
+    def test_every_task_session_runs_the_gate_first_whatever_its_ai(self):
+        from taskuary import terminal
+        env = terminal.session_env('assistant', self.tid, sid='run1')
+        first = env['PATH'].split(os.pathsep)[0]
+        self.assertEqual(first, gatecmd.folder())
+        for n in ('agent-browser', 'agent-browser.cmd', 'agent-desktop', 'agent-desktop.cmd'):
+            self.assertIn('taskuary.gatecmd', (Path(first) / n).read_text(encoding='utf-8'), n)
+
+    def test_a_final_post_on_a_road_with_no_hook_is_held_before_it_runs(self):
+        rc, ran, asked = self.run_shim('click', '@e7')
+        self.assertEqual((rc, ran, asked), (1, [], ['agent-browser click @e7']))
+        [rv] = self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (self.tid,))
+        self.assertEqual(json.loads(rv['DraftText'])['args'], ['click', '@e7'])
+
+    def test_a_look_runs_at_once_and_a_reversible_act_after_asking(self):
+        self.assertEqual(self.run_shim('snapshot', '-i'), (0, [['real-agent-browser', 'snapshot', '-i']], []))
+        rc, ran, asked = self.run_shim('fill', '@e1', 'Q&A day', said={'irreversible': False, 'sure': True, 'what': 'types the post'})
+        self.assertEqual((rc, ran), (0, [['real-agent-browser', 'fill', '@e1', 'Q&A day']]))
+
+    def test_an_unreachable_taskuary_holds_a_press_and_lets_a_look_go(self):
+        with mock.patch('urllib.request.urlopen', side_effect=OSError('connection refused')):
+            self.assertIn(bg.HELD, gatecmd.ask('agent-browser', ['click', '@e7']))
+            self.assertEqual(gatecmd.ask('agent-browser', ['open', 'https://x.example']), '')
+
+    def test_an_agent_token_may_ask(self):
         from taskuary import guard
-        self.assertEqual(guard.denied('POST', '/api/hooks/claude/browser'), '')
-
-
-if __name__ == '__main__': unittest.main()
+        self.assertEqual(guard.denied('POST', '/api/agent/gate'), '')
 
 
 class LooksThatAreNot(unittest.TestCase):

@@ -2,7 +2,7 @@
 typed request we can see and refuse").
 
 On the argv road a headless run carries the CLI's bypass flag, and the only fences are the ones the CLI enforces for us - Claude's
---disallowedTools, a PreToolUse hook that can refuse (shellgate, browsergate), and on Codex nothing that can refuse at all. Over ACP
+--disallowedTools, a PreToolUse hook that can refuse (shellgate), and on Codex nothing that can refuse at all. Over ACP
 the agent ASKS (clis.ADAPTERS sets the mode that makes it ask) and the answer is ours, given here, in code, before the call runs:
 
   - Taskuary's own tools (agenttools, the `taskuary` MCP server) are allowed: none of them sends - a propose tool lights a button.
@@ -64,22 +64,14 @@ def decide(tc: dict, ctx: dict) -> tuple:
     """(answer, why) for one toolCall. ctx: store, task_id, cli, cwd, sid."""
     t, store = tool_of(tc), ctx.get('store')
     if t['server']: return _mcp(store, ctx.get('cli') or '', t['server'], t['tool'])
-    from . import readgate, shellgate
+    from . import shellgate
     raw = tc.get('rawInput') if isinstance(tc.get('rawInput'), dict) else {}
     cwd, tid = str(raw.get('cwd') or ctx.get('cwd') or ''), ctx.get('task_id')
     reads, never = reads_of(tc, ctx)
     if never: return REFUSED, never
     todo = (shellgate.acts(t['command'], cwd) if t['command'] else []) + reads
     shell = 'PowerShell' if re.search(r'powershell|pwsh', t['name'] + t['command'], re.I) else 'Bash'
-    if not todo:
-        # ...A PRESS IN THE BROWSER OR ON THE DESKTOP is judged as the hook judges it (hooks.command_gate - its one road): over ACP this answer is
-        # the only gate a Codex session has, and `agent-browser click` on a "Pay now" was allowed here as a plain shell line
-        from . import agentdesktop, browsergate
-        if not (browsergate.acts(t['command']) or agentdesktop.acts(t['command'])): return ALLOWED, ''
-        if store is None or not str(tid or '').isdigit(): return REFUSED, 'a browser or desktop act waits for the owner, and this run has no task to hold it on'
-        from . import hooks
-        said = hooks.command_gate(store, int(tid), str(ctx.get('sid') or ''), t['command'], shell, cwd, False, str(raw.get('description') or ''))
-        return (ALLOWED, '') if not said else (HELD, said['hookSpecificOutput']['permissionDecisionReason'])
+    if not todo: return ALLOWED, ''        # ...a press in the browser or on the desktop is held where it runs (gatecmd)
     if store is None or not str(tid or '').isdigit(): return REFUSED, '; '.join(dict.fromkeys(a['what'] for a in todo)) + ' - it waits for the owner'
     if not shellgate.trusted(store, cwd, todo):
         from . import landing

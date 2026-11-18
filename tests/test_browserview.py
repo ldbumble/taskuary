@@ -495,10 +495,10 @@ class StuckLoadTests(unittest.TestCase):
         self.assertTrue(str(e.exception).startswith('It had not finished loading')); self.assertIn('Taskuary stopped it', str(e.exception))
 
     def test_the_agents_next_browser_line_stops_it_first(self):
-        from taskuary import browsergate, hooks
+        from taskuary import browsergate, gatecmd
         bv._BEGAN['st'] = time.time() - bv.STUCK - 5
         with mock.patch.object(bv, 'on_demand'), mock.patch.object(browsergate, 'check', return_value={}):
-            hooks.command_gate(MemoryStore(), 1, 'st', 'agent-browser get url')
+            gatecmd.judge(MemoryStore(), 1, 'st', 'agent-browser get url')
         self.assertEqual(self.stopped, ['A'])
 
     def test_the_sign_in_reaches_chrome_on_its_own_port_not_through_agent_browser(self):

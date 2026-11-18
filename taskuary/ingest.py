@@ -2590,7 +2590,7 @@ def offer_of(store, tid) -> str:
 # no?"). A forwarded webinar invite with "sign me up" got three outcomes from three doors - the task's box, Send to agent and the
 # assistant chat - because only the New sheet's toggle ever wrote "needs a browser". Triage reads the ask once and says whether it is
 # done on a web page (its verdict's needs_browser); every door that starts an agent on the task opens Taskuary's browser for it, where a
-# submit, a payment or a send is held for the owner's Approve (browserview.HOLD_LINE / ASK_FIRST_LINE) - never pressed by itself.
+# submit, a payment or a send is held for the owner's Approve (browserview.HOLD_LINE) - never pressed by itself.
 def triage_wants_browser(store, tid) -> bool:
     """Triage said this task's work is done on a web page, and the task is not a stranger's - a stranger's link is not followed by an
     agent (browserview.STRANGER_LINE). The newest verdict on the task that answered the question decides."""

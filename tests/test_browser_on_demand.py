@@ -85,11 +85,11 @@ class TheFirstNavigateLaunchesIt(unittest.TestCase):
     from the owner's saved sign-ins (browserview.start), so a sign-in task opens signed in."""
 
     def _hook(self, cmd, open_=False):
-        t = mock.Mock(store=MemoryStore(), task_id=1, sid='s-1')
-        with mock.patch.object(hooks, '_pane', return_value=t), mock.patch.object(bv, 'start', return_value=True) as started, \
+        from taskuary import gatecmd
+        with mock.patch.object(bv, 'start', return_value=True) as started, \
              mock.patch.object(bv, 'state', return_value={'open': open_, 'url': '', 'port': 0}), \
              mock.patch('taskuary.browsergate.check', return_value={}):
-            hooks.browser({'tool_name': 'Bash', 'tool_input': {'command': cmd}})
+            gatecmd.judge(MemoryStore(), 1, 's-1', cmd)       # the server's side of the session's own `agent-browser` (gatecmd)
         return started
 
     def test_open_launches_on_its_address(self):
@@ -169,14 +169,11 @@ class TheAgentAsksForIt(unittest.TestCase):
     def test_the_agent_is_told_of_it_in_one_sentence_where_it_is_told_its_browser(self):
         self.assertIn('taskuary --browser <url>', bv.offer()); self.assertEqual(bv.offer().count('taskuary --browser'), 1)
 
-    def test_an_agent_with_no_hook_is_told_that_road_alone_and_never_to_launch_from_its_shell(self):
-        """Recorded on Codex (the browser audit, 2026-11-15): told "if agent-browser open cannot launch ...", it ran `agent-browser open`
-        first on every task, died in its sandbox, and "Auto-launch failed: CDP response channel closed" stood among the owner's steps."""
-        for told in (bv.offer(held=False), bv.brief(held=False, open_now=False)):
-            self.assertIn('run `taskuary --browser <url>` and Taskuary opens it for you', told)
-            self.assertNotIn('run `agent-browser open', told)
-            self.assertNotIn('If `agent-browser open` cannot launch', told)
-        self.assertIn('run `agent-browser open <url>` and it opens for you', bv.offer(held=True))     # a CLI with the hook keeps its road
+    def test_every_agent_is_told_one_road_whatever_its_ai(self):
+        """Recorded on Codex (the browser audit, 2026-11-15): `agent-browser open` died in its sandbox launching Chrome. The session's own
+        `agent-browser` asks the server before it runs (gatecmd), and the server launches the page - so every AI is told the same road."""
+        for told in (bv.offer(), bv.brief(open_now=False)):
+            self.assertIn('run `agent-browser open <url>` and it opens for you', told)
 
 
 class YourTurnNeedsAPage(unittest.TestCase):

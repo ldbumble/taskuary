@@ -829,7 +829,7 @@ export const NoCodingTool = () => (
 // WHAT MATTERS FOR COMPUTER USE, in the brain menu itself (2026-10-25): four equal items gave no basis for the key choice. Only on a
 // task that wants a browser, and only where it is not ordinary. Text in an existing control.
 export const brainNote = (b, browser) => [b?.signed_out ? "not signed in" : "",
-  browser ? (b?.browser === false ? "can't use the browser" : b?.holds === false ? "browser acts not held" : "") : ""]
+  browser ? (b?.browser === false ? "can't use the browser" : "") : ""]
   .filter(Boolean).map((t) => ` · ${t}`).join("");
 
 export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, size = 30, kinds = {},

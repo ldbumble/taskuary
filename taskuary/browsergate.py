@@ -5,8 +5,8 @@ A browser agent drives its tab with `agent-browser` from its own shell, and unti
 "Pay now", a "Delete account", a "Send" was the agent's to press, and the only thing between a mail that talked it into one and the
 money leaving was the agent's own good sense. That is a promise made in prose, which guard.py's header says is no control.
 
-Where it is caught: Claude's PreToolUse hook on its shell tools (hooks.browser, matcher Bash|PowerShell). Every command a session
-of ours runs is read here BEFORE it runs:
+Where it is caught: at the command itself, whatever AI runs it - the `agent-browser` first on every task session's PATH is Taskuary's
+(gatecmd), and it asks here before the real one runs. Every browser command a session of ours runs is read here BEFORE it runs:
 - NOT a browser act - no agent-browser in it, or only commands that look and never touch (snapshot, get, screenshot, open...) -
   passes at once. Which of agent-browser's own commands only look is its grammar (LOOKS), not a judgement of anything.
 - ANY OTHER agent-browser command (click, press, fill, eval, find ... click) goes to the model with the page it would act on: its
@@ -24,10 +24,9 @@ of ours runs is read here BEFORE it runs:
 - APPROVED, Taskuary runs that exact command in that session's browser itself (perform) - only while the browser is still on the
   page the act was held on - and tells the agent what happened. Dismissed, the agent is told it was not done.
 
-What this does not cover, said plainly: Codex, Devin and Copilot sessions (their hooks report, they cannot refuse a call); a session
-whose hook could not reach Taskuary (the hook prints nothing and the call runs - the same as the ask hook, so the owner's own
-Claude is not broken whenever Taskuary is closed); and an agent that reaches Chrome some other way than agent-browser (its own
-DevTools client, a script). This gates the road browser agents are told to take (browserview.brief), not every road there is.
+What this does not cover, said plainly: an agent that reaches Chrome some other way than the `agent-browser` on its PATH (the real
+program by its full path, `npx`, its own DevTools client, a script). This gates the road browser agents are told to take
+(browserview.brief), not every road there is.
 """
 import json, os, re, shlex, shutil, subprocess, tempfile, threading, time
 from pathlib import Path
@@ -419,16 +418,9 @@ def _pending(store, tid: int, sid: str, args: list, url: str = ''):
 
 
 def check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> dict:
-    """_check, and A FAILURE ONCE THERE IS AN ACT IS A HOLD: the hook's route lets a command go on any error (server.cli_hook_browser), so a
-    payment whose card could not be written - a busy store, a record that raised - ran with no card and no press."""
-    try:
-        out = _check(store, tid, sid, cmd, brain, cwd)
-        # ...AND WHAT ELSE THE LINE HELD DID NOT RUN, said: a line that pushed and clicked Pay is held here as the click alone, and told only of
-        # the click the agent took its push as gone out. Only the browser commands before the held one ran (they are named where they failed)
-        if out and any(_head(a) is None for a in _segments(cmd) or []):
-            d = out['hookSpecificOutput']
-            d['permissionDecisionReason'] += ' Nothing else in your line ran, save any browser commands before the held one - run the rest on its own line.'
-        return out
+    """_check, and A FAILURE ONCE THERE IS AN ACT IS A HOLD: a payment whose card could not be written - a busy store, a record that
+    raised - ran with no card and no press."""
+    try: return _check(store, tid, sid, cmd, brain, cwd)
     except Exception as e:
         if not acts(cmd): raise
         logger.warning(f'browsergate: task {tid} - the act was not filed for the owner - {e}')
@@ -437,14 +429,11 @@ def check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> dic
 
 
 def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> dict:
-    """The hook's answer for one shell command: {} lets it run; a refusal holds it and puts the act on the task. ONE act held
-    holds the rest of the command - the shell line is the agent's, and running what comes after the held act is not what it asked for.
-    THE ACTS BEFORE IT THAT PASSED ON THEIR OWN RUN FIRST, in order (the real-CLI walk, 2026-11-16: "fill name && fill email && click Next"
-    was held whole, so the boxes were never filled - the owner was handed an empty form "left as you filled it", and every press was refused)."""
+    """The answer for one browser command, asked where it runs (gatecmd): {} lets it run; a refusal holds it and puts the act on the task."""
     from . import browserview, signin
     todo = acts(cmd)
     if not todo: return {}
-    pg, passed, said, vs = page(sid), [], asked(store, tid), None
+    pg, said, vs = page(sid), asked(store, tid), None
     for i, a in enumerate(todo):
         if a.get('read'):           # a box's value is read only where the page shows it is no password box
             c = control(a, pg)
@@ -456,18 +445,12 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         if a['verb'] == 'eval' and signin.holds_password(sid):
             return _deny(f"{HELD}: running a script on this page is refused while a password box on it holds a password - the agent never reads one. "
                          "Use snapshot, get text or click instead.")
-        if vs is None: vs = iter(judge(store, [x for x in todo[i:] if not x.get('read')], pg, brain, said=said))     # the rest of the line, asked once
+        if vs is None: vs = iter(judge(store, [x for x in todo[i:] if not x.get('read')], pg, brain, said=said))
         v = next(vs)
-        if not v['hold']: passed.append(a); continue
+        if not v['hold']: continue
         args = _own_args(a['args'])
         if not args: return _deny(f"{HELD}: a browser command it could not read. Run each agent-browser command on its own line.")
         if not pg['url']: return _deny(NO_PAGE.format(held=HELD))
-        for b in passed:
-            try: rc, out = _run(sid, _own_args(b['args']), 30, 'before-held', **({'cwd': cwd} if cwd else {}))
-            except Exception as e: rc, out = 1, str(e)
-            if rc != 0: return _deny(f"{HELD}: {v['what']} waits for the owner, and `{' '.join([EXE, *_own_args(b['args'])])}` before it in your line did "
-                                     f"not go in ({' '.join(str(out).split())[:160]}). Nothing after it ran. Run the commands before the held one on their own "
-                                     "line, then the held one on its own.")
         try: site = signin.site_of(pg['url']) or signin.registrable(urlsplit(pg['url']).hostname) or 'the page'
         except ValueError: site = 'the page'
         browserview.ended_on(sid, 'held', store, tid)                          # its last frame is kept if the session stops here

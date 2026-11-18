@@ -6264,6 +6264,18 @@ class AgentProposeBody(BaseModel):
     model_config = {'extra': 'allow'}
     task_id: int; action: str; why: str = ''
 
+@app.post('/api/agent/gate')
+async def agent_gate(body: dict, request: Request):
+    """An agent's `agent-browser` or `agent-desktop` command asks before it runs (gatecmd, on every AI's road): {'why': ''} runs it,
+    else why it waits - a press that can't be undone is held on the session's OWN task for the owner. On the permits' threads, as the
+    hooks are: a snapshot and a verdict take seconds."""
+    from . import gatecmd
+    tid = int(body.get('task') or 0) if str(body.get('task') or '').isdigit() else 0
+    _own_task_only(request, tid)
+    go = lambda: gatecmd.judge(store, tid, str(body.get('sid') or ''), str(body.get('cmd') or ''), str(body.get('cwd') or ''))
+    return {'why': await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, go)}
+
+
 @app.post('/api/agent/propose')
 def agent_propose(body: AgentProposeBody, request: Request):
     """An agent asks for one act only the owner's press runs (proposals.py) - a GitHub comment, a pull request, a send on a system -

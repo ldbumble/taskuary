@@ -762,14 +762,7 @@ def launch(sid: str, url: str) -> bool:
 # agent-browser against the browser that is then up.
 ASK_LINE = ('If `agent-browser open` cannot launch a browser from your shell, run `taskuary --browser <url>` instead - Taskuary opens the '
             'page for you - then go on with `agent-browser`. ')
-# ...AND ONE WHOSE CLI HAS NO HOOK IS TOLD THAT ROAD ALONE (the browser audit, 2026-11-15: told "if it cannot launch", Codex ran `agent-browser
-# open` first on every task, died in its sandbox and left "Auto-launch failed: CDP response channel closed" among the owner's steps)
 OPEN_HOOK = 'run `agent-browser open <url>` and it opens for you'
-OPEN_ASK = ('run `taskuary --browser <url>` and Taskuary opens it for you - your shell cannot launch a browser, so never start one with '
-            '`agent-browser open`; once it is up, `agent-browser` drives it')
-def opens_with(held: bool) -> str:
-    "How this session's agent opens its first page: a CLI with Taskuary's hook launches on `open`; one without asks Taskuary for it."
-    return OPEN_HOOK if held else OPEN_ASK
 def ask_open(sid: str, url: str) -> dict:
     "The agent asked for a page: launch the session's browser on it, or point the one already up at it. {url, launched} - ValueError says why not."
     u = (url or '').strip()
@@ -1067,11 +1060,6 @@ HOLD_LINE = ('WHEN THE WORK ENDS AT A PAYMENT, A FORM TO SUBMIT OR ANY BUTTON TH
              '"held for the owner" and puts that button in front of them as a card in this task - THEY press it, and you are told when '
              'they have and what the page shows (or that they did not). Then end your turn in one short line and run no browser command '
              'until you hear back; never try the same act another way, and never ask the owner in words whether to submit, register or pay, or to click it. ')
-ASK_FIRST_LINE = ('TASKUARY CANNOT HOLD YOUR BROWSER COMMANDS ON THIS AI: nothing stops a press once you run it. So when the work ends at a '
-                  'payment, a form to submit or any button that can\'t be undone (pay, order, submit for real, send, post, delete, cancel), '
-                  'NEVER press it: fill in everything, leave the page on that button and end your turn with a final line '
-                  '[[TASKUARY-YOURTURN: check it and press <the button\'s own words> on the page]] - the owner presses it themselves, and '
-                  'their "Done" is your next message. Never tell the owner Taskuary will hold it. ')
 # ...and a browser that did not come up is said, not hidden: the agent got no brief and answered "no browser here" or sent the owner
 # looking for a connector that does not exist (the 2026-10-02 live check's gap #2, still open on 2026-10-25)
 FAILED_LINE = ('THE BROWSER DID NOT OPEN for this task ({why}). Tell the owner so in one plain line - "The browser did not open: {why}" - '
@@ -1097,7 +1085,7 @@ OFFER_HEAD = ('NO BROWSER IS OPEN for this task yet, but Taskuary keeps one for 
               # for it stood at the far end of the offer, under how to drive a browser it had not chosen to open)
               'What answers with a sign-in (a portal, an account) is never fetched from your shell: open it here from the start. '
               'NEVER use --session, --headed, profile listing, or launch Chrome separately. ')
-def offer_head(held: bool = True) -> str: return OFFER_HEAD.format(open=opens_with(held)) + (ASK_LINE if held else '')
+def offer_head() -> str: return OFFER_HEAD.format(open=OPEN_HOOK) + ASK_LINE
 NOT_SET_UP = ('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET (agent-browser is not installed). Do not use a browser tool of your own CLI '
               'or of another app instead - Taskuary cannot show those to the owner or hold their presses, and they fail here. If the work needs a web page, do what you can without it (read the message, find the link), then tell the owner in one line: '
               '"The browser is not set up - install agent-browser under {where}, then ask me again." ')
@@ -1138,16 +1126,16 @@ TABS_LINE = ('WORK EACH SITE IN ITS OWN TAB of this one browser: `agent-browser 
 
 DOWNLOADS_LINE = 'A file the page downloads lands in {folder}; one the owner should have, copy into your outputs folder. '
 
-def brief(held: bool = True, open_now: bool = True) -> str:
+def brief(open_now: bool = True) -> str:
     """What an agent with a browser of its own needs to know. Longer than hint() on purpose -
     this only rides when the owner asked for a browser, so it can afford to say how to drive
-    it and where the line is. `held`: this session's own hook can refuse a browser act (browsergate).
+    it and where the line is (its presses are held where they run, gatecmd).
     `open_now`: the browser is already up; else it is OFFERED - opened by the agent's first `open`."""
     # ...and nobody is said to be watching it (the owner, 2026-11-05: hidden unless they are needed on it; 2026-11-10: "i cant see the screen")
     head = ('A BROWSER IS OPEN for this task. The owner sees it only when Taskuary shows it to them - never say it is on their screen. '
             'Drive the existing tab with `agent-browser` - it is already bound and restored, so '
             'NEVER use --session, --headed, profile listing, or launch Chrome separately. Navigate '
-            'with `agent-browser open <url>`. ') if open_now else offer_head(held)
+            'with `agent-browser open <url>`. ') if open_now else offer_head()
     return (head + OWN_ONLY + SAY_WHY + TABS_LINE + DOWNLOADS_LINE.format(folder=downloads()) +
             # POWERSHELL CALLS A SUCCESS AN ERROR. agent-browser writes its progress to stderr
             # ("[agent-browser] launched browser"), and Windows PowerShell 5.1 wraps any native
@@ -1193,7 +1181,7 @@ def brief(held: bool = True, open_now: bool = True) -> str:
             # text card, the owner had no page to do it on - the view hands them the page instead
             + TURN_LINE
             # WHAT CAN'T BE UNDONE WAITS FOR THE OWNER (browsergate.py, 2026-10-25): said up front, so a refusal is expected, not a wall
-            + (HOLD_LINE if held else ASK_FIRST_LINE) +
+            + HOLD_LINE +
             # THEN GET OUT OF THE WAY. Told to hand over the keyboard for an ADP sign-in, an agent
             # asked for the User ID and kept working the same tab anyway - snapshot, get url, read,
             # and `open` on the sign-in URL again (2026-09-15). What had actually blanked that page
@@ -1234,9 +1222,9 @@ GUIDE_LINE = ('Before your first browser command, read the guide `browser` (the 
               # password at all, and the one line that hands the page over
               + SIGNIN_LINE)
 
-def offer(held: bool = True) -> str:
+def offer() -> str:
     "The browser OFFERED, short: brief()'s head and the rules that hold from the first command, the rest in guide()."
-    return offer_head(held) + OWN_ONLY + GUIDE_LINE + (HOLD_LINE if held else ASK_FIRST_LINE)
+    return offer_head() + OWN_ONLY + GUIDE_LINE + HOLD_LINE
 
 def guide() -> str:
     "How to drive the browser - brief() without its head, and without the hold line, which the offer says for this session's own hook."

@@ -164,10 +164,9 @@ def _part(s, a: dict) -> str:
 
 
 def _act(store, tid, sid, args: list) -> str:
-    "One agent-browser command in this task's browser - held for the owner first where it can't be undone (browsergate.check)."
-    from . import browsergate as bg
-    held = bg.check(store, tid, sid, shlex.join([bg.EXE, *args]))
-    if held: return (held.get('hookSpecificOutput') or {}).get('permissionDecisionReason') or f'{bg.HELD}.'
+    "One agent-browser command in this task's browser - held for the owner first where it can't be undone (gatecmd.judge, as a CLI's is)."
+    from . import browsergate as bg, gatecmd
+    if (held := gatecmd.judge(store, tid, sid, shlex.join([bg.EXE, *args]))): return held
     rc, said = bg._run(sid, args, WAIT, 'api')
     if rc != 0: raise ValueError(said.strip()[-400:] or f'agent-browser {args[0]} failed')
     return said.strip() or 'Done.'

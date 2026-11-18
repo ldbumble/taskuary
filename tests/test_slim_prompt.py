@@ -41,18 +41,18 @@ def test_the_figure_walkthrough_rides_only_where_figures_live():
 
 
 def test_the_browser_offer_is_short_and_its_rules_are_one_read_away():
-    held, asks = browserview.offer(held=True), browserview.offer(held=False)
+    held = browserview.offer()
     for want in ('NO BROWSER IS OPEN', 'agent-browser open <url>', 'never a browser tool of your own CLI', 'guide `browser`', 'NEVER type a password',
                  'CAPTCHA'):
         assert want in held, want
     # ...and a sign-in is the page's, from the offer itself: an agent that never opens the browser never reads the guide (the recorded walk,
     # 2026-11-11: it fetched the form from its shell and asked the owner for the password, twice)
     for want in ('no connection', 'you do not need the password', '[[TASKUARY-SIGNIN:', 'Never ask for a password', 'never work a sign-in from your shell', 'keeps it for next time'): assert want in held, want
-    assert 'THEY press it' in held and 'TASKUARY CANNOT HOLD' in asks and 'TASKUARY CANNOT HOLD' not in held
-    assert len(held) < len(browserview.brief(held=True, open_now=False)) / 2
+    assert 'THEY press it' in held
+    assert len(held) < len(browserview.brief(open_now=False)) / 2
     g = guides.read('browser')
     for want in ('TASKUARY-SIGNIN', 'TASKUARY-YOURTURN', 'snapshot -i -c', 'WHEN YOU ASK FOR A SIGN-IN'): assert want in g, want
-    assert browserview.HOLD_LINE not in g and browserview.ASK_FIRST_LINE not in g      # the hold is the session's, said in its offer
+    assert browserview.HOLD_LINE not in g      # the hold is the session's, said in its offer
     with pytest.raises(ValueError, match='browser'): guides.read('nope')
 
 

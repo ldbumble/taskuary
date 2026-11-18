@@ -141,7 +141,7 @@ def session_env(agent: str = '', task_id=None, cwd: str = '', sid: str = None, s
     """What a CLI needs to know about ITSELF. `taskuary --note "..."` inside an agent's terminal
     should not have to be told which agent or which task it is - the session already knows, so
     it says so in the environment."""
-    from . import config, guard
+    from . import config, gatecmd, guard
     srv = config.load()['server']
     host = '127.0.0.1' if srv.get('host') in ('0.0.0.0', '::', '', None) else srv.get('host')
     out = {k: str(v) for k, v in (('TASKUARY_AGENT', agent), ('TASKUARY_TASK', task_id or ''),
@@ -161,7 +161,8 @@ def session_env(agent: str = '', task_id=None, cwd: str = '', sid: str = None, s
     if tok: out[guard.AGENT_ENV] = tok
     # the token is shared by every session; this says which task is THIS one's (guard.owns_task)
     if tok and str(task_id or '').isdigit(): out[guard.TASK_ENV] = guard.task_proof(srv, task_id)
-    if task_id and (d := own_command()): out['PATH'] = d + os.pathsep + os.environ.get('PATH', '')
+    # ...and the browser and desktop presses held at the command, whatever AI runs it (gatecmd): its folder first, then `taskuary`'s
+    if task_id: out['PATH'] = os.pathsep.join(d for d in (gatecmd.folder(), own_command(), os.environ.get('PATH', '')) if d)
     return stranger_env(out, task_id, srv) if stranger else out
 
 
@@ -1946,16 +1947,14 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # repo's agents are deliberately absent - awareness costs prompt tokens, so it is spent
     # only where a collision is physically possible.
     from . import browserview as _bv
-    # the hold is promised only to a CLI whose hook can refuse (llm.HOLDS_CLI): Codex was told "held" and paid (2026-10-25)
-    from .llm import HOLDS_CLI
     # ...told it is OPEN only when there is a page to open it on (last_page) that the owner has a part on; else offered, launched by its
     # first navigate (on_demand)
     from .general import page_needs_owner
     if _bv.wanted(t) and shutil.which('agent-browser'):
-        parts.append(_bv.brief(held=not cli or cli_named({'cmd': cli}) in HOLDS_CLI, open_now=bool(_bv.last_page(tid)) and bool(page_needs_owner(store, tid))))
+        parts.append(_bv.brief(open_now=bool(_bv.last_page(tid)) and bool(page_needs_owner(store, tid))))
     # ...and the owner's desktop apps, once Agent Desktop is on and the task is marked "needs desktop" - never on a stranger's task
     # (agentdesktop.py; its hook refuses there too)
-    if not stranger and _ad.on(store) and _ad.wanted(store.get_task(tid)): parts.append(_ad.brief(held=not cli or cli_named({'cmd': cli}) in HOLDS_CLI))
+    if not stranger and _ad.on(store) and _ad.wanted(store.get_task(tid)): parts.append(_ad.brief())
     from . import blackboard as bb
     # the overlap model would read a stranger's title and summary, and its sentence would land in this prompt
     aware = bb.briefing(store, cwd, exclude_tid=tid, assess_for=None if stranger else tid) if cwd else ''

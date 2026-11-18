@@ -430,13 +430,13 @@ def brain_options(store, keep: str = '') -> list:
     by_pick = {o['pick']: o for o in options}
     brains = dict(hub_agents.connection_brains(store))
     # not installed is not a choice - the same rule the coding brain list follows. ONE NAME per CLI, the clis.KNOWN label the task shows
-    # once it runs ('gemini' here, 'Gemini CLI' after), and what matters for computer use said with it (2026-10-25): whether its browser
-    # acts can be held (llm.HOLDS_CLI) and whether its last test said it isn't signed in
+    # once it runs ('gemini' here, 'Gemini CLI' after), and what matters for computer use said with it (2026-10-25): whether its last
+    # test said it isn't signed in (its browser presses are held on every AI, gatecmd)
     tests = hub_agents.cli_tests(store)
     out = [{**o, 'agent': o['pick'][4:], 'models': climodels.catalog(o['cmd'])['models'], 'browser': True,
-            'holds': o['cmd'] in llm_mod.HOLDS_CLI, 'signed_out': tests.get(o['pick'][4:]) is False}
+            'signed_out': tests.get(o['pick'][4:]) is False}
            for o in options if o.get('type') == 'cli' and hub_agents.runs_here(brains.get(o['pick'][4:]))]
-    options = [{**o, 'browser': False, 'holds': False} if o.get('type') != 'cli' else o for o in options]
+    options = [{**o, 'browser': False} if o.get('type') != 'cli' else o for o in options]
     out += [o for o in options if o.get('type') != 'cli']
     # ...but a pick already in use never vanishes from its own picker. Collapsing five Claude
     # profiles into one entry would otherwise blank the dropdown of a chat running on the fourth.
@@ -2587,7 +2587,7 @@ class GeneralSession:
     browser_failed = ''                  # why this session's browser did not open, said in the turn (send_prompt)
 
     def holds_browser(self) -> bool:
-        "Can this session's browser acts be held? Only a Claude CLI's hook refuses a call (llm.HOLDS_CLI), and a stranger's run has its own."
+        "Can its hook hold this session's shell steps? Only a Claude CLI's hook refuses a call (llm.HOLDS_CLI), and a stranger's run has its own. (Its browser and desktop presses are held on every AI, gatecmd.)"
         from . import origin
         try: return (self.pick.startswith('cli:') and _cli_of_pick(self.store, self.pick) in llm_mod.HOLDS_CLI
                      and origin.of_task(self.store, self.task_id)[0] != 'stranger')
@@ -2998,10 +2998,10 @@ class GeneralSession:
                 # the next (a page opened, a set-up done), and in the system prompt each change reopened the warm conversation (2026-11-16)
                 if self.browser_wanted and (browserview.state(self.sid, fresh=True).get('open') or (last and browserview.start(self.sid, last))):
                     browser_tools = True
-                    late.append(browserview.brief(held=self.holds_browser()))
+                    late.append(browserview.brief())
                 elif self.browser_wanted and not last and browserview.installed():
                     browser_tools, browser_offer = True, True
-                    late.append(browserview.offer(held=self.holds_browser())
+                    late.append(browserview.offer()
                                 + (f' It was last on {was} - open it again only if the work still needs it.' if was else ''))
                 elif self.browser_wanted:
                     # a browser that did not open is SAID - in the turn and to the agent - not left for it to guess at (2026-10-25)
@@ -3015,7 +3015,7 @@ class GeneralSession:
                     # browser and not in a tool of the CLI's own that nobody can watch or hold (browserview.OWN_ONLY, 2026-10-28)
                     if browserview.installed() or coming:
                         browser_tools, browser_offer = True, True
-                        late.append(browserview.offer(held=self.holds_browser()) + (f' {browserview.SETTING_UP}' if coming else ''))
+                        late.append(browserview.offer() + (f' {browserview.SETTING_UP}' if coming else ''))
                     elif setup_why: late.append(browserview.NO_SET_UP.format(why=setup_why))
                     else:
                         from . import words as places
@@ -3029,7 +3029,7 @@ class GeneralSession:
             # a CLI with hands, the owner's own task, the same hook holding what can't be undone
             from . import agentdesktop
             desk = agentdesktop.offered(self.store, self.task_id, self.pick)
-            if desk: late.append(agentdesktop.brief(held=self.holds_browser()))
+            if desk: late.append(agentdesktop.brief())
             # only a CLI-backed chat can post to the wall: an API provider has no shell to
             # run the command in, and telling it about a command it cannot run is a lie
             if self.pick.startswith('cli:'):

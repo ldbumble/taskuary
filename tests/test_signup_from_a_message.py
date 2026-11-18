@@ -188,7 +188,7 @@ class TheOffer(unittest.TestCase):
         self.assertIn('a new sender', line); self.assertIn('press Trust by their name', line); self.assertIn('open the link yourself', line)
 
     def test_the_offer_names_only_taskuarys_browser_and_asks_for_a_plain_reason(self):
-        b = browserview.brief(held=True, open_now=False)
+        b = browserview.brief(open_now=False)
         self.assertIn('NO BROWSER IS OPEN', b); self.assertIn('agent-browser open <url>', b)
         self.assertIn('never a browser tool of your own CLI', b); self.assertIn('IF A STEP FAILS OR IS REFUSED', b)
         self.assertIn('"held for the owner"', b); self.assertIn('THEY press it', b)

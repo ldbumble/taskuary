@@ -10,7 +10,7 @@ Ref actions there are UI Automation calls that neither move the mouse nor take f
 
 WHAT KEEPS IT SAFE, the browser's rules applied to the desktop:
 - OFF BY DEFAULT. Its connector card is seeded off (store.py); off, or not installed, no agent is told of it and every act of
-  agent-desktop in one of our sessions is refused by the shell hook (hooks.browser).
+  agent-desktop in one of our sessions is refused where it runs (gatecmd).
 - ONLY ON A TASK MARKED "needs desktop" (WANTS, the owner 2026-10-31): the card on is not enough - an unmarked task's agent is told
   nothing and its acts are refused.
 - NEVER ON A STRANGER'S TASK: a stranger's words do not get the owner's desktop to drive, as they do not get the browser.
@@ -22,8 +22,8 @@ WHAT KEEPS IT SAFE, the browser's rules applied to the desktop:
 - With no AI connected, plain typing (set-value, type) with no line break passes and every other act waits.
 - The sign-in vault is the browser's alone: agents are told never to type a password into an app and to hand a sign-in to the owner.
 
-What this does not cover, said as browsergate says it: Codex, Devin and Copilot sessions (their hooks cannot refuse a call, so their
-agents are told to ask first); a session whose hook could not reach Taskuary; and an agent that drives the desktop some other way.
+Every act is caught at the command, on every AI (gatecmd: the `agent-desktop` first on a task session's PATH is Taskuary's). What this
+does not cover, said as browsergate says it: an agent that drives the desktop some other way than that command.
 """
 import json, re, subprocess, tempfile
 from pathlib import Path
@@ -137,13 +137,9 @@ HOLD_LINE = ('WHEN THE WORK ENDS AT A PRESS THAT CAN\'T BE UNDONE (send, pay, or
              'saving, change a setting): set everything up in the app first, then run the command for that last press as you would. It is '
              'HELD for the owner: Taskuary refuses it and tells them it is ready in the app for them to press there. Then end your turn and run '
              'no desktop command until their next message - never try the same act another way. ')
-ASK_FIRST_LINE = ('TASKUARY CANNOT HOLD YOUR DESKTOP COMMANDS ON THIS AI: nothing stops a press once you run it. So when the work ends at a '
-                  'press that would send, pay, order, submit for real, post, delete or cancel, NEVER press it: set everything up in the app, '
-                  'end your turn with one line - "It\'s ready in <the app>; press it there." - and wait for the owner\'s next message. Never '
-                  'tell the owner Taskuary will hold it. ')
 
 
-def brief(held: bool = True) -> str:
+def brief() -> str:
     "What an agent with the owner's desktop needs to know: how to drive it, and where the line is."
     return ('THE OWNER\'S DESKTOP APPS are yours to read and operate with `agent-desktop` (the owner turned it on) - for a desktop app that '
             'has no connector and no web page: prefer a connector, then the browser, then this. It reads the app\'s real UI through '
@@ -156,7 +152,7 @@ def brief(held: bool = True) -> str:
             '`ok` and the exit code, retry only when error.disposition.retry is "safe". Never type a password, code or card number '
             'into an app, never read the clipboard for one, and never touch Taskuary\'s own window: a sign-in is the owner\'s - end '
             'your turn and say what they need to do. Snapshots can hold private text: never paste one into a reply, a file or a post. '
-            + (HOLD_LINE if held else ASK_FIRST_LINE))
+            + HOLD_LINE)
 
 
 # ── which part of a shell command is a desktop act ────────────────────────────────────────────────────────────────────────

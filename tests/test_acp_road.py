@@ -167,16 +167,14 @@ def test_an_http_client_that_writes_off_this_machine_is_held_as_a_card_never_ref
     assert json.loads(rv['DraftText'])['action'] == 'shell_act' and 'send data to' in json.loads(rv['DraftText'])['what']
 
 
-def test_a_press_in_the_browser_is_judged_on_the_acp_road_as_on_the_hook():
-    """Over ACP Taskuary's answer is the only gate a Codex session has, and it read only the shell's and the read gate's steps: an
-    `agent-browser click` on a "Pay now" a mail talked the agent into was allowed as a plain shell line. It is judged by the hook's own road
-    (hooks.command_gate) - with no AI connected to judge, a press waits; a look runs."""
+def test_a_press_in_the_browser_is_left_to_the_hold_where_it_runs():
+    """Over ACP a Codex session asks only for what its sandbox blocks, so a press judged here was judged on one road and not the next: the
+    hold is at the command itself (gatecmd), on every road. ACP's answer lets the line through, and the session's `agent-browser` holds it."""
     s = MemoryStore(); tid = s.create_task({'Title': 'Pay the vendor', 'Kind': 'coding', 'Status': 'open'}, 'owner')
     ctx = {'store': s, 'task_id': tid, 'cwd': HERE, 'sid': 'run1', 'cli': 'codex'}
     call = lambda c: acpgate.decide({'toolCallId': 'c', 'kind': 'execute', 'rawInput': {'command': c}}, ctx)
-    for cmd in ('agent-browser click @e3', 'timeout 30 agent-browser click @e3', 'agent-desktop click @s1:e2'):
-        assert call(cmd)[0] == acpgate.HELD, cmd
-    assert call('agent-browser snapshot -i') == (acpgate.ALLOWED, '')
+    for cmd in ('agent-browser click @e3', 'agent-desktop click @s1:e2', 'agent-browser snapshot -i'):
+        assert call(cmd) == (acpgate.ALLOWED, ''), cmd
 
 
 @pytest.mark.parametrize('cmd', ['curl -s https://docs.northwind.example/budget', 'curl -f -s https://docs.northwind.example/a.pdf -o a.pdf',

@@ -37,16 +37,16 @@ class TheGeneralAgentsBrowserIsHeld(unittest.TestCase):
         self.s = MemoryStore(); self.tid = browser_task(self.s)
         self.sess = general.GeneralSession(self.s, self.tid)
         terminal.SESSIONS[self.sess.sid] = self.sess; self.addCleanup(terminal.SESSIONS.pop, self.sess.sid, None)
-        self.pay = {'tool_name': 'Bash', 'tool_input': {'command': "agent-browser click '@e2'"}, 'session_id': 'claude-conv-1', 'cwd': ''}
+        self.pay = {'tool_name': 'Bash', 'tool_input': {'command': 'git push origin main'}, 'session_id': 'claude-conv-1', 'cwd': ''}
 
     def test_its_own_hook_names_it_by_session(self):
-        with mock.patch.object(bg, 'check', return_value={'held': 1}) as check:
+        with mock.patch('taskuary.shellgate.check', return_value={'held': 1}) as check:
             self.assertEqual(hooks.browser(self.pay, sid=self.sess.sid), {'held': 1})
-        self.assertEqual(check.call_args.args[1:4], (self.tid, self.sess.sid, "agent-browser click '@e2'"))
+        self.assertEqual(check.call_args.args[1:4], (self.tid, self.sess.sid, 'git push origin main'))
 
     def test_the_user_wide_hook_finds_it_by_its_cli_conversation(self):
         self.sess.cli_sid = 'claude-conv-1'
-        with mock.patch.object(bg, 'check', return_value={'held': 1}) as check:
+        with mock.patch('taskuary.shellgate.check', return_value={'held': 1}) as check:
             self.assertEqual(hooks.browser(self.pay), {'held': 1})
         self.assertEqual(check.call_args.args[1], self.tid)
 
@@ -57,13 +57,13 @@ class TheGeneralAgentsBrowserIsHeld(unittest.TestCase):
         f = Path(hooks.general_settings(self.tid))
         cmd = next(h['hooks'][0]['command'] for h in json.loads(f.read_text(encoding='utf-8'))['hooks']['PreToolUse'] if h['matcher'] == hooks.BROWSER_MATCH)
         self.assertIn(f'{hooks.BROWSER_MARK}?task={self.tid}', cmd)
-        with mock.patch.object(bg, 'check', return_value={'held': 1}) as check:
+        with mock.patch('taskuary.shellgate.check', return_value={'held': 1}) as check:
             self.assertEqual(hooks.browser(self.pay, task=str(self.tid)), {'held': 1})
             self.assertEqual(hooks.browser(self.pay, task=str(self.tid + 1)), {})                   # another task's: not this chat
         self.assertEqual(check.call_args.args[1], self.tid)
 
     def test_a_session_that_is_not_ours_is_left_alone(self):
-        with mock.patch.object(bg, 'check') as check:
+        with mock.patch('taskuary.shellgate.check') as check:
             self.assertEqual(hooks.browser(self.pay, sid='nobody'), {})
             self.sess.alive = False
             self.assertEqual(hooks.browser(self.pay, sid=self.sess.sid), {})
@@ -84,12 +84,12 @@ class TheGeneralAgentsBrowserIsHeld(unittest.TestCase):
         self.assertIn('HELD for the owner', seen['system'])
         self.assertNotIn('CANNOT HOLD', seen['system'])
 
-    def test_a_codex_chat_is_told_to_ask_first_never_that_it_is_held(self):
+    def test_a_codex_chat_is_told_its_presses_are_held_as_claudes_are(self):
+        """Its presses are held where they run (gatecmd), not by a hook it does not have - so it is told the same road as Claude."""
         connect_cli(self, codex={'cmd': 'codex', 'args': ['exec']})
         seen = self._turn('cli:codex')
         self.assertIsNone(seen['kw'].get('hold_sid'))
-        self.assertIn('TASKUARY CANNOT HOLD YOUR BROWSER COMMANDS', seen['system'])
-        self.assertNotIn('HELD for the owner', seen['system'])
+        self.assertIn('held for the owner', seen['system'])
 
     def test_claudes_argv_carries_the_hook_and_codexs_does_not(self):
         connect_cli(self, claude={'cmd': 'claude', 'args': ['-p']}, codex={'cmd': 'codex', 'args': ['exec']})

@@ -124,6 +124,18 @@ class ImapTests(unittest.TestCase):
         self.assertEqual([a['ContentType'] for a in atts], ['image/png'])
         self.assertTrue(atts[0]['Path'])                        # the bytes landed on disk
 
+    def test_two_files_of_one_name_on_one_mail_are_both_kept(self):
+        # two pages scanned as "scan.pdf" each: they shared one id on the mail, and the second was taken for the first and dropped
+        s, c = self._store()
+        m = email.message.EmailMessage()
+        m['From'], m['To'], m['Subject'], m['Date'] = 'Erin Blake <erin@vendor.example>', 'me@myco.example', 'two scans', 'Wed, 20 Aug 2026 15:03:00 -0400'
+        m.set_content('both pages attached')
+        for page in (b'%PDF-1.4 page one', b'%PDF-1.4 page two'): m.add_attachment(page, maintype='application', subtype='pdf', filename='scan.pdf')
+        with mock.patch.object(imapmail.imaplib, 'IMAP4_SSL', return_value=FakeImap({1: m.as_bytes()})):
+            imapmail.poll_imap(s, c, [], llm=None)
+        kept = [open(r['Path'], 'rb').read() for r in s._rows('SELECT * FROM attachment ORDER BY AttachmentId')]
+        self.assertEqual(kept, [b'%PDF-1.4 page one', b'%PDF-1.4 page two'])
+
     def test_replies_go_back_over_smtp_in_thread_from_the_same_address(self):
         s, _ = self._store()
         sent = {}

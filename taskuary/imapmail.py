@@ -253,7 +253,11 @@ def _body_and_attachments(msg) -> tuple:
         fname = part.get_filename()
         payload = part.get_payload(decode=True) or b''
         if fname or part.get('Content-ID'):
-            atts.append({'id': (part.get('Content-ID') or fname or str(len(atts))).strip('<>')[:60],
+            # ...an id of its own on this mail: two files of one name ("scan.pdf" twice, a phone's "image.jpg") shared it, and the second
+            # was taken for the first already saved and dropped. A repeat takes its place number; a first keeps the id it always had
+            key = (part.get('Content-ID') or fname or str(len(atts))).strip('<>')[:60]
+            if any(a['id'] == key for a in atts): key = f'{key}#{len(atts)}'
+            atts.append({'id': key,
                          'name': _dec(fname) or f'part-{len(atts)}', 'contentType': ctype,
                          'size': len(payload), 'isInline': bool(part.get('Content-ID')),
                          'contentBytes': base64.b64encode(payload).decode()})

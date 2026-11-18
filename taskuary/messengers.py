@@ -68,6 +68,34 @@ def _tg_photo(token: str, m: dict) -> tuple[list, list]:
     return out, missed
 
 
+def keep_files(got: list, folder: str) -> list:
+    """Pictures and files a chat handed over, [(name, bytes)], kept where a prompt may name them (server.prompt_images: under
+    attachments/) - the paths, for general.with_files or the Assistant's `images`. A CLI agent reads a picture from a file, as it does one
+    dropped in a task's own box; the Assistant's model is handed the picture itself."""
+    from . import config
+    d, out = config.home() / 'attachments' / folder / time.strftime('%Y%m'), []
+    for name, data in got or ():
+        if not data: continue
+        d.mkdir(parents=True, exist_ok=True)
+        safe = re.sub(r'[^\w.-]+', '_', os.path.basename(str(name or 'file'))).strip('._')[:80] or 'file'
+        p = d / f"{time.strftime('%Y%m%d-%H%M%S')}-{os.urandom(3).hex()}-{safe}"
+        p.write_bytes(data); out.append(str(p))
+    return out
+
+
+def chat_pictures(store, channel: str, chat: str, c, got, missed: list, message_id=None) -> list:
+    """What the owner sent the Assistant chat beside their words, kept for the turn (keep_files) - the paths. Telegram hands over
+    attachments ([{name, contentBytes}]), the bridge (name, bytes) pairs. One that could not be read is said in the chat, as an
+    unheard voice note is, so the turn is never answered as if nothing had been shown."""
+    pairs = [(a['name'], base64.b64decode(a['contentBytes'])) if isinstance(a, dict) else a for a in got or ()]
+    if missed:
+        from . import remote_assistant
+        try: remote_assistant.send(store, channel, chat, f"{unread_what(missed)} in that message could not be read - send it again, or say "
+                                                         f"what it shows.", c.get('ConnectorId'))
+        except Exception as e: logger.warning(f'{channel}: could not say a picture was unreadable - {e}')
+    return keep_files(pairs, 'phone')
+
+
 def _files(atts: list, missed: list) -> tuple[list, list]:
     "Fetched attachments as an agent channel takes them (agentchannels.heard's `media`): ([(name, bytes)], missed)."
     return [(a['name'], base64.b64decode(a['contentBytes'])) for a in atts], missed
@@ -135,9 +163,9 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
     from . import remote_assistant
     # WHAT WAITED OUT A CLOSED TASKUARY in the Assistant chat: only the newest is acted on, the rest get their thumb and are named (A10)
     mine = lambda x: (((x.get('chat') or {}).get('type') or 'private') == 'private' and not (x.get('from') or {}).get('is_bot')
-                      and ((x.get('text') or '').strip() or x.get('voice') or x.get('audio'))
+                      and ((x.get('text') or x.get('caption') or '').strip() or x.get('voice') or x.get('audio') or x.get('photo') or x.get('document'))
                       and remote_assistant.enabled(store, 'telegram', str((x.get('chat') or {}).get('id') or ''), c))
-    late = remote_assistant.queued_while_closed([(str(x['chat']['id']), x.get('message_id'), x.get('date'), (x.get('text') or '').strip() or 'a voice note')
+    late = remote_assistant.queued_while_closed([(str(x['chat']['id']), x.get('message_id'), x.get('date'), (x.get('text') or x.get('caption') or '').strip() or ('a voice note' if x.get('voice') or x.get('audio') else 'a picture'))
                                                  for u in ups if (x := u.get('message')) and x.get('chat') and mine(x)])
     for u in ups:
         if u.get('callback_query'):                     # a button under one of the Assistant's messages
@@ -171,9 +199,13 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
         # the owner's own words in the ONE private chat their card names as the Assistant chat go to
         # the same walk the desktop is on. A bot only ever hears the other side of a chat, so that
         # named private chat is what says the words are the owner's - there is no fromMe to read.
-        if ((m.get('text') or '').strip() and (chat.get('type') or 'private') == 'private'
-                and remote_assistant.intercept(store, 'telegram', cid, m['text'], from_me=True, connector=c,
-                                               message_id=m.get('message_id'), heard=heard, closed=closed)):
+        # ...A PICTURE included, with its caption: a photo carries its words as `caption`, not `text`, so a screenshot sent to the
+        # Assistant - caption and all - fell past it and was never answered
+        said = (m.get('text') or m.get('caption') or '').strip()
+        if ((said or m.get('photo') or m.get('document')) and (chat.get('type') or 'private') == 'private'
+                and remote_assistant.intercept(store, 'telegram', cid, said, from_me=True, connector=c,
+                                               message_id=m.get('message_id'), heard=heard, closed=closed,
+                                               images=lambda m=m: chat_pictures(store, 'telegram', cid, c, *_tg_photo(tok, m), m.get('message_id')))):
             continue
         if cid not in want:
             # ...and a private chat nobody chose is not met with silence: one fixed line, with nothing about the owner in it (A4)
@@ -627,9 +659,9 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         return _group_named(store, jid, wanames.name_of(store, jid, known))
     # WHAT WAITED OUT A CLOSED TASKUARY in the Assistant chat: only the newest is acted on, the rest get their thumb and are named (A10)
     late = remote_assistant.queued_while_closed([
-        (assistant_chat, x.get('id'), x.get('ts'), (x.get('text') or '').strip() or 'a voice note') for x in out.get('messages', [])
+        (assistant_chat, x.get('id'), x.get('ts'), (x.get('text') or '').strip() or ('a voice note' if x.get('audio') else 'a picture')) for x in out.get('messages', [])
         if assistant_chat and x.get('jid') == assistant_chat and x.get('fromMe') and not x.get('taskuary') and not x.get('stalePoll')
-        and ((x.get('text') or '').strip() or x.get('audio')) and remote_assistant.enabled(store, 'whatsapp', assistant_chat, c)])
+        and ((x.get('text') or '').strip() or x.get('audio') or x.get('image') or x.get('doc')) and remote_assistant.enabled(store, 'whatsapp', assistant_chat, c)])
     for m in out.get('messages', []):
         jid = m.get('jid') or ''
         if not jid: continue
@@ -662,9 +694,10 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         # A natural message the owner types in their designated private chat goes to the SAME
         # guide conversation as the desktop bubble. Bridge-stamped Taskuary output is swallowed
         # here too, so a notification or answer can never loop back as a fresh question.
-        if text and remote_assistant.intercept(
+        if (text or m.get('image') or m.get('doc')) and remote_assistant.intercept(
                 store, 'whatsapp', jid, text, from_me=bool(m.get('fromMe')),
-                connector=c, message_id=m.get('id'), poll=bool(m.get('poll')), arrived=m.get('ts'), heard=heard, closed=closed):
+                connector=c, message_id=m.get('id'), poll=bool(m.get('poll')), arrived=m.get('ts'), heard=heard, closed=closed,
+                images=lambda m=m, jid=jid: chat_pictures(store, 'whatsapp', jid, c, *_wa_files(m), m.get('id'))):
             continue
         if m.get('group') or jid.endswith('@g.us'):
             if jid not in want: continue                      # groups are opt-in, always

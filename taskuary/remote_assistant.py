@@ -648,6 +648,7 @@ def _now() -> str:
 
 # ── inbound: the owner's words, in their chat ───────────────────────────────────────────────────
 _ANSWERED = {}                         # (channel, id) -> when, so one message is answered once
+PICTURE_ONLY = '(a picture, with no words)'     # what a picture sent alone says, beside the picture itself
 _ANSWERED_GUARD = threading.Lock()
 
 
@@ -687,7 +688,7 @@ def closed_note(older: list) -> str:
 
 
 def intercept(store, channel: str, chat: str, text: str, *, from_me=False, taskuary=False, connector=None,
-              message_id=None, poll=False, arrived=None, heard=False, closed=None) -> bool:
+              message_id=None, poll=False, arrived=None, heard=False, closed=None, images=None) -> bool:
     """Claim an owner-authored question before it can be discarded or triaged.
 
     ``taskuary`` is stamped by the local bridge on every message Taskuary itself sends. Those echoes are
@@ -697,21 +698,23 @@ def intercept(store, channel: str, chat: str, text: str, *, from_me=False, tasku
     """
     if taskuary: return True
     question = str(text or '').strip()
-    if not from_me or not question or not enabled(store, channel, chat, connector): return False
+    if not from_me or not (question or images) or not enabled(store, channel, chat, connector): return False
     if not _claim(channel, message_id): return True         # already answered; swallow the second sighting
+    # `images`: a call for what the message showed (messengers.chat_pictures) - fetched only now, for the owner's own chat, once
+    images = images() if callable(images) else list(images or [])
     c = connector_for_chat(store, channel, chat, connector)
     # The answer outlives the poll that heard the question, and a poll hands its workers a single
     # writer thread it CLOSES when the cycle ends (channels._Writer) - a store call after that waits
     # on a queue nobody reads again. The turn talks to the store underneath instead, like any request.
     threading.Thread(target=_locked_respond,
                      args=(getattr(store, '_store', store), channel, str(chat), question, c.get('ConnectorId'),
-                           message_id, bool(poll), arrived, bool(heard), closed),
+                           message_id, bool(poll), arrived, bool(heard), closed, images),
                      name=f'taskuary-{channel}-assistant', daemon=True).start()
     return True
 
 
 def _locked_respond(store, channel: str, chat: str, question: str, connector_id: int, message_id=None, poll=False,
-                    arrived=None, spoken=False, closed=None):
+                    arrived=None, spoken=False, closed=None, images=None):
     # the thumb goes up BEFORE the lock: it says "heard you", and it must not wait behind the turn
     # already answering (which is exactly when the owner most needs to know they were heard)
     if message_id:
@@ -736,7 +739,7 @@ def _locked_respond(store, channel: str, chat: str, question: str, connector_id:
         with lock:
             ev = threading.Event()
             with _locks_guard: _turns[key] = ev
-            try: respond(store, channel, chat, question, connector_id, poll=poll, cancel=ev, heard=spoken, closed=closed)
+            try: respond(store, channel, chat, question, connector_id, poll=poll, cancel=ev, heard=spoken, closed=closed, images=images)
             finally:
                 with _locks_guard:
                     if _turns.get(key) is ev: _turns.pop(key, None)
@@ -962,10 +965,15 @@ def walk(store, actor: str = 'owner', opener: bool = True) -> str:
 
 
 def respond(store, channel: str, chat: str, question: str, connector_id: int, poll: bool = False, cancel=None, heard: bool = False,
-            closed: list = None):
+            closed: list = None, images: list = None):
     """Answer synchronously; the poller runs this on a serialized background worker. `cancel` is set when a pick
-    arrives behind this turn: the model's answer is dropped, never sent after the pick's."""
+    arrives behind this turn: the model's answer is dropped, never sent after the pick's.
+    `images`: the pictures the owner sent with it, kept under attachments/ - shown to the Assistant as the desktop's are, and named
+    to an agent the words go on to (general.with_files)."""
     from . import concierge, general
+    images = list(images or [])
+    if images and not str(question or '').strip(): question = PICTURE_ONLY
+    told = general.with_files(question, images)                 # the words as they go on to an agent: the pictures named with them
     # `heard`: the words are a voice note's, as transcribed - the answer says them back first (A17)
     _ASKING.chat = {'channel': channel, 'chat': chat, 'connector_id': connector_id, **({'heard': question} if heard else {})}
     owner_spoke(store, channel, chat)                 # the owner wrote here: the chat may answer, for the session's window
@@ -1024,7 +1032,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             redo = str(store.get_setting(f'{REDRAFT_KEY}:{channel}:{chat}') or '')
             if redo and not picked:
                 forget_offered(store, channel, chat)
-                send(store, channel, chat, run_act(store, {'t': 'redraft', 'key': redo, 'how': question}, item), connector_id)
+                send(store, channel, chat, run_act(store, {'t': 'redraft', 'key': redo, 'how': told}, item), connector_id)
                 return
             if redo: store.set_setting(f'{REDRAFT_KEY}:{channel}:{chat}', '', 'assistant')
             # ...and the line after Send to agent is what the agent should do: its words lead the hand-off (the owner, 2026-10-23)
@@ -1033,7 +1041,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
                 forget_offered(store, channel, chat)
                 try: was = json.loads(hand)
                 except ValueError: was = {}
-                send(store, channel, chat, run_act(store, {'t': 'hand', 'key': was.get('key') or '', 'verb': was.get('verb') or '', 'how': question}, item),
+                send(store, channel, chat, run_act(store, {'t': 'hand', 'key': was.get('key') or '', 'verb': was.get('verb') or '', 'how': told}, item),
                      connector_id)
                 return
             if hand: store.set_setting(f'{AGENT_KEY}:{channel}:{chat}', '', 'assistant')
@@ -1042,7 +1050,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             if pending and not picked:
                 # the line typed after "Continue" is what to tell the agent - a text field, not a word to read
                 forget_offered(store, channel, chat)
-                send(store, channel, chat, _continue(store, pending, question), connector_id)
+                send(store, channel, chat, _continue(store, pending, told), connector_id)
                 return
             if act and act.get('t') == 'page':
                 # the same list, the next page - kept whole again (the pick spent it above) so a typed number still answers
@@ -1084,7 +1092,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
                 forget_offered(store, channel, chat)
                 send(store, channel, chat, run_act(store, land_pick, item), connector_id)
                 return
-            out = concierge.say(store, question, key=concierge.current_key(store, tid) or None, actor='owner', cancel=cancel)
+            out = concierge.say(store, question, key=concierge.current_key(store, tid) or None, actor='owner', cancel=cancel, images=images or None)
             if cancel is not None and cancel.is_set(): return          # a pick came in behind it and answers instead
             if out.get('no_brain') and not picked:
                 # NO AI TO READ THE WORDS (F10): "next" typed over a list holding Next is that choice's own label - the poll vote said

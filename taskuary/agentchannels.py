@@ -272,20 +272,6 @@ def choices(store, kind: str) -> list:
 
 
 # ── in ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-def keep_files(got: list) -> list:
-    """Pictures and files a member sent, [(name, bytes)], kept where a prompt may name them (server.prompt_images: under attachments/) -
-    the paths, for general.with_files. A CLI agent reads a picture from a file, as it does one dropped in the task's own box."""
-    from . import config
-    d, out = config.home() / 'attachments' / 'agentchannel' / time.strftime('%Y%m'), []
-    for name, data in got or ():
-        if not data: continue
-        d.mkdir(parents=True, exist_ok=True)
-        safe = re.sub(r'[^\w.-]+', '_', os.path.basename(str(name or 'file'))).strip('._')[:80] or 'file'
-        p = d / f"{time.strftime('%Y%m%d-%H%M%S')}-{os.urandom(3).hex()}-{safe}"
-        p.write_bytes(data); out.append(str(p))
-    return out
-
-
 def heard(store, kind: str, chat, senders, text: str, ext: str, from_me: bool = False, name: str = '', media=None) -> bool:
     """One line from a chat. False when the chat is not bound (the poller goes on as before); True when it is - routed, refused or
     ignored, it is never the inbox's. `media`: a call that fetches what the line carried - ([(name, bytes)], [kinds it could not read],
@@ -305,7 +291,8 @@ def heard(store, kind: str, chat, senders, text: str, ext: str, from_me: bool = 
     # A PICTURE IS PART OF THE LINE: only the words went on, so "this is what the page looks like" reached the agent without the page
     try: got, missed = media() if media else ([], [])
     except Exception as e: got, missed = [], ['attachment']; logger.warning(f"agent channel {b['ChannelId']}: what a line carried was not read - {e}")
-    files = keep_files(got)
+    from .messengers import keep_files
+    files = keep_files(got, 'agentchannel')
     if missed:
         from .messengers import unread_what
         say(store, b, f"{unread_what(missed)} in that message could not be read, so the agent did not get it"

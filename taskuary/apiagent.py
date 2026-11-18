@@ -173,6 +173,14 @@ def _act(store, tid, sid, args: list) -> str:
     return said.strip() or 'Done.'
 
 
+def _look(sid, a: dict) -> str:
+    "The page the browser is on, as browser_look answers: its address and its elements (all its text with `full`), from `from` on."
+    from . import browsergate as bg
+    rc, snap = bg._run(sid, ['snapshot', '-c'] if a.get('full') else ['snapshot', '-i', '-c'], 30, 'look')
+    if rc != 0: raise ValueError(snap.strip()[-300:] or 'the page could not be read')
+    return _part(f'PAGE {bg.address(sid)}\n{snap.strip()}', a)
+
+
 def _url(u) -> str:
     u = str(u or '').strip()
     if not u: raise ValueError('no address given')
@@ -417,12 +425,9 @@ def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
             try: _act(store, tid, sid, ['open', u])
             except ValueError as e:
                 if not bg._same_page(bg.address(sid), u): raise
-                return f'(It had not finished loading - {str(e).strip()} - this is what has arrived.)\n' + run_tool(store, tid, sid, 'browser_look', {})
-        return run_tool(store, tid, sid, 'browser_look', {})
-    if name == 'browser_look':
-        rc, snap = bg._run(sid, ['snapshot', '-c'] if a.get('full') else ['snapshot', '-i', '-c'], 30, 'look')
-        if rc != 0: raise ValueError(snap.strip()[-300:] or 'the page could not be read')
-        return _part(f'PAGE {bg.address(sid)}\n{snap.strip()}', a)
+                return f'(It had not finished loading - {str(e).strip()} - this is what has arrived.)\n' + _look(sid, {})
+        return _look(sid, {})
+    if name == 'browser_look': return _look(sid, a)
     if name == 'browser_click': return _act(store, tid, sid, ['click', str(a.get('ref') or '')])
     if name == 'browser_fill': return _act(store, tid, sid, ['fill', str(a.get('ref') or ''), str(a.get('text') or '')])
     if name == 'browser_press': return _act(store, tid, sid, ['press', str(a.get('key') or '')])

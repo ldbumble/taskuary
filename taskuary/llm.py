@@ -58,13 +58,14 @@ OPENAI_COMPATIBLE = {
 
 # THE GATEWAY ADDRESS IS THE CARD'S when the build ships none (HIPAA_AI_URL blank, as this public repo is): it comes with the access
 # code, so the card asks for it - the card that only asked for the code could never connect (the owner, 2026-10-20). Pasted as sent,
-# with or without its /v1; https, since the access code rides it - plain http only to this computer.
-GATEWAY_MISSING = 'Add the gateway address you were sent, then press Connect.'
+# with or without its /v1; https, since the access code rides it - plain http only to this computer. The lines name no button: Setup's
+# AI step says them under Connect, the card under Connections under Test (one said "press Connect" there, over a card with none).
+GATEWAY_MISSING = 'Add the gateway address you were sent, then try again.'
 GATEWAY_NOT_HTTPS = 'The gateway address has to start with https:// - copy it again from the message your access code came in.'
-GATEWAY_SILENT = "Couldn't reach that address - check it and your connection, then press Connect."
+GATEWAY_SILENT = "Couldn't reach that address - check it and your connection, then try again."
 GATEWAY_NOT_GATEWAY = ('That address answered with a web page, not the AI gateway - check you pasted the gateway address you were sent, '
                        'not the admin site.')
-GATEWAY_CODE = "The access code didn't work - copy all of it again and press Connect."
+GATEWAY_CODE = "The access code didn't work - copy all of it once more, then try again."
 GATEWAY_FAULT = 'The gateway answered with an error of its own - try again in a minute, or ask whoever sent your access code.'
 LOCAL_HOSTS = ('localhost', '127.0.0.1', '::1')
 # A GATEWAY THAT SCALES TO ZERO (Cloud Run) answers its first request only once it has started, which took past the 15 s every other

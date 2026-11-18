@@ -132,5 +132,17 @@ test("an idle chat with the socket up looks at most twice a minute; with it down
   assert.equal(restLook({ socket: false, last: 0, now: 5000 }), true);
   assert.equal(restLook({ socket: true, last: 0, now: REST_LOOK_MS }), true);
   const src = readFileSync(fileURLToPath(new URL("../src/GeneralWorkspace.jsx", import.meta.url)), "utf8");
-  assert.match(src, /going \|\| restLook\(\{ socket: liveUp\(\), last, now: Date\.now\(\) \}\)/, "the chat's at-rest tick asks restLook");
+  assert.match(src, /restLook\(\{ socket: liveUp\(\), last, now: Date\.now\(\), every: going \? 3000 : REST_LOOK_MS \}\)/, "the chat's tick asks restLook");
+});
+
+// A TURN AT WORK IS READ AS IT MOVES, NOT EVERY 600 MS (stress round, 2026-11-18): the chat built the task's whole list ~100 times a minute
+// while a turn ran - as often through half a minute of silent thinking as through a stream of steps. Each step is pushed (run-tail); the
+// tick is the backup, every 3 s under a live socket
+test("a turn at work, socket up: half a minute of silence is at most 10 looks, and a pushed step is read", () => {
+  let reads = 0, last = 0;
+  for (let now = 600; now <= 30000; now += 600) if (restLook({ socket: true, last, now, every: 3000 })) { reads++; last = now; }
+  assert.ok(reads <= 10, `${reads} reads of a silent turn in 30 s`);
+  const src = readFileSync(fileURLToPath(new URL("../src/GeneralWorkspace.jsx", import.meta.url)), "utf8");
+  assert.match(src, /onLive\("run-tail", \(ev\) => \{ if \(touches\(ev, tid\)\) wake\(\); \}\)/, "the chat reads when its turn's step is pushed");
+  assert.match(src, /coalesced\(look, 600\)/, "at most every 600 ms");
 });

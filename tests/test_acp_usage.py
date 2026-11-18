@@ -56,8 +56,8 @@ def test_a_turn_with_no_count_is_read_from_the_cli_s_own_log_from_the_turn_s_sta
     line = lambda mid, at, n: json.dumps({'type': 'assistant', 'timestamp': at, 'message': {'id': mid, 'model': 'claude-sonnet-5-5',
                                           'usage': {'input_tokens': n, 'cache_read_input_tokens': 50, 'output_tokens': 9}}})
     def prompt_and_log(real):
-        def go(self, text):
-            out = real(self, text)
+        def go(self, text, *a, **kw):
+            out = real(self, text, *a, **kw)
             # the CLI writes this turn's line as it answers; the line before it is an earlier turn of the same conversation
             (log / 'sess_fake_1.jsonl').write_text(line('old', utc(timedelta(hours=-1)), 999) + '\n' + line('new', utc(timedelta(seconds=1)), 11) + '\n',
                                                    encoding='utf-8')

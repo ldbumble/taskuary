@@ -46,7 +46,7 @@ def test_a_turn_that_said_nothing_yet_still_says_it_was_cut():
     assert [c['Body'] for c in s.list_comments(tid) if c['ActorType'] == general.ASSISTANT_TYPE] == [general.CUT]
 
 
-def test_a_turn_whose_cli_died_part_way_keeps_its_steps_and_its_failure_where_it_happened():
+def test_a_turn_whose_cli_died_part_way_keeps_its_steps_and_its_failure_where_it_happened(tmp_path):
     """THE SAME SHAPE AS A RESTART'S CUT, ON A LIVE CLI (chat-render, 2026-11-18): a turn read a file and its CLI exited. It filed nothing, so the
     chat drew its failure only while it was the task's last word - and once he wrote again the turn read "1 step" with no reason under it, and
     the next turn's clock counted from the dead one's start ("working 12s" the moment he pressed Enter). Invented world."""
@@ -54,8 +54,20 @@ def test_a_turn_whose_cli_died_part_way_keeps_its_steps_and_its_failure_where_it
     from taskuary import clipool, conversation, terminal
     from test_general_turn_ends_short import a_claude, researcher
     import unittest
-    case = unittest.TestCase(); case.addCleanup = lambda f: None
+    # ...its patches stopped when it ends: thrown away, they stayed on for every later test in the run (CI, 2026-11-18: "No AI is connected"
+    # across a shard), and its turn's steps kept in its own folder, never a folder another test's task 1 wrote into
+    from contextlib import ExitStack
+    from taskuary import session_artifacts
+    stack = ExitStack(); case = unittest.TestCase(); case.addCleanup = stack.callback
+    stack.enter_context(mock.patch.object(session_artifacts, 'root', lambda: tmp_path))
     a_claude(case)
+    with stack: _died_part_way(case)
+
+
+def _died_part_way(case):
+    from unittest import mock
+    from taskuary import clipool, conversation, terminal
+    from test_general_turn_ends_short import researcher
     s = MemoryStore(); tid = researcher(s)
     def dies(profile, prompt, trace, resume=None, **kw):
         trace('tool_call', 'Read', {'tool_call_id': 'tu1', 'args': {'file_path': 'gail.txt'}}); trace('tool_result', 'tu1', {'result': 'Hi Alex'})

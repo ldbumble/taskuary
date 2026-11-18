@@ -3622,6 +3622,11 @@ def owed(store, tid: int, s=None) -> bool:
     if store._one("SELECT 1 AS x FROM comment WHERE TaskId=? AND ActorType=? AND CreatedAt>=? LIMIT 1", (int(tid), ASSISTANT_TYPE, at)): return False
     if store._one("SELECT 1 AS x FROM audit WHERE EntityType='task' AND EntityId=? AND Action='stopped_turn' AND CreatedAt>=? LIMIT 1", (int(tid), at)): return False
     if funnel.run_failed(store, tid): return False
+    # ...nor once its pane SHOWED the turn after the hand-over and has not shown work for the screen's own dwell (terminal.stable_phase_of
+    # `worked_at`): a CLI with no hooks and no record read here answered on its screen, and the chat read "Waiting for the agent to start" over
+    # it for OWED seconds (2026-11-17)
+    from . import terminal
+    if waits(store, s) and r['At'] < (getattr(s, 'worked_at', 0) or 0) <= time.time() - terminal.PHASE_DWELL: return False
     # ...a CLI with no hooks never says its turn began: its own record does (a step after the hand-over)
     return isinstance(s, GeneralSession) or not any(x['T'] > r['At'] for _sid, _live, steps in conversation._session_steps(store, tid) for x in steps)
 def working(store, tid: int) -> bool:

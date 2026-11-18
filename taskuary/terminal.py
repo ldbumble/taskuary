@@ -2587,6 +2587,8 @@ def stable_phase_of(t, now: float = None) -> str:
     if typing_into(t): return 'working'
     at = time.time() if now is None else float(now)
     raw = _observed_phase(t)
+    # ...and WHEN ITS SCREEN LAST SHOWED A TURN AT WORK (general.owed): a pane that showed his line's turn and is back at its prompt has answered
+    if raw == 'working': t.worked_at = at
     # A PANE LAUNCHED ON ITS PROMPT IS AT WORK UNTIL ITS CLI SHOWS IT WORKING (the recorded flood, 2026-11-11): the prompt rides the command
     # line, so nothing is typed and nothing waits to be accepted - and while the CLI was still coming up its screen read as the bare prompt.
     # The waiting room typed thirty of his lines and notes into it half a minute before its first turn; none reached the agent, and the

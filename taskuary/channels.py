@@ -190,6 +190,8 @@ ACTOR_DISCOVER = 'connector-test'
 _DNS = re.compile(r'getaddrinfo failed|Name or service not known|nodename nor servname|Temporary failure in name resolution|NameResolutionError|No address associated', re.I)
 _TIMEOUT = re.compile(r'timed? ?out|ReadTimeout|ConnectTimeout', re.I)
 _REFUSED = re.compile(r'Connection refused|actively refused|ECONNREFUSED|WinError 10061', re.I)
+# ...a connection that dropped part-way through a read, as the socket, imaplib and requests each word it
+_DROPPED = re.compile(r'Connection aborted|Connection reset|RemoteDisconnected|socket error|EOF occurred|Broken pipe|IncompleteRead', re.I)
 _AUTH_WORDS = re.compile(r'\b(invalid_auth|not_authed|token_revoked|token_expired|account_inactive|bad credentials|invalid[_ ]api[_ ]key|incorrect api key)\b', re.I)
 def _status(e):
     r = getattr(e, 'response', None)
@@ -236,6 +238,12 @@ def plain_failure(e: Exception, signin: bool = False) -> str:
     # setup has one box for the server and none for a port: the name is what can be checked, and IT knows the rest (2026-10-17)
     if _REFUSED.search(raw): return ("The server turned the connection away. Check the server name, or ask your IT team "
                                      "for the right server and port.")
+    # ...a read cut off part-way, or a server never reached (failures._UNREACHED, the road the run cards read): the socket's words
+    # and requests' repr - the folder, the host, the mailbox in its URL - reached the card and the bell with no word of what happens next
+    from .failures import _UNREACHED
+    if _DROPPED.search(raw): return ("The connection to the server dropped part-way through the read. Nothing already in is lost, "
+                                     "and it is tried again on every poll.")
+    if _UNREACHED.search(raw): return ("The server could not be reached - check this computer is online. It is tried again on every poll.")
     return raw[:500] or type(e).__name__
 
 class DraftStore:

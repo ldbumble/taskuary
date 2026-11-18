@@ -126,7 +126,9 @@ def summary(store, key: str, st: dict) -> str:
 def told(store, key: str, st: dict, actor: str = 'owner') -> str:
     "Its agent hears the whole run once, by the one road (general.tell) - and nothing is said of it again with his next line."
     from . import general
-    got = general.tell(store, st['tid'], summary(store, key, st), actor) if st.get('tid') else ''
+    from .cardqueue import says
+    # ...with what still waits in the line behind it, as a yes, a failure or a no on one card tells it (general.approved / failed, said_no)
+    got = general.tell(store, st['tid'], summary(store, key, st) + (f' {line}' if (line := says(store, st['tid'], pressed=True)) else ''), actor) if st.get('tid') else ''
     if got:
         for rid in st.get('rows', {}): store.audit('review', int(rid), general.TOLD, actor, 'system', {'task': st['tid'], 'how': got, 'batch': key})
     return got

@@ -166,6 +166,10 @@ def test_sends_that_did_not_go_still_wait_on_the_card_and_its_agent_never_sets_t
     [said] = told
     assert 'set up again only what failed' not in said
     assert 'Did not go and still on the card for their press: 4' in said and 'never set them up again' in said, said
+    assert 'stands in front of the owner' not in said or '(4 emails)' in said
+    rest = cardqueue.state(s, tid)['units'][0]
+    assert cardqueue.what(s, rest) == '4 emails', 'what still waits on it, not what it once held'
+    assert cardqueue.says(s, tid, pressed=True).count('rv') == 4, cardqueue.says(s, tid, pressed=True)
     stopped = {**st, 'state': 'stopped'}
     assert 'not run' not in bulkcard.summary(s, out['batch'], stopped), 'a row that ran and failed is no row that was not run'
 
@@ -256,3 +260,16 @@ def test_a_bulk_card_next_in_line_is_named_as_the_card_names_itself():
     us = cardqueue.state(s, tid)['units']
     assert cardqueue.line(cardqueue.state(s, tid)) == '1 of 3 · next: 40 issues'
     assert [cardqueue.what(s, u) for u in us] == ['the email to erin@northwind.example', '40 issues', '2 issues']
+
+
+def test_after_a_bulk_run_its_agent_hears_what_still_waits_behind_it():
+    """A yes, a failure and a no on one card each tell the agent what waits next in the line (cardqueue.says); the bulk card's run did not, so
+    the agent went on from 10 emails sent never told the note to Gail behind them stands once its turn ends - free to raise it again."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        out = call(tid, 'propose_email', items=emails(10))
+        last = call(tid, 'propose_email', to='gail@northwind.example', subject='Done', text='Gail - the ten went out.')
+    with mock.patch.object(outbound, 'send_out', lambda *a, **k: {'channel': 'email', 'to': k.get('to') or []}), mock.patch.object(outbound, 'send_block', lambda *a, **k: ''):
+        st, told = press(s, out['batch'])
+    [said] = told
+    assert '10 done' in said and f"rv{last['review_id']} (the email to gail@northwind.example)" in said, said

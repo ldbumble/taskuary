@@ -57,6 +57,7 @@ function watch(page) {
     const u = new URL(res.url()); if (!u.pathname.startsWith("/api/")) return;
     let bytes = 0, hash = "";
     try { const b = await res.buffer(); if (process.env.DUMP_BODIES && /\/api\/tasks\/\d+(\/assistant)?$/.test(u.pathname)) (globalThis.__bodies ||= []).push([u.pathname, Date.now(), b.toString()]); bytes = b.length; hash = createHash("sha1").update(b).digest("hex").slice(0, 10); } catch { /* streams */ }
+    if (watch.marker && !watch.hit && hash && res.request().method() === "GET" && (await res.text().catch(() => "")).includes(watch.marker)) watch.hit = { at: Date.now(), key: u.pathname };
     seen.push({ at: Date.now(), m: res.request().method(), key: u.pathname.replace(/\/\d+(?=\/|$)/g, "/N") + u.search, bytes, hash, ms: null });
   });
   return { seen, mark: () => seen.length, since: (i) => seen.slice(i) };
@@ -119,11 +120,18 @@ async function once(i) {
     // (a)+(b) turn 1: Enter -> his line -> working line; the agent's first and last word on screen vs written
     const wordHead = WORDS.slice(0, 18), wordTail = WORDS.slice(-24);
     const evBefore = (await events(w.log)).length;
-    const t0 = await say_("ping the vendor sheet", [wordHead, wordTail]);
+    watch.marker = wordTail; watch.hit = null;
+    // ...the server's own side of the hop: the answer read from the API directly every 40 ms, no page between
+    let apiAt = null, t0 = Date.now(); const apiLoop = (async () => { while (!apiAt && Date.now() < Date.now() + 60000) { try { const r = await fetch(`${w.fixtureApi}/api/tasks/${tid}/conversation`, { headers: { "X-Taskuary-Token": w.token } }); if ((await r.text()).includes(wordTail)) apiAt = Date.now(); } catch { /* next */ } await sleep(40); if (Date.now() - t0 > 60000) break; } })();
+    t0 = await say_("ping the vendor sheet", [wordHead, wordTail]);
     const deadline = Date.now() + 60000;
     while (Date.now() < deadline) { const f = await page.evaluate(() => window.__first); if (f["word:" + wordTail]) break; await sleep(25); }
     const f = await page.evaluate(() => window.__first), ev = (await events(w.log)).slice(evBefore);
-    const tok = ev.find((e) => e.ev === "first_token" && e.n === 1), res = ev.find((e) => e.ev === "result" && e.n === 1);
+    // ...the AGENT's own process: the one handed the owner's line (the rest are side calls - a probe, a memory pick, a summary)
+    const got = ev.find((e) => e.ev === "turn" && (e.prompt || "").includes("ping the vendor sheet") && (e.prompt || "").includes("TASK TQ-")), agentPid = got && got.pid;
+    const tok = ev.find((e) => e.ev === "first_token" && e.pid === agentPid), res = ev.find((e) => e.ev === "result" && e.pid === agentPid);
+    if (process.env.SERVER_LOG) await writeFile(process.env.SERVER_LOG, w.backend.output());
+    await sleep(200); out.hops = { agentHandedPrompt: got && got.t * 1000 - t0, cliWrote: res && res.t * 1000 - t0, apiHas: apiAt && apiAt - t0, pageFetched: watch.hit && watch.hit.at - t0, pageFetchedBy: watch.hit && watch.hit.key, onScreen: f["word:" + wordTail] && f["word:" + wordTail] - t0 };
     out.a = { line: f.line && f.line - t0, working: f.working && f.working - t0 };
     out.b = { firstWord: f["word:" + wordHead] && tok && f["word:" + wordHead] - tok.t * 1000, lastWord: f["word:" + wordTail] && res && f["word:" + wordTail] - res.t * 1000 };
     await sleep(2500);
@@ -170,6 +178,7 @@ for (let i = 0; i < REPEATS; i++) { say(`--- run ${i + 1}/${REPEATS} (load ${os.
 say("\n=== MEDIANS over " + runs.length + " runs ===");
 say(`(a) Enter -> his line on screen: ${median(runs.map((r) => r.a.line))} ms; -> the working line: ${median(runs.map((r) => r.a.working))} ms`);
 say(`(b) agent's first word written -> on screen: ${median(runs.map((r) => r.b.firstWord))} ms; last word -> on screen: ${median(runs.map((r) => r.b.lastWord))} ms`);
+say(`(b) hops from Enter, medians (ms): the agent handed its prompt ${median(runs.map((r) => r.hops.agentHandedPrompt))} -> its CLI finished writing ${median(runs.map((r) => r.hops.cliWrote))} -> server API has the answer ${median(runs.map((r) => r.hops.apiHas))} -> page fetched it ${median(runs.map((r) => r.hops.pageFetched))} (${runs.map((r) => r.hops.pageFetchedBy).join(", ")}) -> on screen ${median(runs.map((r) => r.hops.onScreen))}; min/max on screen ${Math.min(...runs.map((r) => r.hops.onScreen))}/${Math.max(...runs.map((r) => r.hops.onScreen))}`);
 say(`(c) polling, the last run in full:`);
 const last = runs.at(-1);
 show("opening the task (3 s)", last.open); show(`idle ${WINDOW} s`, last.idle, WINDOW); show(`a turn at work ${WINDOW} s`, last.turn, WINDOW);

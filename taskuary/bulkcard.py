@@ -113,7 +113,6 @@ def summary(store, key: str, st: dict) -> str:
 def told(store, key: str, st: dict, actor: str = 'owner') -> str:
     "Its agent hears the whole run once, by the one road (general.tell) - and nothing is said of it again with his next line."
     from . import general
-    got = general.tell(store, st['tid'], summary(store, key, st), actor) if st.get('tid') else ''
-    if got:
-        for rid in st.get('rows', {}): store.audit('review', int(rid), general.TOLD, actor, 'system', {'task': st['tid'], 'how': got, 'batch': key})
-    return got
+    def heard(how):
+        for rid in st.get('rows', {}): store.audit('review', int(rid), general.TOLD, actor, 'system', {'task': st['tid'], 'how': how, 'batch': key})
+    return general.tell(store, st['tid'], summary(store, key, st), actor, heard=heard) if st.get('tid') else ''

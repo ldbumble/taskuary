@@ -616,3 +616,17 @@ def test_the_phone_gets_the_full_text_and_its_picks(s):
          mock.patch.object(remote_assistant, 'send') as send:
         asks.check(s, tid)
     assert 'blocked on two approvals.' in send.call_args[0][3] and offer.called
+
+
+# A PICK FROM THE PHONE OF ONE ITS AGENT TOOK BACK (the stress round, 2026-11-18): "the one to paula@... was already closed_unsent" - the
+# store's own word on his phone. The press that lost to an answer says it in words, one sentence for every road that refuses it
+def test_a_phone_send_of_an_email_its_agent_took_back_says_so_in_words():
+    from taskuary import asks, slots, verdicts
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = s.create_task({'Title': 'Q4 room', 'Kind': 'general', 'Status': 'in_progress', 'OriginBase': 'owner'}, 'owner')
+    rid = slots.draft(s, tid, 'Hi Paula', to='paula@northwind.example', subject='Q4')['review_id']
+    assert verdicts.withdraw(s, tid, 'Paula is away', 'claude', which=str(rid))['ok']
+    said = asks.send_picked(s, [[rid, None]])
+    assert 'closed_unsent' not in said and 'already taken back unsent' in said
+    out = verdicts.decide(s, s.get_review(rid), 'approve')
+    assert out['already'] and out['send_error'] == 'this one was already taken back unsent by claude'

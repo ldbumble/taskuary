@@ -269,8 +269,11 @@ def left_by(store, rid):
 def _turn_after(store, task_id: int, rv) -> bool:
     """Has a turn begun on the task since draft `rv` was written - the owner's line or a brief after it? Only a written draft counts.
     ...his line still KEPT for the turn counts too (general.WAITING_TYPE): a coding turn files its letter before its record takes the line it
-    was given (waitroom._handed), and the old draft was rewritten in place under his line (the overnight audit, 2026-11-10)"""
+    was given (waitroom._handed), and the old draft was rewritten in place under his line (the overnight audit, 2026-11-10)
+    ...and his Send on it that did not go is his answer to it too: rewritten in place, the words he pressed Send on were gone under a card
+    still reading the failure (the stress round, 2026-11-18) - it stays his record, greyed, and the agent's letter is a new card"""
     from .general import USER_TYPE, WAITING_TYPE
+    if rv.get('DeliveryState') == 'failed': return True
     return bool(str(rv.get('DraftText') or '').strip()) and bool(store._one(
         'SELECT 1 AS x FROM comment WHERE TaskId=? AND ActorType IN (?,?) AND CreatedAt>? LIMIT 1', (task_id, USER_TYPE, WAITING_TYPE, str(rv.get('CreatedAt') or ''))))
 def an_earlier_turns(store, rv) -> bool:

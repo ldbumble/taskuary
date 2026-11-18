@@ -348,7 +348,7 @@ def test_a_yes_its_agent_was_handed_is_said_once_not_again_under_what_the_owner_
     time.sleep(1.1)
     s.decide_review(kept, 'approved', '{}', 'owner')
     assert any(f'rv{kept}' in d for d in general.owner_did(s, tid)), 'not handed to anyone yet: said under what the owner did'
-    with mock.patch.object(general, 'tell', side_effect=lambda st, t, said, actor='owner': told.append(said) or 'told'):
+    with mock.patch.object(general, 'tell', side_effect=lambda st, t, said, actor='owner', heard=None: told.append(said) or (heard and heard('told')) or 'told'):
         assert general.approved(s, tid, 'Approve', 'post - {"url": "https://social.example/p/1"}', review=kept) == 'told'
     assert len(told) == 1 and 'went through' in told[0]
     assert not any(f'rv{kept}' in d for d in general.owner_did(s, tid)), 'handed once - never a second time in the prompt'

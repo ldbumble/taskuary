@@ -102,7 +102,10 @@ def settled(store, rv: dict, sent: bool, actor: str) -> bool:
     sid, tid = of_review(rv), rv.get('TaskId')
     if not (sid and tid): return False
     mark(store, tid, sid, done=True, actor=actor)
-    return _left(store, tid, f"{'Sent' if sent else 'Dropped'}: {rv.get('Reason') or 'one of its emails'}.", actor)
+    # ...said by whom it was to, never by the card's Reason: that is the card's prompt ("approve to send"), and after a failed press the
+    # failure itself - a second press that went read "Sent: Not sent: 550 ..." (the stress round, 2026-11-18)
+    from .cardqueue import what
+    return _left(store, tid, f"{'Sent' if sent else 'Dropped'}: {what(store, {'rids': [rv['ReviewId']], 'rows': [rv]})}.", actor)
 
 
 def _left(store, tid: int, said: str, actor: str) -> bool:
@@ -180,10 +183,13 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     # A GUESS WHERE HIS MAIL KNOWS THE COMPANY IS NOT MADE (the owner, 2026-11-17: an email to a made-up address at a bank bounced while the
     # bank's contact had written three months before - "give it tool to search emails"): refused before anything stands, with the people at
     # that company his mail knows, so the agent drafts to one of them or asks him. A company his mail never saw still takes a marked guess
+    # ...and one his mail knows is no guess, whatever the agent called it: it was refused for the others at its company, itself unlisted
+    guessed = [a.lower() for a in (split(x)[1] for x in ([guessed] if isinstance(guessed, str) else guessed or [])) if a]
     if channel == 'email' and agent != 'owner':
         from .people import at_domain
-        for g in {a.lower() for a in (split(x)[1] for x in ([guessed] if isinstance(guessed, str) else guessed or [])) if a and '@' in a}:
-            known = [(a, n) for a, n in at_domain(store, g.rpartition('@')[2]) if a.lower() != g]
+        for g in [a for a in dict.fromkeys(guessed) if '@' in a]:
+            known = at_domain(store, g.rpartition('@')[2])
+            if g in {a.lower() for a, _ in known}: guessed = [a for a in guessed if a != g]; continue
             if known: return {'ok': False, 'why': f"{g} is your guess, and the owner's mail knows {g.rpartition('@')[2]}: "
                                                     + ', '.join(f'{a} ({n})' if n else a for a, n in known[:5])
                                                     + ' - draft to the one this is for (search_messages and person tell you who each is), '
@@ -216,7 +222,6 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     try: was = (json.loads(rv.get('Deliver') or '{}') or {}).get('mailbox') if rv and rv.get('Status') == 'pending' else None
     except (TypeError, ValueError): was = None
     box = (mailbox or was) if kind == 'email' else None
-    guessed = [a.lower() for a in (split(x)[1] for x in ([guessed] if isinstance(guessed, str) else guessed or [])) if a]
     if found and o['to'].lower() not in guessed: guessed.append(o['to'].lower())
     # ...an email's To holds addresses only: none found is an EMPTY To the card asks the owner to fill, never the name
     deliver = json.dumps({'channel': kind, 'to': [] if missing else [o['to']], 'cc': cc, 'subject': subj, 'slot': hit['id'], 'seen': seen(store, tid),

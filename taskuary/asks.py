@@ -144,7 +144,7 @@ def send_picked(store, sends: list) -> str:
     for rid, sig in sends:
         rv = store.get_review(int(rid)) or {}
         to = ', '.join((json.loads(rv.get('Deliver') or '{}') or {}).get('to') or []) or 'the sender'
-        if rv.get('Status') != 'pending': said.append(f'the one to {to} was already {rv.get("Status") or "gone"}'); continue
+        if rv.get('Status') != 'pending': said.append(f'the one to {to} was {verdicts.already(rv)}'); continue
         if sig and _sig(rv.get('DraftText')) != sig: said.append(f'the email to {to} changed since I showed it - not sent; open it to see it again'); continue
         out = verdicts.decide(store, rv, 'approve')
         said.append(f'Sent to {to}' if out.get('ok') and not out.get('send_error') else f"not sent to {to} - {out.get('send_error') or out.get('status')}")

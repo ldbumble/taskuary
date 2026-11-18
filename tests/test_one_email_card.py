@@ -94,3 +94,20 @@ def test_sending_one_letter_leaves_the_other_waiting_when_its_sent_copy_comes_ba
                    'FromEmail': 'alex@northwind.example', 'Direction': 'out', 'Subject': 'Your login', 'BodyText': login, 'Status': 'routed'})
     conversation.hear(s, tid, turn=True)
     assert s.get_review(rid)['Status'] == 'pending', s.get_review(rid)
+
+
+# A CARD THE OWNER PRESSED IS HIS RECORD (the stress round, 2026-11-18): he rewrote the agent's email in the box and pressed Send, the mailbox
+# refused it, and the agent - woken with the failure - set the email up again in the same words as before: rewritten in place, his own words
+# were gone, under a card still reading "Not sent: 550 ...". His press stands greyed with what he pressed; the agent's is a new card
+def test_an_email_set_up_again_after_his_send_failed_keeps_his_pressed_card():
+    from taskuary import slots
+    s = MemoryStore(); tid = s.create_task({'Title': 'Q4 review room', 'Kind': 'general', 'Status': 'in_progress', 'OriginBase': 'owner'}, 'owner')
+    rid = slots.draft(s, tid, 'Hi Paula - 3pm.', to='paula@northwind.example', subject='Q4 review')['review_id']
+    with mock.patch.object(outbound, 'send_out', side_effect=RuntimeError('550 mailbox unavailable')), \
+         mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learn.learn_from'):
+        assert verdicts.decide(s, s.get_review(rid), 'approve', 'Hi Paula - 3pm, and bring the Friday figures.')['delivery'] == 'failed'
+    again = slots.draft(s, tid, 'Hi Paula - 3pm.', to='paula@northwind.example', subject='Q4 review')
+    assert again['ok'] and again['review_id'] != rid
+    old = s.get_review(rid)
+    assert old['Status'] == 'closed_unsent' and 'bring the Friday figures' in old['DraftText']
+    assert s.get_review(again['review_id'])['Reason'].startswith('agent wrote this email')

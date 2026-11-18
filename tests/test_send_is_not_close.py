@@ -129,3 +129,15 @@ def test_the_phone_offers_mark_done_and_next_under_a_send_and_its_mark_done_clos
     with mock.patch.object(ra, '_on', side_effect=lambda store, actor, said, **kw: said[0]):
         assert ra._run_act(s, {'t': 'close', 'tid': tid}, None) == f'TQ-{tid:04d} closed.'
     assert s.get_task(tid)['Status'] == 'done'
+
+
+# ...and the line a slot's send leaves says WHICH email went, never the card's own words: a Send that failed once ("Not sent: 550 ...") and
+# went on the owner's second press said "Sent: Not sent: 550 mailbox unavailable.." - the failure kept as the card's reason, read back as news
+def test_an_email_sent_on_its_second_press_says_it_was_sent_not_the_failure(s):
+    tid = typed(s, FOUR[:2]); a = draft(s, tid, 0)
+    with mock.patch('taskuary.outbound.send_out', side_effect=RuntimeError('550 mailbox unavailable')), \
+         mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learn.learn_from'):
+        assert verdicts.decide(s, s.get_review(a), 'approve')['delivery'] == 'failed'
+    assert approve(s, a)['ok']
+    said = comments(s, tid)
+    assert 'Sent: Not sent' not in said and 'Sent: the email to paula@northwind.example. 1 email still to go.' in said

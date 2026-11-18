@@ -114,6 +114,25 @@ class EveryYesCarriesOn(unittest.TestCase):
             while not told and time.time() < end: time.sleep(.01)
         self.assertEqual(len(told), 1); self.assertIn('pressed Approve', told[0])
 
+    def test_a_send_whose_wake_never_started_is_still_news_to_the_next_turn(self):
+        """No AI connected when he pressed Send on the agent's email: the send went, the wake did not start - and the press was marked told
+        before the start was tried, so no later turn heard the email went (the stress round, 2026-11-18). Marked told only once it began."""
+        from taskuary import outbound, slots
+        cid = self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'The email to Paula is ready - press Send.')
+        self.s._exec('UPDATE comment SET CreatedAt=? WHERE CommentId=?', ('2000-01-01 00:00:00', cid))      # its answer, before the press
+        rid = slots.draft(self.s, self.tid, 'Hi Paula', to='paula@northwind.example', subject='Q4')['review_id']
+        tried = []
+        def start(*a, **kw): tried.append(1); raise RuntimeError('no AI is connected')
+        with mock.patch.object(general, 'start_session', side_effect=start), mock.patch.object(general, 'handles', return_value=True), \
+             mock.patch.object(outbound, 'send_out', return_value={'channel': 'email', 'to': ['paula@northwind.example'], 'cc': []}), \
+             mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learn.learn_from'):
+            self.assertTrue(verdicts.decide(self.s, self.s.get_review(rid), 'approve')['ok'])
+            end = time.time() + 5
+            while not tried and time.time() < end: time.sleep(.01)
+            time.sleep(.1)
+        did = general.owner_did(self.s, self.tid)
+        self.assertEqual(len(did), 1, did); self.assertIn(f'rv{rid}', did[0])
+
     def test_no_agent_ever_on_it_wakes_nothing(self):
         self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent'), '')
 
@@ -492,6 +511,19 @@ class AFailedSendIsHandedBack(unittest.TestCase):
         [n] = self.s.waiting_notes(self.tid)
         self.assertIn('IT DID NOT GO', n['Note']); self.assertEqual(general.owner_did(self.s, self.tid), [])
 
+    def test_the_owners_own_words_on_a_send_that_failed_reach_its_agent(self):
+        """He rewrote the reply in the box and pressed Send, and the provider refused it: its agent heard "IT DID NOT GO" and nothing of his
+        words - so the one it set up again went back to its own (the stress round, 2026-11-18). His words ride with the failure, as with a yes."""
+        from taskuary import outbound
+        self.s.snap_draft(self.rid, self.s.add_comment(self.tid, 'claude', 'agent', 'Drafted the reply.'))     # the turn that left it
+        with mock.patch('taskuary.outbound.reply_to_message', side_effect=RuntimeError('mailbox is over its sending limit')), \
+             mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.waitroom.deliver', return_value={}), \
+             mock.patch.object(verdicts, 'context_moved', return_value=(False, None)):
+            verdicts.decide(self.s, self.s.get_review(self.rid), 'approve', 'Confirmed - and the new rate starts in March.')
+        [n] = self.s.waiting_notes(self.tid)
+        self.assertIn('IT DID NOT GO', n['Note']); self.assertIn('the new rate starts in March', n['Note'])
+        self.assertNotIn('what went:', n['Note'])
+
 
 class OneCardAtATime(unittest.TestCase):
     """THE OWNER, 2026-11-16: "where there are 2 action cards, like approve push then email, it should wait on each approval step or action
@@ -541,7 +573,7 @@ class OneCardAtATime(unittest.TestCase):
         tid = Factory(self.s).task('Answer Gail and tell Ray'); self.answered(tid, 'Both letters are set up.', '2000-01-01 00:00:00')
         first, second = self.email(tid, 'gail@northwind.example', 'Gail - the rate is 4%.'), self.email(tid, 'ray@northwind.example', 'Ray - Gail has the rate.')
         told = []
-        with mock.patch.object(general, 'tell', lambda st, t, said, actor='owner': told.append(said) or 'woke'):
+        with mock.patch.object(general, 'tell', lambda st, t, said, actor='owner', heard=None: told.append(said) or (heard and heard('woke')) or 'woke'):
             self.assertTrue(verdicts.decide(self.s, self.s.get_review(first), 'reject')['ok'])
         [said] = told
         self.assertIn(f'turned down rv{first} (the email to gail@northwind.example) - their own no', said); self.assertIn(f'rv{second}', said)

@@ -26,14 +26,18 @@ def _part(words: list, address: str, name: str = '') -> bool:
 
 
 def at_domain(store, domain: str) -> list:
-    "[(address, name)] of everyone at `domain` in the owner's mail - who wrote in, and whom he wrote to - most written-with first."
+    """[(address, name)] of everyone at `domain` in the owner's mail - who wrote in, and whom he wrote to - most written-with first.
+    A public mail service is nobody's company: [] - those who use it are strangers to each other. The owner himself is never one of them."""
+    from .peoplesearch import org_of
+    from .senders import own_addresses
     d = str(domain or '').strip().lower().lstrip('@')
-    if not d: return []
+    if not d or not org_of('@' + d): return []
     out = {h['Email']: h.get('Name') or '' for h in (store.senders_like(f'@{d}', limit=8) if hasattr(store, 'senders_like') else [])
            if h['Email'].endswith('@' + d)}
     for a in written_to(store):
         if a.lower().endswith('@' + d): out.setdefault(a.lower(), '')
-    return list(out.items())
+    mine = own_addresses(store)
+    return [(a, n) for a, n in out.items() if a.lower() not in mine]
 
 
 def written_to(store) -> dict:

@@ -754,3 +754,13 @@ def test_a_routines_own_email_goes_at_once_and_his_own_task_waits_for_his_send(s
     with mock.patch('taskuary.outbound.send_out', side_effect=RuntimeError('SMTP 535')), mock.patch.object(outbound, 'send_block', return_value=''):
         failed = slots.draft(s, run, 'Hi Erin, the schedule is attached. Alex', 'erin@northwind.example', 'Schedule')
     assert failed.get('send_error') and 'sent' not in failed, failed
+
+
+# THE AGENT HEARS WHICH EMAIL WENT (the stress round, 2026-11-18): with two emails out, a Send told it "the message was sent" - no card, no
+# person - while a No names the card and whom it was to (cardqueue.said_no). One sentence says a card, for the yes as for the no
+def test_the_agent_is_told_which_of_its_emails_went(s):
+    tid = typed(s, FOUR[:2]); a, b = draft(s, tid, 0), draft(s, tid, 1)
+    told = []
+    with mock.patch('taskuary.general.approved', lambda st, t, press, what, *x, **k: told.append(what)):
+        assert approve(s, b)['ok']
+    assert told == [f'rv{b} (the email to ray@northwind.example) was sent']

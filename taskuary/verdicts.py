@@ -204,12 +204,22 @@ def _act_busy(store, rid):
     return out if out.get('already') else {**out, 'send_error': 'This is already being done; nothing was run again.'}
 
 
+# A PRESS THAT LOST TO AN ANSWER says what that answer was in words, one sentence on every road (the stress round, 2026-11-18: a phone pick
+# of an email its agent had taken back read "already closed_unsent" - the store's own word)
+STATUS_WORDS = {'approved': 'approved', 'edited': 'approved with changes', 'rejected': 'turned down', 'no_reply': 'marked as needing no reply',
+                'closed_unsent': 'taken back unsent', 'superseded': 'replaced'}
+def already(rv: dict) -> str:
+    "'already turned down by you' - what became of a review no longer waiting, and whose answer it was."
+    st, by = str(rv.get('Status') or ''), str(rv.get('DecidedBy') or '')
+    word = 'sent' if rv.get('DeliveryState') == 'sent' else STATUS_WORDS.get(st, st.replace('_', ' ') or 'gone')
+    return f"already {word}" + (f" by {'you' if by == 'owner' else by}" if by else '')
+
+
 def _delivery_busy(store, rid):
     current = store.get_review(rid) or {}
     state = current.get('DeliveryState')
     if current.get('Status') != 'pending':
-        return {'ok': False, 'status': current.get('Status'), 'sent': None, 'already': True,
-                'send_error': f"this one was already {current.get('Status')}"}
+        return {'ok': False, 'status': current.get('Status'), 'sent': None, 'already': True, 'send_error': f"this one was {already(current)}"}
     return {'ok': False, 'status': 'pending', 'sent': None, 'delivery': state or 'pending',
             'send_error': ('A delivery check or send is already in progress; nothing was sent again.'
                            if current.get('DeliveryClaim') else 'This draft changed before approval; review it and approve again.')}
@@ -592,7 +602,7 @@ def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, **kw) -> dic
         from . import demo
         if demo.enabled(): demo.after_send(store, rv['TaskId'])
         elif proposals._action(rv) not in proposals.HELD_ACTS and not (out.get('shut') or {}).get('closed'):
-            try: general.approved(store, rv['TaskId'], *pressed(rv, out), actor, review=rv.get('ReviewId'))
+            try: general.approved(store, rv['TaskId'], *pressed(store, rv, out), actor, review=rv.get('ReviewId'))
             except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: the agent was not told it went - {e}")
     # ...AND EVERY ONE THAT RAN AND FAILED (general.failed): an act's error, a send that did not go or may have - never a refusal before it
     # ran (stale, a blank, already answered), and never a held turn's steps, whose card tells its agent once for all (shellgate.approve_steps)
@@ -626,7 +636,7 @@ def in_words(got, n: int = 300) -> str:
                      if isinstance(v, (str, int, float)) and not isinstance(v, bool) and str(v).strip())[:n]
 
 
-def pressed(rv: dict, out: dict) -> tuple:
+def pressed(store, rv: dict, out: dict) -> tuple:
     "(the press, what it did) of an answered review, in words for its agent."
     if rv.get('Kind') == 'action':
         from . import proposals
@@ -636,7 +646,10 @@ def pressed(rv: dict, out: dict) -> tuple:
     if (env := _envelope(rv)).get('kind') == 'calendar':
         from .calwrite import head_of
         return 'Send', f'the calendar was told: {head_of(env)}'
-    return 'Send', f"the {'reply' if rv.get('MessageId') else 'message'} was sent" + (f" ({out['sent']})" if isinstance(out.get('sent'), str) else '')
+    # ...the card by its number and in the owner's words, as a No names it (cardqueue.said_no): with two emails out, "the message was sent"
+    # left its agent guessing which one went (the stress round, 2026-11-18)
+    from .cardqueue import what
+    return 'Send', f"rv{rv['ReviewId']} ({what(store, {'rids': [rv['ReviewId']], 'rows': [rv]})}) was sent"
 
 
 def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = None,
@@ -702,7 +715,7 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
     # clicked - or one double click - sent the same mail twice (2026-09-03).
     if str(rv.get('Status') or 'pending') != 'pending':
         return {'ok': False, 'status': rv.get('Status'), 'sent': None, 'already': True,
-                'send_error': f"this one was already {rv.get('Status')}" + (f" by {rv['DecidedBy']}" if rv.get('DecidedBy') else '')}
+                'send_error': f"this one was {already(rv)}"}
     # ...and approving an EMPTY draft sent nothing, marked the review approved and closed the task
     # anyway: the person never got an answer and nothing was left in the pipe to say so.
     # ...and an email to a name nobody has resolved to an address goes nowhere: the provider is never handed a bare name

@@ -135,6 +135,14 @@ def _attach(store, rid: int, name: str, data: bytes, actor: str = 'owner', sourc
     if not store.set_review_deliver(int(rid), json.dumps(env)):
         raise ValueError('the reply changed before its attachment could be saved')
     store.audit('review', int(rid), 'attached', actor, detail={'name': name, 'size': len(data)})
+    # ...HIS FILE ON A CARD IS HIS PRESS, AND THE AGENT'S TO HAVE (a walk, 2026-11-18): the bar's Attach put a sheet on the agent's draft, he
+    # typed a line, the draft greyed - and the agent, never told, recreated the sheet from the mail and attached its own copy. Kept in the
+    # task's folder (outputs.take_in, the chat box's road), where the propose tools take it by name, and said like every press (general.PRESSES)
+    from .processing_unread import OWNER_ACTORS
+    if actor in OWNER_ACTORS and rv.get('TaskId'):
+        from . import outputs
+        kept = outputs.take_in(int(rv['TaskId']), [path])
+        store.audit('task', int(rv['TaskId']), 'reply_file_attached', actor, detail={'name': Path(kept[0]).name if kept else name})
     return {'attachments': files}
 
 

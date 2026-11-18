@@ -746,6 +746,8 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))} - pu
            'merged_from_task': lambda d: f"merged {_ref(d.get('from_task'))} into this task", 'merged_into_task': lambda d: f"merged this task into {_ref(d.get('into'))}",
            'split_from_task': lambda d: f"made this task from part of {_ref(d.get('from_task'))}",
            'dispatch_retry': lambda d: 'pressed Retry on its start', 'dispatch_cancel': lambda d: 'cancelled its queued start',
+           # ...a file he put on a reply card (verdicts._attach), by the name it has in the task's folder - where the agent's attach finds it
+           'reply_file_attached': lambda d: f"attached {d.get('name') or 'a file'} to the reply",
            'outbox': lambda d: f"started a message to {_to(d)}", 'task_email': lambda d: f"started an email to {_to(d)}",
            'land_review_revert': lambda d: f"reverted part of the agent's change in {', '.join(d.get('files') or []) or 'its files'}",
            'strong-again': lambda d: 'asked for it again on the strong model', 'filed_not_work': lambda d: 'filed a message on it as not work',

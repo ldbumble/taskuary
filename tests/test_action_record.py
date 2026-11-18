@@ -406,3 +406,26 @@ def test_a_yes_its_agent_was_handed_is_said_once_not_again_under_what_the_owner_
         assert general.approved(s, tid, 'Approve', 'post - {"url": "https://social.example/p/1"}', review=kept) == 'told'
     assert len(told) == 1 and 'went through' in told[0]
     assert not any(f'rv{kept}' in d for d in general.owner_did(s, tid)), 'handed once - never a second time in the prompt'
+
+
+# HIS FILE ON A CARD IS HIS PRESS (a walk, 2026-11-18): the bar's Attach put the owner's sheet on the agent's reply draft, he typed a line, the
+# draft greyed, and the agent - never told - rebuilt the sheet from the mail and attached its own copy as "the full export". The file is kept
+# in the task's folder, where the agent's attach finds it by name, and the press is a line in the chat and in what its agent hears next
+class AFileOnACardIsAPress(Acts):
+    def test_the_owners_file_on_a_reply_card_is_said_and_kept_where_the_agent_attaches_from(self):
+        from pathlib import Path
+        from taskuary import outputs
+        rid = self.s.add_review({'TaskId': self.tid, 'Kind': 'draft_reply', 'DraftText': 'Hi Paula, the totals.', 'Status': 'pending',
+                                 'Deliver': json.dumps({'kind': 'reply', 'to': ['paula@northwind.example']})})
+        self.answered()
+        verdicts.attach(self.s, rid, 'october-spend.csv', b'vendor,amount\nTrainly,9100\n', 'owner')
+        self.assertEqual(outputs.named(self.tid, 'october-spend.csv').read_bytes(), b'vendor,amount\nTrainly,9100\n')
+        self.assertEqual([m['content'][0]['text'] for m in general.press_lines(self.s, self.tid)], ['You attached october-spend.csv to the reply.'])
+        [did] = general.owner_did(self.s, self.tid)
+        self.assertIn('attached october-spend.csv to the reply', did)
+
+    def test_the_agents_own_attach_is_no_press(self):
+        rid = self.s.add_review({'TaskId': self.tid, 'Kind': 'draft_reply', 'DraftText': 'x', 'Status': 'pending',
+                                 'Deliver': json.dumps({'kind': 'reply', 'to': ['paula@northwind.example']})})
+        verdicts.attach(self.s, rid, 'made.csv', b'a,b\n', 'agent')
+        self.assertEqual(general.press_lines(self.s, self.tid), [])

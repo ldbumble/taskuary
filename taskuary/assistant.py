@@ -2244,7 +2244,7 @@ def _make_task(store, i: dict, a: dict, agent: bool, actor: str) -> dict:
                                                                               'related_task_id': (prior or {}).get('TaskId')})
     if not t: attach_sources(store, i, tid)               # ...and the follow-up its evidence cites that no task holds yet
     if not t and a.get('title'): store.update_task(tid, {'Title': str(a['title'])[:200]}, actor)
-    store.set_idea_action(i['IdeaId'], a | {'tid': tid})
+    store.set_idea_action(i['IdeaId'], a | {'tid': tid, 'took': 'agent' if agent else 'task'})
     if agent:
         # ...as the owner's ask, not a proposal to grade (the owner, 2026-11-03: an agent answered "change it, don't adopt it as written"
         # to an idea they had already taken up - words about the idea, not for them)
@@ -2297,6 +2297,10 @@ def act(store, idea_id: int, verb: str, actor: str = 'owner', days: int = 1, unt
         from . import wsboot
         if verb in ('accept', 'done', 'dismiss', 'dismiss_kind'): out |= wsboot.answer_card(store, i, verb in ('accept', 'done'), actor)
     elif verb == 'accept': raise ValueError('only a workstream card is added')
+    # PRESSED TWICE (a double click, the desk and the phone a beat apart): the idea was taken up already, and its task is still open - the
+    # second press finds it and starts nothing. Put to the agent again, the brief went in twice; taught again, the verdict counted twice
+    if verb in ('task', 'agent') and a.get('took') and (t := linked_task(store, idea_id, a)):
+        return out | {'taskId': t['TaskId'], 'ref': task_ref(t['TaskId']), 'already': a['took']}
     if verb in ('task', 'agent'): out |= _make_task(store, i, a, verb == 'agent', actor)
     if verb == 'rule':
         from . import promote

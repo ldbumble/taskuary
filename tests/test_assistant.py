@@ -401,6 +401,20 @@ class ButtonTests(unittest.TestCase):
         self.assertEqual(s2.get_task(out['taskId'])['Kind'], 'coding')
         self.assertEqual([getattr(c[0][0], '__name__', '') for c in spawn.call_args_list], ['_auto_code'])
 
+    def test_send_to_agent_pressed_twice_starts_one_agent(self):
+        """Pressed twice - a double click, or the desk and the phone a beat apart - the second press put the brief to the agent again
+        (the session had not answered yet, so it still read as fresh) and taught the verdict twice. The second press finds the task
+        the first one made and starts nothing."""
+        s, mid, idea = self._posted()
+        with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch('taskuary.memorylines.teach_soon') as taught:
+            first = assistant.act(s, idea['IdeaId'], 'agent')
+            again = assistant.act(s, idea['IdeaId'], 'agent')
+            made = assistant.act(s, idea['IdeaId'], 'task')
+        self.assertEqual(len(spawn.call_args_list), 1)
+        self.assertEqual(len(taught.call_args_list), 1)
+        self.assertEqual((again['taskId'], made['taskId']), (first['taskId'], first['taskId']))
+        self.assertEqual(s.get_task(first['taskId'])['Kind'], 'general', 'Make a task after it never takes the work off its agent')
+
     def test_make_a_task_reads_the_task_triage_already_opened(self):
         """I1: triage opened a task for the idea, and Make a task opened a second one beside it."""
         s, mid, idea = self._posted()

@@ -572,6 +572,18 @@ class NewTaskTool(unittest.TestCase):
             r = rpc(self.tid, 'tools/call', {'name': 'remember', 'arguments': bad}).json()['result']
             self.assertTrue(r['isError']); self.assertIn('arguments', r['content'][0]['text']); self.assertNotIn("has no attribute", r['content'][0]['text'])
 
+    # A REPORT'S NUMBER (the same round): share takes `report`, the N of #report=N - and search_tasks, the only way to find a report by its
+    # name, listed it as "src:report:<title>" with no number, so the agent could name nothing to share
+    def test_a_report_found_by_search_carries_the_number_share_asks_for(self):
+        sid = self.s.save_source({'Channel': 'report', 'Address': 'Vendor spend weekly', 'Active': 1,
+                                  'ConfigJson': json.dumps({'title': 'Vendor spend weekly', 'type': 'sql'})}, 'owner')
+        hits = json.loads(tool(self.tid, 'search_tasks', words='vendor spend')[0].strip('⟦⟧'))
+        self.assertEqual([h['report'] for h in hits if h['title'] == 'Vendor spend weekly'], [sid])
+        said, err = tool(self.tid, 'share', report=sid + 50, to='Gail Moreno', text='Here it is')
+        self.assertTrue(err); self.assertIn('search_tasks', said)
+        what, step = said.split('\n')                       # ...on the agent's line, never the owner's Why line (agenttools.refusal)
+        self.assertEqual(what, f'there is no report {sid + 50}'); self.assertTrue(step.startswith(agenttools.NEXT_STEP))
+
     # A NUMBER AS ITS LINK WRITES IT (the same round): share's `report` is "the N of #report=N", and an agent that copied the link whole -
     # "#report=4" - was told it was "not a number"; and only the forms the app itself writes are numbers, never a sign or a stray mark
     def test_a_number_written_as_the_link_that_carries_it_is_that_number(self):

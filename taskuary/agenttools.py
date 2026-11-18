@@ -528,7 +528,9 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         got = search.everything(store, a.get('words', ''))
         # ...and the endings of earlier tasks on those words (search.outcomes): what one already settled is not asked of the owner again
         done = search.says_outcomes(search.outcomes(store, a.get('words', ''), skip=tid))
-        return _out(_j([{k: h.get(k) for k in ('type', 'id', 'ref', 'title', 'sub', 'snippet', 'when', 'status') if h.get(k)} for h in got.get('hits', [])][:40])
+        # ...a report's number rides on its hit (`report`, the N of #report=N): share names a report by it, and nothing else told the agent
+        return _out(_j([{**{k: h.get(k) for k in ('type', 'id', 'ref', 'title', 'sub', 'snippet', 'when', 'status') if h.get(k)},
+                         **({'report': h['source']} if h.get('channel') == 'report' and h.get('source') else {})} for h in got.get('hits', [])][:40])
                     + (f'\n\n{done}' if done else ''), fence_it=True)
     if name == 'person':
         from . import people

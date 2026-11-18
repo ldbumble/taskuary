@@ -226,7 +226,7 @@ def _sources(store, words, q: str = '') -> list:
                 out.append({'type': 'source', 'id': f"src:{ch}:{name}", 'title': title, 'sub': name, 'channel': ch, 'pick': f'src:{ch}:{name}'})
             continue
         if all(w in f'{name} {ch}'.lower() for w in lw):
-            out.append({'type': 'source', 'id': f"src:{ch}:{name}", 'title': name, 'channel': ch, 'pick': f'src:{ch}:{name}'})
+            out.append({'type': 'source', 'id': f"src:{ch}:{name}", 'title': name, 'channel': ch, 'pick': f'src:{ch}:{name}', 'source': s['SourceId']})
     return out
 
 

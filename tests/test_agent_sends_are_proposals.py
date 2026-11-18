@@ -233,3 +233,10 @@ class AProposalSaysWhatNeverWhere(unittest.TestCase):
         finally:
             for c in s.connectors_by_type('intacct'): s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 0}, 'test')
 
+    def test_an_mcp_call_naming_no_tool_is_said_back_not_put_before_the_owner(self):
+        "run_system {type: mcp} with no `tool` was filed as an Approve card that could only fail at the press."
+        s = server.store
+        tid = s.create_task({'Title': 'Tidy the notes', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        miss = []
+        self.assertIsNone(proposals.queue(s, tid, {'action': 'run_tool', 'type': 'mcp', 'tool_args': {}}, 'agent', refused=miss))
+        self.assertIn('tool', miss[0])

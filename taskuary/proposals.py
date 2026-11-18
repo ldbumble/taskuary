@@ -244,7 +244,8 @@ def validate(store, p: dict) -> tuple:
         changes, why = setting_changes(p)
         if not changes: return False, why
         return True, 'change ' + '; '.join(f"{c['name']} -> {c['value']}" for c in changes)
-    missing = [k for k in need if not str(p.get(k) or '').strip()]
+    # ...an MCP call is a call to one of its server's tools: none named could only fail at the press
+    missing = [k for k in (*need, *(('tool',) if a == 'run_tool' and p.get('type') == 'mcp' else ())) if not str(p.get(k) or '').strip()]
     if missing: return False, f'{a} needs {", ".join(missing)}'
     # NOTHING EMPTY IS PUT IN FRONT OF THE OWNER: a playbook that could not be filed, or says nothing of how the job is done, is refused at
     # this one gate - the tool, a marker in the agent's words, the on-close question - and its writer is told what it lacks

@@ -13,7 +13,7 @@ test("the capability is asked once, re-asked when setup moves, and shows coding 
   assert.match(c, /tq-setup-changed/);
   assert.match(c, /onLive\(\["feed-changed", "task-changed"\]/, "and re-read when the live feed says something changed");
   // every screen reads the one hook - no screen keeps its own coding check
-  for (const f of ["ui.jsx", "assistantCards.jsx", "TaskPage.jsx", "TasksView.jsx", "SettingsView.jsx", "AssistantView.jsx"])
+  for (const f of ["RunForm.jsx", "assistantCards.jsx", "TaskPage.jsx", "TasksView.jsx", "SettingsView.jsx", "AssistantView.jsx"])
     assert.match(read(f), /useCapabilities\(\)/, f);
 });
 
@@ -24,8 +24,7 @@ test("a channel the server names as unable to send hides its Send; one it does n
 });
 
 test("no coding tool: no Coding agent button, no coding kind to pick, no Coding agent settings", () => {
-  assert.match(read("ui.jsx"), /\{canCode && <Button size="small" variant=\{agentKind === "coding"/);
-  assert.match(read("ui.jsx"), /const suggestedKind = canCode && /);
+  assert.match(read("RunForm.jsx"), /\{canCode && <Button size="small" variant="outlined"/);
   assert.match(read("assistantCards.jsx"), /i\.mid && !i\.tid && canCode && <Button[^\n]*ask\(i, true\)/);
   assert.match(read("TaskPage.jsx"), /\.filter\(\(o\) => o\.key !== "coding" \|\| canCode \|\| t\.Kind === "coding"\)/);
   assert.match(read("TasksView.jsx"), /o\.made !== false && \(o\.key !== "coding" \|\| canCode\)/);

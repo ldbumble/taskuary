@@ -2,7 +2,7 @@ import { taskSource } from "./taskSource.mjs";
 // Consistent worker startup across the surfaces that start one (PW-209..214).
 //
 // The All-detail row hid Send to agent for fyi/reply rows that chat cards happily dispatch; the
-// timeline's SendToAgent read a needs_repo decision as a live start; the task page's "Use
+// task page's "Use
 // non-coding agent" only re-labelled the task's kind and left a workspace mount to start work.
 // Every surface now reads one dispatch outcome and shows what actually happened.
 import test from "node:test";
@@ -27,15 +27,6 @@ test("a dispatch answer is read as started, existing, needs_repo or assistant - 
   // an older server without the flags: a session payload is a start, a needs_repo is not
   assert.equal(outcomeOf({ dispatch: "session", session: { sid: "s" } }).state, "started");
   assert.equal(outcomeOf({ dispatch: "needs_repo" }).state, "needs_repo");
-});
-
-test("the timeline's SendToAgent handles the repository decision instead of calling it a start", () => {
-  const ui = src("ui.jsx");
-  const handoff = ui.slice(ui.indexOf("export const SendToAgent"), ui.indexOf("export const TASK_STATES"));
-  assert.match(handoff, /outcomeOf\(data\)/);
-  assert.match(handoff, /needs_repo/);
-  assert.match(handoff, /RepoPicker/);
-  assert.doesNotMatch(handoff, /setSent\(data\);\s*setPrompt\(""\);\s*onOpenTask/);   // the old unconditional "it started"
 });
 
 test("the task page's non-coding start goes through the shared dispatch, whatever the task's kind was", () => {

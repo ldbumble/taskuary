@@ -1702,8 +1702,9 @@ session, `accepted` (`Term.accepted`: the prompt was submitted - True when the C
 command line or the typed seed was answered, False when it was typed but never taken, None before
 any prompt) - exposed on the session's `info`. A repository decision carries `started: false`; a
 failed launch is a 422, never a success. `website/src/dispatchOutcome.js` (`outcomeOf`) is the one
-reading of that answer: the timeline's SendToAgent (`ui.jsx`) now offers the `RepoPicker` on a
-needs_repo decision with a "Not now - nothing was started" exit and reports what actually happened;
+reading of that answer: an item's Send to agent (once `ui.jsx`'s SendToAgent, now the one box
+`RunForm.AgentAsk` every item opens) offers the `RepoPicker` on a needs_repo decision through its
+caller and reports what actually happened (`website/test/repoChoice.test.mjs`);
 All detail (`FeedView.jsx`) offers Send to agent for fyi/reply rows as the chat cards do, with
 triage's reading kept as the printed reason; the task page's non-coding start (`TasksView.jsx`)
 goes through the shared dispatch whatever the task's kind was instead of re-labelling the task and

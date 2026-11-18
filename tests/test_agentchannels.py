@@ -205,6 +205,18 @@ def test_only_the_bound_agents_answers_and_questions_reach_the_chat(w):
     assert len(w.posts) == 2
 
 
+def test_a_post_the_chat_refuses_is_said_in_the_task_once(w):
+    "The app was taken out of the Slack channel: every answer was lost with a log line, and the task said nothing."
+    w.bind()
+    with mock.patch.object(ac, '_send', side_effect=RuntimeError('slack chat.postMessage: not_in_channel')):
+        ws.record(w.s, w.tid, f's{w.tid}', 'turn_end', text='Fixed the rounding.')
+        ws.record(w.s, w.tid, f's{w.tid}', 'turn_end', text='Tests pass too.')
+    said = [c['Body'] for c in w.s.list_comments(w.tid, internal=True) if 'did not take' in str(c.get('Body') or '')]
+    assert len(said) == 1 and 'not_in_channel' in said[0]
+    ws.record(w.s, w.tid, f's{w.tid}', 'turn_end', text='Back again.')               # it works again: the next failure is said again
+    assert w.posts and not ac.bound(w.s, 'slack', CHAN)['state'].get('down')
+
+
 def test_our_own_post_read_back_is_not_the_owners_line(w):
     w.bind()
     ws.record(w.s, w.tid, f's{w.tid}', 'turn_end', text='Fixed the rounding.')

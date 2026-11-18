@@ -421,9 +421,20 @@ def say(store, b: dict, text: str, tid=None):
         for part in chatformat.split(body, 3500):
             try: ext = _send(store, b, part)
             except Exception as e:
-                logger.warning(f"agent channel {b['ChannelId']} ({b['Kind']}): not posted - {e}"); return
+                logger.warning(f"agent channel {b['ChannelId']} ({b['Kind']}): not posted - {e}"); return _down(store, b, e, tid)
             store.agent_channel_log(b['ChannelId'], ext if ext and not ext.endswith(':') else f"out:{time.time_ns()}", 'out', 'taskuary', '', tid or b.get('TaskId'), part)
+        if (b.get('state') or {}).get('down'): _save_state(store, b, down=None)
     _go(go)
+
+
+def _down(store, b: dict, e, tid=None):
+    """A post the chat would not take is said where the owner works - in the task, once while it keeps failing - instead of only in the
+    log: a Slack app taken out of the channel lost every answer while the teammates waited on it."""
+    if (b.get('state') or {}).get('down'): return
+    _save_state(store, b, down=str(e)[:200] or type(e).__name__)
+    if (t := tid or b.get('TaskId')):
+        store.add_comment(int(t), 'taskuary', 'agent', f"The {LABEL.get(b['Kind'], b['Kind'])} chat this agent talks on did not take its last "
+                          f"message - {str(e)[:200] or type(e).__name__}. Fix the connection, or unbind the chat; the next message tries again.")
 
 
 def on_event(store, tid: int, kind: str, text: str = '', source: str = ''):

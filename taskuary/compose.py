@@ -657,9 +657,7 @@ def compose_dashboard(store, ask: str, llm, answers: dict = None, rounds: int = 
         cfg = out.get('config')
         if not isinstance(cfg, dict): return {'error': AGAIN.format('a dashboard')}
         cfg = {k: v for k, v in cfg.items() if k in DASHBOARD_KEYS} | {'type': 'dashboard'}
-        for i, s in enumerate(cfg.get('sources') or [], 1):
-            if isinstance(s, dict): s.setdefault('key', f's{i}')
-        cfg, dropped = _tiles_of(store, cfg, llm)
+        cfg, dropped = _tiles_of(store, dashboards.keyed(cfg), llm)
         ok, why = dashboards.validate(cfg, store)
         if not ok and dropped and not cfg.get('components'): why = dropped[0]
         if not ok: return {'error': why, 'config': cfg}

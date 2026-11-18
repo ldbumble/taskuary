@@ -75,6 +75,14 @@ def rows_out(rows, limit, unit='rows', mine=True):
     return head, '\n'.join(json.dumps(r, default=str) for r in rows)[:WIDE_CHARS if _WIDE.get() else BODY_CHARS]
 
 
+def json_body(data) -> str:
+    """A JSON answer as a body. A list is one item per line, as rows_out writes rows: a dashboard reads each line as a row and a cut
+    loses only the tail. Pretty-printed and cut at the report's cap, a 500-item answer lost every row (a cut list is no JSON, and
+    no line of an indented one is a whole item) while its headline still said 500."""
+    if isinstance(data, list): return '\n'.join(json.dumps(r, default=str) for r in data)[:WIDE_CHARS if _WIDE.get() else BODY_CHARS]
+    return json.dumps(data, indent=1, default=str)[:BODY_CHARS]
+
+
 def ro_sqlite(path: str):
     """A report READS a database, so open it so that it can do nothing else: the query is whatever
     the spec says, and DDL autocommits - a metric spec that said DROP TABLE dropped it (audit 2026-09-02)."""
@@ -441,7 +449,7 @@ def run_rest(cfg):
     data = r.json()
     for k in (cfg.get('path') or '').split('.'):
         if k: data = data[int(k)] if isinstance(data, list) else data.get(k)
-    return (plural(len(data), 'item') if isinstance(data, list) else 'ok'), json.dumps(data, indent=1, default=str)[:BODY_CHARS]
+    return (plural(len(data), 'item') if isinstance(data, list) else 'ok'), json_body(data)
 
 
 def run_graphql(cfg):
@@ -465,7 +473,7 @@ def run_graphql(cfg):
     data = payload.get('data') or {}
     for k in (cfg.get('path') or '').split('.'):
         if k: data = data[int(k)] if isinstance(data, list) else data.get(k)
-    return (f'{len(data)} items' if isinstance(data, list) else 'ok'), json.dumps(data, indent=1, default=str)[:BODY_CHARS]
+    return (f'{len(data)} items' if isinstance(data, list) else 'ok'), json_body(data)
 
 
 def run_rss(cfg):

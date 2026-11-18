@@ -549,3 +549,133 @@ def test_a_run_says_every_panel_so_send_to_agent_hands_over_the_whole_dashboard(
     # ...and the preview a report reads a dashboard by says it in the same words
     with mock.patch.object(dashboards, 'collect', lambda store, cfg: data):
         assert reports._dashboard_preview({**spec, 'store': s}) == (out['subject'].split(' — ', 1)[1], body)
+
+
+# ── stress round: a spec saved by hand, a run that fails, a number that is not one ──────────────────────
+def _post(c, sid, spec):
+    return c.post('/api/sources', json={**({'SourceId': sid} if sid else {}), 'Channel': 'report', 'Address': spec['title'],
+                                        'ConfigJson': json.dumps(spec), 'Active': True})
+
+
+def test_a_source_saved_without_a_key_is_read_under_the_name_its_tiles_bind_to():
+    """validate names a keyless source s1 and lets a tile read "s1"; the run kept its rows under no name at all, so every tile read
+    nothing - and the page looked the source up by a key the spec never carried. The saved spec carries the name the check gave it."""
+    from unittest import mock
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    s = _store()
+    spec = {**SPEC, 'sources': [{k: v for k, v in SPEC['sources'][0].items() if k != 'key'}],
+            'components': [{**c, 'source': 's1'} for c in SPEC['components']]}
+    with mock.patch.object(server, 'store', s):
+        sid = _post(TestClient(server.app), None, spec).json()['sourceId']
+    kept = json.loads(s.get_source(sid)['ConfigJson'])
+    assert kept['sources'][0]['key'] == 's1'
+    old = s.save_source({'Channel': 'report', 'Address': 'Kept before', 'Active': 1, 'ConfigJson': json.dumps(spec)}, 't')
+    with mock.patch.object(server, 'store', s):              # ...one kept before reaches the page under the names its run reads
+        assert TestClient(server.app).get(f'/api/dashboards/{old}').json()['config']['sources'][0]['key'] == 's1'
+    data = dashboards.collect(s, spec)                       # ...and a spec that still has none reads under the same name
+    assert list(data['sources']) == ['s1']
+    assert dict((c['title'], v) for c, v in dashboards.numbers(spec, data)) == {'Open tasks': 2}
+
+
+@pytest.mark.parametrize('change, says', [
+    ({'filters': {'range': 'a month'}}, 'date range'),
+    ({'filters': 'last month'}, 'filters'),
+    ({'components': [{'kind': 'list', 'title': 'Open now', 'source': 'tasks', 'label': 'title', 'limit': 'many'}]}, '"limit" is a number'),
+    ({'components': [{'kind': 'progress', 'title': 'Goal', 'source': 'tasks', 'target': 'ten'}]}, '"target" is a number'),
+])
+def test_a_number_that_is_not_one_is_refused_at_save_not_crashed_on_at_run(change, says):
+    """The tile check refused a "limit" that was not a number, but a spec saved whole only met validate, which let it through - and
+    the run crashed on int('many'); a date range in words crashed the save itself with a 500."""
+    from unittest import mock
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    ok, why = dashboards.validate({**SPEC, **change}, MemoryStore())
+    assert not ok and says in why
+    with mock.patch.object(server, 'store', _store()):
+        r = _post(TestClient(server.app), None, {**SPEC, **change})
+    assert r.status_code == 422 and says in r.json()['detail']
+
+
+def test_a_run_whose_every_source_failed_is_said_on_the_dashboard_it_left_as_it_was():
+    """Run now on a dashboard whose one source broke: no new rows were kept, so the page drew the last run's numbers under the last
+    run's time, and the press said nothing at all. The failed run is said on the page, with its reason, until a run reads again."""
+    from unittest import mock
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    s = _store(); src = _save(s)
+    reports.run_one(s, src, None, 'manual')
+    broken = {**SPEC, 'sources': [{'key': 'tasks', 'label': 'Tasks', 'type': 'taskuary_data', 'dataset': 'gone'}]}
+    s.save_source({'SourceId': src['SourceId'], 'ConfigJson': json.dumps(broken)}, 't')
+    reports.run_one(s, s.get_source(src['SourceId']), None, 'manual')
+    with mock.patch.object(server, 'store', s):
+        c = TestClient(server.app)
+        probs = c.get(f"/api/dashboards/{src['SourceId']}").json()['problems']
+        assert any(p.startswith('The last run') and 'failed' in p and 'gone' in p for p in probs), probs
+        s.save_source({'SourceId': src['SourceId'], 'ConfigJson': json.dumps(SPEC)}, 't')
+        reports.run_one(s, s.get_source(src['SourceId']), None, 'manual')
+        assert c.get(f"/api/dashboards/{src['SourceId']}").json()['problems'] == []
+
+
+def test_a_web_source_that_answers_hundreds_of_items_draws_every_one(monkeypatch):
+    """A REST answer was pretty-printed and cut at the report's 20K cap even on a dashboard: 500 invoices were no JSON once cut, and no
+    line of an indented list is a whole item - so the source said "500 items" and every tile on it counted nothing."""
+    from taskuary import webguard
+
+    class Answer:
+        def raise_for_status(self): pass
+        def json(self): return [{'id': i, 'vendor': 'Payworth', 'amount': i * 1.5, 'status': 'open'} for i in range(500)]
+    monkeypatch.setattr(webguard, 'get', lambda *a, **k: Answer())
+    spec = {'type': 'dashboard', 'title': 'Bills', 'sources': [{'key': 'bills', 'type': 'rest', 'url': 'https://api.vendor.example/bills'}],
+            'components': [{'kind': 'stat', 'title': 'Open bills', 'source': 'bills', 'where': {'status': 'open'}}]}
+    data = dashboards.collect(MemoryStore(), spec)
+    assert data['sources']['bills']['head'] == '500 items' and len(data['sources']['bills']['rows']) == 500
+    assert dashboards.headline(spec, data) == [('Open bills', '500')]
+    head, body = reports.run_rest({'url': 'https://api.vendor.example/bills'})        # ...and a report still reads it whole-headed, in its cap
+    assert head == '500 items' and len(body) <= reports.BODY_CHARS and json.loads(body.splitlines()[0])['id'] == 0
+
+
+def test_a_run_without_one_of_its_sources_reaches_the_bell_as_a_reports_does():
+    """A report that ran without a source names it in its headline (`Bills: FAILED`) and the bell says "<report> ran without Bills".
+    A dashboard's headline was its tiles alone, so one that lost a source drew on - and nothing anywhere but its own page said so."""
+    from taskuary import problems
+    s = _store()
+    spec = {**SPEC, 'sources': SPEC['sources'] + [{'key': 'bills', 'label': 'Bills', 'type': 'taskuary_data', 'dataset': 'gone'}]}
+    src = _save(s, spec)
+    out = reports.run_one(s, src, None, 'manual')
+    assert out['message_id'] and not out['failed'] and out['subject'].endswith('Bills: FAILED')
+    rang = [p for p in problems.collect(s) if p['key'] == f"report:{src['SourceId']}"]
+    assert rang and rang[0]['title'] == 'Northwind desk ran without Bills' and 'gone' in rang[0]['detail']
+
+
+def test_a_run_with_nothing_to_show_still_says_the_source_it_went_without_and_the_column_that_went():
+    """A run with no number puts nothing on the rail - but it dropped the note with it: a dashboard whose second source broke while
+    the first was empty said "Every source was read" in its history and nothing in the bell, and one whose table lost the column
+    every tile counted said "none has a number yet"."""
+    from taskuary import problems
+    s = MemoryStore()
+    spec = {**SPEC, 'sources': [{'key': 'replies', 'label': 'Replies', 'type': 'taskuary_data', 'dataset': 'replies'},
+                                {'key': 'bills', 'label': 'Bills', 'type': 'taskuary_data', 'dataset': 'gone'}],
+            'components': [{'kind': 'stat', 'title': 'Replies sent', 'source': 'replies'}]}
+    src = _save(s, spec)
+    out = reports.run_one(s, src, None, 'manual')
+    assert out['message_id'] is None and not out['failed'] and 'gone' in out['note']
+    assert any(p['title'] == 'Northwind desk ran without Bills' for p in problems.collect(s))
+    s2 = _store()
+    shape = {**SPEC, 'components': [{'kind': 'stat', 'title': 'Open hours', 'source': 'tasks', 'agg': 'sum', 'y': 'hours_open'}]}
+    out = reports.run_one(s2, _save(s2, shape), None, 'manual')
+    assert out['message_id'] is None and 'no column hours_open' in out['summary']
+
+
+def test_a_run_whose_numbers_fell_to_nothing_retires_the_row_that_still_said_them():
+    """Nothing to show is not news, so no row is put on the rail - but the one before it stayed: "Open tasks 2" stood there the morning
+    after both tasks were closed, a number no run said any more. The run retires it, as a run that drew would have."""
+    s = _store(); src = _save(s)
+    first = reports.run_one(s, src, None, 'manual')['message_id']
+    for t in s.list_tasks(): s.update_task(t['TaskId'], {'Status': 'done'}, 'owner')
+    spec = {**SPEC, 'components': [SPEC['components'][0]]}
+    s.save_source({'SourceId': src['SourceId'], 'ConfigJson': json.dumps(spec)}, 't')
+    out = reports.run_one(s, s.get_source(src['SourceId']), None, 'manual')
+    assert out['message_id'] is None and 'nothing to show yet' in out['subject']
+    st = s._one('SELECT Status FROM funnel_state WHERE Key=?', (f'report:{first}',))
+    assert st and st['Status'] == 'done'

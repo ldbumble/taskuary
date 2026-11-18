@@ -162,7 +162,7 @@ class EveryRowIsAWorkingCard(unittest.TestCase):
         with mock.patch.object(apireads.requests, 'get', return_value=rss) as g:
             head, body = apireads.runner('substack')({'host': 'northwind.substack.com'})
         self.assertEqual((g.call_args.args[0], head), ('https://northwind.substack.com/feed', 'Substack: 1 items'))
-        self.assertEqual(json.loads(body)[0]['link'], 'https://northwind.substack.com/p/on-ledgers')
+        self.assertEqual(json.loads(body.splitlines()[0])['link'], 'https://northwind.substack.com/p/on-ledgers')
 
 
 class OnlyReads(unittest.TestCase):

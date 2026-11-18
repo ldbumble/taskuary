@@ -10,7 +10,7 @@ the page slices them - the date range and the segment filter re-slice every comp
 The rules the presets follow (docs/notes/dashboards.md): one screen, the number first, one palette in both themes,
 one axis, thin marks, recessive chrome, filters in one row above everything they scope, a table behind every chart.
 """
-import json, re, time
+import json, math, re, time
 from datetime import datetime, timedelta
 from loguru import logger
 
@@ -224,8 +224,7 @@ def _col(k): return str(k or '').replace('_', ' ').strip()
 
 def describe(c: dict, spec: dict = None) -> str:
     """A plain sentence for a tile from its config alone - what a person would have written for it. No AI: deterministic."""
-    srcs = {s.get('key'): s for s in (spec or {}).get('sources') or [] if isinstance(s, dict)}
-    src, k, agg = _col((srcs.get(c.get('source')) or {}).get('label') or c.get('source')) or 'rows', c.get('kind'), c.get('agg') or 'count'
+    src, k, agg = _col(source_of(spec, c.get('source')).get('label') or c.get('source')) or 'rows', c.get('kind'), c.get('agg') or 'count'
     src = src[:1].lower() + src[1:] if src[1:2].islower() else src           # "Tasks" reads tasks mid-sentence, "AI used" stays
     what = f'the count of {src}' if agg == 'count' else f"{_AGG_SAID.get(agg, agg)} {_col(c.get('y'))} of {src}"
     head = (f"{what} per {_col(c.get('x'))}" if k in ('line', 'area', 'bar') else
@@ -291,16 +290,12 @@ def check_tile(spec: dict, c, seen: dict = None) -> tuple:
     ok, why = validate({'title': 'tile', 'sources': spec.get('sources') or [], 'components': [c]})
     if not ok: return None, why
     name = c.get('title') or c['kind']
-    for k in ('target', 'limit'):
-        if c.get(k) is not None and (isinstance(c[k], bool) or not isinstance(c[k], (int, float))): return None, f'{name}: "{k}" is a number'
-    if c.get('w') is not None and c['w'] not in (1, 2, 3, 4): return None, f'{name}: "w" is 1 to 4 columns'
-    if c.get('columns') is not None and not isinstance(c['columns'], list): return None, f'{name}: "columns" is a list'
     cols = set(((seen or {}).get(c['source']) or {}).get('columns') or [])
     if cols:
         want = [c[k] for k in COLUMN_KEYS if isinstance(c.get(k), str) and c.get(k)] + list(c.get('columns') or []) + list((c.get('where') or {}).keys())
         if c.get('sort'): want.append(str(c['sort']).lstrip('-'))
         if miss := sorted({w for w in want if w not in cols}):
-            label = next((s.get('label') for s in spec.get('sources') or [] if isinstance(s, dict) and s.get('key') == c['source']), None) or c['source']
+            label = source_of(spec, c['source']).get('label') or c['source']
             return None, f"{name}: {label} has no column {', '.join(miss)} - it has {', '.join(sorted(cols))}"
     return c, ''
 
@@ -431,6 +426,17 @@ def migrate_priorities(store) -> int:
 def _key(s, i): return str(s.get('key') or f's{i}').strip()
 
 
+def source_of(spec: dict, key) -> dict:
+    """The source a tile's `source` names - by the name validate gives it (_key), so one saved without a key is still s1."""
+    return next((s for i, s in enumerate((spec or {}).get('sources') or [], 1) if isinstance(s, dict) and _key(s, i) == key), {})
+
+
+def keyed(spec: dict) -> dict:
+    """The spec with every source carrying the name its tiles bind to - what is kept, so the page reads the name the check read."""
+    if not isinstance(spec, dict) or not isinstance(spec.get('sources'), list): return spec
+    return {**spec, 'sources': [{**s, 'key': _key(s, i)} if isinstance(s, dict) else s for i, s in enumerate(spec['sources'], 1)]}
+
+
 # A DASHBOARD SOURCE'S `key` IS ITS OWN NAME (what a component reads), and one executor reads a `key` of its own: an S3 source's object
 # path (aws.run_s3_object). On a dashboard that path is `object_key`, handed to the executor as its `key` at run time; a report's S3
 # source is untouched. A dashboard saved before this held the path in `key` itself - a key shaped like a path (a / or a .) still
@@ -480,8 +486,13 @@ def validate(spec: dict, store=None) -> tuple:
         if r is not None and r is not False and (isinstance(r, bool) or r not in RANGES[:-1]):
             return False, f'{name}: its own "range" is false (what is true now) or one of {", ".join(map(str, RANGES[:-1]))} days'
         if c.get('order') is not None and not isinstance(c['order'], list): return False, f'{name}: "order" is a list of its x values'
+        for k in ('target', 'limit'):
+            if c.get(k) is not None and (isinstance(c[k], bool) or _num(c[k]) is None): return False, f'{name}: "{k}" is a number'
+        if c.get('w') is not None and c['w'] not in (1, 2, 3, 4): return False, f'{name}: "w" is 1 to 4 columns'
+        if c.get('columns') is not None and not isinstance(c['columns'], list): return False, f'{name}: "columns" is a list'
+    if not isinstance(spec.get('filters') or {}, dict): return False, 'the filters are name: value pairs, as {"range": 30}'
     rng = (spec.get('filters') or {}).get('range')
-    if rng is not None and int(rng) not in RANGES: return False, f'the date range is one of {", ".join(map(str, RANGES))} days'
+    if rng is not None and (isinstance(rng, bool) or _num(rng) not in RANGES): return False, f'the date range is one of {", ".join(map(str, RANGES))} days'
     return True, ''
 
 
@@ -495,7 +506,7 @@ def problems(spec: dict, data: dict) -> list:
         if d.get('failed') or not d.get('rows'): continue
         cols = set(d.get('columns') or [])
         want = [c[k] for k in COLUMN_KEYS if isinstance(c.get(k), str) and c.get(k)] + list(c.get('columns') or []) + list((c.get('where') or {}).keys())
-        if (date := (next((s for s in spec.get('sources') or [] if s.get('key') == c.get('source')), {}) or {}).get('date')): want.append(date)
+        if (date := source_of(spec, c.get('source')).get('date')): want.append(date)
         miss = sorted({w for w in want if w not in cols})
         if miss: out.append(f"{c.get('title') or c['kind']}: no column {', '.join(miss)} in {d.get('label') or c['source']}")
     return out
@@ -505,7 +516,7 @@ def rows_of(body: str) -> list:
     """The rows an executor handed back as JSON lines (reports.rows_out), or one JSON list. Prose is no rows."""
     t = str(body or '').strip()
     if t.startswith('['):
-        try: v = json.loads(t); return [r for r in v if isinstance(r, dict)] if isinstance(v, list) else []
+        try: v = json.loads(t); return [r for r in v if isinstance(r, dict)][:ROWS] if isinstance(v, list) else []
         except ValueError: pass
     out = []
     for line in t.splitlines():
@@ -525,8 +536,8 @@ def collect(store, spec: dict) -> dict:
     with reports.wide_rows():
         parts = reports.run_source_parts(store, subs)
     out = {}
-    for s, (_k, label, head, body) in zip(srcs, parts):
-        key, failed = s.get('key'), head == 'FAILED'
+    for i, (s, (_k, label, head, body)) in enumerate(zip(srcs, parts), 1):
+        key, failed = _key(s, i), head == 'FAILED'
         rows = [] if failed else rows_of(body)
         cols = list(dict.fromkeys(c for r in rows[:200] for c in r))
         out[key] = {'label': s.get('label') or label, 'head': head, 'rows': rows, 'columns': cols, 'failed': failed,
@@ -536,8 +547,9 @@ def collect(store, spec: dict) -> dict:
 
 # ── the one number a run says (its rail row's headline): the stat tiles, read the way the page reads them ──
 def _num(v):
-    try: return float(v)
+    try: f = float(v)
     except (TypeError, ValueError): return None
+    return f if math.isfinite(f) else None              # "nan" and "inf" are words, not numbers - nothing counts or cuts by them
 
 
 def in_range(rows, date_col, days, now=None):
@@ -572,11 +584,11 @@ def fmt(v) -> str:
 def tile_rows(spec: dict, data: dict, c: dict, days: int) -> list:
     """A component's rows as the page cuts them (slice.componentRows, no segment chosen): its own window, then its where."""
     rows = ((data.get('sources') or {}).get(c.get('source')) or {}).get('rows') or []
-    date = None if c.get('range') is False else next((s.get('date') for s in spec.get('sources') or [] if s.get('key') == c.get('source')), None)
+    date = None if c.get('range') is False else source_of(spec, c.get('source')).get('date')
     return where(in_range(rows, date, span(c, days)), c.get('where'))     # "range": false counts what is true now
 
 
-def _days(spec): return int((spec.get('filters') or {}).get('range') or 0)
+def _days(spec): return int(_num((spec.get('filters') or {}).get('range')) or 0)
 
 
 def numbers(spec: dict, data: dict) -> list:
@@ -617,7 +629,7 @@ def _panel(spec, data, c, days) -> list:
     if k == 'list':
         if s := c.get('sort'):
             col = s.lstrip('-'); rows = sorted(rows, key=lambda r: (_num(r.get(col)) is None, _num(r.get(col)) or 0, str(r.get(col) or '')), reverse=s.startswith('-'))
-        rows = rows[:int(c.get('limit') or 50)]
+        rows = rows[:int(_num(c.get('limit')) or 50)]
         return [f'{t}:', *(f"- {r.get(c.get('label'))}" + (f" — {r.get(c['meta'])}" if c.get('meta') and r.get(c['meta']) not in (None, '') else '')
                            for r in rows)] if rows else [f'{t}: nothing']
     if k == 'table': return [f'{t}:', *(json.dumps(r, default=str) for r in rows[:50])] if rows else [f'{t}: nothing']
@@ -625,8 +637,13 @@ def _panel(spec, data, c, days) -> list:
         by = {}
         for r in rows: by.setdefault(_key_of(r.get(c.get('x'))), []).append(r)
         return [f'{t}:', *(f"{x}: " + ', '.join(f'{s} {fmt(v)}' for s, v in _groups(rs, c.get('series'), agg, y)) for x, rs in sorted(by.items()))]
-    gs = _groups(rows, c.get('x'), agg, y, int(c.get('limit') or 8), c.get('order')) if k == 'bar' else sorted(_groups(rows, c.get('x'), agg, y))
+    gs = _groups(rows, c.get('x'), agg, y, int(_num(c.get('limit')) or 8), c.get('order')) if k == 'bar' else sorted(_groups(rows, c.get('x'), agg, y))
     return [f'{t}:', *(f'{x}: {fmt(v)}' for x, v in gs)] if gs else [f'{t}: nothing']
+
+
+def without(srcs) -> str:
+    """A source a run went without, named after its headline as a report's run names one (`label: FAILED`): the bell reads it there."""
+    return ''.join(f" · {d.get('label')}: FAILED" for d in srcs if d.get('failed'))
 
 
 def unread(srcs) -> str:
@@ -641,6 +658,7 @@ def as_text(spec: dict, data: dict, nums: list = None) -> tuple:
     body held the stat tiles only, so an agent sent a dashboard said it "shows only totals" beside a goal, a ranking and a list)."""
     srcs, days = (data.get('sources') or {}).values(), _days(spec)
     head = ' · '.join(f'{t} {v}' for t, v in headline(spec, data, nums)[:3]) or f"{sum(len(d.get('rows') or []) for d in srcs)} rows"
+    head += without(srcs)
     note = unread(srcs)
     span_ = f'Range: the last {days} days' if days else 'Range: everything the sources returned'
     panels = ['\n'.join(_panel(spec, data, c, days)) for c in spec.get('components') or []]
@@ -656,6 +674,17 @@ def last(store, sid) -> dict | None:
     r = store.get_dashboard_result(sid)
     try: return json.loads(r['DataJson']) if r else None
     except ValueError: return None
+
+
+def said_on_page(store, sid, cfg: dict, data) -> list:
+    """What the page says over its tiles: what would draw empty, and - when the newest run failed and kept nothing - that the rows shown
+    are the run before it, and why. A failed run keeps the last rows (file_run), so without this a Run now that failed said nothing."""
+    out = problems(cfg, data) if data else []
+    run = next(iter(store.report_runs(sid, 1)), None)
+    if run and run.get('failed'):
+        out.insert(0, f"The last run, {str(run.get('at') or '')[:16]}, failed: {run.get('error') or 'it did not say why'}"
+                      + ('. These are the rows from the run before it.' if data else '.'))
+    return out
 
 
 def file_run(store, src: dict, cfg: dict, trigger: str = 'schedule') -> dict:
@@ -676,8 +705,11 @@ def file_run(store, src: dict, cfg: dict, trigger: str = 'schedule') -> dict:
     # tasks 0 · Open now 0" stood on the rail beside the tasks opened next, until the next morning's run (the bug hunt, 2026-11-12)
     nums = numbers(cfg, data)
     if srcs and (not any(d['rows'] for d in srcs) or (nums and not any(v for _, v in nums))):
-        return {'message_id': None, 'subject': f'{title} — nothing to show yet', 'files': 0, 'said': 0, 'failed': False,
-                'summary': 'Every source was read and none has a number yet'}
+        # ...said as it is: a source that failed, and a tile bound to a column its source stopped returning, are not "no number yet"
+        why, note = problems(cfg, data), unread(srcs)
+        expire_previous_runs(store, src, cfg, 0)        # ...and the row before it, saying numbers no run says any more, is retired
+        return {'message_id': None, 'subject': f'{title} — nothing to show yet{without(srcs)}', 'files': 0, 'said': 0, 'failed': False,
+                'summary': '; '.join(why) or 'Every source was read and none has a number yet', **({'note': note} if note else {})}
     head, text = as_text(cfg, data, nums)          # every panel, not the tiles alone: Send to agent hands over this body (2026-11-17)
     note = unread(srcs)
     stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')

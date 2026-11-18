@@ -7614,6 +7614,7 @@ def save_source(body: SourceBody):
             from . import dashboards
             ok, why = dashboards.validate(rcfg, store)
             if not ok: raise HTTPException(422, f'Not saved: {why}.')
+            if (named := dashboards.keyed(rcfg)) != rcfg: fields['ConfigJson'] = json.dumps(named)     # kept under the names it was checked by
         if flow_cfg is not None:
             from . import flow
             ok, why = flow.validate(store, flow_cfg)
@@ -9022,8 +9023,8 @@ def dashboard_get(sid: int):
     if not src or not dashboards.is_dashboard(cfg): raise HTTPException(404, 'dashboard not found')
     data = dashboards.last(store, sid)
     # ...every tile with its sentence: one saved before tiles were sentences is described from its config, and kept on the next Save
-    return {'source_id': sid, 'active': bool(src.get('Active')), 'config': dashboards.with_said(cfg), 'data': data,
-            'problems': dashboards.problems(cfg, data) if data else []}
+    return {'source_id': sid, 'active': bool(src.get('Active')), 'config': dashboards.with_said(dashboards.keyed(cfg)), 'data': data,
+            'problems': dashboards.said_on_page(store, sid, cfg, data)}
 
 
 @app.get('/api/workflows')

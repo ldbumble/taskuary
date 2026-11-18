@@ -258,6 +258,15 @@ def _forget_live(site):
         except Exception as e: logger.debug(f'signin: {site} cookies not cleared from the live browser of {sid} - {e}')
 
 
+def _unsave(store, site):
+    "A sign-in kept ahead of a sign-up the site turned down: out of the vault, its seals forgotten - no Undo line, no account was made."
+    from . import vault
+    _tables(store)
+    if not (row := saved(store, site)): return
+    store._exec('DELETE FROM signin_vault WHERE Site=?', (str(site).lower(),))
+    for v in row.get('User'), row.get('Secret'), row.get('Totp'), row.get('Extra'): vault.forget(v)
+
+
 def _used(store, site): store._exec('UPDATE signin_vault SET LastUsed=? WHERE Site=?', (_now(), site))
 
 
@@ -1197,9 +1206,15 @@ def send_new(sid: str, site: str) -> dict:
 
 
 def _sent_up(store, tid, sid, site, rid, pw, send=None):
+    # KEPT BEFORE IT IS SENT (the timeline stress round, 2026-11-18): held only in memory while the form went and the page settled, a restart in
+    # those seconds left an account on the site that nobody could sign in to. Sealed now, its user name added once the page is past; taken
+    # out again if the site keeps its form up. A site with a saved sign-in never reaches here (new_account signs in to it instead)
+    try: save(store, site, '', pw, by='taskuary'); early = True
+    except ValueError: early = False                       # ...no keychain: said below, where the save after the send says it
     try: got = (send or send_new)(sid, site)
     except Exception as e: got = {'ok': False, 'why': str(e) if isinstance(e, SignInError) else 'the browser could not be reached'}
     if not got.get('ok'):
+        if early: _unsave(store, site)
         _audit(store, tid, site, 'vault', False, got.get('why') or 'the form stayed up')
         return _continue(store, tid, rid, site, 'taskuary', words=(f'The sign-up on {site} did not go through', f"{site} kept its sign-up form up"
                          + (f' - it says "{got["why"]}"' if got.get('why') else '') + '. No account was kept. Look at the page: fix what it asks for and '

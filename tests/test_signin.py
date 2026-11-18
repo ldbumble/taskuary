@@ -4,6 +4,7 @@ when the owner ticks it, sealed, and filled by itself next time; Remove takes th
 import json, os, sys, tempfile, threading, time, unittest
 from pathlib import Path
 from unittest import mock
+import pytest
 from fastapi.testclient import TestClient
 from loguru import logger
 
@@ -898,3 +899,34 @@ def test_a_sign_up_he_asked_for_is_sent_by_taskuary_and_its_password_kept():
         signin._signup(s, tid, 'sess1', 'rentscope.example', 'signin:rentscope.example', lambda sid, site, pw: typed.append(pw) or 2, None)
     assert vault.unseal(signin.saved(s, 'rentscope.example')['Secret']) == typed[0]
     assert told[0][0] == f'Signed up on rentscope.example as {USER}' and 'As the owner asked' in told[0][1], told
+
+
+def _signing_up(s, tid, send, typed, told):
+    from taskuary import browsergate
+    with mock.patch.object(browsergate, 'judge', return_value=[{'hold': False, 'what': 'creates an account', 'why': ''}]), \
+            mock.patch.object(browsergate, 'page', return_value={}), mock.patch.object(signin, 'send_new', send), \
+            mock.patch.object(signin, '_continue', lambda *a, **k: told.append(k['words'])), mock.patch.object(signin, '_ask', side_effect=AssertionError('handed to him')):
+        signin._signup(s, tid, 'sess1', 'rentscope.example', 'signin:rentscope.example', lambda sid, site, pw: typed.append(pw) or 2, None)
+
+
+def test_a_sign_up_a_restart_cut_while_its_form_went_keeps_the_password_it_made():
+    """Taskuary's sign-up sent the form and waited for the page to settle with the password it made only in memory: a restart in those
+    seconds left an account on the site that nobody could ever sign in to. It is kept before it is sent."""
+    s = MemoryStore(); tid = Factory(s).task('Market data'); typed, told = [], []
+    class Gone(BaseException): pass                       # the process went with the form under way: nothing after it ran
+    def send(sid, site):
+        assert signin.saved(s, site), 'kept before the form goes'
+        raise Gone()
+    with pytest.raises(Gone): _signing_up(s, tid, send, typed, told)
+    assert vault.unseal(signin.saved(s, 'rentscope.example')['Secret']) == typed[0]
+
+
+def test_a_sign_up_the_site_turned_down_keeps_no_password():
+    s = MemoryStore(); tid = Factory(s).task('Market data'); typed, told = [], []
+    _signing_up(s, tid, lambda sid, site: {'ok': False, 'why': 'That email is already in use'}, typed, told)
+    assert signin.saved(s, 'rentscope.example') is None
+    assert 'No account was kept' in told[0][1]
+    s2 = MemoryStore(); tid2 = Factory(s2).task('Market data'); typed, told = [], []
+    _signing_up(s2, tid2, lambda sid, site: {'ok': True, 'user': USER}, typed, told)
+    row = signin.saved(s2, 'rentscope.example')
+    assert vault.unseal(row['Secret']) == typed[0] and vault.unseal(row['User']) == USER

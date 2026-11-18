@@ -9,6 +9,7 @@ import { Box, IconButton, Popover, Tooltip } from "@mui/material";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import CloseIcon from "@mui/icons-material/Close";
 import api from "./api";
+import { pastedFiles } from "./promptPaste.js";
 
 export const IMAGE_TYPES = /^image\/(png|jpeg|gif|webp)$/;
 export const MAX_IMAGES = 8;
@@ -70,9 +71,9 @@ export function usePromptImages({ files: anyFile = false } = {}) {
   const clear = useCallback(() => { setImgs([]); setErr(""); setPending((cur) => { cur.forEach((p) => dropped.current.add(p.key)); return []; }); }, []);
   // ...and files a send could not take, put back in front of what was added since (a task chat's failed line)
   const put = useCallback((files) => setImgs((cur) => [...files.filter((f) => !cur.some((c) => c.path === f.path)), ...cur]), []);
-  // a paste that carries an image (or, with `files`, any file) is that, not text; anything else pastes as it always did
+  // a paste that carries an image (or, with `files`, any file) and no words is that file; anything else pastes as it always did (promptPaste)
   const onPaste = useCallback((e) => {
-    const files = [...(e.clipboardData?.files || [])].filter(takes);
+    const files = pastedFiles(e.clipboardData, takes);
     if (files.length) { e.preventDefault(); add(files); }
   }, [add, takes]);
   const onDrop = useCallback((e) => {

@@ -160,3 +160,27 @@ test("Enter in New while its file uploads: the task is made with the file", { ti
   assert.match(posted[0].body, /ATTACHED IMAGES|"images":\["/, `the task was made without its file: ${JSON.stringify(posted)}`);
   assert.deepEqual(errors, []);
 });
+
+// A PASTE FROM WORD OR EXCEL (2026-11-18): their clipboard holds the copied words AND a picture of them. The box took the picture and cancelled
+// the paste - the words never came, a picture of them was attached instead. A paste with words is words; a picture alone is the picture
+test("a paste of words that also carries a picture of them is words; a picture alone is attached", { timeout: 300000 }, async (t) => {
+  const w = await world(t), page = await w.newPage();
+  await page.setViewport({ width: 1600, height: 900 });
+  const errors = []; page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto(`${w.ui}#new-task`, { waitUntil: "domcontentloaded" });
+  const sel = "[data-tq-new] [data-tq-prompt-box]";
+  await page.waitForSelector(sel, { visible: true, timeout: 60000 });
+  await new Promise((r) => setTimeout(r, 1500));
+  const paste = (withText) => page.evaluate(async (sel, withText, b64) => {
+    const dt = new DataTransfer(), bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    if (withText) { dt.setData("text/plain", "Q3 totals\t1,200\t1,450"); dt.setData("text/html", "<table><tr><td>Q3 totals</td></tr></table>"); }
+    dt.items.add(new File([bytes], "image.png", { type: "image/png" }));
+    const ev = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+    document.querySelector(`${sel} .tq-aui-input`).dispatchEvent(ev);
+    await new Promise((r) => setTimeout(r, 1500));
+    return { prevented: ev.defaultPrevented, chips: document.querySelectorAll(`${sel} [data-tq-file-chip]`).length };
+  }, sel, withText, PNG.toString("base64"));
+  assert.deepEqual(await paste(true), { prevented: false, chips: 0 }, "words from a sheet pasted as a picture of them");
+  assert.deepEqual(await paste(false), { prevented: true, chips: 1 }, "a picture alone is attached");
+  assert.deepEqual(errors, []);
+});

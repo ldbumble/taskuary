@@ -98,3 +98,15 @@ test("his first line on a report he sent on draws the report as a pill, then his
   assert.match(gw, /<div data-tq-line-came=""[^]*?\{!!x\.came && <AttachChip name=\{x\.came\}/);          // ...beside his files' pills (2026-11-17)
   assert.doesNotMatch(tp, /setReportOpen|>The report</);
 });
+
+test("a paste that carries words is those words; its files are taken only when no words come with them", async () => {
+  const { pastedFiles } = await import("../src/promptPaste.js");
+  const png = { name: "image.png", type: "image/png" }, pdf = { name: "notes.pdf", type: "application/pdf" };
+  const clip = (text, files) => ({ getData: (k) => (k === "text/plain" ? text : ""), files });
+  assert.deepEqual(pastedFiles(clip("Q3 totals\t1,200", [png])), [], "a row from a sheet, with its picture, is the row");
+  assert.deepEqual(pastedFiles(clip("", [png])), [png], "a screenshot alone is attached");
+  assert.deepEqual(pastedFiles(clip("  \n", [png])), [png], "white space is not words");
+  assert.deepEqual(pastedFiles(clip("", [png, pdf]), (f) => f.type.startsWith("image/")), [png], "a box that takes pictures only");
+  assert.deepEqual(pastedFiles(null), []);
+  assert.match(read("promptImages.jsx"), /const files = pastedFiles\(e\.clipboardData, takes\);/, "the one paste road reads it");
+});

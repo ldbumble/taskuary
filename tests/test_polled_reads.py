@@ -138,6 +138,9 @@ class TheTasksReadAsksEachSettingOnce(unittest.TestCase):
         tid = made(); c.get(f'/api/tasks/{tid}')
         few = len(self.queries(tid))
         for k in range(40): made()
+        # ...as warm as the first: making forty tasks takes long enough on a slow runner that a cache of a second had gone cold, and the read
+        # asked once more for that, not for the store's size (Windows CI, 2026-11-18: 123 against 122)
+        c.get(f'/api/tasks/{tid}')
         self.assertLessEqual(len(self.queries(tid)), few + 2, 'the read of one task asks the same questions whatever else the store holds')
 
     def test_a_document_is_read_once_and_a_write_inside_the_hold_is_read_fresh(self):

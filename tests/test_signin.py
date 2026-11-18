@@ -914,3 +914,38 @@ def test_a_sign_up_he_asked_for_is_sent_by_taskuary_and_its_password_kept():
         signin._signup(s, tid, 'sess1', 'rentscope.example', 'signin:rentscope.example', lambda sid, site, pw: typed.append(pw) or 2, None)
     assert vault.unseal(signin.saved(s, 'rentscope.example')['Secret']) == typed[0]
     assert told[0][0] == f'Signed up on rentscope.example as {USER}' and 'As the owner asked' in told[0][1], told
+
+
+def test_a_sign_up_taskuary_sent_that_asks_an_emailed_code_types_it_from_the_mail():
+    """Asked to sign up, Taskuary sent the form itself - and the site's next page asked for the code it had just emailed. The agent was told
+    "Signed up - continue" over that code page, and nothing looked in the inbox: the mail came in before any watch began, so even the code ask
+    a later turn raised never saw it. The page's code step is now watched from the moment the password was typed, and the code typed from the mail."""
+    from taskuary import browsergate
+    s = MemoryStore(); tid = Factory(s).task('Market data'); told, asked, watched = [], [], []
+    site, rid, mail = 'lienlens.example', 'signin:lienlens.example', {}
+    def send(sid, st):
+        # ...the site emails its code as the form is sent - before anything that answers the send has begun
+        mail['id'] = s.add_message({'Channel': 'email', 'FromEmail': 'no-reply@lienlens.example', 'FromName': 'LienLens', 'Subject': 'Your LienLens code',
+                                    'BodyText': 'Your LienLens verification code is 383972.', 'Status': 'filed'})
+        return {'ok': True, 'user': USER}
+    with mock.patch.object(browsergate, 'judge', return_value=[{'hold': False, 'what': 'creates an account', 'why': ''}]), \
+         mock.patch.object(browsergate, 'page', return_value={}), mock.patch.object(signin, 'send_new', send), \
+         mock.patch.object(signin, 'asks_code', return_value=True), \
+         mock.patch.object(signin, '_continue', lambda *a, **k: told.append(k.get('words'))), \
+         mock.patch.object(signin, '_ask', lambda *a: asked.append(a)):
+        signin._signup(s, tid, 'sess1', site, rid, lambda sid, st, pw: 2, lambda *a: watched.append(a))
+    assert told == [], f'nothing is said signed up over a code page: {told}'
+    assert len(asked) == 1 and 'emailed' in asked[0][5], asked
+    assert signin.saved(s, site), 'the password the site took is kept'
+    # ...the ask's watch: the mail that came in before it began is the sign-up's, its code typed on the pinned page, and once past the agent told
+    ws.record(s, tid, 'sess1', 'input_needed', request_id=rid, text=asked[0][5], choices=None, source='api')
+    code_page = {'top': True, 'href': 'https://lienlens.example/verify', 'otp': True}
+    page = WatchPage([code_page, code_page, {'top': True, 'href': 'https://lienlens.example/data'}])
+    typed = []
+    with mock.patch.object(signin, '_type_code', lambda c, st, code: typed.append(code())), \
+         mock.patch.object(signin, '_continue', lambda *a, **k: told.append((a[4], k.get('words')))):
+        assert signin.watch(s, tid, 'sess1', site, rid, conn=page, every=0)
+    assert typed == ['383972']
+    (actor, (did, said)), = told
+    assert actor == 'taskuary' and did == f'Signed up on {site} as {USER}' and 'The owner pressed' not in said, told
+    assert not any(r['Actor'] == 'owner' for r in s._rows("SELECT * FROM audit WHERE Action='signin_fill'")), 'nothing of it is said as his press'

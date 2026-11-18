@@ -5890,7 +5890,6 @@ def agent_new_task(body: AgentNewTaskBody, request: Request):
     """The new_task tool: a separate job the owner asked for on this task, made a task of its own and started at once (the owner, 2026-11-17:
     "I think it should be able to create new task from the agent"). It is the owner's own work - made as New makes it, started by the task
     page's own dispatch door - so nothing is held for a press: nothing leaves. Never from a stranger's task, nor one the owner never spoke on."""
-    import asyncio, threading
     from . import general, origin, repochoice
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
@@ -5910,7 +5909,8 @@ def agent_new_task(body: AgentNewTaskBody, request: Request):
         if new and (general.history(store, new) or general.starting(new) or getattr(hub_term.session_for(new), 'alive', False)):
             return {'ok': True, 'task': task_ref(new), 'title': title, 'already': True, 'started': True,
                     'next': f'{task_ref(new)} was already started from here and is working on it - nothing new was made'}
-        if not new:
+        made = not new
+        if made:
             # ...the owner's ask, made at the door they asked from - the task they spoke on's ("agent" is no door: the Assistant named it one)
             from . import asks
             via = asks.of(store.get_task(body.task_id)) or 'desktop'
@@ -5918,24 +5918,31 @@ def agent_new_task(body: AgentNewTaskBody, request: Request):
             from . import selfclose
             selfclose.claim(store, new, ACTOR)           # the owner's own work: its agent never closes it by itself
             store.audit('task', new, 'create', body.agent, detail={'from_task': body.task_id, 'title': title})
-            store.add_comment(body.task_id, body.agent, 'agent', f'Started {task_ref(new)}: {title}')
     out = {'ok': True, 'task': task_ref(new), 'title': title, 'kind': kind}
     # ...a checkout named for what is not a coding task (developer mode off made it general) is said dropped, never silently
     if body.repo and kind != 'coding': out['repo_not_set'] = f'{body.repo} was not set: {task_ref(new)} is a general task, which works in no checkout'
     if body.repo and kind == 'coding':
         try: repochoice.use(store, new, body.repo, f'named by the agent on {task_ref(body.task_id)}')
         except (PermissionError, ValueError) as e: out['repo_not_set'] = str(e)
+    res = _start_new_task(new, kind, ask, body.model)
+    # ...said on this task once it is known: "Started" was written before the start, and stood over one that was refused
+    if res['started']: store.add_comment(body.task_id, body.agent, 'agent', f'Started {task_ref(new)}: {title}')
+    elif made: store.add_comment(body.task_id, body.agent, 'agent', f"Made {task_ref(new)}: {title} - its agent did not start: {res['why']}")
+    return {**out, **res}
+
+def _start_new_task(new: int, kind: str, ask: str, model: str) -> dict:
+    "The new_task tool's start of task `new` by the task page's own dispatch door: {started, why?, next}."
     bg = BackgroundTasks()
-    try: got = dispatch_task(new, DispatchBody(kind=kind, instruction=ask, model=body.model or None, app_words=True), bg)
+    try: got = dispatch_task(new, DispatchBody(kind=kind, instruction=ask, model=model or None, app_words=True), bg)
     except HTTPException as e:
         # ...kept on the new task, where the owner meets it: a refusal said only in this answer left it open with nothing said (StartRefused
         # is kept by the door that raised it)
         if not isinstance(e, StartRefused): _start_failed(new, e)
-        return {**out, 'started': False, 'why': str(e.detail), 'next': f'{task_ref(new)} is made but its agent did not start - say why in your answer'}
+        return {'started': False, 'why': str(e.detail), 'next': f'{task_ref(new)} is made but its agent did not start - say why in your answer'}
     # ...its first turn runs off this call: the agent that asked goes on with its own turn meanwhile
     if bg.tasks: threading.Thread(target=lambda: asyncio.run(bg()), daemon=True, name=f'new-task-{new}').start()
-    if got.get('dispatch') == 'needs_repo': return {**out, 'started': False, 'why': got.get('reason'), 'next': 'the owner picks its checkout on that task'}
-    return {**out, 'started': bool(got.get('started') or got.get('existing')), 'next': f'say in one line that {task_ref(new)} is working on it'}
+    if got.get('dispatch') == 'needs_repo': return {'started': False, 'why': got.get('reason'), 'next': 'the owner picks its checkout on that task'}
+    return {'started': bool(got.get('started') or got.get('existing')), 'next': f'say in one line that {task_ref(new)} is working on it'}
 
 class AgentRememberBody(BaseModel): task_id: int; note: str = ''; about: str = ''; replaces: str = ''; agent: str = 'agent'
 AGENT_KEEPS = 5          # new memory lines one task's agent may write in a day; a correction (`replaces`) adds none and is always taken

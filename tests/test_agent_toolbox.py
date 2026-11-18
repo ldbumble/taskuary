@@ -399,6 +399,17 @@ class NewTaskTool(unittest.TestCase):
         self.assertEqual(out['kind'], 'general')
         self.assertIn('northwind/ledger', out['repo_not_set'])
 
+    def test_the_line_on_this_task_says_whether_it_started(self):
+        """"Started TQ-0002: Bed board" was written before the start and stood in the chat over one that was refused: nothing was working on
+        it. The line says what happened - made and not started, with why; started once its start goes."""
+        lines = lambda: [c['Body'] for c in self.s.list_comments(self.tid, internal=True) if 'TQ-' in str(c.get('Body'))]
+        with mock.patch.object(server, 'dispatch_task', side_effect=server.HTTPException(422, 'No AI is connected')):
+            tool(self.tid, 'new_task', title='Bed board', ask='Build it.')
+        self.assertEqual(lines(), ['Made TQ-0002: Bed board - its agent did not start: No AI is connected'])
+        with mock.patch.object(server, 'dispatch_task', return_value={'started': True}):
+            tool(self.tid, 'new_task', title='Bed board', ask='Build it.')
+        self.assertEqual(lines()[1:], ['Started TQ-0002: Bed board'])
+
     def test_a_job_made_but_not_started_is_started_on_the_second_ask(self):
         "...and where the first start was refused (no AI yet), the second call starts that same task - never a second one beside it."
         with mock.patch.object(server, 'dispatch_task', side_effect=server.HTTPException(422, 'no AI')):

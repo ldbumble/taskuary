@@ -139,6 +139,13 @@ for line in sys.stdin:
             for i, p in enumerate(rule.get('post') or []):
                 update('tool_call', toolCallId=f'post_{STARTS}_{i}', title='taskuary', kind='execute', status='in_progress', rawInput={'command': f"taskuary {p['path'].rsplit('/', 1)[-1]}"})
                 post(p); update('tool_call_update', toolCallId=f'post_{STARTS}_{i}', status='completed')
+            # ...its `steps` (fake_claude's): a call and its answer - failed where `error` - or a thought, streamed as the adapter streams them
+            for i, st in enumerate(rule.get('steps') or []):
+                if 'thought' in st: update('agent_thought_chunk', content={'type': 'text', 'text': st['thought']}); continue
+                update('tool_call', toolCallId=f'step_{STARTS}_{i}', title=st['tool'], kind='execute', status='in_progress', rawInput=st.get('input') or {})
+                __import__('time').sleep(float(st.get('wait') or 0.2))
+                update('tool_call_update', toolCallId=f'step_{STARTS}_{i}', status='failed' if st.get('error') else 'completed',
+                       content=[{'type': 'content', 'content': {'type': 'text', 'text': st.get('error') or st.get('output') or 'ok'}}])
             if rule.get('wait'):                       # a long turn: a session/cancel meanwhile ends it, as a real adapter's does
                 _prompt_id = mid
                 def finish(mid=mid, text=rule.get('first') or 'Ok.', wait=float(rule['wait'])):
@@ -146,7 +153,8 @@ for line in sys.stdin:
                     __import__('time').sleep(wait)
                     if _prompt_id == mid: update('agent_message_chunk', content={'type': 'text', 'text': text}); reply(mid, ended()); _prompt_id = None
                 __import__('threading').Thread(target=finish, daemon=True).start(); continue
-            update('agent_message_chunk', content={'type': 'text', 'text': rule.get('first') or 'Ok.'}); reply(mid, ended()); continue
+            if rule.get('first') != '': update('agent_message_chunk', content={'type': 'text', 'text': rule.get('first') or 'Ok.'})
+            reply(mid, ended()); continue
         if folder_of():                                # a scenario's own turn (fake_director.py): its words, no permission asked
             _prompt_id = mid                           # ...on a thread, so a session/cancel meanwhile ends the turn as a real adapter's does
             def answer_later(mid=mid, said=said):

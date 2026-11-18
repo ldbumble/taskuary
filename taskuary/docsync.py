@@ -125,12 +125,12 @@ def agent_systems(store, tooled: bool = True) -> str:
     return ('YOUR SYSTEMS (the owner\'s connections you may use)\n' + '\n'.join(lines) + '\n' + (mail + '\n' if mail else '') +
             call + ' - saved credentials are filled in for you.\n'
             # the owner, 2026-10-25: never sent without their press - so the agent is told the call waits, not that it failed
-            'A call that would SEND, post, pay or place an order - and an MCP tool its server does not mark read-only - never runs '
-            'from here: it answers {"queued": true} and waits on the task, on its card, for the owner to press Approve. Do not retry it.\n'
-            'AUTHORITY is the owner\'s ceiling on each one: at read you may look but not change anything (a SQL batch that '
-            'writes is rolled back). To change something on a read-level system, PROPOSE it and the owner approves it on the '
-            'task: TASKUARY-PROPOSE {"action": "run_tool", "type": "<one of its tools>", "connector_id": <id>, ...} - say in '
-            'your reply what it will change and why. At write you may make the change yourself; say what you changed.')
+            # ...and a change above a card's Authority is the same wait (server.tool_run): one road, so the agent is never told to
+            # write a TASKUARY-PROPOSE line for what its own call already files
+            'A call that would SEND, post, pay or place an order, an MCP tool its server does not mark read-only, and a change on a '
+            'system whose AUTHORITY (the owner\'s ceiling on it) is read, never runs from here: it answers {"queued": true} and waits '
+            'on the task, on its card, for the owner to press Approve. Do not retry it; say in your reply what it will change and why. '
+            '(At read a SQL batch that writes is rolled back.) At write you may make the change yourself; say what you changed.')
 
 
 def not_a_tool(store, t) -> str:

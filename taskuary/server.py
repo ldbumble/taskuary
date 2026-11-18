@@ -8821,6 +8821,11 @@ def tool_run(body: dict, request: Request):
     if guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
         tool = _mcp_tool(conn, body) if t == 'mcp' else None
         if why := scopes.reaches(t, body, tool): return _agent_proposes(request, t, conn, body, why)
+        # ...and a change above the card's Authority is the same proposal (docsync.agent_systems tells the agent so): the 403 below said
+        # "raise it under the card", a step only the owner can take, and lit nothing for them to press
+        if not scopes.allows(conn, t):
+            return _agent_proposes(request, t, conn, body, f"needs {scopes.needs(t)} Authority on {conn.get('Name') or t}, which is set to "
+                                                           f"{scopes.scope_of(conn)}")
     try:
         scopes.require(conn, t)
     except PermissionError as e:

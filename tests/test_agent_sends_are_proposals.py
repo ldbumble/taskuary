@@ -135,10 +135,11 @@ class AFileIsNotAMessage(unittest.TestCase):
         self.assertEqual(p.call_args.kwargs['data'], b'# Q3')
         self.assertEqual(p.call_args.kwargs['params'], {'@microsoft.graph.conflictBehavior': 'rename'})   # never overwrites
 
-    def test_at_read_the_save_is_refused(self):
+    def test_at_read_the_save_waits_for_the_press(self):
+        "...never saved past the card's Authority; with no task to wait on, the refusal names the task_id that files it there."
         server.store.save_connector({'ConnectorId': self.card['ConnectorId'], 'Scope': 'read'}, 'test')
         r = c.post('/api/tools/run', headers=agent(), json={'type': 'sharepoint_save', 'path': 'a.md', 'text': 'x'})
-        self.assertEqual(r.status_code, 403); self.assertIn('write', r.json()['detail'])
+        self.assertEqual(r.status_code, 422); self.assertIn('write', r.json()['detail']); self.assertIn('task_id', r.json()['detail'])
 
     def test_onedrive_save_says_where(self):
         from taskuary import sharing
@@ -150,3 +151,40 @@ class AFileIsNotAMessage(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class AWriteAboveTheCardsAuthorityWaitsForThePress(unittest.TestCase):
+    """An agent's write on a card the owner narrowed to read was a flat 403 - "raise it under Intacct → Authority, or leave it and the
+    agents stay hands-off": a step only the owner can take, said to the agent, and nothing lit for the owner. The agent was told (list_systems)
+    that a change on a read-level system is a proposal the owner approves; the call itself now files that proposal on its task."""
+    def setUp(self):
+        s = server.store
+        self.tid = s.create_task({'Title': 'Post the Payworth bill', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        self.card = s.get_connector_by_type('intacct')
+        s.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 1, 'Roles': 'tool', 'Scope': 'read'}, 'test')
+        self.ran = []
+        self.patch = mock.patch.dict(REGISTRY, {'intacct_create': lambda cfg: self.ran.append(cfg) or ('created APBILL', 'RECORDNO 41')})
+        self.patch.start()
+
+    def tearDown(self):
+        self.patch.stop()
+        server.store.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 0, 'Scope': ''}, 'test')
+
+    def test_the_write_is_queued_on_its_task_and_the_press_runs_it(self):
+        r = c.post('/api/tools/run', headers=agent(self.tid),
+                   json={'type': 'intacct_create', 'object': 'APBILL', 'fields': {'VENDORID': 'V-PAYWORTH'}, 'task_id': self.tid})
+        self.assertEqual(r.status_code, 202, r.text)
+        j = r.json()
+        self.assertTrue(j['queued']); self.assertIn('read', j['says']); self.assertEqual(self.ran, [])
+        rv = server.store.get_review(j['review'])
+        self.assertEqual((rv['TaskId'], rv['Status']), (self.tid, 'pending'))
+        proposals.execute(server.store, rv, 'owner')
+        self.assertEqual(len(self.ran), 1)
+
+    def test_with_no_task_the_refusal_says_how_and_not_to_raise_the_authority(self):
+        r = c.post('/api/tools/run', headers=agent(), json={'type': 'intacct_create', 'object': 'APBILL', 'fields': {}})
+        self.assertIn(r.status_code, (403, 422)); self.assertIn('task_id', r.json()['detail']); self.assertEqual(self.ran, [])
+
+    def test_the_owners_own_call_is_still_held_to_the_card(self):
+        r = c.post('/api/tools/run', headers=owner(), json={'type': 'intacct_create', 'object': 'APBILL', 'fields': {}})
+        self.assertEqual(r.status_code, 403); self.assertEqual(self.ran, [])

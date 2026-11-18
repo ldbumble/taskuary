@@ -380,6 +380,17 @@ def on_password_page(sid: str) -> bool:
     except Exception: return False
 
 
+def holds_password(sid: str, conn=None) -> bool:
+    """Does a password box of the page the browser is on hold one now - typed by Taskuary (a sign-in, a sign-up waiting for his press) or by
+    him? True too when the page cannot be read: what a script would read there is then not known to be no secret."""
+    try:
+        c = conn or connect(sid)
+        try: return bool(c.js("(() => { " + DEEP + " return deepAll('input[type=password]').some((e) => !!e.value); })()"))
+        finally:
+            if conn is None: c.close()
+    except Exception: return True
+
+
 def asks_code(sid: str, conn=None) -> bool:
     "Is the page the browser is on asking for a sign-in code? False whenever it cannot be read."
     try:

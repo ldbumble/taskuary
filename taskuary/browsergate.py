@@ -367,6 +367,11 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
             if not c.get('role') or 'password' in f"{c.get('name')} {c.get('role')}".lower():
                 return _deny(f"{HELD}: reading what is typed in that box is refused - it is a password box, or the page does not say what it is.")
             continue
+        # ...AND A SCRIPT reads any box (`eval "...input[type=password].value"`): judged only on whether it can be undone, a read passed - so
+        # none runs while a password box of the page holds one (signin.holds_password), a sign-up's made password waiting for his press among them
+        if a['verb'] == 'eval' and signin.holds_password(sid):
+            return _deny(f"{HELD}: running a script on this page is refused while a password box on it holds a password - the agent never reads one. "
+                         "Use snapshot, get text or click instead.")
         if vs is None: vs = iter(judge(store, [x for x in todo[i:] if not x.get('read')], pg, brain, said=said))     # the rest of the line, asked once
         v = next(vs)
         if not v['hold']: passed.append(a); continue

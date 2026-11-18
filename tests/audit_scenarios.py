@@ -171,11 +171,13 @@ class Run:
         self.snap(label)
 
     def own_reply(self, text):
-        "The owner answers on the thread from his phone: his own mail on it, read in."
+        "The owner answers on the thread from his phone: his own mail on it, read in by the sync's own road (channels.ingest_own_message)."
+        from taskuary import channels
         n = len(self.s._rows('SELECT MessageId FROM message'))
-        self.s.add_message({'TaskId': self.tid, 'ExternalId': f'own-{n}', 'ConversationId': 'conv-1', 'Channel': 'email', 'Direction': 'out',
-                            'FromName': 'Alex Doyle', 'FromEmail': ME, 'To': ERIN, 'Subject': 'Re: Question', 'BodyText': text,
-                            'SentAt': time.strftime('%Y-%m-%d %H:%M:%S'), 'Status': 'routed'})
+        if self.snaps: pace()
+        channels.ingest_own_message(self.s, {'external_id': f'own-{n}', 'channel': 'email', 'source_name': ME, 'subject': 'Re: Question',
+                                             'from_email': ME, 'body': text, 'conversation_id': 'conv-1',
+                                             'sent_at': time.strftime('%Y-%m-%d %H:%M:%S')}, 'your reply on this thread - kept for context')
         self.snap('he answers on the thread himself')
 
     def drain(self):
@@ -657,11 +659,11 @@ def j_answered_outside(r: Run):
     "(j) The owner answers outside the app, then the sender writes again -> the agent re-plans: the old draft passed, a new card."
     r.arrive({'intent': 'reply_only', 'kind': 'task', 'title': 'Erin asks for the venue'}, body='Which venue did we pick for the offsite?')
     r.turn('The reply to Erin waits for your Send.', ('propose_reply', {'text': 'Hi Erin - we picked the Harbor Hall.'}))
-    r.own_reply('Harbor Hall - booked it this morning.')
+    r.own_reply('Harbor Hall - booked it this morning.')          # ...his draft greyed where it stood, and the agent woken to re-plan
+    assert [(c['passed'], c['turn']) for c in r.cards()] == [(True, 0)], r.cards()
+    r.turn('I see you answered Erin yourself - nothing left on the venue.')
     r.arrive({'intent': 'reply_only', 'kind': 'task', 'refines': False}, body='Great - and what time does it open?', label='Erin writes again')
-    r.turn('You answered the venue yourself, so that draft is put down; the reply about the opening time waits for your Send.',
-           ('reply_not_needed', {'why': 'the owner answered the venue on the thread'}),
-           ('propose_reply', {'text': 'It opens at 9am.'}))
+    r.turn('The reply about the opening time waits for your Send.', ('propose_reply', {'text': 'It opens at 9am.'}))
     r.send()
     r.turn('Erin has the time.')
 

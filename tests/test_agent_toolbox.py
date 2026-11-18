@@ -141,7 +141,7 @@ class TheServer(unittest.TestCase):
             self.assertIn('unknown tool', r['error']['message'])
         # ...with no day, on a task with no reminder, nothing is "taken off": it says what to give
         r = rpc(theirs, 'tools/call', {'name': 'remind', 'arguments': {}}, headers=st).json()['result']
-        self.assertTrue(r['isError'], r); self.assertIn('no reminder is set', str(r))
+        self.assertTrue(r['isError'], r); self.assertIn('remind needs `when`', str(r)); self.assertFalse(self.s.get_task(theirs).get('RemindAt'))
         r = rpc(theirs, 'tools/call', {'name': 'remind', 'arguments': {'when': 'in 2 days'}}, headers=st).json()['result']
         self.assertFalse(r['isError'], r); self.assertTrue(self.s.get_task(theirs).get('RemindAt'))
         r = rpc(theirs, 'tools/call', {'name': 'check_back', 'arguments': {'when': 'tomorrow 9am', 'what': 'the export ran'}}, headers=st).json()['result']
@@ -371,6 +371,85 @@ class NewTaskTool(unittest.TestCase):
         self.assertFalse(err, said)
         rows = self.s._rows("SELECT Batch FROM review WHERE TaskId=?", (self.tid,))
         self.assertEqual([r['Batch'] for r in rows], [None])
+
+    def test_a_bulk_item_its_door_refused_is_said_never_dropped_and_none_filed_is_no_card(self):
+        "An item with no words is refused by the draft door's {ok: false}: it is named as refused, and a run where every item was says no card stands."
+        said, err = tool(self.tid, 'propose_email', items=[{'to': 'gail@northwind.example', 'subject': 'Offsite', 'text': ''},
+                                                           {'to': 'erin@northwind.example', 'subject': 'Offsite', 'text': 'Friday it is. Alex'}])
+        got = json.loads(said)
+        self.assertEqual(got['on_the_card'], 1); self.assertEqual(len(got['refused']), 1); self.assertIn('item 1', got['refused'][0])
+        said, err = tool(self.tid, 'propose_email', items=[{'to': 'ray@northwind.example', 'subject': 'Offsite', 'text': ''},
+                                                           {'to': 'omar@northwind.example', 'subject': 'Offsite', 'text': ''}])
+        got = json.loads(said)
+        self.assertFalse(got['ok']); self.assertEqual(len(got['refused']), 2); self.assertNotIn('ONE card', got['shown'])
+
+    def test_find_tools_names_only_the_tools_this_session_is_offered(self):
+        "The owner's own ask has no reply tools: find_tools for a reply named propose_reply anyway, and calling it answered \"unknown tool\"."
+        said, err = tool(self.tid, 'find_tools', query='reply to the sender')
+        self.assertFalse(err); self.assertNotIn('propose_reply', said); self.assertNotIn('reply_not_needed', said)
+        said, _ = tool(self.tid, 'find_tools', query='propose_reply')
+        self.assertIn('not offered on this task', said)
+        said, _ = tool(self.tid, 'find_tools', query='pick the git checkout')         # a coding agent's tool, on a general task
+        self.assertNotIn('use_repo', said)
+        r = rpc(self.tid, 'tools/call', {'name': 'propose_reply', 'arguments': {'text': 'x'}}).json()
+        self.assertIn('tools/list names', r['error']['message'])
+
+    def test_a_routines_email_that_went_at_once_is_never_spoken_of_as_a_waiting_card(self):
+        "A routine run's own email is sent by the draft itself (slots.routine_sends): the agent was told its card \"shows that it waits and that nothing went\"."
+        from taskuary import selfclose, slots
+        self.s._exec("UPDATE task SET Source='workflow' WHERE TaskId=?", (self.tid,))
+        with mock.patch.object(slots, 'routine_sends', return_value={'sent': True}):
+            said, err = tool(self.tid, 'propose_email', to='ray@northwind.example', subject='Quote', text='Any update on the quote? Alex')
+            self.assertFalse(err, said)
+            got = json.loads(said)
+            self.assertTrue(got['sent']); self.assertNotEqual(got['shown'], selfclose.CARD_SAID); self.assertIn('sent', got['shown'])
+            said, err = tool(self.tid, 'propose_email', items=[{'to': 'erin@northwind.example', 'subject': 'Quote', 'text': 'Any update? Alex'},
+                                                               {'to': 'gail@northwind.example', 'subject': 'Quote', 'text': 'Any update? Alex'}])
+            got = json.loads(said)
+            self.assertTrue(got['ok'], got); self.assertEqual(got['sent'], 2); self.assertNotIn('Nothing was filed', got['shown'])
+        with mock.patch.object(slots, 'routine_sends', return_value={'send_error': 'the mailbox refused the sign-in'}):
+            got = json.loads(tool(self.tid, 'propose_email', to='paula@northwind.example', subject='Quote', text='Any update? Alex')[0])
+            self.assertIn('did not go (the mailbox refused the sign-in)', got['shown'])
+
+    def test_a_settings_proposal_written_as_one_object_of_switches_is_read_as_its_changes(self):
+        "`changes: {poll_minutes: 5}` came back \"a change must be an object\" - an object, refused for not being one, with no shape said."
+        said, err = tool(self.tid, 'propose', action='settings', why='Mail should come in faster.', changes={'poll_minutes': 5})
+        self.assertFalse(err, said); self.assertTrue(json.loads(said)['queued'])
+        said, err = tool(self.tid, 'propose', action='settings', why='x', changes=['poll_minutes'])
+        self.assertTrue(err); self.assertIn('"name"', said)
+
+    def test_an_attachment_that_was_never_kept_is_a_failure_with_its_way_past_it(self):
+        "read_attachment answered \"not kept here - open the original message\" as if it were the file's text - to an agent that has no mailbox to open."
+        mid = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'r9', 'ConversationId': 'conv-r', 'Channel': 'email', 'FromName': 'Gail Moreno',
+                                  'FromEmail': 'gail@northwind.example', 'Subject': 'Renewal terms', 'BodyText': 'Terms attached.',
+                                  'SentAt': '2026-10-21 08:00:00', 'Status': 'routed'})
+        aid = self.s.add_attachment({'MessageId': mid, 'Name': 'terms.pdf', 'Size': 900, 'Path': ''})
+        from taskuary import origin
+        with mock.patch.object(origin, 'of_message', return_value=('person', None)), mock.patch.object(origin, 'of_task', return_value=('person', None)):
+            said, err = tool(self.tid, 'read_attachment', id=aid)
+        self.assertTrue(err, said); self.assertIn('tell the owner', said); self.assertNotIn('open the original', said)
+
+    def test_a_list_or_a_number_given_in_another_shape_is_read_as_the_schema_has_it(self):
+        "A lone cc address, an `answers` written m12, an attachment named \"attachment 12\": read as meant - never a Pydantic dump or a cc spelled letter by letter."
+        mid = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'r0', 'ConversationId': 'conv-r', 'Channel': 'email', 'FromName': 'Gail Moreno',
+                                  'FromEmail': 'gail@northwind.example', 'Subject': 'Renewal terms', 'BodyText': 'Ready for the call?',
+                                  'SentAt': '2026-10-21 08:00:00', 'Status': 'routed'})
+        from taskuary import origin
+        with mock.patch.object(origin, 'of_message', return_value=('person', None)), mock.patch.object(origin, 'of_task', return_value=('person', None)):
+            said, err = tool(self.tid, 'propose_reply', text='Yes - see you at ten.', cc='paula@northwind.example', answers=f'm{mid}')
+            self.assertFalse(err, said)
+            self.assertEqual(json.loads(said)['recipients']['cc'], ['paula@northwind.example'])
+            said, err = tool(self.tid, 'propose_email', to='erin@northwind.example', subject='Renewal', text='Notes attached.', cc='ray@northwind.example')
+            self.assertNotIn('p, a', said); self.assertNotIn('r, a, y', said)
+            self.assertEqual(json.loads(self.s.get_review(json.loads(said)['review_id'])['Deliver']).get('cc'), ['ray@northwind.example'])
+            said, err = tool(self.tid, 'read_attachment', id='attachment 77')
+            self.assertTrue(err); self.assertIn('no attachment 77', said)
+            said, err = tool(self.tid, 'search_messages', limit='ten')
+            self.assertTrue(err); self.assertIn('`limit` is a number', said)
+            for name, args, need in (('answer_invite', {}, '`answer`'), ('propose', {'why': 'x'}, '`action`'), ('person', {}, '`name`'),
+                                     ('set_up_meeting', {'title': 'Renewal'}, '`with`')):
+                said, err = tool(self.tid, name, **args)
+                self.assertTrue(err, said); self.assertIn(f'{name} needs {need}', said); self.assertNotIn('pydantic', said)
 
 
 def test_an_agent_is_told_to_offer_to_keep_code_it_wrote_as_a_routine():

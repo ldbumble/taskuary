@@ -559,7 +559,8 @@ class TheToolboxTests(unittest.TestCase):
         apiagent.TOOLBOX[(9, 's')] = {'search_messages'}
         try:
             with mock.patch.object(apiagent, 'call_taskuary') as called:
-                with self.assertRaises(ValueError): apiagent.run_tool(MemoryStore(), 9, 's', 'merge_pr', {})
+                with self.assertRaises(ValueError) as e: apiagent.run_tool(MemoryStore(), 9, 's', 'merge_pr', {})
+                self.assertIn('find_tools names the ones you have', str(e.exception))         # ...said with where its tools are
                 apiagent.run_tool(MemoryStore(), 9, 's', 'search_messages', {'words': 'x'})
             called.assert_called_once()
         finally: apiagent.TOOLBOX.pop((9, 's'), None)

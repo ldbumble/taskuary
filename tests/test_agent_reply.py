@@ -323,6 +323,20 @@ def test_an_undecodable_reply_file_says_why(monkeypatch, capsys, tmp_path):
     assert capsys.readouterr().out.startswith(f'not saved: cannot read {f}: ')
 
 
+def test_the_draft_command_says_what_the_draft_tool_says_of_a_missing_address_and_of_an_email_that_went(monkeypatch, capsys):
+    "`taskuary --draft` printed \"email saved on the task\" over a To left empty, and over a routine's email that had already gone."
+    from unittest import mock
+    from taskuary import cli, slots
+    monkeypatch.setenv('TASKUARY_TASK', '1')
+    monkeypatch.setattr('sys.argv', ['taskuary', '--draft', 'Any update on the quote? Alex', '--to', 'Ray Colton', '--subject', 'Quote'])
+    r = mock.Mock(status_code=200, text='')
+    with mock.patch.object(cli, '_post', return_value=(r, {'ok': True, 'review_id': 3, 'to_missing': slots.to_missing('Ray Colton')})): cli.main()
+    assert slots.to_missing('Ray Colton') in capsys.readouterr().out
+    with mock.patch.object(cli, '_post', return_value=(r, {'ok': True, 'review_id': 4, 'sent': True})): cli.main()
+    said = capsys.readouterr().out
+    assert 'email sent.' in said and 'nothing went' not in said
+
+
 class SaidOnceTests(NoHook):
     """The email walk, 2026-10-29: one reply saved by its marker and by `--reply` in the same turn wrote "agent drafted the reply
     itself" and "assistant drafted the reply itself" one under the other, and the close then said the reply "is being written"."""

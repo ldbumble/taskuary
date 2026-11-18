@@ -315,6 +315,15 @@ CARD_SAID = ('A reply, an email or an act you set up is its card under your answ
              'guessed address, a picked date), the one question - in one short line, or nothing. Raise your cards in the order they should '
              "happen: each waits for the owner's press before the next is shown, and you hear each outcome. Many of one act (25 emails, 40 issues "
              'to close) go as ONE card, in one call with `items`.')
+# ...AND A ROUTINE'S OWN EMAIL IS NO CARD (slots.routine_sends, the owner 2026-11-17: "routines should send on their own too"): it went at
+# once, and its agent was told the card "shows ... that it waits and that nothing went" - so it said nothing went (the tools stress round)
+def card_said(out: dict) -> str:
+    "How a draft that stood is spoken of, on every road (the draft tools, `taskuary --draft`): sent at once, failed to go, or its card."
+    if out.get('sent'): return ("It went at once - a routine's own email is sent without a press, so there is no card: say in a few words that "
+                                "it was sent, and to whom.")
+    if out.get('send_error'): return (f"It did not go ({out['send_error']}), so it stands as its card for the owner's Send - say that in one "
+                                      f"line. {CARD_SAID}")
+    return CARD_SAID
 # ...AND A STEP TASKUARY HELD IS A CARD TOO (the real-CLI walks, 2026-11-12: "The delete of old-export.csv is waiting for your approval",
 # over the card that says so; "still waiting for your Approve" the turn after): every hold's answer to its agent ends on this one tail
 CARD_TAIL = ('It is a card in this task now: the card says what it is and that it waits for their press - never say either. Add only what '

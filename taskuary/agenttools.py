@@ -342,13 +342,14 @@ NOT_LISTED = ("A SITE OR SYSTEM NOT LISTED HERE has no connection: say so in one
               "(the guide `browser` first) - a sign-in is done on the page there, by a saved sign-in or by the owner, and kept for next time. "
               "Never ask the owner for a password, and never work a sign-in from your shell.")
 
-def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
-    """_call - and a card's tool says where its card stands in the task's line (cardqueue: one card at a time, in the order raised)."""
+def call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
+    """_call - and a card's tool says where its card stands in the task's line (cardqueue: one card at a time, in the order raised). `skip`:
+    the tools this session is not offered (rpc's), which find_tools never names."""
     # ...ONE item is one card, as if given whole (2026-11-17: a lone break_out stood as "1 step - review a few, then do them all", "Approve all 1")
     if TOOLS[name][0] == 'propose' and isinstance((args or {}).get('items'), list) and len(args['items']) == 1 and isinstance(args['items'][0], dict):
         args = {**{k: v for k, v in args.items() if k != 'items'}, **args['items'][0]}
     if TOOLS[name][0] == 'propose' and isinstance((args or {}).get('items'), list): out = _many(store, tid, name, args, doors)
-    else: out = _call(store, tid, name, args, doors)
+    else: out = _call(store, tid, name, args, doors, skip)
     if TOOLS[name][0] != 'propose' or not isinstance(out, str): return out
     from . import cardqueue
     if not (line := cardqueue.says(store, tid)): return out
@@ -378,22 +379,56 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if not items: raise ValueError('`items` holds no objects - give each item its own fields')
     if len(items) > 500: raise ValueError(f'{len(items)} items is past what one card holds (500) - split them, or narrow the list')
     key, top = bulkcard.new_key(), (store._one('SELECT MAX(ReviewId) AS m FROM review') or {}).get('m') or 0
-    refused = []
+    refused, sent = [], 0
     for i, it in enumerate(items):
-        try: _call(store, tid, name, {**base, **it}, doors)
-        except Exception as e: refused.append(f'item {i + 1}: {failed(name, e)}')
+        try: out = _call(store, tid, name, {**base, **it}, doors)
+        except Exception as e: refused.append(f'item {i + 1}: {failed(name, e)}'); continue
+        # ...a door that answers {ok: false, why} filed nothing either: the item was dropped unsaid, and an all-refused run read "ONE card"
+        try: got = json.loads(out.body if hasattr(out, 'body') else out)
+        except (TypeError, ValueError): got = None
+        if isinstance(got, dict) and got.get('ok') is False:
+            refused.append(f"item {i + 1}: {got.get('why') or got.get('says') or 'refused, with no reason given'}")
+        sent += bool(isinstance(got, dict) and got.get('sent'))       # a routine's own email went at once (slots.routine_sends): no card
     store._exec('UPDATE review SET Batch=? WHERE TaskId=? AND ReviewId>? AND Status=?', (key, int(tid), top, 'pending'))
     n = (store._one('SELECT COUNT(*) AS n FROM review WHERE Batch=?', (key,)) or {}).get('n') or 0
-    return _j({'ok': n > 0, 'batch': key, 'on_the_card': n, **({'refused': refused} if refused else {}),
-               'shown': 'They stand as ONE card: the owner reviews a few and does them all with one press; you hear the whole run once.'})
+    return _j({'ok': n + sent > 0, **({'batch': key, 'on_the_card': n} if n else {}), **({'sent': sent} if sent else {}),
+               **({'refused': refused} if refused else {}),
+               'shown': ' '.join(filter(None, (
+                   f"{sent} went at once - a routine's own email is sent without a press: say they were sent." if sent else '',
+                   'They stand as ONE card: the owner reviews a few and does them all with one press; you hear the whole run once.' if n else '',
+                   'Nothing was filed, so no card stands - fix what each item was refused for and call it again.' if not n + sent else '')))})
 
 
-def _call(store, tid: int, name: str, args: dict, doors: dict) -> str:
+# THE ARGUMENTS AS THE SCHEMA HAS THEM (the tools stress round, 2026-11-18): a model writes `cc: "paula@..."` where a list is asked, `answers:
+# "m12"` or `id: "attachment 12"` where a number is - its own ids as it was shown them. Each came back as a Pydantic dump or "invalid literal
+# for int()", or worse: a cc spelled out letter by letter. One rule for every tool, read off its own schema; what cannot be read says what to do
+_NUM = re.compile(r'\s*(?:[a-z]+[\s#-]*|#)?(\d+)\s*', re.I)
+def fit(name: str, args) -> dict:
+    """`args` as tool `name`'s schema has them: one value where a list is wanted is a list of it, a number written with its mark (m12, #12,
+    attachment 12, "20") that number. A required field missing, or a number that is none, is a ValueError saying what to give."""
+    s, a = TOOLS[name][2], dict(args or {}) if isinstance(args, dict) else {}
+    for k, p in (s.get('properties') or {}).items():
+        v, t = a.get(k), (p or {}).get('type')
+        if v is None: continue
+        if t == 'array' and not isinstance(v, (list, tuple)): a[k] = [v] if v != '' else []
+        elif t == 'integer' and (isinstance(v, bool) or not isinstance(v, int)):
+            if isinstance(v, float) and v.is_integer(): a[k] = int(v); continue
+            m = re.fullmatch(r'\s*-?\d+\s*', str(v)) or _NUM.fullmatch(str(v))
+            if not m: raise ValueError(f"{name}'s `{k}` is a number - {v!r} is not one; call it again with the number")
+            a[k] = int(m[1] if m.re is _NUM else m[0])
+    need = s.get('required') or ([] if a.get('items') else next((x['required'] for x in s.get('anyOf') or []), []))
+    if miss := [k for k in need if a.get(k) is None]:
+        raise ValueError(f"{name} needs {', '.join(f'`{k}`' for k in miss)} - call it again with "
+                         f"{'it' if len(miss) == 1 else 'them'} (find_tools {name} has its whole instructions)")
+    return a
+
+
+def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     """Run one tool for the session on task `tid`. `doors` are the server's own handlers for the acts that have one (tool_run, tick,
     reply, draft, propose), called with the caller's request so their own checks - owns_task, scopes, the send-to-proposal rule -
     are the ones that hold. Raises ValueError for a call the model can correct; the answer is text the model reads."""
     from . import mailsearch, verdicts
-    a = args or {}
+    a = fit(name, args)
     if name == 'search_messages':
         hits = mailsearch.search(store, a.get('sender', ''), a.get('subject', ''), a.get('words', ''), a.get('since', ''), a.get('until', ''),
                                  a.get('limit') or 20)
@@ -412,7 +447,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         if not x or not store.get_message(x.get('MessageId')) or (store.get_message(x['MessageId']) or {}).get('Channel') == 'assistant':
             raise ValueError(f"no attachment {a['id']} - read_message lists a message's attachments with their ids")
         p = Path(x['Path']) if x.get('Path') else None
-        if not p or not p.is_file(): return f"{x.get('Name')}: not kept here - open the original message"
+        if not p or not p.is_file(): raise ValueError(not_kept(x.get('Name')))
         got = attachtext.read(x.get('Name'), p.read_bytes())
         return _out(got.get('text') or got.get('note') or '(no text in it)', fence_it=bool(got.get('text')))
     if name == 'my_task':
@@ -462,7 +497,10 @@ def _call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         from . import guides
         return _out(guides.read(a.get('topic')))
     if name == 'find_tools':
-        hits = found(a.get('query'), {n: d for n, (_, d, _s, _) in TOOLS.items()})
+        # ...only this session's own: on the owner's own ask "reply to the sender" found propose_reply, and calling it answered "unknown tool"
+        hits = found(a.get('query'), {n: d for n, (_, d, _s, _) in TOOLS.items() if n not in skip})
+        if not hits and str(a.get('query') or '').strip().lower() in skip:
+            return f"{a['query'].strip()} is not offered on this task - tools/list names the ones it has; say what you need in words to find one of them."
         return '\n\n'.join(map(instructions, hits)) if hits else f"No tool fits {a.get('query')!r} - name one, or say what it should do in other words."
     if name == 'run_system':
         r = doors['tool_run']({**a, 'task_id': tid})
@@ -486,7 +524,9 @@ def _call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if name == 'remember': return doors['remember'](tid, str(a.get('note') or ''), str(a.get('about') or ''), str(a.get('replaces') or ''))['says']
     if name == 'ask_stronger':
         out = doors['ask_stronger'](tid, str(a.get('question') or ''), str(a.get('context') or ''))
-        return out['answer'] if out.get('ok') else out.get('says') or _j(out)
+        # ...no answer is a failure, never a result: "could not be started" read back as if it were the stronger model's word
+        if not out.get('ok'): raise ValueError(out.get('says') or 'the stronger model did not answer - go on with your own judgement')
+        return out['answer']
     if name == 'note_peers': return _j(doors['note_peers'](tid, str(a.get('to') or ''), str(a.get('text') or '')))
     # ...`deploy` with it: dropped here, "how push, deploy <branch>" drew Push alone and the agent asked for the deploy in words
     if name == 'propose_land': return _j(doors['propose_land'](tid, str(a.get('how') or ''), str(a.get('why') or ''), **({'deploy': str(a['deploy'])} if a.get('deploy') else {})))
@@ -559,9 +599,9 @@ def show_files(store, tid: int, paths) -> str:
 
 
 def said_once(o):
-    "A draft that stands, with how it is spoken of (selfclose.CARD_SAID): the owner sees it as a card - its words are never said again."
-    from .selfclose import CARD_SAID
-    return {**o, 'shown': CARD_SAID} if isinstance(o, dict) and o.get('ok') else o
+    "A draft that stands, with how it is spoken of (selfclose.card_said): the owner sees it as a card - its words are never said again."
+    from .selfclose import card_said
+    return {**o, 'shown': card_said(o)} if isinstance(o, dict) and o.get('ok') else o
 
 
 def replaced(store, doors, tid: int, was: list, out, old, why: str):
@@ -603,6 +643,13 @@ def attached(store, tid: int, names) -> list:
     return out
 
 
+# ...and ONE THAT WAS NEVER KEPT is said as a fact with its way past it: "open the original message" asked of an agent that cannot open a
+# mailbox, and read_attachment said it as a plain answer, not a failure - an agent went on as if it had read the file
+def not_kept(name) -> str:
+    return (f"{name or 'that file'} was not kept by Taskuary, so it cannot be read or attached from here - tell the owner in one line that it "
+            "is on the original message in their mailbox, and go on with what you have")
+
+
 def mail_file(store, tid: int, aid, kept: bool = True) -> tuple:
     """(name, path) of attachment `aid` - a file that came on a message ON task `tid`, kept under Taskuary's own attachments folder (a Path
     column pointing anywhere else would make this a local file read). A ValueError says why not. `kept=False`: only whether it is this
@@ -619,7 +666,7 @@ def mail_file(store, tid: int, aid, kept: bool = True) -> tuple:
         p = Path(str(x.get('Path') or '')).resolve()
         if not x.get('Path') or not p.is_relative_to((config.home() / 'attachments').resolve()) or not p.is_file(): p = None
     except (OSError, ValueError): p = None
-    if not p: raise ValueError(f"{x.get('Name') or 'that file'} is not kept here - open the original message")
+    if not p: raise ValueError(not_kept(x.get('Name')))
     return x.get('Name') or p.name, p
 
 
@@ -689,7 +736,7 @@ def rpc(msg: dict, run, skip=()) -> dict | None:
     if m == 'tools/list': return ok({'tools': listing(skip)})
     if m == 'tools/call':
         name = p.get('name')
-        if name not in TOOLS or name in skip: return err(-32602, f'unknown tool {name!r}')
+        if name not in TOOLS or name in skip: return err(-32602, f"unknown tool {name!r} - this task's tools are the ones tools/list names")
         try: return ok({'content': [{'type': 'text', 'text': run(name, p.get('arguments') or {})}], 'isError': False})
         except Exception as e: return ok({'content': [{'type': 'text', 'text': failed(name, e)}], 'isError': True})
     return err(-32601, f'method {m!r} is not served here')
@@ -700,6 +747,10 @@ def failed(name: str, e: Exception) -> str:
     "ValueError: ... is not in the subpath of ...", and the agent read the owner that)."""
     detail = getattr(e, 'detail', None)                      # an HTTPException from a door: its words are the refusal
     if isinstance(e, KeyError): return f'{name} needs `{e.args[0] if e.args else "?"}` - call it again with it'
+    # ...and a door's own model refusing a field says which and how, never a Pydantic dump with its web address
+    if callable(getattr(e, 'errors', None)) and type(e).__name__ == 'ValidationError':
+        bad = '; '.join(f"`{'.'.join(map(str, x.get('loc') or ())) or '?'}` {str(x.get('msg') or 'is not right').lower()}" for x in e.errors()[:5])
+        return f'{name}: {bad} - call it again with that fixed (find_tools {name} has its whole instructions)'
     if detail is None and not isinstance(e, (ValueError, TypeError, PermissionError, LookupError)): logger.warning(f'mcp tool {name} failed: {e!r}')
     said = str(detail if detail is not None else e).strip()[:1000]
     return said or f'{name} did not work, and said nothing about why - try it once more, or tell the owner it failed'

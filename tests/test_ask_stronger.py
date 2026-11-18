@@ -40,5 +40,9 @@ def test_ask_stronger_with_nothing_stronger_says_so_and_the_tool_is_listed():
     assert not out['ok'] and 'no brain here has a stronger model' in out['says']
     assert 'ask_stronger' in {t['name'] for t in agenttools.listing()}
     assert agenttools.call(s, tid, 'ask_stronger', {'question': 'q'}, {'ask_stronger': lambda t, q, c: {'ok': True, 'answer': 'A'}}) == 'A'
+    # ...and no answer is the tool's failure, with the way on - never handed back as if it were the stronger model's word
+    import pytest
+    with pytest.raises(ValueError, match='own judgement'):
+        agenttools.call(s, tid, 'ask_stronger', {'question': 'q'}, {'ask_stronger': lambda t, q, c: {'ok': False, 'says': 'Mistral could not be started - go on with your own judgement'}})
     from taskuary import general
     assert 'ask_stronger tool' in general._ACTION and 'Never for routine steps' in general._ACTION     # the agent is told it may

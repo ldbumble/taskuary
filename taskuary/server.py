@@ -6267,7 +6267,7 @@ async def mcp_rpc(request: Request, task: int = 0):
                 name == 'read_message' and agenttools.own_message(store, task, args)): _owner_history(request, task)
         # ...this door is never a stranger's session's, so a stranger's words on its own task are never read through it (agenttools.UNVOUCHED)
         if name == 'read_message' and agenttools.unvouched(store, task, args): raise HTTPException(403, agenttools.UNVOUCHED)
-        out = agenttools.call(store, task, name, args, doors)
+        out = agenttools.call(store, task, name, args, doors, skip)
         return out.body.decode() if isinstance(out, JSONResponse) else out
     from .wrapup import no_correspondent
     from .general import GENERAL_KINDS

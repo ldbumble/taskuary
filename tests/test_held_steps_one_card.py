@@ -77,6 +77,19 @@ class HeldStepsOneCard(unittest.TestCase):
         self.assertFalse(out['ok']); self.assertEqual(out['busy'], sg.BUSY); self.assertEqual(ran, [])
         self.assertEqual([self.s.get_review(i)['Status'] for i in ids], ['pending'] * 3); self.assertEqual(told, [])
 
+    def test_a_single_press_while_its_agent_works_waits_lit_and_wakes_nobody(self):
+        # the phone's or the assistant's Approve on one held step (verdicts.decide, not the card's /steps): the busy refusal was raised inside
+        # the act, so the card was settled as failed - "press it again once its turn has ended" over a card with no Approve left - and the
+        # agent, mid-turn, was woken with "IT FAILED"
+        rv, told = self.hold('git push origin deploy'), []
+        busy = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, busy=True)
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': busy}, clear=True), \
+             mock.patch.object(general, 'tell', lambda st, t, said, *a, **k: told.append(said) or 'told'):
+            out = verdicts.decide(self.s, rv, 'approve')
+        self.assertFalse(out['ok']); self.assertEqual(out['busy'], sg.BUSY); self.assertFalse(out.get('act_failed'))
+        r = self.s.get_review(rv['ReviewId']); self.assertEqual(r['Status'], 'pending', 'still lit for the press it asks for'); self.assertFalse(r.get('ActError'))
+        self.assertEqual(told, [], 'nothing ran, nothing to tell')
+
     def test_one_dismiss_dismisses_them_all_and_the_agent_hears_once(self):
         ids, out, ran, told, _ = self.run_all([0, 0, 0], 'reject')
         self.assertEqual(ran, []); self.assertEqual([self.s.get_review(i)['Status'] for i in ids], ['rejected'] * 3)

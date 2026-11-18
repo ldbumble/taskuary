@@ -462,7 +462,6 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
         store.audit('task', tid, 'shell_act_done', 'owner', 'human', {'what': p.get('what'), 'reads': p['reads']})
         return {'performed': p.get('what') or 'a read', 'said': ''}
     if not cmd: raise RuntimeError('this held step names no command')
-    if (busy := mid_turn(store, tid, p.get('sid'))): raise RuntimeError(busy)
     if cwd and not os.path.isdir(cwd): raise RuntimeError(f'the folder it was held in is gone ({cwd}) - nothing was done')
     def go(argv, folder):
         from . import spawn
@@ -490,9 +489,7 @@ def approve_steps(store, rids: list, decide, actor: str = 'owner', verb: str = '
     if not rvs or any(not r or r.get('Kind') != 'action' or json.loads(r.get('DraftText') or '{}').get('action') != 'shell_act' for r in rvs):
         raise ValueError('only held shell steps are approved together')
     if len({r.get('TaskId') for r in rvs}) != 1: raise ValueError('held steps of one task only')
-    tid, told, done, failed, refused = rvs[0]['TaskId'], [], [], None, ''
-    if verb == 'approve' and (busy := mid_turn(store, tid, json.loads(rvs[0].get('DraftText') or '{}').get('sid'))):
-        return {'ok': False, 'done': [], 'failed': None, 'left': [r['ReviewId'] for r in rvs], 'busy': busy}
+    tid, told, done, failed, refused, busy = rvs[0]['TaskId'], [], [], None, '', ''
     tok = _batch.set(told)
     try:
         for i, rv in enumerate(rvs):
@@ -500,12 +497,13 @@ def approve_steps(store, rids: list, decide, actor: str = 'owner', verb: str = '
             # ...A STEP REFUSED BEFORE IT RAN DID NOT FAIL (the held-steps round, 2026-11-18): a second press of an answered card - a double
             # click, a page or phone that had not read the first - woke the agent with "step 1 failed: this one was already approved". Only a
             # step that ran and failed (its act's own error) is a failure; a refusal stops the card, leaves every step as it stands, tells nobody
-            if not out.get('ok') and not out.get('act_failed'): refused = out.get('send_error') or 'it was answered already'; break
+            # ...and one its agent's turn is working beside (mid_turn, said by the decide door) waits, lit, for the press it asks for
+            if not out.get('ok') and not out.get('act_failed'): refused, busy = out.get('send_error') or 'it was answered already', out.get('busy') or ''; break
             if not out.get('ok'): failed = {'review': rv['ReviewId'], 'step': i + 1, 'error': out.get('send_error') or 'it did not run'}; break
             done.append({'review': rv['ReviewId'], 'result': out.get('result')})
     finally: _batch.reset(tok)
     left = [r['ReviewId'] for r in rvs[len(done) + (1 if failed else 0):]]
-    if refused and not done: return {'ok': False, 'already': True, 'send_error': refused, 'done': [], 'failed': None, 'left': left}
+    if refused and not done: return {'ok': False, **({'busy': busy} if busy else {'already': True}), 'send_error': refused, 'done': [], 'failed': None, 'left': left}
     ran = '; '.join(told) or 'nothing ran'
     if verb != 'approve': _tell(store, tid, f"The owner dismissed {len(done)} held step{'s' if len(done) != 1 else ''}: {ran} - NOT done. {OWNER_NO}")
     elif failed:

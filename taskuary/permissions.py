@@ -188,6 +188,7 @@ def ask(store, tid: int, request: dict, wait: float = None, timed_out=None, move
             store.audit('task', tid, 'permission_asked', 'agent', 'agent', {'pid': pid, 'pattern': pattern(r), 'call': r['call']})
             try: agentchannels.permission_asked(store, tid, pid, r)
             except Exception as e: logger.warning(f'permission on {task_ref(tid)}: not put on its channel - {e}')
+            end = time.monotonic() + wait
             out = ws.wait_held(g, wait)
         finally:
             with _LOCK: PENDING.pop(pid, None)
@@ -198,8 +199,9 @@ def ask(store, tid: int, request: dict, wait: float = None, timed_out=None, move
             return ans or _pick(r, False)
         if not ans:
             ans = _pick(r, False)
-            said = (f"No answer in {round(wait / 60) or 1} min{'s' if round(wait / 60) != 1 else ''} - the agent's request was refused: it {line(r)}."
-                    if out is None and not ws.STOP.is_set() else CLOSED_FIRST.format(line(r)))
+            # ...let go before its time was up is no timeout: its session ended first (closed, or its process died) - never "No answer in 10 mins"
+            said = (CLOSED_FIRST if ws.STOP.is_set() or out is not None else ENDED_FIRST if time.monotonic() < end - 1 else
+                    f"No answer in {round(wait / 60) or 1} min{'s' if round(wait / 60) != 1 else ''} - the agent's request was refused: it {{}}.").format(line(r))
             try: ws.record(store, tid, sid, 'answered', request_id=rid, text='timed out - refused', source='permission')
             except Exception: pass
             store.add_comment(tid, 'taskuary', 'agent', said)
@@ -265,6 +267,7 @@ def set_aside(store, tid: int, said: str = SET_ASIDE_SAID) -> list:
 # a kill says nothing, so the next start says it, before the run's ending is written (terminal.recover_after_restart): the request is
 # closed in the record and the task reads that it was never run. A run the record already ended is history, and is left as it reads
 CLOSED_FIRST = "The agent's request was refused - Taskuary closed first: it {}."
+ENDED_FIRST = "The agent's request was refused - its session ended before you answered: it {}."
 def refuse_orphans(store) -> list:
     "Every permission request the record holds open with nobody in this process asking it: refused, and said on its task - [task ids]."
     from . import workerstate as ws

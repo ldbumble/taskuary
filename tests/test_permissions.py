@@ -254,3 +254,16 @@ def test_the_step_a_request_stopped_at_waits_and_once_refused_reads_not_run(s):
     assert steps() == {'call-7': 'completed', 'call-rm': 'refused'}, 'an allowed call is as its run says'
     assert perm.ask(s, tid, {**perm.from_acp(ACP), 'call': 'call-late'}, wait=0.1) == 'reject_once'
     assert perm.calls(s, tid)['call-late'] == 'refused', 'no answer in time is a refusal too'
+
+
+def test_a_request_whose_session_ended_says_so_never_that_ten_minutes_passed(s):
+    """The agent's session closed (its process died, the task was closed) seconds after it asked: the ask was let go (workerstate.release) and
+    the task read "No answer in 10 mins - the agent's request was refused" - ten minutes that never passed. It says the session ended first."""
+    tid = coding(s)
+    t, box = asking(s, tid, perm.from_acp(ACP), wait=600)
+    assert perm.pending(tid, s)
+    ws.release(tid); t.join(3)
+    assert box == ['reject_once'] and not perm.pending(tid, s)
+    said = [c['Body'] for c in s.list_comments(tid)]
+    assert not any(b.startswith('No answer in') for b in said), said
+    assert said[-1] == perm.ENDED_FIRST.format("wants to run `npm test -- money` (" + os.path.join(REPO, 'money.js') + ")"), said

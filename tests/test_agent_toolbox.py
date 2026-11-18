@@ -530,6 +530,15 @@ class NewTaskTool(unittest.TestCase):
         self.assertFalse(err)
         self.assertIn("No tool fits 'spreadsheet'", said); self.assertIn("session's own tools", said); self.assertIn('outputs folder', said)
 
+    # ARGUMENTS AS A STRING (the same round): a client that sends a tool's arguments as the JSON text of the object answered a Python
+    # message - "'str' object has no attribute 'get'" - and nothing said what to do
+    def test_arguments_sent_as_json_text_are_read_and_anything_else_says_what_to_send(self):
+        r = rpc(self.tid, 'tools/call', {'name': 'remember', 'arguments': '{"note": "Gail Moreno now handles payroll questions"}'}).json()['result']
+        self.assertFalse(r['isError'], r); self.assertIn('Kept in the owner', r['content'][0]['text'])
+        for bad in ('not json', '[1, 2]'):
+            r = rpc(self.tid, 'tools/call', {'name': 'remember', 'arguments': bad}).json()['result']
+            self.assertTrue(r['isError']); self.assertIn('arguments', r['content'][0]['text']); self.assertNotIn("has no attribute", r['content'][0]['text'])
+
     def test_a_routines_email_that_went_at_once_is_never_spoken_of_as_a_waiting_card(self):
         "A routine run's own email is sent by the draft itself (slots.routine_sends): the agent was told its card \"shows that it waits and that nothing went\"."
         from taskuary import selfclose, slots

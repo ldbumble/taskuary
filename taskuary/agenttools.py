@@ -375,9 +375,20 @@ NOT_LISTED = ("A SITE OR SYSTEM NOT LISTED HERE has no connection: say so in one
               "(the guide `browser` first) - a sign-in is done on the page there, by a saved sign-in or by the owner, and kept for next time. "
               "Never ask the owner for a password, and never work a sign-in from your shell.")
 
+def _arguments(a) -> dict:
+    "A call's arguments as an object: the JSON text of one is read as it was meant; anything else is a ValueError saying what to send."
+    if isinstance(a, str):
+        try: a = json.loads(a)
+        except ValueError: pass
+    if a is None: return {}
+    if not isinstance(a, dict): raise ValueError('a tool\'s `arguments` is one JSON object of its parameters ({"name": value, ...}) - send it that way')
+    return a
+
+
 def call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     """_call - and a card's tool says where its card stands in the task's line (cardqueue: one card at a time, in the order raised). `skip`:
     the tools this session is not offered (rpc's), which find_tools never names."""
+    args = _arguments(args)
     # ...ONE item is one card, as if given whole (2026-11-17: a lone break_out stood as "1 step - review a few, then do them all", "Approve all 1")
     if TOOLS[name][0] == 'propose' and isinstance((args or {}).get('items'), list) and len(args['items']) == 1 and isinstance(args['items'][0], dict):
         args = {**{k: v for k, v in args.items() if k != 'items'}, **args['items'][0]}

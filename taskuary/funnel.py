@@ -585,11 +585,16 @@ def run_failed(store, tid, live_too: bool = False, st=None) -> dict | None:
     plain words (failures.classify) and the place that fixes it - Connect an AI for an agent with no AI to run on - else None.
     `st`: the task's record (taskstate.TaskState), when the caller holds it - its ending is read there."""
     from . import workerstate
-    from .failures import classify
     # live_too: whatever the session does (R2)
     if (workerstate.ended(store, tid, live_too) if st is None or live_too else st.end) != 'failed': return None
     last = (st.last(('failed',)) if st else store.last_worker_event(tid, kinds=('failed',))) or {}
-    c = classify(' '.join(str(last.get('Text') or '').split()) or 'it stopped without saying why', tid=tid)
+    return failure(last.get('Text'), tid)
+
+
+def failure(text, tid=None) -> dict:
+    "{sentence, fix} of a run's failure, from the words it failed with - what run_failed says, and what a failed turn keeps (general.file_turn)."
+    from .failures import classify
+    c = classify(' '.join(str(text or '').split()) or 'it stopped without saying why', tid=tid)
     return {'sentence': _sentence(c['sentence']), 'fix': c['fix']}
 
 

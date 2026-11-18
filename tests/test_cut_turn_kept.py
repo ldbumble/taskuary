@@ -44,3 +44,52 @@ def test_a_turn_that_said_nothing_yet_still_says_it_was_cut():
     sessionrecord.keep_live(tid, [{'type': 'start'}, {'type': 'tool_call', 'name': 'Read', 'detail': {'args': {'file': 'pack.pdf'}}}])
     general.keep_cut_turns(s)
     assert [c['Body'] for c in s.list_comments(tid) if c['ActorType'] == general.ASSISTANT_TYPE] == [general.CUT]
+
+
+def test_a_turn_whose_cli_died_part_way_keeps_its_steps_and_its_failure_where_it_happened():
+    """THE SAME SHAPE AS A RESTART'S CUT, ON A LIVE CLI (chat-render, 2026-11-18): a turn read a file and its CLI exited. It filed nothing, so the
+    chat drew its failure only while it was the task's last word - and once he wrote again the turn read "1 step" with no reason under it, and
+    the next turn's clock counted from the dead one's start ("working 12s" the moment he pressed Enter). Invented world."""
+    from unittest import mock
+    from taskuary import clipool, conversation, terminal
+    from test_general_turn_ends_short import a_claude, researcher
+    import unittest
+    case = unittest.TestCase(); case.addCleanup = lambda f: None
+    a_claude(case)
+    s = MemoryStore(); tid = researcher(s)
+    def dies(profile, prompt, trace, resume=None, **kw):
+        trace('tool_call', 'Read', {'tool_call_id': 'tu1', 'args': {'file_path': 'gail.txt'}}); trace('tool_result', 'tu1', {'result': 'Hi Alex'})
+        trace('progress', 'text', "Gail's note asks for the renewal terms.")
+        raise RuntimeError(clipool.MID_TURN)
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch('taskuary.agents.run_cli', side_effect=dies):
+        sess = general.start_session(s, tid, pick='cli:claude')
+        try: sess.send_prompt('Draft the reply to Gail', pick='cli:claude')
+        except Exception: pass
+    turns = lambda: [x for x in conversation.items(s, tid)['items'] if x['kind'] == 'turn']
+    now = turns()
+    assert len(now) == 1 and now[0]['state'] == 'failed' and [x['k'] for x in now[0]['steps']] == ['tool'], now
+    assert now[0]['text'] == "Gail's note asks for the renewal terms." and 'middle of its turn' in now[0]['fail'], now
+    # ...and once he writes again, it still says so, where it happened - and the next turn's clock is its own
+    s.add_comment(tid, 'owner', general.USER_TYPE, 'Carry on, please')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The reply to Gail is drafted.')
+    later = turns()
+    assert later[0]['id'] == now[0]['id'] and later[0]['state'] == 'failed' and later[0]['fail'] == now[0]['fail'], later
+    assert later[0]['text'] == now[0]['text'] and later[1]['text'] == 'The reply to Gail is drafted.', later
+    assert later[1]['started'] is None or later[1]['started'] >= now[0]['ended'] - 1, later
+
+
+def test_a_long_turn_keeps_every_step_it_took():
+    """A LONG SESSION'S TURN NEVER LOSES ITS FIRST STEPS (chat-render, 2026-11-18): the trace kept only its newest 100 events, and every tool
+    call is three or four of them (the call, its live line, its result, the result's line) - at its 26th call the turn at work lost its first
+    steps off the top, and the turn was filed with only what was left. The live lines are narration of the same work: they make room first."""
+    s = MemoryStore(); tid = s.create_task({'Title': 'Vendor audit for Northwind', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    me = types.SimpleNamespace(task_id=tid, busy=True, trace=[{'type': 'start', 'session': {}, 'at': 1.0}], trace_revision=0, _trace_detail=general.GeneralSession._trace_detail)
+    for i in range(60):
+        general.GeneralSession._remember_trace(me, 'tool_call', 'Read', {'tool_call_id': f'tu{i}', 'args': {'file_path': f'vendor-{i}.txt'}})
+        general.GeneralSession._remember_trace(me, 'live', 'claude', f'→ Read: vendor-{i}.txt')
+        general.GeneralSession._remember_trace(me, 'tool_result', f'tu{i}', {'result': 'x' * 5000})
+        general.GeneralSession._remember_trace(me, 'live', 'claude', '· ' + 'x' * 200)
+    tools = [x['text'] for x in sessionrecord.trace_steps(me.trace) if x['k'] == 'tool']
+    assert tools == [f'vendor-{i}.txt' for i in range(60)], tools[:3]
+    assert me.trace[0]['type'] == 'start', 'the turn keeps its start (keep_cut_turns: its files)'
+    assert len(json.dumps(me.trace)) < 160_000, 'and no more is served on a read than the newest 100 events were (~150K here)'

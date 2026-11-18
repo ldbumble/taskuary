@@ -506,6 +506,8 @@ def _items(store, tid: int) -> dict:
             # ...AN ANSWER NOBODY MARKED THE START OF STANDS AT ITS OWN TIME (every task answered before hand-overs were written down - his
             # older tasks, the demo's): placed at the start of time, it stood above the mail it answered and the chat began with the agent
             last = max(last + 1e-7, began or ep(c['CreatedAt']))
+            # ...ONE THAT FAILED says so where it failed, for good (general.file_turn): its closing line, after the app's own mark, is its `fail`
+            body, fail = general.failed_line(body)
             st = _said(steps_of.get(cid, []), body)
             # ...one it was made to take back (take_back): its words are a step of the work that goes on under it
             # ...and its summary goes with its words (the recorded walk, 2026-11-12: the saved sign-in's folded turn still drew its summary - "Erin
@@ -515,7 +517,8 @@ def _items(store, tid: int) -> dict:
                 st, body, backs = [*st, {'k': 'note', 'text': (led.get(('back', str(cid))) or {}).get('Sid') or back_why(cid) or TOOK_BACK}], '', [n for n in backs if n >= cid]
             # ...and it BEGAN at its own time too (the demo walk, 2026-11-18): with no start it counted as begun at the start of time, so a card
             # made long before it was "made in" it - a played Send's card was taken into the line said after it, and jumped down under it
-            t = {'kind': 'turn', 'at': stamp(clock) or c['CreatedAt'], 'state': 'done', 'steps': st, 'text': body, 'cards': [], 'started': clock or ep(c['CreatedAt']),
+            t = {'kind': 'turn', 'at': stamp(clock) or c['CreatedAt'], 'state': 'failed' if fail else 'done', 'steps': st, 'text': body, 'cards': [],
+                 'started': clock or ep(c['CreatedAt']), **({'fail': fail.strip()} if fail else {}),
                  'ended': ep(c['CreatedAt']), 'answer': f'comment-{cid}', **({'summary': summ[cid]} if cid in summ and not took else {})}
             # ...and each draft this turn left that a later turn rewrote: greyed where it stood, never moved
             newest = {s['review']: k for k, ss in snaps.items() for s in ss}
@@ -905,6 +908,7 @@ def _items(store, tid: int) -> dict:
             if c['status'] == 'pending' and c.get('was') and (c['what'] in DRAFTS and i < last_in or i < last_his or c['review'] in past): c['status'] = 'passed'
             # ...each says why in what happened (proposals.passed_why), never "you moved on" over a draft he never saw
             if c['status'] == 'passed' and (rv := store.get_review(c['review'])): c['why'] = proposals.passed_why(store, rv)
+            elif c['status'] == 'pending' and c.get('was'): c['aside'] = proposals.WROTE_PAST      # ...and the page says it from his Enter (withMine)
     # ...and a reply with NO words yet - its card said only what its agent needed - is not the one to press above his newer line either
     # (recorded 2026-11-13: he answered the agent's question, and the empty reply box stood lit over his answer while the turn that writes it
     # worked): it has nothing to grey, so it is not drawn there; the turn his line began raises it, written, as its own last thing

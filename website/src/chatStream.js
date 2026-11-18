@@ -182,7 +182,9 @@ export const withMine = (list, mine) => {
   // ...AND A REPLY DRAFT ABOVE IT GREYS IN ITS PLACE FROM THE SAME FRAME (the owner, 2026-11-12: "grey out buttons right away"): what the
   // server does as it hears the line (proposals.set_aside_drafts), drawn before its read comes back - its buttons stood lit ~300 ms
   // ...a line sent while a turn works too (the owner, 2026-11-16: "The second a new prompt comes in ... it should gray out the action card but never move")
-  const aside = (c) => (own.some((l) => !l.err) && c.status === "pending" && c.was ? { ...c, status: "passed" } : c);
+  // ...in the server's own sentence (`aside`, proposals.WROTE_PAST) with his newest line cut as proposals._cut cuts it: its read never swaps the words
+  const by = own.findLast((l) => !l.err), cut = (w) => ((w = String(w || "").trim().split(/\s+/).join(" ")).length > 60 ? `${w.slice(0, 60)}…` : w);
+  const aside = (c) => (by && c.status === "pending" && c.was ? { ...c, status: "passed", ...(c.aside ? { why: c.aside.replace("{line}", cut(by.text)) } : {}) } : c);
   const greyed = items.map((x) => (x.kind === "card" ? aside(x) : x.kind === "turn" && (x.cards || []).length ? { ...x, cards: x.cards.map(aside) } : x));
   return { items: [...greyed.slice(0, at), ...rest, ...greyed.slice(at), ...tail], pending: [...pending, ...wait] };
 };

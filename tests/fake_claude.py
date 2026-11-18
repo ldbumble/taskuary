@@ -59,6 +59,9 @@ def answer(prompt: str) -> str:
     for r in script:
         # ...`anywhere`: the rule reads the whole prompt - a task's turn names the owner's words its own way
         if not re.search(r['when'], prompt if r.get('anywhere') else said, re.I): continue
+        # ...`events`: stream-json lines said as they are, in order, each after its own `_sleep` - a tool that fails, a compaction (chat-render)
+        for e in r.get('events') or []:
+            e = dict(e); time.sleep(float(e.pop('_sleep', 0) or 0)); out({'session_id': sid, **e})
         if r.get('exit') is not None: log('exit', code=r['exit']); sys.exit(r['exit'])   # a CLI that dies mid-turn (website/browser/agent-journey)
         for p in r.get('post') or []: act(p)
         time.sleep(r.get('wait') or 0)                   # a long turn, for a stop pressed while it works

@@ -675,17 +675,20 @@ def passed_why(store, r: dict) -> str:
     tid = int(r['TaskId'])
     his = [x for x in store.list_comments(tid, internal=True) if x.get('ActorType') in (general.USER_TYPE, general.WAITING_TYPE)
            and not general.is_brief(x) and x.get('Actor') == 'owner']
-    lines = [(ep(x['CreatedAt']), f'your line "{w}"', f'you wrote "{w}" after it') for x in his for w in [_cut(general.line_words(x))]]
+    lines = [(ep(x['CreatedAt']), f'your line "{w}"', WROTE_PAST.format(line=w)) for x in his for w in [_cut(general.line_words(x))]]
     # ...his own mail on the thread is his answer to whom it was with, never "you wrote again" (2026-11-17): the newest other sender before it
     mails, who = [], ''
     for x in _mail(store, tid):
         n = x.get('FromName') or x.get('FromEmail')
-        if not x.get('Own'): who = n or who; mails.append((x['T'], f"{n or 'a'}'s new message", f"{n or 'someone'} wrote again after it")); continue
+        if not x.get('Own'): who = n or who; mails.append((x['T'], f"{n or 'a'}'s new message", f"Not sent - {n or 'someone'} wrote again after it")); continue
         to = who or continuity.sent_to(store, r, 'them')
-        mails.append((x['T'], f'your answer to {to}', f'you answered {to} yourself'))
+        mails.append((x['T'], f'your answer to {to}', f'Not sent - you answered {to} yourself'))
     got = max((x for x in lines + mails if x[0] <= end + 1), key=lambda x: x[0], default=None)
     if not got: return 'Not sent - set aside when the chat moved on'
-    return f'Not sent - {got[2]}' if got[0] >= card else f'Not sent - written before the agent read {got[1]}'
+    return got[2] if got[0] >= card else f'Not sent - written before the agent read {got[1]}'
+# ...the sentence his line greys a card with - sent with each card it could grey (conversation `aside`), so the page says it from the frame he
+# presses Enter, his line cut as _cut cuts it (chatStream.withMine), never words of its own that the read then swaps
+WROTE_PAST = 'Not sent - you wrote "{line}" after it'
 def _cut(w: str, n: int = 60) -> str: return (w := ' '.join(str(w or '').split()))[:n] + ('…' if len(w) > n else '')
 
 

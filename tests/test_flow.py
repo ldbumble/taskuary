@@ -545,3 +545,15 @@ def test_a_run_of_steps_the_restart_cut_says_so_and_is_not_walked_again(db):
     assert run['failed'] and run['summary'].startswith('Cut short when Taskuary restarted, after step 1 of 3') and 'Run now' in run['summary']
     assert flow.turn(s, tid, False)['text'] == run['summary']
     assert sum(c['Body'] == run['summary'] for c in s.list_comments(tid)) == 1
+
+
+def test_a_repair_whose_answer_cannot_be_read_says_so_never_asks_the_owner_to_say_it_another_way(db):
+    # a scheduled run's script failed and the repair model answered prose: the task told the owner "I couldn't turn that into a report. Say it
+    # another way" - words for an ask he typed, over a repair nobody asked for in words
+    s = MemoryStore()
+    src = source(s, [{'id': 's1', 'kind': 'source', 'label': 'Run the script', 'type': 'python_script', 'script': "import sys\nsys.exit('the ledger file is missing')"}])
+    tid = run_task(s, src)
+    out = flow.execute(s, src, tid, 'schedule', llm=answering('I think the file moved.'))
+    said = [c['Body'] for c in s.list_comments(tid)]
+    assert out['failed'] and not any('Say it another way' in x or 'a report' in x for x in said), said
+    assert f'No repair was found: {flow.REPAIR_GARBLED}' in said

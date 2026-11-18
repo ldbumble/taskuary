@@ -524,7 +524,9 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'remember': return doors['remember'](tid, str(a.get('note') or ''), str(a.get('about') or ''), str(a.get('replaces') or ''))['says']
     if name == 'ask_stronger':
         out = doors['ask_stronger'](tid, str(a.get('question') or ''), str(a.get('context') or ''))
-        return out['answer'] if out.get('ok') else out.get('says') or _j(out)
+        # ...no answer is a failure, never a result: "could not be started" read back as if it were the stronger model's word
+        if not out.get('ok'): raise ValueError(out.get('says') or 'the stronger model did not answer - go on with your own judgement')
+        return out['answer']
     if name == 'note_peers': return _j(doors['note_peers'](tid, str(a.get('to') or ''), str(a.get('text') or '')))
     # ...`deploy` with it: dropped here, "how push, deploy <branch>" drew Push alone and the agent asked for the deploy in words
     if name == 'propose_land': return _j(doors['propose_land'](tid, str(a.get('how') or ''), str(a.get('why') or ''), **({'deploy': str(a['deploy'])} if a.get('deploy') else {})))

@@ -28,7 +28,7 @@ def ask(store, task_id: int, question: str, context: str = '') -> dict:
     rid = brainroute.log(store, brainroute.Route('general', 'strong', pick, model or '', 'strong', [], RULE, said), task_id)
     try:
         brain = llm._scrub(aiusage.metered(store, rid, llm._build_llm(store, pick, model or None, task_id=task_id, gear='strong', backups=[])))
-        if not brain: brainroute.outcome(store, rid, 'error'); return {'ok': False, 'says': f'{brainroute._said(store, pick)} could not be started'}
+        if not brain: brainroute.outcome(store, rid, 'error'); return {'ok': False, 'says': f'{brainroute._said(store, pick)} could not be started - go on with your own judgement'}
         user = f"The task: {task.get('Title') or ''}\n\nThe question:\n{q}" + (f"\n\nWhat the agent knows:\n{str(context).strip()}" if str(context or '').strip() else '')
         answer = brain(SYSTEM, user)
     except Exception as e:

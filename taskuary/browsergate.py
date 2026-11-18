@@ -396,8 +396,10 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
         if shown(tid, sid, pg): return hand_over(store, tid, sid, a, pg, v, site)    # someone watches: the press is theirs, on the page
         if not _pending(store, tid, sid, args):
             from . import proposals
+            c = control(a, pg)
             proposals.queue(store, tid, {'action': 'browser_act', 'sid': str(sid), 'args': args, 'command': ' '.join([EXE, *args]),
-                                         'url': pg['url'], 'site': site, 'what': v['what'], 'why': v['why']}, 'agent')
+                                         'url': pg['url'], 'site': site, 'what': v['what'], 'why': v['why'],
+                                         **({'control': {'name': c['name'], 'role': c['role']}} if c.get('role') else {})}, 'agent')
             store.audit('task', tid, 'browser_act_held', 'taskuary', 'system', {'verb': a['verb'], 'site': site, 'why': v['why']})
         from .selfclose import CARD_TAIL
         return _deny(f"{HELD}: {v['what']} ({v['why']}). Once they approve it, Taskuary runs this exact command in your browser and tells you "
@@ -450,6 +452,11 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
                            f"{p.get('site') or 'the page'} - nothing was done. {AGAIN}")
     if not _same_page(here, str(p.get('url') or '')):
         raise RuntimeError(f"the agent's browser has moved on from the page this was held on ({p.get('site') or 'its site'}) - nothing was done. {AGAIN}")
+    # ...AND THE REF STILL NAMES THE CONTROL IT WAS HELD ON: a page that re-draws itself on one address (a checkout's next step, a list that
+    # reloaded) gives @e12 to another control at its next snapshot, and the owner's yes to "Continue" clicked "Remove item"
+    if (was := p.get('control')) and (now := control({'args': args}, page(sid))) and (now.get('role'), now.get('name')) != (was.get('role'), was.get('name')):
+        raise RuntimeError(f"the {was.get('role') or 'control'} \"{was.get('name')}\" this was held on is no longer where it was on "
+                           f"{p.get('site') or 'the page'} - the page has changed since, so nothing was done. {AGAIN}")
     rc, said = (run or (lambda s, a: _run(s, a, 60, 'act')))(sid, args)
     said = ' '.join(str(said or '').split())[-600:]
     if rc != 0:

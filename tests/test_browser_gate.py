@@ -264,7 +264,7 @@ class Holding(unittest.TestCase):
         ran = []
         with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': CHECKOUT + '#top'}), \
                 mock.patch('taskuary.workerstate._live', return_value=self.sess), \
-                mock.patch.object(bg, '_run', lambda sid, args, wait, tag: ran.append((sid, args)) or (0, '✓ Done')):
+                mock.patch.object(bg, '_run', lambda sid, args, wait, tag: (0, SNAP) if args[0] == 'snapshot' else ran.append((sid, args)) or (0, '✓ Done')):
             out = verdicts.decide(self.s, rv, 'approve')
         self.assertTrue(out['ok'], out)
         self.assertEqual(ran, [('run1', ['click', '@e12'])])
@@ -279,6 +279,21 @@ class Holding(unittest.TestCase):
         self.assertFalse(out['ok']); self.assertIn('moved on', out['send_error'])
         run.assert_not_called()
         self.assertEqual(self.pending(), [], 'over, its error kept - the agent holds it anew (the owner, 2026-11-16: no Try again)')
+
+    def test_a_ref_that_names_another_control_by_the_press_is_not_acted_on(self):
+        """A checkout on one address re-draws itself: held as @e12 "Continue", by the owner's Approve a fresh snapshot gave @e12 to "Remove
+        item" - the address was the same, so the click ran on a control nobody approved. The ref must still name what was held."""
+        self.held(); [rv] = self.pending()
+        self.assertEqual(json.loads(rv['DraftText'])['control'], {'name': 'Continue', 'role': 'button'})
+        moved = SNAP.replace('button "Continue" [ref=e12]', 'button "Remove item" [ref=e12]')
+        ran = []
+        def run(sid, args, wait, tag):
+            ran.append(args)
+            return (0, moved) if args[0] == 'snapshot' else (0, '✓ Done')
+        with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': CHECKOUT}), mock.patch.object(bg, '_run', run):
+            out = verdicts.decide(self.s, rv, 'approve')
+        self.assertFalse(out['ok']); self.assertIn('no longer', out['send_error'])
+        self.assertNotIn(['click', '@e12'], ran)
 
     def test_dismiss_tells_the_agent_it_was_not_done(self):
         self.held(); [rv] = self.pending()

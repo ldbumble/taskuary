@@ -1,7 +1,7 @@
 // A scratch instance on the person's real CLI, kept up for a walk driven from other scripts (real-lib.mjs). Not a test: nothing here runs in CI.
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { startHarness } from "./harness.mjs";
@@ -55,14 +55,17 @@ exec "$(cygpath -u '${exe}')" "$@"
 // ...`codex`: the person's real Codex CLI picked as the agents' brain (its own budget, not Claude's)
 if (BRAIN === "codex") real.unshift(path.dirname(where("codex")[0]));
 if (BRAIN === "cli" || BRAIN === "codex") process.env.TASKUARY_BROWSER_REAL_CLI = real.join(path.delimiter);
+// ...the gateway's address and key, read before the server starts: its host is the one outside address the test server may reach
+const GW = BRAIN !== "gateway" ? {} : (() => { const f = path.join(os.homedir(), ".taskuary-eval.json"), c = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {};
+  return { url: process.env.EVAL_AI_URL || c.url, key: process.env.EVAL_AI_KEY || c.key, model: process.env.EVAL_AI_MODEL || c.model }; })();
+if (GW.url) process.env.TASKUARY_FIXTURE_ALLOW = new URL(GW.url).hostname;
 const h = await startHarness({ fresh: true });
 // ...AND npx RUNS IN IT (the coding walk, 2026-11-12): APPDATA is the scratch home's, with no npm folder, so `npx -y <the ACP adapter>` failed
 // and every coding session fell back to its terminal - a road the owner's own machine does not take
 await mkdir(path.join(h.home, "appdata", "npm"), { recursive: true });
 const api = (p, body) => fetch(`${h.fixtureApi}${p}`, { method: body ? "POST" : "GET", headers: { "Content-Type": "application/json", "X-Taskuary-Token": h.token }, body: body && JSON.stringify(body) }).then((r) => r.json());
 if (BRAIN === "gateway") {
-  const f = path.join(os.homedir(), ".taskuary-eval.json"), c = existsSync(f) ? JSON.parse(await readFile(f, "utf8")) : {};
-  const url = process.env.EVAL_AI_URL || c.url, key = process.env.EVAL_AI_KEY || c.key, model = process.env.EVAL_AI_MODEL || c.model;
+  const { url, key, model } = GW;
   if (!url || !key) throw new Error("EVAL_BRAIN=gateway needs EVAL_AI_URL and EVAL_AI_KEY (or ~/.taskuary-eval.json)");
   const r = await api("/api/setup/first-run/key", { type: "hipaa_ai", key, config: { base_url: url, ...(model ? { model, strong_model: model } : {}) } });
   console.log("ai", JSON.stringify({ ok: r.ok, why: r.why }).slice(0, 300));         // ...never the key

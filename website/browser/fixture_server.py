@@ -46,7 +46,10 @@ def _pty_own(address) -> bool:
 # the browser's screencast and DevTools ports on this computer, so loopback - and only loopback - is let through. Without it every read of the
 # browser raised, no sign-in was ever raised and the walk ended in a dead end the product does not have. Never set in CI.
 LOOPBACK = os.environ.get("TASKUARY_FIXTURE_LOOPBACK") == "1"
-def _local(host) -> bool: return LOOPBACK and str(host) in ("127.0.0.1", "localhost", "::1")
+# ...AND THE ONE AI A WALK RUNS ON (TASKUARY_FIXTURE_ALLOW=<host>, set by real-run.mjs under EVAL_BRAIN=gateway): its addresses, read before
+# the guard is put on, are let through - and nothing else of the outside world. Never set in CI.
+ALLOW = {a[4][0] for h in os.environ.get("TASKUARY_FIXTURE_ALLOW", "").split(",") if h for a in socket.getaddrinfo(h, 443)}
+def _local(host) -> bool: return LOOPBACK and str(host) in ("127.0.0.1", "localhost", "::1") or str(host) in ALLOW
 
 
 class NoOutboundSocket(socket.socket):

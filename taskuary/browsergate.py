@@ -88,35 +88,63 @@ def _segments(cmd: str):
     return out
 
 
+def words(seg: str) -> list:
+    """One simple command's words as the shell will see them: quotes joined to what they touch (`"$HOME"/.ssh/x` is one path) and a redirect cut
+    from the word it is stuck to (`cat<x`). On Windows a backslash is a path's separator, never an escape."""
+    try:
+        lx = shlex.shlex(seg.replace('\\', '\\\\') if os.name == 'nt' else seg, posix=True, punctuation_chars=True)
+        lx.whitespace_split = True
+        return list(lx)
+    except ValueError: return [x.strip('"\'') for x in seg.split()]      # a quote the split cut in two (`cmd /c "cd X && rd Y"`)
+
+
 def _is_exe(tok: str, exe: str = EXE) -> bool:
     # `npx agent-browser@0.41.0 click ...` is the same tool: a pinned version must not walk an act past the gate
     return re.sub(r'(?<=.)@[^/]*$', '', re.sub(r'\.(exe|cmd|ps1|bat)$', '', os.path.basename(str(tok).replace('\\', '/')).lower())) == exe
 
 
-# THE SHELL'S OWN GRAMMAR AROUND A COMMAND: its reserved words open one (`for ...; do agent-browser click`, `if ...; then ...`), and these
-# programs run the command named after their own options (`timeout 30 agent-browser click`, `... | xargs agent-browser click`). Read as no
-# browser act, every one of them ran its click ungated.
+def joined(cmd: str) -> str:
+    "The line as the shell will join its words, for a cheap test of what it names: `agent-brows''er` and `g\"\"h` are agent-browser and gh."
+    return re.sub(r'[\'"\\`]', '', str(cmd or '')).lower()
+
+
+def names(cmd: str, exe: str = EXE) -> bool:
+    "The cheap test: does this line name `exe` at all, as the shell will join it?"
+    return exe in joined(cmd)
+
+
+# THE SHELL'S OWN GRAMMAR AROUND A COMMAND: its reserved words open one (`for ...; do agent-browser click`, `if ...; then ...`), and the
+# programs that only LAUNCH another run the command named after their own options (`timeout 30 agent-browser click @e3` pressed "Pay now"
+# past the gate, read as a call of `timeout`; `... | xargs agent-browser click`). Read as no browser act, every one of them ran ungated
 RESERVED = frozenset('do then else elif if while until { ! time'.split())
-RUNNERS = frozenset('sudo doas env nohup timeout nice ionice stdbuf setsid xargs watch caffeinate unbuffer chronic flock nsenter chroot '
-                    'start start-process saps'.split())       # ...and cmd's `start`, PowerShell's Start-Process
+LAUNCHERS = frozenset('npx pnpm dlx bunx yarn exec call cmd command timeout env nice ionice nohup time sudo doas xargs stdbuf setsid unbuffer '
+                      'caffeinate chrt taskset watch chronic flock nsenter chroot start start-process saps'.split())
+
+
+def launched(argv: list, is_tool) -> list:
+    """One simple command from the program that does the work: past `FOO=bar`, `&` and the shell's reserved words, and past a launcher to the
+    first word `is_tool` names (shellgate's tools, the browser's, the desktop's) - else past the launchers alone. The gates read what this
+    returns, never `timeout`."""
+    i = 0
+    while i < len(argv) and (re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', argv[i]) or argv[i] == '&' or argv[i] in RESERVED): i += 1   # FOO=bar ..., do ...
+    if i < len(argv) and not is_tool(argv[i]) and re.sub(r'\.(exe|cmd|bat)$', '', os.path.basename(argv[i].replace('\\', '/')).lower()) in LAUNCHERS:
+        j = next((j for j in range(i + 1, len(argv)) if is_tool(argv[j])), None)
+        if j is not None: return argv[j:]
+        while i < len(argv) and argv[i].lower() in LAUNCHERS: i += 1
+    return argv[i:]
 
 
 def _head(argv: list, exe: str = EXE) -> list | None:
-    "The agent-browser (or `exe`: desktop.py) arguments of one simple command, through env prefixes, `&`, npx, runners and the like - else None."
-    i = 0
-    while i < len(argv) and (re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', argv[i]) or argv[i] in RESERVED): i += 1   # FOO=bar agent-browser, do ...
-    while i < len(argv) and argv[i].lower() in ('&', 'npx', 'pnpm', 'dlx', 'bunx', 'yarn', '-y', '--yes', 'exec', 'call', 'cmd', '/c', 'command'): i += 1
-    if i < len(argv) and os.path.basename(argv[i]).lower() in RUNNERS:          # its options and their values, up to the program it runs
-        j = next((j for j in range(i + 1, len(argv)) if _is_exe(argv[j], exe)), None)
-        return argv[j + 1:] if j is not None else None
-    return argv[i + 1:] if i < len(argv) and _is_exe(argv[i], exe) else None
+    "The agent-browser (or `exe`: desktop.py) arguments of one simple command, through env prefixes, `&`, reserved words and any launcher - else None."
+    a = launched(argv, lambda t: _is_exe(t, exe))
+    return a[1:] if a and _is_exe(a[0], exe) else None
 
 
 def acts(cmd: str) -> list:
     """Every agent-browser call in a shell command that is not only a look: [{'args': [...], 'verb': 'click'}]. A command
     that names agent-browser where it cannot be read (a quote left open, a call inside another shell's string that will not
     parse) is one act with verb '?' - held to the model like any other, never let through for being hard to read."""
-    if EXE not in str(cmd or '').lower(): return []
+    if not names(cmd): return []
     segs = _segments(cmd)
     if segs is None: return [{'args': [], 'verb': '?', 'raw': str(cmd)[:400]}]
     out = []
@@ -125,7 +153,7 @@ def acts(cmd: str) -> list:
         if a is None:
             # `bash -c "agent-browser click @e1"`, `powershell -Command "..."`: the string is a command of its own
             for t in argv[1:]:
-                if EXE in t.lower() and ' ' in t.strip(): out += acts(t)
+                if names(t) and ' ' in t.strip(): out += acts(t)
             continue
         i = 0
         while i < len(a) and a[i].startswith('-'): i += 2 if a[i] in VALUED and '=' not in a[i] else 1
@@ -163,7 +191,7 @@ def carries(url: str) -> bool:
 
 def opens(cmd: str) -> str:
     "The address the first agent-browser open / goto / navigate in a shell command goes to, else '' (browserview.on_demand)."
-    if EXE not in str(cmd or '').lower(): return ''
+    if not names(cmd): return ''
     for argv in _segments(cmd) or []:
         a = _head(argv)
         a = _own_args(a) if a is not None else []

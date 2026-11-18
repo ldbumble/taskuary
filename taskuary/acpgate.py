@@ -70,9 +70,17 @@ def decide(tc: dict, ctx: dict) -> tuple:
     reads, never = reads_of(tc, ctx)
     if never: return REFUSED, never
     todo = (shellgate.acts(t['command'], cwd) if t['command'] else []) + reads
-    if not todo: return ALLOWED, ''
-    if store is None or not str(tid or '').isdigit(): return REFUSED, '; '.join(dict.fromkeys(a['what'] for a in todo)) + ' - it waits for the owner'
     shell = 'PowerShell' if re.search(r'powershell|pwsh', t['name'] + t['command'], re.I) else 'Bash'
+    if not todo:
+        # ...A PRESS IN THE BROWSER OR ON THE DESKTOP is judged as the hook judges it (hooks.command_gate - its one road): over ACP this answer is
+        # the only gate a Codex session has, and `agent-browser click` on a "Pay now" was allowed here as a plain shell line
+        from . import agentdesktop, browsergate
+        if not (browsergate.acts(t['command']) or agentdesktop.acts(t['command'])): return ALLOWED, ''
+        if store is None or not str(tid or '').isdigit(): return REFUSED, 'a browser or desktop act waits for the owner, and this run has no task to hold it on'
+        from . import hooks
+        said = hooks.command_gate(store, int(tid), str(ctx.get('sid') or ''), t['command'], shell, cwd, False, str(raw.get('description') or ''))
+        return (ALLOWED, '') if not said else (HELD, said['hookSpecificOutput']['permissionDecisionReason'])
+    if store is None or not str(tid or '').isdigit(): return REFUSED, '; '.join(dict.fromkeys(a['what'] for a in todo)) + ' - it waits for the owner'
     if not shellgate.trusted(store, cwd, todo):
         from . import landing
         # a push of the task's own work is the landing card's Push (landing.push_asked) - before any other button is drawn for it

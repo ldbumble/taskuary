@@ -297,7 +297,6 @@ def test_a_letter_filed_while_his_line_still_waits_for_the_turn_is_a_new_draft()
     assert (old['Status'], old['DecideNote'], old['DraftText']) == ('closed_unsent', wrapup.REPLACED, OLD)
 
 
-<<<<<<< HEAD
 def test_a_close_a_message_reopened_since_is_told_with_the_reopening():
     # a stress round, 2026-11-18: Mark done, then a question that reopened the task woke its agent - told "marked it done" under "take it as
     # said, never undo it", and nowhere that the task was open again because of the message it was woken for
@@ -310,7 +309,7 @@ def test_a_close_a_message_reopened_since_is_told_with_the_reopening():
     ingest._reopen(s, tid, {'from_name': 'Erin Blake', 'subject': 'Which room?'}, 'router', {'intent': 'reply_only'})
     did = [x.split(': ', 1)[1] for x in general.owner_did(s, tid)]
     assert did == ['marked it done - a new message on its thread has opened it again since'], did
-=======
+
 def test_the_owners_line_this_turn_carries_is_not_quoted_in_its_facts_as_well():
     """The Continue round, 2026-11-18: a finished chat, Mark done, then Continue with a note. The kept conversation's turn is the note, and the
     facts above it - there because he closed and reopened - quoted it again as THE NEWEST MESSAGE: his note reached the agent twice. The facts
@@ -326,4 +325,3 @@ def test_the_owners_line_this_turn_carries_is_not_quoted_in_its_facts_as_well():
     assert note not in facts and general.OWN_BELOW in facts
     assert general._prompt(s, tid)[1].count(note) == 1, 'a fresh turn: the conversation ends on it, and the facts point there'
 
->>>>>>> origin/claude/stress-continue

@@ -36,7 +36,7 @@ somewhere else, a pipe into Remove-Item - is held, never let through for being h
 """
 import contextvars, json, ntpath, os, re, shlex, shutil, subprocess, tempfile, threading
 from loguru import logger
-from .browsergate import _segments, _deny, _tell, not_approved, NEXT, OWNER_NO
+from .browsergate import _segments, _deny, _tell, joined, launched, not_approved, NEXT, OWNER_NO, words
 
 HELD = 'Taskuary held this for the owner'
 _FILING = threading.Lock()
@@ -65,17 +65,26 @@ GLAB = {('mr', 'merge'): 'merge a merge request', ('mr', 'create'): 'open a merg
 PUBLISH = {'npm', 'pnpm', 'yarn', 'cargo', 'poetry', 'gem', 'dotnet', 'nuget'}             # `<tool> publish` / `nuget push` publish a package
 MAIL = {'sendmail': 'send an email', 'mailx': 'send an email', 'mutt': 'send an email', 'msmtp': 'send an email', 'send-mailmessage': 'send an email'}
 _WRITES = {'post', 'put', 'patch', 'delete'}
-HTTP = {'curl', 'wget', 'http', 'https', 'xh', 'invoke-webrequest', 'iwr', 'invoke-restmethod', 'irm'}
-# curl's short flags are case-sensitive (-F is a form post, -f is --fail); the long ones and PowerShell's -Body / -InFile are not
-_SHORT = ('-d', '-F', '-T')
-_DATA = ('--data', '--data-raw', '--data-binary', '--data-urlencode', '--json', '--form', '--upload-file', '-body', '-infile',
-         '--post-data', '--post-file', '--body-data', '--body-file')
+HTTP = {'curl', 'wget', 'http', 'https', 'xh', 'xhs', 'invoke-webrequest', 'iwr', 'invoke-restmethod', 'irm'}
+_PS, _PIE = {'invoke-webrequest', 'iwr', 'invoke-restmethod', 'irm'}, {'http', 'https', 'xh', 'xhs'}
+# each client's own grammar for a write: curl's short flags are case-sensitive (-F a form post, -f --fail) and bundle (`-sXPOST`, `-sd x`) - the
+# letters that take a value end a bundle; a long option that sends a body starts with one of these; -K/--config sends what a file it reads says
+_CURL_VAL = 'AbcCdDeEFHKmoPQrtTuUwxXyYz'
+_BODY = ('--data', '--form', '--upload', '--post-', '--body-', '--json', '--raw', '--config')
+_PIE_VAL = 'aAop'
+_VERBS = {'get', 'head', 'options', 'post', 'put', 'patch', 'delete'}
+# the programs whose own grammar says a step goes out - what a launcher (`timeout 60 git push`) is read through to (browsergate.launched)
+_TOOLS = frozenset({'git', 'gh', 'glab', 'twine', 'docker', 'bash', 'sh', 'powershell', 'pwsh', 'cmd', *PUBLISH, *MAIL, *HTTP})
 _LOCAL = re.compile(r'^https?://(localhost|127\.\d+\.\d+\.\d+|\[::1\])(:\d+)?(/|$)', re.I)
 # ...and Taskuary's own address as it hands it to a session (terminal.session_env), the way docsync.agent_systems spells the call to the
 # owner's systems: held as "send data to a web address", a read of his own books was an Approve card. Never where the command sets it
 _OWN = re.compile(r'^\$(TASKUARY_URL|\{TASKUARY_URL\})(/|$)')
 _SETS_OWN = re.compile(r'\bTASKUARY_URL\s*=')
 _PREFIX = ('&', 'npx', 'command', 'call', 'exec', 'sudo', 'time', 'nohup')
+
+
+
+def _tool(t: str) -> bool: return _name(t) in _TOOLS or _name(t) in DELETERS or _name(t) in ('find', 'cd', 'chdir', 'set-location', 'sl', 'pushd', 'push-location')
 
 
 def _name(tok: str) -> str:
@@ -86,11 +95,8 @@ def _name(tok: str) -> str:
 def _words(argv: list) -> tuple:
     """(tool, its words with every option and an option's value taken out) of one simple command, through env prefixes and the like."""
     import re
-    i = 0
-    while i < len(argv) and re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', argv[i]): i += 1
-    while i < len(argv) and argv[i].lower() in _PREFIX: i += 1
-    if i >= len(argv): return '', []
-    tool, rest, out, j = _name(argv[i]), argv[i + 1:], [], 0
+    if not argv: return '', []
+    tool, rest, out, j = _name(argv[0]), argv[1:], [], 0
     # git's own options before the subcommand that take a value (`git -C repo push`, `git -c k=v push`)
     while tool == 'git' and j < len(rest) and rest[j].startswith('-'): j += 2 if rest[j] in ('-C', '-c', '--git-dir', '--work-tree', '--namespace') else 1
     for t in rest[j:]:
@@ -99,17 +105,44 @@ def _words(argv: list) -> tuple:
 
 
 def _http_write(argv: list, own: bool = False) -> str:
-    """'' unless this HTTP client writes to a host off this machine - then what it does, in words. Taskuary's own API answers its own guard.
-    `own`: $TASKUARY_URL is Taskuary's (nothing in the command set it)."""
-    a = [str(t) for t in argv[1:]]
-    urls = [t for t in a if re.match(r'^https?://', t, re.I) or (own and _OWN.match(t))]
+    """'' unless this HTTP client writes to a host off this machine - then what it does, in words. Read by each client's own grammar: its
+    method option (`-X`, `--request`, `--method`, PowerShell's `-Method` however abbreviated or `-Method:Post`), an option that sends a body,
+    and httpie's / xh's own `[METHOD] URL item=value`. Taskuary's own API answers its own guard - `own`: $TASKUARY_URL is Taskuary's (nothing
+    in the command set it)."""
+    tool, a = _name(argv[0]), [str(t) for t in argv[1:]]
+    meth, data, pos, i = '', False, [], 0
+    while i < len(a):
+        t, nxt = a[i], (a[i + 1] if i + 1 < len(a) else '')
+        if t.startswith('--'):
+            k, eq, v = t.partition('=')
+            k = k.lower()
+            if k in ('--request', '--method'): meth = v if eq else nxt; i += not eq
+            elif k.startswith(_BODY) or (tool in _PIE and k == '--form'): data = True
+        elif t.startswith('-') and len(t) > 1 and tool in _PS:
+            k, col, v = t[1:].partition(':')
+            k = k.lower()
+            if len(k) > 1 and 'method'.startswith(k): meth = v if col else nxt; i += not col
+            elif len(k) > 1 and ('body'.startswith(k) or 'infile'.startswith(k)): data = True
+        elif t.startswith('-') and len(t) > 1 and tool == 'curl':
+            for j, c in enumerate(t[1:], 1):
+                if c in 'dFTK': data = True
+                if c == 'X': meth = t[j + 1:] or nxt
+                if c in _CURL_VAL:
+                    i += j == len(t) - 1; break
+        elif t.startswith('-') and len(t) > 1 and tool in _PIE: i += t[-1] in _PIE_VAL
+        elif not t.startswith('-'): pos.append(t)
+        i += 1
+    urls = [t for t in pos if re.match(r'^https?://', t, re.I) or (own and _OWN.match(t))]
+    if tool in _PIE and pos:
+        # httpie / xh: [METHOD] URL then items - `k=v`, `k:=json`, `k@file` send a body (a POST), `k==v` is a query and `K:v` a header
+        if len(pos) > 1 and pos[0].lower() in _VERBS: meth, pos = meth or pos[0], pos[1:]
+        u = pos[0]
+        urls = [u if re.match(r'^https?://', u, re.I) or (own and _OWN.match(u)) else 'http://' + ('localhost' + u if u.startswith(':') else u)]
+        data = data or any(re.match(r'^[^:=@]*(:=|=(?!=)|@)', x) for x in pos[1:])
     if urls and all(_LOCAL.match(u) or (own and _OWN.match(u)) for u in urls): return ''
-    meth = next((a[i + 1] for i, t in enumerate(a[:-1]) if t.lower() in ('-x', '--request', '-method')), '')
-    meth = meth or next((t[2:] for t in a if t.startswith('-X') and len(t) > 2), '')
-    data = any(t in _SHORT or t.lower().split('=', 1)[0] in _DATA or (t.startswith('-d') and not t.startswith('--') and len(t) > 2) for t in a)
     if meth.lower() not in _WRITES and not data: return ''
     host = re.sub(r'^https?://([^/?#]+).*', r'\1', urls[0]) if urls else 'a web address'
-    return f'send data to {host} ({_name(argv[0])})'
+    return f'send data to {host} ({tool})'
 
 
 def _api_writes(argv: list) -> bool:
@@ -213,7 +246,7 @@ def _deletes(raw: str, cwd: str, env: dict, here='') -> dict:
     # (the stress test's second delete, 2026-11-03). '' is the agent's own folder; None a `cd` it could not read
     named, places, blind, tools = [], [], False, []
     done = lambda: {'named': named, 'places': places, 'blind': blind, 'tools': tools, 'here': here}
-    if not any(w in raw.lower() for w in _DEL_WORDS + ('cd', 'location')): return done()             # the cheap test first
+    if not any(w in joined(raw) for w in _DEL_WORDS + ('cd', 'location')): return done()             # the cheap test first
     raw = re.sub(r'\$\{(\w+(?::\w+)?)\}', r'$\1', raw)                         # ${dst} is $dst - and its braces are not a block
     for seg in _SPLIT.split(shell_text(raw)):
         seg = seg.strip()
@@ -223,9 +256,9 @@ def _deletes(raw: str, cwd: str, env: dict, here='') -> dict:
             except ValueError: v = []
             if len(v) == 1: env[m.group(1).lower()] = _expand(v[0].strip('"\''), env)
             continue
-        try: w = [x.strip('"\'') for x in shlex.split(seg, posix=False)]
-        except ValueError: w = [x.strip('"\'') for x in seg.split()]      # a quote the split cut in two (`cmd /c "cd X && rd Y"`)
-        while w and (w[0].lower() in _PREFIX or w[0].lower() in ('if', 'else', 'elseif', 'then', 'do')): w = w[1:]
+        w = words(seg)
+        while w and w[0].lower() in ('if', 'else', 'elseif', 'then', 'do'): w = w[1:]
+        w = launched(w, _tool)
         if not w: continue
         tool = _name(w[0])
         if tool in ('cd', 'chdir', 'set-location', 'sl', 'pushd', 'push-location'):
@@ -275,7 +308,7 @@ def _outward(cmd: str, own: bool = True) -> list:
     """Every step in a shell command that goes out: [{'tool', 'what', 'why', 'command'}]. A command that cannot be read and names one of
     these tools is one step - held, never let through for being hard to read."""
     raw = shell_text(str(cmd or ''))
-    low = raw.lower()
+    low = joined(raw)
     own = own and not _SETS_OWN.search(raw)
     if not any(w in low for w in ('git', 'gh', 'glab', 'publish', 'push', 'upload', 'mail', 'mutt', 'msmtp', 'http', 'curl', 'wget', 'xh', 'iwr', 'irm',
                                   'invoke-')): return []      # the cheap test first
@@ -286,6 +319,7 @@ def _outward(cmd: str, own: bool = True) -> list:
             r'\b(git\s+push|gh\s+(pr|issue|release|repo|api)|glab|publish|sendmail|send-mailmessage)\b', low) else []
     out, moved = [], False
     for argv in segs:
+        argv = launched(argv, lambda t: _name(t) in _TOOLS)         # `timeout 60 git push` is git's push, read as git's
         tool, w = _words(argv)
         if tool in MOVES: moved = True
         if tool in ('bash', 'sh', 'powershell', 'pwsh', 'cmd'):                 # `bash -c "git push"`: the string is a command of its own

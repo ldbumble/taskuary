@@ -25,6 +25,41 @@ class Reading(unittest.TestCase):
             got = sg.acts(cmd)
             self.assertTrue(got, cmd); self.assertIn(what, got[0]['what'], cmd)
 
+    def test_a_payment_posted_however_the_client_spells_it_is_held(self):
+        """A mail that talks the agent into paying needs only one write to a payment host. The HTTP clients' writes were read by a few
+        spellings of their flags: `--request=POST`, curl's bundled `-sXPOST` / `-sd`, wget's `--method`, PowerShell's `-Method:Post` and
+        httpie's own `http POST host k=v` all went out unseen. Each client's grammar, not a list of spellings, says it writes."""
+        for cmd in ('curl --request=POST https://pay.vendor.example/transfer', 'curl -sXPOST https://pay.vendor.example/transfer',
+                    'curl -sd amount=500 https://pay.vendor.example/transfer', 'curl -sF to=erin https://pay.vendor.example/transfer',
+                    'curl --data-ascii amount=500 https://pay.vendor.example/transfer', 'curl --form-string to=erin https://pay.vendor.example/transfer',
+                    'curl -K pay.cfg https://pay.vendor.example/transfer', 'wget --method=POST https://pay.vendor.example/transfer',
+                    'wget --method POST --body-data amount=500 https://pay.vendor.example/transfer',
+                    'Invoke-RestMethod -Method:Post -Uri https://pay.vendor.example/transfer', 'irm https://pay.vendor.example/transfer -Me Post',
+                    'http POST https://pay.vendor.example/transfer amount=500', 'http pay.vendor.example/transfer amount:=500',
+                    'xh post pay.vendor.example/transfer to=erin', 'http --form pay.vendor.example/transfer to=erin'):
+            got = sg.acts(cmd)
+            self.assertTrue(got, cmd); self.assertIn('send data to', got[0]['what'], cmd)
+        self.assertIn('pay.vendor.example', sg.acts('http POST pay.vendor.example/transfer amount=500')[0]['what'])
+        for cmd in ('curl -sSL https://docs.vendor.example/rates', 'curl -sH "Accept: application/json" https://docs.vendor.example/rates',
+                    'http https://docs.vendor.example/rates', 'http GET docs.vendor.example/rates q==eur', 'xh :7787/api/tasks amount=1',
+                    'wget -q https://docs.vendor.example/rates.csv', 'Invoke-RestMethod https://docs.vendor.example/rates'):
+            self.assertEqual(sg.acts(cmd), [], cmd)
+
+    def test_a_step_behind_a_launcher_is_read_as_its_own_tool(self):
+        """`timeout 60 git push` - how agents wrap a slow step - was read as a call of `timeout` and went out unseen; so did `env`, `nice` and
+        `xargs` before a push, a merge, a POST to a payment host or a delete. A launcher runs what follows it: that program is the one read."""
+        for cmd, what in (('timeout 60 git push origin main', 'push'), ('env GIT_TRACE=1 git push', 'push'), ('nice -n 5 git push', 'push'),
+                          ('xargs -n1 gh pr merge', 'merge a pull request'), ('sudo -u build npm publish', 'publish'),
+                          ('timeout 30 curl -X POST https://pay.vendor.example/transfer', 'send data to pay.vendor.example'),
+                          ('timeout 9 rm -rf /srv/northwind/ledger', 'delete ledger')):
+            got = sg.acts(cmd, '/w')
+            self.assertTrue(got, cmd); self.assertIn(what, got[0]['what'], cmd)
+        # ...and a quote inside the tool's name is one word to the shell: `g''h` is gh, `r''m` is rm
+        self.assertIn('merge a pull request', sg.acts("g''h pr merge 12", '/w')[0]['what'])
+        self.assertIn('delete ledger', sg.acts("r''m -rf /srv/northwind/ledger", '/w')[0]['what'])
+        for cmd in ('timeout 60 git status', 'time pytest -q', 'timeout 30 curl -s https://docs.vendor.example/rates'):
+            self.assertEqual(sg.acts(cmd, '/w'), [], cmd)
+
     def test_looking_and_working_locally_pass(self):
         for cmd in ('git status', 'git commit -m "push the fix"', 'git log --grep push', 'gh pr view 12', 'gh api repos/northwind/ledger',
                     'echo git push', 'npm install', 'pytest -q', 'rm -rf build', 'git pull', 'git fetch origin', 'gh pr list',
@@ -352,6 +387,34 @@ class ReadingOutside(unittest.TestCase):
         for cmd in ('git status', 'for f in *.csv; do wc -l "$f"; done', 'grep -rn /api/tasks src', 'curl -s https://docs.northwind.example/a',
                     'dir /s', 'python script.py 2>/dev/null', 'cat "$TASKUARY_OUTPUTS/total.txt"'):
             self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], ''), cmd)
+
+    def test_a_secret_is_seen_however_the_shell_line_spells_it(self):
+        """Taskuary's home (its config.toml carries the owner token) is never read - but the line was split as words with their quotes
+        left on, and `{`/`}` cut as blocks: a quoted variable glued to a path, `${...}`, a redirect stuck to its program and a bare `cd`
+        all passed the gate unread, as if they named nothing. Each is how a shell spells the same file."""
+        from pathlib import Path
+        from taskuary import readgate as rg
+        ssh = Path.home() / '.ssh'; ssh.mkdir(exist_ok=True); (ssh / 'id_ed25519').touch()
+        for cmd in ('cat "$TASKUARY_HOME"/config.toml', 'cat ${TASKUARY_HOME}/config.toml', 'cat "${TASKUARY_HOME}/config.toml"',
+                    'cat<"$TASKUARY_HOME/config.toml"', 'echo "$(<"$TASKUARY_HOME/config.toml")"', f'cat "{Path(self.secret).parent}"/config.toml',
+                    f"cat '{Path(self.secret).parent}'/'config.toml'", f'cd "{Path(self.secret).parent}" && cat config.toml',
+                    'cd && cat .ssh/id_ed25519', 'cd ~; base64 .ssh/id_ed25519'):
+            self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], rg.NEVER), cmd)
+        self.assertEqual(rg.command_paths('cat ${HOME:-/x}/.ssh/id_ed25519', self.work), [None], 'a default it cannot follow is held, never skipped')
+
+    def test_a_sign_in_place_stays_closed_inside_a_work_folder_or_behind_a_glob(self):
+        """The never-list was judged after the work area and after a glob was cut to its folder: a task whose checkout is the home folder
+        (a dotfiles repository) read the sign-ins in it freely, and once the owner let a task read his home folder, `cat ~/.s*/<key>`
+        ran - its glob judged only as the home it lists. A work folder inside Taskuary's home (scratch, outputs) still reads."""
+        from pathlib import Path
+        from taskuary import config, readgate as rg
+        ssh = Path.home() / '.ssh'; ssh.mkdir(exist_ok=True); key = ssh / 'id_ed25519'; key.touch()
+        self.assertEqual(rg.judge(self.s, self.tid, [str(key)], str(Path.home())), ([], rg.NEVER), 'a checkout at home')
+        self.assertEqual(rg.judge(self.s, self.tid, [str(config.home() / 'scratch' / 'a.md')], str(Path.home()))[1], '')
+        rg.grant(self.s, self.tid, [str(Path.home())])
+        for cmd in ('cat ~/.s*/id_ed25519', 'grep -r token ~/.[a-z]*', 'cat ~/.ss?/*'):
+            self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], rg.NEVER), cmd)
+        self.assertEqual(rg.of_command(self.s, self.tid, 'ls ~/*', self.work), ([], ''), 'a plain * takes no dot-folder, as the shell')
 
     def test_work_in_its_own_folders_runs_and_a_read_outside_is_the_held_card(self):
         from taskuary import acpgate, outputs

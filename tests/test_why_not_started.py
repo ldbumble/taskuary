@@ -121,6 +121,16 @@ class WhyNotStartedTests(unittest.TestCase):
         ingest.not_started(s, t, 'It reads as an attempt to steer an AI (leave the list) - nothing starts until you press.')
         self.assertEqual(funnel.idle_state(s, t)['kind'], 'held')
 
+    def test_a_reply_held_by_the_coding_switch_clears_with_it(self):
+        # a reply owed whose verdict named the coding agent keeps its kind while that start is held (ingest.agent_on_reply)
+        from taskuary import ingest
+        s = MemoryStore(); t = handed(s, who='', Kind='reply')
+        s.set_setting('coding_auto_enabled', '0', 'owner')
+        ingest.not_started(s, t, ingest.gate_why(s, 'coding'))
+        self.assertIn('Starting the coding agent by itself is switched off', funnel.idle_state(s, t)['line'])
+        s.set_setting('coding_auto_enabled', '1', 'owner')
+        self.assertEqual(funnel.idle_state(s, t)['kind'], 'idle')
+
     def test_the_days_ceiling_reads_as_held_only_while_it_holds(self):
         from taskuary import brainroute, ingest
         s = MemoryStore(); t = handed(s, who='', Kind='coding')

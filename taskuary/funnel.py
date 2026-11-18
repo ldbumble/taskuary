@@ -747,8 +747,10 @@ def idle_state(store, tid, st=None) -> dict:
         # ...as it stands NOW where the home held it (ingest.gate_why: the day's ceiling, the switch, no AI): "No AI is set up" stood after one
         # was connected, "switched off" after it was switched on. Cleared, it says so - and that the start is the owner's, as a lifted hold does
         from . import ingest
-        gate = 'coding' if t.get('Kind') == 'coding' else 'general'
-        if ingest.gated(said, gate) and (now := ingest.gate_why(store, gate)) != said:
+        # ...whichever kind's start it held: a reply task keeps its kind while the agent its verdict named is held (agent_on_reply)
+        own = 'coding' if t.get('Kind') == 'coding' else 'general'
+        gate = next((k for k in (own, *({'coding', 'general'} - {own})) if ingest.gated(said, k)), '')
+        if gate and (now := ingest.gate_why(store, gate)) != said:
             if not now: return out('idle', f'Not started yet. What held it when it came in has cleared - start {agent} when you want it; '
                                             'it does not start by itself.' + old, 'not started yet')
             said = now

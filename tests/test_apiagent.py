@@ -10,6 +10,7 @@ from unittest import mock
 
 from taskuary import apiagent, browserview as bv, llm
 from taskuary.store import MemoryStore
+from tests.test_linked_documents import pdf
 
 
 class _R:
@@ -1044,3 +1045,57 @@ def config_home():
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class WebFetchReadsWhatItFetchesTests(unittest.TestCase):
+    """web_fetch reads "one public web page or file" - a page or a file read by the road a linked document takes (linkdocs), not decoded
+    as UTF-8 whatever it is: a spreadsheet a vendor's page links to came back as zip bytes, a page in Latin-1 as mojibake, and a page that
+    asked for a sign-in as a bare status code with nothing to do next."""
+
+    def setUp(self):
+        import io, threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from openpyxl import Workbook
+        wb, buf = Workbook(), io.BytesIO()
+        wb.active.append(['vendor', 'price']); wb.active.append(['Payworth', 4200]); wb.save(buf)
+        files = {'/rates': ('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buf.getvalue(), 200),
+                 '/about': ('text/html; charset=iso-8859-1', '<html><title>Über</title><body><p>Gail Moreno, Müller Straße</p></body></html>'.encode('latin-1'), 200),
+                 '/portal': ('text/html', b'<html><body>Sign in required</body></html>', 401),
+                 '/terms': ('text/html', '<html><head><meta charset="utf-8"></head><body><p>Zoë at Northwind signs.</p></body></html>'.encode(), 200),
+                 '/download?id=3': ('application/pdf', pdf('Clause 9: payment within 45 days'), 200)}
+        class H(BaseHTTPRequestHandler):
+            def do_GET(self):
+                ct, body, code = files[self.path]
+                self.send_response(code); self.send_header('Content-Type', ct); self.send_header('Content-Length', str(len(body))); self.end_headers()
+                self.wfile.write(body)
+            def log_message(self, *a): pass
+        self.srv = ThreadingHTTPServer(('127.0.0.1', 0), H)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.base = f'http://127.0.0.1:{self.srv.server_address[1]}'
+        self.s = MemoryStore()
+        self.tid = self.s.create_task({'Title': 'Compare two quotes', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        from taskuary import webguard
+        for p in (mock.patch.object(webguard, 'check_url'), mock.patch.dict('os.environ', {'NO_PROXY': '127.0.0.1', 'no_proxy': '127.0.0.1'})):
+            p.start(); self.addCleanup(p.stop)
+
+    def tearDown(self): self.srv.shutdown(); self.srv.server_close()
+
+    def fetch(self, path): return apiagent.run_tool(self.s, self.tid, 'sid-w', 'web_fetch', {'url': self.base + path})
+
+    def test_a_spreadsheet_is_read_as_its_rows(self):
+        got = self.fetch('/rates')
+        self.assertIn('Payworth,4200', got)
+        self.assertNotIn('PK', got.split('\n', 1)[1][:4])
+
+    def test_a_page_in_its_own_charset_reads_as_written(self):
+        self.assertIn('Müller Straße', self.fetch('/about'))
+
+    def test_a_page_whose_charset_is_only_in_its_meta_reads_as_written(self):
+        self.assertIn('Zoë at Northwind', self.fetch('/terms'))
+
+    def test_a_pdf_at_an_address_with_no_extension_is_read_as_a_pdf(self):
+        self.assertIn('Clause 9', self.fetch('/download?id=3'))
+
+    def test_a_page_that_wants_a_sign_in_says_how_to_go_on(self):
+        with self.assertRaises(ValueError) as e: self.fetch('/portal')
+        self.assertIn('401', str(e.exception)); self.assertIn('browser_open', str(e.exception))

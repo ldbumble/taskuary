@@ -111,7 +111,6 @@ def _short(tools: list):
 _short([*BROWSER, SHOW, *FILES, *WRITE, *WEB, *SHELL])
 HANDS = ('files_list', 'file_read', 'file_write', 'file_edit', 'web_fetch', 'web_search', 'run_command')
 RUN_WAIT = 600                 # one command - a build, a test run
-FETCH_BYTES = 8_000_000
 SEARCHERS = ('brave_search', 'tavily', 'exa', 'serpapi', 'serper')
 
 
@@ -303,16 +302,16 @@ def _hands(store, tid: int, sid: str, name: str, a: dict) -> str:
         else: p.write_text(str(a.get('text') or ''), encoding='utf-8')
         return f'{"Edited" if name == "file_edit" else "Wrote"} {to} ({to.stat().st_size} bytes).'
     if name == 'web_fetch':
-        from . import knowledge, webguard
+        # ...BY THE ROAD A LINKED DOCUMENT TAKES (linkdocs): a page in its own charset, a sheet as its rows, a Google or SharePoint file
+        # through the card that reaches it - not every answer decoded as UTF-8 text, which read a workbook as its zip bytes
+        from . import linkdocs
         u = _url(a.get('url'))
-        r = webguard.get(u, timeout=30, stream=True, headers={'User-Agent': 'Mozilla/5.0 (Taskuary agent)'})
-        try: data = r.raw.read(FETCH_BYTES, decode_content=True)
-        finally: r.close()
-        if r.status_code >= 400: raise ValueError(f'{u} answered {r.status_code}')
-        ct = str(r.headers.get('content-type') or '').lower()
-        ext = 'pdf' if 'pdf' in ct else 'html' if 'html' in ct else 'txt'
-        text = knowledge.extract(f'page.{ext}', data) if ext != 'txt' else data.decode('utf-8', 'replace')
-        return _cut(f'PAGE {u}' + chr(10) + re.sub(r'[ \t]+', ' ', re.sub(r'\n\s*\n+', chr(10) * 2, text)).strip())
+        d = linkdocs.classify(u)
+        if not d: raise ValueError(f'{u} is not a page or document that reads as text (a picture, a script) - browser_open it to see it')
+        got = linkdocs.read(store, d, auto=False, full=True)
+        if 'note' in got: raise ValueError(f"{u} was not read: {got['note']}. If it needs a sign-in or a click, browser_open it instead")
+        head = ' - '.join(x for x in (f'PAGE {u}', str(got.get('title') or '').strip(), str(got.get('more') or '')) if x)
+        return _cut(head + chr(10) + str(got.get('text') or '').strip())
     if name == 'web_search': return _search(store, tid, sid, str(a.get('query') or ''))
     if name == 'run_command':
         from . import hooks, shellgate, spawn

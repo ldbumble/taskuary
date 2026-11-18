@@ -415,20 +415,46 @@ def _github(store, d, full, offset, limit):
     return {'title': f"{repo}#{n} {i.get('title') or ''}".strip(), 'text': text, 'chars': len(text)}
 
 
+# WHAT A FETCHED BODY IS WRITTEN IN, AND WHAT KIND OF FILE IT IS - read off the response's own header, else the page's <meta>. requests
+# names ISO-8859-1 for any text/* without a charset, so a UTF-8 page that says so only in its <meta> read as mojibake; and a file at an
+# address with no extension (/download?id=3) was named by the address, so a PDF or a workbook there was read as text
+_CHARSET = re.compile(rb'charset\s*=\s*["\']?\s*([\w.:-]+)', re.I)
+
+
+def _charset(ct: str, data: bytes) -> str:
+    import codecs
+    m = _CHARSET.search(ct.encode('latin-1', 'replace')) or _CHARSET.search(data[:4096])
+    try: return codecs.lookup(m.group(1).decode('ascii')).name if m else 'utf-8'
+    except LookupError: return 'utf-8'
+
+
+def _typed(name: str, ct: str) -> str:
+    "A fetched file's name with the extension its Content-Type says, where the name has none a reader knows."
+    import mimetypes
+    if _ext(name) in FILE_EXTS: return name
+    ext = mimetypes.guess_extension(ct.split(';', 1)[0].strip()) or ''
+    return f'{name}{ext}' if ext.lstrip('.') in FILE_EXTS else name
+
+
 def _web(store, d, full, offset, limit):
     from . import webguard, attachtext
-    try: r = webguard.get(d['url'], timeout=20, headers={'User-Agent': 'Taskuary (reading a link sent to its owner)'})
+    try: r = webguard.get(d['url'], timeout=20, stream=True, headers={'User-Agent': 'Taskuary (reading a link sent to its owner)'})
     except RuntimeError as e: raise Unreadable(str(e)[:160])
-    if r.status_code >= 300: raise Unreadable(f'the site answered {r.status_code}')
-    data, ct = r.content or b'', str(r.headers.get('content-type') or '').lower()
-    if len(data) > attachtext.READ_BYTES: raise Unreadable(f'{attachtext._mb(len(data))}, over the read limit')
+    try:
+        if r.status_code >= 300: raise Unreadable(f'the site answered {r.status_code}')
+        # ...read no further than the limit: a link to a huge file was downloaded whole before it was found too big to read
+        data = r.raw.read(attachtext.READ_BYTES + 1, decode_content=True) or b''
+    finally: r.close()
+    ct = str(r.headers.get('content-type') or '').lower()
+    if len(data) > attachtext.READ_BYTES: raise Unreadable(f'over the {attachtext._mb(attachtext.READ_BYTES)} read limit')
     if 'html' in ct or (d['kind'] == 'page' and not ct):
         from .channels import _clean
-        html = data.decode(r.encoding or 'utf-8', errors='replace')
+        html = data.decode(_charset(ct, data), errors='replace')
         title = (re.search(r'(?is)<title[^>]*>(.*?)</title>', html) or [None, ''])[1].strip()[:120]
         text = _clean(html, every=False)              # a page's own navigation is not what it says
         return {'title': title or d['name'], 'text': text, 'chars': len(text)}
-    return _file(d.get('name') or 'file', data, offset, limit)
+    if ct.startswith('text/'): data = data.decode(_charset(ct, data), errors='replace').encode('utf-8')     # the file readers read UTF-8
+    return _file(_typed(d.get('name') or 'file', ct), data, offset, limit)
 
 
 RESOLVERS = {'google': _google, 'graph': _graph, 'github': _github, 'web': _web}

@@ -66,3 +66,17 @@ def test_two_cards_of_a_type_are_never_picked_between_silently():
         said, err = tool(tid, 'run_system', type='intacct', object='VENDOR')
         assert err and ran == [second], said
         assert str(first['ConnectorId']) in said and str(second) in said and 'connector_id' in said
+
+
+def test_a_field_the_tool_needs_and_did_not_get_is_named():
+    """An executor that reads a field it was not given (graphql's cfg['query'], sqlite's cfg['db']) failed as "error": "'query'" - a
+    Python KeyError's text, which says nothing to the agent. It says the tool needs that field, the way every Taskuary tool does."""
+    from unittest import mock
+    from test_agent_toolbox import server, tool, world
+    from taskuary.reports import REGISTRY
+    s, tid, _ = world()
+    with mock.patch.object(server, 'store', s), mock.patch.dict(REGISTRY, {'intacct': lambda cfg: cfg['object']}):
+        card = s.get_connector_by_type('intacct')
+        s.save_connector({'ConnectorId': card['ConnectorId'], 'Active': 1, 'Roles': 'tool'}, 'test')
+        said, _ = tool(tid, 'run_system', type='intacct')
+    assert 'needs `object`' in said, said

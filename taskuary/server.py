@@ -8850,8 +8850,10 @@ def tool_run(body: dict, request: Request):
             tool_cfg['author'] = actor
         head, out = REGISTRY[t](resolve_cfg(store, tool_cfg))
     except Exception as e:
+        # ...in the words every Taskuary tool's failure takes (agenttools.failed): a field it needs and was not given is named, never "'query'"
+        from .agenttools import failed
         store.audit('tool', (conn or {}).get('ConnectorId', 0), 'run_failed', actor, detail={'type': t, 'error': str(e)[:300]})
-        return {'ok': False, 'error': str(e)[:1000]}
+        return {'ok': False, 'error': failed(t, e)[:1000]}
     store.audit('tool', (conn or {}).get('ConnectorId', 0), 'run', actor, detail={'type': t, 'headline': str(head)[:200]})
     return {'ok': True, 'headline': head, 'output': (out or '')[:20000]}
 

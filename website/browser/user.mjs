@@ -27,8 +27,11 @@ async function look(note = "") {
     const rail = [...document.querySelectorAll("[data-tq-rail] .tq-pile-row[data-tq-key]")].filter(vis).map((e) => "- " + txt(e).split("\n").slice(0, 2).join(" | ")).slice(0, 25);
     const chat = txt(tp?.querySelector(".tq-aui-viewport"));
     const main = tp ? "" : txt(document.querySelector("main") || document.body).slice(0, 2500);
+    // ...a greyed one says so (a card the chat moved past keeps its buttons inside a disabled fieldset: button.disabled reads false there)
+    const off = (b) => b.matches(":disabled") || !!b.closest("[inert], [aria-disabled=true]");
     const btns = [...document.querySelectorAll("button, a[href], [role=button]")].filter(vis)
-      .map((b) => (b.innerText || b.getAttribute("aria-label") || b.title || "").trim().replace(/\s+/g, " ")).filter((w) => w && w.length < 60);
+      .map((b) => { const w = (b.innerText || b.getAttribute("aria-label") || b.title || "").trim().replace(/\s+/g, " "); return w && off(b) ? `${w} (greyed)` : w; })
+      .filter((w) => w && w.length < 70);
     const boxes = [...document.querySelectorAll("textarea, input[type=text], input:not([type]), [contenteditable=true]")].filter(vis)
       .map((b) => b.getAttribute("placeholder") || b.getAttribute("aria-label") || "a box");
     const working = !!tp?.querySelector("[data-tq-working], [data-tq-stop-run]");
@@ -52,7 +55,9 @@ async function click(words, n = 1) {
     const hits = [...all.filter((b) => name(b) === want), ...all.filter((b) => name(b) !== want && name(b).includes(want))];
     const b = hits[n - 1];
     if (!b) return { ok: false };
-    if (b.disabled || b.getAttribute("aria-disabled") === "true") return { ok: false, off: name(b), why: b.title || "" };
+    // ...greyed by its own flag or by the card around it (MovedPast's disabled fieldset): the walks of 2026-11-18 "pressed" such a Send and an
+    // Approve, nothing reached the server, and the diary read it as a live stale card
+    if (b.matches(":disabled") || b.closest("[inert], [aria-disabled=true]")) return { ok: false, off: name(b), why: b.title || "" };
     b.scrollIntoView({ block: "center" }); b.click(); return { ok: true, name: name(b) };
   }, words, n, vis);
   if (!got.ok) return look(got.off ? `"${got.off}" is greyed out${got.why ? ` (its hover says: ${got.why})` : ""} - nothing pressed` : `no button or link says "${words}" - nothing pressed`);

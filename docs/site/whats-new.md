@@ -2,6 +2,29 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.26 - 2026-11-18
+
+- A searched task opens as its rail row does, at the click
+- A card the chat moved past is the card it was, its buttons greyed, with no reason line
+- A turn woken by a press hears what stands on his screen once
+- One hold at the send door, whoever calls; a post on a network never signed in says Connect
+- A refused step names the switch that refused and opens it
+- A start that did not happen says what held it, read from the state the start read
+- An email set up on a chat's task names the address it goes to, never the chat's sender
+- Effort in proportion to the ask, and a missing tool is the best version with its gap named
+- An AI card's agent with tools is told the owner's systems and mailboxes, as a CLI with hands is
+- The side Assistant opens a task or a page and stops - it never works in them
+- Every door's start is one road: the owner's words and files make a task and start its agent, and the same work open already hears them
+- New's box starts its agent by the one start, its task opened
+- The Assistant's line says what it opened, never that it wrote into New; New's start is the owner's route alone
+- A part moved to the task already doing that work reaches its agent as Taskuary's words, never as a line in the owner's name
+- A part joined to a task no agent ever worked starts that task's agent with it, never vanishes
+- A failure the owner sees is a plain line and a Try again; no tag, tool name or raw error reaches him
+- One overlay at a time, a close always in sight, and typing lands in the box he can see
+- A reply set aside before it ever stood is drawn nowhere, never greyed at the chat's foot
+- A reply or a rewrite asked of the Assistant on the desk opens the task; its agent drafts there
+- A sheet an agent writes stores what each formula comes to, so every viewer shows the number
+
 ## 0.4.0.25 - 2026-11-18
 
 - A line typed after a coding agent died reopens its conversation without telling it the owner pressed Resume

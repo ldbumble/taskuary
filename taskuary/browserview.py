@@ -592,10 +592,12 @@ def your_turn(store, tid: int, sid: str, what: str = '', watch=...) -> str:
     from . import signin
     try: signing = signin.on_signin_page(sid)
     except Exception as e: signing = False; logger.debug(f'task {tid}: the page handed over could not be read for a sign-in - {e}')
-    if signing and (site := signin.needs(store, tid, sid, '').get('site')): return f'{signin.PREFIX}{site}'
+    # ...asked as the step the agent named (a human check on a sign-up page is not "sign in" - design round 5), the vault's road all the same
+    if signing and (site := signin.needs(store, tid, sid, '', what=what).get('site')): return f'{signin.PREFIX}{site}'
     try: host = urlsplit(str(st.get('url') or '')).hostname or ''
     except ValueError: host = ''
     host = host[4:] if host.startswith('www.') else host
+    host = signin.page_name(sid, host) if host else host         # ...a bare address called by its page's title (signin.page_name)
     text = f"Your turn in the browser{f' on {host}' if host else ''}: {what or 'the agent needs you to do a step on the page'}"
     rid = ws.fresh_id(store, tid, f'{TURN_PREFIX}{ws.request_id_for(text)}')
     chat = hasattr(term.SESSIONS.get(str(sid)), 'send_prompt')
@@ -1132,7 +1134,8 @@ TURN_LINE = ('NEVER SOLVE, CLICK OR WORK AROUND A CAPTCHA, an "I\'m not a robot"
              '(a sign-in or code you cannot type, a card number), is THEIRS: leave the page on it and end your turn with a final line '
              '[[TASKUARY-YOURTURN: <what they need to do on the page, in a few words>]]. Taskuary shows them this page; '
              'they do it and hand it back, and their "Done" is your next message - then look at the page and go on. Run no browser '
-             'command until then. ')
+             'command until then. Hand them everything on the job that needs them at once: a fact only they have for another step (a '
+             'mobile number, a choice) goes in that same hand-over, to type in the chat while the page is theirs - never kept for after it. ')
 
 # ...each site in a tab of its own (the owner, 2026-11-15): the view beside the chat shows the tabs, and one tab walked from site to site
 # hid the others from him

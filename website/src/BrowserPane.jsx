@@ -8,7 +8,7 @@ import api from "./api.js";
 import { failLine, landed, press as pressReview } from "./press.js";
 import { label } from "./buttons.js";
 import { useAgents } from "./ui.jsx";
-import { ACCENT, BORDER, CATPPUCCIN, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
+import { ACCENT, BORDER, CATPPUCCIN, DIM, FAINT, INK, PANEL, PANEL2, mono, sans } from "./theme.jsx";
 import { activeTab, tabList, FIRST_WAIT, fitFrame, holdFirst, isPaste, keyMessage, mayShape, pasteMessages, mouseMessage, parseMessage, shortUrl, viewportFor,
   viewportMoved, wheelMessage } from "./browserSplit.js";
 
@@ -293,7 +293,7 @@ Take over to drive it yourself; close the session to close it."
             second, greyed one (the overnight walk, 2026-11-11) */}
         {!turn && <Box component="button" onClick={() => (driving ? setDriving(false) : takeOver())}
           title={driving ? "give the page back to the agent" : "drive the page yourself - for a password or a code the agent must not type"}
-          sx={{ ...btn, ...(driving ? { color: CATPPUCCIN.yellow, borderColor: CATPPUCCIN.yellow } : {}) }}>
+          sx={{ ...btn, ...sans, ...(driving ? { color: CATPPUCCIN.yellow, borderColor: CATPPUCCIN.yellow } : {}) }}>
           {driving ? "I'm done" : "Take over"}
         </Box>}
         {/* ...Snapshot only in Developer mode (audit, 2026-11-05): a frame filed as an attachment is a developer's record */}
@@ -381,7 +381,7 @@ ${t.active ? "the tab the agent is working on - shown now" : driving ? "show thi
           </Typography>
         )}
         {driving && !filling && !turn && (
-          <Typography sx={{ ...mono, position: "absolute", left: 8, bottom: 6, fontSize: 10, color: CATPPUCCIN.yellow,
+          <Typography sx={{ ...sans, position: "absolute", left: 8, bottom: 6, fontSize: 11, color: CATPPUCCIN.yellow,
             bgcolor: "#000000aa", px: 0.75, py: 0.25, borderRadius: 1, pointerEvents: "none" }}>
             {/* ...only over a page that has drawn: "click the page and type" stood over a pane with no frame in it (2026-11-04) */}
             {!live ? "Loading the page…" : handed.current ? "your turn — click the page and type; scroll it for a button below the edge" : "you are driving — the agent's next command still runs; press I'm done when finished"}
@@ -390,7 +390,7 @@ ${t.active ? "the tab the agent is working on - shown now" : driving ? "show thi
         {asked && !driving && (
           <Box sx={{ position: "absolute", left: 8, right: 8, bottom: 6, display: "flex", alignItems: "center", gap: 1,
             bgcolor: "#000000cc", border: `1px solid ${CATPPUCCIN.yellow}66`, px: 1, py: 0.5, borderRadius: 1 }}>
-            <Typography sx={{ ...mono, fontSize: 10, color: "var(--tq-muted, #e1dcd5)", flex: 1 }}>
+            <Typography sx={{ ...sans, fontSize: 11, color: "var(--tq-muted, #e1dcd5)", flex: 1 }}>
               {`You are watching the agent's page — Take over to type on it${tabs.length > 1 ? " or switch tabs" : ""}.`}
             </Typography>
             <Box component="button" onClick={takeOver}
@@ -410,7 +410,8 @@ ${t.active ? "the tab the agent is working on - shown now" : driving ? "show thi
 const bar = { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1, px: 1.25, py: 0.75, flexShrink: 0, bgcolor: "#1c1b19",
   borderTop: `1px solid ${CATPPUCCIN.yellow}88` };
 const barText = { fontSize: 12.5, color: "var(--tq-muted, #e1dcd5)", flex: "1 1 220px", minWidth: 0, lineHeight: 1.4 };
-const press = { ...btn, fontSize: 11.5, px: 1.25, py: 0.6 };
+// ...the hand-over's words and presses in the app's own face: they are his to read, not the page's address bar (design round 5)
+const press = { ...btn, ...sans, fontSize: 12, px: 1.25, py: 0.6 };
 const primary = { ...press, color: "var(--tq-text, #101010)", bgcolor: CATPPUCCIN.yellow, borderColor: CATPPUCCIN.yellow,
   "&:hover": { bgcolor: "var(--tq-tint-brass, #f3d98f)", borderColor: "var(--tq-edge-brass, #f3d98f)", color: "var(--tq-text, #101010)" } };
 const failed = (e, data) => data?.send_error || e?.response?.data?.detail || (e ? "That did not go through - nothing was done. Try again." : "");

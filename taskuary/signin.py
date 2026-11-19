@@ -417,10 +417,23 @@ def _ask(store, tid, sid, site, rid, text, watch):
     if watch: threading.Thread(target=watch, args=(store, tid, sid, site, rid), daemon=True, name=f'signin-watch-{tid}').start()
 
 
+# A HAND-OVER NAMES THE SITE AS HE KNOWS IT (design round 5, 2026-11-19: "Sign in to 127.0.0.6 to continue" over a vendor's sign-up page): a
+# site reached by a bare address is called by its page's own title; a named one by its name. What a fill is pinned to stays the address
+def page_name(sid: str, site: str) -> str:
+    if not _ip(site): return site
+    try:
+        c = connect(sid)
+        try: t = ' '.join(str(c.js('document.title') or '').split())
+        finally: c.close()
+    except Exception: t = ''
+    return t[:60] or site
+
+
 HANDED_ON = 6
-def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=...) -> dict:
+def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=..., what: str = '') -> dict:
     """The agent ended its turn asking to be signed in. Record the ask on the existing road and, when the owner keeps a sign-in for
-    the site the browser is actually on, fill it at once on its own thread. `fill`: the filler (tests stand one in)."""
+    the site the browser is actually on, fill it at once on its own thread. `fill`: the filler (tests stand one in). `what`: the step in the
+    agent's own words, where it handed the page over as its turn (browserview.your_turn) - the ask says that, never "sign in"."""
     from . import browserview, workerstate as ws
     if watch is ...: watch = globals()['watch']
     st = browserview.state(sid, fresh=True)
@@ -437,15 +450,18 @@ def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=...) ->
         ws.record(store, tid, sid, 'input_needed', request_id=ws.request_id_for(text), text=text, choices=[then] if _chat(sid) else None,
                   source='api')
         return {'site': '', 'auto': False}
-    rid, text = f'{PREFIX}{site}', f'Sign in to {site} to continue'
     # A SIGN-UP (the agent's own marker said so - signing_up): Taskuary makes the password, types it and keeps it - nobody is asked
+    rid = f'{PREFIX}{site}'
     if signing_up(claimed): return new_account(store, tid, sid, site, rid, fill, watch)
+    name = page_name(sid, site)
+    what = ' '.join(str(what or '').split()).rstrip('.')
+    text = f'Your turn in the browser on {name}: {what}' if what else f'Sign in to {name} to continue'
     # "Signed in" as a CHOICE only where an answer arrives as words (the chat's own agent): a pty's choices are a chooser, answered
     # by number (workerstate.answer). A pty's ask still has the press - the card draws it for every `signin:` ask, and its answer goes
     # through signed_in, never the chooser (2026-10-25)
     # NO PRESSES ON IT (the owner, 2026-11-03: "remove that stupid box again ... just have the question and link to fill it out securely"):
     # the ask is its words; Taskuary sees the sign-in happen on the page itself (watch), and "done" typed in the chat's box still tells it
-    def ask(said=None): _ask(store, tid, sid, site, rid, said or f'Sign in to {site} to continue', watch)
+    def ask(said=None): _ask(store, tid, sid, site, rid, said or text, watch)
     row, last = saved(store, site), _TRIED.get((tid, site), 0)
     # ...A PAGE THAT ASKS ONLY THE CODE is his step at once, however lately the saved sign-in was typed (its agent made it ready, READY_CODE):
     # not a sign-in "asked again within minutes"

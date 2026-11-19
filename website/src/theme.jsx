@@ -220,6 +220,8 @@ export const createAppTheme = (mode = "light") => createTheme({
 export const theme = createAppTheme();
 
 export const mono = { fontFamily: "'IBM Plex Mono', 'Cascadia Code', Consolas, monospace" };
+// ...and the app's own face, for words to the owner set inside a mono surface (the browser pane's hand-over - design round 5, 2026-11-19)
+export const sans = { fontFamily: "'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif" };
 // Compact modern select styling, shared by the detail-header dropdowns and the hand-off form.
 export const selSx = { fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)", borderRadius: 2,
   "& .MuiOutlinedInput-notchedOutline": { borderColor: BORDER },

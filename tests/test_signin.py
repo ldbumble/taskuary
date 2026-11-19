@@ -604,6 +604,28 @@ class TheOwnerSignsInOnThePage(Asking):
             rid = browserview.your_turn(self.s, self.tid, 'sess1', 'sign in and type the code from your phone', watch=None)
             self.wait_for(lambda: watched.called)
         self.assertEqual((rid, signin.pending(self.s, self.tid)['site']), ('signin:bank.example', 'bank.example'))
+        # ...and asked as the step the agent named, never as a bare "sign in" (design round 5)
+        self.assertEqual(signin.pending(self.s, self.tid)['text'], 'Your turn in the browser on bank.example: sign in and type the code from your phone')
+
+    def test_a_human_check_on_a_sign_up_page_at_a_bare_address_is_named_for_the_site_and_the_step(self):
+        """The walks, design round 5 (2026-11-19): a vendor's sign-up page with a human check on it, at a local address, was handed over as
+        "Sign in to 127.0.0.6 to continue" - a raw address, and "sign in" on a sign-up. It is named by the page's own title and the step the
+        agent named; what a fill is pinned to stays the address."""
+        from taskuary import browserview
+        sess = self.chat()
+        class Title:
+            def js(self, src): return '  PermitWatch — Create your account '
+            def close(self): pass
+        with on_page('http://127.0.0.6:18791/s/permitwatch/signup'), mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}), \
+             mock.patch.object(signin, 'on_signin_page', return_value=True), mock.patch.object(signin, 'connect', return_value=Title()), \
+             mock.patch.object(signin, 'watch'):
+            rid = browserview.your_turn(self.s, self.tid, 'sess1', 'answer the human check.', watch=None)
+        p = signin.pending(self.s, self.tid)
+        self.assertEqual((rid, p['site']), ('signin:127.0.0.6', '127.0.0.6'))
+        self.assertEqual(p['text'], 'Your turn in the browser on PermitWatch — Create your account: answer the human check')
+        self.assertNotIn('Sign in', p['text']); self.assertNotIn('127.0.0.6', p['text'])
+        # ...and a named site is called by its name, with nothing read off the page
+        with mock.patch.object(signin, 'connect', side_effect=AssertionError('not read')): self.assertEqual(signin.page_name('s', 'bank.example'), 'bank.example')
 
     def test_a_step_giving_way_to_the_next_is_not_through_and_through_is_taken_back(self):
         """The owner's own sign-in, in its order (2026-11-14): the user name on one page, the password on the next, then a code page on

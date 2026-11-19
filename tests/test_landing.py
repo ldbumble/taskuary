@@ -534,6 +534,20 @@ class NamedCheckoutTests(unittest.TestCase):
         with mock.patch('taskuary.waitroom.add'): out = landing.land(self.s, self.tid, 'push')
         self.assertTrue(out['ok']); self.assertEqual(git(self.remote, 'rev-parse', 'master'), git(self.cwd, 'rev-parse', 'master'))
 
+    def test_his_push_runs_through_the_one_executor_a_held_step_does(self):
+        # the roads audit, 2026-11-19 (#8): an approved held step ran as the agent's own tool would (shellgate.replay: its shell, its git) while
+        # the Push card ran Taskuary's own `git -C` - two executors for one push, and on his machine only one of the gits could push.
+        self.fix()
+        landing.push_asked(self.s, self.tid, f'Set-Location "{self.cwd}"; git push', self.scratch, about='Push the rounding fix')
+        seen, real = [], shellgate.run_
+        def spy(p, cwd='', timeout=300): seen.append((p, cwd)); return real(p, cwd, timeout)
+        with mock.patch.object(shellgate, 'run_', spy), mock.patch('taskuary.waitroom.add'): out = landing.land(self.s, self.tid, 'push')
+        self.assertTrue(out['ok'], out); self.assertEqual(len(seen), 1)
+        (p, cwd), = seen
+        self.assertTrue(os.path.samefile(cwd, self.cwd)); self.assertTrue(p['command'].startswith('git push origin '))
+        self.assertEqual(shellgate.replay(p)[1:], ['-c', p['command']], "the agent's Bash tool's own road")
+        self.assertEqual(git(self.remote, 'rev-parse', 'master'), git(self.cwd, 'rev-parse', 'master'))
+
     def test_propose_push_with_no_folder_takes_the_one_he_named(self):
         self.fix()
         out = landing.from_proposal(self.s, self.tid, {'action': 'push', 'why': 'the rounding fix'})

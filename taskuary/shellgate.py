@@ -623,6 +623,16 @@ def replay(p: dict) -> list:
 def _argv(shell: str, cmd: str) -> list: return replay({'shell': shell, 'command': cmd})
 
 
+def run_(p: dict, cwd: str = '', timeout: int = 300) -> tuple:
+    """THE ONE EXECUTOR FOR A STEP TAKEN ON HIS PRESS (the roads audit, 2026-11-19 #8): the call as the agent's own tool would have run it
+    (replay), in its folder, no input, its output read as words (text) -> (exit code, what it said). A held shell step's Approve and the
+    landing card's Push / Open a PR (landing._push, _pr) both run through it, so a push he pressed meets the git, the credentials and the
+    shell the agent's own `git push` would have - never a second git of Taskuary's own PATH."""
+    from . import spawn
+    r = spawn.run(replay(p), cwd=cwd or None, capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL)   # bytes: text() reads them
+    return r.returncode, text(r.stdout) + text(r.stderr)
+
+
 def text(raw) -> str:
     """A child's output as words: UTF-16 when its bytes say so (a byte-order mark, or NULs in every other place - wsl.exe writes it),
     else UTF-8 with whatever does not decode replaced. Read as UTF-8, WSL's sentence reached the owner as r\\0i\\0b\\0u\\0t\\0i\\0o\\0n."""
@@ -670,13 +680,9 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
         return {'performed': p.get('what') or 'a read', 'said': ''}
     if not cmd: raise RuntimeError('this held step names no command')
     if cwd and not os.path.isdir(cwd): raise RuntimeError(f'the folder it was held in is gone ({cwd}) - nothing was done')
-    def go(argv, folder):
-        from . import spawn
-        r = spawn.run(argv, cwd=folder or None, capture_output=True, timeout=300, stdin=subprocess.DEVNULL)   # bytes: text() reads them
-        return r.returncode, text(r.stdout) + text(r.stderr)
     from . import actrule
     actrule.remember(store, tid, p.get('keys'), 'approved')       # his yes to this kind of step on this target stands for the task
-    rc, said = (run or go)(replay(p), cwd)
+    rc, said = run_(p, cwd) if run is None else run(replay(p), cwd)
     if rc != 0:
         store.audit('task', tid, 'shell_act_failed', 'owner', 'human', {'what': p.get('what'), 'command': cmd[:300], 'said': str(said or '')[-1500:]})
         raise RuntimeError(failed(said, rc, p.get('what')))

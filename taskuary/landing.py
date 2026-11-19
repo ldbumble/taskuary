@@ -39,6 +39,16 @@ def _run(cwd, *args, timeout=60) -> tuple:
     except Exception as e: return 1, '', str(e)
 
 
+def _push_as_agent(cwd, *args, timeout=180) -> tuple:
+    """A push his press makes, run as the agent's own `git push` would run (shellgate.run_: its shell, its git, its credentials) - never
+    Taskuary's own git, which on his machine is not always the one that can push. -> (exit code, what git said, '')."""
+    import shlex
+    from .shellgate import run_
+    try: rc, said = run_({'command': 'git ' + ' '.join(shlex.quote(str(a)) for a in args), 'shell': 'Bash'}, cwd, timeout)
+    except Exception as e: return 1, '', str(e)
+    return rc, said.strip(), ''
+
+
 def _git(cwd, *args) -> str: return _ok(_run(cwd, *args))
 def _ok(r: tuple) -> str: return r[1] if r[0] == 0 else ''
 
@@ -788,7 +798,7 @@ def _push(store, tid, s, how, actor) -> dict:
     cwd, base, p = s['cwd'], s['base'], s['push']
     tip, done, refused = p['tip'], [], ''
     for b in [base] + ([p['deploy']] if how == 'deploy' else []):
-        rc, out, err = _run(cwd, 'push', 'origin', f'{tip}:refs/heads/{b}', timeout=180)
+        rc, out, err = _push_as_agent(cwd, 'push', 'origin', f'{tip}:refs/heads/{b}')
         if rc:
             why = ci.TOKEN_URL.sub('https://', (err or out))[:300]
             fix = ' - pull and rebase, then push again (never forced)' if re.search(r'non-fast-forward|fetch first|rejected', why) else ''
@@ -821,7 +831,7 @@ def _pr(store, tid, s, actor) -> dict:
     # ...GITHUB'S NO IS THE LANDING'S NO (stress round, 2026-11-18): its own error passed land()'s handler - no line kept, the agent never told
     try: c = ci._conn(store, repo)
     except RuntimeError as e: raise Refused(f'{e} - nothing was pushed') from e
-    rc, out, err = _run(cwd, 'push', '-u', 'origin', br, timeout=180)
+    rc, out, err = _push_as_agent(cwd, 'push', '-u', 'origin', br)
     if rc: raise Refused(f"the push of {br} was refused: {ci.TOKEN_URL.sub('https://', (err or out))[:300]} - no pull request opened")
     t = store.get_task(tid) or {}
     body = f"Opened by Taskuary for {task_ref(tid)}.\n\n{(t.get('Summary') or '')[:1500]}"

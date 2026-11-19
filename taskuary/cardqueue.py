@@ -86,16 +86,32 @@ def _units(store, tid: int, past: set) -> list:
     return out
 
 
-def _going_on(store, tid: int, since: float, own=()) -> bool:
+# A LETTER AFTER A LETTER STANDS AT ONCE (design round 5, I4: three emails the agent had already written stood one at a time, and between each
+# Send and the next card its agent was woken to think ~12 s - "Thinking..." over a letter that was there): a letter he sent with another
+# letter written behind it wakes nobody - the next stands the moment his press lands, and the agent hears every one of them with the press
+# that ends the run (or one that fails, which wakes it at once - general.failed). An act's outcome is the agent's to go on from: it still wakes
+LETTERS = ('slot', 'draft_reply', 'draft')
+def _letters(rows) -> bool: return bool(rows) and all(r.get('Kind') in LETTERS for r in rows)
+def goes_on(store, rv: dict) -> bool:
+    "Did his press on letter `rv` bring forward a letter already written - so its agent is not woken for it (verdicts.decide)?"
+    if not rv or rv.get('Kind') not in LETTERS or not rv.get('TaskId') or rv.get('Batch'): return False
+    us = [u for u in _units(store, int(rv['TaskId']), set()) if u['done'] is None]
+    return bool(us) and _letters(us[0]['rows']) and min(us[0]['rids']) > rv['ReviewId']        # ...written behind it, not one that stood before it
+
+
+def _going_on(store, tid: int, since: float, own=(), front=()) -> bool:
     """Is the agent still going on from a press made after `since` on ANOTHER card - at work on it, or woken a moment ago and not yet begun?
-    A press on the front itself (`own`: a Send that did not go, which still waits on its card) holds nothing back: it never left its place."""
+    A press on the front itself (`own`: a Send that did not go, which still waits on its card) holds nothing back: it never left its place -
+    nor a letter's press with the `front` a letter too: nothing was woken for it (goes_on)."""
     from . import general
     from .conversation import ep
     # ...a PRESS: the agent taking back its own card is none - nothing wakes it, and the front stood held for WAKING seconds over it (a CI
     # flake twice, 2026-11-17: whenever the take-back fell in the second after its last answer)
-    pressed = max([ep(r['at']) for r in store._rows("SELECT ReviewId, DecidedAt AS at FROM review WHERE TaskId=? AND DecidedAt IS NOT NULL "
-                                                    "AND COALESCE(DecidedBy, '') NOT LIKE 'agent%'", (int(tid),))
-                   if r['ReviewId'] not in own] or [0.])
+    rows = [r for r in store._rows("SELECT ReviewId, Kind, Batch, Status, DecidedAt AS at FROM review WHERE TaskId=? AND DecidedAt IS NOT NULL "
+                                   "AND COALESCE(DecidedBy, '') NOT LIKE 'agent%'", (int(tid),)) if r['ReviewId'] not in own]
+    last = max(rows, key=lambda r: ep(r['at']), default=None)
+    pressed = ep(last['at']) if last else 0.
+    if last and last['Kind'] in LETTERS and last['Status'] in ('approved', 'edited', 'sent') and not last['Batch'] and _letters(front)             and min(r['ReviewId'] for r in front) > last['ReviewId']: pressed = 0.
     from . import landing
     if LAND not in own: pressed = max(pressed, ep((landing.record(store, int(tid)).get('landed') or {}).get('at')))
     if pressed < since: return False
@@ -120,7 +136,7 @@ def _state(store, tid: int) -> dict:
     i = us.index(front); n = 1
     while i - n >= 0 and us[i - n + 1]['at'] <= (us[i - n]['done'] or float('inf')) + 1: n += 1
     held = [x for u in waiting[1:] for x in u['rids']]
-    live = [] if _going_on(store, tid, front['at'], set(front['rids'])) else front['rids']
+    live = [] if _going_on(store, tid, front['at'], set(front['rids']), front['rows']) else front['rids']
     if not live: held = front['rids'] + held
     return {'live': live, 'held': held, 'n': n, 'of': n + len(waiting) - 1, 'next': what(store, waiting[1]) if len(waiting) > 1 else '', 'units': waiting, 'past': past}
 
@@ -237,7 +253,7 @@ def screen(store, tid: int, skip=()) -> str:
             elif ids & live:
                 waiting.append(f'Waiting for his press now{outcome(r)}: {n}')
             elif u['rids'] == front: waiting.append(f'Comes forward once your turn ends (you are going on from his last press): {n}')
-            elif ids & held: waiting.append(f'Not on his screen yet - it comes forward once the one before it is pressed and you have heard how it went: {n}')
+            elif ids & held: waiting.append(f'Not on his screen yet - it comes forward once the one before it is pressed (after an act, once you have heard how it went): {n}')
             continue
         s, at = (_card(r)['status'] if r else 'approved'), clock(r.get('DecidedAt')) if r else ''
         if s == 'passed': str(r.get('DecidedAt') or '') >= since and greyed(r, n)

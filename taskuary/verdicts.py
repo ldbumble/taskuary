@@ -626,7 +626,7 @@ def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, **kw) -> dic
     out = _decide(store, rv, verb_in, *a, **kw)
     if QUIET.get(): return out
     if verb_in in ('approve', 'edit', 'merge_anyway') and out.get('ok') and not out.get('send_error') and rv.get('TaskId'):
-        from . import general, proposals
+        from . import cardqueue, general, proposals
         actor = a[2] if len(a) > 2 else kw.get('actor', 'owner')
         # SEND AND CLOSE CLOSES BEFORE ITS AGENT IS TOLD (the agent walk, 2026-11-10): the close came a beat after the send, by the page's
         # own call - and by then the send had woken the agent parked on the task, so the gate found it working and kept the task open:
@@ -642,7 +642,9 @@ def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, **kw) -> dic
         # ended the played Send on "No AI is connected" under a turn marked failed
         from . import demo
         if demo.enabled(): demo.after_send(store, rv['TaskId'])
-        elif proposals._action(rv) not in proposals.HELD_ACTS and not (out.get('shut') or {}).get('closed'):
+        # ...and never for a letter with the next letter already written behind it: that one stands at once, and the press that ends the
+        # run tells it of them all (cardqueue.goes_on)
+        elif proposals._action(rv) not in proposals.HELD_ACTS and not (out.get('shut') or {}).get('closed') and not cardqueue.goes_on(store, rv):
             try: general.approved(store, rv['TaskId'], *pressed(store, rv, out), actor, review=rv.get('ReviewId'))
             except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: the agent was not told it went - {e}")
     # ...AND EVERY ONE THAT RAN AND FAILED (general.failed): an act's error, a send that did not go or may have - never a refusal before it

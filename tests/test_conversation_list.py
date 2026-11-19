@@ -596,12 +596,14 @@ class TheList(unittest.TestCase):
         self.assertEqual(end['letters'], turns[-1]['id']); self.assertEqual([c['review'] for c in turns[-2]['cards']], [rid, slot])
 
 
-    def test_two_emails_stand_one_at_a_time_and_the_second_comes_where_the_agent_heard_the_first_go(self):
+    def test_two_emails_stand_one_at_a_time_and_the_second_stands_the_moment_the_first_went(self):
         """The owner, 2026-11-16: "same with 2 emails, it should say I have 2 emails to send, should we send this one? then user clicks then
-        the next one shows ... action cards should hold up the agent until it's completed". Before, both stood side by side with their Sends
-        (2026-11-13). Now the first stands, saying what comes next; the second waits unseen until he has sent the first AND the turn that
-        heard it went has ended - then it stands in that turn, where the chat has got to. What went stays where it stood, for good."""
-        import json, threading
+        the next one shows". Before, both stood side by side with their Sends (2026-11-13). The first stands, saying what comes next; the
+        second waits unseen until he has sent the first. Design round 5, I4: it then waited too for a turn its agent was woken to think in
+        (~12 s of "Thinking..." over a letter already written) - a letter after a letter stands the moment his Send lands, in the turn that
+        wrote it, nobody woken; the press that ends the run wakes the agent, told of both. What went stays where it stood, for good."""
+        import json
+        from taskuary import verdicts
         s, tid = self.s, self.tid
         mail = lambda to, words: s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': words, 'Reason': 'assistant wrote this email - approve to send',
                                                'Deliver': json.dumps({'channel': 'email', 'to': [to], 'cc': [], 'subject': 'Offsite', 'slot': to})})
@@ -613,20 +615,17 @@ class TheList(unittest.TestCase):
         self.assertEqual((was['letters'], was['queue']), (wrote['id'], {'live': [ray], 'held': [erin], 'line': '1 of 2 · next: the email to erin@northwind.example'}))
         self.assertEqual([r['ReviewId'] for r in s.waiting_reviews() if r['TaskId'] == tid], [ray], 'what waits on him: the one that stands')
         t = time.time(); until(lambda: time.time() >= t + 1.1)                                  # (a stamp is a whole second)
-        s.decide_review(ray, 'approved', None, 'owner')                                        # ...he sends Ray's, and Taskuary wakes its agent
-        self.brain.delay = 0.6
-        threading.Thread(target=lambda: general.session_for(tid).send_prompt("You sent Ray's email.", brief=True), daemon=True).start()
-        self.assertTrue(until(lambda: self.list()['working']))
-        now = self.list()
-        self.assertEqual((now['queue']['live'], now['queue']['held']), ([], [erin]), "Erin's waits while the agent hears how Ray's went")
-        self.assertEqual(cards(now), {wrote['id']: [(ray, 'approved')]}); self.assertEqual(conversation.flow_breaks(now, was), [])
-        self.brain.delay = 0; self.rest()
-        end = self.list(); woke = [x for x in end['items'] if x['kind'] == 'turn'][-1]
-        self.assertNotEqual(woke['id'], wrote['id'])
-        self.assertEqual((end['queue']['live'], end['letters'], end['queue']['line']), ([erin], woke['id'], ''), 'the last of two says no more')
-        self.assertEqual(conversation.flow_breaks(end, now), [])
-        s.decide_review(erin, 'approved', None, 'owner')
-        self.assertEqual(cards(self.list()), {wrote['id']: [(ray, 'approved')], woke['id']: [(erin, 'approved')]}, 'each where it stood, for good')
+        woke, sent = [], mock.patch('taskuary.outbound.send_out', lambda *a, **k: {'channel': 'email', 'to': k.get('to') or []})
+        with sent, mock.patch.object(general, 'tell', lambda st, t_, said, *a, **k: woke.append(said) or 'woke'), mock.patch('taskuary.learn.learn_from'):
+            self.assertTrue(verdicts.decide(s, s.get_review(ray), 'approve', None, None, 'owner')['ok'])
+            now = self.list()
+            self.assertEqual(woke, [], 'nobody woken to think over a letter already written')
+            self.assertEqual((now['queue']['live'], now['queue']['held'], now['working']), ([erin], [], False), "Erin's stands at once")
+            self.assertEqual(cards(now)[wrote['id']], [(ray, 'approved')]); self.assertEqual(conversation.flow_breaks(now, was), [])
+            self.assertEqual(now['letters'], wrote['id'], 'it stands in the turn that wrote it, under the one that went')
+            self.assertTrue(verdicts.decide(s, s.get_review(erin), 'approve', None, None, 'owner')['ok'])
+        self.assertEqual(len(woke), 1, 'the press that ends the run wakes its agent, once')
+        self.assertEqual(cards(self.list())[wrote['id']], [(ray, 'approved'), (erin, 'approved')], 'each where it stood, for good')
 
     def test_an_email_that_waited_its_turn_and_was_taken_back_never_stands(self):
         """The owner, 2026-11-16: the push failed, "so the email that announced it is not shown as-is; the agent decides". A card behind

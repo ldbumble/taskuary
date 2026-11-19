@@ -301,7 +301,7 @@ SHORT = {
     'propose_reply': "Set up this task's reply for the owner's Send.",
     'reply_not_needed': 'The reply waiting here is no longer needed; say why.',
     'withdraw_draft': 'Take back a reply, email or proposal you set up that has not gone out.',
-    'propose_email': "Draft an email for the owner's Send - many at once in `items`, one card.",
+    'propose_email': "Draft an email for the owner's Send - several at once in `items`.",
     'sign_form': "Fill and sign a PDF form with the owner's saved signature.",
     'answer_invite': "Answer this task's meeting invite: accept, decline or propose.",
     'set_up_meeting': "Set up a meeting for the owner's press.",
@@ -411,9 +411,9 @@ def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> 
 # then send them all out"): any card's tool takes `items` - each item that tool's own fields, over the ones given beside them - and files each
 # by its own door, as one call would; the rows share one Batch, which the line of cards and the chat hold as ONE card with one press
 ITEMS = {'type': 'array', 'items': {'type': 'object'},
-         'description': "many of this same act at once (25 emails, 40 issues to close): a list of objects, each with this tool's own fields - "
-                        "fields beside `items` are shared by all. ONE card holds them: the owner reviews a few, does them all with one press, "
-                        "and you hear how the whole run went, once."}
+         'description': "several of this same act at once: a list of objects, each with this tool's own fields - fields beside `items` are "
+                        "shared by all. A few stand one at a time for the owner's press each; many (25 emails, 40 issues to close) stand as ONE "
+                        "card he reviews a few of and does with one press. You hear how they went once."}
 # ...the two every act goes by: an email, and any other act (`propose`: a close, a post, a SQL write, an API call) - a reply answers one
 # message, an invite one meeting, and the landing question is one per checkout
 for _n, (_c, _d, _s, _door) in TOOLS.items():
@@ -445,14 +445,19 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
         # ...the card EACH item filed, by its own answer - never every card raised on the task meanwhile: a reply drafted for a mail that came
         # in as the items were filed, or the agent's own call beside this one, joined the card and went with its one press
         if isinstance(got, dict) and isinstance(rid := got.get('review_id', got.get('review')), int): mine.append(rid)
-    if mine: store._exec(f"UPDATE review SET Batch=? WHERE TaskId=? AND ReviewId>? AND Status='pending' AND ReviewId IN ({','.join('?' * len(mine))})",
-                         (key, int(tid), top, *mine))
-    n = (store._one('SELECT COUNT(*) AS n FROM review WHERE Batch=?', (key,)) or {}).get('n') or 0
-    card = 'They stand as ONE card: the owner reviews a few and does them all with one press; you hear the whole run once.'
+    # ...A FEW STAND ONE AT A TIME, MANY AS ONE CARD (design round 5, I4: three caterer emails came as one bulk card - one Send, a guessed address
+    # sent unopened): under bulkcard.MANY each is its own card in the line ("1 of 3"), as the same three raised one call each would be
+    mine = [r['ReviewId'] for r in store._rows(f"SELECT ReviewId FROM review WHERE TaskId=? AND ReviewId>? AND Status='pending' AND ReviewId IN ({','.join('?' * len(mine))})",
+                                               (int(tid), top, *mine))] if mine else []
+    bulk = len(mine) >= bulkcard.MANY
+    if bulk: store._exec(f"UPDATE review SET Batch=? WHERE ReviewId IN ({','.join('?' * len(mine))})", (key, *mine))
+    n = len(mine)
+    card = ('They stand as ONE card: the owner reviews a few and does them all with one press; you hear the whole run once.' if bulk
+            else f'They stand one at a time, {n} in a row: the owner sees each in turn and presses it; you hear how they went once the last is pressed.')
     shown = ((f"{len(went)} of {len(items)} sent at once - a routine's email to what its owner saved into it goes without a press; say they went."
-              + (f" Not sent: {'; '.join(held)}." if held else '') + (f" The {n} unsent stand as ONE card for the owner's Send." if n else '')) if went
+              + (f" Not sent: {'; '.join(held)}." if held else '') + (f" The {n} unsent stand for the owner's Send{' as ONE card' if bulk else ', one at a time'}." if n else '')) if went
              else card if n else 'Nothing was filed, so no card stands - fix what each item was refused for and call it again.')
-    return _j({'ok': n > 0 or bool(went), **({'batch': key, 'on_the_card': n} if n else {}), **({'sent': len(went)} if went else {}),
+    return _j({'ok': n > 0 or bool(went), **({'on_the_card': n} if n else {}), **({'batch': key} if bulk else {}), **({'sent': len(went)} if went else {}),
                **({'refused': refused} if refused else {}), 'shown': shown})
 
 

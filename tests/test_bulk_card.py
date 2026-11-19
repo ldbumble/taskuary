@@ -73,6 +73,21 @@ def test_twenty_five_emails_are_one_card_and_one_press_sends_them_all():
     assert s.get_review(q['live'][3])['DecideNote'] == bulkcard.LEFT
 
 
+def test_a_few_emails_raised_in_one_call_stand_one_at_a_time_whichever_road_made_them():
+    """Design round 5, I4: Claude's three caterer emails came as one bulk card ("3 emails - review a few, then do them all", one Send, a guessed
+    address sent unopened) while Codex, raising them one call each, showed "1 of 3". A few stand one at a time whichever road made them; the
+    bulk card is for many (bulkcard.MANY)."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s): out = call(tid, 'propose_email', items=emails(bulkcard.MANY - 2))
+    assert out['ok'] and out['on_the_card'] == 3 and 'batch' not in out and 'one at a time' in out['shown'], out
+    q = cardqueue.state(s, tid)
+    assert len(q['units']) == 3 and len(q['live']) == 1 and (q['n'], q['of']) == (1, 3), q
+    assert not s._rows('SELECT 1 FROM review WHERE TaskId=? AND Batch IS NOT NULL', (tid,))
+    s, tid = world()
+    with mock.patch.object(server, 'store', s): out = call(tid, 'propose_email', items=emails(bulkcard.MANY))
+    assert out['batch'] and out['on_the_card'] == bulkcard.MANY
+
+
 def test_forty_issues_closed_with_some_refused_counts_each_and_says_why():
     s, tid = world()
     with mock.patch.object(server, 'store', s):
@@ -258,10 +273,10 @@ def test_a_bulk_card_next_in_line_is_named_as_the_card_names_itself():
     with mock.patch.object(server, 'store', s):
         call(tid, 'propose_email', to='erin@northwind.example', subject='Issues', text='Erin - closing the stale issues next.')
         call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='stale', items=[{'number': n} for n in range(1, 41)])
-        call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='stale', items=[{'number': n} for n in range(41, 43)])
+        call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='stale', items=[{'number': n} for n in range(41, 41 + bulkcard.MANY)])
     us = cardqueue.state(s, tid)['units']
     assert cardqueue.line(cardqueue.state(s, tid)) == '1 of 3 · next: 40 issues'
-    assert [cardqueue.what(s, u) for u in us] == ['the email to erin@northwind.example', '40 issues', '2 issues']
+    assert [cardqueue.what(s, u) for u in us] == ['the email to erin@northwind.example', '40 issues', f'{bulkcard.MANY} issues']
 
 
 def test_after_a_bulk_run_its_agent_hears_what_still_waits_behind_it():
@@ -304,7 +319,7 @@ def test_a_standing_bulk_card_names_the_sentence_his_next_line_greys_it_with():
     over his new line for a read (~230 ms) - two Sends over the line that had just written past them. It names the sentence, as a draft does."""
     s, tid = world()
     with mock.patch.object(server, 'store', s):
-        call(tid, 'propose_email', items=emails(2))
+        call(tid, 'propose_email', items=emails(bulkcard.MANY))
         items = conversation.items(s, tid)['items']
     cards = [k for x in items for k in ([x] if x['kind'] == 'card' else x.get('cards') or [])]
     assert [(k['what'], k['status'], k.get('aside')) for k in cards] == [('batch', 'pending', proposals.WROTE_PAST)]

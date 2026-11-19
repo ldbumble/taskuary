@@ -40,7 +40,7 @@ import { openAppLink } from "./appLinks.js";
 import { NEW_PB, askPlaybook } from "./playbookOpen.js";
 import { place } from "./words.js";
 import { label as btn } from "./buttons.js";
-import { capabilities, useCapabilities } from "./capabilities.js";
+import { aiFor, capabilities, useCapabilities } from "./capabilities.js";
 import { PromptBox } from "./AgentSummary.jsx";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { madeRow } from "./funnelPile.js";
@@ -219,11 +219,13 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   // note
   const [when, setWhen] = useState("");
   // a goal (spec 2026-10-12): what done looks like is the words above; by when, who is involved, and whether the AI plans the steps
-  const noAi = useCapabilities().ai === false;
+  // ONE ANSWER PER JOB (capabilities.aiFor): the box starts a general agent; Plan it asks the Assistant, which writes the steps (goals.plan).
+  // Plan it read triage's AI while its press read the general agents' list - one sheet, two answers (2026-11-19)
+  const caps = useCapabilities(), noAi = !aiFor(caps, "general"), noPlanner = !aiFor(caps, "assistant");
   // ...Plan it only with an AI to plan: pre-selected with none, the goal's first press failed into NO_AI_PLAN (2026-10-22 walk). The
   // capability lands after the first draw, so it is followed until the owner picks a side
-  const [by, setBy] = useState(""); const [who, setWho] = useState(""); const [plan, setPlan] = useState(!noAi), planPicked = useRef(false);
-  useEffect(() => { if (!planPicked.current) setPlan(!noAi); }, [noAi]);
+  const [by, setBy] = useState(""); const [who, setWho] = useState(""); const [plan, setPlan] = useState(!noPlanner), planPicked = useRef(false);
+  useEffect(() => { if (!planPicked.current) setPlan(!noPlanner); }, [noPlanner]);
   const filed = useRef(null);      // a task this sheet filed whose start was refused: {taskId, ref, about, how}
 
   useEffect(() => { if (!open) return; setErr(""); setOk(""); setKind(initialKind); }, [open, initialKind]);
@@ -296,7 +298,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         // NOTHING TO RUN IT ON, SAID HERE AND THE SHEET STAYS OPEN (owner-approved, 2026-10-21): the task was made, its agent failed a
         // second later, and it sat on the rail under "waiting on you". Read fresh - the list loaded with the sheet may be from before
         // ...read off the one capability (capabilities.has_ai): the demo's agents work with no AI connected, and its box said "No AI connected"
-        if (general && (await capabilities()).ai === false) { setErr(NO_AI_LINE); setBusy(false); return; }
+        if (general && !aiFor(await capabilities(), "general")) { setErr(NO_AI_LINE); setBusy(false); return; }
         // a session opens where the picker says (auto = the repository the words name, else the server guesses as ever);
         // the choice is the task's `repo:` tag, the override that always wins
 
@@ -339,16 +341,16 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         askPlaybook(about, true); onClose?.(); openAppLink(`report=${NEW_PB}`);
       } else if (kind === "goal") {
         // PLAN IT WITH NO AI SAYS SO (owner-approved, 2026-10-21): it promised "planning the steps; they land in a moment" and none came
-        if (plan && !((await api.get("/api/agents")).data?.general_brains || []).length) {
+        if (plan && !aiFor(await capabilities(), "assistant")) {
           setErr(NO_AI_PLAN); setErrAi(true); setBusy(false); return;
         }
         const title = about.split(/[.\n]/)[0].trim().slice(0, 120) || about.slice(0, 120);
         const { data } = await api.post("/api/tasks", { Title: title, Summary: withImages(who ? `${about}\nInvolved: ${who}` : about, pics.paths),
           DoneWhen: about.slice(0, 1000), DueAt: by || null, Kind: "task", Tags: "goal" });
         // the model writes the steps (server.plan_goal); "Track it" leaves the boxes to you
-        if (plan && !noAi) api.post(`/api/tasks/${data.taskId}/read-ask`, { goal: true }).catch(() => null);
+        if (plan && !noPlanner) api.post(`/api/tasks/${data.taskId}/read-ask`, { goal: true }).catch(() => null);
         // ...and with no AI nothing plans them: it promised steps that never came (the UI audit, 2026-10-21)
-        setOk(`${data.ref} — ${!plan ? "on your rail; add the steps on the task." : noAi ? "on your rail. No AI is connected, so nothing can plan the steps - add them on the task."
+        setOk(`${data.ref} — ${!plan ? "on your rail; add the steps on the task." : noPlanner ? "on your rail. No AI is connected, so nothing can plan the steps - add them on the task."
           : "planning the steps; they land on the task in a moment."}`);
         aboutRef.current?.clear(); setHasAbout(false); setBy(""); setWho(""); pics.clear(); onDone?.(); openIt(data.taskId);
       } else {
@@ -358,7 +360,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       }
     } catch (e) { setErr(e?.response?.data?.detail || "That did not go through"); }
     if (!(inline && opened)) setBusy(false);
-  }, [kind, channel, to, emailTo, cc, mode, how, role, when, by, who, plan, noAi, onDone, onOpenTask, onClose, pics, line, inline]);
+  }, [kind, channel, to, emailTo, cc, mode, how, role, when, by, who, plan, noAi, noPlanner, onDone, onOpenTask, onClose, pics, line, inline]);
 
   // ...and no live session without a coding tool the owner chose (owner-approved, 2026-10-21): Send to coding agent stays disabled
   const noCodingTool = kind === "agent" && how === "terminal" && (!agentsRead || !codingReady);

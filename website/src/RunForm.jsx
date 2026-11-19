@@ -53,7 +53,7 @@ export function AgentAsk({ coding: wantCoding = false, title, what, placeholder 
   const [text, setText] = useState("");
   const pics = usePromptImages();
   const [busy, setBusy] = useState(false), [err, setErr] = useState("");
-  const why = cannotStart(caps, { coding, read: agentsRead, brains: generalBrains, codingReady });
+  const why = cannotStart(caps, { coding, read: agentsRead, codingReady });
   const box = useRef(null);
   useViewExtras(box, view ? { item: view.item, title: view.title } : {});
   useEffect(() => { box.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" }); }, []);

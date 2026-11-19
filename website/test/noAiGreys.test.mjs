@@ -9,7 +9,7 @@ const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8"
 // capabilities.js imports the page's api client; its pure rule is lifted from the source and run here
 const { cannotStart, NO_AI_WHY, NO_CODING_TOOL } = (() => {
   const c = read("capabilities.js"), one = (n) => c.slice(c.indexOf(`export const ${n} =`), c.indexOf(";\n", c.indexOf(`export const ${n} =`)) + 1);
-  const src = ["NO_AI_WHY", "NO_CODING_TOOL", "cannotStart"].map(one).join("\n").replace(/export const /g, "const ");
+  const src = ["aiFor", "NO_AI_WHY", "NO_CODING_TOOL", "cannotStart"].map(one).join("\n").replace(/export const /g, "const ");
   return new Function(`${src}\nreturn { cannotStart, NO_AI_WHY, NO_CODING_TOOL };`)();
 })();
 
@@ -17,9 +17,10 @@ test("cannotStart: no AI greys the general road; no coding tool greys only codin
   assert.equal(cannotStart({ ai: false }), NO_AI_WHY);
   assert.equal(cannotStart({ ai: false }, { coding: true, read: true, codingReady: true }), "", "a coding agent runs its own tool, no AI needed");
   assert.equal(cannotStart({ ai: false }, { coding: true, read: true, codingReady: false }), NO_CODING_TOOL);
-  assert.equal(cannotStart({ ai: true }, { read: true, brains: [] }), NO_AI_WHY, "general_brains read and empty is no AI");
-  assert.equal(cannotStart({ ai: true }, { read: false, brains: [] }), "", "not read yet is not a no");
-  assert.equal(cannotStart({ ai: true }, { read: true, brains: [{ pick: "cli:codex" }] }), "");
+  // ...the general road asks the server's one answer for general work, never triage's nor a list of its own (2026-11-19)
+  assert.equal(cannotStart({ ai: true, ai_for: { general: false } }, { read: true }), NO_AI_WHY, "triage has an AI, general work has none");
+  assert.equal(cannotStart({ ai: false, ai_for: { general: true } }, { read: true }), "", "general work has one though triage has none");
+  assert.equal(cannotStart({ ai: true }, { read: false }), "", "not read yet is not a no");
   assert.equal(cannotStart({ ai: true }, { coding: true, read: true, codingReady: false }), NO_CODING_TOOL);
   assert.equal(cannotStart({ ai: true }, { coding: true, read: true, brains: [], codingReady: true }), "", "coding asks its tool, not general_brains");
   assert.equal(NO_CODING_TOOL, "Pick a coding tool first");
@@ -38,7 +39,11 @@ test("the task page greys every agent start on that one check, the reason in the
 
 test("a goal starts on Track it when no AI is connected, and follows the capability until the owner picks", () => {
   const s = read("NewSheet.jsx");
-  assert.match(s, /useState\(!noAi\), planPicked = useRef\(false\)/);
-  assert.match(s, /if \(!planPicked\.current\) setPlan\(!noAi\)/);
+  assert.match(s, /useState\(!noPlanner\), planPicked = useRef\(false\)/);
+  assert.match(s, /if \(!planPicked\.current\) setPlan\(!noPlanner\)/);
+  // ...the box and the press ask ONE answer for the one planner (the Assistant, goals.plan) - no second list fetched at the press
+  assert.match(s, /noPlanner = !aiFor\(caps, "assistant"\)/);
+  assert.match(s, /if \(plan && !aiFor\(await capabilities\(\), "assistant"\)\)/);
+  assert.doesNotMatch(s, /general_brains/);
   assert.doesNotMatch(s, /\[plan, setPlan\] = useState\(true\)/);
 });

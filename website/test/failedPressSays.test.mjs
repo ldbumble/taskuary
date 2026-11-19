@@ -24,7 +24,7 @@ test("the Wall's close-session x says a refused close on the pane", () => {
 
 test("New > Set a goal > Plan it promises no steps when no AI is connected", () => {
   const sheet = src("NewSheet.jsx");
-  assert.match(sheet, /const noAi = useCapabilities\(\)\.ai === false;/);
-  assert.match(sheet, /if \(plan && !noAi\) api\.post/);
-  assert.match(sheet, /noAi \? "on your rail\. No AI is connected, so nothing can plan the steps/);
+  assert.match(sheet, /noPlanner = !aiFor\(caps, "assistant"\)/);
+  assert.match(sheet, /if \(plan && !noPlanner\) api\.post/);
+  assert.match(sheet, /noPlanner \? "on your rail\. No AI is connected, so nothing can plan the steps/);
 });

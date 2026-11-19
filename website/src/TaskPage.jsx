@@ -811,7 +811,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const stale = (id) => selRef.current !== id;
   const { agents, models, kinds, brains, brainList, brainModels, generalBrains, codingOptions, agentsRead, codingReady } = useAgents();
   // an agent start with nothing to run on is greyed, the reason its hover - one check for both roads (capabilities.cannotStart)
-  const runWhy = (coding) => cannotStart(caps, { coding, read: agentsRead, brains: generalBrains, codingReady }), noAiWhy = runWhy(false);
+  const runWhy = (coding) => cannotStart(caps, { coding, read: agentsRead, codingReady }), noAiWhy = runWhy(false);
   const pickerTask = useRef(null);         // initialize each task from its durable worker once
   const [err, setErr] = useState("");
   const [startFail, setStartFail] = useState(null);   // a failed agent start's ways past it (failures.py), drawn on the error line

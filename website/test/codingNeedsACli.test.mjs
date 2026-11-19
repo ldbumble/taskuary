@@ -9,7 +9,7 @@ const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8"
 test("the capability is asked once, re-asked when setup moves, and shows coding until the answer is in", () => {
   const c = read("capabilities.js");
   assert.match(c, /api\.get\("\/api\/capabilities"\)/);
-  assert.match(c, /export const ASSUMED = \{ coding: true, ai: true, mail: true, send: \{\}, known: false \};/, "until the answer is in, everything shows");
+  assert.match(c, /export const ASSUMED = \{ coding: true, ai: true, ai_for: \{\}, mail: true, send: \{\}, known: false \};/, "until the answer is in, everything shows");
   assert.match(c, /tq-setup-changed/);
   assert.match(c, /onLive\(\["feed-changed", "task-changed"\]/, "and re-read when the live feed says something changed");
   // every screen reads the one hook - no screen keeps its own coding check

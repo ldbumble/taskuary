@@ -39,6 +39,7 @@ test("the rail never says All done when no AI could judge anything", () => {
 
 test("Plan it with no AI says so instead of promising steps", () => {
   const s = src("NewSheet.jsx");
-  assert.match(s, /if \(plan && !\(\(await api\.get\("\/api\/agents"\)\)/);
+  // ...asked of the one answer for the AI that plans it (the Assistant, goals.plan) - never a list fetched at the press
+  assert.match(s, /if \(plan && !aiFor\(await capabilities\(\), "assistant"\)\)/);
   assert.match(s, /setErr\(NO_AI_PLAN\); setErrAi\(true\)/);
 });

@@ -851,8 +851,9 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   // ...and only once nothing waits on him there (`need` over): while a step of his is being read afresh (readFor) it said "nothing waits on you
   // there now" for half a second over the page about to open for him (design round 6, D8, recorded frame by frame)
   const closedLine = !!sid && (quiet ? lent && !need && !showingBrowser : seen && !browser.open && !ended) && (
-    <Typography data-tq-browser-closed="" sx={{ ...mono, flex: "0 0 auto", fontSize: 10.5, color: "#a8a196", m: "5px 0 0 10px" }}>
-      {quiet ? "The browser is put away - nothing waits on you there now. It shows here again when the agent needs you."
+    <Typography data-tq-browser-closed="" sx={{ flex: "0 0 auto", fontSize: 12, color: "#a8a196", m: "5px 0 0 10px" }}>
+      {/* ...in his words, never a terminal's (the roads audit, 2026-11-19: a mono "put away" banner read as a log line) */}
+      {quiet ? "Nothing waits on you in the browser now - it comes back here when the agent needs you."
         : `The browser closed${lastPage.current ? ` (last on ${shortUrl(lastPage.current, 36)})` : ""}. It reopens when the agent next needs it.`}
     </Typography>
   );

@@ -239,7 +239,6 @@ export const heldOn = (review, sid) => {
 // a step only a person may do (isTurn) - or a step it held for Approve (heldOn). A saved sign-in raises no ask (signin.needs), so it
 // is never drawn. Then it sits BESIDE the chat, never over it: the chat keeps CHAT_SHARE of the width, a phone's width gets the chip.
 export const CHAT_SHARE = 0.45;
-export const needsOwner = (asking, held = []) => waitsOnPage(asking) || !!held?.length;
 // ...folded by the owner's own Fold, it is the chip that says "your turn - open it". A 1024px laptop's chat slot is ~555px - under
 // PHONE_BELOW, where the other layouts chip it - and still split here: hiding the page the owner was asked to sign in on is worse than a
 // small one. Only a phone's slot gets the chip.

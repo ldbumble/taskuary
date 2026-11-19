@@ -47,7 +47,7 @@ import ActionCard from "./ActionCard.jsx";
 import CopyCorner from "./CopyCorner.jsx";
 import { SessionPane, TerminalPane } from "./TerminalView.jsx";
 import ThreadReading from "./ThreadReading.jsx";
-import { askPlaceholder, heldOn, isSignin, isTurn, needsOwner, waitsOnPage } from "./browserSplit.js";
+import { askPlaceholder, heldOn, isSignin, isTurn, waitsOnPage } from "./browserSplit.js";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import "./generalWorkspace.css";
 import "./agentStepRows.css";
@@ -960,8 +960,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // sign-in's pages there is a moment with no ask open, and the page went away under them
   // ...what the agent asks, by the one read both payloads carry (taskstate.asking): gone from the card the moment it is answered
   const ask = (conv.list || data)?.asking, asking = ask && ask.request_id !== answered ? ask : null;
-  const needRaw = needsOwner(asking,
-      (data?.browserActs || []).map((r) => heldOn(r, data?.session?.sid)).filter(Boolean)), answers = (conv.list?.items || []).filter((x) => x.kind === "turn" && x.state !== "working" && x.state !== "starting").length;
+  // ...whether he has a part on the page is the server's one answer (taskstate.needs_owner); an ask he has just answered here stops it at once
+  const needRaw = !!data?.needsOwner && (!!asking || (data?.browserActs || []).some((r) => heldOn(r, data?.session?.sid))), answers = (conv.list?.items || []).filter((x) => x.kind === "turn" && x.state !== "working" && x.state !== "starting").length;
   const [needHeld, setNeedHeld] = useState(null);
   useEffect(() => { if (needRaw) setNeedHeld(answers); }, [needRaw]);   // eslint-disable-line react-hooks/exhaustive-deps
   // ...or is AT WORK again: his part is done the moment it goes on (the owner, 2026-11-11: "seamlessly hand off once login is in to go back to

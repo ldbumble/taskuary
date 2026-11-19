@@ -228,6 +228,7 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None) -> list:
     """Every path a shell line names as an argument, through `cd`, `bash -c "..."` and `--opt=value` - None for one built from a variable
     it cannot read. The program itself, options, URLs and switches (`/s`) are not paths."""
     from .browsergate import words
+    from .shellgate import _OWN
     out, here, env = [], cwd, dict(env or {})
     for seg in _segments(str(cmd or '')):
         # ...a path kept in a variable is read where the variable is (`$p='C:/x.csv'; Get-Content $p` - the real-CLI walk, 2026-11-16)
@@ -250,7 +251,9 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None) -> list:
             if (v := _VAR.fullmatch(x)) and (v[1] or v[2]).lower() in env: x = env[(v[1] or v[2]).lower()]
             # ...after a `cd` away, a plain name that is there is read there (`cd ~ && cat .ssh/x`)
             near = here != cwd and here and x and not x.startswith('-') and os.path.exists(os.path.join(here, x))
-            if not x or '://' in x or re.match(r'^/\w$', x) or re.match(r'^(/dev/|\d$)', x) or not (near or _pathish(x)): continue
+            # ...and Taskuary's own address as a session is handed it ($TASKUARY_URL/api/...) is a web address, never a file: a read-only curl
+            # of its own API was held as "a path it builds from a variable", a card each time the agent looked (the roads audit, 2026-11-19)
+            if not x or '://' in x or _OWN.match(x) or re.match(r'^/\w$', x) or re.match(r'^(/dev/|\d$)', x) or not (near or _pathish(x)): continue
             e = _expand(x, here, env)
             if e is None: out.append(None); continue
             e = re.sub(r'^/([A-Za-z])(?=/|$)', r'\1:', e) if os.name == 'nt' else e

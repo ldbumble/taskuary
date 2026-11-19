@@ -1159,3 +1159,13 @@ def test_every_open_ask_carries_its_kind_and_site_so_the_page_never_reads_the_id
     assert ws.ask_of('q:where') == {'ask': 'question', 'site': ''}
     e = {'RequestId': f'{signin.PREFIX}toll.example', 'Kind': 'input_needed', 'Text': 'Sign in to toll.example', 'Sid': 's1', 'CreatedAt': 'now'}
     assert ws._public_request(e)['ask'] == 'signin' and ws._public_request(e)['site'] == 'toll.example'
+
+
+# WHETHER HE HAS A PART ON THE PAGE is the server's one answer (taskstate.needs_owner) - the page rebuilt it from the ask's id
+def test_the_server_says_whether_he_is_needed_on_the_page():
+    from taskuary import taskstate
+    act = lambda sid: {'DraftText': json.dumps({'action': 'browser_act', 'sid': sid})}
+    assert not taskstate.needs_owner(None) and not taskstate.needs_owner({'ask': 'question'})
+    assert taskstate.needs_owner({'ask': 'signin', 'site': 'bank.example'}) and taskstate.needs_owner({'ask': 'turn'})
+    assert taskstate.needs_owner(None, [act('s1')], 's1') and not taskstate.needs_owner(None, [act('s2')], 's1')
+    assert not taskstate.needs_owner(None, [{'DraftText': json.dumps({'action': 'shell_act', 'sid': 's1'})}], 's1')

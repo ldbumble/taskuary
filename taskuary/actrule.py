@@ -41,7 +41,8 @@ def _target(a: dict, cwd: str) -> tuple:
 
 
 def key(a: dict, cwd: str = '') -> str:
-    "What makes two steps the same decision: what it does, and where - a push by its repo and branch."
+    "What makes two steps the same decision: what it does, and where - a push by its repo and branch, a gate's own key where it names one."
+    if a.get('key'): return str(a['key'])
     if a.get('refs') is not None:
         repo, br = target(a, cwd)
         return f'push|{repo.lower()}|{br}' if repo and br else ''

@@ -541,12 +541,21 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         if not args: return _deny(f"{HELD}: a browser command it could not read. Run each agent-browser command on its own line.")
         if not pg['url']: return _deny(NO_PAGE.format(held=HELD))
         site = signin.site_name(pg['url']) or 'the page'
+        # ...THE ONE RULE (actrule.decide): the same press on the same site he already approved on this task runs; one he dismissed is his no
+        from . import actrule
+        step = {'what': v['what'], 'why': v['why'], 'key': f"browser|{site}|{target(a, pg) or ' '.join(args)}"}
+        how, told = actrule.decide(store, tid, [step], cwd)
+        if how == 'approved':
+            if told: store.add_comment_once(tid, 'taskuary', 'agent', told)
+            continue
+        if how == 'dismissed': return _deny(told)
         browserview.ended_on(sid, 'held', store, tid)                          # its last frame is kept if the session stops here
         if not _pending(store, tid, sid, args, pg['url']):
             from . import proposals
             c = control(a, pg)
             proposals.queue(store, tid, {'action': 'browser_act', 'sid': str(sid), 'args': args, 'command': ' '.join([EXE, *args]),
                                          'url': pg['url'], 'site': site, 'what': v['what'], 'why': v['why'], **({'cwd': cwd} if cwd else {}),
+                                         'keys': [step['key']],
                                          'fields': signin.form_fields(sid),
                                          **({'control': {'name': c['name'], 'role': c['role']}} if c.get('role') else {})}, 'agent')
             store.audit('task', tid, 'browser_act_held', 'taskuary', 'system', {'verb': a['verb'], 'site': site, 'why': v['why']})
@@ -585,7 +594,8 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
     """The owner's yes: run the held command in the session's browser - only while that browser is still on the page the act was
     judged on, since a ref like @e12 means another control on another page. `run`: the runner (tests stand one in). One that fails
     marks the session, so the page it failed on is kept if the session stops there (browserview.keep_last)."""
-    from . import browserview
+    from . import actrule, browserview
+    actrule.remember(store, tid, p.get('keys'), 'approved')       # his yes to this press on this site stands for the task
     try: return _perform(store, tid, p, run)
     except RuntimeError:
         if p.get('sid'): browserview.ended_on(str(p['sid']), 'failed', store, tid)
@@ -704,7 +714,10 @@ def _again(store, tid: int, sid: str, p: dict) -> dict:
 OWNER_NO = ("That is the owner's own answer, not a block of Taskuary's. Do not try it another way and do not ask for the same step again - "
             'carry on without it, and ask only if you need to know what they want instead.')
 def not_approved(what) -> str: return f'The owner did not approve it: {what} was NOT done. {OWNER_NO}'
-def declined(store, tid: int, p: dict) -> None: _tell(store, tid, not_approved(p.get('what') or p.get('command')))
+def declined(store, tid: int, p: dict) -> None:
+    from . import actrule
+    actrule.remember(store, tid, p.get('keys'), 'dismissed')
+    _tell(store, tid, not_approved(p.get('what') or p.get('command')))
 
 
 # the turn an approval wakes says what happened. ...AND NOTHING ABOUT WHAT DID NOT (agent walk 2, 2026-11-10): told "(with its link, if it

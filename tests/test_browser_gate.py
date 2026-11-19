@@ -289,6 +289,23 @@ class Holding(unittest.TestCase):
         self.assertEqual([json.loads(r['DraftText'])['what'] for r in self.pending()],
                          ['pays the $412.50 order on toll.example', 'closes the account on toll.example'])
 
+    def test_his_yes_to_a_press_on_a_site_stands_for_the_task_and_his_no_is_told_not_asked_again(self):
+        # ONE RULE (actrule.decide, 2026-11-19): the same press on the same site he approved on this task runs; one he dismissed is his no
+        self.held()
+        [rv] = self.pending(); p = json.loads(rv['DraftText'])
+        self.assertEqual(p['keys'], ['browser|toll.example|click the "Continue" button on toll.example'])
+        with mock.patch.object(bg, '_perform', return_value={'performed': 'done'}): bg.perform(self.s, self.tid, p)
+        self.s.decide_review(rv['ReviewId'], 'approved', None, 'owner', 'approved')
+        self.assertEqual(self.held(), {})                                              # runs: no second card
+        self.assertEqual(self.pending(), [])
+        s2 = MemoryStore(); t2 = Factory(s2).task('Pay the toll invoice')
+        self.s, self.tid = s2, t2
+        self.held(); [rv] = self.pending(); p = json.loads(rv['DraftText'])
+        with mock.patch.object(bg, '_tell'): bg.declined(self.s, self.tid, p)
+        self.s.decide_review(rv['ReviewId'], 'rejected', None, 'owner', 'dismissed')
+        self.assertIn('The owner dismissed this same step', self.held()['hookSpecificOutput']['permissionDecisionReason'])
+        self.assertEqual(self.pending(), [])
+
     def test_a_line_of_acts_is_one_ask_not_one_per_act(self):
         # 2026-11-17: a sign-up's four fills and ticks were four model calls in a row, each with the same page, before the hook could answer
         calls, ok = [], {'irreversible': False, 'sure': True, 'what': 'fills the form'}

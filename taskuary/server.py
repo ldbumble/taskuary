@@ -2561,7 +2561,7 @@ def _assistant_payload(task_id: int, session=None):
             # ...and a chat agent's question after its process idled out or the server restarted (taskstate.open_question, the owner 2026-11-07):
             # still open, and `resting` - typing answers it as the next turn, which starts the agent again
             # ...and a step handed over on a page that has closed since says so, its one press bringing it back (browsergate.shown_ask)
-            'asking': taskstate.asking(store, task, session),
+            'asking': (asking_ := taskstate.asking(store, task, session)),
             # pages its Claude session published (claude_artifacts) and files it chose to show (selfclose.SHOW_LINE) - the
             # conversation draws each in the turn that made it, by the cards' one rule (at_turn): a turn stopped or failed has no answer, and
             # its page went to the NEXT turn's (the overnight walk, 2026-11-11); lists any it cannot place at its foot
@@ -2574,9 +2574,11 @@ def _assistant_payload(task_id: int, session=None):
             # ...AND A HELD BROWSER ACT, the same way (2026-10-25): its card sat inside the hidden Close out, so the owner reached it only
             # by Stop and save - which closed the agent's browser, and then Approve said "the agent's browser is closed"
             # ...ONLY THE ONE THE LINE HAS AT ITS FRONT (cardqueue; a hard rule): one held behind it is its front's "next" and nothing more
-            'browserActs': [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' "
-                                                   "ORDER BY ReviewId", (task_id,)) if _proposals._action(r) in _proposals.HELD_ACTS
-                            and r['ReviewId'] not in _cardqueue.held(store, task_id)],
+            'browserActs': (acts_ := [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' "
+                                                             "ORDER BY ReviewId", (task_id,)) if _proposals._action(r) in _proposals.HELD_ACTS
+                                      and r['ReviewId'] not in _cardqueue.held(store, task_id)]),
+            # ...and WHETHER HE HAS A PART ON THE PAGE, said once here (taskstate.needs_owner) - the page drew its own answer from the ask's id
+            'needsOwner': taskstate.needs_owner(asking_, acts_, getattr(session, 'sid', '') if session else ''),
             # triage's reading of the thread (who asks what, the owner's part, the mails aside): None before the first verdict
             'thread': store.task_thread(task_id),
             'session': session.info(tail=3) if session else None}

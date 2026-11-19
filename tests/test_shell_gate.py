@@ -626,3 +626,12 @@ def test_a_powershell_failure_is_said_by_its_reason_never_its_position():
             "Unexpected token '-Command' in expression or statement.\n    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException\n")
     assert sg.failed(said, 1, 'push 3 commits to northwind/ledger deploy') == \
         "Push 3 commits to northwind/ledger deploy failed: Unexpected token '-Command' in expression or statement."
+
+
+# A READ-ONLY LOOK AT TASKUARY'S OWN API IS NO FILE READ (the roads audit, 2026-11-19): `curl "$TASKUARY_URL/api/..."` was held as "a path it
+# builds from a variable" - a card each time the agent looked
+def test_a_curl_of_taskuarys_own_api_reads_no_file():
+    from taskuary import readgate
+    assert readgate.command_paths('curl -s "$TASKUARY_URL/api/tasks/3"', 'C:/work/ledger') == []
+    assert readgate.command_paths('curl -s ${TASKUARY_URL}/api/tasks/3 | python -c "import json,sys"', 'C:/work/ledger') == []
+    assert readgate.command_paths('cat "$SECRETS_DIR/x"', 'C:/work/ledger') == [None]                # a variable it cannot read is still held

@@ -64,6 +64,18 @@ def asking(store, task: dict, session=None) -> dict | None:
     return browsergate.shown_ask({**q, 'resting': True}) if rests and (q := open_question(store, tid)) else None
 
 
+def needs_owner(ask: dict | None, acts: list = (), sid: str = '') -> bool:
+    """WHETHER THE OWNER HAS A PART ON THE PAGE - the one answer the task's view draws its browser by (the roads audit, 2026-11-19: the page
+    rebuilt it from the ask's id): a sign-in or a step handed over to him there, or a browser step of this session held for his press."""
+    import json
+    if (ask or {}).get('ask') in ('signin', 'turn'): return True
+    for r in acts or []:
+        try: p = json.loads(r.get('DraftText') or '{}') or {}
+        except (TypeError, ValueError): continue
+        if p.get('action') == 'browser_act' and sid and str(p.get('sid')) == str(sid): return True
+    return False
+
+
 def _chat_resting(store, t: dict) -> str | None:
     "An open chat task with no live agent: 'blocked' while its question is open, 'agentdone' once it has answered, else None."
     from .general import ASSISTANT_TYPE, handles, is_dock

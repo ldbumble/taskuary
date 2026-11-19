@@ -22,7 +22,6 @@ import {
   heldOn,
   isTurn,
   askPlaceholder,
-  needsOwner,
   wheelMessage,
 } from "../src/browserSplit.js";
 
@@ -217,12 +216,8 @@ test("an empty tab is not a page: the view folds to its chip until the agent ope
 
 // A CHAT TASK'S BROWSER (the owner, 2026-11-05): drawn only when the owner has a part on the page, and then beside the chat
 test("a chat task's browser shows only when the owner is needed, side by side", async () => {
-  const { needsOwner, quietLayout, quietRatio, CHAT_SHARE } = await import("../src/browserSplit.js");
-  assert.equal(needsOwner(null), false);                                                   // the agent just browsing
-  assert.equal(needsOwner({ request_id: "q:where" }), false);                              // a question asked in words: the chat's box
-  assert.equal(needsOwner({ ask: "signin", site: "bank.example" }), true);                   // a sign-in (or its code) the vault does not keep
-  assert.equal(needsOwner({ ask: "turn" }), true);                      // a captcha handed over
-  assert.equal(needsOwner(null, [{ id: 7 }]), true);                                       // a held step: Approve / Dismiss
+  // ...whether he is needed is the server's answer (taskstate.needs_owner, tests/test_signin.py); the page lays it out
+  const { quietLayout, quietRatio, CHAT_SHARE } = await import("../src/browserSplit.js");
   assert.equal(quietLayout(1200, false), "none");
   for (const w of [555, 600, 700, 900, 1400]) assert.equal(quietLayout(w, true), "split");     // never stacked at a desktop's width
   assert.equal(quietLayout(380, true), "chip");                                            // a phone's width: the view as a link

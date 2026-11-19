@@ -479,9 +479,15 @@ def broken(r: Run) -> list:
         if c['id'] in r.raised and c['turn'] is not None and c['turn'] != r.raised[c['id']] and (r.raised[c['id']], c['turn']) not in went:
             out.append(f"(iii) rv{c['id']} raised in turn {r.raised[c['id']] + 1} is drawn in turn {c['turn'] + 1} ({'named' if c['named'] else 'by time'})")
         if moved: out.append(f"(iii) rv{c['id']} moved between turns: {[t for t in turns if t is not None]}")
-    # ...and THE THING TO PRESS IS RIGHT ABOVE THE BOX (the owner, 2026-11-11): a waiting card's live copy stands under the newest answer
+    # ...and THE THING TO PRESS IS RIGHT ABOVE THE BOX (the owner, 2026-11-11): a waiting card's live copy stands under the newest answer - of
+    # what he said since: the log never moves a card (chatlog, SPEC D), so answers Taskuary woke with no line of his between (a failed send told
+    # back) go on under it, and a line of his greys it (proposals.move_on)
+    first = {}
+    for i, s in enumerate(ss):
+        for c in s['cards']: first.setdefault(c['id'], i)
     for i, s in enumerate(ss):
         for c in s['cards']:
+            if len(s['lines']) == len(ss[first[c['id']]]['lines']): continue
             if c['status'] == 'pending' and c.get('at') is not None and s['said'] and not s['working'] and c['at'] < len(s['said']) - 1:
                 say('iii', i, f"rv{c['id']} waits under answer {c['at'] + 1} of {len(s['said'])}")
     # (iv) a press leaves one trace where it was made (a line, or its card's own state) and reaches the agent once
@@ -491,6 +497,9 @@ def broken(r: Run) -> list:
         lines = len(b['events']) - len(a['events'])
         moved = [c['id'] for c in b['cards'] if (c['id'], c['status'], c['error']) not in {(x['id'], x['status'], x['error']) for x in a['cards']}] + ['ask'] * (a['asking'] != b['asking'])
         if lines > 1 or not (lines or moved): say('iv', i, f"the press left {lines} line(s) and moved cards {moved}")
+    # ...and a press line once drawn stays: Remind me's waited by the box for a turn its own press stopped, and was gone once it stopped
+    for i in range(1, len(ss)):
+        if len(ss[i]['events']) < len(ss[i - 1]['events']): say('iv', i, f"a press line went: {ss[i - 1]['events']} -> {ss[i]['events']}")
     # (vi) nothing left the computer without a press: every send is a Send that went
     if len(r.sent) > len([i for i in r.pressed if 'send' in ss[i]['step'] or 'Approve' in ss[i]['step']]): out.append(f"(vi) {len(r.sent)} sends for fewer presses")
     return out

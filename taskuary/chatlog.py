@@ -461,10 +461,16 @@ def pressed(store, tid: int, aid: int, action: str) -> None:
     with store.lock:
         live = store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='turn' AND Parent IS NULL AND State IN ('starting','working') "
                                 "ORDER BY Id DESC LIMIT 1", (int(tid),)).fetchone()
-    if live and action not in ENDS and m.get('press'): return
-    if live and action in ENDS: update(store, tid, live['Key'], state='stopped' if action == 'stopped_turn' else 'done')
+    # ...and so does Remind me with a day: it puts the agent to rest (remind.rest stops its turn), so no turn would ever hear it - kept for one,
+    # the line stood by the box while the turn ran and was gone the moment it stopped
+    stops = action == 'stopped_turn' or action == 'remind' and bool(_detail(store, aid).get('to'))
+    if live and not stops and action not in ENDS and m.get('press'): return
+    if live and (stops or action in ENDS): update(store, tid, live['Key'], state='stopped' if stops else 'done')
     put(store, tid, 'press' if m.get('press') else 'note', f'p:{aid}', {'at': m['createdAt'], 'text': m['content'][0]['text'],
         **({'perm': m['perm']} if m.get('perm') else {}), **({'stop': True} if action == 'stopped_turn' else {})}, src=f'audit:{aid}')
+def _detail(store, aid: int) -> dict:
+    try: return json.loads((store._one('SELECT Detail FROM audit WHERE Id=?', (int(aid),)) or {}).get('Detail') or '{}') or {}
+    except (TypeError, ValueError): return {}
 
 
 @_safe

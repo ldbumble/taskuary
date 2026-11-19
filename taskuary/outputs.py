@@ -127,6 +127,43 @@ def rel(tid: int, p: Path) -> str:
 # WHAT IT MADE IS READ WHERE IT IS (the owner, 2026-11-15: he asked for a query to review, the agent saved it as a file, and the chat held only
 # "it is ready for you to review"): a file of a kind with no viewer of its own - a query, a script, a config - that is plain text reads as text.
 # By its bytes, never its name: no list of extensions decides what can be read
+# A SMALL TEXT FILE GOES INTO THE MESSAGE OF AN AI THAT CANNOT OPEN IT (design round 3, 2026-11-18): a two-line .py on his line reached an AI
+# card as its path alone, and its agent said "I could not open the attached totals.py from here". Whole, up to TEXT_EACH, all of them up to
+# TEXT_ALL; a file that is no text (reads_as_text) or too long is left to its path, as before
+TEXT_EACH, TEXT_ALL = 20_000, 60_000
+def texts(paths) -> str:
+    "The block of the small text files among `paths`, each whole under its name - '' where none is."
+    out, room = [], TEXT_ALL
+    for raw in dict.fromkeys(map(str, paths or [])):
+        p = Path(raw)
+        try:
+            if not p.is_file() or p.stat().st_size > min(TEXT_EACH, room) or not reads_as_text(p): continue
+            body = p.read_text(encoding='utf-8', errors='replace')
+        except OSError: continue
+        out.append(f'--- {_STAMPED.sub("", p.name) or p.name} ({p}) ---\n{body.rstrip()}'); room -= len(body)
+    return ('THE TEXT OF THE FILES ABOVE, whole:\n' + '\n'.join(out)) if out else ''
+
+
+# ...AND WHAT AN AI WITH NO HANDS WRITES OUT AS A FILE IS ONE (capabilities.HANDS 'none'): asked for a spreadsheet, a card that takes no tools
+# answered with a CSV in its words and "no spreadsheet file anywhere". A fenced block whose first line names its file - ```csv file=quotes.csv -
+# is saved to the task's folder as the file a CLI would have written there (a .xlsx or .docx made real, officefiles), and named in its place
+_WRITTEN = re.compile(r'```[\w+.-]*[ \t]+file=([^\s`]+)[^\n]*\n(.*?)\n?```', re.S)
+def keep_written(tid: int, text: str) -> tuple:
+    "(`text` with each named fenced block saved to task `tid`'s folder and said as its name, the paths saved)."
+    from . import officefiles
+    saved = []
+    def save(m):
+        name = re.sub(r'[^\w .()-]', '_', Path(m.group(1)).name).strip(' .') or 'file.txt'
+        d = folder(tid); d.mkdir(parents=True, exist_ok=True)
+        p = d / name
+        try:
+            if officefiles.is_office(p): officefiles.write(p, m.group(2))
+            else: p.write_text(m.group(2) + '\n', encoding='utf-8')
+        except (OSError, ValueError): return m.group(0)
+        saved.append(str(p)); return f'**{name}** (in this task\'s files)'
+    return _WRITTEN.sub(save, str(text or '')), saved
+
+
 def reads_as_text(p: Path) -> bool:
     try: st = p.stat()
     except OSError: return False

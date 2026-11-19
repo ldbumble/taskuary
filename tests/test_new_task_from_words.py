@@ -68,6 +68,59 @@ class NewsBoxIsTheOneStartTests(unittest.TestCase):
         r = self.start('Fix the rounding bug in the ledger totals, checkout at C:/work/ledger')
         self.assertEqual(r.status_code, 200, r.text); self.assertTrue(r.json()['started'])
 
+    def test_a_fix_in_the_folder_he_names_is_made_tested_and_committed_by_the_general_agent(self):
+        """Design round 3, 2026-11-18: "Fix the rounding bug in the ledger totals - my checkout is at <path>" from New was refused on every AI
+        ("this general task has no way to switch to coding", "add your checkout as a repository"). Developer mode off, the general agent with
+        a shell is told what it can do here, reads and changes the folder he named, runs its test and commits there - his words the go-ahead."""
+        import os, subprocess, sys
+        from pathlib import Path
+        from taskuary import apiagent, browserview as bv, capabilities, llm, readgate
+        repo = Path.home() / 'work' / 'ledger'; repo.mkdir(parents=True, exist_ok=True)     # ...his own folder, outside every one the task owns
+        (repo / 'totals.py').write_text('def total(xs): return int(sum(xs))' + chr(10), encoding='utf-8')
+        (repo / 'test_totals.py').write_text(chr(10).join(['import os, sys', 'sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))',
+                                                           'from totals import total', 'assert total([1.25, 1.30]) == 2.55, total([1.25, 1.30])', '']), encoding='utf-8')
+        who = {**os.environ, 'GIT_AUTHOR_NAME': 'Alex Doyle', 'GIT_AUTHOR_EMAIL': 'alex@northwind.example', 'GIT_COMMITTER_NAME': 'Alex Doyle',
+               'GIT_COMMITTER_EMAIL': 'alex@northwind.example'}
+        git = lambda *a: subprocess.run(['git', *a], cwd=repo, capture_output=True, text=True, env=who)
+        git('init', '-q'); git('add', '.'); git('commit', '-qm', 'totals')
+        test = lambda: subprocess.run([sys.executable, '-I', str(repo / 'test_totals.py')], capture_output=True)
+        self.assertNotEqual(test().returncode, 0, 'the test fails first')
+        r = self.start(f'Fix the rounding bug in the ledger totals that is failing CI. My checkout is at {repo}')
+        tid = r.json()['taskId']
+        go = f"Set-Location -LiteralPath '{repo}'; " if os.name == 'nt' else f'cd "{repo}" && '
+        steps = [('file_read', {'path': str(repo / 'totals.py')}),
+                 ('file_edit', {'path': str(repo / 'totals.py'), 'old': 'int(sum(xs))', 'new': 'round(sum(xs), 2)'}),
+                 ('run_command', {'command': go + 'python test_totals.py', 'why': 'run the test'}),
+                 ('run_command', {'command': go + 'git commit -qam "Round totals to cents"', 'why': 'commit'})]
+        seen, said = [], []
+        class Card:
+            def chat(self, msgs, tools, max_tokens, **kw):
+                seen.append((msgs[0]['content'] + str(msgs[1]['content']), [t['function']['name'] for t in tools]))
+                said.extend(m['content'] for m in msgs[len(said) and 0:] if m.get('role') == 'tool' and m['content'] not in said)
+                if not steps: return {'content': 'Fixed: totals round to cents, the test passes, committed.'}
+                name, a = steps.pop(0)
+                return {'content': '', 'tool_calls': [{'id': f'c{len(steps)}', 'type': 'function', 'function': {'name': name, 'arguments': json.dumps(a)}}]}
+        class Shell:                       # ...the stand-in world's shell: the gate in front of it is the real one (hooks.command_gate)
+            pid = 4242
+            def __init__(self, argv, **kw):
+                line = ' '.join(map(str, argv))
+                ran = test() if 'test_totals.py' in line else git('commit', '-qam', 'Round totals to cents') if 'commit' in line else None
+                self.returncode, self.out = (ran.returncode, (ran.stdout or b'') if isinstance(ran.stdout, bytes) else str(ran.stdout or '').encode()) if ran else (1, b'?')
+            def communicate(self, timeout=None): return self.out, b''
+        session = general.GeneralSession(self.s, tid)
+        session.pick, session.provider, session.model = 'connector:1', 'Northwind AI', ''
+        with mock.patch.object(llm, 'build_llm', return_value=Card()), mock.patch.object(bv, 'installed', return_value=False), \
+             mock.patch.object(bv, 'can_set_up', return_value=False), mock.patch.object(apiagent, 'taskuary_tools', return_value=[]), \
+             mock.patch('taskuary.spawn.popen', side_effect=Shell):
+            session.send_prompt(self.s.get_task(tid)['Summary'], brief=True)
+        prompt, tools = seen[0]
+        self.assertIn(str(repo), prompt); self.assertIn(capabilities.HANDS['all'], prompt)
+        self.assertNotIn('non-coding', prompt)
+        self.assertTrue({'file_edit', 'run_command'} <= set(tools))
+        self.assertIn('def total', said[0], 'his folder is read at once, never held for a press')
+        self.assertEqual(test().returncode, 0, said)
+        self.assertIn('Round totals to cents', git('log', '-1', '--format=%s').stdout, said)
+
     def test_with_no_ai_nothing_is_made_and_the_line_carries_its_way_past(self):
         r = self.start('Find three caterers near the office', ai=False)
         self.assertEqual(r.status_code, 422); self.assertEqual(self.s.list_tasks(None), [])

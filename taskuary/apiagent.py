@@ -124,10 +124,8 @@ TOOLS_BRIEF = ("YOUR TASKUARY TOOLS are functions you call, not commands to writ
 NO_BROWSER = ('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET, so you cannot open a site this turn. Do not say '
               '"cannot be done from here" and do not ask the owner to paste the page: say in one line that the browser is not set up, and '
               'end with [[TASKUARY-ASK]] Set up the agent browser under {where} so I can do this myself?')
-NO_TOOLS = ('THIS AI CANNOT DRIVE A BROWSER (its card takes no tools). If the work needs a website - signing in to a portal, reading a '
-            'page - do not say "cannot be done from here" and do not ask the owner to paste it: do what you can without it, then end with '
-            '[[TASKUARY-ASK]] This needs an agent with a browser - connect an AI that can use tools (or Claude Code or Codex under {where}), '
-            'or switch this task to one?')
+# ...and A CARD THAT TAKES NO TOOLS is told so in the one fact of what it can do (capabilities.fact 'none'): its own line here ended every
+# answer "connect an AI that can use tools ... or switch this task to one?" - on a computer with no other AI, and on asks no browser served
 
 
 class ToolsRefused(RuntimeError): "The card's model would not take tools at all - its first call was refused."
@@ -144,7 +142,6 @@ def _where() -> str:
     from . import words
     return words.name('ai_apps')
 def no_browser_line() -> str: return NO_BROWSER.format(where=_where())
-def no_tools_line() -> str: return NO_TOOLS.format(where=_where())
 
 
 def _cut(s, n=CAP) -> str: s = str(s or ''); return s if len(s) <= n else s[:n] + f'\n... (cut at {n:,} of {len(s):,} characters - the rest is not shown)'
@@ -254,8 +251,9 @@ def _path(store, tid: int, raw) -> Path:
 
 
 def where_line(store, tid: int) -> str:
+    # ...and what it makes for him, by the CLI's own words (outputs.brief): one road for the files every agent makes, whatever runs it
     from . import outputs
-    return f'YOUR WORKING FOLDER is {workdir(store, tid)}. Files you make for the owner go in {outputs.folder(tid)}.'
+    return f'YOUR WORKING FOLDER is {workdir(store, tid)}.\n\n{outputs.brief(tid)}'
 
 
 def env_of(store, tid: int, sid: str) -> dict:

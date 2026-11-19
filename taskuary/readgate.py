@@ -44,7 +44,34 @@ def own(store, tid, cwd: str = '') -> list:
         # is its own work - timed on a long task, 2026-11-16: a grep over its mail's files was refused as Taskuary's data, and it worked around
         ms = store.list_messages(int(tid))
         rs += [a['Path'] for m in ms for a in store.list_attachments(m['MessageId']) if a.get('Path')] + [config.home() / 'attachments' / str(int(m['MessageId'])) for m in ms]
-    return [_n(r) for r in dict.fromkeys(map(str, rs + checkouts(store))) if r]
+    return [_n(r) for r in dict.fromkeys(map(str, rs + checkouts(store) + named(store, tid))) if r]
+
+
+# A FOLDER THE OWNER NAMES IS HIS GO-AHEAD (design round 3, 2026-11-18: "fix the rounding bug - my checkout is at <path>" from New, and the
+# agent's every read there would have stood as a card asking him to let it read the folder he had just pointed it at). The paths in his own
+# words on the task - what he typed in New, his lines in its chat - found by their shape (drive-rooted, ~ or /), each the longest stretch of
+# his words that is a folder or a file here (a file: its folder). Never a place the never-list keeps: his naming it does not open it
+_PATHISH = re.compile(r'(?<![\w/\\])(?:[A-Za-z]:[\\/]|~[\\/]|/(?=\w))')
+def named(store, tid) -> list:
+    "The folders the owner named in his own words on task `tid` that exist here."
+    if store is None or not str(tid or '').isdigit(): return []
+    from . import floor, general
+    t = store.get_task(int(tid)) or {}
+    said = [str(t.get('Summary') or '')] if t.get('OriginBase') == 'owner' else []
+    said += [str(c.get('Body') or '') for c in store.list_comments(int(tid), internal=True) if c.get('ActorType') == general.USER_TYPE and not general.is_brief(c)]
+    nev, out = [_n(p) for p in floor.kept_secret()], []
+    for text in said:
+        for line in text.splitlines():
+            for m in _PATHISH.finditer(line):
+                words = line[m.start():].split(' ')
+                for k in range(len(words), 0, -1):           # ...the longest stretch first: a folder's name may hold a space
+                    p = Path(' '.join(words[:k]).rstrip('.,;:)"\'`').strip('"\'`')).expanduser()
+                    try: d = p if p.is_dir() else p.parent if p.is_file() else None
+                    except OSError: d = None
+                    if d is None: continue
+                    if not any(_in(_n(d), r) for r in nev): out.append(str(d))
+                    break
+    return list(dict.fromkeys(out))
 
 
 def checkouts(store) -> list:

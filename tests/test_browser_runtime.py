@@ -168,7 +168,7 @@ class TheCardAgentTests(unittest.TestCase):
         self.assertIn('PAGE https://portal.example/', brain.seen[1][2]['content'])
         said = [e['detail'] for e in sess.trace if e['type'] == 'progress' and e['name'] == 'browser']
         self.assertTrue(any('downloading Chrome' in str(d) for d in said), sess.trace)
-        self.assertFalse(any(general.NO_BROWSER_LINE in str(e.get('detail')) for e in sess.trace), 'the AI was never the problem')
+        self.assertFalse(any("This AI can't use the browser" in str(e.get('detail')) for e in sess.trace), 'the AI was never the problem')
 
     def test_a_download_that_cannot_be_made_reaches_the_agent_with_its_real_reason(self):
         why = 'agent-browser could not be downloaded (GitHub: refused; npm: refused) - check the internet connection, a VPN, or a company firewall'

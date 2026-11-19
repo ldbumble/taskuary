@@ -81,3 +81,48 @@ def capabilities(store) -> dict:
     """{"coding", "ai", "mail", "send": {channel: bool}} - the one answer, for the server and the page alike."""
     return {'coding': can_code(store), 'ai': has_ai(store), 'mail': has_mail(store),
             'send': {ch: can_send(store, ch) for ch in channels()}}
+
+
+# ── WHAT THIS AGENT CAN DO HERE, said to it each turn (design round 3, 2026-11-18) ──────────────────────────────────────────────────────
+# "Fix the rounding bug in <his checkout>" was refused on every AI: "this general task has no way to switch to coding", "add your checkout as a
+# repository" - an agent with a shell, told only that it did "non-coding work", named buttons that do not exist and never the one switch that
+# does. One fact, read from the state the app itself goes by - its hands, the other AIs he could hand it to, Developer mode - and nothing else
+# says it: never a button, a setting or an AI that is not here.
+FACT_HEAD = "WHAT YOU CAN DO HERE (this computer as it is now - never name a button, setting or AI that is not in this list):"
+HANDS = {
+    'all': ('A shell and files on this computer: a folder the owner names on this task is yours to read and change - for a fix in code there, '
+            'make the change, run its tests and commit it there. A push or anything else that leaves this computer becomes his card when you run it.'),
+    'look': ("Reading only: you read files and look things up, and change and run nothing - his setting "
+             "[General agents can](#settings=config&group=Agent%20permissions&key=general_agent_hands) is 'only look things up'."),
+    'none': ('Words only: this AI takes no tools, so you open no file, page or system and run nothing - you have what this conversation holds. '
+             'A file he asks for (a sheet, a document, code) you write whole in a fenced block whose first line names it - ```csv file=quotes.csv, '
+             '```xlsx file=quotes.xlsx with `a | b | c` rows - and Taskuary saves it to the task\'s files.'),
+}
+
+
+def other_ais(store, pick: str = '', clis: bool = False) -> list:
+    """The AIs ready here besides `pick`, by the names the task's Agent menu shows them (general.provider_options): a CLI only where it starts
+    on this computer and its last test did not fail (agents.ready_brains) - the menu lists every one connected, installed or not. `clis`: those
+    alone (what drives a browser whatever its model)."""
+    from . import agents, general
+    if store is None: return []
+    ready = {f'cli:{k}' for k in _safe(lambda: agents.ready_brains(store), [])}
+    return [o['label'] for o in _safe(lambda: general.provider_options(store), [])
+            if o.get('pick') != pick and (o['pick'] in ready if o.get('type') == 'cli' else not clis)]
+
+
+def fact(store, hands: str, pick: str = '') -> str:
+    """WHAT THIS AGENT CAN DO HERE, in one block: `hands` 'all' (a shell and files), 'look' (reads only) or 'none' (a card that takes no
+    tools); the AIs the owner could hand it to instead, from his own menu; Developer mode, as it stands. Said where every turn's late facts
+    are (general), so a change - a switch flipped, an AI connected - reaches a conversation under way."""
+    from . import agents
+    others = other_ais(store, pick)
+    dev = agents.developer_mode(store)
+    out = [FACT_HEAD, f'- {HANDS.get(hands, HANDS["none"])}',
+           f"- Another AI could do this task: {', '.join(others)} - he picks it in the Agent menu on this task." if others else
+           '- No other AI is connected here: never offer to switch this task to one.',
+           '- Developer mode is on: coding tasks also run in a terminal of their own.' if dev else
+           '- Developer mode is off ([Settings](#settings=config&group=Agent%20permissions&key=developer_mode)): it adds coding tasks in a terminal '
+           'of their own' + (' - a change in a folder he names needs none of it.' if hands == 'all' else '.')]
+    # ...and Developer mode only where it would give him something: with no AI CLI here it starts no coding task (agents.coding_ready)
+    return '\n'.join(out if _safe(lambda: agents.cli_ready(store)) else out[:-1])

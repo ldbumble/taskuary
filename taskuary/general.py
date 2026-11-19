@@ -163,6 +163,16 @@ def failed_line(body: str) -> tuple:
     return (head.strip(), tail[len(FAILED_MARK):].strip()) if tail.startswith(FAILED_MARK) and '\n' not in tail.strip() else (str(body or ''), '')
 
 
+# ...AND THE SAME FAILURE IS ONE FAILURE (the API walk, 2026-11-18): while the AI's provider was down every line he typed filed another
+# "⚠ ... over its quota (429)" under it. A turn that did nothing and failed as the newest answer on the task already says is not filed again:
+# that one stands, with its Try again (the page), and his lines since are the next try's to hear
+def same_failure(store, tid: int, trace: list, why: str) -> bool:
+    from . import sessionrecord
+    if sessionrecord.said(trace) or any(e.get('type') == 'tool_call' for e in trace): return False
+    last = next((c for c in reversed(store.list_comments(tid, internal=True)) if c.get('ActorType') == ASSISTANT_TYPE), None)
+    return bool(last) and failed_line(last.get('Body')) == ('', why)
+
+
 def file_turn(store, tid: int, trace: list, line: str) -> int:
     """A TURN THAT ENDED WITHOUT ITS ANSWER - cut by a restart, or failed under its CLI - filed as its answer: what it said, its steps (its
     trace's), its files, and one closing line. One road for both: the chat draws it where it stood, and the agent reads it next turn."""
@@ -498,7 +508,11 @@ def browser_offered(store, tid: int, pick: str) -> bool:
         logger.debug(f'general: browser not offered on task {tid} - {e}'); return False
 
 
-NO_BROWSER_LINE = "This AI can't use the browser - pick an AI CLI such as Claude Code or Codex to let it."
+def no_browser_line(store, pick: str) -> str:
+    "The line on screen where a card that takes no tools was asked for a browser: the AIs really here that could, or none (capabilities.other_ais)."
+    from .capabilities import other_ais
+    others = other_ais(store, pick, clis=True)
+    return "This AI can't use the browser" + (f" - {', '.join(others)} can: pick it in the Agent menu." if others else '.')
 
 
 def walk_pick(store, task: dict = None) -> str:
@@ -1623,8 +1637,10 @@ HUB_LINE = ('The Hub is a high-signal commons, not a task log. Only file a reusa
 # goal?"): every press on a card it set up wakes it (approved), so a step that waits on the owner ends its turn on that card, saying what follows
 # WHAT ITS WORK IS, said once: general work - or, for a coding task on an AI card (on_card), the coding itself. That one was told "non-coding
 # work ... do not turn this into a coding task" over CODING.md's rules, a checkout and a shell (the agent map, 2026-11-10)
-GENERAL_WHO = ("Do its non-coding work - research, planning, writing, marketing, operations - never as a coding task or by instructing a "
-               "coding CLI. The task and source material below are authoritative; be direct and useful.")
+# ...and general work is whatever the task asks, with what the agent has (design round 3, 2026-11-18): told "non-coding work ... never as a
+# coding task", an agent with a shell refused a two-line fix in the folder the owner named. What it has is its own fact (capabilities.fact)
+GENERAL_WHO = ("Do its work - research, planning, writing, operations, and a change to files or code where the owner points you - with the "
+               "tools you have. The task and source material below are authoritative; be direct and useful.")
 CODING_WHO = ("This is coding work and you are the one doing it, with your own tools, in your working folder: read the code before you change "
               "it, make the change, and run what proves it. The task and source material below are authoritative. Be direct and useful.")
 FINISH_LINE = ("Finish the job in this turn: only the owner's next message, a check-back you set (CHECK BACK LATER) or their press on "
@@ -3065,6 +3081,10 @@ class GeneralSession:
                 from . import origin
                 try: hands = origin.launch_mode(self.store, self.task_id, _cli_of_pick(self.store, self.pick)) != 'look'
                 except origin.Refusal: pass                 # ...its run refuses it, and says so where it starts (llm.make_cli_llm)
+            # ...and WHAT IT CAN DO HERE, in one fact (capabilities.fact) - on a CLI here, on a card below, where it knows what the card takes
+            from . import capabilities
+            told = not is_dock(self.store.get_task(self.task_id)) and _origin_of(self.store, self.task_id) != 'stranger'
+            if told and self.pick.startswith('cli:'): late.append(capabilities.fact(self.store, 'all' if hands else 'look', self.pick))
             # ...and with no shell, its to-dos are ticked by a mark in the reply (selfclose.tick_markers), never a command it cannot run
             if not hands and self.store.task_checklist(self.task_id): late.append(_sc.TICK_CHAT_LINE)
             # ...ONE WAY TO WRITE A REPLY (2026-11-09): a session with Taskuary's own tools (agenttools.session_args: Claude and Codex, with
@@ -3152,7 +3172,7 @@ class GeneralSession:
             brain = llm_mod.build_llm(self.store, **build_args, job='quick_work') if quick else llm_mod.build_llm(self.store, **build_args, job='general')
             if not brain: raise RuntimeError('the AI chosen for this is not available - pick another, or connect it again')
             from . import apiagent
-            looped, api_tools, api_box, toolbox = False, None, (), apiagent.TOOLS_BRIEF
+            looped, api_tools, api_box, toolbox, card_fact = False, None, (), apiagent.TOOLS_BRIEF, None
             if api_hands:
                 # THE CLI'S TOOLBOX ON AN API CARD (the owner, 2026-11-09: "make sure hipaa thing matches capabilities of claude cli"): Taskuary's
                 # own tools through the same gated server a CLI session reaches (apiagent.tools_for), and the browser on the owner's own task.
@@ -3188,8 +3208,13 @@ class GeneralSession:
                     system = f'{system}\n\n{apiagent.BRIEF}'
                 elif not stranger:
                     # ...and where it cannot, the next real step as the owner's question - never "cannot be done from here" (2026-11-09)
-                    if self.browser_wanted and not apiagent.can(brain): self._remember_trace('progress', 'browser', NO_BROWSER_LINE)     # true of a card that takes no tools, and only of it
-                    system = f'{system}\n\n{apiagent.no_browser_line() if apiagent.can(brain) else apiagent.no_tools_line()}'
+                    if self.browser_wanted and not apiagent.can(brain): self._remember_trace('progress', 'browser', no_browser_line(self.store, self.pick))     # true of a card that takes no tools, and only of it
+                    if apiagent.can(brain): system = f'{system}\n\n{apiagent.no_browser_line()}'
+                # ...and WHAT IT CAN DO HERE (capabilities.fact): a card that takes no tools hears it has words alone, and only the AIs really here
+                if not stranger:
+                    from . import capabilities
+                    card_fact = lambda tooled: capabilities.fact(self.store, ('all' if full_hands(self.store) else 'look') if tooled else 'none', self.pick)
+                    late.append(card_fact(looped))
             kept_conv = bool(self.cli_sid or (looped and self.card_msgs))
             if kept_conv and self.frozen is None: self.frozen = self._told()
             head, system, news = system, *freeze(self, system, [*late, unlearned(self.store, self.frozen)] if kept_conv else late, kept_conv, by_line=True)
@@ -3222,6 +3247,12 @@ class GeneralSession:
             def files(u):
                 named = {str(Path(f).resolve()) for part in u.split('\n\n') for f in split_files('\n\n' + part)['files']}
                 return with_files('', rest) if (rest := [r for p in paths if (r := str(Path(p).resolve())) not in named]) else ''
+            # ...and to an AI card asked the plain way - no hands to open a file - the small text files among them whole (outputs.texts): this
+            # turn's own, and the task's on a conversation's first turn
+            from . import outputs
+            def texts(u):
+                named = [f for part in u.split('\n\n') for f in split_files('\n\n' + part)['files']]
+                return f'\n\n{t}' if (t := outputs.texts([*named, *([] if kept_conv else paths)])) else ''
             limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS
             def ask(brain, user):
                 "The turn, asked of this brain: with its tools where it takes them (apiagent.turn), else the plain way."
@@ -3232,9 +3263,13 @@ class GeneralSession:
                                                   ear=self.keep()) or '').strip()
                     except apiagent.ToolsRefused as e:
                         logger.info(f'task {self.task_id}: {self.provider} took no tools - asked the plain way ({str(e)[:160]})')
-                        looped, system = False, f"{system.replace(apiagent.BRIEF, '').replace(toolbox, '')}\n\n{apiagent.no_tools_line()}"
+                        looped, system = False, system.replace(apiagent.BRIEF, '').replace(toolbox, '')
+                        if card_fact: system = system.replace(card_fact(True), card_fact(False))
+                if card_fact: user += texts(user)
                 with llm_mod.watching(visible):          # an API brain's own web searches are steps too (llm.watching)
-                    return str(brain(system, user, max_tokens=limit, images=_images(paths), **_web(brain)) or '').strip()
+                    said = str(brain(system, user, max_tokens=limit, images=_images(paths), **_web(brain)) or '').strip()
+                # ...and a card with no hands writes a file out in its words: saved as one (outputs.keep_written), as a CLI's would be
+                return outputs.keep_written(self.task_id, said)[0] if card_fact else said
             try: reply = ask(brain, user + files(user))
             except Exception as e:
                 # the CLI could not pick that conversation back up (it was restarted, its history
@@ -3329,7 +3364,9 @@ class GeneralSession:
             # ...and one that failed is filed where it happened, with what it did and why it ended (file_turn) - before its run reads failed
             if not stopped and not is_dock(self.store.get_task(self.task_id)):
                 from . import funnel
-                try: file_turn(self.store, self.task_id, [x for x in self.trace if x.get('type') != 'error'], FAILED_MARK + funnel.failure(said[:4000], self.task_id)['sentence'])
+                try:
+                    kept, why = [x for x in self.trace if x.get('type') != 'error'], funnel.failure(said[:4000], self.task_id)['sentence']
+                    if not same_failure(self.store, self.task_id, kept, why): file_turn(self.store, self.task_id, kept, FAILED_MARK + why)
                 except Exception as skipped: logger.warning(f'task {self.task_id}: the failed turn was not filed - {skipped}')
             try:
                 from . import workerstate as ws

@@ -508,7 +508,8 @@ class TheSessionTests(unittest.TestCase):
             def __call__(self, system, user, **kw): seen.append(system); return 'Here is what I can do without a browser.'
             def chat(self, *a, **kw): raise RuntimeError('hipaa_ai error 400 at https://gateway.example: tools are not supported')
         self._turn(Brain())
-        self.assertIn('THIS AI CANNOT DRIVE A BROWSER', seen[0])
+        from taskuary import capabilities
+        self.assertIn(capabilities.HANDS['none'], seen[0]); self.assertNotIn(capabilities.HANDS['all'], seen[0])
         self.assertNotIn(apiagent.BRIEF, seen[0])
 
     def test_the_clis_toolbox_rides_with_the_browser(self):
@@ -563,12 +564,59 @@ class TheSessionTests(unittest.TestCase):
         self.assertIn('NO BROWSER FOR AGENTS YET', system)
         self.assertNotIn('browser_open', names)
 
-    def test_a_card_that_takes_no_tools_asks_for_the_next_real_step(self):
+    def test_a_small_text_file_reaches_a_card_whole_and_a_sheet_it_writes_out_is_a_file(self):
+        """The API walk, 2026-11-18: a two-line totals.py on his line reached the card as a path ("I could not open the attached totals.py from
+        here"), and a spreadsheet asked of it was a CSV in its words - "no spreadsheet file anywhere". The file's text rides in the message,
+        and a block it writes out under a file name is saved to the task's files."""
+        from taskuary import config, general, outputs
+        up = config.home() / 'attachments' / 'line' / 'totals.py'; up.parent.mkdir(parents=True, exist_ok=True)
+        up.write_text('def total(xs):' + chr(10) + '    return int(sum(xs))' + chr(10), encoding='utf-8')
+        heard = []
+        def brain(system, user, **kw):
+            heard.append(user)
+            return 'Here are the quotes.' + chr(10) + '```xlsx file=quotes.xlsx' + chr(10) + 'Caterer | Per head' + chr(10) + 'Ray\'s Kitchen | 42' + chr(10) + '```'
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Caterers for the offsite', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        session = general.GeneralSession(s, tid)
+        session.pick, session.provider, session.model = 'connector:1', 'HIPAA AI', ''
+        with mock.patch.object(llm, 'build_llm', return_value=brain), mock.patch.object(bv, 'installed', return_value=False), \
+             mock.patch.object(bv, 'can_set_up', return_value=False):
+            session.send_prompt(general.with_files('why does this round wrong? and price three caterers as a sheet', [str(up)]), echo=False)
+        self.assertIn('    return int(sum(xs))', heard[0])
+        self.assertTrue((outputs.folder(tid) / 'quotes.xlsx').is_file())
+        said = [c['Body'] for c in s.list_comments(tid) if c['ActorType'] == general.ASSISTANT_TYPE][-1]
+        self.assertIn('quotes.xlsx', said); self.assertNotIn('```', said)
+
+    def test_while_the_provider_is_down_the_failure_is_said_once(self):
+        """The API walk, 2026-11-18: during the provider's outage every line he typed added another "⚠ ... over its quota (429)" to the chat.
+        The same failure on a turn that did nothing is the one failure already standing - his lines since wait for the next try."""
+        from taskuary import general
+        class Down:
+            def chat(self, *a, **kw): raise RuntimeError('hipaa_ai error 429 at https://gateway.example: over its quota at the provider')
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Weekly spend summary', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        session = general.GeneralSession(s, tid)
+        session.pick, session.provider, session.model = 'connector:1', 'HIPAA AI', ''
+        with mock.patch.object(llm, 'build_llm', return_value=Down()), mock.patch.object(bv, 'installed', return_value=False), \
+             mock.patch.object(bv, 'can_set_up', return_value=False), mock.patch.object(apiagent, 'taskuary_tools', return_value=[]):
+            for line in ('set up the Monday summary', 'any luck?', 'Try again.'):
+                session = general.GeneralSession(s, tid); session.pick, session.provider, session.model = 'connector:1', 'HIPAA AI', ''
+                try: session.send_prompt(line, echo=False)
+                except Exception: pass
+        failed = [c for c in s.list_comments(tid) if c['ActorType'] == general.ASSISTANT_TYPE and general.failed_line(c['Body'])[1]]
+        self.assertEqual(len(failed), 1, [c['Body'] for c in failed])
+
+    def test_a_card_that_takes_no_tools_is_offered_only_the_ways_that_are_here(self):
+        """The API walk, 2026-11-18: every answer of a card that takes no tools ended "connect an AI that can use tools ... or switch this task
+        to one?" - with no other AI on the computer, and on asks no browser served. It is told it has words alone, and the AIs really here."""
+        from taskuary import capabilities
         seen = []
-        def brain(system, user, **kw): seen.append(system); return 'I need a browser.\n[[TASKUARY-ASK]] Connect an agent with a browser?'
-        s, tid = self._turn(brain)
-        self.assertIn('THIS AI CANNOT DRIVE A BROWSER', seen[0])
-        self.assertNotIn(apiagent.BRIEF, seen[0])
+        def brain(system, user, **kw): seen.append(system); return 'Here is the plan.'
+        with mock.patch.object(capabilities, 'other_ais', return_value=[]): self._turn(brain)
+        self.assertIn(capabilities.HANDS['none'], seen[0]); self.assertIn('No other AI is connected here', seen[0])
+        self.assertNotIn('switch this task to one?', seen[0]); self.assertNotIn(apiagent.BRIEF, seen[0])
+        with mock.patch.object(capabilities, 'other_ais', return_value=['Claude Code']): self._turn(brain)
+        self.assertIn('Another AI could do this task: Claude Code - he picks it in the Agent menu on this task.', seen[1])
 
 
 class TheToolboxTests(unittest.TestCase):
@@ -1012,7 +1060,7 @@ class CodingOnACardTests(unittest.TestCase):
     def test_it_is_told_this_is_coding_and_where_it_works_as_its_cli_is(self):
         import tempfile
         self.s.add_comment(self.tid, 'owner', self.g.USER_TYPE, 'fix it')
-        self.assertIn('non-coding work', self.g._prompt(self.s, self.tid)[0])              # ...general work still is
+        self.assertIn(self.g.GENERAL_WHO, self.g._prompt(self.s, self.tid)[0])          # ...general work still is
         self.g.ON_CARD.add(self.tid)
         system, user = self.g._prompt(self.s, self.tid)
         self.assertIn(self.g.CODING_WHO, system)

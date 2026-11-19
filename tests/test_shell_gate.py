@@ -142,7 +142,7 @@ class Holding(unittest.TestCase):
         with mock.patch.object(sg.os.path, 'isdir', self.held_dir), run:
             out = verdicts.decide(self.s, rv, 'approve')
         self.assertFalse(out['ok']); self.assertIn('non-fast-forward', out['send_error'])
-        self.assertTrue(out['send_error'].startswith('The held step failed: '), out['send_error'])
+        self.assertTrue(out['send_error'].startswith("Push the agent's commits out of this computer failed: "), out['send_error'])     # what did not happen, in his words
         with mock.patch.object(sg.os.path, 'isdir', return_value=False):
             self.assertRaisesRegex(RuntimeError, 'folder it was held in is gone', sg.perform, self.s, self.tid, json.loads(rv['DraftText']))
 
@@ -601,3 +601,28 @@ class TwoGatesAtOnce(unittest.TestCase):
             for t in ts: t.start()
             for t in ts: t.join(10)
         self.assertEqual(len(s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))), 1)
+
+
+# ── AN APPROVE RUNS THE CALL AS THE AGENT'S OWN TOOL WOULD HAVE (the owner's live task, 2026-11-19): Codex reported its push as the shell it
+# started on a line - `"<powershell.exe>" -Command '...'` - and Approve wrapped that line in PowerShell again, which read the quoted program and
+# its -Command as one expression: every press "failed: At line:1 char:66"
+def test_a_held_line_replays_in_the_shell_it_was_written_for():
+    ps = '"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command \'git push origin HEAD:refs/heads/deploy\''
+    a = sg.replay({'command': ps, 'shell': 'PowerShell'})
+    assert sg._name(a[0]) in ('powershell', 'pwsh') and a[1:] == ['-Command', 'git push origin HEAD:refs/heads/deploy']
+    bash = 'cd ../ledger && git push origin "$(git rev-parse --abbrev-ref HEAD)"'
+    with mock.patch.object(sg, 'git_bash', return_value='/usr/bin/bash'):
+        assert sg.replay({'command': bash, 'shell': 'Bash'}) == ['/usr/bin/bash', '-c', bash]
+        assert sg.replay({'command': "bash -lc 'git push origin main'", 'shell': 'PowerShell'}) == ['/usr/bin/bash', '-lc', 'git push origin main']
+    own = 'Get-ChildItem | Remove-Item -Recurse'
+    assert sg.replay({'command': own, 'shell': 'PowerShell'})[-2:] == ['-Command', own]
+    # ...and the argv a brain gave as a list (Codex) is that argv, the program found where it was named
+    with mock.patch.object(sg, '_shell_exe', return_value='C:/pwsh.exe'):
+        assert sg.replay({'command': 'x', 'argv': ['powershell.exe', '-Command', 'git push']}) == ['C:/pwsh.exe', '-Command', 'git push']
+
+
+def test_a_powershell_failure_is_said_by_its_reason_never_its_position():
+    said = ("At line:1 char:66\n+ \"C:\\WINDOWS\\powershell.exe\" -Command 'git push'\n+                ~~~~~~~~\n"
+            "Unexpected token '-Command' in expression or statement.\n    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException\n")
+    assert sg.failed(said, 1, 'push 3 commits to northwind/ledger deploy') == \
+        "Push 3 commits to northwind/ledger deploy failed: Unexpected token '-Command' in expression or statement."

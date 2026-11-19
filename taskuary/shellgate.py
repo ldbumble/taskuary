@@ -330,7 +330,8 @@ def _outward(cmd: str, own: bool = True) -> list:
         if not what and tool in ('gh', 'glab') and w[:1] == ['api'] and _api_writes(argv): what = 'change something on the code host through its API'
         if not what and tool == 'git' and w[:1] == ['push']: what = GIT['push']
         if not what and tool in HTTP: what = _http_write(argv, own)
-        if what: out.append({'tool': tool, 'what': what, 'why': OUT, 'command': ' '.join(argv)[:400], 'to': '?' if moved else _to(tool, whole, w)})
+        if what: out.append({'tool': tool, 'what': what, 'why': OUT, 'command': ' '.join(argv)[:400], 'to': '?' if moved else _to(tool, whole, w),
+                             **({'refs': w[2:]} if tool == 'git' and w[:1] == ['push'] else {})})
     return out
 
 
@@ -356,9 +357,13 @@ def _to(tool: str, argv: list, w: list) -> str:
     env = {t.split('=', 1)[0].upper() for t in a if re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', t)}
     if env & {'GIT_DIR', 'GIT_WORK_TREE', 'GH_REPO', 'GH_HOST', 'GITLAB_HOST'}: return '?'
     if tool == 'git':
-        if any(t in ('-C', '--git-dir', '--work-tree') or t.startswith(('--git-dir=', '--work-tree=', '--repo', '--receive-pack', '--exec')) for t in a): return '?'
+        if any(t in ('--git-dir', '--work-tree') or t.startswith(('--git-dir=', '--work-tree=', '--repo', '--receive-pack', '--exec')) for t in a): return '?'
+        # ...`git -C <folder>` runs in that folder: '@<folder>', its own origin read where it is checked (trusted) - a worktree of the same repo
+        # is the same repo (the owner's live task, 2026-11-19: every push from the agent's worktree was a card on a repo he trusts)
+        at = [a[i + 1] for i, t in enumerate(a[:-1]) if t == '-C']
+        if len(at) > 1 or (at and re.search(r'[$`(%]', at[0])): return '?'
         remote = w[1] if len(w) > 1 else ''
-        if remote in ('', 'origin'): return ''
+        if remote in ('', 'origin'): return '@' + at[0] if at else ''
         h, r = host_repo(remote) if re.match(r'^([a-z][a-z0-9+.-]*://|[^@/\s]+@)', remote, re.I) else ('', '')
         return r if h in HOSTS and r else '?'
     named = [a[i + 1] for i, t in enumerate(a[:-1]) if t in ('-R', '--repo')] + [t.split('=', 1)[1] for t in a if t.startswith('--repo=')]
@@ -447,11 +452,21 @@ def card_host(card: dict) -> str:
 HOSTS = {'github.com', 'gitlab.com'}
 
 
+def folder(cwd: str, to: str) -> str:
+    "The folder a step runs in: `cwd`, or the one its `git -C` names ('@<folder>', _to) read against it."
+    return os.path.normpath(os.path.join(cwd, _path(str(to)[1:]))) if str(to).startswith('@') and cwd else cwd
+
+
 def trusted(store, cwd: str, todo: list) -> str:
     "The repo whose card's Authority covers every step in `todo` - '' when any step is not covered."
+    from . import scopes
+    # ...an unset Authority is what the card SHOWS it to be (scopes.scope_of: full) - read here as 'read', every push of the owner's live task on
+    # a card he left at its default was a card of its own (2026-11-19). One reading of a card's Authority, the same as every tool call's
+    level = lambda c: RANK.get(scopes.scope_of(c or {}), 0)
     # ...asked of git only when some code-host card trusts its repos at all: a command on a machine with none never runs `git remote`
     srcs = [s for s in store.list_sources(active_only=False) if s.get('Channel') in ('github', 'gitlab') and s.get('ConnectorId')]
-    if not any(RANK.get(str((store.get_connector(s['ConnectorId']) or {}).get('Scope') or 'read').lower(), 0) >= 1 for s in srcs): return ''
+    if not any(level(store.get_connector(s['ConnectorId'])) >= 1 for s in srcs): return ''
+    if any(a.get('why') != OUT for a in todo): return ''
     # ...WHERE A PUSH GOES, not what the fetch URL says: origin's push URLs, every one of them on the card's own host. An origin that only
     # mentions a code host (`https://evil.example/github/northwind/ledger.git`) or a pushurl set apart from it is not that repository
     got = set(_remote(cwd, push=True))
@@ -460,23 +475,33 @@ def trusted(store, cwd: str, todo: list) -> str:
     src = next((s for s in srcs if str(s.get('Address') or '').lower() == repo.lower()), None)
     card = store.get_connector(src['ConnectorId']) if src else None
     if not card or host not in (card_host(card), 'ssh.' + card_host(card)): return ''
-    level = RANK.get(str(card.get('Scope') or card.get('ScopeDefault') or 'read').lower(), 0)
-    ok = ADMIN_OK if level >= 2 else WRITE_OK if level >= 1 else set()
-    return repo if all(a.get('what') in ok and a.get('why') == OUT and str(a.get('to', '?')).lower() in ('', repo.lower()) for a in todo) else ''
+    lv = level(card)
+    ok = ADMIN_OK if lv >= 2 else WRITE_OK if lv >= 1 else set()
+    def same(to):
+        to = str(to if to is not None else '?')
+        if to.startswith('@'): return set(_remote(folder(cwd, to), push=True)) == {(host, repo)}
+        return to.lower() in ('', repo.lower())
+    return repo if all(a.get('what') in ok and same(a.get('to', '?')) for a in todo) else ''
 
 
-def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '', ask: bool | str = False, about: str = '', reads: list = ()) -> dict:
+def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '', ask: bool | str = False, about: str = '', reads: list = (),
+          argv: list = None) -> dict:
     """The hook's answer for one shell command: {} lets it run; `ask` (asks) hands it to the CLI's own prompt (never an allow); else a
     refusal holds it and puts the step on the task. ONE step holds the whole command - the line is the agent's, and half of it is not what it asked.
     `about`: the agent's own words for the call (a CLI's shell tool takes a `description`) - the card leads with them (the owner, 2026-11-09)
-    `reads`: what it reads outside its work (readgate.judge) - held on the same card; Approve also lets the task read those folders."""
+    `reads`: what it reads outside its work (readgate.judge) - held on the same card; Approve also lets the task read those folders.
+    `argv`: the call as the brain's own tool made it, where it gave a list (Codex) - replayed as it is on Approve (replay)."""
     todo = (acts(cmd, cwd) if cmd else []) + list(reads or [])
     if not todo: return {}
-    what, why = ('; '.join(dict.fromkeys(a[k] for a in todo)) for k in ('what', 'why'))
-    if (repo := trusted(store, cwd, todo)):
-        store.audit('task', tid, 'shell_act_trusted', 'taskuary', 'system', {'tools': [a['tool'] for a in todo], 'what': what, 'repo': repo})
-        store.add_comment_once(tid, 'taskuary', 'agent', f"The agent went on to {what} on {repo} - a repo you trust to act on its own.")
+    from . import actrule
+    # ...THE ONE RULE FIRST (actrule.decide): a repo he trusts, or the same step he already approved on this task, runs; one he dismissed is his no
+    how, said = actrule.decide(store, tid, todo, cwd)
+    if how in ('trusted', 'approved'):
+        store.audit('task', tid, f'shell_act_{how}', 'taskuary', 'system', {'tools': [a['tool'] for a in todo], 'what': '; '.join(a['what'] for a in todo)})
+        if said: store.add_comment_once(tid, 'taskuary', 'agent', said)
         return {}
+    if how == 'dismissed': return _deny(said)
+    what, why = ('; '.join(dict.fromkeys(a[k] for a in todo)) for k in ('what', 'why'))
     if ask:
         store.audit('task', tid, 'shell_act_asked', 'taskuary', 'system', {'tools': [a['tool'] for a in todo], 'what': what})
         # ...said only where a terminal does ask (agent walk 2, 2026-11-10: the line stood on a task whose agent has no terminal, over a
@@ -494,7 +519,10 @@ def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '
             from . import proposals
             proposals.queue(store, tid, {'action': 'shell_act', 'sid': str(sid), 'turn': turn_of(store, tid), 'command': str(cmd)[:4000], 'shell': shell, 'cwd': cwd or '',
                                          # the card's In: the folder a delete aims at, never the agent's own scratch folder it ran from
-                                         'what': what, 'why': why, 'where': next((a['where'] for a in todo if a.get('where')), ''),
+                                         # ...a push named by its repo and branch, in his words (actrule.words), and what his answer is remembered by
+                                         'what': '; '.join(dict.fromkeys(actrule.words(a, cwd) for a in todo)), 'why': why,
+                                         'where': next((a['where'] for a in todo if a.get('where')), ''), 'keys': actrule.keys(todo, cwd),
+                                         **({'argv': [str(x) for x in argv]} if argv else {}),
                                          **({'reads': folders} if folders else {}),
                                          **({'about': ' '.join(str(about).split())[:300]} if str(about or '').strip() else {})}, 'agent')
             store.audit('task', tid, 'shell_act_held', 'taskuary', 'system', {'tools': [a['tool'] for a in todo], 'what': what})
@@ -530,17 +558,69 @@ def git_bash() -> str:
     return next((c for c in cands if c and os.path.isfile(c)), '')
 
 
-def _argv(shell: str, cmd: str) -> list:
-    "The held command in the shell it was written in: the agent's PowerShell tool in PowerShell, its Bash tool in Git Bash (the system bash off Windows)."
-    if str(shell).lower() == 'powershell':
+def _shell_exe(shell: str) -> str:
+    "The program for a shell by its name: PowerShell (pwsh before Windows' own), cmd, else Git Bash (the system bash off Windows)."
+    n = _name(shell)
+    if n in ('powershell', 'pwsh'):
         # ...Windows' own, where it always is, when the PATH this app was started with names neither (the recorded walk, 2026-11-11: the
         # approved step answered "[WinError 2] The system cannot find the file specified" - the shell, not the file it was to delete)
         own = ntpath.join(os.environ.get('SystemRoot') or r'C:\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
-        return [shutil.which('pwsh') or shutil.which('powershell') or (own if os.path.isfile(own) else 'powershell'), '-NoProfile', '-NonInteractive', '-Command', cmd]
+        return (shutil.which('pwsh') if n == 'pwsh' else None) or shutil.which('powershell') or shutil.which('pwsh') or (own if os.path.isfile(own) else 'powershell')
+    if n == 'cmd': return shutil.which('cmd') or 'cmd'
     b = git_bash()
     if not b: raise RuntimeError('The held step was not run: ' + ('no Git Bash (the bash beside git.exe)' if os.name == 'nt' else 'no bash or sh')
                                  + ' was found to run it in - nothing was done')
-    return [b, '-c', cmd]
+    return b
+
+
+_FLAG = {'powershell': ('-command', '-c'), 'pwsh': ('-command', '-c'), 'bash': ('-c', '-lc'), 'sh': ('-c',), 'zsh': ('-c', '-lc'), 'cmd': ('/c',)}
+_LAUNCH = re.compile(r"""^\s*&?\s*("[^"]+"|'[^']+'|\S+)\s+(.*)$""", re.S)
+
+
+def _exe(tok: str) -> str:
+    "A launcher's program as written: its quotes off, and a path printed with doubled backslashes (`C:\\WINDOWS`) as a path."
+    t = tok[1:-1] if tok[:1] in ('"', "'") and tok[-1:] == tok[:1] else tok
+    return t.replace('\\\\', '\\')
+
+
+def _launcher(cmd: str) -> list | None:
+    """[program, *its options, flag, the inner line] when the held line IS a shell started on a line of its own - how Codex reports its calls
+    (`"<Windows folder>/powershell.exe" -Command 'git push ...'`) - else None. Wrapped again in the shell it was recorded under, PowerShell read
+    the quoted program and its `-Command` as one expression and every Approve failed "At line:1 char:66" (the owner's live task, 2026-11-19)."""
+    m = _LAUNCH.match(str(cmd or ''))
+    if not m: return None
+    prog, rest = _exe(m.group(1)), m.group(2)
+    flags = _FLAG.get(_name(prog))
+    if not flags: return None
+    opts = []
+    while rest:
+        w, _, more = rest.partition(' ')
+        if w.lower() in flags:
+            inner = more.strip()
+            if len(inner) > 1 and inner[0] == inner[-1] and inner[0] in ('"', "'"):      # one level of the quoting it was printed with
+                q = inner[0]
+                inner = inner[1:-1].replace("''", "'") if q == "'" and _name(prog) in ('powershell', 'pwsh') else inner[1:-1]
+            exe = prog if os.path.isabs(prog) and os.path.isfile(prog) else _shell_exe(prog)
+            return [exe, *opts, w, inner]
+        if not w.startswith(('-', '/')): return None
+        opts.append(w); rest = more.lstrip()
+    return None
+
+
+def replay(p: dict) -> list:
+    """THE HELD CALL AS THE AGENT'S OWN TOOL WOULD HAVE RUN IT - the one road an Approve runs by: the argv its brain gave (Codex's list), a line
+    that is itself a shell started on a line (`powershell.exe -Command '...'`, `bash -lc '...'`) as that shell, else the line in the shell its tool
+    is: the PowerShell tool in PowerShell, the Bash tool in Git Bash (the system bash off Windows)."""
+    if (a := p.get('argv')) and isinstance(a, list) and len(a) > 1:
+        a = [str(x) for x in a]
+        return [a[0] if os.path.isabs(a[0]) and os.path.isfile(a[0]) else _shell_exe(a[0]) if _name(a[0]) in _FLAG else (shutil.which(a[0]) or a[0]), *a[1:]]
+    cmd, shell = str(p.get('command') or ''), str(p.get('shell') or 'Bash')
+    if (l := _launcher(cmd)): return l
+    if _name(shell) in ('powershell', 'pwsh'): return [_shell_exe(shell), '-NoProfile', '-NonInteractive', '-Command', cmd]
+    return [_shell_exe('bash'), '-c', cmd]
+
+
+def _argv(shell: str, cmd: str) -> list: return replay({'shell': shell, 'command': cmd})
 
 
 def text(raw) -> str:
@@ -558,12 +638,16 @@ def text(raw) -> str:
 # an `error:` / `fatal:` line; else its first line, where WSL says it
 _LISTED = re.compile(r'^([ MADRCU?!]{1,2}\s+\S+|[0-9a-f]{7,40}\s.*|[^\s:]+[/\\][^\s]+)$')
 _SAYS_WHY = re.compile(r'^(error|fatal|ERROR|FATAL)\b')
-def failed(said: str, rc: int) -> str:
-    "What the owner reads when the held step failed: the one line where WSL, git or gh says why."
+# ...and PowerShell's own frame around its message - "At line:1 char:66", the echoed line and its `+ ~~~` marks, "+ CategoryInfo" - is where,
+# never why: the owner read "It failed: At line:1 char:66" (2026-11-19), the reason two lines under it
+_PS_FRAME = re.compile(r'^(At (line|char):\d|At [^:]+:\d+ char:\d+|\+ )')
+def failed(said: str, rc: int, what: str = '') -> str:
+    "What the owner reads when the held step failed: what did not happen, in his words, and the one line where the tool says why."
     lines = [l.strip() for l in str(said or '').splitlines() if l.strip()]
-    told = [l for l in lines if not _LISTED.match(l) and not l.lower().startswith('hint:')] or lines
+    told = [l for l in lines if not _LISTED.match(l) and not l.lower().startswith('hint:') and not _PS_FRAME.match(l)] or lines
     why = next((l for l in told if _SAYS_WHY.match(l)), told[0] if told else '')
-    return f"The held step failed: {why[:240] or f'exit {rc}'}"
+    step = str(what or 'the held step').split(';')[0].strip()
+    return f"{step[:1].upper()}{step[1:]} failed: {why[:240] or f'exit {rc}'}"
 
 
 # THE OWNER'S PRESS NEVER RACES THE AGENT IN ITS OWN FOLDER (the owner, 2026-11-10: "no idea what this is. it's broken"): a second Approve
@@ -596,8 +680,12 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
         from . import spawn
         r = spawn.run(argv, cwd=folder or None, capture_output=True, timeout=300, stdin=subprocess.DEVNULL)   # bytes: text() reads them
         return r.returncode, text(r.stdout) + text(r.stderr)
-    rc, said = (run or go)(_argv(p.get('shell') or 'Bash', cmd), cwd)
-    if rc != 0: raise RuntimeError(failed(said, rc))
+    from . import actrule
+    actrule.remember(store, tid, p.get('keys'), 'approved')       # his yes to this kind of step on this target stands for the task
+    rc, said = (run or go)(replay(p), cwd)
+    if rc != 0:
+        store.audit('task', tid, 'shell_act_failed', 'owner', 'human', {'what': p.get('what'), 'command': cmd[:300], 'said': str(said or '')[-1500:]})
+        raise RuntimeError(failed(said, rc, p.get('what')))
     said = ' '.join(str(said or '').split())[-600:]
     if (told := _batch.get()) is not None: told.append(f"`{cmd[:300]}` said: {said[-200:] or 'done'}")
     else: _tell(store, tid, f"The owner approved it and Taskuary ran `{cmd[:300]}` in {cwd or 'its folder'}. It said: {said[-300:] or 'done'}. "
@@ -643,13 +731,22 @@ def approve_steps(store, rids: list, decide, actor: str = 'owner', verb: str = '
         # the agent is started on what failed, and what it holds next is a new card in its new turn
         for r in [failed['review'], *left]: store.decide_review(r, 'superseded', None, 'taskuary', FAILED if r == failed['review'] else NOT_RUN)
         _tell(store, tid, f"The owner approved {len(rvs)} held steps together. Taskuary ran {len(done)} of them ({ran}); step {failed['step']} "
-                          f"failed: {failed['error'][:300]}. Nothing on that card waits on the owner now - the steps after it were not run. Find out "
+                          f"failed: {failed['error'][:300]}" + (f"\n\nWhat it printed:\n{raw}\n\n" if (raw := _printed(store, tid)) else '. ') + "Nothing on that card waits on the owner now - the steps after it were not run. Find out "
                           "why and put it right if you can; a step still needed is run again by you and held as a new card for their press. " + NEXT,
               wake=True)
     else: _tell(store, tid, f"The owner approved {plural(len(done), 'held step')} together and Taskuary ran them in order: {ran}. " + NEXT, wake=True)
     return {'ok': not (failed or refused), 'done': done, 'failed': failed, 'left': left, **({'send_error': refused} if refused else {})}
 
 
+def _printed(store, tid: int) -> str:
+    "What the last held step that failed on this task printed, whole - the agent's to read; the owner's card says it in one line (failed)."
+    r = store._one("SELECT Detail FROM audit WHERE EntityType='task' AND EntityId IN (?,?) AND Action='shell_act_failed' ORDER BY Id DESC LIMIT 1", (int(tid), str(tid)))
+    try: return str(json.loads((r or {}).get('Detail') or '{}').get('said') or '').strip()[-1500:]
+    except (TypeError, ValueError): return ''
+
+
 def declined(store, tid: int, p: dict) -> None:
+    from . import actrule
+    actrule.remember(store, tid, p.get('keys'), 'dismissed')
     if (told := _batch.get()) is not None: return told.append(f"{p.get('what') or 'the step'} (`{str(p.get('command') or '')[:200]}`)")
     _tell(store, tid, not_approved(f"{p.get('what') or 'the step'} (`{str(p.get('command') or '')[:200]}`)"))

@@ -126,11 +126,14 @@ const fileStep = (p, plain) => {
   return null;
 };
 
+// ...A VALUE THE SHELL FILLS IN AS IT RUNS ("$q" in a loop, "${TERM}", "%Q%") is none the step can say: "Searching your mail for '$q'" stood in
+// the steps (design round 6, D3). A price ("$519") is a value all the same
+const filled = (v) => (/\$\{?[A-Za-z_]|%[A-Za-z_]\w*%/.test(String(v || "")) ? "" : v);
 const taskuaryCall = (path, cmd) => {
   const [where, query = ""] = path.split("?");
   const bits = where.split("/").filter(Boolean);
   const param = (k) => { const m = new RegExp(`(?:^|&)${k}=([^&]*)`).exec(query); try { return m ? decodeURIComponent(m[1].replace(/\+/g, " ")) : ""; } catch { return m[1]; } };
-  if (bits[0] === "search") { const q = param("q"); return { kind: "mail", summary: q && !q.includes("$") ? `Searched your mail for ${quoted(q)}` : "Searched your mail", q }; }
+  if (bits[0] === "search") { const q = filled(param("q")); return { kind: "mail", summary: q ? `Searched your mail for ${quoted(q)}` : "Searched your mail", q }; }
   if (bits[0] === "tasks" && /^\d+$/.test(bits[1] || "")) return { kind: "task", summary: `Opened TQ-${bits[1].padStart(4, "0")}` };
   if (bits[0] === "tasks") return { kind: "task", summary: "Looked at your task list" };
   if (bits[0] === "messages" && /^\d+$/.test(bits[1] || "")) return { kind: "mail", summary: `Opened message ${bits[1]}` };
@@ -151,7 +154,7 @@ const OWN_CLI = { "--search": (v) => ({ kind: "mail", summary: v ? `Searched you
 OWN_CLI["--note"] = (v) => (v ? { kind: "plan", summary: clip(v, 120), own: true } : { kind: "plan", summary: "Left a note on the wall" });
 OWN_CLI["--board"] = () => ({ kind: "data", summary: "Read what earlier agents left on the wall" });
 const ownCli = (args) => { const i = args.findIndex((a) => OWN_CLI[a]);
-  return i < 0 ? { kind: "data", summary: "Looked something up in Taskuary" } : OWN_CLI[args[i]](args[i + 1] && !args[i + 1].startsWith("-") ? args[i + 1] : ""); };
+  return i < 0 ? { kind: "data", summary: "Looked something up in Taskuary" } : OWN_CLI[args[i]](args[i + 1] && !args[i + 1].startsWith("-") ? filled(args[i + 1]) : ""); };
 
 // AGENT-BROWSER IN WORDS, from its own fixed grammar (browsergate.LOOKS / TYPES lists the same verbs): Codex and Gemini read "Ran
 // agent-browser click" with no page or target, while Claude was saved only by its own Bash description (2026-10-25)

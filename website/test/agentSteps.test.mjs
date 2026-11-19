@@ -301,6 +301,17 @@ test("Taskuary's own command reads as what was asked of it, never its name", asy
   assert.doesNotMatch(describeCall("Bash", { command: "taskuary --memory" }).summary, /taskuary/i);
 });
 
+// "Searching your mail for '$q', and 1 more" (design round 6, D3): a loop's `taskuary --search "$q"` - the shell fills the value as it runs, so
+// the step has none to say; a price in the words ("$519") is a value all the same
+test("a value the shell fills in as it runs is never shown as the step's words", async () => {
+  const { describeCall } = await import("../src/agentSteps.js");
+  const loop = 'for q in "board" "data asks"; do taskuary --search "$q" | head -20; done';
+  assert.equal(describeCall("Bash", { command: loop }).summary, "Searched your mail");
+  assert.equal(describeCall("Bash", { command: 'taskuary --search "${TERM}"' }).summary, "Searched your mail");
+  assert.equal(describeCall("Bash", { command: 'taskuary --search "%Q%"' }).summary, "Searched your mail");
+  assert.equal(describeCall("Bash", { command: 'taskuary --search "print run $519"' }).summary, "Searched your mail for 'print run $519'");
+});
+
 // THE OWNER'S CODING TURN ON CODEX OVER ACP (2026-11-18: "ran git is not feedback??"): its shell calls carry no words of their own - the step is
 // what the call did, read off its grammar, or the agent's own words where the call carries them (a wall note); never a bare program's name
 test("a wordless shell call says what it did, never a bare program, a number for a file, nor 'Used <its title>'", () => {

@@ -2282,9 +2282,10 @@ def people_line(store, tid: int) -> str:
             'and said as one: ' + '; '.join(got)) if got else ''
 
 
-def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
+def prompt_parts(store, tid: int, turn: bool = False, heard: str = '') -> tuple[str, list, str]:
     """(the system's lines that stay the same turn after turn, those a turn can change, the user turn) - _prompt joins them. `turn`: built for
-    a session's turn that just began (turn_facts) - the thread as its hand-over took it: what came in since is the next turn's to hear."""
+    a session's turn that just began (turn_facts) - the thread as its hand-over took it: what came in since is the next turn's to hear.
+    `heard`: Taskuary's words this turn carries besides (a press told back) - a fact they say already is not said again."""
     detail = store.task_detail(tid) or {}
     if turn:
         from . import conversation
@@ -2498,7 +2499,7 @@ def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
     # ...the LATEST facts ride in the TURN, never the system prompt: they change every turn, and a CLI's system prompt is its process's
     # command line (a hashed --append-system-prompt-file), so in the system prompt each turn started a new process (clipool's one per chat)
     from .cardqueue import once          # ...the screen fact once, where the note that woke this turn says it already
-    lb = once(turn_facts(store, tid, task, rules=False, turn=turn), str((chat_rows(store, tid, run=True)[-1:] or [{}])[0].get('Body') or ''))
+    lb = once(turn_facts(store, tid, task, rules=False, turn=turn), f"{heard}\n\n{(chat_rows(store, tid, run=True)[-1:] or [{}])[0].get('Body') or ''}")
     if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF): system += f'\n\n{selfclose.DRAFTS_ONCE}'
     md = store.checklist_markdown(tid, ids=True, shell=False) if hasattr(store, 'checklist_markdown') else ''    # the slot's id: its road is in the brief (by_tool)
     ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words
@@ -3161,7 +3162,8 @@ class GeneralSession:
             # Written again here, its start now naming its provider
             try: sessionrecord.keep_live(self.task_id, self.trace)
             except OSError as e: logger.debug(f'task {self.task_id}: the turn now beginning was not kept on disk - {e}')
-            system, late, user = prompt_parts(self.store, self.task_id, turn=True)
+            # ...a press told back is the turn's own words (to_agent: never a chat row), so the facts above it are told what it says already
+            system, late, user = prompt_parts(self.store, self.task_id, turn=True, heard='' if as_owner else f'{text}\n\n{delivery_instructions or ""}')
             # ...WHAT THIS TURN ALONE IS TOLD (what came in, how many lines he sent, a hand-over) rides the TURN of a conversation the CLI
             # already holds, never its system prompt (rule 10, the recorded flood 2026-11-11): changed there, everything after it - the whole
             # conversation - was read again at full price. A conversation said afresh has nothing kept: there it is among the late lines

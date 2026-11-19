@@ -111,6 +111,12 @@ _WALK_THREAD = [None]
 WALK_WAIT = 15                   # a reset that hangs (a locked store) must not hold the app shut for ever; it logs and lets go
 
 
+def slim_records():
+    "The agents' records kept before slim(), written again in its form, once (codingchat.slim_kept) - a lifespan thread the tests stop."
+    from . import codingchat
+    codingchat.slim_kept()
+
+
 def _warm_reads():
     """THE PAGE'S FIRST READS, MADE BEFORE IT ASKS (the owner's restart, 2026-11-16: the setup, first-run and agents reads each looked for
     every AI CLI on every PATH folder, and the rail was built from nothing, all inside the page's first requests - 2-6 s each, on top of the
@@ -184,8 +190,8 @@ async def _lifespan(_app):
             from . import recentlydeleted; recentlydeleted.purge(store)
         except Exception as e: logger.warning(f'Recently deleted not purged: {e}')
         backups.start(config.db_path())               # a copy of the database and its files once a day, the newest three kept
-        from . import codingchat as _cc             # ...and the agents' records kept before slim(), written again in its form, once
-        threading.Thread(target=_cc.slim_kept, daemon=True, name='taskuary-slim-records').start()
+        # ...and the agents' records kept before slim(), written again in its form, once
+        threading.Thread(target=slim_records, daemon=True, name='taskuary-slim-records').start()
     else:
         # THE DEMO WORLD IS A FINISHED INSTALL: the settle above never runs for it, so its flag stayed unset and read as "not finished" -
         # every demo, and every browser test in CI, opened on setup instead of the day (2026-10-15)

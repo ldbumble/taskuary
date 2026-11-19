@@ -397,8 +397,11 @@ class SuggestConnectionsTests(unittest.TestCase):
         "i have many more connections setup, why is it still not checked")."""
         self.assertEqual(firstrun.more_connected(self.s), 0)
         for t in ('outlook', 'azure_openai', 'handbook', 'intacct', 'teams'):
-            cid = self.s.get_connector_by_type(t)['ConnectorId']; self.s.save_connector({'ConnectorId': cid, 'Active': 1}, 'o')
+            cid = self.s.get_connector_by_type(t)['ConnectorId']; self.s.save_connector({'ConnectorId': cid, 'Active': 1, 'Secret': 'k'}, 'o')
         self.assertEqual(firstrun.more_connected(self.s), 2)                     # Sage Intacct and Teams: not the AI, the mail or the Hub
+        # ...counted as the card says it (connectorcatalog.connected): one switched on and never signed in is not set up
+        self.s.save_connector({'ConnectorId': self.s.get_connector_by_type('linkedin')['ConnectorId'], 'Active': 1}, 'o')
+        self.assertEqual(firstrun.more_connected(self.s), 2)
 
     def test_a_generic_transfer_or_storage_card_is_never_a_system_or_a_suggestion(self):
         """"SFTP is the best next connection" - SFTP is how files move, not a system one works in (the owner, 2026-10-16: "remove

@@ -28,7 +28,7 @@ def fast_fake(monkeypatch, tmp_path):
 def _store():
     s = MemoryStore()
     s.upsert_agent('claude', 'general', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p', '--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose']}))
-    s.set_setting(concierge.AI_KEY, 'cli:claude', 't')
+    s.set_setting(concierge.AI_KEY, 'cli:claude', 'owner')
     return s
 
 

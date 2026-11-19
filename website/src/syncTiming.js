@@ -1,4 +1,4 @@
-import { fmtTime } from "./dates.js";
+import { clock } from "./dates.js";
 import { span } from "./timeWords.js";
 // How long the Timeline waits before it asks the sync status again by itself. A sync that starts or ends says so on the
 // socket (store.set_setting('ingest_status') pushes ingest-status, and the observer reads at once), so an idle page only checks
@@ -15,7 +15,7 @@ export const syncPhaseLabel = phase => ({ fetching: 'Reading sources', triaging:
 export const syncFace = ({ busy = false, what = "", every = 10, lastAt = null, nextIn = null, terse = false, checked = false, started = false } = {}) => {
   if (busy) return what && !terse ? what : "syncing…";
   if (!every) return terse ? "sync off" : "background sync off";
-  const at = lastAt ? fmtTime(lastAt, "en-US", { hour: "numeric", minute: "2-digit" }) : "—";
+  const at = lastAt ? clock(lastAt) : "—";
   const verb = started ? 'check started' : checked ? 'checked' : 'synced';
   // terse is the narrowed sidebar's one line (2026-09-29): the whole time must fit, so a started check says just that. A source
   // that could not be read rode it in red (2026-10-22) until the owner moved it to the bell (2026-10-23): a clock, never an error

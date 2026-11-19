@@ -223,7 +223,8 @@ def retry_said(why: str, at) -> str:
         except ValueError: at = None
     if not at: return f'{why} - trying again shortly.'
     day = '' if at.date() == datetime.now().date() else at.strftime(' on %a %d %b')
-    return f"{why} - trying again at {at.strftime('%I:%M %p').lstrip('0')}{day}."
+    from .timewords import clock
+    return f"{why} - trying again at {clock(at)}{day}."
 def retry_turn(store, tid: int) -> bool:
     "The queued try (queue_retry), run now: Taskuary's word to the agent, never a line in his name. The row goes when a turn answers (_file)."
     t = store.get_task(tid) or {}
@@ -2161,7 +2162,8 @@ READING_CHARS = 1_500
 def _md(at, clock=False) -> str:
     try: d = datetime.fromisoformat(str(at or '').strip().replace('Z', '+00:00')[:19].replace(' ', 'T'))
     except ValueError: return ''
-    return f'{d.month}/{d.day}' + (f' {d:%H:%M}' if clock else '')
+    from .timewords import clock as said
+    return f'{d.month}/{d.day}' + (f' {said(d)}' if clock else '')
 
 
 def reading_block(store, tid: int) -> str:

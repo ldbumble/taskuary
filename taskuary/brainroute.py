@@ -23,6 +23,7 @@ from datetime import datetime, timedelta
 from typing import NamedTuple
 from loguru import logger
 from .kinds import ASSISTANT
+from .timewords import clock
 
 # What a call is FOR. Closed: a new call site picks one of these, and an AST test fails a build_llm without it.
 JOBS = ('triage', 'draft', 'summary', 'advisor', 'memory', 'rank', 'assistant', 'general', 'coding', 'judge', 'report', 'quick_work')
@@ -408,7 +409,7 @@ def _level(store, job: str, tier: str, want_pick, want_model, hands, only) -> tu
         if job != 'general' or want_model != general._selected(store, pick=to)[2]: return None, ''
     cold = cooldowns(store)
     no = (_not_ready(store, to) or ('has no shell, and this work needs a CLI' if not hands(to) else '')
-          or (f"is limited until {cold[to].strftime('%H:%M')}" if to in cold else '') or ('has spent its budget' if spent(store, to) else '')
+          or (f"is limited until {clock(cold[to])}" if to in cold else '') or ('has spent its budget' if spent(store, to) else '')
           or ('is not marked to read sensitive data' if only and not may_read_sensitive(store, to) else ''))
     if no: return None, f"; {LEVEL_OF[tier]} work is set to {_said(store, to)} in AI routing, but it {no}, so its card"
     return (to, m), ''
@@ -483,7 +484,7 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
     if pick and mode(store) == 'auto' and pick in (cold := cooldowns(store)):
         to = next((c for c in chain if c and c not in cold and hands(c)), '')
         if to:
-            why += f"; {_said(store, pick)} is limited until {cold[pick].strftime('%H:%M')}, so {_said(store, to)}"
+            why += f"; {_said(store, pick)} is limited until {clock(cold[pick])}, so {_said(store, to)}"
             # ...on its own model, as a failover always is: the resting brain's model id means nothing to another provider
             chain, pick, model = [pick, *chain], to, (lift(store, to, tier) if tier in LIFT else '')
             if tier == 'strong' and not strong_of(store, pick) and not model: tier, g = 'standard', GEAR_OF['standard']
@@ -830,7 +831,7 @@ def resting(store, pick: str) -> str:
     work is still on though it rests - nothing else was there to take it - so "right now it runs on X" is never said of a resting X
     without its time."""
     t = cooldowns(store).get(pick) if pick else None
-    return f"{_said(store, pick)} is limited until {t.strftime('%H:%M')}" if t else ''
+    return f"{_said(store, pick)} is limited until {clock(t)}" if t else ''
 
 
 def default_level(store, cfg=None) -> dict:

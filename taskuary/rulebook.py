@@ -51,7 +51,8 @@ def when(at, now: datetime = None) -> str:
     """'at 10:02' today, else ago() - "your reply went at 10:02; nothing since" (the owner, 2026-10-28). '' for a time nothing can read."""
     t, now = _dt(at), now or datetime.now()
     if not t: return ''
-    return f'at {t:%H:%M}' if t.date() == now.date() and t <= now else ago(t, now)
+    from .timewords import clock
+    return f'at {clock(t)}' if t.date() == now.date() and t <= now else ago(t, now)
 
 
 def finished_quiet(store, tid, at) -> str:

@@ -5,7 +5,7 @@ import React, { useState } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import api from "./api";
 import { ALERT, ROLES } from "./theme.jsx";
-import { fmtTime } from "./dates.js";
+import { fmtTime12 } from "./dates.js";
 
 // `line`: A CHAT TASK'S ONE LINE (the owner, 2026-11-06): over the chat it is a line and its Cancel - "Waiting its turn - starts by itself when a
 // slot frees up" - and a start that failed says so, its retry what is typed in the box below (never a Start now of its own)
@@ -18,7 +18,7 @@ export default function QueuedStart({ taskId, queued, onChanged, compact = false
   // a start that failed and will try again read "Waiting for a free agent slot"; and the reason was the raw exception -
   // its first line, cut short, is the part a person reads (the whole of it stays on hover)
   const why = String(queued.lastError || "").split("\n")[0].slice(0, 140);
-  const at = retrying && queued.nextAt ? fmtTime(new Date(String(queued.nextAt).replace(" ", "T")), [], { hour: "numeric", minute: "2-digit" }) : "";
+  const at = retrying && queued.nextAt ? fmtTime12(queued.nextAt) : "";
   const act = (e, what) => {
     e.stopPropagation();
     setBusy(what); setErr("");

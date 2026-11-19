@@ -9,7 +9,7 @@ import React from "react";
 import { Box, Typography } from "@mui/material";
 import { Attachments } from "./Attachments.jsx";
 import { cleanText, tsMs } from "./ui.jsx";
-import { dayLabel, fmtTime } from "./dates.js";
+import { clock, dayLabel } from "./dates.js";
 import { BORDER, FAINT, INK } from "./theme.jsx";
 
 // the channels whose messages are a conversation, not letters
@@ -34,7 +34,7 @@ export const splitBody = (body) => {
 };
 
 const dayOf = (at) => { const d = new Date(tsMs(at)); return Number.isNaN(d.getTime()) ? "" : d.toDateString(); };
-const timeOf = (at) => { const d = new Date(tsMs(at)); return Number.isNaN(d.getTime()) ? "" : fmtTime(d, undefined, { hour: "numeric", minute: "2-digit" }); };
+const timeOf = (at) => { const d = new Date(tsMs(at)); return clock(d); };
 
 // COMPACT (the task-view cleanup, owner-approved 2026-10-25: Show all on a six-message burst drew 476px, about 79px a message): the name
 // INSIDE the bubble, once per run of one sender's messages, and the time at the end of the line - about 34px for a one-line message.

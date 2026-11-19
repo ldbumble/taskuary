@@ -49,7 +49,7 @@ import { lazyView } from "./lazyView.jsx";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { FailWays, failOf } from "./failure.jsx";
 import { noteKey, noteOf, onYouLine, progressLine, saveNote, settleTick, withTicks } from "./checklist.js";
-import { fmtDate, fmtTime } from "./dates.js";
+import { clock, fmtDate } from "./dates.js";
 import { deliveryCc, deliveryFiles, deliveryMeta, replyContext, sentCardOf } from "./replyDelivery.js";
 import { sizeText } from "./replyFiles.js";
 import { completionTransition, cutAway, filterForSelectedState, remindWaiting, remindDay } from "./taskFilter.js";
@@ -173,7 +173,7 @@ const whenShort = (s) => {
   if (!s) return "";
   const d = asUtc(String(s));
   if (!Number.isFinite(d.getTime())) return "";
-  return d.toDateString() === new Date().toDateString() ? fmtTime(d, [], { hour: "2-digit", minute: "2-digit" })
+  return d.toDateString() === new Date().toDateString() ? clock(d)
     : fmtDate(d, [], { month: "short", day: "numeric" });
 };
 // SHOW ALL IS FOR READING (the owner, 2026-10-20: seven messages in a 360px box): the opened thread is as tall as the window

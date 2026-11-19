@@ -127,11 +127,12 @@ def since_line(store, tid, agent: str = 'the agent') -> str:
 # nothing told it the send happened. One reading of it, for every door that wakes an agent up again.
 
 def clock(at) -> str:
-    """'05:33 PM', with the day when it is not today."""
+    """'5:33 PM' (timewords.clock), with the day when it is not today."""
     from datetime import datetime
+    from .timewords import clock as said
     try: d = datetime.strptime(str(at)[:16], '%Y-%m-%d %H:%M')
     except ValueError: return str(at or '')
-    return d.strftime('%I:%M %p') + ('' if d.date() == datetime.now().date() else f' on {_day(at)}')
+    return said(d) + ('' if d.date() == datetime.now().date() else f' on {_day(at)}')
 
 
 def sent_since(store, tid) -> tuple:

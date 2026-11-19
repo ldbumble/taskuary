@@ -51,10 +51,9 @@ export const tzLabel = () => {
   } catch { return ""; }
 };
 const tzOpt = () => (TZ ? { timeZone: TZ } : {});   // format in the configured zone, so digits match the label
-export const fmtTime12 = (s) => {
-  const d = s ? asUtc(s) : null;
-  return d && Number.isFinite(d.getTime()) ? fmtTime(d, "en-US", { hour: "numeric", minute: "2-digit", ...tzOpt() }) : "";
-};
+// ONE CLOCK, "4:15 PM" (the real-Claude walk, 2026-11-19: "04:15 PM", "16:26" and "4:14 PM" in one chat) - the server's is timewords.clock
+export const clock = (d) => (d && Number.isFinite(+d) ? fmtTime(d, "en-US", { hour: "numeric", minute: "2-digit", ...tzOpt() }) : "");
+export const fmtTime12 = (s) => clock(s ? asUtc(s) : null);
 export const tsMs = (s) => {
   const n = s ? asUtc(s).getTime() : 0;
   return Number.isFinite(n) ? n : 0;

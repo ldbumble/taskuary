@@ -12,6 +12,7 @@ from loguru import logger
 from . import acp as acp_mod, acpadapter, aiusage, pathcache, redact, spawn
 from . import clis as clis_mod
 from .store import task_ref
+from .timewords import clock
 from .clis import preset_args
 from .clipool import LIMITS, MID_TURN, Cancelled, PartWay, TimedOut, ended_early
 from .selfclose import without_summary
@@ -413,7 +414,7 @@ def rate_limit_msg(name: str, info: dict) -> str:
         t = datetime.fromtimestamp(int(when))
         day = '' if t.date() == datetime.now().date() else (' tomorrow' if (t.date() - datetime.now().date()).days == 1
                                                             else t.strftime(' on %a %d %b'))
-        at = f" It comes back at {t.strftime('%I:%M %p').lstrip('0')}{day}."   # %-I is not portable
+        at = f" It comes back at {clock(t)}{day}."
     except (TypeError, ValueError, OSError, OverflowError):
         pass
     allowance = f'its {window} usage limit' if window else 'its usage limit'
@@ -1120,7 +1121,7 @@ def default_ask(store) -> dict:
     name = lambda k: _said(store, f'cli:{k}')
     # every CLI that can take work, one resting on its limit with the time it is back - and one left out says why, with its way back
     cold, tests = cooldowns(store), cli_tests(store)
-    names = [name(k) + (f" (resting until {cold[f'cli:{k}'].strftime('%H:%M')})" if f'cli:{k}' in cold else '') for k in ready]
+    names = [name(k) + (f" (resting until {clock(cold[f'cli:{k}'])})" if f'cli:{k}' in cold else '') for k in ready]
     out = [name(k) for k, c in connection_brains(store) if tests.get(k) is False and runs_here(c)]
     one, runs = len(out) == 1, default_brain(store)
     # ...and where the one it took is itself resting, the work is on it only once it is back: the card's RUNS line names what has it now

@@ -24,6 +24,13 @@ def stamp(s) -> datetime | None:
     except (TypeError, ValueError): return None
 
 
+def clock(at) -> str:
+    """ONE CLOCK (the real-Claude walk, 2026-11-19: "04:15 PM", "16:26" and "4:14 PM" in one chat): '4:15 PM', as the page says it
+    (dates.fmtTime12). '' for a time nothing can read."""
+    d = stamp(at)
+    return '' if d is None else f"{d.hour % 12 or 12}:{d.minute:02d} {'AM' if d.hour < 12 else 'PM'}"
+
+
 def mins(at, now: datetime = None):
     """Minutes from `at` to `now` - past is positive, ahead negative. None when it is no time at all."""
     d = stamp(at)

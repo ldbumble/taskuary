@@ -211,17 +211,12 @@ export const viewOnScreen = (layout) => layout === "split" || layout === "stack"
 // A STEP ONLY THE OWNER CAN DO ON THE PAGE (browserview.TURN_PREFIX): the agent handed the page over - drawn on the view as "Your turn"
 export const TURN_PREFIX = "yourturn:";
 export const isTurn = (asking) => String(asking?.request_id || "").startsWith(TURN_PREFIX);
-// ...and A PRESS HANDED OVER (browsergate.hand_over, the owner 2026-11-05: "you hit pay in the browser instead of a generated ui"): the agent
-// filled the page and stopped on its last button, which is the owner's to press on the page itself. Its line says all of it; the page's own
-// press is the approval, and Taskuary sees it land
-export const PRESS_PREFIX = "yourturn:press:";
-export const isPress = (asking) => String(asking?.request_id || "").startsWith(PRESS_PREFIX);
 // WHAT THE CHAT'S BOX SAYS WHILE THE AGENT WAITS ON HIM - one function for every ask: a sign-in is typed on the page (never a password here), a
 // step handed over is done on the page (the browser audit, 2026-11-15: "Answer the agent's question..." stood under a step that was no question),
 // and only a question is answered in the box
 export const SIGNIN_PREFIX = "signin:";
 export const askPlaceholder = (asking) => (!asking ? "" : String(asking.request_id || "").startsWith(SIGNIN_PREFIX) ? "Message the agent - never your password"
-  : isTurn(asking) ? (isPress(asking) ? "Press it on the page - or tell the agent here…" : "Your step is on the page - or tell the agent here…")
+  : isTurn(asking) ? "Your step is on the page - or tell the agent here…"
   : "Answer the agent's question…");
 
 // A HELD BROWSER ACT of THIS session's browser (browsergate.py), as the view draws it - null for anything else (a shell step, another

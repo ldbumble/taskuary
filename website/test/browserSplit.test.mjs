@@ -21,10 +21,8 @@ import {
   viewOnScreen,
   heldOn,
   isTurn,
-  isPress,
   askPlaceholder,
   needsOwner,
-  PRESS_PREFIX,
   TURN_PREFIX,
   wheelMessage,
 } from "../src/browserSplit.js";
@@ -149,13 +147,6 @@ test("what waits on the view: a held act of THIS browser, and the agent's hand-o
   assert.equal(heldOn(row({ ...act, what: "" }), "s1").what, act.command);
   assert.ok(isTurn({ request_id: `${TURN_PREFIX}abc` }));
   assert.ok(!isTurn({ request_id: "signin:bank.example" }) && !isTurn(null));
-});
-
-test("a press handed over is the owner's turn on the page, and only it is a press", () => {
-  const press = { request_id: `${PRESS_PREFIX}abc`, text: 'Your turn: check it and press "Pay $42.00" on the page.' };
-  assert.ok(isPress(press) && isTurn(press), "drawn on the view as the owner's turn (browsergate.hand_over)");
-  assert.ok(needsOwner(press), "the browser shows beside the chat for it");
-  assert.ok(!isPress({ request_id: `${TURN_PREFIX}abc` }) && !isPress(null), "a captcha's hand-over keeps its own line");
 });
 
 
@@ -303,10 +294,9 @@ test("the browser's tabs read as a strip: title or host, the active one marked, 
 });
 
 // THE BROWSER AUDIT, 2026-11-15: a step handed over on the page drew "Answer the agent's question..." in the box - it was no question
-test("the box says what waits on him: a sign-in, a step on the page, a press on the page, or a question", () => {
+test("the box says what waits on him: a sign-in, a step on the page, or a question", () => {
   assert.equal(askPlaceholder(null), "");
   assert.equal(askPlaceholder({ request_id: "signin:bank.example" }), "Message the agent - never your password");
   assert.equal(askPlaceholder({ request_id: `${TURN_PREFIX}ab12` }), "Your step is on the page - or tell the agent here…");
-  assert.equal(askPlaceholder({ request_id: `${PRESS_PREFIX}ab12` }), "Press it on the page - or tell the agent here…");
   assert.equal(askPlaceholder({ request_id: "q:1" }), "Answer the agent's question…");
 });

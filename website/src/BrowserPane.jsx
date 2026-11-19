@@ -9,7 +9,7 @@ import { failLine, landed, press as pressReview } from "./press.js";
 import { label } from "./buttons.js";
 import { useAgents } from "./ui.jsx";
 import { ACCENT, BORDER, CATPPUCCIN, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
-import { activeTab, tabList, FIRST_WAIT, fitFrame, holdFirst, isPaste, isPress, keyMessage, mayShape, pasteMessages, mouseMessage, parseMessage, shortUrl, viewportFor,
+import { activeTab, tabList, FIRST_WAIT, fitFrame, holdFirst, isPaste, keyMessage, mayShape, pasteMessages, mouseMessage, parseMessage, shortUrl, viewportFor,
   viewportMoved, wheelMessage } from "./browserSplit.js";
 
 const wsUrl = (sid) => {
@@ -451,16 +451,15 @@ function TurnBar({ turn, url = "", onHandBack, short = false }) {
     try { await onHandBack?.(); } catch (e) { setErr(failed(e)); setBusy(false); }
   };
   useEffect(() => { setBusy(false); setErr(""); }, [turn?.request_id]);
-  // a press handed over is said by its own line, and the press that matters is the page's; every hand-over is watched and goes on by itself
-  // when the page moves on (the owner, 2026-11-05) - Done stays, quiet, for a page Taskuary cannot read
-  const pressing = isPress(turn);
+  // every hand-over is watched and goes on by itself when the page moves on (the owner, 2026-11-05) - Done stays, quiet, for a page Taskuary
+  // cannot read. A press is never handed over here: it is a card in the chat (browsergate, 2026-11-18)
   return (
-    <Box data-tq-browser-turn={turn.request_id} data-tq-browser-press={pressing ? "" : undefined} data-tq-browser-turn-short={short ? "" : undefined}
+    <Box data-tq-browser-turn={turn.request_id} data-tq-browser-turn-short={short ? "" : undefined}
       sx={short ? { ...bar, flexWrap: "nowrap", py: 0.4 } : bar}>
       <Typography sx={short ? { ...barText, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : barText}
-        title={short ? `${turn.text || "Your turn in the browser"}${pressing ? "" : " - do it on the page, and the agent goes on when it moves on"}` : undefined}>
+        title={short ? `${turn.text || "Your turn in the browser"} - do it on the page, and the agent goes on when it moves on` : undefined}>
         <Box component="span" sx={{ color: CATPPUCCIN.yellow, fontWeight: 600 }}>{turn.text || "Your turn in the browser"}</Box>
-        {!pressing && !short && <Box component="span" sx={{ color: "var(--tq-warning, #a8a196)" }}> · do it on the page, and the agent goes on when it moves on</Box>}
+        {!short && <Box component="span" sx={{ color: "var(--tq-warning, #a8a196)" }}> · do it on the page, and the agent goes on when it moves on</Box>}
       </Typography>
       {/* ...AND IN HIS OWN BROWSER WHERE THIS ONE IS REFUSED (the owner, 2026-11-13: a registrar's "Verifying you are human" spun forever in the
           agent's browser - a check that turns away an automated browser even with a person at it, and Approve could not get past it): the

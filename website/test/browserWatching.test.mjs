@@ -71,7 +71,7 @@ test("a short pane keeps its page: the step's card is one line", () => {
   assert.match(pane, /export const SHORT_PANE = 360;/);
   assert.match(pane, /setShort\(e\.contentRect\.height < SHORT_PANE\)/);
   assert.match(pane, /<TurnBar turn=\{turn\} url=\{url\} onHandBack=\{onHandBack\} short=\{short\} \/>/);
-  assert.match(pane, /\{!pressing && !short && <Box component="span"/);
+  assert.match(pane, /\{!short && <Box component="span"/);
 });
 
 test("a page handed over is his from its first frame: no beat of Take over", () => {

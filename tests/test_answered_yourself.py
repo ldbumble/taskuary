@@ -336,14 +336,13 @@ class AForwardIsNotTheAnswer(unittest.TestCase):
         own = s.get_message(s.thread_messages('c-fw')[-1]['MessageId'])
         self.assertIn('gail@northwind.example', own['RecipientsJson'])
 
-    def test_when_the_agent_hears_it_the_card_says_whom_he_wrote_to(self):
+    def test_her_draft_stays_where_it_stood_greyed_once_his_forward_moved_past_it(self):
+        """The card stays in its place with its buttons greyed - no reason line (the owner, 2026-11-18) - never taken off the chat."""
         from taskuary import conversation
         s, tid, rid = self._world(['gail@northwind.example'])
         card = next(c for x in conversation.items(s, tid)['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])
                     if c['review'] == rid)
         self.assertEqual(card['status'], 'passed')                      # greyed as every card an input moved past, until its agent hears it
-        self.assertNotIn('Erin', card.get('why') or '', card)
-        self.assertIn('gail@northwind.example', card.get('why') or '', card)
 
     def test_with_no_agent_to_hear_it_her_reply_goes_to_an_agent_to_write(self):
         """The reply was the arrival writer's - no agent conversation on the task, so none hears his forward. Greyed as moved past (the chat

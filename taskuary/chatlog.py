@@ -676,11 +676,9 @@ def advance(store, tid: int) -> None:
         rv = by.get(json.loads(r['Body']).get('review'))
         if not rv: continue
         st = _card(rv)['status']
-        # ...one the chat moved past stays where it stood, greyed with why (proposals.written_past): never taken off as if it waited behind
+        # ...one the chat moved past stays where it stood, its buttons greyed (proposals.written_past) - never taken off as if it waited behind
         if st == 'pending' and rv['ReviewId'] not in front: st = 'passed' if rv['ReviewId'] in q['past'] else 'offer' if r['State'] == 'offer' else 'held'
-        if st != r['State']:
-            from .proposals import passed_why
-            update(store, tid, k, state=st, status=st, **({'why': passed_why(store, rv)} if st == 'passed' and rv['Status'] == 'pending' else {}))
+        if st != r['State']: update(store, tid, k, state=st, status=st)
     if front and (rv := by.get(front[0])) and f"r:{front[0]}" not in rows:
         t = _newest_turn(store, tid)
         if t and t['State'] in LIVE: return                     # ...a turn's card is its last thing: it comes when the turn has ended

@@ -237,7 +237,7 @@ class ACliCountsAsABrainTests(unittest.TestCase):
         s = _fresh()
         s.upsert_agent('claude', 'coding', 'cli', '{"cmd": "claude"}')
         self.assertFalse(_step(setup.state(s), 'ai')['done'])
-        s.set_setting('triage_ai', 'cli:claude', 't')
+        s.set_setting('triage_ai', 'cli:claude', 'owner')      # his pick (one saved FOR him that does not run is set aside: agents.stale)
         with mock.patch('taskuary.agents.runs_here', return_value=True):     # ...one that is installed
             st = _step(setup.state(s), 'ai')
         self.assertTrue(st['done'])
@@ -569,7 +569,7 @@ def test_a_connected_cli_with_no_worker_profile_is_an_ai_that_is_set_up():
     from taskuary import config, setup
     from taskuary.store import MemoryStore
     s = MemoryStore()
-    s.set_setting('triage_ai', 'cli:codex', 'test')
+    s.set_setting('triage_ai', 'cli:codex', 'owner')
     assert s.get_agent('codex') is None                                  # no worker profile of that name
     with mock.patch.object(config, 'load', return_value={'cli_connections': {'codex': {'cmd': 'codex'}}}),          mock.patch('taskuary.agents.runs_here', return_value=True):       # ...and installed: only a brain that starts ticks
         ai = setup._ai(s)

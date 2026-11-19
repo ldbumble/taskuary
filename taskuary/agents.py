@@ -702,21 +702,39 @@ BRAIN_SETTING = {'coding': 'default_brain', 'general': 'assistant_ai', 'triage':
 class NoAI(ValueError): "Nothing connected can run this - the reason a start shows, naming no AI the person does not have."
 
 
-def resolve_brain(store, kind: str = 'general', cli_only: bool = False) -> str:
-    """'cli:<key>', 'connector:<id>' or '' - see above. `cli_only` for a run that cannot exist without a terminal."""
+def role_brain(store, role: str) -> str:
+    """The CLI key set for one profile's work (profile_brains) - his own taken at its word, as resolve_brain takes a card's; one an update
+    moved there only while it is connected. '' when none."""
+    try: over = json.loads(store.get_setting('profile_brains') or '{}')
+    except (TypeError, ValueError): over = {}
+    k = str(over.get(str(role or '')) or '').strip() if role and isinstance(over, dict) else ''
+    return k if k and (picked(store, 'profile_brains') or k in dict(connection_brains(store))) else ''
+
+
+def resolve_brain(store, kind: str = 'general', cli_only: bool = False, role: str = None) -> str:
+    """'cli:<key>', 'connector:<id>' or '' - see above. `cli_only` for a run that cannot exist without a terminal; `role` a profile
+    whose own brain (profile_brains) the owner set. THE PICK EVERY ROAD READS: triage's (llm.effective_pick), the Assistant's
+    (concierge.default_pick), the general agent's (general._selected), a coding pane's (brain_for, brain_chain, cli_connections.brain_of)
+    and the router's fixed answer (brainroute._fixed) - two of them read a blank slot two ways, and a job ran on a CLI Settings did not name."""
+    if role and (r := role_brain(store, role)): return f'cli:{r}'
     name = BRAIN_SETTING.get(kind, 'assistant_ai')
     v = '' if stale(store, name) else str(store.get_setting(name) or '').strip()
     # ...a CLI's key, or an AI card the owner chose for coding (the owner, 2026-11-09: "coding tasks should run on hipaa, why not")
     if v and name == 'default_brain' and not is_card(v): v = f'cli:{v}'
     if v.isdigit(): v = f'connector:{v}'
+    if ',' in v and not cli_only: return v              # a slot naming its own failover order (triage) is taken as written
     # the person's own pick is taken at its word - one that does not start says so when it is started, never swapped behind them
     if v.startswith('cli:') and (picked(store, name) or v[4:] in dict(connection_brains(store))): return v
     if v.startswith('connector:') and not cli_only: return v
-    k = next(iter(ready_brains(store)), '')
-    if k: return f'cli:{k}'
+    # BLANK MEANS THE DEFAULT BRAIN (default_pick: the Coding agent card's CLI when it is his or ready, else a ready one) - this took the
+    # first ready CLI while triage and the general agent took the default, so one blank read two ways
+    d = default_pick(store)
+    if d.startswith('cli:'): return d
+    # ...a run that needs a terminal takes any ready CLI over none (default_pick gave way to a card, or names one not connected)
+    if cli_only: return next((f'cli:{k}' for k in ready_brains(store)), '')
     # no CLI here: a job with no pick of its own runs on the AI card the general agent is SET to (a gateway-only home's coding task)
-    if not cli_only and name != 'assistant_ai' and (g := str(store.get_setting('assistant_ai') or '').strip()).startswith('connector:'): return g
-    c = None if cli_only else ready_connector(store)
+    if name != 'assistant_ai' and (g := str(store.get_setting('assistant_ai') or '').strip()).startswith('connector:'): return g
+    c = ready_connector(store)
     return f"connector:{c['ConnectorId']}" if c else ''
 
 
@@ -1045,12 +1063,9 @@ def default_pick(store) -> str:
 
 
 def brain_for(store, role: str) -> str:
-    """The brain that runs one role. A profile never PINS a brain: this is a setting keyed BY a
-    profile, and what it names is a brain - never a model, never an effort."""
-    try: over = json.loads(store.get_setting('profile_brains') or '{}')
-    except ValueError: over = {}
-    key = str(over.get(str(role or '')) or '').strip() if isinstance(over, dict) else ''
-    return key or default_brain(store)
+    """The CLI that runs one role's coding pane - the one resolver's (resolve_brain), the role's own brain (profile_brains) first. A
+    profile never PINS a brain: this is a setting keyed BY a profile, and what it names is a brain - never a model, never an effort."""
+    return resolve_brain(store, 'coding', cli_only=True, role=role)[4:]
 
 
 def brain_chain(store, first: str = None, cfg: dict = None) -> list:
@@ -1065,7 +1080,7 @@ def brain_chain(store, first: str = None, cfg: dict = None) -> list:
     from . import config
     cfg = config.load() if cfg is None else cfg
     known = list(cfg.get('cli_connections') or {})
-    head = str(first or default_brain(store) or '').strip()
+    head = str(first or resolve_brain(store, 'coding', cli_only=True)[4:] or '').strip()
     setting = str(store.get_setting('backup_brains') or '').strip()
     # ...but never one whose own test FAILED: a CLI the person never got signed in is no backup for anything
     backups = [k for k in known if cli_tests(store).get(k) is not False] if setting == '*' else [x.strip() for x in setting.split(',') if x.strip()]

@@ -11,8 +11,9 @@ Not `routing.py`: that name, and the `route` table, already mean mail-to-task ma
 AUTO is what an install runs unless its owner chose Fixed (the owner, 2026-11-06: "it should be on auto routing by default using
 triage designation"): triage's quick/standard/hard judgement picks the brain's light, card or strong model, and a brain with only
 one model thinks less or harder instead where its CLI takes an effort flag (`lift`). FIXED is the cards, exactly as before the
-router - in it `choose` asks the resolvers that already exist (llm.effective_pick, general.default_pick/_selected,
-agents.resolve_brain, concierge.pick), so a fixed install behaves as it always did (tests/test_brainroute.py's golden matrix).
+router - in it `choose` asks the one pick resolver, agents.resolve_brain (which llm.effective_pick, general._selected/opening and
+concierge.pick read their card through), so a fixed install behaves as it always did (tests/test_brainroute.py's golden matrix).
+`choose` is THE answer to "which AI runs this job" - pick, model, gear and why; capabilities.has_ai asks it whether one is there.
 
 All router state lives in the store - settings and the `brainroute` log - never in module globals: the
 poller and the server are separate processes (dirty triggers are cross-process).
@@ -249,7 +250,7 @@ def _fixed(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
     # reply; the one-shot 'draft' left - a reply or message the owner presses for - is a one-message job like the rest of these
     if job in ONE_SHOT:
         # the same reading llm._build_llm makes: the named pick, else the triage brain, else what blank means
-        pick = llm.effective_pick(store, want_pick if want_pick is not None else store.get_setting('triage_ai') or '')
+        pick = llm.effective_pick(store, want_pick)      # None: the triage card, read by the one resolver (agents.resolve_brain)
         return pick, want_model or '', gear or 'light', _backups(store)
     if job == 'coding':
         pick = want_pick if want_pick is not None else agents.resolve_brain(store, 'coding', cli_only=True)  # a terminal or nothing
@@ -262,7 +263,7 @@ def _fixed(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
         from . import concierge
         return concierge.pick(store), want_model or concierge.model_of(store), gear or 'light', _backups(store)
     from . import general
-    base, pick = general._selected(store), general.default_pick(store, task)
+    base, pick = general._selected(store), general.default_pick(store, task, level=False)      # the level's AI is this router's own step, below
     model = want_model or (base[2] if pick == base[0] else general._selected(store, pick=pick)[2] if pick else '')
     return pick, model or '', gear or 'main', _backups(store)
 
@@ -892,7 +893,7 @@ def session_allowed(store, task, chain: list) -> tuple:
     f = facts(store, 'coding', task)
     if not _first(store, f, 'only'): return chain, ''
     from . import agents
-    ok = [c for c in chain if may_read_sensitive(store, f"cli:{c or agents.default_brain(store) or ''}")]
+    ok = [c for c in chain if may_read_sensitive(store, f"cli:{c or agents.resolve_brain(store, 'coding', cli_only=True)[4:]}")]
     return (ok, '') if ok else ([], f'{NO_SENSITIVE}, so the coding agent does not start')
 
 

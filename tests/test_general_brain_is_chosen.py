@@ -341,3 +341,74 @@ def test_no_launch_road_defaults_a_missing_cli_to_any_one_cli():
     bad = [f'{p.name}:{i}: {l.strip()}' for p in sorted(Path(agents.__file__).parent.glob('*.py'))
            for i, l in enumerate(p.read_text(encoding='utf-8').splitlines(), 1) if any(re.search(x, l) for x in shapes)]
     assert bad == []
+
+
+# ── ONE RESOLVER: every road that asks "which AI runs this" gets the same answer ──────────────────────────────────────
+def _two_ready(**settings):
+    "claude and codex both connected, installed and passed - claude first in the list - and the Coding agent card set by the owner to codex."
+    return _home(('claude', 'codex'), tests={'claude': True, 'codex': True}, settings={'default_brain': 'codex', **settings})
+
+
+def test_a_blank_card_reads_the_default_brain_on_every_road(world):
+    """The general agent's session, triage and the Assistant read a blank card as the default brain; resolve_brain - what reports, a
+    coding task on no CLI and the Settings card's RUNS line read - took the first ready CLI instead: two AIs for one blank."""
+    from taskuary import concierge
+    world['installed'] |= {'claude', 'codex'}
+    s, cfg = _two_ready()
+    with mock.patch.object(config, 'load', lambda: cfg):
+        assert agents.resolve_brain(s, 'general') == general._selected(s)[0] == 'cli:codex'
+        assert agents.resolve_brain(s, 'triage') == llm.effective_pick(s) == 'cli:codex'
+        assert agents.resolve_brain(s, 'assistant') == concierge.default_pick(s) == 'cli:codex'
+
+
+def test_a_coding_pane_its_role_row_and_its_failover_head_name_one_cli(world):
+    "brain_for, the pane's chain and the row sync (cli_connections.brain_of) read the settings each their own way; now the resolver's."
+    world['installed'] |= {'claude', 'codex'}
+    s, cfg = _two_ready()
+    s.set_setting('profile_brains', json.dumps({'researcher': 'claude'}), 'owner')
+    with mock.patch.object(config, 'load', lambda: cfg):
+        for role, want in (('coding', 'codex'), ('researcher', 'claude')):
+            assert agents.brain_for(s, role) == agents.resolve_brain(s, 'coding', cli_only=True, role=role)[4:] == want
+            assert clic.brain_of(s, cfg, role, {}) == want
+        assert agents.brain_chain(s)[0] == agents.resolve_brain(s, 'coding', cli_only=True)[4:] == 'codex'
+
+
+def test_a_brain_an_update_saved_that_no_longer_starts_is_set_aside_by_every_road(world):
+    "Triage read its card raw and brain_for read default_brain raw: a saved-for-him gemini that is gone kept both while the rest moved on."
+    world['installed'] |= {'codex'}
+    s, cfg = _home(('codex', 'gemini'), tests={'codex': True})
+    for k, v in (('default_brain', 'gemini'), ('triage_ai', 'cli:gemini')): s.set_setting(k, v, 'migration')
+    with mock.patch.object(config, 'load', lambda: cfg):
+        assert llm.effective_pick(s) == agents.resolve_brain(s, 'triage') == 'cli:codex'
+        assert agents.brain_for(s, 'coding') == agents.brain_chain(s)[0] == 'codex'
+
+
+def test_the_task_header_names_the_ai_its_session_opens_on(world):
+    """The header (server: defaultPick) kept a saved conversation on a CLI whose test failed since; the session set it aside and opened on
+    the card's AI. One answer (general.opening) for both."""
+    world['installed'] |= {'claude', 'codex'}
+    s, cfg = _home(('claude', 'codex'), tests={'claude': False, 'codex': True})
+    tid = _researcher(s)
+    s.save_session(tid, 'cli:claude', '', 'sid-old', '')
+    with mock.patch.object(config, 'load', lambda: cfg):
+        clic.sync(cfg, s)
+        shown = general.default_pick(s, s.get_task(tid))         # before the session saves its own pick over the old one
+        sess = general.GeneralSession(s, tid)
+        try: assert shown == sess.pick == 'cli:codex'
+        finally: sess.close(learn=False, report=False); general.drop_session(tid)
+
+
+def test_is_there_an_ai_is_asked_of_the_job_that_will_run(world):
+    """The New sheet's Plan it read triage's AI; its press read the general agents' list - one sheet, two answers. Each job has its
+    own answer now, from the AI that job runs on: here triage's card is his and ready while the general agent is set to a CLI not installed."""
+    from taskuary import brainroute, capabilities
+    world['installed'] |= {'codex'}
+    s, cfg = _home(('codex', 'gemini'), tests={'codex': True}, connector='anthropic')
+    cid = s.get_connector_by_type('anthropic')['ConnectorId']
+    s.set_setting('triage_ai', f'connector:{cid}', 'owner'); s.set_setting('assistant_ai', 'cli:gemini', 'owner')
+    with mock.patch.object(config, 'load', lambda: cfg):
+        clic.sync(cfg, s)
+        assert capabilities.has_ai(s) and capabilities.has_ai(s, 'assistant')
+        assert brainroute.choose(s, 'general').pick == general._selected(s)[0] == 'cli:gemini'
+        assert not capabilities.has_ai(s, 'general')
+        assert capabilities.capabilities(s)['ai_for'] == {'triage': True, 'general': False, 'assistant': True}

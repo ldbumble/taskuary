@@ -28,7 +28,8 @@ class CapabilitiesTests(unittest.TestCase):
         s = MemoryStore()
         with mock.patch.object(agents, 'coding_ready', return_value=False):
             c = capabilities.capabilities(s)
-        self.assertEqual(set(c), {'coding', 'ai', 'mail', 'send'})
+        self.assertEqual(set(c), {'coding', 'ai', 'ai_for', 'mail', 'send'})
+        self.assertEqual(set(c['ai_for']), set(capabilities.AI_JOBS))
         self.assertIs(c['coding'], False); self.assertIs(c['mail'], False)
         # email can deliver; a Teams chat is read here and never posted into
         self.assertIs(c['send']['email'], True); self.assertIs(c['send']['teams'], False)

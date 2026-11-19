@@ -608,10 +608,11 @@ def effective_pick(store, pick=None) -> str:
     """The pick a brain setting resolves to - the slot's own value (`triage_ai` unless `pick` names one), else
     what blank means (agents.default_pick). '' = no brain: build_llm returns None and mail files untriaged.
     ONE answer for the brain that runs and for every surface that says which one does (setup.state)."""
-    primary = str(pick if pick is not None else store.get_setting('triage_ai') or '').strip()
-    if primary: return primary
-    from .agents import default_pick
-    return default_pick(store)
+    from . import agents
+    # the slot's own reading is the one resolver's (agents.resolve_brain) - it read the setting raw, so a CLI an update saved FOR him that no
+    # longer starts kept reading his mail while every other job had set it aside
+    if pick is None: return agents.resolve_brain(store, 'triage')
+    return str(pick).strip() or agents.default_pick(store)
 
 
 def brain_status(store, pick=None) -> dict:

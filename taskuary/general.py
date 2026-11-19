@@ -643,7 +643,7 @@ def _unset_gateway(store, pick: str) -> bool:
     return bool(c) and c['Type'] in agents.PICKED_ONLY and not any(str(store.get_setting(k) or '').strip() == pick for k in agents.BRAIN_SETTINGS)
 
 
-def default_pick(store, task: dict = None) -> str:
+def default_pick(store, task: dict = None, level: bool = True) -> str:
     """Which provider the chat would use if nobody chose one - the SAME reading start_session makes.
 
     The workspace used to default its picker to providers[0], and provider_options lists CLIs first,
@@ -653,34 +653,46 @@ def default_pick(store, task: dict = None) -> str:
     ...except on a walk-through, where start_session overrides that with walk_pick - and this did
     not, so the strip named the API brain while codex was driving the browser, and the owner's first
     typed reply would have handed the walk to a brain that cannot click (the owner, 2026-09-14)."""
+    return opening(store, task, level)[0]
+
+
+def opening(store, task: dict = None, level: bool = True) -> tuple:
+    """(pick, model, why) a general task's session opens on when nobody steers it - ONE answer for the session (GeneralSession) and for the
+    task's header (server: defaultPick): they read it two ways, so the header named the General agent card while the session opened on
+    the AI set for this level of work, or resumed a conversation the header had set aside. None for the model: the AI's own; `why` 'saved', 'walk', 'level' or 'card'.
+    `level` False for the router's fixed answer (brainroute._fixed), which steps up to the level's AI itself."""
+    task = store.get_task(int(task)) if task is not None and not isinstance(task, dict) and str(task).isdigit() else task
     saved = store.saved_session((task or {}).get('TaskId')) or {}
     # a saved pick is the owner's own choice of BRAIN and nothing about the role contradicts it:
     # the role no longer nominates a provider, so there is nothing left to reconcile it against
     # ...but never a gateway card no job is set to any more (agents.PICKED_ONLY): a session started while HIPAA AI was wrongly the
-    # general agent's brain kept every later turn on it after the setting was put back (the owner, 2026-11-09: "we changed it back")
-    if (p := saved.get('Pick')) and not _unset_gateway(store, p):
-        if any(o['pick'] == p for o in provider_options(store)): return p
+    # general agent's brain kept every later turn on it after the setting was put back (the owner, 2026-11-09: "we changed it back");
+    # nor a CLI whose test failed and that he did not choose (_failed)
+    if (p := saved.get('Pick')) and not _unset_gateway(store, p) and not _failed(store, p):
+        if any(o['pick'] == p for o in provider_options(store)): return p, saved.get('Model') or None, 'saved'
     # ...and the same is true of any task with a BROWSER, whoever opened it. A workflow's repeat run
     # carried its browser and its brief and answered "opening the secure area cannot be done from
     # here", because the quick API brain this falls back to has no shell to run agent-browser in
     # (2026-09-15). What needs hands takes the pick that has them.
     if str((task or {}).get('SourceRef') or '') == SETUP_REF or _browser_task(task):
         walk = walk_pick(store, task)
-        if walk: return walk
-    return _selected(store)[0]
+        if walk: return walk, None, 'walk'
+    # ...a first start nobody steered opens on the AI the owner set for this task's level in AI routing (brainroute.by_level)
+    if level and task and not is_dock(task):
+        from . import brainroute
+        lp = brainroute.level_pick(store, 'general', task) if brainroute.by_level(store) else None
+        if lp: return lp[0], lp[1] or None, 'level'
+    return _selected(store)[0], None, 'card'
 
 
 def _selected(store, connector_id=None, model=None, pick=None) -> tuple[str, str, str]:
     options = provider_options(store)
     explicit = bool(pick or connector_id is not None or model)
     from . import agents as hub_agents
-    # a general brain saved FOR the person that is not ready here is no choice of theirs (agents.stale) - it must not keep winning
-    own = '' if hub_agents.stale(store, 'assistant_ai') else store.get_setting('assistant_ai')
-    wanted = str(pick or (f'connector:{connector_id}' if connector_id else '') or own or '')
+    wanted = str(pick or (f'connector:{connector_id}' if connector_id else '') or '')
     if wanted and ':' not in wanted and wanted.isdigit(): wanted = f'connector:{wanted}'
-    if not wanted:                                     # blank = the default brain (agents.default_pick), as everywhere
-        from . import agents as hub_agents
-        wanted = hub_agents.default_pick(store)
+    # ...nobody steered it: the General agent card, read by the one resolver (agents.resolve_brain) - blank = the default brain, as everywhere
+    if not wanted: wanted = hub_agents.resolve_brain(store, 'general')
     if not wanted:
         # API/local connectors answer in-process and are dramatically quicker than launching a
         # coding CLI. Prefer that native path for chat; the owner can persist a CLI choice when
@@ -2662,14 +2674,12 @@ class GeneralSession:
         self.sid = sid or uuid.uuid4().hex[:12]         # `sid`: an idled-out session's own, brought back as the same run (idle_out)
         self.store, self.task_id = store, task_id
         saved = store.saved_session(task_id) or {}
+        # nobody steered it: the one answer the task's header shows too (opening) - its saved conversation's AI, a browser's hands, the
+        # level's AI in AI routing, else the General agent card. The task's ROLE is not a candidate - it names the instructions, never the brain
         if connector_id is None and not pick:
-            # the task's ROLE is not a candidate here - it names the instructions, never the brain
-            if any(o['pick'] == saved.get('Pick') for o in provider_options(store)) and not _failed(store, saved['Pick']): pick = saved['Pick']
-        # ...and a first start nobody steered opens on the AI the owner set for this task's level in AI routing (brainroute.by_level)
-        if connector_id is None and not pick and model is None and not is_dock(store.get_task(task_id)):
-            from . import brainroute
-            lp = brainroute.level_pick(store, 'general', task_id) if brainroute.by_level(store) else None
-            if lp: pick, model = lp[0], lp[1] or None
+            p, m, why = opening(store, store.get_task(task_id), level=model is None)
+            # ...the card's own AI is left for _selected to read, with the card's model
+            if why != 'card': pick, model = p, (m if why == 'level' else model)
         if model is None and (pick or (f'connector:{connector_id}' if connector_id else '')) == saved.get('Pick'):
             model = saved.get('Model') or None
         self.pick, self.provider, self.model = _selected(store, connector_id, model, pick)

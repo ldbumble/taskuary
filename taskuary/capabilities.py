@@ -24,10 +24,22 @@ def ai_brain(store) -> dict:
     rest (its name, why not) off the same dict."""
     from . import setup
     return (_safe(lambda: setup._ai(store), None) if store is not None else None) or {'ready': False}
-def has_ai(store) -> bool:
+# IS THERE AN AI FOR THIS JOB - ONE answer per job, the router's own pick (brainroute.choose, on agents.resolve_brain) and whether it or a
+# backup it fails over to answers here. The page asked triage's brain for "an AI" and the goal's planner a list of its own: on one sheet
+# the Plan-it box said an AI was there while the press found none (2026-11-19). The jobs the page offers work on:
+AI_JOBS = ('triage', 'general', 'assistant')
+
+def has_ai(store, job: str = 'triage') -> bool:
+    """`triage` (mail is read; what the Advisor and the connect line ask), `general` (an agent can work a task), `assistant` (the
+    Assistant answers, and plans a goal's steps - goals.plan)."""
     # the demo's script answers every ask (llm.build_llm) - with no AI "connected" the page drew Connect an AI over advice it had
     from . import demo
-    return demo.enabled() or bool(ai_brain(store).get('ready'))
+    if demo.enabled(): return True
+    if job == 'triage': return bool(ai_brain(store).get('ready'))      # setup's row: the same pick and backups, with its name and why
+    if store is None: return False
+    from . import brainroute, llm
+    r = _safe(lambda: brainroute.choose(store, job), None)
+    return any(_safe(lambda p=p: llm.brain_status(store, p)['ready']) for p in ([r.pick, *r.chain] if r else []) if p)
 
 
 def mail_cards(store) -> list:
@@ -79,8 +91,8 @@ def channels() -> tuple:
 
 
 def capabilities(store) -> dict:
-    """{"coding", "ai", "mail", "send": {channel: bool}} - the one answer, for the server and the page alike."""
-    return {'coding': can_code(store), 'ai': has_ai(store), 'mail': has_mail(store),
+    """{"coding", "ai", "ai_for": {job: bool}, "mail", "send": {channel: bool}} - the one answer, for the server and the page alike."""
+    return {'coding': can_code(store), 'ai': has_ai(store), 'ai_for': {j: has_ai(store, j) for j in AI_JOBS}, 'mail': has_mail(store),
             'send': {ch: can_send(store, ch) for ch in channels()}}
 
 

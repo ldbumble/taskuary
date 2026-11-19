@@ -186,7 +186,7 @@ class WhatTheJudgeIsAskedTests(unittest.TestCase):
 class ApplyTests(unittest.TestCase):
     def test_setting_a_cli_brains_model_writes_the_light_model_and_leaves_coding_alone(self):
         s, cfg = _store(), {**_cfg(model='opus'), 'agents': {'coding': {'kind': 'coding'}}}
-        s.set_setting('default_brain', 'claude', 'o'); s.set_setting('triage_ai', 'cli:claude', 'o')
+        s.set_setting('default_brain', 'claude', 'owner'); s.set_setting('triage_ai', 'cli:claude', 'o')      # his pick: the one resolver (agents.brain_for) takes it at its word
         out = aidefaults.apply(s, cfg, 'triage_ai', model='haiku')
         self.assertEqual(out['model'], 'haiku')
         # the GEARS live on the brain, not on the profile - a profile has nothing to do with which model runs it

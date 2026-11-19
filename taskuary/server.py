@@ -4656,7 +4656,7 @@ def _brainless(coding: bool) -> str:
     where = words.name('ai')
     if coding and not hub_agents.cli_ready(store):
         return f'{hub_agents.NO_AI} that can run a coding agent - connect a command-line AI (Claude Code, Codex) under {where}, then start it again'
-    if not coding and not capabilities.has_ai(store): return f'{hub_agents.NO_AI} to run this agent - connect one under {where}, then start it again'
+    if not coding and not capabilities.has_ai(store, 'general'): return f'{hub_agents.NO_AI} to run this agent - connect one under {where}, then start it again'
     return ''
 
 def _no_brain(task: dict | None, body: DispatchBody, kind: str = '') -> str:

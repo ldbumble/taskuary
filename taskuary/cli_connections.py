@@ -97,14 +97,15 @@ def resolve(cfg, profile, brain: str = ''):
 
 
 def brain_of(store, cfg, worker: str, profile: dict) -> str:
-    """The connection a profile's row runs on: its role's override (profile_brains), else the default brain - when either
-    names a connection; else '' and the legacy provider decides (an install from before the brain layer)."""
+    """The connection a profile's row runs on: the one resolver's CLI for this role (agents.brain_for - its override in profile_brains,
+    else the Coding agent card) - once either is chosen; else '' and the legacy provider decides (an install from before the brain layer).
+    It read the two settings raw, so a row was synced to a CLI the pane's own road (brain_chain) had already set aside as stale."""
+    from . import agents
     try: over = json.loads(store.get_setting('profile_brains') or '{}')
     except (TypeError, ValueError): over = {}
-    conns = cfg.get('cli_connections') or {}
-    for key in ((over.get(worker) if isinstance(over, dict) else ''), store.get_setting('default_brain')):
-        if str(key or '').strip() in conns: return str(key).strip()
-    return ''
+    if not any(str(k or '').strip() for k in ((over.get(worker) if isinstance(over, dict) else ''), store.get_setting('default_brain'))): return ''
+    k = agents.brain_for(store, worker)
+    return k if k in (cfg.get('cli_connections') or {}) else ''
 
 
 def adopt_installed(cfg, store) -> list:

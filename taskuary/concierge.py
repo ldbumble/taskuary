@@ -276,12 +276,9 @@ def pick(store) -> str:
 def default_pick(store) -> str:
     """The Assistant's default brain: the owner's choice in Settings' AI defaults (or on the Assistant tab); else the default CLI agent
     (its tools are what make this a full assistant); else the first API connector."""
-    s = store.get_settings()
-    chosen = str(s.get(AI_KEY) or '').strip()
-    if chosen: return chosen
     from . import agents as hub_agents
-    if (dflt := hub_agents.default_pick(store)): return dflt          # the default brain, as everywhere else
-    return general._selected(store)[0]
+    # the one resolver's (agents.resolve_brain: his pick, else the default brain, as everywhere else) - else the general agent's AI
+    return hub_agents.resolve_brain(store, 'assistant') or general._selected(store)[0]
 
 
 def is_cli(store) -> bool: return pick(store).startswith('cli:')
@@ -1775,7 +1772,7 @@ NEW_PRESS = {'note': 'Note it', 'goal': 'Track it', 'playbook': 'Set up with AI'
 OPENED = {'note': 'New on a note', 'goal': 'New on a goal', 'playbook': 'New on a playbook', 'dashboard': 'a new dashboard'}
 def new_press(store, kind: str) -> str:
     from . import capabilities
-    return 'Plan it' if kind == 'goal' and capabilities.has_ai(store) else NEW_PRESS[kind]
+    return 'Plan it' if kind == 'goal' and capabilities.has_ai(store, 'assistant') else NEW_PRESS[kind]
 
 def recurs_of(raw) -> dict | None:
     """The model's structured word that an ask repeats on a clock, kept to its four fields - None when it said nothing of the kind."""
@@ -1849,7 +1846,7 @@ def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = ''
 def start_refusal(store, kind: str) -> str:
     "Why an agent of `kind` cannot start here, or '' - asked by the one start (handoff_task) before anything is made: a task whose agent fails a second later is a dead end."
     from . import agents as hub_agents, capabilities
-    if not capabilities.has_ai(store): return f"{general.NO_AI}, so an agent can't run this yet"
+    if not capabilities.has_ai(store, 'general'): return f"{general.NO_AI}, so an agent can't run this yet"
     # ...a coding job with Developer mode off is a general agent's (handoff_task), so only a CLI missing in Developer mode refuses it
     if kind == 'coding' and hub_agents.developer_mode(store) and not capabilities.can_code(store):
         return 'No command-line AI (Claude Code, Codex) is connected to run a coding agent'
@@ -1857,7 +1854,7 @@ def start_refusal(store, kind: str) -> str:
 def no_start_chip(store, kind: str) -> dict:
     "The button under start_refusal's line: the check that refused - the AI, or the coding tool - opened where it is switched."
     from . import agents as _ag, capabilities
-    return {'verb': 'go', **_ag.no_coding_fix(store)} if kind == 'coding' and capabilities.has_ai(store) else connect_ai_chip()
+    return {'verb': 'go', **_ag.no_coding_fix(store)} if kind == 'coding' and capabilities.has_ai(store, 'general') else connect_ai_chip()
 
 
 def _made_now(store, tid: int, op: str, params: dict, lead: str = '', actor: str = 'owner') -> dict:

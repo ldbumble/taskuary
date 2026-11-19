@@ -37,10 +37,10 @@ def norm_route(route) -> str:
 
 def _brain(store, slot) -> str:
     """A slot's brain as a CLI name or a connector type - never a Name, which can be an account."""
-    from . import agents, llm
-    v = str(store.get_setting(slot['key']) or '').strip()
-    if slot['pick'] == 'cli': v = f"cli:{v or agents.default_brain(store)}" if ':' not in v else v
-    st = llm.brain_status(store, v)
+    from . import agents, aidefaults, llm
+    # what the card's job RUNS (agents.resolve_brain, the pick every road reads) - it read the setting raw and guessed a blank its own way
+    job = aidefaults.JOB_OF.get(slot['key'])
+    st = llm.brain_status(store, agents.resolve_brain(store, job) if job else str(store.get_setting(slot['key']) or '').strip())
     if st.get('Type') != 'cli': return str(st.get('Type') or '')
     key = str(st.get('pick') or '')[4:]
     row = agents.agent_row(store, key) or {}

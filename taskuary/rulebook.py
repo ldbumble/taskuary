@@ -887,15 +887,11 @@ AGENT_CHECK = True       # the suite turns this off (tests/conftest.py): a bare 
 
 
 def _agent_ready(store, item: dict) -> str:
-    """'' when an agent can start on the item from here, else why not - the page's own check (capabilities.cannotStart: an AI, and a brain a
-    general hand-off can choose), so no button is filled that the page greys."""
+    """'' when an agent can start on the item from here, else why not - the page's own check (capabilities.cannotStart: an AI for general
+    work, capabilities.has_ai), so no button is filled that the page greys."""
     if not AGENT_CHECK: return ''
-    from . import capabilities, general, agents as ha
-    try:
-        if not capabilities.has_ai(store): return 'no AI is connected'
-        brains = dict(ha.connection_brains(store))
-        ok = any(o.get('type') != 'cli' or ha.runs_here(brains.get(o['pick'][4:])) for o in general.provider_options(store))
-        return '' if ok else 'no brain an agent can run on'
+    from . import capabilities
+    try: return '' if capabilities.has_ai(store, 'general') else 'no AI is connected'
     except Exception as e: logger.debug(f'rulebook: no agent check for {item.get("key")} - {e}'); return ''
 
 

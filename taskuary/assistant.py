@@ -1674,7 +1674,7 @@ def attach_sources(store, i: dict, tid: int) -> list:
     for mid in store.idea_sources(i):
         m = store.get_message(mid)
         if not m or m.get('Channel') == CHANNEL or m.get('TaskId'): continue
-        store.attach_message(mid, tid); moved.append(mid)
+        if store.arrive(mid, tid, 'routed'): moved.append(mid)
     return moved
 
 

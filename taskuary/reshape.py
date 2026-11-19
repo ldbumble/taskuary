@@ -113,7 +113,7 @@ def move_part(store, tid: int, dst: int, message_ids, items, actor: str = 'owner
     mine = {m['MessageId'] for m in store.list_messages(tid)}
     moved = [int(m) for m in (message_ids or []) if int(m) in mine]
     for mid in moved:
-        store.attach_message(mid, dst)
+        store.arrive(mid, dst, 'routed', decided=True)
         store.add_route(mid, dst, 'split', None, f'{task_ref(tid)} was two jobs - this one is {task_ref(dst)}', [], actor)
     # THE TO-DOS GO WITH THEIR JOB (B13, the email walk 2026-10-29): a split left every box on the first task - the second job's
     # own to-do stayed under the first and the new task had none. The boxes keep their ids, ticks and notes
@@ -206,7 +206,7 @@ def merge_tasks(store, src: int, dst: int, actor: str = 'owner') -> dict:
         store.audit('task', dst, 'reopen', actor, detail={'why': f'{task_ref(src)} folded in'})
     msgs = store.list_messages(src)
     for m in msgs:
-        store.attach_message(m['MessageId'], dst)
+        store.arrive(m['MessageId'], dst, 'routed', decided=True)
         store.add_route(m['MessageId'], dst, 'merge', None, f'folded {task_ref(src)} into {task_ref(dst)} - one job, two tasks', [], actor)
     ask = str(a.get('Summary') or '').strip()
     if ask and ask not in str(b.get('Summary') or ''):

@@ -196,5 +196,36 @@ class DayCountTests(unittest.TestCase):
         self.assertEqual(ingest.day_count(s, '2026-11-11')['judged'], 0)
 
 
+class OneArrivalRoadTests(unittest.TestCase):
+    """ONE ARRIVAL ROAD (store.arrive, the only writer of message.TaskId): triage decides first. Two mails in one poll, and a same-thread
+    join made while triage still read them (the sent-mail judge putting his own mail on the open task) left a message ON the task and on
+    the rail as "triage is deciding" at once - then triage placed it again."""
+    def test_a_join_while_triage_reads_never_puts_a_message_in_two_places(self):
+        s = MemoryStore(); s.save_source({'Channel': 'email', 'Address': OWNER, 'Owner': 'me', 'Active': 1}, 'test'); ingest._PENDING.clear()
+        tid = s.create_task({'Title': 'Ledger check', 'Kind': 'task', 'Status': 'open'}, 'owner')
+        with ingest.deferred():
+            a = ingest.ingest_message(s, mail(1))['message_id']
+            b = ingest.ingest_message(s, mail(2, from_email=OWNER, external_id='q2'))['message_id']
+        self.assertFalse(s.sent_onto_task(b, tid, 'your sent mail - part of its work'))      # triage reads it: no road places it first
+        for m in (a, b):
+            row = s.get_message(m)
+            self.assertFalse(row['Status'] == 'triaging' and row['TaskId'], f'message {m} is on a task and still being read')
+        self.assertEqual(ingest.drain(s, llm=oracle('task')), 2)
+        self.assertEqual({s.get_message(m)['Status'] for m in (a, b)} & {'triaging'}, set())
+        for m in (a, b):          # ...and where it is, is where its last route says it went
+            row = s.get_message(m)
+            self.assertEqual(row['TaskId'], s._one('SELECT TaskId FROM route WHERE MessageId=? ORDER BY RouteId DESC LIMIT 1', (m,))['TaskId'])
+
+    def test_only_arrive_writes_a_messages_task(self):
+        import pathlib, re
+        # a placement written anywhere else - "UPDATE message SET ... TaskId=?" - is a second road (a task's delete clearing it is not one)
+        hits = [(p.name, n) for p in pathlib.Path(ingest.__file__).parent.glob('*.py')
+                for n, line in enumerate(p.read_text(encoding='utf-8').splitlines(), 1)
+                if re.search(r'UPDATE message SET[^"\']*TaskId=\?', line)]
+        self.assertEqual(hits, [])
+        from taskuary.store import MemoryStore as S
+        self.assertTrue(callable(getattr(S, 'arrive', None)))
+
+
 if __name__ == '__main__':
     unittest.main()

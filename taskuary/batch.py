@@ -117,7 +117,7 @@ def create(store, channel: str, source: str, rows: list, actor: str = 'router') 
 def _let_in(store, tid, rows, first, source):
     for n, r in enumerate(rows, first):
         conv = r.get('ConversationId') or f"m{r['MessageId']}"
-        store.place_message(r['MessageId'], tid, 'routed')
+        store.arrive(r['MessageId'], tid, 'routed')
         store.add_route(r['MessageId'], tid, 'batch', r.get('RankValue'),
                         f"item {n} of {task_ref(tid)}'s batch" + (f" - {r['RankWhy']}" if r.get('RankWhy') else ''), [], 'rank')
         store.add_batch_item(tid, conv, r['MessageId'], n, _title(r, source), r.get('SourceLink'))
@@ -208,7 +208,7 @@ def combine(store, tid, actor: str = 'owner') -> dict:
         for i in store.batch_items(o):
             place += 1; moved.append(f"({place}) {i.get('Title') or ''}")
             store.move_batch_item(i['ItemId'], tid, place)
-            if i.get('MessageId'): store.place_message(i['MessageId'], tid, 'routed')
+            if i.get('MessageId'): store.arrive(i['MessageId'], tid, 'routed', decided=True)
         # folded away through the one close (concierge.close_task): its agent stopped, anything it held put down with it
         from . import concierge
         store.add_comment(o, 'router', 'agent', f'Its items moved into {task_ref(tid)}, so one agent goes through them all.')

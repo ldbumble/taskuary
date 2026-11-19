@@ -215,7 +215,7 @@ def _restore_task(store, d: dict) -> int:
     for t, key in TASK_ROWS:
         for r in d.get(t) or []: store.put_back(t, {**r, 'TaskId': tid}, key)
     for m in d.get('messages') or []:
-        store._exec('UPDATE message SET TaskId=?, Status=? WHERE MessageId=? AND TaskId IS NULL', (tid, m['Status'], m['MessageId']))
+        store.arrive(m['MessageId'], tid, m['Status'], free=True, decided=True)       # the owner's own undo
     for rid in d.get('routes') or []: store._exec('UPDATE route SET TaskId=? WHERE RouteId=? AND TaskId IS NULL', (tid, rid))
     if d.get('ignore'): store._exec("DELETE FROM route WHERE RouteId=? AND Decision='ignore'", (d['ignore'],))
     # ...and the line the verdict taught comes out, any line it replaced goes back, and what it fed is withdrawn (memorylines.untaught).

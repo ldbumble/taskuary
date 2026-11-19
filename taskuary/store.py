@@ -3075,16 +3075,14 @@ class SQLiteStore:
         summary = f"You told {who} on {str(m.get('SentAt') or '')[:10]}" + (f" re \"{subj}\"" if subj else '') + f" you would {what}."
         tid = self.create_task({'Title': what[:1].upper() + what[1:], 'Summary': summary, 'Kind': 'task', 'Status': 'open', 'Assignee': 'owner',
                                 'Source': m.get('Channel') or 'email', 'SourceRef': f'promise:{mid}', 'DueAt': due or None}, 'promise')
-        self._exec('UPDATE message SET TaskId=? WHERE MessageId=? AND TaskId IS NULL', (tid, mid))
+        self.arrive(mid, tid, free=True)
         from . import outcomes
         outcomes.record(self, 'promise.made', 'task', tid, 'promise', facts={'mid': mid, 'due': due})   # the ledger: kept, kept late, late?
         return tid
     def sent_onto_task(self, mid: int, tid: int, why: str) -> bool:
         """The owner's own sent message, on no task yet, put on the open task the model read it as part of - so the thread is that
         task's and the other side's reply follows it there (store.task_for_conversation). False when it found a task meanwhile."""
-        with self.lock:
-            cur = self.cx.execute('UPDATE message SET TaskId=? WHERE MessageId=? AND TaskId IS NULL', (tid, mid)); self.cx.commit(); self._writes += 1
-        if cur.rowcount != 1: return False
+        if not self.arrive(mid, tid, free=True): return False       # ...nor while triage still reads it: it decides first
         self.add_route(mid, tid, 'attach', None, why, [], 'sentjudge')
         return True
     def open_promises(self, since, before='9999', conversation_id=None):
@@ -4983,20 +4981,28 @@ class SQLiteStore:
         self._poke('feed-changed', message_id=mid)
     def update_message_body(self, mid, body): self._exec('UPDATE message SET BodyText=? WHERE MessageId=?', (body, mid))   # a voice note, transcribed later
     def get_message(self, mid): return self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
-    def place_message(self, mid, task_id, status, title=None):
-        """A row that was shown first and judged later lands where the judgement puts it (ingest.drain).
-
-        `title` is the verdict's own line, which did not exist when the row was first shown: a
-        deferred row is written before triage has said anything about it."""
-        if title:
-            self._exec('UPDATE message SET TaskId=?, Status=?, TriageTitle=? WHERE MessageId=?', (task_id, status, title, mid))
-        else:
-            self._exec('UPDATE message SET TaskId=?, Status=? WHERE MessageId=?', (task_id, status, mid))
+    def arrive(self, mid, task_id, status=None, title=None, *, free: bool = False, decided: bool = False) -> bool:
+        """WHERE A MESSAGE IS - THE ONE WRITER OF message.TaskId (spec B, one arrival road). Triage decides first: while a row is still
+        'triaging' only a placement that `decided` it lands - triage's own verdict (ingest._land, its retry and error paths) or the owner's
+        own hand (promote, split, move). Any other road - the sent-mail judge's join, an idea's sources, a promise - is refused, so a
+        message is never on a task and on the rail as "triage is deciding" at once (two mails in one poll, a join while triage read).
+        `status` None keeps the row's; `title` is the verdict's own line; `free` places only a row no task holds yet. -> placed?"""
+        sets, args = ['TaskId=?'], [task_id]
+        if status is not None: sets.append('Status=?'); args.append(status)
+        if title: sets.append('TriageTitle=?'); args.append(title)
+        where = 'MessageId=?' + (' AND TaskId IS NULL' if free else '') + ('' if decided else " AND Status!='triaging'")
+        with self.lock:
+            cur = self.cx.execute(f"UPDATE message SET {', '.join(sets)} WHERE {where}", (*args, mid)); self.cx.commit(); self._writes += 1
+        if cur.rowcount != 1: return False
         if task_id is not None:
             self._bump_snapshots()
             self._poke('feed-changed', 'task-changed', message_id=mid, task_id=task_id)
         else:
             self._poke('feed-changed', message_id=mid)
+        return True
+    # the two old names, kept for the tests that set rows up by hand: each is arrive, decided - no road of the app calls them
+    def place_message(self, mid, task_id, status, title=None): self.arrive(mid, task_id, status, title, decided=True)
+    def attach_message(self, mid, task_id): self.arrive(mid, task_id, 'routed', decided=True)
     def claim_retriage(self, mid: int) -> bool:
         """Atomically move one failed row back into triage: a message in the `error` state (linked
         to a task or not), or a legacy failure still stored as a taskless `filed` row.
@@ -5202,10 +5208,6 @@ class SQLiteStore:
     def set_message_rank(self, mid, value: float, why: str, actor: str):
         """Where in the judging queue this arrival sits, and the words it got there by."""
         self._exec('UPDATE message SET RankValue=?, RankWhy=? WHERE MessageId=?', (float(value), str(why or ''), mid))
-    def attach_message(self, mid, task_id):
-        self._exec("UPDATE message SET TaskId=?, Status='routed' WHERE MessageId=?", (task_id, mid))
-        self._bump_snapshots()
-        self._poke('feed-changed', 'task-changed', message_id=mid, task_id=task_id)
     # What was ON the mail: the screenshot of the spreadsheet, the invoice PDF. The bytes live on
     # disk (`Path`) - a database that grows by 8MB a mail is a database nobody backs up.
     def add_attachment(self, fields): return self._insert('attachment', fields, ATT_COLS, {'CreatedAt': _now()})

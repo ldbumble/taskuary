@@ -120,7 +120,7 @@ def _land(store, msg: dict, task_id, status: str) -> int:
     verdict). It rides the msg dict rather than a parameter because every branch below lands through
     here, and a verdict that named nothing - a policy ignore, a failed call - simply carries none."""
     if msg.get('_mid'):
-        store.place_message(msg['_mid'], task_id, status, title=msg.get('_title'))
+        store.arrive(msg['_mid'], task_id, status, title=msg.get('_title'), decided=True)
         mid = msg['_mid']
     else: mid = store.add_message({**_fields(msg, task_id), 'Status': status})
     # ...and the calls that judged it are this message's, now that it has a row (judge; aiusage.for_message)
@@ -564,7 +564,7 @@ def drain(store, llm=None, progress=None, limit: int = 500, fresh=(), only_fresh
                     if _judged_then_failed(store, mid, before, tid, e): continue
                     # a row whose judgement blew up keeps whatever task the router gave it and says
                     # triage failed - an error with a retry, never a filed "nothing to do" (PW-036)
-                    store.place_message(mid, tid, 'error')
+                    store.arrive(mid, tid, 'error', decided=True)
                     store.add_route(mid, tid, 'file', None, f'triage failed ({str(e)[:160]}) - unclassified; retry available', [], 'triage',
                                     parse_error=str(e)[:1000])
                     store.set_setting('triage_last_error', str(e)[:200], 'system')
@@ -1246,7 +1246,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 # was never judged left the queue and the retry sweep for good (L1, 2026-09-25 - always triage it)
                 if (prior and prior.get('TaskId') is None
                         and prior.get('Status') not in ('context', 'skipped', 'triaging', 'error')):
-                    store.attach_message(rel_mid, tid)
+                    store.arrive(rel_mid, tid, 'routed')
             # the agents actually pick work up here:
             # - reply tasks ALWAYS enter the review queue ("needs me") - for everyone, there is no setting for it (S1, 2026-09-25) -
             #   and the reply is the task's agent's to write, started here as for any work (reply_to_agent)
@@ -1448,7 +1448,7 @@ def _judged_then_failed(store, mid, before, after, e) -> bool:
     start, the checklist). Marking it "triage failed" put it back in the retry sweep, which judged it again as new
     and opened a second task. It stays on its task, saying what broke - never re-triaged as new work."""
     if not after or after == before: return False
-    store.place_message(mid, after, 'routed')
+    store.arrive(mid, after, 'routed', decided=True)
     store.add_comment(after, 'triage', 'agent', f'Triaged onto this task; a later step failed ({str(e)[:160]}) - nothing was re-triaged.')
     logger.warning(f'ingest: message {mid} reached {task_ref(after)}, then a later step failed - {e}')
     return True
@@ -3243,7 +3243,7 @@ def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding
     tid = store.create_task({'Title': title, 'Summary': plain, 'Kind': kind,
                              'Source': m.get('Channel') or 'api', 'SourceRef': m.get('SourceLink'),
                              **({'Assignee': assignee} if assignee else {})}, actor)
-    store.attach_message(mid, tid)
+    store.arrive(mid, tid, 'routed', decided=True)       # the owner's own hand
     ask_later(store, tid, m, plain, said)
     # what was said about THIS message before it was work travels with it (operations.py, PW-133)
     from . import operations
@@ -3276,7 +3276,7 @@ def split_message(store, mid: int, actor: str = 'owner', kind: str = None) -> in
     tid = store.create_task({'Title': title, 'Summary': plain,
                              'Kind': kind or (parent or {}).get('Kind') or 'coding',
                              'Source': m.get('Channel') or 'api', 'SourceRef': m.get('SourceLink')}, actor)
-    store.attach_message(mid, tid)
+    store.arrive(mid, tid, 'routed', decided=True)       # the owner's own hand
     ask_later(store, tid, m, plain)
     store.add_route(mid, tid, 'create', None,
                     f'split off {task_ref(old)} - a separate ask in the same thread' if old else 'made its own task',
@@ -3716,7 +3716,7 @@ def _sweep(store, llm, limit, hours, tries) -> int:
             if _judged_then_failed(store, mid, m.get('TaskId'), now.get('TaskId'), e): continue
             # the pipeline itself broke rather than the AI: put the row back where it was, with the
             # reason on it, exactly as the button's endpoint does
-            store.place_message(mid, now.get('TaskId'), 'error')
+            store.arrive(mid, now.get('TaskId'), 'error', decided=True)
             store.add_route(mid, now.get('TaskId'), 'file', None,
                             f'triage retry failed ({str(e)[:200]}) - unclassified; retry available', [],
                             'triage', parse_error=str(e)[:1000])

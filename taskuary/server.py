@@ -7713,7 +7713,7 @@ def retriage_message(mid: int):
         # Most AI failures are deliberately recorded as errors by ingest_message. This catches only
         # an unexpected pipeline failure so Retry never leaves the row spinning forever.
         now = store.get_message(mid) or {}
-        store.place_message(mid, now.get('TaskId'), 'error')
+        store.arrive(mid, now.get('TaskId'), 'error', decided=True)
         store.add_route(mid, now.get('TaskId'), 'file', None,
                         f'triage retry failed ({str(e)[:200]}) - unclassified; retry available', [], 'triage',
                         parse_error=str(e)[:1000])

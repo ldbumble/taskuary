@@ -742,7 +742,7 @@ class BringUpTests(unittest.TestCase):
             remote_assistant.respond(store, 'whatsapp', JID, 'bring up TQ-0035', c['ConnectorId'])
         self.assertEqual(surfaced.call_args.args[1], 'task:35')
         self.assertIn('Here it is: TQ-0035.', sent[0][0])
-        self.assertEqual(sent[-1][1], ['Remind me', 'Next', 'Mark done'])
+        self.assertEqual(sent[-1][1], ['Mark done', 'Next', 'Remind me'])   # nothing lit by the decision: the chips' own order, as the desk draws them
         self.assertEqual(remote_assistant.acts_for(store, 'whatsapp', JID)['Mark done'], {'t': 'verb', 'verb': 'close', 'key': 'task:35'})
 
 

@@ -2047,8 +2047,9 @@ def source_line(item: dict | None) -> str:
     if not item: return ''
     who = ' '.join(str(item.get('who') or '').split())
     ch = str(item.get('channel') or '')
-    # ...and what landed since the owner last opened it, the rail's "+3" said short (processing_unread.news_since_seen)
-    new = f"+{item['new_n']} new" if item.get('new_n') else ''
+    # ...and what landed since the owner last opened it, as the rail's row says it (processing_unread.news_word)
+    from .processing_unread import news_word
+    new = news_word(item.get('new_n'))
     bits = ' · '.join(x for x in (who, ch.replace('_', ' '), str(item.get('ref') or ''), new) if x)
     return ' '.join(x for x in (funnel.CHANNEL_MARKS.get(ch, ''), bits) if x) if bits else ''
 
@@ -2282,10 +2283,6 @@ def pages(text: str, limit: int = PAGE_CHARS, head: int = 0) -> list:
     return out
 
 
-# words that put a thing DOWN rather than do it: never the card's verb while a real one is offered
-_DOWN = ('close', 'not_ours', 'not_ours_sender', 'block_sender', 'done')
-
-
 # the words that answer "who should take it?" - the move of a task nobody is on (move_title)
 _HAND = ('regular_agent', 'coding_agent')
 
@@ -2317,29 +2314,14 @@ def decision(store, item: dict | None) -> dict:
 
 
 def primary(out: dict, said: dict = None) -> dict | None:
-    """The card's verb: THE ONE DECISION'S, when it lit one of the chips here (`said`, decision()) - the same button as the desk - and, only
-    while it has nothing, the fixed rule: the first word that DOES the thing - a reply with no draft yet leads with drafting it, not with
-    closing the task (the vocabulary lists close first for a waiting draft).
-    ...and the move's own verb where the card names one: "who should take it?" is answered by handing it over,
-    never by a reply (the desktop's button there is Hand to agent, 2026-09-28). {'verb': 'next'} when the decision's move is Next."""
-    chips = [c for c in (out.get('chips') or []) if isinstance(c, dict) and c.get('verb') and c.get('verb') != 'next']
+    """The card's verb: THE ONE DECISION'S (rulebook.decide, `said`), when it lit one of the chips here - the same button as the desk - else
+    None, and the card keeps its chips' own order, as the desk draws them. The phone had fixed rules of its own for a card the decision lit
+    nothing on (the first word that is not a put-down, Hand to agent on "who should take it?", Mark done on a finished agent), so it led with
+    a button the desk left plain. {'verb': 'next'} when the decision's move is Next."""
     it = out.get('item') or {}
-    ours = bool(said) and said.get('key') == it.get('key')
-    if ours and said.get('verb') == 'next': return {'verb': 'next', 'label': said.get('label') or buttons.label('next')}
-    hit = next((c for c in chips if c['verb'] == said.get('verb')), None) if ours and said.get('verb') else None
-    if hit: return hit
-    # ...but never on a stranger's held mail: handing a prompt from an unknown address to an agent is not the first thing to do (F8)
-    if it.get('hold'):
-        mine = [c for c in chips if c['verb'] not in _HAND]
-        return next((c for c in mine if c['verb'] not in _DOWN), (mine or chips or [None])[0])
-    # ...and a move that IS Mark done (a task its agent finished - move_of, the desk's reading too) leads with it
-    if it.get('kind') in STORY_KINDS and move_title(it) == buttons.label('close'):
-        done = next((c for c in chips if c['verb'] == 'close'), None)
-        if done: return done
-    if it.get('kind') in STORY_KINDS and move_title(it) in ('who should take it?', buttons.label('regular_agent')):
-        hand = next((c for c in chips if c['verb'] in _HAND), None)
-        if hand: return hand
-    return next((c for c in chips if c['verb'] not in _DOWN), chips[0] if chips else None)
+    if not said or said.get('key') != it.get('key') or not said.get('verb'): return None
+    if said['verb'] == 'next': return {'verb': 'next', 'label': said.get('label') or buttons.label('next')}
+    return next((c for c in out.get('chips') or [] if isinstance(c, dict) and c.get('verb') == said['verb']), None)
 
 
 def advice_line(out: dict, said: dict) -> str:
@@ -2498,14 +2480,11 @@ def agent_state(item: dict | None, store=None) -> str:
 
 
 def held(item: dict | None) -> bool:
-    """An agent holds this task right now: its row is in the working lane, or a live session is on it."""
+    """An agent is on this task right now (workerstate.on_task, the one answer) - the row's lane only for a row with no task to ask about."""
     it = item or {}
-    if it.get('lane') == 'working': return True
-    if not str(it.get('tid') or '').isdigit(): return False
-    from . import terminal
-    try: s = terminal.session_for(int(it['tid']))
-    except Exception: return False
-    return bool(s and getattr(s, 'alive', False))
+    if not str(it.get('tid') or '').isdigit(): return it.get('lane') == 'working'
+    from .workerstate import on_task
+    return on_task(it['tid'])
 
 
 def subject_of(store, item: dict | None) -> str:

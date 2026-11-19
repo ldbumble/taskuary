@@ -83,6 +83,9 @@ def test_each_state_is_one_decision_on_every_surface(world, case, state, verb, s
     chips = concierge.chips_for(s, syn.get(item['key']) or item)
     lead = remote_assistant.primary({'chips': chips, 'item': item}, d)
     if verb in {c['verb'] for c in chips}: assert lead['verb'] == verb
+    # ...and where the decision lights nothing, the phone leads with nothing of its own either: no fixed rule picks a button the desk left
+    # plain (remote_assistant.primary had three)
+    if not verb: assert lead is None, f'the phone lit {lead} where the desk lit nothing'
     assert remote_assistant.advice_line({'item': item}, d) == (d.get('line') or '')
 
 

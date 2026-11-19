@@ -435,9 +435,9 @@ def _agent_row(store, tid) -> bool:
     """Is an agent's own row on the rail the line for this task - a live session (working or waiting on the owner), or a run
     that finished, failed or stopped? Its row already says so: "agent stopped", "finished" (the owner, 2026-10-20)."""
     from . import workerstate
+    if workerstate.on_task(tid): return True          # is an agent on it now: the one answer (workerstate.on_task)
     try:
-        w = workerstate.status(store, int(tid))
-        if w.get('live') or w.get('state') in AGENT_ENDED: return True
+        if workerstate.status(store, int(tid)).get('state') in AGENT_ENDED: return True
     except Exception: pass
     runs = store.list_runs(int(tid)) or []
     return bool(runs) and str(runs[-1].get('Status') or '') in AGENT_ENDED

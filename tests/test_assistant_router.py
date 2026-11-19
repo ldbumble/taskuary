@@ -264,7 +264,7 @@ class DeskRoutes(unittest.TestCase):
         self.assertTrue(concierge.continuable(s, tid))
         for model in ('CALL: {"kind": "agent.tell", "params": {"text": "carry on, but skip the mail search"}}',
                       'CALL: {"kind": "agent.answer", "params": {"text": "carry on, but skip the mail search"}}'):
-            with mock.patch.object(concierge, '_agent_running', return_value=False), \
+            with mock.patch.object(concierge, '_on_task', return_value=False), \
                  mock.patch.object(server, 'continue_work', return_value={'continued': True}) as go:
                 out, _ = say(s, 'carry on with it, but skip the mail search', item['key'], model)
             go.assert_called_once()
@@ -274,12 +274,12 @@ class DeskRoutes(unittest.TestCase):
             self.assertNotIn('nothing would hear', out['say'])
         # ...and the row's own Continue, which a general agent's row does not draw: "get the agent going again on this" was answered "I can't
         # start it from this item" (the re-check, 2026-11-04) - it picks up, the owner's words its note
-        with mock.patch.object(concierge, '_agent_running', return_value=False), \
+        with mock.patch.object(concierge, '_on_task', return_value=False), \
              mock.patch.object(server, 'continue_work', return_value={'continued': True}) as go:
             out, _ = say(s, 'get the agent going again on this', item['key'], 'CALL: {"kind": "continue", "params": {}}')
         self.assertEqual(go.call_args[0][1].note, 'get the agent going again on this', out['say'])
         # ...and a continue called with no note carries the owner's own words (the re-check: "skip the zip file" was lost)
-        with mock.patch.object(concierge, '_agent_running', return_value=False), \
+        with mock.patch.object(concierge, '_on_task', return_value=False), \
              mock.patch.object(server, 'continue_work', return_value={'continued': True}) as go:
             say(s, 'carry on with this one, and skip the zip file', item['key'], 'CALL: {"kind": "agent.continue", "params": {}}')
         self.assertEqual(go.call_args[0][1].note, 'carry on with this one, and skip the zip file')
@@ -304,7 +304,7 @@ class DeskRoutes(unittest.TestCase):
             s = store(); tid, item = on_table(s); typed = []
             s._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (10 ** 9, tid))
             notes = len(s.list_comments(tid))
-            with mock.patch.object(concierge, '_agent_running', return_value=True), mock.patch.object(waitroom, 'state', return_value=('working', None)), \
+            with mock.patch.object(concierge, '_on_task', return_value=True), mock.patch.object(waitroom, 'state', return_value=('working', None)), \
                  mock.patch.object(terminal, 'tell', side_effect=lambda t, text: (typed.append(text), 'typed into')[1]):
                 out, _ = say(s, 'tell the agent to use the main branch', item['key'], model)
             self.assertEqual(out.get('open'), f'#task={tid}', model)
@@ -313,7 +313,7 @@ class DeskRoutes(unittest.TestCase):
         # ...and the phone, which has no task to open, still hands them over (the owner: phone left as it is)
         s = store(); tid, item = on_table(s)
         s._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (10 ** 9, tid))
-        with concierge.delivering(concierge.PHONE), mock.patch.object(concierge, '_agent_running', return_value=True), \
+        with concierge.delivering(concierge.PHONE), mock.patch.object(concierge, '_on_task', return_value=True), \
              mock.patch.object(waitroom, 'state', return_value=('working', None)):
             out, _ = say(s, 'tell the agent to use the main branch', item['key'], 'CALL: {"kind": "agent.tell", "params": {"text": "use the main branch"}}')
         self.assertEqual([waitroom.parts(n['Note']) for n in s.waiting_notes(tid)], [('tell the agent to use the main branch', 'use the main branch')])

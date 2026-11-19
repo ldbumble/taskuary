@@ -388,12 +388,17 @@ class TheWalkOpensWithWhoWantsWhatTests(unittest.TestCase):
 
 
 class TheVerbDoesTheThingTests(unittest.TestCase):
-    def test_a_reply_with_no_draft_leads_with_drafting_it_not_closing(self):
-        out = {'say': 'Sam is owed a reply.', 'item': {'kind': 'review', 'lane': 'approve'},
+    def test_a_reply_with_no_draft_leads_with_what_the_decision_lit_and_nothing_of_its_own(self):
+        """The lead is the ONE DECISION's (rulebook.decide), as the desk lights it - the phone's own fallback rules went (N18)."""
+        out = {'say': 'Sam is owed a reply.', 'item': {'key': 'task:7', 'kind': 'review', 'lane': 'approve'},
                'chips': [{'verb': 'close', 'label': 'Close without sending'}, {'verb': 'redraft', 'label': 'Redraft it'},
                          {'verb': 'not_ours', 'label': 'Not ours'}, {'verb': 'next', 'label': 'Next'}]}
-        text = remote_assistant.turn_text(out, store=MemoryStore())
+        with mock.patch.object(remote_assistant, 'decision', return_value={'key': 'task:7', 'verb': 'redraft', 'line': ''}):
+            text = remote_assistant.turn_text(out, store=MemoryStore())
         self.assertIn('Reply with one of:\n1 · Redraft it\n2 · Next\n3 · Close without sending\n4 · Not ours', text)
+        with mock.patch.object(remote_assistant, 'decision', return_value={'key': 'task:7', 'verb': None, 'line': ''}):
+            text = remote_assistant.turn_text(out, store=MemoryStore())
+        self.assertIn('Reply with one of:\n1 · Close without sending\n2 · Redraft it', text, 'nothing lit: the chips in the order the desk draws them')
 
 
 class NoHintUnderAnAnswerTests(unittest.TestCase):

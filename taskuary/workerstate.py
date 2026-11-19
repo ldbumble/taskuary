@@ -73,6 +73,19 @@ def _live(tid: int):
     return next((x for x in list(term.SESSIONS.values()) if getattr(x, 'task_id', None) == tid and getattr(x, 'alive', False)), None)
 
 
+def on_task(tid) -> bool:
+    """IS AN AGENT ON THIS TASK NOW - one answer for the rail's buttons, the phone's card, the Assistant and the task's page: a session open
+    on it (coding terminal or chat), or its start in flight (general.starting). A chat agent that idled out (general.idle_out) is not - its
+    session is gone until the next line brings it back - though its row's lane, its Assignee and its last event still name an agent: the
+    phone read the lane and said "working" over a task whose page read idle."""
+    try: tid = int(tid)
+    except (TypeError, ValueError): return False
+    from . import terminal
+    from .general import starting
+    try: return terminal.for_task(tid, details=False) is not None or starting(tid)
+    except Exception: return False
+
+
 LIVE_SESSION, OTHER_SESSION = 'the agent session on it is still open', 'another agent session on it is still open'
 
 def live_work(store, tid: int, but=None, skip: tuple = ()) -> list:

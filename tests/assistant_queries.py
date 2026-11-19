@@ -1357,7 +1357,7 @@ def _guards(stack, sort=None, live=None, agenda=None):
     stack.enter_context(mock.patch.object(llm_mod, 'make_cli_llm', never))
     stack.enter_context(mock.patch.object(llm_mod, 'build_llm', never))
     stack.enter_context(mock.patch.object(terminal, 'live_sessions', return_value=[{'taskId': int(live), 'sid': f's{live}'}] if live else []))
-    # a running session on one task, where the case says so - what Stop and save is drawn by (concierge._agent_running)
+    # a running session on one task, where the case says so - what Stop and save is drawn by (concierge._on_task)
     stack.enter_context(mock.patch.object(terminal, 'for_task', lambda tid, **k: {'sid': f's{tid}'} if live and int(tid) == int(live) else None))
     stack.enter_context(mock.patch.object(concierge, 'stop_turn', lambda tid: bool(live) and int(tid) == int(live)))      # the x's road, never a real session
     stack.enter_context(mock.patch.object(ingest, '_spawn'))

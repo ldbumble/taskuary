@@ -66,6 +66,17 @@ class IdleOut(unittest.TestCase):
         self.assertFalse(self.ses.alive); self.assertTrue(general.idled(self.tid, self.s))
         shut.assert_called_once_with(self.sid, self.tid)
 
+    def test_an_idled_agent_is_off_the_task_on_the_page_the_rail_and_the_phone(self):
+        """IS AN AGENT ON THIS TASK NOW is one answer (workerstate.on_task): idled out, the page read idle while the phone, reading the row's
+        lane the rail last stood with, said "working" over it."""
+        from taskuary import concierge, funnel, remote_assistant as ra
+        self.assertTrue(ws.on_task(self.tid))
+        row = next((i for i in funnel.pile(self.s).get('items') or [] if i.get('tid') == self.tid), None) or {'tid': self.tid}
+        with mock.patch.object(clipool, 'close'): general.idle_sweep(self.later())
+        said = {'page': general.working(self.s, self.tid), 'rail': concierge._on_task(self.tid),
+                'phone': ra.held({**row, 'lane': 'working'}), 'one': ws.on_task(self.tid)}
+        self.assertEqual(said, dict.fromkeys(said, False))
+
     def test_an_idle_session_closes_quietly_after_the_period(self):
         s, tid = self.s, self.tid
         before = (chat(s, tid), len(s.list_comments(tid)), len([e for e in s.worker_events(tid) if e["Kind"] not in ws.NOTES]), s.get_task(tid)['Status'],

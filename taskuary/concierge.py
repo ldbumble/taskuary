@@ -829,17 +829,13 @@ def no_agent(store) -> str:
     except Exception: return ''
 
 
+from .workerstate import on_task as _on_task     # is an agent on this task now - one answer, every surface
+
+
 def _agent_holds(store, item) -> bool:
     """An agent is on this task - "mine" then takes it off the agent's hands rather than making a task."""
     t = (store.get_task(int(item['tid'])) if store is not None and item.get('tid') else None) or {}
     return str(t.get('Assignee') or item.get('assignee') or '').startswith('agent:')
-
-
-def _agent_running(tid) -> bool:
-    """A live agent session - coding terminal or assistant chat - is on this task right now."""
-    from . import terminal
-    try: return terminal.for_task(int(tid), details=False) is not None
-    except Exception: return False
 
 
 def _queued(store, tid) -> bool:
@@ -920,7 +916,7 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     if verb == 'report_off' and not _report_on(store, item):
         return f"There's no report on {what} running on its clock to switch off."
     # ...an agent still WORKING on it takes the words as its next prompt (agent.tell, the owner 2026-11-02)
-    if verb == 'answer_agent' and item.get('kind') != 'agent' and not (item.get('tid') and _agent_running(item['tid'])):
+    if verb == 'answer_agent' and item.get('kind') != 'agent' and not (item.get('tid') and _on_task(item['tid'])):
         return f"There's nothing to answer on {what} - nothing on it is waiting for an answer."
     # SEND AND CLOSE is Close out's other send (the owner, 2026-11-03): a reply drafted on a task - never a close-out's merge, one email of
     # several (slots.py) or a question parked for the sender - and wherever Send itself could not go, nor can it
@@ -955,7 +951,7 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
             block = outbound.send_block(store, capabilities.draft_channel(store, item['rid'])) or 'its channel cannot deliver a reply'
             return f"The draft on {what} cannot be sent from here - {block}."
     # an agent already RUNNING on the task is not handed it again (the owner, 2026-10-01) - the dispatch door refuses it too
-    if verb in ('coding_agent', 'regular_agent') and item.get('tid') and _agent_running(item['tid']):
+    if verb in ('coding_agent', 'regular_agent') and item.get('tid') and _on_task(item['tid']):
         return f"{what} is already being worked on - it is not handed off a second time."
     if verb == 'coding_agent' and store is not None:
         # no coding tool connected: there is no coding agent to offer at all - not even as an alternative (2026-10-16)
@@ -1263,7 +1259,7 @@ def _shows(store, it: dict, b: str, known: dict = None) -> bool:
     saved = lambda: once('saved', lambda: store.resumable_session(tid))
     story = lambda: once('story', lambda: _story(store, int(tid)))
     if b == 'reopen': return bool(it.get('closed')) or str(task().get('Status') or '') in ('done', 'dropped')
-    if b == 'stop_agent': return _agent_running(tid)
+    if b == 'stop_agent': return _on_task(tid)
     # the task page draws it only on an open task whose agent failed or whose reader was unsure (brainroute.strong_offered)
     if b == 'strong_again':
         from . import brainroute, workerstate
@@ -1271,7 +1267,7 @@ def _shows(store, it: dict, b: str, known: dict = None) -> bool:
                                                                   once('ended', lambda: workerstate.ended(store, int(tid))), story())
     if b == 'continue': return bool(saved()) and not _general(store, it)
     # ...Run another agent only where one ever ran (the owner, 2026-11-09): a task held for a new sender is an agent's, and nothing ran on it
-    if b == 'run_another': return _agent_running(tid) or bool(saved() or store.last_transcript(tid) or store.list_runs(int(tid))
+    if b == 'run_another': return _on_task(tid) or bool(saved() or store.last_transcript(tid) or store.list_runs(int(tid))
                                                               or (story() or {}).get('kind') not in (None, 'held', 'idle', 'queued', 'none'))
     # ...and Review changes on work left to review after its session is gone (the owner, 2026-11-10: "yes, keep it"): the same fact that lights
     # it (rulebook.changes_waiting), so the lit button always has something to open - the landing card's own diff (TaskPage `diff`)
@@ -1280,7 +1276,7 @@ def _shows(store, it: dict, b: str, known: dict = None) -> bool:
         return _agent_holds(store, it) or bool(saved()) or bool(tid and rulebook.changes_waiting(store, int(tid)))
     if b == 'share': return _agent_holds(store, it) or bool(saved())
     # Share stands on a task's row whenever no agent is at work on it (TaskPage: a Result to share, or a summary to email)
-    if b == 'share_result': return not _agent_running(it['tid'])
+    if b == 'share_result': return not _on_task(it['tid'])
     if b == 'attach': return bool(it.get('rid'))
     # Copy is a draft's that cannot be sent from here (ReviewDecision, the owner 2026-10-22) - it stood on every task's list of buttons
     if b == 'copy': return bool(it.get('rid')) and cannot(it, 'approve', store)
@@ -1456,7 +1452,7 @@ def continuable(store, tid) -> bool:
     "A stopped agent's work can be picked up: a coding session's own CLI conversation, or a general agent's saved chat with nothing live on it."
     if store.resumable_session(tid): return True
     t = store.get_task(tid) or {}
-    return general.handles(t) and not _agent_running(tid) and bool(general.chat_rows(store, tid, run=True))
+    return general.handles(t) and not _on_task(tid) and bool(general.chat_rows(store, tid, run=True))
 
 
 def _did(store, tid: int, said: str, kind: str, outcome: dict | None = None) -> dict:
@@ -1552,7 +1548,7 @@ def _stop_now(store, tid: int, item: dict | None, t: int | None, actor: str) -> 
     desk (b757c3e0d), so there was no button to light, and the Assistant answered "Stopping it." over an agent it never touched. A typed
     put-down acts (2026-10-23); this is one. No agent running is said, never pretended."""
     ref = task_ref(t) if t else ''
-    if not t or not _agent_running(t): say_ = f"No agent is running{' on ' + ref if ref else ''} - nothing to stop."
+    if not t or not _on_task(t): say_ = f"No agent is running{' on ' + ref if ref else ''} - nothing to stop."
     elif stop_turn(t): say_ = f"Stopped the agent on {ref} - type to it to carry on."
     else: say_ = f"The agent on {ref} did not stop - press the x on its turn."
     record_related(store, tid, item, 'assistant', say_)
@@ -1960,7 +1956,7 @@ IN_TASK = frozenset({'agent.tell', 'agent.answer', 'answer_agent', 'task.comment
 def _opened(store, tid: int, target: int) -> dict:
     "The task brought up as a press of its rail row does, and where his words go there - nothing written in it."
     t = store.get_task(int(target)) or {}
-    live = _agent_running(int(target)) or t.get('RunStatus') == 'running' or _queued(store, int(target))
+    live = _on_task(int(target)) or t.get('RunStatus') == 'running' or _queued(store, int(target))
     said = f"Opened {task_ref(int(target))} - {'its agent hears what you type in its box' if live else 'type it in its box'}."
     record(store, tid, 'assistant', said)
     return {'say': said, 'options': [], 'chips': [], 'decision': None, 'open': f'#task={int(target)}'}
@@ -1977,7 +1973,7 @@ def _tell_now(store, tid: int, target: int, said: str, actor: str, owner: str = 
     o = r.get('outcome') or {}
     when = ('it has them now' if o.get('delivered') else
             "they wait until you trust its sender" if o.get('state') == 'held_stranger' else
-            'they go in when its agent starts - it waits its turn' if _queued(store, target) and not _agent_running(target) else
+            'they go in when its agent starts - it waits its turn' if _queued(store, target) and not _on_task(target) else
             'they go in when it stops at its prompt')
     return _did(store, tid, f"Told the agent on {task_ref(target)}: “{_title_cut(' '.join(str(owner or said).split()), 120)}” - {when}.", 'agent.tell')
 
@@ -3797,13 +3793,13 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             if who and not person(store, who):
                 raise CallMiss(f"Nobody called {who} has written here, so there is no address to hand {named} to - ask the owner for "
                                f"their email address ({kind} takes an address as `who`). Nothing was written.")
-        if kind == 'agent.stop' and not _agent_running(t) and (store.get_task(t) or {}).get('RunStatus') != 'running':
+        if kind == 'agent.stop' and not _on_task(t) and (store.get_task(t) or {}).get('RunStatus') != 'running':
             raise CallMiss(f"No agent is running on {named} - there is nothing to stop. Say so in plain words. Nothing was changed.")
         # ...and an ANSWER with nobody to hear it (real-AI walk, 2026-10-18): "tell the agent on TQ-n ..." with no session on TQ-n
         # came back as a card, and on the next try as a coding agent nobody asked for. The fact goes back, with the real roads
         # (an agent's own card on the table was built from its live session: it is the run that asked)
         # ...and an agent waiting its turn to start hears them too: they wait in its box until it starts (_queued)
-        live = kind in ('agent.answer', 'agent.tell') and (_agent_running(t) or (store.get_task(t) or {}).get('RunStatus') == 'running' or _queued(store, t))
+        live = kind in ('agent.answer', 'agent.tell') and (_on_task(t) or (store.get_task(t) or {}).get('RunStatus') == 'running' or _queued(store, t))
         # ...but words for an agent the owner stopped, or a restart cut off, ARE "carry on" (the overnight run, 2026-11-03: "carry on with the
         # vendor notes" was answered "press Try again or Run another agent"): its saved conversation picks up with them as the owner's note
         if kind in ('agent.answer', 'agent.tell') and not live and continuable(store, t):
@@ -4578,7 +4574,7 @@ def card_for(item: dict) -> dict:
                                        'danger', 'danger_aim', 'subject',
                                        'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'members', 'aliases', 'unread', 'deferred', 'watching', 'actionable', 'paused', 'closed',
                                        # ...and an FYI row speaking for its email thread: the mails it opens on (processing_unread.fold_fyi_threads)
-                                       'brief_today', 'thread', 'thread_n', 'thread_items')} | ({'dashboard': True} if item.get('dashboard') else {})   # a dashboard's row draws the dashboard
+                                       'brief_today', 'thread', 'thread_n', 'thread_items', 'new_n', 'news')} | ({'dashboard': True} if item.get('dashboard') else {})   # a dashboard's row draws the dashboard
 
 
 def _fyi_card(item: dict, batch: list, gists: dict) -> tuple:
@@ -5344,11 +5340,6 @@ def _routing_words(cfg: dict) -> str:
     return route_words(cfg)
 
 
-def _schedule_words(cfg: dict) -> str:
-    from . import reports
-    return reports.schedule_words(cfg)
-
-
 # The card reads the way the report builder does - its prompt first, then the settings under it. It used to be
 # "source: agent; inputs: ...; summary instructions: ..." - a config dump the owner called "some technical summary",
 # on the desktop and in WhatsApp alike (2026-09-24).
@@ -5369,12 +5360,13 @@ def report_facts(cfg: dict) -> dict:
     """What the confirmation box says about a report (PW-195), in the builder's order: its name, the prompt, then
     what it reads, when it runs, how it reaches the owner and where else it goes."""
     from .appfacts import _goes
+    from . import reports
     agent = cfg.get('type') == 'agent' or any(isinstance(x, dict) and x.get('type') == 'agent' for x in cfg.get('sources') or [])
     job = str(cfg.get('prompt') or next((x.get('prompt') for x in cfg.get('sources') or [] if isinstance(x, dict) and x.get('prompt')), '') or '').strip()
     summ = str(cfg.get('ai_prompt') or '').strip()
     prompt = '\n\n'.join(x for x in ((job if agent else ''), (f'Then: {summ}' if agent and job and summ else summ)) if x)
     return {'title': str(cfg.get('title') or ''), 'prompt': prompt or 'none - the raw result is filed as it comes',
-            'reads': _reads_words(cfg), 'runs': _schedule_words(cfg) + (f" ({cfg['tz']})" if cfg.get('tz') else ''),
+            'reads': _reads_words(cfg), 'runs': reports.schedule_words(cfg) + (f" ({cfg['tz']})" if cfg.get('tz') else ''),
             'reaches_you': _routing_words(cfg), 'goes_to': _goes(cfg)}
 
 

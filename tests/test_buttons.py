@@ -61,7 +61,7 @@ class Contract(unittest.TestCase):
 
 class EveryLabelIsOnTheList(unittest.TestCase):
     def test_chips(self):
-        with mock.patch.object(concierge, '_agent_running', return_value=False):
+        with mock.patch.object(concierge, '_on_task', return_value=False):
             for it in ITEMS:
                 for c in chips(it): self.assertIn(c['label'], LABELS, (it['kind'], c))
                 for c in chips(it): self.assertEqual(c['label'], buttons.label(c['verb'], 'action' if c['label'] == 'Approve' else
@@ -69,7 +69,7 @@ class EveryLabelIsOnTheList(unittest.TestCase):
                                                                                'fyi' if c['verb'] == 'mine' and it.get('kind') == 'fyi' else None), c)
 
     def test_state_labels_where_the_state_holds(self):
-        with mock.patch.object(concierge, '_agent_running', return_value=False):
+        with mock.patch.object(concierge, '_on_task', return_value=False):
             act = next(c for c in chips(ITEMS[2]) if c['verb'] == 'approve')
             self.assertEqual(act['label'], buttons.label('approve', 'action'))
             self.assertEqual(next(c for c in chips(ITEMS[3]) if c['verb'] == 'approve')['label'], buttons.label('approve', 'action'))
@@ -104,7 +104,7 @@ class NoRemovedButton(unittest.TestCase):
             for table in (concierge.PROPOSALS, concierge.CHIP_WORDS, toolcatalog.DECISIONS, concierge.RECEIPTS):
                 self.assertNotIn(v, table, v)
             self.assertNotIn(v, concierge.VERBS)
-        with mock.patch.object(concierge, '_agent_running', return_value=False):
+        with mock.patch.object(concierge, '_on_task', return_value=False):
             for it in ITEMS:
                 self.assertFalse({c['verb'] for c in chips(it)} & set(buttons.REMOVED), it['kind'])
                 self.assertFalse({v['verb'] for v in rulebook.offered(None, it)} & set(buttons.REMOVED), it['kind'])
@@ -132,7 +132,7 @@ class PhantomGuard(unittest.TestCase):
         return found
 
     def test_every_fallback_line(self):
-        with mock.patch.object(concierge, '_agent_running', return_value=False):
+        with mock.patch.object(concierge, '_on_task', return_value=False):
             for it in ITEMS:
                 shown = {c['label'] for c in chips(it)}
                 for opening in (True, False):
@@ -143,12 +143,12 @@ class PhantomGuard(unittest.TestCase):
     def test_a_held_row_says_its_state_once(self):
         # the phone read "No agent has started on it. Waiting for you. ..." - two heads for one fact; the row's own sentence leads with it
         it = next(i for i in ITEMS if i.get('why_idle'))
-        with mock.patch.object(concierge, '_agent_running', return_value=False):
+        with mock.patch.object(concierge, '_on_task', return_value=False):
             line = concierge.fallback(dict(it), True)
         self.assertIn(f". {it['why_idle']} From you:", line); self.assertNotIn('No agent has started', line)
 
     def test_the_cannot_lines(self):
-        with mock.patch.object(concierge, '_agent_running', return_value=True):
+        with mock.patch.object(concierge, '_on_task', return_value=True):
             for it in ITEMS:
                 shown = {c['label'] for c in chips(it)}
                 for v in ('not_ours_kind', 'approve', 'regular_agent', 'coding_agent'):
@@ -239,7 +239,7 @@ class AVerbOnlyWhereItBelongs(unittest.TestCase):
         mid = _mail(s, sender, tid, channel); return s, {'kind': 'task', 'key': f'task:{tid}', 'title': 'CI failed on main', 'tid': tid, 'mid': mid}
 
     def row(self, s, it):
-        with mock.patch('taskuary.capabilities.has_ai', return_value=False), mock.patch.object(concierge, '_agent_running', return_value=False):
+        with mock.patch('taskuary.capabilities.has_ai', return_value=False), mock.patch.object(concierge, '_on_task', return_value=False):
             return {b['verb'] for b in concierge.row_buttons(s, it)}
 
     def test_reply_only_where_somebody_reads_one(self):

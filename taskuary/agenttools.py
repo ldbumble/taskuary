@@ -923,6 +923,10 @@ SHOW_RULE = ("To show the owner an image, a file or a page, call the `show` tool
 # ...and THE ANSWER IS THE ANSWER (the owner, 2026-11-16: "tell me what to do and i will do it" was answered "No changes were made to Azure
 # permissions, resources, or the implementation this turn"): "say what you checked it by, or that you could not" closed every turn with what it
 # had NOT done - a line of what did not happen is said only where it changes the answer
+# ...and WHAT IT SAYS OF HIM IS HIS (the redesign walk, 2026-11-19: a sent redraft said "Friday is tight for me", which he never said, and a
+# meeting already over was accepted at 4:27 PM): one sentence, beside the verify rule, in every agent's rules (terminal.with_fence_rule)
+OWNER_FACT_RULE = ("Never state a fact about the owner he did not give you or a record does not show - when he is free, what he prefers, what "
+                   "suits him - ask him in one question instead; and check every date and time against now before you accept, propose or write it.")
 VERIFY_RULE = ("Answer what was asked. Claim an effect (searched, opened, sent, changed, pushed, deployed, on screen) only once you verified it, "
                "and say how; what you did not do or could not open is said only where it changes the answer.")
 

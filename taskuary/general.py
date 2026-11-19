@@ -2266,7 +2266,10 @@ def unlearned(store, frozen) -> str:
 # WHAT IT STATES CAN BE CHECKED, SO IT IS TOLD (design round 4, H5: "Thursday, March 12" for a Friday; "I guessed Ray's address" of a man whose
 # mail was on the task): the day, and the addresses the people on the task wrote from - facts, said where every turn's late facts are
 def today_line() -> str:
-    return f"TODAY: {datetime.now().strftime('%A %d %B %Y')} on this computer. Any other date's weekday you write, work out from this one."
+    # ...and the hour: told the day alone, an agent at 4:27 PM accepted a meeting that had ended at 3:00 (the redesign walk, 2026-11-19)
+    n = datetime.now()
+    return (f"TODAY: {n.strftime('%A %d %B %Y')}, {n.strftime('%I:%M %p').lstrip('0')} now on this computer. Any other date's weekday you write, "
+            "work out from this one; a time before now has passed.")
 PEOPLE_N = 12
 def people_line(store, tid: int) -> str:
     "Who wrote on the task, at the address their mail came from - '' with none. Never the owner's own mail."

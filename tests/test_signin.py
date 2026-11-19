@@ -1005,6 +1005,26 @@ def test_a_sign_up_the_site_turned_down_puts_back_the_sign_in_it_replaced():
     assert signin.saved(s2, 'rentscope.example') is None
 
 
+def test_a_failed_sign_up_card_a_later_sign_up_made_good_reads_done_not_a_red_failure():
+    """Design round 6, D3 (the vendor walk): his press on a held sign-up failed - "No account: the site kept its sign-up form up" - and stood red
+    under the agent's later line that the account was active. The failure a later step overcame is that outcome, where it happened."""
+    from taskuary import conversation, general
+    s = MemoryStore(); tid = Factory(s).task('Market data')
+    rid = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'Submit the sign-up on RentScope',
+                        'DraftText': json.dumps({'action': 'browser_act', 'sid': 'sess1', 'args': ['signup'], 'signup': 'rentscope.example',
+                                                 'site': 'rentscope.example', 'what': 'Submit the sign-up on RentScope'})})
+    s.review_act_failed(rid, f'No account: rentscope.example kept its sign-up form up. {general.AGENT_TOLD}', 'owner')
+    other = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'Pay on DealFlow',
+                          'DraftText': json.dumps({'action': 'browser_act', 'sid': 'sess1', 'args': ['click', '@e4'], 'site': 'dealflow.example', 'what': 'Pay $49'})})
+    s.review_act_failed(other, 'the page covers that control', 'owner')
+    ok, _ = signing_up(s, tid, UpPage(), lambda sid, site, c: c.go('data', 'https://www.rentscope.example/data') or {'ok': True, 'user': USER})
+    assert ok
+    r = s.get_review(rid)
+    assert (r['Status'], r['ActError']) == ('approved', None) and conversation._card(r)['status'] == 'approved'
+    assert 'the account on rentscope.example was made' in json.loads(r['FinalText'])['result']['performed']
+    assert s.get_review(other)['ActError'], 'a failure on another site is not overcome by this one'
+
+
 def test_a_wizards_last_step_is_kept_under_the_email_its_first_step_named():
     """A two-step sign-up: the email on step one, Company and password on step two. Kept with no user name, the account was said "created"
     and every sign-in after was refused ("Wrong email or password"). The agent's press on step one is heard, and its email kept for the step

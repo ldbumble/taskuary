@@ -1482,6 +1482,8 @@ def _make(store, tid, sid, site, c, fill=None, send=None) -> tuple[bool, str]:
                        'kept. Fix what it asks for and run `agent-browser signup` again; a box only the owner can fill is theirs.')
     if (u := got.get('user')) and u != user and not kept: user = u; save(store, site, user, pw, by='taskuary', keep_old=True)
     if not kept: _kept(prev, _raw(store, site))
+    from .browsergate import overcome
+    overcome(store, tid, site, f'Done on a later try: the account on {site} was made', signup=True)
     return True, _answered(store, tid, sid, site, c, user, kept)
 
 

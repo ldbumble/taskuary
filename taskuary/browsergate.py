@@ -370,6 +370,7 @@ WANT = wants(ITEM)
 # accessibility tree's own grammar (`- button "Pay $412.50" [ref=e12]`), not a word list - so the card can say which control it is.
 _VERB = {'click': 'click', 'dblclick': 'double-click', 'press': 'press', 'fill': 'type into', 'type': 'type into', 'check': 'tick',
          'uncheck': 'untick', 'select': 'choose in', 'upload': 'upload a file to', 'drag': 'drag', 'focus': 'focus'}
+_REF = re.compile(r'@e\d+|\bref[ =]?e\d+', re.I)
 _REF_LINE = r'^\s*-?\s*(?P<role>[\w-]+)\s*(?:"(?P<name>[^"]*)")?[^\n]*\bref=(?P<ref>{ref})\b'
 
 
@@ -460,7 +461,12 @@ def _judge(store, todo: list, pg: dict, brain=None, said: str = '') -> list:
 
 def _verdict(act: dict, v: dict | None, pg: dict, said: str) -> dict:
     if v is None: return {'hold': True, 'what': target(act, pg) or _cmd(act), 'why': "the AI's answer could not be read, so it waits for you"}
-    what = ' '.join(str(v.get('what') or '').split())[:200] or target(act, pg) or _cmd(act)
+    what = ' '.join(str(v.get('what') or '').split())[:200]
+    # ...a ref is agent-browser's grammar, never his words ("clicks ref e640 on uprinting.com, which is not in the visible snapshot"): the
+    # control the page names it, else the site (design round 6, D3)
+    if not what or _REF.search(what):
+        h = urlsplit(str(pg.get('url') or '')).hostname
+        what = target(act, pg) if control(act, pg).get('role') else f"a step on {h}" if h else target(act, pg) or _cmd(act)
     big = v.get('big')
     if big is True: return {'hold': True, 'what': what, 'why': WHY.get(str(v.get('kind') or ''), BIG_WHY)}
     # ...only a verdict that SAYS it is not big passes on that: one that left `big` out (a CLI judge carries no schema) is read the old way -
@@ -576,6 +582,26 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
         raise
 
 
+# A FAILURE A LATER STEP OVERCAME IS THAT OUTCOME (design round 6, D3: "Failed - No account: the site kept its sign-up form up ... run
+# `agent-browser signup` again" stood red under the line that said the account was active). Kept where it happened, with what came of it:
+# the card he pressed reads done on a later try - never a live red failure the work has since got past. The same act only - a sign-up made
+# on that site, or the very command run there - never any later step on the site.
+OVERCOME = 'overcome by a later step'
+def overcome(store, tid, site: str, said: str, signup: bool = False, command: str = '') -> list:
+    "The failed browser cards on task `tid` for `site` that this later success did: settled done, saying `said`. -> their review ids."
+    from .shellgate import FAILED
+    if not (store and tid and site): return []
+    out = []
+    for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND (IFNULL(ActError,'')<>'' OR DecideNote=?)", (int(tid), FAILED)):
+        try: p = json.loads(r.get('DraftText') or '{}') or {}
+        except (TypeError, ValueError): continue
+        if not isinstance(p, dict) or p.get('action') != 'browser_act' or p.get('site') != site: continue
+        if not ((signup and p.get('signup')) or (command and str(p.get('command') or '') == command)): continue
+        if store.review_overcome(r['ReviewId'], json.dumps({**p, 'about': said, 'result': {'performed': said}}), OVERCOME): out.append(r['ReviewId'])
+    if out: store.audit('task', int(tid), 'cards_overcome', 'taskuary', 'system', {'rids': out, 'site': site})
+    return out
+
+
 def _perform(store, tid: int, p: dict, run=None) -> dict:
     from . import browserview
     sid, args = str(p.get('sid') or ''), list(p.get('args') or [])
@@ -623,6 +649,7 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
                       f"The page is now {now or 'unknown'} - look at it, then " + NEXT[0].lower() + NEXT[1:], wake=True)
     store.audit('task', tid, 'browser_act_done', 'owner', 'human', {'site': p.get('site'), 'what': p.get('what'), 'command': str(p.get('command') or '')[:300],
                                                           'said': now or said[-300:]})
+    overcome(store, tid, p.get('site'), f"Done on a later try: {p.get('what') or p.get('command')}", command=str(p.get('command') or ''))
     return {'performed': p.get('what') or p.get('command'), 'site': p.get('site'), 'page': now}
 
 

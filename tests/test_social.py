@@ -16,6 +16,7 @@ from unittest import mock
 from taskuary import social
 from taskuary.reports import CONNECTION_OF, REGISTRY, resolve_cfg
 from taskuary.store import MemoryStore
+from taskuary.testing import Factory
 
 TYPES = ('bluesky_me', 'bluesky_timeline', 'bluesky_post',
          'mastodon_me', 'mastodon_timeline', 'mastodon_post')
@@ -448,6 +449,15 @@ class RedditAndXAreWired(unittest.TestCase):
             self.assertEqual((a['card'], a['press'], a['road']), (card, press, 'run_tool'))
         self.assertIn('x_post', proposals.MEDIA); self.assertNotIn('reddit_post', proposals.MEDIA)
         self.assertIn('developer app', cat.by_type('x')['desc'])
+
+    def test_a_post_card_is_named_by_its_own_press_never_its_tool(self):
+        # "1 of 3 · next: write x post on X (Twitter)" (design round 6, D3): the next card's line is the card's own words
+        from taskuary import cardqueue, proposals
+        s = MemoryStore(); tid = Factory(s).task(title='Post the Q3 headline')
+        self.assertEqual(proposals.tool_words(s, {'action': 'run_tool', 'type': 'x_post', 'text': 'Q3 is in.'}), 'post to X')
+        for t in ('linkedin_post', 'x_post'): proposals.queue(s, tid, {'action': 'run_tool', 'type': t, 'text': 'Q3 is in.'})
+        q = cardqueue.state(s, tid)
+        self.assertEqual(cardqueue.line(q), '1 of 2 · next: post to X')
 
     def test_the_saved_card_reaches_the_executor_and_no_body_can_bring_its_own(self):
         from taskuary.reports import query_only

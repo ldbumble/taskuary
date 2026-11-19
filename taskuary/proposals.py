@@ -358,6 +358,10 @@ def tool_words(store, p: dict) -> str:
     from . import reports, scopes, trackers
     t = str(p.get('type') or '')
     if t in trackers.TYPES: return trackers.words(p)
+    # ...a post its card declares is said by that card's own press ("post to X"): built from the tool's name it read "write x post on X
+    # (Twitter)" on the next card's line (design round 6, D3)
+    from .connectorcatalog import action_for
+    if (act := action_for(t)) and act.get('kind') == 'post' and (press := str(act.get('press') or '')): return press[:1].lower() + press[1:]
     verb = {'read': 'read', 'write': 'write', 'admin': 'run'}.get(scopes.needs(t), 'run')
     if t.endswith('_move'): verb = 'move'
     where = next((str(p[k]) for k in WHERE_KEYS if p.get(k)), '')

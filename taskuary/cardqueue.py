@@ -180,7 +180,9 @@ def what(store, u: dict) -> str:
         why = ' '.join(str(r.get('Reason') or '').split())
         for lead in ('the agent proposes to ', 'the workflow asks to '): why = why[len(lead):] if why.lower().startswith(lead) else why
         why = why.split(': ', 1)[1] if why.startswith('held before it ran') and ': ' in why else why
-        return why.split(' - ')[0][:90] or 'the next step'
+        why = why.split(' - ')[0]
+        # ...cut at a word, never mid-word ("so its effect is u" stood on the line, design round 6)
+        return (why if len(why) <= 90 else why[:90].rsplit(' ', 1)[0].rstrip(',;:') + '…') or 'the next step'
     try: env = json.loads(r.get('Deliver') or '{}') or {}
     except (TypeError, ValueError): env = {}
     if isinstance(env, dict) and env.get('kind') == 'calendar': return 'the calendar answer'

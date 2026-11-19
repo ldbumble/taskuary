@@ -5944,6 +5944,14 @@ class SQLiteStore:
         "An act's press that failed: kept on the review, which still waits - with who pressed and when, as a failed send keeps them (finish_review_delivery)."
         self._exec("UPDATE review SET ActError=?, DecidedBy=?, DecidedAt=? WHERE ReviewId=? AND Status IN ('pending','held','superseded')", (str(error or '')[:300] or None, by, _now(), rid))
         self._review_changed(rid)
+    def review_overcome(self, rid, final, note) -> bool:
+        "An act's press that failed, done since by a later step (browsergate.overcome): settled as done, with what came of it - its error gone."
+        with self.lock:
+            cur = self.cx.execute("UPDATE review SET Status='approved', FinalText=?, ActError=NULL, DecideNote=? WHERE ReviewId=? AND Kind='action' "
+                                  "AND Status IN ('pending','held','superseded')", (final, note, rid))
+            self.cx.commit(); self._writes += 1
+        if cur.rowcount: self._review_changed(rid)
+        return bool(cur.rowcount)
     def set_review_sid(self, rid, sid):
         self._exec('UPDATE review SET DraftSid=? WHERE ReviewId=?', (sid, rid)); self._review_changed(rid)
     def save_review_draft(self, rid, draft):

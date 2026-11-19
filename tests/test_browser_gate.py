@@ -220,6 +220,21 @@ class Judging(unittest.TestCase):
         self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'Sure.')
         self.assertEqual(bg.asked(self.s, self.tid), said, "only his own lines, never Taskuary's or the agent's")
 
+    def test_a_held_steps_words_never_name_a_ref_and_its_line_is_cut_at_a_word(self):
+        """Design round 6, D3: "1 of 3 · next: clicks ref e640 on uprinting.com, which is not in the visible snapshot, so its effect is u" and
+        "Clicks unknown BotWall control @e30" stood as cards. A ref is the browser's grammar, never his words: the control the page names
+        it, else the site; and the next card's line is cut at a word."""
+        from taskuary import cardqueue
+        with verdict({'irreversible': True, 'sure': False, 'what': 'clicks ref e640 on uprinting.com, which is not in the visible snapshot', 'big': False}):
+            v = one(self.s, self.act, {'url': 'https://www.uprinting.example/booklets', 'elements': ''}, Brain(None))
+        self.assertTrue(v['hold']); self.assertEqual(v['what'], 'a step on www.uprinting.example')
+        with verdict({'irreversible': True, 'sure': False, 'what': 'Clicks unknown BotWall control @e30', 'big': False}):
+            self.assertEqual(one(self.s, self.act, {'url': CHECKOUT, 'elements': SNAP}, Brain(None))['what'], 'click the "Continue" button on pay.toll.example')
+        long = 'held before it ran, in the agent browser: ' + 'Submit the sign-up form on the vendor portal for the board data trial with the made-up details'
+        u = {'rids': [1], 'rows': [{'ReviewId': 1, 'Kind': 'action', 'Status': 'pending', 'Reason': long, 'DraftText': '{}'}]}
+        w = cardqueue.what(self.s, u)
+        self.assertTrue(w.endswith('…') and len(w) <= 91 and long.split(': ', 1)[1].startswith(w[:-1]), w)
+
     def test_his_go_ahead_typed_while_the_turn_runs_is_his_words_at_once(self):
         """The vendor walk, 2026-11-18 (0 of 13 accounts): the task came from a colleague's chat, and "go ahead and submit them all yourself"
         was typed while the agent's turn ran - kept for its next step, so not yet his words to the gate, which read "(none)" and held every

@@ -85,7 +85,8 @@ test("a held browser act reads as what it does and where, never its JSON", () =>
       url: "https://pay.toll.example/checkout/review", site: "toll.example", what: "pays the $412.50 order on toll.example" }) };
   const shown = proposalPresentation(review);
   assert.equal(shown.title, "The agent's browser waits for your yes");
-  assert.equal(shown.destination, "https://pay.toll.example/checkout/review");
+  // ...on the SITE, never its raw address (the owner's live app, 2026-11-19)
+  assert.equal(shown.destination, "toll.example");
   assert.equal(shown.approveLabel, "Approve");
   assert.equal(shown.readOnly, true);
   // the what is the context line (Reason) already; the box is the exact command, once (2026-10-25)

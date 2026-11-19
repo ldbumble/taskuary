@@ -449,7 +449,11 @@ def _judge(store, todo: list, pg: dict, brain=None, said: str = '') -> list:
             f"{fence(json.dumps(pg.get('fields') or [])[:2000])}\n"
             "THE COMMANDS THE AGENT IS ABOUT TO RUN, IN THIS ORDER:\n" + ''.join(f'ACT {i}: {fence(_cmd(a))}\n' for i, a in enumerate(todo, 1)) +
             f"THE OWNER'S OWN WORDS TO THIS AGENT: {fence(said or '(none)')}")
-    try: vs = ask_acts(store, brain, SYSTEM, user, WANT, len(todo))
+    try:
+        vs = ask_acts(store, brain, SYSTEM, user, WANT, len(todo))
+        # ...AN ANSWER IT COULD NOT READ IS ASKED ONCE MORE before anything waits on him (the owner's live app, 2026-11-19: a click to a file
+        # list's second page was held because one entry came back out of shape) - what it still cannot read then holds, as before
+        if vs and None in vs: vs = [a or b for a, b in zip(vs, ask_acts(store, brain, SYSTEM, user, WANT, len(todo)) or [None] * len(todo))]
     except Exception as e:
         logger.debug(f'browsergate: no verdict on {[a["verb"] for a in todo]} - {e}')
         return [_late(target(a, pg) or _cmd(a)) for a in todo]

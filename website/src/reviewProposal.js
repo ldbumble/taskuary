@@ -188,7 +188,8 @@ export const proposalPresentation = (review) => {
     context: review.Reason || "Held before it ran · it can't be undone",
     ...heldLead(proposal),
     destinationLabel: "On",
-    destination: proposal.url || proposal.site || "the agent's browser",
+    // ...the SITE, never its raw address (the owner's live app, 2026-11-19: "On https://app.box.example/folder/..." under the step)
+    destination: proposal.site || proposal.url || "the agent's browser",
     approveLabel: APPROVE,
     busyLabel: "running…",
     rejectLabel: "Dismiss",

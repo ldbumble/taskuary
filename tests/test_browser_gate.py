@@ -691,3 +691,14 @@ def test_signup_is_taskuarys_own_verb_answered_by_the_server_never_the_real_prog
          mock.patch.object(gatecmd, 'post', lambda cmd, after=False, wait=0: posted.append(cmd) or {'own': True, 'ok': True, 'said': 'Signed up on x.example'}):
         assert gatecmd.main(['gate', 'agent-browser', 'signup']) == 0
     assert ran == [] and posted == ['agent-browser signup']
+
+
+def test_an_answer_out_of_shape_is_asked_once_more_before_anything_waits_on_him():
+    """The owner's live app, 2026-11-19: a click to the second page of a file list was held - "the AI could not tell" - because the judge's
+    entry came back out of shape. It is asked once more; only what it still cannot read waits on him."""
+    s, calls, said = MemoryStore(), [], iter([{'acts': [{'what': 'next page'}]}, {'acts': [{'big': False, 'sure': True, 'irreversible': False,
+                                                                                                'what': 'Show the second page of files on Box'}]}])
+    def ask(brain, system, user, want=None, need=(), **kw): calls.append(user); return SimpleNamespace(data=next(said))
+    with mock.patch('taskuary.llm.ask_json', ask):
+        v = one(s, bg.acts('agent-browser click @e12')[0], {'url': 'https://app.box.example/folder/9', 'elements': SNAP}, Brain(None))
+    assert (v['hold'], len(calls)) == (False, 2), (v, calls)

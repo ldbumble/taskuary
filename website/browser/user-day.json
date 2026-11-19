@@ -11,7 +11,9 @@
   "Find three Boston caterers that can do 40 people in March, with prices, in a spreadsheet you can forward.",
   "Have the October vendor spend summary come to you automatically every Monday from now on.",
   "Get Erin the vendor trial accounts she asks for, using your work email.",
-  "Sort out the clashing meeting invite."
+  "Sort out the clashing meeting invite.",
+  "Send Paula a one-page PDF summary of October vendor spend with a chart, and a 5-slide deck of the same for the leadership meeting.",
+  "Email each of the three caterers you find to ask for availability on March 12 - three separate emails, each yours to send."
  ],
  "arrivals": [
   {
@@ -98,6 +100,34 @@
    "from": "Gail Moreno <gail@northwind.example>",
    "subject": "Re: Offsite venue",
    "body": "One more - can you find catering for the 40 of us too? Three options with prices would be great."
+  },
+  {
+   "at": 30,
+   "channel": "chat",
+   "from": "Paula Vance",
+   "subject": "",
+   "body": "also can you make that a short PDF with a chart? and a few slides for leadership - meeting is at 4"
+  },
+  {
+   "at": 31,
+   "channel": "chat",
+   "from": "Erin Blake",
+   "subject": "",
+   "body": "any luck with those trials?"
+  },
+  {
+   "at": 31,
+   "channel": "email",
+   "from": "Gail Moreno <gail@northwind.example>",
+   "subject": "Re: Offsite venue",
+   "body": "Quick one - did you hear back from any caterers?"
+  },
+  {
+   "at": 32,
+   "channel": "chat",
+   "from": "Ray Colton",
+   "subject": "",
+   "body": "can we move the vendor review to Friday instead?"
   }
  ],
  "files": {

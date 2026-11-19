@@ -17,6 +17,7 @@ _NO_AI = re.compile(r'no AI connector|no AI is (set up|connected)|no brain', re.
 # a web call that never answered, as requests words it - its host, port and seconds are no reason anyone can act on (2026-11-09)
 _UNREACHED = re.compile(r'HTTPS?ConnectionPool\(|Max retries exceeded|Failed to establish a new connection', re.I)
 _SLOW = re.compile(r'timed? ?out|ReadTimeout|ConnectTimeout', re.I)
+_BAD_IMAGE = re.compile(r'\[WinError (193|216)\]')
 # ...and an API brain that TURNED THE REQUEST DOWN, as llm.make_llm raises it: "hipaa_ai error 400 at https://<gateway>/v1/chat/completions:
 # {"error": ...}" reached the agent pane whole - the gateway's address and a page of JSON (2026-11-09). The AI, and its own reason when it gave one
 _REFUSED = re.compile(r'\b(\w+) error (400|422) at \S+?(?: after \d+ tries)?: ?(.*)', re.S)
@@ -79,7 +80,10 @@ def classify(e, *, act: str = None, tid=None) -> dict:
     fix = None if isinstance(e, str) else outbound.fix_of(e)
     fix = fix or outbound.auth_fix(RuntimeError(text))
     sentence = text
-    if isinstance(e, FileNotFoundError) or _NOT_INSTALLED.search(text):
+    # ...a program Windows would not load (its exe half-written by an update, or not a program at all) - by the error's code, never its words
+    if getattr(e, 'winerror', None) in (193, 216) or _BAD_IMAGE.search(text):
+        sentence = "The AI's program on this computer couldn't be started - it was probably updating itself. Try again in a minute"
+    elif isinstance(e, FileNotFoundError) or _NOT_INSTALLED.search(text):
         sentence, fix = "The coding tool isn't installed on this computer", fix or _fix('Connect a coding tool', 'ai_apps')
     elif _NO_TOOL.search(text): fix = fix or _fix('Connect a coding tool', 'ai_apps')       # terminal.NO_CODING_TOOL
     elif _NO_FOLDER.search(text):
@@ -91,6 +95,10 @@ def classify(e, *, act: str = None, tid=None) -> dict:
                     else 'The service could not be reached - check this computer is online, then try again')
     # an AI CLI that isn't signed in is a sign-in to do on its card, not an app bug to report (agents.signed_out_msg, 2026-10-25)
     elif _SIGNED_OUT.search(text): fix = fix or _fix('Sign it in', 'ai_apps')
+    # ...and what no reading above put in words is never shown as the raw exception (say.raw): the rail read "Failed - [WinError 216] This
+    # version of %1 is not compatible..." (walk 2, 2026-11-19). Its text stays in the log
+    from . import say
+    if sentence == text and say.raw(text): sentence = "Something went wrong on this computer - Taskuary kept the details in its log. Try again"
     unknown = act in SENDS and not isinstance(e, str) and outbound.delivery_uncertain(e)
     # ...and what KIND of failure it is, read off the exception's type, never its words: a start refused for a stranger's words has one way
     # on, the owner's Trust (concierge.recover) - a retry is refused the same way

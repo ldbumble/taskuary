@@ -4860,6 +4860,8 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
                 # ...Taskuary's brief, never a second line in the owner's name: their words are the task's own message already, and the chat
                 # drew them twice (the click-through, 2026-11-12)
                 session.send_prompt(brief, brief=True)
+            # ...a first turn that failed is filed on its task in plain words (send_prompt: say_failure) - nothing is left to raise into a thread
+            except Exception as e: logger.info(f"task {made['taskId']}: its first turn failed - {e}")
             finally: general.OPENING.discard(made['taskId'])
         threading.Thread(target=first_turn, daemon=True).start()
         made['started'] = True

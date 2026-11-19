@@ -1474,9 +1474,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
     kind, tid, mid, p = op['kind'], op['target'], op['target'], op['params'] or {}
     # TRUST AND START (the owner, 2026-10-22: "if i hit go then it should start anyway"): the owner's word on the sender first - the
     # page's Trust them - then the very start that was refused, so one press does both
-    if p.get('trust') and op.get('targetKind') == 'task' and store.get_task(tid):
-        from . import origin
-        origin.raise_to(store, tid, 'trusted', ACTOR)
+    if p.get('trust') and op.get('targetKind') == 'task' and store.get_task(tid): _vouch(tid)
     if kind == 'task.create_from_message':
         k = str(p.get('kind') or 'task').lower()
         # WHAT THE OWNER SAID IN THE AGENT BOX starts it with those words (the owner, 2026-10-23): the chat road opened on the task's
@@ -2157,11 +2155,8 @@ def task_trust(task_id: int, scope: str = ''):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     # ...a press that lifts nothing starts nothing (pressed twice, or on the phone and the desk): the second handed the same thread over again
     lifts = store.task_has_tag(task_id, _ing.HOLD_TAG) or origin.of_task(store, task_id)[0] == 'stranger'
-    org = None
-    if scope == 'org':
-        try: org = senders.trust_org(store, task_id, ACTOR)
-        except ValueError as e: raise HTTPException(422, str(e))
-    else: origin.raise_to(store, task_id, 'trusted', ACTOR)    # ...which remembers the sender its press named (senders.vouch, the one road)
+    try: org, others = _vouch(task_id, scope)
+    except ValueError as e: raise HTTPException(422, str(e))
     o, why = origin.of_task(store, task_id)
     # ...A START THAT BREAKS IS KEPT ON THE TASK with its retry (blackboard.record_failure), never a bare 500 under "You trusted the sender"
     # with nobody at work (2026-11-17)
@@ -2169,7 +2164,25 @@ def task_trust(task_id: int, scope: str = ''):
     except Exception as e:
         from . import blackboard as bb
         logger.warning(f'task {task_id}: the start Trust makes failed - {e}'); bb.record_failure(store, task_id, e, 'assistant'); started = ''
-    return {'origin': o, 'why': why, 'started': started, **({'org': org} if org else {})}
+    return {'origin': o, 'why': why, 'started': started, **({'org': org} if org else {}), **({'released': others} if others else {})}
+
+
+def _vouch(task_id: int, scope: str = '') -> tuple:
+    """THE ONE TRUST PRESS (the task page, the phone, Trust and start): the sender its press names is trusted (origin.raise_to ->
+    senders.vouch), or with scope 'org' their organisation (senders.trust_org) - and since a trust is a person's, not a task's, every
+    other task their words held starts at once, as this one does (the owner, 2026-11-11). -> (org or None, [the other tasks it started]).
+    Raises ValueError where there is no organisation to name."""
+    from . import origin, senders
+    was = origin.held_tasks(store, but=task_id)
+    org = senders.trust_org(store, task_id, ACTOR) if scope == 'org' else origin.raise_to(store, task_id, 'trusted', ACTOR)
+    others = []
+    for t in origin.released(store, was):
+        # ...each start that breaks is kept on its own task (blackboard.record_failure), never in the way of the one he pressed
+        try: _trusted_starts(t); others.append(t)
+        except Exception as e:
+            from . import blackboard as bb
+            logger.warning(f'task {t}: the start a Trust on {task_id} made failed - {e}'); bb.record_failure(store, t, e, 'assistant')
+    return org, others
 
 
 @app.get('/api/trusted')

@@ -294,6 +294,24 @@ def test_trust_with_no_agent_yet_starts_one_whose_first_turn_takes_his_line(monk
         assert done.wait(5) and 'Reply and say thanks' in prompts[0]
     general.OPENING.discard(t)
 
+def test_trust_is_a_press_on_a_person_and_starts_their_other_held_task_too(monkeypatch):
+    """The roads audit, 2026-11-19 (#6): Omar Keller wrote twice, two tasks, both held. Trust on the first remembered him (senders.vouch), but
+    the second stayed held, nothing at work on it, until a second Trust - the owner's ruling (2026-11-11) is that Trust starts the held agent,
+    and a trust is a person's. One press releases and starts both."""
+    s = MemoryStore(); monkeypatch.setattr(server, 'store', s)
+    def omar(subject):
+        t = s.create_task({'Title': subject, 'Kind': 'general', 'Source': 'email', 'Status': 'open'}, 'router')
+        s.add_message({'TaskId': t, 'Channel': 'email', 'SourceName': 'alex@northwind.example', 'FromEmail': 'omar@keller.example',
+                       'FromName': 'Omar Keller', 'Subject': subject, 'BodyText': 'Can you look at this?', 'Status': 'routed'})
+        return t
+    a, b = omar('Invoice question'), omar('Contract renewal')
+    assert origin.hold(s, a) and origin.hold(s, b)
+    starts = []; monkeypatch.setattr(server, '_trusted_starts', lambda tid: starts.append(tid) or 'started')
+    r = TestClient(server.app).post(f'/api/tasks/{a}/trust')
+    assert r.status_code == 200 and r.json()['started'] == 'started', r.text
+    assert r.json().get('released') == [b] and sorted(starts) == [a, b]
+    assert origin.hold(s, b) is None and origin.of_task(s, b)[0] != 'stranger', "his other task reads the person's trust"
+
 def test_a_start_trust_makes_that_breaks_is_kept_on_the_task_not_a_500(monkeypatch):
     s, t = _held_with_line(monkeypatch)
     def boom(tid): raise RuntimeError('the CLI would not come up')

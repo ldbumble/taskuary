@@ -373,6 +373,18 @@ def hold(store, tid) -> dict | None:
     if (was := _HOLDS.get(key)) and was[0] == sig and now - was[1] < 5: return was[2]
     _HOLDS[key] = (sig, now, got := _hold(store, int(tid), t))
     return got
+# ...TRUST IS A PRESS ON A PERSON, NOT A TASK (the owner, 2026-11-11: "Trust starts the held agent"; the roads audit, 2026-11-19 #6): Omar
+# Keller held on two tasks, trusted on one, stayed held on the other until a second Trust. The press remembers him (senders.vouch, read by
+# of_message on every task); these two say which of his other tasks it released, so the press starts them too
+def held_tasks(store, but=None) -> set:
+    "The open tasks an untrusted sender's words hold now, other than `but` - read before a Trust press."
+    from .ingest import HOLD_TAG
+    rows = store._rows("SELECT TaskId FROM task WHERE Status NOT IN ('done', 'dropped') AND (Origin='stranger' OR Tags LIKE ?)", (f'%{HOLD_TAG}%',))
+    return {r['TaskId'] for r in rows if r['TaskId'] != but and hold(store, r['TaskId'])}
+def released(store, was: set) -> list:
+    "Of the tasks `was` (held_tasks before a Trust press), the ones no sender holds now - judged afresh, never from the hold's few-second memo."
+    for tid in was: _HOLDS.pop((id(store), int(tid)), None)
+    return [tid for tid in sorted(was) if not hold(store, tid)]
 def _hold(store, tid: int, t: dict) -> dict | None:
     msgs = store.list_messages(tid)
     if of_task(store, tid, msgs)[0] != 'stranger': return None

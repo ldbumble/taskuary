@@ -263,6 +263,7 @@ def with_watch(cfg: dict, watch) -> dict:
 def workflow_catalog(store) -> dict:
     """Trusted choices an AI workflow builder may use; credentials never enter its prompt."""
     from . import zoho
+    from .connectorcatalog import connected
     zoho_cards = []
     for row in store.list_connectors():
         if row.get('Type') != 'zoho_invoice': continue
@@ -274,9 +275,9 @@ def workflow_catalog(store) -> dict:
         zoho_cards.append(item)
     return {'zoho_monthly_invoices': zoho_cards,
             'agent': [{'name': a.get('Name')} for a in store.list_agents() if a.get('Name')],
-            # what a workflow may work IN: the connections that are switched on, by id and name - never their settings
+            # what a workflow may work IN: the signed-in connections (connectorcatalog.connected), by id and name - never their settings
             'connections': [{'id': c['ConnectorId'], 'name': c.get('Name') or c.get('Type'), 'type': c.get('Type')}
-                            for c in store.list_connectors() if c.get('Active')],
+                            for c in connected(store, failing=True)],
             # the brain a run works on (workflows.brain) and what it can be asked for - a harder model, more effort
             'brain': _brain(store)}
 

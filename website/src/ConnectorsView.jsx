@@ -2239,7 +2239,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     const dm = DATA_META[t];
     return { key: `d${c.ConnectorId}`, title: c.Name, channel: t,
       desc: connWord(c)
-        + ` ·${plural(reports.filter((s2) => dm.types.includes(parse(s2.ConfigJson).type)).length, "report")} (built under Reports)`,
+        + ` · ${plural(reports.filter((s2) => dm.types.includes(parse(s2.ConfigJson).type)).length, "report")} (built under Reports)`,
       haystack: `${dm.title} ${t} ${dm.desc} ${dm.types.join(" ")} ` + dm.howto.join(" "),
       go: () => setOpen({ kind: "connector", id: c.ConnectorId }), remove: removable(c) ? { conn: c, channel: "data", reload: load } : null };
   }));

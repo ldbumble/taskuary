@@ -725,8 +725,9 @@ def _mailboxes(store) -> list:
 def more_connected(store) -> int:
     """Connections switched on beyond the AI, the main source and Taskuary's own Hub - what ticks More connections on the rail, which never
     ticked however many were set up (the owner, 2026-10-16: "why is it still not checked, what checks it?")."""
+    from .connectorcatalog import connected
     from .llm import AI_TYPES
-    on = [c for c in store.list_connectors() if c.get('Active') and c.get('Type') not in {*AI_TYPES, *GENERIC}]
+    on = [c for c in connected(store, failing=True) if c.get('Type') not in {*AI_TYPES, *GENERIC}]     # signed in, as the card says
     # ...and beyond the MAIN SOURCE, whichever kind it is: every mailbox when there is one, else the first source on the shelf - a
     # monday.com-only home read "More connections: 1 connected" over the one card that was its main source (the owner, 2026-10-21)
     order = source_types()

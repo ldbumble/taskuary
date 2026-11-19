@@ -82,10 +82,17 @@ def state(c: dict, srcs=()) -> dict:
          else 'failing' if c.get('LastError') else 'connected')
     return {'state': k, 'line': LINES[k], 'fix': '' if k == 'connected' else f"#connector={c.get('Type') or ''}"}
 def is_connected(c: dict, srcs=()) -> bool: return state(c, srcs)['state'] == 'connected'
-def connected(store) -> list:
-    "The cards that are connected: what Connections counts, the phone says, triage is told it can reach and the agents may act on."
+SIGNED_IN = ('connected', 'failing', 'signed_out')     # signed in once: a card failing for a moment is still his system, said as failing
+def connected(store, failing=False) -> list:
+    """The cards that are connected, each with its State: what Connections counts and the phone says. failing=True keeps a card that is
+    signed in but failing or lapsed right now - triage and the agents are still told of it, with its line, never as if it were gone."""
     srcs = store.list_sources() if hasattr(store, 'list_sources') else ()
-    return [c for c in store.list_connectors() or [] if is_connected(c, srcs)]
+    ok = SIGNED_IN if failing else ('connected',)
+    return [c | {'State': st} for c in store.list_connectors() or [] if (st := state(c, srcs))['state'] in ok]
+def as_now(c) -> str:
+    "' - not answering right now' / ' - needs sign-in right now' for a card connected(failing=True) kept, '' for a connected one."
+    st = c.get('State') or {}
+    return '' if st.get('state') in (None, 'connected') else f" - {st['line'].split(' - ')[0].lower()} right now"
 
 
 def connected_count(store, cli_connections: dict) -> int:

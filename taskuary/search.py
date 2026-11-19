@@ -323,15 +323,16 @@ def _app_rows(store) -> list:
              for k, m in settings_schema.knobs().items() if k not in _UNSHOWN]
     rows += [{'type': 'setting', 'panel': k, 'title': p['title'], 'where': f"{places.name('settings')} → {p['group']}", 'rest': f"{p['group']} {p['words']}",
               'href': panel(k, p)} for k, p in settings_schema.panels().items()]
-    mine =[c for c in store.list_connectors()]
-    on = {str(c.get('Type') or '') for c in mine if c.get('Active')}
+    mine, srcs = store.list_connectors(), store.list_sources() if hasattr(store, 'list_sources') else ()
+    st = {c.get('ConnectorId'): connectorcatalog.state(c, srcs) for c in mine}     # "connected" as the card says it
+    on = {str(c.get('Type') or '') for c in mine if st[c.get('ConnectorId')]['state'] == 'connected'}
     rows += [{'type': 'connector', 'title': c.get('title') or c['type'], 'where': 'Connections', 'boost': c['type'] in on, 'key': c['type'],
               'sub': 'connected' if c['type'] in on else 'planned' if c.get('planned') else 'not connected',
               'rest': ' '.join([c['type'], c.get('group') or '', c.get('desc') or '', *(c.get('match') or [])]),
               'href': f"#connector={quote(c['type'], safe='')}"} for c in connectorcatalog.cards()]
     # ...and the owner's own cards, by the name and account they were given ("my work Outlook"): the card of that type opens
     rows += [{'type': 'connector', 'title': str(c.get('Name') or c.get('Type')), 'where': f"Connections · your {c.get('Type')} card", 'boost': True,
-              'sub': 'connected' if c.get('Active') else 'off', 'rest': f"{c.get('Type')} {c.get('Account') or ''} {c.get('Scope') or ''}",
+              'sub': st[c.get('ConnectorId')]['line'].lower(), 'rest': f"{c.get('Type')} {c.get('Account') or ''} {c.get('Scope') or ''}",
               'href': f"#connector={quote(str(c.get('Type') or ''), safe='')}"} for c in mine if c.get('Name')]
     # A REPORT OPENS AS SEARCH OPENS IT (the owner, 2026-11-03: "open the report should open the report like search"): its newest run, the
     # report itself (#msg=, the card a Search pick puts on the table - read or not, on the rail or off it), its page only when it never ran.

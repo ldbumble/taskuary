@@ -65,6 +65,19 @@ def test_a_card_switched_on_and_never_signed_in_is_not_connected_on_any_surface(
     assert doorway_browse._connected(s)['linkedin'] == 'connected'
 
 
+def test_a_card_failing_for_a_moment_is_still_known_to_triage_and_the_agent_as_failing():
+    """A signed-in card whose last read failed is his system still: triage and the agent's brief name it with its state instead of
+    dropping it (it vanished from both on the first cut of the one answer); the page and the phone count it as not connected."""
+    from taskuary import general, ingest
+    s = MemoryStore()
+    cid = _card(s, 'linkedin', Active=1, Secret='tok')
+    n = cc.connected_count(s, None)
+    s.touch_connector(cid, 'timed out')
+    assert _api(s)[cid]['State']['state'] == 'failing' and cc.connected_count(s, None) == n - 1
+    assert any(n.startswith('LinkedIn') and n.endswith('(linkedin) - not answering right now') for n in ingest.connected_systems(s))
+    assert f'connector_id {cid}' in general.roads(s) and 'not answering right now' in general.roads(s)
+
+
 def test_a_card_with_no_sign_in_of_its_own_is_connected_once_on():
     s = MemoryStore()
     cid = _card(s, 'handbook', Active=1)

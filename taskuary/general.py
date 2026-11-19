@@ -2023,17 +2023,17 @@ GENERAL_OVER = ("WHERE AGENT.md READS OTHERWISE, FOR YOU: you never run `taskuar
 
 
 def roads(store) -> str:
-    """The connected systems an act can go out on for this owner: each connected card (connectorcatalog.connected - the page's own
-    answer) that runs an executor that posts, sends or orders (scopes.REACHES), by its own name and id. The generic ones (an MCP tool,
-    a GraphQL call) are no road of their own."""
+    """The connected systems an act can go out on for this owner: each signed-in card (connectorcatalog.connected - the page's own
+    answer; one failing right now is named with its state) that runs an executor that posts, sends or orders (scopes.REACHES), by its
+    own name and id. The generic ones (an MCP tool, a GraphQL call) are no road of their own."""
     from . import scopes
-    from .connectorcatalog import connected
+    from .connectorcatalog import as_now, connected
     from .proposals import MEDIA
     from .reports import REGISTRY, card_of
-    try: cards = connected(store)
+    try: cards = connected(store, failing=True)
     except Exception: return ''
     return '; '.join(f"{c.get('Name') or c['Type']} (connector_id {c['ConnectorId']}): {t} - {scopes.REACHES[t]}" + (', with a picture' if t in MEDIA else '')
-                     + takes(t) for c in cards for t in sorted(REGISTRY) if t in scopes.REACHES and t not in ('mcp', 'graphql') and card_of(t) == c['Type'])
+                     + takes(t) + as_now(c) for c in cards for t in sorted(REGISTRY) if t in scopes.REACHES and t not in ('mcp', 'graphql') and card_of(t) == c['Type'])
 
 
 def takes(tool) -> str:

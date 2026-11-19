@@ -2782,9 +2782,8 @@ def _continue_general(store, tid, msg: dict = None, mid=None):
 # (its reply_not_needed), never a rule here. Coding tasks are as they were: their own carry-on takes new work, nothing else.
 # ...and a message that changes nothing is said so in a line (the owner, 2026-11-05: "it can just say this is the same result nothing
 # changed if it wants")
-REPLAN = ('Re-plan the WHOLE next step from here, not only the draft: it may need no reply any more (then mark the waiting draft with '
-          '`taskuary --reply-not-needed "<why>"` or the reply_not_needed tool - it is put down, kept under Not sent, never deleted), new research, a '
-          'corrected or an added draft, or nothing left at all. Open with one plain line on what changed, in the owner\'s terms - "I see you answered '
+REPLAN = ('Re-plan the WHOLE next step from here, not only the draft (LATEST MESSAGE WINS): a reply no longer owed is marked with '
+          '`taskuary --reply-not-needed "<why>"` or the reply_not_needed tool - put down, kept under Not sent, never deleted. Open with one plain line on what changed, in the owner\'s terms - "I see you answered '
           'Ray there", "Gail took care of it" - then either that we are good, nothing left (nothing_left true), or what is still open as next '
           'steps. Start the summary\'s "did" with that same line: the owner reads the summary, not the words above it. A pending draft written for this '
           'message is kept, or improved in place - never withdrawn. When the new message changes nothing - it repeats what you already had, '

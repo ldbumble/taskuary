@@ -325,3 +325,14 @@ def test_the_owners_line_this_turn_carries_is_not_quoted_in_its_facts_as_well():
     assert note not in facts and general.OWN_BELOW in facts
     assert general._prompt(s, tid)[1].count(note) == 1, 'a fresh turn: the conversation ends on it, and the facts point there'
 
+
+
+def test_a_newer_message_never_retires_what_is_still_owed_to_its_sender():
+    """The walk, 2026-11-19: asked for three caterer options, then "did you hear back from any caterers?" before the reply went - the agent
+    called the options "no longer needed" and drafted only "Not yet". Where every chat agent is told how messages stand (LATEST_LINE), one
+    sentence: what is owed stays owed, answered first; the turn the thread change starts says the same once (ingest.REPLAN points at it).
+    The live shape runs through the real doors in the audit corpus (audit_scenarios.w_owed_answer)."""
+    from taskuary import ingest
+    assert 'never an earlier ask again' not in selfclose.LATEST_LINE
+    assert 'a newer message never retires what is still owed to its sender: answer that, then the new question' in selfclose.LATEST_LINE
+    assert 'it may need no reply any more' not in ingest.REPLAN and 'LATEST MESSAGE WINS' in ingest.REPLAN

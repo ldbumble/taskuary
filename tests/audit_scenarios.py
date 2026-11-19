@@ -842,9 +842,30 @@ def v_attachments(r: Run):
     r.answer('The pack reads fine; the PDF totals match the picture.')
 
 
+@on('cli', 'acp', 'api')            # ...a mail's reply owed: a coding task's chat is not that road (OPEN_PARITY j)
+def w_owed_answer(r: Run):
+    """(w) A sender asks for three options, then writes "did you hear back?" before the reply went (the walk, 2026-11-19: the agent called the
+    options "no longer needed" and drafted only "Not yet") -> the agent's next turn is told the options it drafted, so the one reply answers
+    what is still owed, then the new question."""
+    r.arrive({'intent': 'reply_only', 'kind': 'task', 'title': 'Gail asks for three caterers'}, from_name='Gail Moreno', from_email='gail@northwind.example',
+             body='Can you find catering for the 40 of us? Three options with prices.')
+    r.turn('Three caterers with prices - the reply to Gail waits for your Send.',
+           ('propose_reply', {'text': 'Hi Gail - three options for 40: Harbor Kitchen $780, Elm Street Catering $1,050, Bluebird from $1,200.'}))
+    r.arrive({'intent': 'reply_only', 'kind': 'task', 'refines': False}, from_name='Gail Moreno', from_email='gail@northwind.example',
+             body='Quick one - did you hear back from any caterers?', label='arrive again: Gail asks before the reply went')
+    prompt = r.at_work(('propose_reply', {'text': 'Hi Gail - three options for 40: Harbor Kitchen $780, Elm Street Catering $1,050, Bluebird from $1,200. '
+                                                  'None of them has written back yet.'}))
+    # ...what is owed reaches the agent with the new question: the options it drafted, as he sees them
+    assert 'Harbor Kitchen' in prompt, f'{r.backend}: the turn after her second mail is told what it still owes her: {prompt[-1500:]!r}'
+    r.answer('One reply to Gail: the three options, then that no caterer has answered yet.')
+    r.send()
+    r.turn('Gail has the options and the answer.')
+    assert any('Harbor Kitchen' in x['body'] and 'written back' in x['body'] for x in r.sent), r.sent
+
+
 SCENARIOS = {k: f for k, f in [('a', a_question_answered), ('b', b_email_rewritten), ('c', c_bug_pushed), ('d', d_page_step), ('e', e_three_asks),
                                ('f', f_ci_notice), ('g', g_invite_clash), ('h', h_steered_mail), ('i', i_late_answer), ('j', j_answered_outside),
                                ('k', k_send_fails), ('l', l_no_connector), ('m', m_remind_while_working), ('n', n_full_house), ('o', o_silent_turn),
                                ('p', p_break_out), ('q', q_save_routine), ('r', r_monitor_notice), ('s', s_send_close_at_work), ('t', t_send_at_work),
-                               ('u', u_stranger_twice), ('v', v_attachments)]}
+                               ('u', u_stranger_twice), ('v', v_attachments), ('w', w_owed_answer)]}
 def runs_on(name, backend) -> bool: return backend in getattr(SCENARIOS[name], 'on', BACKENDS)

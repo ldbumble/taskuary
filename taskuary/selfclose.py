@@ -520,10 +520,13 @@ def attach_markers(text: str) -> tuple:
 # draft standing under its newest turn, reading as the answer to the correction. Every turn is told it answers the NEWEST message, read
 # against all before it, what is pending and what already went (general.latest_block) - and how to take a draft back: this marker, on a road
 # with no shell, or `taskuary --withdraw-draft` / the withdraw_draft tool (verdicts.withdraw). The model judges; no word list does
-LATEST_LINE = ('LATEST MESSAGE WINS: answer the newest message against the whole conversation, never an earlier ask again; when the '
-               'thread changed (someone answered, plans or facts moved), re-plan - maybe no reply, new research, corrected drafts, or '
-               'nothing. Replace a pending draft with a corrected one or withdraw it (why, one line), never leave it standing as this answer; '
-               'never draft again what already went out below.')
+# ...AND A NEWER MESSAGE NEVER RETIRES WHAT IS STILL OWED (the walk, 2026-11-19: asked for three caterer options, then "did you hear back?",
+# the agent called the options "no longer needed" and drafted only "Not yet" - "never an earlier ask again" read as dropping it)
+LATEST_LINE = ('LATEST MESSAGE WINS: answer the newest message against the whole conversation - an ask it corrects or one already answered '
+               'is never answered again, but a newer message never retires what is still owed to its sender: answer that, then the new '
+               'question. When the thread changed (someone answered, plans or facts moved), re-plan - maybe no reply, new research, corrected '
+               'drafts, or nothing. Replace a pending draft with a corrected one or withdraw it (why, one line), never leave it standing as '
+               'this answer; never draft again what already went out below.')
 # ...A TURN NO MESSAGE STARTED (agent walk 2, 2026-11-10): woken by the owner's Send, the agent was handed the line it had answered a minute
 # before as "THE NEWEST MESSAGE", under "your answer is to the newest message" - and answered "What is left here?" a second time. A turn
 # Taskuary starts on an answered task (a press, a result that came back, a check-back) is told nothing new was said (general.latest_block)

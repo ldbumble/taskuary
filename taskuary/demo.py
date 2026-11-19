@@ -899,7 +899,7 @@ def seed(store) -> int:
     f.review(q3, qm, draft='Sending the Q3 pack now - it is the same file as the board deck.')
     refs['q3'] = q3
     # a thread: three mails on one ask, grouped on one task
-    audit = f.task(title='Year-end audit - the first document requests', kind='general')
+    audit, audit_mids = f.task(title='Year-end audit - the first document requests', kind='general'), []
     for n, (subject, body, hours) in enumerate((
             ('Year-end audit - the first document requests',
              'The auditors sent their first list: August bank reconciliations and the AP ageing for Q3.', 5),
@@ -908,7 +908,7 @@ def seed(store) -> int:
         m = f.message(task_id=audit, subject=subject, body=body, from_name=priya[0], from_email=priya[1],
                       sent_at=f.ago(hours=hours), conversation_id='email:year-end-audit')
         f.route(m, audit, 'create' if n == 0 else 'attach', 'a request with a list and a date' if n == 0 else 'same conversation thread')
-        audit_mids = [*(audit_mids if n else []), m]
+        audit_mids.append(m)
     # triage's reading of the thread, as the verdict's `thread` leaves it on the task (what Came from and the agent's chat open with)
     store._exec('UPDATE task SET ThreadJson=? WHERE TaskId=?', (json.dumps({
         'asking': f'{priya[0]} wants three documents for the auditors by the 15th', 'your_part': 'Gather the bank reconciliations, the AP ageing and the asset register',

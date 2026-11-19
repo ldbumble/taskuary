@@ -2332,7 +2332,7 @@ def _poll_one(store, c, file_only, backfill_hours, llm) -> int:
                             except Exception as e:
                                 # ...a miss Graph may yet answer (a throttle, its own trouble, a token that lapsed mid-poll, a dropped
                                 # line) holds this mail for the next poll: let in without its files, it never asked for them again
-                                if _status(e) not in (400, 403, 404): raise
+                                if _http_status(e) not in (400, 403, 404): raise
                                 logger.warning(f"attachments for {m['id']} failed: {e}")
                         # an invite is read in full once, as it arrives: the meeting to answer and whether it still needs answering
                         inv = is_invite(m)
@@ -2396,7 +2396,7 @@ def _poll_one(store, c, file_only, backfill_hours, llm) -> int:
                         logger.warning(f"outlook {s['Address']} {folder}: {e}")
                         # ...a folder the card chose that is not there any more (deleted in Outlook: 404 on every poll) has nothing left
                         # to wait for - held as unfinished, it froze the cycle's cutoff, and mail into the Inbox after it was never read
-                        if folder not in ('inbox', 'sentitems') and _status(e) == 404: errors.append(GONE_FOLDER); continue
+                        if folder not in ('inbox', 'sentitems') and _http_status(e) == 404: errors.append(GONE_FOLDER); continue
                         broken.append(f'{folder}: {e}')
                 if broken:
                     errors += broken; continue     # the watermark waits for the folders that did not finish
@@ -2648,3 +2648,9 @@ def _file_after(store, n: int) -> int:
         filing.file_handled(store)
     except Exception as e: logger.warning(f'filing handled mail failed: {e}')
     return n
+
+
+def _http_status(e):
+    "An error's HTTP status, as say reads it (say._status) - the one reading."
+    from .say import _status
+    return _status(e)

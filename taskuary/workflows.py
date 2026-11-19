@@ -360,7 +360,9 @@ def change_of(store, tid: int, p: dict) -> tuple:
             'was': was, 'changes': flow.diff_text(d), 'why': ' '.join(str(p.get('why') or '').split())[:300]}, ''
 
 
-def runs_words(cfg: dict) -> str: return when_words(cfg) if any(cfg.get(k) for k in CLOCK) else 'when you run it'
+def runs_words(cfg: dict) -> str:
+    from .reports import schedule_words
+    return schedule_words(cfg) if any(cfg.get(k) for k in CLOCK) else 'when you run it'
 
 
 def of_task(store, task) -> dict | None:

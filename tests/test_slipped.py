@@ -214,3 +214,16 @@ def test_a_line_their_reply_ended_is_marked_done_once(s):
     assert s.get_idea(iid)['Status'] == 'done' and set(marks) == {iid}
     n = len(marks); rail(s); rail(s)
     assert len(marks) == n
+
+@pytest.mark.parametrize('kind,status', [('task.let_go', 'dropped'), ('task.elsewhere', 'done')])
+def test_a_slipped_put_down_closes_as_mark_done_does(s, kind, status):
+    # one close (concierge.close_task): Let it go and Answered elsewhere left the chase its agent was holding to come back for a yes
+    # on the closed task. The same step through Mark done is the other surface; both must leave nothing owed
+    a, b = person_step(s, 7), person_step(s, 7)
+    card = next(c for c in rail(s) if c.get('tid') == a)
+    for t in (a, b): s.add_review({'TaskId': t, 'Kind': 'draft', 'Status': 'held', 'DraftText': 'Any news, Ray?'})     # held while its agent works it
+    assert run(s, kind, card).status_code == 200
+    concierge.close_task(s, b, 'owner')
+    assert s.get_task(a)['Status'] == status
+    assert s.pending_review(a, live_only=False) is None and s.pending_review(b, live_only=False) is None
+    assert not s._rows("SELECT 1 FROM review WHERE TaskId IN (?,?) AND Status IN ('pending','held')", (a, b))

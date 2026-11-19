@@ -1876,7 +1876,7 @@ def close_upstream_ended(store, tid: int, said: str, actor: str = 'router'):
     "was merged on GitHub" a few seconds after showing it (2026-10-12). A task that never had a
     session has nothing to wrap ('nothing to wrap up') - that refusal is expected, and must not
     leave the dead task sitting in the work list."""
-    from . import wrapup, proposals, selfclose, terminal as term
+    from . import wrapup, proposals, concierge, terminal as term
     # said once: a task kept open below for its unsent reply meets this ending again on a later poll
     if not any(c.get('Body') == said for c in store.list_comments(tid)): store.add_comment(tid, 'router', 'agent', said)
     # a close-out waiting on the owner (close the issue, merge) is answered by the upstream ending itself
@@ -1895,17 +1895,17 @@ def close_upstream_ended(store, tid: int, said: str, actor: str = 'router'):
         for r in store.list_reviews('pending'):
             if r.get('TaskId') == tid and r.get('Kind') not in ('action', 'slot'):
                 store.decide_review(r['ReviewId'], 'no_reply', None, actor, 'the item ended upstream')
-        selfclose.unclaim(store, tid, actor)
-        store.update_task(tid, {'Status': 'done'}, actor)
+        concierge.close_task(store, tid, actor, save=False)
         return
+    # ...and a wrap that cannot run closes through the one close all the same, so nothing it left waits on a closed task
     try:
         wrapup.wrap(store, tid, close=True, actor=actor, no_reply=True)   # a merged PR owes nobody a reply (A21)
     except ValueError as e:
         logger.info(f'TQ-{tid:04d}: nothing to wrap up ({e}) - closing it plainly')
-        store.update_task(tid, {'Status': 'done'}, actor)
+        concierge.close_task(store, tid, actor, save=False)
     except Exception as e:
         logger.warning(f'TQ-{tid:04d}: the ending failed ({e}) - closing it plainly')
-        store.update_task(tid, {'Status': 'done'}, actor)
+        concierge.close_task(store, tid, actor, save=False)
 
 
 ENDED_SAID = 'so there is nothing left to do here.'

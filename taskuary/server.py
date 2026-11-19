@@ -1824,11 +1824,13 @@ def _run_kind(op: dict, background: BackgroundTasks):
         # Let it go is a turn-down on the follow-up; answered elsewhere is a done. Only a step somebody OWES is dropped or closed -
         # a thread's own task is never touched for its follow-up (the review, 2026-10-12)
         if iid: assistant.act(store, iid, 'dismiss' if kind == 'task.let_go' else 'done', ACTOR)
+        # ...and closed through the one close (concierge.close_task), so a draft or an agent on it goes with it
         status = 'put down'
-        if step and kind == 'task.let_go':
-            store.add_comment(tid_, ACTOR, 'human', 'Let it go - nobody is chasing this further.'); store.update_task(tid_, {'Status': 'dropped'}, ACTOR); status = 'dropped'
-        elif step:
-            store.add_comment(tid_, ACTOR, 'human', f"Answered elsewhere{': ' + text if text else ''}."); store.update_task(tid_, {'Status': 'done'}, ACTOR); status = 'done'
+        if step:
+            from . import concierge
+            let = kind == 'task.let_go'; status = 'dropped' if let else 'done'
+            concierge.close_task(store, tid_, ACTOR, status=status,
+                                 note='Let it go - nobody is chasing this further.' if let else f"Answered elsewhere{': ' + text if text else ''}.")
         outcomes.record(store, 'chase.let_go' if kind == 'task.let_go' else 'chase.elsewhere', 'task' if tid_ else 'message', tid_ or item.get('mid') or 0, ACTOR,
                         facts={'who': who, **({'where': text} if text else {})})
         return {'status': status, 'who': who}
@@ -2902,9 +2904,10 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
             is_chat = getattr(live, 'mode', '') == 'assistant'
             wants_chat = general.handles({'Kind': next_kind})
             if is_chat != wants_chat or next_kind == 'task': hub_term.close(live.sid)
-    # Status done through here is Mark done too - the one close (concierge.close_task), whichever page sent it
-    closing = fields.get('Status') == 'done' and t.get('Status') not in ('done', 'dropped')
-    if closing: fields.pop('Status')
+    # Status done or dropped through here is the one close too (concierge.close_task), whichever page sent it: a drop
+    # left the draft waiting for a yes on a task nobody would open again
+    closing = fields.get('Status') in ('done', 'dropped') and t.get('Status') not in ('done', 'dropped')
+    if closing: closing = fields.pop('Status')
     store.update_task(task_id, fields, ACTOR)
     # the owner's own priority call is evidence: every task from one sender marked urgent by hand is a rule worth asking about (promote.py)
     if fields.get('Priority'):
@@ -2917,28 +2920,20 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
         _teach_line(task_id, 'priority', f"triage made it {level(t.get('Priority'))}; the owner made it {fields['Priority']}", background)
     if closing:
         from . import concierge
-        try: concierge.close_task(store, task_id, ACTOR)
+        try: concierge.close_task(store, task_id, ACTOR, save=closing == 'done', status=closing)
         except concierge.KeptOpen as e: raise HTTPException(409, str(e))      # the live agent's save failed: still open, and why
     if t.get('Status') in ('done', 'dropped') and fields.get('Status') in ('open', 'in_progress', 'waiting'):
         # A self-close is remembered in-process to prevent duplicate hooks. Reopening is a new
         # lifecycle, so a later automated run must be allowed to settle again.
         from . import selfclose
         selfclose.forget(task_id)
-    # A task DROPPED (or one already closed, marked again) ends its agent too: a live session left
-    # running on a finished task is an agent nobody is coming back for. close() files the transcript
-    # first, so the record survives the pty as always. Mark done never reaches here - its Status was
-    # popped above and concierge.close_task stopped the agent and settled the item itself.
+    # A task already closed, marked again, ends an agent left on it too: a live session left running on a finished task is an agent
+    # nobody is coming back for. close() files the transcript first, so the record survives the pty as always.
     if fields.get('Status') in ('done', 'dropped'):
         live = hub_term.session_for(task_id)
         if live and live.alive:
             hub_term.close(live.sid)
             store.add_comment(task_id, ACTOR, 'human', 'Task closed - ended the live agent session with it.')
-        # the same read receipt concierge.close_task writes: a task dropped leaves Unread too, and a
-        # later arrival on it is unread again (the owner, 2026-09-07)
-        if fields['Status'] == 'dropped' and t.get('Status') not in ('done', 'dropped'):
-            from . import funnel as _funnel
-            try: _funnel.settle(store, f'task:{task_id}', 'done', ACTOR, note='the task was closed')
-            except Exception as e: logger.debug(f'the closed task did not settle its item: {e}')
     # The kind control is a VERDICT, not a field edit. It used to be the only door to "this is
     # mine, not the agent's" that taught nothing - the tray button beside it reached the identical
     # end state and wrote the lesson - so the owner's correction was given and dropped on the floor
@@ -4519,8 +4514,8 @@ def file_message(mid: int, body: NotATaskBody = None, background: BackgroundTask
         # never delete work: a task an agent has been on is CLOSED and kept, report and all
         fate = 'archived' if (body is not None and body.archive) else _file_task(tid, 'filed from the pipe')
         if fate == 'archived' and store.get_task(tid) and store.get_task(tid).get('Status') not in ('done', 'dropped'):
-            store.update_task(tid, {'Status': 'done'}, ACTOR)
-            store.add_comment(tid, ACTOR, 'human', 'Archived from the pipe - closed, not deleted.')
+            from . import concierge
+            concierge.close_task(store, tid, ACTOR, save=False, note='Archived from the pipe - closed, not deleted.')
     learned = _teach_not_a_task(m, background) if (body is None or body.learn) else None
     verdict, route_id = operations.verdict_of_message(store, m)
     store.set_message_status(mid, 'ignored')

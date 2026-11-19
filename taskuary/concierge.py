@@ -4307,9 +4307,10 @@ def _kept(store, tid, actor, e):
 
 
 CLOSED_TASK = 'the owner closed the task'      # the note on a draft the task's close put down: the close's own doing, never a verdict on the draft (episodes.py)
-def close_task(store, tid: int, actor: str = 'owner', save: bool = True) -> bool:
-    """Close a task from the chat: the pending draft on it is dismissed first (a closed task must not
-    leave a reply waiting for a yes), then the task itself. False when already closed with no draft."""
+def close_task(store, tid: int, actor: str = 'owner', save: bool = True, status: str = 'done', note: str = '') -> bool:
+    """THE ONE CLOSE, from every door: the pending draft on it is dismissed first (a closed task must not
+    leave a reply waiting for a yes), its live agent saved and stopped, then the task itself - `status` done, or dropped for a put-down
+    (Let it go, a batch folded away); `note` is the door's own line on the task. False when already closed with no draft."""
     # ...and a write-up running for this task (writeup.py) finishes first: a close from anywhere - the task page, the chat, an
     # operation - never ends the session before its transcript is harvested, and lands on what the write-up left
     from . import writeup
@@ -4346,7 +4347,8 @@ def close_task(store, tid: int, actor: str = 'owner', save: bool = True) -> bool
             terminal.close(s.sid)
             store.add_comment(tid, actor, 'human', 'Stopped the agent - the task was closed from the chat.')
     except Exception as e: logger.warning(f'concierge: the agent on {task_ref(tid)} was not stopped - {e}')
-    if not closed: store.update_task(tid, {'Status': 'done'}, actor)
+    if note and not closed: store.add_comment(tid, actor, 'human', note)
+    if not closed: store.update_task(tid, {'Status': status}, actor)
     # ...and a start in flight for a line of his is over with it: the turn it was opening was stopped by the close, and the mark it left read
     # the closed task "at work" until that turn's thread let go (a stress round, 2026-11-18)
     from . import general

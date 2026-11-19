@@ -524,8 +524,10 @@ def playbook_answered(store, tid: int, actor: str) -> None:
     tags = [x for x in str(t.get('Tags') or '').split(',') if x.strip()]
     if HELD not in tags or playbook_pending(store, tid): return
     from . import workerstate as ws          # ...never back to done under work still live on it (a Continue since, 2026-11-01)
-    shut = not owed(store, tid) and not ws.live_work(store, tid)
-    store.update_task(tid, {'Tags': ','.join(x for x in tags if x != HELD), **({'Status': 'done'} if shut else {})}, actor)
+    store.update_task(tid, {'Tags': ','.join(x for x in tags if x != HELD)}, actor)
+    if not owed(store, tid) and not ws.live_work(store, tid):
+        from . import concierge
+        concierge.close_task(store, tid, actor, save=False)
 
 
 def held_pending(store, tid) -> dict | None:

@@ -209,11 +209,10 @@ def combine(store, tid, actor: str = 'owner') -> dict:
             place += 1; moved.append(f"({place}) {i.get('Title') or ''}")
             store.move_batch_item(i['ItemId'], tid, place)
             if i.get('MessageId'): store.place_message(i['MessageId'], tid, 'routed')
-        from . import terminal as term
-        s = term.session_for(o)
-        if getattr(s, 'alive', False): term.close(s.sid)
+        # folded away through the one close (concierge.close_task): its agent stopped, anything it held put down with it
+        from . import concierge
         store.add_comment(o, 'router', 'agent', f'Its items moved into {task_ref(tid)}, so one agent goes through them all.')
-        store.update_task(o, {'Status': 'dropped'}, actor)
+        concierge.close_task(store, o, actor, save=False, status='dropped')
     its = store.batch_items(tid)
     noun = _noun([store.get_message(i['MessageId']) or {} for i in its if i.get('MessageId')])
     src = (t.get('Title') or '').split(' on ', 1)[-1]
@@ -478,7 +477,9 @@ def _close(store, tid, actor, waited=False):
     if waited or getattr(term.session_for(tid), 'alive', False):
         try: wrapup.wrap(store, tid, close=True, actor=actor, no_reply=True); wrapped = True
         except Exception as e: logger.warning(f'{task_ref(tid)}: the batch ending failed ({e}) - closing it plainly')
-    if not wrapped and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'): store.update_task(tid, {'Status': 'done'}, actor)
+    if not wrapped:
+        from . import concierge
+        concierge.close_task(store, tid, actor, save=False)
     store.tag_task(tid, TAG, False, actor)          # after the close: an app gone mid-wrap tries again at its next start
     _next(store)
 

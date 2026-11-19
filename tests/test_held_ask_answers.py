@@ -63,7 +63,7 @@ class HeldAskIsAsking(Base):
     def test_a_note_typed_while_the_ask_is_held_goes_straight_to_the_hook(self):
         th, got = self.hold()
         self.assertEqual(waitroom.state(self.s, self.tid)[0], 'asking', 'held = asking, whatever the spinner says')
-        out = waitroom.add(self.s, self.tid, 'release/2026-10')
+        out = waitroom.add(self.s, self.tid, 'release/2026-10', 'owner')
         th.join(2)
         self.assertFalse(th.is_alive(), 'the hook let go at once - not after ASK_WAIT')
         self.assertEqual((out['delivered'], out['state']), (1, 'answered'))
@@ -73,7 +73,7 @@ class HeldAskIsAsking(Base):
 
     def test_own_words_are_an_answer_to_a_held_ask_too(self):
         th, got = self.hold()
-        waitroom.add(self.s, self.tid, 'base it on the tag v4.2 instead')
+        waitroom.add(self.s, self.tid, 'base it on the tag v4.2 instead', 'owner')
         th.join(2)
         self.assertEqual(list(got['out']['hookSpecificOutput']['updatedInput']['answers'].values()), ['base it on the tag v4.2 instead'])
 
@@ -106,7 +106,7 @@ class APickIsItsNumber(Base):
     def test_the_waiting_room_hands_such_words_over_too(self):
         self.asked(); self.t.waiting = lambda: True; typed = []
         with mock.patch.object(term, 'type_into', side_effect=lambda t, x: typed.append(x)), mock.patch.object(ws, 'PUT_DOWN', 0):
-            out = waitroom.add(self.s, self.tid, 'use whatever the last release used')
+            out = waitroom.add(self.s, self.tid, 'use whatever the last release used', 'owner')
         self.assertEqual((out['delivered'], out['state'], typed), (1, 'answered', ['use whatever the last release used']))
         self.assertEqual(self.t.written, ['\x1b']); self.assertNotIn('why', out)
         self.assertEqual(self.s.waiting_notes(self.tid), [], 'nothing piles up behind the chooser')
@@ -169,7 +169,7 @@ class WordsUnderButtonsAreALine(Base):
         g, rid = self.held()
         self.assertEqual(ws.answer(self.s, self.tid, rid, 'what does it push?')['state'], 'line')
         self.assertIn(g, ws.HELD, 'the hold still waits on its buttons'); self.assertEqual(len(ws.status(self.s, self.tid)['requests']), 1)
-        out = waitroom.add(self.s, self.tid, 'what does it push?')
+        out = waitroom.add(self.s, self.tid, 'what does it push?', 'owner')
         self.assertEqual((out['delivered'], out['state']), (0, 'held_ask')); self.assertNotIn('why', out)
         self.assertEqual(len(self.s.waiting_notes(self.tid)), 1, 'kept as his line, waiting for the agent')
 
@@ -181,7 +181,7 @@ class WordsUnderButtonsAreALine(Base):
         g, rid = self.held()
         sent = []; self.t.prompt = lambda *a, **k: sent.append(a); self.t.steerable = lambda: True
         with mock.patch.object(term, 'is_acp', return_value=True), mock.patch.object(permissions, 'pending', return_value=[{'id': 'p1'}]):
-            out = waitroom.add(self.s, self.tid, 'is that the only file it removes?')
+            out = waitroom.add(self.s, self.tid, 'is that the only file it removes?', 'owner')
         self.assertEqual((out['delivered'], out['state']), (0, 'held_ask'))
         self.assertEqual(sent, []); self.assertIn(g, ws.HELD); self.assertEqual(len(ws.status(self.s, self.tid)['requests']), 1)
         self.assertEqual(len(self.s.waiting_notes(self.tid)), 1)

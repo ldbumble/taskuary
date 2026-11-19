@@ -624,7 +624,7 @@ class GeneralWaitroomTests(unittest.TestCase):
         with mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
              mock.patch.object(general, 'start_session', return_value=fake) as start, \
              mock.patch.object(terminal, 'start_on_task') as coding:
-            out = waitroom.add(store, tid, 'Compare the competitors')
+            out = waitroom.add(store, tid, 'Compare the competitors', 'owner')
             time.sleep(.05)
         self.assertEqual((out['state'], out['delivered']), ('restarted', 1))
         start.assert_called_once(); coding.assert_not_called(); fake.send_prompt.assert_called_once()

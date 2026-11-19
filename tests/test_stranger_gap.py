@@ -118,7 +118,7 @@ def test_a_bound_chats_line_is_refused_and_says_why(w):
 
 def test_the_waiting_room_still_holds_its_notes(w):
     live(w)
-    out = waitroom.add(w.s, w.tid, 'also handle the null case')
+    out = waitroom.add(w.s, w.tid, 'also handle the null case', 'owner')
     assert out['state'] == 'held_stranger' and len(w.s.waiting_notes(w.tid)) == 1
     nothing_went_in(w)
 

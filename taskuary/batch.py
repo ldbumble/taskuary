@@ -159,7 +159,7 @@ def join(store, tid, rows, source, actor='router'):
         from . import waitroom
         path = brief_file(store, tid)
         waitroom.add(store, tid, f'NEW ITEMS JOINED THIS BATCH: {said}. Their text and diffs are now in {path}. Review them after '
-                     f'the ones before them, and report each the same way: {REPORT} <n> --result "..." --propose merge|close|changes.', actor)
+                     f'the ones before them, and report each the same way: {REPORT} <n> --result "..." --propose merge|close|changes.', 'router')
 
 
 def admit(store, rows: list) -> list:
@@ -222,7 +222,7 @@ def combine(store, tid, actor: str = 'owner') -> dict:
     if live(tid):
         from . import waitroom
         waitroom.add(store, tid, f'ITEMS MOVED INTO THIS BATCH: {"; ".join(moved)}. They are in {brief_file(store, tid)}. Work every '
-                                 f'item still open, security first, and report each with {REPORT} <n>.', actor)
+                                 f'item still open, security first, and report each with {REPORT} <n>.', 'router')
     else: start(store, tid)
     return {'ok': True, 'moved': len(moved), 'closed': others}
 
@@ -631,7 +631,7 @@ def fix(store, tid, it, actor='owner') -> dict:
     from . import waitroom
     waitroom.add(store, tid, f"FIX ITEM {it['Place']} ({it.get('Title') or ''}): make the changes your review asked for - "
                              f"{it.get('Result') or 'see your finding'}. Work in a worktree of its branch, run its tests, then commit and "
-                             'push to THAT pull request\'s branch - for this item only, the owner asked. Report it again when done.', actor)
+                             'push to THAT pull request\'s branch - for this item only, the owner asked. Report it again when done.', 'router')
     store.update_batch_item(tid, it['ConversationId'], {'State': 'working'})
     return {'ok': True, 'state': 'working'}
 

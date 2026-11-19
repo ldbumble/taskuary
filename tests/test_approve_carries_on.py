@@ -265,7 +265,7 @@ class ParkedOnItsOwnQuestion(unittest.TestCase):
         sess = self.parked(send_prompt=lambda text, **kw: told.append((text, kw)))
         with mock.patch.dict(term.SESSIONS, {'a': sess}, clear=True):
             self.asked(sess)
-            self.assertEqual(waitroom.add(self.s, self.tid, 'Yes, send it as it is')['state'], 'answered')
+            self.assertEqual(waitroom.add(self.s, self.tid, 'Yes, send it as it is', 'owner')['state'], 'answered')
         [(text, kw)] = told
         self.assertEqual(text, 'Yes, send it as it is'); self.assertFalse(kw.get('brief'))
         [ev] = [e for e in ws.events(self.s, self.tid) if e['Kind'] == 'answered']

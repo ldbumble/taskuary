@@ -112,10 +112,10 @@ class PhaseTests(unittest.TestCase):
         go, put = threading.Event(), t.write
         t.write = lambda x: (go.wait(5), put(x))                     # the paste, still going in
         with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True), mock.patch.object(terminal, 'SEED_ENTER', .05):
-            self.assertEqual(waitroom.add(s, tid, 'first: the totals are off by a row')['delivered'], 1)
+            self.assertEqual(waitroom.add(s, tid, 'first: the totals are off by a row', 'owner')['delivered'], 1)
             # ...its paste is going in, the screen still the bare prompt: the pane is not at rest, and the second waits its turn
             self.assertEqual(waitroom.state(s, tid)[0], 'working')
-            out = waitroom.add(s, tid, 'second: and the tax line')
+            out = waitroom.add(s, tid, 'second: and the tax line', 'owner')
             self.assertEqual((out['delivered'], out['state']), (0, 'working'))
             self.assertNotIn('second', t.typed())
             go.set()
@@ -197,7 +197,7 @@ class DeliveryTests(unittest.TestCase):
         t = FakeTerm(tid, idle=2)
         with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True):
             r1 = waitroom.add(s, tid, 'also handle the null case', 'owner')
-            r2 = waitroom.add(s, tid, 'rename the flag to --dry-run')
+            r2 = waitroom.add(s, tid, 'rename the flag to --dry-run', 'owner')
             self.assertEqual((r1['delivered'], r1['state'], r2['state']), (0, 'working', 'working'))
             self.assertEqual(len(s.waiting_notes(tid)), 2); self.assertEqual(t.writes, [])
             t._idle = terminal.IDLE_WAITING + 1                      # it parked at its prompt
@@ -219,7 +219,7 @@ class DeliveryTests(unittest.TestCase):
         s = MemoryStore(); tid = task(s)
         t = FakeTerm(tid, idle=terminal.IDLE_WAITING + 5, tail=['Done - all tests pass.'])
         with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True), mock.patch.object(origin, 'of_task', return_value=('stranger', 'a new sender')):
-            out = waitroom.add(s, tid, 'NEW ITEMS JOINED THIS BATCH: (3) outside pull request')
+            out = waitroom.add(s, tid, 'NEW ITEMS JOINED THIS BATCH: (3) outside pull request', 'router')
             waitroom.deliver(s, tid)
             time.sleep(0.3)
             self.assertEqual((out['delivered'], out['state']), (0, 'held_stranger'))
@@ -232,7 +232,7 @@ class DeliveryTests(unittest.TestCase):
         s = MemoryStore(); tid = task(s)
         t = FakeTerm(tid, idle=terminal.IDLE_WAITING + 5, tail=['Done - all tests pass.'])
         with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True):
-            out = waitroom.add(s, tid, 'now do the same for the export path')
+            out = waitroom.add(s, tid, 'now do the same for the export path', 'owner')
             time.sleep(0.5)
         self.assertEqual((out['delivered'], out['state']), (1, 'parked'))
         self.assertIn('export path', t.typed())
@@ -257,18 +257,39 @@ class DeliveryTests(unittest.TestCase):
             ws.record(s, tid, 'fake', 'turn_end', text=said, source='hook')
             ws.record(s, tid, 'fake', 'input_needed', request_id=ws.request_id_for('Which repo should I use?'), text='Which repo should I use?', source='hook')
             self.assertEqual(waitroom.state(s, tid)[0], 'asking')
-            out = waitroom.add(s, tid, 'use the 8/17 file')
+            out = waitroom.add(s, tid, 'use the 8/17 file', 'owner')
             self.assertEqual((out['delivered'], out['state']), (1, 'answered'))
             time.sleep(0.5)
         self.assertEqual(t.typed(), 'use the 8/17 file')               # the answer itself, nothing wrapped round it
         self.assertEqual(s.waiting_notes(tid), [])
         self.assertIn('Answered "Which repo should I use?"', ' '.join(c['Body'] for c in s.list_comments(tid)))   # bound to the request
 
+    def test_taskuarys_note_waiting_with_his_answer_never_goes_in_as_his_words(self):
+        """TASKUARY'S NOTES ARE NEVER "YOU" (the one-log spec, 1c): his answer and a batch's "NEW ITEMS JOINED" note waited together while the
+        agent worked; it stopped on a question, and the one batch went in as the answer under the first note's speaker - Taskuary's words
+        typed in his name. His words answer the question alone; Taskuary's keep their place for the next plain stop, said as Taskuary's."""
+        from taskuary import general, workerstate as ws
+        s = MemoryStore(); tid = task(s)
+        t = FakeTerm(tid, idle=0.2, tail=['⠹ Running the tests… (esc to interrupt)']); t.sid = 'fake'
+        with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True):
+            general.wait_line(s, tid, 'use the 8/17 file')                 # ...his line typed in the box, kept for the coding agent
+            waitroom.add(s, tid, 'NEW ITEMS JOINED THIS BATCH: (3) a pull request from Ray Colton', 'router')
+            self.assertEqual(t.writes, [], 'held while it works')
+            t._tail, t._idle = ['Two files match. Which one should I use?'], terminal.IDLE_WAITING + 5
+            ws.record(s, tid, 'fake', 'input_needed', request_id=ws.request_id_for('Which file should I use?'), text='Which file should I use?', source='hook')
+            out = waitroom.deliver(s, tid)
+            time.sleep(0.5)
+        self.assertEqual((out['delivered'], out['state']), (1, 'answered'))
+        self.assertEqual(t.typed(), 'use the 8/17 file', 'his answer alone, nothing of Taskuary\'s in his name')
+        self.assertEqual([x['CreatedBy'] for x in s.waiting_notes(tid)], ['router'], "Taskuary's note keeps its place")
+        self.assertFalse([c for c in s.list_comments(tid) if c['Actor'] == 'owner' and 'NEW ITEMS' in c['Body']])
+        with self.assertRaises(ValueError): waitroom.add(s, tid, 'no speaker named', None)
+
     def test_no_session_reopens_one_with_the_notes_as_the_ask(self):
         s = MemoryStore(); tid = task(s)
         with mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
              mock.patch.object(terminal, 'start_on_task', return_value={'sid': 'new'}) as start:
-            out = waitroom.add(s, tid, 'also fix the header row')
+            out = waitroom.add(s, tid, 'also fix the header row', 'owner')
         self.assertEqual((out['delivered'], out['state']), (1, 'restarted'))
         self.assertEqual(start.call_args[0][1], tid)
         self.assertIn('(1) also fix the header row', start.call_args[1]['instruction'])
@@ -281,7 +302,7 @@ class DeliveryTests(unittest.TestCase):
         s.add_transcript(tid, 'old', 'worked here', 'codex-specialist', os.getcwd())
         with mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
              mock.patch.object(terminal, 'start_on_task', return_value={'sid': 'new'}) as start:
-            out = waitroom.add(s, tid, 'make the implementation changes')
+            out = waitroom.add(s, tid, 'make the implementation changes', 'owner')
         self.assertEqual((out['delivered'], out['state']), (1, 'restarted'))
         self.assertEqual(start.call_args.args[:3], (s, tid, 'codex-specialist'))
         self.assertEqual(start.call_args.kwargs['cwd'], os.getcwd())
@@ -289,25 +310,25 @@ class DeliveryTests(unittest.TestCase):
     def test_a_closed_task_holds_and_a_full_house_waits(self):
         s = MemoryStore(); done = task(s, 'done'); open_ = task(s, 'open')
         with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(terminal, 'start_on_task') as start:
-            self.assertEqual(waitroom.add(s, done, 'x')['state'], 'closed')
+            self.assertEqual(waitroom.add(s, done, 'x', 'owner')['state'], 'closed')
             s.set_setting('auto_sessions', '1', 't')
             with mock.patch.dict(terminal.SESSIONS, {'b': FakeTerm(999, idle=1)}, clear=True):
-                self.assertEqual(waitroom.add(s, open_, 'y')['state'], 'full')
+                self.assertEqual(waitroom.add(s, open_, 'y', 'owner')['state'], 'full')
             start.assert_not_called()
         self.assertEqual(len(s.waiting_notes(open_)), 1)                # still waiting - the clock retries
 
     def test_withdraw_before_delivery_only(self):
         s = MemoryStore(); tid = task(s)
         with mock.patch.dict(terminal.SESSIONS, {'a': FakeTerm(tid, idle=1)}, clear=True):
-            wid = waitroom.add(s, tid, 'scratch that')['wid']
+            wid = waitroom.add(s, tid, 'scratch that', 'owner')['wid']
         s.drop_waiting(wid, tid); self.assertEqual(s.waiting_notes(tid), [])
         wid2 = s.add_waiting(tid, 'kept', 'owner'); s.deliver_waiting([wid2], 'typed')
         s.drop_waiting(wid2, tid); self.assertEqual(len(s.waitroom(tid)), 1)
 
     def test_empty_note_and_unknown_task_are_refused(self):
         s = MemoryStore(); tid = task(s)
-        with self.assertRaises(ValueError): waitroom.add(s, tid, '   ')
-        with self.assertRaises(ValueError): waitroom.add(s, 9999, 'x')
+        with self.assertRaises(ValueError): waitroom.add(s, tid, '   ', 'owner')
+        with self.assertRaises(ValueError): waitroom.add(s, 9999, 'x', 'owner')
 
 
 class TurnOverTests(unittest.TestCase):
@@ -350,7 +371,7 @@ class GeneralTests(unittest.TestCase):
     def test_a_parked_general_agent_files_the_note_as_the_owners_and_the_rest_as_taskuarys(self):
         s = MemoryStore(); tid, ses = self.general(s)
         with mock.patch.dict(terminal.SESSIONS, {'g': ses}, clear=True):
-            out = waitroom.add(s, tid, 'Also put Northwind Payroll on the list.')
+            out = waitroom.add(s, tid, 'Also put Northwind Payroll on the list.', 'owner')
             time.sleep(0.3)
         self.assertEqual((out['delivered'], out['state']), (1, 'parked'))
         # ...his line alone: the head round it is the agent's, typed with it - filed, it drew on his screen as a line saying nothing
@@ -375,7 +396,7 @@ class GeneralTests(unittest.TestCase):
         s = MemoryStore(); tid, ses = self.general(s)
         with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude'}]), \
              mock.patch.object(general, 'start_session', return_value=ses):
-            out = waitroom.add(s, tid, 'and sort it')
+            out = waitroom.add(s, tid, 'and sort it', 'owner')
             time.sleep(0.3)
         self.assertEqual(out['state'], 'restarted')
         self.assertEqual([w for w, _ in self.said(s, tid)], ['owner'])
@@ -426,7 +447,7 @@ class DripTests(unittest.TestCase):
         s = MemoryStore(); tid = task(s)
         t = FakeTerm(tid, idle=terminal.IDLE_WAITING + 5, tail=['Done.'])
         with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True):
-            out = waitroom.add_many(s, tid, '1. add the null check\n2) rename the flag\n- write the test\n\n   for the edge case\n')
+            out = waitroom.add_many(s, tid, '1. add the null check\n2) rename the flag\n- write the test\n\n   for the edge case\n', 'owner')
             time.sleep(0.4)
             self.assertEqual((out['queued'], out['delivered'], out['left']), (3, 1, 2))
             typed = t.typed()
@@ -453,7 +474,7 @@ class DripTests(unittest.TestCase):
         said = [ingest.replan_turn({'body': f'flood {i} of 9', 'from_name': 'Gail Moreno', 'from_email': 'gail@northwind.example', 'channel': 'email'}) for i in range(1, 10)]
         with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True):
             for x in said: waitroom.add(s, tid, x, 'router')
-            waitroom.add(s, tid, 'and rename the flag')                                       # ...his own queued note keeps its drip
+            waitroom.add(s, tid, 'and rename the flag', 'owner')                                       # ...his own queued note keeps its drip
             self.assertEqual(len(s.waiting_notes(tid)), 10); self.assertEqual(t.typed(), '')   # working: all of it waits
             t._idle = terminal.IDLE_WAITING + 5
             self.assertEqual(waitroom.tick(s), 9)

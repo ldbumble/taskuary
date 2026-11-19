@@ -58,7 +58,7 @@ def test_a_note_held_for_a_working_agent_keeps_both_and_files_them_apart():
     chat = Chat(s, tid)
     with mock.patch.dict(terminal.SESSIONS, {'g': chat}, clear=True), mock.patch.object(waitroom, 'state', return_value=('parked', chat)), \
          mock.patch.object(general, 'GeneralSession', Chat):        # the parked chat is a general agent's (waitroom.to_general)
-        out = waitroom.add(s, tid, 'Also add Northwind Payroll to vendors-2026.txt, sorted in.', owner='Also put Northwind Payroll on the list, please.')
+        out = waitroom.add(s, tid, 'Also add Northwind Payroll to vendors-2026.txt, sorted in.', 'owner', owner='Also put Northwind Payroll on the list, please.')
         time.sleep(0.3)
     assert out['delivered'] == 1
     rows = said(s, tid)

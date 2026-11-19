@@ -473,10 +473,11 @@ def dated(store, tid: int, out: list) -> None:
         if x['kind'] != 'turn':
             if x['kind'] in ('line', 'arrival', 'press') and x.get('at'): prev = max(prev, ep(x['at']))
             continue
-        if (was := kept.get(x['id'])): x['at'] = was; continue
-        at = max(ep(x.get('at')) if x.get('at') else 0., prev)
-        if not at: continue
-        x['at'] = stamp(at); new.append((tid, f"T:{x['id']}", 0, x['at']))
+        if (was := kept.get(x['id'])): x['at'] = was
+        elif (at := max(ep(x.get('at')) if x.get('at') else 0., prev)): x['at'] = stamp(at); new.append((tid, f"T:{x['id']}", 0, x['at']))
+        # ...AND ITS CLOCK COUNTS FROM THERE (design round 6, D6: under his 7:25 line a turn read "working 1m 28s" ten seconds after his Enter - the
+        # clock of the CLI's turn, begun at 7:23 above it): at work and done alike, the turn's own time is what it ran
+        if x.get('started') and x.get('at'): x['started'] = max(x['started'], ep(x['at']))
     if new:
         with store.lock: store.cx.executemany('INSERT OR IGNORE INTO shown (TaskId, Key, Seq, Host) VALUES (?,?,?,?)', new); store.cx.commit()
 

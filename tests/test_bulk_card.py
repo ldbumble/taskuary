@@ -416,3 +416,20 @@ def test_a_routine_runs_many_emails_go_at_once_and_its_agent_hears_the_true_coun
     assert len(sent) == 2, sent
     assert (out['ok'], out['sent'], out['on_the_card']) == (True, 2, 1), out
     assert out['shown'].startswith('2 of 3 sent at once') and 'owner1@cedar.example' in out['shown'] and 'mailbox refused' in out['shown'], out
+
+
+def test_one_at_a_time_counts_only_the_cards_that_stood_for_his_press():
+    """Design round 6, D6 (the Codex walk): the agent rewrote its three board-pack emails for a corrected headcount and took the first three
+    back; the new first one read "4 of 7 · next: the email to erin" - the run counted the three dead ones. Only cards that stood for his press
+    count: waiting, or settled by his press."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s): call(tid, 'propose_email', items=emails(3))
+    old = [r['ReviewId'] for r in s._rows("SELECT ReviewId FROM review WHERE TaskId=?", (tid,))]
+    for r in old: s.decide_review(r, 'closed_unsent', None, 'agent', note="superseded - a later turn's reply took its place")
+    with mock.patch.object(server, 'store', s): call(tid, 'propose_email', items=emails(3))
+    q = cardqueue.state(s, tid)
+    assert (q['n'], q['of']) == (1, 3) and cardqueue.line(q).startswith('1 of 3 · next: '), q
+    s.decide_review(q['live'][0], 'approved', None, 'owner'); cardqueue.FRESH, was = 0, cardqueue.FRESH
+    try: q = cardqueue.state(s, tid)
+    finally: cardqueue.FRESH = was
+    assert (q['n'], q['of']) == (2, 3), 'the one he sent still counts'

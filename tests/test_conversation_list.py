@@ -1651,3 +1651,19 @@ def test_an_answer_its_messages_streamed_as_steps_is_drawn_once():
         assert said_once(body, seen) == body, 'the answer keeps its own opener'
     st = _said([{'k': 'said', 'text': 'Reading the vendor page first.'}, {'k': 'tool', 'name': 'Read'}, {'k': 'said', 'text': f'{p1}\n\nThe sign-ups each need a browser.'}], p1, set())
     assert [x.get('text') for x in st] == ['Reading the vendor page first.', None, 'The sign-ups each need a browser.'], 'the working stays; the answer is said once'
+
+
+def test_a_turn_counts_from_its_own_head_not_the_turn_before():
+    """Design round 6, D6 (both walks): he typed while the agent worked; the turn under his 7:25 line read "7:25 AM · working 1m 28s" ten
+    seconds after his Enter - its clock was the CLI turn's, begun at 7:23 above his line. A turn's clock starts where its head does."""
+    from taskuary import conversation
+    from taskuary.store import MemoryStore
+    from taskuary.testing import Factory
+    s = MemoryStore(); tid = Factory(s).task('Build the Q3 board pack')
+    ep, a, b = conversation.ep, '2026-11-19 07:23:00', '2026-11-19 07:25:00'
+    out = [{'id': 'l1', 'kind': 'line', 'at': a}, {'id': 't1', 'kind': 'turn', 'at': a, 'started': ep(a) + 0.4, 'ended': ep(a) + 60},
+           {'id': 'l2', 'kind': 'line', 'at': b}, {'id': 't2', 'kind': 'turn', 'at': a, 'started': ep(a) + 0.4, 'ended': None}]
+    conversation.dated(s, tid, out)
+    assert (out[1]['started'], out[3]['at'], out[3]['started']) == (ep(a) + 0.4, b, ep(b)), out
+    out[3].update(at=a, started=ep(a) + 0.4, ended=ep(b) + 30); conversation.dated(s, tid, out)          # ...and the same once it is done
+    assert (out[3]['at'], out[3]['started']) == (b, ep(b)), 'ran 30s, never 2m 30s'

@@ -123,6 +123,14 @@ def _going_on(store, tid: int, since: float, own=(), front=()) -> bool:
 def state(store, tid: int) -> dict: return fresh(store, ('state', int(tid)), lambda: _state(store, tid))
 
 
+def _stood(u: dict) -> bool:
+    """Did this card stand for his press - waiting for it, or settled by it? Never one its agent or Taskuary took back, rewrote or moved past
+    (design round 6, D6: three emails rewritten for a corrected figure, the first new one read "4 of 7" - the three dead ones counted)."""
+    from .conversation import _card
+    return u['done'] is None or not u['rows'] or any(not ((s := _card(r)['status']) in ('passed', 'withdrawn', 'superseded') or s == 'closed_unsent'
+                                                         and r.get('DecidedBy') in ('agent', 'assistant', 'taskuary')) for r in u['rows'])
+
+
 def _state(store, tid: int) -> dict:
     """The line on task `tid`: {'live': the front's ids or [], 'held': ids that wait behind it, 'n': the front's place in the run it is one
     of, 'of': that run's length, 'next': what comes next in words, 'units', 'past': the cards the chat moved past (proposals.written_past)}. The front itself is held while its agent goes on from the press
@@ -132,7 +140,8 @@ def _state(store, tid: int) -> dict:
     waiting = [u for u in us if u['done'] is None]
     if not waiting: return {'live': [], 'held': [], 'n': 0, 'of': 0, 'next': '', 'units': [], 'past': past}
     front = waiting[0]
-    # ...the run it is one of: the cards before it that were raised while the one before them still waited
+    # ...the run it is one of: the cards before it that were raised while the one before them still waited - each one that stood for his press
+    us = [u for u in us if _stood(u)]
     i = us.index(front); n = 1
     while i - n >= 0 and us[i - n + 1]['at'] <= (us[i - n]['done'] or float('inf')) + 1: n += 1
     held = [x for u in waiting[1:] for x in u['rids']]

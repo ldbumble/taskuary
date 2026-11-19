@@ -83,21 +83,22 @@ def said_once(t: str, seen: set) -> str:
     seen.add(lead); return t
 
 
+_PARA, _RUN = re.compile(r'\n\s*\n'), 40
 def _said(steps: list, body: str = '', seen: set = None) -> list:
     """A turn's steps with its words cleaned (clean) - and a step that says only what the turn's answer says, or nothing, or is machinery, left
     out; each message's opener once (said_once, `seen`: the openers the turn has said - the answer's own read against them after)."""
     from .chatformat import plain_text
     out, seen = [], set() if seen is None else seen
+    ps, fb = {_flat(p) for p in _PARA.split(body)}, _flat(body)
     for s in steps:
         if machinery(s): continue
         # ...a thought is one plain row: the same cleaner, and its markup said as words ("**Replacing the pending draft**" stood raw)
         if s.get('k') == 'thought' and (w := plain_text(clean(s.get('text'))) or clean(s.get('text'))): out.append({**s, 'text': w}); continue
         if s.get('k') != 'said': out.append(s); continue
-        w, b = clean(s.get('text')), body.strip()
-        if not w or w == b: continue
-        # ...a copy of the answer itself, part of it as it streamed, is no earlier message: the answer keeps its own opener (the parity audit)
-        f, fb = ' '.join(w.split()), ' '.join(b.split())
-        if fb and (fb.startswith(f) or f.startswith(fb)): out.append({**s, 'text': w}); continue
+        # ...WHAT THE ANSWER SAYS IS THE ANSWER'S, drawn once (design round 6, D2: on the Claude CLI a turn's messages streamed as steps and the
+        # answer joined them - each paragraph drawn twice, the answer's opener cut as "said already"): a paragraph of a step the answer holds
+        # - one of its paragraphs, or a longer run of its words (a message cut mid-word by a line he typed) - is left out, and is no opener seen
+        if not (w := '\n\n'.join(p for p in _PARA.split(clean(s.get('text'))) if (f := _flat(p)) and not (f in ps or len(f) >= _RUN and f in fb))): continue
         out.append({**s, 'text': said_once(w, seen)})
     return out
 

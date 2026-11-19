@@ -35,3 +35,13 @@ def test_the_writing_line_never_shows_the_summary_cut_from_its_tag():
     s(say(prose + '\n[[TASKUARY-SUMMARY]]{"did": "checked it", "on_you": ["press Send on the reply to Erin Blake"], "nothing_left": false, "answ'))
     live = [d for k, n, d in out if k == 'live' and n == 'writing']
     assert live and live[-1].endswith('totals agree.') and '[[' not in live[-1] and 'nothing_left' not in live[-1]
+
+
+def test_a_message_cut_by_a_line_he_typed_mid_turn_is_its_own_step():
+    # design round 6, D2 (the Claude CLI walk, 2026-11-19): his line came in while the agent wrote, the adapter cut its message at "The Q" and
+    # began another - one step held both, run together ("The QPaula's address is..."), while the answer (acp.prompt) kept them two paragraphs
+    m = lambda mid, t: {**say(t), 'messageId': mid}
+    got = traced([m('a', 'The drafts need the same correction. '), m('a', 'The Q'), m('b', "Paula's address is paula@northwind.example."),
+                  m('c', 'Is it 212 or 214?')])
+    assert got == [('progress', 'The drafts need the same correction. The Q'), ('progress', "Paula's address is paula@northwind.example."),
+                   ('progress', 'Is it 212 or 214?')]

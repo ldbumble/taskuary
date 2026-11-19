@@ -1633,3 +1633,21 @@ def test_a_refusal_of_a_plumbing_call_reaches_the_agent_only():
         {'type': 'tool_call', 'name': 'mcp__taskuary__tick', 'detail': {'tool_call_id': 'c2', 'args': {'item': '1'}}}])
     assert all(machinery(s) for s in steps) and _said(steps) == [], steps
     assert not machinery({'k': 'error', 'text': 'the turn failed'})
+
+
+def test_an_answer_its_messages_streamed_as_steps_is_drawn_once():
+    """Design round 6, D2 (the Claude CLI walk): one 11 s turn drew its answer two to three times. Its messages streamed as steps - one cut
+    mid-word by a line he typed ("...the same correction. The Q", then "Paula's address is ...") - and the answer joined them; every step
+    that was not the whole answer stayed, and the answer lost its opener as "said already". The answer's words are drawn once, as the answer;
+    a message that was the working before it stays a step."""
+    from taskuary.conversation import _said, said_once
+    p1 = "I haven't changed anything yet. Gail's file says headcount is 212, and Paula's email says 214."
+    p2, p3 = 'If it is 214, the per-head figures change, and the drafts would need the same correction. The Q', "Paula's address is paula@northwind.example."
+    body = f'{p1}\n\n{p2}\n\n{p3}\n\nIs headcount 212 or 214?'
+    for steps in ([{'k': 'said', 'text': f'{p1}\n\n{p2}'}, {'k': 'said', 'text': p3}],             # one message a step (agents.ACPSteps)
+                  [{'k': 'said', 'text': f'{p1}\n\n{p2}{p3}'}]):                                   # ...and a record from before that split them
+        st = _said(steps, body, seen := set())
+        assert [x['text'] for x in st] == ([] if len(steps) == 2 else [f'{p2}{p3}']), st
+        assert said_once(body, seen) == body, 'the answer keeps its own opener'
+    st = _said([{'k': 'said', 'text': 'Reading the vendor page first.'}, {'k': 'tool', 'name': 'Read'}, {'k': 'said', 'text': f'{p1}\n\nThe sign-ups each need a browser.'}], p1, set())
+    assert [x.get('text') for x in st] == ['Reading the vendor page first.', None, 'The sign-ups each need a browser.'], 'the working stays; the answer is said once'

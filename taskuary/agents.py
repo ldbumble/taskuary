@@ -1340,7 +1340,7 @@ class ACPSteps:
 
     def __init__(self, trace, name: str, held: dict = None):
         self.trace, self.name, self.held = trace, name, held if held is not None else {}
-        self.calls, self.said, self.thought, self.plans, self.live_at = {}, [], [], 0, -1e9
+        self.calls, self.said, self.thought, self.plans, self.live_at, self.mid = {}, [], [], 0, -1e9, None
 
     # ...AND WHAT IT IS THINKING OR WRITING IS SAID AS IT GROWS (the owner, 2026-11-16: "Thinking..." for three minutes with nothing else - "it
     # is a chat: the owner must see what the agent is doing at all times"): about once a second the newest words of the thought or the answer
@@ -1430,7 +1430,10 @@ class ACPSteps:
     def __call__(self, u: dict):
         kind = u.get('sessionUpdate')
         if kind == 'agent_message_chunk':
-            if self.thought: self._words()
+            # ...ONE MESSAGE IS ONE STEP, as the answer (acp.prompt) and the coding chat (conversation.acp_steps) split them (design round 6,
+            # D2: a line he typed cut the message at "The Q", the next began "Paula's address" - one step ran them together, the answer did not)
+            if self.thought or (self.said and u.get('messageId') != self.mid): self._words()
+            self.mid = u.get('messageId')
             self._settle_others(); self.said.append(acp_mod._text_of(u.get('content'))); self._live('writing', self.said); return
         if kind == 'agent_thought_chunk':
             if self.said: self._words()

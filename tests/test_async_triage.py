@@ -221,7 +221,7 @@ class OneArrivalRoadTests(unittest.TestCase):
         # a placement written anywhere else - "UPDATE message SET ... TaskId=?" - is a second road (a task's delete clearing it is not one)
         hits = [(p.name, n) for p in pathlib.Path(ingest.__file__).parent.glob('*.py')
                 for n, line in enumerate(p.read_text(encoding='utf-8').splitlines(), 1)
-                if re.search(r'UPDATE message SET[^"\']*TaskId=\?', line)]
+                if re.search(r'UPDATE message SET[^"\']*TaskId=\?[^"\']*WHERE', line)]     # TaskId SET - one matched in the WHERE is no placement
         self.assertEqual(hits, [])
         from taskuary.store import MemoryStore as S
         self.assertTrue(callable(getattr(S, 'arrive', None)))

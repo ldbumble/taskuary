@@ -2365,7 +2365,10 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
             # ...and what the agent step says when nothing is live: why it never started, or what it did before it went
             'agentStory': story,
             # ...and whether it works in a checkout: the header's Changes and the chat's landing card show then only, any kind (landing.has_checkout)
-            'checkout': _land.has_checkout(store, task_id, (session or {}).get('cwd') or (tr or {}).get('Cwd') or ''),
+            # - and only where the card is his to see (landing.shown: Developer mode, or a checkout he named). The page drew them on its own
+            # coding switch instead, so a general agent's Push card in his named checkout was raised, told to its agent, and never drawn
+            # (design round 6, D1: "Press Push" three times on both CLIs, no card on screen)
+            'checkout': _land.shown(store, task_id) and _land.has_checkout(store, task_id, (session or {}).get('cwd') or (tr or {}).get('Cwd') or ''),
             # ...and whether Fix it can run on its items: an outsider's only in GitHub's cloud, and only once the owner turned that
             # on - a button that could only say "turn it on" was offered anyway (the owner, 2026-10-12: "what does this do?")
             'batchOutside': batch_outside,

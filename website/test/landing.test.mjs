@@ -21,9 +21,11 @@ test("the four answers are the server's and discard asks once more before it goe
   assert.match(body, /\/api\/tasks\/\$\{taskId\}\/landing/);
 });
 
+// ...on the server's one fact (landing.shown + has_checkout), never the page's own coding switch: off with Developer mode, it hid the Push card
+// a general agent raised in the checkout he named, which its agent had been told was up (design round 6, D1)
 test("the chat draws it only where the task works in a checkout, whatever its kind", () => {
   const page = fs.readFileSync(path.join(process.cwd(), "src", "TaskPage.jsx"), "utf8");
-  assert.match(page, /landing=\{canCode && detail\?\.checkout && <LandingCard /);
+  assert.match(page, /landing=\{detail\?\.checkout && <LandingCard /);
   assert.equal((page.match(/<LandingCard /g) || []).length, 1, "once, in the chat");
 });
 

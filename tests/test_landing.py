@@ -526,6 +526,19 @@ class NamedCheckoutTests(unittest.TestCase):
         self.fix()
         out = landing.from_proposal(self.s, self.tid, {'action': 'push', 'why': 'the rounding fix'})
         self.assertTrue(out['ok']); self.assertEqual(landing.state(self.s, self.tid)['proposal']['how'], 'push')
+        self.assertIn('sees the Push card now', out['says'])
+
+    def test_the_agent_is_told_its_push_card_waits_behind_another_not_that_it_is_up(self):
+        # design round 6, D1: told "the owner sees it" whatever the page drew, the agent said three times a card was waiting that was not there
+        self.fix(); Factory(self.s).review(self.tid, kind='slot', draft='Hi Gail, the fix is in.', reason='an email to gail@northwind.example')
+        out = landing.from_proposal(self.s, self.tid, {'action': 'push', 'why': 'the rounding fix'})
+        self.assertIn('NOT on his screen yet', out['says']); self.assertNotIn('sees the', out['says'])
+
+    def test_a_push_no_card_can_draw_is_refused_with_why_not_told_as_up(self):
+        from taskuary import agents
+        t = Factory(self.s).task(title='Look at the ledger', kind='coding'); landing.mark_start(self.s, t, self.cwd); self.fix()
+        with mock.patch.object(agents, 'developer_mode', return_value=False), self.assertRaisesRegex(ValueError, 'no Push card can be drawn'):
+            landing.propose(self.s, t, 'push')
 
     def test_a_checkout_with_no_remote_says_so_on_the_card_and_to_the_agent(self):
         git(self.cwd, 'remote', 'remove', 'origin'); self.fix()
@@ -534,6 +547,26 @@ class NamedCheckoutTests(unittest.TestCase):
         s = landing.state(self.s, self.tid)
         self.assertTrue(s['noRemote'] and not s['ask']); self.assertEqual(s['commits'], 1, 'only the commit made since the task began')
         self.assertIn('no remote to push to', s['line'])
+
+    def test_the_page_draws_the_card_his_named_checkout_raised_and_no_other(self):
+        # design round 6, D1: the agent proposed the push, was told "the owner sees it", and the page - gating the card on its own coding
+        # switch, off with Developer mode - drew nothing; "Press Push" three times on both CLIs. The page reads one fact: landing.shown
+        os.environ.setdefault('TASKUARY_HOME', tempfile.mkdtemp())
+        from fastapi.testclient import TestClient
+        from taskuary import agents, server
+        st, c = server.store, TestClient(server.app)
+        tid = st.create_task({'Title': 'Fix the ledger rounding', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner',
+                              'Summary': f'Fix the rounding bug in the ledger totals. My checkout is at {self.cwd}'}, 'owner')
+        st.add_transcript(tid, 'run1', 'Fixed the rounding.', 'claude', self.scratch); self.fix()
+        with mock.patch.object(agents, 'developer_mode', return_value=False):
+            self.assertTrue(landing.from_proposal(st, tid, {'action': 'push', 'cwd': self.cwd, 'why': 'the rounding fix'})['ok'])
+            self.assertTrue(c.get(f'/api/tasks/{tid}').json()['checkout'], 'the card the agent was told is up is drawn')
+            self.assertTrue(c.get(f'/api/tasks/{tid}/landing').json()['data']['ask'])
+            # ...and a session that merely works in a git folder he never named draws no card, as its landing read returns none
+            t2 = Factory(st).task(title='Look at the ledger', kind='coding'); st.add_transcript(t2, 'run2', 'Read it.', 'claude', self.cwd)
+            landing.mark_start(st, t2, self.cwd)
+            self.assertIsNone(c.get(f'/api/tasks/{t2}/landing').json()['data'])
+            self.assertFalse(c.get(f'/api/tasks/{t2}').json()['checkout'])
 
     def test_a_folder_he_never_named_adopts_nothing(self):
         other = tempfile.mkdtemp(); git(other, 'init', '-q', '-b', 'master'); commit(other, 'x.py', 'x\n')

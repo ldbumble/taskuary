@@ -429,6 +429,10 @@ def propose(store, tid: int, how: str, why: str = '', actor: str = 'agent', depl
                                  'work in the checkout the change belongs in - use_repo picks it (find_repos lists them)'))
     if s.get('noRemote'): raise ValueError(f"{s['line']} The owner sees that on the card. Where he gave you its address, `git remote add origin <url>` "
                                            "and ask for the push again; else ask him for it in one question.")
+    if not shown(store, tid):                     # ...a card the page would not draw is never told to its agent as on his screen (round 6, D1)
+        from .agenttools import refusal
+        raise ValueError(refusal('no Push card can be drawn here: Developer mode is off and this is not a checkout the owner named on this task',
+                                 'ask him in one question for the folder of his checkout this work belongs in'))
     if not s['ask']: raise ValueError(s['line'])
     if how == 'discard' and not s['own']: raise ValueError('discard is only for a branch of your own')
     if how not in {a['how'] for a in s['answers']}: raise ValueError(f"how is one of: {', '.join(a['how'] for a in s['answers'])} here - {s['line']}")
@@ -445,7 +449,16 @@ def propose(store, tid: int, how: str, why: str = '', actor: str = 'agent', depl
         from . import agentchannels
         agentchannels.landing_proposed(store, tid)
     except Exception as e: logger.debug(f'{task_ref(tid)}: the landing question was not put on its channel - {e}')
-    return {'ok': True, 'says': f"The owner sees the landing question with {HOW[how]} marked - nothing lands until they answer it."}
+    return {'ok': True, 'says': where(store, tid, how)}
+
+
+def where(store, tid: int, how: str) -> str:
+    "Where the landing card the agent just raised stands, as the page draws it (cardqueue.state) - never 'on his screen' while it waits its turn."
+    from . import cardqueue
+    q = cardqueue.state(store, int(tid))
+    if cardqueue.LAND in q['live']: return f"The owner sees the {HOW[how]} card now - nothing lands until they press it; you are told when they do."
+    return (f"The {HOW[how]} card is raised but NOT on his screen yet: it comes forward once the card before it is answered. Say that if you "
+            "name it - never that it waits for his press now.")
 
 
 # A GIT ACT PROPOSED ANY WAY IS THE CARD'S BUTTONS (the owner, 2026-11-09: "actions should be cards/buttons"): `propose {"action": "push"}`,

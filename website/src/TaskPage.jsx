@@ -3124,7 +3124,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   <HeadPop id="chat-detail" title="Chat detail" icon={<TuneOutlinedIcon sx={{ fontSize: 16 }} />}><ChatDetail taskId={t.TaskId} source={chatSource(t, term)} /></HeadPop>
                   {/* ...and its code changes ONLY WHERE THERE IS CODE (the owner, 2026-11-06: "diff shows up if there is branch or checkout stuff available"):
                       a task working in a checkout, whatever its kind (landing.has_checkout) */}
-                  {canCode && detail?.checkout && <HeadPop id="changes" title="Changes" wide icon={<DifferenceOutlinedIcon sx={{ fontSize: 16 }} />}>
+                  {detail?.checkout && <HeadPop id="changes" title="Changes" wide icon={<DifferenceOutlinedIcon sx={{ fontSize: 16 }} />}>
                     <CodeChanges taskId={t.TaskId} /></HeadPop>}
                   {canCode && t.Kind === "coding" && <HeadPop id="agent-channels" title="Talk to this agent from…" icon={<ForumOutlinedIcon sx={{ fontSize: 16 }} />}>
                     <AgentChannels taskId={t.TaskId} pop /></HeadPop>}
@@ -3593,7 +3593,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           title: "Where this came from - opens it", onOpen: twoUp ? () => openSection("from") : null } : null}
                         closedLine={closedSaid} term={term}
                         turnCards={turnCards}
-                        landing={canCode && detail?.checkout && <LandingCard key={`land-${t.TaskId}`} taskId={t.TaskId} inChat
+                        landing={detail?.checkout && <LandingCard key={`land-${t.TaskId}`} taskId={t.TaskId} inChat
                           onChanged={() => { loadDetail(selected); onChanged?.(); }} />}
                         onChanged={() => { findTerm(selected); loadDetail(selected); onChanged?.(); }} />
                     </React.Suspense>

@@ -111,6 +111,34 @@ def _install_fresh_routes(app, store):
                                "BodyText": "Hi Alex, could someone comment the totals function in the ledger? Thanks, Gail"})
         return {"taskId": tid, "repo": str(repo)}
 
+    @app.post("/api/fixture/named-push")
+    def fixture_named_push(body: dict = Body(...)):
+        """A general task asked from New with the owner's checkout named in his words, Developer mode off; its agent committed the fix there
+        and proposed the push (browser/named-push-card: design round 6, D1 - the card was told to the agent and never drawn)."""
+        import subprocess
+        from taskuary import agents, landing
+        import tempfile
+        # ...his checkout lives outside Taskuary's own home, which no agent is ever given (floor.kept_secret)
+        home = Path(os.environ["TASKUARY_HOME"]); top = Path(tempfile.mkdtemp(prefix="tq-ledger-")); repo, bare = top / "ledger", top / "ledger-origin.git"
+        G = body.get("git") or "git"        # ...a fresh home's PATH holds only the system's own
+        git = lambda cwd, *a, env=None: subprocess.run([G, "-C", str(cwd), "-c", "user.name=Alex Doyle", "-c", "user.email=alex@northwind.example", *a],
+                                                       check=True, capture_output=True, env=env)
+        repo.mkdir(exist_ok=True); (repo / "totals.py").write_text("def total(a): return round(sum(a))\n", encoding="utf-8")
+        git(repo, "init", "-q", "-b", "master"); git(repo, "add", "."); git(repo, "commit", "-qm", "start")
+        git(top, "init", "-q", "--bare", str(bare)); git(repo, "remote", "add", "origin", str(bare))     # ...added, never fetched: the walk's shape
+        store.set_setting(agents.DEV_MODE, "0", "owner")
+        tid = store.create_task({"Title": "Fix the ledger rounding", "Kind": "general", "Status": "in_progress", "OriginBase": "owner",
+                                 "Summary": f"Fix the rounding bug in the ledger totals and push it on my press. My checkout is at {repo}"}, "owner")
+        store.add_transcript(tid, "run1", "Fixed the rounding.", "claude", str(home))
+        later = str(int(time.time()) + 5)
+        (repo / "totals.py").write_text("def total(a): return round(sum(a), 2)\n", encoding="utf-8"); git(repo, "add", ".")
+        git(repo, "commit", "-qm", "Keep cents in totals", env={**os.environ, "GIT_COMMITTER_DATE": f"{later} +0000", "GIT_AUTHOR_DATE": f"{later} +0000"})
+        from taskuary import general
+        store.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, "Fix the rounding bug in the ledger totals and push it on my press.")
+        store.add_comment(tid, "assistant", general.ASSISTANT_TYPE, "Fixed the rounding to cents, its test passes, and it is committed in your checkout.")
+        said = landing.from_proposal(store, tid, {"action": "push", "cwd": str(repo), "why": "the rounding fix"})
+        return {"taskId": tid, "says": said.get("says")}
+
     @app.post("/api/fixture/mail-task")
     def fixture_mail_task(body: dict = Body(...)):
         """A task from a mail of Erin Blake's with a reply already drafted for it - the arrival road's draft, waiting (browser/cards-in-their-turn).

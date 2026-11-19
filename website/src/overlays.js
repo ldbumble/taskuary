@@ -42,8 +42,13 @@ export function useOverlay(open, close, { typeThrough = false } = {}) {
 // the space in them pressed Change again, the menu back over the box; typed with the menu open, its type-ahead ate every key. One road for
 // every menu: a character typed into an open menu, or a click past it, shuts it and his words go on - in order, none lost - into the box he
 // clicked, else the box beneath
-export const menuOf = (el) => el?.closest?.("[role=menu], .MuiMenu-paper") || null;
-const isBox = (el) => el?.closest?.("input, textarea, [contenteditable=true]") || null;
+const BOX = "input, textarea, [contenteditable=true]";
+// ...AND EVERY POP-OVER WITH NO BOX OF ITS OWN IS ONE (design round 4, 2026-11-19: a line typed while the task's Chat detail was open was lost,
+// nothing started): a menu is a pop-over, so the one road is the pop-over's - one whose words are typed into a box of its own keeps them
+const isBox = (el) => el?.closest?.(BOX) || null;
+const POP = ".MuiPopover-root";
+export const menuOf = (el) => { const p = isBox(el) ? null : el?.closest?.("[role=menu], .MuiMenu-paper, .MuiPopover-paper");
+  return p && !p.querySelector?.(BOX) ? p : null; };
 export const typeThroughMenus = (win) => {
   if (!win || win.__tqMenusTypeThrough) return;
   win.__tqMenusTypeThrough = true;
@@ -53,12 +58,12 @@ export const typeThroughMenus = (win) => {
   const dest = () => (at && isBox(doc.elementFromPoint(at.x, at.y))) || boxBeneath(doc);
   const settle = () => {
     const b = dest();
-    if (b && (doc.querySelector(".MuiMenu-root") || (b.focus(), doc.activeElement !== b)) && ++tries < 120) { win.requestAnimationFrame(settle); return; }
+    if (b && (doc.querySelector(POP) || (b.focus(), doc.activeElement !== b)) && ++tries < 120) { win.requestAnimationFrame(settle); return; }
     if (b && doc.activeElement === b && held) doc.execCommand("insertText", false, held);
     held = ""; busy = false; tries = 0; at = null;
   };
   win.addEventListener("pointerdown", (e) => {
-    if (busy || !e.target?.closest?.(".MuiMenu-root") || menuOf(e.target)) return;
+    if (busy || !e.target?.closest?.(POP) || menuOf(e.target)) return;
     busy = true; at = { x: e.clientX, y: e.clientY }; win.requestAnimationFrame(settle);
   }, true);
   win.addEventListener("keydown", (e) => {

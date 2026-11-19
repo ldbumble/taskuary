@@ -50,8 +50,8 @@ test("a character typed into an open menu, or a click past it, shuts it and his 
   const box = { disabled: false, getClientRects: () => [1], closest: () => null, focus() { if (!open) focused = box; } };
   box.closest = (q) => (q.includes("textarea") ? box : null);
   const menu = { dispatchEvent: (e) => { escapes.push(e.key); open = false; } };
-  const inMenu = { closest: (q) => (q.includes("role=menu") ? menu : null) }, backdrop = { closest: (q) => (q === ".MuiMenu-root" ? {} : null) };
-  const doc = { querySelector: (q) => (q === ".MuiMenu-root" && open ? {} : null), querySelectorAll: (q) => (q === ".tq-aui-input" ? [box] : []),
+  const inMenu = { closest: (q) => (q.includes("role=menu") ? menu : null) }, backdrop = { closest: (q) => (q === ".MuiPopover-root" ? {} : null) };
+  const doc = { querySelector: (q) => (q === ".MuiPopover-root" && open ? {} : null), querySelectorAll: (q) => (q === ".tq-aui-input" ? [box] : []),
     get activeElement() { return focused; }, elementFromPoint: () => box, execCommand: (_c, _u, t) => said.push(t) };
   const win = { document: doc, addEventListener: (n, f) => { on[n] = f; }, requestAnimationFrame: (f) => frames.push(f) };
   globalThis.KeyboardEvent ??= class { constructor(type, o) { Object.assign(this, { type, ...o }); } };
@@ -65,4 +65,16 @@ test("a character typed into an open menu, or a click past it, shuts it and his 
   assert.ok(key(" ", { closest: () => null }).stopped, "the space typed on the button the menu handed the focus back to never presses it");
   key("n", { closest: () => null }); open = false; run();
   assert.deepEqual(said, [" n"]);
+});
+
+// ...AND A POP-OVER WITH NO BOX (design round 4, 2026-11-19: a line typed while the task's Chat detail was open was lost): it is a menu to this
+// road; one with a box of its own keeps what is typed in it
+test("a pop-over with no box of its own types through as a menu does; one with a box keeps its words", async () => {
+  const { menuOf } = await import("../src/overlays.js");
+  const paper = { querySelector: () => null }, inPop = { closest: (q) => (q.includes(".MuiPopover-paper") ? paper : null) };
+  assert.equal(menuOf(inPop), paper, "the Chat detail's buttons are a menu's");
+  const field = { closest: (q) => (q.includes("textarea") ? field : q.includes(".MuiPopover-paper") ? paper : null) };
+  assert.equal(menuOf(field), null, "a box inside a pop-over keeps its own keys");
+  const form = { querySelector: (q) => (q.includes("input") ? {} : null) }, onForm = { closest: (q) => (q.includes(".MuiPopover-paper") ? form : null) };
+  assert.equal(menuOf(onForm), null, "...and so does one with a box anywhere in it");
 });

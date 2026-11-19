@@ -168,7 +168,7 @@ def test_the_owners_press_saves_the_routine_and_nothing_exists_before_it():
     s = MemoryStore(); tid = task(s)
     q = proposals.queue(s, tid, dict(ASK))
     rv = s.get_review(q['reviewId'])
-    assert (rv['Kind'], rv['Status']) == ('action', 'pending') and 'save a script as the routine "Late fees", to run daily 07:00' in rv['Reason']
+    assert (rv['Kind'], rv['Status']) == ('action', 'pending') and 'save a script as the routine "Late fees", to run daily at 07:00' in rv['Reason']
     assert json.loads(rv['DraftText'])['script'] == LATE_FEE, 'the card holds the script whole'
     assert not routines(s), 'nothing is saved, and nothing has run, before the press'
     with mock.patch.object(reports, 'run_python_script', side_effect=AssertionError('the press saves - it runs nothing')):

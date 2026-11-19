@@ -223,8 +223,11 @@ def merge_tasks(store, src: int, dst: int, actor: str = 'owner') -> dict:
     from . import ingest, verdicts
     result, drafts = agent_result(store, src)
     for rid in [r['rid'] for r in verdicts.unsent(store, src)]: store.decide_review(rid, 'superseded', None, actor, note=f'folded into {task_ref(dst)}')
+    # ...and every other one still open on it (an empty draft, a card) is superseded by the fold too, never 'no reply' by the close below
+    for r in store._rows("SELECT ReviewId FROM review WHERE TaskId=? AND Status IN ('pending','held')", (src,)):
+        store.decide_review(r['ReviewId'], 'superseded', None, actor, note=f'folded into {task_ref(dst)}')
     from . import concierge
-    concierge.close_task(store, src, actor, save=False, status='dropped')       # the one close: an agent still on it stops with it
+    concierge.close_task(store, src, actor, save=False, status='dropped', press=False)       # the one close: an agent still on it stops with it
     store.audit('task', src, 'merged_into_task', actor, detail={'into': dst, 'messages': [m['MessageId'] for m in msgs]})
     store.audit('task', dst, 'merged_from_task', actor, detail={'from_task': src, 'messages': len(msgs)})
     told = ingest.folded_in(store, dst, src, str(a.get('Title') or ''), msgs, result, drafts, actor)

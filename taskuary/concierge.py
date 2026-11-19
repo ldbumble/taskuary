@@ -4300,7 +4300,7 @@ def _kept(store, tid, actor, e):
 
 
 CLOSED_TASK = 'the owner closed the task'      # the note on a draft the task's close put down: the close's own doing, never a verdict on the draft (episodes.py)
-def close_task(store, tid: int, actor: str = 'owner', save: bool = True, status: str = 'done', note: str = '') -> bool:
+def close_task(store, tid: int, actor: str = 'owner', save: bool = True, status: str = 'done', note: str = '', press: bool = None) -> bool:
     """THE ONE CLOSE, from every door: the pending draft on it is dismissed first (a closed task must not
     leave a reply waiting for a yes), its live agent saved and stopped, then the task itself - `status` done, or dropped for a put-down
     (Let it go, a batch folded away); `note` is the door's own line on the task. False when already closed with no draft."""
@@ -4348,7 +4348,9 @@ def close_task(store, tid: int, actor: str = 'owner', save: bool = True, status:
     general.answered(tid, every=True)
     from . import selfclose
     selfclose.unclaim(store, tid, actor)            # a finished task is nobody's to end any more
-    store.audit('task', tid, 'close_from_assistant', actor)
+    # ...his close is HIS press only (`press`, by default when he is the actor): a road's own close - a merged PR, a workflow's end, a fold -
+    # read "You marked it done." in his chat once every door came through here. Tell the truth: it is recorded as the road's
+    store.audit('task', tid, 'close_from_assistant' if (actor == 'owner' if press is None else press) else 'closed_by_road', actor)
     # ...and the row goes off Unread with it (the owner, 2026-09-07: "it should just go off the unread
     # timeline"). Closing is the decision, wherever it was made; only the CHAT's close used to post the
     # read receipt, so a close on the Tasks page left the mail behind it sitting in the pipe as an fyi.

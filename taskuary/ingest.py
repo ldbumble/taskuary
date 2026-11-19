@@ -1562,6 +1562,46 @@ def joinable(store, tid, shut: bool = True):
     return tid if ok else None
 
 
+# ONE JOIN DECIDER (one road per decision, #2): words that start work - his in New, the Assistant or the phone, an agent's new_task, a part
+# broken out - were asked "is an open task already this work" by a model call of their own (samework), beside triage's same_as for every
+# message: two deciders of one question, each shown the open work its own way. Now triage answers it for them too - the words are read as a
+# message is, with the same open work beside them, and its same_as is the join. No triage brain, no answer, nothing open: new work.
+OWNER_WORDS, WORDS_CHANNEL = 'the owner himself', 'words'
+def same_work(store, words: str, who: str = OWNER_WORDS, skip=(), llm=None) -> int | None:
+    "The open task triage reads `words` as already being (its same_as), or None. `who`: who asks it; `skip`: tasks never to name (the asker)."
+    words, skip = ' '.join(str(words or '').split()), {int(x) for x in skip if x}
+    if not words: return None
+    try:
+        if llm is None:
+            from . import llm as _llm
+            llm = _llm.build_llm(store, job='triage')
+        if not llm: return None
+        me, key = sorted(own_addresses(store)), hashlib.sha1(f'{who}\n{words}'.encode()).hexdigest()[:16]
+        msg = {'external_id': f'{WORDS_CHANNEL}:{key}', 'conversation_id': f'{WORDS_CHANNEL}:{key}', 'channel': WORDS_CHANNEL, 'direction': 'in',
+               'from_name': who, 'source_name': who, 'from_email': me[0] if me and who == OWNER_WORDS else '',
+               'subject': f'New work asked by {who}: {words[:100]}', 'body': words[:3000], 'sent_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        intent, fail = judge(store, msg, llm, owner_addresses(store), own_addresses(store))
+    except Exception as e:
+        logger.info(f'the same-work reading was skipped, the work is new: {e}'); return None
+    if fail or intent.get('degraded'): return None
+    try: tid = int(intent.get('same_as'))
+    except (TypeError, ValueError): return None
+    return tid if tid not in skip and joinable(store, tid, shut=False) else None
+
+
+def arrive_words(store, words: str, frm: str = 'owner', actor: str = 'owner', who: str = None, skip=(), files=None, said: str = None, llm=None):
+    """WORDS THAT START WORK ARRIVE AS A MESSAGE DOES: triage says whether an open task is already that work (same_work), and where it is they go
+    to that task's agent by the one road into it (general.to_agent) - his words as his line (`frm` 'owner'), Taskuary's (an agent's ask, a part
+    broken out) as its note, its agent started where none ever worked it. `said`: the words as he typed them, where `words` is a rewording.
+    -> {'tid', 'how'} when they joined; None when they are new work, which the caller makes."""
+    tid = same_work(store, words, who or (OWNER_WORDS if frm == 'owner' else 'Taskuary, for the agent of another task'), skip, llm)
+    if not tid: return None
+    from . import general
+    how = general.to_agent(store, tid, said or words, actor, frm=frm, files=files, **({'wait': False} if frm == 'owner' else {'start': True}))
+    store.audit('task', tid, 'joined_same_work', actor, detail={'from': frm, 'asked_on': sorted(skip)})
+    return {'tid': tid, 'how': how}
+
+
 CLOSING_WAIT = 120                # seconds a mail waits for its task's Mark done write-up to close it (land_on)
 def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = 'thread', *, fail: dict = None, cfg: dict = None,
             pol: dict = None, mine=(), score=1.0, cands=(), reason: str = '', notes_note: str = '', step: dict = None) -> dict:
@@ -2833,7 +2873,7 @@ def wake_why(store, tid, msg: dict, mid, follow: dict | None, own: bool = False,
     # ...AND ONE WHOSE SESSION ENDED, as a typed line reopens it (the owner, 2026-11-13: "if a new message comes in, it's like typing, which
     # should restart the agent"): after a restart the coding session was neither live nor idled, so the owner's outside answer and the
     # sender's next line both read "not this agent's" - its draft stood "ready to send" and nothing ran. A coding agent with a conversation
-    # here (a transcript - general.tell's own test) is told through the waiting room, which reopens it (waitroom.reopen_coding)
+    # here (a transcript - general.to_agent's own test) is told through the waiting room, which reopens it (waitroom.reopen_coding)
     live, kind = live_agent(store, tid), 'general' if general.handles(t) else 'coding'
     if kind == 'coding' and not (live == 'coding' or not live and store.last_transcript(tid)): return reason('not_assistant')
     # ...with the assistant's conversation on it: a writer's draft alone (a reply task, an invite and its banter) never starts an agent
@@ -2854,7 +2894,7 @@ def thread_moved(store, tid, msg: dict, mid, follow: dict | None, actor: str, ow
         return False
     turn = replan_turn(msg, follow, own)
     store.audit('task', tid, 'thread_moved', actor, 'agent', {'message_id': mid, 'own': own})
-    # ...a coding agent, live or not, by the waiting room (general.tell): it reopens an ended session as a typed line does, and waits for room
+    # ...a coding agent, live or not, by the waiting room (general.to_agent): it reopens an ended session as a typed line does, and waits for room
     if live_agent(store, tid) or not general.handles(store.get_task(tid) or {}):
         _spawn(_replan_pass, store, tid, {**msg, 'message_id': mid}, turn)
         return True
@@ -2867,11 +2907,11 @@ def thread_moved(store, tid, msg: dict, mid, follow: dict | None, actor: str, ow
 
 
 def _replan_pass(store, tid, msg: dict, turn: str):
-    from . import general           # ...a coding agent's by the one road Taskuary's words to it take (general.tell)
+    from . import general           # ...a coding agent's by the one road Taskuary's words to it take (general.to_agent)
     if general.handles(store.get_task(tid) or {}): _pass_general(store, tid, msg, turn)
     else:
         if isinstance(mid := msg.get('message_id'), int): _typing_turn(tid, mid)
-        general.tell(store, tid, turn)
+        general.to_agent(store, tid, turn)
 
 
 def _replan_general(store, tid, turn: str, mails=()):
@@ -2931,7 +2971,7 @@ def _asker(msg: dict) -> str: return person_name(msg.get('from_name')) or msg.ge
 
 
 def _continue_coding(store, tid, said: str = ''):
-    """A stopped coding task carries on BY THE ONE ROAD Taskuary's words to an agent take (general.tell -> the waiting room): its own CLI
+    """A stopped coding task carries on BY THE ONE ROAD Taskuary's words to an agent take (general.to_agent -> the waiting room): its own CLI
     conversation reopened in its checkout (waitroom.reopen_coding), told what came in since - as a typed line, an approval and a line that
     joins after a restart reach it. It started the CLI itself here, a second road: nothing was written down as heard (a reply draft above
     the new mail stood pending), and a start that found no room said "Continue picks it up" with nothing to try it again. Through the
@@ -2941,7 +2981,7 @@ def _continue_coding(store, tid, said: str = ''):
         row, why = _resumable_coding(store, tid)
         if not row: raise RuntimeError(why)
         if (store.get_task(tid) or {}).get('Status') not in ('open', 'waiting', 'in_progress'): store.update_task(tid, {'Status': 'in_progress'}, 'router')
-        general.tell(store, tid, '\n\n---\n\n'.join(x for x in (carry_on_turn(store, tid), said) if x), 'router')
+        general.to_agent(store, tid, '\n\n---\n\n'.join(x for x in (carry_on_turn(store, tid), said) if x), 'router')
     except Exception as e:
         logger.warning(f'coding carry-on failed for task {tid}: {e}')
         store.add_comment(tid, 'router', 'agent', f"The coding agent couldn't reopen its session by itself: {_said(e)} - Continue picks it up.")

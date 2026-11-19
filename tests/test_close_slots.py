@@ -409,12 +409,11 @@ def test_a_coding_hand_off_and_a_walk_through_keep_his_words_as_his_and_file_the
 
 def test_a_start_the_model_reads_as_open_work_goes_to_that_tasks_agent_never_a_second_task(s):
     """One job is one task at every door (the owner's live app, 2026-11-18): the open tasks go to the model before a task is made, and the
-    same work hears his line on its own task."""
+    same work hears his line on its own task. Triage is what reads it (ingest.same_work), as it reads every message."""
     from taskuary import general
     there = s.create_task({'Title': 'Find two venues for the offsite', 'Kind': 'general', 'Status': 'open'}, 'owner')
     told, had = [], len(s.list_tasks(None))
-    def llm(system, user, **k): return json.dumps({'same_as': there} if 'OPEN TASKS' in user else {'summary': 's', 'checklist': [], 'outputs': []})
-    with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch('taskuary.concierge.brain', return_value=llm),          mock.patch.object(general, 'take_line', lambda st, tid, text, files=None, actor='owner', **k: told.append((tid, text))),          mock.patch('taskuary.general.start_session') as began:
+    with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: ''),          mock.patch('taskuary.ingest.judge', return_value=({'intent': 'task', 'same_as': there}, {})),          mock.patch.object(general, 'take_line', lambda st, tid, text, files=None, actor='owner', **k: told.append((tid, text))),          mock.patch('taskuary.general.start_session') as began:
         made = concierge.handoff_task(s, 'Find venues for the 40-person offsite too', kind='general')
     assert (made['taskId'], made.get('joined')) == (there, True) and len(s.list_tasks(None)) == had and not began.called
     assert told == [(there, 'Find venues for the 40-person offsite too')]

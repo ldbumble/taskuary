@@ -109,7 +109,7 @@ def split_task(store, tid: int, second: dict, first: dict = None, move_message_i
 
 def move_part(store, tid: int, dst: int, message_ids, items, actor: str = 'owner') -> tuple:
     """(the messages moved, the to-dos moved) from `tid` to `dst`: only the messages named, and the to-dos by id - a break-out's part, to a
-    new task (split_task) or to the open task that is already that work (proposals break_out, samework)."""
+    new task (split_task) or to the open task that is already that work (proposals break_out, ingest.same_work)."""
     mine = {m['MessageId'] for m in store.list_messages(tid)}
     moved = [int(m) for m in (message_ids or []) if int(m) in mine]
     for mid in moved:

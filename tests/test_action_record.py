@@ -202,7 +202,7 @@ class APressThatFailed(Acts):
 
     def test_where_no_agent_could_be_told_it_is_said_with_the_owners_next_line(self):
         self.answered(); rv = self.action({'action': 'comment_issue', 'body': 'Fixed.'})
-        with mock.patch.object(general, 'tell', return_value=''): self.fail(rv)
+        with mock.patch.object(general, 'to_agent', return_value=''): self.fail(rv)
         did = general.turn_facts(self.s, self.tid).split('- Failed ')[1]
         self.assertIn(f"rv{rv['ReviewId']}", did); self.assertIn('nothing went', did); self.assertIn('the token may not comment', did)
         self.assertIn('raised again only as a new card', general.turn_facts(self.s, self.tid))
@@ -228,7 +228,7 @@ class APressARestartCut(Acts):
             try: verdicts.decide(self.s, rv, 'approve')
             except Gone: pass
         with mock.patch.object(proposals, '_run', run), mock.patch.object(proposals, 'validate', return_value=(True, 'comment')), \
-                mock.patch.object(general, 'tell', return_value=''):
+                mock.patch.object(general, 'to_agent', return_value=''):
             t = threading.Thread(target=press, daemon=True); t.start()
             self.assertTrue(going.wait(5))
             term.recover_after_restart(self.s)                # what the next start reads: the act under way, its process gone
@@ -335,18 +335,18 @@ class APartThatIsAnotherJob(Acts):
     def test_a_part_an_open_task_already_is_goes_there_and_its_agent_is_told(self):
         """The owner's live app, 2026-11-18: a chat had made a coding task for adding a daily rate to the bed boards; the next day an agent
         on another task broke "the bed board" out into a brand-new coding task - two open tasks, one job. The model reads the open tasks
-        first (samework); the same work gets the part and its agent hears it - no second task."""
+        first, as triage reads every message (ingest.same_work); the same work gets the part and its agent hears it - no second task."""
         there = Factory(self.s).task('Add a daily rate to the bed boards', kind='coding')
         self.ask = {**self.ask, 'title': 'Bed board daily rate', 'summary': 'Paula wants the daily rate column on the bed board.'}
         rv, _ = self.queue()
         seen, told = [], []
-        def llm(system, user, **k): seen.append(user); return json.dumps({'same_as': there})
+        def judge(store, msg, llm, *a, **k): seen.append(msg['body']); return {'intent': 'task', 'same_as': there}, {}
         had = len(self.s.list_tasks(None))
-        with mock.patch('taskuary.concierge.brain', return_value=llm),              mock.patch.object(general, 'tell', lambda st, tid, text, actor='owner', **k: told.append((tid, text)) or 'told'):
+        with mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: ''), mock.patch('taskuary.ingest.judge', judge),              mock.patch.object(general, 'to_agent', lambda st, tid, text, actor='owner', **k: told.append((tid, text)) or 'told'):
             out = verdicts.decide(self.s, rv, 'approve')
         self.assertTrue(out['ok'], out)
         self.assertEqual(len(self.s.list_tasks(None)), had, 'no second task')
-        self.assertIn('Add a daily rate to the bed boards', seen[0])                         # the model was shown the open task
+        self.assertIn('Bed board daily rate', seen[0])                                       # triage read the part as it reads a message
         self.assertEqual((out['result']['task'], [m['MessageId'] for m in self.s.list_messages(there)]), (there, [self.other]))
         self.assertIn('b2', [i['id'] for i in self.s.task_checklist(there)])
         moved = [w for t, w in told if t == there]                       # ...the task that pressed it hears its own approval, as ever
@@ -354,12 +354,12 @@ class APartThatIsAnotherJob(Acts):
 
     def test_a_joined_part_reaches_its_agent_as_taskuarys_words_never_a_line_in_the_owners_name(self):
         """Only his words are his (the coordinator, 2026-11-18): the joined part rode take_line, the road of a line he types, and the receiving
-        chat drew "Moved here from TQ-x ..." under You. It is Taskuary's note, by general.tell - into its agent's next prompt."""
+        chat drew "Moved here from TQ-x ..." under You. It is Taskuary's note, by general.to_agent - into its agent's next prompt."""
         from taskuary import waitroom, workerstate
         there = Factory(self.s).task('Add a daily rate to the bed boards', kind='coding')
         self.ask = {**self.ask, 'title': 'Bed board daily rate'}
         rv, _ = self.queue()
-        with mock.patch('taskuary.concierge.brain', return_value=lambda *a, **k: json.dumps({'same_as': there})),              mock.patch.object(workerstate, '_live', lambda tid: tid == there), mock.patch.object(waitroom, 'deliver', return_value={'delivered': 0}):
+        with mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: ''), mock.patch('taskuary.ingest.judge', return_value=({'intent': 'task', 'same_as': there}, {})),              mock.patch.object(workerstate, '_live', lambda tid: tid == there), mock.patch.object(waitroom, 'deliver', return_value={'delivered': 0}):
             self.assertTrue(verdicts.decide(self.s, rv, 'approve')['ok'])
         self.assertEqual(general.waiting_lines(self.s, there), [], 'no line kept in his name')
         self.assertFalse([c for c in self.s.list_comments(there, internal=True) if c.get('ActorType') == general.USER_TYPE])
@@ -369,7 +369,7 @@ class APartThatIsAnotherJob(Acts):
     def test_a_part_the_model_reads_as_other_work_is_a_task_of_its_own(self):
         Factory(self.s).task('Add a daily rate to the bed boards', kind='coding')
         rv, _ = self.queue()
-        with mock.patch('taskuary.concierge.brain', return_value=lambda *a, **k: json.dumps({'same_as': None})):
+        with mock.patch('taskuary.ingest.same_work', return_value=None):
             out = verdicts.decide(self.s, rv, 'approve')
         self.assertEqual(self.s.get_task(out['result']['task'])['Title'], 'Renew the parking permits')
 
@@ -443,7 +443,7 @@ def test_a_yes_its_agent_was_handed_is_said_once_not_again_under_what_the_owner_
     time.sleep(1.1)
     s.decide_review(kept, 'approved', '{}', 'owner')
     assert f': rv{kept}, ' in general.turn_facts(s, tid).split('- Done ')[1], 'not handed to anyone yet: said as it stands'
-    with mock.patch.object(general, 'tell', side_effect=lambda st, t, said, actor='owner', heard=None: told.append(said) or (heard and heard('told')) or 'told'):
+    with mock.patch.object(general, 'to_agent', side_effect=lambda st, t, said, actor='owner', heard=None: told.append(said) or (heard and heard('told')) or 'told'):
         assert general.approved(s, tid, 'Approve', 'post - {"url": "https://social.example/p/1"}', review=kept) == 'told'
     assert len(told) == 1 and 'went through' in told[0]
     assert not any(f'rv{kept}' in d for d in general.owner_did(s, tid)), 'handed once - never a second time as a press'

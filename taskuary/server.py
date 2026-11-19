@@ -29,7 +29,7 @@ from . import policy as policy_engine
 from . import reshape
 from . import terminal as hub_term
 from .wrapup import PAUSE_MARKER, REPORTS, pause_note, reply_target, wrap as end_task
-from . import aisetup, assistant, demo, deps, learn, learnedgraph, memorylines, operations, outbound, playbooks, rank, responder, samework, signatures, waitroom
+from . import aisetup, assistant, demo, deps, learn, learnedgraph, memorylines, operations, outbound, playbooks, rank, responder, signatures, waitroom
 from . import live as live_bus
 from . import processing_all
 
@@ -1900,12 +1900,12 @@ def _run_kind(op: dict, background: BackgroundTasks):
         return out
     if kind == 'agent.answer':
         # the exact outstanding request of the run that asked (PW-138/139); nothing asked = the waiting room (PW-140)
-        from . import workerstate as ws
+        from . import general
         # ...in the owner's words, never a "yes" made up for them (B12, 2026-10-11): an empty answer reached a permission
         # prompt as yes, and "which branch?" as the word yes
         said = ' '.join(str(p.get('text') or '').split())
         if not said: raise ValueError('say what to tell the agent')
-        out = ws.answer_open(store, tid, said, ACTOR, owner=p.get('owner') or None)
+        out = general.to_agent(store, tid, said, ACTOR, frm='owner', request='open', owner=p.get('owner') or None)
         if out['state'] == 'no_request': return waitroom_add(tid, {'text': said, 'owner': p.get('owner')})
         if not out['delivered']: raise RuntimeError(f"{out['state']}: {out.get('why') or ''}")
         return out
@@ -2131,13 +2131,12 @@ def worker_answer(task_id: int, body: WorkerAnswerBody):
     """Deliver an answer to ONE outstanding request of the run that asked it (PW-139/141): once; 409 when it is
     resolved already or the run changed; 422 when there is no live worker or delivery failed."""
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    from . import workerstate as ws
-    try: out = ws.answer(store, task_id, body.request_id, body.text, ACTOR, press=body.press)
+    from . import general
+    try: out = general.to_agent(store, task_id, body.text, ACTOR, frm='owner', request=body.request_id, press=body.press)
     except ValueError as e: raise HTTPException(422, str(e))
     # ...words that are no answer to its buttons are his next line, on the one road a line takes (general.take_line)
     if out['state'] == 'line':
-        from . import general
-        general.take_line(store, task_id, body.text, None, ACTOR, wait=False)
+        general.to_agent(store, task_id, body.text, ACTOR, frm='owner', wait=False)
         return {'delivered': True, 'state': 'line'}
     if not out['delivered']:
         raise HTTPException(409 if out['state'] in ('resolved', 'stale') else 422, f"{out['state']}: {out.get('why') or ''}")
@@ -2748,7 +2747,7 @@ def _say(task_id: int, body, **kw):
     "A typed line on the one road (general.take_line), as the chat's doors send it - his words straight to the agent, nothing fetched first."
     from . import general
     chat = general.handles(store.get_task(task_id))
-    out = general.take_line(store, task_id, body.text, body.attachments, ACTOR, _line_id(body),
+    out = general.to_agent(store, task_id, body.text, ACTOR, frm='owner', files=body.attachments, line_id=_line_id(body),
                             **({k: v for k, v in (('connector_id', body.connector_id), ('model', body.model), ('pick', body.pick)) if v} if chat else {}), **kw)
     # ...a line KEPT, no turn taken (a held stranger's task: take_line's {'kept', 'held'}) is a chat's (no session, no reply) - both chat doors
     # unpacked the dict as (session, reply) and died on 'kept'.info(), his line drawn with an error under it while it waited behind Trust
@@ -3242,7 +3241,7 @@ def continue_work(task_id: int, body: ContinueBody = None):
         # (its own conversation, else a fresh one with the handover), one that idled out, one at rest. What came in since rides as Taskuary's
         extra = general.relayed(note, (body.context if body else '') or '')
         told = '\n\n'.join(x for x in [continuity.news_block(store, task_id), f'{general.RELAY} {extra}' if extra else ''] if x) if general.handles(task) else ''
-        try: out = general.take_line(store, task_id, note, imgs or None, ACTOR, wait=False,
+        try: out = general.to_agent(store, task_id, note, ACTOR, frm='owner', files=imgs or None, wait=False,
                                      **({'delivery_instructions': told} if told else {}))
         except (ValueError, RuntimeError) as e: raise HTTPException(422, str(e))
         kind = 'general' if general.handles(task) else 'coding'
@@ -6083,9 +6082,11 @@ def agent_new_task(body: AgentNewTaskBody, request: Request):
         if new and (general.history(store, new) or general.starting(new) or getattr(hub_term.session_for(new), 'alive', False)):
             return {'ok': True, 'task': task_ref(new), 'title': title, 'already': True, 'started': True,
                     'next': f'{task_ref(new)} was already started from here and is working on it - nothing new was made'}
-        # ...AND THE SAME WORK ALREADY OPEN ELSEWHERE IS THAT TASK (samework, the owner's live app 2026-11-18): its agent hears the ask there
-        if not new and (same := samework.same_open_task(store, f'{title}. {ask}', skip={body.task_id})):
-            samework.hand(store, same, f'From {task_ref(body.task_id)}: {ask}', ACTOR)       # ...Taskuary's words, never a line in his name
+        # ...AND THE SAME WORK ALREADY OPEN ELSEWHERE IS THAT TASK (the owner's live app 2026-11-18): the ask arrives as a message does - triage
+        # reads whether an open task is it (ingest.arrive_words), and its agent hears it there in Taskuary's words, never a line in his name
+        from . import ingest
+        if not new and (same := (ingest.arrive_words(store, f'{title}. {ask}', 'taskuary', ACTOR, skip={body.task_id},
+                                                     said=f'From {task_ref(body.task_id)}: {ask}') or {}).get('tid')):
             store.add_comment(body.task_id, body.agent, 'agent', f'Handed to {task_ref(same)}, which is already that work: {title}')
             return {'ok': True, 'task': task_ref(same), 'title': title, 'already': True, 'started': True,
                     'next': f'{task_ref(same)} is already that same work - its agent was told; nothing new was made. Say so in one line'}
@@ -7440,7 +7441,8 @@ def waitroom_list(tid: int):
 def waitroom_add(tid: int, body: dict):
     """Queue a note for this task's agent. It is typed in the moment the agent parks at its
     prompt - and at once, as the answer, when it is already parked on a question for you."""
-    try: return waitroom.add(store, tid, str((body or {}).get('text') or ''), ACTOR, owner=(body or {}).get('owner') or None)
+    from . import general            # ...by the one road into the agent (general.to_agent), kept for its next stop
+    try: return general.to_agent(store, tid, str((body or {}).get('text') or ''), ACTOR, frm='owner', wake=False, owner=(body or {}).get('owner') or None)
     except ValueError as e: raise HTTPException(422, str(e))
 
 @app.post('/api/tasks/{tid}/waitroom/bulk')

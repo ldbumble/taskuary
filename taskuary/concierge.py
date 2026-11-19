@@ -4818,7 +4818,7 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
     """THE ONE START FROM THE OWNER'S WORDS (F1, the walks 2026-11-18): New's box (server /api/start), the Assistant's hand-off (the confirmed
     `task.create_from_text`), a phone's - each hands his words and files here, and the task is made and its agent started only then (PW-124).
     What the work is - a code fix, a routine, a report, research - is the agent's to do with its tools; nothing here picks a form. A start
-    that cannot happen says why before anything is made; the same work already open is that task's (samework).
+    that cannot happen says why before anything is made; the same work already open is that task's (ingest.arrive_words).
     `door`: '' for the Assistant's chat, whose talk rides to the agent as Taskuary's brief - else where he typed it ("New"), with no chat."""
     job = str(text or '').strip()
     if not job: raise ValueError('say what the agent should do')
@@ -4828,11 +4828,12 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
     if kind == 'coding' and not hub_agents.developer_mode(store): kind = 'general'
     if why := start_refusal(store, kind): raise ValueError(why)
     tid = dock_tid or general.dock_task(store, actor)[0]['TaskId']
-    # ...AND ONE JOB IS ONE TASK (samework): the same work already open hears his line on its own task, its agent told - never a second task
-    from . import samework
-    if (same := samework.same_open_task(store, general.split_files(said)['text'] if said else job, skip={tid})):
-        f = general.split_files(said or job); samework.tell(store, same, f['text'], actor, f['files'] or None)
-        return {'taskId': same, 'ref': task_ref(same), 'joined': True, 'started': True}
+    # ...AND ONE JOB IS ONE TASK: his words arrive as a message does (ingest.arrive_words) - where triage reads an open task as already this
+    # work, its agent hears his line there, by the one road into it - never a second task
+    from . import ingest
+    f = general.split_files(said or job)
+    if (same := ingest.arrive_words(store, f['text'] if said else job, 'owner', actor, skip={tid}, files=f['files'] or None, said=f['text'])):
+        return {'taskId': same['tid'], 'ref': task_ref(same['tid']), 'joined': True, 'started': True}
     brief = job if door else _handoff_brief(store, tid, job)
     # ...HIS WORDS ARE THE TASK'S OWN MESSAGE, AND ONLY HIS WORDS (recorded on the real CLI, 2026-11-15: the new task's bubble read his ask
     # and then "What we were talking about: remember that payroll questions go to Gail Got it - ..." - the Assistant's chat, in his name).

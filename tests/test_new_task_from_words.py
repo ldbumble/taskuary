@@ -3,11 +3,20 @@
 Typed while one task was open on the table ("stop sending me the vendor-create mails" over the GL task), the assistant rightly
 started a NEW task - and its card, both receipts and the settle named the task on the table. And the new task wore the Advisor's
 mark on the rail though the owner had asked for it."""
-import json, unittest
+import contextlib, importlib.util, json, unittest
 from unittest import mock
 
-from taskuary import concierge, general, processing_all
+from taskuary import concierge, general, ingest, processing_all
 from taskuary.store import MemoryStore
+
+
+@contextlib.contextmanager
+def triage_reads(same_as, seen=None):
+    "Triage's verdict on words that start work (ingest.same_work - the one join decider): an open task they already are, or none."
+    def judge(store, msg, llm, *a, **k):
+        if seen is not None: seen.append(msg)
+        return {'intent': 'task', 'same_as': same_as}, {}
+    with mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: ''), mock.patch.object(ingest, 'judge', judge): yield
 
 
 class NewTaskFromWordsTests(unittest.TestCase):
@@ -44,7 +53,7 @@ class NewsBoxIsTheOneStartTests(unittest.TestCase):
         from taskuary import config, server
         self.s = MemoryStore()
         for p in (mock.patch.object(server, 'store', self.s), mock.patch.object(general, 'start_session'),
-                  mock.patch('taskuary.concierge.brain', return_value=None)):
+                  mock.patch('taskuary.concierge.brain', return_value=None), mock.patch.object(ingest, 'judge', side_effect=RuntimeError('no triage here'))):
             p.start(); self.addCleanup(p.stop)
         self.c, self.up = TestClient(server.app), config.home() / 'attachments' / 'new-box' / 'october-spend.csv'
         self.up.parent.mkdir(parents=True, exist_ok=True); self.up.write_text('vendor,amount' + chr(10) + 'Payworth,1200' + chr(10), encoding='utf-8')
@@ -128,8 +137,7 @@ class NewsBoxIsTheOneStartTests(unittest.TestCase):
 
     def test_the_same_work_open_already_hears_it_there(self):
         there = self.s.create_task({'Title': 'Find caterers for the offsite', 'Kind': 'general', 'Status': 'open'}, 'owner')
-        llm = lambda system, user, **k: json.dumps({'same_as': there})
-        with mock.patch('taskuary.concierge.brain', return_value=llm), mock.patch.object(general, 'take_line') as told:
+        with triage_reads(there), mock.patch.object(general, 'take_line') as told:
             r = self.start('Find three caterers near the office for the offsite')
         self.assertEqual((r.json()['taskId'], r.json()['joined']), (there, True)); self.assertEqual(len(self.s.list_tasks(None)), 1)
         self.assertEqual(told.call_args.args[1:3], (there, 'Find three caterers near the office for the offsite'))
@@ -143,24 +151,22 @@ class AgentsNewTaskIsTheSameRoadTests(unittest.TestCase):
         s = MemoryStore()
         there = s.create_task({'Title': 'Add a daily rate to the bed boards', 'Kind': 'coding', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
         here = s.create_task({'Title': 'Weekly census review', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
-        llm = lambda system, user, **k: json.dumps({'same_as': there})
         body = server.AgentNewTaskBody(task_id=here, title='Bed board daily rate', ask='Add the daily rate column to the bed board', kind='coding')
-        with mock.patch.object(server, 'store', s), mock.patch.object(server, '_own_task_only'), mock.patch('taskuary.concierge.brain', return_value=llm),              mock.patch.object(general, 'tell') as told, mock.patch.object(server, '_start_new_task') as started:
+        with mock.patch.object(server, 'store', s), mock.patch.object(server, '_own_task_only'), triage_reads(there),              mock.patch.object(general, 'to_agent') as told, mock.patch.object(server, '_start_new_task') as started:
             out = server.agent_new_task(body, None)
         self.assertEqual((out['task'], out['already']), ('TQ-%04d' % there, True)); self.assertEqual(len(s.list_tasks(None)), 2)
         started.assert_not_called(); self.assertEqual(told.call_args.args[1], there)
 
     def test_an_open_task_no_agent_ever_worked_starts_its_agent_with_the_ask(self):
-        """A dead end (rule 4): general.tell hands nothing to a task no agent ever worked, and the joined ask vanished. That task's agent is
+        """A dead end (rule 4): general.to_agent hands nothing to a task no agent ever worked, and the joined ask vanished. That task's agent is
         started by the dispatch door with the ask as its opening Taskuary note."""
         from taskuary import server
         s = MemoryStore()
         there = s.create_task({'Title': 'Add a daily rate to the bed boards', 'Kind': 'coding', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
         here = s.create_task({'Title': 'Weekly census review', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
-        llm = lambda system, user, **k: json.dumps({'same_as': there})
         body = server.AgentNewTaskBody(task_id=here, title='Bed board daily rate', ask='Add the daily rate column to the bed board', kind='coding')
         seen = []
-        with mock.patch.object(server, 'store', s), mock.patch.object(server, '_own_task_only'), mock.patch('taskuary.concierge.brain', return_value=llm),              mock.patch.object(server, 'dispatch_task', side_effect=lambda tid, b, bg: seen.append((tid, b)) or {'started': True, 'taskId': tid}):
+        with mock.patch.object(server, 'store', s), mock.patch.object(server, '_own_task_only'), triage_reads(there),              mock.patch.object(server, 'dispatch_task', side_effect=lambda tid, b, bg: seen.append((tid, b)) or {'started': True, 'taskId': tid}):
             out = server.agent_new_task(body, None)
         self.assertEqual(out['task'], 'TQ-%04d' % there); self.assertEqual(len(s.list_tasks(None)), 2)
         (tid, b), = seen
@@ -183,20 +189,43 @@ if __name__ == '__main__':
     unittest.main()
 
 
-class SameWorkIsTheSameJobTests(unittest.TestCase):
-    """The Codex walk, 2026-11-19: a colleague's ask landed on his code fix in the same system. The check is the model's (rule 2) - it is shown
-    each open task's ask in full and who asked it, and who asks the new work, so a sign-up list and a code fix on one system read as two jobs."""
-    def test_the_model_reads_each_ask_in_full_and_who_asked(self):
-        from taskuary import samework
+class SameWorkIsTriagesDecisionTests(unittest.TestCase):
+    """ONE JOIN DECIDER (one road per decision, #2): whether words that start work are an open task's was asked of a model of its own (samework),
+    beside triage's same_as for every message - two deciders of one question. Triage reads both now: the same open work, the same verdict."""
+    def test_his_words_are_read_by_triage_as_a_message_is_and_samework_is_gone(self):
         s = MemoryStore()
-        long_ask = 'Fix the rounding bug in the northwind/ledger totals that makes CI fail. ' + 'The month-end entries lose a cent. ' * 8 + 'END-OF-ASK'
-        fix = s.create_task({'Title': 'Fix the ledger rounding bug', 'Summary': long_ask, 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        fix = s.create_task({'Title': 'Fix the ledger rounding bug', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        words = 'The northwind/ledger totals are a cent off at month end again - fix the rounding'
         seen = []
-        def llm(system, user, **kw): seen.append((system, user)); return json.dumps({'same_as': None})
-        got = samework.same_open_task(s, 'Sign up for a trial account on each of the 13 vendor sites on the internal list', llm=llm, who='Erin Blake on Teams')
-        self.assertIsNone(got)
-        system, user = seen[0]
-        self.assertIn('END-OF-ASK', user)
-        self.assertIn('asked by the owner himself', user); self.assertIn('THE NEW WORK (asked by Erin Blake on Teams)', user)
-        self.assertIn('doing one would do the other', system)
-        self.assertEqual(samework.same_open_task(s, 'Fix the ledger rounding', llm=lambda *a, **k: json.dumps({'same_as': fix})), fix)
+        with triage_reads(fix, seen): self.assertEqual(ingest.same_work(s, words), fix)
+        [msg] = seen                                     # one triage reading of them, as of any message - its same_as is the join
+        self.assertEqual((msg['body'], msg['from_name'], msg['channel']), (words, ingest.OWNER_WORDS, ingest.WORDS_CHANNEL))
+        self.assertIsNone(importlib.util.find_spec('taskuary.samework'), 'the second decider is gone')
+
+    def test_new_and_an_agents_new_task_join_by_the_same_reading(self):
+        """Two doors, one question: his words in New and an agent's new_task ask triage alike, and land on the same open task."""
+        from taskuary import server
+        s = MemoryStore()
+        there = s.create_task({'Title': 'Fix the ledger rounding bug', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        here = s.create_task({'Title': 'Month-end close', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        seen = []
+        with triage_reads(there, seen), mock.patch.object(general, 'take_line'), mock.patch.object(general, 'to_agent', return_value='told') as told,                 mock.patch('taskuary.capabilities.has_ai', return_value=True):
+            mine = concierge.handoff_task(s, 'Fix the ledger rounding at month end', 'general', 'owner', door='New')
+            with mock.patch.object(server, 'store', s), mock.patch.object(server, '_own_task_only'):
+                agents = server.agent_new_task(server.AgentNewTaskBody(task_id=here, title='Ledger rounding', ask='Fix the ledger rounding at month end'), None)
+        self.assertEqual((mine['taskId'], agents['task']), (there, 'TQ-%04d' % there))
+        self.assertEqual([m['channel'] for m in seen], [ingest.WORDS_CHANNEL] * 2)
+        self.assertEqual([c.kwargs['frm'] for c in told.call_args_list], ['owner', 'taskuary'], "his words as his line, the agent's as Taskuary's")
+
+    def test_who_asks_skip_and_a_closed_task_are_kept(self):
+        s = MemoryStore()
+        fix = s.create_task({'Title': 'Fix the ledger rounding bug', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        seen = []
+        with triage_reads(fix, seen):
+            self.assertIsNone(ingest.same_work(s, 'Fix the ledger rounding', skip={fix}))          # never the task that asks
+            self.assertEqual(ingest.same_work(s, 'Fix the ledger rounding', who='Erin Blake on Teams'), fix)
+            s.update_task(fix, {'Status': 'done'}, 'owner')
+            self.assertIsNone(ingest.same_work(s, 'Fix the ledger rounding'), 'a closed task is no join for new work')
+        self.assertEqual(seen[-2]['from_name'], 'Erin Blake on Teams')
+        with mock.patch('taskuary.llm.build_llm', return_value=None):
+            self.assertIsNone(ingest.same_work(s, 'Fix the ledger rounding'), 'no triage brain: new work')

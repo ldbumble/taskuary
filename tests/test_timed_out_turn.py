@@ -180,7 +180,7 @@ def test_a_stopped_first_turn_keeps_its_conversation_and_the_next_turn_resumes_i
     assert resumes == [None, first], resumes                     # ...and the next turn picked that one up, not a fresh one
 
 
-@pytest.mark.parametrize('later', [False, True], ids=['first turn', 'later turn'])
+@pytest.mark.parametrize('later', [False, True], ids=['first-turn', 'later-turn'])
 def test_an_acp_turn_that_ended_early_is_said_once_and_the_next_line_resumes_its_conversation(later, tmp_path, monkeypatch):
     """An ACP turn that ended early before a word (a refusal, a limit) raised an error with no conversation id: on a first turn the next line
     opened a fresh conversation that knew nothing of it, and on a later one the caller asked the whole turn again on a fresh conversation

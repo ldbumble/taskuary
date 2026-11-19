@@ -18,6 +18,10 @@ import { forOwner } from "./stepWhy.js";
 const flat = (s) => String(s || "").split(/\s+/).join(" ").trim();
 const clip = (s, n = 90) => { const t = flat(s); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 const quoted = (s) => `'${clip(s, 60)}'`;
+// ...A PATTERN WRITTEN IN A SEARCH'S OWN SYNTAX is no words to him (design round 4, 2026-11-19: "Searched files for 'import.*spawn|def run\(|...'"):
+// only plain words are quoted
+const plainPat = (p) => !!p && !/[|\()[\]{}^$*+?]/.test(String(p));
+const searched = (p) => (plainPat(p) ? `Searched files for ${quoted(p)}` : "Searched files");
 const parts = (p) => String(p || "").replace(/[\\/]+$/, "").split(/[\\/]+/).filter(Boolean);
 export const baseName = (p) => parts(p).pop() || String(p || "");
 // `$d`, `$env:TEMP`, `%TEMP%`: the shell fills these in, so they name nothing a person can read ("Listed the files in $d", 2026-11-03)
@@ -224,7 +228,7 @@ const commandStep = (cmd, depth = 0) => {
     if (READERS.has(p) && files.length) { const f = files[files.length - 1]; found.push({ kind: "read", summary: readSaid(f), file: f, vague: !named(f) }); continue; }
     if (GREPS.has(p) || (p === "git" && args[0] === "grep")) {
       const e = args.indexOf("-e"), pat = e >= 0 ? args[e + 1] : plain[p === "git" ? 1 : 0];
-      found.push({ kind: "search", summary: pat ? `Searched files for ${quoted(pat)}` : "Searched files", pattern: pat, asked: plain }); continue;
+      found.push({ kind: "search", summary: searched(pat), pattern: pat, asked: plain }); continue;
     }
     if (LISTS.has(p)) {
       // ...and a pattern (`-Filter 'notes*'`, `ls *.zip`) is what it looked for, never a folder: "Listed the files in notes*" (2026-11-03)
@@ -302,6 +306,20 @@ const OWN = {
   userepo: (a) => { const w = String(a.path_or_name || "").trim(), at = /[\\/]/.test(w) && !/^[\w.-]+\/[\w.-]+$/.test(w) ? baseName(w) : w;
     return { kind: "plan", summary: `Working in ${at || "a checkout"}${a.why ? ` - ${clip(a.why, 100)}` : ""}` }; },
   findrepos: (a) => ({ kind: "list", summary: `Looked for the code on this computer${asked(a.query)}` }),
+  // ...AND EVERY OTHER TOOL OF ITS OWN, by what it did (design round 4, 2026-11-19): the rest fell to "Used <name> (taskuary) on ..."
+  guide: () => ({ kind: "read", summary: "Read how Taskuary does it" }),
+  remember: () => ({ kind: "data", summary: "Kept a fact you told it" }),
+  todos: () => ({ kind: "plan", summary: "Updated the to-do list" }),
+  checkback: (a) => ({ kind: "task", summary: a.when ? `Set itself to look again ${clip(a.when, 30)}` : "Set itself to look again later" }),
+  remind: (a) => ({ kind: "task", summary: a.when ? `Set a reminder for ${clip(a.when, 30)}` : "Set a reminder" }),
+  newtask: (a) => ({ kind: "task", summary: a.title ? `Started a task: ${clip(a.title, 60)}` : "Started a task of its own" }),
+  askstronger: () => ({ kind: "plan", summary: "Asked for a second opinion" }),
+  notepeers: () => ({ kind: "plan", summary: "Left a note for another agent" }),
+  proposeland: () => ({ kind: "plan", summary: "Set up how the work lands" }),
+  withdrawdraft: () => ({ kind: "plan", summary: "Took back something it had set up" }),
+  answerinvite: (a) => ({ kind: "edit", summary: a.answer ? `Set up the answer to the invite (${clip(a.answer, 20)})` : "Set up the answer to the invite" }),
+  setupmeeting: () => ({ kind: "edit", summary: "Set up a meeting" }),
+  share: () => ({ kind: "edit", summary: "Set up a share" }),
 };
 const KIND = Object.fromEntries(Object.entries(TOOLS).flatMap(([k, names]) => names.map((n) => [n, k])));
 
@@ -338,7 +356,7 @@ export const describeCall = (name, args = {}) => {
     return s || { kind: "run", summary: "Ran a command" };
   }
   if (kind === "read") { const f = fileOf(a); return { kind, summary: f ? readSaid(f) : "Read a file", file: f }; }
-  if (kind === "search") { const pat = a.pattern || a.query || a.regex; return { kind, summary: pat ? `Searched files for ${quoted(pat)}` : "Searched files", pattern: pat }; }
+  if (kind === "search") { const pat = a.pattern || a.query || a.regex; return { kind, summary: searched(pat), pattern: pat }; }
   if (kind === "list") { const g = a.pattern || a.glob, d = a.path || a.dir_path || a.directory; return { kind, summary: g ? `Looked for files matching ${quoted(g)}` : d ? `Listed the files in ${baseName(d)}` : "Listed the files" }; }
   if (kind === "web") { const q = a.query || a.q || a.search_term;
     return { kind, summary: q ? `Searched the web for ${quoted(q)}` : "Searched the web", doing: q ? `Searching the web for "${clip(q, 60)}"` : "Searching the web", q }; }
@@ -454,7 +472,7 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
       if (MACHINERY.has(key(String(e.name || "").split("__").pop())) || TICK.test(String(parsed(args).command || parsed(args).cmd || ""))) continue;
       const id = e.detail?.tool_call_id || `${e.name}-${steps.length}`;
       const d = describeCall(e.name, args);
-      const step = { id, ...d, raw: rawOf(e.name || "tool", args), output: String(e.detail?.output || ""), status: "running", own: ownTool(e.name),
+      const step = { id, ...d, tool: e.name, raw: rawOf(e.name || "tool", args), output: String(e.detail?.output || ""), status: "running", own: ownTool(e.name),
         ...(d.kind === "helper" && args.description ? { task: clip(args.description, 70) } : {}) };
       // A HELPER'S OWN CALLS GO UNDER ITS ROW (the owner, 2026-11-06: "it's spinning but not the last thing ... shouldn't it be in order? unless
       // it's in parallel"): a call naming the helper call it runs under (`parent`: stream-json's parent_tool_use_id, ACP's parentToolUseId)
@@ -465,7 +483,8 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
     } else if (e.type === "tool_result") {
       const step = byId.get(e.detail?.tool_call_id || e.name);
       if (!step) continue;
-      step.output = String(e.detail?.result || "");
+      step.output = String(e.detail?.result || "") || step.erred || "";
+      if (step.erred) continue;
       // a step Taskuary HELD for the owner's yes (shellgate, browsergate) did not fail: it waits - red "failed" over a held delete read
       // as something gone wrong (the desktop stress test, 2026-11-03); a call the server marked as put to the owner says how it stands (`state`)
       step.status = e.detail?.state || (!e.detail?.is_error ? "done" : /Taskuary held this for the owner/.test(step.output) ? "held" : foundNone(step) ? "none" : "error");
@@ -489,7 +508,12 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
     } else if (e.type === "start" && keepStart) {
       steps.push({ id: `start-${steps.length}`, kind: "note", summary: `Started ${e.session?.provider || "the selected agent"}`, detail: "", status: "done" });
     } else if (e.type === "error") {
-      // ...a failed call kept as its own note says what happened, never the agent's next step (stepWhy.forOwner)
+      // ...A FAILED CALL IS ITS OWN STEP, FAILED: one plain line, its output folded under it (design round 4, 2026-11-19: a filed turn kept the
+      // failure as a note of its own, "⚠ Exit code 127 ⏎ which: no python3 in (...a PATH 600 characters long)", red under "Ran which python3")
+      const call = e.name && [...byId.values()].reverse().find((s) => s.tool === e.name && s.status !== "error");
+      // ...whichever comes first: the chat hands a turn's results in after its calls (chatStream.turnParts), so the result never undoes it
+      if (call) { call.status = "error"; call.erred = String(e.detail?.result || e.error || ""); call.output = call.erred || call.output; continue; }
+      // ...one no call names says what happened, never the agent's next step (stepWhy.forOwner)
       steps.push({ id: `error-${steps.length}`, kind: "error", summary: `⚠ ${forOwner(e.detail?.result || e.error, ownTool(e.name)) || "Taskuary could not answer."}`, detail: "", status: "error" });
     }
   }
@@ -523,7 +547,7 @@ const together = (run) => {
     const dirs = new Set(run.map((s) => parent(s.file)));
     return dirs.size === 1 && [...dirs][0] ? `Read ${n} files in ${[...dirs][0]}/` : `Read ${n} files`;
   }
-  if (k === "search") return `Searched files for ${listOf(run.map((s) => s.pattern && quoted(s.pattern)))}`;
+  if (k === "search") { const ws = listOf(run.map((s) => plainPat(s.pattern) && quoted(s.pattern))); return ws ? `Searched files for ${ws}` : "Searched files"; }
   if (k === "web") return `Searched the web for ${listOf(run.map((s) => s.q && quoted(s.q)))}`;
   if (k === "page") { const h = [...new Set(run.map((s) => s.host).filter(Boolean))]; return h.length === 1 ? `Read ${n} pages on ${h[0]}` : h.length ? `Read ${n} pages (${listOf(h)})` : `Read ${n} web pages`; }
   if (k === "mail" && run.every((s) => s.q !== undefined)) return `Searched your mail for ${listOf(run.map((s) => s.q && !s.q.includes("$") && quoted(s.q)))}`;

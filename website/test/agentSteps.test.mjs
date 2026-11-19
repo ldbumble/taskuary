@@ -341,3 +341,39 @@ test("each thought is its own row: a message of two reasoning headers never read
   const again = stepsOf([{ type: "live", name: "thinking", detail: "**A**" }, { type: "live", name: "thinking", detail: "**A**\n\n**B**" }]);
   assert.deepEqual(again.map((s) => s.summary), ["A", "B"]);
 });
+
+// WHAT HE SEES (design round 4, 2026-11-19, three walks): a failed command's PATH dump stood as a red note under its step; Taskuary's own tool
+// list read "Used find tools (taskuary) on 'propose_reply'"; a code search read "Searched files for 'import.*spawn|def run\(|...'"
+test("a failed call is its own step, failed, its output folded - never a note with the output whole", () => {
+  const dump = `Exit code 127\nwhich: no python3 in (${"/c/Program Files/Tool/bin:".repeat(20)})`;
+  const steps = stepsOf([{ type: "tool_call", name: "Bash", detail: { tool_call_id: "a", args: { command: "which python3" } } },
+    { type: "tool_result", name: "a", detail: { tool_call_id: "a", result: "" } }, { type: "error", name: "Bash", detail: { result: dump } }]);
+  assert.deepEqual(steps.map((s) => [s.summary, s.status]), [["Ran which python3", "error"]]);
+  assert.match(steps[0].detail, /Program Files/, "the output is behind the row, for debugging");
+  // ...one no call names is still said, as before
+  assert.equal(stepsOf([{ type: "error", detail: { result: "The provider refused." } }])[0].kind, "error");
+});
+
+test("every one of Taskuary's own tools reads as what it did; reading the tool list is no step", async () => {
+  const own = JSON.parse(fs.readFileSync(new URL("../../taskuary/owntools.json", import.meta.url), "utf8")).tools;
+  const kinds = JSON.parse(fs.readFileSync(new URL("../../taskuary/stepkinds.json", import.meta.url), "utf8")).machinery;
+  const key = (n) => n.toLowerCase().replace(/[^a-z0-9]/g, "");
+  for (const n of own.filter((x) => !kinds.includes(key(x)))) {
+    const s = describeCall(`mcp__taskuary__${n}`, {}).summary;
+    assert.doesNotMatch(s, /^Used |taskuary|_/, `${n} reads ${s}`);
+  }
+  assert.deepEqual(stepsOf([{ type: "tool_call", name: "mcp__taskuary__find_tools", detail: { tool_call_id: "f", args: { query: "propose_reply" } } }]), []);
+});
+
+test("a search by a pattern in its own syntax reads as a search, never the pattern", () => {
+  assert.equal(describeCall("Grep", { pattern: "import.*spawn|def run\(|capture_output" }).summary, "Searched files");
+  assert.equal(describeCall("Grep", { pattern: "rounding" }).summary, "Searched files for 'rounding'");
+  assert.equal(describeCall("Bash", { command: "rg -n 'def run\(' taskuary" }).summary, "Searched files");
+});
+
+test("...and so it stays when the chat hands its result in after it", async () => {
+  const { eventsOf, turnParts } = await import("../src/chatStream.js");
+  const parts = turnParts(eventsOf([{ k: "tool", id: "t1", name: "Bash", args: { command: "which python3" }, status: "completed" },
+    { k: "error", name: "Bash", text: "Exit code 127\nwhich: no python3" }], false), { answer: "x" });
+  assert.deepEqual(parts.flatMap((p) => p.steps || []).map((s) => [s.summary, s.status]), [["Ran which python3", "error"]]);
+});

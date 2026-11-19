@@ -36,9 +36,14 @@ test("a failed call's own note on the general road says what happened, never the
     { k: "tool", name: "read_message", text: "m999" }, { k: "error", name: "read_message", text: `Taskuary has no saved message m999\n${NEXT_STEP}search_messages finds a message and its id` },
     { k: "error", name: "Bash", text: `make: *** [all] Error 2 ⏎ ${NEXT_STEP}run the migrations first` },
     { k: "error", text: "the agent stopped in the middle of its turn" }];
-  const notes = turnParts(eventsOf(kept, false)).flatMap((p) => p.steps || []).filter((s) => s.kind === "error").map((s) => s.summary);
-  assert.deepEqual(notes, ["⚠ there is no report 9", "⚠ Taskuary has no saved message m999", `⚠ make: *** [all] Error 2 ⏎ ${NEXT_STEP}run the migrations first`,
-    "⚠ the agent stopped in the middle of its turn"]);
+  const steps = turnParts(eventsOf(kept, false)).flatMap((p) => p.steps || []);
+  // ...a failure its call names is that call's own step, failed, its words behind it (design round 4, 2026-11-19) - read without the next step
+  const own = steps.filter((s) => s.kind !== "error");
+  assert.deepEqual(own.map((s) => s.status), ["error", "error"]);
+  for (const s of own) assert.doesNotMatch(whyFailed(s.detail, s.own), new RegExp(NEXT_STEP.trim()));
+  assert.match(whyFailed(own[1].detail, own[1].own), /no saved message m999/);
+  const notes = steps.filter((s) => s.kind === "error").map((s) => s.summary);
+  assert.deepEqual(notes, [`⚠ make: *** [all] Error 2 ⏎ ${NEXT_STEP}run the migrations first`, "⚠ the agent stopped in the middle of its turn"]);
 });
 
 // ...AND ONLY THE LAST LINE, WHICH THE TOOL ALONE WRITES (the robustness judge, 2026-11-18): a connected system's own "Next: ..." line is its

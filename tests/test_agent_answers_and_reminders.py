@@ -44,7 +44,7 @@ class PhoneSavesALateAnswerTests(unittest.TestCase):
         with mock.patch.object(ws, 'answer_open', return_value={'delivered': False, 'state': 'no_request'}), \
              mock.patch.object(waitroom, 'add', return_value={'queued': True}) as saved:
             said = ra.answer_the_agent(s, item, 'main', True)
-        saved.assert_called_once_with(s, t, 'main', 'owner')
+        saved.assert_called_once(); self.assertEqual(saved.call_args[0], (s, t, 'main', 'owner'))     # his answer kept for it, as he typed it
         self.assertIn('saved', said)
 
 

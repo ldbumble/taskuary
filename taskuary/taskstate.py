@@ -266,7 +266,8 @@ def waits_press(store, t: dict, row: bool = False) -> bool:
     from . import proposals
     pending = t.get('ReviewStatus') == 'pending'
     if pending and t.get('ReviewKind') != 'action' and not proposals.written_past(store, t['TaskId']): return True
-    return bool(store.waiting_on_owner(t['TaskId'])) if pending or not row else False
+    # ...`row` trusts the list row's own column; a task row that carries none (store.get_task) asks the queue - it said "yours" over a card
+    return bool(store.waiting_on_owner(t['TaskId'])) if pending or not row or 'ReviewStatus' not in t else False
 
 
 def done_for_now(store, t: dict, session: dict) -> bool:

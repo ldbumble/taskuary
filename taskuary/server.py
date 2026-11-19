@@ -1137,7 +1137,9 @@ from starlette.exceptions import HTTPException as _StarletteHTTP
 from fastapi.exception_handlers import http_exception_handler as _http_answer
 @app.exception_handler(_StarletteHTTP)
 async def _plain_refusal(request, e: _StarletteHTTP):
-    if isinstance(e.detail, str) and _sayer().raw(e.detail):
+    # ...the page's: an agent's door answers its refusal as written - its next step quotes the lines to copy, and flattened to "That didn't
+    # work" the agent was left with no way on
+    if isinstance(e.detail, str) and _sayer().raw(e.detail) and not request.url.path.startswith(('/api/agent/', '/api/mcp')):
         logger.info(f'{request.method} {request.url.path} -> {e.status_code}: {e.detail[:500]}')
         e = HTTPException(e.status_code, _sayer().plain(e.detail, 'any'), headers=getattr(e, 'headers', None))
     return await _http_answer(request, e)

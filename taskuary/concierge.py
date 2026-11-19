@@ -536,6 +536,20 @@ def unreal_refs(store, text: str, said: str = '') -> list:
             + [f'message {n}' for n in dict.fromkeys(_MSG_REF.findall(text)) if -int(n) not in own and not store.get_message(int(n))])
 
 
+# ...AND NEVER A BUTTON THAT IS NOT ON THE SCREEN (design round 5, 2026-11-19: on a colleague's FYI, asked to reply proposing Friday, the
+# answer was "Use Reply below to draft the note" - an FYI has no Reply). The app's own labels (buttons.json), named mid-sentence, that the
+# item in front of him does not draw - a label is the app's own word, read as written, never a guess at what a sentence means
+def on_screen(store, item: dict | None) -> list: return list(dict.fromkeys(c['label'] for c in chips_for(store, item) if c.get('label'))) if item else []
+def unreal_buttons(store, text: str, item: dict | None) -> list:
+    have, t, out = set(on_screen(store, item)), str(text or ''), []
+    for l in sorted(buttons.labels(), key=len, reverse=True) if item else ():      # ...the longest first: "Send to agent" is never its "Send"
+        at = re.compile(r'(?<=[a-z,] )' + re.escape(l) + r'(?![\w-])')
+        if '{' in l or not at.search(t): continue
+        if l not in have: out.append(l)
+        t = at.sub(' ', t)
+    return out
+
+
 def documents_line(store, item: dict | None) -> str:
     """DOCUMENTS ON IT: what the item's messages link to (linkdocs) - kind, name, and whether it was read - so a request ABOUT a
     document ("go through the open bills in that sheet") can be routed to an agent that will have it. From the cache only: a turn
@@ -6556,12 +6570,14 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         return {'say': say_, 'options': [], 'chips': chips, 'decision': None, 'error': True}
     # NEVER A REFERENCE THAT DOES NOT EXIST: a choice naming one is dropped, and an answer naming one is asked for again once
     options = [o for o in options if not unreal_refs(store, o, text)]
-    bad = unreal_refs(store, reply, text)
-    if bad and failed is None:
+    bad, gone = unreal_refs(store, reply, text), unreal_buttons(store, reply, item)
+    if (bad or gone) and failed is None:
         try:
-            raw = str(llm(system, f"{table}\n\nYour answer named {', '.join(bad)}, which do not exist"
-                                  + (f" - {NO_THREAD}" if no_thread(item) else '') + f".\nThe owner asked: {text}\n"
-                                  'Answer them again from what you know, naming no reference that does not exist, and CALL nothing.',
+            raw = str(llm(system, f"{table}\n\nYour answer named " + '; and '.join(x for x in (
+                                  f"{', '.join(bad)}, which do not exist" + (f" - {NO_THREAD}" if no_thread(item) else '') if bad else '',
+                                  f"{', '.join(gone)}, which {'is' if len(gone) == 1 else 'are'} no button on his screen - its buttons are "
+                                  f"{', '.join(on_screen(store, item))}" if gone else '') if x) + f".\nThe owner asked: {text}\n"
+                                  'Answer them again from what you know, naming no reference that does not exist and no other button, and CALL nothing.',
                           max_tokens=MAX_TOKENS) or '').strip()
         except Exception as e:
             logger.warning(f'concierge: the second answer failed - {e}'); raw = ''

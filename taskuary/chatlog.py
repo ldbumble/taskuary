@@ -265,6 +265,10 @@ def _safe(f):
     return go
 
 
+def _kids(store, t: dict) -> bool:
+    with store.lock: return bool(store.cx.execute('SELECT 1 FROM chatlog WHERE Parent=? LIMIT 1', (t['Id'],)).fetchone())
+
+
 @_safe
 def heard(store, tid: int, new: list, at: float) -> None:
     """What one hand-over took (conversation.hear), in the order it took it: his lines, the messages, the presses - and the turn it began.
@@ -274,8 +278,10 @@ def heard(store, tid: int, new: list, at: float) -> None:
     tid = int(tid)
     mails = {str(x['MessageId']): x for x in _mail(store, tid)} if any(k == 'mail' for k, _ in new) else {}
     presses = {m['id'].split('-')[1]: m for m in general.press_lines(store, tid)} if any(k == 'press' for k, _ in new) else {}
+    # ...the turn his lines were heard for at a press is the one that now begins (ahead, below): it takes them already heard
+    ahead = (o := open_turn(store, tid)) and o['State'] in LIVE and not _kids(store, o) and json.loads(o['Body'] or '{}').get('ahead')
     # ...one turn at work, ever: a turn the agent never answered is over when the next begins - before what this hand-over took is appended
-    if any(k == 'turn' for k, _ in new) and (old := _live(store, tid)): update(store, tid, old['Key'], state='done')
+    if any(k == 'turn' for k, _ in new) and not ahead and (old := _live(store, tid)): update(store, tid, old['Key'], state='done')
     if any(k == 'turn' for k, _ in new): opener(store, tid, at)
     for k, r in new:
         if k == 'line':
@@ -287,8 +293,12 @@ def heard(store, tid: int, new: list, at: float) -> None:
         elif k == 'press' and (m := presses.get(r)):
             put(store, tid, 'press' if m.get('press') else 'note', f'p:{r}', {'at': m['createdAt'], 'text': m['content'][0]['text'],
                 **({'perm': m['perm']} if m.get('perm') else {})}, src=f'audit:{r}', at=at)
-        elif k == 'turn':
+        elif k == 'turn' and not ahead:
             put(store, tid, 'turn', f't:{r}', {'started': at, 'ended': None, 'text': ''}, state='starting', src='heard', at=at)
+    # ...HIS LINES HEARD AT A PRESS, THEIR TURN ON ITS WAY (general.stop_turn - the recorded stop, 2026-11-12: what waited is heard under the
+    # stop, the turn that answers it at work from that moment): that turn stands under them from this read, never a beat of nothing under his line
+    if not any(k == 'turn' for k, _ in new) and any(k == 'line' for k, _ in new) and general.starting(tid) and not _live(store, tid):
+        put(store, tid, 'turn', f't:{time.time_ns()}', {'started': at, 'ended': None, 'text': '', 'ahead': True}, state='starting', src='heard', at=at)
 
 
 def _live(store, tid: int):
@@ -850,7 +860,10 @@ def serve(store, tid: int, level: str = None) -> dict:
     if not migrated(store, tid): migrate(store, tid)
     hold_ = origin.hold(store, tid)
     at_work = general.working(store, tid) if not hold_ else bool(getattr(general._live_of(tid), 'busy', False))
-    if at_work and (h := _halted(store, tid)): at_work = bool(general.waiting_lines(store, tid)) or h == 'stopped_turn' and bool(getattr(general._live_of(tid), 'owes_stop', lambda: False)())
+    # ...A TURN WHOSE ANSWER IS FILED IS OVER (recorded 2026-11-12: its session read busy a beat after the answer was filed, and the dots stood
+    # under that answer): with nothing heard since and no line of his waiting, nothing works - a hand-over on its way writes its turn as it goes
+    if at_work and (t := open_turn(store, tid)) and t['State'] not in LIVE and not general.waiting_lines(store, tid): at_work = False
+    if at_work and (h := _halted(store, tid)): at_work = any(not get(store, tid, w.get('line') or f"c:{w['id']}") for w in general.waiting_lines(store, tid)) or h == 'stopped_turn' and bool(getattr(general._live_of(tid), 'owes_stop', lambda: False)())
     at_work = at_work or workflows.at_work(tid)            # ...a routine running its steps is at work with no agent at all (flow.turn)
     # ..."working" is one fact (general.working): a turn the log holds at work while nothing works has either not begun yet - nothing of it is
     # drawn until it has - or was left by a process that is gone (a restart): it is over, in place

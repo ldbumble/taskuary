@@ -3518,7 +3518,8 @@ class GeneralSession:
                     proposals.restore_set_aside(self.store, self.task_id)
                 else: let_go_retry(self.store, self.task_id)
             except Exception as skipped: logger.warning(f'task {self.task_id}: the try again was not queued - {skipped}')
-            self._remember_trace('error', 'assistant', {'result': said, 'is_error': True})
+            # ...his stop is said by its own line in the chat (the press): never also an error step, landing under the lines that waited at it
+            if not stopped: self._remember_trace('error', 'assistant', {'result': said, 'is_error': True})
             self._emit(f'\x1b[1;31merror>\x1b[0m {said}\r\n\r\n')
             self._unusable(e)
             # A TURN THAT DIED IS NOT A TURN STILL RUNNING. The turn opened with a `working`

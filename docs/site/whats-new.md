@@ -2,6 +2,26 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.29 - 2026-11-19
+
+- A newer message never retires what is still owed to its sender
+- A few letters stand one at a time, and the next stands the moment his Send lands
+- A turn owns what it shows: its time set once, each try its own line, what it left on him kept in it
+- A press lands before the page moves, and a Stop is heard while the agent is still starting
+- A browser batch is its steps: each judged and carded by what it does
+- A tool's refusal reaches the agent only; a turn's steps say what was done
+- A stamp from before the epoch reads as no time, never an error that breaks the chat's read
+- A fix committed in a checkout the owner named is pushed through one Push card
+- An agent on an AI card writes a PDF and a deck by the road its workbook takes
+- An answer on the rail never names a button the item does not draw
+- A hand-over is named for the step and the site, and asks everything at once
+- Every card leads with what its Approve does; tabs keep a page's title; Came from in his words
+- The answer keeps its own opener where a step is only its streamed copy
+- README asks for a star and for contributors again, at the bottom
+- A start nobody typed opens its chat as what started it
+- A stop pressed on a starting turn stops that turn only
+- A command with no words of its own is shown as itself
+
 ## 0.4.0.28 - 2026-11-19
 
 - An answer names nothing of Taskuary's own: the close, a task's number, his own ask

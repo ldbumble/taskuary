@@ -400,7 +400,7 @@ class LearnTests(unittest.TestCase):
 
     def test_learn_from_updates_hypotheses_and_guards_garbage(self):
         s = MemoryStore()
-        bullet = '- {{owner_first}} prefers replies without pleasantries. [s:2 | ev: rv7 | seen: 2026-08-21]'
+        bullet = '- {{owner_first}} prefers replies without pleasantries. [s:2 | ev: rv7 | seen: ' + learn._today() + ']'
         stamped = bullet[:-1] + ' | k: owner first prefers replies without pleasantries]'   # settle keys it on the way in
         learn.learn_from(s, 'rv7: owner EDITED a draft', llm=lambda sys_, usr, **kw: bullet)
         doc = s.get_doc('learned')
@@ -437,7 +437,7 @@ class LearnTests(unittest.TestCase):
         so no answer could carry them back and every reflection was refused."""
         s = MemoryStore()
         doc = s.get_doc('learned')
-        pad = '\n'.join(f'- Erin Blake likes item {i} handled early. [s:2 | ev: rv{i} | seen: 2026-08-{i % 28 + 1:02d}]'
+        pad = '\n'.join(f'- Erin Blake likes item {i} handled early. [s:2 | ev: rv{i} | seen: {learn._today()}]'
                         for i in range(60))
         doc = learn._put_block(doc, learn.HYP_START, learn.HYP_END, pad)
         s.save_doc('learned', doc, 'owner')
@@ -521,7 +521,7 @@ class LearnTests(unittest.TestCase):
         # and the live path wires the doc in: a promoted line reaches the triage system prompt
         s = MemoryStore()
         s.save_doc('learned', s.get_doc('learned').replace(
-            '## What you care about', '## What you care about\n- Vendor invoices are FYI, never tasks. [s:5 | ev: rv1,rv2,rv3 | seen: 2026-08-01]'), 'reflect')
+            '## What you care about', '## What you care about\n- Vendor invoices are FYI, never tasks. [s:5 | ev: rv1,rv2,rv3 | seen: ' + learn._today() + ']'), 'reflect')
         from taskuary.ingest import ingest_message
         seen.clear()
         ingest_message(s, {'external_id': 'lrn-1', 'channel': 'email', 'from_email': 'ap@vendor.example',

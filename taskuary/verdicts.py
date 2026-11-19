@@ -324,7 +324,7 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
     # to it wrote {"attachments": [...]} alone - which read as new outbound mail with no recipient (2026-10-07: a
     # session's `--attach`; the owner's Attach button did the same). Only a destination makes it outgoing - not files,
     # not a cc, not the bookkeeping a failed attempt leaves behind, which is how a retry kept failing the same way.
-    outgoing = outbound.outgoing(env)
+    outgoing = outbound.new_mail(env)
     if not outgoing and env.get('kind') != 'reply':
         files = env.get('attachments')
         env = {**(outbound.reply_envelope(store, msg) or {'kind': 'reply'}), **({'attachments': files} if files else {})}

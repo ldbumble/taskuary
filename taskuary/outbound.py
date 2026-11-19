@@ -878,10 +878,14 @@ def reply_envelope(store, msg: dict, mode: str = 'reply_all'):
     return {'kind': 'reply', 'mode': 'reply_all' if mode == 'reply_all' else 'reply_to', 'to': to, 'cc': cc}
 
 
+def new_mail(env: dict) -> bool:
+    """Does an envelope go out as NEW mail, not as a reply on the thread that asked - not files, a cc or a failed try's bookkeeping.
+    A reply whose people the card set is still a reply: its channel's block holds it, and what it asked is watched (verdicts.decide)."""
+    env = env if isinstance(env, dict) else {}
+    return env.get('kind') not in (None, '', 'reply') or (not env.get('kind') and bool(env.get('to') or env.get('channel')))
 def outgoing(env: dict) -> bool:
     "Does an envelope name a destination of its own (new mail, a reply with its people set) - not files, a cc or a failed try's bookkeeping."
-    env = env if isinstance(env, dict) else {}
-    return bool(env.get('to')) or env.get('kind') not in (None, '', 'reply') or (not env.get('kind') and bool(env.get('channel')))
+    return new_mail(env) or bool((env if isinstance(env, dict) else {}).get('to'))
 
 
 def review_envelope(store, rv: dict) -> dict:

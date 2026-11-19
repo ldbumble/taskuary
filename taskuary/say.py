@@ -45,8 +45,9 @@ NEXT = 'write to carry on, or press Try again'
 def turn_failed(raw) -> str:
     from .failures import cli_quota
     r = str(raw or '')
-    if (q := cli_quota(r)): return f'{q} - {NEXT} once it resets.'
     codes, types = {int(c) for c in _STATUS.findall(r)}, set(_TYPE.findall(r))
+    # ...the CLI's own quota notice says when it resets; a provider's typed error that merely mentions "rate limit" is read by its type
+    if (q := cli_quota(r)) and ('reset' in q.lower() or not types): return f'{q} - {NEXT} once it resets.'
     if 429 in codes or types & {'rate_limit_error', 'insufficient_quota', 'quota_exceeded'}: return f'The AI provider is over its quota or rate limit - {NEXT} in a minute.'
     if codes & {401, 403} or types & {'authentication_error', 'permission_error'}:
         return "The AI provider refused the request: its sign-in or access was turned down - check the AI's card under Connections, then " + NEXT + '.'

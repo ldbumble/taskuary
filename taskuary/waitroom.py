@@ -397,7 +397,7 @@ def reopen_coding(store, tid: int, notes: list, said: str, actor: str = 'router'
     continue of course"): reopened by the id its CLI gave it, in its checkout, on the CLI that made it - else, where that cannot open (gone,
     signed out, never named), a fresh session on the CLI that last worked it, told to pick up from the handover and what was sent since. The
     owner's own lines ride its first prompt as his (ACPCoding.carries). One road for a typed line, Continue and a note left for it. -> how."""
-    from . import agents as hub_agents, continuity, ingest, terminal as term
+    from . import agents as hub_agents, continuity, ingest, say, terminal as term
     row, _why = ingest._resumable_coding(store, tid)
     how = 'resumed'
     try:
@@ -405,7 +405,7 @@ def reopen_coding(store, tid: int, notes: list, said: str, actor: str = 'router'
         got = term.start_on_task(store, tid, row['Agent'], instruction=said, actor=actor, cwd=row['Cwd'], resume=row['ExtId'], brain=row.get('Brain') or None)
     except (ValueError, RuntimeError, FileNotFoundError) as e:
         last = row or store.last_transcript(tid) or {}
-        if row: store.add_comment(tid, 'router', 'agent', f"{last.get('Brain') or row['Agent']} could not reopen its conversation ({e}); "
+        if row: store.add_comment(tid, 'router', 'agent', f"{last.get('Brain') or row['Agent']} could not reopen its conversation ({say.said(e)}); "
                                   f"starting a fresh {last.get('Brain') or 'agent'} session with the handover instead.")
         sent = continuity.sent_block(store, tid, quote=0, cmd='`taskuary --follow-up --reply "<text>"`')
         got = term.start_on_task(store, tid, last.get('Agent') or hub_agents.default_agent(store), actor=actor, cwd=last.get('Cwd') or None,

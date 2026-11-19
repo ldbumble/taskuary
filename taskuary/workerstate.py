@@ -14,6 +14,7 @@ import hashlib, json, re, threading, time
 from pathlib import Path
 from loguru import logger
 from .kinds import SHOWN, shown as shown_agent   # who the owner sees at work: Taskuary, never the profile (kinds.json `shown_`)
+from . import say
 
 KINDS = ('working', 'turn_end', 'background', 'input_needed', 'approval_needed', 'stalled', 'answered', 'finished', 'failed', 'disconnected', 'stopped',
          'floor_denied', 'idled')
@@ -508,7 +509,7 @@ def answer_group(store, tid: int, answers: dict, actor: str = 'owner') -> dict:
             return {'delivered': all(answer(store, tid, r['request_id'], answers[r['request_id']], actor).get('delivered') for r in reqs),
                     'state': 'delivered', 'sid': sess.sid}
     except Exception as e:
-        store.add_comment(tid, actor, 'human', f'Answers could not be delivered to the agent: {str(e)[:200]}')
+        store.add_comment(tid, actor, 'human', f'Answers could not be delivered to the agent: {say.said(e)}')
         return {'delivered': False, 'state': 'failed', 'why': str(e)[:200]}
     for r in reqs: record(store, tid, sess.sid, 'answered', request_id=r['request_id'], text=answers[r['request_id']], source=said_by(actor))
     store.add_comment(tid, actor, 'human', 'Answered the agent: ' + '; '.join(f"{r['text'][:80]} - {answers[r['request_id']][:200]}" for r in reqs)
@@ -606,7 +607,7 @@ def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner', ow
                 sessionrecord.keep_seed(tid, send)          # its `you` step in the record reads as Taskuary's brief (mark_briefs)
         else: term.type_into(sess, send, **_as(actor))
     except Exception as e:
-        store.add_comment(tid, actor, 'human', f'Answer to "{req["text"][:160]}": {text[:500]} - could not be delivered to {who}: {str(e)[:200]}')
+        store.add_comment(tid, actor, 'human', f'Answer to "{req["text"][:160]}": {text[:500]} - could not be delivered to {who}: {say.said(e)}')
         return {'delivered': False, 'state': 'failed', 'why': str(e)[:200]}
     words = ' '.join(str(owner or text).split())          # the record reads what the owner said, not the Assistant's version
     record(store, tid, sess.sid, 'answered', request_id=request_id, text=words, source=said_by(actor))

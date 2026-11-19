@@ -88,7 +88,7 @@ def test_no_raw_text_reaches_any_surface_he_reads():
         cid = s.save_connector({'Type': 'imap', 'Name': 'Mail', 'Active': 1}, 't')
         s.touch_connector(cid, r)
         for p in problems.collect(s): _clean(p.get('detail') or p.get('title'), 'bell')
-    _clean(funnel._said('triage: fyi - Erin Blake shares the rota'), 'rail')
+    _clean(funnel._reason_said('triage: fyi - Erin Blake shares the rota'), 'rail')
     # ...and Taskuary's own sentences pass as they are, on every surface
     own = 'No AI is connected - connect one under Connections.'
     assert say.plain(own, 'any') == say.plain(own, 'start') == remote_assistant.plain(ValueError(own)) == own

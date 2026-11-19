@@ -432,7 +432,10 @@ def left_on_him(store, tid: int, out: list, ask: dict = None, letters: str = Non
                 if was is None: update(store, tid, x['id'], on_you_kept=WAITS)
                 continue
             if not sm and len(out) == i + 1: continue
-            was = '1' if mine and mine != said and not waits and not (was == WAITS and under) else ''
+            # ...SETTLED FROM WHAT IS STILL OWED (the real walk, 2026-11-19: "Press Send on the notes to Erin and Marcus" drawn under one sent and
+            # one not-sent card): a turn that waited on his press or answer left THAT on him - its cards and question say it, and once they are
+            # settled nothing of it is owed; its to-do is never drawn late over what is done
+            was = '1' if mine and mine != said and not waits and was != WAITS else ''
             update(store, tid, x['id'], on_you_kept=was)
         if was and was != WAITS: x['on_you'], said = True, mine
 
@@ -991,8 +994,12 @@ def beside(store, tid: int, out: list, at_work: bool, hold_) -> dict:
             last.update(fail=notice, quota=True)
             if not at_work: ask = None
     if ask and last:
-        said = ' '.join([str(last.get('text') or ''), *(s.get('text') or '' for s in last.get('steps') or [] if s.get('k') == 'said')])
-        ask = {**ask, 'turn': last['id'], **({'said': True} if flat(ask.get('text')) and flat(ask['text']) in flat(said) else {})}
+        said = lambda t: flat(' '.join([str(t.get('text') or ''), *(s.get('text') or '' for s in t.get('steps') or [] if s.get('k') == 'said')]))
+        # ...IN THE TURN THAT ASKED IT (the real walk, 2026-11-19: the sender wrote again mid-question, and the new turn at work drew the old
+        # question word for word as its own): the turn whose words hold it, else the newest one
+        q = flat(ask.get('text'))
+        at = next((t for t in reversed(turns) if q and q in said(t)), None)
+        ask = {**ask, 'turn': (at or last)['id'], **({'said': True} if at else {})}
         # ...a missing fact is one question: the reply it cannot write yet is not drawn under it as an empty box
         for x in turns: x['cards'] = [c for c in x.get('cards') or [] if not (c.get('status') == 'pending' and c.get('what') in DRAFTS and not c.get('was'))]
     # ...the turn whose letter waits for his Send (the page hangs the letters' block there), never one at work

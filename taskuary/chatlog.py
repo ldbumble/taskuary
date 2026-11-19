@@ -811,8 +811,26 @@ def serve(store, tid: int, level: str = None) -> dict:
     left_note(store, tid, at_work)
     got = read(store, tid, level)
     out = got['items'] if at_work else [x for x in got['items'] if not (x['kind'] == 'turn' and x.get('state') in LIVE)]
+    if at_work and (lv := next((x for x in reversed(out) if x['kind'] == 'turn' and x.get('state') in LIVE), None)): lv.update(_now(tid, lv))
     body = {'items': out, 'level': got['level'], **beside(store, tid, out, at_work, hold_)}
     return {'rev': hashlib.sha1(json.dumps(body, default=str).encode()).hexdigest()[:16], **body}
+
+
+def _now(tid: int, turn: dict) -> dict:
+    """What the turn at work is doing this moment, off its session's own trace - never written to the log, it changes by the token:
+    `opening` while its agent really is starting (recorded on the real CLI, 2026-11-16: a cold adapter took most of a minute under "Thinking...")
+    - from its start where no CLI is up (general.cold), until its road hands it the prompt; `doing`, the answer being written while that is
+    the newest thing it did."""
+    from . import general
+    from .conversation import clean
+    ses = general.session_for(tid)
+    if ses is None: return {'opening': True} if turn.get('state') == 'starting' and general.cold(tid) else {}
+    trace = getattr(ses, 'trace', None) or []
+    kinds = [e.get('type') for e in trace]
+    opening = 'opening' in kinds and kinds[::-1].index('opening') < (kinds[::-1].index('prompt') if 'prompt' in kinds else len(kinds))
+    e = trace[-1] if trace else {}
+    doing = clean(e.get('detail')) if e.get('type') == 'live' and e.get('name') == 'writing' else ''
+    return {**({'opening': True} if opening else {}), **({'doing': doing} if doing else {})}
 
 
 def beside(store, tid: int, out: list, at_work: bool, hold_) -> dict:

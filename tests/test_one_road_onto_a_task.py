@@ -74,8 +74,9 @@ class SameAsTests(unittest.TestCase):
         s = self.s = store()
         self.t = mail(s, 'a', 'How many seats do we have?', brain())['task_id']
 
-    def test_a_dropped_task_is_never_rejoined(self):
-        self.s.update_task(self.t, {'Status': 'dropped'}, 'owner')
+    def test_a_folded_task_is_never_rejoined(self):
+        # a task he let go comes back when owed (ingest.folded); one FOLDED into another is not work to come back to - its work lives there
+        self.s.update_task(self.t, {'Status': 'dropped'}, 'owner'); self.s.audit('task', self.t, ingest.FOLDED, 'router', detail={'into': 0})
         r = mail(self.s, 'b', 'Seats again - how many?', brain(same_as=self.t), conv='c:other')
         self.assertEqual(r['status'], 'created'); self.assertNotEqual(r['task_id'], self.t)
         self.assertEqual(self.s.get_task(self.t)['Status'], 'dropped')
@@ -110,9 +111,9 @@ class StepTests(unittest.TestCase):
         r = self.serve('c')                                                       # new work: it comes back
         self.assertEqual(r['status'], 'routed'); self.assertNotIn(self.s.get_task(self.g)['Status'], ('done', 'dropped'))
 
-    def test_a_dropped_steps_task_is_not_come_back_to(self):
+    def test_a_folded_steps_task_is_not_come_back_to(self):
         c = self.s.create_task({'Title': 'Erin confirms the seats', 'Status': 'open'}, 'owner'); self.s.link_step(self.g, self.ids[0], c, 'owner')
-        self.s.update_task(c, {'Status': 'dropped'}, 'owner')
+        self.s.update_task(c, {'Status': 'dropped'}, 'owner'); self.s.audit('task', c, ingest.FOLDED, 'router', detail={'into': self.g})
         r = self.serve('b')
         self.assertEqual((r['task_id'], self.s.get_task(c)['Status']), (self.g, 'dropped'))
 

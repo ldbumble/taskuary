@@ -104,6 +104,12 @@ def _after(body) -> float:
     "The newest message the store held when a kept line was typed (general.wait_line) - a line from before that was written is after all of its second."
     try: return float(json.loads(body or '{}').get('after'))
     except (ValueError, TypeError, AttributeError): return INF
+def came(x: dict) -> tuple:
+    """WHEN AN INPUT CAME - one key for a message and a line of his alike: its second (a stamp is no finer), then inside it the order the store
+    took them in - a message by its id, a line after the newest message there when it was typed (_after). A message by when it CAME - the
+    store took it, or he sent his own - never its sender's clock, nor when triage put it here, which a flood finishes out of order."""
+    if 'MessageId' in x: return (int(ep((x.get('SentAt') if x.get('Own') else None) or x.get('CreatedAt')) or x.get('T') or 0), x['MessageId'], 0, x['MessageId'])
+    return (int(ep(x.get('CreatedAt'))), _after(x.get('Body')), 1, x['CommentId'])
 
 
 def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing: bool = False) -> int:
@@ -114,7 +120,7 @@ def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing:
     drawn moves under his line. Each input once, whoever calls and however often. -> how many were new.
     WHAT ONE HAND-OVER TAKES STANDS IN THE ORDER IT CAME (the recorded flood, 2026-11-11: his lines were written down first, then his own
     replies, then the sender's mail in the order triage got through them - "34, 31, 46"): by each one's own time, and inside one second - a
-    stamp is no finer - by the order the store took them in: a line knows the newest message that was there when it was typed.
+    stamp is no finer - by the order the store took them in: a line knows the newest message that was there when it was typed (came).
     ...AND NEVER ABOVE WHAT WAS DRAWN: what was on the task before his oldest waiting line was typed stood in the chat already - from that
     line on, what comes in waits by the box with it (items) - so those keep the order they stood in, ahead of the rest."""
     from . import general
@@ -125,13 +131,11 @@ def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing:
     refs = []
     if turn or standing:
         since = _since(store, tid) - 1
-        # ...a mail by when it CAME - the store took it (CreatedAt), or he sent his own - never its sender's clock: a mail held up on its way
-        # was placed by its Date, above the line he typed before it came. Nor by when triage put it here (`T`), which a flood finishes out of order
-        refs += [((0, x['T'], x['MessageId']) if x['MessageId'] <= first else (1, int(ep((x.get('SentAt') if x.get('Own') else None) or x.get('CreatedAt')) or x['T']), x['MessageId'], 0, x['MessageId']),
-                  'mail', str(x['MessageId'])) for x in _mail(store, tid) if x['T'] >= since]
+        # ...a mail by when it CAME (came): a mail held up on its way was placed by its Date, above the line he typed before it came
+        refs += [((0, x['T'], x['MessageId']) if x['MessageId'] <= first else (1, *came(x)), 'mail', str(x['MessageId'])) for x in _mail(store, tid) if x['T'] >= since]
         # ...a press stands where he made it (his stop is drawn the moment it is pressed): the lines that waited enter under it
         refs += [((0, ep(p[1]), i), 'press', str(p[0])) for i, p in enumerate(general.presses(store, tid)) if ep(p[1]) >= since]
-    refs += [((1, int(ep(x.get('CreatedAt'))), _after(x.get('Body')), 1, x['CommentId']), 'line', str(x.get('LineId') or '')) if isinstance(x, dict) else ((2, i), 'line', str(x))
+    refs += [((1, *came(x)), 'line', str(x.get('LineId') or '')) if isinstance(x, dict) else ((2, i), 'line', str(x))
              for i, x in enumerate(lines) if x]
     refs = [(k, r) for _, k, r in sorted(refs, key=lambda x: x[0]) if r]
     if turn: refs.append(('turn', str(time.time_ns())))
@@ -489,7 +493,7 @@ def _items(store, tid: int) -> dict:
             body = general.his_line(c)
             it = {'id': c.get('LineId') or f'c:{cid}', 'kind': 'line', 'at': c['CreatedAt'], **body}
             h = led.get(('line', c.get('LineId') or ''))
-            if not h and ty == WAITING_TYPE: pend.append({**it, '_after': _after(c['Body'])}); continue
+            if not h and ty == WAITING_TYPE: pend.append({**it, '_after': _after(c['Body']), '_k': came(c)}); continue
             if h: it['_h'] = h['At']
             # ...one the ledger heard stands at its hand-over's own moment, beside what was taken with it (in the ledger's order, `put`): moved
             # a hair on for each line before it, every message of a flood stood above its second line
@@ -609,7 +613,7 @@ def _items(store, tid: int) -> dict:
         # ...and what an untrusted sender wrote on a thread an agent works: it waits, behind the Trust action (origin.hold)
         # ...and one the chat has drawn never goes back by the box (the release run on macOS, 2026-11-12: a coding turn began in the second the
         # first mail joined, and the mail left the canvas for the waiting room)
-        if not h and it['id'] not in was_shown and (at_work and x['T'] + 1 > began or x['MessageId'] > waits or (hold_ and x['MessageId'] in hold_['mids'] and (turn_of or live_sid))): pend.append(it)
+        if not h and it['id'] not in was_shown and (at_work and x['T'] + 1 > began or x['MessageId'] > waits or (hold_ and x['MessageId'] in hold_['mids'] and (turn_of or live_sid))): pend.append({**it, '_k': came(x)})
         else: put(h['At'] if h else x['T'], 0 if h else -1, it, h['HId'] if h else 0)
     # ...AND ONE THAT WAS DRAWN HERE STAYS, though it moved to a task of its own (a break-out; the basic flow's check, 2026-11-12: the second
     # matter left the chat with the turn that answered it): where it stood, saying where it went
@@ -636,10 +640,14 @@ def _items(store, tid: int) -> dict:
         # ...and one the chat has drawn never goes back by the box, as a drawn mail does not (a stress round, 2026-11-18: his Mark done, drawn,
         # left the canvas while the turn a reopening mail began was starting, and came back above that mail once it was at work) - and his
         # close never waits there at all: like his stop it ends the turn it was pressed under, it is no input for the next
-        if not h and it['id'] not in was_shown and at_work and ep(m['createdAt']) + 1 > began and m.get('press') and text != stop and aid not in closes_: pend.append(it)
+        if not h and it['id'] not in was_shown and at_work and ep(m['createdAt']) + 1 > began and m.get('press') and text != stop and aid not in closes_: pend.append({**it, '_k': (int(ep(m['createdAt'])), INF, 2, int(aid))})
         # ...A PRESS NOBODY HEARD YET STANDS AFTER ALL OF ITS OWN SECOND - its stamp is no finer: a stop pressed in the second its turn's line was
         # heard sorted above that line, and the stop's mark fell on the answer before it (a same-second tie, seen as a flash and a red test)
         else: put(h['At'] if h else ep(m['createdAt']) + 0.999, 0 if h else -1, it, h['HId'] if h else 0)
+    # ...AND WHAT WAITS IN THE ORDER IT CAME, on the hand-over's own key (came; a press after all of its second): gathered kind by kind, his
+    # lines stood by the box above the mail between them - and a read in the beat before the hand-over served them so, a place kept for good
+    # (Windows CI, 2026-11-18: a flood read every line of his, then every mail)
+    pend.sort(key=lambda p: p.pop('_k'))
 
     # in order - and an input nobody heard never cuts a turn's work in two: it stands after the turn it came in under
     # ...A CHAT TURN'S TOO, wherever its answer was placed (the stress round, 2026-11-18): a note filed while the turn worked (his reply from

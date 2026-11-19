@@ -216,6 +216,27 @@ class TheList(unittest.TestCase):
         words = [str(x.get('text') or x.get('words') or '') for x in self.list()['items'] if x['kind'] in ('line', 'arrival')]
         self.assertEqual([w[:8] for w in words if w.startswith('flood ')], [f'flood {i + 1:02d}' for i in range(n)])
 
+    def test_what_waits_drawn_in_the_beat_before_its_hand_over_stands_in_the_order_it_came(self):
+        """The flood on a slow runner (Windows CI, 2026-11-18): a read in the beat between one turn's answer and the next one's hand-over drew
+        what waited as the input of the turn about to begin - all his lines, then all the mail - and the chat keeps the place an item was first
+        served in, so the order stood after the hand-over too. What waits is drawn by when each came, on the one key the hand-over sorts by."""
+        real, gate, at = general.take_kept, threading.Event(), threading.Event()
+        def take_kept(store, tid, ids=None, **how):
+            if how.get('turn') and conversation.heard(store, tid, 'line', ['l0']): at.set(); gate.wait(10)
+            return real(store, tid, ids, **how)
+        self.brain.delay = 1.0
+        with mock.patch.object(general, 'take_kept', take_kept):
+            self.say('Suggest two.', 'l0', wait=False)
+            self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+            self.mail('first, a mail'); self.say('second, his line', 'l-b', wait=False); self.mail('third, his own reply', own=True)
+            self.assertTrue(at.wait(10))
+            self.assertTrue(until(lambda: self.s.list_comments(self.tid, internal=True)[-1].get('ActorType') == general.ASSISTANT_TYPE))
+            self.list(); gate.set()                    # ...the read in that beat: his line and the mail around it, the next turn's input
+            # ...and none read again until all is at rest: this pins the beat's read, nothing else
+            self.assertTrue(until(lambda: not general.working(self.s, self.tid) and not general.waiting_lines(self.s, self.tid)))
+        words = [str(x.get('text') or x.get('words') or '') for x in self.list()['items'] if x['kind'] in ('line', 'arrival')]
+        self.assertEqual([w.split(',')[0] for w in words if w.split(',')[0] in ('first', 'second', 'third')], ['first', 'second', 'third'])
+
     def test_what_comes_in_while_his_line_waits_waits_by_the_box_with_it_and_nothing_enters_above_what_was_drawn(self):
         """The recorded flood on a pane, 2026-11-11: the pane read at rest while his lines waited, so each message that came in was drawn at
         once - and when the hand-over took them all, in the order they came, his lines entered above messages already on the screen."""

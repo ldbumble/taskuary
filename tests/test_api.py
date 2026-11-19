@@ -204,7 +204,7 @@ class ReportScheduleAndBrainTests(unittest.TestCase):
         self.assertEqual(schedule_words({'daily_at': '08:00', 'on_startup': True, 'once_per_day': True}),
                          'daily at 08:00 + on app start (at most once a day)')
         self.assertEqual(schedule_words({'cron': '0 8 * * 1', 'on_startup': True, 'once_per_week': True}),
-                         'cron 0 8 * * 1 + on app start (at most once a week)')
+                         'Mondays at 08:00 + on app start (at most once a week)')
         self.assertEqual(schedule_words({'on_startup': True}), 'on app start')
         self.assertEqual(schedule_words({}), 'no schedule - run it by hand')
 

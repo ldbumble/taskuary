@@ -10,6 +10,6 @@ def test_every_seeded_report_with_a_clock_has_one_the_scheduler_reads():
     s = MemoryStore(); demo.seed(s)
     cfgs = {r['Address']: json.loads(r['ConfigJson'] or '{}') for r in s.list_sources(active_only=False) if r['Channel'] == 'report'}
     weekly = cfgs['Vendor spend, weekly']
-    assert reports.schedule_error(weekly) is None and reports.schedule_words(weekly) == 'cron 0 7 * * 1'
+    assert reports.schedule_error(weekly) is None and reports.schedule_words(weekly) == 'Mondays at 07:00'
     for name, c in cfgs.items():
         assert not [k for k in c if k.endswith('_at') and k not in ('daily_at', 'first_run_at_schedule')], f'{name}: a clock no scheduler reads'

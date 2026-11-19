@@ -7724,13 +7724,22 @@ def retriage_message(mid: int):
 def sources():
     # default_repo rides along so the Board's repo picker preselects it; a report carries its route in
     # the server's own words, so the page never re-derives the rules (reports.route_words)
-    from .reports import route_words
+    from .reports import route_words, schedule_words
     rows = store.list_sources(active_only=False)
     for r in rows:
         if r.get('Channel') != 'report': continue
-        try: r['RouteWords'] = route_words(json.loads(r.get('ConfigJson') or '{}'))
+        # ...and its clock in the server's one phrase (reports.schedule_words): the page draws it, never says it again
+        try: c = json.loads(r.get('ConfigJson') or '{}'); r['RouteWords'], r['ScheduleWords'] = route_words(c), schedule_words(c)
         except ValueError: pass
     return {'data': rows, 'default_repo': (cfg.get('github') or {}).get('default_repo')}
+
+@app.post('/api/schedule-words')
+def schedule_words_of(body: dict):
+    """A clock the editor holds and has not saved, said as every surface says it once saved (reports.schedule_words) - with why the
+    scheduler could not read it, if it could not (schedule_error)."""
+    from .reports import schedule_error, schedule_words
+    c = body.get('cfg') if isinstance(body.get('cfg'), dict) else {}
+    return {'words': schedule_words(c), 'error': schedule_error(c)}
 
 @app.post('/api/sources')
 def save_source(body: SourceBody):

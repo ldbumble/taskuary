@@ -16,6 +16,7 @@ import { effortChoices, keepEffort, modelChoices } from "./workflowBrain.js";
 import WorkflowSteps from "./WorkflowSteps.jsx";
 import { REPAIR, REPORT_WORDS, asReport, asSteps, askFor, diffKeys, firstMissing, onlyReads, outputsOf, toSaved } from "./workflowFlow.js";
 import { openAppLink } from "./appLinks.js";
+import { useScheduleWords } from "./reportWords.js";
 
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -48,16 +49,6 @@ export const withSchedule = (c, s) => {
   if (s.mode === "cron" && String(s.cron || "").trim()) out.cron = String(s.cron).trim();
   return out;
 };
-
-export const scheduleWords = (s) => s.mode === "every" ? `every ${s.minutes} minutes`
-  : s.mode === "daily" ? `every day at ${s.at}`
-  : s.mode === "weekly" ? `${(s.days || []).map((d) => DAYS[d]).join(", ")} at ${s.at}`
-  : s.mode === "monthly" ? `on the ${s.day} of each month at ${s.at}`
-  : s.mode === "cron" ? `cron ${s.cron}` : "only when you press Run now";
-
-// ...and when a mail starts it too (workflows.from_mail): the clock alone said "only when you press Run now" over a job a mail starts
-export const runsWords = (s, c) => String(c?.on_mail || "").trim()
-  ? `${s.mode === "manual" ? "" : `${scheduleWords(s)}, and `}when a mail like the one described arrives` : scheduleWords(s);
 
 const Field = ({ label, hint, children }) => (
   <Box sx={{ mb: 2 }}>
@@ -172,6 +163,8 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
   const missing = !String(cfg.title || "").trim() ? "a name"
     : steps ? (!(cfg.flow || []).length ? "a first step" : "") : !String(cfg.prompt || cfg.skill || "").trim() ? "what it does" : "";
   const stepMissing = steps ? firstMissing(cfg.flow) : "";
+  // ...and WHEN IT RUNS, as it is held now, in the server's one phrase (reports.schedule_words) - what the list and its task say once saved
+  const runs = useScheduleWords(withSchedule({ on_mail: cfg.on_mail }, sched));
   const save = async () => {
     if (missing) { setMsg({ ok: false, text: `Give it ${missing} first.` }); return null; }
     if (stepMissing) { setMsg({ ok: false, text: `Not yet: ${stepMissing}.` }); return null; }
@@ -181,7 +174,7 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
       const { data } = await api.post("/api/sources", { ...(cur ? { SourceId: cur.SourceId } : {}), Channel: "report",
         Address: c.title, ConfigJson: JSON.stringify(c), Active: cur ? !!cur.Active : true });
       await reload();
-      setMsg({ ok: true, text: `Saved — runs ${runsWords(sched, cfg)}.` }); setRepair(null);
+      setMsg({ ok: true, text: `Saved — runs ${runs}.` }); setRepair(null);
       if (!cur) onSaved?.(data.sourceId);
       return data.sourceId || cur?.SourceId;
     } catch (e) { setMsg({ ok: false, text: e?.response?.data?.detail || "It could not be saved." }); return null; }
@@ -211,7 +204,7 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
       {/* the actions, together: what it is doing now, and the three things you can do about it */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 2, mt: -1 }}>
         <Typography variant="body2" sx={{ color: DIM, flex: 1, minWidth: 200 }}>
-          {cur ? `${cur.Active ? "On" : "Off"} · runs ${runsWords(sched, cfg)}` : `Not saved yet · will run ${runsWords(sched, cfg)}`}
+          {cur ? `${cur.Active ? "On" : "Off"} · runs ${runs}` : `Not saved yet · will run ${runs}`}
         </Typography>
         {cur && <Box sx={{ display: "flex", alignItems: "center" }}>
           {/* named, so the Assistant can find it (the everyday-asks audit, 2026-11-02): a switch with no label never reached its view */}

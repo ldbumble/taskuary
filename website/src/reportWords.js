@@ -1,39 +1,22 @@
+import { useEffect, useState } from "react";
+import api from "./api";
 import { READ_LABELS } from "./apiReads.js";
 // WHAT A REPORT READS AND WHEN IT RUNS, in words (ReportsView's list and the report on the table, ItemSections) - kept apart so the Assistant's card
 // can say it without loading the whole Reports tab
-// A cron line, said in words when it is one of the shapes people actually write; the raw
-// expression stays for anything cleverer, because a wrong paraphrase is worse than none.
-const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-export const cronText = (expr) => {
-  const f = String(expr || "").trim().split(/\s+/);
-  if (f.length !== 5) return `cron ${expr}`;
-  const [mi, h, dom, mon, dow] = f;
-  const hhmm = /^\d+$/.test(mi) && /^\d+$/.test(h) ? `${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}` : null;
-  const every = (x, unit) => { const m = /^\*\/(\d+)$/.exec(x); return m ? `every ${m[1]}${unit}` : null; };
-  if (h === "*" && dom === "*" && mon === "*" && dow === "*") return every(mi, "m") || (mi === "*" ? "every minute" : `cron ${expr}`);
-  // a few set times every day, as reports.times_a_day says it: the Advisor's "twice a day: 7:30 and 16:30"
-  if (/^\d+$/.test(mi) && /^\d+(,\d+)+$/.test(h) && dom === "*" && mon === "*" && dow === "*") {
-    const at = [...new Set(h.split(",").map(Number))].sort((a, b) => a - b).map((x) => `${x}:${String(mi).padStart(2, "0")}`);
-    if (at.length > 1) return `${at.length === 2 ? "twice" : `${at.length} times`} a day: ${at.slice(0, -1).join(", ")} and ${at.at(-1)}`;
-  }
-  if (mi !== "*" && dom === "*" && mon === "*" && dow === "*") return every(h, "h") ? `${every(h, "h")} at :${String(mi).padStart(2, "0")}` : hhmm ? `daily ${hhmm}` : `cron ${expr}`;
-  if (hhmm && dom === "*" && mon === "*") {
-    if (dow === "1-5") return `weekdays ${hhmm}`;
-    if (dow === "0,6" || dow === "6,0") return `weekends ${hhmm}`;
-    const days = dow.split(",").map((d) => DOW[Number(d) % 7]).filter(Boolean);
-    if (days.length && days.length === dow.split(",").length) return `${days.join(", ")} ${hhmm}`;
-  }
-  if (hhmm && mon === "*" && dow === "*" && /^\d+$/.test(dom)) return `the ${dom}${["th", "st", "nd", "rd"][(dom % 10 > 3 || [11, 12, 13].includes(dom % 100)) ? 0 : dom % 10]} of the month ${hhmm}`;
-  return `cron ${expr}`;
-};
-
-// "on app startup" is a lie next to once_per_day/once_per_week - it fires on the FIRST launch of the
-// day (or week) and drops the rest. Saying "every" is what made one evening launch look like a restart.
-export const startupText = (c) => "on app startup" + (c.once_per_day ? " (at most once a day)"
-  : c.once_per_week ? " (at most once a week)" : "");
-export const reportSchedule = (c) => [c.on_startup && startupText(c), c.cron && cronText(c.cron),
-  c.every_minutes && `every ${c.every_minutes} minutes`, c.daily_at && `daily at ${c.daily_at}`]
-  .filter(Boolean).join(" + ") || "only when you press Run now";
+// WHEN IT RUNS is the SERVER's to say, once (reports.schedule_words): a saved row carries it as ScheduleWords, and a clock an editor holds
+// unsaved is asked of the same function (/api/schedule-words). The page had three sayings of its own - "daily 08:00" in the list, "every day
+// at 08:00" in the routine's editor, "daily at 08:00" on its task - for one routine.
+export function useScheduleWords(cfg) {
+  const key = JSON.stringify(cfg || {});
+  const [words, setWords] = useState("");
+  useEffect(() => {
+    let live = true;
+    const t = setTimeout(() => api.post("/api/schedule-words", { cfg: JSON.parse(key) })
+      .then(({ data }) => { if (live) setWords(data?.words || ""); }).catch(() => {}), 150);
+    return () => { live = false; clearTimeout(t); };
+  }, [key]);
+  return words;
+}
 
 export const TYPE_LABELS = {
   ...READ_LABELS,

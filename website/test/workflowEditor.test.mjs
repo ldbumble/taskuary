@@ -7,21 +7,25 @@ const read = (name) => fs.readFileSync(new URL(`../src/${name}`, import.meta.url
 // the schedule helpers are plain functions; import them without React by slicing them out of the module
 const src = read("WorkflowEditor.jsx");
 const helpers = src.slice(src.indexOf("const DAYS"), src.indexOf("const Field"));
-const { scheduleOf, withSchedule, scheduleWords } = new Function(`${helpers.replace(/export /g, "")}; return { scheduleOf, withSchedule, scheduleWords };`)();
+const { scheduleOf, withSchedule } = new Function(`${helpers.replace(/export /g, "")}; return { scheduleOf, withSchedule };`)();
 
 test("every Monday at 8 is a weekly cron, and reads back as Monday - never daily", () => {
   const c = withSchedule({ title: "x", daily_at: "08:00" }, { mode: "weekly", at: "08:00", days: [1] });
   assert.deepEqual(c, { title: "x", cron: "0 8 * * 1" });
   assert.deepEqual(scheduleOf(c), { mode: "weekly", at: "08:00", days: [1] });
-  assert.equal(scheduleWords(scheduleOf(c)), "Mon at 08:00");
 });
 
-test("a workflow a mail starts says so, and the page asks which mail in words", () => {
-  const { runsWords } = new Function(`${helpers.replace(/export /g, "")}; return { runsWords };`)();
-  assert.equal(runsWords({ mode: "manual" }, { on_mail: "a vendor sends an invoice" }), "when a mail like the one described arrives");
-  assert.equal(runsWords({ mode: "weekly", at: "08:00", days: [1] }, { on_mail: "x" }), "Mon at 08:00, and when a mail like the one described arrives");
-  assert.equal(runsWords({ mode: "manual" }, {}), "only when you press Run now");
+// WHEN IT RUNS is the server's to say (reports.schedule_words; tests/test_workflow_one_road.py holds its words): the editor, the Reports list
+// and the report's Came from draw what it says - "every day at 08:00" here, "daily 08:00" on the task, "daily at 08:00" in the list was one routine
+test("a workflow a mail starts says so, and every page surface says the clock in the server's words", () => {
   assert.ok(src.includes('set("on_mail"') && src.includes("Start when a mail like this arrives"));
+  assert.match(src, /useScheduleWords\(withSchedule\(\{ on_mail: cfg\.on_mail \}, sched\)\)/);
+  for (const f of ["WorkflowEditor.jsx", "ReportsView.jsx", "reportWords.js", "assistantCards.jsx"]) {
+    const s = read(f);
+    assert.doesNotMatch(s, /scheduleWords|runsWords|cronText|reportSchedule|startupText|`daily \$\{|every day at/, f);
+  }
+  assert.match(read("ReportsView.jsx"), /Runs \{source\.ScheduleWords\}/);
+  assert.match(read("assistantCards.jsx"), /runs: row\?\.ScheduleWords/);
 });
 
 test("each schedule is one key, and the others are cleared", () => {

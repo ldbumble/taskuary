@@ -29,7 +29,7 @@ import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail } 
 import { RecentlyDeleted, UndoLine, removeNow } from "./Removed.jsx";
 import WorkflowEditor, { SchedulePicker, scheduleOf, withSchedule } from "./WorkflowEditor.jsx";
 import RunSteps from "./RunSteps.jsx";
-import { TYPE_LABELS, cronText, reportSchedule, startupText } from "./reportWords.js";
+import { TYPE_LABELS, useScheduleWords } from "./reportWords.js";
 import { asSteps, runWords } from "./workflowFlow.js";
 import { onDraftHanded, takeDraft } from "./draftHandoff.js";
 import { label as btnLabel } from "./buttons.js";
@@ -202,7 +202,7 @@ export const FIELDS = {
   alchemy_wallet: [["wallet address", "address", "text", "0x..."],
     ["Alchemy networks", "networks", "text", "eth-mainnet,base-mainnet"], AI_FIELD],
 };
-export { cronText, TYPE_LABELS };
+export { TYPE_LABELS };
 
 
 /* The picker was 21 flat entries in the order the registry happens to list them, which is not a
@@ -508,9 +508,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   const row = (s) => {
         const c = parse(s.ConfigJson);
         // both halves, not the first one: "on startup" alone hid the Monday cron behind it
-        const sched = [c.on_startup && startupText(c), c.cron && cronText(c.cron),
-          c.every_minutes && `every ${c.every_minutes}m`, c.daily_at && `daily ${c.daily_at}`]
-          .filter(Boolean).join(" + ");
+        const sched = c.on_startup || c.cron || c.every_minutes || c.daily_at ? s.ScheduleWords || "" : "";   // in the server's words
         // NO CLOCK IS A REPORT THAT STOPPED (D2, the owner 2026-09-28): it said "daily" and ran only by hand, so
         // it wears a red border and says so - a workflow is started by hand on purpose and is left alone
         const unscheduled = !sched && !workflowOverview;
@@ -813,7 +811,7 @@ function SavedReportSummary({ source, workflow = false }) {
         </Typography>
       </Box>
       <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55, fontSize: 12.5 }}>
-        Reads {reads}. Runs {reportSchedule(c)}.
+        Reads {reads}. Runs {source.ScheduleWords}.
       </Typography>
       <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.45, lineHeight: 1.5 }}>
         {c.ai_prompt ? "AI writes the summary. " : "Uses the source result as-is. "}
@@ -835,6 +833,7 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
   const [batch, setBatch] = useState(null);
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState(carry?.msg || "");
+  const monthly = useScheduleWords({ cron: cfg.cron || "0 9 1 * *" });   // the cron typed, in the server's words
   useEffect(() => { if (carry) onCarried?.(); }, []);   // read once, at mount: the carry is spent
   const period = new Date().toISOString().slice(0, 7);
   const loadCustomers = useCallback(async () => {
@@ -904,7 +903,7 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
             <MenuItem value="" disabled>Zoho Invoice connection</MenuItem>
             {zohoCards.map((c) => <MenuItem key={c.ConnectorId} value={c.ConnectorId}>{c.Name}{c.Active ? "" : " — off"}</MenuItem>)}
           </Select>
-          <TextField size="small" label="monthly cron" value={cfg.cron || ""} helperText={cronText(cfg.cron || "0 9 1 * *")}
+          <TextField size="small" label="monthly cron" value={cfg.cron || ""} helperText={monthly}
             onChange={(e) => setCfg({ ...cfg, cron: e.target.value })} />
         </Box>
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>Customers included each month</Typography>

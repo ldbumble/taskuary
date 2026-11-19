@@ -164,7 +164,7 @@ class CardTests(unittest.TestCase):
         with mock.patch.object(workflows, '_spawn', lambda fn: None):
             tid = workflows.run(s, s.get_source(sid))['task_id']
         self.assertEqual(workflows.of_task(s, s.get_task(tid)),
-                         {'source_id': sid, 'title': 'Vendor bill sweep', 'trigger': 'schedule', 'schedule': 'Mondays 08:00', 'started_by': 'its schedule',
+                         {'source_id': sid, 'title': 'Vendor bill sweep', 'trigger': 'schedule', 'schedule': 'Mondays at 08:00', 'started_by': 'its schedule',
                           'runs_on': ''})                                                                       # no brain connected in this store
         with mock.patch.object(server, 'store', s):
             self.assertEqual(TestClient(server.app).get(f'/api/tasks/{tid}').json()['workflow']['started_by'], 'its schedule')
@@ -181,11 +181,28 @@ class CardTests(unittest.TestCase):
         live = [{'taskId': x, 'agent': 'ap', 'sid': f's{x}', 'waiting': True, 'state': 'parked', 'line': 'ap is waiting on you'} for x in (tid, mail)]
         self.assertEqual([c['channel'] for c in funnel.from_agents(s, live_state=live)], ['workflow', ''])
 
-    def test_the_clock_is_said_the_way_the_owner_says_it(self):
-        w = workflows.when_words
+    def test_the_clock_is_said_the_way_the_owner_says_it_once_on_every_surface(self):
+        """HOW A ROUTINE'S CLOCK IS SAID is one function (reports.schedule_words): its task's header, the Reports list (the API's
+        ScheduleWords) and the editor's unsaved clock (/api/schedule-words) say one phrase. One routine read "daily 08:00" on its task,
+        "daily at 08:00" in the list and "every day at 08:00" in its editor."""
+        from taskuary import reports, server
+        from fastapi.testclient import TestClient
+        w = reports.schedule_words
         self.assertEqual([w({'cron': '0 8 * * 1'}), w({'cron': '30 7 * * 1-5'}), w({'daily_at': '08:00'}), w({'cron': '0 9 1 * *'})],
-                         ['Mondays 08:00', 'weekdays 07:30', 'daily 08:00', 'day 1 of each month, 09:00'])
-        self.assertEqual(w({'every_minutes': 15}), 'every 15 minutes')
+                         ['Mondays at 08:00', 'weekdays at 07:30', 'daily at 08:00', 'day 1 of each month at 09:00'])
+        self.assertEqual([w({'every_minutes': 15}), w({'cron': '*/15 * * * *'})], ['every 15 minutes', 'every 15 minutes'])
+        self.assertEqual(w({'on_mail': 'a vendor sends an invoice'}), 'when a mail like the one described arrives')
+        self.assertEqual(w({'cron': '0 8 * * 1', 'on_mail': 'x'}), 'Mondays at 08:00, and when a mail like the one described arrives')
+        s = store(); sid = workflow(s)
+        s.merge_config('source', sid, {'daily_at': '08:00', 'cron': None})
+        with mock.patch.object(workflows, '_spawn', lambda fn: None):
+            tid = workflows.run(s, s.get_source(sid))['task_id']
+        task = workflows.of_task(s, s.get_task(tid))['schedule']
+        with mock.patch.object(server, 'store', s):
+            c = TestClient(server.app)
+            listed = next(r for r in c.get('/api/sources').json()['data'] if r['SourceId'] == sid)['ScheduleWords']
+            editor = c.post('/api/schedule-words', json={'cfg': {'daily_at': '08:00'}}).json()['words']
+        self.assertEqual({task, listed, editor}, {'daily at 08:00'})
 
 
 class ComposerTests(unittest.TestCase):

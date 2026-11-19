@@ -1962,17 +1962,43 @@ def times_a_day(cron: str) -> str:
     return f"{'twice' if len(hs) == 2 else f'{len(hs)} times'} a day: {', '.join(at[:-1])} and {at[-1]}"
 
 
+_DAYS = {'0': 'Sundays', '1': 'Mondays', '2': 'Tuesdays', '3': 'Wednesdays', '4': 'Thursdays', '5': 'Fridays', '6': 'Saturdays', '7': 'Sundays',
+         '1-5': 'weekdays', '0,6': 'weekends', '6,0': 'weekends'}
+
+
+def cron_words(cron: str) -> str:
+    """A cron line as the owner says it - "Mondays at 08:00", "weekdays at 07:30", "day 1 of each month at 09:00", "every 15 minutes",
+    "twice a day: 7:30 and 16:30" - for the shapes people write; the raw line for anything cleverer (a wrong paraphrase is worse than none)."""
+    m, h, dom, mon, dow = f = (str(cron or '').split() + [''] * 5)[:5]
+    if len(str(cron or '').split()) != 5: return f'cron {cron}'
+    if (x := times_a_day(cron)): return x
+    if h == dom == mon == dow == '*' and m.startswith('*/') and m[2:].isdigit(): return f'every {m[2:]} minutes'
+    if m.isdigit() and h.startswith('*/') and h[2:].isdigit() and dom == mon == dow == '*': return f'every {h[2:]} hours at :{int(m):02d}'
+    if not (m.isdigit() and h.isdigit() and mon == '*'): return f'cron {cron}'
+    at = f'{int(h):02d}:{int(m):02d}'
+    if dom == '*' and dow == '*': return f'daily at {at}'
+    if dom == '*' and (dow in _DAYS or all(d in _DAYS for d in dow.split(','))):
+        days = _DAYS.get(dow) or ', '.join(_DAYS[d] for d in dow.split(','))
+        return f'{days} at {at}'
+    if dom.isdigit() and dow == '*': return f'day {dom} of each month at {at}'
+    return f'cron {cron}'
+
+
 def schedule_words(cfg: dict) -> str:
-    """A report's WHOLE clock in one phrase, guard included. Every surface that printed half of it
-    invited the same misreading: "on startup" alone hid the Monday cron behind it, and "on every app
-    start" said `every` while once_per_day was quietly dropping the repeats - so two seeded reports
-    greeting one evening launch read as a scheduler fault, or as an unexplained restart (TQ-0010)."""
+    """A report's or a routine's WHOLE clock in one phrase, guard included - THE ONE PLACE it is said: the Reports list, the routine's
+    editor, its task's header, the phone and the Assistant all read this (the API carries it as ScheduleWords). One routine read
+    "daily 08:00" on its task, "every day at 08:00" in its editor and "daily at 08:00" in the list. Every surface that printed half
+    of it invited the same misreading: "on startup" alone hid the Monday cron behind it, and "on every app start" said `every` while
+    once_per_day was quietly dropping the repeats (TQ-0010)."""
     cap = (' (at most once a day)' if cfg.get('once_per_day') else
            ' (at most once a week)' if cfg.get('once_per_week') else '')
-    parts = [times_a_day(cfg['cron']) or f"cron {cfg['cron']}" if cfg.get('cron') else '', f"daily at {cfg['daily_at']}" if cfg.get('daily_at') else '',
+    parts = [cron_words(cfg['cron']) if cfg.get('cron') else '', f"daily at {cfg['daily_at']}" if cfg.get('daily_at') else '',
              f"every {cfg['every_minutes']} minutes" if cfg.get('every_minutes') else '',
              f'on app start{cap}' if cfg.get('on_startup') else '']
-    return ' + '.join(p for p in parts if p) or 'no schedule - run it by hand'
+    clock = ' + '.join(p for p in parts if p)
+    # ...and when a mail starts it too (workflows.from_mail): the clock alone said "run it by hand" over a job a mail starts
+    if str(cfg.get('on_mail') or '').strip(): return f'{clock}, and when a mail like the one described arrives' if clock else 'when a mail like the one described arrives'
+    return clock or 'no schedule - run it by hand'
 
 
 def schedule_error(cfg: dict) -> str | None:

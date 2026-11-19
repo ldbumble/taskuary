@@ -260,10 +260,6 @@ def brain_options(store) -> dict:
     return {**b, 'models': models, 'efforts': efforts_for(b['cli'], cat, b['base'])}
 
 
-_DAYS = {'0': 'Sundays', '1': 'Mondays', '2': 'Tuesdays', '3': 'Wednesdays', '4': 'Thursdays', '5': 'Fridays', '6': 'Saturdays',
-         '7': 'Sundays', '1-5': 'weekdays', '*': 'daily'}
-
-
 # A SCRIPT AN AGENT WROTE ON A JOB, KEPT AS A ROUTINE (the owner, 2026-11-10: "agent should be able to after building one should say
 # should we save this"). The agent proposes it (proposals 'save_routine'); the owner reads the script on the card, and their Approve is
 # the save - the one door by which anything but the editor puts a script on a schedule. The steps are the ones the editor would hold: an
@@ -367,21 +363,10 @@ def change_of(store, tid: int, p: dict) -> tuple:
 def runs_words(cfg: dict) -> str: return when_words(cfg) if any(cfg.get(k) for k in CLOCK) else 'when you run it'
 
 
-def when_words(cfg: dict) -> str:
-    """The clock as the owner says it - "Mondays 08:00" - for the common crons; anything else as reports.schedule_words says it."""
-    from .reports import schedule_words
-    if cfg.get('daily_at') and not cfg.get('cron') and not cfg.get('every_minutes'): return f"daily {cfg['daily_at']}"
-    m, h, dom, mon, dow = (str(cfg.get('cron') or '').split() + [''] * 5)[:5]
-    if m.isdigit() and h.isdigit() and mon == '*':
-        at = f'{int(h):02d}:{int(m):02d}'
-        if dom == '*' and dow in _DAYS: return f'{_DAYS[dow]} {at}'
-        if dom.isdigit() and dow == '*': return f'day {dom} of each month, {at}'
-    return schedule_words(cfg)
-
-
 def of_task(store, task) -> dict | None:
     """What the task card says about a workflow run: which workflow, and what started it (TaskPage's header and Came from)."""
     from . import flow
+    from .reports import schedule_words
     if (task or {}).get('Source') != 'workflow': return None
     src, trig = source_of(store, task), trigger_of(task)
     cfg = cfg_of(src) if src else {}
@@ -389,7 +374,7 @@ def of_task(store, task) -> dict | None:
     by_code = flow.is_flow(cfg) and not any(s.get('kind') == 'agent' for s in flow.steps_of(cfg))
     title = cfg.get('title') or (src or {}).get('Address') or str(task.get('Title') or '').rsplit(' - ', 1)[0]
     run = store.report_run_of_task(task['TaskId']) if task.get('TaskId') else None     # its steps, when it ran as steps (flow.execute)
-    return {'source_id': (src or {}).get('SourceId'), 'title': title, 'trigger': trig, 'schedule': when_words(cfg) if src else '',
+    return {'source_id': (src or {}).get('SourceId'), 'title': title, 'trigger': trig, 'schedule': schedule_words(cfg) if src else '',
             'started_by': STARTED_BY.get(trig, ''), 'runs_on': brain(store, cfg, task)['said'] if src and not by_code else '',
             **({'by_code': True} if by_code else {}),
             **({'steps': run['steps'], 'run_id': run['runId'], 'failed': run['failed'], 'summary': run.get('summary') or '',

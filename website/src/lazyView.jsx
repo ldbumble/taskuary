@@ -14,9 +14,12 @@ export function lazyView(load, pick = (m) => m.default) {
   const start = () => ready || (ready = load().then((m) => { C = pick(m); return { default: C }; }));
   idle(() => start().catch(() => { /* drawn, the lazy rethrows to the boundary; a stale build reloads (main.jsx) */ }));
   const Late = React.lazy(start);
-  return function View(props) {
+  function View(props) {
     const was = useRef(C);
     const Now = was.current;
     return Now ? <Now {...props} /> : <Suspense fallback={null}><Late {...props} /></Suspense>;
-  };
+  }
+  // ...and a page that must not stand half-drawn while it comes (a task's head over an empty room) asks whether it is in, and waits on it
+  View.ready = () => !!C; View.load = start;
+  return View;
 }

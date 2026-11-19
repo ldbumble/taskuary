@@ -2735,6 +2735,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     });
     return () => cancelAnimationFrame(f);
   }, [continueCard]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // A TASK IS NEVER ITS HEAD OVER NOTHING (the nothing-above run, 2026-11-18: New's first task drew its head over an empty room for ~337 ms
+  // while the chat's own code was still coming): the task is drawn once its chat can be, the loading card with its title until then
+  const [chatIn, setChatIn] = useState(() => GeneralWorkspace.ready());
+  useEffect(() => { if (!chatIn) GeneralWorkspace.load().then(() => setChatIn(true), () => setChatIn(true)); }, [chatIn]);
   const claimRef = useRef(null);
   claimRef.current = canvas && active && t && !sessionView ? (d) => { if (Number(d?.tid) !== Number(selected)) return false; setRestartOpen(false); if (chatPane) intoChat(d.note); else setContinueCard({ note: d.note || "" }); return true; } : null;
   useEffect(() => {
@@ -3036,7 +3040,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           {/* this view's own errors - they were drawn over the list column when the two were one component */}
           {err && <Alert severity="error" onClose={() => { setErr(""); setStartFail(null); }} sx={{ mb: 1, flexShrink: 0 }}>{err}
             {startFail && startFail.text === err && <FailWays fail={startFail} onRetry={() => { const go = startFail.again; setErr(""); setStartFail(null); go?.(); }} />}</Alert>}
-          {!t ? (
+          {!t || !chatIn ? (
             // ...AND ON THE TABLE IT HOLDS THE VIEW'S ROOM (G8): a view with no pane is only as tall as what it draws (CanvasItem), so the
             // shell was 22px - the dead-end walk's SEEN "only 22px of the card on the table is in view" after Remove (CI, 2026-10-20) was a
             // next view still waiting for its read - and the view then grew to 400 under the owner's eyes. The canvas's own floor, 340

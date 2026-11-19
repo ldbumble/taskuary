@@ -17,6 +17,7 @@ import {
 import { ButtonBar } from "./ButtonBar.jsx";
 import CloseIcon from "@mui/icons-material/Close";
 import api from "./api";
+import { prefetchTask } from "./taskDetail.js";
 import { ACCENT, ACCENT2, BORDER, DIM, FAINT, INK, PANEL, ROLES, mono } from "./theme.jsx";
 import { ChannelIcon, MicButton, useAgents, usePeopleSearch } from "./ui.jsx";
 import { withFound } from "./peopleSearch.js";
@@ -275,7 +276,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
     // so its press stays busy until then - free again, it could be pressed twice and file the task twice. A dialog's host closes it itself
     let opened = false;
     // ...drawn at the press as its row (funnelPile.madeRow): the task, his words and its agent starting, never New's card over a "…"
-    const openIt = (tid) => { opened = !!tid && !!onOpenTask; onOpenTask?.(tid, { row: madeRow(tid, about) }); };
+    // ...its read asked with its chat as it opens, as a rail row's press asks it (taskDetail.prefetchTask): read only once its view had mounted,
+    // New's task drew its head over the chat's own spinner for that read (the nothing-above run, 2026-11-18)
+    const openIt = (tid) => { opened = !!tid && !!onOpenTask; if (tid) prefetchTask(api, tid); onOpenTask?.(tid, { row: madeRow(tid, about) }); };
     try {
       if (kind === "send") {
         const { data } = await api.post("/api/outbox", {

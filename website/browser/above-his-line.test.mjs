@@ -124,3 +124,26 @@ test("a line typed in New opens its task with his words first and the agent's un
     await new Promise((r) => setTimeout(r, 1500));
   });
 });
+
+// A TASK IS NEVER ITS HEAD OVER NOTHING (the owner's rule; seen in one of two runs of the test above, 2026-11-18: New's task drew its head with
+// no chat under it for ~337 ms): the chat's own code still on its way is that beat, held here until a second after Send - every frame from Send
+// until the chat stands, read for a task head with no chat room under it
+test("New's task never stands as its head over nothing while the chat's code is still coming", { timeout: 300000 }, async (t) => {
+  const w = await world(t), { page } = w;
+  let release; const held = new Promise((r) => { release = r; });
+  const guard = page.fixtureRequestGuard; page.off("request", guard);
+  page.on("request", (r) => (/GeneralWorkspace\.jsx/.test(r.url()) ? held.then(() => guard(r)) : guard(r)));
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.evaluate(() => { location.hash = "new-task"; });
+  const box = "[data-tq-new] [data-tq-prompt-box]";
+  await page.waitForSelector(`${box} textarea`, { visible: true, timeout: 60000 });
+  await page.evaluate(() => { window.__bare = []; const tick = () => { const p = document.querySelector("[data-tq-task-page]");
+    if (p?.querySelector("[data-tq-agent-room]") && !p.querySelector(".tq-aui-viewport")) window.__bare.push(Math.round(performance.now()));
+    if (!window.__stop) requestAnimationFrame(tick); }; tick(); });
+  await page.type(`${box} textarea`, "start with the south office"); await page.click(`${box} button[type=submit]`);
+  await new Promise((r) => setTimeout(r, 1000)); release();
+  await inChat(page, /south office runs/);
+  const bare = await page.evaluate(() => { window.__stop = true; return window.__bare; });
+  assert.deepEqual(bare.length ? [bare[0], bare.at(-1)] : [], [], `the task stood as its head over nothing for ${bare.length ? bare.at(-1) - bare[0] : 0} ms`);
+  assert.deepEqual(w.errors, []);
+});

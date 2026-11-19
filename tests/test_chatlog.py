@@ -296,3 +296,31 @@ def test_the_page_reads_the_log_through_a_timeline_and_nothing_he_saw_moves():
     s.decide_review(rid, 'approved', 'Hi Erin, the review is attached. Alex', 'owner'); look()      # ...pressed twice: nothing moves
     assert all(r[:len(a)] == a for a, r in zip(reads, reads[1:])), reads
     assert len({c['review'] for x in got['items'] for c in x.get('cards') or []}) <= 1
+
+
+def test_codex_and_a_terminal_cli_log_write_their_steps_as_every_other_road():
+    """EVERY BRAIN READS THE SAME (the owner's addition, 2026-11-19: Codex showed "Ran a command"): Codex's own log and a terminal CLI's log
+    are written through the one door, each call one row in plain words - the command as he would type it, never a list's repr."""
+    events = [{'type': 'response_item', 'payload': {'type': 'function_call', 'name': 'shell', 'arguments': '{"command": ["bash", "-lc", "ls vendors"]}'}},
+              {'type': 'response_item', 'payload': {'type': 'message', 'role': 'assistant', 'content': [{'type': 'output_text', 'text': 'Two vendor files.'}]}}]
+    from taskuary import conversation, general
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    for e in events: chatlog.feed(s, tid, 'cx1', 'codex-log', e)
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Two vendor files.')
+    t = chatlog.read(s, tid, 'everything')['items'][-1]
+    tool = next(x for x in t['steps'] if x['k'] == 'tool')
+    assert (tool['text'], tool['line']) == ('ls vendors', 'Ran ls vendors')
+    chatlog.steps_of(s, tid, 'pty1', [{'k': 'tool', 'name': 'Bash', 'text': 'pytest -q', 'output': '3 passed in 1s'}, {'k': 'you', 'text': 'his line'}])
+    rows = s._rows("SELECT Body FROM chatlog WHERE TaskId=? AND Src LIKE 'pty1:%'", (tid,))
+    assert len(rows) == 1, 'his line is the hand-over\'s, never a step'
+
+
+def test_a_draft_he_wrote_past_reads_grey_from_the_read_his_line_is_drawn_in():
+    """THE OLD DRAFT STOOD PRESSABLE OVER HIS NEWER LINE on the log (the recorded walk, 2026-11-19): a draft above a newer input reads
+    passed - its words kept - in the same read his line is drawn, before the turn that hears it has set it aside."""
+    out = [{'kind': 'card', 'id': 'r:1', 'review': 1, 'what': 'draft_reply', 'status': 'pending', 'was': {'text': 'Hi Erin. Alex'}},
+           {'kind': 'line', 'id': 'l-2', 'text': 'make it shorter'}]
+    s, tid = world()
+    chatlog.moved_past(s, out)
+    assert out[0]['status'] == 'passed' and out[0]['was']['text'] == 'Hi Erin. Alex'

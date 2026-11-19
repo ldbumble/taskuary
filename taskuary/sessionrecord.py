@@ -72,6 +72,8 @@ def _target(args) -> str:
     v = next((args[k] for k in _TARGET_KEYS if args.get(k)), None)
     if v is None: v = next((x for x in args.values() if isinstance(x, str) and x.strip()), '')
     if (args.get('pattern') or args.get('query')) and args.get('path'): v = f"{v} in {args['path']}"     # a search says where it looked
+    # ...a command as the words it was run with (Codex's ["bash", "-lc", "ls vendors"]): its list's repr read "Ran ['bash', ...]"
+    if isinstance(v, list): v = ' '.join(map(str, v[2:] if len(v) > 2 and str(v[1]) in ('-lc', '-c', '-Command') else v))
     return _cut(' '.join(str(v).split()), TARGET_N)
 
 

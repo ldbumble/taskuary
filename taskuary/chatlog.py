@@ -173,9 +173,32 @@ def rev(store, tid: int) -> int:
 
 
 def reconcile(store, tid: int) -> None:
-    "The turn at work reads what is so (general.working - one fact): starting until its agent works, at work while it does."
+    """The turn at work reads what is so (general.working - one fact): starting until its agent works, at work while it does. And a coding
+    agent in a terminal - Claude Code, Codex, any CLI whose own log Taskuary reads (codingchat.sessions) - has the steps its log added since
+    written in the one shape, as every other road writes them as they come (logged)."""
     from . import general
     if (t := _live(store, tid)) and t['State'] == 'starting' and general.working(store, int(tid)): update(store, tid, t['Key'], state='working')
+    logged(store, tid)
+
+
+@_safe
+def logged(store, tid: int) -> None:
+    from . import codingchat
+    if not codingchat._live(int(tid)): return
+    for s in codingchat.owned(store, int(tid), codingchat.sessions(store, int(tid), local=False)):
+        if s.get('source') == 'acp' or not s.get('live'): continue        # ...ACP writes its own, update by update (feed)
+        steps_of(store, tid, str(s['sid']), s.get('steps') or [])
+
+
+def steps_of(store, tid: int, sid: str, steps: list) -> None:
+    "A CLI log's steps (sessionrecord: Claude's, Codex's, Copilot's, Gemini's) by their place in its log: new ones appended, changed ones in place."
+    f = _FEEDS.setdefault((int(tid), f'log:{sid}'), {'wrote': {}})
+    for i, s in enumerate(steps):
+        if s.get('k') in ('you', 'brief'): continue
+        x = one_step(s)
+        if f['wrote'].get(i) == (j := json.dumps(x, sort_keys=True, default=str)): continue
+        f['wrote'][i] = j
+        step(store, tid, sid, f'log:{i}', x, state=x.get('status'))
 
 
 def read(store, tid: int, level: str = None) -> dict:
@@ -202,8 +225,24 @@ def read(store, tid: int, level: str = None) -> dict:
             # ...a turn that ended having said, done and left nothing is no item (a part a line cut off before it did anything)
             if r['State'] not in LIVE and not (x.get('text') or x['steps'] or x['cards'] or x.get('summary') or x.get('fail')): continue
         out.append(x)
+    moved_past(store, out)
     lvl = level_of(store, store.get_task(int(tid)) or {}, level)
     return {'rev': n, 'items': [detailed(x, lvl) for x in out], 'level': lvl}
+
+
+DRAFTS = ('draft_reply', 'draft')
+def moved_past(store, out: list) -> None:
+    """A CARD HE WROTE PAST IS GREY WHERE IT STANDS, from the read his line is drawn in (the owner, 2026-11-12; the recorded walk on the log,
+    2026-11-19: the old draft stood pressable over his newer line until the turn that heard it set it aside): a draft above a newer input, and
+    any card of the agent's above his newer line, reads `passed` - its words kept, nothing to press - and says why (proposals.passed_why)."""
+    from . import proposals
+    last_in = max((i for i, x in enumerate(out) if x['kind'] in ('line', 'arrival')), default=-1)
+    last_his = max((i for i, x in enumerate(out) if x['kind'] == 'line'), default=-1)
+    for i, x in enumerate(out):
+        for c in [x] if x['kind'] == 'card' else x.get('cards') or [] if x['kind'] == 'turn' else []:
+            if c.get('status') == 'pending' and (c.get('was') or c.get('what') == 'batch') and (c.get('what') in DRAFTS and i < last_in or i < last_his):
+                c['status'] = 'passed'
+                if (rv := store.get_review(c['review'])): c['why'] = proposals.passed_why(store, rv)
 
 
 # ── the producers' doors (dual-write: the legacy reader still serves the page; the log is written beside it) ─────────────────────────
@@ -358,7 +397,7 @@ def _convert(road: str, events: list) -> list:
     if road == 'trace': return sessionrecord.trace_steps(events)
     if road == 'acp': return conversation.acp_steps(events)
     st = {'out': []}
-    line_of = sessionrecord._claude_line if road == 'claude-log' else sessionrecord._codex_line
+    line_of = {'claude-log': sessionrecord._claude_line, 'codex-log': sessionrecord._codex_line}[road]
     for j in events: line_of(st, j)
     return st['out']
 

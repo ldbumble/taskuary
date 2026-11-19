@@ -106,3 +106,12 @@ test("Close issue with no comment proposed can be pressed; a comment or a post t
   assert.ok(!pressable(actionFor("jira_comment"), { action: "run_tool", type: "jira_comment", item: "NW-12" }, ""));
   assert.ok(!pressable(actionFor("linkedin_post"), { ...POST, text: "" }, ""));
 });
+
+// THE CARD'S FACE BY THE ONE RULE A FACE READS (design round 6, D3: the X card's avatar read "X(" - the first mark of "(Twitter)")
+test("a post card's avatar is the account's initials by profileAvatar's rule, never a bracket", async () => {
+  const { initialsOf } = await import("../src/profileAvatar.js");
+  assert.equal(initialsOf("X (Twitter)"), "X");
+  assert.equal(initialsOf("Northwind Social"), "NS");
+  const ac = readFileSync(new URL("../src/ActionCard.jsx", import.meta.url), "utf8");
+  assert.match(ac, /const initials = \(s\) => \(String\(s \|\| ""\)\.trim\(\) \? initialsOf\(s\) : "in"\);/);
+});

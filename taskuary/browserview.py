@@ -1224,8 +1224,9 @@ SIGNUP_LINE = ("A SIGN-UP: fill every box but the password, then run `agent-brow
                "signed in. A code the site emails is typed by Taskuary - never ask for it. ")
 SIGNIN_LINE = ("A SIGN-IN YOU HAVE NO PASSWORD FOR IS NOT A BLOCKER AND NEVER A QUESTION - you do not need the password. For a site with no "
                'connection among your systems, say so in one line, open its sign-in page in this browser, and end your turn with a final '
-               "line [[TASKUARY-SIGNIN: <the site's domain>]]: Taskuary types a saved sign-in, or shows the owner the page and keeps it for next "
-               'time, then tells you to go on - so never tell the owner to sign in. Never ask for a password or where one is kept, and never '
+               "line [[TASKUARY-SIGNIN: <the site's domain>]]: Taskuary types a saved sign-in where it keeps one, or shows the owner the page and "
+               'keeps it for next time, then tells you to go on - so never tell the owner to sign in, nor say which it will be: whether one is '
+               "saved is not yours to know, and Taskuary's own line says it. Never ask for a password or where one is kept, and never "
                'work a sign-in from your shell. '
                # ...AND A SIGN-UP (signin.new_account, 2026-11-16): nine forms were handed back for him to type a password into
                + SIGNUP_LINE)

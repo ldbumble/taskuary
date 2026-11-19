@@ -158,7 +158,9 @@ def access(store, c) -> str:
     "A bearer for this card, renewed a minute before it lapses - one renewal at a time per card."
     sp = spec(c['Type']) or {'title': c['Type']}
     b = bundle(c)
-    if not b.get('access_token'): raise OAuthError(f"{sp['title']} is not signed in yet - press Sign in with {sp['title']} on its card")
+    if not b.get('access_token'):
+        from .connectorcatalog import not_signed_in
+        raise OAuthError(not_signed_in(c['Type']))
     if not b.get('expires_at') or b['expires_at'] > time.time() + 60: return b['access_token']
     with _GUARD: lock = _LOCKS.setdefault(c['ConnectorId'], threading.Lock())
     with lock:

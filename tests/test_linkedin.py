@@ -38,8 +38,9 @@ class TheCall(unittest.TestCase):
     def test_no_token_says_where_to_get_one(self):
         with self.assertRaises(RuntimeError) as e:
             linkedin.whoami({})
-        self.assertIn('token generator', str(e.exception))
         self.assertIn('Sign in with LinkedIn', str(e.exception))   # the card's own button is the first answer
+        # ...in plain words, with the way to the card (design round 6, D8: the developer portal's token generator was setup jargon)
+        self.assertIn('(#connector=linkedin)', str(e.exception)); self.assertNotIn('token generator', str(e.exception))
 
     def test_it_resolves_the_author_urn_itself(self):
         """Nobody can paste urn:li:person:<opaque> from memory, so the post fetches it."""

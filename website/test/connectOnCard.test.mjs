@@ -19,3 +19,10 @@ test("the reply and email card and the post card both lead with Connect when the
   // ...and under the draft itself Connect is the one button - no lit Send and close beside "No mailbox is connected" (2026-11-08 render check)
   assert.match(rd, /\{connect && r\.Status === "pending" \? \(\s*<Button size="small" variant="contained" disableElevation data-tq-connect=""/);
 });
+
+// ...AND A PRESS THAT FAILED ON A CARD NOT SIGNED IN SAYS SO WITH THE WAY THERE (design round 6, D8: "save the app's Client ID and Client Secret ...
+// the developer portal's OAuth token generator", nothing to press): the server's line carries the card's link, and the card draws it pressable
+test("a failed press's line is drawn with its links, so the card it names opens", () => {
+  const ac = src("ActionCard.jsx");
+  assert.match(ac, /\{failed && <Typography role="alert"[^>]*><MdLine text=\{failed\} \/><\/Typography>\}/);
+});

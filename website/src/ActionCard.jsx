@@ -17,9 +17,12 @@ import { outputRow } from "./taskOutputs.js";
 import { hint } from "./buttons.js";
 import { failLine, landed, press } from "./press.js";
 import { asLive, MovedPast } from "./PassedCard.jsx";
+import { MdLine } from "./md.jsx";
+import { initialsOf } from "./profileAvatar.js";
 import { ACCENT, ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
-const initials = (s) => String(s || "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("") || "in";
+// ...by the one rule a face reads (profileAvatar.initialsOf): words, never marks - "X (Twitter)" drew "X(" (design round 6, D3)
+const initials = (s) => (String(s || "").trim() ? initialsOf(s) : "in");
 // ...a post's picture is a preview at a glance, not half the screen (the owner, 2026-11-05): its press opens it whole (FileDialog)
 const IMG_MAX = 180;
 // ...as wide as the pick it shows, its chevron beside it - sized to its longest choice, "Anyone" stood a word's gap from its own arrow - and
@@ -112,7 +115,8 @@ export default function ActionCard({ row: was, tid, live = true, onChanged, past
             {over && <Typography sx={{ fontSize: 11.5, color: ALERT_INK }}>{text.length} of {max} characters</Typography>}</>
           : <Typography sx={{ fontSize: 12.5, color: FAINT }}>{st.said}</Typography>}
       </Box>
-      {failed && <Typography role="alert" sx={{ px: 1.5, pb: 1, fontSize: 12.5, color: ALERT_INK }}>{failed}</Typography>}
+      {/* ...with the way past it pressable (connectorcatalog.not_signed_in: "[open its card](#connector=linkedin)") - design round 6, D8 */}
+      {failed && <Typography role="alert" sx={{ px: 1.5, pb: 1, fontSize: 12.5, color: ALERT_INK }}><MdLine text={failed} /></Typography>}
       <FileDialog file={viewing} onClose={() => setViewing(null)} />
     </Box></MovedPast>
   );

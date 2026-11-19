@@ -92,7 +92,13 @@ class TheRoad(unittest.TestCase):
         s = MemoryStore()
         with self.assertRaisesRegex(oauth.OAuthError, 'Client ID and Client Secret'): oauth.start(s, card(s, 'webex'), SERVER)
         with self.assertRaises(oauth.OAuthError): oauth.redirect_uri(SERVER, {'redirect_base': 'http://tunnel.northwind.example'})
-        with self.assertRaisesRegex(oauth.OAuthError, 'not signed in'): oauth.access(s, s.get_connector_by_type('webex', with_secret=True))
+        # ...said in plain words with the way to its card (design round 6, D8: a post failed "save the app's Client ID and Client Secret ...
+        # paste a token from the developer portal's OAuth token generator" - and nothing to press)
+        with self.assertRaisesRegex(oauth.OAuthError, r"isn't signed in - \[open its card\]\(#connector=webex\)"):
+            oauth.access(s, s.get_connector_by_type('webex', with_secret=True))
+        from taskuary import linkedin
+        with self.assertRaises(RuntimeError) as e: linkedin._headers({})
+        self.assertIn("LinkedIn isn't signed in - [open its card](#connector=linkedin)", str(e.exception)); self.assertNotIn('Client', str(e.exception))
 
 
 class TheRoutes(unittest.TestCase):

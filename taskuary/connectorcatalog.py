@@ -36,6 +36,13 @@ def own_groups() -> tuple:
 def by_type(t: str) -> dict | None: return next((c for c in cards() if c['type'] == t), None)
 
 
+# A CARD NOT SIGNED IN SAYS SO IN PLAIN WORDS, WITH THE WAY TO IT (design round 6, D8: a post failed "save the app's Client ID and Client Secret
+# ... or paste a token from the developer portal's OAuth token generator" - setup words, and nothing to press). One line for every connector
+def not_signed_in(t: str) -> str:
+    n = (by_type(t) or {}).get('title') or t
+    return f"{n} isn't signed in - [open its card](#connector={t}) in Connections and press Sign in with {n}"
+
+
 def signed_in(c: dict) -> bool:
     "A card that is on and holds what it needs to reach its system - a card switched on and never signed in is not (the walks, 2026-11-18)."
     return bool(c.get('Active') and (c.get('HasSecret') or c.get('LastSyncAt') or c.get('Secret')))

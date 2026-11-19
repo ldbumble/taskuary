@@ -518,8 +518,10 @@ def _chunk(e) -> bool:
     return isinstance(e, dict) and (e.get('sessionUpdate') in ('agent_message_chunk', 'agent_thought_chunk') or e.get('type') == 'live')
 
 
+@_safe
 def flush(store, tid: int) -> None:
-    "What the roads of task `tid` still hold back (a sentence's last tokens): written now - its answer is filed."
+    "What the roads of task `tid` still hold back (a sentence's last tokens): written now - its answer is filed, or its turn ended."
+    if not store or not tid: return
     for (t, sid), f in list(_FEEDS.items()):
         if t == int(tid) and f.get('dirty'): _write(store, tid, sid, f)
 
@@ -834,6 +836,7 @@ def serve(store, tid: int, level: str = None) -> dict:
     if not migrated(store, tid): migrate(store, tid)
     hold_ = origin.hold(store, tid)
     at_work = general.working(store, tid) if not hold_ else bool(getattr(general._live_of(tid), 'busy', False))
+    if at_work and (h := _halted(store, tid)): at_work = bool(general.waiting_lines(store, tid)) or h == 'stopped_turn' and bool(getattr(general._live_of(tid), 'owes_stop', lambda: False)())
     # ..."working" is one fact (general.working): a turn the log holds at work while nothing works has either not begun yet - nothing of it is
     # drawn until it has - or was left by a process that is gone (a restart): it is over, in place
     if not at_work and (t := _live(store, tid)):
@@ -845,6 +848,19 @@ def serve(store, tid: int, level: str = None) -> dict:
     if at_work and (lv := next((x for x in reversed(out) if x['kind'] == 'turn' and x.get('state') in LIVE), None)): lv.update(_now(tid, lv))
     body = {'items': out, 'level': got['level'], **beside(store, tid, out, at_work, hold_)}
     return {'rev': hashlib.sha1(json.dumps(body, default=str).encode()).hexdigest()[:16], **body}
+
+
+def _halted(store, tid: int) -> str:
+    """His stop or close (its audit action, ENDS) while it is the newest thing in the chat, '' else. A TURN HE STOPPED IS STOPPED FROM THE PRESS
+    (the recorded stops, 2026-11-11 and 2026-11-17): its CLI takes a beat to let go, and all that time nothing works under "You stopped the
+    agent" - only the turn his waiting lines begin, or the one the stopped turn owes him (owes_stop); a close owes nothing."""
+    with store.lock:
+        for r in store.cx.execute('SELECT Kind, Key FROM chatlog WHERE TaskId=? AND Parent IS NULL ORDER BY Id DESC', (int(tid),)):
+            if r['Kind'] in ('turn', 'line', 'arrival'): return ''
+            if r['Kind'] in ('press', 'note') and r['Key'][2:].isdigit():
+                a = store.cx.execute('SELECT Action FROM audit WHERE Id=?', (int(r['Key'][2:]),)).fetchone()
+                if a and a['Action'] in ENDS: return a['Action']
+    return ''
 
 
 def _now(tid: int, turn: dict) -> dict:

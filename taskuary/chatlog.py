@@ -338,7 +338,9 @@ def answered(store, tid: int, cid: int, actor: str, body: str, created: str) -> 
     # ...the turn at work, or one his stop or a failure ended that has not said its last words yet
     if t and (t['State'] in LIVE or t['State'] in ('failed', 'stopped') and not json.loads(t['Body'] or '{}').get('answer')):
         update(store, tid, t['Key'], state='failed' if fail or t['State'] == 'failed' else t['State'] if t['State'] == 'stopped' else 'done', **done)
-    else: put(store, tid, 'turn', f'a:c{cid}', {'started': _when(created), **done}, state='failed' if fail else 'done', src=f'comment:{cid}')
+    else:
+        opener(store, tid)                  # ...a task's first answer with no hand-over before it still opens on what started it
+        put(store, tid, 'turn', f'a:c{cid}', {'started': _when(created), **done}, state='failed' if fail else 'done', src=f'comment:{cid}')
     # ...an answer taken back before it was filed (conversation.take_back, `ahead`) is that turn's step from the moment it lands
     from .conversation import TOOK_BACK
     from .general import ASSISTANT_TYPE
@@ -884,9 +886,21 @@ def serve(store, tid: int, level: str = None) -> dict:
     left_note(store, tid, at_work)
     got = read(store, tid, level)
     out = got['items'] if at_work else [x for x in got['items'] if not (x['kind'] == 'turn' and x.get('state') in LIVE)]
+    closed(store, tid, out)
     if at_work and (lv := next((x for x in reversed(out) if x['kind'] == 'turn' and x.get('state') in LIVE), None)): lv.update(_now(tid, lv))
     body = {'items': out, 'level': got['level'], **beside(store, tid, out, at_work, hold_)}
     return {'rev': hashlib.sha1(json.dumps(body, default=str).encode()).hexdigest()[:16], **body}
+
+
+def closed(store, tid: int, out: list) -> None:
+    """HIS CLOSE IS ONE LINE WITH ITS NOTE (the recorded closed task, 2026-11-12: "You marked it done" and under it the page's own "Mark done
+    4m ago"): the press that closed the task, while it is closed, is marked `closes` - the page then draws no line of its own - and says the
+    note he closed it with."""
+    if (store.get_task(tid) or {}).get('Status') != 'done': return
+    a = store._one("SELECT Id FROM audit WHERE EntityType='task' AND EntityId=? AND Action='close_from_assistant' ORDER BY Id DESC LIMIT 1", (tid,))
+    if not a or not (x := next((x for x in out if x['id'] == f"p:{a['Id']}"), None)): return
+    x['closes'] = True
+    if (note := next((c['note'] for c in reversed(store.closeouts(tid)) if c['what'] == 'closed'), '')): x['text'] = f"{x['text'].rstrip('.')} - {note.rstrip('.')}."
 
 
 def _halted(store, tid: int) -> str:

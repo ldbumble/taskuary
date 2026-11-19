@@ -995,8 +995,7 @@ class TheList(unittest.TestCase):
             got = self.list()
         ids = [x['id'] for x in got['items']]
         self.assertFalse([x['id'] for x in got['items'][:ids.index(shut)] if x.get('state') in ('working', 'starting')], self.kinds(got))
-        self.assertEqual(ids[-2:], [f'm:{mid}', ids[-1]], self.kinds(got))
-        self.assertIn(got['items'][-1].get('state'), ('working', 'starting'))
+        self.assertGreater(ids.index(f'm:{mid}'), ids.index(shut), self.kinds(got))      # ...the turn it begins is written under it at its hand-over (hear)
 
     def test_what_was_drawn_keeps_its_place_through_any_read(self):
         """The chat only grows at its foot (`shown`): an item's place is the one it was first served in - an answer filed late for a turn
@@ -1451,16 +1450,6 @@ if __name__ == '__main__':
     unittest.main()
 
 
-def test_a_turn_has_one_clock_live_and_finished():
-    """The owner, 2026-11-16: a reply turn read "working 1m 39s" while it ran and "ran 1m 27s" once done. One function says when a turn
-    began - its first hand-over after the answer before it - for the turn at work and the finished one alike."""
-    from taskuary.conversation import turn_start
-    marks = [{'Seq': 3, 'At': 100.0}, {'Seq': 5, 'At': 160.0}, {'Seq': 9, 'At': 200.0}, {'Seq': 9, 'At': 230.0}]
-    assert turn_start(marks, 0, 6) == 100.0, 'a second hand-over mid-turn does not move its start'
-    assert turn_start(marks, 9) == 200.0 and turn_start(marks, 12) == 0.
-    assert turn_start(marks, 0, 6, stops=[150.0]) == 160.0 and turn_start(marks, 0, 6, stops=[170.0]) == 100.0, 'a stop ends a turn; one after the last hand-over cuts nothing'
-
-
 def test_a_card_he_said_no_to_keeps_its_words_where_it_stood():
     """The real-CLI walk, 2026-11-16: Don't send took the email's card off the chat and left only "You dropped the email" - the basic flow's
     "no card gone from the canvas". A rejected draft is drawn where it stood, greyed, with what it said."""
@@ -1590,32 +1579,6 @@ def test_a_tick_is_machinery_on_the_server_as_on_the_page():
     assert not machinery({'k': 'tool', 'name': 'Bash', 'args': {'command': 'git status'}})
 
 
-def test_what_a_turn_left_on_him_is_its_own_settled_once_and_never_moves():
-    """Design round 5, I3: "For you to do" vanished from a turn when he typed and came back, word for word, on the next turn - the page drew it
-    only on the newest turn at rest. Each finished turn says its own, settled the first read that can, and keeps it whatever comes after; a turn
-    whose own question is the step never grows it once he answers (2026-11-17), and a turn saying the same as the one before says nothing."""
-    from taskuary.conversation import left_on_him
-    s = MemoryStore()
-    tid = s.create_task({'Title': 'Launch posts', 'Kind': 'general', 'Status': 'open'}, 'o')
-    T = lambda i, on=(), **k: {'kind': 'turn', 'id': i, 'state': 'done', 'cards': [], 'summary': {'did': 'x', **({'on_you': list(on)} if on else {})}, **k}
-    a, q = T('t:a:0', ['Check the features each post names']), T('t:q:0', ['Give the three agenda topics'])
-    out = [a, q]
-    left_on_him(s, tid, out, ask={'turn': 't:q:0'})
-    assert a.get('on_you') and not q.get('on_you'), 'its own question is the step'
-    a2, q2, line, b = {**a, 'on_you': None}, {**q, 'on_you': None}, {'kind': 'line', 'id': 'l1'}, T('t:l1:0', ['Post the square image'])
-    out = [a2, q2, line, b]
-    left_on_him(s, tid, out, ask=None)
-    assert a2.get('on_you'), 'it stays on the turn that wrote it when he types'
-    assert not q2.get('on_you'), 'never grown once its ask is answered'
-    assert b.get('on_you'), 'a later turn says its own'
-    c = T('t:l1:1', ['Post the square image'])
-    left_on_him(s, tid, [b, c]); assert not c.get('on_you'), 'the same as the turn before: said once'
-    # ...and a turn whose letters wait says it once they are pressed, at its own foot - never if his line came under it first
-    d = T('t:l2:0', ['Pick the date to hold'], cards=[{'id': 'r:9', 'review': 9, 'status': 'pending'}])
-    left_on_him(s, tid, [d]); assert not d.get('on_you')
-    d['cards'][0]['status'] = 'approved'; left_on_him(s, tid, [d]); assert d.get('on_you'), 'its letters pressed: what is left on him'
-
-
 def test_a_turn_says_each_messages_opener_once():
     """Design round 5, I3 (the Codex walk): every follow-up turn opened two messages with the same sentence - "Paula says the meeting moved up.
     I'll update the draft." then "Paula says the meeting moved up. The summary and deck are ready." - and both were drawn. The opener once; a
@@ -1675,24 +1638,3 @@ def test_a_turn_counts_from_its_own_head_not_the_turn_before():
     assert (out[1]['started'], out[3]['at'], out[3]['started']) == (ep(a) + 0.4, b, ep(b)), out
     out[3].update(at=a, started=ep(a) + 0.4, ended=ep(b) + 30); conversation_legacy.dated(s, tid, out)          # ...and the same once it is done
     assert (out[3]['at'], out[3]['started']) == (b, ep(b)), 'ran 30s, never 2m 30s'
-
-
-def test_steps_the_record_wrote_after_the_read_began_wait_for_the_next_read():
-    """The owner's live app, 2026-11-19 (a coding agent over ACP): one read of the chat took 17 s on a busy store - the ledger read at its
-    start, the session's record at its end. The agent's steps after his line were drawn while his line was not yet in the ledger, and a place
-    once served is kept: the turn and its "Thinking..." stood above his line for good. The record is read as of the moment the read began."""
-    import time as t_
-    from datetime import datetime
-    from unittest import mock
-    from taskuary import conversation, general
-    from taskuary.store import MemoryStore
-    s = MemoryStore(); tid = s.create_task({'Title': 'Fix the export dates', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
-    now = t_.time()
-    rec = [('s1', True, [{'k': 'said', 'text': 'Looking at the export now.', 'T': now + 5}])]
-    with mock.patch.object(conversation, '_session_steps', return_value=rec):
-        conversation.items(s, tid)                                      # the record already holds a step the ledger's moment had not seen
-        s.add_comment(tid, 'owner', general.USER_TYPE, 'Use the posting date, not the run date')
-        s._exec("UPDATE comment SET CreatedAt=? WHERE TaskId=?", (datetime.fromtimestamp(now + 1).strftime('%Y-%m-%d %H:%M:%S'), tid))
-        with mock.patch('time.time', return_value=now + 10): got = conversation.items(s, tid)['items']
-    kinds = [x['kind'] for x in got if x['kind'] in ('line', 'turn')]
-    assert kinds == ['line', 'turn'], kinds

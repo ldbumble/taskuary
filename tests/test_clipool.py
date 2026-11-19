@@ -192,3 +192,26 @@ def test_words_the_cli_queued_as_their_own_turn_are_read_to_the_end(cli):
     t.join(20)
     assert got['said'].split('\n\n')[0] == 'queued' and got['said'].endswith(':and the refunds')
     assert ask(cli, 'chat:1', 'next', resume=got['sid'])['said'] == 'next'
+
+
+def test_a_general_agent_over_acp_hears_his_line_at_its_next_step():
+    """Design round 3, 2026-11-18 (Codex as the general agent): "sign up yourself" sat unheard 13 minutes behind a 15-minute turn - a kept ACP
+    conversation is not a claude process, so nothing could steer it. An ACP agent that steers (`_session/steering`) takes his words into the
+    turn at work; one that does not keeps them for the next turn, and its road says so (takes_words)."""
+    class Client:
+        def __init__(self, steers): self.steers, self.got = steers, []
+        def can_steer(self): return self.steers
+        def steer(self, text): self.got.append(text); return 'injected'
+    class Conv:
+        def __init__(self, steers): self.client, self.lock = Client(steers), threading.Lock()
+        def alive(self): return True
+        def close(self): pass
+    for key, steers in (('general:71', True), ('general:72', False)):
+        conv = Conv(steers); clipool._POOL[key] = conv
+        try:
+            assert not clipool.steerable(key), 'at rest a line is a turn of its own'
+            with conv.lock:
+                assert clipool.steerable(key) is steers and clipool.takes_words(key) is steers
+                assert clipool.steer(key, lambda: 'sign up yourself') is steers
+            assert conv.client.got == (['sign up yourself'] if steers else [])
+        finally: clipool._POOL.pop(key, None)

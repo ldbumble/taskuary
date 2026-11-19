@@ -2708,6 +2708,10 @@ class GeneralSession:
         self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}, 'at': t0},      # `at`: a cut turn's files are its own (keep_cut_turns)
                       *([{'type': 'opening', 'name': self.pick, 'detail': ''}] if self.cold() else [])]
         self.trace_revision += 1
+    def hears_mid_turn(self) -> bool:
+        "Does this agent's road take his words while a turn works (clipool.takes_words) - where it does not, his waiting line says so."
+        from . import clipool
+        return clipool.takes_words(self.keep())
     # A LINE SENT WHILE A TURN WORKS GOES INTO THAT TURN (2026-11-17): it waited for the turn's end, so the agent finished on old facts and then did
     # the whole job again from the new ones. Claude's stream-json input takes a further message mid-turn, as the ACP road steers (acpcoding.steerable);
     # where the CLI cannot (an API card, a turn not reading yet, one he stopped), the line waits for the next turn as before
@@ -3212,7 +3216,8 @@ class GeneralSession:
                 nonlocal looped, system
                 if looped:
                     try: return str(apiagent.turn(brain, self.store, self.task_id, self.sid, for_toolbox(system, api_box), user, limit,
-                                                  trace=visible, cancel=cancel, images=_images(paths), tools=api_tools, history=self.card_msgs) or '').strip()
+                                                  trace=visible, cancel=cancel, images=_images(paths), tools=api_tools, history=self.card_msgs,
+                                                  ear=self.keep()) or '').strip()
                     except apiagent.ToolsRefused as e:
                         logger.info(f'task {self.task_id}: {self.provider} took no tools - asked the plain way ({str(e)[:160]})')
                         looped, system = False, f"{system.replace(apiagent.BRIEF, '').replace(toolbox, '')}\n\n{apiagent.no_tools_line()}"

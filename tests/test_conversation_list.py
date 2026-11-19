@@ -802,6 +802,19 @@ class TheList(unittest.TestCase):
         self.assertEqual([(c['review'], c['status']) for c in got[-1]['cards']], [(rid2, 'pending')])
         self.assertEqual([x['kind'] for x in got][-4:], ['turn', 'arrival', 'line', 'turn'])
 
+    def test_a_line_that_cannot_reach_the_turn_at_work_says_so(self):
+        """Design round 3, 2026-11-18: his line sat 13 minutes behind a long turn and nothing said why. On a road that takes no words mid-turn (a
+        model asked the plain way, no loop of its own to hear him in) his waiting line says so, once; on a road that does, nothing is said."""
+        self.brain.delay = 1.0
+        self.say('Suggest two.', 'l-one', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.assertEqual(self.list()['later'], '', 'nothing waits')
+        self.say('Near a station.', 'l-two', wait=False)
+        self.assertEqual(self.list()['later'], conversation.LATER)
+        with mock.patch.object(general.GeneralSession, 'hears_mid_turn', return_value=True): self.assertEqual(self.list()['later'], '')
+        self.brain.delay = 0; self.rest()
+        self.assertEqual(self.list()['later'], '')
+
     def test_what_waits_is_in_one_place_and_a_line_he_takes_back_never_reaches_the_agent(self):
         """The waiting room (the owner, 2026-11-12: "make sure ... it comes off the waiting room correctly. it does not show in 2 places"):
         mid-turn his lines, a sender's mail and his own outside reply all wait by the box - never on the canvas too - and land on it once,

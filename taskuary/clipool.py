@@ -179,16 +179,65 @@ def _reap():
     while True: time.sleep(60); _sweep()
 
 
+# HIS LINE REACHES THE AGENT AT ITS NEXT STEP ON EVERY ROAD THAT CAN TAKE IT (design round 3, 2026-11-18: "sign up yourself" sat unheard 13
+# minutes behind a 15-minute turn on Codex): claude's stream-json input (Live.steer), an ACP agent that steers (`_session/steering`: claude-agent-
+# acp and codex-acp both say so at initialize), and an API card's own loop, which reads what was said to it between its tool calls (`ear`)
+_EARS: dict[str, list] = {}
+
+
+def _acp_turn(lv) -> bool:
+    "A kept ACP conversation (acp.Conversation) with a turn on it, whose agent takes words mid-turn."
+    c = getattr(lv, 'client', None)
+    return c is not None and lv.lock.locked() and lv.alive() and bool(getattr(c, 'can_steer', lambda: False)())
+
+
+def takes_words(key: str) -> bool:
+    "Can this conversation's road take his words in the middle of a turn at all - a fact of the road, not of this instant (the waiting line says so)."
+    with _LOCK: lv, ear = _POOL.get(key), key in _EARS
+    return ear or isinstance(lv, Live) or bool(getattr(getattr(lv, 'client', None), 'can_steer', lambda: False)())
+
+
 def steerable(key: str) -> bool:
-    "Is a turn at work on this conversation's live process, so words written now go into it (Live.steer)?"
-    with _LOCK: lv = _POOL.get(key)
-    return isinstance(lv, Live) and lv.on and lv.alive()
+    "Is a turn at work on this conversation that takes words written now (Live.steer, an ACP steer, an API loop's ear)?"
+    with _LOCK: lv, ear = _POOL.get(key), key in _EARS
+    return ear or (isinstance(lv, Live) and lv.on and lv.alive()) or _acp_turn(lv)
 
 
 def steer(key: str, said) -> bool:
-    "Words into the turn at work on this conversation (Live.steer): False where none is - they wait for the next turn."
-    with _LOCK: lv = _POOL.get(key)
-    return isinstance(lv, Live) and lv.steer(said)
+    """Words into the turn at work on this conversation: False where none is - they wait for the next turn. `said`: the text, or what makes it
+    (it takes his kept lines) - made only once it can go in: an API loop makes it at its next step, so one it never reaches stays kept."""
+    with _LOCK:
+        lv = _POOL.get(key)
+        if (ear := _EARS.get(key)) is not None: ear.append(said); return True
+    if isinstance(lv, Live): return lv.steer(said)
+    if not _acp_turn(lv): return False
+    text = said() if callable(said) else said
+    if not text: return True
+    # ...(a turn that ended between the look and the request takes nothing: what was said is logged, as Live's write that did not go in is)
+    try: got = lv.client.steer(text)
+    except Exception as e: got = str(e)
+    if got != 'injected': logger.warning(f'clipool: {key} - words for the turn at work did not go in ({got or "no answer"}): {text[:200]}')
+    return True
+
+
+def ear(key: str):
+    "An API turn at work opens its ear (apiagent.turn): what is steered to its conversation waits here for its next step."
+    with _LOCK: _EARS[key] = []
+
+
+def heard(key: str, last: bool = False) -> str:
+    """What was said to the turn since its last step, made now (his kept lines taken as it goes in). `last`: the turn is about to answer - with
+    nothing waiting its ear closes in the same step, so a word steered after is the next turn's, never lost between."""
+    with _LOCK:
+        got = list(_EARS.get(key) or [])
+        if key in _EARS: _EARS[key].clear()
+        if last and not got: _EARS.pop(key, None)
+    return '\n\n'.join(t for t in ((f() if callable(f) else f) for f in got) if t)
+
+
+def deaf(key: str):
+    "The turn is over, however it ended: its ear closes; what never went in is still kept, the next turn's."
+    with _LOCK: _EARS.pop(key, None)
 
 
 def is_live(key: str) -> bool:

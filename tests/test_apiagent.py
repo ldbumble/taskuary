@@ -53,6 +53,28 @@ class OneRoundTripTests(unittest.TestCase):
         self.assertEqual(heard[1][-1], {'role': 'tool', 'tool_call_id': 'c1', 'content': 'PAGE https://portal.example/\n- button "Denials" [ref=e3]'})
         self.assertEqual([e[0] for e in trace], ['tool_call', 'tool_result'])
 
+    def test_his_line_sent_while_it_works_reaches_it_at_its_next_step(self):
+        """Design round 3, 2026-11-18: "sign up yourself" waited 13 minutes behind a long turn. An API card's turn hears what was steered to its
+        conversation (clipool.ear) between its tool calls, as his next message - made only as it goes in - and a line steered as it answers is
+        answered in the same turn; once the turn is over nothing more is taken."""
+        from taskuary import clipool
+        steps = iter([{'tool_calls': [{'id': 'c1', 'function': {'name': 'browser_open', 'arguments': '{"url": "vendor.example"}'}}]},
+                      {'content': 'Opened it.'}, {'content': 'Signing up myself, then.'}])
+        heard, made = [], []
+        class Brain:
+            def chat(self, msgs, tools, max_tokens, **kw):
+                heard.append([dict(m) for m in msgs])
+                if len(heard) == 2: assert clipool.steer('general:5', lambda: made.append(1) or 'THE OWNER SAYS: sign up yourself')
+                return next(steps)
+        def tool(*a):
+            assert clipool.steerable('general:5'); return 'PAGE vendor.example'
+        with mock.patch.object(apiagent, 'run_tool', side_effect=tool):
+            said = apiagent.turn(Brain(), MemoryStore(), 1, 's', 'sys', 'list the vendors', 500, ear='general:5')
+        self.assertEqual(said, 'Signing up myself, then.')
+        self.assertEqual(heard[2][-2:], [{'role': 'assistant', 'content': 'Opened it.'}, {'role': 'user', 'content': 'THE OWNER SAYS: sign up yourself'}])
+        self.assertEqual(made, [1])
+        self.assertFalse(clipool.steerable('general:5'), "over: a line is the next turn's")
+
     def test_a_failed_tool_is_told_to_the_model_not_raised(self):
         steps = iter([{'tool_calls': [{'id': 'c1', 'function': {'name': 'browser_click', 'arguments': '{"ref": "@e9"}'}}]},
                       {'content': 'The button was gone.'}])

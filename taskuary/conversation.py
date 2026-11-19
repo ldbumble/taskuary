@@ -188,6 +188,8 @@ def unheard(store, tid: int) -> set:
 
 
 START_BY_WRITING = 'Write to the agent below and it starts.'
+# ...AND A LINE THAT CANNOT REACH THE TURN AT WORK SAYS SO (design round 3, 2026-11-18: "sign up yourself" sat 13 minutes behind a turn, unsaid)
+LATER = 'This agent takes no words while it works - it reads this when its turn ends.'
 TOOK_BACK = 'Asked for the sign-in details, then took that back: a sign-in is done on the page, never in the chat.'
 def take_back(store, tid: int, said: str = None, why: str = '', since: float = 0., ahead: bool = False) -> None:
     """AN ANSWER THAT WAS ONLY A STEP ON THE WAY IS A STEP OF THE WORK, NEVER AN ANSWER (the recorded sign-in walks, 2026-11-11): one its agent
@@ -1024,6 +1026,7 @@ def _items(store, tid: int) -> dict:
     # session that takes words mid-turn, not stopped at his Allow); `dropped`: the lines he took back, which leave no trace
     live_ = codingchat._live(tid)
     now = bool(at_work and pend and not perms and live_ is not None and getattr(live_, 'steerable', lambda: False)())
+    later = LATER if at_work and any(p['kind'] == 'line' for p in pend) and not getattr(general._live_of(tid), 'hears_mid_turn', lambda: True)() else ''
     dropped = [json.loads(r['Detail'] or '{}').get('line') for r in store._rows("SELECT Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action='line_dropped'", (tid,))]
     # A START THAT DID NOT HAPPEN SAYS WHY, WHERE HE LOOKS (the owner's rule 4; recorded on the real CLI, 2026-11-15: the switch off, the task
     # read "waiting to start" over a chat that held only the mail). The reason was written on the task (ingest.not_started) and drawn nowhere:
@@ -1039,7 +1042,7 @@ def _items(store, tid: int) -> dict:
     if (task_.get('Source') == 'report') and (first := next((x for x in out if x['kind'] == 'line'), None)):
         m = next(iter(store.list_messages(tid)), None) or {}
         if (name := str(m.get('SourceName') or m.get('Subject') or '').strip()): first['came'] = name
-    body = {'items': out, 'pending': pend, 'now': now, 'dropped': [d for d in dropped if d], 'working': at_work, 'started': t0 if at_work else None, 'asking': ask,
+    body = {'items': out, 'pending': pend, 'now': now, 'later': later, 'dropped': [d for d in dropped if d], 'working': at_work, 'started': t0 if at_work else None, 'asking': ask,
             'permissions': perms, 'live': codingchat.live_of(codingchat._live(tid)),
             'letters': letters, 'idle': idle,
             # ...and the line of cards (cardqueue): which one stands, which wait behind it unseen, and what the one standing says of them

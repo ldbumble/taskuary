@@ -640,15 +640,16 @@ def _settle(msgs: list):
 
 
 def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: int, trace=None, cancel=None, tools=None,
-         steps: int = None, images=None, history: list = None) -> str:
+         steps: int = None, images=None, history: list = None, ear: str = None) -> str:
     """One turn of an API brain with tools: call, run, answer back, until it answers in words. `trace(kind, name, detail)` sees each
     step as a CLI's do (tool_call / tool_result), so the pane and the chat draw them the same - a `show` among them as its pictures.
 
     `history` IS THE CARD'S OWN CONVERSATION (the spine audit, 2026-11-09), kept by its session as a CLI keeps its own: the turn opens on
     it and leaves this turn in it - what it called, what came back, what it said, and what a stopped turn had done. Every turn used to
     be one system and one user message, so whatever the agent had read with its tools was gone by the owner's next line - only its own
-    last answer came back, as chat text - and it opened the same pages and files again. Kept under BUDGET (_fit)."""
-    from . import llm
+    last answer came back, as chat text - and it opened the same pages and files again. Kept under BUDGET (_fit).
+    `ear`: its conversation's key - what the owner says while it works reaches it at its next step (clipool.ear)."""
+    from . import clipool, llm
     tools = list(tools) if tools is not None else [*BROWSER, SHOW]
     BRAINS[(tid, sid)] = brain
     if trace: SAY[(tid, sid)] = lambda s: trace('progress', 'browser', s)
@@ -662,6 +663,12 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
     reads = {*READS.get((tid, sid), ()), *(t['function']['name'] for t in FILES)}
     budget, idle_n = _setting(store, 'agent_request_chars', REQUEST_CHARS), _setting(store, 'agent_idle_steps', IDLE_STEPS)
     stopped = lambda: cancel is not None and cancel.is_set()
+    # ...HIS WORDS MID-TURN, AT ITS NEXT STEP (design round 3): between its tool calls, as his next message - never held to the turn's end
+    if ear: clipool.ear(ear)
+    def hears(last=False, m=None):
+        if not ear or not (w := clipool.heard(ear, last)): return False
+        if m is not None and (t := said(m)) and trace: trace('progress', 'agent', t)      # ...the answer it was writing, a step of the turn
+        msgs.append({'role': 'user', 'content': w}); return True
     def said(m):
         text = llm.said_text(m)
         if text: msgs.append({'role': 'assistant', 'content': text})
@@ -682,6 +689,8 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
                 raise
             begun = True
             calls = m.get('tool_calls') or []
+            # ...and words he sent while it wrote its answer are answered in this turn: its answer is a step, and it goes on from them
+            if not calls and hears(True, m): continue
             if not calls: return said(m)
             msgs.append({'role': 'assistant', **{k: v for k, v in m.items() if v is not None}})          # as sent: a Gemini model's thought signature rides on it
             new = False
@@ -711,6 +720,7 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
                 # with other words, or a page that failed again, is not working - a line no earlier answer of this turn held is
                 lines = {' '.join(l.split()) for l in str(out).splitlines() if l.strip()} if not err else set()
                 new, read = new or bool(lines - read), read | lines
+            if hears(): new = True
             idle = 0 if new else idle + 1
             if idle >= idle_n:
                 why = f'Your last {idle} steps brought nothing you had not read already.'
@@ -726,3 +736,4 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
         if history is not None and begun: mine['content'] = user; _settle(msgs); history[:] = msgs[1:]
         # ...and what was this TURN's goes with it - its brain, its Stop switch, its way to say a step: a step still under way has read its own
         for d in (SAY, STOPS, BRAINS): d.pop((tid, sid), None)
+        if ear: clipool.deaf(ear)

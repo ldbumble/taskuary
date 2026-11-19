@@ -570,9 +570,11 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next = null
    slim row each on his side - the newest two, "+N more" over them - with Send now where the turn takes words mid-turn (the list's `now`) and a
    trash that takes it back. What came in waits as a count on its sender's chip (waitingChips), never a row here. Each in one place: here
    until the agent hears it, then in the chat where it heard it. */
-const PendingStrip = ({ items, now = false, onRetry = null, onDrop = null, onNow = null }) => {
+const PendingStrip = ({ items, now = false, later = "", onRetry = null, onDrop = null, onNow = null }) => {
   const rows = items.filter((x) => x.kind !== "arrival"), shown = waitingShown(rows, 2), more = rows.length - shown.length;
   return !rows.length ? null : <div className="tq-conv-pending" data-tq-pending="" role="status" aria-label="Waiting for the agent">
+  {/* ...and where this agent's road takes no words mid-turn, it says so once, over his lines (the list's `later`, conversation.LATER) */}
+  {!!later && <div className="tq-conv-pending-more" data-tq-pending-later="">{later}</div>}
   {more > 0 && <div className="tq-conv-pending-more" data-tq-pending-more="" data-tq-pending-ids={rows.filter((x) => !shown.includes(x)).map((x) => x.id).join(" ")}>+{more} more</div>}
   {shown.map((x) => <div key={x.id} className="tq-conv-pending-row" data-tq-pending-item={x.id} dir="auto" title={[x.text || x.words, ...(x.files || []).map(fileName)].filter(Boolean).join(" · ")}>
     {/* ...WITH A PILL FOR EACH FILE HE SENT WITH IT, as his heard line has (the attach stress round, 2026-11-18): waiting here it drew its words
@@ -732,7 +734,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
             {/* HIS LINE THAT WAITS IS PINNED JUST OVER THE BOX until the agent takes it, then it lands in the chat where it was heard (the owner,
                 2026-11-15: under the turn at work it went down the screen for as long as that turn wrote - a minute, on a terminal). It keeps its
                 place whatever the turn does: a little room between it and the box, each line in its own border. Every kind of agent, one strip */}
-            <PendingStrip items={merged.pending} now={!!list?.now} onRetry={retry} onDrop={dropLine} onNow={sendNow} />
+            <PendingStrip items={merged.pending} now={!!list?.now} later={list?.later || ""} onRetry={retry} onDrop={dropLine} onNow={sendNow} />
             {/* NO AI: one small line over the box, its Connect an AI beside it (the owner, 2026-11-06) - the box stays the box */}
             {noAi}
             {/* ONE DOOR: while the conversation is open the box is how it goes on, but once a coding run has ENDED on a closed task the bar

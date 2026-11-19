@@ -343,6 +343,10 @@ class ACPCoding:
         if (lines or how) and self.store and self.task_id: general.take_kept(self.store, self.task_id, lines, **how)
         return lines
 
+    def hears_mid_turn(self) -> bool:
+        "Does its adapter take words mid-turn at all (acp.can_steer) - where it does not, his waiting line says so (conversation.LATER)."
+        return bool(self.client and self.client.can_steer())
+
     def steerable(self) -> bool:
         "Does a prompt now go into the running turn: a turn on, and an adapter that said at initialize it takes words mid-turn (acp.can_steer)."
         return bool(self.alive and self.in_turn and self.client and self.client.can_steer())

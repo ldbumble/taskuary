@@ -282,8 +282,9 @@ async def _relay(ws, sid: str, url: str):
                         continue
                     # ...an ack is not input: the page's ack of the frame it drew just before the fill still goes, or the stream stalls on it
                     if sid not in FILLING or _ACK.search(m): await up.send(m)
-            tasks = [asyncio.create_task(down()), asyncio.create_task(back())]
+            tasks = [asyncio.create_task(down()), asyncio.create_task(back()), asyncio.create_task(asyncio.to_thread(follow, sid, stop := threading.Event()))]
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            stop.set()
             for t in pending: t.cancel()
             for t in done:
                 exc = t.exception()
@@ -291,6 +292,68 @@ async def _relay(ws, sid: str, url: str):
                     logger.debug(f'browser relay {sid} ended: {exc!r}')
     except (OSError, websockets.WebSocketException) as e:
         logger.debug(f'browser relay {sid} could not attach to {url}: {e}')
+
+
+# A WINDOW THE PAGE OPENS IS FOLLOWED (the owner, live 2026-11-19: "Continue with Google" on a site's sign-in did nothing he could see). A
+# sign-in with Google, a payment's 3-D Secure, a "share" button open a popup - a target of its own the screencast never showed, so the press
+# looked dead while the window waited off screen. While a view is open, a page target that appears is switched to - the pane shows it, and it is
+# a tab in its strip - and once it closes the view goes back to the tab it came from. A step he is typing a sign-in into is never moved
+FOLLOW_EVERY = 1.0
+def pages(sid: str) -> list:
+    "Session `sid`'s page targets as its own Chrome lists them - [] when it does not answer."
+    return [t for t in _devtools(sid, '/json/list') or [] if t.get('type') == 'page']
+
+
+def follow(sid: str, stop, every: float = FOLLOW_EVERY, switch=None) -> None:
+    "Follow each window session `sid`'s page opens, and come back when it closes, until `stop` is set. `switch`: the tab switch (tests)."
+    switch = switch or switch_tab
+    with _START_LOCKS_GUARD:                                # ...one follower a session, however many views watch it
+        if sid in _FOLLOWING: return
+        _FOLLOWING.add(sid)
+    try: _follow(sid, stop, every, switch)
+    except Exception as e: logger.debug(f'browser {sid}: stopped following its windows - {e}')      # never ends the view it rides on
+    finally: _FOLLOWING.discard(sid)
+
+
+_FOLLOWING = set()
+def _follow(sid, stop, every, switch) -> None:
+    known, came_from = {t['id'] for t in pages(sid)}, ''
+    while not stop.wait(every):
+        ts = pages(sid)
+        if not ts: continue
+        ids = {t['id'] for t in ts}
+        new = [t for t in ts if t['id'] not in known]
+        if new and sid not in FILLING:
+            came_from = came_from or active_tab(sid)
+            if switch(sid, new[-1]['id']): logger.info(f'browser {sid}: the page opened a window - the view follows it')
+            refused(sid, new[-1].get('url'))
+        elif came_from and active_tab(sid) not in ids and came_from in ids and sid not in FILLING:
+            switch(sid, came_from); came_from = ''                     # ...its window closed: back where it came from
+        for t in ts:
+            if t['id'] in known: refused(sid, t.get('url'))
+        known = ids
+
+
+# ...AND A SIGN-IN GOOGLE WILL NOT DO HERE IS SAID, WITH THE WAY PAST IT: Google turns down a browser it reads as automated ("This browser or
+# app may not be secure"), on a page of its own address (/signin/rejected) - read off that address, never its words. Said once per session
+_REFUSED_AT = re.compile(r'^https://accounts\.google\.com/(?:v\d/)?signin/rejected', re.I)
+_SAID_REFUSED = set()
+REFUSED_WHAT = ("Google won't sign in inside this browser. Sign in to the site with its own email and password instead - or use "
+                "Fill it in securely if your sign-in for it is saved")
+def refused(sid: str, url) -> bool:
+    "Say it to the owner and the agent when `url` is Google's own refusal of this browser; True when it was."
+    if not _REFUSED_AT.match(str(url or '')) or sid in _SAID_REFUSED: return False
+    _SAID_REFUSED.add(sid)
+    try:
+        from . import server, terminal as hub_term
+        t = hub_term.get(sid)
+        if t and getattr(t, 'task_id', None):
+            from .browsergate import _tell
+            your_turn(server.store, t.task_id, sid, what=REFUSED_WHAT)
+            _tell(server.store, t.task_id, "Google refused to sign in inside this browser (its page says the browser may not be secure). Use the "
+                                           "site's own email-and-password sign-in, or a saved sign-in; never try Google's sign-in again here.")
+    except Exception as e: logger.warning(f'browser {sid}: Google refused its sign-in and it was not said - {e}')
+    return True
 
 
 # SEVERAL SITES ARE TABS OF THE TASK'S ONE BROWSER (the owner, 2026-11-15: "you can open multiple sites on same window with tabs"). The view
@@ -815,13 +878,21 @@ def cdp_port(sid: str) -> int:
         return _PORTS[str(sid)]
 
 def chrome_exe() -> str:
-    "The Chrome a session runs: the owner's AGENT_BROWSER_EXECUTABLE_PATH, else the newest one agent-browser installed; '' when none."
+    """The Chrome a session runs: the owner's AGENT_BROWSER_EXECUTABLE_PATH, else the Google Chrome installed on this computer, else the newest
+    one agent-browser installed; '' when none. ...THE INSTALLED ONE BEFORE agent-browser's "Chrome for Testing" (the owner, live 2026-11-19: "Continue
+    with Google" went nowhere): Google turns a sign-in down in that build, and an ordinary Chrome is what sites expect - run with a profile of its
+    own, never the owner's"""
     own = os.environ.get('AGENT_BROWSER_EXECUTABLE_PATH') or ''
     if own and os.path.isfile(own): return own
+    if (mine := installed_chrome()): return mine
     names = {'chrome.exe', 'chrome', 'Google Chrome for Testing'}
     for d in sorted((home() / 'browsers').glob('chrome-*'), key=lambda p: [int(x) for x in re.findall(r'\d+', p.name)] or [0], reverse=True):
         if (f := next((p for p in d.rglob('*') if p.name in names and p.is_file()), None)): return str(f)
-    # ...else a Chrome installed on this computer, as agent-browser itself falls back to one - run with a profile of its own, never the owner's
+    return ''
+
+
+def installed_chrome() -> str:
+    "A Chrome installed on this computer ('' when none)."
     roots = [os.environ.get(k) for k in ('LOCALAPPDATA', 'PROGRAMFILES', 'PROGRAMFILES(X86)')]
     known = [os.path.join(r, 'Google', 'Chrome', 'Application', 'chrome.exe') for r in roots if r] +             ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'] + [shutil.which(n) or '' for n in ('google-chrome', 'chromium', 'chromium-browser')]
     return next((k for k in known if k and os.path.isfile(k)), '')

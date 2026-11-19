@@ -4,6 +4,7 @@ frame on the task. A fake screencast server stands in for agent-browser - no Chr
 import pytest
 import asyncio, base64, json, os, socket, sys, threading, time, unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 from fastapi.testclient import TestClient
 from taskuary import browserview as bv, server, terminal
@@ -96,7 +97,7 @@ class StateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'AGENT_BROWSER_HOME': d}):
             (Path(d) / 'browsers' / 'chrome-152.0.7977.64').mkdir(parents=True); exe = Path(d) / 'browsers' / 'chrome-152.0.7977.64' / 'chrome.exe'
             exe.write_text('')
-            self.assertEqual(bv.chrome_exe(), str(exe))
+            with mock.patch.object(bv, 'installed_chrome', return_value=''): self.assertEqual(bv.chrome_exe(), str(exe))
             e = bv.env('rc1'); port = bv.cdp_port('rc1')
             self.assertEqual(e['AGENT_BROWSER_CDP'], str(port)); self.assertNotIn('AGENT_BROWSER_USER_AGENT', e)
             self.assertEqual(bv.env('rc1')['AGENT_BROWSER_CDP'], str(port), 'one port per session, whoever asks')
@@ -533,3 +534,31 @@ class TheAddressIsTheTabsOwnTests(unittest.TestCase):
     def test_a_chrome_that_does_not_answer_leaves_the_file_as_before(self):
         self.tabs = None
         self.assertEqual(bv.state('t1', fresh=True)['url'], 'https://portal.example/runs')
+
+
+
+# A WINDOW THE PAGE OPENS IS FOLLOWED (the owner, live 2026-11-19: "Continue with Google" on a site's sign-in did nothing he could see)
+def _run_follow(sid, lists, switched, active='A'):
+    import threading
+    seq, stop = iter(lists), threading.Event()
+    def pages(_):
+        try: return next(seq)
+        except StopIteration: stop.set(); return []
+    with mock.patch.object(bv, 'pages', side_effect=pages), mock.patch.object(bv, 'active_tab', side_effect=lambda _: switched[-1] if switched else active),             mock.patch.object(bv, 'refused', return_value=False):
+        bv.follow(sid, stop, every=0, switch=lambda s, t: switched.append(t) or True)
+
+
+def test_a_popup_the_page_opens_is_shown_and_the_view_comes_back_when_it_closes():
+    A, G = {'id': 'A', 'url': 'https://x.example/login'}, {'id': 'G', 'url': 'https://accounts.google.example/o/oauth2'}
+    switched = []
+    _run_follow('fw1', [[A], [A], [A, G], [A, G], [A]], switched)
+    assert switched == ['G', 'A']                      # to the popup, then back where it came from
+
+
+def test_google_s_own_refusal_page_is_said_with_the_way_past_it():
+    told = []
+    with mock.patch('taskuary.terminal.get', return_value=SimpleNamespace(task_id=7)),             mock.patch.object(bv, 'your_turn', side_effect=lambda st, tid, sid, what='': told.append(what)), mock.patch('taskuary.browsergate._tell'):
+        assert bv.refused('fw2', 'https://accounts.google.com/v3/signin/rejected?continue=x')
+        assert not bv.refused('fw2', 'https://accounts.google.com/v3/signin/rejected')          # once a session
+        assert not bv.refused('fw3', 'https://accounts.google.com/v3/signin/identifier')
+    assert told == [bv.REFUSED_WHAT] and 'email and password' in told[0]

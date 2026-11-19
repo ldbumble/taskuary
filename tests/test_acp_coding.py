@@ -685,6 +685,29 @@ def test_a_waiting_card_never_moves_under_a_turn_that_only_stopped_at_his_allow(
     assert not turns[-2]['cards'] and not turns[-1]['cards']
 
 
+def test_the_work_after_his_allow_never_counts_from_before_his_press(world, monkeypatch):
+    """The owner's live app, 2026-11-18 (a coding task, a push held for his Allow mid-turn): the turn ran, he allowed the push minutes later, and
+    under his answered card a new head read "AGENT · <the turn's start> · working 15m" - the work after his press stamped with the turn's start,
+    from before both the turn above and the press. What works after a press counts from it: never an earlier clock, in any read."""
+    from taskuary import conversation
+    s, tid, repo = world
+    monkeypatch.setenv('FAKE_ACP_ASK', 'git push origin main'); monkeypatch.setattr(shellgate, 'trusted', lambda *a, **k: '')
+    monkeypatch.setenv('FAKE_ACP_AFTER', '3')
+    t = open_(s, tid, repo, seed=''); assert until(lambda: t.client and not t.busy)
+    general.take_line(s, tid, 'Push it.', line_id='l-one')
+    assert until(lambda: permissions.pending(tid, s))
+    assert until(lambda: time.time() >= (t.turn_at or time.time()) + 2.5)       # ...he presses a while after the turn began
+    pressed = time.time()
+    permissions.answer(s, tid, permissions.pending(tid, s)[0]['id'], 'allow_once')
+    bad = []
+    while t.busy or t.turns < 1:
+        got = conversation.items(s, tid)['items']; i = max((k for k, x in enumerate(got) if x.get('perm')), default=-1)
+        bad += [(x['state'], round(pressed - x['started'], 1)) for x in got[i + 1:] if x['kind'] == 'turn' and x.get('started') and x['started'] < pressed - 1.01]
+        time.sleep(0.05)
+    assert idle(t, 1)
+    assert not bad, f'work under his press counted from before it (seconds early): {bad[:5]}'
+
+
 def test_a_coding_chat_reads_in_the_same_order_once_its_session_has_closed(world, monkeypatch):
     """Recorded on the real CLI, 2026-11-12 (Send and close on a coding task, then the task opened again): his two lines stood first, then
     the reply card by itself, then both turns - every step of the closed session stamped at the moment its transcript was filed, which is

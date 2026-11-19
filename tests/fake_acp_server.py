@@ -13,6 +13,7 @@ Set in its environment, for the tests that need more:
   FAKE_ACP_RESUME=1      it offers session/resume (no replay) beside session/load
   FAKE_ACP_GONE=1        it no longer has the session it is asked to reopen, as the CLI after its own cleanup says
   FAKE_ACP_ASK=<command> the permission it asks for is to run that shell command (kind execute)
+  FAKE_ACP_AFTER=<secs>  the turn works on that long after his answer to its permission
   FAKE_ACP_CODE=<file>   a coding turn: a plan, an edit of that file asked for (kind edit, its location) and, once allowed, made -
                          a comment line on top, sent back as a diff - then `git status` run, its output streamed as terminal deltas
   FAKE_ACP_HANG=1        a turn that only ends when it is cancelled (session/cancel) - or steered
@@ -96,10 +97,14 @@ for line in sys.stdin:
             granted = ((msg.get('result') or {}).get('outcome') or {}).get('outcome') == 'selected' and \
                 'reject' not in str(((msg.get('result') or {}).get('outcome') or {}).get('optionId'))
             if os.environ.get('FAKE_ACP_CODE'): code_done(granted)
-            else:
-                update('tool_call_update', toolCallId=f'call_{STARTS}', status='completed' if granted else 'failed')
-                update('agent_message_chunk', content={'type': 'text', 'text': ('granted' if granted else 'denied') + f' - {_heard}'})
-            reply(_prompt_id, ended())
+            else: update('tool_call_update', toolCallId=f'call_{STARTS}', status='completed' if granted else 'failed')
+            def done_(pid=_prompt_id, granted=granted):
+                # ...FAKE_ACP_AFTER=<secs>: the turn works on that long after his answer, as a real agent goes on from an allowed step
+                __import__('time').sleep(float(os.environ.get('FAKE_ACP_AFTER') or 0))
+                if not os.environ.get('FAKE_ACP_CODE'): update('agent_message_chunk', content={'type': 'text', 'text': ('granted' if granted else 'denied') + f' - {_heard}'})
+                reply(pid, ended())
+            if os.environ.get('FAKE_ACP_AFTER'): __import__('threading').Thread(target=done_, daemon=True).start()
+            else: done_()
             _prompt_id = None
         continue
 

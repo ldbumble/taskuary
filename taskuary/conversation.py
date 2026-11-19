@@ -737,6 +737,9 @@ def _items(store, tid: int) -> dict:
     # ...A TURN NOT YET HANDED OVER IS THE SAME TURN (the walks, 2026-11-17): its clock and stamp the ones it keeps once at work - the first
     # thing heard from the press that began it (`starts`) - and opening where the turn at work will be (general.cold)
     begun, opens = min((r['At'] for r in starts if t0 and r['At'] >= t0), default=0.), ({'opening': True} if general.cold(tid) else {})
+    # ...AND WHAT WORKS UNDER HIS ANSWER TO A STEP COUNTS FROM IT (the owner's live app, 2026-11-18: allowed a push at 9:00 in a turn begun at
+    # 8:45, the work after it read "AGENT · 8:45 PM · working 15m" under his card): never a clock from before the press it stands under
+    floor = lambda upto: max((x.get('_h') or ep(x.get('at')) for x in out[:upto] if x.get('perm')), default=0.)
     if at_work and not mine and unfiled: pass
     elif at_work and not mine:
         if tail and tail.get('perm') and turns_ and turns_[-1]['state'] in LIVE:
@@ -749,8 +752,10 @@ def _items(store, tid: int) -> dict:
             if took: out += took; pend = [p for p in pend if p not in took]; tail = took[-1]
         began_ =begun or t0 or max(mark if tail and tail['kind'] == 'turn' and mark >= (tail.get('ended') or 0) else 0., (tail or {}).get('_h') or (tail or {}).get('_hm') or 0.) or time.time()      # from its hand-over, where one is written
         if (cut := max(stops, default=0.)) >= began_: began_ = cut + 1        # ...never from before a stop or a close of his (as the turn at work, above)
+        began_ = max(began_, floor(len(out)))
         out.append(tail := {'kind': 'turn', 'at': stamp(began_), 'state': 'starting', 'steps': [], 'text': '', 'cards': [], 'started': began_, 'ended': None, **opens})
-    elif at_work and tail['state'] != 'working': tail.update(state='working', ended=None, started=t0 or tail['started'])
+    elif at_work and tail['state'] != 'working':
+        b_ = max(t0 or tail['started'], floor(out.index(tail))); tail.update(state='working', ended=None, started=b_, at=stamp(b_) if b_ != tail['started'] else tail['at'])
     # ...AND NEVER ABOVE HIS NEWEST LINE (the owner's live task, 2026-11-12: the dots stood over "try now"; recorded on ACP the same day for a
     # frame - the session's record had not yet cut its turn at his line): what works now is the turn his line began, under it
     if at_work and (his := max((i for i, x in enumerate(out) if x['kind'] == 'line'), default=-1)) >= 0:

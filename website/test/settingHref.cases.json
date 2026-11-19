@@ -1,0 +1,9 @@
+{
+ "_": "A setting's address, said by settings_schema.href (tests/test_connected_count.py) and canvasLinks.settingHref (settingHref.test.mjs) - both are held to these",
+ "cases": [
+  {"group": "Mail / routing", "key": "mail_route", "href": "#settings=config&group=Mail%20%2F%20routing&key=mail_route"},
+  {"group": "Owner's (own) list!", "key": "a*b", "href": "#settings=config&group=Owner%27s%20%28own%29%20list%21&key=a%2Ab"},
+  {"group": "Café & co", "key": "x y", "href": "#settings=config&group=Caf%C3%A9%20%26%20co&key=x%20y"},
+  {"group": "How mail is sorted", "key": "triage_ai", "href": "#settings=config&group=How%20mail%20is%20sorted&key=triage_ai"}
+ ]
+}

@@ -4147,7 +4147,7 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
         r = next((x for x in appfacts.settings(store) if x['key'] == params.get('setting')), None) or {}
         from . import settings_schema
         return _page(store, tid, table, settings_schema.href(r['key']) if r.get('key') in settings_schema.knobs() else
-                     f"#settings=config&group={quote(r.get('group') or '')}&key={quote(str(params.get('setting') or ''))}",
+                     settings_schema.href(str(params.get('setting') or ''), r.get('group') or ''),
                      f"Opened Settings{' → ' + r['group'] if r.get('group') else ''} at {r.get('label') or named} - change it there.")
     if tk == 'connector':
         typ = str(params.get('type') or '') or next((c['type'] for c in appfacts.connections(store) if c['connector_id'] == target), '')

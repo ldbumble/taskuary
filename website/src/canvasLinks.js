@@ -120,6 +120,10 @@ export function canvasRequestFromHash(hash, n = 0) {
 // the browser's Back left the app and a reload reopened a task the walk had moved past). What it cannot name - an open document on
 // the Profiles shelf, a guide card - is written as the section it sits in; reading the address back lands there.
 const enc = encodeURIComponent;
+// ONE ADDRESS FOR A SETTING, the twin of settings_schema.href: Python's quote(safe='') escapes !'()* where encodeURIComponent does not, and
+// both are held to the same cases (website/test/settingHref.cases.json) - a group named "Mail / routing" opened the wrong anchor from one road
+const q = (s) => enc(String(s)).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+export const settingHref = (group, key) => `#settings=config&group=${q(group)}${key ? `&key=${q(key)}` : ""}`;
 export function hashFor(area, s = {}) {
   s = s || {};
   if (area === "new") return "#new-task";
@@ -135,7 +139,7 @@ export function hashFor(area, s = {}) {
   if (area === "settings") {
     const p = s.section;
     if (!p) return "#settings";
-    if (p === "config") return s.open ? `#settings=config&group=${enc(s.open)}${s.knob ? `&key=${enc(s.knob)}` : ""}` : "#settings=config";
+    if (p === "config") return s.open ? settingHref(s.open, s.knob) : "#settings=config";
     return `#settings=${p}${s.knob ? `&key=${enc(s.knob)}` : ""}`;
   }
   if (area === "reports") {

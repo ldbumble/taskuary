@@ -59,6 +59,8 @@ test("on a phone the box's chips wrap above its words", () => {
   const css = read("generalWorkspace.css");
   assert.match(css, /@media \(max-width: 599\.95px\) \{\s+\.tq-aui-composer:has\(> \.tq-aui-attachments\) \{ flex-wrap: wrap;/);
   assert.match(css, /\.tq-aui-composer > \.tq-aui-attachments \{ order: -1; flex: 1 0 100%; max-width: 100%;/);
+  // ...and a task's chat narrowed by the window, not only a phone (design round 4, 2026-11-19: the box 40px wide beside the agent's browser)
+  assert.match(css, /\.tq-aui-footer \{ container-type: inline-size; \}\s+@container \(max-width: 480px\) \{\s+\.tq-aui-composer:has\(> \.tq-aui-attachments\) \{ flex-wrap: wrap;/);
 });
 
 // A PASTE ATTACHES TO THE BOX IT WAS PASTED IN (the owner, 2026-11-16: Ctrl+V in a task's chat drew a grey "Attaching..." at the top of the

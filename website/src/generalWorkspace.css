@@ -69,6 +69,9 @@
    .tq-aui-note-error), where it happened - drawn here, "It stopped without saying why" was a grey 9px centred whisper (the visual pass, 2026-11-18) */
 .tq-aui-hint { margin: 5px auto 0; text-align: center; color: var(--tq-muted, #a09b92); font: 9px/1.2 'Cascadia Mono', Consolas, monospace; }
 .tq-aui-attachments { box-sizing: border-box; }
+/* ...but the line over a card in a row is words he reads, in the chat's own type (design round 4, 2026-11-19: "2 of 4 · next: the email to ..."
+   in 9px grey monospace, missed by every walk) */
+.tq-aui-hint[data-tq-card-queue] { margin: 0 0 6px; text-align: left; font-family: inherit; font-size: 12.5px; font-weight: 500; line-height: 1.45; color: var(--tq-secondary, #5f5a50); }
 /* on the assistant canvas the room is the agent's answer, not the keyboard help (the owner, 2026-10-18); a closed chat's notice keeps its line */
 [data-tq-canvas-item] .tq-aui-footer { padding: 8px 14px 7px; }
 [data-tq-canvas-item] .tq-aui-viewport { padding: 14px 18px 2px; }
@@ -84,6 +87,13 @@
 /* ON A PHONE what the box goes with ("From Priya Shah", its files) is a line of its own over the words (the owner, 2026-11-08): beside them it
    squeezed "Message the agent…" into a column a word wide */
 @media (max-width: 599.95px) {
+  .tq-aui-composer:has(> .tq-aui-attachments) { flex-wrap: wrap; row-gap: 2px; }
+  .tq-aui-composer > .tq-aui-attachments { order: -1; flex: 1 0 100%; max-width: 100%; padding-left: 4px; }
+}
+/* ...and so in a task's chat a narrow WINDOW leaves narrow, not only a phone (design round 4, 2026-11-19: at ~756px with the agent's browser
+   beside it, "Message the agent - never your password" stood one word a line in a box 40px wide, beside "Came fro…") */
+.tq-aui-footer { container-type: inline-size; }
+@container (max-width: 480px) {
   .tq-aui-composer:has(> .tq-aui-attachments) { flex-wrap: wrap; row-gap: 2px; }
   .tq-aui-composer > .tq-aui-attachments { order: -1; flex: 1 0 100%; max-width: 100%; padding-left: 4px; }
 }

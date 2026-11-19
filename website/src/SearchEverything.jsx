@@ -54,7 +54,7 @@ const Marked = ({ text, words }) => marks(text, words).map((p, i) => (p.hit
 
 const Kbd = ({ children }) => (
   <Box component="kbd" sx={{ ...mono, fontSize: 10, color: FAINT, px: 0.6, py: "1px", borderRadius: "5px",
-    border: `1px solid ${BORDER}`, borderBottomWidth: 2, bgcolor: PANEL, lineHeight: 1.4 }}>{children}</Box>
+    border: `1px solid ${BORDER}`, borderBottomWidth: 2, bgcolor: PANEL, lineHeight: 1.4, whiteSpace: "nowrap" }}>{children}</Box>
 );
 
 // The bar on the TOP LINE of the app (the owner, 2026-10-14: "it should be on top line not on top of the work rail"): it looks

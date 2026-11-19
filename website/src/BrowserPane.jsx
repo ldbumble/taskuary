@@ -310,7 +310,8 @@ Take over to drive it yourself; close the session to close it."
 ${t.url}
 
 ${t.active ? "the tab the agent is working on - shown now" : driving ? "show this tab - the agent works on the tab shown" : "Take over to switch to this tab"}`}
-              sx={{ ...mono, fontSize: 10.5, lineHeight: 1.2, display: "flex", alignItems: "center", gap: 0.6, flex: "0 1 auto", minWidth: 0, maxWidth: 180,
+              // ...each tab keeps a name's room and the strip scrolls (design round 4, 2026-11-19: at ~756px thirteen tabs read one letter each)
+              sx={{ fontSize: 11.5, lineHeight: 1.2, display: "flex", alignItems: "center", gap: 0.6, flex: "0 0 auto", minWidth: 64, maxWidth: 180,
                 px: 0.9, py: 0.4, borderRadius: 1, cursor: t.active ? "default" : "pointer", whiteSpace: "nowrap",
                 border: `1px solid ${t.active ? ACCENT : BORDER}`, bgcolor: t.active ? PANEL2 : "transparent",
                 color: t.active ? INK : FAINT, fontWeight: t.active ? 600 : 400,

@@ -161,6 +161,13 @@ def acts(cmd: str) -> list:
         while i < len(a) and a[i].startswith('-'): i += 2 if a[i] in VALUED and '=' not in a[i] else 1
         verb = a[i].lower() if i < len(a) else ''
         nxt = a[i + 1] if i + 1 < len(a) else ''
+        # A BATCH IS ITS STEPS (the vendor walk, 2026-11-19: read as one act, its card said "Starts a browser batch on RentScope with no actions
+        # shown" - nobody could judge it): each quoted argument is a command of its own, read as one. Steps it reads from its input show
+        # none, and it stays one act `_check` refuses with the way that shows them
+        if verb == 'batch':
+            steps = [t for t in a[i + 1:] if not t.startswith('-')]
+            out += [x for t in steps for x in acts(f'{EXE} {t}')] if steps else [{'args': a, 'verb': 'batch'}]
+            continue
         # A LOOK THAT IS NOT ONE (M4, 2026-11-08): an address carrying a token or a long query is a magic link ("approve", "confirm",
         # one-click pay) or a way out for what the agent read (`open https://x/?d=...`) - judged like a click; and `get value` reads
         # whatever a box holds, a password the sign-in vault just filled included - checked against the page (check)
@@ -484,6 +491,9 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
     if not todo or all(typing(a) for a in todo): return {}
     pg, said, vs = page(sid), asked(store, tid), None
     for i, a in enumerate(todo):
+        if a['verb'] == 'batch':
+            return _deny(f"{HELD}: a batch that reads its steps from its input shows none of them. Pass each step as its own quoted argument "
+                         '(agent-browser batch "fill @e2 ..." "click @e5"), or run them one per line.')
         if a.get('read'):           # a box's value is read only where the page shows it is no password box
             c = control(a, pg)
             if not c.get('role') or 'password' in f"{c.get('name')} {c.get('role')}".lower():

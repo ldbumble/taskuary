@@ -118,6 +118,21 @@ class Reading(unittest.TestCase):
         self.assertEqual([a['args'] for a in bg.acts(cmd)], [['fill', '@e1', 'Alex Doyle'], ['click', '@e3'], ['fill', '@e2', 'x']])
         self.assertEqual(bg.acts('agent-browser type @e2 "a > b"')[0]['args'], ['type', '@e2', 'a > b'])
 
+    def test_a_batch_is_its_steps(self):
+        """The vendor walk, 2026-11-19: `agent-browser batch` read as one act, and its card said "Starts a browser batch on RentScope with no
+        actions shown" - nobody could judge it. Each quoted argument is a command of its own, read as one; a batch fed its steps on its input
+        shows none, and is refused to the agent with the way that shows them - never a card."""
+        cmd = "agent-browser --session v1 batch 'open https://rentscope.example/signup' 'fill @e2 \"Alex Doyle\"' 'click @e5' 'snapshot -i'"
+        self.assertEqual([a['args'] for a in bg.acts(cmd)], [['fill', '@e2', 'Alex Doyle'], ['click', '@e5']])
+        [fed] = bg.acts("echo '[[\"click\", \"@e5\"]]' | agent-browser batch --bail")
+        self.assertEqual(fed['verb'], 'batch')
+        s = MemoryStore(); tid = Factory(s).task('Vendor trials')
+        with on(), verdict({'irreversible': True, 'sure': True, 'what': 'x'}):
+            out = bg.check(s, tid, 'run1', "echo '[[\"click\", \"@e5\"]]' | agent-browser batch", Brain(None))
+        self.assertEqual(out['hookSpecificOutput']['permissionDecision'], 'deny')
+        self.assertIn('as its own quoted argument', out['hookSpecificOutput']['permissionDecisionReason'])
+        self.assertEqual(s._rows("SELECT * FROM review WHERE TaskId=?", (tid,)), [], 'no card he cannot judge')
+
     def test_the_agents_own_session_flag_is_not_what_runs(self):
         self.assertEqual(bg._own_args(['--session', 'other', 'click', '@e12', '--headed']), ['click', '@e12'])
 

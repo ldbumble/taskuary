@@ -225,8 +225,8 @@ test("each ACP tool kind reads as one plain step, the way the same act reads fro
     ["page", "Read docs.northwind.example/budget/review", "done"],
     ["web", "Searched the web for 'northwind budget review policy'", "done"],
     ["tool", "Look up Payworth invoice", "done"],
-    ["run", "Ran pytest", "error"],
-    ["run", "Ran git push", "held"],
+    ["run", "Ran pytest tests/test_budget.py", "error"],
+    ["run", "Ran git push origin main", "held"],
     ["said", "The total is fixed; the push waits for your Approve.", "done"],
     ["run", "Ran npm test", "done"],
   ]);
@@ -252,7 +252,7 @@ test("a file command reads as what it did, in bash or PowerShell, and stays a le
   assert.equal(said("Copy-Item budget.py budget.bak"), "Copied budget.py to budget.bak");
   assert.equal(said("Add-Content -LiteralPath budget.py -Value '# ok'"), "Edited budget.py");
   assert.equal(said("(Get-ChildItem -Force -File | Measure-Object).Count"), "Listed the files here");
-  assert.equal(said("mkdir -p out && cp a.txt out && python build.py"), "Ran python build.py");
+  assert.equal(said("mkdir -p out && cp a.txt out && python build.py"), "Ran mkdir -p out && cp a.txt out && python build.py");
   assert.equal(said("rm -rf $d"), "Deleted a file");
 });
 
@@ -288,6 +288,7 @@ test("ticking a to-do is no step and no working line, by tool or by shell", () =
     { type: "tool_call", name: "Read", detail: { tool_call_id: "d", args: { file_path: "/x/notes.md" } } },
   ]);
   assert.deepEqual(steps.map((s) => s.id), ["d"]);
+  assert.deepEqual(stepsOf([{ type: "tool_call", name: "Bash", detail: { tool_call_id: "e", args: { command: ["taskuary", "--tick", "2"] } } }]), [], "a command sent as its words too");
   assert.doesNotMatch(fs.readFileSync(new URL("../src/agentSteps.js", import.meta.url), "utf8"), /a to-do"/);
 });
 
@@ -308,19 +309,19 @@ test("a wordless shell call says what it did, never a bare program, a number for
   assert.equal(said('taskuary --board\ntaskuary --note "Looking into the history of the ledger totals." --kind working\ngit -C ledger status --short'),
     "Looking into the history of the ledger totals.");
   assert.equal(said("taskuary --board"), "Read what earlier agents left on the wall");
-  // ...options and their values before a subcommand are not it
-  assert.equal(said("git -c safe.directory=C:/work/ledger -C ledger fetch --no-tags origin master"), "Ran git fetch");
-  assert.equal(said("git -C .wt-ledger -c safe.directory=C:/work/ledger push origin feat:refs/heads/deploy"), "Ran git push");
+  // ...a command with no words of its own is itself, cut at its width
+  assert.equal(said("git -c safe.directory=C:/work/ledger -C ledger fetch --no-tags origin master"), "Ran git -c safe.directory=C:/work/ledger -C ledger fetch --no-tags origin master");
+  assert.equal(said("git -C .wt-ledger -c safe.directory=C:/work/ledger push origin feat:refs/heads/deploy"), "Ran git -C .wt-ledger -c safe.directory=C:/work/ledger push origin feat:refs/heads/…");
   // ...a line count is no file
   assert.equal(said("Get-Content ledger/totals.py -TotalCount 290"), "Read totals.py");
   assert.equal(said("Get-Content ledger/totals.py -TotalCount 290\nGet-Content ledger/sql/notes.sql -TotalCount 60"), "Read totals.py and notes.sql");
   // ...a shell named by its whole path runs what it was handed
-  assert.equal(said("\"C:\\\\WINDOWS\\\\system32\\\\cmd.exe\" /c 'git -C ledger worktree add -b feat/x ../x origin/master'"), "Ran git worktree");
+  assert.equal(said("\"C:\\\\WINDOWS\\\\system32\\\\cmd.exe\" /c 'git -C ledger worktree add -b feat/x ../x origin/master'"), "Ran git -C ledger worktree add -b feat/x ../x origin/master");
   // ...a script handed to python, by a PowerShell here-string or a heredoc, is a script it ran - its lines are not commands
-  assert.equal(said("@'\nfrom pathlib import Path\nimport json\nprint(1)\n'@ | python -", "PowerShell"), "Ran a Python script");
-  assert.equal(said("python - <<'EOF'\nimport json\nprint(1)\nEOF"), "Ran a Python script");
-  assert.equal(said("..\\venv\\Scripts\\python.exe -u -m scripts.ledger.import_totals 'C:\\work\\totals.xlsx' --apply"), "Ran python import_totals");
-  assert.equal(said("python -u tools/check_totals.py --all"), "Ran python check_totals.py");
+  assert.equal(said("@'\nfrom pathlib import Path\nimport json\nprint(1)\n'@ | python -", "PowerShell"), "Ran a Python script (3 lines)");
+  assert.equal(said("python - <<'EOF'\nimport json\nprint(1)\nEOF"), "Ran a Python script (2 lines)");
+  assert.equal(said("..\\venv\\Scripts\\python.exe -u -m scripts.ledger.import_totals 'C:\\work\\totals.xlsx' --apply"), "Ran ..\\venv\\Scripts\\python.exe -u -m scripts.ledger.import_totals 'C:\\work\\totals.x…");
+  assert.equal(said("python -u tools/check_totals.py --all"), "Ran python -u tools/check_totals.py --all");
   for (const c of ["git -c a=b -C x status", "python -u x.py", "git --no-pager log -5"]) assert.doesNotMatch(said(c), /^Ran (git|python)$/);
   // ...an ACP call named only by its title is the agent's own words; a helper it started, by its name
   assert.equal(describeCall("Start subagent history_probe", { agentPath: "/root/history_probe" }).summary, "Handed part of the work to a helper: history probe");
@@ -410,7 +411,7 @@ test("a shell's own grammar round a command is no step: its blocks, its function
 }`;
   assert.equal(describeCall("PowerShell", { command: fn }).summary, "Looked at the page");
   assert.equal(describeCall("PowerShell", { command: '$refs = 3..5; foreach ($r in $refs) { agent-browser click "@e$r" }' }).summary, "Clicked on the page");
-  assert.equal(describeCall("Bash", { command: "for f in *.py; do { python -m pytest $f; } done" }).summary, "Ran python pytest");
+  assert.equal(describeCall("Bash", { command: "for f in *.py; do { python -m pytest $f; } done" }).summary, "Ran for f in *.py; do { python -m pytest $f; } done");
   assert.equal(describeCall("Bash", { command: 'cat "${d}/notes.md"' }).summary, "Read a file", "a ${var} is no block");
   assert.equal(describeCall("Glob", { pattern: "**/*sync*" }).summary, "Looked for files named like 'sync'");
   assert.deepEqual(stepsOf([{ type: "tool_call", name: "Skill", detail: { tool_call_id: "s", args: { skill: "dataviz" } } }]), [], "a skill loaded is the CLI's own reading");
@@ -428,4 +429,34 @@ test("an AI card's file, browser and tool-finder calls read as the CLI road's st
   assert.equal(said("find_tools", { query: "pdf" }), "Looked for the right tool");
   for (const n of ["file_write", "file_read", "files_list", "browser_open", "browser_look", "browser_fill", "browser_signup", "find_tools"])
     assert.doesNotMatch(said(n, {}), /^Used /, n);
+});
+
+// A WORDLESS COMMAND IS SHOWN AS ITSELF (the owner, 2026-11-19, of "Ran a command", "Ran git", "Ran foreach, and 1 more": "If not exact detail show
+// what it's doing? other chats do this description thing much better"): where the agent gave no words of its own - Codex's shell calls above all -
+// the row is the command, first line, short; a script by its language and length, its text behind the fold. Codex-shaped: no description
+test("a command with no words of its own reads as the command itself, a script by its language and length", () => {
+  const ps = (c) => `"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "${c}"`;
+  const step = (command, name = "shell") => describeCall(name, { command });
+  assert.deepEqual([step("git log --oneline -10").summary, step("git log --oneline -10").code], ["Ran git log --oneline -10", "git log --oneline -10"]);
+  assert.equal(step(ps("git log --oneline -10")).code, "git log --oneline -10", "the shell it was handed to is no part of it");
+  assert.equal(step(["bash", "-lc", "pytest tests/test_totals.py -q"]).code, "pytest tests/test_totals.py -q");
+  assert.equal(step("python -u tools/check_totals.py --all").summary, "Ran python -u tools/check_totals.py --all");
+  const block = ["$rows = Import-Csv totals.csv", ...Array.from({ length: 10 }, (_, i) => `$rows[${i}].Total = [decimal]$rows[${i}].Total`), "$rows | Export-Csv out.csv"].join("\n");
+  assert.equal(step(["powershell.exe", "-Command", block]).summary, "Ran a PowerShell script (12 lines)");
+  assert.equal(step(block, "PowerShell").summary, "Ran a PowerShell script (12 lines)");
+  assert.equal(step("python - <<'EOF'\nimport json\nprint(1)\nEOF").summary, "Ran a Python script (2 lines)");
+  assert.equal(step("@'\nfrom pathlib import Path\nimport json\nprint(1)\n'@ | python -", "PowerShell").summary, "Ran a Python script (3 lines)");
+  const each = "foreach ($f in Get-ChildItem *.csv) { $n = (Import-Csv $f).Count; \"$($f.Name) $n\" }";
+  assert.equal(step(ps(each)).code, `${each.slice(0, 79)}…`, "a long line, cut at its width");
+  const snip = `python -c "import json; print(json.load(open('t.json'))['total'])"`;
+  assert.equal(step(snip).code, snip);
+  // ...never a bare program, never "a command"; the agent's own words still lead; Taskuary's own command keeps its done-wording
+  for (const c of ["git log --oneline -10", block, each, snip, "cd ledger", ps(each)]) assert.doesNotMatch(step(c).summary, /^Ran (a command|git|python|foreach)\b(,|$)/);
+  assert.equal(describeCall("Bash", { command: "git log --oneline -10", description: "Show recent commits" }).summary, "Show recent commits");
+  assert.equal(step("taskuary --board").summary, "Read what earlier agents left on the wall");
+  assert.equal(step("Get-Content ledger/totals.py -TotalCount 290").summary, "Read totals.py");
+  // ...the same command twice is one row "(2 times)"; two scripts of one length are two rows
+  const call = (id, command) => ({ type: "tool_call", name: "shell", detail: { tool_call_id: id, args: { command } } });
+  assert.deepEqual(stepsOf([call("a", "git status"), call("b", "git status")]).map((s) => s.summary), ["Ran git status (2 times)"]);
+  assert.equal(stepsOf([call("a", "python - <<'EOF'\nprint(1)\nEOF"), call("b", "python - <<'EOF'\nprint(2)\nEOF")]).length, 2);
 });

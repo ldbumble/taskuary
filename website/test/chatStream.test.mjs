@@ -110,7 +110,7 @@ test("the general chat's ACP trace keeps the words where they were said: the ans
     { type: "tool_result", name: "t1", detail: { tool_call_id: "t1", result: "212 passed" } },
     { type: "progress", name: "text", detail: "All 212 pass." }];
   const live = stepsOf(trace, { keepStart: false }).map((s) => s.summary);
-  assert.deepEqual(live, ["Running the suite.", "Ran pytest", "Quick update: half of it passed.", "All 212 pass."]);
+  assert.deepEqual(live, ["Running the suite.", "Ran pytest -q", "Quick update: half of it passed.", "All 212 pass."]);
   // ...filed: the answer leaves the trail, every earlier line stays where it stood
   assert.deepEqual(stepsOf(trace, { keepStart: false, answer: "All 212 pass." }).map((s) => s.summary), live.slice(0, 3));
 });

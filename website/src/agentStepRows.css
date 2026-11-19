@@ -24,6 +24,8 @@
 .tq-aui-step summary:hover { background: var(--tq-inset, #f4f1ea); }
 .tq-aui-step summary:hover::after { color: var(--tq-muted, #858078); }
 .tq-aui-step summary span:not(.tq-aui-tool-dot), .tq-aui-step-line span:not(.tq-aui-tool-dot) { overflow-wrap: anywhere; word-break: break-word; }
+.tq-aui-step-code { padding: 0 4px; border-radius: 4px; background: var(--tq-inset, #f1ede5); color: var(--tq-text, #3f423c);
+  font: 11.5px/1.4 'Cascadia Mono', Consolas, monospace; }
 .tq-aui-step em { color: var(--tq-warning, #8a6d1f); font-size: 11px; font-style: normal; white-space: nowrap; }
 .tq-aui-step.tq-aui-tool-error em { color: var(--tq-danger, #9a4e53); }
 /* ...a step the agent retried and got through (agentSteps `recovered`): a quiet note, never the failure's red */

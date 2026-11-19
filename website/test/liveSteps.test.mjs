@@ -17,7 +17,7 @@ test("a running step says what it is doing, from the call's own arguments", () =
   assert.equal(doing("Bash", { command: "agent-browser open https://portal.vendor.example/login" }), "Opening portal.vendor.example in the browser");
   assert.equal(doing("Read", { file_path: "/srv/northwind/notes.md" }), "Reading notes.md");
   assert.equal(doing("Write", { file_path: "/work/outputs/report.csv" }), "Writing report.csv");
-  assert.equal(doing("Bash", { command: "npm test -- --watch" }), "Running npm test");
+  assert.equal(doing("Bash", { command: "npm test -- --watch" }), "Running npm test -- --watch");
   assert.equal(doing("mcp__taskuary__my_task", {}), "Looking at the task's emails");
   assert.equal(doing("mcp__taskuary__search_messages", { words: "invoice" }), 'Searching your mail for "invoice"');
   // ...and once done, the same step in the past

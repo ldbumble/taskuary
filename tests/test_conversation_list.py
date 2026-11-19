@@ -554,6 +554,13 @@ class TheList(unittest.TestCase):
         self.assertEqual([s['text'] for s in conversation.acp_steps([said('', 'One '), said('', 'message.')])], ['One message.'])     # an adapter that names none
         self.assertFalse([k for s in steps for k in s if k not in ('k', 'text', 'at')])
 
+    def test_a_command_sent_as_its_words_over_acp_is_kept_for_its_row(self):
+        # codex-acp sends an exec's command as the words it runs ["powershell.exe", "-Command", "..."]: kept as a string only, the row read "Ran a command"
+        call = lambda i, cmd: {'sessionUpdate': 'tool_call', 'toolCallId': i, 'kind': 'execute', 'title': 'x', 'rawInput': {'command': cmd}}
+        steps = conversation.acp_steps([call('a', ['powershell.exe', '-Command', 'git log --oneline -10']), call('b', ['taskuary', '--tick', '2'])])
+        self.assertEqual(steps[0]['args']['command'], ['powershell.exe', '-Command', 'git log --oneline -10'])
+        self.assertTrue(conversation.machinery(steps[1]))           # ...and Taskuary's own tick is no step, as its string form is not
+
     def test_a_message_that_came_in_mid_turn_is_pending_then_heard_with_the_next_turn(self):
         self.brain.delay = 3
         self.say('Suggest two.', 'l-one', wait=False)

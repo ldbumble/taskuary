@@ -184,28 +184,14 @@ export const browserStep = (args) => {
   return step(AB_SAID[v] || (v ? `Used the browser (${v})` : "Used the browser"));
 };
 
-// WHAT A PROGRAM WAS ASKED TO DO, by the common grammar of a command line: its first word that is no option nor an option's value - a one-letter
-// option takes the word after it (`git -C ledger -c a=b fetch`, `python -u -m tools.load`) - and a script or module by its own name
-const subOf = (p, args) => {
-  const as = args.map(String);
-  if (SNIPPET[p]) { const m = as.indexOf("-m"), f = as.find((a) => !a.startsWith("-") && /\.\w{1,4}$/.test(baseName(a)));
-    return m >= 0 && as[m + 1] ? as[m + 1].split(".").pop() : f ? baseName(f) : ""; }
-  for (let i = 0; i < as.length; i += 1) {
-    if (/^-[A-Za-z]$/.test(as[i])) { i += 1; continue; }
-    if (as[i].startsWith("-")) continue;
-    return /^[a-z][\w.-]{0,24}$/i.test(as[i]) ? as[i] : "";
-  }
-  return "";
-};
 const andList = (xs) => (xs.length < 2 ? xs.join("") : xs.length === 2 ? `${xs[0]} and ${xs[1]}` : `${xs.slice(0, 2).join(", ")} and ${plural(xs.length - 2, "more file")}`);
 const commandStep = (cmd, depth = 0) => {
-  const found = [], made = new Set(); let fed = false;
+  const found = [], made = new Set();
   for (const seg of segments(cmd)) {
     let w = words(seg.text);
-    // ...a script handed on (a heredoc, a here-string) to an interpreter is a script it ran; any other piped segment only filters what came before it
-    if (seg.piped) { const q = prog(w[0] || ""); if (fed && SNIPPET[q]) found.push({ kind: "run", summary: `Ran a ${SNIPPET[q]} script`, filler: true }); continue; }
-    if (w[0] === FED && w.length === 1) { fed = true; continue; }
-    const here = w.includes(FED); w = w.filter((x) => x !== FED);
+    // ...a piped segment only filters what came before it, and a script handed on (a heredoc, a here-string) is no command of its own
+    if (seg.piped || (w[0] === FED && w.length === 1)) continue;
+    w = w.filter((x) => x !== FED);
     if (/^[A-Za-z_]\w*=\(/.test(w[0] || "")) continue;                       // an array being set up: H=(-H "...")
     while (w.length && (LEAD.has(w[0]) || /^[A-Za-z_]\w*=/.test(w[0]))) w = w.slice(1);
     if (/^\$[\w:]+$/.test(w[0] || "") && w[1] === "=") w = w.slice(2);       // PowerShell's `$landing = agent-browser snapshot`
@@ -254,11 +240,8 @@ const commandStep = (cmd, depth = 0) => {
       found.push({ kind: "list", summary: !d || d === "." ? "Listed the files here" : named(d) ? `Listed the files in ${baseName(d)}` : "Listed the files", vague: !!d && !named(d), asked: plain });
       continue;
     }
-    if (SNIPPET[p] && args.some((a) => a === "-c" || a === "-e")) { found.push({ kind: "run", summary: `Ran a ${SNIPPET[p]} snippet`, filler: true }); continue; }
-    if (SNIPPET[p] && (args.includes("-") || here)) { found.push({ kind: "run", summary: `Ran a ${SNIPPET[p]} script`, filler: true }); continue; }
-    const sub = subOf(p, args);
-    // ...by what it was asked past the options before it: `git -c .. -C .. fetch` read "Ran git" (the owner's live turn, 2026-11-18)
-    found.push({ kind: "run", summary: sub ? `Ran ${p} ${sub}` : `Ran ${p}`, filler: !!SNIPPET[p] });
+    // ...anything else it ran is shown as the command itself (ranCmd): here it only weighs against the line's other steps - a snippet least
+    found.push({ kind: "run", summary: `Ran ${seg.text}`, filler: !!SNIPPET[p] });
   }
   // ...the agent's own words for the line (a wall note) say what all of it was for
   const own = found.find((s) => s.own);
@@ -272,6 +255,30 @@ const commandStep = (cmd, depth = 0) => {
   const reads = use[0].kind === "read" ? use.filter((s) => s.kind === "read" && !s.vague) : [], rest = use.length - Math.max(reads.length, 1);
   const lead = reads.length > 1 ? `Read ${andList([...new Set(reads.map((s) => baseName(s.file)))])}` : use[0].summary;
   return { ...use[0], summary: rest > 0 ? `${lead}, and ${rest} more` : lead };
+};
+
+// A COMMAND WITH NO WORDS OF ITS OWN IS SHOWN AS ITSELF (the owner, 2026-11-19: "Ran a command", "Ran git", "Ran foreach, and 1 more" - "If not exact
+// detail show what it's doing? other chats do this description thing much better"): the line the shell was handed, short, in a code span
+// (`code`); a script of many lines by its language and length - the language of the program that runs it, read off the command, never its words
+const LANG = { ...SNIPPET, bash: "Bash", sh: "shell", zsh: "Zsh", powershell: "PowerShell", pwsh: "PowerShell", cmd: "batch" };
+const unq = (t) => (/^"[\s\S]*"$/.test(t) ? t.slice(1, -1).replace(/\\"/g, '"') : /^'[\s\S]*'$/.test(t) ? t.slice(1, -1) : t);
+// ...the shell it was handed to is no part of it: Codex's `powershell.exe -Command "..."`, `bash -lc '...'`, `cmd /c ...`, as a string or an array
+const unwrap = (cmd) => {
+  const xs = Array.isArray(cmd) ? cmd.map(String) : null, at = xs ? xs.findIndex((a) => /^(-l?c|-command|\/c)$/i.test(a)) : -1;
+  if (xs && at > 0 && SHELLS.has(prog(xs[0]))) return { text: xs.slice(at + 1).join(" "), shell: prog(xs[0]) };
+  const s = xs ? xs.join(" ") : String(cmd || "");
+  const m = /^\s*("[^"]+"|'[^']+'|\S+)(?:\s+-(?!l?c\b|command\b)\w+)*\s+(-l?c|-command|\/c)\s+([\s\S]+)$/i.exec(s), sh = m && prog(unq(m[1]));
+  return m && SHELLS.has(sh) ? { text: unq(m[3].trim()), shell: sh } : { text: s, shell: "" };
+};
+const ranCmd = (cmd, tool) => {
+  const { text, shell } = unwrap(cmd), t = text.replace(/\r/g, "").trim(), lines = t.split("\n").filter((l) => l.trim());
+  if (!t) return { kind: "run", summary: "Ran a command it did not show" };
+  if (lines.length === 1) { const code = clip(t, 80); return { kind: "run", summary: `Ran ${code}`, code }; }
+  // ...a script fed to a program (a heredoc, a here-string piped on, `python -c "..."`) is in that program's language, and only its body counts
+  const fedTo = (/^['"]@\s*\|\s*(\S+)/m.exec(t) || [])[1], first = prog(words(lines[0])[0] || ""), body = t.match(HEREDOC) || t.match(HERESTRING);
+  const lang = LANG[prog(fedTo || "")] || (SNIPPET[first] && LANG[first]) || LANG[shell] || LANG[first] || LANG[key(tool)];
+  const n = body ? body[0].split("\n").length - 2 : lines.length;
+  return { kind: "run", summary: `Ran ${lang ? `a ${lang} script` : "a script"} (${plural(n, "line")})` };
 };
 
 // ── a tool call, by its name and arguments ───────────────────────────────────────────────────────
@@ -378,7 +385,7 @@ export const describeCall = (name, args = {}) => {
     // ...and so do its words for a step whose file or folder the shell had yet to fill in ($d)
     if (s && s.kind !== "run" && !((s.browser || s.vague) && a.description)) return s;
     if (a.description) return { kind: s?.browser ? "page" : s?.vague ? s.kind : "run", summary: clip(a.description), ...(s?.vague && s.asked ? { asked: s.asked } : {}) };
-    return s || { kind: "run", summary: "Ran a command" };
+    return ranCmd(cmd, name);
   }
   if (kind === "read") { const f = fileOf(a); return { kind, summary: f ? readSaid(f) : "Read a file", file: f }; }
   if (kind === "search") { const pat = a.pattern || a.query || a.regex; return { kind, summary: searched(pat), pattern: pat }; }
@@ -495,7 +502,7 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
     if (e.type === "tool_call") {
       const args = e.detail?.args || e.detail || {};
       called.add(e.name);
-      if (MACHINERY.has(key(String(e.name || "").split("__").pop())) || TICK.test(String(parsed(args).command || parsed(args).cmd || ""))) continue;
+      if (MACHINERY.has(key(String(e.name || "").split("__").pop())) || TICK.test([parsed(args).command || parsed(args).cmd || ""].flat().join(" "))) continue;
       const id = e.detail?.tool_call_id || `${e.name}-${steps.length}`;
       const d = describeCall(e.name, args);
       const step = { id, ...d, tool: e.name, raw: rawOf(e.name || "tool", args), output: String(e.detail?.output || ""), status: "running", own: ownTool(e.name),
@@ -598,7 +605,8 @@ function group(steps) {
     if (!("raw" in s) || s.kids?.length) { out.push(s); i += 1; continue; }
     let j = i + 1;
     while (j < steps.length && "raw" in steps[j] && !steps[j].kids?.length && steps[j].kind === s.kind
-           && (["read", "search", "web", "page", "edit"].includes(s.kind) || steps[j].summary === s.summary
+           // ..."(2 times)" only for the same command: two scripts of one length are two
+           && (["read", "search", "web", "page", "edit"].includes(s.kind) || (steps[j].summary === s.summary && (s.kind !== "run" || steps[j].raw === s.raw))
                || (s.kind === "mail" && s.q !== undefined && steps[j].q !== undefined))) j += 1;
     const run = steps.slice(i, j);
     const summary = run.length > 1 ? together(run) : null;

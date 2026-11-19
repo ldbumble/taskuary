@@ -59,11 +59,12 @@ def _cleaned(text) -> str:
 # was kept here for that step and drawn as nothing there - a "1 step" trail for 100 ms, then head and trail gone)
 _KINDS = json.loads(Path(__file__).with_name('stepkinds.json').read_text(encoding='utf-8'))
 MACHINERY, _OWN_LINE = frozenset(_KINDS['machinery']), re.compile(_KINDS['commands'], re.I)
+def _line(x) -> str: return ' '.join(map(str, x)) if isinstance(x, list) else str(x or '')
 def machinery(s: dict) -> bool:
     a = s.get('args') if isinstance(s.get('args'), dict) else {}
     # ...and its refusal too (design round 5, 2026-11-19: a tick refused for a missing argument stood in the chat as its schema dump)
     return s.get('k') in ('tool', 'error') and (re.sub(r'[^a-z0-9]', '', str(s.get('name') or '').split('__')[-1].lower()) in MACHINERY
-                                     or bool(_OWN_LINE.search(str(a.get('command') or a.get('cmd') or ''))))
+                                     or bool(_OWN_LINE.search(_line(a.get('command') or a.get('cmd')))))
 
 
 # ...A SENTENCE A TURN ALREADY SAID IS NOT SAID AGAIN AS THE NEXT MESSAGE'S OPENER (design round 5, I3: on Codex every follow-up turn read
@@ -348,7 +349,9 @@ def acp_steps(updates: list) -> list:
                                                'name': _meta(u, 'claudeCode', 'toolName') or _ACP_TOOL.get(u.get('kind')) or u.get('title') or u.get('kind') or 'tool'}
                 out.append(s)
             if (par := _meta(u, 'claudeCode', 'parentToolUseId') or _meta(u, 'parentToolUseId') or _meta(u, 'parentToolCallId')): s['parent'] = str(par)
-            if isinstance(u.get('rawInput'), dict): s['args'].update({k: v for k, v in u['rawInput'].items() if k in _ARGS and isinstance(v, str) and v.strip()})
+            # ...a command as the words it was run with too (codex-acp's ["powershell.exe", "-Command", "..."]): dropped, the row read "Ran a command"
+            if isinstance(u.get('rawInput'), dict): s['args'].update({k: v for k, v in u['rawInput'].items() if k in _ARGS and (isinstance(v, str) and v.strip()
+                                                                      or k == 'command' and isinstance(v, list) and v and all(isinstance(x, str) for x in v))})
             if u.get('status'): s['status'] = u['status']
             if (d := _meta(u, 'terminal_output_delta', 'data')): s['out'] = s.get('out', '') + d
             elif not s.get('out') and u.get('status') in ('completed', 'failed') and (o := _out(u)): s['output'] = o

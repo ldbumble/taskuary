@@ -614,6 +614,13 @@ CREATE TABLE IF NOT EXISTS heard (HId INTEGER PRIMARY KEY, TaskId INTEGER, Kind 
 -- draw the same order, and what is new only ever goes under it
 -- ...and a card, the turn it was first drawn in (`Host`): it goes down to a later turn that left it again, never back up
 CREATE TABLE IF NOT EXISTS shown (TaskId INTEGER, Key TEXT, Seq INTEGER, Host TEXT, UNIQUE(TaskId, Key));
+-- ONE LOG PER TASK (chatlog.py): each thing the chat draws, appended once, at the place it gets then (`Id`) - nothing renumbers, re-sorts or
+-- re-dates it; what can change (a turn's state, a card pressed) is updated in place (`State`, `Body`, `Rev`). At most one card waits per task
+CREATE TABLE IF NOT EXISTS chatlog (Id INTEGER PRIMARY KEY, TaskId INTEGER NOT NULL, Key TEXT NOT NULL, Kind TEXT NOT NULL, Parent INTEGER,
+  At REAL NOT NULL, Src TEXT, Body TEXT NOT NULL, State TEXT, Rev INTEGER NOT NULL DEFAULT 0, UNIQUE(TaskId, Key));
+CREATE INDEX IF NOT EXISTS idx_chatlog ON chatlog(TaskId, Id);
+CREATE UNIQUE INDEX IF NOT EXISTS one_live_card ON chatlog(TaskId) WHERE Kind='card' AND State='pending';
+CREATE TABLE IF NOT EXISTS chatlog_task (TaskId INTEGER PRIMARY KEY, Rev INTEGER NOT NULL DEFAULT 0, Migrated TEXT);
 -- The agent wall (blackboard.py): what one agent leaves for the next one in the same
 -- checkout. Derived facts (who holds which file) are read off git and the run trace and are
 -- never stored; this is the part only the agent knows - what it is doing, what it found, what

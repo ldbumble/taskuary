@@ -244,7 +244,7 @@ def test_every_tool_call_is_one_row_in_plain_words_and_summary_folds_them_to_one
         ('Searched the web for printer prices', None, None), ('Opened uprinting.com', None, None)]
     assert rows[0]['size'] == len(big) and len(rows[0]['output']) < 3200, 'the output capped: its head and tail, and how big it was'
     t = chatlog.detailed({'kind': 'turn', 'state': 'done', 'text': 'Done.', 'steps': steps}, 'summary')
-    assert [s['k'] for s in t['steps'] if s not in t['fold']] == ['said'] and t['fold_line'] == '6 steps - ran a command, read 3 files, searched the web, opened a site'
+    assert [s['k'] for s in t['steps'] if s not in t['fold']] == ['said'] and t['folded'] == 4      # ...its one line is the page's (chatStream.foldLine)
     assert len(chatlog.detailed({'kind': 'turn', 'state': 'done', 'steps': steps}, 'everything')['steps']) == 5
 
 

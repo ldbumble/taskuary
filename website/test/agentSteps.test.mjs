@@ -477,3 +477,24 @@ test("a merged row of repeated tries keeps the server's why of the newest that f
   const src = (await import("node:fs")).readFileSync(new URL("../src/agentSteps.js", import.meta.url), "utf8");
   assert.match(src, /run\.some\(\(x\) => x\.why\) \? \{ why: run\.filter\(\(x\) => x\.why\)\.at\(-1\)\.why \}/);
 });
+
+// THE REAL-CLAUDE WALK, 2026-11-19: a Write refused ("File has not been read yet") then made stood twice with its diff, under a raw "⚠" note; and
+// "3 steps - ran 2 commands, used a tool" opened on two rows. A try made good folds into the one that worked; the line counts and names its rows
+test("a refused write the agent then made is one row, and the fold's line counts and names the rows it opens on", async () => {
+  const { eventsOf, turnParts, foldLine } = await import("../src/chatStream.js");
+  const err = "```\n<tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>\n```";
+  const steps = [{ k: "tool", id: "a1", name: "Write", args: { file_path: "C:/work/totals.py", content: "x = 1\n" }, status: "failed", output: err },
+    { k: "error", name: "Write", text: err },
+    { k: "tool", id: "a2", name: "Read", args: { file_path: "C:/work/totals.py" }, status: "completed" },
+    { k: "tool", id: "a3", name: "Write", args: { file_path: "C:/work/totals.py", content: "x = 1\n" }, status: "completed" }];
+  const parts = turnParts(eventsOf(steps, false));
+  const notes = parts.flatMap((p) => (p.type === "work" ? p.steps : [])).filter((s) => s.kind === "error" || /tool_use_error/.test(s.summary));
+  assert.deepEqual(notes, [], "the agent's error is no line of his");
+  assert.equal(parts.filter((p) => p.type === "edit").length, 1, "one diff: the write that was made");
+  const failed = parts.flatMap((p) => (p.type === "work" ? p.steps : [])).filter((s) => s.status === "recovered");
+  assert.equal(failed.length, 1, "the refused try is marked made good - the chat folds it (GeneralWorkspace TurnWorkView)");
+  const shown = parts.map((p) => (p.type === "work" ? { ...p, steps: p.steps.filter((s) => s.status !== "recovered") } : p)).filter((p) => p.type !== "work" || p.steps.length);
+  assert.equal(foldLine(shown), "2 steps - read totals.py, wrote totals.py (+1 −0)");
+  const ws = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(ws, /p\.steps\.filter\(\(st\) => !\(chat && st\.status === "recovered"\)\)/, "the chat folds a try made good");
+});

@@ -601,10 +601,6 @@ _DID = (('Ran', ('bash', 'shell', 'execute', 'powershell', 'local_shell_call', '
         ('Edited', ('edit', 'multiedit', 'apply_patch', 'str_replace')), ('Wrote', ('write', 'create', 'notebookedit')),
         ('Searched the web for', ('websearch', 'web_search', 'search_web')), ('Opened', ('webfetch', 'fetch', 'open', 'navigate', 'browser')),
         ('Searched for', ('grep', 'glob', 'search', 'find')))
-_KIND = {'Ran': ('ran', 'ran {n} commands', 'ran a command'), 'Read': ('read', 'read {n} files', 'read a file'), 'Edited': ('edited', 'edited {n} files', 'edited a file'),
-         'Wrote': ('wrote', 'wrote {n} files', 'wrote a file'), 'Opened': ('opened', 'opened {n} sites', 'opened a site'),
-         'Searched the web for': ('searched', 'searched the web {n} times', 'searched the web'), 'Searched for': ('searched', 'searched {n} times', 'searched'),
-         'Used': ('used', 'used {n} tools', 'used a tool')}
 OUT_N = 1500
 
 
@@ -650,17 +646,6 @@ def tool_rows(steps: list) -> list:
     return out
 
 
-def fold_line(rows: list) -> str:
-    "A turn's work as one line: '12 steps - ran tests, read 3 files, opened 2 sites'."
-    tools = [r for r in rows if r.get('k') == 'tool']
-    n = sum(r.get('times', 1) for r in rows if r.get('k') != 'said') if rows else 0
-    if not n: return ''
-    by = {}
-    for r in tools: by[r['verb']] = by.get(r['verb'], 0) + r.get('times', 1)
-    said = [(_KIND[v][1].format(n=c) if c > 1 else _KIND[v][2]) for v, c in by.items()]
-    return plural(n, 'step') + (f" - {', '.join(said)}" if said else '')
-
-
 def detailed(turn: dict, level: str) -> dict:
     """A turn as the level shows it - THE ONE PLACE the detail setting is applied, the same for every brain road. Each tool call is one row in
     plain words (tool_rows). `summary`: its words, what it showed and its cards, every other row behind one line that opens on them (`fold`,
@@ -669,9 +654,9 @@ def detailed(turn: dict, level: str) -> dict:
     if turn.get('kind') != 'turn': return turn
     steps = tool_rows(turn.get('steps') or [])
     if level in ('steps', 'everything') and turn.get('state') not in LIVE: return {**turn, 'steps': steps, 'level': level}
-    # ...every row stays in its order (`steps`); what the fold holds is named (`fold`), and the one line over it (`fold_line`)
+    # ...every row stays in its order (`steps`); what the fold holds is named (`fold`) - its one line is the page's, said from the rows it opens on
     rest = [s for s in steps if s.get('k') not in SHOWN]
-    return {**turn, 'steps': steps, 'fold': rest, 'folded': len(rest), 'fold_line': fold_line(rest),
+    return {**turn, 'steps': steps, 'fold': rest, 'folded': len(rest),
             'level': 'summary' if turn.get('state') not in LIVE else 'live'}
 
 

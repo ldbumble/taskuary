@@ -10,6 +10,7 @@ import { editHunks, stat } from "./diffView.js";
 import { isSignin } from "./browserSplit.js";
 import { liveTerminal } from "./taskLayout.js";
 import { filesOf, viewOf } from "./viewSpec.js";
+import { plural } from "./timeWords.js";
 
 // ── a coding session's steps -> trace events, the one currency ───────────────────────────────────
 // a step the record kept without its arguments (saved before they were) is read off its one line of text
@@ -112,7 +113,18 @@ export function turnParts(events, { answer = "", keepStart = false, live = false
   return parts.filter((p, i) => p.type !== "plan" || i === lastPlan).map((p, i) => ({ ...p, id: `p${i}` }));
 }
 // what a turn did, counted for its fold's line: "6 steps" - its edits each one
-export const workCount = (parts) => (parts || []).reduce((n, p) => n + (p.type === "edit" ? 1 : p.type === "work" ? p.steps.filter(isWork).length : 0), 0);
+export const workCount = (parts) => workRows(parts).length;
+const workRows = (parts) => (parts || []).flatMap((p) => (p.type === "edit" ? [p] : p.type === "work" ? p.steps.filter(isWork) : []));
+// ...AND ITS ONE LINE SAYS THE ROWS IT OPENS ON (the real-Claude walk, 2026-11-19: "3 steps - ran 2 commands, used a tool" opened on two rows,
+// and "1 step - used a tool" named nothing): counted from those rows, in their own words - the first few, then how many more
+const FEW = 3;
+const lower = (t) => String(t || "").replace(/^[A-Z](?![A-Z])/, (c) => c.toLowerCase());
+export const foldLine = (parts) => {
+  const rows = workRows(parts), n = rows.length;
+  if (!n) return "";
+  const said = rows.slice(0, n > FEW ? FEW - 1 : FEW).map((r) => lower(r.summary)).filter(Boolean);
+  return `${plural(n, "step")}${said.length ? ` - ${said.join(", ")}${n > FEW ? `, and ${n - (FEW - 1)} more` : ""}` : ""}`;
+};
 // A DRAFT WHERE IT STOOD, no longer the one to press (GeneralWorkspace wasCard, NotSent): the list's card in one of these states, carrying what it said
 export const isPastCard = (c) => ["superseded", "passed", "withdrawn", "rejected"].includes(c?.status) && !!c.was;
 // ...AND AN EARLIER VERSION NEVER TAKES ITS REVIEW'S OWN CARD (recorded 2026-11-15: a reply the agent rewrote and he then sent - the rewrite

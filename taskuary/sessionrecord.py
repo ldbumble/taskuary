@@ -561,7 +561,11 @@ def trace_steps(trace: list) -> list:
         k, name, d = e.get('type'), e.get('name'), e.get('detail')
         # ...A CALL WHOSE RESULT CAME BACK HAS FINISHED (walk evidence, 2026-11-17): left without a status, the newest call read as running until
         # another step came (chatStream.eventsOf) - "Reading notes.md" stood on the working line for 10 s while the model wrote its answer
-        if k == 'tool_result' and isinstance(d, dict) and (s := calls.get(d.get('tool_call_id') or name)): s['status'] = 'completed'
+        # ...and ONE THAT FAILED IS FAILED, its words on it (the real-Claude walk, 2026-11-19: a Write refused with "File has not been read yet"
+        # read completed - its diff drawn as made, then again for the retry - and its error stood as a raw note the page could tie to no row)
+        if k == 'tool_result' and isinstance(d, dict) and (s := calls.get(d.get('tool_call_id') or name)):
+            s['status'] = 'failed' if d.get('is_error') else 'completed'
+            if d.get('is_error') and not s.get('output'): s['output'] = _cut_said(d.get('result'))
         if k == 'tool_call':
             steps.append(s := _tool(name, (d or {}).get('args') if isinstance(d, dict) else d))
             if isinstance(d, dict): calls[d.get('tool_call_id')] = s

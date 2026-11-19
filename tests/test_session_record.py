@@ -577,3 +577,21 @@ def test_a_failed_calls_note_is_cut_in_what_happened_never_across_its_next_step(
             note = steps[1]['text']
             assert note.endswith(f'{agenttools.NEXT_STEP}work from what your brief already shows of this task'), (n, note[-80:])
             assert note.startswith(what), n
+
+
+def test_a_call_that_failed_reads_failed_with_its_words_never_completed():
+    """The real-Claude walk, 2026-11-19: a Write refused with "File has not been read yet" read completed - its diff drawn as a file written,
+    then again for the retry that wrote it - and its error stood under it as a raw "⚠ <tool_use_error>..." note tied to no row."""
+    err = '```\n<tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>\n```'
+    steps = sessionrecord.trace_steps([
+        {'type': 'tool_call', 'name': 'Write', 'detail': {'tool_call_id': 'a1', 'args': {'file_path': 'C:/work/totals.py', 'content': 'x = 1\n'}}},
+        {'type': 'tool_result', 'name': 'a1', 'detail': {'result': err, 'is_error': True}},
+        {'type': 'tool_call', 'name': 'Read', 'detail': {'tool_call_id': 'a2', 'args': {'file_path': 'C:/work/totals.py'}}},
+        {'type': 'tool_result', 'name': 'a2', 'detail': {'result': 'x = 0'}},
+        {'type': 'tool_call', 'name': 'Write', 'detail': {'tool_call_id': 'a3', 'args': {'file_path': 'C:/work/totals.py', 'content': 'x = 1\n'}}},
+        {'type': 'tool_result', 'name': 'a3', 'detail': {'result': 'ok'}}])
+    tools = [(s['name'], s['status']) for s in steps if s['k'] == 'tool']
+    assert tools == [('Write', 'failed'), ('Read', 'completed'), ('Write', 'completed')], tools
+    assert 'File has not been read yet' in steps[0]['output']
+    # ...and its note is named by that call: the page folds it into the row, never a note of its own (agentSteps.stepsOf)
+    assert [s.get('name') for s in steps if s['k'] == 'error'] == ['Write']

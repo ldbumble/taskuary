@@ -18,7 +18,7 @@ import { holdUnsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd,  partsMessage, turnParts, workCount, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd,  partsMessage, turnParts, workCount, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, ownDetail, useOwnDetail } from "./chatDetail.js";
@@ -251,8 +251,8 @@ const Fold = ({ k, label, quiet = false, children }) => {
 };
 // ONE RULE FOR EVERY FOLD OF A TURN'S WORK: it is drawn round steps of work. One with none in it - only Taskuary's own notes, as a turn the app
 // started holds before its first step - read "Along the way ▸" over nothing he could see (the overnight walk, 2026-11-11): its notes stand open
-const WorkFold = ({ k, quiet = false, parts, draw, line = "" }) => { const n = workCount(parts);
-  return n ? <Fold k={k} quiet={quiet} label={line || plural(n, "step")}>{parts.map((p, i) => draw(p, i, "everything"))}</Fold>
+const WorkFold = ({ k, quiet = false, parts, draw }) => { const n = workCount(parts);
+  return n ? <Fold k={k} quiet={quiet} label={foldLine(parts)}>{parts.map((p, i) => draw(p, i, "everything"))}</Fold>
     : <>{parts.filter((p) => p.type !== "said").map((p, i) => draw(p, i, "everything"))}</>; };
 const TurnWorkView = ({ data, now, k }) => {
   const at = React.useContext(WorkCtx);
@@ -262,8 +262,11 @@ const TurnWorkView = ({ data, now, k }) => {
   // internal thought failure, for the user the task is getting done. failure means nothing") - a TURN that failed says so in its own words
   const calm = (st) => (!now && st.status === "running" ? { ...st, status: "done", alongside: false }
     : chat && (st.status === "error" || st.status === "recovered") ? { ...st, status: "done" } : st);
+  // ...AND A TRY THE AGENT MADE GOOD IS FOLDED INTO THE TRY THAT WORKED (the real-Claude walk, 2026-11-19: a Write refused for a file not read
+  // yet, then made, stood twice - its error the agent's to read, the owner's only the step that worked)
   const parts = (data?.parts || (data?.steps ? [{ type: "work", id: "p0", steps: data.steps }] : []))
-    .map((p) => (p.type === "work" ? { ...p, steps: p.steps.map(calm) } : p));
+    .map((p) => (p.type === "work" ? { ...p, steps: p.steps.filter((st) => !(chat && st.status === "recovered")).map(calm) } : p))
+    .filter((p) => p.type !== "work" || p.steps.length);
   // ...where nothing sums a turn up (the dock), its trail as ever: one line a step, its edits among them
   if (!at) return <AgentSteps data={{ steps: parts.flatMap((p) => (p.type === "work" ? p.steps : p.type === "said" ? [{ id: p.id, kind: "said", summary: p.text }]
     : p.type === "edit" ? [{ id: p.id, kind: "edit", summary: p.summary, status: "done" }] : [])) }} />;
@@ -292,7 +295,7 @@ const TurnWorkView = ({ data, now, k }) => {
     // ...and WHAT IT SAID ON ITS WAY STAYS when the turn ends (the UX walk, 2026-11-18: its opening line "I'll check the email, then ..." went as the
     // summary took its place) - nothing drawn goes; its answer is added under it (stepsOf already leaves out what the answer says again)
     const out = (p) => p.type === "view" || p.type === "files" || p.type === "said", said = parts.filter(out), rest = parts.filter((p) => !out(p));
-    return <>{rest.some((p) => p.type !== "said") && <WorkFold k={`${key}:all`} quiet parts={rest} draw={draw} line={data?.line || ""} />}
+    return <>{rest.some((p) => p.type !== "said") && <WorkFold k={`${key}:all`} quiet parts={rest} draw={draw} />}
       {said.map((p, i) => draw(p, i, "everything"))}</>;
   }
   return <>{parts.map((p, i) => draw(p, i, level))}</>;
@@ -454,7 +457,7 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
     {!!words && !live && <CopyCorner text={words} label="Copy this answer" />}
     {!more && <div className="tq-aui-role">{name}{live ? <RunClock start={turnStart(t)} at={turnAt(t)} /> : <TurnTime t={t} />}</div>}
     <div className="tq-aui-agent-body">
-      <TurnWorkView data={{ parts, level: t.level, line: t.fold_line }} now={live} k={t.id} />
+      <TurnWorkView data={{ parts, level: t.level }} now={live} k={t.id} />
       {!!words && <SaidText text={words} mid={key} />}
       {/* ...A TURN THAT COULD NOT FINISH, WORTH ANOTHER TRY (its summary's `retry`): one button, never "send any message on this task to try
           again" (the 2026-11-18 walks) - pressed, it is his line "Try again." and the agent goes on */}

@@ -490,7 +490,7 @@ def validate(spec: dict, store=None) -> tuple:
             if c.get(k) is not None and (isinstance(c[k], bool) or _num(c[k]) is None): return False, f'{name}: "{k}" is a number'
         if c.get('w') is not None and c['w'] not in (1, 2, 3, 4): return False, f'{name}: "w" is 1 to 4 columns'
         if c.get('columns') is not None and not isinstance(c['columns'], list): return False, f'{name}: "columns" is a list'
-    if not isinstance(spec.get('filters') or {}, dict): return False, 'the filters are name: value pairs, as {"range": 30}'
+    if not isinstance(spec.get('filters') or {}, dict): return False, 'the filters are name: value pairs, such as range: 30'
     rng = (spec.get('filters') or {}).get('range')
     if rng is not None and (isinstance(rng, bool) or _num(rng) not in RANGES): return False, f'the date range is one of {", ".join(map(str, RANGES))} days'
     return True, ''

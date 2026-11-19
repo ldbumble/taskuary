@@ -546,6 +546,8 @@ class ACPCoding:
     def _idle(self, said: str = '', turn: bool = True):
         "A turn ended: the agent waits on the owner, the Board hears it, and what waited in the waiting room goes in now."
         self.busy, self.seeding, self.last = False, False, time.time()
+        from . import chatlog                       # ...its last words, held back a beat as they streamed (CHUNK_S), go into the log at its end
+        chatlog.flush(self.store, self.task_id)
         general.answered(self.task_id, 0)          # the turn is over: "at work" stays only for a line still kept for the next one
         if said: self.witness.note({'k': 'done', 'text': said})
         if turn: self._event('Stop', last_assistant_message=said)

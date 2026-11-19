@@ -717,12 +717,14 @@ def came_in(store, tid: int) -> None:
 # ── THE ONE ACTION BOX (stage 5, D): cardqueue.advance is the only writer of card rows ─────────────────────────────────────────────────────
 @_safe
 def advance(store, tid: int) -> None:
-    """The line of cards on task `tid` (cardqueue.state) into the log: the front is put as the ONE pending card - under the newest turn, as
-    its last thing, once that turn is no longer at work - with the line's "n of m · next" in it; a card that stood is updated in place as it
+    """The line of cards on task `tid` (cardqueue.state) into the log: the front is put as the ONE pending card - under the turn that raised
+    it, as its last thing (drawn once that turn is no longer at work), else at the foot where an input came after every turn - with the
+    line's "n of m · next" in it; a card that stood is updated in place as it
     is pressed, withdrawn or moved past, never moved; one held behind the front has no row, so nothing can draw it. A card outside the line
     (Taskuary's own offer beside a reply - a playbook) stands as an `offer`, drawn only while no card of the line waits."""
     from . import cardqueue
     from .conversation import _card
+    from .processing_unread import OWNER_ACTORS
     tid = int(tid)
     q = cardqueue.state(store, tid)
     with store.lock:
@@ -735,12 +737,15 @@ def advance(store, tid: int) -> None:
         rv = by.get(json.loads(r['Body']).get('review'))
         if not rv: continue
         st = _card(rv)['status']
+        # ...ONE TAKEN BACK BEFORE ITS TURN ENDED NEVER STOOD (drawn only then): its row goes, as nothing of it was ever on his screen
+        if st not in ('pending', 'offer') and rv.get('DecidedBy') not in OWNER_ACTORS and (p := _above(store, r)) and p['State'] in LIVE:
+            with store.lock: store.cx.execute('DELETE FROM chatlog WHERE Id=?', (r['Id'],)); store.cx.commit()
+            continue
         # ...one the chat moved past stays where it stood, its buttons greyed (proposals.written_past) - never taken off as if it waited behind
         if st == 'pending' and rv['ReviewId'] not in front: st = 'passed' if rv['ReviewId'] in q['past'] else 'offer' if r['State'] == 'offer' else 'held'
         if st != r['State']: update(store, tid, k, state=st, status=st)
     if front and (rv := by.get(front[0])) and f"r:{front[0]}" not in rows:
-        t = _newest_turn(store, tid)
-        if t and t['State'] in LIVE: return                     # ...a turn's card is its last thing: it comes when the turn has ended
+        t = open_turn(store, tid)                               # ...the turn that raised it; a turn's card is drawn when that turn has ended
         put(store, tid, 'card', f"r:{front[0]}", {**_card(rv), 'rids': front, 'line': cardqueue.line(q)}, parent=t['Id'] if t else None,
             state='pending', src=f"review:{front[0]}")
     elif front and f"r:{front[0]}" in rows: update(store, tid, f"r:{front[0]}", line=cardqueue.line(q))
@@ -748,9 +753,15 @@ def advance(store, tid: int) -> None:
         if f'r:{rid}' in rows or rv['Status'] != 'pending' or cardqueue.in_line(rv) or rid in held: continue
         from .conversation import unwritten
         if unwritten(rv) or cardqueue.obsolete_read(store, tid, rv): continue
-        t = _newest_turn(store, tid)
-        if t and t['State'] in LIVE: continue
+        t = open_turn(store, tid)
         put(store, tid, 'card', f'r:{rid}', {**_card(rv), 'offer': True}, parent=t['Id'] if t else None, state='offer', src=f'review:{rid}')
+
+
+def _above(store, r: dict):
+    "The row a row stands under (its turn), or None."
+    if r.get('Parent') is None: return None
+    with store.lock: p = store.cx.execute('SELECT * FROM chatlog WHERE Id=?', (r['Parent'],)).fetchone()
+    return dict(p) if p else None
 
 
 def _newest_turn(store, tid: int):

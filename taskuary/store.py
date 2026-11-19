@@ -5638,6 +5638,10 @@ class SQLiteStore:
             if sent:
                 from .channels import retire_draft_answered_elsewhere
                 retire_draft_answered_elsewhere(self, fields.get('TaskId'), sent, later=True)   # a model read, never inside this write
+        # ...a card stands in the chat's log from the moment it is raised, in the turn that raised it (chatlog.advance: the one writer of cards)
+        if fields.get('TaskId') and fields.get('Status') == 'pending':
+            from . import chatlog
+            chatlog.advance(self, fields['TaskId'])
         return rid
     def get_review(self, rid): return self._one('SELECT * FROM review WHERE ReviewId=?', (rid,))
     def reviews_for_message(self, mid):

@@ -169,13 +169,20 @@ def _wa_ids(store, q: str) -> list:
                                                 'ORDER BY SentAt DESC LIMIT ?', (*p, N_MSGS * 6))]
 
 
+TITLE, HEAD = "IFNULL(TriageTitle,'')", "IFNULL(Subject,'') || ' ' || IFNULL(FromName,'') || ' ' || IFNULL(FromEmail,'')"
 def _message_ids(store, words) -> list:
-    ids = store.message_search(words, limit=N_MSGS * 6, prefix=True)
-    if ids is not None: return ids
-    # no full-text index on this SQLite: the subject and the sender, scanned - slower, never nothing
     pat = [f'%{w.lower()}%' for w in words]
-    cond = ' AND '.join("lower(IFNULL(Subject,'') || ' ' || IFNULL(FromName,'') || ' ' || IFNULL(FromEmail,'')) LIKE ?" for _ in pat)
-    return [r['MessageId'] for r in store._rows(f'SELECT MessageId FROM message WHERE {cond} ORDER BY SentAt DESC LIMIT ?', (*pat, N_MSGS * 6))]
+    like = lambda cols: ' AND '.join(f"lower({cols}) LIKE ?" for _ in pat)
+    # ...BY THE TITLE ITS ROW WEARS FIRST (the walk, 2026-11-18: "Nothing matches" for an FYI row's own words, with the row behind the dialog):
+    # the rail names a message by triage's title (funnel.says), which the full-text index never held
+    titled = [r['MessageId'] for r in store._rows(f"SELECT MessageId FROM message WHERE TriageTitle IS NOT NULL AND {like(TITLE)} "
+                                                  'ORDER BY SentAt DESC LIMIT ?', (*pat, N_MSGS * 6))]
+    ids = store.message_search(words, limit=N_MSGS * 6, prefix=True)
+    # no full-text index on this SQLite: the subject and the sender, scanned - slower, never nothing
+    if ids is None:
+        ids = [r['MessageId'] for r in store._rows(f"SELECT MessageId FROM message WHERE {like(HEAD)} "
+                                                   'ORDER BY SentAt DESC LIMIT ?', (*pat, N_MSGS * 6))]
+    return list(dict.fromkeys([*titled, *ids]))
 
 
 def _messages(store, words, first=()) -> tuple:

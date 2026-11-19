@@ -34,6 +34,13 @@ class SearchTests(unittest.TestCase):
         self.assertEqual([x['mid'] for x in h], [self.fw])
         self.assertIn('still needed', h[0]['snippet'])
 
+    def test_an_fyi_row_is_found_by_the_title_the_rail_shows(self):
+        """The walk, 2026-11-18: "Nothing matches 'Unverified Payworth invoice'" while that row sat in the FYI rail behind the dialog - the rail
+        names a message by triage's title, and search read only its subject, sender and body."""
+        mid = mail(self.s, 'Invoice PW-2291', 'Please pay by Friday.', 'c-pay', who='Payworth Billing')
+        self.s._exec('UPDATE message SET TriageTitle=? WHERE MessageId=?', ('Unverified invoice PW-2291 payment demand from Payworth', mid))
+        self.assertEqual([x['mid'] for x in self.hits('Unverified Payworth invoice') if x['type'] == 'email'], [mid])
+
     def test_every_kind_wears_its_pill_and_a_thread_is_one_row(self):
         by = {}
         for x in self.hits('certificate'): by.setdefault(x['type'], []).append(x)

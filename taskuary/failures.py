@@ -26,7 +26,8 @@ _CLI_QUOTA = re.compile(r"(?:you(?:'|’)ve hit your |you have hit your )?(?:(?:
 
 def cli_quota(text) -> str:
     """The CLI's quota notice, without ACP's RPC wrapper or Taskuary's retry suffix."""
-    text = str(text or '').split(' - type to carry on', 1)[0]
+    from .say import NEXT
+    text = str(text or '').split(' - type to carry on', 1)[0].split(f' - {NEXT}', 1)[0]      # ...without what happens next (say.turn_failed)
     if m := _CLI_QUOTA.search(text):
         notice = m[0].strip().rstrip('.')
         return notice[0].upper() + notice[1:]

@@ -70,6 +70,10 @@ export const stateStatus = (key) => {
   return m ? said(key, m, key === "working") : null;
 };
 
+// THE SERVER'S STATUS FOR THE TASK (taskstate.status, the roads audit 2026-11-19 #9): its key and its words, said once on the server - the
+// chat's words, a reply owed and a start that failed already read there - drawn as given, with the rail's mark, badge and ring over it
+export const fromServer = (s) => (s?.key ? said(s.key, { ...(taskStateMeta(s.key) || {}), word: s.word, hint: s.hint || "", ...(s.mark ? { mark: s.mark } : {}) }, !!s.spins) : null);
+
 // THE TASK PAGE'S STATUS: the live session's own word first - the rail's working and waiting lanes read that very session (taskstate:
 // a live session is `blocked` when it waits, else `working`) - then the rail's row for the task (on the canvas), then the server's state
 // (the Tasks list's row, or the detail's own for a task with no row - a closed one).
@@ -85,14 +89,17 @@ export const taskStatus = ({ chat = false, queued = null, ...o } = {}) => {
   const st = chatReady(taskStatus_({ ...o, chat }), chat);
   return st?.key === "queued" && queued?.state === "failed" ? said("start_failed", KIND_META.start_failed, false) : st;
 };
-const taskStatus_ = ({ live = null, rail = null, state = null, closed = false, cantSend = false, page = null, owed = null, chat = false } = {}) => {
+// `server`: the task's own status from its detail (fromServer) - where the page had no rail row it read the state key and laid the chat's,
+// the owed and the failed start's words over it itself; the server says them now, and the key is the fallback for a detail without one
+const taskStatus_ = ({ live = null, rail = null, state = null, closed = false, cantSend = false, page = null, owed = null, chat = false, server = null } = {}) => {
   // ...unless the server read the parked session as the reply it drafted waiting (taskstate: `approve`) - one state, as the Board's - or a
   // chat agent the owner already answered as done for now (`agentdone`, taskstate.chat_moved_on)
   // ...any agent's, since 2026-11-10: a coding agent that pushed and said nothing is left read "agent waiting on you" (taskstate.done_for_now)
   if (live?.alive && !(live.waiting && (state === "approve" || state === "agentdone"))) return railStatus({ lane: live.waiting ? "blocked" : "working" });
   if (live?.alive && state === "agentdone") return chatDone(stateStatus(state));
-  if (closed && stateStatus(state)) return stateStatus(state);
-  const st = railStatus(owed === false && owedNoDraft(rail) ? { ...rail, draft: true } : rail, cantSend, page) || stateStatus(state);
+  const own = fromServer(server) || stateStatus(state);
+  if (closed && own) return own;
+  const st = railStatus(owed === false && owedNoDraft(rail) ? { ...rail, draft: true } : rail, cantSend, page) || own;
   if (owed && ["approve", UNSENDABLE].includes(st?.key) && rail?.kind !== "action") return said(OWED, KIND_META[OWED], false);
   return cantSend && st?.key === "approve" && rail?.kind !== "action" ? said(UNSENDABLE, KIND_META[UNSENDABLE], false) : st;
 };

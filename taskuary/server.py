@@ -2382,6 +2382,8 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
             # ...and what the task IS, the list's own State (taskstate): the table opens a task with no list row, and without it an
             # agent's own close read "stopped and saved" and opened on Close out (the owner, 2026-10-21)
             'state': (st := _task_state(task_id, d, session)),
+            # ...and ITS STATUS IN WORDS, said once (taskstate.status): the header's pill draws it as the phone and the bell say it
+            'status': _task_status(task_id, d, session, st),
             # ...and WHERE IT IS UP TO, at rest (stages.json, the owner 2026-10-26): the page reads its own from what it draws, the same rules
             'stage': stages.of_task(store, d['task'], st, session, msgs),
             # ...and who closed it and why, one line, when its agent did (taskstate.closed_why)
@@ -2438,6 +2440,14 @@ def _task_state(task_id: int, d: dict, session=None):
         return taskstate.state(store, t, session, store.get_dispatch(task_id))
     except Exception as e:
         logger.debug(f'task {task_id}: state skipped - {e}'); return None
+
+
+def _task_status(task_id: int, d: dict, session=None, key=None):
+    "taskstate.status for one task's page, from the state already read - None where it could not be read (the page then reads its own)."
+    if not key: return None
+    try: return taskstate.status(store, d['task'], session, store.get_dispatch(task_id), key=key)
+    except Exception as e:
+        logger.debug(f'task {task_id}: status skipped - {e}'); return None
 
 
 def _writeup_state(task_id: int):

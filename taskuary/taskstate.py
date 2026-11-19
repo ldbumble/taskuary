@@ -299,6 +299,28 @@ def state(store, t: dict, session=None, queued=None) -> str:
     return TaskState(store, t, session, queued).key
 
 
+# THE TASK'S STATUS AND ITS WORDS, SAID ONCE (the roads audit, 2026-11-19 #9): the header's pill, the rail's row, the phone and the bell each
+# put "agent working / waiting on you / done" together from their own facts - the phone said "finished" where the pill said "agent done", and
+# "handed over, not started" where it said "waiting to start". The key is `state`'s; the words are lanes.json's (lanes.word / hint / mark),
+# with the three readings the page laid over them: a chat task's waiting move is its agent's (chat_ready, chat_done - the owner, 2026-11-05
+# and 11-06), a reply owed that nothing has written yet (owed - 2026-10-27), and a start that failed (start_failed - 2026-11-06).
+CHAT_READY, CHAT_DONE = ('blocked', 'approve'), ('agentdone', 'wrapup', 'chat_done')
+def status(store, t: dict, session=None, queued=None, key: str = None) -> dict:
+    """{key, word, hint, mark, spins} for task `t` - what every surface draws as its status. `key`: the state already read for this very
+    reading (state), else it is read here."""
+    from . import lanes
+    from .general import handles, is_dock
+    k = key or state(store, t, session, queued)
+    words = lambda x: {'key': x, 'word': lanes.word(x), 'hint': lanes.hint(x), 'mark': lanes.MARK.get(x, '')}
+    if k == 'queued' and str((queued or {}).get('State') or (queued or {}).get('state') or '') == 'failed': return {**words('start_failed'), 'spins': False}
+    if k == 'approve' and (w := store.waiting_on_owner(t['TaskId'])) and w.get('Kind') in ('draft', 'draft_reply')             and not str(w.get('FinalText') or w.get('DraftText') or '').strip(): return {**words('owed'), 'spins': False}
+    out = {**words(k), 'spins': k == 'working'}
+    if handles(t) and not is_dock(t):
+        if k in CHAT_READY: out = {**out, 'word': lanes.word('chat_ready'), 'hint': lanes.hint('chat_ready')}
+        elif k in CHAT_DONE: out = {**words('chat_done'), 'spins': False}
+    return out
+
+
 def column(key: str) -> str | None:
     """The Board column a state sits in, or None - a task that is yours, or waiting on them, is not agent work."""
     return next((c for c, keys in BOARD if key in keys), None)

@@ -69,3 +69,23 @@ def test_a_reply_held_behind_a_post_is_lit_and_offered_nowhere():
     text, picks = asks.phone_text(s, s.get_task(tid), 'approve', 'a post waits for your Post')
     assert 'Hi Ray' not in text and not any(a.get('rid') == reply for _, a in picks), 'the phone offers no held reply'
     assert s.waiting_on_owner(tid, ('draft', 'draft_reply')) is None
+
+
+def test_the_tasks_status_and_its_words_are_said_once_by_the_server():
+    # the roads audit, 2026-11-19 (#9): the pill put a chat's words, a reply owed and a failed start over the state key in the page, while the
+    # phone and the list said the key's own words - one function says the status and its words, and the page's detail carries it
+    from fastapi.testclient import TestClient
+    from unittest import mock
+    from taskuary import lanes, server
+    s, tid, rid = chat_with_email()
+    s._exec("UPDATE review SET Status='approved', DeliveryState='sent' WHERE ReviewId=?", (rid,))
+    with mock.patch.object(server, 'store', s):
+        got = TestClient(server.app).get(f'/api/tasks/{tid}').json()
+    assert got['state'] == taskstate.state(s, s.get_task(tid)) == 'agentdone'
+    assert got['status'] == taskstate.status(s, s.get_task(tid)) and (got['status']['key'], got['status']['word']) == ('chat_done', lanes.word('chat_done'))
+    # ...a reply owed that nothing has written is said so, never "ready to send"
+    r = MemoryStore(); t = r.create_task({'Title': 'Visitor parking', 'Kind': 'reply', 'Status': 'open'}, 'o')
+    r.add_review({'TaskId': t, 'Kind': 'draft', 'Status': 'pending', 'DraftText': ''})
+    assert taskstate.state(r, r.get_task(t)) == 'approve' and taskstate.status(r, r.get_task(t))['word'] == lanes.word('owed')
+    # ...and a start that failed says it could not start, never "waiting to start"
+    assert taskstate.status(r, r.get_task(t), key='queued', queued={'State': 'failed'})['key'] == 'start_failed'

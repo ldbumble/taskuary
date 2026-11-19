@@ -179,3 +179,17 @@ test("a general task's header reads its rail row's own words, chat or not", () =
   assert.equal(taskStatus({ chat: chatOf({ lane: "approve", kind: "review" }, true), rail: { lane: "approve", kind: "review" } }).word, "ready to send");
   assert.equal(chatOf(null, true), true, "off the rail its kind says it");
 });
+
+// ONE STATUS, SAID BY THE SERVER (the roads audit, 2026-11-19 #9): off the rail, the page read the state key and laid the chat's words, a reply
+// owed and a failed start over it itself; the server says them now (taskstate.status, the detail's `status`), and the pill draws them as given
+test("off the rail the header draws the server's status as it is said, with the rail's mark and ring", () => {
+  const server = { key: "chat_done", word: "agent done", hint: "you answered the agent", mark: "", spins: false };
+  const st = taskStatus({ state: "agentdone", server });
+  assert.deepEqual([st.key, st.word, st.spins], ["chat_done", "agent done", false]);
+  assert.equal(taskStatus({ state: "working", server: { key: "working", word: LANE_META.working.word, spins: true } }).anim, "ring");
+  assert.equal(taskStatus({ state: "queued", server: { key: "start_failed", word: "couldn't start" } }).word, "couldn't start");
+  assert.equal(taskStatus({ state: "agentdone", closed: true, server }).word, "agent done", "a closed task's too");
+  const item = { lane: "approve", kind: "review" };
+  assert.deepEqual(taskStatus({ rail: item, state: "approve", server: { key: "owed", word: "reply owed" } }), taskStatus({ rail: item }),
+    "on the rail the row still leads");
+});

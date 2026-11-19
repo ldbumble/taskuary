@@ -933,8 +933,10 @@ def presses(store, tid: int, since: str = '') -> list:
     # ...A REOPEN HIS TYPED LINE MADE IS SAID BY THAT LINE (QUIET's reopened_by_typing, reopen): the store's own `reopened` row, written by the same
     # write, stood as "You reopened it" right above his line, a frame after the line was drawn (the Continue round, 2026-11-18)
     # ...by the row his typing wrote with it, the next of its kind, whatever another thread wrote between them in that second
-    nxt = lambda i: next((b for b in rows if b['Id'] > i and b['Action'] in ('reopened', 'reopened_by_typing')), None)
-    typed = {a['Id'] for a in rows if a['Action'] == 'reopened' and (b := nxt(a['Id'])) and b['Action'] == 'reopened_by_typing'}
+    pair = ('reopened', 'reopened_by_typing')
+    nxt = lambda i: next((b for b in rows if b['Id'] > i and b['Action'] in pair), None)
+    prv = lambda i: next((b for b in reversed(rows) if b['Id'] < i and b['Action'] in pair), None)
+    typed = {a['Id'] for a in rows if a['Action'] == 'reopened' and any(b and b['Action'] == 'reopened_by_typing' for b in (nxt(a['Id']), prv(a['Id'])))}
     out = [(r['Id'], r['CreatedAt'], PRESSES[r['Action']](_detail(r)),
             *((_held_result(_detail(r)),) if r['Action'] in HELD_DONE else ()))
            for r in rows if r['Action'] in PRESSES and r['Id'] not in typed and not _detail(r).get('review')]   # a card's own act: said by its card (proposals.execute)
@@ -4017,9 +4019,11 @@ def reopen(store, tid: int, actor='owner', why: str = 'reopened_by_typing', deta
     t = store.get_task(tid) or {}
     closed = t.get('Status') in ('done', 'dropped')
     if (closed or t.get('Status') in also) and not is_dock(t):
+        # ...its own row FIRST: the store's 'reopened' row is said as a press the moment it is written (chatlog.pressed), and read before this
+        # one it stood as "You reopened it" under his typed line, which is the reopen (walk 2, 2026-11-19)
+        if closed: store.audit('task', tid, why, actor, 'human' if actor == 'owner' else 'agent', detail)
         store.update_task(tid, {'Status': 'open', 'RemindAt': ''}, actor)
         if closed:
-            store.audit('task', tid, why, actor, 'human' if actor == 'owner' else 'agent', detail)
             from . import selfclose
             selfclose.forget(tid)
         t = store.get_task(tid) or t

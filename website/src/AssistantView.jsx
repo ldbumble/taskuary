@@ -1410,6 +1410,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   const pin = useRef(false);            // the card on the table is held at the top of the view (keepTable below)
   // how the next address is written (recordPlace): "push" once the owner goes somewhere, "replace" for the walk and the server
   const navHow = useRef("replace");
+  // ...and whether the place now asked for came from the address itself (Back, Forward, a link): that one is never a step of its own
+  const urlStep = useRef(false), lastPlace = useRef("");
   const cardRef = useRef(null);
   // every move of the table made HERE, counted: a server word read before one is older than it (readChat, loadPile)
   const tableMoves = useRef(0);
@@ -3306,7 +3308,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     // page headers stood in their place over a lone floor Next, one more for every trip (the 2026-10-25 sweep)
     else if (request.kind === "home") { setRailOpen(false); setFoldedKey(null); browseDownRef.current?.(); putOnTable(null, "view");
       setMsgs((m) => (m.length && m.every((x) => x.role === "browse") ? [] : m)); }
-    if (request.fromUrl) navHow.current = "replace";
+    if (request.fromUrl) { navHow.current = "replace"; urlStep.current = true; }
   }, [request, state]);   // eslint-disable-line react-hooks/exhaustive-deps
   // A COLD LINK TO A TASK (#task=N in a new tab) draws that task first: the conversation came back with the walk's last item on
   // the table, which drew whole - its view and every read behind it - for the 0.6-1 s the link's own pull took, then gave way.
@@ -3339,7 +3341,11 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   useEffect(() => {
     if (request?.n && request.n !== reqSeen.current) { if (request.n === doneReq.current) reqSeen.current = request.n; return; }
     if (!active || !state || old || firstRun || busy) return;
-    recordPlace(placeHash, navHow.current); navHow.current = "replace";
+    // ...A MOVE FROM ONE TASK TO ANOTHER IS A STEP, whatever road moved the table (walk 2, 2026-11-19: Mark done moved to the next task by a road
+    // that never marked its step, the closed task's place was written over, and Back went "home" with the next task drawn and no Back left).
+    // Only a place the address itself asked for (Back, Forward, a link) is written in place
+    const moved = !!placeHash && !!lastPlace.current && placeHash !== lastPlace.current && !urlStep.current;
+    recordPlace(placeHash, moved ? "push" : navHow.current); navHow.current = "replace"; urlStep.current = false; lastPlace.current = placeHash;
   }, [placeHash, active, state, old, firstRun, busy, request]);   // eslint-disable-line react-hooks/exhaustive-deps
   // BACK IN THE WINDOW ITSELF (TQ-1187): the desktop window has no browser bar, so the step behind a page or task the owner opened is
   // a press away here - the browser's own Back, the road onPlace already takes. Only over a step of ours (appLinks.canGoBack)

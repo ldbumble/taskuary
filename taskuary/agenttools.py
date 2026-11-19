@@ -926,7 +926,8 @@ SHOW_RULE = ("To show the owner an image, a file or a page, call the `show` tool
 # ...and WHAT IT SAYS OF HIM IS HIS (the redesign walk, 2026-11-19: a sent redraft said "Friday is tight for me", which he never said, and a
 # meeting already over was accepted at 4:27 PM): one sentence, beside the verify rule, in every agent's rules (terminal.with_fence_rule)
 OWNER_FACT_RULE = ("Never state a fact about the owner he did not give you or a record does not show - when he is free, what he prefers, what "
-                   "suits him - ask him in one question instead; and check every date and time against now before you accept, propose or write it.")
+                   "suits him - ask him in one question instead; and check every date and time against now before you accept, propose or write it. "
+                   "In his chat you speak to the owner as \"you\", never of him by name or in the third person.")
 VERIFY_RULE = ("Answer what was asked. Claim an effect (searched, opened, sent, changed, pushed, deployed, on screen) only once you verified it, "
                "and say how; what you did not do or could not open is said only where it changes the answer. A draft, a send or a push is his to "
                "see as its card - never say one is ready, drafted, sent or pushed that no card or press of his shows.")

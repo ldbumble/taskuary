@@ -576,7 +576,8 @@ def arrived(store, tid, conv, who: str, actor: str = 'router'):
     if not it: return False
     store.update_batch_item(tid, conv, {'State': 'waiting', 'Result': f"{who} wrote on it since"
                                         + (f" - before that: {it['Result']}" if it.get('Result') else '')})
-    if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): store.update_task(tid, {'Status': 'open'}, actor)
+    from . import general
+    general.reopen(store, tid, actor, 'reopen', {'why': f'{who} wrote on an item'})
     return True
 
 
@@ -592,7 +593,8 @@ def act(store, tid, place: int, action: str, actor: str = 'owner') -> dict:
     it = next((i for i in store.batch_items(tid) if int(i['Place']) == int(place)), None)
     if not it: return {'ok': False, 'why': f'there is no item {place} in this batch'}
     if action == 'reopen':
-        if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): store.update_task(tid, {'Status': 'open'}, actor)
+        from . import general
+        general.reopen(store, tid, actor, 'reopen', {'why': 'an item put back for the agent'})
         store.update_batch_item(tid, it['ConversationId'], {'State': 'waiting'}); return {'ok': True, 'state': 'waiting'}
     if action == 'settle':
         set_item(store, tid, it['ConversationId'], actor, State='done'); return {'ok': True, 'state': 'done'}

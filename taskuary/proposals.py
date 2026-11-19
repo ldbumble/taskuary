@@ -841,11 +841,13 @@ def settle(store, rv: dict, verb: str, actor='owner') -> None:
         # back on the owner - open, nobody else's turn - for their Mark done. It used to close here.
         if (store.get_task(tid) or {}).get('Status') == 'waiting' and not owed(store, tid) and \
                 store._one("SELECT 1 x FROM audit WHERE EntityType='task' AND EntityId=? AND Action='awaits_proposals' LIMIT 1", (tid,)):
-            store.update_task(tid, {'Status': 'open'}, actor)
+            from . import general
+            general.reopen(store, tid, actor, also=('waiting',))
             closed_out(store, tid, actor, 'Every proposal is answered.')
         return
     if verb not in ('approve', 'edit'):
-        store.update_task(tid, {'Status': 'open'}, actor)
+        from . import general
+        general.reopen(store, tid, actor, 'reopen', {'why': 'its close-out was turned down'}, also=('waiting', 'in_progress'))
         return
     if owed(store, tid): return
     closed_out(store, tid, actor, 'Closed out.')

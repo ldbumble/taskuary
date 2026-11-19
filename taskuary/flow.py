@@ -759,7 +759,8 @@ def resume(store, fr: dict, result: dict = None) -> dict | None:
         _add(ctx, steps[i], recs[-1], body); start = i + 1
     else:
         recs[-1] = {**last, 'status': 'repaired', 'head': 'failed, then repaired on your yes'}; start = i
-    if task.get('Status') in ('done', 'dropped'): store.update_task(tid, {'Status': 'open'}, 'workflow')
+    from . import general
+    general.reopen(store, tid, 'workflow', 'reopen', {'why': 'the run goes on on your yes'})
     store.add_comment(tid, 'workflow', 'agent', f"Approved - the run goes on from step {start + 1}.")
     rec = {'at': run.get('at') or datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'type': 'flow', 'title': cfg.get('title') or run.get('title'),
            'trigger': trigger, 'subject': run.get('subject'), 'task_id': tid, 'steps': recs, 'run_id': run['runId']}

@@ -156,7 +156,8 @@ def world(store) -> dict:
     store.update_task(tid, {'Status': 'done'}, 'owner')
     f.message(task_id=tid, subject='RE: Trainly seats for the finance team', body='Could we make it seven? Two more joined.', from_name=GAIL[0],
               from_email=GAIL[1], sent_at=at(1), conversation_id='email:Trainly seats for the finance team')
-    store.update_task(tid, {'Status': 'open'}, 'owner'); out['reopened'] = tid
+    from . import general
+    general.reopen(store, tid, 'owner'); out['reopened'] = tid
     store.upsert_idea({'key': 'idea:spendly-limits', 'kind': 'idea', 'text': 'Spendly card limits were raised twice this month - worth a standing rule?',
                        'action': {'triage': {'intent': 'task', 'priority': 'normal'}}}, at(2))
     # a meeting in twenty minutes and one this evening: the calendar the pile reads, held fresh for the walk

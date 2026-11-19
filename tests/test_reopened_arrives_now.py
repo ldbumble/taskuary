@@ -58,4 +58,19 @@ class ReopenedArrivesNow(unittest.TestCase):
         self.assertIsNone(processing_unread.came_back(self.s, self.quiet, self.s.list_messages(self.quiet)))
 
 
+class OneReopen(unittest.TestCase):
+    """ONE REOPEN (general.reopen): a line owed him on a closed task, his own typing, a batch item someone wrote on - each brings it back the
+    same way. Triage's own reopen read only done, so a task he let go stayed closed, and kept a Remind me date that held it under For later."""
+    def test_every_door_brings_a_closed_task_back_the_same_way(self):
+        from taskuary import general, remind
+        s = store()
+        for st in ('done', 'dropped'):
+            a, b = (s.create_task({'Title': 'Budget', 'Kind': 'task', 'Status': 'open', 'RemindAt': ahead(3 * 24 * 60)}, 'owner') for _ in range(2))
+            for t in (a, b): s.update_task(t, {'Status': st}, 'owner')
+            ingest._reopen(s, a, {'from_name': 'Erin Blake', 'subject': 'One more question'}, 'router', {'intent': 'reply_only'})
+            general.reopen(s, b, 'owner')
+            seen = [(s.get_task(t)['Status'], remind.waiting(s.get_task(t))) for t in (a, b)]
+            self.assertEqual(seen, [('open', False)] * 2, st)
+
+
 if __name__ == '__main__': unittest.main()

@@ -228,7 +228,8 @@ def check_task(store, task_id: int, llm=None) -> dict:
     except origin.Refusal: handed = False         # the task says why (terminal.stranger_now); it waits on the owner
     if not handed:
         # nobody is at the keyboard: it becomes work waiting on the owner, not a silent red
-        store.update_task(task_id, {'Status': 'open'}, 'ci')
+        from . import general
+        general.reopen(store, task_id, 'ci', 'reopen', {'why': 'its checks failed'}, also=('waiting', 'in_progress'))
     store.audit('task', task_id, 'ci_failure', 'ci', detail={'at': ref, 'kind': at['kind'],
                                                              'checks': [f['name'] for f in ck['failed']],
                                                              'handed_to_agent': handed})
@@ -289,7 +290,9 @@ def pull_comments(store, task_id: int, at: dict) -> int:
         from . import origin
         try: said = typed and hub_term.say_to_task(store, task_id, {'FromName': 'GitHub', 'Channel': 'github', 'BodyText': typed}, 'github')
         except origin.Refusal: said = False
-        if not said: store.update_task(task_id, {'Status': 'open'}, 'github')
+        if not said:
+            from . import general
+            general.reopen(store, task_id, 'github', 'reopen', {'why': 'new comments on its pull request'}, also=('waiting', 'in_progress'))
         store.audit('task', task_id, 'pr_comments', 'github', detail={'new': n, 'pr': at.get('number')})
     return n
 

@@ -2395,7 +2395,7 @@ def first_agent(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> 
     if not ok: not_started(store, tid, who); return False
     if t.get('Kind') != kind and not (kind == 'general' and general.handles(t)): store.update_task(tid, {'Kind': kind}, 'triage')
     watch.stop(store, tid, 'triage')                         # someone's work now, not a thread watched
-    if t.get('Status') in ('done', 'waiting'): store.update_task(tid, {'Status': 'open'}, 'triage')
+    general.reopen(store, tid, 'triage', 'reopen', {'why': 'work for an agent on its thread'}, also=('waiting',))
     store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s message is work for {task_kinds.worker(kind)}, so it starts on it by itself."
                       + (f' {who}' if who else ''))
     store.audit('task', tid, 'first_agent', actor, 'agent', {'message_id': mid, 'kind': kind, 'was': t.get('Kind')})
@@ -2481,7 +2481,7 @@ def agent_on_reply(store, tid, msg: dict, mid, verdict: dict | None, actor: str,
     # ...a research or marketing task is already the assistant's: it keeps its kind (only a reply task, or a coding one, changes)
     if not (kind == 'general' and general.handles(store.get_task(tid))): store.update_task(tid, {'Kind': kind}, 'triage')
     store.tag_task(tid, REPLY_TAG, actor='triage')
-    if (store.get_task(tid) or {}).get('Status') in ('done', 'waiting'): store.update_task(tid, {'Status': 'open'}, 'triage')
+    general.reopen(store, tid, 'triage', 'reopen', {'why': 'a reply owed on its thread'}, also=('waiting',))
     # ...naming whom that reply goes to: the line that needed the agent may be a machine's notice on the person's thread, and "before it
     # can be answered" promised a reply to a no-reply address
     store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s message needs {task_kinds.worker(kind)}: it works out the answer, then "
@@ -3090,16 +3090,13 @@ def owed_reply(store, msg: dict, v: dict | None) -> dict | None:
 def _reopen(store, tid, msg: dict, actor: str, intent: dict = None) -> bool:
     """New work on a closed task's thread, or a question to the owner, puts the task back in front of them (2026-09-25; only
     that since 2026-10-15 - a comment is kept on it). Said on the task, so the history reads why it came back."""
-    t = store.get_task(tid) or {}
-    if t.get('Status') != 'done': return False
-    store.update_task(tid, {'Status': 'open'}, actor)
-    from . import selfclose
-    selfclose.forget(tid)
+    from . import general
+    if (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'): return False
     who = msg.get('from_name') or msg.get('from_email') or 'someone'
     asked = (intent or {}).get('intent') == 'reply_only'
+    general.reopen(store, tid, actor, 'reopen', {'why': 'a question to you on its thread' if asked else 'new work on its thread'})
     store.add_comment(tid, actor, 'agent', f"Reopened - {who} {'has a question for you' if asked else 'asked for something new'}: "
                       f"{msg.get('subject') or (msg.get('body') or '')[:80]}")
-    store.audit('task', tid, 'reopen', actor, 'agent', {'why': 'a question to you on its thread' if asked else 'new work on its thread'})
     logger.info(f"ingest: {task_ref(tid)} reopened - {'a question to you' if asked else 'new work'} on its thread")
     return True
 

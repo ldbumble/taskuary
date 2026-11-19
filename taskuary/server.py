@@ -1637,7 +1637,8 @@ def _run_kind(op: dict, background: BackgroundTasks):
     if kind == 'task.reopen':
         if not store.get_task(tid): raise HTTPException(404, 'task not found')
         # ONE REOPEN (T13): back in progress, and an old Remind me date cleared - it reopened straight into Upcoming
-        store.update_task(tid, {'Status': 'open', 'RemindAt': ''}, ACTOR); return {'status': 'open'}
+        from . import general
+        general.reopen(store, tid, ACTOR, 'reopen', also=('waiting', 'in_progress')); return {'status': 'open'}
     # THE TASK PAGE AS TOOLS (2026-09-25): each is the page's own handler, so the card and the click agree
     if kind == 'task.update':
         from .processing_order import known, level

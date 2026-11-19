@@ -3918,15 +3918,19 @@ def hand(tid: int, n: int = 1):
 def starting(tid: int) -> bool: return tid in OPENING or bool(HANDED.get(tid))
 
 
-def reopen(store, tid: int, actor='owner') -> dict:
-    """A CLOSED TASK THE OWNER TYPES INTO IS OPEN AGAIN (the owner, 2026-11-05: "typing into chat should continue it or restart it"): as Reopen
-    does (open, an old Remind me cleared), one audit row, whatever agent works it. The Assistant's own chat is never closed. -> the task."""
+def reopen(store, tid: int, actor='owner', why: str = 'reopened_by_typing', detail: dict = None, also: tuple = ()) -> dict:
+    """THE ONE REOPEN, from every door: a closed task - done, or dropped (Let it go) - that his typing, a line owed him, a batch item written
+    on or a workflow approved brings back is open again (the owner, 2026-11-05: "typing into chat should continue it or restart it"): an old
+    Remind me cleared, its self-close forgotten, one audit row `why`. `also` names the open states a door hands back to him as well ('waiting':
+    work arrived on it), its Remind me date cleared with them. The Assistant's own chat is never closed. -> the task."""
     t = store.get_task(tid) or {}
-    if t.get('Status') in ('done', 'dropped') and not is_dock(t):
+    closed = t.get('Status') in ('done', 'dropped')
+    if (closed or t.get('Status') in also) and not is_dock(t):
         store.update_task(tid, {'Status': 'open', 'RemindAt': ''}, actor)
-        store.audit('task', tid, 'reopened_by_typing', actor)
-        from . import selfclose
-        selfclose.forget(tid)
+        if closed:
+            store.audit('task', tid, why, actor, 'human' if actor == 'owner' else 'agent', detail)
+            from . import selfclose
+            selfclose.forget(tid)
         t = store.get_task(tid) or t
     return t
 

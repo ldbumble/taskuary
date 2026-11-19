@@ -7,6 +7,7 @@
 // each edit its own row with its diff ("Edited budget.py (+12 −3)"), its plan a checklist. Whatever drew them, a turn is those parts.
 import { baseName, describeCall, isWork, present, stepsOf } from "./agentSteps.js";
 import { editHunks, stat } from "./diffView.js";
+import { isSignin } from "./browserSplit.js";
 import { liveTerminal } from "./taskLayout.js";
 import { filesOf, viewOf } from "./viewSpec.js";
 
@@ -301,4 +302,4 @@ export const onYouTurn = (items, { askAt = "", lettersAt = "", landAt = "" } = {
 // ...(a question the agent asked before is no wait while it works: the recorded walk, 2026-11-12, read "Waiting for your answer" over a turn
 // already at work on his answer - only a step it is stopped at, or a sign-in on the page, holds a turn at work)
 export const waitingOn = (list) => (list?.permissions?.length ? "Waiting for your Allow once"
-  : String(list?.asking?.request_id || "").startsWith("signin:") ? "Waiting for you to sign in" : "");
+  : isSignin(list?.asking) ? "Waiting for you to sign in" : "");

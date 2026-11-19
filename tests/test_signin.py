@@ -1136,3 +1136,26 @@ def test_a_browser_socket_that_times_out_is_a_browser_that_did_not_answer():
     with pytest.raises(signin.SignInError): c.call('Runtime.evaluate')
     c.ws.send = lambda m: (_ for _ in ()).throw(ConnectionError('no close frame received or sent'))
     with pytest.raises(signin.SignInError): c.fields('')
+
+
+# ONE NAME FOR A SITE (the roads audit, 2026-11-19): one payment step read www.toll.example on its card, toll.example on its hand-over and
+# toll.example:8443 on the page - every surface names it by signin.site_name
+def test_a_site_is_named_one_way_on_every_card_and_hand_over():
+    for where in ('https://www.toll.example:8443/pay?x=1', 'https://pay.toll.example/', 'toll.example', 'WWW.Toll.Example.'):
+        assert signin.site_name(where) == 'toll.example', where
+    assert signin.site_name('http://127.0.0.6:8080/x') == '127.0.0.6'
+    with mock.patch.object(signin, 'page_name', return_value='Northwind vendor portal'):
+        assert signin.site_name('http://127.0.0.6:8080/x', 's1') == 'Northwind vendor portal'
+    assert signin.site_name('') == ''
+    from taskuary import browsergate
+    pg = {'url': 'https://www.toll.example:8443/pay', 'elements': '- button "Pay $412.50" [ref=e12]'}
+    assert browsergate.target({'verb': 'click', 'args': ['click', '@e12']}, pg).endswith(' on toll.example')
+
+
+# WHICH KIND OF ASK, SAID BY THE SERVER (the roads audit, 2026-11-19): the page read `signin:` / `yourturn:` off the id in five places
+def test_every_open_ask_carries_its_kind_and_site_so_the_page_never_reads_the_id():
+    assert ws.ask_of(f'{signin.PREFIX}toll.example') == {'ask': 'signin', 'site': 'toll.example'}
+    assert ws.ask_of(f'{browserview.TURN_PREFIX}ab12') == {'ask': 'turn', 'site': ''}
+    assert ws.ask_of('q:where') == {'ask': 'question', 'site': ''}
+    e = {'RequestId': f'{signin.PREFIX}toll.example', 'Kind': 'input_needed', 'Text': 'Sign in to toll.example', 'Sid': 's1', 'CreatedAt': 'now'}
+    assert ws._public_request(e)['ask'] == 'signin' and ws._public_request(e)['site'] == 'toll.example'

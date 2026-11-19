@@ -17,7 +17,7 @@ test("Done on the browser view is the owner's press, never words in their name",
   assert.doesNotMatch(back, /setOwnPrompt|answerAsk/, "no bubble, and no turn typed for them");
   // ...and the Done drawn as a chip under the ask, where no view is on screen, takes the same road
   assert.match(ws, /if \(isTurn\(req\) && \(req\.choices \|\| \[\]\)\.includes\(text\)\) return handBack\(\);/);
-  assert.ok(isTurn({ request_id: "yourturn:press:abc" }) && isTurn({ request_id: "yourturn:1f" }) && !isTurn({ request_id: "ask:1" }));
+  assert.ok(isTurn({ ask: "turn" }) && !isTurn({ ask: "question" }) && !isTurn({ ask: "signin" }));
   for (const f of readdirSync(SRC).filter((x) => /\.jsx?$/.test(x))) assert.doesNotMatch(read(f), /TURN_BACK/, `${f}: the words are nobody's to send`);
 });
 

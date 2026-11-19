@@ -575,7 +575,6 @@ TURN_DONE = "I'm done"
 
 def your_turn(store, tid: int, sid: str, what: str = '', watch=...) -> str:
     "Record the agent's hand-over as an open request on the task, watched on its page. The request id - `yourturn:<hash>`. `watch`: tests."
-    from urllib.parse import urlsplit
     from . import terminal as term, workerstate as ws
     st = state(sid, fresh=True)
     # ...ON A PAGE. With no browser, or an empty tab, there is nothing to hand over: what the agent wants is said in words and answered
@@ -594,10 +593,7 @@ def your_turn(store, tid: int, sid: str, what: str = '', watch=...) -> str:
     except Exception as e: signing = False; logger.debug(f'task {tid}: the page handed over could not be read for a sign-in - {e}')
     # ...asked as the step the agent named (a human check on a sign-up page is not "sign in" - design round 5), the vault's road all the same
     if signing and (site := signin.needs(store, tid, sid, '', what=what).get('site')): return f'{signin.PREFIX}{site}'
-    try: host = urlsplit(str(st.get('url') or '')).hostname or ''
-    except ValueError: host = ''
-    host = host[4:] if host.startswith('www.') else host
-    host = signin.page_name(sid, host) if host else host         # ...a bare address called by its page's title (signin.page_name)
+    host = signin.site_name(st.get('url'), sid)                  # the one name of a site (signin.site_name): a bare address by its page's title
     text = f"Your turn in the browser{f' on {host}' if host else ''}: {what or 'the agent needs you to do a step on the page'}"
     rid = ws.fresh_id(store, tid, f'{TURN_PREFIX}{ws.request_id_for(text)}')
     chat = hasattr(term.SESSIONS.get(str(sid)), 'send_prompt')

@@ -11,7 +11,7 @@ from taskuary import browsergate as bg, browserview, general, workerstate as ws
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
-PAY, SITE = 'https://pay.vendor.example/checkout', 'pay.vendor.example'
+PAY, SITE = 'https://pay.vendor.example/checkout', 'vendor.example'      # the one name of a site (signin.site_name)
 
 
 class DoneIsAPress(unittest.TestCase):

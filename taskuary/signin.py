@@ -126,6 +126,19 @@ def site_of(url) -> str:
     return ''
 
 
+# WHAT A SITE IS CALLED, ONE WAY (the roads audit, 2026-11-19: one payment step read www.toll.example on its card, toll.example on its
+# hand-over and toll.example:8443 on the page). Every card, hand-over and line names a site by this: the name it is registered under
+# (login.bank.example is bank.example), never a port or a www; a bare address by its page's own title where the session is named
+def site_name(where, sid: str = '') -> str:
+    "The site a URL or a host is on, as the owner reads it - '' for none."
+    s = str(where or '').strip()
+    try: h = host_of(urlsplit(s if '://' in s else '//' + s).hostname)
+    except ValueError: return ''
+    if not h: return ''
+    if _ip(h) or '.' not in h: return page_name(sid, h) if sid else h
+    return registrable(h) or h.removeprefix('www.')
+
+
 def on_site(url, site) -> bool:
     """Is this page ON `site` - the site itself or a name under it, by its origin? A lookalike (bank.example.evil.example,
     bank-example.example, a homograph) has another registrable domain and is not."""
@@ -453,7 +466,7 @@ def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=..., wh
     # A SIGN-UP (the agent's own marker said so - signing_up): Taskuary makes the password, types it and keeps it - nobody is asked
     rid = f'{PREFIX}{site}'
     if signing_up(claimed): return new_account(store, tid, sid, site, rid, fill, watch)
-    name = page_name(sid, site)
+    name = site_name(site, sid)
     what = ' '.join(str(what or '').split()).rstrip('.')
     text = f'Your turn in the browser on {name}: {what}' if what else f'Sign in to {name} to continue'
     # "Signed in" as a CHOICE only where an answer arrives as words (the chat's own agent): a pty's choices are a chooser, answered

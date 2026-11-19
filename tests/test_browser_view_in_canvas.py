@@ -54,7 +54,7 @@ class YourTurn(unittest.TestCase):
             req = ws.status(self.s, self.tid)['requests']
         self.assertTrue(rid.startswith(browserview.TURN_PREFIX))
         self.assertEqual([r['request_id'] for r in req], [rid])
-        self.assertEqual(req[0]['text'], 'Your turn in the browser on events.trainly.example: tick the box')
+        self.assertEqual(req[0]['text'], 'Your turn in the browser on trainly.example: tick the box')
         self.assertEqual(req[0]['choices'], [browserview.TURN_DONE])
 
     def test_a_terminal_cli_gets_no_chooser_and_a_page_with_no_address_still_says_what(self):

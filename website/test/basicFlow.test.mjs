@@ -166,7 +166,7 @@ test("a turn at work says what is happening, or what we wait for, beside its dot
   assert.equal(workingLine(parts, label, { ask: "Waiting for your Allow once" }), "Waiting for your Allow once");
   const { waitingOn } = await import("../src/chatStream.js");
   assert.equal(waitingOn({ permissions: [{}] }), "Waiting for your Allow once");
-  assert.equal(waitingOn({ asking: { request_id: "signin:bank.example" } }), "Waiting for you to sign in");
+  assert.equal(waitingOn({ asking: { ask: "signin", site: "bank.example" } }), "Waiting for you to sign in");
   assert.equal(waitingOn({ asking: { request_id: "q1" } }), "", "a question asked before is no wait while it works");
   assert.equal(waitingOn({}), "");
   const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");

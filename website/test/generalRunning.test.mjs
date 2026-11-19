@@ -55,7 +55,7 @@ test("the chat is pinned to its end when its view gets shorter, as when its list
 // tab - or, in the desktop app with no browser of its own, by the server - and never for any other question
 test("a sign-in ask offers the fill page, and no other ask does", () => {
   const view = read("GeneralWorkspace.jsx");
-  assert.match(view, /String\(asking\.request_id \|\| ""\)\.startsWith\("signin:"\)/);
+  assert.match(view, /const site = isSignin\(asking\)/);     // the kind as the server says it (workerstate.ask_of), never read off the id
   assert.match(view, /api\.post\(`\/api\/tasks\/\$\{taskId\}\/signin\/link\$\{app \? "\?open=1" : ""\}`\)/);
   // ...as a link in the question's line, not a press on a card (the owner, 2026-11-03)
   assert.match(view, /<a href="#" onClick=\{fillPage\} data-tq-signin-link=""/);

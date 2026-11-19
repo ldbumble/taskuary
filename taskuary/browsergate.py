@@ -386,7 +386,8 @@ def target(act: dict, pg: dict) -> str:
     "'click the \"Pay $412.50\" button on toll.example' - an act said by the control it names, read off the page's snapshot; '' when it names none."
     c = control(act, pg)
     if not c: return ''
-    host = urlsplit(str(pg.get('url') or '')).hostname or ''
+    from . import signin
+    host = signin.site_name(pg.get('url'))
     on, verb = (f' on {host}' if host else ''), _VERB.get(act.get('verb') or '', act.get('verb') or 'use')
     if not c['role']: return f'{verb} an element the page no longer shows{on}'
     return f'{verb} the "{c["name"]}" {c["role"]}{on}' if c['name'] else f'{verb} a {c["role"]}{on}'
@@ -469,7 +470,8 @@ def _verdict(act: dict, v: dict | None, pg: dict, said: str) -> dict:
     # ...a ref is agent-browser's grammar, never his words ("clicks ref e640 on uprinting.com, which is not in the visible snapshot"): the
     # control the page names it, else the site (design round 6, D3)
     if not what or _REF.search(what):
-        h = urlsplit(str(pg.get('url') or '')).hostname
+        from . import signin
+        h = signin.site_name(pg.get('url'))
         what = target(act, pg) if control(act, pg).get('role') else f"a step on {h}" if h else target(act, pg) or _cmd(act)
     big = v.get('big')
     if big is True: return {'hold': True, 'what': what, 'why': WHY.get(str(v.get('kind') or ''), BIG_WHY)}
@@ -533,8 +535,7 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         args = _own_args(a['args'])
         if not args: return _deny(f"{HELD}: a browser command it could not read. Run each agent-browser command on its own line.")
         if not pg['url']: return _deny(NO_PAGE.format(held=HELD))
-        try: site = signin.site_of(pg['url']) or signin.registrable(urlsplit(pg['url']).hostname) or 'the page'
-        except ValueError: site = 'the page'
+        site = signin.site_name(pg['url']) or 'the page'
         browserview.ended_on(sid, 'held', store, tid)                          # its last frame is kept if the session stops here
         if not _pending(store, tid, sid, args, pg['url']):
             from . import proposals

@@ -193,7 +193,16 @@ def _public_request(e: dict) -> dict:
     # `source` travels with it because it changes what an ANSWER is: a request read off a chooser is
     # answered by picking, not by typing the option's words back at it (see `answer`)
     return {'request_id': e['RequestId'], 'kind': e['Kind'], 'text': e['Text'], 'choices': choices,
-            'sid': e['Sid'], 'at': e['CreatedAt'], 'source': e.get('Source') or 'api'}
+            'sid': e['Sid'], 'at': e['CreatedAt'], 'source': e.get('Source') or 'api', **ask_of(e['RequestId'])}
+
+
+# WHICH KIND OF ASK, SAID BY THE SERVER (the roads audit, 2026-11-19): the page read `signin:` and `yourturn:` off the request id in five places,
+# each its own copy of a marker only this app writes. It is read here, once: {'ask': 'signin' | 'turn' | 'question', 'site': the site a sign-in is for}
+def ask_of(rid) -> dict:
+    from .browserview import TURN_PREFIX
+    from .signin import PREFIX
+    r = str(rid or '')
+    return {'ask': 'signin', 'site': r[len(PREFIX):]} if r.startswith(PREFIX) else {'ask': 'turn' if r.startswith(TURN_PREFIX) else 'question', 'site': ''}
 
 
 def reconcile_screen_request(store, t, asking: bool) -> dict | None:

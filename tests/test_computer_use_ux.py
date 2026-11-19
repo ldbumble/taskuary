@@ -171,11 +171,11 @@ class TheHeldActInWords(unittest.TestCase):
 
     def test_the_card_names_the_control_from_the_snapshot(self):
         pg = {'url': 'https://billing.vendor.example/inv/1001', 'elements': self.SNAP}
-        self.assertEqual(bg.target(bg.acts("agent-browser click '@e12'")[0], pg), 'click the "Pay $412.50" button on billing.vendor.example')
-        self.assertEqual(bg.target(bg.acts('agent-browser click @e99')[0], pg), 'click an element the page no longer shows on billing.vendor.example')
+        self.assertEqual(bg.target(bg.acts("agent-browser click '@e12'")[0], pg), 'click the "Pay $412.50" button on vendor.example')     # the one name of a site (signin.site_name)
+        self.assertEqual(bg.target(bg.acts('agent-browser click @e99')[0], pg), 'click an element the page no longer shows on vendor.example')
         with mock.patch('taskuary.llm.build_llm', return_value=None):
             self.assertEqual(bg.judge(MemoryStore(), bg.acts('agent-browser click @e12'), pg)[0]['what'],
-                             'click the "Pay $412.50" button on billing.vendor.example')
+                             'click the "Pay $412.50" button on vendor.example')     # the one name of a site (signin.site_name)
 
     def test_a_slow_verdict_holds_inside_the_hooks_limit(self):
         slow = lambda *a, **k: time.sleep(2) or {'hold': False, 'what': 'x', 'why': ''}

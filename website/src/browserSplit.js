@@ -200,7 +200,7 @@ export const isLocalPage = (url) => /^file:/i.test(String(url || "").trim());
 export const isBlankPage = (url) => { const u = String(url || "").trim(); return !u || /^about:/i.test(u); };
 // ...and "your turn - click the page and type" is for a wait ON the page: the agent's hand-over (isTurn) or a sign-in (signin.PREFIX) -
 // never a question it asked in words, which is answered in the chat's box
-export const waitsOnPage = (asking) => isTurn(asking) || String(asking?.request_id || "").startsWith("signin:");
+export const waitsOnPage = (asking) => isTurn(asking) || isSignin(asking);
 
 // Should this slot hold the split, or just a chip? The Wall tiles three or four sessions across.
 // `stack`: an agent's conversation on its task (GeneralWorkspace) - too narrow to split, the browser goes ABOVE the chat instead of
@@ -213,14 +213,14 @@ export const layoutFor = (width, open, folded, stack = false) => (!open ? "none"
 // the layouts where the view itself is on screen, so what waits on it (a held act, the owner's turn) is drawn on it
 export const viewOnScreen = (layout) => layout === "split" || layout === "stack";
 
-// A STEP ONLY THE OWNER CAN DO ON THE PAGE (browserview.TURN_PREFIX): the agent handed the page over - drawn on the view as "Your turn"
-export const TURN_PREFIX = "yourturn:";
-export const isTurn = (asking) => String(asking?.request_id || "").startsWith(TURN_PREFIX);
+// WHICH KIND OF ASK IT IS, as the server says it (workerstate.ask_of: 'signin' | 'turn' | 'question') - the page never reads a request id's marker.
+// A STEP ONLY THE OWNER CAN DO ON THE PAGE: the agent handed the page over - drawn on the view as "Your turn"
+export const isTurn = (asking) => asking?.ask === "turn";
+export const isSignin = (asking) => asking?.ask === "signin";
 // WHAT THE CHAT'S BOX SAYS WHILE THE AGENT WAITS ON HIM - one function for every ask: a sign-in is typed on the page (never a password here), a
 // step handed over is done on the page (the browser audit, 2026-11-15: "Answer the agent's question..." stood under a step that was no question),
 // and only a question is answered in the box
-export const SIGNIN_PREFIX = "signin:";
-export const askPlaceholder = (asking) => (!asking ? "" : String(asking.request_id || "").startsWith(SIGNIN_PREFIX) ? "Message the agent - never your password"
+export const askPlaceholder = (asking) => (!asking ? "" : isSignin(asking) ? "Message the agent - never your password"
   : isTurn(asking) ? "Your step is on the page - or tell the agent here…"
   : "Answer the agent's question…");
 

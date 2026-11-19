@@ -47,7 +47,7 @@ import ActionCard from "./ActionCard.jsx";
 import CopyCorner from "./CopyCorner.jsx";
 import { SessionPane, TerminalPane } from "./TerminalView.jsx";
 import ThreadReading from "./ThreadReading.jsx";
-import { askPlaceholder, heldOn, isTurn, needsOwner, waitsOnPage } from "./browserSplit.js";
+import { askPlaceholder, heldOn, isSignin, isTurn, needsOwner, waitsOnPage } from "./browserSplit.js";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import "./generalWorkspace.css";
 import "./agentStepRows.css";
@@ -313,7 +313,7 @@ const TurnWorkView = ({ data, now, k }) => {
 // sees the page go past the sign-in (signin.watch), and "done" typed in the box below says so too.
 export function AgentAsks({ asking, name, onAnswer, taskId }) {
   const [going, setGoing] = useState(false), [err, setErr] = useState("");
-  const site = String(asking.request_id || "").startsWith("signin:") ? asking.request_id.slice(7) : "";
+  const site = isSignin(asking) ? asking.site || "the site" : "";
   const choices = site ? [] : asking.choices || [];
   const fillPage = async (e) => {
     e?.preventDefault?.();

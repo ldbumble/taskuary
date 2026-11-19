@@ -23,7 +23,6 @@ import {
   isTurn,
   askPlaceholder,
   needsOwner,
-  TURN_PREFIX,
   wheelMessage,
 } from "../src/browserSplit.js";
 
@@ -145,8 +144,8 @@ test("what waits on the view: a held act of THIS browser, and the agent's hand-o
   assert.equal(heldOn(row({ ...act, action: "shell_act" }), "s1"), null, "a shell step is not the browser's");
   assert.equal(heldOn({ ReviewId: 1, DraftText: "not json" }, "s1"), null);
   assert.equal(heldOn(row({ ...act, what: "" }), "s1").what, act.command);
-  assert.ok(isTurn({ request_id: `${TURN_PREFIX}abc` }));
-  assert.ok(!isTurn({ request_id: "signin:bank.example" }) && !isTurn(null));
+  assert.ok(isTurn({ ask: "turn" }));
+  assert.ok(!isTurn({ ask: "signin", site: "bank.example" }) && !isTurn({ ask: "question" }) && !isTurn(null));
 });
 
 
@@ -210,8 +209,8 @@ test("an empty tab is not a page: the view folds to its chip until the agent ope
   assert.equal(isBlankPage(" about:newtab"), true);
   assert.equal(isBlankPage("https://portal.example/login"), false);
   // "your turn - click the page and type" is for a wait ON the page - its hand-over or a sign-in - never a question asked in words
-  assert.equal(waitsOnPage({ request_id: `${TURN_PREFIX}abc` }), true);
-  assert.equal(waitsOnPage({ request_id: "signin:portal.example" }), true);
+  assert.equal(waitsOnPage({ ask: "turn" }), true);
+  assert.equal(waitsOnPage({ ask: "signin", site: "portal.example" }), true);
   assert.equal(waitsOnPage({ request_id: "571e07b97197", text: "First month free, or a price now?" }), false);
   assert.equal(waitsOnPage(null), false);
 });
@@ -221,8 +220,8 @@ test("a chat task's browser shows only when the owner is needed, side by side", 
   const { needsOwner, quietLayout, quietRatio, CHAT_SHARE } = await import("../src/browserSplit.js");
   assert.equal(needsOwner(null), false);                                                   // the agent just browsing
   assert.equal(needsOwner({ request_id: "q:where" }), false);                              // a question asked in words: the chat's box
-  assert.equal(needsOwner({ request_id: "signin:bank.example" }), true);                   // a sign-in (or its code) the vault does not keep
-  assert.equal(needsOwner({ request_id: "yourturn:captcha" }), true);                      // a captcha handed over
+  assert.equal(needsOwner({ ask: "signin", site: "bank.example" }), true);                   // a sign-in (or its code) the vault does not keep
+  assert.equal(needsOwner({ ask: "turn" }), true);                      // a captcha handed over
   assert.equal(needsOwner(null, [{ id: 7 }]), true);                                       // a held step: Approve / Dismiss
   assert.equal(quietLayout(1200, false), "none");
   for (const w of [555, 600, 700, 900, 1400]) assert.equal(quietLayout(w, true), "split");     // never stacked at a desktop's width
@@ -297,7 +296,7 @@ test("the browser's tabs read as a strip: title or host, the active one marked, 
 // THE BROWSER AUDIT, 2026-11-15: a step handed over on the page drew "Answer the agent's question..." in the box - it was no question
 test("the box says what waits on him: a sign-in, a step on the page, or a question", () => {
   assert.equal(askPlaceholder(null), "");
-  assert.equal(askPlaceholder({ request_id: "signin:bank.example" }), "Message the agent - never your password");
-  assert.equal(askPlaceholder({ request_id: `${TURN_PREFIX}ab12` }), "Your step is on the page - or tell the agent here…");
+  assert.equal(askPlaceholder({ ask: "signin", site: "bank.example" }), "Message the agent - never your password");
+  assert.equal(askPlaceholder({ ask: "turn" }), "Your step is on the page - or tell the agent here…");
   assert.equal(askPlaceholder({ request_id: "q:1" }), "Answer the agent's question…");
 });

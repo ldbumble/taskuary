@@ -227,9 +227,9 @@ class Judging(unittest.TestCase):
         from taskuary import cardqueue
         with verdict({'irreversible': True, 'sure': False, 'what': 'clicks ref e640 on uprinting.com, which is not in the visible snapshot', 'big': False}):
             v = one(self.s, self.act, {'url': 'https://www.uprinting.example/booklets', 'elements': ''}, Brain(None))
-        self.assertTrue(v['hold']); self.assertEqual(v['what'], 'a step on www.uprinting.example')
+        self.assertTrue(v['hold']); self.assertEqual(v['what'], 'a step on uprinting.example')
         with verdict({'irreversible': True, 'sure': False, 'what': 'Clicks unknown BotWall control @e30', 'big': False}):
-            self.assertEqual(one(self.s, self.act, {'url': CHECKOUT, 'elements': SNAP}, Brain(None))['what'], 'click the "Continue" button on pay.toll.example')
+            self.assertEqual(one(self.s, self.act, {'url': CHECKOUT, 'elements': SNAP}, Brain(None))['what'], 'click the "Continue" button on toll.example')
         long = 'held before it ran, in the agent browser: ' + 'Submit the sign-up form on the vendor portal for the board data trial with the made-up details'
         u = {'rids': [1], 'rows': [{'ReviewId': 1, 'Kind': 'action', 'Status': 'pending', 'Reason': long, 'DraftText': '{}'}]}
         w = cardqueue.what(self.s, u)

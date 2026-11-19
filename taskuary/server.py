@@ -2351,8 +2351,8 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
             # says so (the owner, 2026-11-03: "it's asking me question but the ai closed the agent why?")
             # ...but a SIGN-IN it was waiting on is not answered in words (the owner, 2026-11-03: "agent is closed but it shows answer it??"):
             # its Continue opens the session and its browser again, and the agent asks for the sign-in there - `leftSignin` names the site
-            'leftAsking': [r['text'] for r in left if not str(r.get('request_id') or '').startswith('signin:')],
-            'leftSignin': next((str(r['request_id'])[7:] for r in left if str(r.get('request_id') or '').startswith('signin:')), ''),
+            'leftAsking': [r['text'] for r in left if r.get('ask') != 'signin'],
+            'leftSignin': next((r['site'] for r in left if r.get('ask') == 'signin'), ''),
             'transcript': {'sid': tr['Sid'], 'agent': tr['Agent'], 'cwd': tr['Cwd'], 'brain': tr['Brain'],
                            'at': tr['CreatedAt'], 'chars': len(tr['Text'] or '')} if tr else None,
             # ...and WHICH BRAIN ACTUALLY RAN IT, for a session that has ended (_ran_on)

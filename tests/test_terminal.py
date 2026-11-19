@@ -697,7 +697,7 @@ class TerminalTests(unittest.TestCase):
                                   'Subject': 'Payroll File Imports', 'SentAt': '2026-08-19 15:03',
                                   'BodyText': 'files with adjustments import in the wrong month'})
         seed = terminal.seed_text(server.store, tid, 'use the payroll date', 'northwind/Census', 'C:/src/Census')
-        for s in ['payroll import month is wrong', 'Dana Reyes', 'wrong month', 'use the payroll date',
+        for s in ['Payroll import month is wrong', 'Dana Reyes', 'wrong month', 'use the payroll date',
                   'REPO: northwind/Census', 'Do NOT look this task up again', 'fix it if it is fixable',
                   'Do NOT create GitHub issues']:
             self.assertIn(s, seed)

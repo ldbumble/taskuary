@@ -215,7 +215,7 @@ def _items(store, tid: int) -> dict:
             # asked Alex ...; no reference number has been read yet" - under the note that it had signed in, the owner in the third person)
             took = (('back', str(cid)) in led or any(n < cid for n in backs)) and body
             if took:
-                st, body, backs = [*st, {'k': 'note', 'text': (led.get(('back', str(cid))) or {}).get('Sid') or back_why(cid) or TOOK_BACK}], '', [n for n in backs if n >= cid]
+                st, body, backs = [*st, {'k': 'note', 'text': (led.get(('back', str(cid))) or {}).get('Sid') or back_why(cid) or TOOK_BACK, 'took': True}], '', [n for n in backs if n >= cid]
             # ...and it BEGAN at its own time too (the demo walk, 2026-11-18): with no start it counted as begun at the start of time, so a card
             # made long before it was "made in" it - a played Send's card was taken into the line said after it, and jumped down under it
             t = {'kind': 'turn', 'at': stamp(clock) or c['CreatedAt'], 'state': 'failed' if fail else 'done', 'steps': st, 'text': body, 'cards': [],

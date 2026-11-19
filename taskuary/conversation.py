@@ -267,6 +267,10 @@ def take_back(store, tid: int, said: str = None, why: str = '', since: float = 0
     else: ref = str(c['CommentId']) if c and str(c.get('Body') or '')[:4000] == said[:4000] else nxt
     store._exec('INSERT OR IGNORE INTO heard (TaskId,Kind,Ref,At,Grp,Seq,Sid) VALUES (?,?,?,?,?,?,?)', (int(tid), 'back', ref, time.time(), 0, 0, why))
     if ahead and why: store._exec("UPDATE heard SET Sid=? WHERE TaskId=? AND Kind='back' AND (Ref=? OR (Ref LIKE '>%' AND At>=?))", (why, int(tid), ref, since - 1))
+    if ref[:1] != '>':                              # ...an answer already filed: its turn in the log says it in its own step, in place
+        from . import chatlog
+        chatlog.took_back(store, tid, int(ref), (store._one("SELECT Sid FROM heard WHERE TaskId=? AND Kind='back' AND Ref=?", (int(tid), ref)) or {}).get('Sid')
+                          or TOOK_BACK)
     store._poke('task-changed', task_id=int(tid))
 
 

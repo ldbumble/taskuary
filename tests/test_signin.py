@@ -333,6 +333,25 @@ class Asking(unittest.TestCase):
             self.wait_for(lambda: [st['text'] for st in last()['steps']][-1] == 'Signed in to bank.example with the saved sign-in.', secs=15)
         self.assertEqual(last()['text'], '')
 
+    def test_an_answer_taken_back_on_a_chat_already_in_its_log_is_a_step_and_says_how_it_ended(self):
+        """The chat is its log (chatlog): a task already drawn once never reads the old list again, so the take-back is written there - the
+        answer that only handed the sign-in over lands as the turn's step, and the step says how it ended in the same line."""
+        from taskuary import chatlog, conversation, general
+        with mock.patch.dict('taskuary.terminal.SESSIONS', clear=True):
+            self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'Looking at the toll account first.')
+            self.s._exec("UPDATE comment SET CreatedAt=datetime('now','localtime','-1 minute')")        # ...said a minute before the ask
+            conversation.items(self.s, self.tid); self.assertTrue(chatlog.migrated(self.s, self.tid))
+            since = time.time()
+            conversation.take_back(self.s, self.tid, why='Signing in to bank.example with the saved sign-in.', since=since, ahead=True)
+            self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'I have no saved sign-in for it. Once the sign-in is done I will read it.')
+            turns = lambda: [x for x in conversation.items(self.s, self.tid)['items'] if x['kind'] == 'turn']
+            self.assertEqual((turns()[-1]['text'], [st['text'] for st in turns()[-1]['steps']]), ('', ['Signing in to bank.example with the saved sign-in.']))
+            self.assertEqual(turns()[0]['text'], 'Looking at the toll account first.', 'only the answer after the mark is taken back')
+            conversation.take_back(self.s, self.tid, why='Signed in to bank.example with the saved sign-in.', since=since, ahead=True)
+            self.assertEqual([st['text'] for st in turns()[-1]['steps']], ['Signed in to bank.example with the saved sign-in.'], 'one line, ended in place')
+            self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'The balance is $12.')
+            self.assertEqual(turns()[-1]['text'], 'The balance is $12.', 'the next answer is an answer')
+
     def test_while_the_saved_sign_in_is_typed_the_task_is_at_work_not_done(self):
         """Seen in the browser round (2026-11-14): for the seconds a saved sign-in was typed the agent's turn had ended and nothing of its
         own was at work, so the header read "agent done" with Mark done lit. Something IS doing the next step: the task reads at work from

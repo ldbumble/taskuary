@@ -228,6 +228,8 @@ def read(store, tid: int, level: str = None) -> dict:
             x['steps'] = [_item(k) for k in ks if k['Kind'] == 'step']
             # ...a turn with its failed line says the failure once: there, never again as an error step under it
             if x.get('fail'): x['steps'] = [s for s in x['steps'] if s.get('k') != 'error']
+            # ...and one taken back (took_back) says so as its step: its words and their summary are no answer
+            if any(s.get('took') for s in x['steps']): x['text'] = ''; x.pop('summary', None)
             x['cards'] = [] if r['State'] in LIVE else [_item(k) for k in ks if k['Kind'] in ('card', 'fail') and _drawn(k, lit)]
             # ...a turn that ended having said, done and left nothing is no item (a part a line cut off before it did anything)
             if r['State'] not in LIVE and not (x.get('text') or x['steps'] or x['cards'] or x.get('summary') or x.get('fail')): continue
@@ -327,6 +329,37 @@ def answered(store, tid: int, cid: int, actor: str, body: str, created: str) -> 
     if t and (t['State'] in LIVE or t['State'] in ('failed', 'stopped') and not json.loads(t['Body'] or '{}').get('answer')):
         update(store, tid, t['Key'], state='failed' if fail or t['State'] == 'failed' else t['State'] if t['State'] == 'stopped' else 'done', **done)
     else: put(store, tid, 'turn', f'a:c{cid}', {'started': _when(created), **done}, state='failed' if fail else 'done', src=f'comment:{cid}')
+    # ...an answer taken back before it was filed (conversation.take_back, `ahead`) is that turn's step from the moment it lands
+    from .conversation import TOOK_BACK
+    from .general import ASSISTANT_TYPE
+    with store.lock:
+        bs = store.cx.execute("SELECT * FROM heard WHERE TaskId=? AND Kind='back' AND (Ref=? OR Ref LIKE '>%')", (tid, str(cid))).fetchall()
+    # ...a mark made before any answer was filed belongs to the FIRST answer after it, never to every later one
+    first = lambda n: (store._one('SELECT MIN(CommentId) AS c FROM comment WHERE TaskId=? AND ActorType=? AND CommentId>?', (tid, ASSISTANT_TYPE, n)) or {}).get('c')
+    bs = [dict(b) for b in bs if b['Ref'] == str(cid) or b['Ref'][1:].isdigit() and int(b['Ref'][1:]) < cid and first(int(b['Ref'][1:])) == cid]
+    if bs:
+        took_back(store, tid, cid, next((b['Sid'] for b in reversed(bs) if b['Sid']), '') or TOOK_BACK)
+
+
+@_safe
+def took_back(store, tid: int, cid: int, why: str) -> None:
+    """AN ANSWER TAKEN BACK IS A STEP OF ITS TURN (conversation.take_back): one note under the turn that filed it, its words no longer drawn
+    as the answer (read) - and a later call says how it ended in that same line, never a second one. Its turn not in the log yet: answered
+    reads the mark when the answer lands."""
+    tid = int(tid)
+    with store.lock:
+        t = next((dict(r) for r in store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='turn' AND Body LIKE ? ORDER BY Id DESC",
+                                                     (tid, f'%"comment-{int(cid)}"%')) if json.loads(r['Body'] or '{}').get('answer') == f'comment-{int(cid)}'), None)
+        if not t: return
+        s = next((dict(r) for r in store.cx.execute("SELECT * FROM chatlog WHERE Parent=? AND Kind='step' ORDER BY Id", (t['Id'],))
+                  if json.loads(r['Body'] or '{}').get('took')), None)
+        if s: _update(store, tid, s, None, {'text': why})
+        else:
+            store.cx.execute('INSERT INTO chatlog (TaskId, Key, Kind, Parent, At, Src, Body, State) VALUES (?,?,?,?,?,?,?,?)',
+                             (tid, f'back:c{int(cid)}', 'step', t['Id'], time.time(), f'comment:{int(cid)}', json.dumps({'k': 'note', 'text': why, 'took': True}), None))
+            _bump(store, tid)
+        store.cx.commit()
+    _poke(store, tid)
 
 
 def void(_): return None

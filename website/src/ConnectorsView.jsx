@@ -1893,13 +1893,15 @@ export const ConnCard = ({ c }) => {
 
 // THE SAME CARD IN PLAIN WORDS (`plain`, the first run's questions): "off · trigger + tool · 0/0 chat jids" is the catalogue's
 // shorthand for someone who has set connections up before; a first-time owner gets the state itself (the owner, 2026-10-15)
-const SIGNED_OUT = /sign-in has lapsed|signed out|sign in again|expired/i;
 // ...and what its first read did - how far back it went, how many it brought in - not only "Connected" (the owner, 2026-11-10: "it
 // says connected but it's not going back"). channels._first_read keeps it on the card once that read moved the watermark.
 const firstRead = (c) => { try { const f = JSON.parse(c.ConfigJson || "{}").first_read; return f ? ` · ${broughtLine(f.n || 0, f.hours || 0)}` : ""; } catch { return ""; } };
-const plainState = (c, srcs) => (c.LastError ? (SIGNED_OUT.test(c.LastError) ? ["failing", "Needs sign-in"] : ["failing", "Not answering - click to fix it"])
-  : c.Active && (c.HasSecret || c.LastSyncAt || (srcs || []).some((s) => s.Active)) ? ["on", c.LastSyncAt ? `Connected${firstRead(c)} · checked ${timeAgo(c.LastSyncAt)}` : "Connected"]
-  : ["off", "Not set up"]);
+// IS IT CONNECTED is the server's to say, once (connectorcatalog.state, sent as State): the page read its own rules in six places, one a
+// word list over the error text that missed Gmail's "invalid_grant" and said "Not answering" over a sign-in to do (2026-11-19)
+export const connStateOf = (c) => c?.State?.state || "off";
+const PLAIN_LIT = { connected: "on", off: "off", not_signed_in: "off" };
+const plainState = (c) => { const st = c.State || { state: "off", line: "Not set up" };
+  return [PLAIN_LIT[st.state] || "failing", st.state === "connected" && c.LastSyncAt ? `Connected${firstRead(c)} · checked ${timeAgo(c.LastSyncAt)}` : st.line]; };
 
 // A connector's card as the catalogue draws it - its status line said one way, wherever the card is shown (the first run's
 // questions show these same cards: the owner, 2026-10-15, "Don't create new ui. keep the same as we have in connections")
@@ -1912,7 +1914,7 @@ export const connCardOf = (c, sources, go, plain = false) => {
   // ...the catalogue's own line, in plain words too (connectorCatalog.cardStatus) - and its state said, not read back out of those words
   const status = cardStatus(c, { roles, srcs, label: m.srcLabel || "sources", read: firstRead(c).replace(/^ · /, ""), checked: c.LastSyncAt ? timeAgo(c.LastSyncAt) : "",
     keyNote: c.HasSecret ? "key saved" : ["ollama", "local_whisper"].includes(c.Type) ? "local — no key needed" : c.Type === "stt_server" ? "your server — key optional" : "no key yet" });
-  const [state, said] = plain ? plainState(c, srcs) : [c.LastError ? "failing" : c.Active ? "on" : "off", status];
+  const [state, said] = plain ? plainState(c) : [c.LastError ? "failing" : c.Active ? "on" : "off", status];
   // the product's own logo wins over the channel glyph: five AI cards sharing one sparkle,
   // or Jira and Linear both wearing 'boards', tells you nothing about which is which
   return { key: `c${c.ConnectorId}`, type: c.Type, title: c.Name, desc: said, state, plain,
@@ -2229,13 +2231,15 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   const chanCard = (c) => ({ ...connCardOf(c, sources, () => setOpen({ kind: "connector", id: c.ConnectorId })),
     remove: removable(c) ? { conn: c, channel: META[c.Type]?.channel || "", reload: load } : null });
   // three shapes of card, said once instead of inline in five groups
-  const dataDesc = (c, rtype) => (c?.LastError ? "connection failing" : c?.LastSyncAt ? "connection ✓" : NOT_SET_UP)
+  // ...the data source's connection said by the server's state (connectorcatalog.state): a failing or switched-off card read "connection ✓"
+  const connWord = (c) => ({ connected: "connection ✓", off: NOT_SET_UP })[connStateOf(c)] || `connection: ${c.State.line.toLowerCase()}`;
+  const dataDesc = (c, rtype) => connWord(c)
     + ` · ${plural(reports.filter((s2) => (parse(s2.ConfigJson).type || "rest") === rtype).length, "report")} (built under Reports)`;
   const dataCards = (keys) => keys.flatMap((t) => allOf(t).filter(() => DATA_META[t]).map((c) => {
     const dm = DATA_META[t];
     return { key: `d${c.ConnectorId}`, title: c.Name, channel: t,
-      desc: (c.LastError ? "connection failing" : c.LastSyncAt ? "connection ✓" : NOT_SET_UP)
-        + ` · ${plural(reports.filter((s2) => dm.types.includes(parse(s2.ConfigJson).type)).length, "report")} (built under Reports)`,
+      desc: connWord(c)
+        + ` ·${plural(reports.filter((s2) => dm.types.includes(parse(s2.ConfigJson).type)).length, "report")} (built under Reports)`,
       haystack: `${dm.title} ${t} ${dm.desc} ${dm.types.join(" ")} ` + dm.howto.join(" "),
       go: () => setOpen({ kind: "connector", id: c.ConnectorId }), remove: removable(c) ? { conn: c, channel: "data", reload: load } : null };
   }));
@@ -2406,7 +2410,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
 
   if (browse) {
     const all = groups.flatMap((g) => g.cards);
-    const connected = nOn ?? connectors.filter((c) => c.Active && (c.HasSecret || c.LastSyncAt) && !c.LastError).length;
+    const connected = nOn ?? connectors.filter((c) => connStateOf(c) === "connected").length;
     const openCard = all.find((c) => c.key === browseState.open);
     const inSection = q ? hits : (groups.find((g) => g.title === browseState.section)?.cards || []);
     return browse({
@@ -2491,7 +2495,8 @@ function ConnectorIdentity({ conn, reload, onCreated, addOnly = false }) {
   const one = oneOf(conn.Type);
   // ...ONLY ONCE THIS ONE IS CONNECTED (the setup sweep, 2026-10-28): "Add another Outlook mailbox" under a first one not yet signed in
   // offered a second before there was a first
-  const connected = !!(conn.HasSecret || conn.LastSyncAt);
+  // ...signed in once, by the server's state (connectorcatalog.state): failing or signed out is still a first one there
+  const connected = ["connected", "failing", "signed_out"].includes(connStateOf(conn));
   // THE NAME SAVES ITSELF (the owner, 2026-11-05): once the typing pauses, or the box is left - a blank one is never saved
   const rename = async () => {
     clearTimeout(renameAt.current);

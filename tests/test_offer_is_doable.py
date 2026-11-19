@@ -32,10 +32,12 @@ def test_triage_is_shown_what_the_install_can_reach():
     assert seen['user']['connected_systems'] == ['Sage Intacct (intacct)']
 
 
-def test_ingest_hands_triage_the_active_connections_only():
+def test_ingest_hands_triage_the_connected_connections_only():
     s = MemoryStore()
     cid = next(c['ConnectorId'] for c in s.list_connectors() if c['Type'] == 'intacct')
     s.save_connector({'ConnectorId': cid, 'Active': 1}, 't')
+    assert not any('(intacct)' in n for n in ingest.connected_systems(s)), 'switched on and never signed in reaches nothing'
+    s.save_connector({'ConnectorId': cid, 'Secret': 'k'}, 't')
     names = ingest.connected_systems(s)
     assert 'Sage Intacct (intacct)' in names
     assert not any('(quickbooks)' in n for n in names)                    # a card that is not switched on reaches nothing

@@ -2023,12 +2023,14 @@ GENERAL_OVER = ("WHERE AGENT.md READS OTHERWISE, FOR YOU: you never run `taskuar
 
 
 def roads(store) -> str:
-    """The connected systems an act can go out on for this owner: each card that is on and runs an executor that posts, sends or
-    orders (scopes.REACHES), by its own name and id. The generic ones (an MCP tool, a GraphQL call) are no road of their own."""
+    """The connected systems an act can go out on for this owner: each connected card (connectorcatalog.connected - the page's own
+    answer) that runs an executor that posts, sends or orders (scopes.REACHES), by its own name and id. The generic ones (an MCP tool,
+    a GraphQL call) are no road of their own."""
     from . import scopes
+    from .connectorcatalog import connected
     from .proposals import MEDIA
     from .reports import REGISTRY, card_of
-    try: cards = [c for c in store.list_connectors() if c.get('Active')]
+    try: cards = connected(store)
     except Exception: return ''
     return '; '.join(f"{c.get('Name') or c['Type']} (connector_id {c['ConnectorId']}): {t} - {scopes.REACHES[t]}" + (', with a picture' if t in MEDIA else '')
                      + takes(t) for c in cards for t in sorted(REGISTRY) if t in scopes.REACHES and t not in ('mcp', 'graphql') and card_of(t) == c['Type'])

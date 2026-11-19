@@ -22,15 +22,15 @@ def section_rows(items: list) -> list:
 
 
 # ── browsing Connections and Settings, as numbered picks ─────────────────────────────────────────────────────────
+_RANK = ('connected', 'signed_out', 'failing', 'not_signed_in', 'off')     # a type's best card speaks for it
 def _connected(store) -> dict:
-    """{type: 'connected' | 'off' | 'failing' | 'not connected'} - the card's state, said the way the desktop card says it."""
-    out = {}
+    """{type: the state of its best card} - connectorcatalog.state, the one the desktop card reads: its line, lower-cased for a sentence."""
+    from .connectorcatalog import state
+    srcs, out = store.list_sources() if hasattr(store, 'list_sources') else (), {}
     for c in store.list_connectors() or []:
-        t = c.get('Type')
-        state = 'failing' if c.get('LastError') else 'connected' if c.get('Active') and (c.get('HasSecret') or c.get('LastSyncAt') or c.get('Secret')) \
-            else 'off' if not c.get('Active') else 'not connected'
-        if out.get(t) != 'connected': out[t] = state
-    return out
+        st, was = state(c, srcs), out.get(c.get('Type'))
+        if not was or _RANK.index(st['state']) < _RANK.index(was['state']): out[c.get('Type')] = st
+    return {t: st['line'].lower() for t, st in out.items()}
 
 
 FIX_WORDS = {'restart': 'Restart bridge on its desktop card', 'pair': 'Pair again on its desktop card'}

@@ -13,7 +13,8 @@ test("every connector detail draws Add another, on the card's own identity row",
   assert.match(cv, /api\.post\("\/api\/connectors", \{ Type: conn\.Type, Name: value \}\)/, "a new instance of the same type, no credentials");
   assert.match(cv, /\{!one \|\| !connected \? null : !adding \? \(\s+<Button .*>Add another \{one\}<\/Button>/, "says what it adds, or is not drawn");
   // ...and only once this card is connected: a second before there is a first (the setup sweep, 2026-10-28)
-  assert.match(cv, /const connected = !!\(conn\.HasSecret \|\| conn\.LastSyncAt\);/);
+  // ...by the server's own state (connectorcatalog.state): signed in once, whether reading fine, failing or lapsed
+  assert.match(cv, /const connected = \["connected", "failing", "signed_out"\]\.includes\(connStateOf\(conn\)\);/);
   assert.match(cv, /const one = oneOf\(conn\.Type\);/);
   // channel cards (Outlook, Gmail, IMAP, Teams, Slack, GitHub, the AI cards ...), SQL Server, WinRM and every data card
   for (const fn of ["ChannelDetail", "MssqlDetail", "WinrmDetail", "DataDetail"]) {

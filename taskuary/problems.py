@@ -199,22 +199,29 @@ def _off(store, e) -> bool:
 # ── 1. signed out of Microsoft ───────────────────────────────────────────────────────────────────
 
 def signed_out(c: dict) -> bool:
-    """An Outlook card whose sign-in Microsoft has let lapse: the token is still stored, so "signed in"
-    alone said yes while no mail had been read for hours."""
-    if (c or {}).get('Type') != 'outlook' or not c.get('Active'): return False
-    from .msauth import lapsed
-    return lapsed(c.get('LastError'))
+    """A card whose sign-in its system has let lapse: the token is still stored, so "signed in" alone said yes while no mail had
+    been read for hours. Decided once, with the card's whole state (connectorcatalog.state) - Outlook's was the only one asked here."""
+    from .connectorcatalog import signed_out as out
+    return out(c)
 
 
 def away_since(store, cid):
     return _load(store.get_setting(f'{AWAY}{cid}')).get('at') or ''
 
 
+def signed_out_by(c) -> str:
+    "Who let the sign-in lapse, as the owner knows them: the company that signs them in, else the system itself."
+    from .connectorcatalog import by_type
+    t = c.get('Type')
+    return 'Microsoft' if t in ('outlook', 'teams') else 'Google' if t == 'gmail' else (by_type(t) or {}).get('title') or c.get('Name') or t
+
+
 def signed_out_line(store, c) -> tuple:
     """(title, detail) - the one thing to say about it, on the bell and on the rail alike."""
     at = clock(away_since(store, c['ConnectorId']) or c.get('LastErrorAt'))
-    return (f"Microsoft signed you out{f' at {at}' if at else ''}",
-            "I can't see your mail, so I can't watch for answers. Sign in here and I'll catch up.")
+    what = ("I can't see your mail, so I can't watch for answers" if c.get('Type') in ('outlook', 'gmail', 'imap')
+            else f"I can't reach {c.get('Name') or signed_out_by(c)}")
+    return f"{signed_out_by(c)} signed you out{f' at {at}' if at else ''}", f"{what}. Sign in here and I'll catch up."
 
 
 def watch_mail(store, c: dict, err=None):

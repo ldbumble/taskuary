@@ -659,6 +659,7 @@
     },
     {
       "type": "knowledge",
+      "keyless": true,
       "title": "Knowledge base",
       "group": "Files & sheets",
       "planned": false,
@@ -671,6 +672,7 @@
     },
     {
       "type": "handbook",
+      "keyless": true,
       "title": "Company Hub",
       "group": "Files & sheets",
       "planned": false,
@@ -1028,6 +1030,7 @@
     },
     {
       "type": "frankfurter",
+      "keyless": true,
       "title": "FX rates",
       "group": "Markets & finance",
       "planned": false,
@@ -1040,6 +1043,7 @@
     },
     {
       "type": "yahoo",
+      "keyless": true,
       "title": "Yahoo Finance (best-effort)",
       "group": "Markets & finance",
       "planned": false,
@@ -1054,6 +1058,7 @@
     },
     {
       "type": "sec_edgar",
+      "keyless": true,
       "title": "SEC filings (EDGAR)",
       "group": "Markets & finance",
       "planned": false,
@@ -1164,6 +1169,7 @@
     },
     {
       "type": "screen",
+      "keyless": true,
       "title": "Strategy screen",
       "group": "Markets & finance",
       "planned": false,
@@ -3351,6 +3357,7 @@
     },
     {
       "type": "obsidian",
+      "keyless": true,
       "title": "Obsidian",
       "group": "Files & sheets",
       "planned": false,

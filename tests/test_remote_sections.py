@@ -81,7 +81,8 @@ class BrowseTests(unittest.TestCase):
         self.assertIn('Outlook mail', cards)
         one = ra.run_act(s, {'t': 'browse', 'area': 'connections', 'section': 'Messaging', 'open': 'outlook'}, None)
         self.assertIn('Outlook mail', one)
-        self.assertRegex(one, r'Outlook mail - (off|not connected)\.', "its state, in the desktop card's own words")
+        from taskuary.connectorcatalog import LINES
+        self.assertIn(f"Outlook mail - {LINES['off'].lower()}.", one, "its state, in the desktop card's own words (connectorcatalog.state)")
         self.assertIn('Back to Messaging', one)
 
     def test_settings_browse_groups_then_its_settings_with_their_values(self):

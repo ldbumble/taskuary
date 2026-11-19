@@ -2566,8 +2566,10 @@ OFFER_JOB = ('The owner accepted your offer: "{offer}". Do that for them. Regist
 
 
 def connected_systems(store) -> list:
-    """The systems this install can reach, as triage is shown them: each active connection's name and type."""
-    try: return [f"{c.get('Name') or c.get('Type')} ({c.get('Type')})" for c in store.list_connectors() if c.get('Active')][:40]
+    """The systems this install can reach, as triage is shown them: each connected card's name and type (connectorcatalog.connected) -
+    a card switched on and never signed in was offered here while Connections said it was not connected."""
+    from .connectorcatalog import connected
+    try: return [f"{c.get('Name') or c.get('Type')} ({c.get('Type')})" for c in connected(store)][:40]
     except Exception as e:
         logger.debug(f'ingest: connected systems unread - {e}'); return []
 

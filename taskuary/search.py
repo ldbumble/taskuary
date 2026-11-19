@@ -277,12 +277,12 @@ def _settings(words) -> list:
     for k, p, behind in _panels_beyond(knobs, words, _words_in):
         if not _words_in(_panel_text(p), words): continue
         out.append({'type': 'setting', 'id': f'set:{k}', 'title': p['title'], 'where': f"Settings · {p['group']}", 'snippet': '',
-                    'rank': 2 if behind else not _words_in(p['title'], words), 'href': f"#settings=config&group={quote(p['group'], safe='')}&key={quote(k, safe='')}"})
+                    'rank': 2 if behind else not _words_in(p['title'], words), 'href': settings_schema.href(k, p['group'])})
     return sorted(out, key=lambda h: h.pop('rank'))
 
 
 def _connectors(store, words) -> list:
-    on = {str(c.get('Type') or '') for c in store.list_connectors() if c.get('Active')}
+    on = {str(c.get('Type') or '') for c in connectorcatalog.connected(store)}     # "connected" as the card says it (connectorcatalog.state)
     out = []
     for c in connectorcatalog.cards():
         title = c.get('title') or c['type']
@@ -313,7 +313,7 @@ def _app_rows(store) -> list:
     from . import words as places
     # ...a page by what it holds too (words.json `does`): "install the new version" named no page, and Updates was found only by "update"
     # ...and a place that IS a settings panel (Saved sign-ins) is that panel's one row, below - found by the words the schema keeps for it
-    panel = lambda k, p: f"#settings=config&group={quote(p['group'], safe='')}&key={quote(k, safe='')}"
+    panel = lambda k, p: settings_schema.href(k, p['group'])
     own = {panel(k, p) for k, p in settings_schema.panels().items()}
     rows = [{'type': 'place', 'title': p['name'], 'rest': f"{k} {p.get('does') or ''}", 'href': p['href'], 'key': k}
             for k, p in places.PLACES.items() if p.get('href') and p['href'] not in own]

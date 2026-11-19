@@ -43,18 +43,55 @@ def not_signed_in(t: str) -> str:
     return f"{n} isn't signed in - [open its card](#connector={t}) in Connections and press Sign in with {n}"
 
 
-def signed_in(c: dict) -> bool:
+# IS THIS CONNECTION CONNECTED - ONE ANSWER (rule 3). The Connections page asked it six ways, the phone a seventh and triage an eighth:
+# a card switched on and never signed in read "Not set up" on the page while triage and the agents were told they could reach it, and a
+# failing card read "connection ✓" in the data-source picker. `state` decides; the API sends it (State) and every surface reads that.
+# A card with no sign-in of its own is on once it is switched on: the catalogue's `keyless` cards (a local folder, a free public feed),
+# a keyless or borrowed-sign-in API read (apireads, the page's `bare`), and an `mcp` card - each agent CLI signs in to that (remotemcp).
+def keyless(t: str) -> bool:
+    from . import apireads
+    s, c = apireads.table().get(t), by_type(t) or {}
+    borrowed = s and s.get('auth') in apireads.SIGN_INS and s.get('auth') != 'oauth' and not s.get('key')     # another card's sign-in
+    return bool(c.get('keyless') or c.get('mcp') or (s and (s.get('keyless') or borrowed)))
+def signed_in(c: dict, srcs=()) -> bool:
     "A card that is on and holds what it needs to reach its system - a card switched on and never signed in is not (the walks, 2026-11-18)."
-    return bool(c.get('Active') and (c.get('HasSecret') or c.get('LastSyncAt') or c.get('Secret')))
-def is_connected(c: dict) -> bool:
-    """A card that is on, has what it needs to reach its system, and is not failing - the one rule the Connections page counts by."""
-    return signed_in(c) and not c.get('LastError')
+    if not c.get('Active'): return False
+    try: cfg = json.loads(c.get('ConfigJson') or '{}') or {}
+    except (TypeError, ValueError): cfg = {}
+    return bool(c.get('HasSecret') or c.get('LastSyncAt') or c.get('Secret') or (isinstance(cfg, dict) and cfg.get('google_refresh_token'))
+                or keyless(c.get('Type')) or any(s.get('Active') and s.get('ConnectorId') == c.get('ConnectorId') for s in srcs or ()))
+
+
+def lapsed(err) -> bool:
+    """The system refused the sign-in the card holds: the lapse lines this app writes (msauth, googlecal and chatgptauth's "sign-in has
+    lapsed", imapmail.GOOGLE_REFUSED, teamsweb.SIGNED_OUT) and OAuth's own refusal code. Gmail's raw "invalid_grant" missed the page's
+    word list, and the card said "Not answering - click to fix it" over a sign-in to do (2026-11-19)."""
+    from .imapmail import GOOGLE_REFUSED
+    from .teamsweb import SIGNED_OUT
+    s = str(err or '')
+    return any(m in s for m in ('sign-in has lapsed', 'invalid_grant', GOOGLE_REFUSED, SIGNED_OUT))
+def signed_out(c: dict) -> bool: return bool((c or {}).get('Active') and lapsed(c.get('LastError')))
+
+
+LINES = {'connected': 'Connected', 'not_signed_in': 'Not signed in', 'signed_out': 'Needs sign-in',
+         'failing': 'Not answering - open it to fix it', 'off': 'Not set up'}
+def state(c: dict, srcs=()) -> dict:
+    """{state, line, fix}: 'connected' | 'not_signed_in' | 'signed_out' | 'failing' | 'off', its plain line, and the card's link. `srcs`
+    are the store's sources: a card a source of its own reads through is signed in by it."""
+    k = ('off' if not c.get('Active') else 'signed_out' if signed_out(c) else 'not_signed_in' if not signed_in(c, srcs)
+         else 'failing' if c.get('LastError') else 'connected')
+    return {'state': k, 'line': LINES[k], 'fix': '' if k == 'connected' else f"#connector={c.get('Type') or ''}"}
+def is_connected(c: dict, srcs=()) -> bool: return state(c, srcs)['state'] == 'connected'
+def connected(store) -> list:
+    "The cards that are connected: what Connections counts, the phone says, triage is told it can reach and the agents may act on."
+    srcs = store.list_sources() if hasattr(store, 'list_sources') else ()
+    return [c for c in store.list_connectors() or [] if is_connected(c, srcs)]
 
 
 def connected_count(store, cli_connections: dict) -> int:
     """How many connections Connections says are connected: the cards, and every connected AI CLI agent beside them. The page counted
     the cards alone and said "0 connected" over its own AI CLI agents card reading Connected (2026-10-19 UI walk)."""
-    return sum(map(is_connected, store.list_connectors() or [])) + len(cli_connections or {})
+    return len(connected(store)) + len(cli_connections or {})
 
 
 # WHAT THE OWNER PRESSES, PER CONNECTOR (the catalogue's `actions`, the owner 2026-11-05): the fields an act's card shows, which the owner

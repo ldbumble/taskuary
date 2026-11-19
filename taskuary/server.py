@@ -7925,13 +7925,15 @@ def connectors(request: Request):
     ScopeDefault rides along so the card can show what an unset Authority actually means -
     which is per type (winrm starts at admin, a tracker at read), not one global floor.
     Agents still list cards (they have to pick a tool) but ConfigJson drops credential keys."""
-    from . import problems, scopes
-    # SignedOut: a stored token is not a sign-in - Microsoft can let it lapse, and the card said "Signed in" over it
-    # LastErrorPlain: the card's red line in words - LastError stays raw for problems.lapsed and the Advisor's facts
+    from . import connectorcatalog, scopes
+    # State: is it connected - connected / not_signed_in / signed_out / failing / off, its plain line and its fix (connectorcatalog.state),
+    # the one answer every spot on the page reads. SignedOut rides on it: a stored token is not a sign-in - Microsoft can let it lapse
+    # LastErrorPlain: the card's red line in words - LastError stays raw for connectorcatalog.lapsed and the Advisor's facts
     from .channels import card_error
     # IsAI: an AI card (llm.AI_TYPES) - what agents think with, never a system they act in: Agent permissions leaves it out
     from .llm import AI_TYPES
-    rows = [c | {'ScopeDefault': scopes.default_scope(c['Type']), 'SignedOut': problems.signed_out(c),
+    srcs = store.list_sources()
+    rows = [c | {'ScopeDefault': scopes.default_scope(c['Type']), 'State': (st := connectorcatalog.state(c, srcs)), 'SignedOut': st['state'] == 'signed_out',
                  'LastErrorPlain': card_error(c), 'IsAI': c['Type'] in AI_TYPES} for c in store.list_connectors()]
     # FellBack: the card's calls are answered by another model than the one asked for (brainroute.fell_line) - the bell's own line
     from .brainroute import fell_line
@@ -7942,7 +7944,6 @@ def connectors(request: Request):
     # ReadsBack: the days this card's first read will go back while that read is still due - its "How far back to bring in", 0 for a
     # reader that is not asked by date or has been read (channels.reads_back)
     from .channels import first_read_hours, reads_back
-    srcs = store.list_sources()
     rows = [c | {'ReadsBack': round(first_read_hours(store, c) / 24) if reads_back(store, c, srcs, unsourced=True) else 0} for c in rows]
     # PeopleMissing: the contacts/people permissions this card's sign-in predates - the card says signing in again adds them
     from .peoplesearch import missing

@@ -229,8 +229,8 @@ def health(store, name: str = '', connector_id=None, n: int = 0, chat: str = '')
     out['log'] = out['log'] or logged
     from . import problems
     full = store.get_connector(c['connector_id']) or {}
-    if problems.signed_out({**full, 'Type': typ}):
-        return {**out, 'ok': False, 'why': 'Microsoft signed you out - it needs you to sign in again', 'fix': {'label': 'Sign in again', 'href': card['href']}}
+    if problems.signed_out(full := {**full, 'Type': typ}):
+        return {**out, 'ok': False, 'why': f'{problems.signed_out_by(full)} signed you out - it needs you to sign in again', 'fix': {'label': 'Sign in again', 'href': card['href']}}
     if out['ok'] or typ == 'whatsapp': return out
     # an error on a card nothing here restarts is asked again first (Test it). What that cannot clear is the owner's - a refused sign-in
     # (outbound.auth_fix, the failure shape's own reading), a key never given, a fix the failed test left - or it is ours: a bug report

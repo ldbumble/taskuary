@@ -420,6 +420,18 @@ _BUILDS, _BUILDS_LOCK = {}, threading.Lock()
 # for the finished turn, was an input heard mid-way, and the turn he had watched for 1m 39s "ran" 12 seconds less
 # ...AND A STOP ENDS A TURN AS AN ANSWER DOES (the real-CLI walk, 2026-11-17: a turn he stopped files no answer, so the 12 s turn after it
 # counted from the stopped one's start and "ran 37s"): `stops`, when each of his stops was heard - the turn begins after the last one
+FAILED_TRY = 'failed'
+def failed_try(store, tid: int) -> None:
+    """A TRY THAT FAILED ENDS WHERE IT FAILED (design round 4, H3: after an outage a short ask read "ran 17m 18s" - the one failure line stands in
+    place, so no answer came between the tries, and the turn that answered counted from the first of them). Its end is in the ledger and is a
+    stop for turn_start, as his own stop is: the turn that answers counts from its own try."""
+    with store.lock:
+        seq = store.cx.execute('SELECT MAX(CommentId) AS m FROM comment WHERE TaskId=?', (int(tid),)).fetchone()['m'] or 0
+        store.cx.execute('INSERT OR IGNORE INTO heard (TaskId,Kind,Ref,At,Grp,Seq,Sid) VALUES (?,?,?,?,?,?,?)',
+                         (int(tid), FAILED_TRY, str(time.time_ns()), time.time(), 0, seq, ''))
+        store.cx.commit()
+
+
 def turn_start(marks, after: float, before: float = float('inf'), stops=()) -> float:
     "When the turn after answer `after` and before `before` began: its first hand-over from `after` on, and from his last stop (0. with none)."
     ms = [m['At'] for m in marks if after <= m['Seq'] < before]
@@ -471,6 +483,7 @@ def _items(store, tid: int) -> dict:
     # card taken into it)
     ends = (general.PRESSES['stopped_turn']({}), general.PRESSES['close_from_assistant']({}))
     stops = [(h := led.get(('press', str(i)))) and h['At'] or ep(at) for i, at, w, *_ in general.presses(store, tid) if w in ends]
+    stops += [r['At'] for (k, _), r in led.items() if k == FAILED_TRY]          # ...and each try that failed (failed_try)
     backs = [int(r[1:]) for k, r in led if k == 'back' and r[:1] == '>']      # an answer taken back before its row was filed (take_back)
     back_why = lambda cid: next((w for n in sorted(backs, reverse=True) if n < cid and (w := led[('back', f'>{n}')].get('Sid'))), '')
     asked = None                                   # the task's own row: the ask that opened it, where no message did

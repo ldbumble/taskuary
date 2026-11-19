@@ -652,6 +652,30 @@ class TheSessionTests(unittest.TestCase):
         self.assertEqual(bodies.count('set up the Monday summary'), 1)       # his line once, never again in his name
         self.assertIn(general.RETRY_ASK, heard[0])
 
+    def test_the_turn_that_answers_after_an_outage_is_clocked_from_its_own_try(self):
+        """The API walk, 2026-11-19: a short ask answered after the outage read "ran 17m 18s" - its clock counted from the first hand-over
+        since the last answer, a try that failed in the outage and filed nothing new (the one failure line stands in place). Each try that
+        failed ends there: the turn that answers counts from its own try."""
+        import time
+        from taskuary import conversation, general
+        class Down:
+            def chat(self, *a, **kw): raise llm.QuotaSpent(llm.QUOTA_LINE.format(name='HIPAA AI', model='Gemini 4'))
+        class Up:
+            def chat(self, *a, **kw): return {'content': 'The posts are drafted.'}
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Launch posts', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        with self._patched(Down()):
+            for line in ('draft the launch posts', 'any luck?'):
+                try: self._down_session(s, tid).send_prompt(line, echo=False)
+                except Exception: pass
+                time.sleep(0.3)
+        last_try = time.time()
+        with self._patched(Up()):
+            self._down_session(s, tid).send_prompt(general.RETRY_ASK, as_owner=False, echo=False)
+        turn = [x for x in conversation.items(s, tid)['items'] if x['kind'] == 'turn'][-1]
+        self.assertEqual(turn['text'], 'The posts are drafted.')
+        self.assertGreaterEqual(turn['started'], last_try - 0.05)
+
     def test_a_failed_turn_leaves_a_draft_that_is_still_good_live(self):
         """The API walk, 2026-11-19: Paula's reply was drafted; he asked for a PDF too, the AI failed, and the draft's Send stood greyed for 43
         minutes while turn after turn failed. A card is set aside as its agent hears the input; a turn the AI never answered read past nothing."""

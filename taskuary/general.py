@@ -236,9 +236,10 @@ def let_go_retry(store, tid: int) -> None:
 def say_failure(store, tid: int, trace: list, why: str, down: bool = False) -> None:
     """A failed turn filed where it happened (file_turn) - but THE SAME OUTAGE IS ONE LINE: a turn that did nothing, failing under a newest answer
     that is itself a failure with no words, changes that line in place (an outage's next time) or leaves it (the same failure again)."""
-    from . import sessionrecord
+    from . import conversation, sessionrecord
+    conversation.failed_try(store, tid)
     last = next((c for c in reversed(store.list_comments(tid, internal=True)) if c.get('ActorType') == ASSISTANT_TYPE), None)
-    quiet = not sessionrecord.said(trace) and not any(e.get('type') == 'tool_call' for e in trace)
+    quiet =not sessionrecord.said(trace) and not any(e.get('type') == 'tool_call' for e in trace)
     words, was = failed_line(last.get('Body')) if last else ('', '')
     if quiet and was and not words:
         if down and was != why: store.set_comment_body(last['CommentId'], FAILED_MARK + why); store._poke('task-changed', task_id=int(tid))

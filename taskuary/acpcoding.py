@@ -405,6 +405,8 @@ class ACPCoding:
 
     def _record(self, u: dict):
         codingchat.record_update(self.task_id, self.sid, u)
+        from . import chatlog                    # ...and the turn's steps in the chat's log, as they come (one shape for every road)
+        chatlog.feed(self.store, self.task_id, self.sid, 'acp', u)
 
     def _turn(self, items: list):
         from . import agents, acpgate

@@ -544,6 +544,8 @@ def failed_try(store, tid: int) -> None:
         store.cx.execute('INSERT OR IGNORE INTO heard (TaskId,Kind,Ref,At,Grp,Seq,Sid) VALUES (?,?,?,?,?,?,?)',
                          (int(tid), FAILED_TRY, str(time.time_ns()), time.time(), 0, seq, ''))
         store.cx.commit()
+    from . import chatlog
+    chatlog.failed(store, tid)
 
 
 def turn_start(marks, after: float, before: float = float('inf'), stops=()) -> float:

@@ -2888,6 +2888,8 @@ class GeneralSession:
         self.trace.append(event)
         self.trace = bounded_trace(self.trace)
         self.trace_revision += 1
+        from . import chatlog                    # ...and the turn's steps in the chat's log, as they come (one shape for every road)
+        chatlog.feed(getattr(self, 'store', None), self.task_id, getattr(self, 'sid', '') or '', 'trace', event)
         if getattr(self, 'busy', False) and event['type'] in ('tool_call', 'progress', 'error'):     # a restart must not erase it (keep_cut_turns)
             from . import sessionrecord
             try: sessionrecord.keep_live(self.task_id, self.trace)

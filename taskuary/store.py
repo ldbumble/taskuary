@@ -5328,6 +5328,12 @@ class SQLiteStore:
         if actor_type == 'assistant_agent' and task_id:
             from . import chatlog
             chatlog.answered(self, task_id, cid, actor, body, at)
+        elif line_id and task_id:
+            from . import chatlog
+            chatlog.filed(self, task_id, line_id, {'Body': body, 'ActorType': actor_type, 'CreatedAt': at})
+        elif actor_type == 'assistant_user' and actor in ('owner', 'you') and task_id:
+            from . import chatlog                    # ...a line of his filed with no name to hear it by: his line where it is filed
+            chatlog.put(self, task_id, 'line', f'c:{cid}', {'at': at, **chatlog.his(body)}, src=f'comment:{cid}')
         return cid
     def add_comment_once(self, task_id, actor, actor_type, body):
         """Append a turn unless it is already the last turn on this task.
@@ -5404,9 +5410,13 @@ class SQLiteStore:
             row = self.cx.execute('SELECT RowHash FROM audit ORDER BY Id DESC LIMIT 1').fetchone()
             prev = (row['RowHash'] if row and row['RowHash'] else None) or GENESIS
             rh = chain_hash(prev, _audit_payload(et, eid, action, actor, actor_type, run_id, d))
-            self.cx.execute('INSERT INTO audit (EntityType,EntityId,Action,Actor,ActorType,RunId,Detail,PrevHash,RowHash,CreatedAt) VALUES (?,?,?,?,?,?,?,?,?,?)',
-                            (et, eid, action, actor, actor_type, run_id, d, prev, rh, _now()))
+            aid = self.cx.execute('INSERT INTO audit (EntityType,EntityId,Action,Actor,ActorType,RunId,Detail,PrevHash,RowHash,CreatedAt) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                                  (et, eid, action, actor, actor_type, run_id, d, prev, rh, _now())).lastrowid
             self.cx.commit()
+        # ...HIS PRESS ON A TASK is a line of its chat from the moment he makes it (chatlog.pressed: the one hook for every press road)
+        if et == 'task' and eid and actor in ('owner', 'you'):
+            from . import chatlog
+            chatlog.pressed(self, int(eid), aid, action)
     # ── what went wrong, and what happened (lookups.py: errors.list, activity.list) ──
     def audit_since(self, since, limit=400) -> list:
         return self._rows('SELECT EntityType, EntityId, Action, Actor, ActorType, Detail, CreatedAt FROM audit WHERE CreatedAt>=? '

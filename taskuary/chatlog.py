@@ -70,10 +70,24 @@ def put(store, tid: int, kind: str, key: str, body: dict, parent=None, state=Non
             body = dict(body or {})
             cur = store.cx.execute('INSERT INTO chatlog (TaskId, Key, Kind, Parent, At, Src, Body, State) VALUES (?,?,?,?,?,?,?,?)',
                                    (int(tid), key, kind, _parent(store, tid, parent), _when(body.get('at') if at is None else at), src, json.dumps(body, default=str), state))
-            _bump(store, tid); store.cx.commit()
             n = cur.lastrowid
+            if kind != 'turn' and parent is None: _goes_on(store, tid, n)
+            _bump(store, tid); store.cx.commit()
     _poke(store, tid)
     return n
+
+
+def _goes_on(store, tid: int, below: int) -> None:
+    """WHAT IS APPENDED WHILE A TURN WORKS STANDS ABOVE THE REST OF IT (the turn at work is always the last thing): the part of the turn before
+    it is over, and the turn goes on in a new row under it ({cont}) - its steps from then on go there. Under the store's lock."""
+    t = store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='turn' AND Parent IS NULL AND State IN ('starting','working') AND Id<? "
+                         "ORDER BY Id DESC LIMIT 1", (int(tid), below)).fetchone()
+    if not t: return
+    b = json.loads(t['Body'] or '{}')
+    store.cx.execute("UPDATE chatlog SET State='done', Rev=Rev+1 WHERE Id=?", (t['Id'],))
+    store.cx.execute('INSERT INTO chatlog (TaskId, Key, Kind, At, Src, Body, State) VALUES (?,?,?,?,?,?,?)',
+                     (int(tid), f"{t['Key'].split('+')[0]}+{below}", 'turn', time.time(), t['Src'],
+                      json.dumps({'cont': t['Key'], 'started': b.get('started'), 'ended': None, 'text': '', **({'sid': b['sid']} if b.get('sid') else {})}), t['State']))
 
 
 def _update(store, tid: int, old: dict, state, patch: dict) -> bool:
@@ -140,8 +154,12 @@ def step(store, tid: int, sid: str, ref: str, step: dict, state=None) -> int:
             cur = store.cx.execute('INSERT INTO chatlog (TaskId, Key, Kind, Parent, At, Src, Body, State) VALUES (?,?,?,?,?,?,?,?)',
                                    (int(tid), key, 'step', t['Id'], time.time(), f'{sid}:{ref}', json.dumps(step, default=str), state))
             _bump(store, tid); store.cx.commit(); n = cur.lastrowid
-    _poke(store, tid)
-    return n
+    return n            # ...a step is its road's news (run-tail), never a task-changed of its own
+
+
+def _drawn(r: dict, lit: bool) -> bool:
+    "A card waiting behind the front is drawn nowhere; an offer outside the line only while no card of the line waits (one box, D)."
+    return r['Kind'] not in ('card',) or r['State'] != 'held' and not (r['State'] == 'offer' and lit)
 
 
 def _item(r: dict) -> dict:
@@ -154,24 +172,38 @@ def rev(store, tid: int) -> int:
     return r['Rev'] if r else 0
 
 
-def read(store, tid: int) -> dict:
-    """The task's chat in its one order: top-level rows by their place, each turn with its steps, and its cards and failures once it is
+def reconcile(store, tid: int) -> None:
+    "The turn at work reads what is so (general.working - one fact): starting until its agent works, at work while it does."
+    from . import general
+    if (t := _live(store, tid)) and t['State'] == 'starting' and general.working(store, int(tid)): update(store, tid, t['Key'], state='working')
+
+
+def read(store, tid: int, level: str = None) -> dict:
+    """`level`: how much of each turn's work is shown (detailed) - the task's own, else its kind's setting.
+    The task's chat in its one order: top-level rows by their place, each turn with its steps, and its cards and failures once it is
     no longer at work (a card is a turn's last thing - the reader's one rule)."""
+    reconcile(store, tid)
+    came_in(store, tid)
+    advance(store, tid)
     with store.lock:
         rows = [dict(r) for r in store.cx.execute('SELECT * FROM chatlog WHERE TaskId=? ORDER BY Id', (int(tid),))]
         n = rev(store, tid)
     kids, out = {}, []
+    lit = any(r['Kind'] == 'card' and r['State'] == 'pending' for r in rows)
     for r in rows:
         if r['Parent'] is not None: kids.setdefault(r['Parent'], []).append(r)
     for r in rows:
-        if r['Parent'] is not None: continue
+        if r['Parent'] is not None or not _drawn(r, lit): continue
         x = _item(r)
         if r['Kind'] == 'turn':
             ks = kids.get(r['Id'], [])
             x['steps'] = [_item(k) for k in ks if k['Kind'] == 'step']
-            x['cards'] = [] if r['State'] in LIVE else [_item(k) for k in ks if k['Kind'] in ('card', 'fail')]
+            x['cards'] = [] if r['State'] in LIVE else [_item(k) for k in ks if k['Kind'] in ('card', 'fail') and _drawn(k, lit)]
+            # ...a turn that ended having said, done and left nothing is no item (a part a line cut off before it did anything)
+            if r['State'] not in LIVE and not (x.get('text') or x['steps'] or x['cards'] or x.get('summary') or x.get('fail')): continue
         out.append(x)
-    return {'rev': n, 'items': out}
+    lvl = level_of(store, store.get_task(int(tid)) or {}, level)
+    return {'rev': n, 'items': [detailed(x, lvl) for x in out], 'level': lvl}
 
 
 # ── the producers' doors (dual-write: the legacy reader still serves the page; the log is written beside it) ─────────────────────────
@@ -194,17 +226,36 @@ def heard(store, tid: int, new: list, at: float) -> None:
     tid = int(tid)
     mails = {str(x['MessageId']): x for x in _mail(store, tid)} if any(k == 'mail' for k, _ in new) else {}
     presses = {m['id'].split('-')[1]: m for m in general.press_lines(store, tid)} if any(k == 'press' for k, _ in new) else {}
+    # ...one turn at work, ever: a turn the agent never answered is over when the next begins - before what this hand-over took is appended
+    if any(k == 'turn' for k, _ in new) and (old := _live(store, tid)): update(store, tid, old['Key'], state='done')
+    if any(k == 'turn' for k, _ in new): opener(store, tid, at)
     for k, r in new:
         if k == 'line':
+            # ...heard at his press, a beat before its row is filed (general.take_line): its place is taken now, its words come with the row (filed)
             c = store._one('SELECT * FROM comment WHERE TaskId=? AND LineId=? ORDER BY CommentId DESC LIMIT 1', (tid, r))
-            if c: put(store, tid, 'line', r, {'at': c['CreatedAt'], **general.his_line(c)}, src=f"comment:{c['CommentId']}", at=at)
-        elif k == 'mail' and (x := mails.get(r)):
+            put(store, tid, 'line', r, {'at': c['CreatedAt'], **general.his_line(c)} if c else {'text': ''}, src=f"comment:{c['CommentId']}" if c else 'heard', at=at)
+        elif k == 'mail' and (x := mails.get(r)) and (x.get('Channel') or '') != OWN:
             put(store, tid, 'arrival', f'm:{r}', {**general.mail_row(store, x), 'joined': stamp(x['T'])}, src=f'message:{r}', at=at)
         elif k == 'press' and (m := presses.get(r)):
             put(store, tid, 'press' if m.get('press') else 'note', f'p:{r}', {'at': m['createdAt'], 'text': m['content'][0]['text'],
                 **({'perm': m['perm']} if m.get('perm') else {})}, src=f'audit:{r}', at=at)
         elif k == 'turn':
             put(store, tid, 'turn', f't:{r}', {'started': at, 'ended': None, 'text': ''}, state='starting', src='heard', at=at)
+
+
+def _live(store, tid: int):
+    with store.lock:
+        r = store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='turn' AND Parent IS NULL AND State IN ('starting','working') "
+                             "ORDER BY Id DESC LIMIT 1", (int(tid),)).fetchone()
+    return dict(r) if r else None
+
+
+@_safe
+def filed(store, tid: int, line_id: str, c: dict) -> None:
+    "His line's row filed after it was heard: its words go into the place it took then."
+    if (r := get(store, tid, line_id)) and r['kind'] == 'line' and not (r.get('text') or r.get('files')):
+        from . import general
+        update(store, tid, line_id, at=c['CreatedAt'], **general.his_line(c))
 
 
 @_safe
@@ -216,11 +267,14 @@ def answered(store, tid: int, cid: int, actor: str, body: str, created: str) -> 
     tid = int(tid)
     words = clean(str(body or ''))
     if actor == sessionrecord.NOTE_ACTOR: return void(put(store, tid, 'note', f'n:c{cid}', {'at': created, 'text': words}, src=f'comment:{cid}'))
+    flush(store, tid)
     text, fail = general.failed_line(words)
     with store.lock:
         t = store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='turn' AND Parent IS NULL ORDER BY Id DESC LIMIT 1", (tid,)).fetchone()
     done = {'text': text, 'ended': _when(created), 'answer': f'comment-{cid}', **({'fail': fail.strip()} if fail else {})}
-    if t and t['State'] in LIVE: update(store, tid, t['Key'], state='failed' if fail else 'done', **done)
+    # ...the turn at work, or one his stop or a failure ended that has not said its last words yet
+    if t and (t['State'] in LIVE or t['State'] in ('failed', 'stopped') and not json.loads(t['Body'] or '{}').get('answer')):
+        update(store, tid, t['Key'], state='failed' if fail or t['State'] == 'failed' else t['State'] if t['State'] == 'stopped' else 'done', **done)
     else: put(store, tid, 'turn', f'a:c{cid}', {'started': _when(created), **done}, state='failed' if fail else 'done', src=f'comment:{cid}')
 
 
@@ -231,3 +285,420 @@ def void(_): return None
 def at_work(store, tid: int, sid: str = '') -> None:
     "The turn the agent has the prompt of: starting until then, working from its first word on (its road's own `prompt`)."
     if (t := open_turn(store, tid)) and t['State'] == 'starting': update(store, tid, t['Key'], state='working', **({'sid': sid} if sid else {}))
+
+
+ENDS = ('stopped_turn', 'close_from_assistant')      # ...his stop and his close end the turn they were pressed under, and never wait
+@_safe
+def pressed(store, tid: int, aid: int, action: str) -> None:
+    """His press (an audit row of his whose words general.PRESSES says): appended where he made it - unless a turn is at work, which hears
+    it at its end (then `heard` appends it, where it was heard). His stop or close ends the turn at work, in place."""
+    from . import general
+    if action not in general.PRESSES: return
+    m = next((m for m in general.press_lines(store, tid) if m['id'] == f'press-{aid}'), None)
+    if not m: return
+    with store.lock:
+        live = store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='turn' AND Parent IS NULL AND State IN ('starting','working') "
+                                "ORDER BY Id DESC LIMIT 1", (int(tid),)).fetchone()
+    if live and action not in ENDS and m.get('press'): return
+    if live and action in ENDS: update(store, tid, live['Key'], state='stopped' if action == 'stopped_turn' else 'done')
+    put(store, tid, 'press' if m.get('press') else 'note', f'p:{aid}', {'at': m['createdAt'], 'text': m['content'][0]['text'],
+        **({'perm': m['perm']} if m.get('perm') else {}), **({'stop': True} if action == 'stopped_turn' else {})}, src=f'audit:{aid}')
+
+
+@_safe
+def failed(store, tid: int) -> None:
+    "A try that failed ends where it failed (conversation.failed_try): the turn at work is over, failed - its line is the answer filed after."
+    with store.lock:
+        live = store.cx.execute("SELECT Key FROM chatlog WHERE TaskId=? AND Kind='turn' AND Parent IS NULL AND State IN ('starting','working') "
+                                "ORDER BY Id DESC LIMIT 1", (int(tid),)).fetchone()
+    if live: update(store, tid, live['Key'], state='failed')
+
+
+def _shape(xs: list) -> list:
+    "What the screen draws, in order, by what each thing is: a turn by its words and its state, anything else by its own name."
+    return [('turn', x.get('state') if x.get('state') in LIVE else 'over', (x.get('text') or '')[:60]) if x['kind'] == 'turn'
+            else (x['kind'], x['id']) for x in xs if x['kind'] != 'step']
+
+
+def shadow(legacy: dict, log: dict) -> str:
+    "The first place the log's chat and the list served (conversation.items) draw differently - '' where they agree. The switch waits on ''."
+    a, b = _shape(legacy.get('items') or []), _shape(log.get('items') or [])
+    if a == b: return ''
+    i = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
+    return f'at {i}: list {a[i:i + 3]} | log {b[i:i + 3]} ({len(a)} vs {len(b)})'
+
+
+def his(body) -> dict:
+    from . import general
+    return general.his_line(body)
+
+
+# ── STEPS: every road's record as the one step shape, written as it comes (stage 3) ──────────────────────────────────────────────────────
+def one_step(s: dict) -> dict:
+    """A step as every road writes it: what was done in plain words (`text` - its description where it gave one, else what it ran or read),
+    the real command beside it (`detail`), the file it made or changed, its edit, status, output and error kept. One shape whatever the road."""
+    from .sessionrecord import _args, _cut, _target
+    k = s.get('k')
+    if k != 'tool': return {x: s[x] for x in ('k', 'text', 'items', 'status', 'name', 'id', 'output') if s.get(x) not in (None, '')}
+    a = s.get('args') if isinstance(s.get('args'), dict) else {}
+    cmd = a.get('command') or a.get('cmd')
+    cmd = ' '.join(map(str, cmd)) if isinstance(cmd, list) else str(cmd or '')
+    desc = str(a.get('description') or '').strip()
+    out = {'k': 'tool', 'name': str(s.get('name') or 'tool'), 'text': _cut(desc, 200) if desc else s.get('text') or _target(a) or cmd}
+    if desc and cmd: out['detail'] = _cut(cmd, 4000)
+    elif s.get('detail'): out['detail'] = s['detail']
+    if (kept := _args(a)): out['args'] = kept
+    for x in ('file', 'edit', 'status', 'output', 'out', 'id', 'parent'):
+        if s.get(x) not in (None, '', {}): out[x] = s[x]
+    return out
+
+
+def _convert(road: str, events: list) -> list:
+    from . import conversation, sessionrecord
+    if road == 'trace': return sessionrecord.trace_steps(events)
+    if road == 'acp': return conversation.acp_steps(events)
+    st = {'out': []}
+    line_of = sessionrecord._claude_line if road == 'claude-log' else sessionrecord._codex_line
+    for j in events: line_of(st, j)
+    return st['out']
+
+
+_FEEDS: dict = {}
+@_safe
+def feed(store, tid: int, sid: str, road: str, event) -> None:
+    """ONE EVENT OF A ROAD'S RECORD (a chat agent's trace event, an ACP update, a line of a CLI's log), as it comes: the turn's steps are
+    read in the one shape and each new or changed one is written in place - by its place in the turn, so an update never moves it."""
+    if not store or not tid or event is None: return
+    t = open_turn(store, tid)
+    root = (t['Key'] if t else '').split('+')[0]
+    f = _FEEDS.get((int(tid), sid))
+    if not f or f['root'] != root: f = _FEEDS[(int(tid), sid)] = {'root': root, 'seq': f'{int(time.time() * 1000)}', 'events': [], 'wrote': {}}
+    f['events'].append(event); f['road'] = road
+    # ...words a token at a time are written a few times a second, not once a token: the rest at the next step or the answer (flush)
+    if _chunk(event) and time.time() - f.get('at', 0) < CHUNK_S: f['dirty'] = True; return
+    _write(store, tid, sid, f)
+
+
+CHUNK_S = 0.4
+def _chunk(e) -> bool:
+    return isinstance(e, dict) and (e.get('sessionUpdate') in ('agent_message_chunk', 'agent_thought_chunk') or e.get('type') == 'live')
+
+
+def flush(store, tid: int) -> None:
+    "What the roads of task `tid` still hold back (a sentence's last tokens): written now - its answer is filed."
+    for (t, sid), f in list(_FEEDS.items()):
+        if t == int(tid) and f.get('dirty'): _write(store, tid, sid, f)
+
+
+def _write(store, tid: int, sid: str, f: dict) -> None:
+    f['at'], f['dirty'] = time.time(), False
+    for i, s in enumerate(_convert(f['road'], f['events'])):
+        if s.get('k') in ('you', 'brief'): continue          # ...his lines and Taskuary's briefs are the hand-over's, never a step
+        x = one_step(s)
+        if f['wrote'].get(i) == (j := json.dumps(x, sort_keys=True, default=str)): continue
+        f['wrote'][i] = j
+        step(store, tid, sid, f"{f['seq']}:{i}", x, state=x.get('status'))
+
+
+# ── HOW MUCH OF THE WORK IS SHOWN: the one place the detail setting is applied ──────────────────────────────────────────────────────────
+LEVELS = ('summary', 'steps', 'everything')
+SETTING = {'coding': 'chat_detail_coding', 'other': 'chat_detail_other'}
+SHIPPED = {'coding': 'everything', 'other': 'summary'}
+SHOWN = ('said', 'show', 'view')          # ...what the agent put in front of him: never folded away
+
+
+def level_of(store, task: dict, own: str = None) -> str:
+    "The task's own level, else its kind's default from Settings (chat_detail_coding / chat_detail_other), else what ships."
+    side = 'coding' if (task or {}).get('Kind') == 'coding' else 'other'
+    return own if own in LEVELS else (v if (v := store.get_setting(SETTING[side], '')) in LEVELS else SHIPPED[side])
+
+
+# ...EVERY TOOL CALL IS ONE ROW IN PLAIN WORDS (the owner, 2026-11-19: "better showing what tools are run on the canvas but not a billion
+# details"): what it did and on what, its outcome in a few words where known, its output only behind the row - capped - and the same call made
+# again folded into "(3 times)". The words are read off the call's own structure (its name, its arguments), never off what it means.
+_DID = (('Ran', ('bash', 'shell', 'execute', 'powershell', 'local_shell_call', 'run')), ('Read', ('read', 'view', 'cat')),
+        ('Edited', ('edit', 'multiedit', 'apply_patch', 'str_replace')), ('Wrote', ('write', 'create', 'notebookedit')),
+        ('Searched the web for', ('websearch', 'web_search', 'search_web')), ('Opened', ('webfetch', 'fetch', 'open', 'navigate', 'browser')),
+        ('Searched for', ('grep', 'glob', 'search', 'find')))
+_KIND = {'Ran': ('ran', 'ran {n} commands', 'ran a command'), 'Read': ('read', 'read {n} files', 'read a file'), 'Edited': ('edited', 'edited {n} files', 'edited a file'),
+         'Wrote': ('wrote', 'wrote {n} files', 'wrote a file'), 'Opened': ('opened', 'opened {n} sites', 'opened a site'),
+         'Searched the web for': ('searched', 'searched the web {n} times', 'searched the web'), 'Searched for': ('searched', 'searched {n} times', 'searched'),
+         'Used': ('used', 'used {n} tools', 'used a tool')}
+OUT_N = 1500
+
+
+def _verb(name: str) -> str:
+    n = str(name or '').lower().rsplit('__', 1)[-1]
+    return next((v for v, ks in _DID if any(n == k or n.startswith(k) for k in ks)), 'Used')
+
+
+def _on(s: dict, verb: str) -> str:
+    import os, re
+    a = s.get('args') or {}
+    if verb in ('Read', 'Edited', 'Wrote') and (f := s.get('file') or a.get('file_path') or a.get('path')): return os.path.basename(str(f).replace('\\', '/').rstrip('/')) or str(f)
+    if verb == 'Opened' and (u := a.get('url') or s.get('text')) and (m := re.match(r'https?://(?:www\.)?([^/\s]+)', str(u))): return m.group(1)
+    if verb == 'Ran': return str(s.get('detail') or a.get('command') or s.get('text') or '')[:160]
+    if verb == 'Used': return str(s.get('name') or 'a tool').rsplit('__', 1)[-1]
+    return str(a.get('query') or a.get('pattern') or s.get('text') or '')[:160]
+
+
+def outcome(s: dict) -> str:
+    "Its outcome in a few words, where its record says one: failed, a test run's own count, the number of results."
+    import re
+    out = str(s.get('output') or s.get('out') or '')
+    if (m := re.findall(r'(\d+) (passed|failed|errors?)\b', out[-2000:])): return ', '.join(f'{n} {w}' for n, w in m[-2:])
+    if s.get('status') == 'failed': return 'failed'
+    return ''
+
+
+def _capped(out: str) -> dict:
+    out = str(out or '')
+    return {} if not out else {'output': out} if len(out) <= 2 * OUT_N else {'output': f"{out[:OUT_N]}\n…\n{out[-OUT_N:]}", 'size': len(out)}
+
+
+def tool_rows(steps: list) -> list:
+    "A turn's steps with each tool call as its one row (`line`, `outcome`, the output capped behind it) and the same call again as `times`."
+    out = []
+    for s in steps:
+        if s.get('k') != 'tool': out.append(s); continue
+        verb = _verb(s.get('name')); on = _on(s, verb)
+        r = {**{k: v for k, v in s.items() if k not in ('output', 'out')}, 'line': f'{verb} {on}'.strip() if on else verb, 'verb': verb,
+             **({'outcome': o} if (o := outcome(s)) else {}), **_capped(s.get('output') or s.get('out'))}
+        if out and out[-1].get('k') == 'tool' and out[-1]['line'] == r['line']: out[-1]['times'] = out[-1].get('times', 1) + 1; out[-1].update({k: r[k] for k in ('outcome', 'status') if k in r}); continue
+        out.append(r)
+    return out
+
+
+def fold_line(rows: list) -> str:
+    "A turn's work as one line: '12 steps - ran tests, read 3 files, opened 2 sites'."
+    tools = [r for r in rows if r.get('k') == 'tool']
+    n = sum(r.get('times', 1) for r in rows if r.get('k') != 'said') if rows else 0
+    if not n: return ''
+    by = {}
+    for r in tools: by[r['verb']] = by.get(r['verb'], 0) + r.get('times', 1)
+    said = [(_KIND[v][1].format(n=c) if c > 1 else _KIND[v][2]) for v, c in by.items()]
+    return f"{n} step{'s' if n != 1 else ''}" + (f" - {', '.join(said)}" if said else '')
+
+
+def detailed(turn: dict, level: str) -> dict:
+    """A turn as the level shows it - THE ONE PLACE the detail setting is applied, the same for every brain road. Each tool call is one row in
+    plain words (tool_rows). `summary`: its words, what it showed and its cards, every other row behind one line that opens on them (`fold`,
+    `folded`: "12 steps - ran tests, read 3 files"); `steps` and `everything`: every row. A turn at work shows at every level what it says
+    and shows as it comes, its rows under the one climbing line - the level decides once it has ended."""
+    if turn.get('kind') != 'turn': return turn
+    steps = tool_rows(turn.get('steps') or [])
+    if level in ('steps', 'everything') and turn.get('state') not in LIVE: return {**turn, 'steps': steps, 'level': level}
+    # ...every row stays in its order (`steps`); what the fold holds is named (`fold`), and the one line over it (`fold_line`)
+    rest = [s for s in steps if s.get('k') not in SHOWN]
+    return {**turn, 'steps': steps, 'fold': rest, 'folded': len(rest), 'fold_line': fold_line(rest),
+            'level': 'summary' if turn.get('state') not in LIVE else 'live'}
+
+
+# ── ARRIVALS (stage 4): what opened the task, and what came in while nothing worked ──────────────────────────────────────────────────────
+EARLIER = 3600.
+OWN = 'own'                     # ownwork.CHANNEL: the task's own row - his ask - never "came in"
+def _inputs(store, tid: int) -> bool:
+    with store.lock:
+        return bool(store.cx.execute(f"SELECT 1 FROM chatlog WHERE TaskId=? AND Parent IS NULL AND Kind IN ('line','arrival') LIMIT 1", (int(tid),)).fetchone())
+
+
+@_safe
+def opener(store, tid: int, at: float = None) -> None:
+    """THE FIRST TURN'S INPUT, where nothing he typed and nothing that came in opens the chat: his own ask (New - `a:`, his line) or what
+    started it (a routine, a report - `s:`). Appended before the turn it began, once."""
+    from . import ownwork
+    from .conversation import started_by, stamp, _mail
+    from .general import split_files
+    if _inputs(store, tid): return
+    t = store.get_task(int(tid)) or {}
+    row = next((x for x in _mail(store, int(tid)) if (x.get('Channel') or '') == OWN), None)
+    if (said := ownwork.ask(store, t, row)):
+        when = row['T'] if row else _when(t.get('CreatedAt'))
+        put(store, tid, 'line', f'a:{tid}', {'at': stamp(when), **split_files(said)}, src='ask', at=at)
+    elif (by := started_by(store, t)):
+        put(store, tid, 'arrival', f's:{tid}', {'who': by['head'], 'head': by['head'], 'channel': by['channel'], 'own': False,
+                                               'at': t.get('CreatedAt'), 'files': 0, 'words': by['words']}, src='started', at=at)
+
+
+@_safe
+def came_in(store, tid: int) -> None:
+    """WHAT CAME IN WHILE NOTHING WORKED is appended at the foot as it is found (a turn at work hears it at its end - `heard` - and until then
+    it waits by the box). A THREAD THAT JOINED WITH ITS HISTORY (the owner, 2026-11-19): what is older than the chat's foot is never drawn above
+    it - one line at the foot, "<name>'s thread joined (N messages, M earlier)", opens the earlier ones; the newest stand as they came."""
+    from . import general
+    from .conversation import _mail, stamp
+    tid = int(tid)
+    if _live(store, tid): return
+    with store.lock:
+        rows = [dict(r) for r in store.cx.execute("SELECT Key, Body FROM chatlog WHERE TaskId=? AND Kind='arrival'", (tid,))]
+        have = {r['Key'] for r in rows} | {f'm:{m}' for r in rows if r['Key'][:2] == 'j:' for m in (json.loads(r['Body']).get('thread') or {}).get('mids') or []}
+        foot = store.cx.execute('SELECT MAX(At) AS a FROM chatlog WHERE TaskId=? AND Parent IS NULL', (tid,)).fetchone()['a'] or 0
+    new = [x for x in _mail(store, tid) if (x.get('Channel') or '') != OWN and f"m:{x['MessageId']}" not in have]
+    if not new: return
+    # ...older by its OWN time (sent, else filed) - joined now, a thread from last week reads as now by when it joined
+    # ...by more than a mail held up on its way takes (EARLIER): one a sender's clock or a slow server put a minute back stands as it came
+    older = [x for x in new if foot and _when(x.get('SentAt') or x.get('CreatedAt')) < foot - EARLIER]
+    if older:
+        rest = [x for x in new if x not in older]
+        who = older[-1].get('FromName') or older[-1].get('FromEmail') or 'A'
+        n = len(older) + len(rest)
+        put(store, tid, 'arrival', f"j:{older[-1]['MessageId']}",
+            {'thread': {'name': who, 'n': n, 'earlier': len(older), 'mids': [x['MessageId'] for x in older]},
+             'head': f"{who}'s thread joined ({n} message{'s' if n != 1 else ''}, {len(older)} earlier)", 'who': who, 'own': False,
+             'at': stamp(older[-1]['T']), 'words': '', 'files': 0}, src='thread')
+        new = rest
+    for x in new:
+        put(store, tid, 'arrival', f"m:{x['MessageId']}", {**general.mail_row(store, x), 'joined': stamp(x['T'])}, src=f"message:{x['MessageId']}")
+
+
+# ── THE ONE ACTION BOX (stage 5, D): cardqueue.advance is the only writer of card rows ─────────────────────────────────────────────────────
+@_safe
+def advance(store, tid: int) -> None:
+    """The line of cards on task `tid` (cardqueue.state) into the log: the front is put as the ONE pending card - under the newest turn, as
+    its last thing, once that turn is no longer at work - with the line's "n of m · next" in it; a card that stood is updated in place as it
+    is pressed, withdrawn or moved past, never moved; one held behind the front has no row, so nothing can draw it. A card outside the line
+    (Taskuary's own offer beside a reply - a playbook) stands as an `offer`, drawn only while no card of the line waits."""
+    from . import cardqueue
+    from .conversation import _card
+    tid = int(tid)
+    q = cardqueue.state(store, tid)
+    with store.lock:
+        rows = {r['Key']: dict(r) for r in store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='card'", (tid,))}
+    by = {r['ReviewId']: r for r in store._rows('SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId', (tid,))}
+    front = [x for x in q['live'] if x != cardqueue.LAND]
+    held = set(q['held'])
+    # ...every card that stood reads as its review does now: pressed, withdrawn, moved past - in its place
+    for k, r in rows.items():
+        rv = by.get(json.loads(r['Body']).get('review'))
+        if not rv: continue
+        st = _card(rv)['status']
+        if st == 'pending' and rv['ReviewId'] not in front: st = 'offer' if r['State'] == 'offer' else 'held'     # ...back behind the front
+        if st != r['State']: update(store, tid, k, state=st, status=st)
+    if front and (rv := by.get(front[0])) and f"r:{front[0]}" not in rows:
+        t = _newest_turn(store, tid)
+        if t and t['State'] in LIVE: return                     # ...a turn's card is its last thing: it comes when the turn has ended
+        put(store, tid, 'card', f"r:{front[0]}", {**_card(rv), 'rids': front, 'line': cardqueue.line(q)}, parent=t['Id'] if t else None,
+            state='pending', src=f"review:{front[0]}")
+    elif front and f"r:{front[0]}" in rows: update(store, tid, f"r:{front[0]}", line=cardqueue.line(q))
+    for rid, rv in by.items():
+        if f'r:{rid}' in rows or rv['Status'] != 'pending' or cardqueue.in_line(rv) or rid in held: continue
+        from .conversation import unwritten
+        if unwritten(rv) or cardqueue.obsolete_read(store, tid, rv): continue
+        t = _newest_turn(store, tid)
+        if t and t['State'] in LIVE: continue
+        put(store, tid, 'card', f'r:{rid}', {**_card(rv), 'offer': True}, parent=t['Id'] if t else None, state='offer', src=f'review:{rid}')
+
+
+def _newest_turn(store, tid: int):
+    with store.lock:
+        r = store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='turn' AND Parent IS NULL ORDER BY Id DESC LIMIT 1", (int(tid),)).fetchone()
+    return dict(r) if r else None
+
+
+def live_card(store, tid: int):
+    "The one action box of task `tid` - what every surface draws (the chat, the browser's view, the phone, the rail) - or None."
+    with store.lock:
+        r = store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='card' AND State='pending'", (int(tid),)).fetchone()
+    return _item(dict(r)) if r else None
+
+
+# ── MIGRATION (stage 6): what he saw stays as he saw it ───────────────────────────────────────────────────────────────────────────────────
+_BACKED = set()
+def backed_up(store) -> bool:
+    """A copy of the database before the first task is written into the log - nothing is migrated without one (backups.make, `before-chatlog`).
+    A store in memory has nothing to lose. False where the copy could not be made: then nothing migrates."""
+    from pathlib import Path
+    from . import backups
+    db = getattr(store, '_path', '') or ''
+    if db in _BACKED or db == ':memory:' or not Path(db).is_file(): return True
+    try:
+        if not store.get_setting('chatlog_backup', ''):
+            out = backups.make(db, Path(db).parent, why='before-chatlog', files=False)
+            if not out: return False
+            store.set_setting('chatlog_backup', str(out), 'router')
+        _BACKED.add(db); return True
+    except Exception as e:
+        logger.warning(f'chatlog: no copy of the database before the log - nothing migrates ({e})'); return False
+
+
+def migrated(store, tid: int) -> bool:
+    r = store.cx.execute('SELECT Migrated FROM chatlog_task WHERE TaskId=?', (int(tid),)).fetchone()
+    return bool(r and r['Migrated'])
+
+
+def migrate(store, tid: int, legacy=None) -> bool:
+    """A TASK'S CHAT, FROZEN ONCE AS IT WAS LAST DRAWN (the spec's §4): the list the old build serves (`legacy` - conversation.items) is
+    written item by item in its order - each turn's steps and cards under it - and from then on the producers append. What waits by the box
+    stays pending; a turn at work stays at work, so its road goes on appending under it; of two cards that waited at once the front stays
+    and the other is held (one box). Done once per task, under the store's lock; True when it was done now."""
+    from . import cardqueue
+    if migrated(store, tid) or not backed_up(store): return False
+    got = legacy if legacy is not None else _legacy(store, tid)
+    live = set((cardqueue.state(store, int(tid)) or {}).get('live') or [])
+    with store.lock:
+        if migrated(store, tid): return False
+        store.cx.execute('DELETE FROM chatlog WHERE TaskId=?', (int(tid),))          # ...what dual-write wrote before is the warm-up: the list is the record
+        prev, seen_live = 0., False
+        def row(kind, key, body, parent=None, state=None):
+            nonlocal prev
+            at = max(prev, _when(body.get('started') if kind == 'turn' else body.get('at')) if (body.get('started') or body.get('at')) else prev)
+            prev = at
+            cur = store.cx.execute('INSERT OR IGNORE INTO chatlog (TaskId, Key, Kind, Parent, At, Src, Body, State) VALUES (?,?,?,?,?,?,?,?)',
+                                   (int(tid), key, kind, parent, at or time.time(), 'legacy', json.dumps(body, default=str), state))
+            return cur.lastrowid
+        for x in got.get('items') or []:
+            body = {k: v for k, v in x.items() if k not in ('id', 'kind', 'state', 'steps', 'cards') and not k.startswith('_')}
+            if x['kind'] != 'turn':
+                st = x.get('status') if x['kind'] == 'card' else None
+                if x['kind'] == 'card' and st == 'pending': st = 'pending' if not seen_live and (x.get('review') in live or not live) else 'held'
+                seen_live = seen_live or st == 'pending'
+                row(x['kind'], x['id'], body, state=st); continue
+            n = row('turn', x['id'], body, state=x.get('state'))
+            if x.get('state') in LIVE and x.get('sid'):
+                store.cx.execute('UPDATE chatlog SET Src=? WHERE Id=?', (f"sid:{x['sid']}", n))
+            for i, s in enumerate(x.get('steps') or []):
+                store.cx.execute('INSERT OR IGNORE INTO chatlog (TaskId, Key, Kind, Parent, At, Src, Body, State) VALUES (?,?,?,?,?,?,?,?)',
+                                 (int(tid), f"{x['id']}:s{i}", 'step', n, prev or time.time(), 'legacy', json.dumps(s, default=str), s.get('status')))
+            for c in x.get('cards') or []:
+                st = c.get('status')
+                if st == 'pending': st = 'pending' if not seen_live and (c.get('review') in live or not live) else 'held'
+                seen_live = seen_live or st == 'pending'
+                store.cx.execute('INSERT OR IGNORE INTO chatlog (TaskId, Key, Kind, Parent, At, Src, Body, State) VALUES (?,?,?,?,?,?,?,?)',
+                                 (int(tid), c['id'], 'card', n, prev or time.time(), 'legacy', json.dumps({k: v for k, v in c.items() if k not in ('id', 'kind')}, default=str), st))
+        store.cx.execute("INSERT INTO chatlog_task (TaskId, Rev, Migrated) VALUES (?, 1, datetime('now')) ON CONFLICT(TaskId) DO UPDATE SET Rev=Rev+1, Migrated=excluded.Migrated",
+                         (int(tid),))
+        store.cx.commit()
+    return True
+
+
+def _legacy(store, tid: int) -> dict:
+    from . import conversation
+    return conversation.items(store, int(tid))
+
+
+def migrate_open(store, stop=None) -> int:
+    "The background pass after start-up: every open task's chat frozen into the log, one at a time - a done task migrates when it is opened."
+    n = 0
+    for t in store._rows("SELECT TaskId FROM task WHERE Status NOT IN ('done','dropped') ORDER BY TaskId DESC"):
+        if stop is not None and stop.is_set(): break
+        try: n += migrate(store, t['TaskId'])
+        except Exception as e: logger.warning(f"chatlog: task {t['TaskId']} not migrated - {e}")
+    return n
+
+
+# ── THE READER SWITCH (stage 7): the page's chat is the log's, behind the setting `chat_log` (0: the old build, for one release) ────────────
+def on(store) -> bool: return store.get_setting('chat_log', '1') != '0'
+
+
+def serve(store, tid: int, level: str = None) -> dict:
+    """What the page draws for task `tid`: the log's items, in its one order, each turn at its level - with what waits by the box and the
+    task's live facts (asking, permissions, the hold, the line of cards) as the old build reads them until stage 8 moves them here. A task
+    is frozen into the log at its first read (migrate); what waits is never also drawn (an input is in one place)."""
+    from . import conversation
+    old = conversation.items(store, int(tid))
+    if not on(store): return old
+    migrate(store, tid, legacy=old)
+    got = read(store, tid, level)
+    drawn = {x['id'] for x in got['items']}
+    return {**old, 'items': got['items'], 'level': got['level'], 'pending': [p for p in old.get('pending') or [] if p.get('id') not in drawn],
+            'rev': f"{old.get('rev', '')}:{got['rev']}:{got['level']}"}

@@ -792,6 +792,12 @@ def the_basic_flow(request):
         key = int(tid)
         bad.extend(f'task {tid}: {b}' for b in conversation.flow_breaks(got, prev[store].get(key)) if f'task {tid}: {b}' not in bad)
         if os.environ.get('FLOW_DUMP'): print('LIST', tid, [(x['id'], x.get('state', ''), [(c['id'], c['status']) for c in x.get('cards') or []]) for x in got['items']], got.get('working'))
+        # ...SHADOW_REPORT=<file>: the chat's log (chatlog.read) beside the list, every difference written down, none failing (one-log stage 2)
+        if (rep := os.environ.get('SHADOW_REPORT')):
+            from taskuary import chatlog
+            if os.environ.get('SHADOW_MIGRATE'): chatlog.migrate(store, key, legacy=got)     # ...frozen at its first read, appended from there
+            if (d := chatlog.shadow(got, chatlog.read(store, key))):
+                with open(rep, 'a', encoding='utf-8') as f: f.write('\t'.join((request.node.nodeid, f'task {tid}', d)) + '\n')
         prev[store][key] = got
         return got
     conversation.items = items

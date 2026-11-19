@@ -113,5 +113,4 @@ test("an email's card goes sending… then Sent in its one place, and a card dra
   assert.match(page, /key: `rv:\$\{r\.ReviewId\}`[^\n]*letter: true/);
   assert.doesNotMatch(page, /r\.Kind !== "action" && WENT\.includes/, "no second sent card for an email");
   assert.match(page, /\{!inTurns && <SlotList /);
-  assert.match(gw, /x\.id === lettersAt \? \[\.\.\.lettersHere\(\)/);
 });

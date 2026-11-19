@@ -18,7 +18,7 @@ import { holdUnsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd,  partsMessage, turnParts, workCount, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, lettersTurn, onYouTurn, placesLoose, looseCards, askedFirst, nextStands } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd,  partsMessage, turnParts, workCount, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, ownDetail, useOwnDetail } from "./chatDetail.js";
@@ -507,10 +507,10 @@ const wasCard = (c, rv) => <ReviewDecision key={c.id} past review={c.what !== "a
   : rv || { ReviewId: c.review, Kind: "action", DraftText: JSON.stringify({ what: c.was.text }) }} />;
 /* `items`: the server's list, with this page's own lines the server has not answered for yet (`mine`) already merged in by their names.
    `nodes`: the cards the page draws, by the review each is of ([{key, rid, node}]); `next`: the reply that waits, at the card it is. */
-function Conversation({ items, nodes = [], posts = [], reviews = [], next: given = null, nextRid = null, landing: landed = null, landAt, name, tid, onChanged, loose: looseOk = true, ask = null, askAt = "", lettersAt = "", queue = null }) {
+function Conversation({ items, nodes = [], posts = [], reviews = [], next = null, landing: landed = null, landAt, name, tid, onChanged, ask = null, askAt = "", queue = null }) {
   // ONE CARD AT A TIME (cardqueue.py): what waits behind the card that stands is drawn nowhere - the landing question too - and the card that
   // stands says, over itself, how many come and which is next ("1 of 2 · next: the email to Erin")
-  const held = new Set(queue?.held || []), live = new Set(queue?.live || []), landing = held.has("land") ? null : landed, next = nextStands(queue, nextRid) ? given : null;
+  const held = new Set(queue?.held || []), live = new Set(queue?.live || []), landing = held.has("land") ? null : landed;
   const qLine = () => (queue?.line && !used.has("queue") && used.add("queue") ? [<div key="queue" className="tq-aui-hint" data-tq-card-queue="" role="note">{queue.line}</div>] : []);
   // THE WORK'S CARD IS PART OF THE AGENT TURN THAT DID IT, or not drawn at all (the owner, 2026-11-13: "stop putting worked on master at the
   // bottom ... it's part of the agent turn or doesn't belong at all"): the turn its newest change came in (landing.landingTurn); until the card
@@ -518,7 +518,7 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next: given
   const landIn = landAt ? landingTurn(items.filter((x) => x.kind === "turn").map((x) => ({ role: "assistant", id: x.id, createdAt: x.at })), landAt) : null;
   // ...every review the list places, in whatever state: a card is drawn where the list has it and nowhere else
   const used = new Set(), listed = new Set(items.flatMap((x) => (x.kind === "card" ? [x] : x.kind === "turn" ? x.cards || [] : [])).map((c) => c.review));
-  const stands = standing(items), owes = onYouTurn(items, { askAt, lettersAt, landAt: landIn });
+  const stands = standing(items), owes = onYouTurn(items, { askAt, landAt: landIn });
   const rv = (id) => reviews.find((r) => r.ReviewId === id);
   const draw = (cs) => (cs || []).flatMap((c) => {
     // ...a draft no longer to press carries what it said (`was`); one he said no to says so. Either takes its review's node with it only where
@@ -534,21 +534,11 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next: given
     // ...ONE REVIEW IS ONE CARD: a post or a tracker comment an earlier build set aside has its settled card among the nodes, and was drawn
     // again under it as the act's own card reading "Not posted · dismissed" (the card round, 2026-11-12)
     const out = [...got.map((n) => <React.Fragment key={n.key}>{past ? React.cloneElement(n.node, { past: true }) : n.node}</React.Fragment>),
-      ...(post && !got.length && !used.has(`post:${c.review}`) && used.add(`post:${c.review}`) ? [<ActionCard key={`post:${c.review}`} row={post} tid={tid} onChanged={onChanged} past={past} />] : []),
-      // ...the letters that wait: at the end of the turn the list names (`lettersAt`, below); only where it names none, on the reply's own card
-      ...(!past && next && !lettersAt && c.review === nextRid && !used.has("next") && used.add("next") ? [...lettersHere(), nextBox()] : [])];
+      ...(post && !got.length && !used.has(`post:${c.review}`) && used.add(`post:${c.review}`) ? [<ActionCard key={`post:${c.review}`} row={post} tid={tid} onChanged={onChanged} past={past} />] : [])];
     return out.length && live.has(c.review) && c.status === "pending" ? [...qLine(), ...out] : out;
   });
-  // ...over the letters' block when the card that stands is one of them: an email (the list places none that wait) or the reply
-  const inLetters = [...live].some((r) => r === nextRid || (r !== "land" && !listed.has(r)));
-  const nextBox = () => <Box key="next" data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>{inLetters && qLine()}{next}</Box>;
-  // ...THE TASK'S EMAILS, EACH ITS OWN NODE (`letter`, TaskPage turnCards; the walk, 2026-11-17): drawn in their turn where the list places them,
-  // and where it places them nowhere yet - one waiting, or sent a read ahead of the list - with the letters, as siblings of the same turn's cards, so
-  // the card he pressed Send on turns Sent where it stands and is never gone between the two reads
-  const lettersHere = () => { const ls = nodes.filter((n) => n.letter && !used.has(n.key) && !listed.has(n.rid) && !held.has(n.rid)); ls.forEach((n) => used.add(n.key));
-    return ls.length ? [...(ls.some((n) => live.has(n.rid)) ? qLine() : []), ...ls.map((n) => <React.Fragment key={n.key}>{n.node}</React.Fragment>)] : []; };
-  // A TURN'S CARDS, ITS LAST THING: what the list placed in it, then the letters that wait for his Send where this is their turn, then the work's card
-  const cardsOf = (x) => [...draw(x.cards), ...(x.id === lettersAt ? [...lettersHere(), ...(next && !used.has("next") && used.add("next") ? [nextBox()] : [])] : []),
+  // A TURN'S CARDS, ITS LAST THING: what the log placed in it - a reply, a letter, an act - then the work's card
+  const cardsOf = (x) => [...draw(x.cards),
     ...(x.id === landIn ? [...(live.has("land") ? qLine() : []), <React.Fragment key="landing">{landing}</React.Fragment>] : [])];
   const rows = items.map((x, i) => {
     const prev = items[i - 1];
@@ -567,16 +557,10 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next: given
     return <div key={x.id} className={`tq-aui-message tq-aui-press${prev && (prev.kind === "press" || prev.kind === "note") ? " tq-aui-press-more" : ""}`} data-tq-item={x.id} data-tq-chat-press="">
       <div className="tq-aui-press-line">{pressLine(x.text, x.at ? when(String(x.at)) : "")}</div></div>;
   });
-  // ...a card the list places nowhere (made this instant, the list a read behind) is never lost: under everything, until the list names its turn
-  // ...BUT NEVER UNDER A TURN AT WORK, nor one the list holds in another state (the owner, 2026-11-12: "it should finish thinking and last thing
-  // should be show action box" - drawn at the foot while the turn worked, its words landed above the card; and greyed in its turn, the same
-  // reply stood live again at the foot): a turn's card comes when the list has it, as the turn's last thing
-  // ...NOR BEFORE THE LIST IS READ (chatStream.placesLoose): every card of the task stood stacked at the foot until its turns arrived
-  const loose = looseOk ? looseCards(nodes, { used, listed, held }) : [];
-  const nextLoose = next && !used.has("next") && looseOk && !listed.has(nextRid) && !lettersAt;
   return <>{rows}
-    {!!loose.length && <div className="tq-aui-message tq-aui-agent" data-tq-row-cards="loose"><div className="tq-aui-agent-body">{loose.map((n) => <React.Fragment key={n.key}>{n.node}</React.Fragment>)}</div></div>}
-    {nextLoose && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>{inLetters && qLine()}{next}</Box>}
+    {/* ...EVERY CARD IS A ROW THE LOG PLACED (chatlog.advance - one road): under everything only the page's own block, a hand-off or a
+        write-up he opened, never a card of the line */}
+    {!!next && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>{next}</Box>}
     {!landIn && landing && <div hidden>{landing}</div>}</>;
 }
 /* WHAT WAITS FOR THE AGENT, BY THE BOX: accepted, not yet handed over - never in the conversation until it is (the heard rule).
@@ -704,11 +688,6 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
   const landNode = landing ? React.cloneElement(landing, { onState: setLandS, rev: list?.rev || "", ...(landS ? { initial: landS } : {}) }) : null;
   // ...and only when it asks for a press or says what one did: "Worked on master - 8 files" alone is the header's diff, said again
   const landAt = landS && (landS.ask || landS.landed) ? landS.at || "" : null;
-  // ...the reply that waits stands at its own card - and once it went, where it stood: the newest reply of the task, waiting or not
-  // ...by its number, never by the order the page happened to hold them in: the newest was read as the oldest, and the card he had just
-  // pressed Send on went to the first draft's turn, screens above (the recorded walk, 2026-11-11)
-  const replies = (nextAt?.reviews || []).filter((r) => ["draft_reply", "draft"].includes(r.Kind)).sort((a, b) => b.ReviewId - a.ReviewId);
-  const nextRid = (replies.find((r) => r.Status === "pending") || replies[0])?.ReviewId ?? null;
   // WHAT THE AGENT ASKS STANDS IN THE TURN THAT ASKED IT (conversation.items `asking.turn`): one node, drawn there
   const askNode = asking ? <AgentAsks asking={asking} name={name} onAnswer={onAnswer} taskId={task.TaskId} /> : null;
   const askAt = askTurn(asking, merged.items);
@@ -725,8 +704,8 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
             {!!list && !merged.items.length && !empty && !(chat && reading) && <div className="tq-aui-welcome"><TaskuaryMark size={22} /><div>
               <div className="tq-aui-welcome-title">Work on this with your assistant</div>
               <div className="tq-aui-welcome-copy">Research, plan, write, analyze, or coordinate. This conversation stays on the task.</div></div></div>}
-            <RetryCtx.Provider value={retry}><AgainCtx.Provider value={again}><WaitOnCtx.Provider value={waitingOn(list)}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} reviews={nextAt?.reviews || []} next={askedFirst(asking, nextAt?.reviews) ? null : nextAt?.next || null} nextRid={nextRid}
-              landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} loose={placesLoose(list)} ask={askNode} askAt={askAt} lettersAt={lettersTurn(list, merged.items)} queue={list?.queue || null} /></WaitOnCtx.Provider></AgainCtx.Provider></RetryCtx.Provider>
+            <RetryCtx.Provider value={retry}><AgainCtx.Provider value={again}><WaitOnCtx.Provider value={waitingOn(list)}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} reviews={nextAt?.reviews || []} next={askedFirst(asking, nextAt?.reviews) ? null : nextAt?.next || null}
+              landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} ask={askNode} askAt={askAt} queue={list?.queue || null} /></WaitOnCtx.Provider></AgainCtx.Provider></RetryCtx.Provider>
             {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
             {cards}
             {/* ...under everything only while the list names no turn for it (a read behind, a chat with no turn yet) */}

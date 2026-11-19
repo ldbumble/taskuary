@@ -261,36 +261,16 @@ export const thinkingLine = (text) => {
 // which the list names (conversation.items `asking.turn`) - "" only while that turn is not in what is drawn (a read behind, a chat with no
 // turn yet), when it stands under everything as it did
 export const askTurn = (asking, items) => (asking?.turn && (items || []).some((x) => x.kind === "turn" && x.id === asking.turn) ? asking.turn : "");
-// WHERE THE LETTERS THAT WAIT FOR HIS SEND ARE DRAWN (the reply's card and the task's emails, one block of the page): at the end of the turn
-// the list names (conversation.items `letters` - the last turn that left a letter still waiting), under that turn's words. "" while the
-// list names none or holds no such turn yet, or while that turn is at work - it holds the block back, as it does its cards - and the page
-// then hangs the block on the reply's own card, as it did. The owner's live task, 2026-11-13: an email a later turn wrote stood up at the
-// reply's card, that turn's words under both
-// ...nor above a line of his: what stood over the line he just sent is set aside as it is heard (proposals.set_aside_drafts), and the page
-// draws that from the same frame (withMine) - the block's Send stood lit over his new line until the list was read again
-// A CARD THE LIST PLACES NOWHERE STANDS UNDER EVERYTHING - ONCE THERE IS A LIST (the audit, 2026-11-13, recorded on Back and on a rail click): a
-// task's cards arrive with the task, its conversation a beat later, and for that beat (1.5 s on the recording) every card of the task -
-// each letter that went, newest first, and the draft with its Send - stood in one stack at the chat's foot, then jumped up into the turns
-// that wrote them. Until the list is read nothing can be placed, so nothing is; nor under a turn at work, which holds its own cards back.
-export const placesLoose = (list) => !!list && !list.working;
 // ONE ACTION BOX AT A TIME, A HARD RULE (cardqueue.py; the owner's live task, 2026-11-19: a held browser step read "1 of 2 · next: the reply
 // to Gail" and the reply's box stood under it): a card the line holds behind its front is drawn nowhere - the reply's block included, by its
 // review (`rid`) - and while the front is another card, no door to write a reply stands beside it either (`replyDoorOpen`)
-export const nextStands = (queue, rid) => !(queue?.held || []).includes(rid);
 export const replyDoorOpen = (queue, rid) => !(queue?.live || []).length || (queue.live || []).includes(rid);
-// ...AND ONLY A CARD THAT WAITS (the owner's live app, 2026-11-18: "it never leaves when you put in new prompt. it's broken"): a card moved past -
-// set aside, replaced (`record`) - is a record of where it stood, drawn where the list places it or nowhere; a reply set aside while it waited
-// its turn behind another never stood, the list places it nowhere, and it stood greyed under the newest turn, and under every turn after
-export const looseCards = (nodes = [], { used = new Set(), listed = new Set(), held = new Set() } = {}) =>
-  nodes.filter((n) => !n.record && !used.has(n.key) && !listed.has(n.rid) && !held.has(n.rid));
 // ...and A MISSING FACT IS ONE QUESTION (the owner's rule; recorded on the real CLI, 2026-11-15): while the agent waits on his answer, the reply
 // it could not write yet - no words, no email beside it - is not drawn under the question as an empty box over a greyed Send; his answer's
 // turn writes it (the server's list leaves it out of the turn the same way, conversation.items)
 const words = (r) => String(r?.FinalText || r?.DraftText || "").trim();
 export const askedFirst = (asking, reviews = []) => !!asking && !(reviews || []).some((r) => r.Kind === "slot" && r.Status === "pending")
   && !(reviews || []).some((r) => ["draft_reply", "draft"].includes(r.Kind) && r.Status === "pending" && words(r));
-export const lettersTurn = (list, items) => { const xs = items || [], i = list?.letters ? xs.findIndex((x) => x.kind === "turn" && x.id === list.letters) : -1;
-  return i >= 0 && !["starting", "working"].includes(xs[i].state) && !xs.slice(i + 1).some((x) => x.kind === "line") ? xs[i].id : ""; };
 // THE ONE TURN THAT OFFERS ITS TRY AGAIN (its summary's `retry`): the newest turn, at rest, with nothing of his under it (nothing new is drawn
 // above his line), and never one whose own ask, card or letters wait: those ARE the step. What a turn left on him ("For you to do") is not this
 // one's: each turn says its own, settled once by the list (conversation.left_on_him)

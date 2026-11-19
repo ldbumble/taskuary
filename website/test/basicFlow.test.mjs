@@ -97,10 +97,8 @@ test("nothing drawn goes or moves, and nothing new is drawn above it", () => {
 
 test("a card is drawn where the list has it and nowhere else - never loose under a turn at work, never live again at the foot", async () => {
   const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  // ...nor before the list is read (chatStream.placesLoose: one word for "there is a list, and no turn of it is at work")
-  assert.match(src, /const loose = looseOk \? looseCards\(nodes, \{ used, listed, held \}\) : \[\]/);
-  assert.match(src, /const nextLoose = next && !used\.has\("next"\) && looseOk && !listed\.has\(nextRid\)/);
-  assert.match(src, /loose=\{placesLoose\(list\)\}/);
+  // ...THE LOG PLACES EVERY CARD (chatlog.advance, one road): the page has no placing of its own - no loose cards, no reply spliced in
+  assert.doesNotMatch(src, /looseCards|nextLoose|lettersHere|nextRid/);
   // ...a draft no longer to press is its own card in its place, greyed, from its words: rewritten, set aside as he wrote again, taken back
   assert.match(src, /if \(past && !got\.length && !post\) return c\.was \? \[wasCard\(c, rv\(c\.review\)\)\] : \[\];/);
   assert.match(src, /past \? React\.cloneElement\(n\.node, \{ past: true \}\) : n\.node/);

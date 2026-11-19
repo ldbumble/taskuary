@@ -198,17 +198,6 @@ test("the agent's open question is drawn in the turn that asked it, never under 
   assert.equal(askTurn({ request_id: "q1" }, items), ""); assert.equal(askTurn(null, items), "");
 });
 
-test("the letters that wait for his Send are drawn at the end of the turn the list names, never above later words", async () => {
-  const { lettersTurn } = await import("../src/chatStream.js");
-  // the owner's live task, 2026-11-13: a turn left the reply's card, the turn that went on from it wrote a second letter - both stood over its words
-  const items = [{ id: "l1", kind: "line" }, { id: "t:l1:0", kind: "turn", state: "done" }, { id: "t:l1:1", kind: "turn", state: "done" }];
-  assert.equal(lettersTurn({ letters: "t:l1:1" }, items), "t:l1:1");
-  // ...held back while that turn is at work, as its cards are; and where the list names none (or a turn not drawn yet), the page's own place
-  assert.equal(lettersTurn({ letters: "t:l1:1" }, [...items.slice(0, 2), { ...items[2], state: "working" }]), "");
-  assert.equal(lettersTurn({ letters: null }, items), ""); assert.equal(lettersTurn({ letters: "t:l9:0" }, items), ""); assert.equal(lettersTurn(null, items), "");
-  // ...nor over a line he has just sent (recorded 2026-11-13: its Send stood lit above his new line until the list was read again)
-  assert.equal(lettersTurn({ letters: "t:l1:1" }, [...items, { id: "l2", kind: "line" }]), "");
-});
 
 test("a chat paints a held list only if it was read a moment ago - an older one spins until its read lands", async () => {
   // the owner, 2026-11-13: a long task opened on messages from his last visit, the rest coming in after

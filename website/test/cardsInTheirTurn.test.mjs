@@ -58,48 +58,20 @@ test("what the foot's boxes said over a held act and a playbook is said over its
   assert.equal(askNote(act({ action: "close_task", why: "the folder is clear" })), "", "a card that says itself gets no line over it");
 });
 
-// THE LIVE SHAPE (the audit, 2026-11-13, recorded on the walk's Back and on a rail click): the task's cards arrive with the task, its
-// conversation a beat later - and for that beat every letter that went and the draft with its Send stood in one stack at the chat's foot
-test("no card is drawn loose at the chat's foot before the conversation is read, nor under a turn at work", async () => {
-  const { placesLoose } = await import("../src/chatStream.js");
-  assert.equal(placesLoose(null), false, "the list not read yet: nothing can be placed, so nothing is");
-  assert.equal(placesLoose(undefined), false);
-  assert.equal(placesLoose({ items: [], working: true }), false, "a turn at work holds its cards back");
-  assert.equal(placesLoose({ items: [], working: false }), true, "read, at rest: a card the list places nowhere is never lost");
-  const ws = read("GeneralWorkspace.jsx");
-  assert.match(ws, /loose=\{placesLoose\(list\)\}/);
-  assert.match(ws, /const loose = looseOk \? looseCards\(nodes, /);
-  assert.match(ws, /const nextLoose = next && !used\.has\("next"\) && looseOk && /);
-});
 
 
-// THE OWNER'S LIVE APP, 2026-11-18 ("it never leaves when you put in new prompt. it's broken"): on a Teams task a reply waited its turn behind
-// another (cardqueue) and was set aside by his line before it ever stood. The list places such a card nowhere, by design - yet the page drew it,
-// greyed with its Copy, under the newest turn, and again under every turn after. A card moved past is a record of where it stood: drawn where
-// the list places it, or nowhere. Only a card that still waits, made this instant with the list a read behind, stands loose at the foot.
-test("a card moved past is never drawn loose at the chat's foot - only one that waits, which the list places nowhere yet", async () => {
-  const { looseCards } = await import("../src/chatStream.js");
-  const nodes = [{ key: "passed:7", rid: 7, record: true }, { key: "replaced:8", rid: 8, record: true }, { key: "rv9", rid: 9, waits: true }, { key: "rv10", rid: 10 }];
-  assert.deepEqual(looseCards(nodes, { listed: new Set([10]) }).map((n) => n.key), ["rv9"]);
-  assert.deepEqual(looseCards(nodes, { used: new Set(["rv9"]), listed: new Set([10]) }).map((n) => n.key), [], "nor one already drawn");
-  assert.deepEqual(looseCards(nodes, { held: new Set([9]), listed: new Set([10]) }).map((n) => n.key), [], "nor one that waits its turn behind another");
-  const page = read("TaskPage.jsx");
-  assert.match(page, /const passedCards = [^\n]*\n\s+return \{ key: `passed:\$\{r\.ReviewId\}`, at: r\.CreatedAt \|\| "", rid: r\.ReviewId, record: true,/);
-  assert.match(read("GeneralWorkspace.jsx"), /const loose = looseOk \? looseCards\(nodes, \{ used, listed, held \}\) : \[\];/);
-});
 
 // ONE ACTION BOX AT A TIME, A HARD RULE (the owner's live task, 2026-11-19): a held browser step stood at the front reading "1 of 2 · next: the
 // reply to Gail Moreno", and the reply's box was drawn under it - the page's reply block (`next`) and the letters were drawn with no look at
 // the line. What the line holds behind its front stands nowhere; while the front is another card, no door to write a reply stands beside it.
 test("a reply the line holds behind its front draws no box, and no reply door stands beside another card's front", async () => {
-  const { nextStands, replyDoorOpen } = await import("../src/chatStream.js");
+  const { replyDoorOpen } = await import("../src/chatStream.js");
   const q = { live: [744], held: [745] };
-  assert.equal(nextStands(q, 745), false, "the held reply's block");
-  assert.equal(nextStands(q, 744), true); assert.equal(nextStands(null, 9), true, "no line read yet: as before");
   assert.equal(replyDoorOpen(q, null), false, "a door to write a reply beside the browser step's front");
   assert.equal(replyDoorOpen({ live: [745], held: [] }, 745), true); assert.equal(replyDoorOpen({ live: [], held: [] }, null), true);
   const ws = read("GeneralWorkspace.jsx");
-  assert.match(ws, /next = nextStands\(queue, nextRid\) \? given : null;/);
-  assert.match(ws, /n\.letter && !used\.has\(n\.key\) && !listed\.has\(n\.rid\) && !held\.has\(n\.rid\)/);
+  // ...a card the line holds has no row in the log (chatlog.advance) and the page places none of its own: nothing to draw
+  assert.doesNotMatch(ws, /looseCards|nextLoose|lettersHere/);
+  assert.match(read("TaskPage.jsx"), /const chatReview = !inTurns \? pendingReview : null;/);
   assert.match(read("TaskPage.jsx"), /!pendingReview && !inRow && !replyEmpty && replyDoorOpen\(detail\?\.queue, null\) && \(/);
 });

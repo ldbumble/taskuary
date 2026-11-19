@@ -70,7 +70,7 @@ class ReportSetupTests(unittest.TestCase):
         out = say(s, 'set up a report of open tasks by kind every Monday at 8', composer())
         self.assertIsNone(out['decision']); p = out['proposal']
         self.assertEqual((p['kind'], p['label'], p['params']['title'], p['params']['runs'], p['params']['reaches_you']),
-                         ('report.create', 'Create the report', 'Open tasks by kind', 'cron 0 8 * * 1', 'Reports: every run; alert: never'))
+                         ('report.create', 'Create the report', 'Open tasks by kind', 'Mondays at 08:00', 'Reports: every run; alert: never'))
         self.assertEqual(p['params']['config'], COMPOSED)
         self.assertIn('Nothing is saved', out['say']); self.assertIn('Counts open tasks by kind', out['say'])
         # the builder's order, not a config dump: the prompt first, then the settings, one labelled line each
@@ -126,7 +126,7 @@ class ReportSetupTests(unittest.TestCase):
         s = store()
         first = say(s, 'set up a report of open tasks by kind every Monday', composer())['proposal']
         second = say(s, 'make it daily at 7 instead', composer(compose={'config': {**REPORT, 'cron': '0 7 * * *'}, 'explain': 'Daily now.'}))['proposal']
-        self.assertEqual((second['id'], second['version'], second['params']['runs']), (first['id'], 2, 'cron 0 7 * * *'))
+        self.assertEqual((second['id'], second['version'], second['params']['runs']), (first['id'], 2, 'daily at 07:00'))
         self.assertEqual(run(s, first).status_code, 409)                                                    # the old confirmation is stale
         with mock.patch.object(server, 'store', s): TestClient(server.app).delete(f"/api/operations/{second['id']}")
         self.assertEqual(run(s, second).status_code, 409)

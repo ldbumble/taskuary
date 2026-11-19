@@ -175,6 +175,8 @@ AGENT_READS = (
 # listed so that test_guard walks app.routes and FAILS on a write route nobody classified: a new
 # door is a decision, not something that inherits whatever the table happened to say.
 OWNER_ONLY = (
+    # a clock the routine editor holds, said in words (reports.schedule_words) - it writes nothing, but it is the page's, not an agent's
+    (r'POST', r'^/api/schedule-words$', "the routine editor's own wording of an unsaved clock - the page's"),
     # New's box, the one start from the owner's words (F1): an agent starts new work by its own new_task, which checks the owner asked
     (r'POST', r'^/api/start$', "a new task from the owner's own words is the owner's - an agent's is new_task"),
     # a bulk card's press does every act on it, and its Stop ends the rest (bulkcard.py): his alone, as each act's own press is

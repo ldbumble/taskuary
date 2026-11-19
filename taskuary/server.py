@@ -1120,7 +1120,7 @@ def _processing_live():
         return None  # Unavailable observation is distinct from an observed empty roster.
 
 
-def _say():
+def _sayer():
     from . import say
     return say
 
@@ -1131,9 +1131,9 @@ from starlette.exceptions import HTTPException as _StarletteHTTP
 from fastapi.exception_handlers import http_exception_handler as _http_answer
 @app.exception_handler(_StarletteHTTP)
 async def _plain_refusal(request, e: _StarletteHTTP):
-    if isinstance(e.detail, str) and _say().raw(e.detail):
+    if isinstance(e.detail, str) and _sayer().raw(e.detail):
         logger.info(f'{request.method} {request.url.path} -> {e.status_code}: {e.detail[:500]}')
-        e = HTTPException(e.status_code, _say().plain(e.detail, 'any'), headers=getattr(e, 'headers', None))
+        e = HTTPException(e.status_code, _sayer().plain(e.detail, 'any'), headers=getattr(e, 'headers', None))
     return await _http_answer(request, e)
 
 
@@ -1170,7 +1170,7 @@ def _queued_info(q):
             'reason': q.get('Reason'), 'since': q.get('CreatedAt'),
             # the retry budget (PW-085..087): waiting | retrying | failed, how many tries, the last error and the next one
             # ...its last error in his words (say.plain): the raw text stays on the queue row, where the start and its retries read it
-            'state': q.get('State') or 'waiting', 'attempts': int(q.get('Attempts') or 0), 'lastError': _say().plain(q.get('LastError'), 'start'), 'nextAt': q.get('NextAt'),
+            'state': q.get('State') or 'waiting', 'attempts': int(q.get('Attempts') or 0), 'lastError': _sayer().plain(q.get('LastError'), 'start'), 'nextAt': q.get('NextAt'),
             # a setup error fails every Start the same way, so the card must not offer Start as the fix (blackboard.failed_line)
             'permanent': q.get('State') == 'failed' and blackboard.is_permanent(q.get('LastError'))}
 

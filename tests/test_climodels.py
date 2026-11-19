@@ -216,7 +216,7 @@ class EffortFlagTests(unittest.TestCase):
         from taskuary import concierge
         s = MemoryStore()
         s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p']}))
-        s.set_setting('concierge_ai', 'cli:claude', 't')
+        s.set_setting('concierge_ai', 'cli:claude', 'owner')     # his own pick (agents.picked) - one saved FOR him that is not ready here is set aside
         seen = []
         with mock.patch('taskuary.llm.make_cli_llm', side_effect=lambda st, name, model, **kw: seen.append(model)):
             s.set_setting('concierge_model', 'claude-sonnet-5', 't'); concierge.brain(s, fast=True)

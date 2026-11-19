@@ -27,7 +27,7 @@ from .processing_order import attention_band, gave_up, priority_rank
 from .workerstate import says as agent_says, sub_state, request_line   # funnel.says is a message's subject
 
 
-def _said(reason) -> str:
+def _reason_said(reason) -> str:
     "A reader's reason as the row says it to him (say.owner): never triage's own head."
     from . import say
     return say.owner({'kind': 'reason', 'text': reason}) if reason else ''
@@ -431,7 +431,7 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             # open_only: the row is here for the open task alone (its own line was a thank-you, an
             # fyi) - build() lets the wrap-up outrank exactly these, and never a line triage kept as work
             out.append(_item(f"msg:{r['MessageId']}", 'todo', lane, subj, coding=cat == 'coding', open_only=open_only,
-                             why=('urgent - ' if urgent else '') + (why or _said(r.get('RouteReason')) or ('a coding task with no agent on it' if cat == 'coding' else 'real work with nobody on it')), **base))
+                             why=('urgent - ' if urgent else '') + (why or _reason_said(r.get('RouteReason')) or ('a coding task with no agent on it' if cat == 'coding' else 'real work with nobody on it')), **base))
             if group and threads.get(group) is None: threads[group] = out[-1]
         if cat in ('coding', 'todo') and (r.get('NeedsYou') or r.get('Working') or open_work):   # a worked row is kept, tagged, and let go in build()
             _work(); continue
@@ -446,7 +446,7 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             _work(open_only=True, why='you answered - the task is still open'); continue
         if cat == 'review' or (r.get('NeedsYou') and cat not in ('info',)):
             out.append(_item(f"msg:{r['MessageId']}", 'asked', 'time' if urgent else 'asked', subj,
-                             why=_said(r.get('RouteReason')) or 'a person asked you for something', **base))
+                             why=_reason_said(r.get('RouteReason')) or 'a person asked you for something', **base))
             if group and threads.get(group) is None: threads[group] = out[-1]
             continue
         # Anything incoming which reached the Timeline and was not handled above is unread
@@ -460,7 +460,7 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
         # task (_band), the lane and its Retry stay (processing_order.gave_up)
         if cat == 'error':
             out.append(_item(f"msg:{r['MessageId']}", 'fyi', 'unjudged', subj, held=gave_up(r),
-                             why=_said(r.get('RouteReason')) or 'triage could not classify this - nothing was started', **base))
+                             why=_reason_said(r.get('RouteReason')) or 'triage could not classify this - nothing was started', **base))
             if group and threads.get(group) is None: threads[group] = out[-1]
             continue
         # ...AND THE LAST MESSAGE DOES NOT GET A VOTE ON AN OPEN TASK. Everything above judged the row
@@ -477,7 +477,7 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             if group and threads.get(group) is None: threads[group] = out[-1]
             continue
         # ...and a list's way off it, still unpressed (store.feed `Unsub`): the card's Unsubscribe (unsubscribe.py)
-        out.append(_item(f"msg:{r['MessageId']}", 'fyi', 'fyi', subj, why=_said(r.get('RouteReason')) or 'a person told you something; nothing to do',
+        out.append(_item(f"msg:{r['MessageId']}", 'fyi', 'fyi', subj, why=_reason_said(r.get('RouteReason')) or 'a person told you something; nothing to do',
                          **({'unsub': r['Unsub']} if r.get('Unsub') else {}), **base))
         if group and out and threads.get(group) is None: threads[group] = out[-1]
     # ONE brief leads the day. `brief_today` is true of every digest run made today, and the digest
@@ -1754,7 +1754,7 @@ def item_for_key(store, key: str) -> dict | None:
         return item_for_key(store, f'msg:{shown}') if shown and shown != mid else item_for_key(store, f'task:{tid}') if tid else None
     items = from_feed(store, [row | {'Category': 'info' if row.get('Category') in _QUIET else row.get('Category')}])
     it = next((i for i in items if i.get('mid') == mid), None)
-    if it and it['kind'] == 'fyi': it = it | {'lane': 'fyi', 'why': _said(row.get('RouteReason')) or it['why']}
+    if it and it['kind'] == 'fyi': it = it | {'lane': 'fyi', 'why': _reason_said(row.get('RouteReason')) or it['why']}
     return shut(store, _present_one(store, it))
 
 
@@ -1770,7 +1770,7 @@ def message_item(store, key: str) -> dict | None:
     it = next((i for i in from_feed(store, [row], canonical=True) if i.get('mid') == mid), None)
     if it is None: return None
     if row.get('Direction') == 'out': it = it | {'lane': 'fyi', 'why': 'you sent this'}
-    elif it['kind'] == 'fyi': it = it | {'lane': 'fyi', 'why': _said(row.get('RouteReason')) or it['why']}
+    elif it['kind'] == 'fyi': it = it | {'lane': 'fyi', 'why': _reason_said(row.get('RouteReason')) or it['why']}
     if row.get('TaskStatus') in ('done', 'dropped'): it = it | {'closed': True}
     return _present_one(store, it)
 

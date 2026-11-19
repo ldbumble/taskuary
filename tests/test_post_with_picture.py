@@ -133,6 +133,9 @@ class OnePress(unittest.TestCase):
     def test_the_prompt_names_the_connected_road(self):
         system, _ = general._prompt(server.store, self.tid)
         self.assertIn('NEXT STEPS - DO WHAT YOU CAN DO', system)
+        # the live app, 2026-11-19: a turn ended "For you to do: check the error folder on the server" and did it when asked - what it
+        # might reach itself is never his part
+        self.assertIn('never handed to him to look at', system)
         self.assertIn(f"(connector_id {self.card['ConnectorId']}): linkedin_post", system)
         server.store.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 0}, 'test')
         self.assertNotIn('linkedin_post -', general.roads(server.store))     # off is not a road

@@ -368,6 +368,10 @@ def acp_steps(updates: list) -> list:
             if u.get('status'): s['status'] = u['status']
             if (d := _meta(u, 'terminal_output_delta', 'data')): s['out'] = s.get('out', '') + d
             elif not s.get('out') and u.get('status') in ('completed', 'failed') and (o := _out(u)): s['output'] = o
+            # ...a step that failed says why in his words (say.step_why) - its output stays for the agent and the open row
+            if s.get('status') == 'failed':
+                from . import say
+                s['why'] = say.step_why(s.get('output') or s.get('out'))
             loc = next((l['path'] for l in u.get('locations') or [] if isinstance(l, dict) and l.get('path')), '')
             if loc and not any(s['args'].get(k) for k in _PATHS): s['args']['file_path'] = loc
             if (diffs := [c for c in u.get('content') or [] if isinstance(c, dict) and c.get('type') == 'diff']):

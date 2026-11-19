@@ -510,7 +510,7 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
       const d = describeCall(e.name, args);
       // ...its outcome in a few words and the same call made again, as the server's one reading of the turn says (chatlog.tool_rows)
       const step = { id, ...d, tool: e.name, raw: rawOf(e.name || "tool", args), output: String(e.detail?.output || ""), status: "running", own: ownTool(e.name),
-        ...(e.detail?.outcome ? { outcome: e.detail.outcome } : {}), ...(e.detail?.times > 1 ? { times: e.detail.times } : {}),
+        ...(e.detail?.outcome ? { outcome: e.detail.outcome } : {}), ...(e.detail?.why ? { why: e.detail.why } : {}), ...(e.detail?.times > 1 ? { times: e.detail.times } : {}),
         ...(d.kind === "helper" && args.description ? { task: clip(args.description, 70) } : {}) };
       // A HELPER'S OWN CALLS GO UNDER ITS ROW (the owner, 2026-11-06: "it's spinning but not the last thing ... shouldn't it be in order? unless
       // it's in parallel"): a call naming the helper call it runs under (`parent`: stream-json's parent_tool_use_id, ACP's parentToolUseId)

@@ -78,6 +78,12 @@ def owner(e: dict) -> str:
     raise ValueError(f'say.owner: no words for {k!r}')
 
 
+def step_why(output) -> str:
+    "A failed step's line under its row: the one line where the tool says why, in his words when it is raw."
+    r = reason(output)
+    return f"Why: {plain(r, 'any') if raw(r) else r}" if r else 'It stopped without saying why.'
+
+
 def agent(e: dict) -> str:
     "The words the agent is told for event `e` - what it needs to act on, the tool's output whole."
     k = e.get('kind')

@@ -92,3 +92,9 @@ def test_no_raw_text_reaches_any_surface_he_reads():
     # ...and Taskuary's own sentences pass as they are, on every surface
     own = 'No AI is connected - connect one under Connections.'
     assert say.plain(own, 'any') == say.plain(own, 'start') == remote_assistant.plain(ValueError(own)) == own
+
+
+def test_a_failed_steps_row_says_why_in_his_words():
+    for r in RAWS: _clean(say.step_why(r), 'step row')
+    assert say.step_why("U a.js\nerror: failed to push some refs\nhint: pull first") == 'Why: error: failed to push some refs'
+    assert say.step_why('') == 'It stopped without saying why.'

@@ -200,6 +200,21 @@ class Holding(unittest.TestCase):
         run.assert_not_called()
         self.assertIn('did not approve it', self.heard()[0])
 
+    def test_his_yes_to_a_press_in_an_app_stands_for_the_task_and_his_no_is_told_not_asked_again(self):
+        # the roads audit, 2026-11-19 (#7): the desktop gate asks the one rule the browser's and the shell's do (actrule.decide)
+        self.check(); [rv] = self.pending()
+        with installed(), mock.patch('taskuary.workerstate._live', return_value=self.sess),                 mock.patch.object(ad, '_run', return_value=(0, '{"ok":true,"command":"click","data":{}}')):
+            self.assertTrue(verdicts.decide(self.s, rv, 'approve')['ok'])
+        self.assertEqual(self.check(), {}, 'the same press on the same control of the same app runs')
+        self.assertEqual(self.pending(), [])
+        self.s = MemoryStore(); self.tid = Factory(self.s).task('Reply to Gail about the Trainly renewal', Tags=ad.WANTS); turn_on(self.s)
+        self.check(); [rv] = self.pending()
+        with mock.patch('taskuary.workerstate._live', return_value=self.sess), mock.patch.object(ad, '_run'):
+            self.assertTrue(verdicts.decide(self.s, rv, 'reject')['ok'])
+        out = self.check()
+        self.assertIn('The owner dismissed this same step', out['hookSpecificOutput']['permissionDecisionReason'])
+        self.assertEqual(self.pending(), [])
+
 
 class Hook(unittest.TestCase):
     def test_a_desktop_act_is_held_where_it_runs(self):

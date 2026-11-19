@@ -1,6 +1,7 @@
 """ONE RULE FOR A STEP THAT NEEDS THE OWNER'S PRESS (the owner, 2026-11-19, over a task that held ~75 pushes in one chat: "this should be
 included in whats a action no?"). Every gate asks it the same question, after its own reading of what the step is (shellgate.acts: a tool's
-own grammar for a push, a publish, a delete outside the agent's folder, a web write):
+own grammar for a push, a publish, a delete outside the agent's folder, a web write; the desktop gate's press on an app's control; and every
+card an agent proposes - an email, a post, a payment - which stays a card, `big`, so only his no is read for it):
 
   1. IS IT ALREADY ALLOWED? A trusted connection that acts on its own (the repo's GitHub card at write or full Authority - shellgate.trusted),
      or the owner already approved the same kind of step on the same target in this task (a push to the same repo and branch): it runs, and
@@ -84,12 +85,21 @@ def remember(store, tid: int, ks: list, answer: str) -> None:
     except Exception as e: logger.warning(f'actrule: task {tid} - his {answer} was not written down - {e}')
 
 
-def decide(store, tid: int, todo: list, cwd: str = '') -> tuple:
+def card_key(p: dict) -> str:
+    """What makes two proposed cards the same step (an email, a post, a payment, a PR): what it does, on which tool, with what - the same
+    proposal again, word for word. A changed one is another step, and is put to him."""
+    import hashlib
+    bare = {k: v for k, v in p.items() if k != 'why'}
+    return f"card|{p.get('action') or ''}|{p.get('type') or ''}|" + hashlib.sha1(json.dumps(bare, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+
+def decide(store, tid: int, todo: list, cwd: str = '', big: bool = False) -> tuple:
     """(how, words) for steps a gate would hold: ('trusted' | 'approved', a line for the task) runs them; ('dismissed', words for the agent)
-    refuses them as his no; ('', '') - put them to him as one card."""
+    refuses them as his no; ('', '') - put them to him as one card. `big`: a step that is always his press - an email, a post, a payment, a
+    PR (proposals.queue) - stays a card whatever he approved before or a connection allows; only his no is read for it."""
     from . import shellgate
     if not todo: return 'approved', ''
-    if (repo := shellgate.trusted(store, cwd, todo)):
+    if not big and (repo := shellgate.trusted(store, cwd, todo)):
         return 'trusted', f"The agent went on to {'; '.join(dict.fromkeys(words(a, cwd) for a in todo))} on {repo} - a repo you trust to act on its own."
     ks = keys(todo, cwd)
     if not ks: return '', ''
@@ -99,5 +109,6 @@ def decide(store, tid: int, todo: list, cwd: str = '') -> tuple:
     what = '; '.join(dict.fromkeys(words(a, cwd) for a in todo))
     if set(ks) & no: return 'dismissed', (f"{DISMISSED} ({what}) on an earlier card since he last wrote - it was NOT run, "
                                           "and it is not put to him again. Say in one line that it waits on his word, and go on without it.")
+    if big: return '', ''
     if set(ks) <= yes: return 'approved', f"The agent went on to {what} - you approved the same earlier in this task."
     return '', ''

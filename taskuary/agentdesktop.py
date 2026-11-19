@@ -261,6 +261,12 @@ def _verdict(v: dict | None, w: str) -> dict:
     return {'hold': False, 'what': said, 'why': ''}
 
 
+def key(act: dict, ctl: dict, v: dict) -> str:
+    "What makes two desktop presses the same decision (actrule.key): the app, the verb and the control it names - its command where it names none."
+    on_ = f"{ctl.get('role') or ''} {ctl.get('name') or ''}".strip() or ' '.join(act.get('args') or [])
+    return f"desktop|{_app(act, v).lower()}|{act.get('verb') or ''} {on_}"
+
+
 # ── the hook's answer ─────────────────────────────────────────────────────────────────────────────────────────────────────
 def _pending(store, tid: int, sid: str, args: list):
     for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,)):
@@ -285,14 +291,24 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
     if not wanted(store.get_task(tid)):
         return _deny('This task is not marked "needs desktop", so it does not drive the owner\'s desktop. Say in one line that the owner can '
                      'mark it "needs desktop" if the work needs a desktop app, and what you would have done there.')
-    for a, v in zip(todo, judge(store, todo, [control(a) for a in todo], brain)):
+    ctls = [control(a) for a in todo]
+    for a, c, v in zip(todo, ctls, judge(store, todo, ctls, brain)):
         if not v['hold']: continue
         if not a['args']: return _deny(f'{HELD}: a desktop command it could not read. Run each agent-desktop command on its own line.')
+        # ...THE ONE RULE (actrule.decide), as the browser's: the same press on the same control of the same app he already approved on this
+        # task runs; one he dismissed since his last line is his no, never a second card
+        from . import actrule
+        step = {'what': v['what'], 'why': v['why'], 'key': key(a, c, v)}
+        how, told = actrule.decide(store, tid, [step])
+        if how == 'approved':
+            if told: store.add_comment_once(tid, 'taskuary', 'agent', told)
+            continue
+        if how == 'dismissed': return _deny(told)
         if watched(tid, sid): return ready(store, tid, sid, a, v)
         if not _pending(store, tid, sid, a['args']):
             from . import proposals
             proposals.queue(store, tid, {'action': 'desktop_act', 'sid': str(sid), 'args': a['args'], 'command': ' '.join([EXE, *a['args']]),
-                                         'what': v['what'], 'why': v['why']}, 'agent')
+                                         'what': v['what'], 'why': v['why'], 'keys': [step['key']]}, 'agent')
             store.audit('task', tid, 'desktop_act_held', 'taskuary', 'system', {'verb': a['verb'], 'why': v['why']})
         from .selfclose import CARD_TAIL
         return _deny(f"{HELD}: {v['what']} ({v['why']}). Once they approve it, Taskuary runs this exact command and tells you what happened. "
@@ -342,6 +358,8 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
     """The owner's yes: run the held command as it was. A control gone since makes agent-desktop refuse its ref (STALE_REF) - said
     as "nothing was done", never retried on a guess. `run`: the runner (tests stand one in)."""
     from .browsergate import _tell, NEXT
+    from . import actrule
+    actrule.remember(store, tid, p.get('keys'), 'approved')       # his yes to this press on this control stands for the task
     args = list(p.get('args') or [])
     if not args: raise RuntimeError('this held act names no desktop command')
     if not on(store): raise RuntimeError('Agent Desktop is off on this computer now - nothing was done. Turn it on under Connections, and '

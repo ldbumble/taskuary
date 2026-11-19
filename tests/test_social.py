@@ -459,6 +459,19 @@ class RedditAndXAreWired(unittest.TestCase):
         q = cardqueue.state(s, tid)
         self.assertEqual(cardqueue.line(q), '1 of 2 · next: post to X')
 
+    def test_a_post_he_dismissed_raised_again_is_his_no_not_a_second_card(self):
+        # the roads audit, 2026-11-19 (#7): a post, a payment, an email stay cards, but they ask the one rule the shell's, the browser's and
+        # the desktop's gates do (actrule.decide) - the same card raised again after his Dismiss, with no word from him since, is his no
+        from taskuary import proposals, verdicts
+        s = MemoryStore(); tid = Factory(s).task(title='Post the Q3 headline')
+        p = {'action': 'run_tool', 'type': 'x_post', 'text': 'Q3 is in.'}
+        q = proposals.queue(s, tid, dict(p))
+        self.assertTrue(verdicts.decide(s, s.get_review(q['reviewId']), 'reject')['ok'])
+        miss = []
+        self.assertIsNone(proposals.queue(s, tid, dict(p), refused=miss))
+        self.assertIn('The owner dismissed this same step', miss[0])
+        self.assertTrue(proposals.queue(s, tid, {**p, 'text': 'Q3 is in - up 12%.'}), 'a changed post is another step, put to him')
+
     def test_the_saved_card_reaches_the_executor_and_no_body_can_bring_its_own(self):
         from taskuary.reports import query_only
         s = MemoryStore()

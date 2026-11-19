@@ -343,6 +343,13 @@ def answered(store, tid: int, cid: int, actor: str, body: str, created: str) -> 
     else:
         opener(store, tid)                  # ...a task's first answer with no hand-over before it still opens on what started it
         put(store, tid, 'turn', f'a:c{cid}', {'started': _when(created), **done}, state='failed' if fail else 'done', src=f'comment:{cid}')
+    # ...and a press he made while it worked, which no turn will hear (a second Trust, a tap on what was already done), goes in under it: kept
+    # for a turn that never comes, it stood by the box while this one ran and was gone the moment it answered. One a next turn hears is in place
+    began = json.loads(t['Body'] or '{}').get('started') if t and t['State'] in LIVE else None
+    for m in general.press_lines(store, tid) if began else ():
+        if m.get('press') and _when(m['createdAt']) >= began - 1 and not get(store, tid, f"p:{(aid := m['id'].split('-')[1])}"):
+            put(store, tid, 'press', f'p:{aid}', {'at': m['createdAt'], 'text': m['content'][0]['text'], **({'perm': m['perm']} if m.get('perm') else {})},
+                src=f'audit:{aid}')
     # ...an answer taken back before it was filed (conversation.take_back, `ahead`) is that turn's step from the moment it lands
     from .conversation import TOOK_BACK
     from .general import ASSISTANT_TYPE
@@ -507,6 +514,10 @@ def one_step(s: dict) -> dict:
     the real command beside it (`detail`), the file it made or changed, its edit, status, output and error kept. One shape whatever the road."""
     from .sessionrecord import _args, _cut, _target
     k = s.get('k')
+    # ...the agent's words as he reads them on every road (conversation.clean): an ACP coding turn's said step drew its [[TASKUARY-ASK]] marker
+    if k == 'said' and s.get('text'):
+        from .conversation import clean
+        s = {**s, 'text': clean(s['text'])}
     if k != 'tool': return {x: s[x] for x in ('k', 'text', 'items', 'status', 'name', 'id', 'output') if s.get(x) not in (None, '')}
     a = s.get('args') if isinstance(s.get('args'), dict) else {}
     cmd = a.get('command') or a.get('cmd')
@@ -888,6 +899,9 @@ def serve(store, tid: int, level: str = None) -> dict:
     at_work = at_work or workflows.at_work(tid)            # ...a routine running its steps is at work with no agent at all (flow.turn)
     # ..."working" is one fact (general.working): a turn the log holds at work while nothing works has either not begun yet - nothing of it is
     # drawn until it has - or was left by a process that is gone (a restart): it is over, in place
+    # ...and nothing at work holds back its last words: a coding turn files no answer (answered flushes), so the words its road said within a
+    # beat of the one before - the could-not question after a second silence - were never written, and the chat drew nothing of them
+    if not at_work: flush(store, tid)
     if not at_work and (t := _live(store, tid)):
         with store.lock: n = store.cx.execute('SELECT COUNT(*) FROM chatlog WHERE Parent=?', (t['Id'],)).fetchone()[0]
         if n or json.loads(t['Body'] or '{}').get('text'): update(store, tid, t['Key'], state='done')

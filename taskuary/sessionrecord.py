@@ -12,7 +12,7 @@ pruning its logs next month does not take the record with it.
 A step is {k, text, name?, file?, at?}: k is `you` (what the agent was told), `brief` (what Taskuary told it - keep_seed),
 `thought`, `said`, `tool` (name + what it was pointed at), `plan` (its todo list), `compact` (the CLI compacted its context) or `error`. Tool OUTPUT is left out on purpose - it is the noise the record
 is read past, and the agent's next thought or answer says what it made of it."""
-import json, threading
+import json, threading, time
 import re
 from datetime import datetime
 from pathlib import Path
@@ -513,15 +513,28 @@ def cut_turns() -> list:
         except (ValueError, OSError) as e: logger.debug(f'cut turn {p} unreadable - {e}')
         p.unlink(missing_ok=True)
     return out
+# A LINE OF HIS STEERED INTO THE TURN AT WORK CUTS IT WHERE IT WAS HEARD (the owner, 0.4.0.26: "when i type in prompt the agent is typing on top
+# of it then under it"): one CLI turn goes on under his line, but what it wrote before stands above the line as it was drawn, and the turn
+# under it was drawn from the whole trace - its first words over his line and again under it. GeneralSession.steer marks the trace just
+# before the hand-over is written down; what stands under his line, at work and filed, is what came after the newest mark. `upto`: the
+# newest hand-over a read's ledger holds - a mark whose hand-over that read has not seen yet cuts nothing, so no read cuts the turn while
+# his line still waits by the box
+HEARD = 'heard'
+def heard_mark() -> dict: return {'type': HEARD, 'name': '', 'detail': '', 'at': time.time()}
+def since_heard(trace: list, upto: float = float('inf')) -> list:
+    "The part of a turn's trace under the newest line steered into it (heard_mark) - all of it where none was."
+    xs = list(trace or [])
+    cut = max((i for i, e in enumerate(xs) if e.get('type') == HEARD and float(e.get('at') or 0) <= upto), default=-1)
+    return xs[cut + 1:]
 def said(trace: list) -> str:
-    "What a turn said so far: its text, in order."
-    return '\n\n'.join(str(e.get('detail')).strip() for e in trace or []
+    "What a turn said so far, under the newest line steered into it: its text, in order."
+    return '\n\n'.join(str(e.get('detail')).strip() for e in since_heard(trace)
                        if e.get('type') == 'progress' and e.get('name') in ('text', 'agent_message') and str(e.get('detail') or '').strip())
 
 
 def keep_turn(tid: int, reply_id, trace: list):
     """A general turn's tool calls and thinking, filed under the reply they led to (general.send_prompt)."""
-    if not (steps := trace_steps(trace)): return
+    if not (steps := trace_steps(since_heard(trace))): return
     with _gen_path(tid).open('a', encoding='utf-8') as f: f.write(json.dumps({'reply': reply_id, 'steps': steps}) + '\n')
 
 

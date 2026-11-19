@@ -554,7 +554,8 @@ def _items(store, tid: int) -> dict:
         # is a whole second) - read from the stopped turn's hand-over, it stood as that turn, at work again above the press
         # ...only for a turn that began since (the session's own turn clock, `last`): one still letting go of the stopped turn stays above the press
         if (cut := max(stops, default=0.)) >= began and (getattr(ses, 'last', 0) or 0) > cut: began = cut + 1; clock = max(clock or 0., began)
-        trace = list(getattr(ses, 'trace', None) or [])
+        # ...only what came after the newest line of his it heard mid-turn (sessionrecord.since_heard): before it stands above that line
+        trace = sessionrecord.since_heard(getattr(ses, 'trace', None), max((r['At'] for r in led.values()), default=0.))
         # ...and the answer it is writing, while that is the newest thing it did (agents.ACPSteps._live): the turn's line of what it is doing
         doing = (lambda e: clean(e.get('detail')) if e and e.get('type') == 'live' and e.get('name') == 'writing' else '')(trace[-1] if trace else None)
         # ...STARTING UNTIL ITS AGENT HAS THE PROMPT (recorded on the real CLI, 2026-11-16: a cold adapter took most of a minute to open, and the

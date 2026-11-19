@@ -116,6 +116,40 @@ class TheList(unittest.TestCase):
         self.assertEqual([(x['id'], x.get('state')) for x in got['items'][-2:]], [('l-one', None), (live, 'done')])      # the turn that ends redraws in place
         self.assertEqual(got['items'][-1]['text'], 'Answer 1.')
 
+    def test_a_line_steered_into_a_turn_has_only_what_came_after_it_under_it(self):
+        """The owner, 0.4.0.26: "when i type in prompt the agent is typing on top of it then under it". A line typed while the turn writes goes
+        into that turn (GeneralSession.steer) and stands where it was heard: what the turn wrote before it above, the rest under it. The turn
+        under it was drawn from the session's whole trace - its first words stood over his line and again under it, then grew there. From the
+        read his line is heard in, and on the turn filed when the CLI's turn ends, under his line is only what came after it."""
+        from taskuary import clipool, sessionrecord
+        self.brain.delay = 2.0
+        self.say('Suggest two.', 'l-one', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        ses = general.session_for(self.tid)
+        self.assertTrue(until(lambda: self.list()['items'][-1].get('state') == 'working'))
+        ses._remember_trace('progress', 'text', 'BEFORE: the Mill is by the river.')
+        self.assertIn('BEFORE', str(self.list()['items'][-1]['steps']))          # ...drawn at work, above where his line will stand
+        steered = []
+        with mock.patch.object(clipool, 'steerable', return_value=True), \
+             mock.patch.object(clipool, 'steer', lambda key, said: steered.append(said() if callable(said) else said) or True):
+            self.say('Near a station.', 'l-two', wait=False)
+            self.assertTrue(until(lambda: steered and conversation.heard(self.s, self.tid, 'line', ['l-two'])), 'his line went into the turn at work')
+            got = self.list(); ids = [x['id'] for x in got['items']]
+            self.assertEqual(ids[-2], 'l-two', self.kinds(got))
+            under, above = got['items'][-1], got['items'][ids.index('l-two') - 1]
+            self.assertEqual((under['kind'], under['state']), ('turn', 'working'))
+            self.assertNotIn('BEFORE', str(under['steps']), 'what was written before his line is not drawn again under it')
+            self.assertIn('BEFORE', str(above['steps']) + str(above.get('text')), 'it stays where it was drawn')
+            ses._remember_trace('progress', 'text', 'AFTER: the Quay is by the station.')
+            got = self.list()
+            self.assertIn('AFTER', str(got['items'][-1]['steps'])); self.assertNotIn('BEFORE', str(got['items'][-1]['steps']))
+            self.assertNotIn('AFTER', str(got['items'][ids.index('l-two') - 1]), 'nothing new above his line')
+            self.rest()
+        # ...and the turn filed under his line keeps the steps that came after it, as it was drawn at work
+        steps = [s for x in self.list()['items'][ids.index('l-two') + 1:] if x['kind'] == 'turn' for s in x['steps']]
+        self.assertNotIn('BEFORE', str(steps)); self.assertIn('AFTER', str(steps))
+        self.assertEqual(sessionrecord.said([{'type': 'progress', 'name': 'text', 'detail': 'one'}, sessionrecord.heard_mark(), {'type': 'progress', 'name': 'text', 'detail': 'two'}]), 'two')
+
     def test_a_line_sent_mid_turn_waits_by_the_box_and_enters_once_when_the_next_turn_takes_it(self):
         self.brain.delay = 0.8
         self.say('Suggest two.', 'l-one', wait=False)

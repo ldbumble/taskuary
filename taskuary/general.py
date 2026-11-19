@@ -2725,7 +2725,11 @@ class GeneralSession:
         # they arrived bare, a file-only line as blank lines and then the block. One frame over what one steer takes, as one turn at rest takes
         # its lines under one; a later steer is a later message into the turn and says whose it is again. A steer that took nothing sends nothing
         def lines():
+            # ...the trace marked where they go in, before they are heard: the turn under them is what it does from here (since_heard)
+            from . import sessionrecord
+            self.trace.append(mark := sessionrecord.heard_mark())
             took = [_line_of(r['Body']) for r in take_kept(self.store, self.task_id, sid=self.sid)]
+            if not took: self.trace = [e for e in self.trace if e is not mark]
             return with_files(_turn_only(self.store, self.task_id, '\n\n'.join(x['text'] for x in took)),
                               list(dict.fromkeys(str(Path(f).resolve()) for x in took for f in x['files']))) if took else ''
         return clipool.steer(self.keep(), lines if said is None else said)

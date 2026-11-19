@@ -36,3 +36,37 @@ export function useOverlay(open, close, { typeThrough = false } = {}) {
     return () => { window.removeEventListener(OPENED, other); window.removeEventListener("keydown", key, true); off(); };
   }, [open, typeThrough]);
 }
+
+// ...AND A MENU IS AN OVERLAY WITH NO BOX OF ITS OWN (the walks, 2026-11-18, recorded with a real mouse and keyboard): with the Change menu
+// open he clicked into the agent's box and typed - the click only shut the menu, the focus went back to Change, his words were lost on it and
+// the space in them pressed Change again, the menu back over the box; typed with the menu open, its type-ahead ate every key. One road for
+// every menu: a character typed into an open menu, or a click past it, shuts it and his words go on - in order, none lost - into the box he
+// clicked, else the box beneath
+export const menuOf = (el) => el?.closest?.("[role=menu], .MuiMenu-paper") || null;
+const isBox = (el) => el?.closest?.("input, textarea, [contenteditable=true]") || null;
+export const typeThroughMenus = (win) => {
+  if (!win || win.__tqMenusTypeThrough) return;
+  win.__tqMenusTypeThrough = true;
+  const doc = win.document;
+  // ...held while the menu lets go: a closing menu keeps the focus, then hands it back to the button that opened it
+  let held = "", busy = false, tries = 0, at = null;
+  const dest = () => (at && isBox(doc.elementFromPoint(at.x, at.y))) || boxBeneath(doc);
+  const settle = () => {
+    const b = dest();
+    if (b && (doc.querySelector(".MuiMenu-root") || (b.focus(), doc.activeElement !== b)) && ++tries < 120) { win.requestAnimationFrame(settle); return; }
+    if (b && doc.activeElement === b && held) doc.execCommand("insertText", false, held);
+    held = ""; busy = false; tries = 0; at = null;
+  };
+  win.addEventListener("pointerdown", (e) => {
+    if (busy || !e.target?.closest?.(".MuiMenu-root") || menuOf(e.target)) return;
+    busy = true; at = { x: e.clientX, y: e.clientY }; win.requestAnimationFrame(settle);
+  }, true);
+  win.addEventListener("keydown", (e) => {
+    const menu = menuOf(e.target);
+    if (!(busy || menu) || !typesText(e) || !(busy || boxBeneath(doc))) return;
+    e.preventDefault(); e.stopPropagation(); held += e.key;
+    if (busy) return;
+    busy = true; menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); win.requestAnimationFrame(settle);
+  }, true);
+};
+if (typeof window !== "undefined") typeThroughMenus(window);

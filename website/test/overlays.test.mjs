@@ -40,3 +40,29 @@ test("the box beneath is the agent's box in sight, else the chat's - never one i
   assert.equal(boxBeneath(doc({ ".tq-aui-input": [el("hidden", { shown: false })], ".tq-compose-field textarea": [chat] })), chat);
   assert.equal(boxBeneath(doc({ ".tq-aui-input": [el("over", { modal: true })] })), null);
 });
+
+// ...AND A MENU (recorded with a real mouse and keyboard, 2026-11-18): typed into the Change menu, its type-ahead ate the words; clicked past it
+// into the box, the focus went back to Change, the words were lost on it and their space pressed Change again
+test("a character typed into an open menu, or a click past it, shuts it and his words go on into the box, in order", async () => {
+  const { typeThroughMenus } = await import("../src/overlays.js");
+  const on = {}, frames = [], said = [], escapes = [];
+  let open = true, focused = null;
+  const box = { disabled: false, getClientRects: () => [1], closest: () => null, focus() { if (!open) focused = box; } };
+  box.closest = (q) => (q.includes("textarea") ? box : null);
+  const menu = { dispatchEvent: (e) => { escapes.push(e.key); open = false; } };
+  const inMenu = { closest: (q) => (q.includes("role=menu") ? menu : null) }, backdrop = { closest: (q) => (q === ".MuiMenu-root" ? {} : null) };
+  const doc = { querySelector: (q) => (q === ".MuiMenu-root" && open ? {} : null), querySelectorAll: (q) => (q === ".tq-aui-input" ? [box] : []),
+    get activeElement() { return focused; }, elementFromPoint: () => box, execCommand: (_c, _u, t) => said.push(t) };
+  const win = { document: doc, addEventListener: (n, f) => { on[n] = f; }, requestAnimationFrame: (f) => frames.push(f) };
+  globalThis.KeyboardEvent ??= class { constructor(type, o) { Object.assign(this, { type, ...o }); } };
+  typeThroughMenus(win);
+  const key = (k, target) => { const e = { key: k, target, preventDefault() { this.stopped = true; }, stopPropagation() {} }; on.keydown(e); return e; };
+  const run = () => { while (frames.length) frames.shift()(); };
+  assert.ok(key("h", inMenu).stopped); key("i", { closest: () => null }); run();
+  assert.deepEqual([escapes, said], [["Escape"], ["hi"]], "typed into the menu: shut, and every key in the box in order");
+  open = true; focused = null; said.length = 0;
+  on.pointerdown({ target: backdrop, clientX: 5, clientY: 5 });
+  assert.ok(key(" ", { closest: () => null }).stopped, "the space typed on the button the menu handed the focus back to never presses it");
+  key("n", { closest: () => null }); open = false; run();
+  assert.deepEqual(said, [" n"]);
+});

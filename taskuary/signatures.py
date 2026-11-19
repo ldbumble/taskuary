@@ -79,11 +79,11 @@ def agent_signed(store, rv: dict, text: str, msg: dict = None) -> str:
     """An agent's draft as it is filed: the agent's own sign-off ("Best,\\nAlex Doyle") taken off and the saved block put on once -
     the drafter's own road (responder.signed). It was filed as written, and the box put the block under the agent's name: signed
     twice (walk 2026-10-29). Chat: the owner's name lines off, nothing on (outbox)."""
-    from .responder import signed, strip_signoff, own_lines
+    from .responder import chat_said, signed
     text = str(text or '').strip()
     if not text: return text
     if is_email(store, rv, msg): return signed(text, for_review(store, rv, msg))
-    return strip_signoff(text, own_lines(store)) or text
+    return chat_said(store, text)
 
 
 def told(store) -> str:

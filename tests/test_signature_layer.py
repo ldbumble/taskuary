@@ -170,6 +170,18 @@ def test_an_agents_chat_reply_loses_its_name_and_gets_no_block(s):
     assert s.get_review(out['review_id'])['DraftText'] == 'on it - done by noon'
 
 
+def test_an_agents_chat_reply_is_filed_in_the_words_it_goes_as_links_written_out(s):
+    """Design round 6, D4: an agent's reply to a colleague's chat ask stood in his box as "3-5 business days. [Calculator](https://...)" four
+    times - the box he edits and sends. It is filed as the plain words a chat send leaves as, each link's address written out."""
+    from taskuary import wrapup
+    tid, mid, _ = thread(s, channel='teams', box='Paula Vance', draft='')
+    md = ('Four printers:\n\n- **Northwind Print**: $128.25, 3-5 business days. [Calculator](https://print.example/calc)\n'
+          '- Vendor Two: $140, 5 days. [Calculator](https://two.example/calc)')
+    box = s.get_review(wrapup.agent_reply(s, tid, md, 'coding')['review_id'])['DraftText']
+    assert box == ('Four printers:\n\n- Northwind Print: $128.25, 3-5 business days. Calculator (https://print.example/calc)\n'
+                   '- Vendor Two: $140, 5 days. Calculator (https://two.example/calc)')
+
+
 def test_what_goes_is_exactly_the_box_his_own_sign_off_kept(s):
     """The box showed the draft with the block; he wrote his own "Thanks,\nAlex" in its place and pressed Send, and the send road
     signed it again: 'Alex Doyle' landed under his sign-off, a line the box never showed (2026-11-17). The block goes on once, when

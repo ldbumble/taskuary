@@ -367,6 +367,15 @@ def own_lines(store, sig: str = '') -> list:
     return [name, name.split()[0] if name else ''] + str(sig or '').splitlines()
 
 
+def chat_said(store, text: str) -> str:
+    """A chat reply as it is filed in his box: the owner's name lines off, nothing put on, and a writer's Markdown spelled as the plain words
+    every chat send leaves as (chatformat.plain_text), each link's address written out. Left raw, the box he edits and approves showed
+    "[Calculator](https://...)" four times (design round 6, D4) - one spelling for the box and for what goes."""
+    from .chatformat import plain_text
+    t = strip_signoff(text, own_lines(store)) or str(text or '').strip()
+    return plain_text(t) or t
+
+
 def _bare(l: str) -> str: return ' '.join(str(l).split()).strip(' ,.!-').lower()
 
 
@@ -812,7 +821,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     has = bool(files) or len(sender_body(str(m.get('BodyText') or ''), m.get('OwnText'))[0]) >= SUBSTANCE
     out, files, why = _answer(llm, system, user, FEEDBACK_TOKENS if has else REPLY_TOKENS, images, guard=not instruction,
                          sig=signature_for(store, mailbox_in(m)))
-    out = (strip_signoff(out, own_lines(store)) or out) if chat else signed(out, signature_for(store, mailbox_in(m)))
+    out = chat_said(store, out) if chat else signed(out, signature_for(store, mailbox_in(m)))
     if not chat and not store.review_envelope(review_id):
         from . import outbound as _ob
         env = _ob.reply_envelope(store, m)

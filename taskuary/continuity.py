@@ -140,23 +140,23 @@ def sent_since(store, tid) -> tuple:
     return (rv, mail_since(store, tid, str(rv.get('DecidedAt') or rv.get('CreatedAt') or ''))) if rv else (None, [])
 
 
-def _env_to(rv) -> list:
-    try: env = json.loads((rv or {}).get('Deliver') or '{}') or {}
-    except (TypeError, ValueError): env = {}
-    to = env.get('to') if isinstance(env, dict) else None
+def _env_to(store, rv) -> list:
+    "Where its words go (outbound.review_envelope - the one answer the card sends by): the To addresses."
+    from .outbound import review_envelope
+    to = review_envelope(store, rv or {}).get('to')
     return [str(x) for x in (to if isinstance(to, (list, tuple)) else [to]) if x] if to else []
 
 
 def addressees(store, rv) -> set:
-    "The addresses a reply or an email goes to, lower-cased - sent_to's, as addresses: its envelope's, else the sender of the message it answers."
-    to = _env_to(rv) or [(store.get_message((rv or {}).get('MessageId')) or {}).get('FromEmail') or '']
+    "The addresses a reply or an email goes to, lower-cased - sent_to's, as addresses: where the card sends it, else the sender of the message it answers."
+    to = _env_to(store, rv) or [(store.get_message((rv or {}).get('MessageId')) or {}).get('FromEmail') or '']
     return {x.strip().lower() for x in to if x and x.strip()}
 
 
 def sent_to(store, rv, none: str = 'them') -> str:
-    """Whom a reply or an email goes to: where its envelope sends it, else who wrote the message it answers. The envelope first (2026-11-17):
-    a message the owner started answers his own ask, and the agent read its draft as going "to You"."""
-    to = _env_to(rv)
+    """Whom a reply or an email goes to: where the card sends it (outbound.review_envelope - a Reply-To honoured), else who wrote the message
+    it answers. The envelope first (2026-11-17): a message the owner started answers his own ask, and the agent read its draft as going "to You"."""
+    to = _env_to(store, rv)
     m = store.get_message((rv or {}).get('MessageId')) or {}
     # ...each address by the person it is where the message answered says so - "Gail Moreno", never her address (CI, 2026-11-17)
     named = {str(m.get('FromEmail') or '').lower(): str(m.get('FromName') or '').strip()} if m.get('FromName') else {}

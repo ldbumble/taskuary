@@ -878,6 +878,24 @@ def reply_envelope(store, msg: dict, mode: str = 'reply_all'):
     return {'kind': 'reply', 'mode': 'reply_all' if mode == 'reply_all' else 'reply_to', 'to': to, 'cc': cc}
 
 
+def review_envelope(store, rv: dict) -> dict:
+    """WHERE A REVIEW'S WORDS GO - the one answer the card, the send, the agent's "it went to" and the "already answered" check all read:
+    the envelope it went out on once sent; its own envelope when it names a destination (new mail, a reply with its people set); else the
+    reply to the mail that asked (AnswersMid), as the send works it out (reply_envelope - Reply all, the Reply-To honoured). The agent was
+    told a reply went to the From address when the card had sent it to the Reply-To, and a second draft followed."""
+    def load(f):
+        try: d = json.loads((rv or {}).get(f) or '{}') or {}
+        except (TypeError, ValueError): d = {}
+        return d if isinstance(d, dict) else {}
+    went = load('DeliveryEnvelope').get('envelope')
+    if isinstance(went, dict) and went.get('to'): return went
+    env = load('Deliver')
+    if env.get('to') or env.get('kind') not in (None, '', 'reply') or (not env.get('kind') and env.get('channel')): return env
+    mid = (rv or {}).get('AnswersMid') or (rv or {}).get('MessageId')
+    m = store.get_message(int(mid)) if mid else None
+    return {**(reply_envelope(store, m) or {'kind': 'reply'}), **({'cc': env['cc']} if env.get('cc') is not None else {})}
+
+
 UNKNOWN_ERRORS = (requests.exceptions.Timeout, requests.exceptions.ConnectionError, TimeoutError,
                   smtplib.SMTPServerDisconnected, requests.exceptions.JSONDecodeError, UncertainDelivery)
 

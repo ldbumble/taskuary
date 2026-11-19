@@ -324,15 +324,9 @@ def state(store, item: dict, verbs: list) -> tuple:
 # new dialog): before Send, an address the thread never had and the files the draft carries are said in one line beside the lit Send.
 # Addresses and files are facts the draft's envelope keeps - read the way the send will read them (verdicts._deliver_review) - never words.
 def recipients(store, rv: dict) -> list:
-    """The addresses a draft will go to, lowercased: its own envelope's To and Cc when it is new mail or a reply with its people set, else
-    whom a reply to its message goes to (outbound.reply_envelope)."""
+    "The addresses a draft will go to, lowercased: its To and Cc as the send reads them (outbound.review_envelope)."
     from . import outbound
-    try: env = json.loads(rv.get('Deliver') or '{}') or {}
-    except (TypeError, ValueError): env = {}
-    env = env if isinstance(env, dict) else {}
-    if not env.get('to') and (env.get('kind') == 'reply' or not env.get('channel')):
-        m = store.get_message(int(rv['MessageId'])) if rv.get('MessageId') else None
-        env = {**(outbound.reply_envelope(store, m) or {}), **({'cc': env['cc']} if env.get('cc') is not None else {})}
+    env = outbound.review_envelope(store, rv)
     return [str(a).strip().lower() for a in [*(env.get('to') or []), *(env.get('cc') or [])] if '@' in str(a or '')]
 
 

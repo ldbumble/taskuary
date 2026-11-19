@@ -194,5 +194,26 @@ class SignatureTests(unittest.TestCase):
         self.assertNotIn('Northwind Trading', s.get_review(rid)['DraftText'])
 
 
+class OneAnswerToWhomTests(unittest.TestCase):
+    """WHO A REPLY GOES TO has one answer (outbound.review_envelope): the card sends to the Reply-To, so the agent is told it went there and the
+    "already answered" check reads the same address. They read the From address, and his own answer to the Reply-To left the draft standing."""
+    def test_the_card_the_agent_and_the_answered_check_name_the_same_people(self):
+        from taskuary import channels, continuity, rulebook
+        s = store(); tid = s.create_task({'Title': 'August export', 'Kind': 'reply', 'Status': 'open'}, 'owner')
+        mid = s.add_message({'TaskId': tid, 'ExternalId': 'e1', 'ConversationId': 'AAQk-e', 'Channel': 'email', 'SourceName': 'alex@northwind.example',
+                             'Subject': 'August export', 'FromName': 'Erin Blake', 'FromEmail': 'erin@vendor.example', 'SentAt': '2026-11-18 09:00:00',
+                             'BodyText': 'Could you send the August export?', 'Status': 'routed',
+                             'RecipientsJson': json.dumps({'to': ['alex@northwind.example']}), 'MailMetaJson': json.dumps({'reply_to': ['billing@vendor.example']})})
+        rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Attached.'})
+        rv = s.get_review(rid)
+        card = set(rulebook.recipients(s, rv))
+        self.assertEqual(card, {'billing@vendor.example'})
+        self.assertEqual(continuity.addressees(s, rv), card)
+        self.assertEqual(continuity.sent_to(s, rv), 'billing@vendor.example')
+        # his own answer, sent from Outlook to where she asked to be answered, answers the draft
+        his = {'ConversationId': 'AAQk-e', 'SentAt': '2026-11-18 10:00:00', 'RecipientsJson': json.dumps({'to': ['billing@vendor.example']})}
+        self.assertEqual([r['ReviewId'] for r in channels.answered_drafts(s, tid, his)], [rid])
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -295,13 +295,34 @@ class Holding(unittest.TestCase):
         self.assertIn('The owner approved it', self.heard()[0]); self.assertIn('agent-browser click @e12', self.told[0])
         self.assertEqual(self.pending(), [])
 
-    def test_a_page_that_moved_on_is_not_acted_on(self):
+    def test_a_click_held_on_a_page_the_agent_left_is_pressed_there_again(self):
+        """The vendor walk, 2026-11-19: "the agent's browser has moved on from the page this was held on - nothing was done" - his Approve could
+        not succeed, because the hold was tied to a tab the agent had left. His press is tied to the job: the page is opened again in a tab of
+        Taskuary's own, its boxes filled as the agent left them, and the control pressed there by its role and name."""
+        from taskuary import signin
         self.held(); [rv] = self.pending()
-        with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': 'https://pay.toll.example/checkout/other'}), \
-                mock.patch.object(bg, '_run') as run:
+        class Tab:
+            def __init__(s, there=True): s.there, s.ran = there, []
+            def js(s, expr):
+                s.ran.append(expr)
+                if expr.startswith(bg.PRESS_JS): return s.there
+                return {'location.href': 'https://pay.toll.example/checkout/done', 'document.title': 'Thank you', 'document.readyState': 'complete',
+                        bg.STATUS_JS: {'status': 200}}.get(expr, False if 'tqLeaving' in expr else None)
+            def __enter__(s): return s, True
+            def __exit__(s, *a): pass
+        tab = Tab()
+        with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': 'https://pay.toll.example/checkout/other'}),                 mock.patch.object(bg, '_run') as run, mock.patch.object(signin, 'tab_at', lambda sid, url: tab),                 mock.patch('taskuary.workerstate._live', return_value=self.sess):
             out = verdicts.decide(self.s, rv, 'approve')
-        self.assertFalse(out['ok']); self.assertIn('moved on', out['send_error'])
-        run.assert_not_called()
+        self.assertTrue(out['ok'], out); run.assert_not_called()
+        self.assertTrue(any(e.startswith(signin.REFILL) for e in tab.ran))
+        self.assertIn(f'{bg.PRESS_JS}("button", "Continue")', tab.ran)
+        said = self.heard()[0]
+        self.assertIn('opened https://pay.toll.example/checkout/review again in a tab of its own', said); self.assertIn('"Thank you"', said)
+        # ...and a page that no longer shows that control: nothing pressed, said so, the card over
+        self.held(); [rv] = self.pending(); gone = Tab(there=False)
+        with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': 'https://pay.toll.example/checkout/other'}),                 mock.patch.object(signin, 'tab_at', lambda sid, url: gone):
+            out = verdicts.decide(self.s, rv, 'approve')
+        self.assertFalse(out['ok']); self.assertIn('is not on it any more - nothing was done', out['send_error'])
         self.assertEqual(self.pending(), [], 'over, its error kept - the agent holds it anew (the owner, 2026-11-16: no Try again)')
 
     def test_a_held_upload_runs_in_the_agents_folder_on_approve(self):

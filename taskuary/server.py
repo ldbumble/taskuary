@@ -6301,8 +6301,12 @@ async def agent_gate(body: dict, request: Request):
     tid = int(body.get('task') or 0) if str(body.get('task') or '').isdigit() else 0
     _own_task_only(request, tid)
     from . import browsergate
-    go = ((lambda: browsergate.outcome(str(body.get('sid') or ''))) if body.get('after') else
-          lambda: gatecmd.judge(store, tid, str(body.get('sid') or ''), str(body.get('cmd') or ''), str(body.get('cwd') or '')))
+    sid, cmd = str(body.get('sid') or ''), str(body.get('cmd') or '')
+    # ...TASKUARY'S OWN VERB (`agent-browser signup`): done here, its result the command's own output (gatecmd.own)
+    if not body.get('after') and (own := gatecmd.own(cmd)):
+        ok, said = await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, lambda: gatecmd.run_own(store, tid, sid, own))
+        return {'why': '', 'own': True, 'ok': ok, 'said': said}
+    go = ((lambda: browsergate.outcome(sid, store)) if body.get('after') else lambda: gatecmd.judge(store, tid, sid, cmd, str(body.get('cwd') or '')))
     return {'why': await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, go)}
 
 

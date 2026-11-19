@@ -1211,11 +1211,12 @@ def brief(open_now: bool = True) -> str:
 # A BROWSER OFFERED IS A LINE, ITS RULES A GUIDE (2026-11-09, the owner: "the tools should be progressive disclosure"): the whole brief
 # rode on every task an agent MIGHT open a page on - 4,500 characters on a WhatsApp bug report. The offer keeps what must hold from the
 # first command (only this browser, no password or CAPTCHA, the last press) and names the guide; the rest is read when a page is needed.
-# A SIGN-UP (signin.new_account, the real-CLI walk 2026-11-16): nine forms were handed back for him to type a password into. One line,
-# read wherever the sign-in is told (the brief, the offer, the API agent's brief)
-SIGNUP_LINE = ("A SIGN-UP is the same: fill every box but the password, end your turn with [[TASKUARY-SIGNUP: <the site's domain>]] - Taskuary "
-               "types a strong password, keeps it and sends the form the owner asked for. A code the site then emails is typed into its page by "
-               "Taskuary and you are told - never ask for it or send for another; go on with the next site meanwhile. ")
+# A SIGN-UP (signin.signup, design round 4, 2026-11-19): one command inside the turn - the marker that ended a turn per site took 25-35 minutes for
+# thirteen vendors, and a form the agent pressed itself lost its password. One line, read wherever the sign-in is told (the brief, the offer, the API
+# agent's brief)
+SIGNUP_LINE = ("A SIGN-UP: fill every box but the password, then run `agent-browser signup` - Taskuary makes a strong password, types it, keeps it "
+               "with the owner's saved sign-ins, sends the form and prints what the site answered; an account counts only where that says you are "
+               "signed in. A code the site emails is typed by Taskuary - never ask for it. ")
 SIGNIN_LINE = ("A SIGN-IN YOU HAVE NO PASSWORD FOR IS NOT A BLOCKER AND NEVER A QUESTION - you do not need the password. For a site with no "
                'connection among your systems, say so in one line, open its sign-in page in this browser, and end your turn with a final '
                "line [[TASKUARY-SIGNIN: <the site's domain>]]: Taskuary types a saved sign-in, or shows the owner the page and keeps it for next "

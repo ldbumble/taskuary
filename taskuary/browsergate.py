@@ -232,8 +232,15 @@ SETTLE_WAIT = 12.0
 STATUS_JS = "(() => { const n = performance.getEntriesByType('navigation')[0]; return {status: n ? n.responseStatus || 0 : 0, url: location.href}; })()"
 
 
-def outcome(sid: str) -> str:
-    "One plain line when the page an act or open left is not a working page - a load that did not finish, an error status - else ''."
+def outcome(sid: str, store=None) -> str:
+    """One plain line when the page an act or open left is not a working page - a load that did not finish, an error status - else ''. A
+    password the act sent is kept or put back first (signin.settled), and said."""
+    from . import signin
+    kept = signin.settled(store, sid) if store is not None else ''
+    return '\n'.join(x for x in (kept, _outcome(sid)) if x)
+
+
+def _outcome(sid: str) -> str:
     from . import browserview, signin
     try: rc, said = _run(sid, ['get', 'url'], SETTLE_WAIT, 'settle')
     except RuntimeError as e:
@@ -504,6 +511,7 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
             c = control(a, pg)
             proposals.queue(store, tid, {'action': 'browser_act', 'sid': str(sid), 'args': args, 'command': ' '.join([EXE, *args]),
                                          'url': pg['url'], 'site': site, 'what': v['what'], 'why': v['why'], **({'cwd': cwd} if cwd else {}),
+                                         'fields': signin.form_fields(sid),
                                          **({'control': {'name': c['name'], 'role': c['role']}} if c.get('role') else {})}, 'agent')
             store.audit('task', tid, 'browser_act_held', 'taskuary', 'system', {'verb': a['verb'], 'site': site, 'why': v['why']})
         from .selfclose import CARD_TAIL
@@ -511,8 +519,11 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
                      f"what happened. Never ask them in words to approve or click it, and do not try it another way. {CARD_TAIL} End your turn "
                      "now, or go on with work that does not need it.")
     if (browserview.ENDED_ON.get(str(sid)) or ('',))[0] == 'failed': browserview.ended_on(sid)     # it went on past the failure
-    # ...and a press that went to a site is the agent's own act there: a code that site mails now comes back to it (signin.acting)
-    if any(not setting(a) and not a.get('read') for a in todo): signin.acting(store, tid, sid, signin.site_of(pg.get('url')))
+    # ...and a press that went to a site is the agent's own act there: a code that site mails now comes back to it (signin.acting), and a
+    # password a box of the form holds is kept before the press sends it (signin.pressing) - nothing a site was sent is lost
+    if any(not setting(a) and not a.get('read') for a in todo):
+        signin.acting(store, tid, sid, (here := signin.site_of(pg.get('url'))))
+        signin.pressing(store, tid, sid, here)
     return {}
 
 
@@ -549,6 +560,9 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
     from . import browserview
     sid, args = str(p.get('sid') or ''), list(p.get('args') or [])
     if not sid or not args: raise RuntimeError('this held act names no browser command')
+    if p.get('signup'):                     # a sign-up: filled again where the agent has moved on, its password made and kept (signin.send_held)
+        from . import signin
+        return signin.send_held(store, tid, sid, p)
     st = browserview.state(sid, fresh=True)
     # ...and the way on, said: the same Approve stayed and failed every time, with nothing saying Dismiss it (2026-10-25)
     if not st.get('open'): raise RuntimeError(f"the agent's browser is closed - nothing was done. {AGAIN}")
@@ -556,16 +570,17 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
     if not here or not p.get('url'):
         raise RuntimeError(f"Taskuary could not read which page the agent's browser is on, so it could not check it is still on "
                            f"{p.get('site') or 'the page'} - nothing was done. {AGAIN}")
+    # ...HIS PRESS IS TIED TO THE JOB, NOT TO THE AGENT'S TAB (the vendor walk, 2026-11-19: "the agent's browser has moved on from the page this was
+    # held on - nothing was done"): the page is opened again in a tab of Taskuary's own, its boxes filled as the agent left them, and the control
+    # pressed there by its role and name
     if not _same_page(here, str(p.get('url') or '')):
+        if (p.get('control') or {}).get('name') and args[0] in ('click', 'dblclick'): return _again(store, tid, sid, p)
         raise RuntimeError(f"the agent's browser has moved on from the page this was held on ({p.get('site') or 'its site'}) - nothing was done. {AGAIN}")
     # ...AND THE REF STILL NAMES THE CONTROL IT WAS HELD ON: a page that re-draws itself on one address (a checkout's next step, a list that
     # reloaded) gives @e12 to another control at its next snapshot, and the owner's yes to "Continue" clicked "Remove item"
     if (was := p.get('control')) and (now := control({'args': args}, page(sid))) and (now.get('role'), now.get('name')) != (was.get('role'), was.get('name')):
         raise RuntimeError(f"the {was.get('role') or 'control'} \"{was.get('name')}\" this was held on is no longer where it was on "
                            f"{p.get('site') or 'the page'} - the page has changed since, so nothing was done. {AGAIN}")
-    if p.get('signup'):                     # a sign-up form Taskuary filled: sent its own way, its password kept (signin.send_held)
-        from . import signin
-        return signin.send_held(store, tid, sid, p)
     # ...WHERE THE AGENT RAN IT: `upload @e5 ./resume.pdf` approved ran from the server's own folder, and its relative path named another file
     rc, said = (run or (lambda s, a: _run(s, a, 60, 'act', **({'cwd': p['cwd']} if p.get('cwd') else {}))))(sid, args)
     said = ' '.join(str(said or '').split())[-600:]
@@ -588,6 +603,41 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
                       f"The page is now {now or 'unknown'} - look at it, then " + NEXT[0].lower() + NEXT[1:], wake=True)
     store.audit('task', tid, 'browser_act_done', 'owner', 'human', {'site': p.get('site'), 'what': p.get('what'), 'command': str(p.get('command') or '')[:300],
                                                           'said': now or said[-300:]})
+    return {'performed': p.get('what') or p.get('command'), 'site': p.get('site'), 'page': now}
+
+
+PRESS_JS = r"""((role, name) => { const norm = (t) => String(t || '').replace(/\s+/g, ' ').trim().toLowerCase(), want = norm(name);
+  const sel = role === 'link' ? 'a[href], [role=link]' : role === 'button' ? 'button, input[type=submit], input[type=button], input[type=image], [role=button]'
+    : '[role=' + role + '], ' + role;
+  const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 1 && r.height > 1 && !e.disabled; };
+  const said = (e) => norm(e.innerText || e.value || e.getAttribute('aria-label') || e.title);
+  const el = [...document.querySelectorAll(sel)].filter(vis).find((e) => said(e) === want);
+  if (!el) return false; el.click(); return true; })"""
+
+
+def _again(store, tid: int, sid: str, p: dict) -> dict:
+    "The held click done on its own page again: opened in a tab of Taskuary's own, filled as the agent left it, pressed, and read."
+    from . import signin
+    ctl, site = p['control'], p.get('site') or 'its site'
+    try:
+        with signin.tab_at(sid, str(p.get('url') or '')) as (c, _):
+            c.js(f"{signin.REFILL}({json.dumps(p.get('fields') or [])})")
+            signin.pressing(store, tid, sid, signin.site_of(p.get('url')), conn=c)
+            try: c.js(signin.LEAVING)
+            except signin.SignInError: pass
+            if not c.js(f'{PRESS_JS}({json.dumps(ctl.get("role") or "button")}, {json.dumps(ctl["name"])})'):
+                signin._PRESSED.pop(str(sid), None)
+                raise RuntimeError(f'the page this was held on was opened again, and its {ctl.get("role") or "control"} "{ctl["name"]}" is not on it '
+                                   f'any more - nothing was done. {AGAIN}')
+            status = signin.answered(c, SETTLE_WAIT)
+            kept = signin.settled(store, sid, conn=c)
+            now, title = str(c.js('location.href') or ''), str(c.js('document.title') or '')
+    except signin.SignInError as e: raise RuntimeError(f'the page this was held on could not be opened again ({e}) - nothing was done. {AGAIN}')
+    how = f'answered with an error (HTTP {status})' if status and status >= 400 else 'did not answer' if status is None else f'now shows "{title}" ({now})'
+    _tell(store, tid, f"The owner approved it. Your browser had moved on, so Taskuary opened {p.get('url')} again in a tab of its own, filled it "
+                      f"as you had left it and pressed the \"{ctl['name']}\" {ctl.get('role') or 'control'}: the site {how}. That tab is closed; "
+                      f"what it did stands on {site}. {kept} " + NEXT, wake=True)
+    store.audit('task', tid, 'browser_act_done', 'owner', 'human', {'site': p.get('site'), 'what': p.get('what'), 'again': True, 'said': now})
     return {'performed': p.get('what') or p.get('command'), 'site': p.get('site'), 'page': now}
 
 

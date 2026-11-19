@@ -43,6 +43,8 @@ BROWSER = [
     _fn('browser_fill', 'Type text into a box by its ref (replaces what is there). Never a password: sign-ins are Taskuary\'s.',
         _S({'ref': _REF, 'text': {'type': 'string'}}, ['ref', 'text'])),
     _fn('browser_press', 'Press a key in the page, like Enter or Tab.', _S({'key': {'type': 'string'}}, ['key'])),
+    _fn('browser_signup', 'Send the sign-up form on this page, every box filled but the password: Taskuary makes, types and keeps the password '
+        'and answers what the site said.', _S({})),
     _fn('browser_screenshot', 'Save a picture of the page; answers with its path, which `show` puts in the chat.', _S({})),
 ]
 SHOW = _fn('show', f"Show the owner files in this chat - a screenshot, a file you made - by path. {SHOW_WHAT}",
@@ -53,7 +55,7 @@ BRIEF = ('YOUR TOOLS: you drive Taskuary\'s browser for this task with browser_o
          'the owner it "cannot be done from here" or ask them to paste what the page shows. A SIGN-IN PAGE: never type a password and never '
          'ask for one - open the site\'s sign-in page, then end your turn with a final line [[TASKUARY-SIGNIN: <the site\'s domain>]]. '
          'Taskuary signs in with the login saved in its vault and wakes you to continue; if none is saved, the owner fills it in securely '
-         '(and can save it to the vault for next time). ' + SIGNUP_LINE + 'An act that can\'t be undone (submit, pay, send, delete) may be HELD for the owner: '
+         '(and can save it to the vault for next time). ' + SIGNUP_LINE.replace('run `agent-browser signup`', 'call browser_signup') + 'An act that can\'t be undone (submit, pay, send, delete) may be HELD for the owner: '
          'when a tool says so, stop and say what you will do once they approve. Say what you found from the page itself, and what you could not check.')
 # ── PHASE 2: the rest of what a CLI's hands do (the owner, 2026-11-09: "make sure hipaa thing matches capabilities of claude cli") ──────
 # Files in the task's own outputs folder (the one folder the task page serves), read with Taskuary's own readers (attachtext); a page fetched
@@ -95,7 +97,7 @@ LOCAL = {t['function']['name'] for t in (*BROWSER, SHOW, *FILES, *WRITE, *WEB, *
 SHORT = {'browser_open': "Open a web page in this task's browser.",
          'browser_look': 'Read the page the browser is on: its elements with refs (@e1); full=true for its text.',
          'browser_click': 'Click an element by its ref.', 'browser_fill': 'Type text into a box by its ref (never a password).',
-         'browser_press': 'Press a key in the page (Enter, Tab).', 'browser_screenshot': 'Save a picture of the page; answers with its path.',
+         'browser_press': 'Press a key in the page (Enter, Tab).', 'browser_signup': 'Send the sign-up form here; Taskuary makes the password.', 'browser_screenshot': 'Save a picture of the page; answers with its path.',
          'show': 'Show the owner files in this chat, by path.', 'files_list': 'List a folder (default: your working folder).',
          'file_read': 'Read a file as text (also PDF, Word, Excel).',
          'file_write': 'Write a whole file (.docx/.xlsx made real).',
@@ -166,7 +168,8 @@ def _act(store, tid, sid, args: list) -> str:
     if (held := gatecmd.judge(store, tid, sid, shlex.join([bg.EXE, *args]))): return held
     rc, said = bg._run(sid, args, WAIT, 'api')
     if rc != 0: raise ValueError(said.strip()[-400:] or f'agent-browser {args[0]} failed')
-    return said.strip() or 'Done.'
+    after = bg.outcome(sid, store) if args[0] not in bg.LOOKS or args[0] in bg.NAVS else ''
+    return '\n'.join(x for x in (said.strip() or 'Done.', after) if x)
 
 
 def _look(sid, a: dict) -> str:
@@ -438,6 +441,9 @@ def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
     if name == 'browser_click': return _act(store, tid, sid, ['click', str(a.get('ref') or '')])
     if name == 'browser_fill': return _act(store, tid, sid, ['fill', str(a.get('ref') or ''), str(a.get('text') or '')])
     if name == 'browser_press': return _act(store, tid, sid, ['press', str(a.get('key') or '')])
+    if name == 'browser_signup':
+        from . import gatecmd
+        return gatecmd.run_own(store, tid, sid, 'signup')[1]
     if name == 'browser_screenshot':
         import time
         from . import outputs
@@ -488,8 +494,8 @@ def tools_for(tid: int, sid: str, browser: bool, stranger: bool = False, post=No
 LATER = frozenset({'read_attachment', 'search_knowledge', 'owner_memory', 'calendar', 'list_systems', 'run_system', 'remind', 'ask_stronger',
                    'note_peers', 'use_repo', 'find_repos', 'propose_land', 'withdraw_draft', 'sign_form', 'answer_invite', 'set_up_meeting', 'share',
                    'search_tasks', 'person', 'guide', 'todos', 'check_back', 'browser_look', 'browser_click', 'browser_fill', 'browser_press',
-                   'browser_screenshot', 'web_fetch', 'files_list', 'reply_not_needed', 'propose', 'my_task', 'new_task'})
-BROWSER_MORE = ('browser_look', 'browser_click', 'browser_fill', 'browser_press', 'browser_screenshot')
+                   'browser_signup', 'browser_screenshot', 'web_fetch', 'files_list', 'reply_not_needed', 'propose', 'my_task', 'new_task'})
+BROWSER_MORE = ('browser_look', 'browser_click', 'browser_fill', 'browser_press', 'browser_signup', 'browser_screenshot')
 LOAD = 'find_tools'
 DEFERRED = {}                  # (tid, sid) -> {name: schema} of the tools this turn named but has not loaded
 def loader(later: list) -> dict:

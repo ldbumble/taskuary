@@ -277,7 +277,8 @@ class TheSignInPage(unittest.TestCase):
         def refused(*a, **k): raise signin.NotAccepted('northwind.example did not accept that password')
         signin._auto(self.s, self.tid, 'sess1', 'northwind.example', 'signin:northwind.example', refused)
         said = ' '.join(c.get('Body') or '' for c in self.s.list_comments(self.tid))
-        self.assertIn('The saved password for northwind.example did not work', said); self.assertNotIn('Signed in', said)
+        # ...said as what happened, and gone back to the agent to get past (design round 4): never "sign in on the page" to him
+        self.assertIn('The saved sign-in for northwind.example did not go in', said); self.assertNotIn('Signed in', said)
 
     def test_the_page_names_its_task_and_says_what_happens_next(self):
         line = signin.for_line(self.s, self.tid)

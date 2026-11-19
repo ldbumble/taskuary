@@ -17,6 +17,10 @@ from pathlib import Path
 GATED = ('agent-browser', 'agent-desktop')
 MARK = '/api/agent/gate'
 WAIT = 150                      # a snapshot and one verdict (browsergate.JUDGE_WAIT), and a page launched for its first open
+OWN_WAIT = 300                  # ...and Taskuary's own verb: a verdict, the form sent, and a code the site emails waited for (signin.CODE_INLINE)
+# TASKUARY'S OWN VERBS on the browser (design round 4, 2026-11-19): done by the server in this session's browser, never by the real program - their
+# result is the command's own output. `signup`: the page's sign-up form, filled but its password, sent with a password Taskuary makes and keeps
+OWN = ('signup',)
 _DIR: dict = {}
 LAUNCHER = b'-m taskuary.gatecmd'          # ...written in every launcher folder() makes: how one is told from the real program
 
@@ -74,27 +78,47 @@ def asks(name: str, cmd: str) -> tuple:
     return act, act or bool(browsergate.opens(cmd))
 
 
+def own(cmd: str) -> str:
+    "Taskuary's own verb this agent-browser line asks for (OWN), else ''. Its grammar is the line's first word past agent-browser's options."
+    from . import browsergate
+    for argv in browsergate._segments(cmd) or []:
+        a = browsergate._own_args(browsergate._head(argv) or [])
+        if a and a[0].lower() in OWN: return a[0].lower()
+    return ''
+
+
+def run_own(store, tid: int, sid: str, verb: str) -> tuple:
+    "(done, what the command prints) of Taskuary's own verb."
+    from . import signin
+    if verb == 'signup': return signin.signup(store, tid, sid)
+    return False, f'agent-browser {verb} is not a command'
+
+
 def ask(name: str, args: list, after: bool = False) -> str:
     """'' runs the command; else why it was not run. Asked of the server this session belongs to, as `taskuary --note` asks it: its token
     from the session (TASKUARY_TOKEN - or the app's own config where a CLI strips token-named variables from its shell, as Codex does).
     `after`: the browser command has run - what the site did, in one line when it is not a working page (browsergate.outcome), else ''."""
-    from . import config, hooks
-    from .guard import TASK_ENV, TASK_HDR
     cmd = shlex.join([name, *args])
     act, call = asks(name, cmd)
     if not call or after and name != 'agent-browser': return ''
+    try: return str(post(cmd, after).get('why') or '')
+    except Exception as e:
+        if not act or after: return ''
+        return (f'Taskuary held this for the owner: it could not be asked whether this press may run ({str(e)[:120]}), so nothing was '
+                'done. Run it again; if it is refused like this again, tell the owner in one line what you were about to do and end your turn.')
+
+
+def post(cmd: str, after: bool = False, wait: float = WAIT) -> dict:
+    "The server's answer on one line of this session's (/api/agent/gate)."
+    from . import config, hooks
+    from .guard import TASK_ENV, TASK_HDR
     env, srv = os.environ, config.load()['server']
     body = json.dumps({'task': env.get('TASKUARY_TASK') or '', 'sid': env.get('TASKUARY_SID') or '', 'cmd': cmd, 'cwd': os.getcwd(), **({'after': True} if after else {})}).encode()
     hdr = {'Content-Type': 'application/json', **({'X-Taskuary-Token': srv['token']} if srv.get('token') else {}),
            **({TASK_HDR: env[TASK_ENV]} if env.get(TASK_ENV) else {})}
     import urllib.request
-    try:
-        req = urllib.request.Request((env.get('TASKUARY_URL') or hooks.base_url()) + MARK, body, hdr)
-        with urllib.request.urlopen(req, timeout=WAIT) as r: return str(json.load(r).get('why') or '')
-    except Exception as e:
-        if not act or after: return ''
-        return (f'Taskuary held this for the owner: it could not be asked whether this press may run ({str(e)[:120]}), so nothing was '
-                'done. Run it again; if it is refused like this again, tell the owner in one line what you were about to do and end your turn.')
+    req = urllib.request.Request((env.get('TASKUARY_URL') or hooks.base_url()) + MARK, body, hdr)
+    with urllib.request.urlopen(req, timeout=wait) as r: return json.load(r)
 
 
 def judge(store, tid: int, sid: str, cmd: str, cwd: str = '', brain=None) -> str:
@@ -114,6 +138,10 @@ def main(argv: list = None) -> int:
     gate, name, *args = sys.argv[1:] if argv is None else argv
     exe = real(name, gate)
     if not exe: print(f'{name} is not installed on this computer.', file=sys.stderr); return 127
+    if name == 'agent-browser' and (verb := own(shlex.join([name, *args]))):
+        try: r = post(shlex.join([name, *args]), wait=OWN_WAIT)
+        except Exception as e: print(f'Taskuary could not be reached ({str(e)[:120]}) - nothing was done. Run it again.', file=sys.stderr); return 1
+        print(r.get('said') or r.get('why') or f'{verb}: no answer'); return 0 if r.get('ok') else 1
     why = ask(name, args)
     if why: print(why, file=sys.stderr); return 1
     from . import spawn

@@ -4517,9 +4517,9 @@ def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: st
     words = general.split_files(own)['text'].strip() or text          # ...his words, without the files his line names (his_words)
     # the title the model named (the set-up sort's, the hand-off's), or the owner's sentence as said. A regex used to strip a
     # leading verb off it, and "Add Erin to payroll" became "Erin to payroll" (the owner, 2026-10-11: no word lists)
-    title = _title_cut(title) or _title_cut(' '.join(words.split()))
+    title = general.title_of(title) or general.title_of(words)
     from . import browserview
-    tid = store.create_task({'Title': title[:1].upper() + title[1:], 'Summary': own, 'Kind': kind, 'Status': 'open', 'Priority': 'normal', 'OriginBase': 'owner',
+    tid = store.create_task({'Title': title, 'Summary': own, 'Kind': kind, 'Status': 'open', 'Priority': 'normal', 'OriginBase': 'owner',
                              # a CODING hand-off is the owner's own job, not a Taskuary set-up: marked
                              # assistant:setup it read as "Taskuary's own work" and opened in Taskuary's
                              # checkout, whatever it was about (the owner, 2026-09-24: an issue in another repository)
@@ -4535,6 +4535,7 @@ def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: st
     # ...and a file he attached is the task's own, in its folder, named there (outputs.take_in_summary - New's own road too)
     from . import outputs
     own = outputs.take_in_summary(store, tid, actor) or own
+    general.own_title(store, tid, words)            # ...called by his words, until its agent names it (general.take_name)
     # A task the owner creates in the Assistant deserves the same concrete list surface as work
     # triage creates from an incoming ask. With no checklist the card rendered Summary as a banner,
     # then rendered the identical own-message below it; there was no box and the ask appeared three

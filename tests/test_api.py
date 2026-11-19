@@ -373,7 +373,20 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(t['Summary'], ask)
         typed = server.store.get_task(c.post('/api/tasks', json={'Title': ask, 'Summary': 'as typed'}).json()['taskId'])
         self.assertEqual(typed['Summary'], 'as typed')
-        self.assertEqual(server.store.get_task(c.post('/api/tasks', json={'Title': 'do the thing'}).json()['taskId'])['Title'], 'do the thing')
+        self.assertEqual(server.store.get_task(c.post('/api/tasks', json={'Title': 'do the thing'}).json()['taskId'])['Title'], 'Do the thing')
+
+    def test_his_words_as_a_title_take_the_agents_name_from_every_door(self):
+        """IS THE TITLE STILL HIS WORDS has one answer (general.title_is_his), marked where the title is made (general.title_of): the Assistant's
+        set-up capitalised a lower-case ask, the check recomputed the plain cut, and the task never took its agent's name; New's did."""
+        from taskuary import concierge, general
+        s = server.store
+        ask = 'find three caterers in Boston for about forty people in March'
+        made = [c.post('/api/tasks', json={'Title': ask, 'Summary': ask, 'Kind': 'general'}).json()['taskId'],
+                concierge.setup_task(s, ask, 'owner', kind='general', agent_job=True)['taskId']]
+        self.assertEqual([general.take_name(s, t, 'Boston caterers for March') for t in made], [True, True])
+        self.assertEqual([general.take_name(s, t, 'A second name') for t in made], [False, False])       # a name it has stands
+        named = c.post('/api/tasks', json={'Title': 'Caterers', 'Summary': ask}).json()['taskId']
+        self.assertFalse(general.take_name(s, named, 'Boston caterers for March'))                        # ...and one he gave it
 
     def test_the_list_row_carries_its_checklist(self):
         """The sidebar draws each row's progress, and list_tasks' SELECT t.* already ships the

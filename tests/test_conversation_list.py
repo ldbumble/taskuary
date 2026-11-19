@@ -867,8 +867,8 @@ class TheList(unittest.TestCase):
         his sentence takes that name - once: a name it already has, or one he gave, stands."""
         from taskuary import selfclose
         ask = 'Find three caterers in Boston for about forty people in March, with prices per head and minimums, and put them in a sheet.'
-        tid = self.tid = self.s.create_task({'Title': ask[:120].rsplit(' ', 1)[0] + '…' if len(ask) > 120 else ask, 'Summary': ask, 'Kind': 'general',
-                                             'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        tid = self.tid = self.s.create_task({'Title': general.title_of(ask), 'Summary': ask, 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        general.own_title(self.s, tid, ask)            # made from his words, as New and the Assistant make it
         mark = lambda name: f'Three found. {selfclose.SUMMARY_OPEN}{{"name": "{name}", "about": "", "did": "Three caterers.", "on_you": []}}{selfclose.SUMMARY_CLOSE}'
         self.brain.said = {1: mark('Boston caterers for March'), 2: mark('Caterers, second name')}
         self.say('Go.', 'l-one'); self.rest()

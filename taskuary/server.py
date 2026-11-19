@@ -1267,10 +1267,15 @@ def create_task(body: TaskBody):
     fields = {k: v for k, v in body.model_dump().items() if v is not None}
     # A TITLE IS A LINE, NOT THE ASK (TQ-1215, the owner: "task name is 300 words. it should be limited"): + New filed its whole request
     # as the title. Cut at a word the way the assistant's own tasks are; the words as typed stay the Summary.
-    from .concierge import _title_cut
-    if len(fields['Title']) > 120: fields = {**fields, 'Summary': fields.get('Summary') or fields['Title'], 'Title': _title_cut(' '.join(fields['Title'].split()))}
+    # ...and a title that is his words is made by the one road (general.title_of) and marked his, so its agent may name it (take_name)
+    from . import general
+    words = fields.get('Summary') or fields['Title']
+    his = general.title_of(fields['Title']) == general.title_of(words)
+    if his or len(fields['Title']) > 120:
+        fields = {**fields, 'Title': general.title_of(fields['Title']), **({'Summary': words} if len(fields['Title']) > 120 else {})}
     # made by the owner on the page: an ask from the desktop once an agent works it (asks.py)
     tid = store.create_task({**fields, 'AskedVia': 'desktop', 'OriginBase': 'owner'}, ACTOR)
+    if his: general.own_title(store, tid, words)
     # ...and a file attached in New is the task's own, in its folder - named under attachments/, its agent's Read was refused (2026-11-17)
     from . import outputs
     outputs.take_in_summary(store, tid, ACTOR)

@@ -749,7 +749,8 @@ class SetupAndTroubleTests(unittest.TestCase):
         t = s.get_task(out['taskId'])
         self.assertEqual((t['Kind'], t['Status'], t['Source']), ('general', 'open', 'assistant'))
         # with no title named, the owner's sentence as said - a regex used to cut the verb off it (the owner, 2026-10-11)
-        self.assertEqual(out['title'], "set up a report that pulls last month's Zoho invoices every Monday"); self.assertEqual(t['Title'][:6], 'Set up')
+        self.assertEqual(out['title'], t['Title'])     # the receipt names the task as made
+        self.assertEqual(out['title'], "Set up a report that pulls last month's Zoho invoices every Monday")
         self.assertIn('Zoho invoices', t['Summary'])
         self.assertEqual([i['text'] for i in s.task_checklist(out['taskId'])],
                          ["set up a report that pulls last month's Zoho invoices every Monday"])

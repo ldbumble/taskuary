@@ -106,6 +106,11 @@ test("the rail row draws no +N in the age column, and the newest message on the 
   const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
   assert.doesNotMatch(view, /tq-pile-new|newMark/);
   assert.match(view, /: ageHover\(i\)\}>/);
+  // "+N" IS NEWS, in the server's words beside the title - the phone's "+3 new" (processing_unread.news_word); a folded FYI thread counts
+  // its mails in words of its own, never a "+N" of another meaning
+  assert.match(view, /\{!!i\.news && <span className="tq-pile-ref" data-tq-news=\{i\.new_n\}[^>]*>\{i\.news\}<\/span>\}/);
+  assert.match(view, /· \{i\.thread_n\} more on the thread/);
+  assert.doesNotMatch(view, />\+\{i\.thread_n\}</);
   // ...through funnelPile.subLine since 2026-11-15, which says the newest message's age only where it is not the gutter's own
   assert.match(view, /subLine\(i, why\)/); assert.match(readFileSync(fileURLToPath(new URL("../src/funnelPile.js", import.meta.url)), "utf8"), /latestLine\(i\) \? \[latestLine\(i\), other\(i\.last_at\)\]/);
 });

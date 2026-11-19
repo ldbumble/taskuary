@@ -609,12 +609,19 @@ def news_since_seen(view, read, allowed) -> dict:
                   key=lambda m: funnel_time(str(m['SentAt'])))
     seen = read.get('last_read_at') or read.get('read_at')
     new = [m for m in msgs if seen and not is_ours(m) and not is_auto(m) and not (units.get(str(m['MessageId'])) or {'read': True})['read']]
-    out = {'new_n': len(new)} if new else {}
+    out = {'new_n': len(new), 'news': news_word(len(new))} if new else {}
     if len(msgs) > 1:
         m = msgs[-1]
         out.update(last_at=str(m['SentAt']), latest={'who': 'You' if is_ours(m) else m.get('FromName') or m.get('FromEmail') or '',
                                                      'text': ' '.join(str(m.get('BodyText') or m.get('Subject') or '').split())[:160]})
     return out
+
+
+def news_word(n) -> str:
+    """WHAT "+N" MEANS ON A ROW, said once: the messages from others since the owner last opened it - "+3 new" on the desk's row and on the
+    phone's card alike (the row carries it as `news`). The desk drew "+N" for the mails folded on an FYI thread instead, and the phone's
+    "+3 new" for news: one mark, two meanings. A folded thread says its count in its own words ("· 2 more on the thread")."""
+    return f'+{n} new' if n else ''
 
 
 def arrived_at(store, card, task, view, allowed):

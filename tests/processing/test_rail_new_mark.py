@@ -72,3 +72,17 @@ def test_the_phone_says_it_short():
     item = {'who': 'Erin Blake', 'channel': 'email', 'ref': 'TQ-0007'}
     assert ra.source_line(item | {'new_n': 3}).endswith('TQ-0007 · +3 new')
     assert '+' not in ra.source_line(item)
+
+
+def test_plus_n_is_news_on_the_desk_and_on_the_phone(db):
+    """WHAT "+N" MEANS is one thing (processing_unread.news_word): the messages since he opened it. The desk drew "+N" for the mails folded
+    on an FYI thread and never the news; the phone said "+3 new" for the news. The row the page draws carries the phone's very words."""
+    from taskuary import remote_assistant as ra
+    store, tids = db
+    opened(store, tids[0])
+    for n in range(2): mail(store, TASKS[0][0], 0, tids[0], n=f':news{n}')
+    settle(store)
+    row = row_of(store, tids[0])
+    assert row['news'] == '+2 new', 'the desk row carries no news word'
+    assert ra.source_line(row).endswith(row['news']), 'the phone and the desk say two things'
+    assert not row_of(store, tids[1]).get('news')

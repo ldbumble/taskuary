@@ -566,7 +566,7 @@ export default function FeedView({ onOpenTask, active = true, top = null, stage 
           {/* ...A TASK HIT IS A PRESS OF ITS RAIL ROW (onPress - AssistantView pressRow, the Assistant's own opens' road): drawn at the click, the
               walk's light on its row; a task on no row (a closed one) by its link (the owner, 2026-11-18: "it does nothing then moves to new one slowly") */}
           <SearchEverything open={searchOpen} query={searchQ} onClose={() => { setSearchOpen(false); setSearchQ(""); }}
-            onOpenTask={(tid) => { searchPicked(); return onPress ? onPress(tid) : onOpenTask?.(tid); }}
+            onOpenTask={(tid, h) => { searchPicked(); return onPress ? onPress(tid, h) : onOpenTask?.(tid); }}
             onOpenMessage={(mid, h) => { searchPicked(); return onPull ? (onPull({ MessageId: mid, TaskId: h?.tid, Subject: h?.title }, { quiet: true }), true) : false; }}
             onPickSource={(next) => {
               searchPicked();

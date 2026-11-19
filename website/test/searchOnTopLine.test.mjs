@@ -15,7 +15,7 @@ test("the search bar is on the top line, and the rail no longer draws one", () =
 test("a hit goes on the canvas through the rail's own road, whatever the mode", () => {
   const f = read("FeedView.jsx");
   // ...a task as a press of its rail row, quietly (searchOpensRow.test.mjs); a mail by the pull, without a "Tell me about" line (searchPickQuiet)
-  assert.match(f, /onOpenTask=\{\(tid\) => \{ searchPicked\(\); return onPress \? onPress\(tid\) : onOpenTask\?\.\(tid\); \}\}/);
+  assert.match(f, /onOpenTask=\{\(tid, h\) => \{ searchPicked\(\); return onPress \? onPress\(tid, h\) : onOpenTask\?\.\(tid\); \}\}/);
   assert.match(f, /onOpenMessage=\{\(mid, h\) => \{ searchPicked\(\); return onPull \? \(onPull\(\{ MessageId: mid, TaskId: h\?\.tid, Subject: h\?\.title \}, \{ quiet: true \}\), true\) : false; \}\}/);
 });
 

@@ -101,7 +101,7 @@ import { summarize } from "./walkSummary.js";
 import { refreshToday, useCalendarToday } from "./calendarToday.js";
 import { onFirstRun, readFirstRun } from "./firstRunState.js";
 import FeedView from "./FeedView.jsx";
-import { MORE_PX, backAt, dueWord, holdsNew, levelOf, placed, pressOnto, pulledRow, rowOfTask, withWalk } from "./funnelPile.js";
+import { MORE_PX, backAt, dueWord, holdsNew, levelOf, madeRow, placed, pressOnto, pulledRow, rowOfTask, withWalk } from "./funnelPile.js";
 import { STAYS, dropHeld, ghostsOf, keepHeld, movedEntry } from "./movedFyi.js";
 import { isImportant, level as priorityOf } from "./priority.js";
 import { age, ago, band, bandUntil, plural } from "./timeWords.js";
@@ -3898,12 +3898,13 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     if (isCur || (table.folded && key === table.key)) { backToTable(key); return; }
     pull(key, null);
   };
-  // ...a task by number: its row when the rail holds it, else the task link's own road (a closed task is on no rail)
+  // ...a task by number: its row when the rail holds it, else the same pull with its row made at the press from the hit (madeRow, as New's) - by
+  // its link it went a hash round trip, the task left standing lit until the read came (a closed one searched while on another, 2026-11-19)
   // ...and a Search hit on a task too (FeedView onPress): it pulled `task:N`, which no rail row is keyed by
-  const pressRow = (n) => {
+  const pressRow = (n, hit = null) => {
     prefetchTask(api, n);
     const row = rowOfTask(pile?.items, n);
-    if (row) railPress(row.key); else openAppLink(`task=${n}`);
+    if (row) railPress(row.key); else openTaskCard({ tid: n, row: hit ? madeRow(n, hit.title) : null });
     return !!row;
   };
   pressRowRef.current = pressRow;

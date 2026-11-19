@@ -181,7 +181,7 @@ test("a task opened by its number - New's or the Assistant's just-made job - is 
   assert.match(hub, /const req = canvasRequestFromHash\(h, 0\);\s*readAhead\(req\);/);
   assert.match(hub, /const openTask = \(taskId, opts\) => \{\s*readAhead\(\{ kind: "task", tid: taskId \}\);/);
   // ...and the Assistant's open of a row the rail holds, which presses the row rather than follow the link
-  assert.match(view, /const pressRow = \(n\) => \{\s*prefetchTask\(api, n\);/);
+  assert.match(view, /const pressRow = \(n, hit = null\) => \{\s*prefetchTask\(api, n\);/);
   // ...and every read of the task while that chat is on the way waits for it: the write a just-started job makes re-read the task, and its
   // held head was drawn at once over an empty chat
   const page = src("TaskPage.jsx");

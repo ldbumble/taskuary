@@ -28,7 +28,8 @@ const ended = (s, output) => (ASKED[s.status] ? { result: ASKED[s.status], is_er
 export const eventsOf = (steps, running, tail = true) => steps.flatMap((s, i) => {
   const id = s.id || `t${i}`, output = String(s.output || "").trim();
   if (s.k === "tool") return [{ type: "tool_call", name: s.name, detail: { tool_call_id: id, args: argsOf(s), output,
-      ...(s.parent ? { parent: s.parent } : {}), ...(s.edit ? { edit: s.edit } : {}), ...(s.file ? { file: s.file } : {}) } },
+      ...(s.parent ? { parent: s.parent } : {}), ...(s.edit ? { edit: s.edit } : {}), ...(s.file ? { file: s.file } : {}),
+      ...(s.outcome ? { outcome: s.outcome } : {}), ...(s.times > 1 ? { times: s.times } : {}) } },
     ...(runs(s, running, tail && i === steps.length - 1) ? [] : [{ type: "tool_result", name: id, detail: { tool_call_id: id, ...ended(s, output) } }])];
   if (s.k === "plan") return [{ type: "tool_call", name: "TodoWrite", detail: { tool_call_id: id, args: { todos: s.items || [] } } },
     { type: "tool_result", name: id, detail: { tool_call_id: id, result: "" } }];

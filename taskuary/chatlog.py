@@ -687,6 +687,7 @@ def migrate_open(store, stop=None) -> int:
 
 
 # ── THE READER SWITCH (stage 7): the page's chat is the log's, behind the setting `chat_log` (0: the old build, for one release) ────────────
+# ...ON; `chat_log` = '0' falls back to the old build for one release
 def on(store) -> bool: return store.get_setting('chat_log', '1') != '0'
 
 
@@ -698,7 +699,13 @@ def serve(store, tid: int, level: str = None) -> dict:
     old = conversation.items(store, int(tid))
     if not on(store): return old
     migrate(store, tid, legacy=old)
+    # ..."working" is one fact (general.working): a turn the log holds at work while nothing works has either not begun yet - nothing of it is
+    # drawn until it has - or was left by a process that is gone (a restart): it is over, in place
+    if not old.get('working') and (t := _live(store, tid)):
+        with store.lock: n = store.cx.execute('SELECT COUNT(*) FROM chatlog WHERE Parent=?', (t['Id'],)).fetchone()[0]
+        if n or json.loads(t['Body'] or '{}').get('text'): update(store, tid, t['Key'], state='done')
     got = read(store, tid, level)
+    if not old.get('working'): got['items'] = [x for x in got['items'] if not (x['kind'] == 'turn' and x.get('state') in LIVE)]
     drawn = {x['id'] for x in got['items']}
     return {**old, 'items': got['items'], 'level': got['level'], 'pending': [p for p in old.get('pending') or [] if p.get('id') not in drawn],
             'rev': f"{old.get('rev', '')}:{got['rev']}:{got['level']}"}

@@ -21,7 +21,7 @@ import { AgentSteps } from "./AgentStepRows.jsx";
 import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd,  partsMessage, turnParts, workCount, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, lettersTurn, onYouTurn, placesLoose, looseCards, askedFirst, nextStands } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
-import { detailFor, useOwnDetail } from "./chatDetail.js";
+import { detailFor, ownDetail, useOwnDetail } from "./chatDetail.js";
 import { useChatDefaults } from "./DetailSlider.jsx";
 import { AnsweredPermission, PermissionCards } from "./AgentChannels.jsx";
 import { Hunk } from "./DiffView.jsx";
@@ -251,12 +251,12 @@ const Fold = ({ k, label, quiet = false, children }) => {
 };
 // ONE RULE FOR EVERY FOLD OF A TURN'S WORK: it is drawn round steps of work. One with none in it - only Taskuary's own notes, as a turn the app
 // started holds before its first step - read "Along the way ▸" over nothing he could see (the overnight walk, 2026-11-11): its notes stand open
-const WorkFold = ({ k, quiet = false, parts, draw }) => { const n = workCount(parts);
-  return n ? <Fold k={k} quiet={quiet} label={plural(n, "step")}>{parts.map((p, i) => draw(p, i, "everything"))}</Fold>
+const WorkFold = ({ k, quiet = false, parts, draw, line = "" }) => { const n = workCount(parts);
+  return n ? <Fold k={k} quiet={quiet} label={line || plural(n, "step")}>{parts.map((p, i) => draw(p, i, "everything"))}</Fold>
     : <>{parts.filter((p) => p.type !== "said").map((p, i) => draw(p, i, "everything"))}</>; };
 const TurnWorkView = ({ data, now, k }) => {
   const at = React.useContext(WorkCtx);
-  const key = foldKey(k), level = React.useContext(LevelCtx), chat = React.useContext(ChatCtx);
+  const key = foldKey(k), given = React.useContext(LevelCtx), level = data?.level && data.level !== "live" ? data.level : given, chat = React.useContext(ChatCtx);
   // ...AND A TURN THAT ENDED HAS NOTHING STILL AT WORK (the owner, 2026-11-05: a step kept its spinner under the answer): a call that never got
   // its result before the answer was filed is drawn done, never circling. IN A CHAT A STEP IS NEVER "FAILED" (the owner, 2026-11-05: "it's just a
   // internal thought failure, for the user the task is getting done. failure means nothing") - a TURN that failed says so in its own words
@@ -292,7 +292,7 @@ const TurnWorkView = ({ data, now, k }) => {
     // ...and WHAT IT SAID ON ITS WAY STAYS when the turn ends (the UX walk, 2026-11-18: its opening line "I'll check the email, then ..." went as the
     // summary took its place) - nothing drawn goes; its answer is added under it (stepsOf already leaves out what the answer says again)
     const out = (p) => p.type === "view" || p.type === "files" || p.type === "said", said = parts.filter(out), rest = parts.filter((p) => !out(p));
-    return <>{rest.some((p) => p.type !== "said") && <WorkFold k={`${key}:all`} quiet parts={rest} draw={draw} />}
+    return <>{rest.some((p) => p.type !== "said") && <WorkFold k={`${key}:all`} quiet parts={rest} draw={draw} line={data?.line || ""} />}
       {said.map((p, i) => draw(p, i, "everything"))}</>;
   }
   return <>{parts.map((p, i) => draw(p, i, level))}</>;
@@ -381,7 +381,7 @@ export function useConversation(tid, on) {
   // his line vanished, the chat read "at rest" over a turn at work, and his next line was drawn as heard): one that a later read overtook is dropped
   const asked = useRef(0), shown = useRef(0);
   // ...ONE READ OF THE TASK'S LIST AT A TIME, whichever view or listener asks (singleFlight.shared): a read on its way is joined, never doubled
-  const load = useCallback(() => { const n = ++asked.current, at = Date.now(); return (on ? shared(READS, tid, () => api.get(`/api/tasks/${tid}/conversation`, { params: { rev: rev.current } })).then(({ data: d }) => {
+  const load = useCallback(() => { const n = ++asked.current, at = Date.now(); return (on ? shared(READS, tid, () => api.get(`/api/tasks/${tid}/conversation`, { params: { rev: rev.current, level: ownDetail(tid) || "" } })).then(({ data: d }) => {
     if (n < shown.current) return false;
     shown.current = n;
     if (d?.same && LISTS.get(tid)) LISTS.get(tid)._at = at;
@@ -413,6 +413,9 @@ export function useConversation(tid, on) {
     return () => { clearInterval(t); off(); stop(); };
   }, [on, going, load, tid]);
   useEffect(() => (on ? onLive("task-changed", (ev) => { if (touches(ev, tid)) load(); }) : undefined), [on, tid, load]);
+  // ...HOW MUCH OF THE WORK IT SHOWS IS THE SERVER'S TO APPLY (chatlog.detailed, the one place): the chat's own choice changed is read again
+  useEffect(() => { const f = (e) => { if (String(e.detail?.tid) === String(tid)) load(); }; window.addEventListener("tq-chat-detail", f);
+    return () => window.removeEventListener("tq-chat-detail", f); }, [tid, load]);
   return { list, load };
 }
 // A TURN'S HEAD SAYS ONE TIME, SET ONCE (design round 5, I3): when it began in the chat (the list's `at`, conversation.dated) - at work and done
@@ -451,7 +454,7 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
     {!!words && !live && <CopyCorner text={words} label="Copy this answer" />}
     {!more && <div className="tq-aui-role">{name}{live ? <RunClock start={turnStart(t)} at={turnAt(t)} /> : <TurnTime t={t} />}</div>}
     <div className="tq-aui-agent-body">
-      <TurnWorkView data={{ parts }} now={live} k={t.id} />
+      <TurnWorkView data={{ parts, level: t.level, line: t.fold_line }} now={live} k={t.id} />
       {!!words && <SaidText text={words} mid={key} />}
       {/* ...A TURN THAT COULD NOT FINISH, WORTH ANOTHER TRY (its summary's `retry`): one button, never "send any message on this task to try
           again" (the 2026-11-18 walks) - pressed, it is his line "Try again." and the agent goes on */}

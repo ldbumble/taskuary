@@ -2598,12 +2598,13 @@ def assistant_state(task_id: int, rev: str = ''):
     return _revisioned(_assistant_payload(task_id), rev)
 
 @app.get('/api/tasks/{task_id}/conversation')
-def conversation_list(task_id: int, rev: str = ''):
-    """THE TASK'S CHAT, ONE LIST FOR EVERY KIND OF AGENT (conversation.items): what the page draws, in order, and what waits by the box.
-    `rev`: the list the page already holds - unchanged, only its name comes back."""
-    from . import conversation
+def conversation_list(task_id: int, rev: str = '', level: str = ''):
+    """THE TASK'S CHAT, ONE LOG FOR EVERY KIND OF AGENT (chatlog.serve): what the page draws, in order, and what waits by the box.
+    `rev`: the list the page already holds - unchanged, only its name comes back. `level`: how much of the work it shows, the chat's own
+    choice (summary, steps, everything) - else its kind's setting."""
+    from . import chatlog
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    got = conversation.items(store, task_id)
+    got = chatlog.serve(store, task_id, level or None)
     return _revisioned(got, rev)
 
 @app.post('/api/tasks/{task_id}/assistant/session')

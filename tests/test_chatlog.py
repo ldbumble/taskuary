@@ -267,3 +267,32 @@ def test_migration_freezes_what_he_saw_and_a_turn_at_work_goes_on_in_its_own_row
     chatlog.feed(s, tid, 'sid9', 'trace', {'type': 'progress', 'name': 'text', 'detail': 'The price is on the second page.'})
     t = s._rows("SELECT Id FROM chatlog WHERE Key='t:l-2:0'")[0]['Id']
     assert [r['Parent'] for r in s._rows("SELECT Parent FROM chatlog WHERE TaskId=? AND Kind='step' AND Src LIKE 'sid9:%'", (tid,))] == [t]
+
+
+def test_the_page_reads_the_log_through_a_timeline_and_nothing_he_saw_moves():
+    """THE READER SWITCH (stage 7): what the page reads is the log - a message, a turn with its reply card, his line, a restart in the middle,
+    his Send and a second press. Every read keeps what the one before drew in its place (flow_breaks), and the card stands where it stood."""
+    from taskuary import cardqueue, conversation, general
+    s, tid = world(); s.set_setting('chat_log', '1', 'owner')
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'e1', 'Channel': 'email', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
+                         'ToEmail': 'alex@northwind.example', 'Subject': 'Review?', 'BodyText': 'Your review of the tool? Erin', 'Status': 'routed'})
+    reads, was = [], None
+    def look():
+        nonlocal was
+        cardqueue._SEEN.clear()
+        got = chatlog.serve(s, tid)
+        assert conversation.flow_breaks(got, was) == [], conversation.flow_breaks(got, was)
+        was = got; reads.append([x['id'] for x in got['items']]); return got
+    look()
+    conversation.hear(s, tid, turn=True); look()
+    rid = _rv(s, tid, mid, text='Hi Erin, the review is attached. Alex')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Drafted the reply to Erin.'); got = look()
+    assert [c['review'] for x in got['items'] for c in x.get('cards') or [] if c['status'] == 'pending'] == [rid]
+    general.wait_line(s, tid, 'Add that the pricing page is out of date', line_id='l-2'); conversation.hear(s, tid, ['l-2'], turn=True); look()
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Noted - the reply says so now.'); look()
+    chatlog._FEEDS.clear()                                               # ...a restart in the middle
+    look()
+    s.decide_review(rid, 'approved', 'Hi Erin, the review is attached. Alex', 'owner'); got = look()
+    s.decide_review(rid, 'approved', 'Hi Erin, the review is attached. Alex', 'owner'); look()      # ...pressed twice: nothing moves
+    assert all(r[:len(a)] == a for a, r in zip(reads, reads[1:])), reads
+    assert len({c['review'] for x in got['items'] for c in x.get('cards') or []}) <= 1

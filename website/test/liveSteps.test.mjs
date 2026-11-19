@@ -59,7 +59,7 @@ test("a running turn shows its words, its steps counted SHUT, and ONE live line 
   assert.match(ws, /if \(now\) \{\s*const shown = \(p\) => \["said", "view", "files"\]\.includes\(p\.type\)[^]*?<WorkFold k=\{`\$\{key\}:all`\} quiet parts=\{rest\}/);
   assert.doesNotMatch(ws, /data-tq-live-steps=""|LIVE_SHOWN/);
   assert.match(ws, /doing \? <span className="tq-aui-working-line" data-tq-working-line="" title=\{doing\}>\{doing\}<\/span> : null/);
-  assert.match(ws, /const WorkFold = \(\{ k, quiet = false, parts, draw \}\) => \{ const n = workCount\(parts\);\s+return n \? <Fold k=\{k\} quiet=\{quiet\} label=\{plural\(n, "step"\)\}>/, "an ended turn folds to N steps");
+  assert.match(ws, /const WorkFold = \(\{ k, quiet = false, parts, draw, line = "" \}\) => \{ const n = workCount\(parts\);\s+return n \? <Fold k=\{k\} quiet=\{quiet\} label=\{line \|\| plural\(n, "step"\)\}>/, "an ended turn folds to N steps - or the line the server reads it as (chatlog.fold_line)");
   // ...and a fold with no step in it is never drawn: "Along the way ▸" over a turn the app started, before its first step (the overnight walk, 2026-11-11)
   assert.doesNotMatch(ws, /"Along the way"/);
   assert.match(ws, /: <>\{parts\.filter\(\(p\) => p\.type !== "said"\)\.map\(\(p, i\) => draw\(p, i, "everything"\)\)\}<\/>; \};/, "its notes stand open");

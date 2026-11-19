@@ -117,7 +117,7 @@ def create(store, channel: str, source: str, rows: list, actor: str = 'router') 
 def _let_in(store, tid, rows, first, source):
     for n, r in enumerate(rows, first):
         conv = r.get('ConversationId') or f"m{r['MessageId']}"
-        store.arrive(r['MessageId'], tid, 'routed')
+        store.arrive(r['MessageId'], tid, 'routed', decided=True)   # the batch is these rows' verdict: none is triaged one by one
         store.add_route(r['MessageId'], tid, 'batch', r.get('RankValue'),
                         f"item {n} of {task_ref(tid)}'s batch" + (f" - {r['RankWhy']}" if r.get('RankWhy') else ''), [], 'rank')
         store.add_batch_item(tid, conv, r['MessageId'], n, _title(r, source), r.get('SourceLink'))

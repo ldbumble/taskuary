@@ -64,7 +64,7 @@ class DevPhoneTests(unittest.TestCase):
         with concierge.delivering(concierge.PHONE), devphone.armed(self.s), \
              mock.patch.object(waitroom, 'add', return_value={'delivered': 0}) as add:
             said = concierge.read_op(self.s, 'tell_agent', {'task': task_ref(self.tid), 'text': 'use the main branch for the fixture'})
-        add.assert_called_once_with(self.s, self.tid, 'use the main branch for the fixture', 'owner')
+        self.assertEqual(add.call_count, 1); self.assertEqual(add.call_args.args, (self.s, self.tid, 'use the main branch for the fixture', 'owner'))
         mine = [c for c in self.s.list_comments(self.tid) if c['Actor'] == 'owner']
         self.assertEqual(mine[-1]['Body'], 'use the main branch for the fixture')
         self.assertIn('when it stops', said)

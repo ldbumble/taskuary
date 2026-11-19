@@ -1914,7 +1914,7 @@ export const connCardOf = (c, sources, go, plain = false) => {
   // ...the catalogue's own line, in plain words too (connectorCatalog.cardStatus) - and its state said, not read back out of those words
   const status = cardStatus(c, { roles, srcs, label: m.srcLabel || "sources", read: firstRead(c).replace(/^ · /, ""), checked: c.LastSyncAt ? timeAgo(c.LastSyncAt) : "",
     keyNote: c.HasSecret ? "key saved" : ["ollama", "local_whisper"].includes(c.Type) ? "local — no key needed" : c.Type === "stt_server" ? "your server — key optional" : "no key yet" });
-  const [state, said] = plain ? plainState(c) : [c.LastError ? "failing" : c.Active ? "on" : "off", status];
+  const [state, said] = plain ? plainState(c) : [PLAIN_LIT[connStateOf(c)] || "failing", status];
   // the product's own logo wins over the channel glyph: five AI cards sharing one sparkle,
   // or Jira and Linear both wearing 'boards', tells you nothing about which is which
   return { key: `c${c.ConnectorId}`, type: c.Type, title: c.Name, desc: said, state, plain,

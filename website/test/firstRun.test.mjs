@@ -166,10 +166,14 @@ test("a catalogue card and its section say themselves in plain words", async () 
     "on · brings in work · 1 of 2 chat ids on · checked 5m ago");
   assert.equal(cardStatus({ Active: 0, HasSecret: 1 }, { roles: ["tool"], keyNote: "key saved" }), "switched off · agents can use it · key saved");
   assert.equal(cardStatus({ Active: 1, LastError: "401" }, { roles: ["tool"], keyNote: "key saved" }), "on · agents can use it · key saved · last test failed");
+  // ...and a sign-in to do said as the server's state says it, first (connectorcatalog.state)
+  assert.equal(cardStatus({ Active: 1, LastError: "invalid_grant", State: { state: "signed_out", line: "Needs sign-in" } }, { roles: ["trigger"], srcs: [], label: "Mailboxes" }),
+    "needs sign-in · brings in work · no mailboxes yet");
+  assert.equal(cardStatus({ Active: 1, State: { state: "not_signed_in", line: "Not signed in" } }, { roles: ["tool"], keyNote: "no key yet" }), "not signed in · agents can use it · no key yet");
   for (const w of ["trigger", "tool", "0/0"]) assert.doesNotMatch(blank, new RegExp(w));
   // ...and the card's state is said beside the words, never read back out of them
   const cv = read("ConnectorsView.jsx");
-  assert.match(cv, /\[c\.LastError \? "failing" : c\.Active \? "on" : "off", status\]/);
+  assert.match(cv, /\[PLAIN_LIT\[connStateOf\(c\)\] \|\| "failing", status\]/, "its light is the server's state too");
   assert.equal(cardState({ state: "off", desc: blank }), "off");
   assert.equal(sectionName("Observability"), "Monitoring & alerts"); assert.equal(sectionName("Agentic web"), "Web search & reading"); assert.equal(sectionName("Email"), "Email");
   assert.equal((cv.match(/label: sectionName\(g\.title\)/g) || []).length, 2, "the rail and the first run's chips"); assert.match(cv, /: sectionName\(shown\.title\)\}/);

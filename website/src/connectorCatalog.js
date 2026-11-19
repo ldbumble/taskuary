@@ -58,10 +58,13 @@ const ROLE_SAID = { trigger: "brings in work", feed: "shows new items", report: 
 // its mailboxes (chats, tables) are on, and its last check. `c`: the connector's row; `srcs`: its own sources, or null where it has none
 export function cardStatus(c, { roles = [], srcs = null, label = "sources", keyNote = "", read = "", checked = "" } = {}) {
   const on = (srcs || []).filter((s) => s.Active).length, unit = String(label).split(" — ")[0].toLowerCase();
-  return [c.Active ? "on" : c.HasSecret || (srcs || []).length ? "switched off" : NOT_SET_UP,
+  // ...a card on but never signed in, or lapsed, says so first, in the server's words (connectorcatalog.state, sent as State): Gmail's
+  // refused sign-in read "on · ... · last test failed" on Connections while the bell said signed out (2026-11-19)
+  const st = c.State?.state, sign = st === "signed_out" || st === "not_signed_in";
+  return [sign ? c.State.line.toLowerCase() : c.Active ? "on" : c.HasSecret || (srcs || []).length ? "switched off" : NOT_SET_UP,
     roles.map((r) => ROLE_SAID[r] || r).join(", "),
     srcs ? (srcs.length ? `${on} of ${srcs.length} ${unit} on` : `no ${unit} yet`) : keyNote,
-    c.LastError ? "last test failed" : c.LastSyncAt ? `${read ? `${read} · ` : ""}checked ${checked}` : ""].filter(Boolean).join(" · ");
+    c.LastError ? (st === "signed_out" ? "" : "last test failed") : c.LastSyncAt ? `${read ? `${read} · ` : ""}checked ${checked}` : ""].filter(Boolean).join(" · ");
 }
 // ...and the state a card that is not set up says, one wording for every kind (an MCP card said "not added", a data card "not set up")
 export const NOT_SET_UP = "not set up";

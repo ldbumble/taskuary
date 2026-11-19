@@ -2,6 +2,7 @@
 server writes about when, or about how many, asks here; website/src/timeWords.js is the page's twin and a test holds the two to
 the same words. Each surface had grown its own: the wall said "47h ago" where the page said "2d ago", the walk "5 min ago" beside
 the rail's "5m", the asks block "yesterday" for anything a day old, and a stamp a minute ahead read "-1 min ago" (2026-10-18)."""
+import re
 from datetime import datetime
 
 
@@ -10,12 +11,23 @@ def plural(n, one: str, many: str = None) -> str:
     return f"{n} {one if n == 1 else many or one + 's'}"
 
 
-def mins(stamp, now: datetime = None):
-    """Minutes from `stamp` to `now` - past is positive, ahead negative. None when it is no time at all."""
+def stamp(s) -> datetime | None:
+    """ONE STAMP READER: a stored stamp as this machine's local, naive time - what every stamp is kept in (store.norm_stamp) - and one that
+    names its own zone ('...Z', '+02:00') turned into it, never read as if it were local already. None when it is no time at all."""
+    if isinstance(s, datetime): return s.astimezone().replace(tzinfo=None) if s.tzinfo else s
+    t = str(s or '').strip().replace('T', ' ')
+    z = re.search(r'(Z|[+-]\d\d:?\d\d)$', t[19:], re.I) if len(t) > 19 else None
     try:
-        d = stamp if isinstance(stamp, datetime) else datetime.fromisoformat(str(stamp)[:19].replace('T', ' '))
-        return ((now or datetime.now()) - d).total_seconds() / 60
+        d = datetime.fromisoformat(t[:19])
+        if z: d = datetime.fromisoformat(t[:19] + ('+00:00' if z[1].upper() == 'Z' else z[1])).astimezone().replace(tzinfo=None)
+        return d
     except (TypeError, ValueError): return None
+
+
+def mins(at, now: datetime = None):
+    """Minutes from `at` to `now` - past is positive, ahead negative. None when it is no time at all."""
+    d = stamp(at)
+    return None if d is None else ((now or datetime.now()) - d).total_seconds() / 60
 
 
 def span(m, long: bool = False, exact: bool = False) -> str:

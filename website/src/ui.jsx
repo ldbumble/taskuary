@@ -1008,8 +1008,8 @@ export const LifecycleChip = ({ kind, phase, compact = false, sx = {} }) => {
       fontSize: compact ? 11 : 11.5, fontWeight: 500, "& .MuiChip-label": { px: compact ? 0.7 : 0.9 }, ...sx }} />;
 };
 
-// a stamp's age read in the server's zone (asUtc), said by the one rule (timeWords.ago)
-export const timeAgo = (s) => (s ? ago(asUtc(String(s))) : "");
+// a stamp's age, said by the one rule (timeWords.ago, which reads every stamp in the server's zone)
+export const timeAgo = (s) => (s ? ago(s) : "");
 
 // Bodies arrive as HTML (email) or oddly-spaced stripped text - make them readable.
 // A MAIL SYSTEM'S EXTERNAL-SENDER BANNER is not something anybody said (the owner, 2026-09-23: "this email ... template of all

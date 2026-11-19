@@ -26,8 +26,8 @@ EV = '_evidence'         # a fact's own ids (usual.py), carried beside the line'
 
 
 def _dt(s):
-    try: return datetime.fromisoformat(str(s or '').replace('T', ' ')[:19])
-    except ValueError: return None
+    from .timewords import stamp
+    return stamp(s)
 
 
 def working_days(since, now: datetime = None) -> int:

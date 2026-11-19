@@ -6,6 +6,23 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { age, ago, agoMins, band, bandUntil, dur, durSince, minsSince, plural, span } from "../src/timeWords.js";
+import { asUtc, setTz } from "../src/dates.js";
+
+// ONE STAMP READER (dates.asUtc): a server stamp is the SERVER's local time. The rail's band and age read it in the BROWSER's zone while the
+// task's "5m ago" (ui.timeAgo) and its date (fmtDateTime) read it in the server's - one stamp, two ages, whenever the zones differ.
+test("a server stamp reads one age on the rail and on the task, whatever zone the browser is in", () => {
+  const zone = "Pacific/Auckland";
+  const parts = (d) => Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: zone, hourCycle: "h23", year: "numeric", month: "2-digit",
+    day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(d).map((p) => [p.type, p.value]));
+  const p = parts(new Date(Date.now() - 5 * 60000)), stamp = `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`;
+  setTz(zone);
+  try {
+    const task = agoMins((Date.now() - asUtc(stamp).getTime()) / 60000);     // the task's road: asUtc, then the one rule
+    assert.equal(task, "5m ago");
+    assert.deepEqual([ago(stamp), age(stamp), band(stamp)], [task, "5m", "< 15m"], "the rail read the stamp in the browser's zone");
+    assert.equal(ago(new Date(Date.now() - 5 * 60000).toISOString()), "5m ago", "a stamp naming its own zone is read as written");
+  } finally { setTz(""); }
+});
 
 const now = new Date("2026-10-18T09:00:00").getTime();
 const at = (m) => new Date(now - m * 60000).toISOString();

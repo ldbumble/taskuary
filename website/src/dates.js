@@ -35,9 +35,11 @@ const tzOffsetMin = (d) => {
   const m = part.replace("GMT", "").match(/([+-]?)(\d+)(?::(\d+))?/) || [0, "+", "0"];
   return (m[1] === "-" ? -1 : 1) * (parseInt(m[2] || 0) * 60 + parseInt(m[3] || 0));
 };
+// ...and a stamp that names its own zone ("...Z", "+02:00") is read as written: "Z" glued on after it read nothing (Invalid Date)
+const ZONED = /(?:Z|[+-]\d\d:?\d\d)$/i;
 export const asUtc = (s) => {
-  const iso = String(s || "").replace(" ", "T");
-  if (!TZ) return new Date(iso);                       // blank = this browser IS the server's zone
+  const iso = String(s || "").trim().replace(" ", "T");
+  if (!TZ || ZONED.test(iso)) return new Date(iso);    // blank = this browser IS the server's zone
   try { return new Date(Date.parse(iso + "Z") - tzOffsetMin(new Date(iso + "Z")) * 60000); }
   catch { return new Date(iso); }
 };

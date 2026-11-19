@@ -67,3 +67,17 @@ def test_no_module_pluralises_a_count_by_hand():
     hits = [f'{p.relative_to(ROOT)}:{n}: {s[:80]}' for p in sorted((ROOT / 'taskuary').rglob('*.py')) if p.name != 'timewords.py'
             for n, s in strings(p) if counted_by_hand(s)]
     assert not hits, 'say a count with taskuary.timewords.plural:\n' + '\n'.join(hits)
+
+
+def test_one_stamp_reader_and_one_age_for_every_surface():
+    """ONE STAMP READER (timewords.stamp): a stamp naming its own zone is turned into this machine's local time, never read as if it were
+    local already - timewords, the agent's open-items list (context._age) and the rulebook's line all read it, and say one age."""
+    from taskuary import context, rulebook
+    now = datetime.now().replace(microsecond=0)
+    utc = (now.astimezone() - timedelta(hours=3)).astimezone(__import__('datetime').timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    local = (now - timedelta(hours=3)).strftime('%Y-%m-%d %H:%M:%S')
+    assert tw.stamp(utc) == tw.stamp(local) == now - timedelta(hours=3)
+    assert tw.ago(utc, now) == tw.ago(local, now) == '3h ago'
+    assert context._age(utc) == context._age(local) == tw.ago(local)          # the agent's list said 'today' where the rail said '3h ago'
+    assert rulebook.ago(utc, now) == rulebook.ago(local, now) == '3 hours ago'
+    assert tw.stamp('not a date') is None and tw.stamp(None) is None

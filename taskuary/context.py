@@ -435,9 +435,9 @@ OPEN_ITEMS, OPEN_ITEM_CHARS = 40, 140
 
 
 def _age(at) -> str:
-    try: d = (datetime.now() - datetime.fromisoformat(str(at)[:19].replace('T', ' '))).days
-    except ValueError: return ''
-    return 'today' if d < 1 else f'{d}d' if d < 14 else f'{d // 7}w'
+    "How old, as every surface says it (timewords.ago): '3d ago'."
+    from .timewords import ago
+    return ago(at)
 
 
 def _asks(t: dict) -> str:

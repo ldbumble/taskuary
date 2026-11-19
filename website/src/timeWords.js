@@ -2,7 +2,10 @@
 // about when, or how many, asks here; taskuary/timewords.py is the server's twin and a test holds the two to the same words. Each
 // surface had grown its own: the walk said "40 min" where the task list said "40m ago", the Hub "47h ago" where the page said
 // "2d ago", and "asked you 5m ago" was typed twice (2026-10-18).
-const ms = (x) => (x instanceof Date ? x.getTime() : typeof x === "number" ? x : new Date(String(x).replace(" ", "T")).getTime());
+// ...ONE STAMP READER: a server stamp is the SERVER's local time (dates.asUtc), never the browser's - read here as a browser-zone string, the
+// rail's age and the task's "5m ago" (ui.timeAgo, through asUtc) said two ages of one stamp whenever the two zones differ
+import { asUtc } from "./dates.js";
+const ms = (x) => (x instanceof Date ? x.getTime() : typeof x === "number" ? x : asUtc(String(x)).getTime());
 
 export const plural = (n, one, many) => `${n} ${n === 1 ? one : many || `${one}s`}`;
 // what came with a task: its files and the documents its messages link to - "6 attachments · 2 links", '' for neither

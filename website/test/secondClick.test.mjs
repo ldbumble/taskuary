@@ -69,3 +69,27 @@ test("the page installs it once, at start", () => {
   installSecondClick(doc);
   assert.equal(doc.__tqSecondClick, true);
 });
+
+// THE NEXT CARD DRAWN UNDER A STILL POINTER (design round 4, 2026-11-19): Send on the first of two letters, the second card drew where the press
+// had landed seconds later - after the agent's answer - and the next press sent a letter he never read
+test("a control that came under the pressed spot takes no press for its first moment, however long after the press it came", () => {
+  const on = {}; let t = 0, under = null, check = null;
+  const doc = { addEventListener: (k, f) => { on[k] = f; }, removeEventListener: (k) => { delete on[k]; }, elementFromPoint: () => under };
+  installSecondClick(doc, { now: () => t, watch: (f) => { check = f; return () => { check = null; }; } });
+  const control = () => { const c = { matches: () => false, contains: (x) => x === c, disabled: false }; c.closest = () => c; return c; };
+  const click = (target, x = 100, y = 200) => { const e = { target, timeStamp: t, clientX: x, clientY: y, isTrusted: true, stopped: false,
+    preventDefault() {}, stopImmediatePropagation() { this.stopped = true; } }; on.click(e); return e; };
+  const first = control(), second = control();
+  under = first; t = 1000; click(first);
+  t = 9000; under = second; check();                      // ...drawn eight seconds on, when the agent answered
+  t = 9150; assert.ok(click(second).stopped, "a press a beat after it came there is the hand's, not his choice of it");
+  t = 9500; assert.ok(click(second).stopped, "...within its first moment");
+  t = 10100; assert.ok(!click(second).stopped, "a moment later it is his to press");
+  // ...one that comes alive there (greyed while the agent thought) is new from then
+  const third = control(); third.disabled = true; under = third; t = 20000; check(); click(second);
+  t = 26000; third.disabled = false; check();
+  t = 26200; assert.ok(click(third).stopped, "lit under the pointer a beat ago");
+  // ...and a hand that moved off the spot is a new press wherever it lands
+  t = 40000; click(first); under = second; t = 41000; check(); on.pointermove({ clientX: 300, clientY: 200 });
+  t = 41100; assert.ok(!click(second, 300, 200).stopped);
+});

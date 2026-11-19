@@ -548,15 +548,15 @@ def three_emails(s):
     return tid, a, b, c
 
 
-def test_the_phone_line_shows_every_email_in_full_with_picks(s):
+# ONE CARD AT A TIME (cardqueue): the phone offers the letter that stands, in full, and nothing held behind it - a held letter is never
+# sent from a pick he could not see on the desk
+def test_the_phone_line_shows_the_standing_email_in_full_and_none_held_behind_it(s):
     tid, a, b, c = three_emails(s)
     text, rows = asks.phone_text(s, s.get_task(tid), 'approve', '3 of 3 emails drafted, waiting on your yes')
-    for words in ('Screening is waiting on the vendor file.', 'Center Documents are all in.', 'blocked on two approvals.',
-                  'ray@northwind.example', 'Omar Keller', 'no address yet'):
-        assert words in text
+    assert 'Screening is waiting on the vendor file.' in text and 'ray@northwind.example' in text
+    assert 'Center Documents are all in.' not in text and 'blocked on two approvals.' not in text
     labels = [r[0] for r in rows]
-    assert 'Send to Ray Colton' in labels and 'Send to paula@northwind.example' in labels and 'Send both ready ones' in labels
-    assert 'Drop the one to Omar Keller' in labels and not any(l == 'Send to Omar Keller' for l in labels)
+    assert 'Send to Ray Colton' in labels and not [l for l in labels if 'paula' in l or 'Omar' in l or 'ready ones' in l]
     assert all(f'{n} · ' in text for n in range(1, len(rows) + 1))
 
 
@@ -577,15 +577,6 @@ def test_a_send_pick_sends_that_email_and_only_it(s):
     assert s.get_review(a)['Status'] == 'approved' and s.get_review(b)['Status'] == 'pending'
 
 
-def test_send_both_sends_the_ready_ones(s):
-    tid, a, b, c = three_emails(s)
-    _, rows = asks.phone_text(s, s.get_task(tid), 'approve', 'x')
-    with mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent, mock.patch.object(outbound, 'send_block', return_value=''), \
-         mock.patch('taskuary.learn.learn_from'):
-        remote_assistant.run_act(s, dict(rows)['Send both ready ones'], None)
-    assert sent.call_count == 2 and s.get_review(c)['Status'] == 'pending'
-
-
 def test_an_email_changed_after_it_was_shown_is_not_sent(s):
     tid, a, b, c = three_emails(s)
     _, rows = asks.phone_text(s, s.get_task(tid), 'approve', 'x')
@@ -596,8 +587,12 @@ def test_an_email_changed_after_it_was_shown_is_not_sent(s):
 
 
 def test_a_drop_pick_drops_that_email(s):
-    tid, a, b, c = three_emails(s)
-    _, rows = asks.phone_text(s, s.get_task(tid), 'approve', 'x')
+    tid = made(s, LONG)
+    slots.add(s, tid, [{'to': 'Omar Keller', 'about': 'AP Invoices'}, {'to': 'Ray Colton <ray@northwind.example>', 'about': 'Screening'}], 'owner')
+    c = slots.draft(s, tid, 'Hi Omar - AP Invoices are blocked on two approvals.', to='Omar Keller', subject='AP Invoices')['review_id']
+    a = slots.draft(s, tid, 'Hi Ray - Screening is waiting on the vendor file.', to='ray@northwind.example', subject='Screening')['review_id']
+    text, rows = asks.phone_text(s, s.get_task(tid), 'approve', 'x')
+    assert 'no address yet' in text and 'Send to Omar Keller' not in dict(rows)
     remote_assistant.run_act(s, dict(rows)['Drop the one to Omar Keller'], None)
     assert s.get_review(c)['Status'] == 'rejected' and s.get_review(a)['Status'] == 'pending'
 
@@ -615,7 +610,7 @@ def test_the_phone_gets_the_full_text_and_its_picks(s):
          mock.patch.object(remote_assistant, 'quiet', return_value=True), mock.patch.object(remote_assistant, '_offer') as offer, \
          mock.patch.object(remote_assistant, 'send') as send:
         asks.check(s, tid)
-    assert 'blocked on two approvals.' in send.call_args[0][3] and offer.called
+    assert 'Screening is waiting on the vendor file.' in send.call_args[0][3] and offer.called
 
 
 # A PICK FROM THE PHONE OF ONE ITS AGENT TOOK BACK (the stress round, 2026-11-18): "the one to paula@... was already closed_unsent" - the

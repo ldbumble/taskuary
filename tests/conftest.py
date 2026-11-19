@@ -800,13 +800,10 @@ def the_basic_flow(request):
         prev.setdefault(store, {})
         key = int(tid)
         bad.extend(f'task {tid}: {b}' for b in conversation.flow_breaks(got, prev[store].get(key)) if f'task {tid}: {b}' not in bad)
+        # ...AND NOTHING THE STORE MADE IS MISSING FROM IT (chatlog.missing: the permanent compare, naming the road that made it)
+        from taskuary import chatlog
+        bad.extend(f'task {tid}: {b}' for b in chatlog.missing(store, key, got) if f'task {tid}: {b}' not in bad)
         if os.environ.get('FLOW_DUMP'): print('LIST', tid, [(x['id'], x.get('state', ''), [(c['id'], c['status']) for c in x.get('cards') or []]) for x in got['items']], got.get('working'))
-        # ...SHADOW_REPORT=<file>: the chat's log (chatlog.read) beside the list, every difference written down, none failing (one-log stage 2)
-        if (rep := os.environ.get('SHADOW_REPORT')):
-            from taskuary import chatlog
-            from taskuary import conversation_legacy
-            if (d := chatlog.shadow(conversation_legacy.items(store, key), got)):
-                with open(rep, 'a', encoding='utf-8') as f: f.write('\t'.join((request.node.nodeid, f'task {tid}', d)) + '\n')
         prev[store][key] = got
         return got
     conversation.items = items

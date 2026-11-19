@@ -489,20 +489,6 @@ def failed(store, tid: int) -> None:
     if live: update(store, tid, live['Key'], state='failed')
 
 
-def _shape(xs: list) -> list:
-    "What the screen draws, in order, by what each thing is: a turn by its words and its state, anything else by its own name."
-    return [('turn', x.get('state') if x.get('state') in LIVE else 'over', (x.get('text') or '')[:60]) if x['kind'] == 'turn'
-            else (x['kind'], x['id']) for x in xs if x['kind'] != 'step']
-
-
-def shadow(legacy: dict, log: dict) -> str:
-    "The first place the log's chat and the old build's list (conversation_legacy) draw differently - '' where they agree."
-    a, b = _shape(legacy.get('items') or []), _shape(log.get('items') or [])
-    if a == b: return ''
-    i = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
-    return f'at {i}: list {a[i:i + 3]} | log {b[i:i + 3]} ({len(a)} vs {len(b)})'
-
-
 def his(body) -> dict:
     from . import general
     return general.his_line(body)
@@ -908,6 +894,28 @@ def closed(store, tid: int, out: list) -> None:
     if not a or not (x := next((x for x in out if x['id'] == f"p:{a['Id']}"), None)): return
     x['closes'] = True
     if (note := next((c['note'] for c in reversed(store.closeouts(tid)) if c['what'] == 'closed'), '')): x['text'] = f"{x['text'].rstrip('.')} - {note.rstrip('.')}."
+
+
+def missing(store, tid: int, got: dict) -> list:
+    """THE PERMANENT COMPARE (the owner's GO, 2026-11-19: "fix it once and for all"): what the store made for task `tid` against what the
+    chat `got` shows - every answer filed has its turn, every line of his heard has its item, the card that waits on his press stands - each
+    gap one sentence naming the road that made the thing. Read at rest only (a turn at work shows its card and answer at its end). [] when whole."""
+    from . import cardqueue, general, sessionrecord
+    if got.get('working'): return []
+    ids = {x['id'] for x in got.get('items') or []} | {p['id'] for p in got.get('pending') or []}
+    answers = {x.get('answer') for x in got.get('items') or [] if x['kind'] == 'turn'} | {x['id'] for x in got.get('items') or [] if x['kind'] == 'note'}
+    cards = {c['review'] for x in got.get('items') or [] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])}
+    out = []
+    for c in store.list_comments(int(tid), internal=True):
+        if c.get('ActorType') == general.ASSISTANT_TYPE and f"comment-{c['CommentId']}" not in answers and f"n:c{c['CommentId']}" not in answers:
+            out.append(f"i: answer comment-{c['CommentId']} filed by {c.get('Actor')!r} is in no turn")
+        if c.get('ActorType') == general.USER_TYPE and c.get('Actor') != general.BRIEF_ACTOR and (k := c.get('LineId')) and k not in ids:
+            out.append(f"i: his line {k} is drawn nowhere")
+    for rid in (x for x in cardqueue.state(store, int(tid))['live'] if x != cardqueue.LAND):
+        rv = store.get_review(rid) or {}
+        if rv.get('Status') == 'pending' and rid not in cards:
+            out.append(f"i: the card that waits on him, review {rid} ({rv.get('Kind')} from {rv.get('Origin') or rv.get('DraftBy') or 'its road'}), is drawn nowhere")
+    return out
 
 
 def _halted(store, tid: int) -> str:

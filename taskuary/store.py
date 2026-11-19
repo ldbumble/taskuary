@@ -5596,10 +5596,10 @@ class SQLiteStore:
 
     # reviews (orphans - reviews whose task is gone - never surface)
     def _poke_review(self, review):
-        """A review changes both places that render it: its message and its task - and a card that can stand now stands in the task's chat
-        log from this moment, in the turn that raised it (chatlog.advance: every road that raises or writes a review comes through here)."""
+        """A review changes both places that render it: its message and its task - and its card in the task's chat log is written HERE, at
+        the source, as it changes (chatlog.advance: every road that raises, presses or settles a review comes through here)."""
         if not review: return
-        if review.get('TaskId') and review.get('Status') == 'pending':
+        if review.get('TaskId'):                # ...raised, pressed, sent, withdrawn, set aside or failed: its card says so where it stood
             from . import chatlog
             chatlog.advance(self, review['TaskId'])
         kinds = []

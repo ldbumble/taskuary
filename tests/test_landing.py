@@ -396,7 +396,7 @@ class LandingTests(unittest.TestCase):
             with self.assertRaises(landing.Refused): landing.land(self.s, self.tid, 'push')
         self.assertFalse(self.pushed())
         [line] = [what for _, _, what, *_ in general.presses(self.s, self.tid) if 'Push' in what]
-        self.assertIn('REFUSED', line); self.assertIn('nothing went out', line)
+        self.assertIn('it did not go', line); self.assertIn('failed to push', line, "git's own why, in say.owner's words")
         [said] = told
         self.assertIn('was refused', said); self.assertIn('rebase', said)
         self.assertTrue(landing.state(self.s, self.tid)['ask'], 'the question stays: Push is still one press once the agent has rebased')

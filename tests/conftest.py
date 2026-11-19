@@ -5,7 +5,7 @@ config and opens SQLite at import time.  The guards below are deliberately test-
 code does not gain a pytest switch and a unit test can still replace a guarded boundary with its
 own fake.  Real local services are reachable only after a test registers its ephemeral port.
 """
-import hashlib, os, platform, shutil, socket, subprocess, sys, tempfile, threading, time, uuid
+import hashlib, os, platform, shlex, shutil, socket, subprocess, sys, tempfile, threading, time, uuid
 from contextlib import asynccontextmanager
 from contextlib import ExitStack
 from pathlib import Path
@@ -409,8 +409,17 @@ def isolated_runtime_boundaries():
                 return False
         return True
 
+    def shell_git(argv):
+        "A held step's replay (shellgate.run_): `bash -c 'git ...'` with nothing but one git line is judged as that git argv, by the same rules."
+        command = [str(x) for x in (argv if isinstance(argv, (list, tuple)) else [argv])]
+        if len(command) != 3 or Path(command[0]).name.lower() not in ('bash', 'bash.exe') or command[1] != '-c': return None
+        if any(c in command[2] for c in ';&|`$<>()\n'): return None
+        try: inner = shlex.split(command[2])
+        except ValueError: return None
+        return inner if inner[:1] == ['git'] else None
+
     def allowed_process(argv, kwargs) -> bool:
-        return reviewed_python(argv) or git_allowed(argv, kwargs)
+        return reviewed_python(argv) or git_allowed(argv, kwargs) or bool((g := shell_git(argv)) and git_allowed(g, kwargs))
 
     def guarded_popen(argv, *args, **kwargs):
         if allowed_process(argv, kwargs): return real_popen(argv, *args, **kwargs)

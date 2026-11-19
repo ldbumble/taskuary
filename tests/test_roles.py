@@ -15,7 +15,7 @@ from taskuary.store import MemoryStore
 def setup():
     s = MemoryStore()
     s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
-    s.set_setting('default_brain', 'claude', 'o')
+    s.set_setting('default_brain', 'claude', 'owner')        # his pick: the one resolver takes it at its word (agents.picked)
     return s, {'agents': {'coding': {'kind': 'coding'}}, 'cli_connections': {'claude': {'cmd': 'claude', 'args': ['-p']}}}
 
 

@@ -90,7 +90,8 @@ class CarryOnTests(unittest.TestCase):
         self.assertFalse([c for c in s.list_comments(tid) if c['Body'].startswith(ingest.NOT_STARTED)])
 
     def test_a_dismissed_task_starts_nothing_and_says_nothing(self):
-        s = store(); tid = finished_task(s); s.update_task(tid, {'Status': 'dropped'}, 't')
+        # ...FOLDED into another (ingest.folded): one he let go is still his, and a line owed him reopens it (test_reopened_arrives_now)
+        s = store(); tid = finished_task(s); s.update_task(tid, {'Status': 'dropped'}, 't'); s.audit('task', tid, ingest.FOLDED, 't')
         with mock.patch.object(senders, 'wrote_to', return_value=True):
             self.assertFalse(ingest._carry_on(s, tid, mail(**AGAIN), None, {'intent': 'task'}, 't'))
         self.assertFalse([c for c in s.list_comments(tid) if c['Body'].startswith(ingest.NOT_STARTED)])
@@ -316,7 +317,7 @@ class PassInTests(unittest.TestCase):
 
     def test_a_dismissed_tasks_live_agent_is_not_handed_the_line(self):
         # ONE GATE (2026-11-10): passing in checked no task state at all, while a carry-on held a dismissed task back
-        s = store(); tid = finished_task(s); s.update_task(tid, {'Status': 'dropped'}, 't')
+        s = store(); tid = finished_task(s); s.update_task(tid, {'Status': 'dropped'}, 't'); s.audit('task', tid, ingest.FOLDED, 't')
         with mock.patch.object(general, 'session_for', return_value=mock.Mock(busy=True)), mock.patch.object(senders, 'wrote_to', return_value=True):
             self.assertEqual(ingest.pass_in_why(s, tid, mail(**AGAIN), None, {'intent': 'task'}), 'the task is closed')
 

@@ -399,11 +399,11 @@ class TheList(unittest.TestCase):
     def test_a_turn_is_on_disk_from_its_start_so_a_restart_at_any_point_says_it_was_cut(self):
         "The recorded restart, 2026-11-11: cut while its CLI was still coming up, the turn left his line heard with nothing under it."
         from taskuary import sessionrecord
-        self.brain.delay = 0.8
+        self.brain.delay = 30                                                       # ...held mid-turn until let go: a slow runner never outruns it
         self.say('Suggest two.', 'l-one', wait=False)
         self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False) and len(self.brain.calls) == 1))
         self.assertTrue(sessionrecord._live_path(self.tid).is_file())
-        self.rest(); self.assertFalse(sessionrecord._live_path(self.tid).is_file())                             # ...and gone with the turn's own end
+        self.brain.delay = 0; self.rest(); self.assertFalse(sessionrecord._live_path(self.tid).is_file())                             # ...and gone with the turn's own end
 
     def test_a_kept_line_is_heard_and_taken_in_one_step(self):
         "The recorded flood, 2026-11-11: read between its take and its hear, a line stood for a frame at the time it was typed, above what came in since."

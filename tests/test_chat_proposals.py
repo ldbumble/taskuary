@@ -247,7 +247,8 @@ class ExecutionTests(unittest.TestCase):
         p = out['proposal']
         self.assertEqual((p['kind'], p['params']['kind']), ('task.create_from_text', 'coding')); self.assertIn('bulk approve', p['params']['text'])
         self.assertEqual(s.list_tasks(active_only=True), [])
-        with mock.patch.object(ingest, '_spawn') as spawn:
+        from taskuary import capabilities                 # ...an AI to run it: the one start refuses before making a task without one
+        with mock.patch.object(ingest, '_spawn') as spawn, mock.patch.object(capabilities, 'has_ai', return_value=True):
             r = run(s, p)
         t = s.get_task(r.json()['outcome']['taskId'])
         self.assertEqual(t['Kind'], 'coding'); self.assertTrue(spawn.called); self.assertIn('did not stick', t['Summary'])

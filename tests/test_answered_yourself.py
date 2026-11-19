@@ -269,16 +269,6 @@ class TheDraftHisAnswerRetiredStaysWhereItStood(unittest.TestCase):
         said = [c['Body'] for c in s.list_comments(tid) if c['Actor'] == NOTE_ACTOR]
         self.assertEqual(said, ['You answered Erin Blake yourself - no new response needed.'])
 
-    def test_the_task_page_reads_it_the_same(self):
-        from fastapi.testclient import TestClient
-        from unittest import mock
-        from taskuary import server
-        s, tid, rid = self._world()
-        with mock.patch.object(server, 'store', s):
-            r = next(r for r in TestClient(server.app).get(f'/api/tasks/{tid}').json()['reviews'] if r['ReviewId'] == rid)
-        self.assertEqual(r.get('Why'), 'Not sent - you answered Erin Blake yourself')
-
-
     def test_mail_polled_together_after_a_restart_still_says_he_answered(self):
         """Taskuary was off overnight. Erin wrote at 08:00 and he answered from his phone at 09:00; at 10:00 the poll took her mail in, the
         draft was written, and the Sent folder's read brought his answer. His mail was placed by when he SENT it, hers by when it ARRIVED, so

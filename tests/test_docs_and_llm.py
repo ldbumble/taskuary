@@ -419,7 +419,7 @@ class LearnTests(unittest.TestCase):
             self.assertFalse(learn.reflect(s))                   # no brain: the old doc always stands
         for _ in range(3): s.add_review({'Kind': 'reply', 'Status': 'edited', 'DraftText': 'a', 'FinalText': 'b'})   # rv1-3 resolve (learn._books)
         good = s.get_doc('learned').replace(
-            '## What you care about', '## What you care about\n- Short replies, no filler. [s:4 | ev: rv1,rv2,rv3 | seen: 2026-08-20]')
+            '## What you care about', '## What you care about\n- Short replies, no filler. [s:4 | ev: rv1,rv2,rv3 | seen: ' + learn._today() + ']')   # ...seen today: a fixed date ages past expire()
         self.assertTrue(learn.reflect(s, llm=lambda sys_, usr, **kw: good))
         self.assertIn('Short replies, no filler', learn.injectable(s.get_doc('learned')))   # promoted = injected
         self.assertEqual(s.get_settings().get('learn_pending'), '0')

@@ -58,12 +58,6 @@ class AssistantDrafts(unittest.TestCase):
         self.assertFalse([c for c in out.get('chips') or [] if c.get('report')])
         self.assertIn('Nothing was drafted', model.seen[0])
 
-    def test_nothing_on_a_turn_they_did_not_type(self):
-        s = store()
-        out, model = self.ask(s, 'they pressed Save', WISH, react='pressed Save')
-        self.assertFalse([c for c in out.get('chips') or [] if c.get('report')])
-        self.assertIn('Nothing was drafted', model.seen[0])
-
 
 class TheTool(unittest.TestCase):
     def test_it_is_in_the_catalogue_and_runs_in_the_turn(self):

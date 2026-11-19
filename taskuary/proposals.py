@@ -19,7 +19,7 @@ proposal is never a partially-executed one.
 import json, re, time
 from loguru import logger
 from .timewords import plural
-from . import buttons
+from . import buttons, words
 
 MARK = 'TASKUARY-PROPOSE'
 BLOCK = re.compile(MARK + r'\s*(\{.*?\})', re.S)     # only for cutting junk a decode could not read (strip)
@@ -194,7 +194,7 @@ SETTING_VALUES = {'answer_to_agent': ('auto', 'ask', 'off')}   # timeline_fade r
 SWITCHES = {'agent_push_enabled': ('Agents may push / deploy', 'the GitHub card', '#connector=github'),
             'use_as_tracker': ('GitHub is the issue tracker', 'the GitHub card', '#connector=github'),
             'github_reply': ('Reply to issue/PR authors', 'the GitHub card', '#connector=github'),
-            'playbooks_enabled': ('Use playbooks', 'Settings → How mail is sorted', '#settings=config&group=How%20mail%20is%20sorted&key=playbooks_enabled')}
+            'playbooks_enabled': ('Use playbooks', words.name('sorting'), words.href('sorting') + '&key=playbooks_enabled')}
 def _switch_ok(store, name) -> bool:
     if not name: return True
     if name == 'agent_push_enabled': return store.github_permissions()[1]

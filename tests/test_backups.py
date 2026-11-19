@@ -1,6 +1,6 @@
-"""A COPY OF EVERYTHING, KEPT A WEEK (backups.py): the database by SQLite's own backup API - what the WAL holds included - once a day and
-before a new version opens it, seven days kept, the files it points at mirrored once each, and nothing that can stop a start."""
-import sqlite3
+"""A COPY OF EVERYTHING (backups.py): the database by SQLite's own backup API - what the WAL holds included - once a day and
+before a new version opens it, the newest three kept, the files it points at mirrored once each, and nothing that can stop a start."""
+import os, sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -26,14 +26,21 @@ def test_a_copy_holds_what_the_wal_holds_and_the_files_beside_it(tmp_path):
     cx.close()
 
 
-def test_a_week_is_kept_and_the_newest_always(tmp_path):
+def test_the_newest_three_copies_are_kept_and_agent_records_are_not_copied(tmp_path):
+    """The owner, 2026-11-19: backups held five full database copies from two days and a second copy of every agent record - one session's
+    half a gigabyte. Three copies are kept, agent records are never copied, and the mirror an earlier build made of them goes."""
     db, cx = _home(tmp_path)
-    day0 = datetime(2026, 11, 1)
-    for i in range(10): backups.make(str(db), tmp_path, now=day0 + timedelta(days=i))
-    kept = sorted(p.name for p in (tmp_path / 'backups').glob('taskuary-*.db'))
-    assert kept == [f'taskuary-2026-11-{d:02d}.db' for d in range(3, 11)]
-    assert backups.prune(tmp_path / 'backups', now=datetime(2027, 1, 1)) and len(list((tmp_path / 'backups').glob('taskuary-*.db'))) == 1
-    assert not backups.due(tmp_path, now=datetime(2026, 11, 10, 18)) and backups.due(tmp_path, now=datetime(2026, 11, 11))
+    (tmp_path / 'artifacts' / '7').mkdir(parents=True); (tmp_path / 'artifacts' / '7' / 'acp-s1.jsonl').write_bytes(b'{}\n')
+    old = tmp_path / 'backups' / 'artifacts' / '7'; old.mkdir(parents=True); (old / 'acp-s1.jsonl').write_bytes(b'x' * 1000)
+    day0, made = datetime(2026, 11, 1), []
+    for i in range(5):
+        made.append(backups.make(str(db), tmp_path, why=f'before-0.4.{i}', now=day0 + timedelta(days=i // 2)).name)
+        os.utime(tmp_path / 'backups' / made[-1], (1_000_000 + i, 1_000_000 + i))       # ...in the order they were made
+    backups.prune(tmp_path / 'backups')
+    assert sorted(p.name for p in (tmp_path / 'backups').glob('taskuary-*.db')) == sorted(made[-3:])
+    assert not (tmp_path / 'backups' / 'artifacts').exists() and (tmp_path / 'backups' / 'attachments' / '12' / 'budget.xlsx').is_file()
+    assert (tmp_path / 'artifacts' / '7' / 'acp-s1.jsonl').is_file(), 'the home itself is never touched'
+    assert not backups.due(tmp_path, now=datetime(2026, 11, 3, 18)) and backups.due(tmp_path, now=datetime(2026, 11, 4))
     cx.close()
 
 

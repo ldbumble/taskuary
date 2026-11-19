@@ -156,15 +156,15 @@ altered" is not, and it names the rows.
 | A finished session's written result | `~/.taskuary/artifacts/` |
 | The context an agent was handed | `~/.taskuary/context/` |
 | Playbooks | `~/.taskuary/playbooks/*.md` |
-| Backups (a week of daily copies) | `~/.taskuary/backups/` |
+| Backups (the newest three copies) | `~/.taskuary/backups/` |
 
 Under Docker, all of it is `/data` inside the container. `TASKUARY_HOME` moves it anywhere.
 
 ## Going back to a backup
 
 Taskuary copies its database once a day, and again before a new version first opens it, into
-`~/.taskuary/backups/` - seven days are kept. The files your mail and agents brought in are mirrored
-beside them (`attachments/`, `artifacts/`). To go back to one, quit Taskuary, then:
+`~/.taskuary/backups/` - the newest three are kept. The files your mail brought in are mirrored
+beside them (`attachments/`); the agents' own session records are not copied. To go back to one, quit Taskuary, then:
 
 ```bash
 cp ~/.taskuary/backups/taskuary-2026-11-16.db ~/.taskuary/taskuary.db && rm -f ~/.taskuary/taskuary.db-wal ~/.taskuary/taskuary.db-shm

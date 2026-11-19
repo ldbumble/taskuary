@@ -1,20 +1,22 @@
 """A COPY OF EVERYTHING, KEPT A WEEK (the owner's brief, 2026-11-16): the database is one file, and before this nothing copied it but a one-time
 migration (processing_startup). One road now: a consistent copy by SQLite's own backup API (it carries what the WAL holds, never a torn file)
 into the home's backups/ folder - once a day while Taskuary runs, and before a new version opens the database, since that is when its schema
-changes. Seven days are kept. The files the database points at (attachments/, artifacts/) are not in it: they are mirrored beside the copies,
-each file once - they never change after they land - so a week of copies does not cost a week of files.
+changes. The newest KEEP copies are kept. The files the database points at in attachments/ are not in it: they are mirrored beside the
+copies, each file once - they never change after they land. The agents' own records (artifacts/) are not copied: they grow while a session
+writes, and one session's record copied whole was half a gigabyte (the owner, 2026-11-19: keep three copies, no agent records).
 
 Never in the way: the daily copy runs on its own thread, and any failure is a line in the log, never a start that stops.
 
 Restore (docs/site/troubleshooting.md): quit Taskuary, then copy backups/taskuary-<date>.db over taskuary.db and the mirrored folders back.
 """
 import os, shutil, sqlite3, threading, time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from loguru import logger
 
-KEEP_DAYS = 7
-FILES = ('attachments', 'artifacts')          # where the database's file rows point, under the home
+KEEP = 3                                      # database copies kept, the newest
+FILES = ('attachments',)                      # where the database's file rows point, under the home
+DROPPED = ('artifacts',)                      # mirrored by an earlier build: taken out of the backups by the next rotation
 EVERY = 3600                                  # how often the running app looks whether today's copy is made
 
 
@@ -50,14 +52,19 @@ def mirror(home: Path, to: Path) -> int:
     return n
 
 
-def prune(to: Path, now: datetime = None) -> list:
-    "Copies older than KEEP_DAYS go; the newest copy is always kept, however old."
-    cut = ((now or datetime.now()) - timedelta(days=KEEP_DAYS)).strftime('%Y-%m-%d')
-    dbs = sorted(to.glob('taskuary-*.db'))
-    gone = [p for p in dbs[:-1] if p.name[len('taskuary-'):][:10] < cut]
+def prune(to: Path) -> list:
+    "The newest KEEP copies stay and older ones go, and a mirror of what is no longer copied (DROPPED) with them. Each removal is logged."
+    dbs = sorted(to.glob('taskuary-*.db'), key=lambda p: (p.stat().st_mtime, p.name))
+    gone = dbs[:-KEEP] if len(dbs) > KEEP else []
     for p in gone:
-        try: p.unlink()
+        try: p.unlink(); logger.info(f'backup: {p.name} removed - only the newest {KEEP} copies are kept')
         except OSError as e: logger.warning(f'backup {p.name} not removed: {e}')
+    for d in DROPPED:
+        if (q := to / d).is_dir():
+            n = sum(f.stat().st_size for f in q.rglob('*') if f.is_file())
+            shutil.rmtree(q, ignore_errors=True)
+            logger.info(f'backup: {d}/ removed from the backups ({n / 1e6:.0f} MB) - agent records are not copied')
+            gone.append(q)
     return gone
 
 
@@ -68,7 +75,7 @@ def make(db: str, home=None, why: str = '', now: datetime = None, files: bool = 
     to = folder(home); to.mkdir(parents=True, exist_ok=True)
     out = copy_db(db, to / _name((now or datetime.now()).strftime('%Y-%m-%d'), why))
     if files: mirror(Path(home) if home else Path(db).parent, to)
-    prune(to, now)
+    prune(to)
     logger.info(f'backup: {out.name} written')
     return out
 
@@ -96,6 +103,8 @@ def before_open(db: str, version: str, home=None) -> Path | None:
 def start(db: str, home=None, stop: threading.Event = None) -> threading.Thread:
     "The daily copy, on its own thread: made when today has none, looked at every hour."
     def run():
+        try: prune(folder(home))              # ...the rotation at every start too, not only with a day's copy
+        except Exception as e: logger.warning(f'backup rotation not done: {e}')
         while not (stop and stop.is_set()):
             try:
                 if due(home): make(db, home)

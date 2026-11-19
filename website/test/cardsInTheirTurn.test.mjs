@@ -87,3 +87,19 @@ test("a card moved past is never drawn loose at the chat's foot - only one that 
   assert.match(page, /const passedCards = [^\n]*\n\s+return \{ key: `passed:\$\{r\.ReviewId\}`, at: r\.CreatedAt \|\| "", rid: r\.ReviewId, record: true,/);
   assert.match(read("GeneralWorkspace.jsx"), /const loose = looseOk \? looseCards\(nodes, \{ used, listed, held \}\) : \[\];/);
 });
+
+// ONE ACTION BOX AT A TIME, A HARD RULE (the owner's live task, 2026-11-19): a held browser step stood at the front reading "1 of 2 · next: the
+// reply to Gail Moreno", and the reply's box was drawn under it - the page's reply block (`next`) and the letters were drawn with no look at
+// the line. What the line holds behind its front stands nowhere; while the front is another card, no door to write a reply stands beside it.
+test("a reply the line holds behind its front draws no box, and no reply door stands beside another card's front", async () => {
+  const { nextStands, replyDoorOpen } = await import("../src/chatStream.js");
+  const q = { live: [744], held: [745] };
+  assert.equal(nextStands(q, 745), false, "the held reply's block");
+  assert.equal(nextStands(q, 744), true); assert.equal(nextStands(null, 9), true, "no line read yet: as before");
+  assert.equal(replyDoorOpen(q, null), false, "a door to write a reply beside the browser step's front");
+  assert.equal(replyDoorOpen({ live: [745], held: [] }, 745), true); assert.equal(replyDoorOpen({ live: [], held: [] }, null), true);
+  const ws = read("GeneralWorkspace.jsx");
+  assert.match(ws, /next = nextStands\(queue, nextRid\) \? given : null;/);
+  assert.match(ws, /n\.letter && !used\.has\(n\.key\) && !listed\.has\(n\.rid\) && !held\.has\(n\.rid\)/);
+  assert.match(read("TaskPage.jsx"), /!pendingReview && !inRow && !replyEmpty && replyDoorOpen\(detail\?\.queue, null\) && \(/);
+});

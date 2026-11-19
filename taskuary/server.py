@@ -2252,6 +2252,7 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
     q = cardqueue.state(store, task_id)
     held = set(q['held'])
     d['reviews'] = [r for r in d['reviews'] if r['ReviewId'] not in held and not cardqueue.obsolete_read(store, task_id, r)]
+    d['queue'] = {'live': q['live'], 'held': q['held']}       # ...the page's reply door reads it: none beside a front that is another card
     # ...and what the chat moved past reads as it will once its agent hears that (proposals.written_past): greyed in place, from this read on
     from .proposals import SET_ASIDE
     past = q['past']
@@ -2473,7 +2474,7 @@ def _workerstate():
 
 
 def _assistant_payload(task_id: int, session=None):
-    from . import general, proposals as _proposals
+    from . import cardqueue as _cardqueue, general, proposals as _proposals
     task = store.get_task(task_id)
     if not task: raise HTTPException(404, 'task not found')
     # ...READ on any task but a coding one (the owner, 2026-11-06: one prompt box everywhere): a reply task, or a closed one from before the chat,
@@ -2570,8 +2571,10 @@ def _assistant_payload(task_id: int, session=None):
                                if _proposals._action(r) in ('write_playbook', 'amend_playbook')],
             # ...AND A HELD BROWSER ACT, the same way (2026-10-25): its card sat inside the hidden Close out, so the owner reached it only
             # by Stop and save - which closed the agent's browser, and then Approve said "the agent's browser is closed"
+            # ...ONLY THE ONE THE LINE HAS AT ITS FRONT (cardqueue; a hard rule): one held behind it is its front's "next" and nothing more
             'browserActs': [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' "
-                                                   "ORDER BY ReviewId", (task_id,)) if _proposals._action(r) in _proposals.HELD_ACTS],
+                                                   "ORDER BY ReviewId", (task_id,)) if _proposals._action(r) in _proposals.HELD_ACTS
+                            and r['ReviewId'] not in _cardqueue.held(store, task_id)],
             # triage's reading of the thread (who asks what, the owner's part, the mails aside): None before the first verdict
             'thread': store.task_thread(task_id),
             'session': session.info(tail=3) if session else None}

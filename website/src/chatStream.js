@@ -271,6 +271,11 @@ export const askTurn = (asking, items) => (asking?.turn && (items || []).some((x
 // each letter that went, newest first, and the draft with its Send - stood in one stack at the chat's foot, then jumped up into the turns
 // that wrote them. Until the list is read nothing can be placed, so nothing is; nor under a turn at work, which holds its own cards back.
 export const placesLoose = (list) => !!list && !list.working;
+// ONE ACTION BOX AT A TIME, A HARD RULE (cardqueue.py; the owner's live task, 2026-11-19: a held browser step read "1 of 2 · next: the reply
+// to Gail" and the reply's box stood under it): a card the line holds behind its front is drawn nowhere - the reply's block included, by its
+// review (`rid`) - and while the front is another card, no door to write a reply stands beside it either (`replyDoorOpen`)
+export const nextStands = (queue, rid) => !(queue?.held || []).includes(rid);
+export const replyDoorOpen = (queue, rid) => !(queue?.live || []).length || (queue.live || []).includes(rid);
 // ...AND ONLY A CARD THAT WAITS (the owner's live app, 2026-11-18: "it never leaves when you put in new prompt. it's broken"): a card moved past -
 // set aside, replaced (`record`) - is a record of where it stood, drawn where the list places it or nowhere; a reply set aside while it waited
 // its turn behind another never stood, the list places it nowhere, and it stood greyed under the newest turn, and under every turn after

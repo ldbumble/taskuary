@@ -18,7 +18,7 @@ import { holdUnsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd,  partsMessage, turnParts, workCount, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, lettersTurn, onYouTurn, placesLoose, looseCards, askedFirst } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd,  partsMessage, turnParts, workCount, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, lettersTurn, onYouTurn, placesLoose, looseCards, askedFirst, nextStands } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
@@ -504,10 +504,10 @@ const wasCard = (c, rv) => <ReviewDecision key={c.id} past review={c.what !== "a
   : rv || { ReviewId: c.review, Kind: "action", DraftText: JSON.stringify({ what: c.was.text }) }} />;
 /* `items`: the server's list, with this page's own lines the server has not answered for yet (`mine`) already merged in by their names.
    `nodes`: the cards the page draws, by the review each is of ([{key, rid, node}]); `next`: the reply that waits, at the card it is. */
-function Conversation({ items, nodes = [], posts = [], reviews = [], next = null, nextRid = null, landing: landed = null, landAt, name, tid, onChanged, loose: looseOk = true, ask = null, askAt = "", lettersAt = "", queue = null }) {
+function Conversation({ items, nodes = [], posts = [], reviews = [], next: given = null, nextRid = null, landing: landed = null, landAt, name, tid, onChanged, loose: looseOk = true, ask = null, askAt = "", lettersAt = "", queue = null }) {
   // ONE CARD AT A TIME (cardqueue.py): what waits behind the card that stands is drawn nowhere - the landing question too - and the card that
   // stands says, over itself, how many come and which is next ("1 of 2 · next: the email to Erin")
-  const held = new Set(queue?.held || []), live = new Set(queue?.live || []), landing = held.has("land") ? null : landed;
+  const held = new Set(queue?.held || []), live = new Set(queue?.live || []), landing = held.has("land") ? null : landed, next = nextStands(queue, nextRid) ? given : null;
   const qLine = () => (queue?.line && !used.has("queue") && used.add("queue") ? [<div key="queue" className="tq-aui-hint" data-tq-card-queue="" role="note">{queue.line}</div>] : []);
   // THE WORK'S CARD IS PART OF THE AGENT TURN THAT DID IT, or not drawn at all (the owner, 2026-11-13: "stop putting worked on master at the
   // bottom ... it's part of the agent turn or doesn't belong at all"): the turn its newest change came in (landing.landingTurn); until the card
@@ -542,7 +542,7 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next = null
   // ...THE TASK'S EMAILS, EACH ITS OWN NODE (`letter`, TaskPage turnCards; the walk, 2026-11-17): drawn in their turn where the list places them,
   // and where it places them nowhere yet - one waiting, or sent a read ahead of the list - with the letters, as siblings of the same turn's cards, so
   // the card he pressed Send on turns Sent where it stands and is never gone between the two reads
-  const lettersHere = () => { const ls = nodes.filter((n) => n.letter && !used.has(n.key) && !listed.has(n.rid)); ls.forEach((n) => used.add(n.key));
+  const lettersHere = () => { const ls = nodes.filter((n) => n.letter && !used.has(n.key) && !listed.has(n.rid) && !held.has(n.rid)); ls.forEach((n) => used.add(n.key));
     return ls.length ? [...(ls.some((n) => live.has(n.rid)) ? qLine() : []), ...ls.map((n) => <React.Fragment key={n.key}>{n.node}</React.Fragment>)] : []; };
   // A TURN'S CARDS, ITS LAST THING: what the list placed in it, then the letters that wait for his Send where this is their turn, then the work's card
   const cardsOf = (x) => [...draw(x.cards), ...(x.id === lettersAt ? [...lettersHere(), ...(next && !used.has("next") && used.add("next") ? [nextBox()] : [])] : []),

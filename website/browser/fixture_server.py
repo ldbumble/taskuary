@@ -401,6 +401,30 @@ def _install_fresh_routes(app, store):
         store.add_comment(tid, "assistant", general.ASSISTANT_TYPE, "RentScope is active now - I signed up again with the form fixed.")
         return {"taskId": tid, "reviewId": rid}
 
+    @app.post("/api/fixture/held-pair")
+    def fixture_held_pair(body: dict = Body(...)):
+        """A held browser step on Erin's portal at the front of the line, and the reply to Gail Moreno raised after it (cardqueue): the live
+        shape of TQ-1435 - the hold read "1 of 2 · next: the reply to Gail Moreno" with the reply's box drawn under it (browser/one-box)."""
+        import json
+        store.set_setting("owner_name", "Alex Doyle", "owner"); store.set_setting("owner_email", "alex@northwind.example", "owner")
+        tid = store.create_task({"Title": "Vendor portal access for Gail", "Kind": "general", "Status": "in_progress", "OriginBase": "owner"}, "owner")
+        mail = lambda n, at, text: store.add_message({"TaskId": tid, "ExternalId": f"fx-{tid}-{n}", "Channel": "email", "FromName": "Gail Moreno",
+            "FromEmail": "gail@northwind.example", "ToEmail": "alex@northwind.example", "Subject": "Portal access?", "SentAt": at, "BodyText": text, "Status": "routed"})
+        # ...her first mail was answered already: a reply that went, a round before (the live shape's task had one)
+        first = mail(1, "2026-11-18 08:00:00", "Hi Alex, do we have the vendor portal yet? Gail")
+        sent = store.add_review({"TaskId": tid, "MessageId": first, "Kind": "draft_reply", "Status": "pending", "Channel": "email", "DraftText": "Hi Gail, not yet - on it today. Alex"})
+        store.decide_review(sent, "approved", None, "owner")
+        store._exec("UPDATE review SET CreatedAt='2026-11-18 08:05:00', DecidedAt='2026-11-18 08:10:00' WHERE ReviewId=?", (sent,))
+        mid = mail(2, "2026-11-18 09:00:00", "Thanks - can you get me into it once it is set up? Gail")
+        store.add_comment(tid, "assistant", general.ASSISTANT_TYPE, "The invite form on Erin's portal is filled in; it waits on your press, then the reply to Gail.")
+        p = {"action": "browser_act", "sid": "fx", "args": ["click", "@e4"], "site": "portal.vendor.example", "url": "https://portal.vendor.example/invite",
+             "command": "send the invite on portal.vendor.example", "what": "Send Gail's invite on the vendor portal"}
+        act = store.add_review({"TaskId": tid, "Kind": "action", "Status": "pending", "Origin": "agent", "DraftText": json.dumps(p),
+                                "Reason": "held before it ran, in the agent's browser: Send Gail's invite on the vendor portal"})
+        rid = store.add_review({"TaskId": tid, "MessageId": mid, "Kind": "draft_reply", "Status": "pending", "Channel": "email",
+                                "DraftText": "Hi Gail, you're invited - the email from the portal is on its way. Alex"})
+        return {"taskId": tid, "actId": act, "reviewId": rid}
+
     @app.post("/api/fixture/no-readonly")
     def fixture_no_readonly(body: dict = Body(...)):
         """The stand-in CLI as one with no read-only mode Taskuary can hold it to (clis.READONLY): with a version too old for its reviewer

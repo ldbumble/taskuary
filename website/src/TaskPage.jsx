@@ -120,7 +120,7 @@ import { readingOf } from "./threadReading.js";
 import AiUsed from "./AiUsed.jsx";
 import CodeChanges from "./CodeChanges.jsx";
 import { ChatDetail } from "./DetailSlider.jsx";
-import { chatSource } from "./chatStream.js";
+import { chatSource, replyDoorOpen } from "./chatStream.js";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import DifferenceOutlinedIcon from "@mui/icons-material/DifferenceOutlined";
 import AgentChannels from "./AgentChannels.jsx";
@@ -2846,7 +2846,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   to make it go" - the owner, 2026-09-22), and the twin beside it did the thing
                   the first one was named for. The box is still editable, and Redraft below
                   writes it again. */}
-              {!pendingReview && !inRow && !replyEmpty && (
+              {!pendingReview && !inRow && !replyEmpty && replyDoorOpen(detail?.queue, null) && (
                 <Button size="small" variant={outside ? "outlined" : "contained"} disableElevation disabled={!!openingReply}
                   sx={outside ? barBtn : primaryBtn} data-tq-reply-again={outside ? "" : undefined}
                   startIcon={openingReply ? <CircularProgress size={12} /> : <ForwardToInboxIcon sx={{ fontSize: 16 }} />}

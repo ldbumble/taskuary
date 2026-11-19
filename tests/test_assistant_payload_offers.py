@@ -47,3 +47,16 @@ def test_an_agent_asking_from_a_terminal_on_a_general_task_has_its_question_in_t
     # ...and it stays asked once the terminal is gone: an open question is kept with the task until it is answered (the owner, 2026-11-07:
     # "of course it should be saved") - the agent idling out or its pane closing never answers it
     assert (payload(s, tid)['asking'] or {}).get('text') == 'Keep the inter-company rows, or drop them?'
+
+
+def test_a_held_browser_step_behind_the_front_is_on_no_view_and_the_detail_names_the_line():
+    """ONE ACTION BOX AT A TIME (cardqueue; the owner's live task, 2026-11-19): two browser steps held on one task - the second waits its turn,
+    and the browser view listed it beside the front, a second Approve. The view gets the front alone; the task's own read names the line."""
+    s = MemoryStore(); tid = chat(s, Status='in_progress')
+    act = lambda what: s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent', 'Reason': f'held before it ran: {what}',
+                                     'DraftText': json.dumps({'action': 'browser_act', 'sid': 'fx', 'site': 'portal.vendor.example', 'what': what, 'command': what})})
+    front, behind = act("Send Gail's invite on the vendor portal"), act("Save the portal's new settings")
+    assert [r['ReviewId'] for r in payload(s, tid)['browserActs']] == [front]
+    with mock.patch.object(server, 'store', s):
+        d = TestClient(server.app).get(f'/api/tasks/{tid}').json()
+    assert d['queue'] == {'live': [front], 'held': [behind]}

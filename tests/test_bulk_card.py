@@ -330,7 +330,7 @@ def test_a_bulk_card_that_waited_behind_another_and_was_written_past_never_stand
     with mock.patch.object(server, 'store', s):
         note = call(tid, 'propose_email', to='gail@northwind.example', subject='First', text='Gail - the letters go out next.')['review_id']
         call(tid, 'propose_email', items=emails(10))
-    assert chat_cards(s, tid) == {}, "the note stands in the page's letters, the bulk card waits its turn"
+    assert chat_cards(s, tid) == {note: ('slot', 'pending')}, 'the note is the one action box, the bulk card waits its turn drawn nowhere'
     time.sleep(1.1)
     general.wait_line(s, tid, 'hold everything', line_id='l-hold-all')
     assert chat_cards(s, tid) == {note: ('slot', 'passed')}
@@ -351,7 +351,7 @@ def test_a_bulk_card_that_waited_its_turn_then_stood_and_went_stays_where_it_sto
     assert chat_cards(s, tid)[first] == ('batch', 'pending'), 'its turn came'
     with send, mock.patch.object(outbound, 'send_block', lambda *a, **k: ''):
         press(s, bulk['batch'])
-    assert chat_cards(s, tid)[first] == ('batch', 'done'), 'pressed, it stays where it stood'
+    assert chat_cards(s, tid)[first] == ('batch', 'approved'), 'pressed, it stays where it stood'
 
 
 def test_its_agent_takes_back_a_bulk_card_by_the_ids_it_was_told():

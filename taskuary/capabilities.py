@@ -115,14 +115,21 @@ def fact(store, hands: str, pick: str = '') -> str:
     """WHAT THIS AGENT CAN DO HERE, in one block: `hands` 'all' (a shell and files), 'look' (reads only) or 'none' (a card that takes no
     tools); the AIs the owner could hand it to instead, from his own menu; Developer mode, as it stands. Said where every turn's late facts
     are (general), so a change - a switch flipped, an AI connected - reaches a conversation under way."""
-    from . import agents
+    from . import agents, words
     others = other_ais(store, pick)
     dev = agents.developer_mode(store)
+    # ...AND THE APP'S OWN ROADS WHERE THIS AGENT HAS NONE (design round 4, H5: an AI card told him "there is no button or setting you can press"
+    # with the install of a CLI one page away, and "I cannot schedule this" in an app that runs routines): a road that is here is named
+    cli = _safe(lambda: agents.cli_ready(store))
     out = [FACT_HEAD, f'- {HANDS.get(hands, HANDS["none"])}',
            f"- Another AI could do this task: {', '.join(others)} - he picks it in the Agent menu on this task." if others else
            '- No other AI is connected here: never offer to switch this task to one.',
+           *([] if cli else [f"- An AI CLI - a shell, files and a browser on this computer - can be installed from {words.link('ai_apps')}: "
+                             'where the work needs hands you lack, that is the road to name.']),
+           '- Work that should run again by itself is a routine Taskuary runs: set it up for his one press (save_routine), never "it cannot be '
+           'scheduled".',
            '- Developer mode is on: coding tasks also run in a terminal of their own.' if dev else
            '- Developer mode is off ([Settings](#settings=config&group=Agent%20permissions&key=developer_mode)): it adds coding tasks in a terminal '
            'of their own' + (' - a change in a folder he names needs none of it.' if hands == 'all' else '.')]
     # ...and Developer mode only where it would give him something: with no AI CLI here it starts no coding task (agents.coding_ready)
-    return '\n'.join(out if _safe(lambda: agents.cli_ready(store)) else out[:-1])
+    return '\n'.join(out if cli else out[:-1])

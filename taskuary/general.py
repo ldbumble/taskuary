@@ -2169,6 +2169,22 @@ def unlearned(store, frozen) -> str:
     return '\n'.join([UNLEARNED, *gone]) if gone else ''
 
 
+# WHAT IT STATES CAN BE CHECKED, SO IT IS TOLD (design round 4, H5: "Thursday, March 12" for a Friday; "I guessed Ray's address" of a man whose
+# mail was on the task): the day, and the addresses the people on the task wrote from - facts, said where every turn's late facts are
+def today_line() -> str:
+    return f"TODAY: {datetime.now().strftime('%A %d %B %Y')} on this computer. Any other date's weekday you write, work out from this one."
+PEOPLE_N = 12
+def people_line(store, tid: int) -> str:
+    "Who wrote on the task, at the address their mail came from - '' with none. Never the owner's own mail."
+    seen = {}
+    for m in store.list_messages(int(tid)):
+        a = str(m.get('FromEmail') or '').strip()
+        if '@' in a and str(m.get('Direction') or 'in') != 'out' and m.get('Status') != 'context': seen.setdefault(a.lower(), (m.get('FromName') or '', a))
+    got = [f"{' '.join(str(n).split())} <{a}>" if n else a for n, a in list(seen.values())[-PEOPLE_N:]]
+    return ('THE PEOPLE WHO WROTE ON THIS TASK, AT THE ADDRESS THEIR MAIL CAME FROM - write to them there; any other address is a guess, '
+            'and said as one: ' + '; '.join(got)) if got else ''
+
+
 def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
     """(the system's lines that stay the same turn after turn, those a turn can change, the user turn) - _prompt joins them. `turn`: built for
     a session's turn that just began (turn_facts) - the thread as its hand-over took it: what came in since is the next turn's to hear."""
@@ -2198,7 +2214,7 @@ def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
     from .workstreams import of_task as _ws_of           # ...JOB.md as this task's workstream reads it (2026-11-01)
     owner_bg = '' if outsider else _brief.background(store, workstream=_ws_of(store, tid) or None, drop=_brief.GENERAL_HAS)
     known = '' if outsider else learned_block(store, tid)
-    late = [known, '' if outsider else voice_block(store, tid)]
+    late = [known, '' if outsider else voice_block(store, tid), today_line(), people_line(store, tid)]
     system = (
         (f'{owner_bg}\n\n' if owner_bg else '') +
         # ...and said once (2026-11-09): "never claim a tool did what it did not" is AGENT.md's Honest reporting, and "ask when a fact is

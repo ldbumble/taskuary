@@ -683,6 +683,29 @@ class TheSessionTests(unittest.TestCase):
         with mock.patch.object(capabilities, 'other_ais', return_value=['Claude Code']): self._turn(brain)
         self.assertIn('Another AI could do this task: Claude Code - he picks it in the Agent menu on this task.', seen[1])
 
+    def test_what_it_states_can_be_checked_so_it_is_told_the_day_the_addresses_and_the_roads_here(self):
+        """The API walk, 2026-11-19: an email said "Thursday, March 12" (a Friday); "I guessed Ray's address" of a man whose invite was on the
+        task; "there is no button or setting you can press" with a CLI's install one page away; "I cannot schedule this" in an app that runs
+        routines. The agent is told the day, the address each person on the task wrote from, and the roads that are here."""
+        from datetime import datetime
+        from taskuary import agents, capabilities, general
+        seen = []
+        def brain(system, user, **kw): seen.append(system); return 'Done.'
+        s = MemoryStore()
+        s.set_setting('owner_email', 'alex@northwind.example', 'owner')
+        tid = s.create_task({'Title': 'Vendor review time', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        s.add_message({'TaskId': tid, 'Channel': 'email', 'ConversationId': 'c-ray', 'FromName': 'Ray Colton', 'FromEmail': 'ray@northwind.example',
+                       'Subject': 'Vendor review', 'BodyText': 'Invitation: vendor review, Thursday 2-3pm', 'Status': 'routed'})
+        session = general.GeneralSession(s, tid); session.pick, session.provider, session.model = 'connector:1', 'HIPAA AI', ''
+        with mock.patch.object(llm, 'build_llm', return_value=brain), mock.patch.object(bv, 'installed', return_value=False), \
+             mock.patch.object(bv, 'can_set_up', return_value=False), mock.patch.object(capabilities, 'other_ais', return_value=[]), \
+             mock.patch.object(agents, 'cli_ready', return_value=False):
+            session.send_prompt('can we move it to Friday?', echo=False)
+        self.assertIn(f"TODAY: {datetime.now().strftime('%A %d %B %Y')}", seen[0])
+        self.assertIn('Ray Colton <ray@northwind.example>', seen[0])
+        self.assertIn('An AI CLI - a shell, files and a browser on this computer - can be installed from', seen[0])
+        self.assertIn('is a routine Taskuary runs', seen[0])
+
 
 class TheToolboxTests(unittest.TestCase):
     """Taskuary's own tools reach an API brain through the SAME server a CLI session's MCP does - its token and task proof, its gates."""

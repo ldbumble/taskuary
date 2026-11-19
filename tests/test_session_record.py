@@ -481,9 +481,9 @@ def test_a_log_that_grows_while_its_agent_works_is_read_once_byte_for_byte(home,
 
 
 def test_five_reads_of_one_task_at_once_are_one_build(home, monkeypatch):
-    "The page's polls, the task's read and the rail's at once each built the list again; they wait for one build and share it."
+    "The old build (frozen for migration, conversation_legacy): reads of one task at once wait for one build and share it."
     import threading, time
-    from taskuary import conversation
+    from taskuary import conversation_legacy as conversation
     s = MemoryStore(); tid = s.create_task({'Title': 'Fix the March import', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
     builds, real = [], conversation._items
     monkeypatch.setattr(conversation, '_items', lambda st, t: (builds.append(t), time.sleep(0.5), real(st, t))[2])

@@ -5,7 +5,7 @@ at work that ends, a card he presses - is updated in place (`State`, `Body`, `Re
 
 Every producer writes through `put`/`update`/`step`; the reader is `read`. The rule for when a running turn is split by his line lives in
 `step`, at write time, decided once."""
-import json, logging, os, time
+import hashlib, json, logging, os, re, time
 
 logger = logging.getLogger(__name__)
 
@@ -181,8 +181,12 @@ def reconcile(store, tid: int) -> None:
     logged(store, tid)
 
 
-@_safe
 def logged(store, tid: int) -> None:
+    try: _logged(store, tid)
+    except Exception as e: logger.warning(f'chatlog: the CLI log of task {tid} was not read into the chat - {e}')
+
+
+def _logged(store, tid: int) -> None:
     from . import codingchat
     if not codingchat._live(int(tid)): return
     for s in codingchat.owned(store, int(tid), codingchat.sessions(store, int(tid), local=False)):
@@ -360,7 +364,7 @@ def _shape(xs: list) -> list:
 
 
 def shadow(legacy: dict, log: dict) -> str:
-    "The first place the log's chat and the list served (conversation.items) draw differently - '' where they agree. The switch waits on ''."
+    "The first place the log's chat and the old build's list (conversation_legacy) draw differently - '' where they agree."
     a, b = _shape(legacy.get('items') or []), _shape(log.get('items') or [])
     if a == b: return ''
     i = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
@@ -572,7 +576,10 @@ def came_in(store, tid: int) -> None:
         rows = [dict(r) for r in store.cx.execute("SELECT Key, Body FROM chatlog WHERE TaskId=? AND Kind='arrival'", (tid,))]
         have = {r['Key'] for r in rows} | {f'm:{m}' for r in rows if r['Key'][:2] == 'j:' for m in (json.loads(r['Body']).get('thread') or {}).get('mids') or []}
         foot = store.cx.execute('SELECT MAX(At) AS a FROM chatlog WHERE TaskId=? AND Parent IS NULL', (tid,)).fetchone()['a'] or 0
-    new = [x for x in _mail(store, tid) if (x.get('Channel') or '') != OWN and f"m:{x['MessageId']}" not in have]
+    # ...never what an untrusted sender wrote on a thread an agent works: it waits behind the Trust press (origin.hold)
+    from . import origin
+    held = set((origin.hold(store, tid) or {}).get('mids') or [])
+    new = [x for x in _mail(store, tid) if (x.get('Channel') or '') != OWN and f"m:{x['MessageId']}" not in have and x['MessageId'] not in held]
     if not new: return
     # ...older by its OWN time (sent, else filed) - joined now, a thread from last week reads as now by when it joined
     # ...by more than a mail held up on its way takes (EARLIER): one a sender's clock or a slow server put a minute back stands as it came
@@ -666,7 +673,7 @@ def migrated(store, tid: int) -> bool:
 
 
 def migrate(store, tid: int, legacy=None) -> bool:
-    """A TASK'S CHAT, FROZEN ONCE AS IT WAS LAST DRAWN (the spec's §4): the list the old build serves (`legacy` - conversation.items) is
+    """A TASK'S CHAT, FROZEN ONCE AS IT WAS LAST DRAWN (the spec's §4): the list the old build serves (`legacy` - conversation_legacy.items) is
     written item by item in its order - each turn's steps and cards under it - and from then on the producers append. What waits by the box
     stays pending; a turn at work stays at work, so its road goes on appending under it; of two cards that waited at once the front stays
     and the other is held (one box). Done once per task, under the store's lock; True when it was done now."""
@@ -711,8 +718,8 @@ def migrate(store, tid: int, legacy=None) -> bool:
 
 
 def _legacy(store, tid: int) -> dict:
-    from . import conversation
-    return conversation.items(store, int(tid))
+    from . import conversation_legacy
+    return conversation_legacy.items(store, int(tid))
 
 
 def migrate_open(store, stop=None) -> int:
@@ -725,26 +732,100 @@ def migrate_open(store, stop=None) -> int:
     return n
 
 
-# ── THE READER SWITCH (stage 7): the page's chat is the log's, behind the setting `chat_log` (0: the old build, for one release) ────────────
-# ...ON; `chat_log` = '0' falls back to the old build for one release
-def on(store) -> bool: return store.get_setting('chat_log', '1') != '0'
-
-
+# ── THE READER (stage 8): the page's chat is the log's - and what stands beside it, read here ──────────────────────────────────────────────
 def serve(store, tid: int, level: str = None) -> dict:
-    """What the page draws for task `tid`: the log's items, in its one order, each turn at its level - with what waits by the box and the
-    task's live facts (asking, permissions, the hold, the line of cards) as the old build reads them until stage 8 moves them here. A task
-    is frozen into the log at its first read (migrate); what waits is never also drawn (an input is in one place)."""
-    from . import conversation
-    old = conversation.items(store, int(tid))
-    if not on(store): return old
-    migrate(store, tid, legacy=old)
+    """What the page draws for task `tid`: the log's items, in its one order, each turn at its level, and beside them what waits by the box,
+    what the agent asks, the permissions it waits on, the line of cards and the hold. A task is frozen into the log at its first read
+    (migrate); what waits is never also drawn (an input is in one place)."""
+    from . import general, origin
+    tid = int(tid)
+    if not migrated(store, tid): migrate(store, tid)
+    hold_ = origin.hold(store, tid)
+    at_work = general.working(store, tid) if not hold_ else bool(getattr(general._live_of(tid), 'busy', False))
     # ..."working" is one fact (general.working): a turn the log holds at work while nothing works has either not begun yet - nothing of it is
     # drawn until it has - or was left by a process that is gone (a restart): it is over, in place
-    if not old.get('working') and (t := _live(store, tid)):
+    if not at_work and (t := _live(store, tid)):
         with store.lock: n = store.cx.execute('SELECT COUNT(*) FROM chatlog WHERE Parent=?', (t['Id'],)).fetchone()[0]
         if n or json.loads(t['Body'] or '{}').get('text'): update(store, tid, t['Key'], state='done')
     got = read(store, tid, level)
-    if not old.get('working'): got['items'] = [x for x in got['items'] if not (x['kind'] == 'turn' and x.get('state') in LIVE)]
-    drawn = {x['id'] for x in got['items']}
-    return {**old, 'items': got['items'], 'level': got['level'], 'pending': [p for p in old.get('pending') or [] if p.get('id') not in drawn],
-            'rev': f"{old.get('rev', '')}:{got['rev']}:{got['level']}"}
+    out = got['items'] if at_work else [x for x in got['items'] if not (x['kind'] == 'turn' and x.get('state') in LIVE)]
+    body = {'items': out, 'level': got['level'], **beside(store, tid, out, at_work, hold_)}
+    return {'rev': hashlib.sha1(json.dumps(body, default=str).encode()).hexdigest()[:16], **body}
+
+
+def beside(store, tid: int, out: list, at_work: bool, hold_) -> dict:
+    """What the page draws beside the chat's items, each from the fact that says it: what waits for the agent (`pending` - his lines not yet
+    heard; a message, a press while a turn works; what an untrusted sender wrote), `now`/`later` (whether a waiting line goes in mid-turn),
+    `asking` (in the turn that asked), `permissions`, `queue` (the line of cards), `hold`, `letters` (the turn whose letter waits), `idle`
+    (why nothing started), the pages it published, and the CLI that runs."""
+    from . import cardqueue, codingchat, general, origin, outputs, permissions, taskstate
+    from .conversation import LATER, START_BY_WRITING, came, ep, stamp, _mail
+    from .general import WAITING_TYPE
+    task = store.get_task(tid) or {'TaskId': tid}
+    drawn = {x['id'] for x in out}
+    led = {(r['Kind'], r['Ref']) for r in store._rows('SELECT Kind, Ref FROM heard WHERE TaskId=?', (tid,))}
+    held = set((hold_ or {}).get('mids') or [])
+    pend = []
+    for c in store.list_comments(tid, internal=True):
+        k = c.get('LineId') or f"c:{c['CommentId']}"
+        if c.get('ActorType') != WAITING_TYPE or k in drawn or ('line', c.get('LineId') or '') in led: continue
+        pend.append({'id': k, 'kind': 'line', 'at': c['CreatedAt'], **general.his_line(c), '_k': came(c)})
+    for x in _mail(store, tid):
+        k = f"m:{x['MessageId']}"
+        if (x.get('Channel') or '') == OWN or k in drawn or ('mail', str(x['MessageId'])) in led or not (at_work or x['MessageId'] in held): continue
+        pend.append({'id': k, 'kind': 'arrival', **general.mail_row(store, x), 'joined': stamp(x['T']), '_k': came(x)})
+    if at_work:
+        for m in general.press_lines(store, tid):
+            aid = m['id'].split('-')[1]
+            if f'p:{aid}' in drawn or not m.get('press') or ('press', aid) in led: continue
+            pend.append({'id': f'p:{aid}', 'kind': 'press', 'at': m['createdAt'], 'text': m['content'][0]['text'],
+                         '_k': (int(ep(m['createdAt'])), float('inf'), 2, int(aid))})
+    pend.sort(key=lambda p: p.pop('_k'))
+    perms = permissions.pending(tid, store)
+    live = general._live_of(tid)
+    ask = taskstate.asking(store, task, general.session_for(tid) or (live if codingchat._live(tid) else None))
+    if ask and ask.get('source') == 'permission' and perms: ask = None
+    flat = lambda v: ' '.join(re.sub(r'[*_`]', '', str(v or '')).split())
+    turns = [x for x in out if x['kind'] == 'turn']
+    last = turns[-1] if turns else None
+    if last and last.get('state') == 'failed':
+        from .failures import cli_quota
+        if (notice := cli_quota(last.get('fail'))):
+            last.update(fail=notice, quota=True)
+            if not at_work: ask = None
+    if ask and last:
+        said = ' '.join([str(last.get('text') or ''), *(s.get('text') or '' for s in last.get('steps') or [] if s.get('k') == 'said')])
+        ask = {**ask, 'turn': last['id'], **({'said': True} if flat(ask.get('text')) and flat(ask['text']) in flat(said) else {})}
+        # ...a missing fact is one question: the reply it cannot write yet is not drawn under it as an empty box
+        for x in turns: x['cards'] = [c for c in x.get('cards') or [] if not (c.get('status') == 'pending' and c.get('what') in DRAFTS and not c.get('was'))]
+    # ...the turn whose letter waits for his Send (the page hangs the letters' block there), never one at work
+    letters = next((x['id'] for x in reversed(turns) if x.get('state') not in LIVE
+                    and any(c.get('status') == 'pending' and c.get('what') in (*DRAFTS, 'slot') for c in x.get('cards') or [])), None)
+    # ...what is left to him is said by the newest finished turn, the chat's last thing (its summary's "for you to do")
+    if last and last.get('state') not in LIVE and out and out[-1] is last: last['on_you'] = True
+    lv = codingchat._live(tid)
+    now = bool(at_work and pend and not perms and lv is not None and getattr(lv, 'steerable', lambda: False)())
+    later = LATER if at_work and any(p['kind'] == 'line' for p in pend) and not getattr(live, 'hears_mid_turn', lambda: True)() else ''
+    dropped = [json.loads(r['Detail'] or '{}').get('line') for r in store._rows(
+        "SELECT Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action='line_dropped'", (tid,))]
+    idle = None
+    if not at_work and not hold_ and not pend and task.get('Status') not in ('done', 'dropped') and out and all(x['kind'] == 'arrival' for x in out):
+        from .ingest import NOT_STARTED
+        why = next((c for c in reversed(store.list_comments(tid, internal=True)) if str(c.get('Body') or '').startswith(NOT_STARTED)), None)
+        if why: idle = f"{why['Body']} {START_BY_WRITING}"
+    # ...HIS FIRST LINE ON A REPORT HE SENT ON CARRIES ITS NAME: the report is the pill in his bubble
+    if task.get('Source') == 'report' and not any(x['id'] == f's:{tid}' for x in out) and (first := next((x for x in out if x['kind'] == 'line'), None)):
+        m = next(iter(store.list_messages(tid)), None) or {}
+        if (name := str(m.get('SourceName') or m.get('Subject') or '').strip()): first['came'] = name
+    # ...each page it published stands in the turn that made it: the newest that had begun by then
+    def after(at):
+        t = next((x for x in reversed(turns) if (x.get('started') or 0) <= at), None)
+        return (t.get('answer') or t['id']) if t else None
+    published = [{**p, 'after': after(ep(p.get('created_at')) + 0.999)} for p in outputs.pages(store, tid)]
+    q = cardqueue.state(store, tid)
+    return {'pending': pend, 'now': now, 'later': later, 'dropped': [d for d in dropped if d], 'working': at_work,
+            'started': general.turn_started(tid) if at_work else None, 'asking': ask, 'permissions': perms, 'live': codingchat.live_of(lv),
+            'letters': letters, 'idle': idle, 'queue': {'live': q['live'], 'held': q['held'], 'line': cardqueue.line(q)},
+            'hold': hold_ and {**{k: hold_[k] for k in ('line', 'person', 'org')},
+                               **({'line': origin.JOINED_LINE.format(who=hold_['who'])} if turns else {})},
+            'published': published, 'ran': bool(turns)}

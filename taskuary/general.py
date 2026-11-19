@@ -140,7 +140,7 @@ def keep_cut_turns(store) -> list:
 
 # A TURN THAT FAILED KEEPS ITS FAILURE WHERE IT HAPPENED (chat-render, 2026-11-18; the owner's rule 4): its CLI died part-way, it filed nothing,
 # and the chat said why only while that run was the task's last word - once he wrote again the turn read "1 step" with no reason under it.
-# Filed as a cut turn is, its sentence on a line of its own that opens with this mark (conversation._items reads it back as the turn's `fail`)
+# Filed as a cut turn is, its sentence on a line of its own that opens with this mark (chatlog.answered reads it back as the turn's `fail`)
 FAILED_MARK = '\u26a0 '
 
 

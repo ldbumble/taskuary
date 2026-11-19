@@ -795,8 +795,8 @@ def the_basic_flow(request):
         # ...SHADOW_REPORT=<file>: the chat's log (chatlog.read) beside the list, every difference written down, none failing (one-log stage 2)
         if (rep := os.environ.get('SHADOW_REPORT')):
             from taskuary import chatlog
-            if os.environ.get('SHADOW_MIGRATE'): chatlog.migrate(store, key, legacy=got)     # ...frozen at its first read, appended from there
-            if (d := chatlog.shadow(got, chatlog.read(store, key))):
+            from taskuary import conversation_legacy
+            if (d := chatlog.shadow(conversation_legacy.items(store, key), got)):
                 with open(rep, 'a', encoding='utf-8') as f: f.write('\t'.join((request.node.nodeid, f'task {tid}', d)) + '\n')
         prev[store][key] = got
         return got

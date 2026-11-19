@@ -273,7 +273,7 @@ def test_the_page_reads_the_log_through_a_timeline_and_nothing_he_saw_moves():
     """THE READER SWITCH (stage 7): what the page reads is the log - a message, a turn with its reply card, his line, a restart in the middle,
     his Send and a second press. Every read keeps what the one before drew in its place (flow_breaks), and the card stands where it stood."""
     from taskuary import cardqueue, conversation, general
-    s, tid = world(); s.set_setting('chat_log', '1', 'owner')
+    s, tid = world()
     mid = s.add_message({'TaskId': tid, 'ExternalId': 'e1', 'Channel': 'email', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
                          'ToEmail': 'alex@northwind.example', 'Subject': 'Review?', 'BodyText': 'Your review of the tool? Erin', 'Status': 'routed'})
     reads, was = [], None
@@ -324,3 +324,18 @@ def test_a_draft_he_wrote_past_reads_grey_from_the_read_his_line_is_drawn_in():
     s, tid = world()
     chatlog.moved_past(s, out)
     assert out[0]['status'] == 'passed' and out[0]['was']['text'] == 'Hi Erin. Alex'
+
+
+def test_what_waits_by_the_box_is_read_beside_the_log_never_drawn_twice():
+    """STAGE 8: the reader says what waits for the agent itself - his line kept while nothing heard it yet - and an input is in one place:
+    waiting, or in the chat once heard. The line of cards and the turn's state ride beside it."""
+    from taskuary import conversation, general
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    general.wait_line(s, tid, 'Also the March numbers', line_id='l-wait')
+    got = chatlog.serve(s, tid)
+    assert [p['id'] for p in got['pending']] == ['l-wait'] and 'l-wait' not in [x['id'] for x in got['items']]
+    assert set(got) >= {'rev', 'items', 'pending', 'working', 'asking', 'permissions', 'queue', 'hold', 'letters', 'published', 'ran'}
+    conversation.hear(s, tid, ['l-wait'])
+    got = chatlog.serve(s, tid)
+    assert got['pending'] == [] and 'l-wait' in [x['id'] for x in got['items']]

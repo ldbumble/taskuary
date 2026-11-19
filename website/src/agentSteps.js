@@ -37,14 +37,18 @@ const seeded = (f) => /^TQ-\d+\.stranger\.md$/i.test(baseName(f));
 const readSaid = (f) => (seeded(f) ? "Read what the sender wrote" : named(f) ? `Read ${baseName(f)}` : "Read a file");
 const parent = (p) => { const x = parts(p); return x.length > 1 ? x[x.length - 2] : ""; };
 // ...past any `user:password@` the address carries: a host is all a person needs, and a sign-in in a URL is a secret
-const hostOf = (u) => (/^https?:\/\/(?:[^/@\s]*@)?(?:www\.)?([^/?#:@]+)/i.exec(String(u || "")) || [])[1] || "";
+// ...A VALUE THE SHELL FILLS IN AS IT RUNS ("$q" in a loop, "${TERM}", "%Q%") is none the step can say: "Searching your mail for '$q'" stood in
+// the steps (design round 6, D3). A price ("$519") is a value all the same
+const filled = (v) => (/\$\{?[A-Za-z_]|%[A-Za-z_]\w*%/.test(String(v || "")) ? "" : v);
+// ...and never one the shell fills in as it runs ("127.0.0.$i" in a loop - the walk, 2026-11-19): none a step can say (filled)
+const hostOf = (u) => filled((/^https?:\/\/(?:[^/@\s]*@)?(?:www\.)?([^/?#:@]+)/i.exec(String(u || "")) || [])[1] || "");
 // WHERE A FETCH WENT, host and path (the owner, 2026-11-05: "it has to show what it's working on ... like pulling from url's"): never its query
 // string or fragment, where tokens ride, nor a path segment that reads as a key (long, letters and digits mixed)
 const KEYLIKE = /^(?=.*\d)(?=.*[A-Za-z])[\w~.=-]{24,}$/;
 const unesc = (p) => { try { return decodeURIComponent(p); } catch { return p; } };
 export const pageOf = (u) => {
   const m = /^https?:\/\/(?:[^/@\s]*@)?(?:www\.)?([^/?#:@]+)(?::\d+)?([^?#\s]*)/i.exec(String(u || "").trim());
-  if (!m) return "";
+  if (!m || !filled(m[1])) return "";
   const path = m[2].split("/").filter(Boolean).map((p) => (KEYLIKE.test(p) ? "…" : unesc(p))).join("/");
   return clip(path ? `${m[1]}/${path}` : m[1], 64);
 };
@@ -126,9 +130,6 @@ const fileStep = (p, plain) => {
   return null;
 };
 
-// ...A VALUE THE SHELL FILLS IN AS IT RUNS ("$q" in a loop, "${TERM}", "%Q%") is none the step can say: "Searching your mail for '$q'" stood in
-// the steps (design round 6, D3). A price ("$519") is a value all the same
-const filled = (v) => (/\$\{?[A-Za-z_]|%[A-Za-z_]\w*%/.test(String(v || "")) ? "" : v);
 const taskuaryCall = (path, cmd) => {
   const [where, query = ""] = path.split("?");
   const bits = where.split("/").filter(Boolean);
@@ -153,8 +154,17 @@ const OWN_CLI = { "--search": (v) => ({ kind: "mail", summary: v ? `Searched you
 // ...the agent's own note on the wall (--note) is ITS words for what the line is doing: the step, whatever else ran with it (`own`)
 OWN_CLI["--note"] = (v) => (v ? { kind: "plan", summary: clip(v, 120), own: true } : { kind: "plan", summary: "Left a note on the wall" });
 OWN_CLI["--board"] = () => ({ kind: "data", summary: "Read what earlier agents left on the wall" });
-const ownCli = (args) => { const i = args.findIndex((a) => OWN_CLI[a]);
-  return i < 0 ? { kind: "data", summary: "Looked something up in Taskuary" } : OWN_CLI[args[i]](args[i + 1] && !args[i + 1].startsWith("-") ? filled(args[i + 1]) : ""); };
+// ...EVERY FLAG OF ITS GRAMMAR SAYS WHAT IT DID (the walk, 2026-11-19: "Looked something up in Taskuary" said nothing)
+Object.assign(OWN_CLI, { "--withdraw-draft": () => ({ kind: "edit", summary: "Took back its draft" }),
+  "--reply-not-needed": () => ({ kind: "task", summary: "Said no reply is needed" }), "--no-reply": () => ({ kind: "task", summary: "Said no reply is needed" }),
+  "--waiting-on": () => ({ kind: "task", summary: "Said what the task waits on" }), "--follow-up": () => ({ kind: "task", summary: "Picked the task up again" }),
+  "--propose": () => ({ kind: "task", summary: "Proposed a step for your yes" }), "--slot": () => ({ kind: "edit", summary: "Drafted an email" }),
+  "--use-repo": () => ({ kind: "task", summary: "Picked the repository to work in" }), "--guide": () => ({ kind: "data", summary: "Read Taskuary's guide" }),
+  "--prompts": () => ({ kind: "data", summary: "Read its instructions" }), "--browser": () => ({ kind: "page", summary: "Used the browser" }),
+  "--upvote": () => ({ kind: "data", summary: "Voted on a Hub post" }), "--downvote": () => ({ kind: "data", summary: "Voted on a Hub post" }),
+  "--comment": () => ({ kind: "data", summary: "Commented on a Hub post" }) });
+const ownCli = (args) => { const i = args.findIndex((a) => OWN_CLI[a]), flag = args.find((a) => /^--[a-z]/.test(a));
+  return i < 0 ? { kind: "data", summary: flag ? `Asked Taskuary for ${flag.slice(2).replace(/-/g, " ")}` : "Ran Taskuary's command" } : OWN_CLI[args[i]](args[i + 1] && !args[i + 1].startsWith("-") ? filled(args[i + 1]) : ""); };
 
 // AGENT-BROWSER IN WORDS, from its own fixed grammar (browsergate.LOOKS / TYPES lists the same verbs): Codex and Gemini read "Ran
 // agent-browser click" with no page or target, while Claude was saved only by its own Bash description (2026-10-25)

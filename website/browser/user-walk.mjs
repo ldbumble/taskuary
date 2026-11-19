@@ -27,7 +27,8 @@ await writeFile(path.join(out, "user-brief.md"), [`# Who you are\n${day.persona}
   `# Files you have\n${Object.keys(day.files || {}).map((f) => `- ${path.join(files, f)}`).join("\n") || "- none"}\n- the northwind/ledger checkout on your disk: ${repo}`].join("\n\n"));
 // ...AND THE WEB IT SIGNS UP ON: invented vendor sites on this computer (fake_signup.py - a sign-up form, password rules, a human check, a
 // code by email, a code by phone, a paid plan), each on its own loopback address; the codes they "email" arrive as mail, as a real inbox would
-const SITE = 18791, INBOX = path.join(out, "sites-inbox.jsonl"), PY = process.env.TASKUARY_TEST_PYTHON || "python";
+// ...on a port of this walk's own (USER_SITE_PORT): walks run side by side, and two on one port answered each other's vendors
+const SITE = Number(process.env.USER_SITE_PORT || 18791), INBOX = path.join(out, "sites-inbox.jsonl"), PY = process.env.TASKUARY_TEST_PYTHON || "python";
 const sites = spawn(PY, [fileURLToPath(new URL("./fake_signup.py", import.meta.url)), String(SITE), INBOX], { stdio: "ignore" });
 process.on("exit", () => { try { sites.kill(); } catch {} });
 let inboxSeen = 0;
@@ -44,7 +45,7 @@ for (const a of [...day.arrivals].sort((x, y) => x.at - y.at)) {
   const wait = t0 + (a.at * 60000) / speed - Date.now();
   if (wait > 0) await sleep(wait);
   const [, name, email] = /^(.*?)\s*<(.+)>$/.exec(a.from) || [, a.from, ""];
-  const body = a.attach && day.files?.[a.attach] ? `${a.body}\n\n--- ${a.attach} ---\n${day.files[a.attach]}` : a.body;
+  const body = (a.attach && day.files?.[a.attach] ? `${a.body}\n\n--- ${a.attach} ---\n${day.files[a.attach]}` : a.body).replaceAll("127.0.0.1:18791", `127.0.0.1:${SITE}`);
   const got = await api("/api/ingest/push", { channel: a.channel, subject: a.subject || "", body, from_name: name, ...(email ? { from_email: email } : {}),
     conversation_id: `day-${a.channel}-${thread(a.subject) || name}` });
   console.log(`[${((Date.now() - t0) / 60000).toFixed(1)}m] ${a.channel} from ${name}: ${a.subject || a.body.slice(0, 40)} -> ${JSON.stringify(got).slice(0, 120)}`);

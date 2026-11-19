@@ -24,7 +24,8 @@ async function look(note = "") {
     const vis = eval(visSrc), txt = (e) => (e?.innerText || "").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
     const tp = document.querySelector("[data-tq-task-page]");
     const head = txt(tp?.querySelector("[data-tq-task-head], header, h1, h2")) || txt(document.querySelector("main h1, main h2"));
-    const rail = [...document.querySelectorAll("[data-tq-rail] .tq-pile-row[data-tq-key]")].filter(vis).map((e) => "- " + txt(e).split("\n").slice(0, 2).join(" | ")).slice(0, 25);
+    // ...the whole row on one line: its first two lines were its age and a hand badge, and the walks read rows "showing only the waving hand"
+    const rail = [...document.querySelectorAll("[data-tq-rail] .tq-pile-row[data-tq-key]")].filter(vis).map((e) => "- " + txt(e).split("\n").filter(Boolean).join(" | ")).slice(0, 25);
     const chat = txt(tp?.querySelector(".tq-aui-viewport"));
     const main = tp ? "" : txt(document.querySelector("main") || document.body).slice(0, 2500);
     // ...a greyed one says so (a card the chat moved past keeps its buttons inside a disabled fieldset: button.disabled reads false there)
@@ -58,8 +59,11 @@ async function click(words, n = 1) {
     // ...greyed by its own flag or by the card around it (MovedPast's disabled fieldset): the walks of 2026-11-18 "pressed" such a Send and an
     // Approve, nothing reached the server, and the diary read it as a live stale card
     if (b.matches(":disabled") || b.closest("[inert], [aria-disabled=true]")) return { ok: false, off: name(b), why: b.title || "" };
-    b.scrollIntoView({ block: "center" }); b.click(); return { ok: true, name: name(b) };
+    // ...and pressed with the mouse: an element's click() reaches a button under an open menu's backdrop, which no person can - the walks
+    // "opened" Change a second time over the first that way
+    b.scrollIntoView({ block: "center" }); const q = b.getBoundingClientRect(); return { ok: true, name: name(b), x: q.x + q.width / 2, y: q.y + q.height / 2 };
   }, words, n, vis);
+  if (got.ok) await page.mouse.click(got.x, got.y);
   if (!got.ok) return look(got.off ? `"${got.off}" is greyed out${got.why ? ` (its hover says: ${got.why})` : ""} - nothing pressed` : `no button or link says "${words}" - nothing pressed`);
   await sleep(1500); return look(`pressed "${got.name}"`);
 }
@@ -85,11 +89,15 @@ async function type(words, file) {
 }
 
 async function row(words) {
-  const ok = await page.evaluate((w, visSrc) => {
+  // ...pressed with the mouse, as a person does (the walks of 2026-11-18: an element's click() on the row opened nothing, and the diaries read
+  // the rail as broken - a real click on the same row opens it)
+  const at = await page.evaluate((w, visSrc) => {
     const vis = eval(visSrc), want = w.toLowerCase();
     const r = [...document.querySelectorAll("[data-tq-rail] .tq-pile-row[data-tq-key]")].filter(vis).find((e) => e.innerText.toLowerCase().includes(want));
-    if (!r) return false; (r.querySelector("button, a") || r).click(); return true;
+    if (!r) return null; r.scrollIntoView({ block: "center" }); const q = r.getBoundingClientRect(); return { x: q.x + q.width / 2, y: q.y + q.height / 2 };
   }, words, vis);
+  if (at) await page.mouse.click(at.x, at.y);
+  const ok = !!at;
   await sleep(2000); return look(ok ? `opened the row "${words}"` : `no rail row says "${words}"`);
 }
 

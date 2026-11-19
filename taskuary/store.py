@@ -5355,11 +5355,8 @@ class SQLiteStore:
                 (task_id,)).fetchone()
             if last and last['Actor'] == actor and last['ActorType'] == actor_type and last['Body'] == body:
                 return last['CommentId']
-            cur = self.cx.execute(
-                'INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)',
-                (task_id, actor, actor_type, body, _now()))
-            self.cx.commit(); self._writes += 1
-            return cur.lastrowid
+            # ...through add_comment's own door, so an answer filed this way is in the chat's log as one filed there (the demo's line after Send)
+            return self.add_comment(task_id, actor, actor_type, body)
     def list_comments(self, task_id, internal: bool = False):
         """The task's comments, oldest first. PROMPT MACHINERY IS NOT A COMMENT (the owner, 2026-11-08): a brief Taskuary handed an agent ("THIS
         TASK IS A REPLY OWED..."), a turn's summary JSON, a line kept for a turn - each its own ActorType already (is_internal) - stays out of

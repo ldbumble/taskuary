@@ -818,7 +818,10 @@ class TheDemoWorldIsConnectedTests(unittest.TestCase):
     def test_its_tasks_channels_are_connected(self):
         from taskuary import connectorcatalog, outbound
         s = MemoryStore(); demo.seed(s)
-        self.assertEqual(connectorcatalog.connected_count(s, demo.cli_connections()), len(demo.CONNECTIONS) + len(demo.CLIS_ON))
+        # ...every card the demo connects reads connected, and the count is those and its CLIs (a keyless card switched on, the Hub, counts too)
+        on = {c['Type'] for c in connectorcatalog.connected(s)}
+        self.assertLessEqual({c[0] for c in demo.CONNECTIONS}, on)
+        self.assertEqual(connectorcatalog.connected_count(s, demo.cli_connections()), len(on) + len(demo.CLIS_ON))
         for kind in ('email', 'linkedin', 'teams', 'whatsapp', 'github'): self.assertIsNone(outbound.connect_fix(s, kind), kind)
 
 

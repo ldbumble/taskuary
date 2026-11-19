@@ -2,6 +2,22 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.27 - 2026-11-19
+
+- What waits by the box is drawn in the order it came, on the hand-over's own key
+- A line typed while the agent writes has only what came after it under it
+- The work after his Allow counts from his press, never from the turn's start
+- His line reaches the agent at its next step on every road that can take it
+- A task called by his whole sentence takes the name its agent gives it
+- The agent is told what it can do here, and a fix in the folder he names just works
+- Search finds a mail by the title its rail row wears
+- Words typed at an open menu, or after a click past it, go on into the box
+- A task is never its head over nothing while its chat is still coming
+- His ask runs in the browser; a big act or one he did not ask for is one card in the chat
+- The browser pane draws no press handed over: a held press is a card in the chat
+- A sign-up the site crashed on or never answered is no account; typing asks no model
+- A turn's steps say what the agent did, each thought on its own line, in the chat's own type
+
 ## 0.4.0.26 - 2026-11-18
 
 - A searched task opens as its rail row does, at the click

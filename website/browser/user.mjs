@@ -21,7 +21,7 @@ const vis = `(e) => { const r = e.getBoundingClientRect(); return r.width > 0 &&
 async function look(note = "") {
   await sleep(600);
   const s = await page.evaluate((visSrc) => {
-    const vis = eval(visSrc), txt = (e) => (e?.innerText || "").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+    const vis = eval(visSrc), txt = (e) => (e?.innerText || "").replace(/\t+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
     const tp = document.querySelector("[data-tq-task-page]");
     const head = txt(tp?.querySelector("[data-tq-task-head], header, h1, h2")) || txt(document.querySelector("main h1, main h2"));
     // ...the whole row on one line: its first two lines were its age and a hand badge, and the walks read rows "showing only the waving hand"
@@ -79,12 +79,23 @@ async function type(words, file) {
   }, vis);
   if (!where) return look("there is no box to type in on this screen");
   if (file) {
-    const input = await page.$("[data-tq-task-page] input[type=file]") || await page.$("input[type=file]");
+    // ...the paperclip OF THE BOX he types in (R6 walk: the first file input on a task page was a reply card's, so the file went onto the
+    // outgoing email and read as an app bug)
+    const input = (await page.evaluateHandle((visSrc) => { const vis = eval(visSrc), box = [document.querySelector("[data-tq-task-page] .tq-aui-input"),
+      ...document.querySelectorAll("textarea, [contenteditable=true]")].find((b) => b && vis(b) && !b.disabled);
+      for (let e = box; e; e = e.parentElement) { const f = e.querySelector("input[type=file]"); if (f) return f; } return null; }, vis)).asElement()
+      || await page.$("[data-tq-task-page] input[type=file]") || await page.$("input[type=file]");
     if (!input) return look("there is no paperclip on this screen");
     await input.uploadFile(path.resolve(file)); await sleep(1200);
     await page.evaluate((visSrc) => { const vis = eval(visSrc); [document.querySelector("[data-tq-task-page] .tq-aui-input"), ...document.querySelectorAll("textarea, [contenteditable=true]")].find((b) => b && vis(b) && !b.disabled)?.focus(); }, vis);
   }
-  await page.keyboard.type(words); await page.keyboard.press("Enter");
+  // ...a line break is Shift+Enter, as a person writes a paragraph (R6: keyboard.type pressed Enter at each newline and sent half a message,
+  // and the keys after it fell into a box being cleared - read as "lost lines")
+  for (const [i, part] of String(words).split("\n").entries()) {
+    if (i) { await page.keyboard.down("Shift"); await page.keyboard.press("Enter"); await page.keyboard.up("Shift"); }
+    await page.keyboard.type(part);
+  }
+  await page.keyboard.press("Enter");
   await sleep(3000); return look(`typed into "${where}"${file ? ` with ${path.basename(file)}` : ""}`);
 }
 

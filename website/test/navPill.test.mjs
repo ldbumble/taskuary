@@ -58,14 +58,8 @@ test("the row's end flag rides the snapshot, and the walk's Back is no item's ve
 test("the view registers Back beside the floor and asks the walk for the row above; Next is hidden on the last one from the walk's own word", () => {
   const view = fs.readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
   // ...and on a desk Back is always there, greyed where there is nowhere to go back to (the owner, 2026-10-29)
-  assert.match(view, /useVerbs\("nav", \[\{ id: BACK, group: "back", label: btn\("back"\), title: btnHint\("back"\), disabled: !backTo \|\| moving, why: moving \? "" : "nothing above this one",\s+run: \(\) => backTo && goBack\(\) \}\], !!backTo \|\| \(deskChat && !firstRun\)\);/);
-  assert.match(view, /if \(resetting \|\| busy \|\| turnFlight\.current \|\| deferredChat\.current\.size \|\| !backTo\) return undefined;/,
-    "nothing above, or a move out: nothing happens (greyed - one move at a time, 2026-11-03)");
-  assert.match(view, /return surface\(null, null, null, false, "back"\);/, "the walk's own Back: the row above, from the server");
-  // ...and not greyed on a rail row under the top while the walk's word catches up (the stress walk, 2026-11-02) - only while a move is out
-  // ...and at the walk's end, nothing on the table, Back goes to the last row walked (railwalk.back from its end; the owner, 2026-11-10)
-  assert.match(view, /const walkEnd = !currentItem && !table\.key && !table\.place && !!walkNow\?\.ended && walkNow\.above;/);
-  assert.match(view, /const backTo = !firstRun && !old && !walk && \(table\.speaks \? \(onWalk \? walkNow\.above : underTop \? "above" : null\) : walkEnd \|\| null\), moving = busy \|\| deferring \|\| resetting;/);
+  // ...ONE BACK OVER ONE LIST (the spec's part E, 2026-11-19): the places he and the walk moved through (appLinks.navBack - oneBack.test.mjs)
+  assert.match(view, /useVerbs\("nav", \[\{ id: BACK, group: "back", label: btn\("back"\), title: btnHint\("back"\), disabled: !canBack \|\| moving, why: moving \? "" : "nothing to go back to",\s+run: navBack \}\], canBack \|\| \(deskChat && !firstRun\)\);/);
   assert.match(view, /const atEnd = !!current && table\.speaks && onWalk && !walkNow\.below;/, "no Next on the last one: the walk says nothing is below");
   const row = fs.readFileSync(new URL("../src/ActionRow.jsx", import.meta.url), "utf8");
   assert.ok(row.indexOf("data-tq-walk-back") < row.indexOf("data-tq-next=\"\""), "Back on the left, Next on the right");

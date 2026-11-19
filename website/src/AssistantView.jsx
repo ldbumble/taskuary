@@ -86,7 +86,7 @@ import { actReceipt, lineKeys, mergeDurableTurns, nextBadge, pickLine, placeLine
 import { lightOf, litAfter, litOn, litPick, litPull } from "./assistantLight.js";
 import * as pageView from "./pageView.js";
 import DigestText from "./DigestText.jsx";
-import { canGoBack, firstAppLink, linkName, onStep, openAppLink, recordPlace } from "./appLinks.js";
+import { canGoBack, firstAppLink, linkName, navBack, onStep, openAppLink, recordPlace } from "./appLinks.js";
 import { goStraight } from "./SetupWithAi.jsx";
 import { BOARD, hashFor, opensTask } from "./canvasLinks.js";
 import { canSend, cannotStart, useCapabilities } from "./capabilities.js";
@@ -2079,7 +2079,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     const drawn0 = rowsDrawn.current;
     setBusy(true); setErr(""); setFlight({ from: key && key === currentRef.current?.key ? null : currentRef.current?.key || null });
     pickedRef.current = !!key;
-    if (!key) navHow.current = "replace";            // the walk's Next is a stream, not a stack: the address follows, Back does not
+    navHow.current = "push";                         // every move is a step of the one list both Backs walk (appLinks.navBack), Next too
     const optimisticId = asUser ? `u${Date.now()}` : null;
     if (optimisticId) setMsgs((m) => pickLine(m, { id: optimisticId, role: "user", text: asUser, pick: key || undefined }));
     // the row the press moves FROM: the one on the table, or the one the press names
@@ -3060,15 +3060,6 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   // (the owner, 2026-11-03), and its move goes once that one is in - whose answer then fills its own line and leaves the table alone (landed
   // `off`). A rail click mid-pull was refused as busy and did nothing at all. The latest ask wins; one queued before it is dropped.
   const pullRef = useRef(null), pressRowRef = useRef(null);   // ...pressRowRef: a rail row pressed by number (railPress, below)
-  // BACK: the row directly above the one on the table, even when the walk did not start at the top (rule 3) - the server's to say
-  // (walk.above) and to move to (railwalk.back). It reads nothing and passes nothing: the row it leaves stays exactly as it was
-  // ...greyed, and refused, while a move is out (the owner, 2026-11-03): it draws its row at its press as Next does
-  const goBack = () => {
-    if (resetting || busy || turnFlight.current || deferredChat.current.size || !backTo) return undefined;
-    navHow.current = "replace";
-    setRailOpen(false); if (old) setOld(null); browseDown();
-    return surface(null, null, null, false, "back");
-  };
   // `made`: the row of a task New just made (funnelPile.madeRow), which no rail row holds yet - drawn at the press as a rail row is
   const pull = (key, asUser, made = null) => {
     const row = (pileRef.current?.items || []).find((i) => i.key === key && !i.settling) || (made?.key === key ? made : null);
@@ -3267,18 +3258,16 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   useVerbs("floor", [{ id: "floor:next", group: "next", label: btn("next"), tone: "p", title: btnHint("next"),
     run: () => { setErr(""); surface(null, null); } }], hanging);
   // NAV: BACK BESIDE NEXT, NO NEXT ON THE LAST ONE (the owner, 2026-10-27: "on the first one no Back, like no Next on the last one"). Back
-  // stands while the walk has a row above the one on the table (walk.above); Next goes when it has nothing below it (walk.below)
+  // stands while there is a place to go back to (appLinks.navBack); Next goes when it has nothing below it (walk.below)
   const walkNow = walkOf(pile), onWalk = !!currentItem && !!walkNow && (walkNow.on === currentItem.key || (walkNow.members || []).includes(currentItem.key));
-  // ...and on a rail row below the top while the walk's word catches up (its answer in, its rail not yet), there is a row above: the server says
-  // which. Greyed while a move is out, as Next is (the owner, 2026-11-03: one move at a time)
-  const underTop = !!currentItem && items.some((i) => i.key === currentItem.key) && items[0]?.key !== currentItem.key;
-  // ...and AT THE WALK'S END, nothing on the table, Back goes to the last row it walked (railwalk.back from its end; the owner, 2026-11-09: Back is
-  // any task you were on) - greyed there, the bar was Back and nothing else that worked (the owner, 2026-11-10: "where is the button to start over?")
-  const walkEnd = !currentItem && !table.key && !table.place && !!walkNow?.ended && walkNow.above;
-  const backTo = !firstRun && !old && !walk && (table.speaks ? (onWalk ? walkNow.above : underTop ? "above" : null) : walkEnd || null), moving = busy || deferring || resetting;
+  // ...BACK IS THE ONE LIST OF PLACES HE WAS ON (the spec's part E, 2026-11-19): the bar's Back walked the rail's row above, the corner arrow the
+  // address - two Backs, two answers. Both step back over the places he and the walk moved through (appLinks.navBack)
+  const [canBack, setCanBack] = useState(canGoBack);
+  useEffect(() => onStep(() => setCanBack(canGoBack())), []);
+  const moving = busy || deferring || resetting;
   // ...and on a desk Back is ALWAYS on the bar, greyed where there is nowhere to go back to (the owner, 2026-10-29: the bar is Back and Next)
-  useVerbs("nav", [{ id: BACK, group: "back", label: btn("back"), title: btnHint("back"), disabled: !backTo || moving, why: moving ? "" : "nothing above this one",
-    run: () => backTo && goBack() }], !!backTo || (deskChat && !firstRun));
+  useVerbs("nav", [{ id: BACK, group: "back", label: btn("back"), title: btnHint("back"), disabled: !canBack || moving, why: moving ? "" : "nothing to go back to",
+    run: navBack }], canBack || (deskChat && !firstRun));
   const atEnd = !!current && table.speaks && onWalk && !walkNow.below;
   useEffect(() => { navEnd(atEnd); }, [atEnd]);
   useEffect(() => () => navEnd(false), []);
@@ -3351,8 +3340,6 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   }, [placeHash, active, state, old, firstRun, busy, request]);   // eslint-disable-line react-hooks/exhaustive-deps
   // BACK IN THE WINDOW ITSELF (TQ-1187): the desktop window has no browser bar, so the step behind a page or task the owner opened is
   // a press away here - the browser's own Back, the road onPlace already takes. Only over a step of ours (appLinks.canGoBack)
-  const [canBack, setCanBack] = useState(canGoBack);
-  useEffect(() => onStep(() => setCanBack(canGoBack())), []);
   const railPile = useMemo(() => ((leaving.length || continuingTid || readGone) && pile?.items
     ? { ...pile, items: asPressed(pile.items, { leaving: leaving.map((x) => x.tid), continuing: continuingTid, read: readGone?.keys }) } : pile),
     [pile, leaving, continuingTid, readGone]);
@@ -3660,7 +3647,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     <div className="tq-asst-col" style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div className="tq-chat-head">
         {/* no mark here: the top bar already carries the logo (the owner, 2026-10-06: "don't need it on top of the assistant") */}
-        {canBack && !!placeHash && !old && !firstRun && <Tooltip title="Back (Alt+←)"><IconButton size="small" aria-label="Back" onClick={() => window.history.back()} sx={{ ml: -0.75, mr: 0.25 }}><ArrowBackIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>}
+        {canBack && !!placeHash && !old && !firstRun && <Tooltip title="Back (Alt+←)"><IconButton size="small" aria-label="Back" onClick={navBack} sx={{ ml: -0.75, mr: 0.25 }}><ArrowBackIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>}
         <div className="who" style={{ minWidth: 0 }}><b>{ASSISTANT_NAME}</b>{old && <span>An earlier chat · {fmtDateTime(old.at)}</span>}</div>
         <div className="grow" />
         <Tooltip title="Your work"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>

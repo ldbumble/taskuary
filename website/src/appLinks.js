@@ -96,6 +96,10 @@ export const openAppLink = (h) => {
 // one, so it never walks out of the app - a page opened cold from a link has nothing of ours behind it
 const depth = () => (typeof window === "undefined" ? 0 : Number(window.history.state?.tqDepth) || 0);
 export const canGoBack = () => depth() > 0;
+// ONE BACK OVER ONE LIST (the spec's part E, 2026-11-19): the corner arrow and the walk bar's Back landed in different places - the bar on the
+// rail's row above, the arrow skipping every task the walk's Next had moved through. Every move is a step (recordPlace "push"), and both
+// Backs, Alt+Left with them, step back over the one list - never out of the app
+export const navBack = () => { if (canGoBack()) window.history.back(); };
 const STEPS = ["popstate", "hashchange", "tq-place"];
 export const onStep = (fn) => { STEPS.forEach((e) => window.addEventListener(e, fn)); return () => STEPS.forEach((e) => window.removeEventListener(e, fn)); };
 

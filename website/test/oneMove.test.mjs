@@ -22,7 +22,7 @@ test("Next and Back grey while a move is out - a typed one's put-off move too - 
   assert.match(read("CanvasItem.jsx"), /useVerbs\("next", \[\{ id: "next", group: "next", label: btnLabel\("next"\), disabled: !!busy, run/);
   assert.match(view, /chip: runChip, busy: busy \|\| deferring \|\| resetting,/);
   assert.match(view, /deferredChat\.current\.add\(timer\); setDeferring\(true\);/);
-  assert.match(view, /disabled: !backTo \|\| moving,/);
+  assert.match(view, /disabled: !canBack \|\| moving,/);
   assert.ok(!read("actionRow.js").includes("steady"), "a Next drawn as live while it is greyed is back");
 });
 

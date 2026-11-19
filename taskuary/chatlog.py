@@ -748,8 +748,9 @@ def advance(store, tid: int) -> None:
         if st == 'pending' and rv['ReviewId'] not in front: st = 'passed' if rv['ReviewId'] in q['past'] else 'offer' if r['State'] == 'offer' else 'held'
         if st != r['State']: update(store, tid, k, state=st, status=st)
     if front and (rv := by.get(front[0])) and f"r:{front[0]}" not in rows:
-        t = open_turn(store, tid)                               # ...the turn that raised it; a turn's card is drawn when that turn has ended
-        put(store, tid, 'card', f"r:{front[0]}", {**_card(rv), 'rids': front, 'line': cardqueue.line(q)}, parent=t['Id'] if t else None,
+        # ...the turn that raised it (advance_soon kept it), else the one open now; a turn's card is drawn when that turn has ended
+        t = _RAISED.get((id(store), int(front[0]))) or (open_turn(store, tid) or {}).get('Id')
+        put(store, tid, 'card', f"r:{front[0]}", {**_card(rv), 'rids': front, 'line': cardqueue.line(q)}, parent=t,
             state='pending', src=f"review:{front[0]}")
     elif front and f"r:{front[0]}" in rows: update(store, tid, f"r:{front[0]}", line=cardqueue.line(q))
     for rid, rv in by.items():
@@ -758,6 +759,26 @@ def advance(store, tid: int) -> None:
         if unwritten(rv) or cardqueue.obsolete_read(store, tid, rv): continue
         t = open_turn(store, tid)
         put(store, tid, 'card', f'r:{rid}', {**_card(rv), 'offer': True}, parent=t['Id'] if t else None, state='offer', src=f'review:{rid}')
+    # ...AND ONE HE PRESSED BEFORE ITS ROW WAS WRITTEN STILL STANDS (nothing he did vanishes): raised and pressed - or pressed and failed -
+    # within a beat, before the worker or any read put it, its row is written from the review as it is now, in the turn that raised it
+    from .conversation import ep
+    with store.lock: froze = store.cx.execute("SELECT MAX(At) AS a FROM chatlog WHERE TaskId=? AND Src='legacy'", (tid,)).fetchone()['a'] or 0
+    for rid, rv in by.items():
+        if ep(rv.get('CreatedAt')) <= froze: continue          # ...what the old build drew was frozen as it was (migrate)
+        if f'r:{rid}' in rows or rv['Status'] == 'pending' or (rv.get('Batch') and rid != min(x for x, y in by.items() if y.get('Batch') == rv['Batch'])): continue
+        c = _card(rv)
+        if rv.get('DecidedBy') not in OWNER_ACTORS and c['status'] != 'failed': continue
+        t = _RAISED.get((id(store), int(rid))) or (_turn_at(store, tid, rv.get('CreatedAt')) or {}).get('Id')
+        put(store, tid, 'card', f'r:{rid}', c, parent=t, state=c['status'], src=f'review:{rid}')
+
+
+def _turn_at(store, tid: int, created):
+    "The turn at work when a thing was raised at `created` (a stamp): the newest turn begun by then, else None."
+    from .conversation import ep
+    with store.lock:
+        r = store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='turn' AND Parent IS NULL AND At<=? ORDER BY Id DESC LIMIT 1",
+                             (int(tid), ep(created) + 1)).fetchone()
+    return dict(r) if r else None
 
 
 # ...OFF THE WRITER'S THREAD (walk 2, 2026-11-19: the server froze ~20 s after an Approve - every request stuck, CPU flat): a review's write
@@ -765,8 +786,14 @@ def advance(store, tid: int) -> None:
 # and advance reads the whole line of cards through other roads that take their own. Two of those in opposite orders on two threads is a
 # deadlock. The write only says the line moved; one worker puts it, holding nothing else, and every read still advances first.
 _SOON, _SOON_LOCK, _SOON_GO, _SOON_T = {}, threading.Lock(), threading.Event(), [None]
-def advance_soon(store, tid: int) -> None:
-    "The line of cards on task `tid` moved: put into the log by the one worker, never on the thread that wrote it."
+_RAISED = {}         # (store, review id) -> the Id of the turn open at the review's last write before its card stood: the turn that raised it
+def advance_soon(store, tid: int, rid: int = None) -> None:
+    """The line of cards on task `tid` moved: put into the log by the one worker, never on the thread that wrote it. `rid`: the review that
+    moved - until its card stands, the turn open at each of its writes is kept as the one that raised it (the one that wrote its words, for
+    a reply raised empty) - plain reads, no other lock taken."""
+    if rid and not get(store, tid, f'r:{int(rid)}'):
+        if len(_RAISED) > 4096: _RAISED.clear()
+        _RAISED[(id(store), int(rid))] = (open_turn(store, tid) or {}).get('Id')
     with _SOON_LOCK:
         _SOON[(id(store), int(tid))] = (store, int(tid))
         if not (_SOON_T[0] and _SOON_T[0].is_alive()):

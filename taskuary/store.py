@@ -5601,7 +5601,7 @@ class SQLiteStore:
         if not review: return
         if review.get('TaskId'):                # ...raised, pressed, sent, withdrawn, set aside or failed: its card says so where it stood
             from . import chatlog                # ...put by the log's own worker, never under what this write's caller holds (advance_soon)
-            chatlog.advance_soon(self, review['TaskId'])
+            chatlog.advance_soon(self, review['TaskId'], review.get('ReviewId'))
         kinds = []
         if review.get('MessageId'): kinds.append('feed-changed')
         if review.get('TaskId'): kinds.append('task-changed')

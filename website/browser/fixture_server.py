@@ -380,6 +380,27 @@ def _install_fresh_routes(app, store):
         rid = store.add_review({"TaskId": tid, "Kind": "action", **legacy, "Origin": "agent", "DraftText": json.dumps(p), "Reason": body.get("reason") or "the comment Erin asked for"})
         return {"taskId": tid, "reviewId": rid}
 
+    @app.post("/api/fixture/overcome")
+    def fixture_overcome(body: dict = Body(...)):
+        """A held sign-up his press could not make - its card failed - and then (`taskId`) the same sign-up made on a later try: what the card
+        reads after (browser/overcome-card, design round 6 D3)."""
+        import json
+        from taskuary import browsergate, general
+        from taskuary.shellgate import FAILED
+        if body.get("taskId"):
+            return {"rids": browsergate.overcome(store, int(body["taskId"]), "rentscope.example", "Done on a later try: the account on rentscope.example was made", signup=True)}
+        tid = store.create_task({"Title": "Get data vendor trials", "Kind": "general", "Status": "in_progress", "OriginBase": "owner"}, "owner")
+        store.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, "Get trials on the data vendors Erin listed.")
+        store.add_comment(tid, "assistant", general.ASSISTANT_TYPE, "RentScope's sign-up is filled in; it waits on your press.")
+        p = {"action": "browser_act", "sid": "fx", "args": ["signup"], "signup": "rentscope.example", "site": "rentscope.example",
+             "url": "https://www.rentscope.example/signup", "command": "send the sign-up form on rentscope.example", "what": "Submit the sign-up on RentScope"}
+        rid = store.add_review({"TaskId": tid, "Kind": "action", "Status": "pending", "Origin": "agent", "DraftText": json.dumps(p),
+                                "Reason": "held before it ran, in the agent's browser: Submit the sign-up on RentScope"})
+        store.decide_review(rid, "superseded", None, "owner", note=FAILED)
+        store.review_act_failed(rid, f"No account: rentscope.example kept its sign-up form up. {general.AGENT_TOLD}", "owner")
+        store.add_comment(tid, "assistant", general.ASSISTANT_TYPE, "RentScope is active now - I signed up again with the form fixed.")
+        return {"taskId": tid, "reviewId": rid}
+
     @app.post("/api/fixture/no-readonly")
     def fixture_no_readonly(body: dict = Body(...)):
         """The stand-in CLI as one with no read-only mode Taskuary can hold it to (clis.READONLY): with a version too old for its reviewer

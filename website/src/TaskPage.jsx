@@ -2105,7 +2105,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...on white, as the mail itself reads (the owner, 2026-11-01: "shouldn't the came from full email be white") - the pane's tint is chrome
   const CARD = { bgcolor: "var(--tq-panel, #fff)", border: `1px solid ${FOCUS_EDGE}`, borderRadius: "12px", px: 2, py: 1.75, minWidth: 0, display: "flex", flexDirection: "column", gap: 0.75 };
   const cardHead = { fontSize: 12, fontWeight: 600, color: DIM };
-  const cameSummary = cameIn ? String(triaged.why || "").trim() : "";
   const cameReport = !!cameIn && t?.Source === "report" && typeof cameIn.MessageId === "number";
   const fromCards = () => (
     <Box data-tq-from-cards="" sx={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 2, "@container (min-width: 620px)": { gridTemplateColumns: "repeat(2, minmax(0, 1fr))" } }}>
@@ -2115,9 +2114,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           <Typography sx={{ fontSize: 13, color: DIM }}>{byLine(cameIn.who || cameIn.FromName || cameIn.FromEmail, cameFromWhere(cameIn),
             cameIn.SentAt ? whenShort(cameIn.SentAt) : "")}</Typography>
           {toWent()}
-          {/* WHO AND WHAT, HERE; WHAT TRIAGE MADE OF IT, BESIDE (the owner, 2026-11-05: "one should be who and summary, other the triage"):
-              the summary of what came in moved here from the triage card, which keeps only its verdict */}
-          {cameSummary && <Typography data-tq-came-in-summary="" sx={{ fontSize: 15, lineHeight: 1.5, color: INK, overflowWrap: "anywhere", mt: 0.25 }}>{cameSummary}</Typography>}
+          {/* ...THE MESSAGE ITSELF, never Taskuary's notes about it (the real-Claude walk, 2026-11-19: "paying is Alex's own action, and the
+              sender is unverified" stood where the vendor's mail should): what Taskuary made of it is the card beside, and the agent's */}
           {/* ...A REPORT SENT ON AS A TASK reads as it does on Reports - its chart and its table - never its rows' raw data (the owner,
               2026-11-13: "What came in" showed {"site": ..., "headcount": ...}) */}
           {cameReport ? <Box data-tq-came-in-report=""><FullText mid={cameIn.MessageId} report={{ name: cameIn.Subject || t?.Title || "" }} /></Box>
@@ -2130,7 +2128,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           {/* ...and the way to the whole of it is a word you can see, not only a click on the text (the owner, 2026-10-28) */}
           {!flow && !cameReport && <Link component="button" type="button" underline="hover" data-tq-came-in-more="" aria-expanded={cameInFull}
             onClick={() => setCameInFull((v) => !v)} sx={{ display: "block", fontSize: 12.5, color: "var(--tq-link, #55697a)", mt: 0.4, textAlign: "left" }}>
-            {cameInFull ? "Show less" : "Show the whole email"}</Link>}
+            {cameInFull ? "Show less" : `Show the whole ${cameIn.Channel === "email" ? "email" : "message"}`}</Link>}
           {!flow && cameInFull && typeof cameIn.MessageId === "number" && <Attachments messageId={cameIn.MessageId} dense original={cameIn.SourceLink} />}
         </> : !sources.length && fromWorkflow ? fromConvs() : <Typography sx={{ fontSize: 13, color: DIM }}>{detail.ref} · {made}</Typography>}
         {fromFacts()}
@@ -2139,7 +2137,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         {/* ...in his words, never the app's own name for its sorting (design round 5, 2026-11-19: "What triage made of it") */}
         <Typography sx={cardHead}>How Taskuary read it</Typography>
         <Typography sx={{ fontSize: 15, lineHeight: 1.5, color: INK }}>{madeOf(facts, t?.Kind || "task")}</Typography>
-        {!cameSummary && triaged.why && <Typography sx={{ fontSize: 13, lineHeight: 1.5, color: DIM, overflowWrap: "anywhere" }}>{triaged.why}</Typography>}
+        {triaged.why && <Typography sx={{ fontSize: 13, lineHeight: 1.5, color: DIM, overflowWrap: "anywhere" }}>{triaged.why}</Typography>}
         {triaged.later > 0 && <Typography sx={{ fontSize: 12.5, color: FAINT }}>{plural(triaged.later, "later message")} joined this task</Typography>}
         {workContext && <Typography sx={{ fontSize: 12.5, color: FAINT }}>Works from: {workContext}</Typography>}
         {facts.pills.filter((p) => p.tone === "alert" && p.key !== "priority").map((p) => (

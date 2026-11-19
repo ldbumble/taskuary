@@ -124,9 +124,11 @@
 .tq-aui-chat .tq-aui-message:has(+ .tq-aui-thinking) { margin-bottom: 7px; }
 .tq-aui-chat .tq-aui-user { justify-items: end; }
 .tq-aui-chat .tq-aui-user .tq-aui-user-bubble { justify-self: end; max-width: 75%; background: var(--tq-inset, #e7efe6); border-color: var(--tq-border, #cfdccd); }
-.tq-aui-chat .tq-aui-arrived { justify-self: end; max-width: 75%; border-top: 0; margin: 2px 0 14px; padding: 8px 12px; background: var(--tq-panel, #fff); border: 1px solid var(--tq-border, #dfdbd3); border-radius: 13px; }
+/* ...SOMEONE ELSE'S WORDS STAND ON THE OTHER SIDE FROM HIS (the real-Claude walk, 2026-11-19: a colleague's chat line drawn right, where his own
+   lines stand, read as his): what came in from another person on the left, his own replies - from his phone, his mailbox - on his side */
+.tq-aui-chat .tq-aui-arrived { justify-self: start; max-width: 75%; border-top: 0; margin: 2px 0 14px; padding: 8px 12px; background: var(--tq-panel, #fff); border: 1px solid var(--tq-border, #dfdbd3); border-radius: 13px; }
 .tq-aui-chat .tq-aui-brief { justify-items: end; }
-.tq-aui-chat .tq-aui-arrived-own { justify-self: start; background: var(--tq-panel, #f7f4ee); }
+.tq-aui-chat .tq-aui-arrived-own { justify-self: end; background: var(--tq-inset, #e7efe6); border-color: var(--tq-border, #cfdccd); }
 .tq-aui-chat .tq-aui-arrived-head { color: var(--tq-warning, #6b6559); font-weight: 600; font-size: 11.5px; }
 /* ...the next of a burst from the same sender sits close under the first, its time alone over it (GeneralWorkspace Arrived) */
 .tq-aui-chat .tq-aui-arrived-more { margin-top: -8px; }

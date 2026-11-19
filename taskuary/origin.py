@@ -365,13 +365,19 @@ def _hold(store, tid: int, t: dict) -> dict | None:
             'after': TRUST_AFTER}
 
 
+# HIS OWN WORDS ARE NEVER HELD BEHIND A SENDER'S TRUST (design round 4, H4: "Push it now" on his own code task waited on "Trust Erin" - her chat
+# had joined it - and his answer on another on "Trust CI"). The hold keeps what a stranger's mail would start; a turn his line begins runs, as
+# the task's mode is - the stranger's words theirs, under the reviewer - and the Trust press still lifts it. Set for the turn his line begins
+OWNER_SPEAKS = contextvars.ContextVar('tq_owner_speaks', default=False)
+
+
 def launch_mode(store, tid, cli: str, cmd: str = '') -> str:
     """'full' (today's launch, untouched), 'auto' (the CLI's reviewer) or 'look' (its read-only mode); raises Refusal when a stranger's task
     cannot run safely.
     `cmd` is the profile's own command, so the version read is the binary that will launch."""
     from . import clis
     if not tid or of_task(store, tid)[0] != 'stranger': return 'full'
-    if (h := hold(store, tid)): raise Refusal(h['line'])           # an untrusted sender: no agent at all, until Trust
+    if not OWNER_SPEAKS.get() and (h := hold(store, tid)): raise Refusal(h['line'])     # an untrusted sender: no agent of its own, until Trust
     cli = clis._base(cli)
     # ...`cli` IS claude in the version check - the CLI's own name; a reviewer too old to refuse is no reviewer
     if cli in clis.AUTO and not (cli == 'claude' and _claude_version(cmd or cli) < MIN_CLAUDE): return 'auto'

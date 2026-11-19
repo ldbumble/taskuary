@@ -184,3 +184,19 @@ def test_review_changes_stays_on_the_row_after_the_session_is_gone(s):
     assert concierge._shows(s, it, 'review_changes'), 'offered with no session open'
     assert 'review_changes' in [v['verb'] for v in rulebook.offered(s, it)]
     assert (rulebook.recommended(s, it) or {}).get('verb') is None, 'offered, never lit: what to do next is the task agent to suggest'
+
+
+def test_a_chat_room_shared_by_two_asks_makes_neither_the_others_duplicate(s):
+    """The Codex walk, 2026-11-19: a colleague's question in a Teams chat joined his code fix, and her sign-up list in the same chat a minute
+    later read "Same ask as TQ-0003 - fold it into that one". A chat's conversation id names its room, never one topic (routing.CHAT_CHANNELS);
+    two mails on one email thread still are one conversation."""
+    fix = s.create_task({'Title': 'Fix the rounding bug in northwind/ledger totals', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+    trials = s.create_task({'Title': 'Get trial accounts for the vendors on the list', 'Kind': 'general', 'Status': 'open'}, 'triage')
+    for tid, body in ((fix, 'did the ledger sync finish last night?'), (trials, 'can you sign us up for the 13 vendor trials?')):
+        s.add_message({'TaskId': tid, 'Channel': 'teams', 'ConversationId': 'teams:chat-erin', 'FromName': 'Erin Blake', 'BodyText': body, 'Status': 'routed'})
+    assert rulebook.same_thread(s, item(trials)) is None
+    mail = s.create_task({'Title': 'Invoice question', 'Kind': 'general', 'Status': 'open'}, 'triage')
+    again = s.create_task({'Title': 'Invoice question again', 'Kind': 'general', 'Status': 'open'}, 'triage')
+    for tid in (mail, again):
+        s.add_message({'TaskId': tid, 'Channel': 'email', 'ConversationId': 'thread-77', 'FromEmail': 'gail@northwind.example', 'BodyText': 'the invoice', 'Status': 'routed'})
+    assert rulebook.same_thread(s, item(again)) == mail

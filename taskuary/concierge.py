@@ -4036,8 +4036,6 @@ def _task_writes(store, tid: int, kind: str, target: int, params: dict, named: s
         relay = ' '.join(str(params.get('note') or params.get('text') or '').split())
         note = ' '.join(str(said or relay).split())
         r = run_proposal(store, operations.propose(store, 'agent.continue', target, {'note': note, 'context': general.relayed(note, relay)}, actor), actor)
-        # ...a note kept behind the sender's Trust is no failure: it waits there, said with why (general.kept_held), whatever the run's status
-        if (held := general.kept_held(task_ref(target), r.get('outcome'))): return _did(store, tid, held, 'agent.continue')
         if r.get('status') != 'done': raise CallMiss(f"{r.get('error') or 'it did not pick up'} - say so in plain words. Nothing was started.")
         return _did(store, tid, f"Picked up {task_ref(target)} again" + (f" with your note: “{_title_cut(note, 120)}”." if note else '.'),
                     'agent.continue')

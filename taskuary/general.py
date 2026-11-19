@@ -267,8 +267,6 @@ def run_kept(store, tid: int) -> bool:
     does: the first begins it (say_line), the rest go with it (send_prompt). Run on the waiting room's clock; True when a turn was begun."""
     if tid in OPENING or _IN_FLIGHT.get(tid) or _at_work(_live_of(tid)): return False
     t, kept = store.get_task(tid) or {}, waiting_lines(store, tid)
-    from . import origin
-    if kept and origin.hold(store, tid): return False              # an untrusted sender's task: they wait behind its Trust, as every line does
     if not kept or not handles(t) or t.get('Status') not in ('open', 'in_progress', 'waiting') or not provider_options(store): return False
     w = kept[0]
     PRESSED[tid] = time.time(); _IN_FLIGHT[tid] = 1; OPENING.add(tid)
@@ -2941,9 +2939,10 @@ class GeneralSession:
         # agent, through a reload and a restart - never only in this process (WAITING_TYPE)
         mine = as_owner and not brief and not kept
         if mine and waiting is None: waiting = wait_line(self.store, self.task_id, text, attachments, line_id)
-        # ...nothing is handed over until Trust - but his line is kept first, so a refusal here never loses it (2026-11-17)
+        # ...nothing a stranger's mail starts is handed over until Trust - but his line is kept first, so a refusal here never loses it (2026-11-17);
+        # and his own line is never held (origin.OWNER_SPEAKS): its turn runs as the task's mode is
         from . import origin
-        if (h := origin.hold(self.store, self.task_id)): raise origin.RefusedForStranger(h['line'])
+        if not mine and (h := origin.hold(self.store, self.task_id)): raise origin.RefusedForStranger(h['line'])
         # ...and one sent while a turn works goes INTO it (steer): that turn answers for it, so this one has nothing more to say
         if mine and self.steer(): return ''
         if not self._take(WAIT_TURN, cancel):
@@ -2980,6 +2979,7 @@ class GeneralSession:
         self.quick = quick                   # an agent's turn takes a desk from here; the warm agent's stays a fraction of one (quickwork._take)
         if as_owner: self.woke = self.silent = False       # ...and a turn the owner's words began may be woken once again (wake)
         self.owned = as_owner and not brief
+        own_tok = origin.OWNER_SPEAKS.set(self.owned)
         # ...ITS TRACE IS THIS TURN'S FROM THE MOMENT IT IS BUSY (the walks, 2026-11-17): the turn read at work over the last turn's trace -
         # "Thinking..." with that turn's prompt in it - and stepped back to "opening" when its CLI's start said so (conversation.items)
         # ...so the trace is reset BEFORE it reads busy (the walks, 2026-11-17): set busy first, the reads of the task row in between (keep,
@@ -3478,6 +3478,7 @@ class GeneralSession:
                 sessionrecord.drop_live(self.task_id)
             self._emit('\x1b[1;34myou>\x1b[0m ')
             self._lock.release()
+            origin.OWNER_SPEAKS.reset(own_tok)
             # ...and the slot it held is free: what waits in the queue starts (blackboard.freed) - unless a line of its own takes the turn next
             if not getattr(self, 'waiting_turns', 0):
                 from . import blackboard
@@ -3973,12 +3974,6 @@ def line_state(store, tid: int, rows: list = None, was: bool = False) -> dict:
     return {'working': was or starting(tid) or _at_work(s), 'turnStarted': at, 'waiting': waiting_lines(store, tid) if rows is None else rows}
 
 
-def kept_held(ref: str, out) -> str:
-    """What a door that handed a line on says when take_line HELD it (origin.hold: an untrusted sender's task) - '' when it went to the agent.
-    One sentence for every surface: the phone and the Assistant said "Continuing ..." / "Picked up ... again" while nothing ran (2026-11-18)."""
-    return f"Your note waits on {ref} - {out['held']}" if isinstance(out, dict) and out.get('held') else ''
-
-
 def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=None, wait=True, **kw):
     """THE ONE ROAD FOR A LINE THE OWNER TYPES TO A TASK'S AGENT, whatever agent takes it and whatever its session is doing - at work, at rest,
     idled out, ended, never started, closed, after a restart (the owner, 2026-11-10: "coding and general use the same code when it comes to
@@ -3999,9 +3994,7 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     if not text and not files: raise ValueError('empty message')
     t = reopen(store, tid, actor)
     if not t: raise ValueError(f'no task {tid}')
-    # ...AN UNTRUSTED SENDER'S TASK HANDS NOTHING TO AN AGENT (origin.hold): his line is kept and waits by the box, behind the Trust action
-    from . import origin
-    if (h := origin.hold(store, tid)): return {'kept': wait_line(store, tid, text, files, line_id), 'held': h['line']}
+    # ...AND NO SENDER'S TRUST HOLDS IT (origin.OWNER_SPEAKS): his line goes to the agent on a task an untrusted sender wrote on too
     # ...A WATCHED TASK HE HANDS A LINE TO IS HIS AGAIN (the rail walk, 2026-11-12: its agent set to work while the row stood under Watching,
     # "on you"): back under Tasks before the turn starts, as every other move he makes on it (server.WATCH_ENDS) - from any door
     from . import watch

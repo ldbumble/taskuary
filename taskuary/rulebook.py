@@ -92,7 +92,10 @@ def same_thread(store, item) -> int | None:
     """Another open task on this item's own conversation - the one duplicate a FACT shows. The same sender alone no longer counts
     (the design, 2026-10-23): one person asks for many things, and "TQ-0006 may already cover it" stood over unrelated asks."""
     ms = _inbound(store, item)
-    cids = {m['ConversationId'] for m in ms if m.get('ConversationId')}
+    # ...A CHAT'S ID NAMES ITS ROOM, NOT A TOPIC (routing.CHAT_CHANNELS; design round 4, H4: a colleague's sign-up list read "Same ask as TQ-0003 -
+    # fold it into that one" of a code fix, because her earlier line in the same chat had joined it) - everything said there shares one id
+    from .routing import CHAT_CHANNELS
+    cids = {m['ConversationId'] for m in ms if m.get('ConversationId') and str(m.get('Channel') or '').lower() not in CHAT_CHANNELS}
     if not cids: return None
     own = item.get('tid')
     r = store._one(f"SELECT m.TaskId FROM message m JOIN task t ON t.TaskId=m.TaskId WHERE t.Status NOT IN ('done','dropped') AND m.ConversationId IN "

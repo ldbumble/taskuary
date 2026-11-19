@@ -181,3 +181,22 @@ class AdvisorMarkTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SameWorkIsTheSameJobTests(unittest.TestCase):
+    """The Codex walk, 2026-11-19: a colleague's ask landed on his code fix in the same system. The check is the model's (rule 2) - it is shown
+    each open task's ask in full and who asked it, and who asks the new work, so a sign-up list and a code fix on one system read as two jobs."""
+    def test_the_model_reads_each_ask_in_full_and_who_asked(self):
+        from taskuary import samework
+        s = MemoryStore()
+        long_ask = 'Fix the rounding bug in the northwind/ledger totals that makes CI fail. ' + 'The month-end entries lose a cent. ' * 8 + 'END-OF-ASK'
+        fix = s.create_task({'Title': 'Fix the ledger rounding bug', 'Summary': long_ask, 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        seen = []
+        def llm(system, user, **kw): seen.append((system, user)); return json.dumps({'same_as': None})
+        got = samework.same_open_task(s, 'Sign up for a trial account on each of the 13 vendor sites on the internal list', llm=llm, who='Erin Blake on Teams')
+        self.assertIsNone(got)
+        system, user = seen[0]
+        self.assertIn('END-OF-ASK', user)
+        self.assertIn('asked by the owner himself', user); self.assertIn('THE NEW WORK (asked by Erin Blake on Teams)', user)
+        self.assertIn('doing one would do the other', system)
+        self.assertEqual(samework.same_open_task(s, 'Fix the ledger rounding', llm=lambda *a, **k: json.dumps({'same_as': fix})), fix)

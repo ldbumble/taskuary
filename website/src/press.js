@@ -29,6 +29,9 @@ export const pressSteps = async (api, ids, verb) => { const o = await post(api, 
   return o.data?.failed ? { ...o, kind: "failed", why: String(o.data.failed.error || "") } : o; };
 
 export const landed = (o) => o.kind === "ok" || o.kind === "partial";
+// ...AND AN ANSWERED PRESS IS OVER (the owner's live app, 2026-11-19: a held step ran and its decide answered, and the bar's Approve read
+// "running…" until a re-read minutes behind took the bar away): what it did - a press decided elsewhere did it too - or why it did not
+export const afterPress = (o, verb) => (landed(o) || o.kind === "already" ? { busy: "", done: verb, err: "" } : { busy: "", done: "", err: failLine(o) });
 // ...a yes the server says went: decided (approved, edited, sent) or with its delivery's receipt - what a page may move on from (design round 5, I2)
 export const landedSend = (data) => !!data?.ok && !data.send_error && (["approved", "edited", "sent"].includes(data.status) || !!data.sent || data.delivery === "sent");
 // what a card says under a press that did not land: the server's reason, else that nothing was `done` ("sent", "posted", "run") - and never

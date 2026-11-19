@@ -5,7 +5,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Box, Typography } from "@mui/material";
 import api from "./api.js";
-import { failLine, landed, press as pressReview } from "./press.js";
+import { afterPress, press as pressReview } from "./press.js";
 import { label } from "./buttons.js";
 import { useAgents } from "./ui.jsx";
 import { ACCENT, BORDER, CATPPUCCIN, DIM, FAINT, INK, PANEL, PANEL2, mono, sans } from "./theme.jsx";
@@ -419,12 +419,12 @@ const failed = (e, data) => data?.send_error || e?.response?.data?.detail || (e 
 // A HELD ACT (browsergate.check): Approve runs that exact command in this browser and the agent is told what happened - it goes on
 // in the same conversation by itself; Dismiss tells it the step was not done. The existing decide road, the same as the card's.
 function HeldBar({ held: h, onDecided }) {
-  const [busy, setBusy] = useState(""), [err, setErr] = useState("");
+  const [busy, setBusy] = useState(""), [done, setDone] = useState(""), [err, setErr] = useState("");
   const decide = async (verb) => {
-    if (busy) return;
+    if (busy || done) return;
     setBusy(verb); setErr("");
     const o = await pressReview(api, h.id, { verb, cc: null, anyway: false }, 2);       // the one press (press.js)
-    if (!landed(o) && o.kind !== "already") { setErr(failLine(o)); setBusy(""); }
+    const after = afterPress(o, verb); setBusy(after.busy); setDone(after.done); setErr(after.err);
     if (o.kind !== "error") onDecided?.();
   };
   return (
@@ -433,10 +433,11 @@ function HeldBar({ held: h, onDecided }) {
         <Box component="span" sx={{ color: CATPPUCCIN.yellow, fontWeight: 600 }}>Approve: </Box>{h.what}
         {h.why && <Box component="span" sx={{ color: "var(--tq-warning, #a8a196)" }}>{` — held because ${h.why}`}</Box>}
       </Typography>
-      <Box component="button" onClick={() => decide("approve")} disabled={!!busy} sx={primary}
-        title="Taskuary runs exactly this in the agent's browser, and the agent carries on from there">{busy === "approve" ? "running…" : label("approve", "action")}</Box>
-      <Box component="button" onClick={() => decide("reject")} disabled={!!busy} sx={press}
-        title="Not done - the agent is told, and carries on without it or asks you">{busy === "reject" ? "…" : "Dismiss"}</Box>
+      <Box component="button" onClick={() => decide("approve")} disabled={!!busy || !!done} sx={primary}
+        title="Taskuary runs exactly this in the agent's browser, and the agent carries on from there">
+        {done === "approve" ? "✓ ran" : busy === "approve" ? "running…" : label("approve", "action")}</Box>
+      <Box component="button" onClick={() => decide("reject")} disabled={!!busy || !!done} sx={press}
+        title="Not done - the agent is told, and carries on without it or asks you">{done === "reject" ? "✓ dismissed" : busy === "reject" ? "…" : "Dismiss"}</Box>
       {err && <Typography role="alert" sx={{ ...mono, fontSize: 10.5, color: CATPPUCCIN.red, flexBasis: "100%" }}>{err}</Typography>}
     </Box>
   );

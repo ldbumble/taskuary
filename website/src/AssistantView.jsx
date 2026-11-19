@@ -1428,7 +1428,10 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
       if (card) openCardRef.current = null;
     }
     if (how !== "sync") pin.current = true;
-    else navHow.current = "replace";
+    // ...and a sync never takes back a step a move has yet to write (the redesign walk, 2026-11-19): Mark done's move to the next task was
+    // a step, a rail sync landed before the address was written and made it a replace - the closed task's place was gone, Back went "home"
+    // with the next task still drawn, and the arrow and the bar's Back went out with nothing behind them
+    else if (navHow.current !== "push") navHow.current = "replace";
   }, []);
   // THE TASK'S OWN RECOMMENDED MOVE (the owner, 2026-11-09: "the agents while running should recommend actions, no assistant" / "assistant/
   // advisor should only be on rail"): on every row but an idea, the one filled button is the field its task and its rail item are served

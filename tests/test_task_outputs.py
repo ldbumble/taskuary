@@ -343,3 +343,50 @@ def test_a_file_written_back_as_it_was_is_no_change_of_that_turn():
         assert [k['path'] for k in outputs.keep_turn(tid, 12, t0)] == ['posts.txt'] and outputs.made_by(tid)['posts.txt'] == 'comment-12'
     finally:
         shutil.rmtree(outputs.folder(tid), True); shutil.rmtree(outputs.turns_folder(tid), True)
+
+
+class TasksSharingAFileHearItChange(unittest.TestCase):
+    """Design round 6, D7: a research task added a "Print vendors" sheet to the board pack's workbook (another task's file); the pack's agent,
+    told nothing, rebuilt the pack for a new headcount and wiped it; the research agent then said the files "still show 212" minutes after
+    they showed 214. Whoever changes a file another live task uses, that task's agent hears it - and the task the file is of, when another
+    wrote into it. Plain code over the folders: no per-task rule."""
+    def setUp(self):
+        import time
+        from taskuary import general
+        self.s, self.t0 = MemoryStore(), time.time() - 1
+        self.pack = self.s.create_task({'Title': 'Build the Q3 board pack', 'Kind': 'general', 'Status': 'in_progress'}, 'owner')
+        self.research = self.s.create_task({'Title': 'Compare print vendors', 'Kind': 'general', 'Status': 'in_progress'}, 'owner')
+        self.done = self.s.create_task({'Title': 'An old look at the pack', 'Kind': 'general', 'Status': 'done'}, 'owner')
+        self.addCleanup(shutil.rmtree, config.home() / 'scratch' / 'outputs', True)
+        self.book = outputs.folder(self.pack) / 'Q3 board pack working.xlsx'; _book(self.book)
+        (outputs.folder(self.pack) / 'Q3 board report.pdf').write_bytes(b'%PDF-1.4 headcount 212')
+        self.told = []
+        p = mock.patch.object(general, 'tell', lambda store, tid, said, actor='owner', heard=None: self.told.append((tid, said)) or 'told')
+        p.start(); self.addCleanup(p.stop)
+
+    def turn(self, tid, *cmds):
+        return [{'type': 'tool_call', 'name': 'PowerShell', 'detail': {'args': {'command': c}}} for c in cmds]
+
+    def test_a_file_written_into_by_another_task_and_then_rebuilt_is_heard_by_each_side(self):
+        from taskuary import sharedfiles
+        path = str(self.book).replace('/', os.sep)
+        # ...the research turn adds its sheet into the pack's workbook: the pack's agent hears its file changed
+        os.utime(self.book, None)
+        got = sharedfiles.turn_ended(self.s, self.research, self.turn(self.research, f'py print_vendors.py "{path}"'), self.t0, [])
+        self.assertEqual(got, [(self.pack, 'Q3 board pack working.xlsx')])
+        self.assertIn("TQ-%04d's agent just changed Q3 board pack working.xlsx (this task's)" % self.research, self.told[-1][1])
+        self.assertIn('Read it again before you say what it holds', self.told[-1][1])
+        # ...and when the pack's agent rebuilds it for 214, the research task that uses it hears - the done task does not
+        self.s.audit('task', self.done, sharedfiles.USED, 'taskuary', 'system', {'task': self.pack, 'paths': ['Q3 board pack working.xlsx']})
+        self.told.clear()
+        got = sharedfiles.turn_ended(self.s, self.pack, [], self.t0, [{'path': 'Q3 board pack working.xlsx'}, {'path': 'Q3 board report.pdf'}])
+        self.assertEqual(got, [(self.research, 'Q3 board pack working.xlsx')])
+        self.assertEqual(len(self.told), 1); self.assertIn(f"({task_ref(self.pack)}'s, which you use)", self.told[0][1])
+
+    def test_a_file_only_read_is_used_and_a_turn_that_names_no_file_uses_none(self):
+        from taskuary import sharedfiles
+        old = self.t0 - 3600; os.utime(self.book, (old, old))
+        got = sharedfiles.turn_ended(self.s, self.research, self.turn(self.research, f'cd "{outputs.folder(self.pack)}"; py -c "read" "Q3 board pack working.xlsx"'), self.t0, [])
+        self.assertEqual((got, self.told), ([], []), 'reading changes nothing, and nobody is told')
+        self.assertEqual(sharedfiles.users(self.s, self.pack, 'Q3 board pack working.xlsx'), {self.research})
+        self.assertEqual(sharedfiles.named('Get-ChildItem C:/work', self.research), {})

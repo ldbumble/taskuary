@@ -92,7 +92,8 @@ def capabilities(store) -> dict:
 FACT_HEAD = "WHAT YOU CAN DO HERE (this computer as it is now - never name a button, setting or AI that is not in this list):"
 HANDS = {
     'all': ('A shell and files on this computer: a folder the owner names on this task is yours to read and change - for a fix in code there, '
-            'make the change, run its tests and commit it there. A push or anything else that leaves this computer becomes his card when you run it.'),
+            'make the change, run its tests and commit it there. A push or anything else that leaves this computer becomes his card when you run it. '
+            'Say what a file holds from the file as it is now, never from memory - another task may have changed it.'),
     'look': ("Reading only: you read files and look things up, and change and run nothing - his setting "
              f"{settings_schema.link('general_agent_hands', 'General agents can')} is 'only look things up'."),
     'none': ('Words only: this AI takes no tools, so you open no file, page or system and run nothing - you have what this conversation holds. '

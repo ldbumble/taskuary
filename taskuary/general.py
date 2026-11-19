@@ -3652,9 +3652,12 @@ class GeneralSession:
             if not woke_for_silence(self, reply, getattr(self, 'owned', False)): hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=self.wake, summ=summ, jobs=background.left(self.trace, path))
         rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
         # ...and the files this turn wrote, as it left them: a later turn rewrites them in place (outputs.keep_turn, the owner 2026-11-07)
-        from . import outputs
-        try: outputs.keep_turn(self.task_id, rid, t0)
-        except Exception as e: logger.debug(f'task {self.task_id}: the files of this turn were not kept with it - {e}')
+        from . import outputs, sharedfiles
+        try: made = outputs.keep_turn(self.task_id, rid, t0)
+        except Exception as e: made = logger.debug(f'task {self.task_id}: the files of this turn were not kept with it - {e}') or []
+        # ...and every other live task using a file it changed hears of it (sharedfiles, design round 6 D7)
+        try: sharedfiles.turn_ended(self.store, self.task_id, self.trace, t0, made)
+        except Exception as e: logger.warning(f'task {self.task_id}: the tasks sharing its files were not told of its changes - {e}')
         if summ:
             take_corrections(self.store, self.task_id, summ.pop('corrections', None))     # learned quietly, never drawn
             take_check(self.store, self.task_id, summ.pop('check_back', None))

@@ -429,7 +429,8 @@ def test_a_view_the_agent_showed_is_still_drawn_once_its_turn_is_filed(home):
 def test_a_coding_chat_polled_again_reads_each_cli_log_once_per_version(home, monkeypatch):
     """The owner's live app, 2026-11-16: a coding task's chat took 15-43 s a poll - every poll parsed each session's whole CLI log again
     (~1 s per 100 MB) while the page polled every few seconds. The conversation is built from a log read once per (file, mtime, size): polled
-    again it reads nothing, and only a log that grew is read again."""
+    again it reads nothing. Since the chat is read from its own log (chatlog), a session no longer live is frozen in it once: a log of a
+    closed session that grows is never parsed again by a poll (a live one's is read byte by byte - the test below)."""
     import os
     from taskuary import conversation
     monkeypatch.setattr(sessionrecord, '_STEPS', {}, raising=False)
@@ -447,7 +448,7 @@ def test_a_coding_chat_polled_again_reads_each_cli_log_once_per_version(home, mo
     f.write_text(f.read_text(encoding='utf-8') + '\n' + json.dumps({'type': 'assistant', 'message': {'content': [{'type': 'text', 'text': 'One more check.'}]}}), encoding='utf-8')
     os.utime(f, ns=(f.stat().st_atime_ns, f.stat().st_mtime_ns + 10**9))
     conversation.items(s, tid)
-    assert reads[3:] == ['big1.jsonl'], 'only the log that grew is read again'
+    assert reads[3:] == [], 'a closed session is frozen in the chat log: a poll never parses its CLI log again'
 
 
 def test_a_log_that_grows_while_its_agent_works_is_read_once_byte_for_byte(home, monkeypatch):

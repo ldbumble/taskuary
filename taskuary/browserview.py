@@ -1071,8 +1071,10 @@ def set_viewport(sid: str, w: int, h: int) -> bool:
 # (the owner's computer-use walk, 2026-10-25). Promise the hold only where there is one; everywhere else the agent asks first.
 # ...AND WHAT HE ASKED FOR IS HIS GO-AHEAD (the owner, 2026-11-17/18): the hold is for what he did not ask for, and for a big act - money, a
 # resource that lasts, a public post, a delete - which is always one card in the chat for his press (browsergate._verdict).
-HOLD_LINE = ('PRESS WHAT THE OWNER ASKED FOR YOURSELF - his ask is his go-ahead (a sign-up, a form, a search he asked for). A press that '
-             'spends money, makes or ends something that lasts, posts publicly, or that he did not ask for is refused with "held for the owner" '
+# ...REVISED 2026-11-19 (the owner: "anything big like spending money or putting in private info should wait for user for now"): the hold is
+# the big step only - money, his own details, speaking for him, a delete - and a free sign-up with made-up details runs (browsergate.BIG)
+HOLD_LINE = ('PRESS WHAT THE WORK NEEDS YOURSELF - a free sign-up or trial with made-up details, a form, a search. A press that spends his '
+             'money, sends his own private details (his real phone, card, address, ID), speaks for him to others or deletes something of his is refused with "held for the owner" '
              'and stands as one card in this chat: fill in everything first, run the command for that last button as you would, and when it is '
              'held go on with the rest of the work - his press on the card runs it, and you are told what the page shows. Never try a held act '
              'another way, and never ask him in words to approve or click it. ')

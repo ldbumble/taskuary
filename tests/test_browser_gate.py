@@ -187,24 +187,32 @@ class Judging(unittest.TestCase):
             with verdict(sure): self.assertTrue(one(self.s, bg.acts(cmd)[0], {'url': CHECKOUT}, Brain(None))['hold'], cmd)
         with verdict(unsure): self.assertTrue(one(self.s, self.act, {'url': CHECKOUT}, Brain(None))['hold'])
 
-    def test_what_the_owner_asked_for_in_his_own_words_is_done_save_a_big_act(self):
-        """The owner, 2026-11-17: "If you ask it to sign up to those sites it should do it, nothing else required" - and 2026-11-18: "any big
-        action that will spend money, create resource should ask for approval". His own words are given to the verdict; an act they ask for
-        is not held for a second yes - unless it is big (money, a resource that lasts, a public post, a delete), which is always his card.
-        No words of his, no such pass, whatever the model says."""
+    def test_a_free_sign_up_runs_and_money_or_his_own_details_wait_as_one_card(self):
+        """The owner, 2026-11-19: "anything big like spending money or putting in private info should wait for user for now". The vendor
+        walk held every free sign-up "because it can't be undone" - one press each, on work Erin had asked for and he had opened. The gate's
+        question is his rule: a step that is not big runs, asked in his words or not; one that spends money, sends his own details, speaks
+        for him or deletes something of his is one card, whatever he said; the form's filled boxes are what the judge reads a send by."""
         b = Brain(None)
         said = 'Sign up for a free account on each of the ten vendors and collect their tables.'
-        with verdict({'irreversible': True, 'sure': True, 'what': 'creates an account on rentscope.example', 'asked': True, 'big': False}):
+        with verdict({'irreversible': True, 'sure': True, 'what': 'Submit the sign-up on RentScope', 'big': False}):
             self.assertFalse(one(self.s, self.act, {'url': CHECKOUT, 'elements': SNAP}, b, said=said)['hold'])
-            self.assertTrue(one(self.s, self.act, {'url': CHECKOUT}, Brain(None), said='')['hold'], 'no words of his, no pass')
+            self.assertFalse(one(self.s, self.act, {'url': CHECKOUT}, Brain(None), said='')['hold'], 'a free sign-up runs on the task he opened')
         self.assertIn(said, b.seen[0])
-        for what in ('pays $49 on dealflow.example', 'starts a paid workspace on cloud.example', 'posts the announcement publicly on social.example'):
-            with verdict({'irreversible': True, 'sure': True, 'what': what, 'asked': True, 'big': True}):
+        for kind, what, why in (('money', 'Pay $49 for DealFlow Pro', 'spends your money'), ('private', 'Send your mobile number to ZoningNow', 'your own details'),
+                                ('speaks', 'Post the announcement on social.example', 'speaks for you'), ('deletes', 'Cancel the plan on cloud.example', 'deletes or cancels')):
+            with verdict({'irreversible': True, 'sure': True, 'what': what, 'big': True, 'kind': kind}):
                 v = one(self.s, self.act, {'url': CHECKOUT}, Brain(None), said='Sign up and pay for DealFlow Pro')
-                self.assertTrue(v['hold'], what); self.assertIn('yours to approve', v['why'])
-        # ...and a verdict that does not say whether it is big is no "it is not": a CLI judge carries no schema, and one that left the
-        # key out passed a payment he had asked for with no press
-        with verdict({'irreversible': True, 'sure': True, 'what': 'pays $49 on dealflow.example', 'asked': True}):
+                self.assertTrue(v['hold'], what); self.assertIn(why, v['why']); self.assertEqual(v['what'], what)
+        # ...the form's filled boxes are put before the judge: his own phone in one is what makes its send his
+        b = Brain(None)
+        with verdict({'irreversible': True, 'sure': True, 'what': 'Send your mobile number to ZoningNow', 'big': True, 'kind': 'private'}):
+            one(self.s, self.act, {'url': CHECKOUT, 'fields': [{'k': 'mobile', 't': 'tel', 'v': '+1 555 0100'}]}, b)
+        self.assertIn('+1 555 0100', b.seen[0]); self.assertIn('SENDS HIS OWN PRIVATE DETAILS', bg.SYSTEM)
+        # ...unsure whether it is big is held; and a verdict that does not say whether it is big is no "it is not": a CLI judge carries no
+        # schema, and one that left the key out passed a payment he had asked for with no press
+        with verdict({'irreversible': True, 'sure': False, 'what': 'Continue on the checkout', 'big': False}):
+            self.assertTrue(one(self.s, self.act, {'url': CHECKOUT}, Brain(None))['hold'])
+        with verdict({'irreversible': True, 'sure': True, 'what': 'pays $49 on dealflow.example'}):
             self.assertTrue(one(self.s, self.act, {'url': CHECKOUT}, Brain(None), said='Sign up and pay for DealFlow Pro')['hold'])
         from taskuary import general
         self.s.add_comment(self.tid, 'owner', general.USER_TYPE, said)
@@ -574,7 +582,7 @@ class AFormFieldIsNotTheSending(unittest.TestCase):
         page then saw was said to him as his tick. A field of a form not sent yet changes nothing outside the browser; the sending is
         judged on its own."""
         from taskuary import browsergate as bg
-        self.assertIn('ticking, choosing or filling a field of a form that is not sent yet', bg.SYSTEM)
+        self.assertIn('ticking or choosing in a box sends nothing until the form is sent', bg.SYSTEM)
         self.assertIn('the sending is judged on its own', bg.SYSTEM)
 
 

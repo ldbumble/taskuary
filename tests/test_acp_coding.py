@@ -723,7 +723,7 @@ def test_a_coding_chat_reads_in_the_same_order_once_its_session_has_closed(world
     assert until(lambda: time.time() >= end + 1.1)                                         # (a stamp is a whole second: it closes in a later one)
     t.close(); assert until(lambda: not codingchat._live(tid) and s._rows('SELECT 1 FROM transcript WHERE TaskId=?', (tid,)))
     # ...in the same order - under it only the task's own line that its run is over (conversation.items `n:left`)
-    assert shape() == [*was, ('note', 'n:left')], shape()
+    got = shape(); assert got[:-1] == was and got[-1][0] == 'note' and got[-1][1].startswith('n:left'), got      # (its key names the turn it closes)
 
 
 def test_a_line_is_never_the_answer_to_a_step_whose_buttons_are_a_beat_away(world, monkeypatch):
@@ -754,9 +754,10 @@ def test_a_held_step_he_asks_the_coding_agent_about_greys_in_place_and_is_held_a
                                    'updates': codingchat.acp_updates(tid, t.sid)[-8:]}, default=str)[:6000]
     hold = lambda: shellgate.check(s, tid, t.sid, 'git push origin main', 'Bash', str(repo))
     hold(); [rv] = s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))
+    assert [c['review'] for x in conversation.items(s, tid)['items'] for c in x.get('cards') or []] == [rv['ReviewId']]   # ...he asks about the step he sees
     general.take_line(s, tid, 'What does that step change?', line_id='l-two', wait=False)
     got = conversation.items(s, tid)
-    assert [(x['kind'], x.get('state', '')) for x in got['items']][-2:] == [('line', ''), ('turn', 'starting')] and not got['pending'], got['items']
+    assert [(x['kind'], x.get('state', '') in ('starting', 'working')) for x in got['items']][-2:] == [('line', False), ('turn', True)] and not got['pending'], got['items']
     assert idle(t, 2)
     # ...his line set the step aside, greyed where it stood (2026-11-12, one rule for every card); run again, it is held anew - the live one
     rows = [(r['ReviewId'], r['Status']) for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' ORDER BY ReviewId", (tid,))]

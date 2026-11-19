@@ -13,7 +13,14 @@ CORPUS = [{'kind': 'land_refused', 'how': 'Push', 'why': GIT}, {'kind': 'land_re
           {'kind': 'signup_failed', 'site': 'trainly.example', 'why': 'That email is already registered'}, {'kind': 'signup_failed', 'site': 'trainly.example'},
           {'kind': 'held', 'why': 'the AI could not tell whether it spends money or sends your own details, so it waits for you'},
           {'kind': 'held', 'why': 'the AI could not tell whether it can be undone'}, {'kind': 'held', 'why': 'it leaves this computer'},
-          {'kind': 'reason', 'text': 'triage: fyi - Erin Blake shares the rota for next week'}, {'kind': 'reason', 'text': 'triage: the vendor confirms the order'}]
+          {'kind': 'reason', 'text': 'triage: fyi - Erin Blake shares the rota for next week'}, {'kind': 'reason', 'text': 'triage: the vendor confirms the order'},
+          # ...a turn the AI provider ended: its raw error, every shape it comes in
+          *({'kind': 'turn_failed', 'raw': r} for r in (
+              '{"type":"error","error":{"type":"rate_limit_error","message":"This request would exceed the rate limit for your organization"}}',
+              'API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}',
+              "Error code: 400 - {'error': {'message': 'litellm.BadRequestError: model not allowed', 'type': 'invalid_request_error'}}",
+              'HTTP 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}', 'Traceback (most recent call last): ...', ''))]
+AGENT_ONLY += ('{', 'Error code', 'Traceback', 'litellm', 'x-api-key')
 
 
 def test_no_agent_facing_words_reach_the_owner():
@@ -33,3 +40,18 @@ def test_a_held_steps_failure_is_its_reason_line():
     assert shellgate.failed(PS, 1, 'push 3 commits to northwind/ledger main') == \
         "Push 3 commits to northwind/ledger main failed: Unexpected token '-Command' in expression or statement."
     assert say.owner({'kind': 'reason', 'text': 'triage: fyi - Erin Blake shares the rota'}) == 'Erin Blake shares the rota'
+
+
+def test_a_failed_turn_says_what_failed_once_in_his_words():
+    from taskuary import chatlog
+    from taskuary.general import ASSISTANT_TYPE, FAILED_MARK
+    from taskuary.store import MemoryStore
+    from taskuary.testing import Factory
+    s = MemoryStore(); tid = Factory(s).task('Reconcile the October invoices')
+    raw = '{"type":"error","error":{"type":"rate_limit_error","message":"This request would exceed the rate limit"}}'
+    body = f'{raw}\n\n{FAILED_MARK}{raw}'           # the shape a failed turn is filed in: its words, then its marked failure
+    cid = s.add_comment(tid, 'assistant', ASSISTANT_TYPE, body)
+    chatlog.answered(s, tid, cid, 'assistant', body, s.list_comments(tid, internal=True)[-1]['CreatedAt'])
+    [t] = [x for x in chatlog.read(s, tid)['items'] if x['kind'] == 'turn']
+    assert t['fail'] == say.turn_failed(raw) and 'over its quota' in t['fail']
+    assert not t.get('text') and not [x for x in t.get('steps') or [] if x.get('k') == 'error']     # once, never the raw JSON again

@@ -340,7 +340,10 @@ def acp_steps(updates: list) -> list:
             chunk('said' if who == 'agent' else 'brief' if who == 'brief' else 'you', _text(u.get('content')), at, **({'line': l} if (l := _meta(u, 'line')) else {}))
         elif kind == 'agent_message_chunk': chunk('said', _text(u.get('content')), at, **said)
         elif kind == 'agent_thought_chunk': chunk('thought', _text(u.get('content')), at, **said)
-        elif kind == 'error' and _meta(u, 'taskuary') == 'error': out.append({'k': 'error', 'text': _text(u.get('content')), 'at': at})
+        # ...a failure Taskuary marked, in his words (say.owner) - the raw text stays in the agent's own record
+        elif kind == 'error' and _meta(u, 'taskuary') == 'error':
+            from . import say
+            out.append({'k': 'error', 'text': say.owner({'kind': 'turn_failed', 'raw': _text(u.get('content'))}), 'at': at})
         elif kind == 'compaction_update' or (kind in ('tool_call', 'tool_call_update') and (_meta(u, 'claudeCode', 'toolName') == 'compact' or str(u.get('toolCallId')) in compacts)):
             cid = str(u.get('compactionId') if kind == 'compaction_update' else u.get('toolCallId'))
             if cid not in compacts: compacts[cid] = {'k': 'compact', 'id': cid, 'at': at}; out.append(compacts[cid])

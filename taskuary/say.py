@@ -37,6 +37,24 @@ def held_why(why) -> str:
 def _cap(s: str) -> str: return s[:1].upper() + s[1:]
 
 
+# A TURN THE AI PROVIDER ENDED, read off the failure's structure - its HTTP status, its error `type` - never its prose (the owner, 2026-11-19: a
+# failed turn showed the provider's raw error JSON twice). He reads one plain line and what happens next; the raw text is the agent's
+_STATUS = re.compile(r'\b(4\d\d|5\d\d)\b')
+_TYPE = re.compile(r'''["']type["']\s*:\s*["'](\w+)["']''')
+NEXT = 'write to carry on, or press Try again'
+def turn_failed(raw) -> str:
+    from .failures import cli_quota
+    r = str(raw or '')
+    if (q := cli_quota(r)): return f'{q} - {NEXT} once it resets.'
+    codes, types = {int(c) for c in _STATUS.findall(r)}, set(_TYPE.findall(r))
+    if 429 in codes or types & {'rate_limit_error', 'insufficient_quota', 'quota_exceeded'}: return f'The AI provider is over its quota or rate limit - {NEXT} in a minute.'
+    if codes & {401, 403} or types & {'authentication_error', 'permission_error'}:
+        return "The AI provider refused the request: its sign-in or access was turned down - check the AI's card under Connections, then " + NEXT + '.'
+    if codes & {400, 404, 413, 422} or types & {'invalid_request_error', 'not_found_error'}: return f'The AI provider refused the request - {NEXT}.'
+    if any(c >= 500 for c in codes) or types & {'overloaded_error', 'api_error', 'timeout'}: return f"The AI provider didn't answer - {NEXT}."
+    return f'The AI stopped on an error before it finished - {NEXT}.'
+
+
 def owner(e: dict) -> str:
     "The line the owner sees for event `e`."
     k = e.get('kind')
@@ -52,6 +70,7 @@ def owner(e: dict) -> str:
         return f"No account was made on {e.get('site') or 'the site'}" + (f': it said "{why[:200]}"' if why else ': it kept its sign-up form up') + '. The agent was told.'
     if k == 'held':
         return held_why(e.get('why'))
+    if k == 'turn_failed': return turn_failed(e.get('raw'))
     if k == 'reason':                                   # a reader's note on a row: its words, never its name for itself
         from .categories import route_why
         return re.sub(r'^\s*(triage|router|reader)\s*:\s*', '', route_why(e.get('text')), flags=re.I).strip()

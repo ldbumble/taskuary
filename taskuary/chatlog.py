@@ -226,6 +226,8 @@ def read(store, tid: int, level: str = None) -> dict:
         if r['Kind'] == 'turn':
             ks = kids.get(r['Id'], [])
             x['steps'] = [_item(k) for k in ks if k['Kind'] == 'step']
+            # ...a turn with its failed line says the failure once: there, never again as an error step under it
+            if x.get('fail'): x['steps'] = [s for s in x['steps'] if s.get('k') != 'error']
             x['cards'] = [] if r['State'] in LIVE else [_item(k) for k in ks if k['Kind'] in ('card', 'fail') and _drawn(k, lit)]
             # ...a turn that ended having said, done and left nothing is no item (a part a line cut off before it did anything)
             if r['State'] not in LIVE and not (x.get('text') or x['steps'] or x['cards'] or x.get('summary') or x.get('fail')): continue
@@ -315,6 +317,11 @@ def answered(store, tid: int, cid: int, actor: str, body: str, created: str) -> 
     text, fail = general.failed_line(words)
     with store.lock:
         t = store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='turn' AND Parent IS NULL ORDER BY Id DESC LIMIT 1", (tid,)).fetchone()
+    # ...A FAILURE IS ONE PLAIN LINE IN HIS WORDS (say.owner): the provider's raw error stood twice, once as the turn's words and once as its line
+    if fail and (raw := fail.strip()):
+        from . import say
+        text = '' if text.strip() == raw or (raw[:1] in '{[' and raw in text) else text
+        fail = say.owner({'kind': 'turn_failed', 'raw': raw})
     done = {'text': text, 'ended': _when(created), 'answer': f'comment-{cid}', **({'fail': fail.strip()} if fail else {})}
     # ...the turn at work, or one his stop or a failure ended that has not said its last words yet
     if t and (t['State'] in LIVE or t['State'] in ('failed', 'stopped') and not json.loads(t['Body'] or '{}').get('answer')):

@@ -82,6 +82,8 @@ def put(store, tid: int, kind: str, key: str, body: dict, parent=None, state=Non
 
 
 def _goes_on(store, tid: int, below: int) -> None:
+    with store.lock: _goes_on_(store, tid, below)
+def _goes_on_(store, tid: int, below: int) -> None:
     """WHAT IS APPENDED WHILE A TURN WORKS STANDS ABOVE THE REST OF IT (the turn at work is always the last thing): the part of the turn before
     it is over, and the turn goes on in a new row under it ({cont}) - its steps from then on go there. Under the store's lock."""
     t = store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='turn' AND Parent IS NULL AND State IN ('starting','working') AND Id<? "
@@ -95,6 +97,8 @@ def _goes_on(store, tid: int, below: int) -> None:
 
 
 def _update(store, tid: int, old: dict, state, patch: dict) -> bool:
+    with store.lock: return _update_(store, tid, old, state, patch)
+def _update_(store, tid: int, old: dict, state, patch: dict) -> bool:
     body = json.loads(old['Body'] or '{}')
     if (bad := _frozen(old['Kind'], old['State'], body, patch or {})):
         msg = f"chatlog: {old['Key']} on task {tid} keeps its {', '.join(bad)} - the record of what he saw"

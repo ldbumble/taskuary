@@ -383,3 +383,27 @@ def test_a_card_press_and_a_chat_read_on_two_threads_both_finish():
     for x in ts: x.start()
     for x in ts: x.join(8)
     assert sorted(done) == ['press', 'read'], f'a thread never finished: {done}'
+
+
+def test_a_task_search_and_a_chat_read_that_migrates_on_two_threads_both_finish():
+    """Walk 3, 2026-11-19 (a py-spy dump of the freeze): a chat read checked `migrated` on the writer's connection without the store's lock,
+    holding the GIL, while New's same-work check searched the open tasks on it - a query whose own function (tq_fold) needs the GIL. Neither
+    moved. A search over many tasks and chat reads that freeze tasks into the log, on two threads, both finish."""
+    import threading, time as t_
+    from taskuary import conversation
+    s, _ = world()
+    tids = [s.create_task({'Title': f'Vendor review {i} for Erin', 'Summary': 'the ledger totals ' * 20, 'Kind': 'general', 'Status': 'open'}, 'owner')
+            for i in range(150)]
+    done, stop = [], t_.time() + 2
+    def search():
+        while t_.time() < stop: s.list_tasks(q='ledger totals')
+        done.append('search')
+    def read():
+        for tid in tids:
+            if t_.time() > stop: break
+            conversation.items(s, tid)
+        done.append('read')
+    ts = [threading.Thread(target=f, daemon=True) for f in (search, read)]
+    for x in ts: x.start()
+    for x in ts: x.join(10)
+    assert sorted(done) == ['read', 'search'], f'a thread never finished: {done}'

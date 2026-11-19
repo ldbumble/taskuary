@@ -417,7 +417,7 @@ const TurnTime = ({ t }) => {
   return <span data-tq-ran="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>· {when(end)}{ran ? ` · ${ran}` : ""}</span>;
 };
 // `later`: a turn after the chat's first - its agent starting again is the work going on, never "waiting for the agent" (workingLine)
-const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = false }) => {
+const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = false, newest = false }) => {
   const live = t.state === "working" || t.state === "starting";
   const parts = useMemo(() => turnParts(eventsOf(t.steps || [], live), { answer: t.text || "", live }), [t.steps, t.text, live]);
   const key = t.answer || t.id, at = useTurnOutputs(key), shown = React.useContext(ShownCtx)[key];
@@ -448,7 +448,10 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
       {/* ...A TURN THAT COULD NOT FINISH, WORTH ANOTHER TRY (its summary's `retry`): one button, never "send any message on this task to try
           again" (the 2026-11-18 walks) - pressed, it is his line "Try again." and the agent goes on */}
       {owes && !live && sum?.retry && !!again && <div style={{ marginTop: 8 }}><button type="button" className="tq-chip primary" data-tq-turn-retry="" onClick={again}>{btn("try_again")}</button></div>}
-      {t.state === "failed" && !!t.fail && <div className="tq-aui-note tq-aui-note-error" role="alert" data-tq-turn-failed="">⚠ {t.fail}</div>}
+      {/* ...and THE NEWEST TURN THAT FAILED carries the same one button (the API walk, 2026-11-18: a provider's outage left "⚠ ... 429" and nothing
+          to press) - the server files the same failure once (general.same_failure), so this is the one failure state while it lasts */}
+      {t.state === "failed" && !!t.fail && <div className="tq-aui-note tq-aui-note-error" role="alert" data-tq-turn-failed="">⚠ {t.fail}
+        {newest && !!again && <div style={{ marginTop: 8 }}><button type="button" className="tq-chip primary" data-tq-turn-retry="" onClick={again}>{btn("try_again")}</button></div>}</div>}
       {!!rest.length && <PublishedPages pages={rest} open />}
       {!!made.length && <TurnFiles files={made} />}
       {/* ...what this turn asked him, where it asked it (the list's `asking.turn`): above its card, never at the chat's foot */}
@@ -540,7 +543,7 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next = null
     // ...AND NEVER INTO ONE THAT FAILED (the Continue round, 2026-11-18): Try again's turn stands under the failure it is past, and folded, its head
     // went the moment it answered - its words left under the failure's head, with no time of their own
     if (x.kind === "turn") return <ConvTurn key={x.id} t={x} more={prev?.kind === "turn" && prev.state !== "failed" && x.state !== "working" && x.state !== "starting"} name={name} ask={x.id === askAt ? ask : null}
-      cards={cardsOf(x)} owes={x.id === owes} later={items.slice(0, i).some((y) => y.kind === "turn")} />;
+      cards={cardsOf(x)} owes={x.id === owes} later={items.slice(0, i).some((y) => y.kind === "turn")} newest={!items.slice(i + 1).some((y) => y.kind === "turn")} />;
     if (x.kind === "line") return <ConvLine key={x.id} x={x} more={prev?.kind === "line"} />;
     if (x.kind === "arrival") return <div key={x.id} className="tq-aui-message tq-aui-brief" data-tq-item={x.id}><Arrived mail={[x]} prev={prev?.kind === "arrival" ? prev : null} /></div>;
     if (x.kind === "card") { const got = draw([x]); return got.length ? <div key={x.id} className="tq-aui-message tq-aui-agent" data-tq-item={x.id} data-tq-row-cards=""><div className="tq-aui-agent-body">{got}</div></div> : null; }

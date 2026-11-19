@@ -165,6 +165,8 @@ def _drawn(r: dict, lit: bool) -> bool:
 
 def _item(r: dict) -> dict:
     b = json.loads(r['Body'] or '{}')
+    # ...a card carries what it said (`was`) only while that is what it shows (conversation._card): one he pressed is its pressed card
+    if r['Kind'] == 'card' and b.get('was') and b.get('status') not in ('passed', 'withdrawn', 'pending', 'rejected'): b.pop('was')
     return {**b, 'id': r['Key'], 'kind': r['Kind'], **({'state': r['State']} if r['State'] is not None else {}), 'at': b.get('at', r['At'])}
 
 

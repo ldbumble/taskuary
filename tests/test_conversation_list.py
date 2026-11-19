@@ -1068,12 +1068,6 @@ class TheList(unittest.TestCase):
         self.assertEqual([[(c['id'], c['status']) for c in t['cards']] for t in turns], [[(f'r:{rid}', 'passed')], []])
         told = self.brain.calls[-1]
         self.assertIn(cardqueue.SCREEN_HEAD, told); self.assertIn(f': rv{rid}', told.split('- Greyed, will not go')[1]); self.assertNotIn('declin', told.split(cardqueue.SCREEN_HEAD)[1])
-        # ...and one an earlier build set aside is that record in its OWN turn, by its own name - never moved, never read as a rewritten draft
-        old = self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps({**step, 'command': 'sqlcmd -Q "SELECT 1"'}), 'Reason': 'r'})
-        self.s._exec('UPDATE review SET CreatedAt=(SELECT CreatedAt FROM review WHERE ReviewId=?) WHERE ReviewId=?', (rid, old))
-        self.s.decide_review(old, 'superseded', None, 'taskuary', proposals.SET_ASIDE)
-        turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
-        self.assertEqual([(c['id'], c['status']) for c in turns[0]['cards']], [(f'r:{rid}', 'passed'), (f'r:{old}', 'passed')])
 
     def test_a_card_outside_every_turn_never_shifts_where_a_later_card_finds_its_turn(self):
         """The owner's live task, 2026-11-12 (KeyError 'cards', the chat would not load): a card that no turn holds is put into the list

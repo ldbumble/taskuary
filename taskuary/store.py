@@ -5596,8 +5596,12 @@ class SQLiteStore:
 
     # reviews (orphans - reviews whose task is gone - never surface)
     def _poke_review(self, review):
-        """A review changes both places that render it: its message and its task."""
+        """A review changes both places that render it: its message and its task - and a card that can stand now stands in the task's chat
+        log from this moment, in the turn that raised it (chatlog.advance: every road that raises or writes a review comes through here)."""
         if not review: return
+        if review.get('TaskId') and review.get('Status') == 'pending':
+            from . import chatlog
+            chatlog.advance(self, review['TaskId'])
         kinds = []
         if review.get('MessageId'): kinds.append('feed-changed')
         if review.get('TaskId'): kinds.append('task-changed')
@@ -5638,10 +5642,6 @@ class SQLiteStore:
             if sent:
                 from .channels import retire_draft_answered_elsewhere
                 retire_draft_answered_elsewhere(self, fields.get('TaskId'), sent, later=True)   # a model read, never inside this write
-        # ...a card stands in the chat's log from the moment it is raised, in the turn that raised it (chatlog.advance: the one writer of cards)
-        if fields.get('TaskId') and fields.get('Status') == 'pending':
-            from . import chatlog
-            chatlog.advance(self, fields['TaskId'])
         return rid
     def get_review(self, rid): return self._one('SELECT * FROM review WHERE ReviewId=?', (rid,))
     def reviews_for_message(self, mid):

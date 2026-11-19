@@ -239,6 +239,25 @@ def _install_fresh_routes(app, store):
                                    "subject": body.get("subject") or "", "body": body["body"], "sent_at": body.get("sent"), "to": body.get("to") or []}, "your own reply on the thread - kept for context")
         return {"ok": True}
 
+    @app.post("/api/fixture/started-run")
+    def fixture_started_run(body: dict = Body(...)):
+        """A task a run started with nobody typing: a routine's run (`routine`) or a report's (else), its agent's first turn done - what its chat
+        opens with (browser/start-line)."""
+        import json as _json
+        from taskuary import general
+        title = body.get("title") or ("Weekly post drafts" if body.get("routine") else "Late invoices check")
+        cfg = {"type": "agent", "access": "write", "title": title, "prompt": "Draft three posts about this week at Northwind"} if body.get("routine") else {"type": "sql", "title": title}
+        sid = store.save_source({"Channel": "report", "Address": title, "Active": 0, "ConfigJson": _json.dumps(cfg)}, "owner")
+        tid = store.create_task({"Title": f"{title} - run" if body.get("routine") else "Two invoices past due", "Kind": "general", "Status": "open",
+                                 "Summary": "" if body.get("routine") else "Find out why the two Payworth invoices are past due",
+                                 **({"Source": "workflow", "SourceRef": f"workflow:{sid}"} if body.get("routine") else {"Source": "report"})}, "schedule")
+        if not body.get("routine"):
+            store.add_message({"TaskId": tid, "ExternalId": f"fx-run:{tid}", "ConversationId": f"report:{sid}", "Channel": "report", "SourceName": title,
+                               "Subject": f"{title} - 2 rows", "BodyText": "| Vendor | Days |\n| Payworth | 45 |", "Status": "routed"})
+        store.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, "WORKFLOW RUN: ..." if body.get("routine") else "Find out why the two Payworth invoices are past due")
+        store.add_comment(tid, "assistant", general.ASSISTANT_TYPE, "Three drafts are ready below." if body.get("routine") else "Both invoices wait on a purchase order from Erin Blake.")
+        return {"taskId": tid}
+
     @app.post("/api/fixture/session")
     def fixture_session(body: dict = Body(...)):
         """The task's live session put where time would put it: `ended` (closed, forgotten) or `idled` (closed quietly, the next line wakes it) -

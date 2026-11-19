@@ -11,6 +11,7 @@ its own time, after the turn it came in under - never inside one.
 
 One item: {id, kind, at, ...}
   arrival  m:<MessageId>            who, channel, words, files, own (his own reply on the channel)
+           s:<TaskId>               head, channel report|dashboard|routine, words - the start nobody typed (started_by)
   line     <the page's LineId> | c:<CommentId>      text, files
   press    p:<audit id>             text - his press, in his voice (general.PRESSES)
   note     n:<...>                  text - one quiet sentence
@@ -126,6 +127,32 @@ def _after(body) -> float:
     "The newest message the store held when a kept line was typed (general.wait_line) - a line from before that was written is after all of its second."
     try: return float(json.loads(body or '{}').get('after'))
     except (ValueError, TypeError, AttributeError): return INF
+# THE START NOBODY TYPED IS AN INPUT TOO (the owner, 2026-11-18 on a routine's run and 2026-11-19 on a report: the box wore "Report · ..." and the
+# chat began with the agent's turn - nothing said what started it): a routine's run, a report's or a dashboard's run that started its agent,
+# drawn at the top as an arrival is - where it came from, named, and what the agent was asked. Read from the task's own facts, never a model
+def started_by(store, t: dict) -> dict | None:
+    "{head, channel, words} for task `t` begun by a routine or a report/dashboard run - None where a person's message or his words began it."
+    if not t: return None
+    if t.get('Source') == 'workflow':
+        from . import workflows
+        src = workflows.source_of(store, t)
+        d = workflows.definition(store, src) if src else {}
+        name = d.get('title') or str(t.get('Title') or '').rsplit(' - ', 1)[0]
+        said = d.get('objective') or (f"Run the saved skill /{d['skill']}" if d.get('skill') else '')
+        return {'head': f'From the routine {name}', 'channel': 'routine', 'words': said}
+    m = next((m for m in store.list_messages(t['TaskId']) if (m.get('Channel') or '') == 'report'), None) if t.get('Source') == 'report' else None
+    if not m: return None
+    from .dashboards import is_dashboard
+    sid = str(m.get('ConversationId') or '').partition('report:')[2]
+    src = store.get_source(int(sid)) if sid.isdigit() else None
+    try: dash = is_dashboard(json.loads((src or {}).get('ConfigJson') or '{}'))
+    except ValueError: dash = False
+    kind, name = 'dashboard' if dash else 'report', str(m.get('SourceName') or m.get('Subject') or '').strip()
+    # ...what it was asked: the job its start read off the run (the task's own ask), else what the run said
+    said = _flat(t.get('Summary')) or _flat(m.get('Subject')) or name
+    return {'head': f'From the {kind} {name}'.strip(), 'channel': kind, 'words': said}
+
+
 def came(x: dict) -> tuple:
     """WHEN AN INPUT CAME - one key for a message and a line of his alike: its second (a stamp is no finer), then inside it the order the store
     took them in - a message by its id, a line after the newest message there when it was typed (_after). A message by when it CAME - the
@@ -773,6 +800,7 @@ def _items(store, tid: int) -> dict:
     # task he made and has not started says nothing yet - shown there, the title stood as his line and went when the line he typed began it
     # ...and once drawn it stays, whatever starts or stops after (the basic flow's check, 2026-11-12: it went when the turn it began ended)
     once = bool(store._one("SELECT 1 AS x FROM shown WHERE TaskId=? AND Key=?", (tid, f'a:{tid}')))
+    once_s = bool(store._one("SELECT 1 AS x FROM shown WHERE TaskId=? AND Key=?", (tid, f's:{tid}')))
     # ...and never while a line of his begins the turn (PRESSED: his press; or heard and not yet filed): that line is the ask (CI parity, 2026-11-12: the task's title stood
     # as his line over the line he typed on one backend, from a read in that beat)
     drawn0 = {x.get('id') for x in out} | {p['id'] for p in pend}
@@ -781,6 +809,14 @@ def _items(store, tid: int) -> dict:
         at = asked['T'] if asked else ep((store.get_task(tid) or {}).get('CreatedAt'))
         # ...his words and his files, read as every line of his is (split_files): a file attached in New stood in his bubble as its path
         out.insert(0, {'id': f'a:{tid}', 'kind': 'line', 'at': stamp(at), **general.split_files(said), '_h': at})
+    # ...AND A START NOBODY TYPED OPENS IT AS WHAT STARTED IT (started_by): where no line or message stands above its first work
+    work = next((i for i, x in enumerate(out) if x['kind'] in ('turn', 'step', 'line', 'arrival')), None)
+    # ...from its first read on: a chat drawn without it (from before this) never gets it under what was already there
+    begun = once_s or not was_shown and (at_work or work is not None and out[work]['kind'] in ('turn', 'step'))
+    if begun and (work is None or out[work]['kind'] in ('turn', 'step')) and (by := started_by(store, store.get_task(tid) or {})):
+        at = ep((store.get_task(tid) or {}).get('CreatedAt'))
+        out.insert(0, {'id': f's:{tid}', 'kind': 'arrival', 'who': by['head'], 'head': by['head'], 'channel': by['channel'], 'own': False,
+                       'at': stamp(at), 'files': 0, 'words': by['words'], '_hm': at})
     # ONE TURN AT WORK, AND IT IS THE LAST (the owner's live task, 2026-11-11: a second head spun under a later, finished answer while the task
     # read done): a turn stands where it began, so one that reads at work with a turn after it has ended - whatever its session still says
     turns_ = [x for x in out if x['kind'] == 'turn']
@@ -1127,7 +1163,7 @@ def _items(store, tid: int) -> dict:
         if why: idle = f"{why['Body']} {START_BY_WRITING}"
     # ...HIS FIRST LINE ON A REPORT HE SENT ON CARRIES ITS NAME (the owner, 2026-11-17: "it says report name then your prompt"): the report is the
     # pill in his bubble, as it was on the box he typed it in - and the report itself on the task's Came from
-    if (task_.get('Source') == 'report') and (first := next((x for x in out if x['kind'] == 'line'), None)):
+    if (task_.get('Source') == 'report') and not any(x['id'] == f's:{tid}' for x in out) and (first := next((x for x in out if x['kind'] == 'line'), None)):
         m = next(iter(store.list_messages(tid)), None) or {}
         if (name := str(m.get('SourceName') or m.get('Subject') or '').strip()): first['came'] = name
     body = {'items': out, 'pending': pend, 'now': now, 'later': later, 'dropped': [d for d in dropped if d], 'working': at_work, 'started': t0 if at_work else None, 'asking': ask,
@@ -1176,7 +1212,7 @@ def flow_breaks(got: dict, was: dict = None) -> list:
         k = x['kind']
         if (k == 'turn' and not live(x) and not (x.get('text') or x.get('steps') or x.get('cards') or x.get('fail') or x.get('summary'))
                 or k == 'line' and not (str(x.get('text') or '').strip() or x.get('files'))
-                or k == 'arrival' and not (str(x.get('words') or '').strip() or x.get('files'))
+                or k == 'arrival' and not (str(x.get('words') or '').strip() or x.get('files') or x.get('head'))
                 or k in ('note', 'press') and not str(x.get('text') or '').strip()): say(f'd: {x["id"]} is drawn empty')
     # e
     at = [x for x in xs if live(x)]

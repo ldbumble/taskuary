@@ -1485,6 +1485,58 @@ def test_his_first_line_on_a_report_he_sent_on_carries_its_name():
     assert all('came' not in x for x in conversation.items(s, t2)['items'])
 
 
+def test_a_turn_a_report_run_started_opens_on_the_report_and_what_it_asked():
+    """The owner, 2026-11-19: a report's run started its agent, the box wore "Report · Process Error Check" and the chat began with the agent's
+    turn - nothing showed what started it. The report stands at the top as an input, named, with what the agent was asked; a typed line
+    nowhere, and nothing drawn before any work began."""
+    from taskuary import conversation, general
+    from taskuary.store import MemoryStore
+    s = MemoryStore()
+    sid = s.save_source({'Channel': 'report', 'Address': 'Late invoices check', 'Active': 1, 'ConfigJson': '{"title": "Late invoices check"}'}, 'owner')
+    tid = s.create_task({'Title': 'Two invoices past due', 'Summary': 'Find out why the two Payworth invoices are past due', 'Kind': 'general',
+                         'Status': 'open', 'Source': 'report'}, 'owner')
+    s.add_message({'TaskId': tid, 'Channel': 'report', 'ConversationId': f'report:{sid}', 'SourceName': 'Late invoices check',
+                   'Subject': 'Late invoices - 2 rows', 'BodyText': 'x', 'Status': 'routed'})
+    assert conversation.items(s, tid)['items'] == [], 'nothing began yet'
+    s.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, 'Find out why the two Payworth invoices are past due')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Both wait on a purchase order.')
+    got = conversation.items(s, tid)
+    xs = got['items']
+    assert [x['kind'] for x in xs] == ['arrival', 'turn'], xs
+    assert (xs[0]['head'], xs[0]['words'], xs[0]['channel']) == ('From the report Late invoices check', 'Find out why the two Payworth invoices are past due', 'report'), xs[0]
+    assert not conversation.flow_breaks(got)
+
+
+def test_a_routine_run_opens_on_the_routine_and_its_objective():
+    """The owner, 2026-11-18: a routine's run showed the box's "Routine · ..." chip and the agent's turn first. The run stands at the top, named
+    "From the routine ...", with the objective the routine asks of its agent - never the run's whole brief."""
+    import json
+    from taskuary import conversation, general
+    from taskuary.store import MemoryStore
+    s = MemoryStore()
+    sid = s.save_source({'Channel': 'report', 'Address': 'Weekly post drafts', 'Active': 1,
+                         'ConfigJson': json.dumps({'type': 'agent', 'access': 'write', 'title': 'Weekly post drafts', 'prompt': 'Draft three posts about this week at Northwind'})}, 'owner')
+    tid = s.create_task({'Title': 'Weekly post drafts - 2026-11-18 09:00', 'Summary': 'WORKFLOW RUN: Weekly post drafts - scheduled ...', 'Kind': 'general',
+                         'Status': 'open', 'Source': 'workflow', 'SourceRef': f'workflow:{sid}'}, 'schedule')
+    s.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, 'WORKFLOW RUN: Weekly post drafts - scheduled ...')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Three drafts are ready.')
+    got = conversation.items(s, tid)
+    xs = got['items']
+    assert [x['kind'] for x in xs] == ['arrival', 'turn'], xs
+    assert (xs[0]['head'], xs[0]['words']) == ('From the routine Weekly post drafts', 'Draft three posts about this week at Northwind'), xs[0]
+    assert not conversation.flow_breaks(got)
+    # ...and a run's chat drawn before this, without it, never has it drawn under what was already there
+    t1 = s.create_task({'Title': 'Weekly post drafts - 2026-11-11 09:00', 'Kind': 'general', 'Status': 'open', 'Source': 'workflow', 'SourceRef': f'workflow:{sid}'}, 'schedule')
+    s.add_comment(t1, 'assistant', general.ASSISTANT_TYPE, 'The drafts of last week.')
+    s._exec("INSERT INTO shown (TaskId, Key, Seq) VALUES (?, 'old', 1)", (t1,))
+    assert [x['kind'] for x in conversation.items(s, t1)['items']] == ['turn']
+    # ...and a task his own words began draws his line, never a start row
+    t2 = s.create_task({'Title': 'Venues', 'Kind': 'general', 'Status': 'open', 'Source': 'report'}, 'owner')
+    s.add_comment(t2, 'owner', general.USER_TYPE, 'Which venue is cheapest?')
+    s.add_comment(t2, 'assistant', general.ASSISTANT_TYPE, 'The second one.')
+    assert [x['kind'] for x in conversation.items(s, t2)['items']] == ['line', 'turn']
+
+
 def test_his_answer_to_a_permission_request_is_its_card_greyed_where_it_stood():
     """The owner, 2026-11-17: "the approve card should never go anywhere and just say it was approved ... keep the action cards but gray out
     if passed" - his Allow on a coding agent's permission request left only "You allowed: ..." in its place. The press carries what it asked

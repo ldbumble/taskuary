@@ -67,6 +67,7 @@ import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import TelegramIcon from "@mui/icons-material/Telegram";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
+import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 
@@ -166,7 +167,8 @@ const ChatCtx = React.createContext(false);
 const CHANNEL_WORD = { email: "Email", whatsapp: "WhatsApp message", teams: "Teams message", slack: "Slack message", telegram: "Telegram message", sms: "Text" };
 const ChannelMark = ({ channel }) => {
   const c = String(channel || "").toLowerCase();
-  const Icon = c === "whatsapp" ? WhatsAppIcon : c === "telegram" ? TelegramIcon : c === "email" || !c ? MailOutlineIcon : ChatBubbleOutlineIcon;
+  const Icon = c === "whatsapp" ? WhatsAppIcon : c === "telegram" ? TelegramIcon : c === "email" || !c ? MailOutlineIcon
+    : ["report", "dashboard", "routine"].includes(c) ? AssessmentOutlinedIcon : ChatBubbleOutlineIcon;
   return <Icon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />;
 };
 // ...and a burst from one sender reads as one: the next message of the same person on the same channel carries its time alone (the owner's
@@ -178,7 +180,8 @@ const sameAs = (a, b) => !!a && !!b && a.who === b.who && String(a.channel || ""
 // should be left side thing but written as you responded"): on the LEFT, "You · on WhatsApp · 5:20 PM" - their answer on the thread, never a
 // prompt to the agent (channels.ingest_own_message wakes no turn; the next one hears it)
 const ON_WORD = { email: "by email", whatsapp: "on WhatsApp", teams: "on Teams", slack: "on Slack", telegram: "on Telegram", sms: "by text" };
-const headOf = (x) => x.own ? ["You", ON_WORD[String(x.channel || "").toLowerCase()] || "outside Taskuary"]
+// ...and a start nobody typed - a routine's run, a report's - names itself: "From the routine Weekly post drafts" (conversation.started_by)
+const headOf = (x) => x.head ? [x.head] : x.own ? ["You", ON_WORD[String(x.channel || "").toLowerCase()] || "outside Taskuary"]
   : [`${CHANNEL_WORD[String(x.channel || "").toLowerCase()] || "Message"} from ${x.who || "someone"}`];
 // the subject when it says something the words do not: not over a chat line (none), not the same as the line before's, not the words themselves
 export const subjectOf = (x, prev) => { const sub = String(x?.subject || "").trim(), bare = (v) => String(v || "").replace(/^\s*((re|fw|fwd)\s*:\s*)+/i, "").trim().toLowerCase();

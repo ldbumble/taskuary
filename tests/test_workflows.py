@@ -137,7 +137,11 @@ class StepsRunTests(unittest.TestCase):
         turns = [x for x in mid['chat']['items'] if x['kind'] == 'turn']
         self.assertTrue(mid['chat']['working'])
         self.assertEqual([(t['state'], [x['text'] for x in t['steps']]) for t in turns], [('working', ['Read AP bills: read bills'])])
-        turns = [x for x in conversation.items(s, out['task_id'])['items'] if x['kind'] == 'turn']
+        # ...and the run itself opens its chat, named - what started it, never only the box's chip (the owner, 2026-11-18)
+        self.assertEqual([(x['kind'], x.get('head')) for x in mid['chat']['items']][:1], [('arrival', 'From the routine Duplicate bill check')])
+        xs = conversation.items(s, out['task_id'])['items']
+        self.assertEqual((xs[0]['id'], xs[0]['head']), (f"s:{out['task_id']}", 'From the routine Duplicate bill check'))
+        turns = [x for x in xs if x['kind'] == 'turn']
         self.assertEqual([(t['state'], len(t['steps'])) for t in turns], [('done', 2)])
         self.assertTrue(turns[0]['text'].startswith('Ran 2 steps in'))
 

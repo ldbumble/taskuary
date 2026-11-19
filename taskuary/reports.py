@@ -2583,7 +2583,7 @@ def source_title(t: str) -> str:
 
 
 def plain_reason(e) -> str:
-    from .channels import plain_failure
+    from .say import plain_failure
     return plain_failure(e if isinstance(e, Exception) else RuntimeError(str(e)))[:300]
 
 

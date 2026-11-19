@@ -238,7 +238,7 @@ class ToolTests(unittest.TestCase):
 
     def test_stop_names_its_agent_or_stops_nothing(self):
         s, tid, mid, item = table()
-        with mock.patch.object(concierge, '_agent_running', return_value=True):
+        with mock.patch.object(concierge, '_on_task', return_value=True):
             p, out = call(s, 'agent.stop', ref=f'TQ-{tid:04d}')
             self.assertEqual((p['kind'], p['target'], p['params'].get('wrap')), ('agent.stop', tid, True))
             p, out = call(s, 'agent.stop')

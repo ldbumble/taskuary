@@ -15,7 +15,7 @@ class RunAnotherOnlyAfterARun(unittest.TestCase):
         self.s = MemoryStore(); f = Factory(self.s)
         self.tid = f.task('Fix the CSV export header order', kind='coding', Assignee='agent:coding')
         self.s.tag_task(self.tid, HOLD_TAG)
-        p = mock.patch.object(concierge, '_agent_running', return_value=False); p.start(); self.addCleanup(p.stop)
+        p = mock.patch.object(concierge, '_on_task', return_value=False); p.start(); self.addCleanup(p.stop)
 
     def shows(self): return concierge._shows(self.s, {'tid': self.tid}, 'run_another')
 

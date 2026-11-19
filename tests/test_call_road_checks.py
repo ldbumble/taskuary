@@ -50,7 +50,7 @@ class TheCallRoadChecksWhatTheButtonsCheckTests(unittest.TestCase):
 
     def test_stop_with_nothing_running_says_so_and_offers_nothing(self):
         s, tid, mid, item = table()
-        with mock.patch.object(concierge, '_agent_running', return_value=False):
+        with mock.patch.object(concierge, '_on_task', return_value=False):
             said = miss(s, item, 'agent.stop', ref=f'TQ-{tid}')
         self.assertIn(f'No agent is running on TQ-{tid:04d}', said)
         self.assertNotIn('transcript', said)
@@ -58,14 +58,14 @@ class TheCallRoadChecksWhatTheButtonsCheckTests(unittest.TestCase):
     def test_stop_with_an_agent_running_is_a_card(self):
         s, tid, mid, item = table()
         dock = concierge.general.dock_task(s, 'owner')[0]['TaskId']
-        with mock.patch.object(concierge, '_agent_running', return_value=True):
+        with mock.patch.object(concierge, '_on_task', return_value=True):
             out = concierge.call_turn(s, dock, {'kind': 'agent.stop', 'params': {'ref': f'TQ-{tid}'}}, item, 'stop it')
         self.assertEqual(out['proposal']['kind'], 'agent.stop')
 
 
     def test_an_answer_with_no_agent_on_the_named_task_goes_back_with_the_real_roads(self):
         s, tid, mid, item = table()
-        with mock.patch.object(concierge, '_agent_running', return_value=False):
+        with mock.patch.object(concierge, '_on_task', return_value=False):
             said = miss(s, None, 'agent.answer', ref=f'TQ-{tid}', text='use the main branch')
         self.assertIn(f'No agent is on TQ-{tid:04d}', said); self.assertIn('dispatch.prepare', said)
         self.assertEqual(s._rows("SELECT * FROM operation WHERE Kind='agent.answer'"), [], 'no card nobody hears')
@@ -77,7 +77,7 @@ class TheCallRoadChecksWhatTheButtonsCheckTests(unittest.TestCase):
         s, tid, mid, item = table()
         s.enqueue_dispatch(tid, None, 'claude', 'no slot free')
         dock = concierge.general.dock_task(s, 'owner')[0]['TaskId']
-        with mock.patch.object(concierge, '_agent_running', return_value=False), mock.patch.object(ingest, 'has_room', return_value=False), \
+        with mock.patch.object(concierge, '_on_task', return_value=False), mock.patch.object(ingest, 'has_room', return_value=False), \
              mock.patch.object(server, 'store', s), mock.patch.object(origin, 'hold', return_value=None):
             out = concierge.call_turn(s, dock, {'kind': 'agent.tell', 'params': {'ref': f'TQ-{tid}', 'text': 'use the main branch'}}, None,
                                       'tell the agent to use the main branch')
@@ -89,7 +89,7 @@ class TheCallRoadChecksWhatTheButtonsCheckTests(unittest.TestCase):
         # the owner, 2026-11-02: words for a working agent go in as its next prompt (agent.tell), no card
         s, tid, mid, item = table()
         dock = concierge.general.dock_task(s, 'owner')[0]['TaskId']
-        with mock.patch.object(concierge, '_agent_running', return_value=True),              mock.patch.object(concierge, '_tell_now', return_value={'say': 'told'}) as tell:
+        with mock.patch.object(concierge, '_on_task', return_value=True),              mock.patch.object(concierge, '_tell_now', return_value={'say': 'told'}) as tell:
             out = concierge.call_turn(s, dock, {'kind': 'agent.answer', 'params': {'ref': f'TQ-{tid}', 'text': 'main'}}, None, 'tell it main')
         self.assertEqual(out, {'say': 'told'}); self.assertEqual(tell.call_args.args[2:4], (tid, 'main'))
 

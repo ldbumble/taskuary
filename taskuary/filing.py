@@ -192,7 +192,8 @@ def _problem(store, c, line: str) -> int:
 
 def _read_graph(store, c, rows) -> int:
     from . import msauth
-    from .channels import graph_creds, graph_token, mark_mail_read, _status
+    from .channels import graph_creds, graph_token, mark_mail_read
+    from .say import _status
     cfg, sec, _ = graph_creds(store, c)
     user = cfg.get('auth') == 'user'
     if user and msauth.granted(cfg, 'Mail.ReadWrite') is False: return _problem(store, c, SCOPE_LINE[True])
@@ -229,7 +230,7 @@ def mark_read_back(store) -> int:
         full = store.get_connector(c['ConnectorId'], with_secret=True)
         try: got = (_read_graph if c['Type'] == 'outlook' else _read_imap)(store, full, rows)
         except Exception as e:
-            from .channels import plain_failure
+            from .say import plain_failure
             logger.warning(f"marking read mail read on {c.get('Name') or c['Type']} failed: {e}")
             _problem(store, c, f"Could not mark mail read there just now - tried again shortly. {plain_failure(e, c['Type'] == 'outlook')[:200]}")
             continue

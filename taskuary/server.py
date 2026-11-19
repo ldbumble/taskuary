@@ -8167,7 +8167,7 @@ def save_connector(body: ConnectorBody):
             discovery['said'] = (f"authenticated as {discovery.get('login')} · {discovery.get('repos')} repos discovered · "
                                  f"{discovery.get('added')} sources added · repo map written to SOUL.md")
         except Exception as e:
-            from .channels import plain_failure
+            from .say import plain_failure
             discovery = {'error': plain_failure(e)}      # shown under Save: "401 Client Error ... api.github.com" helped nobody
     # an AI card switched on or given its key here fills its empty model boxes from what it lists (firstrun.fill_tiers)
     from . import llm as _llm

@@ -74,7 +74,7 @@ def _held(cfg, user, mint) -> tuple:
     from .calwrite import _claims
     try: claims = _claims(mint())
     except Exception as e:
-        from .channels import plain_failure
+        from .say import plain_failure
         return None, '', f"Microsoft could not be asked just now: {plain_failure(e, user)[:200]}"
     held = claims.get('scp', '').split() if user else list(claims.get('roles') or [])
     name = str(claims.get('app_displayname') or '')

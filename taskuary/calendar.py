@@ -153,7 +153,7 @@ _OFFLINE = re.compile(r'Max retries exceeded|Failed to establish a new connectio
 def unreadable(e) -> str:
     """Why a calendar could not be read, in words: the opener shows it to the owner, a draft reads it. The raw error went
     straight onto My Day ("HTTPSConnectionPool(host='login.microsoftonline...' ... NameRes") when the machine was offline."""
-    from .channels import plain_failure, _DNS, _TIMEOUT
+    from .say import plain_failure, _DNS, _TIMEOUT
     raw = str(e); logger.info(f'calendar: could not be read - {raw[:300]}')
     if _DNS.search(raw) or _TIMEOUT.search(raw) or _OFFLINE.search(raw):
         return 'The calendar service could not be reached - this computer may be offline. It tries again in a few minutes.'

@@ -5,7 +5,7 @@ at work that ends, a card he presses - is updated in place (`State`, `Body`, `Re
 
 Every producer writes through `put`/`update`/`step`; the reader is `read`. The rule for when a running turn is split by his line lives in
 `step`, at write time, decided once."""
-import hashlib, json, logging, os, re, time
+import hashlib, json, logging, os, re, threading, time
 from .timewords import plural
 
 logger = logging.getLogger(__name__)
@@ -758,6 +758,25 @@ def advance(store, tid: int) -> None:
         if unwritten(rv) or cardqueue.obsolete_read(store, tid, rv): continue
         t = open_turn(store, tid)
         put(store, tid, 'card', f'r:{rid}', {**_card(rv), 'offer': True}, parent=t['Id'] if t else None, state='offer', src=f'review:{rid}')
+
+
+# ...OFF THE WRITER'S THREAD (walk 2, 2026-11-19: the server froze ~20 s after an Approve - every request stuck, CPU flat): a review's write
+# put its card from inside the store's own poke, under whatever its caller held - the store's lock, a press's claim, the waiting room's -
+# and advance reads the whole line of cards through other roads that take their own. Two of those in opposite orders on two threads is a
+# deadlock. The write only says the line moved; one worker puts it, holding nothing else, and every read still advances first.
+_SOON, _SOON_LOCK, _SOON_GO, _SOON_T = {}, threading.Lock(), threading.Event(), [None]
+def advance_soon(store, tid: int) -> None:
+    "The line of cards on task `tid` moved: put into the log by the one worker, never on the thread that wrote it."
+    with _SOON_LOCK:
+        _SOON[(id(store), int(tid))] = (store, int(tid))
+        if not (_SOON_T[0] and _SOON_T[0].is_alive()):
+            _SOON_T[0] = threading.Thread(target=_soon_loop, daemon=True, name='chatlog-cards'); _SOON_T[0].start()
+    _SOON_GO.set()
+def _soon_loop() -> None:
+    while True:
+        _SOON_GO.wait(); _SOON_GO.clear()
+        with _SOON_LOCK: jobs = list(_SOON.values()); _SOON.clear()
+        for st, tid in jobs: advance(st, tid)
 
 
 def _above(store, r: dict):

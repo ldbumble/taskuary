@@ -5600,8 +5600,8 @@ class SQLiteStore:
         the source, as it changes (chatlog.advance: every road that raises, presses or settles a review comes through here)."""
         if not review: return
         if review.get('TaskId'):                # ...raised, pressed, sent, withdrawn, set aside or failed: its card says so where it stood
-            from . import chatlog
-            chatlog.advance(self, review['TaskId'])
+            from . import chatlog                # ...put by the log's own worker, never under what this write's caller holds (advance_soon)
+            chatlog.advance_soon(self, review['TaskId'])
         kinds = []
         if review.get('MessageId'): kinds.append('feed-changed')
         if review.get('TaskId'): kinds.append('task-changed')

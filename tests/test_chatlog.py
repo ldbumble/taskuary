@@ -359,3 +359,27 @@ def test_for_you_to_do_stays_on_the_turn_that_wrote_it_and_is_not_said_again():
     s.add_comment(tid, 'assistant', general.SUMMARY_TYPE, j.dumps({'about': 'the form', 'did': 'filed it', 'on_you': ['Sign the vendor form']}))
     turns = [x for x in chatlog.serve(s, tid)['items'] if x['kind'] == 'turn']
     assert [bool(t.get('on_you')) for t in turns] == [True, False], 'kept on its own turn; the same words not said again'
+
+
+def test_a_card_press_and_a_chat_read_on_two_threads_both_finish():
+    """Walk 2, 2026-11-19: the server froze ~20 s after an Approve - a review's write put its card under whatever its caller held, and a read
+    of the chat took the same locks the other way. A press and a read with steps written beside it, on two threads, both finish at once."""
+    import threading, time as t_
+    from taskuary import conversation, general
+    s, tid = world()
+    general.wait_line(s, tid, 'Send Erin the review', line_id='l-1'); conversation.hear(s, tid, ['l-1'], turn=True)
+    done, stop = [], t_.time() + 2
+    def press():
+        while t_.time() < stop:
+            rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'Channel': 'email', 'DraftText': 'Hi Erin, attached. Alex'})
+            with s.lock: s.decide_review(rid, 'approved', 'Hi Erin, attached. Alex', 'owner')      # ...a press under the store's own lock
+        done.append('press')
+    def read():
+        n = 0
+        while t_.time() < stop:
+            chatlog.step(s, tid, 'sid1', f'r{n}', {'k': 'said', 'text': f'step {n}'}); conversation.items(s, tid); n += 1
+        done.append('read')
+    ts = [threading.Thread(target=f, daemon=True) for f in (press, read)]
+    for x in ts: x.start()
+    for x in ts: x.join(8)
+    assert sorted(done) == ['press', 'read'], f'a thread never finished: {done}'

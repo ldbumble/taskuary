@@ -1384,10 +1384,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     const beat = said && closes ? new Promise((r) => setTimeout(r, SENT_BEAT)) : null;
     // ...on the walk's table that gate is the walk's close (railwalk.leave "sent"): kept open, the same row comes back
     if (closes && walkLeave) {
-      if (beat) await beat;            // ...the walk's close draws its "…" under the card at once: the line goes first
-      onLeave?.();
-      // ...and kept open, the sent line says why - it went on saying "closing the task" over a task that stayed (the agent walk, 2026-11-10)
-      try { const d = await walkLeave("sent"); if (d?.kept) { if (said) setSentHere((h) => h && { ...h, closing: false, kept: d.kept.join("; ") }); onStay?.(); } } catch (e) { onStay?.(e?.response?.data?.detail || e?.message || "Could not close it"); }
+      if (beat) await beat;
+      // ...THE PAGE MOVES ONLY ONCE THE CLOSE HAS LANDED (design round 5, I2: "Send and close" walked on to the next task with nothing sent,
+      // and a second press sent it): put down at the answer, never the press - kept open, the sent line says why, and the task stays in front
+      // of him (the agent walk, 2026-11-10: it went on saying "closing the task" over a task that stayed); failed, it says so where he pressed
+      try { const d = await walkLeave("sent"); if (d?.kept) { if (said) setSentHere((h) => h && { ...h, closing: false, kept: d.kept.join("; ") }); onStay?.(); } else onLeave?.(); }
+      catch (e) { onStay?.(e?.response?.data?.detail || e?.message || "Could not close it"); }
       loadDetail(selected); loadTasks(); onChanged?.(); return;
     }
     if (closes) {

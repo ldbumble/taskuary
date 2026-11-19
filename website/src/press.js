@@ -29,6 +29,8 @@ export const pressSteps = async (api, ids, verb) => { const o = await post(api, 
   return o.data?.failed ? { ...o, kind: "failed", why: String(o.data.failed.error || "") } : o; };
 
 export const landed = (o) => o.kind === "ok" || o.kind === "partial";
+// ...a yes the server says went: decided (approved, edited, sent) or with its delivery's receipt - what a page may move on from (design round 5, I2)
+export const landedSend = (data) => !!data?.ok && !data.send_error && (["approved", "edited", "sent"].includes(data.status) || !!data.sent || data.delivery === "sent");
 // what a card says under a press that did not land: the server's reason, else that nothing was `done` ("sent", "posted", "run") - and never
 // that after no answer, when it may be going still (verdicts' claim: a second press of a running act or send does nothing)
 export const STILL = "No answer yet - it may still be going. Nothing runs twice.";

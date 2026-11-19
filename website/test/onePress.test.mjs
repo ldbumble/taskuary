@@ -60,3 +60,18 @@ test("a road that reports what is thrown gets the answer, the line, or the reque
   assert.throws(() => sure(outcomeOf(null, refusal)), (e) => e === refusal, "its reader knows a refusal's fix: the error itself, not a copy of its words");
 });
 
+
+// A PRESS LANDS BEFORE THE PAGE MOVES (design round 5, I2: "Send and close" walked on to the next task with nothing sent, and a second press
+// sent it): the card hands the page its Send only on a receipt that says it went, and the walk's close puts the task down at its answer
+test("the page moves on from a Send only once the server says it went, and the walk's close only at its answer", async () => {
+  const { landedSend } = await import("../src/press.js");
+  assert.ok(landedSend({ ok: true, status: "approved", sent: { channel: "email" }, delivery: "sent" }));
+  assert.ok(landedSend({ ok: true, status: "sent" }));
+  assert.ok(!landedSend({ ok: true }), "an answer with no sent state moves nothing");
+  assert.ok(!landedSend({ ok: true, status: "pending", send_error: "delivery unknown" }));
+  assert.ok(!landedSend({ ok: false, status: "approved" }));
+  assert.match(read("ReviewDecision.jsx"), /verb === "approve" \? landedSend\(data\)/);
+  const page = read("TaskPage.jsx"), at = page.indexOf('const d = await walkLeave("sent")');
+  assert.ok(at > 0 && !/onLeave\?\.\(\);\s*$/.test(page.slice(page.lastIndexOf("if (closes && walkLeave)", at), at).trim()), "never put down before the answer");
+  assert.match(page, /if \(d\?\.kept\) \{[^\n]*\} else onLeave\?\.\(\); \}/);
+});

@@ -3020,6 +3020,7 @@ class GeneralSession:
         t0 = self.last                       # the turn's own time, kept with its record (sessionrecord.record sums them)
         self._cancel = cancel if cancel is not None else threading.Event()
         cancel = self._cancel
+        if time.time() - STOP_ASKED.pop(self.task_id, 0.) < STOP_KEEPS: cancel.set()      # ...his Stop, pressed while it was starting (stop_turn)
         try:
             if connector_id is not None or model or pick:
                 self.select_provider(connector_id, model, pick)
@@ -3881,6 +3882,8 @@ OPENING = _Opening()
 # ...EVERY KIND'S START IN FLIGHT, one mark (the owner, 2026-11-10: "coding and general use the same code when it comes to interactions so there
 # should be no difference"): a coding task's reopening held a set of its own (ingest's CODING_OPENING), and the pages read neither the same way
 PRESSED = {}                 # task id -> when the owner pressed the line that started the turn in flight: that turn's clock (line_state)
+STOP_ASKED = {}              # task id -> when he pressed Stop on a turn still starting: it stops where it begins (stop_turn, send_prompt)
+STOP_KEEPS = 300             # ...seconds such a stop is kept for the turn it was pressed on - never a later one's
 _IN_FLIGHT = {}              # task id -> lines accepted (take_line) that no turn has answered yet: OPENING stays until the last is
 # ...AND A MAIL HANDED TO IT IS AS A TYPED LINE (the owner, 2026-11-13: "if a new message comes in, it's like typing"): a line that joined the
 # thread was handed to the chat agent at rest (ingest._pass_general) and waited seconds for the rest of a burst before its turn began, and
@@ -4151,7 +4154,11 @@ def stop_turn(store, tid: int) -> bool:
     a coding one said nothing): the turn stops, the session stays, and the press is a line in the chat, as every press is (press_lines)."""
     from . import terminal
     s = session_for(tid)
-    if not (s.stop() if s else terminal.cancel_turn(tid)): return False
+    # ...AND HEARD WHILE IT IS STILL STARTING (design round 5, I2: his Stop under "Waiting for the agent to start" was lost - no line, and the
+    # turn went on): a turn in flight with no answer under way yet is stopped where it begins (send_prompt reads STOP_ASKED)
+    if not (s.stop() if s else terminal.cancel_turn(tid)):
+        if not (starting(tid) or _IN_FLIGHT.get(tid) or (s is not None and getattr(s, 'busy', False))): return False
+        STOP_ASKED[tid] = time.time()
     store.audit('task', tid, 'stopped_turn', 'owner')
     # ...AND WHAT WAITED IS HANDED OVER IN THE SAME STEP (2026-11-12: a read between his stop and the next turn's take drew that turn under the
     # stop before the lines it answers, and they landed above it): his waiting lines are heard now, under the stop, the turn that answers

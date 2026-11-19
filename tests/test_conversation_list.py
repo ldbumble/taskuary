@@ -342,6 +342,26 @@ class TheList(unittest.TestCase):
         self.assertEqual(ids[-3:], ['l-two', *drawn, 'l-three'])
         self.assertEqual([x['state'] for x in got['items'] if x['kind'] == 'turn'][0], 'done')                 # the answer above was never stopped
 
+    def test_his_stop_while_the_agent_is_still_starting_is_heard_and_stops_the_turn(self):
+        """Design round 5, I2 (the API walk): Stop pressed under "Waiting for the agent to start" changed nothing - no line, and the turn went on
+        to think and answer; only a second Stop once it was thinking was heard. A stop is heard in every state: the press is its line at once,
+        and the turn stops where it begins."""
+        real = general.start_session
+        def cold(*a, **k): time.sleep(1.0); return real(*a, **k)
+        with mock.patch.object(general, 'start_session', cold):
+            self.say('Set up the Monday routine.', 'l-one', wait=False)
+            self.assertTrue(until(lambda: general.starting(self.tid)))
+            self.assertIsNone(general.session_for(self.tid))
+            self.assertTrue(general.stop_turn(self.s, self.tid), 'heard while it starts')
+            self.assertIn(('press', None), [(x['kind'], x.get('state')) for x in self.list()['items']])
+            self.assertTrue(until(lambda: not general.starting(self.tid) and not getattr(general.session_for(self.tid), 'busy', False)))
+            time.sleep(0.3); self.rest()
+        got = self.list()
+        self.assertFalse([x for x in got['items'] if x['kind'] == 'turn' and 'Answer' in str(x.get('text'))], self.kinds(got))
+        self.assertFalse([x for x in got['items'] if x['kind'] == 'turn' and x.get('state') == 'failed'], 'a stop is no failure')
+        self.assertEqual([x['text'] for x in got['items'] if x['kind'] == 'press'], [f"You {general.PRESSES['stopped_turn']({})}."], self.kinds(got))
+        self.assertNotIn(self.tid, general.STOP_ASKED, 'used once, by the turn it was pressed on')
+
     def test_a_stopped_turn_whose_only_step_is_machinery_is_no_item_on_any_read(self):
         """The walks, 2026-11-17: he stopped a turn whose only step was Claude loading a tool (ToolSearch). The server kept it for that step, the
         page drew none - a "1 step" trail for 100 ms, then head and trail gone. One list says what is machinery (stepkinds.json), on every read."""

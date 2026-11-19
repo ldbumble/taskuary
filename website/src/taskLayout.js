@@ -120,7 +120,8 @@ export const cameFrom = (m) => {
 };
 // THE PILL ON THE BOX IS THE CONNECTION AND THE CHAT (the owner, 2026-11-17: "pill should be what the message connection card source is"):
 // "Teams · MFA Security App Help", "WhatsApp · Finance team", "Email · Gail Moreno", "Report · End of day checkup"
-export const cameChip = (m) => (cameFrom(m) ? `${channelName(m.Channel)} · ${cameFrom(m)}` : "");
+// ...his own ask is the channel alone: its source is himself (ownwork.SOURCE "you"), never a second word for him
+export const cameChip = (m) => { const f = cameFrom(m); return !f ? "" : /^you$/i.test(f) ? channelName(m.Channel) : `${channelName(m.Channel)} · ${f}`; };
 export const fromStatus = ({ channel = "", count = 0, msgs = [], workflow = null, made = "", sorted = "", to = "" } = {}) => ({
   lines: [count ? [channel, plural(count, "message")].filter(Boolean).join(" · ") : workflow ? `Routine · ${workflow.title}` : made, to,
     ...msgs.slice(0, TAB_MOST).map((m) => `${m.who}: ${q(m.words)}`)].filter(Boolean),

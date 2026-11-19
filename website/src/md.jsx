@@ -57,7 +57,9 @@ const A = ({ href, children, onTask }) => {
   // ...BY ITS ROAD (appLinks.linkRoad, the owner 2026-11-02): the web alone opens a new tab - the system browser, from the desktop window -
   // and the app's own address, written out whole or as a path, stays in the window like its #links
   const road = linkRoad(href), own = ownPath(href) || "", hash = own.includes("#") ? own.slice(own.indexOf("#")) : href;
-  const m = road === "task" ? TASK_LINK.exec(hash || "") : null, bare = !!m && /^TQ-\d+$/.test(String(React.Children.toArray(children).join("")));
+  // ...A TASK LINK READS ITS OWN WORDS (design round 4, 2026-11-19: "I used the time you proposed in open TQ-0007 →" - the agent named the task
+  // by its title, and the page put the number in its place): the words the answer gave it, the ref only where the ref is all it gave
+  const m = road === "task" ? TASK_LINK.exec(hash || "") : null;
   // ...and a page of the app itself (appLinks.js): opened on the canvas here, never a new browser tab
   const page = road === "page" ? appLink(hash) || String(hash).trim() : null;
   // ...and a file an agent made, as the Assistant links it (lookups.outputs_find): the Result's own Download - one tap saves it
@@ -79,7 +81,7 @@ const A = ({ href, children, onTask }) => {
         else if (pdf) { e.preventDefault(); setView((v) => !v); }
         else if (file) { e.preventDefault(); setErr(""); setSaved(""); saveFile({ url: raw }).then(setSaved, (x) => setErr(x.message)); }
       }}>
-      {m && !bare ? `open TQ-${String(m[1]).padStart(4, "0")} →` : children}
+      {children}
     </a>
     {err && <span data-tq-file-error="" style={{ color: DIM, fontWeight: 400 }}> — {err}</span>}
     {saved && <span data-tq-file-saved="" style={{ color: DIM, fontWeight: 400 }}> — {saved}</span>}

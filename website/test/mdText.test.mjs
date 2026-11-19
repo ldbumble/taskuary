@@ -10,6 +10,9 @@ test("a bare task ref in an answer becomes its link, nothing else does", () => {
   assert.equal(linkRefs("TQ-1173, the reconciliation, is next."), "[TQ-1173](#task=1173), the reconciliation, is next.");
   assert.equal(linkRefs("See [TQ-0002](#task=2)."), "See [TQ-0002](#task=2).");
   assert.equal(linkRefs("run `open TQ-0005` and TQ-0006"), "run `open TQ-0005` and [TQ-0006](#task=6)");
+  // ...and a link the answer named in words keeps them: the page never puts "open TQ-0007 →" in their place (design round 4, 2026-11-19)
+  const md = fs.readFileSync(new URL("../src/md.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(md, /open TQ-\$\{/);
   assert.equal(linkRefs("/outputs/TQ-0007/report.md"), "/outputs/TQ-0007/report.md");
   assert.equal(refNumber("TQ-0042"), 42);
   assert.equal(refNumber("nope"), 0);

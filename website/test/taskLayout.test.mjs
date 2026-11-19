@@ -255,6 +255,8 @@ test("the two sections come in the flow's order, and each closed tab says where 
   assert.equal(cameChip({ ...teams, Subject: "Help desk" }), "Teams · Help desk");
   assert.equal(cameChip({ Channel: "whatsapp", SourceName: "Finance team", FromName: "Ray Colton" }), "WhatsApp · Finance team");
   assert.equal(cameChip({ Channel: "email", SourceName: "alex@northwind.example", FromName: "Gail Moreno" }), "Email · Gail Moreno");
+  // ...and a task he made himself is his ask - never "Own · you" (design round 4, 2026-11-19)
+  assert.equal(cameChip({ Channel: "own", SourceName: "you", FromName: "You" }), "Your ask");
   assert.match(fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8"), /label: cameChip\(sourceMessage\) \|\| \(sources\.length/);
   assert.match(fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8"), /channel: cameIn \? cameFrom\(cameIn\) \|\| channelName\(cameIn\.Channel\)/);
   assert.equal(agentWord({}), "not started");

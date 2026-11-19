@@ -342,10 +342,10 @@ NEVER_CLOSES = ('Taskuary did not close the task - closing it is the owner\'s, w
                 'the task. Never say you closed, marked done or reopened it.')
 def owner_closes_line() -> str:
     from .buttons import label
-    # ...and never while a card of its own waits (the real Codex walk, 2026-11-16: "Ready for Mark done" over the email card still waiting for Send)
-    return (f'ENDING THE TASK: the owner closes it with {label("close")} - none of your steps closes it, so never say you closed, marked done or '
-            f'reopened it; when the work is complete and no card you set up still waits for their press, say it is ready for {label("close")} - '
-            f'never that you could not close it. '
+    # ...and never names the close at all (design round 4, 2026-11-19: "Ready for Mark done" ended answers on three AIs - this line taught it):
+    # the page lights the button when the work is done, so the answer ends on the result
+    return (f'ENDING THE TASK: the owner closes it with {label("close")}, which the page lights for them once your work is done - none of your '
+            f'steps closes it, so never say you closed, marked done or reopened it, and never name the button or the close: end on the result. '
             # ...and where what it drafts is (the owner, 2026-11-05: a draft said to be in a section that no longer exists): earlier turns of the
             # conversation may still name another screen - the page they were written for is gone
             f'WHERE YOUR DRAFTS ARE: this task is one chat - no other screen or tab, whatever an earlier turn said. {CARD_SAID} '

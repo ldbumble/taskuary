@@ -638,7 +638,9 @@ function HeadPop({ id, icon, title, children, wide = false }) {
   return <>
     <Tooltip title={title}><IconButton size="small" data-tq-head-pop={id} aria-label={title} aria-haspopup="dialog" aria-expanded={!!at}
       onClick={(e) => setAt(e.currentTarget)} sx={{ color: "var(--tq-link, #41525f)", flexShrink: 0 }}>{icon}</IconButton></Tooltip>
-    <Popover open={!!at} anchorEl={at} onClose={() => setAt(null)} anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+    {/* ...and opening it moves nothing under it (walk 2, 2026-11-19: Chat detail threw the canvas down half a screen): no scroll lock - it
+        turned the page's body into a scroller of its own (overflow hidden over the app's clip) - and the focus kept where it was */}
+    <Popover open={!!at} anchorEl={at} onClose={() => setAt(null)} disableScrollLock disableAutoFocus disableRestoreFocus anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
       transformOrigin={{ vertical: "top", horizontal: "right" }} slotProps={{ paper: { "data-tq-head-pop-body": id, sx: { p: 1.5, width: wide ? 760 : 380, maxWidth: "92vw", maxHeight: wide ? "75vh" : "60vh", overflowY: "auto" } } }}>
       {at && children}</Popover>
   </>;

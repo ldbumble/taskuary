@@ -24,8 +24,10 @@ def own_system(store, row: dict) -> str:
     dom = str(row.get('FromEmail') or '').rsplit('@', 1)[-1].lower() if '@' in str(row.get('FromEmail') or '') else ''
     if dom and dom in senders.own_domains(store) - senders.PUBLIC_MAIL: return f'an automated notice from your own domain, {dom}'
     if (m := REPO_MARK.match(str(row.get('Subject') or ''))):
+        # ...his repositories: the SOUL.md map, the coding checkouts and the ones his GitHub card reaches (its sources, channels.github_sync)
         from .terminal import known_repos
-        if m.group(1).lower() in {r.lower() for r in known_repos(store)}: return f'a notice from your repository {m.group(1)}'
+        mine = {*known_repos(store), *(s['Address'] for s in store.list_sources(active_only=False) if s.get('Channel') == 'github' and s.get('Address'))}
+        if m.group(1).lower() in {str(r).lower() for r in mine}: return f'a notice from your repository {m.group(1)}'
     return ''
 
 

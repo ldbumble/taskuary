@@ -82,9 +82,9 @@ def draft_revision(store, rv) -> str:
         # an empty envelope means the reply _deliver_review resolves - and a failed send writes that resolution into
         # Deliver, so hashing the raw field refused Try again with "the draft changed" when nothing the owner saw had moved
         if d: return d
+        # ...worked out as the send works it out (outbound.review_envelope: the mail that ASKED, AnswersMid - this hashed MessageId's)
         from . import outbound
-        msg = store.get_message(r.get('MessageId')) if r.get('MessageId') else None
-        return outbound.reply_envelope(store, msg) or {'kind': 'reply'}
+        return outbound.review_envelope(store, {**r, 'Deliver': '', 'DeliveryEnvelope': ''})
     basis = [(r.get('ReviewId'), str(r.get('DraftText') or '').strip(), env(r)) for r in rows]
     return hashlib.sha1(json.dumps(basis, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
@@ -323,7 +323,7 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
     # to it wrote {"attachments": [...]} alone - which read as new outbound mail with no recipient (2026-10-07: a
     # session's `--attach`; the owner's Attach button did the same). Only a destination makes it outgoing - not files,
     # not a cc, not the bookkeeping a failed attempt leaves behind, which is how a retry kept failing the same way.
-    outgoing = env.get('kind') not in (None, '', 'reply') or (not env.get('kind') and bool(env.get('to') or env.get('channel')))
+    outgoing = outbound.outgoing(env)
     if not outgoing and env.get('kind') != 'reply':
         files = env.get('attachments')
         env = {**(outbound.reply_envelope(store, msg) or {'kind': 'reply'}), **({'attachments': files} if files else {})}

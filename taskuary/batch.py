@@ -213,6 +213,8 @@ def combine(store, tid, actor: str = 'owner') -> dict:
         from . import concierge
         store.add_comment(o, 'router', 'agent', f'Its items moved into {task_ref(tid)}, so one agent goes through them all.')
         concierge.close_task(store, o, actor, save=False, status='dropped')
+        from .ingest import FOLDED
+        store.audit('task', o, FOLDED, actor, detail={'into': tid})        # folded away: its thread's next line is judged new (ingest.folded)
     its = store.batch_items(tid)
     noun = _noun([store.get_message(i['MessageId']) or {} for i in its if i.get('MessageId')])
     src = (t.get('Title') or '').split(' on ', 1)[-1]

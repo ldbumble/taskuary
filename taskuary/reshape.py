@@ -223,7 +223,8 @@ def merge_tasks(store, src: int, dst: int, actor: str = 'owner') -> dict:
     from . import ingest, verdicts
     result, drafts = agent_result(store, src)
     for rid in [r['rid'] for r in verdicts.unsent(store, src)]: store.decide_review(rid, 'superseded', None, actor, note=f'folded into {task_ref(dst)}')
-    store.update_task(src, {'Status': 'dropped'}, actor)
+    from . import concierge
+    concierge.close_task(store, src, actor, save=False, status='dropped')       # the one close: an agent still on it stops with it
     store.audit('task', src, 'merged_into_task', actor, detail={'into': dst, 'messages': [m['MessageId'] for m in msgs]})
     store.audit('task', dst, 'merged_from_task', actor, detail={'from_task': src, 'messages': len(msgs)})
     told = ingest.folded_in(store, dst, src, str(a.get('Title') or ''), msgs, result, drafts, actor)

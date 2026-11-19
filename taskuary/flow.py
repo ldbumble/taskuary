@@ -675,7 +675,8 @@ def _walk(store, src, tid, trigger, llm, ctx, recs, repairs, rec, start, t0) -> 
     # ...and nothing else on it still working: the run is not the only hand on its task (workerstate.live_work, 2026-11-01)
     elif stop is None and closed is None and not any(r.get('review_id') and r.get('task_id') in (None, tid) for r in recs) \
             and not workerstate.live_work(store, tid, skip=('routine',)):
-        store.update_task(tid, {'Status': 'done'}, 'workflow')
+        from . import concierge
+        concierge.close_task(store, tid, 'workflow', save=False)
     return {'run_id': rid, 'steps': recs, 'failed': failed, 'error': error, 'waiting': stop is not None and not failed, 'summary': words,
             'repairs': repairs, **({'cause': 'taskuary' if app else 'step'} if failed else {})}
 

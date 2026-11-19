@@ -96,3 +96,12 @@ def test_his_own_ci_s_notice_keeps_his_task_his_and_a_stranger_s_mail_does_not()
     s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'builds@ci.example', 'SenderClass': 'automated',
                    'Subject': '[northwind/ledger] Build failed on main', 'BodyText': 'failed', 'Status': 'routed'})
     assert origin.of_task(s, t)[0] == 'stranger'
+
+
+def test_a_repository_his_github_card_reaches_is_his_own_too():
+    "Not only the SOUL.md map: the repositories his GitHub card syncs (its sources) are his systems, a stored fact (origin.own_system)."
+    s = MemoryStore()
+    note = {'Channel': 'email', 'FromEmail': 'builds@ci.example', 'SenderClass': 'automated', 'Subject': '[northwind/portal] Build failed on main'}
+    assert origin.own_system(s, note) == ''
+    s.save_source({'Channel': 'github', 'Address': 'northwind/portal', 'Active': 1, 'Owner': 'discovered'}, 'github')
+    assert 'northwind/portal' in origin.own_system(s, note)

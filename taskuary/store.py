@@ -2997,7 +2997,9 @@ class SQLiteStore:
             # the promise kept working a closed task, and a reply drafted on it waited where no page shows one. Kept open, and said
             from . import buttons, proposals, workerstate as ws
             live = ws.live_work(self, t['TaskId'])
-            if not live and not proposals.owed(self, t['TaskId']): self.update_task(t['TaskId'], {'Status': 'done'}, 'promise')
+            if not live and not proposals.owed(self, t['TaskId']):
+                from .concierge import close_task
+                close_task(self, t['TaskId'], 'promise', save=False)
             else: self.add_comment(t['TaskId'], 'promise', 'agent', 'Your sent mail delivered this promise. It stays open - '
                                    + (live[0] if live else 'something on it still waits on you') + f" - {buttons.label('close')} when it is finished.")
         if t:                                           # delivered: the ledger row resolves now, not at the sweep

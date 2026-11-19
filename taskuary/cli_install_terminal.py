@@ -92,7 +92,8 @@ def start(store, name, verb='install', actor='owner'):
         try:
             term = terminal.Term(argv, str(config.home()), f'{verb} {name}', tid, None, 32, 110, store)
         except Exception:
-            store.update_task(tid, {'Status': 'done'}, actor)
+            from . import concierge
+            concierge.close_task(store, tid, actor, save=False)
             raise
         term.keep_transcript = False  # vendor setup may ask the owner to paste a token
         terminal.SESSIONS[term.sid] = term

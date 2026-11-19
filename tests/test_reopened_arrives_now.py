@@ -74,3 +74,25 @@ class OneReopen(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+def test_a_task_he_let_go_comes_back_when_its_sender_writes_again_and_a_folded_one_does_not():
+    """LET IT GO IS STILL HIS TASK (the owner, 2026-10-25: nothing important stays closed). A task put down with Let it go is dropped, and
+    a dropped task was read as "folded away": the sender's next mail on that thread opened a new task beside it, or nothing. Only a task
+    FOLDED into another (a batch combined, a duplicate folded) stays put - its work lives on where it went."""
+    from taskuary import concierge
+    s = store()
+    let = s.create_task({'Title': 'Chase the Payworth refund', 'Kind': 'task', 'Status': 'open'}, 'owner')
+    mail(s, 'Payworth refund', who='Ray Colton', email='ray@vendor.example', hours=30, tid=let, conv='email:refund')
+    concierge.close_task(s, let, 'owner', save=False, status='dropped', note='Let it go - nobody is chasing this further.')
+    folded, into = (s.create_task({'Title': t, 'Kind': 'task', 'Status': 'open'}, 'owner') for t in ('Trainly seats', 'Trainly seats, all'))
+    mail(s, 'Trainly seats', who='Gail Moreno', email='gail@vendor.example', hours=30, tid=folded, conv='email:seats')
+    concierge.close_task(s, folded, 'router', save=False, status='dropped')
+    s.audit('task', folded, ingest.FOLDED, 'router', detail={'into': into})
+    r = ingest.identity_route(s, {'conversation_id': 'email:refund', 'channel': 'email'})
+    assert r['decision'] == 'attach' and r['task_id'] == let and r.get('reopen'), r
+    assert ingest.joinable(s, let) == let and ingest.joinable(s, let, shut=False) is None
+    assert ingest._reopen(s, let, {'from_name': 'Ray Colton', 'subject': 'Refund still missing'}, 'router', {'intent': 'reply_only'})
+    assert s.get_task(let)['Status'] == 'open'
+    assert ingest.identity_route(s, {'conversation_id': 'email:seats', 'channel': 'email'})['decision'] == 'create'
+    assert ingest.joinable(s, folded) is None

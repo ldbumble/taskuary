@@ -1543,13 +1543,22 @@ def _mention(store, msg: dict, tids: list, intent: dict, actor: str, notes_note:
     return {'status': 'feed', 'task_id': None, 'message_id': mid, 'mentions': tids[0]}
 
 
+FOLDED = 'merged_into_task'          # the audit row a task folded into another carries (reshape.fold, batch.combine)
+def folded(store, t) -> bool:
+    """A task FOLDED AWAY into another: its work lives on there, and nothing comes back to it. Every other close - Mark done, Let it go,
+    Answered elsewhere - is a task still, which a line owing him an answer reopens (the owner, 2026-10-25: nothing important stays closed)."""
+    return bool(t) and t.get('Status') == 'dropped' and bool(store._one(
+        "SELECT 1 x FROM audit WHERE EntityType='task' AND EntityId=? AND Action=? LIMIT 1", (t['TaskId'], FOLDED)))
+
+
 def joinable(store, tid, shut: bool = True):
-    """MAY A MESSAGE LAND ON THIS TASK - the one answer (the spine audit, 2026-11-09). It exists and was not DROPPED: a dropped task is
-    not a task, or was folded away, and nothing comes back to it. `shut=False` wants it open as well - for a road that may not reopen
-    a closed one. And it is WORK: the app's own chat is stored as a task and is no one's job (store.WORK). Returns the id, or None."""
+    """MAY A MESSAGE LAND ON THIS TASK - the one answer (the spine audit, 2026-11-09). It exists and was not FOLDED into another (folded):
+    a task he let go is still his, and comes back when it is owed something. `shut=False` wants it open as well - for a road that may not
+    reopen a closed one. And it is WORK: the app's own chat is stored as a task and is no one's job (store.WORK). Returns the id, or None."""
     from .store import INTERNAL_TASK_BASE
     t = store.get_task(tid) if tid else None
-    return tid if t and t['TaskId'] < INTERNAL_TASK_BASE and t.get('Status') != 'dropped' and (shut or t.get('Status') != 'done') else None
+    ok = t and t['TaskId'] < INTERNAL_TASK_BASE and not folded(store, t) and (shut or t.get('Status') not in ('done', 'dropped'))
+    return tid if ok else None
 
 
 CLOSING_WAIT = 120                # seconds a mail waits for its task's Mark done write-up to close it (land_on)
@@ -1573,7 +1582,7 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
     from . import writeup
     if writeup.closing(tid) and not writeup.in_job(): writeup.wait_for(tid, CLOSING_WAIT)
     t, ref = store.get_task(tid) or {}, task_ref(tid)
-    closed = t.get('Status') == 'done'
+    closed = t.get('Status') in ('done', 'dropped')
     # ...the GOAL itself, under a step nobody holds, is a container: its date, its boxes and the agent it does not have are not this mail's
     own = not (step or {}).get('goal')
     # NOTHING READ IT, SO NOTHING IS DECIDED BY IT (PW-036): kept on the task, said as unread, with Retry - never passed off as
@@ -1796,10 +1805,10 @@ def identity_route(store, msg: dict) -> dict:
     # THE THREAD'S CLOSED TASK IS STILL ITS TASK (the owner, 2026-09-25, reversing PW-017). Judged as new, every
     # line after a close opened another task - one mail thread carried nine. It joins the task it belongs to, and
     # the task reopens only when this line needs the owner; a "thanks" is filed on it and it stays closed.
-    # A DROPPED task (not a task, folded into another) is not work to come back to: that thread starts fresh.
-    if t.get('Status') == 'dropped':
+    # A task FOLDED into another is not work to come back to: that thread starts fresh. One he let go is still its task (folded)
+    if folded(store, t):
         return {'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [],
-                'reason': f"this thread's task {task_ref(home)} was dropped - judged as new"}
+                'reason': f"this thread's task {task_ref(home)} was folded into another - judged as new"}
     # ...except Taskuary's OWN channels: every run of one report, every idea of one source, shares a conversation
     # id, so "the same thread" there is only the same report - a new failure would reopen last week's task. For
     # those the closed task is shown to triage (recently_closed) and same_as decides whether this IS it.
@@ -1810,10 +1819,10 @@ def identity_route(store, msg: dict) -> dict:
     if msg.get('channel') == 'report':
         return {'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [],
                 'reason': f"a report run - {task_ref(home)} holds an earlier run, but a run is judged on its own, never joined by its thread"}
-    if t.get('Status') == 'done' and msg.get('channel') in OWN_CHANNELS:
+    if t.get('Status') in ('done', 'dropped') and msg.get('channel') in OWN_CHANNELS:
         return {'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [],
                 'reason': f"a new run of the report behind {task_ref(home)}, which was closed - judged on its own, same_as decides"}
-    if t.get('Status') == 'done':
+    if t.get('Status') in ('done', 'dropped'):
         return {'decision': 'attach', 'task_id': home, 'score': 1.0, 'candidates': [], 'reopen': True,
                 'reason': f"same conversation thread as {task_ref(home)}, which was closed - it reopens only on new work or a question to you"}
     return {'decision': 'attach', 'task_id': home, 'score': 1.0, 'candidates': [], 'reason': 'attached: same conversation thread'}
@@ -3149,7 +3158,7 @@ def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
     # left unsaid it is `uncertain`, which in a group is its own work. A one-to-one chat keeps its own ruling below.
     if rel in ('continues', 'answers') and target and not dm and intent.get('same_problem') is not True: rel = 'uncertain'
     if rel in ('continues', 'answers') and target:
-        closed = (store.get_task(target) or {}).get('Status') == 'done'
+        closed = (store.get_task(target) or {}).get('Status') in ('done', 'dropped')
         return ({'decision': 'attach', 'task_id': target, 'score': 1.0, 'candidates': [], 'reopen': closed,
                  'reason': f'{rel} the ask on {task_ref(target)} (same chat, same day)'
                            + (' - it was closed, and reopens only on new work or a question to you' if closed else '')}, (intent, fail))
@@ -3162,7 +3171,7 @@ def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
         cur = target or joinable(store, intent.get('same_as')) or next((c['task_id'] for c in reversed(cands) if joinable(store, c['task_id'])), None) \
               or joinable(store, store.task_for_conversation(msg.get('conversation_id')), shut=False)
         if cur:
-            closed = (store.get_task(cur) or {}).get('Status') == 'done'
+            closed = (store.get_task(cur) or {}).get('Status') in ('done', 'dropped')
             return ({'decision': 'attach', 'task_id': cur, 'score': 1.0, 'candidates': [], 'reopen': closed,
                      'reason': f'unsure whether it continues {task_ref(cur)} - a one-to-one chat stays on its task unless the line is a new ask'
                                + (' - it was closed, and reopens only on new work or a question to you' if closed else '')}, (intent, fail))

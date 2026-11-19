@@ -22,6 +22,7 @@ def finish(store, tid: int, actor: str = 'owner') -> dict:
     live = term.for_task(tid)
     if live: term.close(live['sid'])
     store.add_comment(tid, actor, 'human', 'Setup session closed.')
-    if (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'): store.update_task(tid, {'Status': 'done'}, actor)
+    from . import concierge
+    concierge.close_task(store, tid, actor, save=False)
     store.audit('terminal', tid, 'wrap', actor, detail={'sid': live and live['sid'], 'setup': True})
     return {'wrap': 'done', 'taskId': tid}

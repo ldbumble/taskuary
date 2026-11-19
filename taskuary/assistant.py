@@ -227,11 +227,11 @@ def _other_side(store, cid):
     the Advisor's own thread, an auto-reply or a calendar response - the mail system wrote those (2026-10-06). Nor a
     machine's mail: the owner answering a portal's notification with a question raised "No answer from Vendor Portal in
     3 days - follow up?" - a noreply address never answers, and nobody is there to chase (the rail Advisor's eval)."""
-    from .categories import sender_class
+    from .categories import automated
     inbound = store.last_inbound_in(cid) if cid else None
     if not inbound: return None
     if inbound.get('Channel') in ('report', CHANNEL) or _ooo_row(inbound) or _cal_mail(inbound): return None
-    if sender_class(inbound) in ('automated', 'bulk'): return None
+    if automated(inbound): return None
     return inbound
 
 

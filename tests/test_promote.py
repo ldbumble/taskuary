@@ -175,3 +175,16 @@ class Promotion(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+def test_a_machine_is_one_reading_for_the_promoter_and_the_chase():
+    """IS A MACHINE THE SENDER: one answer (categories.automated) for the promoter's "every one of theirs a machine's" and the follow-up's
+    "nobody to chase". The promoter read SenderClass alone, so a mail the mail system marked an auto-reply, with no class, was a person to
+    it and a machine to the chase."""
+    s = _store(); cid = 'email:out-of-office:1'
+    s.add_message({'ConversationId': cid, 'Channel': 'email', 'Subject': 'Away until Monday', 'FromEmail': 'gail@vendor.example',
+                   'FromName': 'Gail Moreno', 'BodyText': 'I am out of the office.', 'Status': 'autoreply'})
+    from taskuary.categories import automated
+    assert automated(s.last_inbound_in(cid))
+    assert promote.evidence(s)['gail@vendor.example']['auto'] is True, 'the promoter read an auto-reply as a person'
+    assert assistant._other_side(s, cid) is None, 'the chase read an auto-reply as a person'

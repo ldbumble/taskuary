@@ -25,7 +25,6 @@ IGNORE_AT, SKIP_AT, ESCALATE_AT = 8, 20, 5
 DOMAIN_SENDERS, DOMAIN_AT = 3, 12
 GROW = 3                   # a refused question comes back only once the evidence is this many times what it was refused at
 DAYS = 90                  # how far back the evidence is read
-AUTOMATED = ('automated', 'bulk')
 URGENT_ACTION = 'priority'  # the audit row server.update_task writes when the owner changes a task's priority
 
 
@@ -60,10 +59,11 @@ def evidence(store, days: int = DAYS) -> dict:
     and the audit trail."""
     since, out = _since(days), {}
     def row(em): return out.setdefault(em, {'down': set(), 'up': set(), 'urgent': set(), 'threads': set(), 'auto': None})
-    for m in store._rows("SELECT lower(FromEmail) em, ConversationId cid, MessageId, SenderClass FROM message WHERE IFNULL(Direction,'in')<>'out' "
+    from .categories import automated
+    for m in store._rows("SELECT lower(FromEmail) em, ConversationId cid, MessageId, SenderClass, Channel, Status FROM message WHERE IFNULL(Direction,'in')<>'out' "
                          "AND Status<>'context' AND FromEmail LIKE '%_@_%' AND Channel NOT IN ('report','assistant','own') AND IFNULL(SentAt,CreatedAt)>=?", (since,)):
         r = row(m['em']); r['threads'].add(m['cid'] or f"m{m['MessageId']}")
-        r['auto'] = r['auto'] is not False and str(m.get('SenderClass') or '').lower() in AUTOMATED   # every one of theirs a machine's
+        r['auto'] = r['auto'] is not False and automated(m)   # every one of theirs a machine's (categories.automated, as every surface reads it)
     # the owner's own put-downs: Not ours and Not a task both write an owner `ignore` route (server.not_mine, file_message)
     for m in store._rows("SELECT lower(m.FromEmail) em, m.ConversationId cid, m.MessageId FROM route r JOIN message m ON m.MessageId=r.MessageId "
                          "WHERE r.RoutedBy='owner' AND r.Decision='ignore' AND m.FromEmail LIKE '%_@_%' AND r.CreatedAt>=?", (since,)):

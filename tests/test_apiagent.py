@@ -861,6 +861,29 @@ class TheHandsTests(unittest.TestCase):
         self.assertEqual([ws['C5'].value, ws['D5'].value], ['Total', '=SUM(D2:D4)'])
         self.assertIn('Total | =SUM(D2:D4)', self.run_('file_read', path='Invoice INV-2026-10.xlsx'))      # the total it can check, read back
 
+    def test_a_one_page_pdf_with_a_bar_chart_and_a_deck_are_written_by_the_road_the_workbook_takes(self):
+        """The API walk, design round 5 (2026-11-19): asked for a one-page PDF with a bar chart and a five-slide deck, the card's agent made the
+        .xlsx, then said PDF and PowerPoint "require file generation tools ... AI CLI agents" and drew the chart in block characters. file_write
+        makes both from the same text: a heading, points, a table, `chart:` over `label | number` lines, `---` between slides."""
+        from pypdf import PdfReader
+        NL = chr(10)
+        text = NL.join(['# October vendor spend', 'Total $103,190 across 7 vendors.', '- The top five are 93.9%', '', 'chart: Spend by vendor',
+                        'Payworth | 48210', 'Trainly | 21000', '', 'Vendor | Spend', 'Payworth | $48,210', '---', '# Concentration', '- Top five: 93.9%'])
+        d = Path(apiagent.workdir(self.s, self.tid))
+        self.assertIn('a PDF, 1 page', self.run_('file_write', path='October spend.pdf', text=text.replace('---', '')))
+        pages = PdfReader(str(d / 'October spend.pdf')).pages
+        self.assertEqual(len(pages), 1)
+        got = pages[0].extract_text()
+        for w in ('October vendor spend', 'Payworth', '48,210', 'Spend by vendor', '$48,210'): self.assertIn(w, got)
+        self.assertNotIn('chart:', got); self.assertIn(' re f', pages[0].get_contents().get_data().decode('latin-1'), 'the bars are drawn, not typed')
+        self.assertIn('a PowerPoint deck, 2 slides', self.run_('file_write', path='Leadership.pptx', text=text))
+        read = self.run_('file_read', path='Leadership.pptx')
+        for w in ('October vendor spend', 'Concentration', '48,210', 'Top five: 93.9%'): self.assertIn(w, read)
+        try: import pptx
+        except ImportError: pptx = None
+        if pptx: self.assertEqual(len(pptx.Presentation(str(d / 'Leadership.pptx')).slides), 2)
+        with self.assertRaisesRegex(ValueError, 'file_write it whole'): self.run_('file_edit', path='Leadership.pptx', old='Concentration', new='Share')
+
     def test_the_file_tools_are_offered_whole_not_behind_load_tools(self):
         "A model never shown file_write said it had no way to make the file (the same ask, on a card): making one is the hands' first job."
         with mock.patch.object(apiagent, 'taskuary_tools', return_value=[]):

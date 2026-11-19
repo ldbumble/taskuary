@@ -415,3 +415,17 @@ test("a shell's own grammar round a command is no step: its blocks, its function
   assert.equal(describeCall("Glob", { pattern: "**/*sync*" }).summary, "Looked for files named like 'sync'");
   assert.deepEqual(stepsOf([{ type: "tool_call", name: "Skill", detail: { tool_call_id: "s", args: { skill: "dataviz" } } }]), [], "a skill loaded is the CLI's own reading");
 });
+
+// THE API CARD'S OWN HANDS, IN THE WORDS THE CLI'S TAKE (design round 5, 2026-11-19: the API walk's steps read "Used file write", "Used browser open")
+test("an AI card's file, browser and tool-finder calls read as the CLI road's steps do", () => {
+  const said = (n, a) => describeCall(n, a).summary;
+  assert.equal(said("file_write", { path: "out/caterers.xlsx", text: "a | b" }), "Wrote caterers.xlsx");
+  assert.equal(said("file_edit", { path: "Invoice.docx", old: "x", new: "y" }), "Edited Invoice.docx");
+  assert.equal(said("file_read", { path: "spend.pdf" }), describeCall("Read", { file_path: "spend.pdf" }).summary);
+  assert.equal(said("browser_open", { url: "https://vendors.example/signup" }), "Opened vendors.example in the browser");
+  assert.equal(said("browser_click", { ref: "@e4" }), "Clicked on the page");
+  assert.equal(said("browser_signup", {}), "Sent the sign-up form");
+  assert.equal(said("find_tools", { query: "pdf" }), "Looked for the right tool");
+  for (const n of ["file_write", "file_read", "files_list", "browser_open", "browser_look", "browser_fill", "browser_signup", "find_tools"])
+    assert.doesNotMatch(said(n, {}), /^Used /, n);
+});

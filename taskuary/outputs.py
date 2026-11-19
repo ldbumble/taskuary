@@ -146,7 +146,7 @@ def texts(paths) -> str:
 
 # ...AND WHAT AN AI WITH NO HANDS WRITES OUT AS A FILE IS ONE (capabilities.HANDS 'none'): asked for a spreadsheet, a card that takes no tools
 # answered with a CSV in its words and "no spreadsheet file anywhere". A fenced block whose first line names its file - ```csv file=quotes.csv -
-# is saved to the task's folder as the file a CLI would have written there (a .xlsx or .docx made real, officefiles), and named in its place
+# is saved to the task's folder as the file a CLI would have written there (a .xlsx, .docx, .pdf or .pptx made real, officefiles), and named in its place
 _WRITTEN = re.compile(r'```[\w+.-]*[ \t]+file=([^\s`]+)[^\n]*\n(.*?)\n?```', re.S)
 def keep_written(tid: int, text: str) -> tuple:
     "(`text` with each named fenced block saved to task `tid`'s folder and said as its name, the paths saved)."
@@ -157,7 +157,7 @@ def keep_written(tid: int, text: str) -> tuple:
         d = folder(tid); d.mkdir(parents=True, exist_ok=True)
         p = d / name
         try:
-            if officefiles.is_office(p): officefiles.write(p, m.group(2))
+            if officefiles.is_made(p): officefiles.write(p, m.group(2))
             else: p.write_text(m.group(2) + '\n', encoding='utf-8')
         except (OSError, ValueError): return m.group(0)
         saved.append(str(p)); return f'**{name}** (in this task\'s files)'

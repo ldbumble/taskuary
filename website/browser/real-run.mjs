@@ -54,7 +54,9 @@ exec "$(cygpath -u '${exe}')" "$@"
 // (its address, key and model from EVAL_AI_URL/EVAL_AI_KEY/EVAL_AI_MODEL or ~/.taskuary-eval.json - never from the repo)
 // ...`codex`: the person's real Codex CLI picked as the agents' brain (its own budget, not Claude's)
 if (BRAIN === "codex") real.unshift(path.dirname(where("codex")[0]));
-if (BRAIN === "cli" || BRAIN === "codex") process.env.TASKUARY_BROWSER_REAL_CLI = real.join(path.delimiter);
+// ...and THE AGENTS' BROWSER ON EVERY BRAIN'S ROAD (design round 5, 2026-11-19): on the gateway walk only the CLIs' PATH carried it, so the
+// server found no browser, and the card's agent was told it had none - its browser_signup never reached it, 0 of 13 sign-ups
+if (BRAIN === "cli" || BRAIN === "codex" || process.env.REAL_BROWSER) process.env.TASKUARY_BROWSER_REAL_CLI = real.join(path.delimiter);
 // ...the gateway's address and key, read before the server starts: its host is the one outside address the test server may reach
 const GW = BRAIN !== "gateway" ? {} : (() => { const f = path.join(os.homedir(), ".taskuary-eval.json"), c = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {};
   return { url: process.env.EVAL_AI_URL || c.url, key: process.env.EVAL_AI_KEY || c.key, model: process.env.EVAL_AI_MODEL || c.model }; })();

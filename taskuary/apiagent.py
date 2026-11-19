@@ -68,8 +68,9 @@ FILES = [
         _S({'path': _PATH, **FROM}, ['path'])),
 ]
 WRITE = [
-    _fn('file_write', 'Write a whole file (created, or replaced). A .docx or .xlsx path writes a real Word document or Excel workbook from '
-        'the text: a line a paragraph (# a heading), and `a | b | c` lines a table - in a workbook its rows, `=SUM(G2:G9)` a formula.',
+    _fn('file_write', 'Write a whole file (created, or replaced). A .docx, .xlsx, .pdf or .pptx path writes a real Word document, Excel workbook, '
+        'PDF or PowerPoint deck from the text: a line a paragraph (# a heading - in a deck, each starts a slide), `- ` a point, `a | b | c` lines a '
+        'table - in a workbook its rows, `=SUM(G2:G9)` a formula - `chart: <title>` over `label | number` lines a bar chart, `---` a new page or slide.',
         _S({'path': _PATH, 'text': {'type': 'string'}}, ['path', 'text'])),
     _fn('file_edit', 'Replace one exact piece of a file with another - `old` must occur in it exactly once. In a .docx or .xlsx it is the '
         "text as file_read shows it, and the file keeps its look; `old` a whole table row (`a | b | c`) and `new` several such lines fills one "
@@ -100,7 +101,7 @@ SHORT = {'browser_open': "Open a web page in this task's browser.",
          'browser_press': 'Press a key in the page (Enter, Tab).', 'browser_signup': 'Send the sign-up form here; Taskuary makes the password.', 'browser_screenshot': 'Save a picture of the page; answers with its path.',
          'show': 'Show the owner files in this chat, by path.', 'files_list': 'List a folder (default: your working folder).',
          'file_read': 'Read a file as text (also PDF, Word, Excel).',
-         'file_write': 'Write a whole file (.docx/.xlsx made real).',
+         'file_write': 'Write a file (docx/xlsx/pdf/pptx made real).',
          'file_edit': 'Replace one exact piece of a file.',
          'web_search': 'Search the web.', 'web_fetch': 'Read one public web page or file by its address.',
          'run_command': 'Run a shell command in your working folder.'}
@@ -310,17 +311,18 @@ def _hands(store, tid: int, sid: str, name: str, a: dict) -> str:
         return _part(p.read_text(encoding='utf-8', errors='replace'), a)
     if name in ('file_write', 'file_edit'):
         # A WORD OR EXCEL FILE IS MADE, NOT SPELLED OUT (officefiles): written as text it was a file no one could open, and the agent went on
-        # to build one by hand in PowerShell - a script of output a step, for as long as it took
+        # to build one by hand in PowerShell - a script of output a step, for as long as it took. A PDF and a deck the same (design round 5)
         from . import officefiles as of
         p = _path(store, tid, a.get('path')); to = _path(store, tid, a['save_as']) if a.get('save_as') else p
         to.parent.mkdir(parents=True, exist_ok=True)
         if name == 'file_edit':
             if not p.is_file(): raise ValueError(f'no file at {p}')
             if of.is_office(p): return f'Edited {to} ({of.edit(p, str(a.get("old") or ""), str(a.get("new") or ""), to)}).'
+            if of.is_made(p): raise ValueError(f'{p.name} is not edited in place - file_write it whole again with the change')
             text, old = p.read_text(encoding='utf-8'), str(a.get('old') or '')
             if not old or text.count(old) != 1: raise ValueError(f'`old` occurs {text.count(old) if old else 0} times in {p.name} - it must be exactly once')
             to.write_text(text.replace(old, str(a.get('new') or '')), encoding='utf-8')
-        elif of.is_office(p): return f'Wrote {p}: {of.write(p, str(a.get("text") or ""))} ({p.stat().st_size} bytes).'
+        elif of.is_made(p): return f'Wrote {p}: {of.write(p, str(a.get("text") or ""))} ({p.stat().st_size} bytes).'
         else: p.write_text(str(a.get('text') or ''), encoding='utf-8')
         return f'{"Edited" if name == "file_edit" else "Wrote"} {to} ({to.stat().st_size} bytes).'
     if name == 'web_fetch':

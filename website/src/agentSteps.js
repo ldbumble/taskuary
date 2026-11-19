@@ -278,14 +278,14 @@ const commandStep = (cmd, depth = 0) => {
 const fileOf = (a) => a.file_path || a.filePath || a.absolute_path || a.path || a.file || a.notebook_path || "";
 const firstUrl = (s) => (/https?:\/\/[^\s"')]+/.exec(String(s || "")) || [])[0] || "";
 const TOOLS = {
-  read: ["read", "readfile", "view", "readmanyfiles", "openfile", "catfile"],
+  read: ["read", "readfile", "view", "readmanyfiles", "openfile", "catfile", "fileread"],
   search: ["grep", "searchfilecontent", "searchtext", "rg", "codebasesearch", "grepsearch"],
-  list: ["glob", "ls", "listdirectory", "listdir", "list", "find", "findfiles"],
+  list: ["glob", "ls", "listdirectory", "listdir", "list", "find", "findfiles", "fileslist"],
   web: ["websearch", "googlewebsearch", "searchweb", "googlesearch", "webquery"],
   page: ["webfetch", "fetch", "fetchurl", "readurl", "browse", "openurl"],
   run: ["bash", "shell", "runshellcommand", "execute", "shellcommand", "powershell", "terminal", "execcommand", "runcommand", "localshell"],
-  edit: ["edit", "multiedit", "replace", "strreplace", "strreplacebasededittool", "applypatch", "notebookedit", "filechange", "patch"],
-  write: ["write", "writefile", "createfile"],
+  edit: ["edit", "multiedit", "replace", "strreplace", "strreplacebasededittool", "applypatch", "notebookedit", "filechange", "patch", "fileedit"],
+  write: ["write", "writefile", "createfile", "filewrite"],
   helper: ["task", "agent", "subagent", "dispatchagent"],
   // ACP's own kinds for a tool call (agents.ACPSteps names a call by its kind when the agent gives no tool name)
   delete: ["delete", "deletefile", "removefile"],
@@ -337,6 +337,14 @@ const OWN = {
   setupmeeting: () => ({ kind: "edit", summary: "Set up a meeting" }),
   share: () => ({ kind: "edit", summary: "Set up a share" }),
 };
+// ...AND AN AI CARD'S OWN HANDS (apiagent.py) in the words the CLI's take (design round 5, 2026-11-19: the API walk read "Used browser open on ..."):
+// its browser through the browser's own grammar, the sign-up and its tool finder by what they did
+const API_HANDS = {
+  browseropen: (a) => browserStep(["open", a.url || ""]), browserlook: () => browserStep(["snapshot"]), browserclick: () => browserStep(["click"]),
+  browserfill: () => browserStep(["fill"]), browserpress: () => browserStep(["press"]), browserscreenshot: () => browserStep(["screenshot"]),
+  browsersignup: () => ({ kind: "page", summary: "Sent the sign-up form", browser: true }),
+  findtools: () => ({ kind: "plan", summary: "Looked for the right tool" }),
+};
 const KIND = Object.fromEntries(Object.entries(TOOLS).flatMap(([k, names]) => names.map((n) => [n, k])));
 
 // ...and every label is built from PARSED arguments: a call whose arguments came as a JSON string (Codex's function_call, an OpenAI-style
@@ -355,6 +363,7 @@ export const describeCall = (name, args = {}) => {
   // TASKUARY'S OWN TOOLS (agenttools.TOOLS), by what each one is for, BEFORE any guess from its arguments: a draft kept without them was
   // read as a command ("Running a command" for an email, 2026-11-17)
   const own = OWN[key(mcp ? mcp[2] : name)];
+  if (!mcp && API_HANDS[key(name)]) return API_HANDS[key(name)](a);
   if (own && (!mcp || key(mcp[1]) === "taskuary")) return own(a);
   let kind = KIND[key(mcp ? mcp[2] : name)] || "";
   // ...a helper an ACP agent started names itself by where it runs (codex-acp's "Start subagent history_probe", agentPath /root/history_probe)

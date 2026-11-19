@@ -2732,9 +2732,13 @@ class GeneralSession:
     def cold(self) -> bool:
         from . import clipool
         return self.pick.startswith('cli:') and not clipool.is_live(self.keep())
+    # ...and THE SAME TURN'S START DRAWN AGAIN (its provider picked) KEEPS WHAT IT HAS SAID SINCE (CI, 0.4.0.27): it is busy from the hand-over,
+    # and words written before its start named its provider went - from the chat and from disk, so a restart filed the cut turn without them
     def _turn_trace(self, t0) -> None:
+        was = self.trace if (getattr(self, 'trace', None) or [{}])[0].get('type') == 'start' and self.trace[0].get('at') == t0 else []
         self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}, 'at': t0},      # `at`: a cut turn's files are its own (keep_cut_turns)
-                      *([{'type': 'opening', 'name': self.pick, 'detail': ''}] if self.cold() else [])]
+                      *([{'type': 'opening', 'name': self.pick, 'detail': ''}] if self.cold() else []),
+                      *(e for e in was[1:] if e.get('type') != 'opening')]
         self.trace_revision += 1
     def hears_mid_turn(self) -> bool:
         "Does this agent's road take his words while a turn works (clipool.takes_words) - where it does not, his waiting line says so."

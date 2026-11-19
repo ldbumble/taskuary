@@ -1134,13 +1134,19 @@ class TheList(unittest.TestCase):
         self.assertNotIn(general.CUT_HEARD, self.brain.calls[-1], 'said once')
 
     def test_a_turn_the_app_closing_cut_is_kept_for_the_next_start(self):
-        from taskuary import sessionrecord, terminal
+        from taskuary import proposals, sessionrecord, terminal
         self.say('Suggest two.', 'l-one'); self.rest()
         self.brain.delay = 30
-        self.say('Compare both in detail.', 'l-two', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
-        ses = general.session_for(self.tid)
-        ses._remember_trace('progress', 'text', 'The lakeside venue costs more.')
+        # ...its first words written while the turn's start is still being set up (CI on macOS, 0.4.0.27): busy from the hand-over, the start
+        # named its provider later by drawing its trace again from nothing - and the words already said went, from the chat and from disk
+        said, move_on = threading.Event(), proposals.move_on
+        with mock.patch.object(proposals, 'move_on', lambda *a, **k: said.wait(10) and move_on(*a, **k)):
+            self.say('Compare both in detail.', 'l-two', wait=False)
+            self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+            ses = general.session_for(self.tid)
+            ses._remember_trace('progress', 'text', 'The lakeside venue costs more.'); said.set()
+            self.assertTrue(until(lambda: len(self.brain.calls) == 2), 'the turn reached its brain')
+        self.assertEqual(sessionrecord.said(ses.trace), 'The lakeside venue costs more.')
         terminal.shutdown_sessions()
         self.brain.delay = 0
         self.assertTrue(until(lambda: not ses.busy))

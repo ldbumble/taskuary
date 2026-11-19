@@ -17,7 +17,7 @@ test("a heredoc written into a file reads as that file written, never 'Read <<EO
 test("a folder the shell fills in ($d) is never shown as its name: the agent's own words for the step are (stress test 2026-11-03)", () => {
   const command = "$d=Join-Path $env:USERPROFILE 'Downloads'; $d; Get-ChildItem $d -Filter 'notes*' | Select Name; Get-ChildItem . -Recurse -Filter 'notes*'";
   assert.equal(describeCall("PowerShell", { command, description: "Locate the zip in Downloads" }).summary, "Locate the zip in Downloads");
-  assert.equal(describeCall("PowerShell", { command }).summary, "Looked for files matching 'notes*', and 1 more");
+  assert.equal(describeCall("PowerShell", { command }).summary, "Looked for files named like 'notes'");
   assert.equal(describeCall("PowerShell", { command: "Get-ChildItem $d | Select Name" }).summary, "Listed the files");
   assert.equal(describeCall("Bash", { command: 'cat "$f"' }).summary, "Read a file");
   assert.equal(describeCall("Bash", { command: "type %TEMP%\\notes.txt" }).summary, "Read a file");
@@ -25,8 +25,8 @@ test("a folder the shell fills in ($d) is never shown as its name: the agent's o
   // ...and a pattern it looked for is not a folder it listed
   const find = 'Get-ChildItem -Recurse -Filter "notes-missing*" -Path "$env:USERPROFILE\\Downloads" -ErrorAction SilentlyContinue | Select FullName';
   assert.equal(describeCall("PowerShell", { command: find, description: "Search for the named zip elsewhere" }).summary, "Search for the named zip elsewhere");
-  assert.equal(describeCall("PowerShell", { command: find }).summary, "Looked for files matching 'notes-missing*'");
-  assert.equal(describeCall("Bash", { command: "ls ~/Downloads/*.zip" }).summary, "Looked for files matching '*.zip'");
+  assert.equal(describeCall("PowerShell", { command: find }).summary, "Looked for files named like 'notes-missing'");
+  assert.equal(describeCall("Bash", { command: "ls ~/Downloads/*.zip" }).summary, "Looked for .zip files");
   // ...nor a file it looked at a folder it listed
   assert.equal(describeCall("Bash", { command: "ls -la ~/Downloads/notes.zip 2>&1" }).summary, "Looked at notes.zip");
   assert.equal(describeCall("Bash", { command: "ls -la ~/Downloads/notes.zip", description: "Locate the zip in Downloads" }).summary, "Locate the zip in Downloads");
@@ -110,7 +110,7 @@ test("summaries come from the call's own arguments", () => {
   assert.equal(describeCall("Bash", { command: "git status" }).summary, "Ran git status");
   assert.equal(describeCall("Bash", { command: "ls -la", description: "List the scratch folder" }).summary, "Listed the files here");
   assert.equal(describeCall("Bash", { command: "./build.sh --fast", description: "Build the report" }).summary, "Build the report");
-  assert.equal(describeCall("Glob", { pattern: "**/*.js" }).summary, "Looked for files matching '**/*.js'");
+  assert.equal(describeCall("Glob", { pattern: "**/*.js" }).summary, "Looked for .js files");
   assert.equal(describeCall("Edit", { file_path: "/srv/northwind/ledger/app.py" }).summary, "Edited app.py");
   assert.equal(describeCall("file change", { changes: [{ path: "a.py" }, { path: "b.py" }] }).summary, "Changed 2 files");
   assert.equal(describeCall("TodoWrite", { todos: [{}, {}, {}] }).summary, "Updated its plan (3 steps)");
@@ -376,4 +376,42 @@ test("...and so it stays when the chat hands its result in after it", async () =
   const parts = turnParts(eventsOf([{ k: "tool", id: "t1", name: "Bash", args: { command: "which python3" }, status: "completed" },
     { k: "error", name: "Bash", text: "Exit code 127\nwhich: no python3" }], false), { answer: "x" });
   assert.deepEqual(parts.flatMap((p) => p.steps || []).map((s) => [s.summary, s.status]), [["Ran which python3", "error"]]);
+});
+
+// WHAT HE SEES (design round 5, 2026-11-19, three walks): after a press "⚠ ``` \`item\` was not given Next: call tick again ... The input schema is:
+// {...} select:mcp__taskuary__tick"; rows "Running function Inspect-VendorForm", "Ran foreach (2 times)", "Using Load skill: dataviz", "Looked for
+// files matching '**/*sync*'"
+test("a tool's refusal reaches the agent only: no note for a call of the turn, a plumbing call's included", () => {
+  const schema = `\`\`\`
+\`item\` was not given
+Next: call tick again with it
+\`\`\`
+The input schema is: {"type":"object"}`;
+  const steps = stepsOf([{ type: "tool_call", name: "mcp__taskuary__tick", detail: { tool_call_id: "t1", args: {} } },
+    { type: "error", name: "mcp__taskuary__tick", detail: { result: schema } },
+    { type: "tool_call", name: "mcp__taskuary__tick", detail: { tool_call_id: "t2", args: { item: "1" } } },
+    { type: "tool_call", name: "Bash", detail: { tool_call_id: "b", args: { command: "git status" } } },
+    { type: "error", name: "Bash", detail: { result: "fatal: not a git repository" } },
+    { type: "error", name: "Bash", detail: { result: "fatal: not a git repository" } }]);
+  assert.deepEqual(steps.map((s) => [s.summary, s.status]), [["Ran git status", "error"]]);
+  // ...a turn's own failure, named by no call, is still said
+  assert.equal(stepsOf([{ type: "error", name: "assistant", detail: { result: "the CLI exited" } }])[0].kind, "error");
+});
+
+test("a shell's own grammar round a command is no step: its blocks, its functions, its assignments", () => {
+  const fn = `function Inspect-VendorForm {
+  $landing = agent-browser snapshot -i -c
+  $landing | Write-Output
+}
+`
+    + `foreach ($t in @('t2','t3')) {
+  agent-browser tab $t
+  if ($LASTEXITCODE -eq 0) { Inspect-VendorForm }
+}`;
+  assert.equal(describeCall("PowerShell", { command: fn }).summary, "Looked at the page");
+  assert.equal(describeCall("PowerShell", { command: '$refs = 3..5; foreach ($r in $refs) { agent-browser click "@e$r" }' }).summary, "Clicked on the page");
+  assert.equal(describeCall("Bash", { command: "for f in *.py; do { python -m pytest $f; } done" }).summary, "Ran python pytest");
+  assert.equal(describeCall("Bash", { command: 'cat "${d}/notes.md"' }).summary, "Read a file", "a ${var} is no block");
+  assert.equal(describeCall("Glob", { pattern: "**/*sync*" }).summary, "Looked for files named like 'sync'");
+  assert.deepEqual(stepsOf([{ type: "tool_call", name: "Skill", detail: { tool_call_id: "s", args: { skill: "dataviz" } } }]), [], "a skill loaded is the CLI's own reading");
 });

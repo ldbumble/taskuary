@@ -22,6 +22,10 @@ const quoted = (s) => `'${clip(s, 60)}'`;
 // only plain words are quoted
 const plainPat = (p) => !!p && !/[|\()[\]{}^$*+?]/.test(String(p));
 const searched = (p) => (plainPat(p) ? `Searched files for ${quoted(p)}` : "Searched files");
+// ...and a file pattern by the words in it (design round 5, 2026-11-19: "Looked for files matching '**/*sync*'"): an ending is the kind of file,
+// any other word what its name holds
+const globSaid = (g) => { const w = String(g || "").split(/[\/]/).pop().replace(/[*?[\]{}]+/g, " ").trim();
+  return /^\.\w{1,8}$/.test(w) ? `Looked for ${w} files` : w && !/\s/.test(w) ? `Looked for files named like ${quoted(w)}` : "Looked for files"; };
 const parts = (p) => String(p || "").replace(/[\\/]+$/, "").split(/[\\/]+/).filter(Boolean);
 export const baseName = (p) => parts(p).pop() || String(p || "");
 // `$d`, `$env:TEMP`, `%TEMP%`: the shell fills these in, so they name nothing a person can read ("Listed the files in $d", 2026-11-03)
@@ -65,6 +69,11 @@ const segments = (cmd) => {
     if ((c === "&" || c === "|") && s[i + 1] === c) { push(false); i += 1; continue; }
     if (c === ";" || c === "\n") { push(false); continue; }
     if (c === "|") { push(true); continue; }
+    // ...and a block's braces (`foreach (...) { agent-browser tab $t }`, `function X { ... }`, `if (...) { ... }`): the commands inside are steps of
+    // their own, the line opening it none (design round 5, 2026-11-19: "Ran foreach (2 times)", "Running function Inspect-VendorForm") - never a
+    // `${var}` or a `{}` an argument carries
+    if (c === "{" && /^\s?$/.test(s[i + 1] || "") && /^[\s)]?$/.test(s[i - 1] || "")) { push(false); continue; }
+    if (c === "}" && /^[\s;]?$/.test(s[i - 1] || "") && /^[\s;)]?$/.test(s[i + 1] || "")) { push(false); continue; }
     // `2>&1`, `>&2`, `&>`: a redirect, not a command running in the background - its `1` read as a step of its own ("and 1 more")
     if (c === "&" && (s[i - 1] === ">" || s[i + 1] === ">")) { cur += c; continue; }
     if (c === "&") { push(false); continue; }
@@ -87,7 +96,9 @@ const words = (seg) => {
 };
 const SHELLS = new Set(["bash", "sh", "zsh", "dash", "powershell", "pwsh", "cmd"]);
 const QUIET = new Set(["cd", "pushd", "popd", "export", "set", "echo", "printf", "true", "false", "sleep", "mkdir", "for", "while",
-  "if", "fi", "done", "local", "source", ".", "test", "[", "read", "rm", "cp", "mv", "touch", "trap", "unset", "clear", "write-host"]);
+  "if", "fi", "done", "local", "source", ".", "test", "[", "read", "rm", "cp", "mv", "touch", "trap", "unset", "clear", "write-host",
+  // ...and PowerShell's own words around a command, and its echo
+  "foreach", "elseif", "switch", "try", "catch", "finally", "param", "return", "write-output"]);
 const READERS = new Set(["cat", "type", "head", "tail", "sed", "less", "more", "get-content", "gc", "nl", "bat", "awk"]);
 const GREPS = new Set(["rg", "grep", "egrep", "fgrep", "findstr", "ag", "ack", "select-string", "sls"]);
 const LISTS = new Set(["ls", "dir", "find", "tree", "get-childitem", "gci", "fd"]);
@@ -188,7 +199,7 @@ const subOf = (p, args) => {
 };
 const andList = (xs) => (xs.length < 2 ? xs.join("") : xs.length === 2 ? `${xs[0]} and ${xs[1]}` : `${xs.slice(0, 2).join(", ")} and ${plural(xs.length - 2, "more file")}`);
 const commandStep = (cmd, depth = 0) => {
-  const found = []; let fed = false;
+  const found = [], made = new Set(); let fed = false;
   for (const seg of segments(cmd)) {
     let w = words(seg.text);
     // ...a script handed on (a heredoc, a here-string) to an interpreter is a script it ran; any other piped segment only filters what came before it
@@ -197,9 +208,13 @@ const commandStep = (cmd, depth = 0) => {
     const here = w.includes(FED); w = w.filter((x) => x !== FED);
     if (/^[A-Za-z_]\w*=\(/.test(w[0] || "")) continue;                       // an array being set up: H=(-H "...")
     while (w.length && (LEAD.has(w[0]) || /^[A-Za-z_]\w*=/.test(w[0]))) w = w.slice(1);
+    if (/^\$[\w:]+$/.test(w[0] || "") && w[1] === "=") w = w.slice(2);       // PowerShell's `$landing = agent-browser snapshot`
+    // ...a function the line defines is no step, nor a call of it: its body's commands are (design round 5, 2026-11-19)
+    if (prog(w[0]) === "function") { if (w[1]) made.add(prog(w[1])); continue; }
     if (w.length && /^\(+[\w-]/.test(w[0])) w = [w[0].replace(/^\(+/, ""), ...w.slice(1)];       // `(Get-ChildItem ...).Count`
-    if (!w.length || !/^[\w.:\/\\~+-]+$/.test(w[0])) continue;                // only a word that can name a program (C:\...\cmd.exe too)
+    if (!w.length || !/^[\w.:\/\\~+-]+$/.test(w[0]) || !/[A-Za-z]/.test(w[0])) continue;   // only a word that can name a program (C:\...\cmd.exe too)
     const p = prog(w[0]), args = w.slice(1), plain = args.filter((a) => !a.startsWith("-"));
+    if (made.has(p)) continue;
     if (SHELLS.has(p) && depth < 2) {
       const at = args.findIndex((a) => /^(-l?c|-command|\/c)$/i.test(a));
       const inner = at >= 0 ? args.slice(at + 1).join(" ") : "";
@@ -233,7 +248,7 @@ const commandStep = (cmd, depth = 0) => {
     if (LISTS.has(p)) {
       // ...and a pattern (`-Filter 'notes*'`, `ls *.zip`) is what it looked for, never a folder: "Listed the files in notes*" (2026-11-03)
       const d = plain.find((a) => !/[*?]/.test(a)), g = plain.find((a) => /[*?]/.test(a));
-      if (g) { found.push({ kind: "list", summary: `Looked for files matching ${quoted(baseName(g))}`, vague: true, asked: plain }); continue; }
+      if (g) { found.push({ kind: "list", summary: globSaid(g), vague: true, asked: plain }); continue; }
       // ...and `ls -la notes.zip` looked at one file: "Listed the files in notes.zip" read the zip as a folder
       if (d && named(d) && /\.[A-Za-z0-9]{1,5}$/.test(baseName(d))) { found.push({ kind: "list", summary: `Looked at ${baseName(d)}`, vague: true, asked: plain }); continue; }
       found.push({ kind: "list", summary: !d || d === "." ? "Listed the files here" : named(d) ? `Listed the files in ${baseName(d)}` : "Listed the files", vague: !!d && !named(d), asked: plain });
@@ -250,7 +265,8 @@ const commandStep = (cmd, depth = 0) => {
   if (own) return own;
   // a snippet that only reshapes what a fetch brought back is not a step of its own
   const real = found.filter((s) => !s.filler && !s.minor), more = found.filter((s) => !s.minor);
-  const use = real.length ? real : more.length ? more : found;
+  // ...and the same words once: two looks at the page are "Looked at the page", never "..., and 1 more"
+  const all = real.length ? real : more.length ? more : found, use = all.filter((s, i) => all.findIndex((x) => x.summary === s.summary) === i);
   if (!use.length) return null;
   // ...files it read in one line are named together: "Read totals.py and notes.sql"
   const reads = use[0].kind === "read" ? use.filter((s) => s.kind === "read" && !s.vague) : [], rest = use.length - Math.max(reads.length, 1);
@@ -357,7 +373,7 @@ export const describeCall = (name, args = {}) => {
   }
   if (kind === "read") { const f = fileOf(a); return { kind, summary: f ? readSaid(f) : "Read a file", file: f }; }
   if (kind === "search") { const pat = a.pattern || a.query || a.regex; return { kind, summary: searched(pat), pattern: pat }; }
-  if (kind === "list") { const g = a.pattern || a.glob, d = a.path || a.dir_path || a.directory; return { kind, summary: g ? `Looked for files matching ${quoted(g)}` : d ? `Listed the files in ${baseName(d)}` : "Listed the files" }; }
+  if (kind === "list") { const g = a.pattern || a.glob, d = a.path || a.dir_path || a.directory; return { kind, summary: g ? globSaid(g) : d ? `Listed the files in ${baseName(d)}` : "Listed the files" }; }
   if (kind === "web") { const q = a.query || a.q || a.search_term;
     return { kind, summary: q ? `Searched the web for ${quoted(q)}` : "Searched the web", doing: q ? `Searching the web for "${clip(q, 60)}"` : "Searching the web", q }; }
   if (kind === "page") { const u = a.url || firstUrl(a.prompt), at = pageOf(u);
@@ -446,7 +462,7 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
   // the terminal pane. Only a CLI that streams nothing structured is read off its lines - decided over the whole trace, not by
   // which came first, so the line written before the first tool call no longer slipped into the box as raw text.
   const structured = events.some((e) => e?.type === "tool_call" || e?.type === "progress");
-  const steps = [], byId = new Map();
+  const steps = [], byId = new Map(), called = new Set();
   const say = (kind, text) => {
     const t = forScreen(text);
     if (!t || QUICK_RAW.test(t)) return;
@@ -469,6 +485,7 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
     if (!e) continue;
     if (e.type === "tool_call") {
       const args = e.detail?.args || e.detail || {};
+      called.add(e.name);
       if (MACHINERY.has(key(String(e.name || "").split("__").pop())) || TICK.test(String(parsed(args).command || parsed(args).cmd || ""))) continue;
       const id = e.detail?.tool_call_id || `${e.name}-${steps.length}`;
       const d = describeCall(e.name, args);
@@ -513,6 +530,10 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
       const call = e.name && [...byId.values()].reverse().find((s) => s.tool === e.name && s.status !== "error");
       // ...whichever comes first: the chat hands a turn's results in after its calls (chatStream.turnParts), so the result never undoes it
       if (call) { call.status = "error"; call.erred = String(e.detail?.result || e.error || ""); call.output = call.erred || call.output; continue; }
+      // ...A TOOL'S REFUSAL IS THE AGENT'S (design round 5, 2026-11-19: a tick refused for a missing argument stood in the chat as "⚠ ``` `item`
+      // was not given Next: call tick again ... The input schema is: {...}"): one a call of this turn names - a plumbing call no row stands
+      // for, or one already failed - reaches the agent only; he sees at most its row, retried
+      if (e.name && called.has(e.name)) continue;
       // ...one no call names says what happened, never the agent's next step (stepWhy.forOwner)
       steps.push({ id: `error-${steps.length}`, kind: "error", summary: `⚠ ${forOwner(e.detail?.result || e.error, ownTool(e.name)) || "Taskuary could not answer."}`, detail: "", status: "error" });
     }
@@ -549,7 +570,8 @@ const together = (run) => {
   }
   if (k === "search") { const ws = listOf(run.map((s) => plainPat(s.pattern) && quoted(s.pattern))); return ws ? `Searched files for ${ws}` : "Searched files"; }
   if (k === "web") return `Searched the web for ${listOf(run.map((s) => s.q && quoted(s.q)))}`;
-  if (k === "page") { const h = [...new Set(run.map((s) => s.host).filter(Boolean))]; return h.length === 1 ? `Read ${n} pages on ${h[0]}` : h.length ? `Read ${n} pages (${listOf(h)})` : `Read ${n} web pages`; }
+  // ...pages read, never the agent's own browser at work: two looks at its page read "Read 2 web pages" (design round 5, 2026-11-19)
+  if (k === "page" && !run.some((s) => s.browser)) { const h = [...new Set(run.map((s) => s.host).filter(Boolean))]; return h.length === 1 ? `Read ${n} pages on ${h[0]}` : h.length ? `Read ${n} pages (${listOf(h)})` : `Read ${n} web pages`; }
   if (k === "mail" && run.every((s) => s.q !== undefined)) return `Searched your mail for ${listOf(run.map((s) => s.q && !s.q.includes("$") && quoted(s.q)))}`;
   if (k === "edit") return `Changed ${n} files`;
   return run.every((s) => s.summary === run[0].summary) ? `${run[0].summary} (${n} times)` : null;

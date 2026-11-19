@@ -265,9 +265,10 @@ def _copilot_line(st: dict, j) -> None:
     elif t == 'assistant.message':
         if str(d.get('reasoningText') or '').strip(): out.append({'k': 'thought', 'text': _cut(d['reasoningText'], THOUGHT_N), 'at': at})
         if str(d.get('content') or '').strip(): out.append({'k': 'said', 'text': _cut(d['content'], SAID_N), 'at': at})
-    elif t == 'tool.execution_start': out.append(_tool(d.get('toolName'), d.get('arguments'), at))
-    elif t == 'tool.execution_complete' and d.get('success') is False:
-        out.append({'k': 'error', 'text': _cut((d.get('error') or {}).get('message') if isinstance(d.get('error'), dict) else d.get('error') or 'a tool failed', 400), 'at': at})
+    elif t == 'tool.execution_start': out.append(s := _tool(d.get('toolName'), d.get('arguments'), at)); st.setdefault('uses', {})[d.get('toolCallId')] = s
+    # ...A TOOL'S FAILURE IS ITS CALL'S, as Claude's is (design round 5, 2026-11-19): a note of its own drew the tool's words to the agent whole
+    elif t == 'tool.execution_complete' and d.get('success') is False and (s := st.get('uses', {}).get(d.get('toolCallId'))):
+        s['status'], s['output'] = 'failed', _cut((d.get('error') or {}).get('message') if isinstance(d.get('error'), dict) else d.get('error') or 'a tool failed', 400)
 
 
 def _gemini_file(ext: str):

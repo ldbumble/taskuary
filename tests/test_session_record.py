@@ -87,10 +87,13 @@ def test_copilot_events_read_and_an_unknown_cli_keeps_its_screen(home):
     jsonl(home / '.copilot' / 'session-state' / 'k1' / 'events.jsonl', [
         {'type': 'user.message', 'data': {'content': 'List the stale branches.'}},
         {'type': 'assistant.message', 'data': {'content': '', 'reasoningText': 'git for-each-ref sorts by date.'}},
-        {'type': 'tool.execution_start', 'data': {'toolName': 'powershell', 'arguments': {'command': 'git for-each-ref'}}},
+        {'type': 'tool.execution_start', 'data': {'toolCallId': 't1', 'toolName': 'powershell', 'arguments': {'command': 'git for-each-ref'}}},
+        # ...a tool's failure is its call's, failed, as Claude's is - never a note of its own with the tool's words whole (design round 5, 2026-11-19)
+        {'type': 'tool.execution_complete', 'data': {'toolCallId': 't1', 'success': False, 'error': {'message': 'not a git repository'}}},
         {'type': 'assistant.message', 'data': {'content': 'Three branches are older than 90 days.'}}])
     steps, _ = sessionrecord.cli_steps('copilot', 'k1')
     assert [s['k'] for s in steps] == ['you', 'thought', 'tool', 'said']
+    assert (steps[2]['status'], steps[2]['output']) == ('failed', 'not a git repository')
     assert sessionrecord.cli_steps('cursor-agent', 'whatever') == ([], '')
     assert sessionrecord.screen_steps('  $ make test\n12 passed  ') == [{'k': 'screen', 'text': '$ make test\n12 passed'}]
 

@@ -60,7 +60,8 @@ _KINDS = json.loads(Path(__file__).with_name('stepkinds.json').read_text(encodin
 MACHINERY, _OWN_LINE = frozenset(_KINDS['machinery']), re.compile(_KINDS['commands'], re.I)
 def machinery(s: dict) -> bool:
     a = s.get('args') if isinstance(s.get('args'), dict) else {}
-    return s.get('k') == 'tool' and (re.sub(r'[^a-z0-9]', '', str(s.get('name') or '').split('__')[-1].lower()) in MACHINERY
+    # ...and its refusal too (design round 5, 2026-11-19: a tick refused for a missing argument stood in the chat as its schema dump)
+    return s.get('k') in ('tool', 'error') and (re.sub(r'[^a-z0-9]', '', str(s.get('name') or '').split('__')[-1].lower()) in MACHINERY
                                      or bool(_OWN_LINE.search(str(a.get('command') or a.get('cmd') or ''))))
 
 

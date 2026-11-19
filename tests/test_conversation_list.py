@@ -1558,3 +1558,16 @@ def test_a_turn_says_each_messages_opener_once():
     assert said_once(f'{lead} The summary and deck are ready.', seen) == 'The summary and deck are ready.'
     assert said_once(lead, seen) == lead, 'nothing else to say: kept whole'
     assert said_once('No sentence end here', set()) == 'No sentence end here'
+
+
+def test_a_refusal_of_a_plumbing_call_reaches_the_agent_only():
+    """The walk, 2026-11-19: after a press, a tick refused for a missing argument stood in the chat as "⚠ ``` `item` was not given Next: call
+    tick again ... The input schema is: {...} select:mcp__taskuary__tick". The call is no step, and neither is what it was told back."""
+    from taskuary import sessionrecord
+    from taskuary.conversation import _said, machinery
+    steps = sessionrecord.trace_steps([
+        {'type': 'tool_call', 'name': 'mcp__taskuary__tick', 'detail': {'tool_call_id': 'c1', 'args': {}}},
+        {'type': 'tool_result', 'name': 'c1', 'detail': {'tool_call_id': 'c1', 'result': '```\n`item` was not given\n```\nThe input schema is: {}', 'is_error': True}},
+        {'type': 'tool_call', 'name': 'mcp__taskuary__tick', 'detail': {'tool_call_id': 'c2', 'args': {'item': '1'}}}])
+    assert all(machinery(s) for s in steps) and _said(steps) == [], steps
+    assert not machinery({'k': 'error', 'text': 'the turn failed'})

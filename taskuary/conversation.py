@@ -200,6 +200,10 @@ def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing:
             if (c := store.cx.execute('INSERT OR IGNORE INTO heard (TaskId,Kind,Ref,At,Grp,Seq,Sid) VALUES (?,?,?,?,?,?,?)', (tid, k, r, now, grp, seq, sid or '')).rowcount): new.append((k, r))
             n += c
         store.cx.commit()
+    # ...and written into the chat's log, in the order it was taken: its place there for good (chatlog.heard)
+    if new:
+        from . import chatlog
+        chatlog.heard(store, tid, new, now)
     # ...a line of his, or a message, heard is the conversation moving past any reply draft that waited above it (proposals.set_aside_drafts):
     # the turn that hears it drafts again under it where a reply is still owed (the rail walk, 2026-11-12: the sender wrote again, and the
     # draft to refresh stood above her new mail)

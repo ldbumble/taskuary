@@ -134,6 +134,9 @@ def step(store, tid: int, sid: str, ref: str, step: dict, state=None) -> int:
                 cur = store.cx.execute('INSERT INTO chatlog (TaskId, Key, Kind, At, Src, Body, State) VALUES (?,?,?,?,?,?,?)',
                                        (int(tid), k, 'turn', time.time(), f'sid:{sid}', json.dumps(body, default=str), last['State'] if last and last['State'] in LIVE else 'working'))
                 t = {'Id': cur.lastrowid}
+                # ...and the part above his line is over: the work goes on below it (the same turn's state, carried down, never two at work)
+                if last and last['State'] in LIVE: store.cx.execute("UPDATE chatlog SET State='done', Rev=Rev+1 WHERE Id=?", (last['Id'],))
+            if t.get('State') == 'starting': store.cx.execute("UPDATE chatlog SET State='working', Rev=Rev+1 WHERE Id=?", (t['Id'],))
             cur = store.cx.execute('INSERT INTO chatlog (TaskId, Key, Kind, Parent, At, Src, Body, State) VALUES (?,?,?,?,?,?,?,?)',
                                    (int(tid), key, 'step', t['Id'], time.time(), f'{sid}:{ref}', json.dumps(step, default=str), state))
             _bump(store, tid); store.cx.commit(); n = cur.lastrowid
@@ -169,3 +172,62 @@ def read(store, tid: int) -> dict:
             x['cards'] = [] if r['State'] in LIVE else [_item(k) for k in ks if k['Kind'] in ('card', 'fail')]
         out.append(x)
     return {'rev': n, 'items': out}
+
+
+# ── the producers' doors (dual-write: the legacy reader still serves the page; the log is written beside it) ─────────────────────────
+def _safe(f):
+    "A producer's write to the log never breaks the road it rides on: the old record is still what the agent and the page read."
+    def go(*a, **k):
+        try: return f(*a, **k)
+        except Frozen: raise
+        except Exception as e: logger.warning(f'chatlog: {f.__name__} was not written - {e}')
+    go.__name__ = f.__name__
+    return go
+
+
+@_safe
+def heard(store, tid: int, new: list, at: float) -> None:
+    """What one hand-over took (conversation.hear), in the order it took it: his lines, the messages, the presses - and the turn it began.
+    Each is appended now, under everything already in the log - the place it is heard is its place for good."""
+    from . import general
+    from .conversation import _mail, stamp
+    tid = int(tid)
+    mails = {str(x['MessageId']): x for x in _mail(store, tid)} if any(k == 'mail' for k, _ in new) else {}
+    presses = {m['id'].split('-')[1]: m for m in general.press_lines(store, tid)} if any(k == 'press' for k, _ in new) else {}
+    for k, r in new:
+        if k == 'line':
+            c = store._one('SELECT * FROM comment WHERE TaskId=? AND LineId=? ORDER BY CommentId DESC LIMIT 1', (tid, r))
+            if c: put(store, tid, 'line', r, {'at': c['CreatedAt'], **general.his_line(c)}, src=f"comment:{c['CommentId']}", at=at)
+        elif k == 'mail' and (x := mails.get(r)):
+            put(store, tid, 'arrival', f'm:{r}', {**general.mail_row(store, x), 'joined': stamp(x['T'])}, src=f'message:{r}', at=at)
+        elif k == 'press' and (m := presses.get(r)):
+            put(store, tid, 'press' if m.get('press') else 'note', f'p:{r}', {'at': m['createdAt'], 'text': m['content'][0]['text'],
+                **({'perm': m['perm']} if m.get('perm') else {})}, src=f'audit:{r}', at=at)
+        elif k == 'turn':
+            put(store, tid, 'turn', f't:{r}', {'started': at, 'ended': None, 'text': ''}, state='starting', src='heard', at=at)
+
+
+@_safe
+def answered(store, tid: int, cid: int, actor: str, body: str, created: str) -> None:
+    """An answer filed (an ASSISTANT_TYPE comment): the turn at work ends with its words - in place, never moved. Taskuary's own note in
+    the agent's name (sessionrecord.NOTE_ACTOR) is a note; an answer nothing marked the start of is a turn of its own, where it is filed."""
+    from . import general, sessionrecord
+    from .conversation import clean
+    tid = int(tid)
+    words = clean(str(body or ''))
+    if actor == sessionrecord.NOTE_ACTOR: return void(put(store, tid, 'note', f'n:c{cid}', {'at': created, 'text': words}, src=f'comment:{cid}'))
+    text, fail = general.failed_line(words)
+    with store.lock:
+        t = store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='turn' AND Parent IS NULL ORDER BY Id DESC LIMIT 1", (tid,)).fetchone()
+    done = {'text': text, 'ended': _when(created), 'answer': f'comment-{cid}', **({'fail': fail.strip()} if fail else {})}
+    if t and t['State'] in LIVE: update(store, tid, t['Key'], state='failed' if fail else 'done', **done)
+    else: put(store, tid, 'turn', f'a:c{cid}', {'started': _when(created), **done}, state='failed' if fail else 'done', src=f'comment:{cid}')
+
+
+def void(_): return None
+
+
+@_safe
+def at_work(store, tid: int, sid: str = '') -> None:
+    "The turn the agent has the prompt of: starting until then, working from its first word on (its road's own `prompt`)."
+    if (t := open_turn(store, tid)) and t['State'] == 'starting': update(store, tid, t['Key'], state='working', **({'sid': sid} if sid else {}))

@@ -5322,8 +5322,13 @@ class SQLiteStore:
         return out
     def list_routes(self, task_id): return self._rows('SELECT * FROM route WHERE TaskId=? ORDER BY RouteId', (task_id,))
     def add_comment(self, task_id, actor, actor_type, body, line_id=None):
-        return self._exec('INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt,LineId) VALUES (?,?,?,?,?,?)',
-                          (task_id, actor, actor_type, body, _now(), line_id))
+        cid = self._exec('INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt,LineId) VALUES (?,?,?,?,?,?)',
+                         (task_id, actor, actor_type, body, at := _now(), line_id))
+        # ...an answer filed ends its turn in the chat's log, in place (chatlog.answered: the one door every answer road goes through)
+        if actor_type == 'assistant_agent' and task_id:
+            from . import chatlog
+            chatlog.answered(self, task_id, cid, actor, body, at)
+        return cid
     def add_comment_once(self, task_id, actor, actor_type, body):
         """Append a turn unless it is already the last turn on this task.
 

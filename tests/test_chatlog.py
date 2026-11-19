@@ -156,7 +156,9 @@ def test_a_thread_joining_with_its_history_is_one_line_at_the_foot():
     them), and the two that came after the chat's foot stand as they came."""
     import time as t_
     from taskuary import conversation, general
+    from taskuary.store import set_owner
     s, tid = world()
+    set_owner(s, 'Alex Doyle', 'alex@northwind.example')       # Ray is a colleague: a stranger's thread waits behind Trust, never joins the chat
     general.wait_line(s, tid, 'Check what Ray sent about the ledger', line_id='l-1'); conversation.hear(s, tid, ['l-1'], turn=True)
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Nothing from Ray yet.')
     foot = max(r['At'] for r in s._rows('SELECT At FROM chatlog WHERE TaskId=?', (tid,)))

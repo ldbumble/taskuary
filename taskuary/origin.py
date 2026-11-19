@@ -13,6 +13,22 @@ def worse(a, b): return a if ORDER.index(a) <= ORDER.index(b) else b
 
 def _own(row): return row.get('Direction') == 'out' or row.get('Status') == 'context'
 
+# HIS OWN SYSTEMS ARE HIS (the owner, 2026-11-19): his CI's "[northwind/ledger] Build failed on main", his repositories' bots, his
+# connected systems' automated mail never put his task in safe mode - a real stranger's mail still does, until Trust. Read from stored
+# facts, never words: a machine's mail (its SenderClass, the verdict's else the headers') on his own domain, or naming one of his
+# repositories (the SOUL.md map, the coding checkouts) in the [owner/repo] marker a repository's notices head their subject with.
+REPO_MARK = re.compile(r'^\s*(?:(?:re|fwd?):\s*)*\[([\w.-]+/[\w.-]+)\]', re.I)
+def own_system(store, row: dict) -> str:
+    "Why this message is a notice from one of his own systems, else ''."
+    if str(row.get('SenderClass') or row.get('HeaderClass') or '').lower() != 'automated' or _own(row): return ''
+    dom = str(row.get('FromEmail') or '').rsplit('@', 1)[-1].lower() if '@' in str(row.get('FromEmail') or '') else ''
+    if dom and dom in senders.own_domains(store) - senders.PUBLIC_MAIL: return f'an automated notice from your own domain, {dom}'
+    if (m := REPO_MARK.match(str(row.get('Subject') or ''))):
+        from .terminal import known_repos
+        if m.group(1).lower() in {r.lower() for r in known_repos(store)}: return f'a notice from your repository {m.group(1)}'
+    return ''
+
+
 def of_message(store, row: dict, memo: dict = None, seen: dict = None) -> tuple:
     "(origin, why) for one stored message row. No network: senders.known is never asked to look deeper. `memo`: senders.known's."
     if _own(row): return 'owner', 'your own words'
@@ -27,6 +43,7 @@ def of_message(store, row: dict, memo: dict = None, seen: dict = None) -> tuple:
         from .batch import outside_row
         return ('stranger', 'a public repository, by someone without write access') if outside_row(store, row) \
             else ('trusted', 'a member of the repository')
+    if (w := own_system(store, row)): return 'trusted', w
     # the whole person, so a chat sender is judged as one (senders._chat_known); their own line is never the owner's talk.
     # MailMetaJson carries the mail's sender-verification verdict (mailauth), so a forged From is never trusted on read - and the
     # body and attachments ride too: a colleague's forward of an outsider's words is the outsider's (senders.outsider, H1)
@@ -147,7 +164,7 @@ def lifted(store, msgs, through: int = 0, memo: dict = None, seen: dict = None):
     later, work = [m for m in msgs if m['MessageId'] > through], None
     for i in range(len(later) - 1, -1, -1):
         m = later[i]
-        if _own(m) or (m.get('Channel') or '') in NO_LIFT: continue
+        if _own(m) or (m.get('Channel') or '') in NO_LIFT or own_system(store, m): continue     # ...a machine of his vouches for nobody
         if (r := of_message(store, m, memo, seen)) and r[0] == 'trusted':
             if _group_line(m) and m['MessageId'] not in (work := _joined_as_work(store, msgs) if work is None else work): continue
             if any(x.get('Danger') for x in later[:i + 1]): return None

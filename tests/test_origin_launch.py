@@ -68,3 +68,31 @@ def test_claude_version_caches_only_a_success(monkeypatch):
         return o
     monkeypatch.setattr(origin.subprocess, 'run', run); monkeypatch.setattr(agents, '_resolve_cmd', lambda c: ['claude.exe'])
     assert origin._claude_version('claude') == () and origin._claude_version('claude') == (2, 1, 300) and origin._claude_version('claude') == (2, 1, 300)
+
+def test_his_own_ci_s_notice_keeps_his_task_his_and_a_stranger_s_mail_does_not():
+    """The owner's ruling, 2026-11-19: a notice from his OWN systems - his CI's "[northwind/ledger] Build failed on main", sent by the CI's
+    no-reply address on its own domain - is his, so it never puts his code task in safe mode: the agent keeps full tools and hears it. A
+    stranger's mail joining the same task still holds it until Trust. Told apart by stored facts (origin.own_system): a machine's mail
+    (SenderClass) naming one of his repositories (the SOUL.md map) in the subject's [owner/repo] marker."""
+    def task():
+        s = MemoryStore(); s.save_doc('soul', '## Repos\n- **northwind/ledger**: the ledger service\n', 'owner')
+        return s, s.create_task({'Title': 'Fix the ledger totals', 'Kind': 'coding', 'Source': 'manual', 'OriginBase': 'owner'}, 'owner')
+    def mode(s, t):
+        try: return origin.launch_mode(s, t, 'claude')
+        except origin.Refusal: return 'held'
+    s, t = task()
+    s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'builds@ci.example', 'FromName': 'CI', 'SenderClass': 'automated',
+                   'Subject': '[northwind/ledger] Build failed on main', 'BodyText': 'The totals test failed.', 'Status': 'routed'})
+    assert origin.of_task(s, t)[0] != 'stranger' and origin.hold(s, t) is None and mode(s, t) == 'full'
+    s, t = task()
+    s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'erin@vendor.example', 'FromName': 'Erin Blake', 'Subject': 'Re: ledger totals',
+                   'BodyText': 'Can you also send me the totals?', 'Status': 'routed'})
+    assert origin.of_task(s, t)[0] == 'stranger' and mode(s, t) != 'full'
+    # ...and the CI's notice vouches for nobody: on a task a stranger's mail started, it lifts nothing (origin.lifted)
+    s, t = task()
+    s.update_task(t, {'OriginBase': ''}, 'owner')
+    s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'erin@vendor.example', 'FromName': 'Erin Blake', 'Subject': 'ledger totals',
+                   'BodyText': 'Please fix the totals.', 'Status': 'routed'})
+    s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'builds@ci.example', 'SenderClass': 'automated',
+                   'Subject': '[northwind/ledger] Build failed on main', 'BodyText': 'failed', 'Status': 'routed'})
+    assert origin.of_task(s, t)[0] == 'stranger'

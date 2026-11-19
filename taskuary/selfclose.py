@@ -383,7 +383,7 @@ SUMMARY_OPEN, SUMMARY_CLOSE = '[[TASKUARY-SUMMARY]]', '[[/TASKUARY-SUMMARY]]'
 AFTER_PRESS = ('send', 'handoff')
 from .buttons import label as _label
 RETRY_LABEL = _label('try_again')          # the button a summary's `retry` draws
-SUMMARY_LINE = (f'ENDING EVERY TURN: close with {SUMMARY_OPEN}{{"about": "<two or three plain sentences from the whole thread: which '
+SUMMARY_LINE = (f'ENDING EVERY TURN: close with {SUMMARY_OPEN}{{"name": "<the task in three to six words, as a to-do list names it>", "about": "<two or three plain sentences from the whole thread: which '
                 f'conversation, what about, who asked, for whom, why - naming only people it shows in that role>", "did": "<the RESULT ITSELF '
                 f'first (the path, link, figure or name), then what you did; any part unmet or unchecked>", "on_you": ["<a step for what they '
                 f'asked that only they can take, a line each with why, said nowhere in your words above; [] when nothing_left>"],"nothing_left": <true only when the goal '
@@ -428,6 +428,7 @@ def summary_marker(text: str, letters=()) -> tuple:
     from .store import ON_YOU_MAX, by_sentence
     flat = lambda x, n: by_sentence(without_letters(' '.join(str(x or '').split()), letters), n)
     out = {'about': flat(j.get('about'), 600), 'did': flat(j.get('did'), 600), 'nothing_left': j.get('nothing_left') is True}
+    if (name := ' '.join(str(j.get('name') or '').split())[:80]): out['name'] = name
     # ...and the agent's own say on whether its prose is the deliverable (GeneralWorkspace: agentSummary.answerShown) - kept only when it said
     if isinstance(j.get('answer_is_result'), bool): out['answer_is_result'] = j['answer_is_result']
     # ...and the one press it waits on to carry on (general.follow_up): that press starts its next turn

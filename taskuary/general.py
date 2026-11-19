@@ -220,6 +220,18 @@ def waiting_lines(store, tid: int) -> list:
     "The owner's lines no turn has taken yet, oldest first: [{id, text, files, at}]."
     return [{'id': r['CommentId'], 'at': r['CreatedAt'], **_line_of(r['Body']), **({'line': r['LineId']} if r.get('LineId') else {})}
             for r in store.list_comments(tid, internal=True) if r.get('ActorType') == WAITING_TYPE]
+def take_name(store, tid: int, name: str) -> bool:
+    """A TASK CALLED BY HIS WHOLE SENTENCE TAKES THE NAME ITS AGENT GAVE IT (the walks, 2026-11-18: New's rows read "Fix the rounding bug in the
+    northwind/ledger totals that is failing CI. My checkout is at…"): only while its title is still his own words as typed - a name he gave it,
+    or one taken since, stands. Once, and said in the task's record."""
+    from . import ownwork
+    from .concierge import _title_cut
+    t = store.get_task(tid) or {}
+    if not (ask := ' '.join(split_files(ownwork.ask(store, t))['text'].split())) or str(t.get('Title') or '') != _title_cut(ask) or name == t.get('Title'): return False
+    store.update_task(tid, {'Title': name}, 'assistant')
+    return True
+
+
 def take_kept(store, tid: int, ids=None, **how) -> list:
     """The owner's kept lines (`ids`, else all) taken as his lines of the conversation (store.take_lines) - by the turn that takes them, any
     agent's. `how`: what else this hand-over is (conversation.hear's `turn`, `sid`) - ONE hand-over is written down once, so what it took
@@ -3417,6 +3429,7 @@ class GeneralSession:
                                                                        (self.task_id,)))]
         reply, summ = selfclose.summary_marker(reply, [x for x in letters if x])
         if summ: reply = reply or summ['did']
+        if summ and summ.get('name'): take_name(self.store, self.task_id, summ['name'])
         if ticks:
             from .store import agent_tick
             for i in ticks:

@@ -802,6 +802,21 @@ class TheList(unittest.TestCase):
         self.assertEqual([(c['review'], c['status']) for c in got[-1]['cards']], [(rid2, 'pending')])
         self.assertEqual([x['kind'] for x in got][-4:], ['turn', 'arrival', 'line', 'turn'])
 
+    def test_a_task_called_by_his_whole_sentence_takes_the_name_its_agent_gives_it_once(self):
+        """The walks, 2026-11-18: a task made in New was called by the owner's whole sentence on the rail ("Fix the rounding bug in the
+        northwind/ledger totals that is failing CI. My checkout is at…"). Its agent names it in its turn's summary, and a title that is still
+        his sentence takes that name - once: a name it already has, or one he gave, stands."""
+        from taskuary import selfclose
+        ask = 'Find three caterers in Boston for about forty people in March, with prices per head and minimums, and put them in a sheet.'
+        tid = self.tid = self.s.create_task({'Title': ask[:120].rsplit(' ', 1)[0] + '…' if len(ask) > 120 else ask, 'Summary': ask, 'Kind': 'general',
+                                             'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        mark = lambda name: f'Three found. {selfclose.SUMMARY_OPEN}{{"name": "{name}", "about": "", "did": "Three caterers.", "on_you": []}}{selfclose.SUMMARY_CLOSE}'
+        self.brain.said = {1: mark('Boston caterers for March'), 2: mark('Caterers, second name')}
+        self.say('Go.', 'l-one'); self.rest()
+        self.assertEqual(self.s.get_task(tid)['Title'], 'Boston caterers for March')
+        self.say('Add one more.', 'l-two'); self.rest()
+        self.assertEqual(self.s.get_task(tid)['Title'], 'Boston caterers for March', 'named once: a name it has stands')
+
     def test_a_line_that_cannot_reach_the_turn_at_work_says_so(self):
         """Design round 3, 2026-11-18: his line sat 13 minutes behind a long turn and nothing said why. On a road that takes no words mid-turn (a
         model asked the plain way, no loop of its own to hear him in) his waiting line says so, once; on a road that does, nothing is said."""

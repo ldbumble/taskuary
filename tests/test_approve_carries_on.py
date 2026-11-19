@@ -42,8 +42,9 @@ class HeldStep(unittest.TestCase):
 
     def test_on_a_pty_the_note_is_kept_as_a_seed_and_the_record_reads_it_as_a_brief(self):
         typed = []
-        sess = SimpleNamespace(sid='run1', task_id=self.tid, cli='claude', write=lambda s: typed.append(s), n=0)
-        with mock.patch.object(term, 'in_box', return_value=None), mock.patch.object(term, 'SEED_CHUNK_GAP', 0), mock.patch.object(term, 'SEED_ENTER', 0):
+        sess = SimpleNamespace(sid='run1', task_id=self.tid, cli='claude', write=lambda s: typed.append(s), n=0, alive=True, waiting=lambda: True,
+                               tail=lambda n=8: [], status_tail=lambda n=8: [])
+        with mock.patch.object(term, 'in_box', return_value=None), mock.patch.object(term, 'SEED_CHUNK_GAP', 0), mock.patch.object(term, 'SEED_ENTER', 0),              mock.patch.dict(term.SESSIONS, {'run1': sess}, clear=True):      # ...a pane at rest: the waiting room types it in (general.to_agent)
             self.approve(sess)
             end = time.time() + 5
             while not typed and time.time() < end: time.sleep(.01)

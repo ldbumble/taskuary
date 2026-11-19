@@ -252,3 +252,34 @@ def test_a_long_told_step_with_no_stop_in_it_is_read_in_a_beat():
     head = ('While you were working, the owner and a teammate queued 2 notes for you. Take them in order, after finishing the step you are on; '
             'if one conflicts with work already done, say so instead of undoing it:')
     assert sessionrecord.queued(f'{head} (1) check the tax line (2) then merge') == [('brief', head), ('you', 'check the tax line'), ('you', 'then merge')]
+
+
+def test_a_session_whose_tool_streams_ten_megabytes_keeps_it_small_and_a_poll_reads_only_what_is_new(home):
+    """The owner's live app, 2026-11-19: one session's tools read files, and every update kept the whole output again (and the CLI's own copy
+    of it) - 587 MB for 4,908 updates, read whole on every poll of the chat and of the landing card: one chat read took 17 s, the rail 56 s
+    behind it. A tool's output is kept to its head and tail, and the record is read on from where the last read stopped."""
+    tid, big = 7, 'x' * 10_000_000
+    for i in range(3):
+        codingchat.record_update(tid, 's1', {'sessionUpdate': 'tool_call', 'toolCallId': f'r{i}', 'kind': 'read', 'title': 'Read budget.py'})
+        for _ in range(2): codingchat.record_update(tid, 's1', {'sessionUpdate': 'tool_call_update', 'toolCallId': f'r{i}', 'status': 'completed',
+            'rawOutput': big, 'content': [{'type': 'content', 'content': {'type': 'text', 'text': big}}], '_meta': {'claudeCode': {'toolResponse': {'file': big}}}})
+    p = codingchat._acp_path(tid, 's1')
+    assert p.stat().st_size < 200_000
+    out = codingchat.acp_updates(tid, 's1')[1]['rawOutput']
+    assert out.startswith('xxx') and 'characters not kept' in out and len(out) < 10_000
+    with mock.patch.object(codingchat, 'slim', wraps=codingchat.slim) as read:
+        codingchat.acp_updates(tid, 's1'); landing._acp_seen(tid)
+        assert read.call_count == 9                                        # ...the landing card's first read of it; the chat's is behind it
+        codingchat.record_update(tid, 's1', {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'Found it.'}})
+        read.reset_mock(); ups = codingchat.acp_updates(tid, 's1'); landing._acp_seen(tid); codingchat.acp_updates(tid, 's1')
+        assert read.call_count == 2 and len(ups) == 10 and ups[-1]['content']['text'] == 'Found it.'      # the new line, once per reader
+        p.write_text(p.read_text(encoding='utf-8').splitlines()[0] + '\n', encoding='utf-8')               # ...made again: read from its start
+        assert len(codingchat.acp_updates(tid, 's1')) == 1
+
+
+def test_a_line_still_being_written_is_read_once_it_is_whole(home):
+    p = codingchat._acp_path(8, 's1')
+    p.write_bytes(b'{"sessionUpdate": "plan", "entries": []}\n{"sessionUpdate": "agent_mess')
+    assert len(codingchat.acp_updates(8, 's1')) == 1
+    with p.open('ab') as f: f.write(b'age_chunk", "content": {"type": "text", "text": "Done."}}\n')
+    assert [u['sessionUpdate'] for u in codingchat.acp_updates(8, 's1')] == ['plan', 'agent_message_chunk']

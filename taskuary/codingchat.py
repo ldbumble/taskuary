@@ -11,7 +11,7 @@ THE ACP SEAM. A coding session run over ACP (step 1: acp.py) has no CLI log to r
 `record_update` keeps each one beside the task as it arrives; `chat` hands a session's kept updates to the page as `updates`, and
 chatStream.stepsFromAcp maps them into the very step shape a log gives, so both roads draw one row shape. A coding session over ACP
 (acpcoding.ACPCoding) calls `record_update(tid, sid, update)` for every update it gets, and for every prompt it sends."""
-import json, re, time
+import collections, json, os, re, threading, time
 from datetime import datetime
 from pathlib import Path
 
@@ -20,6 +20,7 @@ from loguru import logger
 from . import outputs, session_artifacts, sessionrecord
 
 ACP_KEEP = 20000                  # the newest updates kept per session: message chunks arrive a token at a time
+OUT_KEEP = 8000                   # the characters of one tool's output kept: the page shows 1,500 of it (agentSteps.detailOf)
 MAIL_N = 3000
 
 
@@ -40,18 +41,64 @@ def record_update(tid: int, sid: str, update: dict) -> None:
     now = time.time()
     update = {**update, '_at': update.get('_at') or datetime.fromtimestamp(now).isoformat(sep=' ', timespec='milliseconds'), '_t': update.get('_t') or now}
     try:
-        with _acp_path(tid, sid).open('a', encoding='utf-8') as f: f.write(json.dumps(update, ensure_ascii=False) + '\n')
+        with _acp_path(tid, sid).open('a', encoding='utf-8') as f: f.write(json.dumps(slim(update), ensure_ascii=False) + '\n')
     except (OSError, TypeError, ValueError) as e: logger.debug(f'coding chat: ACP update for task {tid} not kept - {e}')
+
+
+def _capped(o):
+    h = OUT_KEEP // 2                                                     # ...its head and its tail: a test run's verdict is at its end
+    if isinstance(o, str): return o if len(o) <= OUT_KEEP else f'{o[:h]}\n... ({len(o) - 2 * h} characters not kept) ...\n{o[-h:]}'
+    if isinstance(o, list): return [_capped(x) for x in o]
+    return {k: _capped(v) for k, v in o.items()} if isinstance(o, dict) else o
+
+
+def slim(u: dict) -> dict:
+    """An update as it is kept and read: a tool's output to its head, and the CLI's own copy of what it read (`toolResponse`) not at all. The
+    owner's live app, 2026-11-19: one session reading files kept every file whole three times over, 587 MB, read whole on every poll."""
+    if not isinstance(u, dict) or u.get('sessionUpdate') not in ('tool_call', 'tool_call_update'): return u
+    u = {**u, **({'rawOutput': _capped(u['rawOutput'])} if 'rawOutput' in u else {}),
+         **({'content': [c if isinstance(c, dict) and c.get('type') == 'diff' else _capped(c) for c in u['content']]} if isinstance(u.get('content'), list) else {})}
+    if isinstance(cc := (u.get('_meta') or {}).get('claudeCode'), dict) and 'toolResponse' in cc:
+        u['_meta'] = {**u['_meta'], 'claudeCode': {k: v for k, v in cc.items() if k != 'toolResponse'}}
+    return u
+
+
+_FOLLOWED, _FOLLOWED_LOCK = {}, threading.Lock()
+
+
+def follow(p: Path, fold, start, read):
+    """`read(state)` of what `fold(state, update)` made of an ACP record so far, from `start()` - reading only what was appended since the last
+    read (the record only grows: record_update appends). Read whole on every poll, one chat read took 17 s and the rail 56 s behind it (the
+    owner's live app, 2026-11-19). A record that shrank or was made again is read from its start. Each update read as it is kept (slim)."""
+    with _FOLLOWED_LOCK: e = _FOLLOWED.setdefault((str(p), fold), {'lock': threading.Lock(), 'id': None, 'off': 0, 'tail': b'', 'state': None})
+    with e['lock']:
+        try:
+            with open(p, 'rb') as f:
+                st = os.fstat(f.fileno())
+                f.seek(e['off'] - len(e['tail']))                         # ...the end of what was read still there: else the record was made again
+                if e['state'] is None or e['id'] != (st.st_dev, st.st_ino) or st.st_size < e['off'] or f.read(len(e['tail'])) != e['tail']:
+                    e.update(id=(st.st_dev, st.st_ino), off=0, tail=b'', state=start()); f.seek(0)
+                got = f.read(max(0, st.st_size - e['off']))
+        except OSError: return read(start())
+        # ...a last line still being written is read whole on the next read - one whole without its newline now
+        if (end := got[got.rfind(b'\n') + 1:]):
+            try: json.loads(end)
+            except ValueError: got = got[:len(got) - len(end)]
+        if got: e['off'] += len(got); e['tail'] = got[-256:]
+        for line in got.splitlines():
+            try: u = json.loads(line)
+            except ValueError: continue
+            if isinstance(u, dict): fold(e['state'], slim(u))
+        return read(e['state'])
+
+
+def _keep(q, u): q.append(u)
+def _kept(): return collections.deque(maxlen=ACP_KEEP)
 
 
 def acp_updates(tid: int, sid: str) -> list:
     p = _acp_path(tid, sid)
-    if not p.is_file(): return []
-    out = []
-    for line in p.read_text(encoding='utf-8', errors='replace').splitlines()[-ACP_KEEP:]:
-        try: out.append(json.loads(line))
-        except ValueError: continue
-    return out
+    return follow(p, _keep, _kept, list) if p.is_file() else []
 
 
 def mails(store, tid: int) -> list:

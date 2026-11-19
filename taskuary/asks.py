@@ -46,7 +46,8 @@ def _rail(store) -> list:
     """The rail as it stands, built if it has to be - for the background check, never for a chat turn (block())."""
     from . import funnel
     funnel.pile(store, quiet=True)
-    return funnel.full_items(store) or (funnel.cached_pile(store) or {}).get('items') or []
+    rows = funnel.full_items(store) or (funnel.cached_pile(store) or {}).get('items') or []
+    return funnel.one_state(store, {'items': rows})['items']           # ...each task's row in taskstate's words, as the rail and header say it
 
 
 def _live(tid: int) -> bool:

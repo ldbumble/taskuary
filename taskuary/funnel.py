@@ -1947,7 +1947,7 @@ def reset_walk(store):
 def alerts(store, items: list = None) -> list:
     """What interrupts the PHONE's conversation, whatever it is on (remote_assistant.push_alerts): a meeting inside fifteen minutes and an
     agent that just asked. Each once - acknowledged alerts stay quiet until the fact changes. The desk never reads them (server._pile_payload)."""
-    items = items if items is not None else build(store)['items']
+    items = one_state(store, {'items': items if items is not None else build(store)['items']})['items']   # one task state (taskstate.status)
     states = store.funnel_states()
     out = []
     for i in items:

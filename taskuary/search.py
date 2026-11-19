@@ -269,7 +269,7 @@ def _settings(words) -> list:
         if k in _UNSHOWN or not _words_in(f"{m['label']} {m['group']} {m.get('desc') or ''} {m.get('help') or ''}", words): continue
         out.append({'type': 'setting', 'id': f'set:{k}', 'title': m['label'], 'where': f"Settings · {m['group']}",
                     'snippet': snippet(m.get('desc') or m.get('help'), words, 120), 'rank': not _words_in(m['label'], words),
-                    'href': f"#settings=config&group={quote(m['group'], safe='')}&key={quote(k, safe='')}"})
+                    'href': settings_schema.href(k)})
     # ...and what a section draws as a PANEL, by the words the schema keeps for it: "password" found no saved sign-ins (2026-11-10)
     found = {h['id'] for h in out}
     knobs = [(m['label'], f"{m['label']} {m['group']} {m.get('desc') or ''} {m.get('help') or ''}")
@@ -319,7 +319,7 @@ def _app_rows(store) -> list:
             for k, p in places.PLACES.items() if p.get('href') and p['href'] not in own]
     rows += [{'type': 'place', 'title': t, 'rest': w, 'href': h, 'key': w.split()[0]} for t, h, w in PAGES]
     rows += [{'type': 'setting', 'title': m['label'], 'where': f"{places.name('settings')} → {m['group']}", 'rest': f"{m['group']} {m.get('desc') or ''} {m.get('help') or ''} {k}",
-              'href': f"#settings=config&group={quote(m['group'], safe='')}&key={quote(k, safe='')}"}
+              'href': settings_schema.href(k)}
              for k, m in settings_schema.knobs().items() if k not in _UNSHOWN]
     rows += [{'type': 'setting', 'panel': k, 'title': p['title'], 'where': f"{places.name('settings')} → {p['group']}", 'rest': f"{p['group']} {p['words']}",
               'href': panel(k, p)} for k, p in settings_schema.panels().items()]

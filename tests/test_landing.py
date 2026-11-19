@@ -71,8 +71,12 @@ class LandingTests(unittest.TestCase):
         landing.saw(self.s, self.tid, 'Bash', {'command': 'git commit -q -m "edit ledger.py"'})
         s = landing.state(self.s, self.tid)
         self.assertFalse(s['ask'] or s['own']); self.assertEqual(s['answers'], []); self.assertEqual(s['changed'], 1)
-        self.assertTrue(s['shared']); self.assertIn('shared with other agents', s['line'])
+        # ...and with no remote to push its commit to, the card says so rather than standing silent (design round 5)
+        self.assertTrue(s['shared'] and s['noRemote']); self.assertIn('no remote to push to', s['line'])
         with self.assertRaises(ValueError): landing.land(self.s, self.tid, 'discard')
+        git(self.cwd, 'remote', 'add', 'origin', tempfile.mkdtemp())
+        s = landing.state(self.s, self.tid)
+        self.assertFalse(s['noRemote']); self.assertIn('Push it?', s['line'], 'an origin never fetched still takes the push')
 
     def test_on_a_shared_base_each_task_counts_only_its_own_commits(self):
         # the owner's live coding task, 2026-11-08: "518 files changed" on master - every other agent's and release's commit since it began
@@ -476,3 +480,70 @@ class LandingDoorTests(unittest.TestCase):
             c = TestClient(server.app); tid = Factory(server.store).task(title='x', kind='coding')
             self.assertIsNone(c.get(f'/api/tasks/{tid}/landing').json()['data'])
             self.assertEqual(c.post(f'/api/tasks/{tid}/landing', json={'how': 'rebase'}).status_code, 409)
+
+
+class NamedCheckoutTests(unittest.TestCase):
+    """A GENERAL AGENT'S FIX IN A CHECKOUT THE OWNER NAMED IS ONE PUSH CARD (design round 5, 2026-11-19: "fix the rounding bug - my checkout is
+    at <path>" from New, on both CLIs; the fix committed there, then a raw shell card in the agent's own folder on one, "only you can grant
+    that folder access in Settings -> Agents" on the other). Developer mode off, a general task: his naming the folder is the go-ahead."""
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(); self.cwd = os.path.join(self.tmp.name, 'ledger'); os.mkdir(self.cwd)
+        self.scratch = os.path.join(self.tmp.name, 'scratch'); os.mkdir(self.scratch)
+        git(self.cwd, 'init', '-q', '-b', 'master'); commit(self.cwd, 'totals.py', 'def total(a): return sum(a)\n', 'start')
+        self.remote = os.path.join(self.tmp.name, 'origin.git'); git(self.tmp.name, 'init', '-q', '--bare', 'origin.git')
+        git(self.cwd, 'remote', 'add', 'origin', self.remote); git(self.cwd, 'push', '-q', 'origin', 'master')
+        self.s = MemoryStore()
+        self.tid = self.s.create_task({'Title': 'Fix the ledger rounding', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner',
+                                       'Summary': f'Fix the rounding bug in the ledger totals. My checkout is at {self.cwd}'}, 'owner')
+        self.s.add_transcript(self.tid, 'run1', 'Fixed the rounding.', 'claude', self.scratch)
+        from taskuary import agents
+        self.dev = mock.patch.object(agents, 'developer_mode', agents.developer_mode.real); self.dev.start()
+
+    def tearDown(self):
+        self.dev.stop()
+        try: self.tmp.cleanup()
+        except OSError: pass
+
+    def fix(self):
+        "The agent's commit, made after the task began (git stamps to the second)."
+        later = str(int(time.time()) + 5)
+        commit(self.cwd, 'totals.py', 'def total(a): return round(sum(a), 2)\n', 'Round totals to cents',
+               env={'GIT_COMMITTER_DATE': f'{later} +0000', 'GIT_AUTHOR_DATE': f'{later} +0000'})
+
+    def test_his_named_checkout_pushes_through_one_card_with_developer_mode_off(self):
+        self.fix()
+        self.assertIsNone(landing.state(self.s, self.tid), 'nothing adopted before a push is asked')
+        held, said = landing.push_asked(self.s, self.tid, f'Set-Location "{self.cwd}"; git push', self.scratch, about='Push the rounding fix')
+        self.assertTrue(held); self.assertIn('Push button', said)
+        s = landing.state(self.s, self.tid)
+        self.assertTrue(s['ask']); self.assertEqual((s['push']['ahead'], s['name'], [a['how'] for a in s['answers']]), (1, 'ledger', ['push']))
+        self.assertIn('of ledger', s['line'])
+        self.assertTrue(landing.shown(self.s, self.tid))
+        with mock.patch('taskuary.waitroom.add'): out = landing.land(self.s, self.tid, 'push')
+        self.assertTrue(out['ok']); self.assertEqual(git(self.remote, 'rev-parse', 'master'), git(self.cwd, 'rev-parse', 'master'))
+
+    def test_propose_push_with_no_folder_takes_the_one_he_named(self):
+        self.fix()
+        out = landing.from_proposal(self.s, self.tid, {'action': 'push', 'why': 'the rounding fix'})
+        self.assertTrue(out['ok']); self.assertEqual(landing.state(self.s, self.tid)['proposal']['how'], 'push')
+
+    def test_a_checkout_with_no_remote_says_so_on_the_card_and_to_the_agent(self):
+        git(self.cwd, 'remote', 'remove', 'origin'); self.fix()
+        with self.assertRaises(ValueError) as e: landing.from_proposal(self.s, self.tid, {'action': 'push', 'cwd': self.cwd, 'why': 'the fix'})
+        self.assertIn('no remote to push to', str(e.exception)); self.assertIn('git remote add origin', str(e.exception))
+        s = landing.state(self.s, self.tid)
+        self.assertTrue(s['noRemote'] and not s['ask']); self.assertEqual(s['commits'], 1, 'only the commit made since the task began')
+        self.assertIn('no remote to push to', s['line'])
+
+    def test_a_folder_he_never_named_adopts_nothing(self):
+        other = tempfile.mkdtemp(); git(other, 'init', '-q', '-b', 'master'); commit(other, 'x.py', 'x\n')
+        self.assertIsNone(landing.push_asked(self.s, self.tid, 'git push', other))
+        self.assertFalse(landing.record(self.s, self.tid))
+        t2 = self.s.create_task({'Title': 'Ask about the ledger', 'Kind': 'general', 'Status': 'open', 'Summary': f'From Ray: my checkout is at {self.cwd}'}, 'router')
+        with self.assertRaisesRegex(ValueError, 'no checkout'): landing.from_proposal(self.s, t2, {'action': 'push', 'cwd': self.cwd})
+        self.assertFalse(landing.shown(self.s, t2), "a stranger's words name no checkout")
+
+    def test_use_repo_takes_his_named_checkout_without_a_settings_visit(self):
+        from taskuary import repochoice
+        self.s.set_setting(repochoice.FOLDERS_KEY, self.scratch, 'owner')
+        self.assertTrue(repochoice.allowed(self.s, self.cwd, self.tid)); self.assertFalse(repochoice.allowed(self.s, self.cwd))

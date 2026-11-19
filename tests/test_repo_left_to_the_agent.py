@@ -177,7 +177,8 @@ class UseRepoTests(unittest.TestCase):
 
     def test_a_checkout_outside_the_allowed_folders_is_refused(self):
         with self.assertRaises(PermissionError) as e: repochoice.use(self.s, self.tid, self.outside, 'found it')
-        self.assertIn('Settings → Agents', str(e.exception))
+        # ...the setting itself linked, never its section's name (design round 5: "Settings -> Agents" opened the Settings home)
+        self.assertIn('(#settings=config&group=Agents&key=code_folders)', str(e.exception))
         self.s.set_setting(repochoice.FOLDERS_KEY, f'{self.code}\n{self.elsewhere}', 'owner')
         self.assertEqual(repochoice.use(self.s, self.tid, self.outside, 'found it')['repo'], 'org/app')
 

@@ -19,6 +19,14 @@ def panels() -> dict: return _load().get('panels', {})
 GROUPS = _load()['groups']
 
 
+# ONE ADDRESS FOR A SETTING (design round 5, 2026-11-19: "Settings -> Agents" opened the Settings home, and he hunted for the folder list): its
+# section and the knob itself, held in view (canvasLinks.js) - every sentence and search hit that sends him to a setting links it here
+def href(key: str) -> str:
+    from urllib.parse import quote
+    return f"#settings=config&group={quote(knobs()[key]['group'], safe='')}&key={quote(key, safe='')}"
+def link(key: str, label: str = '') -> str: return f"[{label or knobs()[key]['label']}]({href(key)})"
+
+
 def _word(meta: dict, value) -> str:
     v = '' if value is None else str(value)
     if meta.get('type') == 'switch': return 'on' if v.strip().lower() in ('1', 'true', 'on') else 'off'

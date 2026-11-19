@@ -3,6 +3,7 @@ the Advisor's verbs, the assistant's coding lines, setup, and the page (GET /api
 Each of these was asked its own way in its own file, and they disagreed: a Teams draft offered Send that could never
 leave, coding was offered where no coding tool runs (2026-10-18). Nothing is cached - a connection made a second ago counts."""
 from loguru import logger
+from . import settings_schema
 
 
 def _safe(f, default=False):
@@ -93,7 +94,7 @@ HANDS = {
     'all': ('A shell and files on this computer: a folder the owner names on this task is yours to read and change - for a fix in code there, '
             'make the change, run its tests and commit it there. A push or anything else that leaves this computer becomes his card when you run it.'),
     'look': ("Reading only: you read files and look things up, and change and run nothing - his setting "
-             "[General agents can](#settings=config&group=Agent%20permissions&key=general_agent_hands) is 'only look things up'."),
+             f"{settings_schema.link('general_agent_hands', 'General agents can')} is 'only look things up'."),
     'none': ('Words only: this AI takes no tools, so you open no file, page or system and run nothing - you have what this conversation holds. '
              'A file he asks for (a sheet, a document, code) you write whole in a fenced block whose first line names it - ```csv file=quotes.csv, '
              '```xlsx file=quotes.xlsx with `a | b | c` rows - and Taskuary saves it to the task\'s files.'),
@@ -129,7 +130,7 @@ def fact(store, hands: str, pick: str = '') -> str:
            '- Work that should run again by itself is a routine Taskuary runs: set it up for his one press (save_routine), never "it cannot be '
            'scheduled".',
            '- Developer mode is on: coding tasks also run in a terminal of their own.' if dev else
-           '- Developer mode is off ([Settings](#settings=config&group=Agent%20permissions&key=developer_mode)): it adds coding tasks in a terminal '
+           f'- Developer mode is off ({settings_schema.link("developer_mode", "Settings")}): it adds coding tasks in a terminal '
            'of their own' + (' - a change in a folder he names needs none of it.' if hands == 'all' else '.')]
     # ...and Developer mode only where it would give him something: with no AI CLI here it starts no coding task (agents.coding_ready)
     return '\n'.join(out if cli else out[:-1])

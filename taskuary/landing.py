@@ -75,6 +75,41 @@ def mark_start(store, tid: int, cwd: str) -> dict | None:
     return r
 
 
+# A CHECKOUT THE OWNER NAMED IS THE TASK'S, WHATEVER AGENT WORKS IT (design round 5, 2026-11-19: "fix the rounding bug - my checkout is at
+# <path>" from New, on both CLIs. The fix was committed there, and the push was a dead end - a raw shell card in the agent's own folder on
+# one, "only you can grant that folder access in Settings -> Agents" on the other). His naming it is the go-ahead (readgate.named): its
+# first push asked - a `git push` there, or `propose` push - adopts it as where the task's work is, and the Push card asks it whatever the
+# task's kind or Developer mode. Its own commits are the ones made there since the task began that no remote has yet (own).
+def top(cwd) -> str: return _git(cwd, 'rev-parse', '--show-toplevel') if cwd and os.path.isdir(cwd) else ''
+
+
+def named(store, tid: int) -> list:
+    "The git checkouts the owner named in his own words on the task - each its top folder."
+    from . import readgate
+    return list(dict.fromkeys(t for d in readgate.named(store, tid) if (t := top(d))))
+
+
+def adopt(store, tid: int, cwd: str = '') -> dict:
+    """The task's landing record: kept as it is where it has one; else the checkout the owner named that `cwd` is in (none given: the one he
+    named, where he named one), marked `named`. {} where neither."""
+    r = record(store, tid)
+    if r.get('cwd'): return r
+    ns = named(store, tid)
+    norm = lambda p: os.path.normcase(os.path.realpath(p))
+    at = top(cwd) if cwd else (ns[0] if len(ns) == 1 else '')
+    if not at or norm(at) not in map(norm, ns): return {}
+    if not (r := mark_start(store, tid, at) or {}): return {}
+    r['named'] = True; _save(store, tid, r)
+    store.audit('task', int(tid), 'checkout_named', 'agent', detail={'cwd': at})
+    return r
+
+
+def shown(store, tid: int) -> bool:
+    "The landing card is drawn: Developer mode on, or the work is in a checkout the owner named on this task (adopt)."
+    from . import agents
+    return agents.developer_mode(store) or bool(record(store, tid).get('named'))
+
+
 def has_checkout(store, tid: int, cwd: str = '') -> bool:
     """CODE THINGS ONLY WHERE THERE IS CODE (the owner, 2026-11-06: "diff shows up if there is branch or checkout stuff available"): the task's
     work started in a checkout (mark_start), or a session of it works in a folder inside a git repo - whatever kind the task is."""
@@ -188,6 +223,10 @@ def own(store, tid: int, r: dict = None) -> dict:
     r = r if r is not None else record(store, tid)
     cwd = r.get('cwd') or ''
     if not cwd or not os.path.isdir(cwd): return {'commits': [], 'paths': {}, 'at': ''}
+    if r.get('named'):                            # ...his checkout, adopted after its commits were made: what no remote has, made since the task began
+        since = _stamp(_epoch((store.get_task(int(tid)) or {}).get('CreatedAt') or r.get('at')) + 1)   # ...not one in the second it was made: before it
+        cs = _git(cwd, 'rev-list', '--reverse', f'--since={since}', '--max-count=200', 'HEAD', '--not', '--remotes').split()
+        return {'commits': cs, 'paths': r.get('paths', {}), 'at': _stamp(int(_git(cwd, 'log', '-1', '--format=%ct', cs[-1]) or 0)) if cs else ''}
     calls, seen_ = _acp_seen(tid)
     calls, paths = [*calls, *r.get('calls', [])], {**{q: t for k, t in seen_.items() if (q := _rel(cwd, k))}, **r.get('paths', {})}
     hist = [(x[0], int(x[1])) for l in _git(cwd, 'log', '--branches', '-n', '5000', '--format=%H %ct').splitlines()
@@ -276,7 +315,9 @@ def state(store, tid: int, full: bool = False) -> dict | None:
            'at': _stamp(int(_git(cwd, 'log', '-1', '--format=%ct', br) or 0)) if mine else o['at'],
            'files': files, 'changed': len(files), 'plus': sum(f['plus'] for f in files), 'minus': sum(f['minus'] for f in files),
            'landed': r.get('landed'), 'proposal': r.get('proposal')}
+    out['name'] = out['repo'] or os.path.basename(os.path.normpath(cwd))      # ...the card names the repository it pushes to
     out['push'] = None if mine else _unpushed(store, cwd, base, o['commits'], r.get('proposal'), out['repo'])
+    out['noRemote'] = bool(not mine and o['commits'] and not has_origin(cwd))
     out['ask'] = (mine and ahead > 0 and not r.get('landed')) or bool(out['push'])
     # ...a question the agent RAISED (its proposal) is passed once the conversation moves on (proposals.move_on): greyed, nothing pressable,
     # until the agent raises it again. Unpushed work with no proposal is the checkout's own fact, raised by no turn - it stays live
@@ -334,12 +375,18 @@ def _unpushed(store, cwd, base, commits, prop, repo) -> dict | None:
     """The task's own commits on the shared base that origin does not have yet: {'tip', 'ahead', 'to', 'deploy'} - None when there is no
     origin to push to, or nothing of its own left to push. The tip is its newest own commit still on the base."""
     up = sha(cwd, f'refs/remotes/origin/{base}')
-    if not (up and commits): return None
+    # ...an origin with no copy of the base here yet (added, never fetched - the agent's `git remote add`): its push makes it
+    if not (commits and (up or has_origin(cwd))): return None
     tip = ''                                     # the newest by the graph, not the clock: two commits in one second sort either way
     for c in commits:
         if is_ancestor(cwd, c, base) and (not tip or is_ancestor(cwd, tip, c)): tip = c
-    if not tip or is_ancestor(cwd, tip, up): return None
-    return {'tip': tip, 'ahead': int(_git(cwd, 'rev-list', '--count', f'{up}..{tip}') or 0), 'to': base, 'deploy': _deploy_to(store, prop, repo)}
+    if not tip or (up and is_ancestor(cwd, tip, up)): return None
+    ahead = int(_git(cwd, 'rev-list', '--count', f'{up}..{tip}') or 0) if up else sum(is_ancestor(cwd, c, tip) for c in commits)
+    return {'tip': tip, 'ahead': ahead, 'to': base, 'deploy': _deploy_to(store, prop, repo)}
+
+
+def has_origin(cwd) -> bool: return _run(cwd, 'remote', 'get-url', 'origin')[0] == 0
+NO_REMOTE = "this checkout has no remote to push to"
 
 
 def said(s: dict) -> str:
@@ -347,8 +394,9 @@ def said(s: dict) -> str:
     if not s: return ''
     n = f"{plural(s['changed'], 'file')} changed, +{s['plus']} -{s['minus']}"
     if s.get('landed'): return f"{s['branch']} landed ({HOW.get(s['landed'].get('how'), s['landed'].get('how'))}) - {n}."
-    if (p := s.get('push')): return (f"{plural(p['ahead'], 'commit')} on {s['base']} not on origin yet, up to {p['tip'][:7]}: {n}. Push it"
+    if (p := s.get('push')): return (f"{plural(p['ahead'], 'commit')} on {s['base']} of {s['name']} not on origin yet, up to {p['tip'][:7]}: {n}. Push it"
                                      + (f" and deploy it to {p['deploy']}?" if p['deploy'] else '?'))
+    if s.get('noRemote'): return f"{plural(s['commits'], 'commit')} on {s['base']} of {s['name']}, not pushed - {NO_REMOTE}: {n}."
     if s['ask']: return f"{s['branch']} is {plural(s['ahead'], 'commit')} ahead of {s['base']}: {n}. How should it land?"
     if s['own']: return f"{s['branch']} has nothing {s['base']} does not already have."
     return f"The agent worked on {s['base']} itself, shared with other agents - {n} by its own commits and edits; there is no branch of its own to land."
@@ -379,6 +427,8 @@ def propose(store, tid: int, how: str, why: str = '', actor: str = 'agent', depl
         from .agenttools import refusal
         raise ValueError(refusal('no session of this task started in a git checkout - there is nothing to land yet',
                                  'work in the checkout the change belongs in - use_repo picks it (find_repos lists them)'))
+    if s.get('noRemote'): raise ValueError(f"{s['line']} The owner sees that on the card. Where he gave you its address, `git remote add origin <url>` "
+                                           "and ask for the push again; else ask him for it in one question.")
     if not s['ask']: raise ValueError(s['line'])
     if how == 'discard' and not s['own']: raise ValueError('discard is only for a branch of your own')
     if how not in {a['how'] for a in s['answers']}: raise ValueError(f"how is one of: {', '.join(a['how'] for a in s['answers'])} here - {s['line']}")
@@ -409,7 +459,12 @@ def from_proposal(store, tid: int, p: dict) -> dict | None:
     "A proposed git act as the landing card's question (propose) - None when it is not one, or the task has nothing to land."
     a = str((p or {}).get('action') or '').strip()
     if a not in GIT_ACTS: return None
+    if a in ('push', 'deploy'): adopt(store, tid, str(p.get('cwd') or p.get('folder') or p.get('path') or ''))   # ...his named checkout, where it is one
     s = state(store, tid)
+    if a in ('push', 'deploy') and not s:
+        from .agenttools import refusal
+        raise ValueError(refusal('this task has no checkout to push from', 'give `cwd`: the git checkout the owner named for this work'))
+    if s and s.get('noRemote'): return propose(store, tid, 'push')        # ...refused with why, and the way past
     if not (s and (s['ask'] or s.get('passed'))): return None        # ...a passed question is raised again
     how = 'pr' if s['own'] and GIT_ACTS[a] in ('', 'pr') else 'push' if not s['own'] else GIT_ACTS[a]
     if s['own'] and how == 'push': how = 'pr'                     # a branch of its own goes out as a pull request, never straight over the base
@@ -440,21 +495,37 @@ def _push_of(argv: list) -> tuple | None:
 def _top(cwd) -> str: return os.path.normcase(os.path.realpath(_git(cwd, 'rev-parse', '--show-toplevel') or cwd))
 
 
+def _where(segs, cwd) -> str | None:
+    "The folder a line's pushes run in: `cwd`, moved by each `cd` before them - None for a move after one, or one that names no single folder."
+    for a in segs:
+        if _push_of(a): return cwd if not any(_moves(b) for b in segs[segs.index(a):]) else None
+        if _moves(a):
+            w = [t for t in a[1:] if not t.startswith('-')]
+            if len(w) != 1: return None
+            cwd = os.path.normpath(os.path.join(cwd, os.path.expanduser(w[0])))
+    return cwd
+
+
+def _moves(argv) -> bool:
+    from .shellgate import _words
+    return _words(argv)[0] in _MOVES
+
+
 def push_asked(store, tid: int, cmd: str, cwd: str = '', about: str = '') -> tuple | None:
     """A shell line that pushes this task's own work, as the card's question. (True, words for the agent): the push is on the card, marked.
     (False, words): the line does more than push - none of it runs, and the agent is told to ask with propose_land after the rest.
     None: the card's buttons are not this push (or there is no card: Developer mode off, no checkout) - held like any other step."""
-    from . import agents, shellgate
+    from . import shellgate
     from .browsergate import _segments
-    r = record(store, tid)
-    if not (cwd and r.get('cwd') and agents.developer_mode(store)): return None
     todo, segs = shellgate.acts(cmd, cwd), _segments(_TO_NOWHERE.sub(' ', str(cmd or ''))) or []
     pushes = [p for a in segs if (p := _push_of(a))]
-    if not todo or len(pushes) != len(todo) or any(a['what'] != shellgate.GIT['push'] for a in todo): return None
-    if any(shellgate._words(a)[0] in _MOVES for a in segs) or _top(cwd) != _top(r['cwd']): return None
+    if not cwd or not todo or len(pushes) != len(todo) or any(a['what'] != shellgate.GIT['push'] for a in todo): return None
+    if (at := _where(segs, cwd)) is None: return None
+    r = record(store, tid) or adopt(store, tid, at)
+    if not (r.get('cwd') and shown(store, tid)) or _top(at) != _top(r['cwd']): return None
     s = state(store, tid)
     if not s: return None
-    cur, to = head_branch(cwd), set()
+    cur, to = head_branch(at), set()
     for src, dst in pushes:
         src, dst = (cur if x in ('', 'HEAD') else x.removeprefix('refs/heads/') for x in (src, dst))
         if not src or src != s['branch'] or (s['own'] and dst != src) or not _branch_ok(dst): return None
@@ -463,10 +534,12 @@ def push_asked(store, tid: int, cmd: str, cwd: str = '', about: str = '') -> tup
     if len(live) > 1: return None
     how, deploy = 'pr' if s['own'] else 'push', next(iter(live), '')
     button = HOW['deploy' if deploy else how]
-    if len(segs) > len(pushes):                   # the commit in the same line has not run: there is nothing to put on the card yet
+    if any(not _push_of(a) and not _moves(a) for a in segs):   # the commit in the same line has not run: nothing to put on the card yet
+        from .general import GENERAL_KINDS
+        ask = (f"propose (action push, cwd {s['cwd']}{f', deploy {deploy}' if deploy else ''})" if (store.get_task(tid) or {}).get('Kind') in GENERAL_KINDS
+               else f"propose_land (how {how}{f', deploy {deploy}' if deploy else ''})")
         return False, (f"Taskuary did not run this line: a push from this task's checkout is the owner's {button} button, never a shell step. Run "
-                       f"the rest of it without the push, then call propose_land (how {how}{f', deploy {deploy}' if deploy else ''}) - they get "
-                       "the button, and Taskuary tells you when it went.")
+                       f"the rest of it without the push, then call {ask} - they get the button, and Taskuary tells you when it went.")
     # ...a passed question is still the owner's press: the agent's own push raises it again, never runs (proposals.move_on)
     if not (s['ask'] or s.get('passed')): return None
     try:

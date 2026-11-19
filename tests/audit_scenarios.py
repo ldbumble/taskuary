@@ -296,7 +296,8 @@ class Run:
                         'error': r.get('ActError') or (r.get('DeliveryState') if r.get('DeliveryState') in ('failed', 'unknown') else ''),
                         'note': r.get('DecideNote') or ''})
         # ...and a coding task's landing question (landing.state): the Push card, its own door (/landing), no review row
-        land = (self.c.get(f'/api/tasks/{self.tid}/landing').json() or {}).get('data') if (self.s.get_task(self.tid) or {}).get('Kind') == 'coding' else None
+        # ...on any task whose work is in a checkout: a general agent's in one the owner named too (landing.adopt)
+        land = (self.c.get(f'/api/tasks/{self.tid}/landing').json() or {}).get('data')
         if land and (land.get('ask') or land.get('landed') or land.get('passed')):
             out.append({'id': 'land', 'kind': 'land', 'status': 'approved' if land.get('landed') else 'pending', 'text': land.get('line') or '',
                         'turn': None, 'named': False, 'passed': bool(land.get('passed')), 'error': '', 'note': ''})
@@ -863,9 +864,70 @@ def w_owed_answer(r: Run):
     assert any('Harbor Kitchen' in x['body'] and 'written back' in x['body'] for x in r.sent), r.sent
 
 
+def his_checkout(r: Run, remote: bool) -> Path:
+    "The ledger checkout he names, its own commit made; with `remote` a bare origin beside it. Developer mode as a fresh store has it: off."
+    from taskuary import agents
+    r.mp.setattr(agents, 'developer_mode', agents.developer_mode.real)
+    # ...one place on every backend: the path is in his words, which two backends must read alike (parity)
+    import tempfile
+    home = Path(tempfile.gettempdir()) / f'tq-audit-checkout-{int(remote)}'
+    if home.exists(): shutil.rmtree(home, onerror=lambda f, p, e: (os.chmod(p, 0o700), f(p)))     # ...git's objects are read-only on Windows
+    repo = home / 'his-ledger'; repo.mkdir(parents=True)
+    (repo / 'totals.py').write_text('def total(a):\n    return sum(a)\n', encoding='utf-8')
+    # ...each commit stamped as it is on every backend, so its sha - said in the press's line - is one (parity); the fix's after the task began
+    git = lambda *a, at='2001-01-01T09:00:00 +0000': subprocess.run(['git', '-C', str(repo), '-c', 'user.name=Alex Doyle', '-c', f'user.email={ME}', *a], check=True,
+                                                                    capture_output=True, text=True, env={**os.environ, 'GIT_AUTHOR_DATE': at, 'GIT_COMMITTER_DATE': at}).stdout
+    git('init', '-q', '-b', 'master'); git('add', '.'); git('commit', '-qm', 'start')
+    if remote:
+        subprocess.run(['git', '-C', str(r.tmp), 'init', '-q', '--bare', 'his-origin.git'], check=True, capture_output=True)
+        git('remote', 'add', 'origin', str(r.tmp / 'his-origin.git')); git('push', '-q', 'origin', 'master')
+    r.repo, r.hisgit = repo, git
+    return repo
+
+
+def his_fix(r: Run):
+    "The agent's own hands in his checkout: the fix, committed there."
+    (r.repo / 'totals.py').write_text('def total(a):\n    return round(sum(a), 2)\n', encoding='utf-8')
+    r.hisgit('commit', '-qam', 'Round totals to cents', at='2099-01-01T09:00:00 +0000')
+
+
+@on('cli', 'acp')
+def x_named_checkout_pushed(r: Run):
+    """(x) A general agent fixes a bug in a checkout he named in his ask -> ONE Push card naming it -> press -> on the remote -> the agent is told.
+    Recorded on both CLIs, design round 5: the fix committed, then a raw shell card in the agent's own folder, or "only you can grant that folder
+    access in Settings -> Agents" - a dead end on the push."""
+    repo = his_checkout(r, remote=True)
+    r.task('Fix the ledger rounding')
+    r.type(f'fix the rounding bug in the ledger totals - my checkout is at {repo}. Push it once I say so.')
+    r.at_work(lambda: his_fix(r), ('propose', {'action': 'push', 'why': 'the rounding fix, one commit on master'}))
+    assert 'ERROR' not in r.results[-1], r.results[-1]
+    r.answer('Fixed and committed in your checkout: totals now round to cents. Press Push and I check it reached origin.')
+    land = r.c.get(f'/api/tasks/{r.tid}/landing').json()['data']
+    assert land['ask'] and [a['how'] for a in land['answers']] == ['push'] and land['name'] == 'his-ledger', land
+    r.press(f'/api/tasks/{r.tid}/landing', {'how': 'push'}, label='press Push')
+    assert r.hisgit('rev-parse', 'master') == subprocess.run(['git', '-C', str(r.tmp / 'his-origin.git'), 'rev-parse', 'master'],
+                                                             capture_output=True, text=True).stdout, 'the press pushed his fix'
+    prompt = r.turn('It is on origin/master - the rounding fix is pushed.')
+    assert 'Pushed 1 commit to origin/master' in prompt, prompt[-600:]
+
+
+@on('cli', 'acp')
+def y_named_checkout_no_remote(r: Run):
+    "(y) The same fix in a checkout with no remote -> no button anywhere: the card and the agent both say there is no remote, and it asks for one."
+    repo = his_checkout(r, remote=False)
+    r.task('Fix the ledger rounding')
+    r.type(f'fix the rounding bug in the ledger totals - my checkout is at {repo}. Push it once I say so.')
+    r.at_work(lambda: his_fix(r), ('propose', {'action': 'push', 'cwd': str(repo), 'why': 'the rounding fix'}))
+    assert 'no remote to push to' in r.results[-1] and 'git remote add origin' in r.results[-1], r.results[-1]
+    r.answer(f'Fixed and committed in your checkout, but it has no remote to push to.\n{ASK} What is the address of the ledger repository to push to?')
+    land = r.c.get(f'/api/tasks/{r.tid}/landing').json()['data']
+    assert land['noRemote'] and not land['ask'] and 'no remote to push to' in land['line'], land
+
+
 SCENARIOS = {k: f for k, f in [('a', a_question_answered), ('b', b_email_rewritten), ('c', c_bug_pushed), ('d', d_page_step), ('e', e_three_asks),
                                ('f', f_ci_notice), ('g', g_invite_clash), ('h', h_steered_mail), ('i', i_late_answer), ('j', j_answered_outside),
                                ('k', k_send_fails), ('l', l_no_connector), ('m', m_remind_while_working), ('n', n_full_house), ('o', o_silent_turn),
                                ('p', p_break_out), ('q', q_save_routine), ('r', r_monitor_notice), ('s', s_send_close_at_work), ('t', t_send_at_work),
-                               ('u', u_stranger_twice), ('v', v_attachments), ('w', w_owed_answer)]}
+                               ('u', u_stranger_twice), ('v', v_attachments), ('w', w_owed_answer),
+                               ('x', x_named_checkout_pushed), ('y', y_named_checkout_no_remote)]}
 def runs_on(name, backend) -> bool: return backend in getattr(SCENARIOS[name], 'on', BACKENDS)

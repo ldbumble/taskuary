@@ -6183,18 +6183,18 @@ def agent_propose_land(body: AgentLandBody, request: Request):
 @app.get('/api/tasks/{tid}/landing')
 def task_landing(tid: int, full: bool = False):
     """A coding task's work against where it started - the diff stat (and with `full` the diff) and the landing question. Developer
-    mode only: with it off there is no coding UI to ask it in."""
+    mode, or a checkout the owner named on the task (landing.shown): elsewhere there is no coding UI to ask it in."""
     from . import landing
     if not store.get_task(tid): raise HTTPException(404, 'no such task')
-    if not hub_agents.developer_mode(store): return {'data': None}
+    if not landing.shown(store, tid): return {'data': None}
     return {'data': landing.state(store, tid, full=full)}
 
 @app.get('/api/tasks/{tid}/changes')
 def task_changes(tid: int):
-    "A coding task's work so far as one diff (landing.changes) - the header's Changes, while the agent works. Developer mode only."
+    "A coding task's work so far as one diff (landing.changes) - the header's Changes, while the agent works. Where its card is (landing.shown)."
     from . import landing
     if not store.get_task(tid): raise HTTPException(404, 'no such task')
-    if not hub_agents.developer_mode(store): return {'data': None}
+    if not landing.shown(store, tid): return {'data': None}
     return {'data': landing.changes(store, tid)}
 
 @app.get('/api/tasks/{tid}/coding-chat')
@@ -6270,7 +6270,7 @@ def task_land_revert(tid: int, body: RevertBody, request: Request):
     from . import landing
     _owner_only(request, "what is taken out of a branch before it lands is the owner's review")
     if not store.get_task(tid): raise HTTPException(404, 'no such task')
-    if not hub_agents.developer_mode(store): raise HTTPException(409, 'Developer mode is off (Settings, Developer mode)')
+    if not landing.shown(store, tid): raise HTTPException(409, 'Developer mode is off (Settings, Developer mode)')
     try: return landing.revert(store, tid, body.parts, ACTOR)
     except landing.Refused as e: raise HTTPException(409, str(e))
     except ValueError as e: raise HTTPException(422, str(e))
@@ -6283,7 +6283,7 @@ def task_landing_answer(tid: int, body: LandBody, request: Request):
     from . import landing
     _owner_only(request, "how a branch lands is the owner's answer")
     if not store.get_task(tid): raise HTTPException(404, 'no such task')
-    if not hub_agents.developer_mode(store): raise HTTPException(409, 'Developer mode is off (Settings, Developer mode)')
+    if not landing.shown(store, tid): raise HTTPException(409, 'Developer mode is off (Settings, Developer mode)')
     try: return landing.land(store, tid, body.how, ACTOR)
     except landing.Refused as e: raise HTTPException(409, str(e))
     except ValueError as e: raise HTTPException(422, str(e))

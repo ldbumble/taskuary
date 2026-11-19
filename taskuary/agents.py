@@ -607,7 +607,8 @@ def no_coding_fix(store) -> dict:
     is connected" over a connected Codex, its button to Connections, while the block was Developer mode)."""
     from . import words
     if not developer_mode(store):
-        return {'label': 'Turn on Developer mode', 'href': '#settings=config&group=Agent%20permissions&key=developer_mode'}
+        from .settings_schema import href
+        return {'label': 'Turn on Developer mode', 'href': href('developer_mode')}
     return {'label': 'Connect a coding tool', 'href': words.href('ai_apps')}
 
 

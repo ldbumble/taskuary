@@ -36,10 +36,14 @@ export function landingWords(s) {
 }
 
 const files = (s) => n(s.changed || 0, "file");
+// ...THE REPOSITORY IT GOES TO, NAMED (design round 5, 2026-11-19: a general agent's push from a checkout he named - which one, said on the card)
+const of = (s) => s.name ? ` of ${s.name}` : "";
 function landingTitle(s) {
   const p = s.push;
   // ...a passed card keeps the title it asked with: the same card, greyed (LandingCard `past`)
-  if (p && (s.ask || s.passed)) return `Push ${n(p.ahead || 0, "commit")} to ${s.base}${p.deploy ? " and deploy" : ""} - ${files(s)}`;
+  if (p && (s.ask || s.passed)) return `Push ${n(p.ahead || 0, "commit")} to ${s.base}${of(s)}${p.deploy ? " and deploy" : ""} - ${files(s)}`;
+  // ...and where there is nowhere to push, the card says so rather than standing silent
+  if (s.noRemote && !s.landed) return `${n(s.commits || 0, "commit")} on ${s.base}${of(s)}, not pushed - this checkout has no remote to push to`;
   if (s.own && (s.ask || s.passed || s.landed)) return `Land ${s.branch} into ${s.base} - ${n(s.commits || s.ahead || 0, "commit")}, ${files(s)}`;
   if (s.landed) return `${s.landed.how === "deploy" ? "Push and deploy" : "Push"} ${s.base} - ${files(s)}`;
   return `Worked on ${s.branch} - ${files(s)}`;

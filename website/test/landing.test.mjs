@@ -73,6 +73,9 @@ test("the landing card is one title, the files folded, one filled button and the
   assert.deepEqual([w.first, w.second], ["deploy", "push"]);
   const solo = { ...s, push: { ...s.push, deploy: "" }, answers: s.answers.slice(0, 1) };
   assert.equal(landingWords(solo).title, "Push 1 commit to master - 26 files");
+  assert.equal(landingWords({ ...solo, name: "northwind/ledger" }).title, "Push 1 commit to master of northwind/ledger - 26 files", "the repository it goes to, named");
+  assert.equal(landingWords({ ...solo, name: "ledger", ask: false, push: null, answers: [], noRemote: true }).title,
+    "1 commit on master of ledger, not pushed - this checkout has no remote to push to");
   assert.deepEqual([landingWords(solo).first, landingWords(solo).second], ["push", ""]);
   const own = { own: true, branch: "fix-export", base: "master", ahead: 2, commits: 2, changed: 4, ask: true,
     answers: ["rebase", "merge", "pr", "discard"].map((how) => ({ how, label: HOW[how] })) };

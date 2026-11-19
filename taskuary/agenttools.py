@@ -231,8 +231,8 @@ TOOLS = {
               _S({'report': _INT, 'to': _STR, 'text': _STR, 'via': {'type': 'string', 'enum': ['chat', 'email']}}, ('report', 'to', 'text')),
               ('POST', '/api/agent/share')),
     'propose': ('propose', "Ask the owner to approve one act Taskuary runs on their press: comment_issue {body} (a public GitHub "
-                           "comment), close_issue, open_pr, land, push {deploy?: the branch that deploys it} (on a coding task "
-                           "these three are the landing card's Push / Push & deploy / PR buttons), run_tool {type, connector_id, ...} (a send, post or order on one of"
+                           "comment), close_issue, open_pr, land, push {cwd?: the checkout, deploy?: the branch that deploys it} (where the "
+                           "work is in a checkout - one the owner named counts - these three are its Push / Push & deploy / PR buttons), run_tool {type, connector_id, ...} (a send, post or order on one of"
                            " their systems - a post, a new GitHub issue and a Jira, Monday or Linear write are the guide tool's "
                            "`propose` topic), write_playbook {slug, text}, settings {changes}, break_out {title, summary, messages: [m-ids], items: "
                            "[to-do ids]} (a part of this task that is another matter, to a task of its own), save_routine {title, script: whole standard-library Python, "

@@ -604,8 +604,9 @@ class TheSessionTests(unittest.TestCase):
     def test_while_the_provider_is_down_the_failure_is_one_plain_line_queued_to_try_again(self):
         """The API walk, 2026-11-18/19: during the provider's outage every line he typed added another "⚠ HIPAA AI: Gemini ... over its quota at
         the provider (it answered 429) - raise the quota there..." to the chat, and nothing tried again until he typed. One state: one plain line
-        that says when it is tried again, changed in place while the outage lasts, and the turn waits in the start queue."""
-        from taskuary import funnel, general
+        that says when it is tried again, and the turn waits in the start queue. Design round 5, I3: the line was then changed in place
+        ("trying again at 5:11" read "5:24" later) - each try that fails is its own dated line under the one before, and none is rewritten."""
+        from taskuary import conversation, funnel, general
         class Down:
             def chat(self, *a, **kw): raise llm.QuotaSpent(llm.QUOTA_LINE.format(name='HIPAA AI', model='Gemini 4'))
         s = MemoryStore()
@@ -615,12 +616,13 @@ class TheSessionTests(unittest.TestCase):
                 try: self._down_session(s, tid).send_prompt(line, echo=False)
                 except Exception: pass
         failed = [general.failed_line(c['Body'])[1] for c in s.list_comments(tid) if c['ActorType'] == general.ASSISTANT_TYPE and general.failed_line(c['Body'])[1]]
-        self.assertEqual(len(failed), 1, failed)
-        self.assertRegex(failed[0], r'^The AI is over its limit - trying again at \d')
-        self.assertNotIn('429', failed[0]); self.assertNotIn('quota', failed[0])
+        self.assertEqual(len(failed), 3, failed)
+        for f in failed: self.assertRegex(f, r'^The AI is over its limit - trying again at \d'); self.assertNotIn('429', f); self.assertNotIn('quota', f)
+        items = [x for x in conversation.items(s, tid)['items'] if x['kind'] == 'turn']
+        self.assertEqual([x['fail'] for x in items], failed, 'each try stands as its own failed turn, in the order it failed')
         q = s.get_dispatch(tid)
         self.assertEqual((q['Turn'], q['State']), (general.RETRY_TURN, 'retrying'))
-        self.assertEqual(funnel.idle_state(s, tid)['line'], failed[0])
+        self.assertEqual(funnel.idle_state(s, tid)['line'], failed[-1])
 
     def test_the_queued_try_runs_by_itself_and_its_answer_ends_the_outage(self):
         "Rule 4: a start that cannot happen now is queued and retried - the try is Taskuary's, never a line in his name; answered, nothing is owed."

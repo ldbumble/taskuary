@@ -412,11 +412,14 @@ export function useConversation(tid, on) {
   useEffect(() => (on ? onLive("task-changed", (ev) => { if (touches(ev, tid)) load(); }) : undefined), [on, tid, load]);
   return { list, load };
 }
+// A TURN'S HEAD SAYS ONE TIME, SET ONCE (design round 5, I3): when it began in the chat (the list's `at`, conversation.dated) - at work and done
+// alike. It read its start while it worked and its END once done, and a turn begun at 4:57 was re-dated 5:12 under the owner's eyes
+export const turnAt = (t) => { const d = t?.at ? new Date(String(t.at).replace(" ", "T")) : null; return d && !Number.isNaN(+d) ? d : null; };
 const TurnTime = ({ t }) => {
-  const end = t.ended ? new Date(t.ended * 1000) : t.at ? new Date(String(t.at).replace(" ", "T")) : null;
-  if (!end || Number.isNaN(+end)) return null;
-  const ran = t.started && t.ended ? turnStamp({ start: t.started * 1000, end }) : "";
-  return <span data-tq-ran="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>· {when(end)}{ran ? ` · ${ran}` : ""}</span>;
+  const at = turnAt(t), end = t.ended ? new Date(t.ended * 1000) : null;
+  if (!at) return null;
+  const ran = t.started && end ? turnStamp({ start: t.started * 1000, end }) : "";
+  return <span data-tq-ran="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>· {when(at)}{ran ? ` · ${ran}` : ""}</span>;
 };
 // `later`: a turn after the chat's first - its agent starting again is the work going on, never "waiting for the agent" (workingLine)
 const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = false, newest = false }) => {
@@ -429,8 +432,9 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
   const rest = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown).rest.filter((p) => !names.has(p.name));
   const quiet = !live && !hasParts(parts) && !words && !t.fail && !cards?.length && !made.length && !rest.length && !ask;
   // ...and never under the turn's own open question (the audit, 2026-11-15: "What is your plate number?" in its words, then "For you to do:
-  // Tell me your plate number"): what it asks him IS what is left to him, said once - nor on any turn but the one that `owes` it (onYouTurn)
-  const onYou = owes && !live && sum ? turnOnYou(sum) : "";
+  // Tell me your plate number"): what it asks him IS what is left to him, said once. THE TURN'S OWN, KEPT (design round 5, I3): the list says
+  // which turns say it (`on_you`, conversation.left_on_him), settled once - it never leaves a turn for the next one
+  const onYou = t.on_you && !live && sum ? turnOnYou(sum) : "";
   const again = React.useContext(AgainCtx);
   // ...WHILE THE CLI COMPACTS ITS CONTEXT the turn at work says so (the owner, 2026-11-10: "show compacting like claude code does"): its newest
   // step is the compaction, not yet over
@@ -442,16 +446,15 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
   if (quiet) return null;
   return <div className={`tq-aui-message tq-aui-agent${words && !live ? " tq-copy-host" : ""}${more ? " tq-aui-agent-more" : ""}`} data-tq-item={t.id} data-tq-chat-line={key} data-tq-turn={t.state}>
     {!!words && !live && <CopyCorner text={words} label="Copy this answer" />}
-    {!more && <div className="tq-aui-role">{name}{live ? <RunClock start={turnStart(t)} /> : <TurnTime t={t} />}</div>}
+    {!more && <div className="tq-aui-role">{name}{live ? <RunClock start={turnStart(t)} at={turnAt(t)} /> : <TurnTime t={t} />}</div>}
     <div className="tq-aui-agent-body">
       <TurnWorkView data={{ parts }} now={live} k={t.id} />
       {!!words && <SaidText text={words} mid={key} />}
-      {!!onYou && <div className="tq-aui-summary" data-tq-on-you="" style={{ marginTop: 10 }}><Md text={onYou} /></div>}
       {/* ...A TURN THAT COULD NOT FINISH, WORTH ANOTHER TRY (its summary's `retry`): one button, never "send any message on this task to try
           again" (the 2026-11-18 walks) - pressed, it is his line "Try again." and the agent goes on */}
       {owes && !live && sum?.retry && !!again && <div style={{ marginTop: 8 }}><button type="button" className="tq-chip primary" data-tq-turn-retry="" onClick={again}>{btn("try_again")}</button></div>}
       {/* ...and THE NEWEST TURN THAT FAILED carries the same one button (the API walk, 2026-11-18: a provider's outage left "⚠ ... 429" and nothing
-          to press) - the server files the same failure once (general.same_failure), so this is the one failure state while it lasts */}
+          to press) - each try that failed keeps its own dated line (general.say_failure); only the newest carries the button */}
       {t.state === "failed" && !!t.fail && <div className="tq-aui-note tq-aui-note-error" role="alert" data-tq-turn-failed="">⚠ {t.fail}
         {newest && !!again && <div style={{ marginTop: 8 }}><button type="button" className="tq-chip primary" data-tq-turn-retry="" onClick={again}>{btn("try_again")}</button></div>}</div>}
       {!!rest.length && <PublishedPages pages={rest} open />}
@@ -459,6 +462,9 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
       {/* ...what this turn asked him, where it asked it (the list's `asking.turn`): above its card, never at the chat's foot */}
       {ask}
       {!!cards?.length && <div data-tq-turn-cards="">{cards}</div>}
+      {/* ...what it left on him, at its FOOT, under its cards (design round 5, I3): said once they are pressed, it stood up over them - a line
+          drawn in the middle of what was already there */}
+      {!!onYou && <div className="tq-aui-summary" data-tq-on-you="" style={{ marginTop: 10 }}><Md text={onYou} /></div>}
       {/* ...and the dots say what is happening, or what we wait for, on every level: one quiet line that keeps its place (workingLine) -
           LAST in the turn, under what it has made and asked so far: a chat's newest word is at its foot (the owner, 2026-11-18) */}
       {live && <div className="tq-aui-thinking" role="status" aria-label="The agent is at work" data-tq-working="" {...(t.state === "starting" ? { "data-tq-starting-line": "" } : {})}><i /><i /><i />{compacting

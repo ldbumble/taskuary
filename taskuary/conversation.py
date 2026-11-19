@@ -64,17 +64,34 @@ def machinery(s: dict) -> bool:
                                      or bool(_OWN_LINE.search(str(a.get('command') or a.get('cmd') or ''))))
 
 
-def _said(steps: list, body: str = '') -> list:
-    "A turn's steps with its words cleaned (clean) - and a step that says only what the turn's answer says, or nothing, or is machinery, left out."
+# ...A SENTENCE A TURN ALREADY SAID IS NOT SAID AGAIN AS THE NEXT MESSAGE'S OPENER (design round 5, I3: on Codex every follow-up turn read
+# "Paula says the meeting moved up. I'll update the draft..." and then "Paula says the meeting moved up. The summary is ready." - the model
+# opens each message of a turn with the same sentence, and both were drawn). Structure, not meaning: the same first sentence, word for word
+_LEAD = re.compile(r'\s*(.+?[.!?])(?=\s|$)', re.S)
+def _lead(t: str) -> tuple:
+    "(its first sentence with its spaces made one, where that sentence ends) - ('', 0) where it has none."
+    m = _LEAD.match(t or '')
+    return (' '.join(m.group(1).split()), m.end()) if m else ('', 0)
+def said_once(t: str, seen: set) -> str:
+    "`t` without its opening sentence where `seen` holds it already - and that sentence added to `seen`."
+    lead, end = _lead(t)
+    if not lead: return t
+    if lead in seen and t[end:].strip(): return t[end:].strip()
+    seen.add(lead); return t
+
+
+def _said(steps: list, body: str = '', seen: set = None) -> list:
+    """A turn's steps with its words cleaned (clean) - and a step that says only what the turn's answer says, or nothing, or is machinery, left
+    out; each message's opener once (said_once, `seen`: the openers the turn has said - the answer's own read against them after)."""
     from .chatformat import plain_text
-    out = []
+    out, seen = [], set() if seen is None else seen
     for s in steps:
         if machinery(s): continue
         # ...a thought is one plain row: the same cleaner, and its markup said as words ("**Replacing the pending draft**" stood raw)
         if s.get('k') == 'thought' and (w := plain_text(clean(s.get('text'))) or clean(s.get('text'))): out.append({**s, 'text': w}); continue
         if s.get('k') != 'said': out.append(s); continue
         w = clean(s.get('text'))
-        if w and w != body.strip(): out.append({**s, 'text': w})
+        if w and w != body.strip(): out.append({**s, 'text': said_once(w, seen)})
     return out
 
 
@@ -409,6 +426,57 @@ def served(store, tid: int, out: list) -> list:
     return sorted((x for x in out if x['id'] in known), key=lambda x: known[x['id']]) + new
 
 
+def dated(store, tid: int, out: list) -> None:
+    """A TURN'S TIME IS SET ONCE (design round 5, I3: a turn read 4:57 while it worked and 5:12 once done; the turn under his 4:58 line read
+    4:57). `at` is when the turn began IN THE CHAT - never before the input it stands under - written in the `shown` ledger the first read
+    that draws it, and the same on every read after, at work and done. How long it ran is its clock's (`started`), never its head's time."""
+    tid, prev = int(tid), 0.
+    kept = {r['Key'][2:]: r['Host'] for r in store._rows("SELECT Key, Host FROM shown WHERE TaskId=? AND Key LIKE 'T:%'", (tid,))}
+    new = []
+    for x in out:
+        if x['kind'] != 'turn':
+            if x['kind'] in ('line', 'arrival', 'press') and x.get('at'): prev = max(prev, ep(x['at']))
+            continue
+        if (was := kept.get(x['id'])): x['at'] = was; continue
+        at = max(ep(x.get('at')) if x.get('at') else 0., prev)
+        if not at: continue
+        x['at'] = stamp(at); new.append((tid, f"T:{x['id']}", 0, x['at']))
+    if new:
+        with store.lock: store.cx.executemany('INSERT OR IGNORE INTO shown (TaskId, Key, Seq, Host) VALUES (?,?,?,?)', new); store.cx.commit()
+
+
+def left_on_him(store, tid: int, out: list, ask: dict = None, letters: str = None) -> None:
+    """"FOR YOU TO DO" IS THE TURN'S OWN, SAID ONCE AND KEPT (design round 5, I3: it vanished from a turn when he typed, and the same words
+    came back on the next turn). Whether a finished turn says what it left on him (`on_you`, its summary's) is settled the first read that
+    can - its summary filed, its own question and cards pressed, or his line under it - in the `shown` ledger, and never changes after: never
+    grown above his reply (2026-11-17: an ask answered, and the old turn grew its step over his answer), never moved to a later turn. Not
+    where the turn before said the same."""
+    tid = int(tid)
+    kept = {r['Key'][2:]: r['Host'] for r in store._rows("SELECT Key, Host FROM shown WHERE TaskId=? AND Key LIKE 'Y:%'", (tid,))}
+    new, said = [], None
+    for i, x in enumerate(out):
+        if x['kind'] != 'turn' or x['state'] in LIVE: continue
+        sm = x.get('summary') or {}
+        mine = [str(s) for s in sm.get('on_you') or [] if str(s).strip()] if not sm.get('nothing_left') else []
+        if (was := kept.get(x['id'])) in (None, WAITS):
+            # ...not yet while its own question, letters or cards are the step (WAITS, kept) - settled once they are pressed, or as nothing
+            # where his own line or a message came under it first (nothing new above his line) - nor before its summary is filed (a beat after)
+            waits = (ask and ask.get('turn') == x['id']) or letters == x['id'] or any(c['status'] == 'pending' for c in x['cards'])
+            under = any(y['kind'] in ('line', 'arrival') for y in out[i + 1:])
+            if waits and not under:
+                if was is None: new.append((tid, f"Y:{x['id']}", 0, WAITS))
+                continue
+            if not sm and len(out) == i + 1: continue
+            was = '1' if mine and mine != said and not waits and not (was == WAITS and under) else ''
+            new.append((tid, f"Y:{x['id']}", 0, was))
+        if was: x['on_you'], said = True, mine
+    if new:
+        with store.lock:
+            store.cx.executemany('INSERT INTO shown (TaskId, Key, Seq, Host) VALUES (?,?,?,?) ON CONFLICT(TaskId, Key) DO UPDATE SET Host=excluded.Host '
+                                 f"WHERE shown.Host='{WAITS}'", new); store.cx.commit()
+WAITS = 'w'
+
+
 # ONE BUILD OF A TASK'S CONVERSATION AT A TIME (the owner's live app, 2026-11-16: a working coding agent's chat took 25-40 s a call, and the
 # page's polls, the task's read and the rail's ran their builds side by side, each slowing the others): a call while one is building waits for
 # it and takes its result - the same list, built once
@@ -531,7 +599,7 @@ def _items(store, tid: int) -> dict:
             last = max(last + 1e-7, began or ep(c['CreatedAt']))
             # ...ONE THAT FAILED says so where it failed, for good (general.file_turn): its closing line, after the app's own mark, is its `fail`
             body, fail = general.failed_line(body)
-            st = _said(steps_of.get(cid, []), body)
+            st = _said(steps_of.get(cid, []), body, seen := set()); body = said_once(body, seen)
             # ...one it was made to take back (take_back): its words are a step of the work that goes on under it
             # ...and its summary goes with its words (the recorded walk, 2026-11-12: the saved sign-in's folded turn still drew its summary - "Erin
             # asked Alex ...; no reference number has been read yet" - under the note that it had signed in, the owner in the third person)
@@ -686,7 +754,7 @@ def _items(store, tid: int) -> dict:
             if step['k'] == 'error' and (notice := cli_quota(step.get('text'))):
                 run.update(state='failed', fail=notice, quota=True)
                 run['steps'] = [s for s in run['steps'] if s['k'] != 'said' or str(s.get('text') or '').strip().rstrip('.') != notice]
-            else: run['steps'] += _said([step])
+            else: run['steps'] += _said([step], seen=run.setdefault('_seen', set()))
             run['ended'] = e['T']
         elif rank == -1 and run is not None: held.append(e)
         else: close(); out.append(e)
@@ -950,8 +1018,9 @@ def _items(store, tid: int) -> dict:
     was_left = store._one("SELECT Host FROM shown WHERE TaskId=? AND Key='n:left'", (tid,))
     if was_left and was_left['Host'] and not any(x['id'] == 'n:left' for x in out if x.get('id')):
         out.append({'id': 'n:left', 'kind': 'note', 'at': '', 'text': was_left['Host']})
-    for x in [*out, *pend]: x.pop('stop', None); x.pop('_h', None); x.pop('_hm', None); x.pop('_hs', None); x.pop('_seg', None); x.pop('_shut', None)
+    for x in [*out, *pend]: x.pop('stop', None); x.pop('_h', None); x.pop('_hm', None); x.pop('_hs', None); x.pop('_seg', None); x.pop('_shut', None); x.pop('_seen', None)
     out = served(store, tid, served_back(store, tid, out, was_shown, {p['id'] for p in pend})); keep_shown(store, tid, out, was_shown)
+    dated(store, tid, out)
     # (the reply draft above a newer input, greyed - read in the order drawn)
     # (and any card of the agent's above his newer line - every kind, 2026-11-12 - `hear` settles it as his line is heard)
     # ...and one the thread moved past that no agent has heard yet, by the rule the header's pill and the rail read (proposals.written_past)
@@ -1034,6 +1103,7 @@ def _items(store, tid: int) -> dict:
         for r in store._rows("SELECT ReviewId FROM review WHERE TaskId=? AND Kind='slot' AND Status='pending' AND Batch IS NULL", (tid,)):
             if r['ReviewId'] not in held | past and hosts.get(f"r:{r['ReviewId']}") != letters:
                 store._exec('INSERT INTO shown (TaskId, Key, Seq, Host) VALUES (?,?,0,?) ON CONFLICT(TaskId, Key) DO UPDATE SET Host=excluded.Host', (tid, f"c:r:{r['ReviewId']}", letters))
+    left_on_him(store, tid, out, ask, letters)
     # THE WAITING ROOM (the owner, 2026-11-12): what waits for the agent is drawn in ONE place until it is heard - his lines as rows over the
     # box, messages as counts on their sender's chip - and `now` says whether a waiting line can be handed into the turn at work at once (a
     # session that takes words mid-turn, not stopped at his Allow); `dropped`: the lines he took back, which leave no trace

@@ -664,7 +664,7 @@ def idle_state(store, tid, st=None) -> dict:
         if q.get('State') == 'failed':
             return out('failed', failed_line(err or 'the start failed', is_permanent(err), int(q.get('Attempts') or 0)) + old,
                        f"couldn't start: {short or 'the start failed'}")
-        # ...the AI's own try again (general.queue_retry): what is wrong and when, the one line the chat holds
+        # ...the AI's own try again (general.queue_retry): what is wrong and when, as the newest failed try's line says it
         if q.get('Turn') == general.RETRY_TURN:
             said = general.retry_said(err or 'The AI could not answer', q.get('NextAt'))
             return out('retrying', said, said[:1].lower() + said[1:].rstrip('.'))

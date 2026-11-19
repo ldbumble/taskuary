@@ -64,7 +64,7 @@ test("an ended general session's chat gives the page back to the stage that is f
 test("a turn's open question is not said again as what is left to him", async () => {
   const fs = await import("node:fs");
   const src = read("../src/GeneralWorkspace.jsx");
-  assert.match(src, /const onYou = owes && !live && sum \? turnOnYou\(sum\) : "";/);
+  assert.match(src, /const onYou = t\.on_you && !live && sum \? turnOnYou\(sum\) : "";/);   // ...each turn's own, settled by the list (design round 5)
   assert.match(src, /owes = onYouTurn\(items, \{ askAt, lettersAt, landAt: landIn \}\)/);
 });
 

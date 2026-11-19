@@ -284,9 +284,9 @@ export const askedFirst = (asking, reviews = []) => !!asking && !(reviews || [])
   && !(reviews || []).some((r) => ["draft_reply", "draft"].includes(r.Kind) && r.Status === "pending" && words(r));
 export const lettersTurn = (list, items) => { const xs = items || [], i = list?.letters ? xs.findIndex((x) => x.kind === "turn" && x.id === list.letters) : -1;
   return i >= 0 && !["starting", "working"].includes(xs[i].state) && !xs.slice(i + 1).some((x) => x.kind === "line") ? xs[i].id : ""; };
-// THE ONE TURN THAT SAYS WHAT IS LEFT TO HIM ("For you to do", the summary's `on_you`; the walk, 2026-11-17): it is the state of what is left,
-// not a record of each turn - an old turn whose ask was withdrawn grew "Give the three agenda topics" above his own answer. The newest turn, at
-// rest, with nothing of his under it (nothing new is drawn above his line), and never one whose own ask, card or letters wait: those ARE the step
+// THE ONE TURN THAT OFFERS ITS TRY AGAIN (its summary's `retry`): the newest turn, at rest, with nothing of his under it (nothing new is drawn
+// above his line), and never one whose own ask, card or letters wait: those ARE the step. What a turn left on him ("For you to do") is not this
+// one's: each turn says its own, settled once by the list (conversation.left_on_him)
 export const onYouTurn = (items, { askAt = "", lettersAt = "", landAt = "" } = {}) => {
   const xs = items || [], i = xs.map((x) => x.kind === "turn").lastIndexOf(true), t = xs[i];
   if (!t || ["starting", "working"].includes(t.state) || xs.slice(i + 1).some((x) => x.kind !== "arrival")) return "";

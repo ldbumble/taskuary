@@ -53,7 +53,7 @@ export const hasReply = (reviews) => (reviews || []).some((r) => r && r.Kind !==
 const answerWords = (w) => { const t = String(w || "").trim(); return !!t && (t.length <= 500 || /https?:\/\/|\b[A-Za-z]:\\|(^|\s)\/(Users|home|mnt|tmp)\/|\\\\\S+/.test(t)); };
 // WHAT A TURN LEFT ON THE OWNER IS SAID IN IT (the demo's same-day pay research, 2026-11-13: "Decide whether to offer it - say if I should ask
 // Payworth for terms" was the summary's `on_you`, and the chat drew only `did` - "agent finished", his decision nowhere in it). One line under
-// the words, on the one turn that says what is left (chatStream.onYouTurn)
+// the words, on each turn the list says left something on him (conversation.left_on_him)
 // ...the agent keeps it out of its words (selfclose.SUMMARY_LINE): a substring match on them missed every rephrasing and repeated the prose (the
 // walk, 2026-11-17), so none is made - and a turn that said nothing is left has nothing left to draw
 export const turnOnYou = (summary) => (summary?.nothing_left ? "" : stepsLine("For you to do", (summary?.on_you || []).filter(stepOf)));

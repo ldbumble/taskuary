@@ -150,6 +150,28 @@ class TheList(unittest.TestCase):
         self.assertNotIn('BEFORE', str(steps)); self.assertIn('AFTER', str(steps))
         self.assertEqual(sessionrecord.said([{'type': 'progress', 'name': 'text', 'detail': 'one'}, sessionrecord.heard_mark(), {'type': 'progress', 'name': 'text', 'detail': 'two'}]), 'two')
 
+    def test_a_turns_time_is_set_once_and_never_before_the_line_it_stands_under(self):
+        """Design round 5, I3: a turn read 4:57 while it worked and 5:12 once done, and the turn under his 4:58 line, steered in mid-turn, read
+        4:57. A turn's head time is when it began in the chat - never before the input above it - and the same on every read, at work and done."""
+        from taskuary import clipool
+        self.brain.delay = 3.0
+        self.say('Suggest two.', 'l-one', wait=False)
+        self.assertTrue(until(lambda: self.list()['items'][-1].get('state') == 'working'))
+        general.session_for(self.tid)._remember_trace('progress', 'text', 'The Mill is by the river.')
+        first = self.list()['items'][-1]; at0 = first['at']
+        t = time.time(); self.assertTrue(until(lambda: time.time() >= int(t) + 1.05))      # (a stamp is a whole second: his line in a later one)
+        with mock.patch.object(clipool, 'steerable', return_value=True), mock.patch.object(clipool, 'steer', lambda key, said: (said() if callable(said) else said) or True):
+            self.say('Near a station.', 'l-two', wait=False)
+            self.assertTrue(until(lambda: conversation.heard(self.s, self.tid, 'line', ['l-two'])))
+            got = self.list()['items']; ids = [x['id'] for x in got]
+            under = got[ids.index('l-two') + 1]
+            self.assertGreaterEqual(conversation.ep(under['at']), conversation.ep(got[ids.index('l-two')]['at']), 'never dated before his line')
+            was = {x['id']: x['at'] for x in got if x['kind'] == 'turn'}
+            self.rest()
+        done = {x['id']: x['at'] for x in self.list()['items'] if x['kind'] == 'turn'}
+        self.assertEqual({k: done[k] for k in was if k in done}, {k: v for k, v in was.items() if k in done}, 'the same time at work and done')
+        self.assertEqual(done.get(first['id']), at0, (first['id'], [(x['id'], x['kind'], x.get('at'), x.get('state'), x.get('text')) for x in self.list()['items']]))
+
     def test_a_line_sent_mid_turn_waits_by_the_box_and_enters_once_when_the_next_turn_takes_it(self):
         self.brain.delay = 0.8
         self.say('Suggest two.', 'l-one', wait=False)
@@ -1476,3 +1498,43 @@ def test_a_tick_is_machinery_on_the_server_as_on_the_page():
     assert machinery({'k': 'tool', 'name': 'mcp__taskuary__tick', 'args': {'id': 3}})
     assert machinery({'k': 'tool', 'name': 'Bash', 'args': {'command': 'taskuary --tick 4'}})
     assert not machinery({'k': 'tool', 'name': 'Bash', 'args': {'command': 'git status'}})
+
+
+def test_what_a_turn_left_on_him_is_its_own_settled_once_and_never_moves():
+    """Design round 5, I3: "For you to do" vanished from a turn when he typed and came back, word for word, on the next turn - the page drew it
+    only on the newest turn at rest. Each finished turn says its own, settled the first read that can, and keeps it whatever comes after; a turn
+    whose own question is the step never grows it once he answers (2026-11-17), and a turn saying the same as the one before says nothing."""
+    from taskuary.conversation import left_on_him
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Launch posts', 'Kind': 'general', 'Status': 'open'}, 'o')
+    T = lambda i, on=(), **k: {'kind': 'turn', 'id': i, 'state': 'done', 'cards': [], 'summary': {'did': 'x', **({'on_you': list(on)} if on else {})}, **k}
+    a, q = T('t:a:0', ['Check the features each post names']), T('t:q:0', ['Give the three agenda topics'])
+    out = [a, q]
+    left_on_him(s, tid, out, ask={'turn': 't:q:0'})
+    assert a.get('on_you') and not q.get('on_you'), 'its own question is the step'
+    a2, q2, line, b = {**a, 'on_you': None}, {**q, 'on_you': None}, {'kind': 'line', 'id': 'l1'}, T('t:l1:0', ['Post the square image'])
+    out = [a2, q2, line, b]
+    left_on_him(s, tid, out, ask=None)
+    assert a2.get('on_you'), 'it stays on the turn that wrote it when he types'
+    assert not q2.get('on_you'), 'never grown once its ask is answered'
+    assert b.get('on_you'), 'a later turn says its own'
+    c = T('t:l1:1', ['Post the square image'])
+    left_on_him(s, tid, [b, c]); assert not c.get('on_you'), 'the same as the turn before: said once'
+    # ...and a turn whose letters wait says it once they are pressed, at its own foot - never if his line came under it first
+    d = T('t:l2:0', ['Pick the date to hold'], cards=[{'id': 'r:9', 'review': 9, 'status': 'pending'}])
+    left_on_him(s, tid, [d]); assert not d.get('on_you')
+    d['cards'][0]['status'] = 'approved'; left_on_him(s, tid, [d]); assert d.get('on_you'), 'its letters pressed: what is left on him'
+
+
+def test_a_turn_says_each_messages_opener_once():
+    """Design round 5, I3 (the Codex walk): every follow-up turn opened two messages with the same sentence - "Paula says the meeting moved up.
+    I'll update the draft." then "Paula says the meeting moved up. The summary and deck are ready." - and both were drawn. The opener once; a
+    message that is only that sentence stays whole."""
+    from taskuary.conversation import _said, said_once
+    lead = 'Paula says the leadership meeting moved up.'
+    steps = [{'k': 'said', 'text': f"{lead} I'll update the draft."}, {'k': 'tool', 'name': 'Read'}, {'k': 'said', 'text': f'{lead}  Checking the deck.'}]
+    st = _said(steps, f'{lead} The summary and deck are ready.', seen := set())
+    assert [x.get('text') for x in st] == [f"{lead} I'll update the draft.", None, 'Checking the deck.']
+    assert said_once(f'{lead} The summary and deck are ready.', seen) == 'The summary and deck are ready.'
+    assert said_once(lead, seen) == lead, 'nothing else to say: kept whole'
+    assert said_once('No sentence end here', set()) == 'No sentence end here'

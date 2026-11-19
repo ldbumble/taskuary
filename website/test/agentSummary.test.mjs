@@ -149,14 +149,15 @@ test("a turn's On you steps are said under its words, never twice", () => {
   assert.equal(turnOnYou(null), "");
   // ...and nothing is left to him where the turn said nothing is left (the walk, 2026-11-17: a to-do under "nothing else is pending")
   assert.equal(turnOnYou({ did: "Sent.", on_you: ["Watch for a reply"], nothing_left: true }), "");
-  assert.match(read("GeneralWorkspace.jsx"), /const onYou = owes && !live && sum \? turnOnYou\(sum\) : ""/);
+  assert.match(read("GeneralWorkspace.jsx"), /const onYou = t\.on_you && !live && sum \? turnOnYou\(sum\) : ""/);
   assert.match(read("GeneralWorkspace.jsx"), /\{!!onYou && <div className="tq-aui-summary" data-tq-on-you="" style={{ marginTop: 10 }}>/);
 });
 
 // FOR YOU TO DO IS WHAT IS LEFT, NOT A RECORD OF EACH TURN (the walk, 2026-11-17): a turn asked for the agenda, the ask was withdrawn as he
 // answered, and the old turn grew "For you to do: Give the three agenda topics" above his own reply and the turn that used it. Only the newest
 // turn at rest, nothing of his under it, says what is left - and never one whose own ask or card is the step
-test("only the newest turn at rest with no ask or card of its own says what is left to him", () => {
+// ...THAT IS NOW ITS TRY AGAIN ONLY (design round 5, I3): what each turn left on him is its own, settled once by the list (left_on_him)
+test("only the newest turn at rest with no ask or card of its own offers its try again", () => {
   const A = { kind: "turn", id: "a", state: "done", summary: { did: "Asked for the agenda.", on_you: ["Give the three agenda topics"] } };
   const items = [A, { kind: "line", id: "l1", text: "Budget, hiring, offsite" }, { kind: "turn", id: "b", state: "done", summary: { did: "Drafted the agenda." } }];
   assert.equal(onYouTurn(items), "b");

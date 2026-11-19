@@ -173,8 +173,8 @@ def failed_line(body: str) -> tuple:
 
 # A PROVIDER THAT CANNOT ANSWER NOW IS ONE STATE, QUEUED AND RETRIED (design round 4, H3; rule 4): on the API walk a 429 stood twice with
 # nothing to press, "Hipaa_ai: the model ran out of room ... (finish_reason length)" reached him raw, and a task stayed dead until he typed.
-# Read off the failure's type, never its words: the turn waits in the start queue (blackboard.drain -> retry_turn) and the chat holds one plain
-# line - its time of the next try, its Try again - changed in place while the outage lasts. Waits grow; a limit's own reset time is waited out.
+# Read off the failure's type, never its words: the turn waits in the start queue (blackboard.drain -> retry_turn) and each try that fails says
+# one plain line of its own - its time of the next try, the newest with its Try again (say_failure). Waits grow; a limit's own reset is waited out.
 RETRY_TURN = 'retry'
 RETRY_WAITS = (60, 120, 300, 600, 600, 600)
 RETRY_ASK = "Taskuary tried your last turn again by itself: the AI could not answer it then. Do that turn's work now, from where it stopped."
@@ -239,16 +239,11 @@ def let_go_retry(store, tid: int) -> None:
     "A turn answered, or failed some other way: the queued try is no longer owed."
     if (store.get_dispatch(tid) or {}).get('Turn') == RETRY_TURN: store.clear_dispatch(tid)
 def say_failure(store, tid: int, trace: list, why: str, down: bool = False) -> None:
-    """A failed turn filed where it happened (file_turn) - but THE SAME OUTAGE IS ONE LINE: a turn that did nothing, failing under a newest answer
-    that is itself a failure with no words, changes that line in place (an outage's next time) or leaves it (the same failure again)."""
-    from . import conversation, sessionrecord
+    """A failed turn filed where it happened (file_turn) - EACH TRY ITS OWN DATED LINE (design round 5, I3: "trying again at 5:11" was
+    rewritten to "5:24" in place, and each try's working bubble went with it - the history no longer said what happened). A line once said is
+    never changed: the next try that fails says its own, under it."""
+    from . import conversation
     conversation.failed_try(store, tid)
-    last = next((c for c in reversed(store.list_comments(tid, internal=True)) if c.get('ActorType') == ASSISTANT_TYPE), None)
-    quiet =not sessionrecord.said(trace) and not any(e.get('type') == 'tool_call' for e in trace)
-    words, was = failed_line(last.get('Body')) if last else ('', '')
-    if quiet and was and not words:
-        if down and was != why: store.set_comment_body(last['CommentId'], FAILED_MARK + why); store._poke('task-changed', task_id=int(tid))
-        if down or was == why: return
     file_turn(store, tid, trace, FAILED_MARK + why)
 
 

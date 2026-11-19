@@ -19,11 +19,12 @@ export const StopCtx = React.createContext(null);
 // was drawn read as the turn's start, and the count began again at 0s on every render, and again on every return to the task
 // ...the start a turn of the list gives its clock (ms), or null
 export const turnStart = (t) => (t?.started ? t.started * 1000 : null);
-export const RunClock = ({ start }) => {
+// `at`: the time its head says, set once (GeneralWorkspace turnAt) - the count is from `start`, its clock
+export const RunClock = ({ start, at = null }) => {
   const [now, setNow] = useState(() => Date.now()), stop = React.useContext(StopCtx);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   return <span data-tq-ran="" data-tq-run-clock="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>
-    {start == null ? "· working" : `· ${when(new Date(start))} · working ${elapsedText(Math.max(0, now - start))}`}
+    {start == null ? "· working" : `· ${when(at || new Date(start))} · working ${elapsedText(Math.max(0, now - start))}`}
     {stop && <IconButton size="small" data-tq-stop-run="" aria-label="Stop the agent" title="Stops this turn - the chat stays, and what you type next carries on"
       onClick={stop} sx={{ ml: 0.5, p: 0.25, verticalAlign: "-3px" }}><CloseIcon sx={{ fontSize: 13 }} /></IconButton>}</span>;
 };

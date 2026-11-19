@@ -111,7 +111,7 @@ def world(real: bool = False):
     for k in ('auto_draft_enabled',): s.set_setting(k, '0', 't')
     args = ['-p', '--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose'] + (REAL_ARGS if real else [])
     s.upsert_agent('claude', 'general', 'cli', json.dumps({'cmd': 'claude', 'args': args}))
-    s.set_setting('concierge_ai', 'cli:claude', 't')
+    s.set_setting('concierge_ai', 'cli:claude', 'owner')            # his own pick: the brain resolver honours only that
     saved = s.resumable_session
     s.resumable_session = lambda tid: {'ExtId': 's12', 'Brain': 'claude'} if int(tid) == 12 else saved(tid)
     funnel.invalidate()

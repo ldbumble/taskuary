@@ -92,6 +92,41 @@ def follow(p: Path, fold, start, read):
         return read(e['state'])
 
 
+SLIM_OVER = 20_000_000              # a record past this was kept before slim() and is written again in its form, once
+
+
+def slim_kept(root: Path = None, live=None) -> list:
+    """EVERY RECORD KEPT BEFORE slim() WRITTEN AGAIN IN ITS FORM (the owner, 2026-11-19: yes): one session's record was 587 MB, read in full on
+    the first read after every start. Run once a start, on its own thread: each record past SLIM_OVER is read line by line into a file beside
+    it and swapped in only when whole, and only if nothing was appended meanwhile - a record whose session is live is left for the next start.
+    `live`: the records being written now (default: every running session's). -> [(path, bytes before, bytes after)] of what was rewritten."""
+    root = Path(root) if root else session_artifacts.root()
+    if live is None:
+        from . import terminal as term
+        live = {_acp_path(t.task_id, t.sid) for t in list(term.SESSIONS.values()) if getattr(t, 'alive', False) and t.task_id}
+    live, done = {os.path.normcase(str(p)) for p in live}, []
+    for p in sorted(root.glob('*/acp-*.jsonl')):
+        try: st = p.stat()
+        except OSError: continue
+        if st.st_size <= SLIM_OVER or os.path.normcase(str(p)) in live: continue
+        tmp = p.with_suffix('.slim')
+        try:
+            with open(p, 'rb') as f, open(tmp, 'wb') as out:
+                for line in f:
+                    try: u = json.loads(line)
+                    except ValueError: out.write(line if line.endswith(b'\n') else line + b'\n'); continue
+                    out.write(json.dumps(slim(u), ensure_ascii=False).encode('utf-8') + b'\n')
+            now = p.stat()
+            if (now.st_size, now.st_mtime_ns) != (st.st_size, st.st_mtime_ns): tmp.unlink(); continue      # ...written to meanwhile: next start
+            os.replace(tmp, p); done.append((p, st.st_size, os.path.getsize(p)))
+            logger.info(f'coding chat: {p.parent.name}/{p.name} kept in slim form - {st.st_size / 1e6:.0f} MB to {done[-1][2] / 1e6:.1f} MB')
+        except OSError as e:
+            logger.warning(f'coding chat: {p.name} not slimmed - {e}')
+            try: tmp.unlink()
+            except OSError: pass
+    return done
+
+
 def _keep(q, u): q.append(u)
 def _kept(): return collections.deque(maxlen=ACP_KEEP)
 

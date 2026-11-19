@@ -283,3 +283,25 @@ def test_a_line_still_being_written_is_read_once_it_is_whole(home):
     assert len(codingchat.acp_updates(8, 's1')) == 1
     with p.open('ab') as f: f.write(b'age_chunk", "content": {"type": "text", "text": "Done."}}\n')
     assert [u['sessionUpdate'] for u in codingchat.acp_updates(8, 's1')] == ['plan', 'agent_message_chunk']
+
+
+def test_a_record_kept_before_slim_is_written_again_in_its_form_once_and_a_live_one_waits(home, monkeypatch):
+    """The owner said yes, 2026-11-19: a session's record kept before slim() was 587 MB, read whole after every start. At start each record past
+    the threshold is written again in slim form, swapped in only when whole - and a record whose session is live is left for the next start."""
+    monkeypatch.setattr(codingchat, 'SLIM_OVER', 100_000)
+    big = 'x' * 300_000
+    def kept(tid):
+        p = codingchat._acp_path(tid, 's1')
+        with p.open('w', encoding='utf-8') as f:
+            f.write(json.dumps({'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'Reading the ledger.'}}) + '\n')
+            f.write(json.dumps({'sessionUpdate': 'tool_call_update', 'toolCallId': 'r1', 'status': 'completed', 'rawOutput': big,
+                                '_meta': {'claudeCode': {'toolResponse': {'file': big}}}}) + '\n')
+        return p
+    a, b = kept(21), kept(22)
+    done = codingchat.slim_kept(home / 'artifacts', live={b})
+    assert [d[0] for d in done] == [a] and a.stat().st_size < 20_000 and b.stat().st_size > 600_000      # the live one waits
+    ups = codingchat.acp_updates(21, 's1')
+    assert ups[0]['content']['text'] == 'Reading the ledger.' and 'characters not kept' in ups[1]['rawOutput']
+    assert not list((home / 'artifacts').glob('*/*.slim')), 'nothing half-written is left beside it'
+    assert codingchat.slim_kept(home / 'artifacts', live={b}) == [], 'once: a slim record is under the threshold'
+    assert [d[0] for d in codingchat.slim_kept(home / 'artifacts', live=set())] == [b], '...and the live one at the next start'

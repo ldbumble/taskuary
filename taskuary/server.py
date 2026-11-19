@@ -183,7 +183,9 @@ async def _lifespan(_app):
         try:                                          # Recently deleted keeps a report, a rule or a profile KEEP_DAYS, then it goes for good
             from . import recentlydeleted; recentlydeleted.purge(store)
         except Exception as e: logger.warning(f'Recently deleted not purged: {e}')
-        backups.start(config.db_path())               # a copy of the database and its files once a day, kept a week
+        backups.start(config.db_path())               # a copy of the database and its files once a day, the newest three kept
+        from . import codingchat as _cc             # ...and the agents' records kept before slim(), written again in its form, once
+        threading.Thread(target=_cc.slim_kept, daemon=True, name='taskuary-slim-records').start()
     else:
         # THE DEMO WORLD IS A FINISHED INSTALL: the settle above never runs for it, so its flag stayed unset and read as "not finished" -
         # every demo, and every browser test in CI, opened on setup instead of the day (2026-10-15)

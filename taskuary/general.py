@@ -272,7 +272,7 @@ def run_kept(store, tid: int) -> bool:
     if kept and origin.keeps_him(store, tid): return False         # a task a stranger's mail started: his lines wait behind its Trust (origin.his_own)
     if not kept or not handles(t) or t.get('Status') not in ('open', 'in_progress', 'waiting') or not provider_options(store): return False
     w = kept[0]
-    PRESSED[tid] = time.time(); _IN_FLIGHT[tid] = 1; OPENING.add(tid)
+    PRESSED[tid] = time.time(); _IN_FLIGHT[tid] = 1; OPENING.add(tid); STOP_ASKED.pop(tid, None)
     def go():
         try: _start_line(store, tid, t, w['text'], w['files'], 'owner', w.get('line'), w['id'], {})
         except Exception as e: logger.warning(f'task {tid}: the lines that waited did not start their turn - {e}')
@@ -3020,7 +3020,7 @@ class GeneralSession:
         t0 = self.last                       # the turn's own time, kept with its record (sessionrecord.record sums them)
         self._cancel = cancel if cancel is not None else threading.Event()
         cancel = self._cancel
-        if time.time() - STOP_ASKED.pop(self.task_id, 0.) < STOP_KEEPS: cancel.set()      # ...his Stop, pressed while it was starting (stop_turn)
+        if stop_asked(self.task_id): cancel.set()      # ...his Stop, pressed while it was starting (stop_turn)
         try:
             if connector_id is not None or model or pick:
                 self.select_provider(connector_id, model, pick)
@@ -3882,8 +3882,13 @@ OPENING = _Opening()
 # ...EVERY KIND'S START IN FLIGHT, one mark (the owner, 2026-11-10: "coding and general use the same code when it comes to interactions so there
 # should be no difference"): a coding task's reopening held a set of its own (ingest's CODING_OPENING), and the pages read neither the same way
 PRESSED = {}                 # task id -> when the owner pressed the line that started the turn in flight: that turn's clock (line_state)
-STOP_ASKED = {}              # task id -> when he pressed Stop on a turn still starting: it stops where it begins (stop_turn, send_prompt)
-STOP_KEEPS = 300             # ...seconds such a stop is kept for the turn it was pressed on - never a later one's
+STOP_ASKED = {}              # task id -> when: his Stop on a turn still starting (stop_turn, send_prompt) - a new press of his clears it
+STOP_KEEPS = 120             # ...seconds such a stop is kept for the turn it was pressed on
+def stop_asked(tid: int) -> bool:
+    """Was Stop pressed on the turn now beginning while it was still starting? Used once. ONLY THAT TURN'S (Windows CI, 2026-11-19: a stop
+    left by a start that never reached its prompt cancelled a later turn begun by another line): his next line clears it (take_line), and it
+    is kept only so long."""
+    return time.time() - STOP_ASKED.pop(tid, 0.) < STOP_KEEPS
 _IN_FLIGHT = {}              # task id -> lines accepted (take_line) that no turn has answered yet: OPENING stays until the last is
 # ...AND A MAIL HANDED TO IT IS AS A TYPED LINE (the owner, 2026-11-13: "if a new message comes in, it's like typing"): a line that joined the
 # thread was handed to the chat agent at rest (ingest._pass_general) and waited seconds for the rest of a burst before its turn began, and
@@ -4041,7 +4046,7 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     # line under the stop, kept unheard it went down by the box, and came back up seconds later when the stopped turn ended. It begins the
     # next turn as a line that waited at the stop does (stop_turn) - heard now, taken when the session is free (send_prompt waits its lock)
     rest = not working(store, tid) or getattr(session_for(tid), 'letting_go', lambda: False)()
-    if rest: PRESSED[tid] = time.time()       # the turn's clock: the press
+    if rest: PRESSED[tid] = time.time(); STOP_ASKED.pop(tid, None)       # the turn's clock: the press - and a stop of an earlier start is over
     # ...AND HIS LINE NEVER WAITS ON IT (the owner's live task, 2026-11-12: a chat poll held its lock, the start waited 45 s on it and was
     # refused, and his line came back red with "messages are still syncing ... try again" glued to it): the line is kept and heard first,
     # the sync runs in the start (_start_line), and a sync that cannot be done goes on from what is stored, said in one plain line

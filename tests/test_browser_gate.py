@@ -589,3 +589,15 @@ class WhatTheSiteDid(unittest.TestCase):
             self.assertEqual(gatecmd.main(['gate', 'agent-browser', 'click', '@e7']), 0)
         self.assertEqual(asked, [False, True])
         self.assertIn('did not finish loading', ''.join(str(c.args[0]) for c in err.write.call_args_list))
+
+
+def test_plain_typing_runs_without_a_verdict_and_the_press_after_it_is_one():
+    """The vendor walk, 2026-11-18: every box of every sign-up was a model call - six seconds a box, four boxes a form, thirteen forms. Typing
+    leaves nothing outside the page until something is pressed: it runs at once, and only the press of the same line is judged."""
+    s, calls = MemoryStore(), []
+    t = Factory(s).task()
+    with on(), answers({'irreversible': True, 'sure': True, 'what': 'creates an account', 'asked': True, 'big': False}, calls=calls):
+        assert bg.check(s, t, 'run1', 'agent-browser fill @e1 "Alex Doyle"', Brain({})) == {}
+        assert calls == [], 'typing asks no model'
+        bg.check(s, t, 'run1', 'agent-browser fill @e2 "alex@northwind.example" && agent-browser click @e12', Brain({}))
+    assert len(calls) == 1 and 'fill @e2' not in calls[0] and 'click @e12' in calls[0]

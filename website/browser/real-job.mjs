@@ -127,8 +127,9 @@ while (Date.now() - t0 < MAX) {
   lastLine = st.line;
   if (n % 3 === 0) { const x = { s: s(), working: c.working, line: st.line, lit: st.lit.join(" | "), queue: c.queue }; log.push(x); console.log(JSON.stringify(x));
     if (n % 12 === 0) await shot(page, `${name}-${String(s()).padStart(5, "0")}`); }
-  // A PAGE HANDED TO HIM (a sign-up's press, a held click - browsergate.hand_over): he presses the site's own button in the pane - Enter in its form
-  const pane = await page.evaluate(() => { const c = document.querySelector("[data-tq-task-page] canvas"); if (!c) return null; const b = c.getBoundingClientRect(); return b.width ? [b.left, b.top, b.width, b.height] : null; });
+  // A STEP HANDED TO HIM ON THE PAGE (browserview.your_turn - one only he can do there): he does it in the pane - Enter in its form. A held press
+  // is a card in the chat since 2026-11-18, pressed below as every card is - never a click inside the page
+  const pane = await page.evaluate(() => !!document.querySelector("[data-tq-task-page] [data-tq-browser-turn]"));
   if (pane && !c.working) {
     if ((pagePresses += 1) > 25) { note("pressed on the page 25 times and it is still handed to him"); break; }
     await shot(page, `${name}-page-${pagePresses}`);
@@ -136,16 +137,19 @@ while (Date.now() - t0 < MAX) {
     pressed.push({ s: s(), go: "the page's button", what: st.tail.slice(-160) }); console.log(`[${s()}s] PRESSED the page's button (${JSON.stringify(r)}): ${st.tail.slice(-160).replace(/\n/g, " ")}`);
     // ...once, as he would: the page is given a minute to move on, and one still handed to him after it is a finding, never a second press
     const was = st.tail.slice(-200); let moved = false;
-    for (let k = 0; k < 30 && !moved; k++) { await sleep(2000); await deliver(); moved = (await api(`/api/tasks/${t}/conversation`)).working || !(await page.evaluate(() => !!document.querySelector("[data-tq-task-page] canvas")))
+    for (let k = 0; k < 30 && !moved; k++) { await sleep(2000); await deliver(); moved = (await api(`/api/tasks/${t}/conversation`)).working || !(await page.evaluate(() => !!document.querySelector("[data-tq-task-page] [data-tq-browser-turn]")))
       || (await page.evaluate(() => (document.querySelector("[data-tq-task-page] .tq-aui-viewport")?.innerText || "").slice(-200))) !== was; }
     if (!moved) note(`pressed the page and a minute later it is still handed to him: "${was.slice(-120)}"`);
     calm = 0; continue;
   }
   // A CARD: pressed as he would, its go-ahead - and what it said kept, to catch the same thing asked again
   // ...or his NO to the first card (JOB_REJECT=1 - every action against every answer): the agent hears whose no it was and never lays the same card again
-  const no = process.env.JOB_REJECT && !pressed.length && st.lit.find((b) => /^(Don't send|Reject|Not now|Dismiss)/i.test(b));
+  // ...and his no to a card that would pay: "do not pay for anything" (ANSWERS) is his word on money, a card included
+  const pays = /\$\d|\bpays?\b|subscri|by card/i.test(st.cards.at(-1) || "");
+  const no = (process.env.JOB_REJECT && !pressed.length || pays) && st.lit.find((b) => /^(Don't send|Reject|Not now|Dismiss)/i.test(b));
   const go = no || st.lit.find((b) => GO.test(b) && !STOP.test(b));
-  if (go && !c.working || go && /Allow|Trust/.test(go)) {
+  // ...a held step's Approve too while the agent works on (it goes on with the rest): he presses a card when it stands, as Allow and Trust
+  if (go && !c.working || go && /Allow|Trust|Approve|Dismiss/.test(go)) {
     const what = st.cards.at(-1) || st.tail.slice(-200);
     if (pressed.some((p) => p.what === what)) note(`asked again for what he already pressed: "${what.slice(0, 140)}"`);
     await shot(page, `${name}-card-${pressed.length}`);

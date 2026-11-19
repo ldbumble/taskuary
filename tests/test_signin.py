@@ -868,11 +868,13 @@ class SigningUp(unittest.TestCase):
     def test_a_box_the_page_does_not_name_as_the_user_is_never_kept_as_the_user_name(self):
         """A wizard's last step (its email asked a page before) shows a Company box over the password: read as the user box, the account was
         kept as "Northwind" and said "Signed up ... as Northwind" - and the next sign-in typed the company into the email box."""
+        from taskuary import browsergate
         class Page:
             def __init__(self, named): self.named, self.sent = named, False
             def fields(self, want=''): return {'top': True, 'href': 'https://www.capratehub.example/step2', 'password': not self.sent,
                                                'user': not self.sent, 'named': self.named, 'focused': bool(want)}
-            def js(self, expr): return 'Northwind' if expr == signin.USER else ({} if expr == signin.CLEAR else '')
+            def js(self, expr): return ('Northwind' if expr == signin.USER else 'complete' if expr == 'document.readyState' else False
+                                        if 'tqLeaving ===' in expr else {} if expr in (signin.CLEAR, browsergate.STATUS_JS) else '')
             def enter(self): self.sent = True
             def close(self): pass
         with mock.patch.object(browserview, 'filling', mock.MagicMock()), mock.patch.object(signin, 'SETTLE', 0), mock.patch.object(signin, 'REJECT_WAIT', 0):
@@ -986,6 +988,19 @@ class TheAgentsOwnCode(unittest.TestCase):
             self.assertTrue(signin.code_watch(self.s, self.tid, 'sess1', 'lienlens.example', every=0, until=5, conn=WatchPage([form_page, code_page])))
         self.assertEqual(typed, [('lienlens.example', '383972')])
         self.assertIn('Taskuary typed the code lienlens.example emailed', told[0]); self.assertNotIn('383972', told[0])
+
+
+def test_a_sign_up_the_site_crashed_on_or_never_answered_is_no_account():
+    """The vendor walk, 2026-11-18: a site that crashed on its form showed a 500 page with no password box, and Taskuary kept "an account"
+    nobody could sign in to; one that never answered read "the browser could not be reached". What the site answered is read by its status,
+    and a document still leaving after the wait is a site that did not answer."""
+    from taskuary import browsergate
+    class Page:
+        def __init__(self, status, ready='complete', leaving=False): self.v = {browsergate.STATUS_JS: {'status': status}, 'document.readyState': ready,
+                                                                              'window.__tqLeaving === true': leaving}
+        def js(self, expr): return self.v[expr]
+    assert signin.answered(Page(500)) == 500 and signin.answered(Page(200)) == 200
+    assert signin.answered(Page(200, leaving=True), wait=0.6) is None, 'the old page, still leaving: no answer'
 
 
 def test_a_sign_up_that_went_through_is_said_as_one():

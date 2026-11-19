@@ -1360,16 +1360,44 @@ def send_new(sid: str, site: str) -> dict:
             # ...the user box only where the page NAMES it so (FIELDS `named`): a wizard's last step shows a Company box over the password, and
             # read as the user box the account was kept as the company - and the next sign-in typed it into the email box
             if f.get('user') and f.get('named'): _guard(c, site, 'user'); user = str(c.js(USER) or '')
-            _guard(c, site, 'password'); c.enter()
+            _guard(c, site, 'password')
+            try: c.js(LEAVING)
+            except SignInError: pass
+            c.enter()
             time.sleep(SETTLE)
-            ok, why = accepted(c, site), ''
-            if not ok:
+            # ...AND WHAT THE SITE ANSWERED, by its status (the vendor walk, 2026-11-18): a 500 page has no password box either, and a site
+            # crashing on its form was kept as an account nobody could sign in to; one that never answered was "the browser could not be reached"
+            try: ok, why, status = accepted(c, site), '', answered(c)
+            except Exception: ok, why, status = False, '', None
+            if status is None:
+                browserview.unstick(sid, every=True)
+                return {'ok': False, 'user': user, 'why': f'the site did not answer in {SETTLE + REJECT_WAIT + ANSWER_WAIT:.0f} s, so the load was stopped'}
+            if status >= 400: ok, why = False, f'the site answered with an error (HTTP {status})'
+            elif not ok:
                 try: why = str(c.js(SAYS) or '')
                 except SignInError: pass
             try: c.js(CLEAR)
             except SignInError: pass
             return {'ok': ok, 'user': user, 'why': why}
         finally: c.close()
+
+
+ANSWER_WAIT = 8.0
+# the document marks that it began to leave: still here after the wait, the site never answered the form (a form posted to its own address
+# reads as the same page with the same status - only the old document knowing it was leaving tells the two apart)
+LEAVING = "window.__tqLeaving = false; addEventListener('beforeunload', () => { window.__tqLeaving = true; }); true"
+def answered(c, wait: float = ANSWER_WAIT) -> int | None:
+    """The HTTP status of the document the page shows once it answers (0 when it does not say) - None when none answered within `wait`:
+    the old document still there and leaving, or nothing readable."""
+    from .browsergate import STATUS_JS
+    end = time.time() + wait
+    while time.time() < end:
+        try:
+            f = c.js(STATUS_JS) or {}
+            if c.js('document.readyState') == 'complete' and c.js('window.__tqLeaving === true') is not True: return int(f.get('status') or 0)
+        except Exception: pass
+        time.sleep(.5)
+    return None
 
 
 def _sent_up(store, tid, sid, site, rid, pw, send=None, watch=None):

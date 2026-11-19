@@ -30,7 +30,7 @@ def ep(at) -> float:
     s = str(at or '').strip()
     if not s: return 0.
     try: return datetime.fromisoformat(s.replace('Z', '+00:00').replace(' ', 'T', 1)).timestamp()
-    except ValueError: return 0.
+    except (ValueError, OSError, OverflowError): return 0.      # ...a stamp before the epoch on Windows raises OSError
 def stamp(ts) -> str: return datetime.fromtimestamp(ts).isoformat(sep=' ', timespec='seconds') if ts and ts < INF else ''
 def _flat(s) -> str: return ' '.join(str(s or '').split())
 

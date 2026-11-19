@@ -1514,7 +1514,30 @@ def forget_states(): _STATE.clear(); _SEEN.clear(); _WATCHED[0] = False; _THREAD
 
 def present(store, payload: dict) -> dict:
     """Detach and fingerprint a selected funnel payload without changing its selection."""
-    return _present(store, payload)
+    return _present(store, one_state(store, payload))
+
+
+# ONE TASK STATE (the owner's GO, 2026-11-19): a task's row says what taskstate.status says - the header, the bell and the phone read it too.
+# The rail worked its own lane out of the feed's facts, and a task he had typed back open stayed off it, "Reopen" in its header, for a whole
+# turn. Only the arrival's own words that say more than "on you" (a person asked, a meeting, a report) stay the rail's
+ARRIVAL_WORDS = ('asked', 'time', 'report', 'fyi', 'broken', 'unjudged')
+def one_state(store, payload: dict) -> dict:
+    from . import taskstate
+    payload = {**payload, 'items': [dict(i) for i in payload.get('items') or []],                  # ...the cached build is never written to
+               **({'current': dict(payload['current'])} if isinstance(payload.get('current'), dict) else {})}
+    rows = [*payload['items'], *([payload['current']] if 'current' in payload and payload['current'] is not None else [])]
+    seen = {}
+    for i in rows:
+        tid = i.get('tid') or (int(str(i.get('key'))[6:]) if str(i.get('key') or '').startswith('agent:') and str(i['key'])[6:].isdigit() else None)
+        if not tid: continue
+        if tid not in seen:
+            t = store.get_task(int(tid))
+            try: seen[tid] = taskstate.status(store, t) if t and t.get('Status') not in ('done', 'dropped') else None
+            except Exception as e: logger.debug(f'funnel: the state of task {tid} was not read - {e}'); seen[tid] = None
+        st = seen[tid]
+        if not st or st['key'] not in LANES or (st['key'] == 'yours' and i.get('lane') in ARRIVAL_WORDS): continue
+        i['lane'], i['status'] = st['key'], st
+    return payload
 
 
 def _present_one(store, item: dict | None) -> dict | None:

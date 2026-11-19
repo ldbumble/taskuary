@@ -11,7 +11,7 @@ test("the progress box shows the agent's words, never Taskuary's markers or the 
   // the canvas's steps say the agent's words through it (agentSteps.js: its prose, its thinking)
   const steps = readFileSync(new URL("../src/agentSteps.js", import.meta.url), "utf8");
   assert.match(steps, /const t = forScreen\(text\);/);
-  assert.match(steps, /flat\(forScreen\(e\.detail\)\)/);
+  assert.match(steps, /flat\(forScreen\(p\)\)/);
 });
 
 test("a progress line that only says what the answer says leaves the box; the box goes when nothing is left", () => {

@@ -111,9 +111,6 @@ export function turnParts(events, { answer = "", keepStart = false, live = false
 }
 // what a turn did, counted for its fold's line: "6 steps" - its edits each one
 export const workCount = (parts) => (parts || []).reduce((n, p) => n + (p.type === "edit" ? 1 : p.type === "work" ? p.steps.filter(isWork).length : 0), 0);
-// WHAT IT WROTE OUT FOR HIM IS NEVER FOLDED WITH ITS STEPS (the owner, 2026-11-15: "if it returns something you need to see it"): a message of the
-// turn that holds a block - a query, a script, a table - is a thing it made, not a note on its way; said before its last step, it stays in the turn
-export const isMade = (text) => /^[ \t]*(?:\x60{3}|~~~)/m.test(String(text || "")) || /^[ \t]*\|.+\|[ \t]*\n[ \t]*\|[ :|-]+\|[ \t]*$/m.test(String(text || ""));
 // A DRAFT WHERE IT STOOD, no longer the one to press (GeneralWorkspace wasCard, NotSent): the list's card in one of these states, carrying what it said
 export const isPastCard = (c) => ["superseded", "passed", "withdrawn", "rejected"].includes(c?.status) && !!c.was;
 // ...AND AN EARLIER VERSION NEVER TAKES ITS REVIEW'S OWN CARD (recorded 2026-11-15: a reply the agent rewrote and he then sent - the rewrite

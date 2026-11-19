@@ -29,7 +29,8 @@ Set in its environment, for the tests that need more:
   FAKE_ACP_SCRIPT=<file>  fake_claude's script: the first rule whose `when` the owner's words match answers `first`, after its `post`s ran
                          as the agent's own `taskuary --reply` would (fake_director.post) - a coding agent filing a reply, no permission asked;
                          `wait` seconds before it answers, `exit` a code it dies with mid-turn (after its `updates`),
-                         `updates` raw session updates said first, `silent` it says no words at all and ends the turn, `stop` the stopReason its turn ends with
+                         `updates` raw session updates said first, `silent` it says no words at all and ends the turn, `stop` the stopReason its turn ends with,
+                         `ask` a shell command it then asks permission to run (FAKE_ACP_ASK's card), the turn ending at his answer
 It offers config options (mode, model, effort) the way claude-agent-acp and codex-acp do, and says what they were set to.
 """
 import json, os, re, sys
@@ -39,6 +40,7 @@ SID = 'sess_fake_1'
 PERM_ID = 9001
 _prompt_id = None                 # the turn waiting on the permission answer
 _heard = ''                       # what it was asked, said back once the turn ends
+_then = ''                        # a script rule's own words after his answer to its `ask`
 SET = {'mode': 'auto', 'model': 'opus', 'effort': 'high'}
 STARTS = 0                        # how many turns this one process has served: a kept connection serves more than one
 RESUMED = ''                      # the session it was resumed into, said back in its answer
@@ -101,7 +103,7 @@ for line in sys.stdin:
             def done_(pid=_prompt_id, granted=granted):
                 # ...FAKE_ACP_AFTER=<secs>: the turn works on that long after his answer, as a real agent goes on from an allowed step
                 __import__('time').sleep(float(os.environ.get('FAKE_ACP_AFTER') or 0))
-                if not os.environ.get('FAKE_ACP_CODE'): update('agent_message_chunk', content={'type': 'text', 'text': ('granted' if granted else 'denied') + f' - {_heard}'})
+                if not os.environ.get('FAKE_ACP_CODE'): update('agent_message_chunk', content={'type': 'text', 'text': _then or (('granted' if granted else 'denied') + f' - {_heard}')})
                 reply(pid, ended())
             if os.environ.get('FAKE_ACP_AFTER'): __import__('threading').Thread(target=done_, daemon=True).start()
             else: done_()
@@ -145,6 +147,14 @@ for line in sys.stdin:
             for u in rule.get('updates') or []:
                 u = dict(u); __import__('time').sleep(float(u.pop('_sleep', 0) or 0)); update(u.pop('sessionUpdate'), **u)
             if rule.get('exit') is not None: sys.exit(rule['exit'])   # an agent that dies mid-turn, as fake_claude's `exit` - after what it said
+            # ...`ask`: then it asks to run that shell command, as FAKE_ACP_ASK does - the turn ends at his answer (browser/step-words)
+            if (ask := rule.get('ask')):
+                tc = {'toolCallId': f'call_{STARTS}', 'title': ask, 'kind': 'execute', 'rawInput': {'command': ask}}
+                update('tool_call', **tc, status='pending'); _prompt_id = mid; _then = rule.get('first') or ''
+                send({'jsonrpc': '2.0', 'id': PERM_ID, 'method': 'session/request_permission', 'params': {'sessionId': SID, 'toolCall': tc,
+                      'options': [{'optionId': 'reject-once', 'name': 'Reject', 'kind': 'reject_once'}, {'optionId': 'allow-always', 'name': 'Always', 'kind': 'allow_always'},
+                                  {'optionId': 'allow-once', 'name': 'Allow once', 'kind': 'allow_once'}]}})
+                continue
             # ...each post the shell call a real agent makes for it, reported running before it files and done after - never a card ahead of its turn
             # ...each its own call id, as a real adapter's: one reused across turns drew a later turn's call into the first one's step
             for i, p in enumerate(rule.get('post') or []):

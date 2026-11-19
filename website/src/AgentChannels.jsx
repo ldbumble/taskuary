@@ -12,7 +12,7 @@ import { chatHint, chatUrl, noChats } from "./chatPicker.js";
 import { ACCENT, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 
 const btn = { minHeight: 30, py: 0, px: 1.3, fontSize: 12.5, textTransform: "none" };
-const card = { my: 1.5, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)" };
+const card = { my: 0, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)" };
 const Head = ({ children }) => <Typography sx={{ color: "var(--tq-link, #55697a)", fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", mb: 0.4 }}>{children}</Typography>;
 const why = (e, d) => e?.response?.data?.detail || e?.message || d;
 
@@ -162,6 +162,6 @@ export default function AgentChannels({ taskId, pop = false }) {
   return (
     <details className="tq-aui-working-fold" data-tq-agent-channels="" open={!!v?.channels.length || undefined} hidden={!v || undefined}>
       <summary>Talk to this agent from…</summary>
-      <Box sx={{ ...card, mt: 1 }}><ChannelSetup taskId={taskId} onLoaded={setV} /></Box>
+      <Box sx={{ ...card, mt: 1, mb: 1.5 }}><ChannelSetup taskId={taskId} onLoaded={setV} /></Box>
     </details>);
 }

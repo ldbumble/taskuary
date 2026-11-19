@@ -33,3 +33,21 @@ test("its clock is its own: the per-second state never reaches AssistantView", (
   const view = src.slice(src.indexOf("export default function AssistantView"));
   assert.doesNotMatch(view, /workingLine\(/);
 });
+
+// THE TURN'S HEAD AND ITS WORKING LINE ARE THE CHAT'S OWN TYPE (the owner, again on 2026-11-18: "AGENT · 11:04 PM · working 2m 41s" in tiny
+// monospace capitals beside a monospace working line): no rule in the chat's sheet sets them in a code face or in capitals
+test("the turn's head and the working line are set in the app's font and case", async () => {
+  const fs = await import("node:fs");
+  const css = fs.readFileSync(new URL("../src/generalWorkspace.css", import.meta.url), "utf8");
+  const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter(([, sel]) => /\.tq-aui-role\b|\.tq-aui-thinking span|\.tq-aui-working-line/.test(sel));
+  assert.ok(rules.length >= 2);
+  for (const [, sel, body] of rules) assert.doesNotMatch(body, /monospace|Cascadia|Consolas|uppercase/i, `${sel.trim()} sets ${body.trim()}`);
+});
+
+// THE DETAIL LEVEL'S STOPS ARE BUTTONS (the UX walk, 2026-11-18: a slider's "Everything" was no button to press): one each, the current pressed
+test("the chat's detail control offers each level as a button", async () => {
+  const fs = await import("node:fs");
+  const src = fs.readFileSync(new URL("../src/DetailSlider.jsx", import.meta.url), "utf8");
+  assert.match(src, /<ToggleButtonGroup exclusive/);
+  assert.doesNotMatch(src, /<Slider\b/);
+});

@@ -247,7 +247,7 @@ def counts(store, tid: int) -> dict:
 
 # ── an ACP session's updates -> the log's step shape (one shape for every road) ─────────────────────
 _ACP_TOOL = {'read': 'Read', 'edit': 'Edit', 'delete': 'Delete', 'move': 'Move', 'search': 'Grep', 'execute': 'Bash', 'fetch': 'WebFetch', 'think': 'Think'}
-_ARGS = ('command', 'cmd', 'pattern', 'query', 'url', 'file_path', 'path', 'filePath', 'absolute_path', 'description', 'prompt', 'glob', 'title', 'subagent_type')
+_ARGS = ('command', 'cmd', 'pattern', 'query', 'url', 'file_path', 'path', 'filePath', 'absolute_path', 'description', 'prompt', 'glob', 'title', 'subagent_type', 'agentPath')
 _PATHS = ('path', 'file_path', 'filePath', 'absolute_path')
 def _text(c) -> str:
     if isinstance(c, str): return c

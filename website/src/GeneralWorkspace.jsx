@@ -18,7 +18,7 @@ import { holdUnsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isMade, isPastCard, standing, heldAtEnd,  partsMessage, turnParts, workCount, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, lettersTurn, onYouTurn, placesLoose, looseCards, askedFirst } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd,  partsMessage, turnParts, workCount, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, lettersTurn, onYouTurn, placesLoose, looseCards, askedFirst } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
@@ -243,14 +243,15 @@ const Fold = ({ k, label, quiet = false, children }) => {
   // the toggle only agrees (a fold opened another way)
   const set = (o) => { if (o === OPEN_FOLDS.has(k)) return; if (o) OPEN_FOLDS.add(k); else OPEN_FOLDS.delete(k); FOLD_HEARD.forEach((f) => f()); };
   return <details className="tq-aui-working-fold" data-tq-steps-fold={quiet ? "summary" : ""} open={open} onToggle={(e) => set(e.currentTarget.open)}>
-    <summary onClick={(e) => { e.preventDefault(); set(!OPEN_FOLDS.has(k)); }}>{label}</summary>{children}</details>;
+    {/* ...its count a real button, named and pressable by keyboard (the UX walk, 2026-11-18: a click on "6 steps" found no button) */}
+    <summary onClick={(e) => { e.preventDefault(); set(!OPEN_FOLDS.has(k)); }}><button type="button" className="tq-aui-fold-btn" aria-expanded={open}>{label}</button></summary>{children}</details>;
 };
 // ONE RULE FOR EVERY FOLD OF A TURN'S WORK: it is drawn round steps of work. One with none in it - only Taskuary's own notes, as a turn the app
 // started holds before its first step - read "Along the way ▸" over nothing he could see (the overnight walk, 2026-11-11): its notes stand open
 const WorkFold = ({ k, quiet = false, parts, draw }) => { const n = workCount(parts);
   return n ? <Fold k={k} quiet={quiet} label={plural(n, "step")}>{parts.map((p, i) => draw(p, i, "everything"))}</Fold>
     : <>{parts.filter((p) => p.type !== "said").map((p, i) => draw(p, i, "everything"))}</>; };
-const TurnWorkView = ({ data, now, ended, k }) => {
+const TurnWorkView = ({ data, now, k }) => {
   const at = React.useContext(WorkCtx);
   const key = foldKey(k), level = React.useContext(LevelCtx), chat = React.useContext(ChatCtx);
   // ...AND A TURN THAT ENDED HAS NOTHING STILL AT WORK (the owner, 2026-11-05: a step kept its spinner under the answer): a call that never got
@@ -285,8 +286,9 @@ const TurnWorkView = ({ data, now, ended, k }) => {
   // summary sums up folds whole - its summary says the words
   if (level === "summary") {
     // ...and a view the agent showed is what it chose to put in front of the owner: never folded away
-    // ...nor is a block it wrote out on its way - a query, a table (chatStream.isMade): the summary under it may say only "it is ready"
-    const out = (p) => p.type === "view" || p.type === "files" || (p.type === "said" && (!ended || isMade(p.text))), said = parts.filter(out), rest = parts.filter((p) => !out(p));
+    // ...and WHAT IT SAID ON ITS WAY STAYS when the turn ends (the UX walk, 2026-11-18: its opening line "I'll check the email, then ..." went as the
+    // summary took its place) - nothing drawn goes; its answer is added under it (stepsOf already leaves out what the answer says again)
+    const out = (p) => p.type === "view" || p.type === "files" || p.type === "said", said = parts.filter(out), rest = parts.filter((p) => !out(p));
     return <>{rest.some((p) => p.type !== "said") && <WorkFold k={`${key}:all`} quiet parts={rest} draw={draw} />}
       {said.map((p, i) => draw(p, i, "everything"))}</>;
   }
@@ -442,7 +444,7 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
     {!!words && !live && <CopyCorner text={words} label="Copy this answer" />}
     {!more && <div className="tq-aui-role">{name}{live ? <RunClock start={turnStart(t)} /> : <TurnTime t={t} />}</div>}
     <div className="tq-aui-agent-body">
-      <TurnWorkView data={{ parts }} now={live} ended={!!t.text && !live} k={t.id} />
+      <TurnWorkView data={{ parts }} now={live} k={t.id} />
       {!!words && <SaidText text={words} mid={key} />}
       {!!onYou && <div className="tq-aui-summary" data-tq-on-you="" style={{ marginTop: 10 }}><Md text={onYou} /></div>}
       {/* ...A TURN THAT COULD NOT FINISH, WORTH ANOTHER TRY (its summary's `retry`): one button, never "send any message on this task to try

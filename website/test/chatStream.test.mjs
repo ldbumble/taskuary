@@ -220,15 +220,12 @@ test("a chat paints a held list only if it was read a moment ago - an older one 
   assert.equal(paintable(null, null, now), null);
 });
 
-// WHAT IT WROTE OUT FOR HIM IS NEVER FOLDED WITH ITS STEPS (the owner, 2026-11-15: he asked for a query to review - the turn read "6 steps ▸" and
-// "The SQL is ready for you to review", the query itself behind the fold): a message of the turn that holds a block stays in the turn
-test("a block the agent wrote out on its way is not folded behind the steps", async () => {
-  const { isMade } = await import("../src/chatStream.js");
-  assert.ok(isMade("Here is the script:\n\n```sql\nUPDATE facilities SET fax = NULL WHERE id IN (14, 22, 31);\n```"));
-  assert.ok(isMade("| id | fax |\n|---|---|\n| 14 | 555-0100 |"));
-  assert.ok(!isMade("Let me look at the folder first.") && !isMade("I'll use `psql` for this.") && !isMade(""));
+// WHAT IT SAID ON ITS WAY IS NEVER FOLDED NOR SWAPPED (the owner, 2026-11-15: a query he asked for stood behind "6 steps"; the UX walk, 2026-11-18:
+// the opening line "I'll check the email, then ..." went when the turn ended and its summary took its place): every message of a turn stays in it
+test("what the agent said on its way stays in its turn after the turn ends", async () => {
   const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(src, /p\.type === "said" && \(!ended \|\| isMade\(p\.text\)\)/);
+  assert.match(src, /const out = \(p\) => p\.type === "view" \|\| p\.type === "files" \|\| p\.type === "said",/);
+  assert.doesNotMatch(src, /!ended/);
 });
 
 // A REPLY THE AGENT REWROTE, THEN SENT, KEEPS ITS SENT CARD (recorded 2026-11-15): the rewrite is the same review, so the list holds its earlier

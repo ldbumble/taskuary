@@ -47,10 +47,12 @@ const prog = (w) => String(w || "").split(/[\\/]/).pop().toLowerCase().replace(/
 // Split at the operators outside quotes; a segment after a pipe only filters what came before it.
 // ...and a heredoc's body is the file being written, not commands: its lines read as "and 3 more" steps, its quotes broke the split
 const HEREDOC = /<<-?[ \t]*(['"]?)(\w+)\1([^\n]*)\n[\s\S]*?\n[ \t]*\2[ \t]*(?=\n|$)/g;
+// ...and a PowerShell here-string (@'...'@ | python -) is the script piped on, never its lines as commands ("Ran from", "Ran import")
+const HERESTRING = /@(['"])\r?\n[\s\S]*?\r?\n\1@/g, FED = "__script__";
 const segments = (cmd) => {
   const out = []; let cur = "", q = null, piped = false;
   const push = (nextPiped) => { if (cur.trim()) out.push({ text: cur.trim(), piped }); cur = ""; piped = nextPiped; };
-  const s = String(cmd || "").replace(HEREDOC, "$3");
+  const s = String(cmd || "").replace(HEREDOC, `$3 ${FED}`).replace(HERESTRING, FED);
   for (let i = 0; i < s.length; i += 1) {
     const c = s[i];
     if (q) { if (c === q) q = null; else if (c === "\\" && q === '"') { cur += c + (s[i + 1] || ""); i += 1; continue; } cur += c; continue; }
@@ -130,6 +132,9 @@ const OWN_CLI = { "--search": (v) => ({ kind: "mail", summary: v ? `Searched you
   "--draft-file": () => ({ kind: "edit", summary: "Drafted an email" }),
   "--check-back": () => ({ kind: "task", summary: "Set a check-back" }), "--done": () => ({ kind: "task", summary: "Said the task is done" }),
   "--learned": () => ({ kind: "data", summary: "Posted to the Hub" }), "--sign-form": () => ({ kind: "edit", summary: "Filled in a form" }) };
+// ...the agent's own note on the wall (--note) is ITS words for what the line is doing: the step, whatever else ran with it (`own`)
+OWN_CLI["--note"] = (v) => (v ? { kind: "plan", summary: clip(v, 120), own: true } : { kind: "plan", summary: "Left a note on the wall" });
+OWN_CLI["--board"] = () => ({ kind: "data", summary: "Read what earlier agents left on the wall" });
 const ownCli = (args) => { const i = args.findIndex((a) => OWN_CLI[a]);
   return i < 0 ? { kind: "data", summary: "Looked something up in Taskuary" } : OWN_CLI[args[i]](args[i + 1] && !args[i + 1].startsWith("-") ? args[i + 1] : ""); };
 
@@ -164,15 +169,32 @@ export const browserStep = (args) => {
   return step(AB_SAID[v] || (v ? `Used the browser (${v})` : "Used the browser"));
 };
 
+// WHAT A PROGRAM WAS ASKED TO DO, by the common grammar of a command line: its first word that is no option nor an option's value - a one-letter
+// option takes the word after it (`git -C ledger -c a=b fetch`, `python -u -m tools.load`) - and a script or module by its own name
+const subOf = (p, args) => {
+  const as = args.map(String);
+  if (SNIPPET[p]) { const m = as.indexOf("-m"), f = as.find((a) => !a.startsWith("-") && /\.\w{1,4}$/.test(baseName(a)));
+    return m >= 0 && as[m + 1] ? as[m + 1].split(".").pop() : f ? baseName(f) : ""; }
+  for (let i = 0; i < as.length; i += 1) {
+    if (/^-[A-Za-z]$/.test(as[i])) { i += 1; continue; }
+    if (as[i].startsWith("-")) continue;
+    return /^[a-z][\w.-]{0,24}$/i.test(as[i]) ? as[i] : "";
+  }
+  return "";
+};
+const andList = (xs) => (xs.length < 2 ? xs.join("") : xs.length === 2 ? `${xs[0]} and ${xs[1]}` : `${xs.slice(0, 2).join(", ")} and ${plural(xs.length - 2, "more file")}`);
 const commandStep = (cmd, depth = 0) => {
-  const found = [];
+  const found = []; let fed = false;
   for (const seg of segments(cmd)) {
-    if (seg.piped) continue;
     let w = words(seg.text);
+    // ...a script handed on (a heredoc, a here-string) to an interpreter is a script it ran; any other piped segment only filters what came before it
+    if (seg.piped) { const q = prog(w[0] || ""); if (fed && SNIPPET[q]) found.push({ kind: "run", summary: `Ran a ${SNIPPET[q]} script`, filler: true }); continue; }
+    if (w[0] === FED && w.length === 1) { fed = true; continue; }
+    const here = w.includes(FED); w = w.filter((x) => x !== FED);
     if (/^[A-Za-z_]\w*=\(/.test(w[0] || "")) continue;                       // an array being set up: H=(-H "...")
     while (w.length && (LEAD.has(w[0]) || /^[A-Za-z_]\w*=/.test(w[0]))) w = w.slice(1);
     if (w.length && /^\(+[\w-]/.test(w[0])) w = [w[0].replace(/^\(+/, ""), ...w.slice(1)];       // `(Get-ChildItem ...).Count`
-    if (!w.length || !/^[\w.:\/~+-]+$/.test(w[0])) continue;                 // only a word that can name a program
+    if (!w.length || !/^[\w.:\/\\~+-]+$/.test(w[0])) continue;                // only a word that can name a program (C:\...\cmd.exe too)
     const p = prog(w[0]), args = w.slice(1), plain = args.filter((a) => !a.startsWith("-"));
     if (SHELLS.has(p) && depth < 2) {
       const at = args.findIndex((a) => /^(-l?c|-command|\/c)$/i.test(a));
@@ -197,7 +219,9 @@ const commandStep = (cmd, depth = 0) => {
     // `cat > desk.svg` WRITES desk.svg: it read "Read <<EOF" (the stress test, 2026-11-02)
     const to = args.findIndex((a) => /^>>?$/.test(a)), into = to >= 0 ? args[to + 1] : (args.find((a) => /^>>?[^>&]/.test(a)) || "").replace(/^>+/, "");
     if (READERS.has(p) && into && !/^(\/dev\/null|nul|\$null)$/i.test(into)) { found.push({ kind: "edit", summary: named(into) ? `Wrote ${baseName(into)}` : "Wrote a file", file: into, vague: !named(into) }); continue; }
-    if (READERS.has(p) && plain.length) { const f = plain[plain.length - 1]; found.push({ kind: "read", summary: readSaid(f), file: f, vague: !named(f) }); continue; }
+    // ...its file, never the line count it was given (`Get-Content totals.py -TotalCount 290` read "Read 290")
+    const files = plain.filter((a) => !/^\d+$/.test(a));
+    if (READERS.has(p) && files.length) { const f = files[files.length - 1]; found.push({ kind: "read", summary: readSaid(f), file: f, vague: !named(f) }); continue; }
     if (GREPS.has(p) || (p === "git" && args[0] === "grep")) {
       const e = args.indexOf("-e"), pat = e >= 0 ? args[e + 1] : plain[p === "git" ? 1 : 0];
       found.push({ kind: "search", summary: pat ? `Searched files for ${quoted(pat)}` : "Searched files", pattern: pat, asked: plain }); continue;
@@ -212,14 +236,22 @@ const commandStep = (cmd, depth = 0) => {
       continue;
     }
     if (SNIPPET[p] && args.some((a) => a === "-c" || a === "-e")) { found.push({ kind: "run", summary: `Ran a ${SNIPPET[p]} snippet`, filler: true }); continue; }
-    const sub = args[0] && /^[a-z][\w.-]{0,24}$/i.test(args[0]) ? ` ${SNIPPET[p] ? baseName(args[0]) : args[0]}` : "";
-    found.push({ kind: "run", summary: `Ran ${p}${sub}`, filler: !!SNIPPET[p] });
+    if (SNIPPET[p] && (args.includes("-") || here)) { found.push({ kind: "run", summary: `Ran a ${SNIPPET[p]} script`, filler: true }); continue; }
+    const sub = subOf(p, args);
+    // ...by what it was asked past the options before it: `git -c .. -C .. fetch` read "Ran git" (the owner's live turn, 2026-11-18)
+    found.push({ kind: "run", summary: sub ? `Ran ${p} ${sub}` : `Ran ${p}`, filler: !!SNIPPET[p] });
   }
+  // ...the agent's own words for the line (a wall note) say what all of it was for
+  const own = found.find((s) => s.own);
+  if (own) return own;
   // a snippet that only reshapes what a fetch brought back is not a step of its own
   const real = found.filter((s) => !s.filler && !s.minor), more = found.filter((s) => !s.minor);
   const use = real.length ? real : more.length ? more : found;
   if (!use.length) return null;
-  return { ...use[0], summary: use.length > 1 ? `${use[0].summary}, and ${use.length - 1} more` : use[0].summary };
+  // ...files it read in one line are named together: "Read totals.py and notes.sql"
+  const reads = use[0].kind === "read" ? use.filter((s) => s.kind === "read" && !s.vague) : [], rest = use.length - Math.max(reads.length, 1);
+  const lead = reads.length > 1 ? `Read ${andList([...new Set(reads.map((s) => baseName(s.file)))])}` : use[0].summary;
+  return { ...use[0], summary: rest > 0 ? `${lead}, and ${rest} more` : lead };
 };
 
 // ── a tool call, by its name and arguments ───────────────────────────────────────────────────────
@@ -291,6 +323,8 @@ export const describeCall = (name, args = {}) => {
   const own = OWN[key(mcp ? mcp[2] : name)];
   if (own && (!mcp || key(mcp[1]) === "taskuary")) return own(a);
   let kind = KIND[key(mcp ? mcp[2] : name)] || "";
+  // ...a helper an ACP agent started names itself by where it runs (codex-acp's "Start subagent history_probe", agentPath /root/history_probe)
+  if (!kind && a.agentPath) return { kind: "helper", summary: `Handed part of the work to a helper: ${clip(baseName(a.agentPath).replace(/[_-]+/g, " "), 60)}` };
   // an ACP "search" is either kind, and says which by what it was given: a pattern searches files, a query searches the web
   if (kind === "search" && a.query && !a.pattern) kind = "web";
   if (key(name) === "search" && !kind) kind = a.pattern ? "search" : "web";
@@ -327,6 +361,10 @@ export const describeCall = (name, args = {}) => {
   if (kind === "plan") { const n = (a.todos || a.plan || []).length; return { kind, summary: n ? `Updated its plan (${n} steps)` : "Updated its plan" }; }
   // ...whatever channel the task came in on - a WhatsApp task read "Checking for new mail" (the owner, 2026-11-05: "this is not mail")
   if (kind === "sync") return { kind, summary: a.new ? `Found ${plural(a.new, "new message")} on the thread` : "Checked the thread for new messages" };
+  // ...an ACP call named only by its title is in words already - the agent's own ("Checking the build output"), never "Used <them>"
+  // - kept as its name (conversation.acp_steps) or beside the kind "other" (agents.ACPSteps)
+  const titled = a.title || (/\s/.test(String(name || "").trim()) && !Object.values(a).some(Boolean) ? name : "");
+  if (!mcp && titled && ["other", key(titled)].includes(key(name))) return { kind: "tool", summary: clip(titled) };
   // anything else: its own name in words, and the one argument a person would want - a query, a host, a file
   const label = String(mcp ? mcp[2] : a.title || name || "a tool").replace(/[_-]+/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").trim();
   const target = a.query ? quoted(a.query) : hostOf(a.url) || (fileOf(a) ? baseName(fileOf(a)) : "");
@@ -371,6 +409,8 @@ const foundNone = (s) => {
 };
 
 // ── the trace, as steps ──────────────────────────────────────────────────────────────────────────
+// a thought's paragraphs, each one line - a header the model set in bold (Codex's `**Checking the dates**`) reads as its words
+const thoughtsOf = (text) => String(text || "").split(/\n\s*\n/).map((p) => flat(forScreen(p)).replace(/^\*\*(.+)\*\*$/, "$1")).filter(Boolean);
 const ECHO = /^(→ |· |✗ |session started\b)/;            // agents._live_line's own rows for a tool call, its result, the init line
 // A QUICK ANSWER'S RAW OBJECT (quickwork.RAW) is its fields, filed as the answer - never words of its working, whichever line carries it: a
 // CLI's readable `live` line was the object cut at 300 characters, drawn under Taskuary (the owner, 2026-11-03)
@@ -403,6 +443,10 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
     if (kind === "said" && last?.kind === "said" && last.live) { last.summary += `\n${t}`; return; }
     steps.push({ id: `${kind}-${steps.length}`, kind, summary: t, detail: "", status: "done", live: kind === "said" && !structured });
   };
+  // ...EACH THOUGHT ITS OWN ROW (the owner's live turn, 2026-11-18: "Reviewing the vendor snapshots Planning the roll-up"): a message of
+  // reasoning holds its paragraphs - Codex sends a header each - and flattened they ran together as one sentence
+  const think = (ts, live) => ts.forEach((t) => steps.push({ id: `thought-${steps.length}`, kind: "thought", summary: clip(t, 140), detail: t.length > 140 ? t : "", status: "done", ...(live ? { live } : {}) }));
+  const dropLive = () => { while (steps.at(-1)?.kind === "thought" && steps.at(-1).live) steps.pop(); };
   for (const e of events) {
     if (!e) continue;
     if (e.type === "tool_call") {
@@ -429,18 +473,17 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
     } else if (e.type === "progress" && e.detail) {
       const name = String(e.name || "");
       if (name === "thinking" || name === "reasoning") {
-        const t = flat(forScreen(e.detail));
-        if (t && steps.at(-1)?.kind === "thought" && steps.at(-1).live) steps.pop();     // ...the whole paragraph in its snapshots' place
-        if (t) steps.push({ id: `thought-${steps.length}`, kind: "thought", summary: clip(t, 140), detail: t.length > 140 ? t : "", status: "done" });
+        const ts = thoughtsOf(e.detail);
+        if (ts.length) dropLive();     // ...the whole paragraph in its snapshots' place
+        think(ts, false);
       } else if (name === "text" || name === "agent_message") say("said", e.detail);
       else say("note", e.detail);
     } else if (e.type === "live" && e.name === "writing") {
       // ...the answer as it streams is the turn's line of what it is doing (conversation `doing`), never words drawn twice
     } else if (e.type === "live" && e.name === "thinking") {
       // ...a thought still being written (agents.ACPSteps): ONE open thought its snapshots update, never words said
-      const t = flat(forScreen(e.detail || "")), last = steps.at(-1);
-      if (t && last?.kind === "thought" && last.live) Object.assign(last, { summary: clip(t, 140), detail: t.length > 140 ? t : "" });
-      else if (t) steps.push({ id: `thought-${steps.length}`, kind: "thought", summary: clip(t, 140), detail: t.length > 140 ? t : "", status: "done", live: true });
+      const ts = thoughtsOf(e.detail || "");
+      if (ts.length) { dropLive(); think(ts, true); }
     } else if (e.type === "live" && !structured && e.detail && !ECHO.test(String(e.detail))) {
       say("said", e.detail);
     } else if (e.type === "start" && keepStart) {

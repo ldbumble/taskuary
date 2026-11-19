@@ -224,7 +224,7 @@ test("each ACP tool kind reads as one plain step, the way the same act reads fro
     ["plan", "Planning the budget summary", "done"],
     ["page", "Read docs.northwind.example/budget/review", "done"],
     ["web", "Searched the web for 'northwind budget review policy'", "done"],
-    ["tool", "Used Look up Payworth invoice", "done"],
+    ["tool", "Look up Payworth invoice", "done"],
     ["run", "Ran pytest", "error"],
     ["run", "Ran git push", "held"],
     ["said", "The total is fixed; the push waits for your Approve.", "done"],
@@ -296,6 +296,48 @@ test("Taskuary's own command reads as what was asked of it, never its name", asy
   const { describeCall } = await import("../src/agentSteps.js");
   assert.equal(describeCall("Bash", { command: 'taskuary --search "ledger sync" --since 2026-11-01' }).summary, "Searched your mail for 'ledger sync'");
   assert.equal(describeCall("Bash", { command: "taskuary --message m1073" }).summary, "Read a message in full");
-  assert.equal(describeCall("Bash", { command: "taskuary --board" }).summary, "Looked something up in Taskuary");
+  assert.equal(describeCall("Bash", { command: "taskuary --board" }).summary, "Read what earlier agents left on the wall");
   assert.doesNotMatch(describeCall("Bash", { command: "taskuary --memory" }).summary, /taskuary/i);
+});
+
+// THE OWNER'S CODING TURN ON CODEX OVER ACP (2026-11-18: "ran git is not feedback??"): its shell calls carry no words of their own - the step is
+// what the call did, read off its grammar, or the agent's own words where the call carries them (a wall note); never a bare program's name
+test("a wordless shell call says what it did, never a bare program, a number for a file, nor 'Used <its title>'", () => {
+  const said = (command, name = "Bash") => describeCall(name, { command }).summary;
+  // ...the agent's own note on the wall is its words for the whole line
+  assert.equal(said('taskuary --board\ntaskuary --note "Looking into the history of the ledger totals." --kind working\ngit -C ledger status --short'),
+    "Looking into the history of the ledger totals.");
+  assert.equal(said("taskuary --board"), "Read what earlier agents left on the wall");
+  // ...options and their values before a subcommand are not it
+  assert.equal(said("git -c safe.directory=C:/work/ledger -C ledger fetch --no-tags origin master"), "Ran git fetch");
+  assert.equal(said("git -C .wt-ledger -c safe.directory=C:/work/ledger push origin feat:refs/heads/deploy"), "Ran git push");
+  // ...a line count is no file
+  assert.equal(said("Get-Content ledger/totals.py -TotalCount 290"), "Read totals.py");
+  assert.equal(said("Get-Content ledger/totals.py -TotalCount 290\nGet-Content ledger/sql/notes.sql -TotalCount 60"), "Read totals.py and notes.sql");
+  // ...a shell named by its whole path runs what it was handed
+  assert.equal(said("\"C:\\\\WINDOWS\\\\system32\\\\cmd.exe\" /c 'git -C ledger worktree add -b feat/x ../x origin/master'"), "Ran git worktree");
+  // ...a script handed to python, by a PowerShell here-string or a heredoc, is a script it ran - its lines are not commands
+  assert.equal(said("@'\nfrom pathlib import Path\nimport json\nprint(1)\n'@ | python -", "PowerShell"), "Ran a Python script");
+  assert.equal(said("python - <<'EOF'\nimport json\nprint(1)\nEOF"), "Ran a Python script");
+  assert.equal(said("..\\venv\\Scripts\\python.exe -u -m scripts.ledger.import_totals 'C:\\work\\totals.xlsx' --apply"), "Ran python import_totals");
+  assert.equal(said("python -u tools/check_totals.py --all"), "Ran python check_totals.py");
+  for (const c of ["git -c a=b -C x status", "python -u x.py", "git --no-pager log -5"]) assert.doesNotMatch(said(c), /^Ran (git|python)$/);
+  // ...an ACP call named only by its title is the agent's own words; a helper it started, by its name
+  assert.equal(describeCall("Start subagent history_probe", { agentPath: "/root/history_probe" }).summary, "Handed part of the work to a helper: history probe");
+  assert.equal(describeCall("Checking the build output", {}).summary, "Checking the build output");
+  assert.equal(describeCall("other", { title: "Checking the build output" }).summary, "Checking the build output");
+  assert.equal(describeCall("other", { title: "Start subagent history_probe", agentPath: "/root/history_probe" }).summary, "Handed part of the work to a helper: history probe");
+});
+
+test("each thought is its own row: a message of two reasoning headers never reads as one sentence", () => {
+  const steps = stepsOf([
+    { type: "progress", name: "thinking", detail: "\n\n**Reviewing the vendor mapping snapshots**\n\n**Planning the history roll-up**" },
+    { type: "tool_call", name: "Read", detail: { tool_call_id: "r", args: { file_path: "/x/notes.md" } } },
+    { type: "live", name: "thinking", detail: "**Preparing the schema**\n\n**Writing the plan**" },
+  ]);
+  assert.deepEqual(steps.map((s) => [s.kind, s.summary]), [["thought", "Reviewing the vendor mapping snapshots"], ["thought", "Planning the history roll-up"],
+    ["read", "Read notes.md"], ["thought", "Preparing the schema"], ["thought", "Writing the plan"]]);
+  // ...and the live thought, updated, replaces its own rows, never stacks them
+  const again = stepsOf([{ type: "live", name: "thinking", detail: "**A**" }, { type: "live", name: "thinking", detail: "**A**\n\n**B**" }]);
+  assert.deepEqual(again.map((s) => s.summary), ["A", "B"]);
 });

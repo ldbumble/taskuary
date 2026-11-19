@@ -1,10 +1,10 @@
-// THE CHAT'S DETAIL LEVEL, a slider like the app's other sliders (the combine level on a connection card): three stops, named under them
-// (chatDetail.js). Settings draws it for the two defaults, a chat's corner for its own.
+// THE CHAT'S DETAIL LEVEL: three options, each a button, the current one pressed (chatDetail.js) - a slider's stops were no buttons, and a
+// click on "Everything" found nothing to press (the UX walk, 2026-11-18). Settings draws it for the two defaults, a chat's corner for its own.
 import React, { useEffect, useState } from "react";
 import api from "./api.js";
-import { Box, Slider, Typography } from "@mui/material";
+import { Box, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import { LABELS, LEVELS, SETTING, defaultDetail, detailFor, keepOwnDetail, useOwnDetail } from "./chatDetail.js";
-import { DIM, FAINT, INK } from "./theme.jsx";
+import { DIM, FAINT } from "./theme.jsx";
 
 // ...the two defaults from Settings, read once and kept in step when Settings saves one (chatDefaultsChanged)
 let read = null, got = {};
@@ -26,7 +26,6 @@ export function useChatDefaults() {
   }, []);
   return s;
 }
-const MARKS = LEVELS.map((l, value) => ({ value, label: LABELS[l] }));
 export const SAYS = {
   summary: "What the agent said and what it made, and its cards - its steps behind one line.",
   steps: "One line a step, folded under each turn.",
@@ -34,12 +33,12 @@ export const SAYS = {
 };
 
 export default function DetailSlider({ value, onChange, label = "How much of the agent's work the chat shows", says = true, width = 260 }) {
-  const i = Math.max(0, LEVELS.indexOf(value));
-  return <Box data-tq-detail-slider={value} sx={{ px: 3.5, maxWidth: width }}>
-    <Slider size="small" min={0} max={LEVELS.length - 1} step={1} marks={MARKS} value={i} aria-label={label}
-      getAriaValueText={(v) => LABELS[LEVELS[v]]} onChange={(_, v) => onChange(LEVELS[v])}
-      sx={{ mt: 0.5, mb: 2.5, "& .MuiSlider-markLabel": { fontSize: 11, color: FAINT }, "& .MuiSlider-markLabelActive": { color: INK } }} />
-    {says && <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.45, mx: -3.5 }}>{SAYS[LEVELS[i]]}</Typography>}
+  const level = LEVELS.includes(value) ? value : LEVELS[0];
+  return <Box data-tq-detail-slider={level} sx={{ maxWidth: width }}>
+    <ToggleButtonGroup exclusive size="small" value={level} aria-label={label} onChange={(_, v) => v && onChange(v)} sx={{ mt: 0.5, mb: 1 }}>
+      {LEVELS.map((l) => <ToggleButton key={l} value={l} data-tq-detail-option={l} sx={{ textTransform: "none", fontSize: 12.5, py: 0.25, px: 1.25 }}>{LABELS[l]}</ToggleButton>)}
+    </ToggleButtonGroup>
+    {says && <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.45 }}>{SAYS[level]}</Typography>}
   </Box>;
 }
 

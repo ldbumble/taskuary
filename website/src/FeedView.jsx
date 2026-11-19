@@ -33,7 +33,6 @@ import NewSheet from "./NewSheet.jsx";
 import AddIcon from "@mui/icons-material/Add";
 import { processingErrorMessage, processingTransportLimit, unreadProcessingRows } from "./processingAll.js";
 import { fyiTail, pileRows } from "./funnelPile.js";
-import { onRoom, roomWanted } from "./browserSplit.js";
 
 // All and Unread are the only Timeline views. Kind and source remain independent filters.
 // The pill row is a fixed set of CATEGORIES - it must not grow as connections do (a
@@ -197,10 +196,9 @@ export default function FeedView({ onOpenTask, active = true, top = null, stage 
   const visibleStage = stage;
   // SETUP IS A SCREEN OF ITS OWN (the owner, 2026-11-03: "the welcome screen should take up the entire screen not just the left side"): no
   // sidebar and no rail while setting up - the stage takes the width, its steps a strip across its top (setupRail). The rail stays mounted, hidden
-  // ...and folded the same way while a chat's browser needs the owner and the room (browserSplit.wantRoom) - back when it goes
-  const [roomy, setRoomy] = useState(roomWanted);
-  useEffect(() => onRoom(setRoomy), []);
-  const folded = setupMode || (roomy && !narrow);
+  // ...and NEVER for a chat's browser (design round 6, D8: it folded while a page waited on the owner, and his task list went with it - twice):
+  // the page sits beside the chat, inside the task
+  const folded = setupMode;
   const railShown = !folded && (!narrow || !visibleStage || railOnNarrow);
   const stageShown = setupMode || !narrow || (!!visibleStage && !railOnNarrow);
   const calEvents = useCalToday();

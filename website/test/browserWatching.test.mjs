@@ -44,7 +44,8 @@ test("a step handed over has one I'm done, and the chat's pane says why it went"
   assert.match(pane, /\{!turn && <Box component="button" onClick=\{\(\) => \(driving \? setDriving\(false\) : takeOver\(\)\)\}/, "the header's press stands aside");
   const term = src("TerminalView.jsx");
   assert.match(term, /useEffect\(\(\) => \{ if \(quiet && showingBrowser\) setLent\(true\); \}, \[quiet, showingBrowser\]\);/);
-  assert.match(term, /const closedLine = !!sid && \(quiet \? lent && !showingBrowser : seen && !browser\.open && !ended\) && \(/);
+  // ...never while a step of his still waits there (design round 6, D8: "nothing waits on you there now" stood half a second over the page opening)
+  assert.match(term, /const closedLine = !!sid && \(quiet \? lent && !need && !showingBrowser : seen && !browser\.open && !ended\) && \(/);
   assert.match(term, /"The browser is put away - nothing waits on you there now\. It shows here again when the agent needs you\."/);
 });
 

@@ -86,7 +86,8 @@ test("closing the detail shows the list rather than re-opening the first task", 
   assert.match(source, /const dismiss = \(\) => \{ dismissed\.current = true; onSelect\(null\); \}/);
   assert.match(source, /if \(active && !selected && firstShownId && !dismissed\.current\) onSelect\(firstShownId\)/);
   assert.match(source, /Close — back to the list \(the task stays\)"\}>/);
-  assert.match(source, /<IconButton aria-label=\{sessionView \? "Back to task" : "Close task"\} size="small" onClick=\{\(\) => \(sessionView \? setPeek\(true\) : dismiss\(\)\)\}/);
+  // ...a chat's X goes to the list: stepping back from a chat drew the same chat (design round 6, D8: "Back to task" did nothing)
+  assert.match(source, /<IconButton aria-label=\{sessionView && !chatPane \? "Back to task" : "Close task"\} size="small" onClick=\{\(\) => \(sessionView && !chatPane \? setPeek\(true\) : dismiss\(\)\)\}/);
   assert.match(source, /if \(selected \|\| !active\) dismissed\.current = false/, "a real pick, or leaving the tab, lifts it");
 });
 

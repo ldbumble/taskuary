@@ -46,7 +46,6 @@ import { writeupView } from "./writeupState.js";
 import { agentName } from "./agentWork.js";
 import { loadGeneral } from "./lazyGeneral.js";
 import { lazyView } from "./lazyView.jsx";
-import { onRoom } from "./browserSplit.js";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { FailWays, failOf } from "./failure.jsx";
 import { noteKey, noteOf, onYouLine, progressLine, saveNote, settleTick, withTicks } from "./checklist.js";
@@ -1154,15 +1153,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // the task's body measured: under STACK_BELOW it is a phone's stacked page, not a main view and drawers
   const [bodyW, setBodyW] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
   const bodyRO = useRef(null), bodyEl = useRef(null);
-  // ...AND IN THE SAME COMMIT AS THE TASK LIST FOLDING OR COMING BACK (browserSplit.wantRoom, recorded 2026-11-12): the observer's word came a
-  // frame or two after the list was back, and for those frames the chat stood at the list-less width - 1145 px, its box 197 px past the
-  // window - as a browser pane closed. The list's fold is heard here as it is asked, so this view draws again in the commit that moves the
-  // list, and measures its body before that commit is painted
-  const [roomTick, setRoomTick] = useState(0);
-  useEffect(() => onRoom(() => setRoomTick((n) => n + 1)), []);
-  React.useLayoutEffect(() => { const el = bodyEl.current; if (!roomTick || !el) return;
-    const s = getComputedStyle(el), w = Math.round(el.clientWidth - parseFloat(s.paddingLeft || 0) - parseFloat(s.paddingRight || 0));
-    if (w > 0) setBodyW((b) => (b === w ? b : w)); }, [roomTick]);
   const bodyBox = useCallback((el) => {
     bodyRO.current?.disconnect(); bodyRO.current = null; bodyEl.current = el;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -3141,9 +3131,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     </Tooltip>
                   )}
                   {/* ONE X, TWO STEPS BACK. With the session filling the page, X first steps back to
-                      the task behind it - the session keeps running; from the task, X goes to the list. */}
-                  <Tooltip title={sessionView ? "Back to the task — the session keeps running" : "Close — back to the list (the task stays)"}>
-                    <IconButton aria-label={sessionView ? "Back to task" : "Close task"} size="small" onClick={() => (sessionView ? setPeek(true) : dismiss())}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
+                      the task behind it - the session keeps running; from the task, X goes to the list.
+                      ...but a CHAT is the task itself (chatPane): stepping back drew the same chat, and "Back to task" did nothing he could
+                      see (design round 6, D8, recorded) - its X goes to the list, the agent still at work */}
+                  <Tooltip title={sessionView && !chatPane ? "Back to the task — the session keeps running" : "Close — back to the list (the task stays)"}>
+                    <IconButton aria-label={sessionView && !chatPane ? "Back to task" : "Close task"} size="small" onClick={() => (sessionView && !chatPane ? setPeek(true) : dismiss())}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
                   </Tooltip>
                 </Box>
               </Box>

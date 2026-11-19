@@ -23,7 +23,7 @@ import { createPool, paneCap } from "./terminalPool.js";
 import api from "./api.js";
 import BrowserPane, { LastView } from "./BrowserPane.jsx";
 import { layoutFor, ratioFromPointer, rememberFold, rememberRatio, savedFold, savedRatio, shortUrl, showsBrowser, isLocalPage, isBlankPage,
-  splitRatio, viewOnScreen, PHONE_BELOW, quietLayout, quietRatio, wantRoom } from "./browserSplit.js";
+  splitRatio, viewOnScreen, PHONE_BELOW, quietLayout, quietRatio } from "./browserSplit.js";
 
 // Programming fonts first: agent TUIs draw boxes and progress bars out of block glyphs,
 // which only line up in a font with real box-drawing coverage.
@@ -812,12 +812,6 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   // ...told BEFORE the paint (a layout effect): told after it, the frame that first drew the view still drew his step in the chat too -
   // its words and its I'm done twice on one screen for a beat (recorded, the browser round 2026-11-14)
   React.useLayoutEffect(() => { onView?.(onScreen); }, [onScreen]);  // eslint-disable-line react-hooks/exhaustive-deps
-  // ...and while it shows the page the owner has a part on, the task list folds away to give it the room (browserSplit.wantRoom)
-  // ...ONLY WHILE THE PAGE IS ON SCREEN: folded away to its chip it needs no room, and the chat ran the window's whole width (1465px,
-  // recorded 2026-11-11) with the task list still gone. ASKED BEFORE THE PAINT (a layout effect): asked after it, the pane first drew
-  // squeezed into the chat's own column, then the list folded and everything moved left, then the widths settled - three layouts in 300 ms
-  const roomFor = quiet && onScreen;
-  React.useLayoutEffect(() => { if (!roomFor) return undefined; const who = {}; wantRoom(who, true); return () => wantRoom(who, false); }, [roomFor]);
   const fold = (f) => { setFolded(f); rememberFold(f, sid); if (!f) setLocalOk(true); };
   // the handle: the pointer's place across the slot IS the split, remembered on release
   const startDrag = (e) => {
@@ -854,7 +848,9 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
      looked the same (2026-10-25). Words only - it comes back by itself when the agent opens a page again. */
   // ...and a chat's page, shown him for his step, goes once nothing waits on him there - his I'm done, the page moving on, an answer in
   // words - and it went with nothing said (the overnight walk, 2026-11-11)
-  const closedLine = !!sid && (quiet ? lent && !showingBrowser : seen && !browser.open && !ended) && (
+  // ...and only once nothing waits on him there (`need` over): while a step of his is being read afresh (readFor) it said "nothing waits on you
+  // there now" for half a second over the page about to open for him (design round 6, D8, recorded frame by frame)
+  const closedLine = !!sid && (quiet ? lent && !need && !showingBrowser : seen && !browser.open && !ended) && (
     <Typography data-tq-browser-closed="" sx={{ ...mono, flex: "0 0 auto", fontSize: 10.5, color: "#a8a196", m: "5px 0 0 10px" }}>
       {quiet ? "The browser is put away - nothing waits on you there now. It shows here again when the agent needs you."
         : `The browser closed${lastPage.current ? ` (last on ${shortUrl(lastPage.current, 36)})` : ""}. It reopens when the agent next needs it.`}

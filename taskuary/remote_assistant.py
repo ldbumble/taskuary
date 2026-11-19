@@ -1885,8 +1885,10 @@ def _continue(store, tid, note: str) -> str:
 
 
 def plain(e) -> str:
-    from .operations import plain as _p
-    return _p(e)
+    "A failure as the phone says it: in his words (say.plain) - a tool's raw text stays in the log."
+    from .say import plain as said
+    d = getattr(e, 'detail', None)
+    return said(d if isinstance(d, str) else str(e), 'any')
 
 
 def stuck(store, text: str) -> str:

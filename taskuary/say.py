@@ -71,6 +71,7 @@ def owner(e: dict) -> str:
     if k == 'held':
         return held_why(e.get('why'))
     if k == 'turn_failed': return turn_failed(e.get('raw'))
+    if k == 'failure': return plain(e.get('raw'), e.get('who') or 'ai')
     if k == 'reason':                                   # a reader's note on a row: its words, never its name for itself
         from .categories import route_why
         return re.sub(r'^\s*(triage|router|reader)\s*:\s*', '', route_why(e.get('text')), flags=re.I).strip()
@@ -83,3 +84,34 @@ def agent(e: dict) -> str:
     if k == 'land_refused': return f"pressed {e.get('how') or 'the button'} on the agent's work and it was REFUSED - nothing went out: {str(e.get('why') or '')[:600]}"
     if k == 'signup_failed': return str(e.get('said') or owner(e))
     return owner(e)
+
+
+# A FAILURE'S TEXT, AS HE READS IT ON ANY SURFACE (a toast, the phone, a queued start's line, the bell): a line Taskuary wrote in words is kept;
+# one that carries a tool's raw output - a JSON body, a traceback, an exception's class, a status code - is said by what kind
+# of failure it is, read off that structure, never shown as it came
+_RAW = re.compile(r'''[{\[]\s*["']|Traceback|File "|\b[A-Z]\w*(Error|Exception)\b:?|\bErrno\b|\b(HTTP|[Ss]tatus(?: code)?|[Ee]rror(?: code)?)\W{0,3}[45]\d\d\b|\b[45]\d\d (Client|Server) Error''')
+def raw(text) -> bool: return bool(_RAW.search(str(text or '')))
+
+
+def plain(text, who: str = 'ai') -> str:
+    """`text` in his words: Taskuary's own sentence as it is (its first line), else the kind of failure - `who` 'ai' for an AI provider's,
+    'service' for a connected service's (channels.plain_failure, the one road a card's error takes), anything else as itself."""
+    t = ' '.join(str(text or '').split('\n')[0].split())
+    if not t: return ''
+    if not raw(text):
+        from .operations import plain as names
+        return names(t)
+    if who == 'service':
+        from .channels import plain_failure
+        s = plain_failure(RuntimeError(str(text)))
+        return s if not raw(s) else 'The service answered with an error.'
+    if who in ('start', 'any'):                         # a start or a press that failed: the one road a failure's sentence takes (failures.classify)
+        from .failures import classify
+        s = classify(str(text)).get('sentence') or ''
+        if s and not raw(s): return s
+        # ...and where it names no provider's status, no AI is to blame: said as a failure of its own, its text in the log
+        if not (_STATUS.search(str(text)) or _TYPE.search(str(text))):
+            return "The agent couldn't start - Taskuary kept the details in its log." if who == 'start' else "That didn't work - Taskuary kept the details in its log."
+    s = turn_failed(text).split(' - ')[0].split(':')[0].rstrip('.') + '.'
+    # ...a press or a page answered by some other service is never blamed on the AI
+    return s.replace('The AI provider', 'The service it called').replace('The AI stopped', 'It stopped') if who == 'any' else s

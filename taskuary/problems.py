@@ -390,4 +390,6 @@ def collect(store, all_of_them: bool = False) -> list:
     uniq = ring
     # ...minus the ones the owner has read, and only while they are the SAME failure
     put_down = _dismissed(store)
-    return [p for p in uniq if put_down.get(p['key']) != signature(p)]
+    # ...and the bell he reads says each in his words (say.plain) - the troubleshooter and the facts above keep the raw text
+    from .say import plain
+    return [{**p, **{k: plain(p[k], 'service') for k in ('title', 'detail') if p.get(k)}} for p in uniq if put_down.get(p['key']) != signature(p)]

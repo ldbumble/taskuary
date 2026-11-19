@@ -1120,6 +1120,23 @@ def _processing_live():
         return None  # Unavailable observation is distinct from an observed empty roster.
 
 
+def _say():
+    from . import say
+    return say
+
+
+# EVERY REFUSAL THE PAGE TOASTS IS SAID IN HIS WORDS (say.plain): a route that raised with a tool's raw text - an exception's class, a provider's
+# JSON, a path - answered it to the page as it came. Taskuary's own sentences pass as they are; the raw text is logged here
+from starlette.exceptions import HTTPException as _StarletteHTTP
+from fastapi.exception_handlers import http_exception_handler as _http_answer
+@app.exception_handler(_StarletteHTTP)
+async def _plain_refusal(request, e: _StarletteHTTP):
+    if isinstance(e.detail, str) and _say().raw(e.detail):
+        logger.info(f'{request.method} {request.url.path} -> {e.status_code}: {e.detail[:500]}')
+        e = HTTPException(e.status_code, _say().plain(e.detail, 'any'), headers=getattr(e, 'headers', None))
+    return await _http_answer(request, e)
+
+
 @app.exception_handler(processing_all.AllError)
 async def _all_error(_request, error: processing_all.AllError):
     # every route that reads the inventory can meet this; one answer, the same JSON the explicit catches give
@@ -1152,7 +1169,8 @@ def _queued_info(q):
             'behindTitle': (store.get_task(b) or {}).get('Title') if b else None,
             'reason': q.get('Reason'), 'since': q.get('CreatedAt'),
             # the retry budget (PW-085..087): waiting | retrying | failed, how many tries, the last error and the next one
-            'state': q.get('State') or 'waiting', 'attempts': int(q.get('Attempts') or 0), 'lastError': q.get('LastError'), 'nextAt': q.get('NextAt'),
+            # ...its last error in his words (say.plain): the raw text stays on the queue row, where the start and its retries read it
+            'state': q.get('State') or 'waiting', 'attempts': int(q.get('Attempts') or 0), 'lastError': _say().plain(q.get('LastError'), 'start'), 'nextAt': q.get('NextAt'),
             # a setup error fails every Start the same way, so the card must not offer Start as the fix (blackboard.failed_line)
             'permanent': q.get('State') == 'failed' and blackboard.is_permanent(q.get('LastError'))}
 

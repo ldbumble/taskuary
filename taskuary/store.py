@@ -5662,14 +5662,15 @@ class SQLiteStore:
         pending reviews less any reply draft the thread has moved past (proposals.written_past - the one rule the chat greys it by and the
         task's state reads). A road that DECIDES about a pending row (what his own line may have answered, an item that ended upstream)
         reads list_reviews: the row is still pending there until its agent hears the newer message."""
-        from . import proposals
-        from . import cardqueue
-        past, held = {}, {}
-        gone = lambda r: bool(r.get('TaskId')) and r['ReviewId'] in (past.get(r['TaskId']) if r['TaskId'] in past else past.setdefault(r['TaskId'], proposals.written_past(self, r['TaskId'])))
-        # ...nor a card that waits behind another on its task (cardqueue): one stands at a time, on every surface
-        waits = lambda r: bool(r.get('TaskId')) and r['ReviewId'] in (held[r['TaskId']] if r['TaskId'] in held else held.setdefault(r['TaskId'], cardqueue.held(self, r['TaskId'])))
-        return [r for r in self.list_reviews('pending')
-                if not cardqueue.obsolete_read(self, r.get('TaskId'), r) and not gone(r) and not waits(r)]
+        return self._stands(self.list_reviews('pending'))
+    def _stands(self, rows) -> list:
+        """THE ONE RULE FOR WHAT WAITS ON HIS PRESS, over pending review rows: less any reply draft the thread has moved past
+        (proposals.written_past - the one rule the chat greys it by), any card that waits behind another on its task (cardqueue: one
+        stands at a time, on every surface) and an obsolete read request. waiting_reviews (every task) and waiting_on_owner (one) read it."""
+        from . import cardqueue, proposals
+        off = {}
+        gone = lambda t: off[t] if t in off else off.setdefault(t, proposals.written_past(self, t) | cardqueue.held(self, t))
+        return [r for r in rows if not (r.get('TaskId') and r['ReviewId'] in gone(r['TaskId'])) and not cardqueue.obsolete_read(self, r.get('TaskId'), r)]
     @contextlib.contextmanager
     def review_delivery_edit(self, rid):
         """Exclude send claims while attachment bytes/envelopes change, even in another process."""
@@ -5825,26 +5826,22 @@ class SQLiteStore:
         if cur.rowcount: self._review_changed(rid)
         return bool(cur.rowcount)
     def pending_review(self, task_id, kind=None, live_only=True):
-        """The task's live pending review, by the SAME visibility rule the queue uses: a draft the
-        owner can no longer see is not one to re-draft into or treat as already-answered. Pass
-        live_only=False only to reach a row deliberately - housekeeping, not the funnel."""
+        """The task's newest pending review ROW, for a road that DECIDES about it - re-draft into it, answer it, retire it, dismiss it on a
+        close. It is NOT what waits on his press: a draft held behind another card or one the thread moved past is still found here.
+        Whatever is SHOWN or LIT for him asks waiting_on_owner (the one rule, _stands). live_only=False reaches a row the queue hides."""
         q = f"SELECT rv.* {_REVIEW_FROM} WHERE rv.TaskId=? AND rv.Status='pending'"
         if kind:      q += ' AND rv.Kind=?'
         else:         q += " AND rv.Kind<>'slot'"             # a task's emails (slots.py) are never its reply
         if live_only: q += f' AND {_NOT_ORPHAN} AND {_VISIBLE_PENDING}'
         return self._one(q + ' ORDER BY rv.ReviewId DESC LIMIT 1', (task_id, kind) if kind else (task_id,))
-    def waiting_on_owner(self, task_id):
-        """The newest thing on the task waiting for the owner's press - a reply draft, one of its emails (slots.py) or a proposal - by
-        the queue's visibility rule. pending_review leaves the emails out (they are never the reply), so "is anything waiting on you"
-        asked of it read an agent's unsent email as nothing: the task said "agent done" and went to Reports (the product audit, 2026-11-08)."""
-        # ...never a reply draft the thread has moved past (proposals.written_past - the one rule the chat greys it by): it is not the one to
-        # press, whether or not an agent has heard the newer message yet
-        # ...nor one that waits its turn behind another (cardqueue): the one that stands is what waits on him
-        from . import cardqueue, proposals
-        past = proposals.written_past(self, task_id) | cardqueue.held(self, task_id)
-        return next((r for r in self._rows(f"SELECT rv.* {_REVIEW_FROM} WHERE rv.TaskId=? AND rv.Status='pending' AND {_NOT_ORPHAN} AND {_VISIBLE_PENDING} "
-                                           "ORDER BY rv.ReviewId DESC", (task_id,))
-                     if r['ReviewId'] not in past and not cardqueue.obsolete_read(self, task_id, r)), None)
+    def waiting_on_owner(self, task_id, kinds=()):
+        """WHAT WAITS ON HIS PRESS ON THIS TASK - the newest card that stands (_stands: never one held behind another, never one the thread
+        moved past): a reply draft, one of its emails (slots.py), a proposal. `kinds` narrows it (('draft', 'draft_reply'): the reply).
+        Every surface that shows or lights a card asks this - the pill, the rail, the desk's lit Send, the phone, the Assistant - so none of
+        them names a card another one holds back (the audit, 2026-11-19: the desk lit Send on a reply the queue held)."""
+        rows = self._rows(f"SELECT rv.* {_REVIEW_FROM} WHERE rv.TaskId=? AND rv.Status='pending' AND {_NOT_ORPHAN} AND {_VISIBLE_PENDING} "
+                          "ORDER BY rv.ReviewId DESC", (task_id,))
+        return next(iter(self._stands([r for r in rows if not kinds or r['Kind'] in kinds])), None)
     def sent_reply(self, message_id=None, task_id=None):
         """The newest reply that actually passed the send gate for this message/task.
 

@@ -115,7 +115,10 @@ def phone_text(store, t: dict, lane: str, says: str) -> tuple:
     blocks, rows, ready = [f"{task_ref(tid)} {_title(t)} - {says or lane}."], [], []
     if lane == 'approve':
         emails = [(i, store.get_review(i['rid'])) for i in slots.open_(store, tid) if i.get('rid')]
-        emails = [(i, rv) for i, rv in emails if rv and rv.get('Status') == 'pending']
+        # ...an email held behind another card is offered nowhere (cardqueue): the phone sends what stands, as the desk does
+        from . import cardqueue
+        held = cardqueue.held(store, tid)
+        emails = [(i, rv) for i, rv in emails if rv and rv.get('Status') == 'pending' and rv['ReviewId'] not in held]
         for n, (i, rv) in enumerate(emails, 1):
             o = i['out']; addr = o['to'] if '@' in str(o.get('to')) else ''
             who = o.get('name') or o['to']
@@ -129,7 +132,7 @@ def phone_text(store, t: dict, lane: str, says: str) -> tuple:
         if len(ready) > 1:
             rows.append((f"Send {'both' if len(ready) == 2 else f'all {len(ready)}'} ready ones",
                          {'t': 'sendall', 'sends': [[rv['ReviewId'], _sig(rv.get('DraftText'))] for rv in ready]}))
-        reply = None if emails else store.pending_review(tid)
+        reply = None if emails else store.waiting_on_owner(tid, ('draft', 'draft_reply'))
         if reply and str(reply.get('DraftText') or '').strip():
             blocks.append(str(reply['DraftText']).strip())
             rows.append(('Send the reply', {'t': 'send', 'rid': reply['ReviewId'], 'sig': _sig(reply.get('DraftText'))}))

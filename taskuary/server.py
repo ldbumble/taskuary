@@ -3304,7 +3304,7 @@ def resume_previous_work(task_id: int, background: BackgroundTasks):
         task = store.get_task(task_id)
         if not task: raise HTTPException(404, 'task not found')
         if task.get('Status') == 'dropped': raise HTTPException(409, 'This task was dismissed.')
-        review = store.pending_review(task_id)
+        review = store.waiting_on_owner(task_id)
         if review: return {'action': 'review', 'reviewId': review['ReviewId'], 'taskId': task_id}
         # A finished task is not a closed conversation. The agent's own session is still there to
         # pick up - and picking it up means there is live work again, so the task comes back to the

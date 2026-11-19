@@ -51,3 +51,21 @@ def test_a_finished_run_with_a_post_waiting_is_that_press_not_agent_done():
                   'DraftText': json.dumps({'action': 'run_tool', 'type': 'linkedin_post', 'text': 'Northwind rolled out Spendly.'})})
     s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'superseded', 'DraftText': 'old'})        # the newest row is not the waiting one
     assert taskstate.state(s, s.get_task(tid)) == 'approve'
+
+
+def test_a_reply_held_behind_a_post_is_lit_and_offered_nowhere():
+    # the roads audit, 2026-11-19 (#4): "what waits on him" had two answers - waiting_on_owner (the pill, the rail) left out a card held behind
+    # another (cardqueue), pending_review (the desk's lit Send, the phone's picks, the Assistant) did not. Ray Colton's reply, written behind a
+    # post still waiting, was the phone's "Send the reply" while the pill and the chat said the post stood. Every surface asks one rule now.
+    from taskuary import asks, cardqueue, rulebook
+    s = MemoryStore(); tid = s.create_task({'Title': 'Expense tool rollout post', 'Kind': 'general', 'Status': 'in_progress'}, 'owner')
+    post = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'the agent proposes to post on LinkedIn',
+                         'DraftText': json.dumps({'action': 'run_tool', 'type': 'linkedin_post', 'text': 'Northwind rolled out Spendly.'})})
+    reply = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Ray - the post goes up today.'})
+    assert cardqueue.held(s, tid) == {reply}
+    assert s.pending_review(tid)['ReviewId'] == reply, 'the row a decider re-drafts into is still found'
+    assert s.waiting_on_owner(tid)['ReviewId'] == post
+    assert rulebook._draft(s, {'tid': tid}, 'task', tid)['ReviewId'] == post, "the desk's lit button is the card that stands"
+    text, picks = asks.phone_text(s, s.get_task(tid), 'approve', 'a post waits for your Post')
+    assert 'Hi Ray' not in text and not any(a.get('rid') == reply for _, a in picks), 'the phone offers no held reply'
+    assert s.waiting_on_owner(tid, ('draft', 'draft_reply')) is None

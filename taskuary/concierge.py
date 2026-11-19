@@ -459,7 +459,7 @@ def task_now(store, tid: int) -> str:
     else:
         from .general import carry_on
         state = 'no agent on it right now' + (f" - its last session is saved ({carry_on(t)})" if continuable(store, tid) else '')
-    rv = store.pending_review(tid)
+    rv = store.waiting_on_owner(tid)
     last = next((c for c in reversed(store.list_comments(tid)) if c.get('ActorType') in ('agent', 'assistant_agent')), None)
     lines = [f"TASK NOW: {task_ref(tid)} [{t.get('Status')}, {t.get('Kind')}] {t.get('Title') or ''} - {state}"]
     # ...and WHAT ITS SCREEN SAYS, so "what is it doing?" is answered from the work, not from a status word - the canvas
@@ -2077,7 +2077,7 @@ def _canvas_table(store, item: dict, d: dict) -> list:
     by = "the task's own recommended move" if d.get('by') == 'agent' else "the Advisor's pick"
     if d.get('verb'):
         lines.append(f"  lit: {d['verb']} \"{d.get('label') or buttons.label(d['verb'])}\" - {by}" + (f": {_cut(d['line'], 120)}" if d.get('line') else ''))
-    rv = store.get_review(item['rid']) if item.get('rid') else store.pending_review(t['TaskId']) if t else None
+    rv = store.get_review(item['rid']) if item.get('rid') else store.waiting_on_owner(t['TaskId']) if t else None
     first = next((ln.strip() for ln in str((rv or {}).get('DraftText') or '').splitlines() if ln.strip()), '')
     if first and str((rv or {}).get('Status') or 'pending') == 'pending': lines.append(f'  draft waiting for Send: "{_cut(first, 140)}"')
     # ...the row's own buttons on the desk and Next on the walk's bar beside them (table_actions' pick); a phone's chips
@@ -3769,7 +3769,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             if _TURN.get() is not None: _TURN.get()['made'] = t
         if not t or not store.get_task(t): raise CallMiss(_no_task(store, tid, it, kind))
         if tk == 'review':
-            rv = (store.get_review(it['rid']) if not ref and it.get('rid') else None) or store.pending_review(t)
+            rv = (store.get_review(it['rid']) if not ref and it.get('rid') else None) or store.waiting_on_owner(t)
             if not rv: raise CallMiss(f'{task_ref(t)} has no draft waiting - nothing to {kind.split(".")[1]}.')
             params['target'] = rv['ReviewId']
         else: params['target'] = t

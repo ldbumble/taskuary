@@ -672,7 +672,7 @@ def _msgs(store, item, target_kind, target_id) -> list:
 def _draft(store, item, target_kind, target_id):
     """The draft waiting for the owner's yes on this item, or None."""
     r = store.get_review(int(item['rid'])) if item.get('rid') else None
-    if not r and target_kind == 'task': r = store.pending_review(int(target_id))
+    if not r and target_kind == 'task': r = store.waiting_on_owner(int(target_id))
     if not r and target_kind == 'message': r = store._one("SELECT * FROM review WHERE MessageId=? AND Status='pending' ORDER BY ReviewId DESC LIMIT 1", (int(target_id),))
     return r if r and r.get('Status') in ('pending', 'held') and (r.get('FinalText') or r.get('DraftText')) else None
 

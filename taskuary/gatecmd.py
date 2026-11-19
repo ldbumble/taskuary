@@ -38,11 +38,15 @@ def folder() -> str:
     from loguru import logger
     from . import config
     d, py = config.home() / 'bin' / 'gate', sys.executable
+    # ...THIS SERVER'S OWN CODE, wherever the agent's shell stands (round 4, 2026-11-19): `-m taskuary` from the agent's folder found whichever
+    # taskuary that Python had installed - another checkout's, an older one's - and the hold that ran was not the one its server asked
+    root = str(Path(__file__).resolve().parent.parent)
     try:
         d.mkdir(parents=True, exist_ok=True)
         for n in GATED:
-            _write(d / f'{n}.cmd', f'@"{py}" -m taskuary.gatecmd "%~dp0." {n} %*\r\n')
-            _write(d / n, f'#!/bin/sh\nexec "{py.replace(chr(92), "/")}" -m taskuary.gatecmd "$(dirname "$0")" {n} "$@"\n', 0o755)
+            _write(d / f'{n}.cmd', f'@set "PYTHONPATH={root};%PYTHONPATH%"\r\n@"{py}" -m taskuary.gatecmd "%~dp0." {n} %*\r\n')
+            _write(d / n, f'#!/bin/sh\nPYTHONPATH="{root.replace(chr(92), "/")}:$PYTHONPATH" exec "{py.replace(chr(92), "/")}" -m taskuary.gatecmd '
+                          f'"$(dirname "$0")" {n} "$@"\n', 0o755)
         _DIR['d'] = str(d)
     except OSError as e:
         logger.warning(f'the browser and desktop hold could not be put on the agents\' PATH - {e}'); _DIR['d'] = ''
@@ -145,7 +149,9 @@ def main(argv: list = None) -> int:
     why = ask(name, args)
     if why: print(why, file=sys.stderr); return 1
     from . import spawn
-    rc = spawn.run([exe, *args]).returncode
+    # ...ITS OUTPUT HANDED ON BY NAME (round 4, 2026-11-19): started with no console, a real program behind a .cmd wrote nothing to the handles it
+    # only inherited - every snapshot, url and read came back empty, and the agent worked the sites with curl instead
+    rc = spawn.run([exe, *args], stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr).returncode
     if (said := ask(name, args, after=True)): print(said, file=sys.stderr)
     return rc
 

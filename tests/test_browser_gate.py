@@ -622,3 +622,34 @@ def test_plain_typing_runs_without_a_verdict_and_the_press_after_it_is_one():
         assert calls == [], 'typing asks no model'
         bg.check(s, t, 'run1', 'agent-browser fill @e2 "alex@northwind.example" && agent-browser click @e12', Brain({}))
     assert len(calls) == 1 and 'fill @e2' not in calls[0] and 'click @e12' in calls[0]
+
+
+def test_the_launcher_runs_this_servers_code_and_hands_the_real_programs_output_on(tmp_path):
+    """Round 4, 2026-11-19: a real program behind a .cmd, started with no console, wrote nothing to the handles it only inherited - every
+    snapshot, url and read came back empty, and the agent worked the vendor sites with curl. And `-m taskuary` from the agent's folder ran
+    whichever taskuary that Python had installed, not the server's own."""
+    import subprocess, sys
+    root = str(Path(gatecmd.__file__).resolve().parent.parent)
+    gatecmd._DIR.clear()
+    try:
+        with mock.patch('taskuary.config.home', return_value=tmp_path): d = gatecmd.folder()
+    finally: gatecmd._DIR.clear()
+    assert root in (Path(d) / 'agent-browser.cmd').read_text(encoding='utf-8') and root.replace(chr(92), '/') in (Path(d) / 'agent-browser').read_text(encoding='utf-8')
+    real = tmp_path / ('real.cmd' if os.name == 'nt' else 'real.sh')
+    real.write_text('@echo page-snapshot\r\n' if os.name == 'nt' else '#!/bin/sh\necho page-snapshot\n'); real.chmod(0o755)
+    script = tmp_path / 'launch.py'
+    script.write_text(f'import sys; sys.path.insert(0, {root!r}); from unittest import mock; from taskuary import gatecmd\n'
+                      f'with mock.patch.object(gatecmd, "real", return_value={str(real)!r}), mock.patch.object(gatecmd, "ask", return_value=""):\n'
+                      f'    sys.exit(gatecmd.main(["gate", "agent-browser", "snapshot"]))\n', encoding='utf-8')
+    out = subprocess.run([sys.executable, '-I', str(script)], capture_output=True, text=True, timeout=60)
+    assert 'page-snapshot' in out.stdout, (out.stdout, out.stderr)
+
+
+def test_signup_is_taskuarys_own_verb_answered_by_the_server_never_the_real_program():
+    assert gatecmd.own('agent-browser signup') == 'signup' and gatecmd.own('agent-browser --session x signup') == 'signup'
+    assert gatecmd.own('agent-browser click @e3') == '' and gatecmd.own('agent-browser snapshot -i') == ''
+    ran, posted = [], []
+    with mock.patch.object(gatecmd, 'real', return_value='real-agent-browser'), mock.patch('taskuary.spawn.run', lambda argv, **k: ran.append(argv)), \
+         mock.patch.object(gatecmd, 'post', lambda cmd, after=False, wait=0: posted.append(cmd) or {'own': True, 'ok': True, 'said': 'Signed up on x.example'}):
+        assert gatecmd.main(['gate', 'agent-browser', 'signup']) == 0
+    assert ran == [] and posted == ['agent-browser signup']

@@ -552,7 +552,7 @@ def turn(store, tid: int, at_work: bool) -> dict | None:
     from .conversation import ep
     t0, recs = ep(run.get('at')), [r for r in run.get('steps') or [] if r.get('kind') != 'agent']
     steps = [{'k': 'error' if r.get('status') == 'failed' else 'note', 'text': step_line(r)} for r in recs]
-    return {'kind': 'turn', 'at': run.get('at') or '', 'state': 'working' if at_work else 'done', 'steps': steps,
+    return {'kind': 'turn', 'id': f'run:{int(tid)}', 'at': run.get('at') or '', 'state': 'working' if at_work else 'done', 'steps': steps,
             'text': '' if at_work else str(run.get('summary') or ''), 'cards': [], 'started': t0 or None,
             'ended': None if at_work else t0 + (run.get('ms') or 0) / 1000}
 
@@ -607,7 +607,7 @@ def execute(store, src, tid, trigger='manual', llm=None, mail: dict = None) -> d
 def _walk(store, src, tid, trigger, llm, ctx, recs, repairs, rec, start, t0) -> dict:
     """The steps from `start` on, recorded on the run row `rec` - a run from its top (execute), or one going on after the owner's
     yes (resume). The repair loop, the stop, the failure's record and the agent hand-off are here, once."""
-    from . import buttons, ingest, workflows
+    from . import buttons, chatlog, ingest, workflows
     cfg, sid, rid = workflows.cfg_of(src), src.get('SourceId'), rec['run_id']
     steps, title, at, ref = steps_of(cfg), cfg.get('title') or src.get('Address') or 'Workflow', rec['at'], task_ref(tid)
     stop, agent, app, asked = None, None, None, False
@@ -621,7 +621,7 @@ def _walk(store, src, tid, trigger, llm, ctx, recs, repairs, rec, start, t0) -> 
             if step.get('kind') == 'agent' and not _skip(step, ctx): agent = step; break
             r = run_step(store, step, ctx, llm, tid, title=title)
             recs.append(r)
-            store.set_report_run_steps(rid, recs, ms=int((time.time() - t0) * 1000))
+            store.set_report_run_steps(rid, recs, ms=int((time.time() - t0) * 1000)); chatlog.ran(store, tid)
             store.add_comment(tid, 'workflow', 'agent', f"Step {i + 1}/{n} {step_line(r)}")
             if r['status'] in ('failed', 'waiting'): stop = i; break
         if stop is None or recs[-1]['status'] != 'failed': break
@@ -657,7 +657,7 @@ def _walk(store, src, tid, trigger, llm, ctx, recs, repairs, rec, start, t0) -> 
              + ('; the agent takes it from here.' if agent else '.')
              # ...and an email that did not go is what the run left the owner: the outcome says it, not only its step's line
              + (f" {plural(len(held), 'email')} {'waits' if len(held) == 1 else 'wait'} for your Send." if (held := [r for r in recs if r.get('kind') == 'draft' and r.get('review_id')]) else ''))
-    store.set_report_run_steps(rid, recs, failed, error, ms, words)
+    store.set_report_run_steps(rid, recs, failed, error, ms, words); chatlog.ran(store, tid)
     # ...A RUN THAT STOPS KEEPS WHAT ITS STEPS READ, WHOLE (the stress round, 2026-11-18): the record holds BODY_CAP of each, and the run that
     # went on after his yes rebuilt its steps from that - a script after the approved write summed 23 of the 150 bills read before it
     if stop is not None:

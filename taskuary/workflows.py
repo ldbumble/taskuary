@@ -444,7 +444,7 @@ def run(store, src, actor: str = 'schedule', trigger: str = 'schedule', context:
 
 
 def _run(store, src, actor, trigger, context, mail) -> dict:
-    from . import ingest, browserview, flow
+    from . import chatlog, ingest, browserview, flow
     from .agents import CODING_KINDS
     defn, steps = definition(store, src), flow.is_flow(cfg_of(src))
     busy = running(store, defn['source_id'])
@@ -485,5 +485,6 @@ def _run(store, src, actor, trigger, context, mail) -> dict:
             else: ingest._auto_general(store, tid, text)
         finally:
             with _LOCK: _STARTING.discard(tid)
+            if steps: chatlog.ran(store, tid)           # ...the run's turn is over once the run lets go of its task
     out = {'task_id': tid, 'ref': task_ref(tid), 'kind': kind, 'title': defn['title'], 'trigger': trigger, 'steps': steps}
     return {**out, 'start': start}

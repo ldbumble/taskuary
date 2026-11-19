@@ -508,7 +508,9 @@ def _items(store, tid: int) -> dict:
             # ...a coding session's turn by its own record (its session, its place in it): an input that joined above it never renames it (the
             # basic flow's check, 2026-11-12: a mail placed over a closed session's turn renamed it, and the turn went and came back)
             x['_seg'] = x.pop('seg', None)
-            x['id'] = f"t:{x['sid']}:{x['_seg']}" if x.get('sid') and x['_seg'] is not None else f't:{anchor}:{n}'; n += 1
+            # ...and a routine's run by its own (flow.turn's `run:<task>`), the key its steps go on writing under (chatlog.ran)
+            x['id'] = (x['id'] if str(x.get('id') or '').startswith('run:') else f"t:{x['sid']}:{x['_seg']}" if x.get('sid') and x['_seg'] is not None
+                       else f't:{anchor}:{n}'); n += 1
         else:
             if x['kind'] in ('line', 'arrival', 'press'): anchor, n = x['id'], 0
         if x['id'] in seen: x['id'] += f":{len(seen)}"

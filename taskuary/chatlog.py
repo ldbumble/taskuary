@@ -366,6 +366,20 @@ def void(_): return None
 
 
 @_safe
+def ran(store, tid: int) -> None:
+    """A ROUTINE'S RUN OF STEPS IS ITS TASK'S TURN (flow.turn), written as it goes: each step under it in order, at work while the run has the
+    task (workflows.at_work), its last word once it is over. One key for the run (`run:<task>`), the one the frozen list gives it, so a task
+    read mid-run goes on in place. A task not frozen yet is frozen whole at its first read."""
+    from . import flow, workflows
+    tid = int(tid)
+    if not migrated(store, tid) or not (ft := flow.turn(store, tid, workflows.at_work(tid))): return
+    key = ft['id']
+    put(store, tid, 'turn', key, {k: ft[k] for k in ('at', 'started', 'ended', 'text')} if ft['state'] == 'done' else {'at': ft['at'], 'started': ft['started']},
+        state=ft['state'], src=f'run:{tid}')
+    for i, s in enumerate(ft['steps']): put(store, tid, 'step', f'{key}:s{i}', s, parent=key)
+
+
+@_safe
 def summarized(store, tid: int, body: str) -> None:
     "A turn's summary (what it was about, what it did, what is left on him) filed after its answer: kept on that turn's own row."
     try: sm = json.loads(body or '')
@@ -831,12 +845,13 @@ def serve(store, tid: int, level: str = None) -> dict:
     """What the page draws for task `tid`: the log's items, in its one order, each turn at its level, and beside them what waits by the box,
     what the agent asks, the permissions it waits on, the line of cards and the hold. A task is frozen into the log at its first read
     (migrate); what waits is never also drawn (an input is in one place)."""
-    from . import general, origin
+    from . import general, origin, workflows
     tid = int(tid)
     if not migrated(store, tid): migrate(store, tid)
     hold_ = origin.hold(store, tid)
     at_work = general.working(store, tid) if not hold_ else bool(getattr(general._live_of(tid), 'busy', False))
     if at_work and (h := _halted(store, tid)): at_work = bool(general.waiting_lines(store, tid)) or h == 'stopped_turn' and bool(getattr(general._live_of(tid), 'owes_stop', lambda: False)())
+    at_work = at_work or workflows.at_work(tid)            # ...a routine running its steps is at work with no agent at all (flow.turn)
     # ..."working" is one fact (general.working): a turn the log holds at work while nothing works has either not begun yet - nothing of it is
     # drawn until it has - or was left by a process that is gone (a restart): it is over, in place
     if not at_work and (t := _live(store, tid)):

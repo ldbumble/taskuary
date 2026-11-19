@@ -373,7 +373,9 @@ class Holding(unittest.TestCase):
         self.assertIn(f'{bg.PRESS_JS}("button", "Continue")', tab.ran)
         said = self.heard()[0]
         self.assertIn('opened https://pay.toll.example/checkout/review again in a tab of its own', said); self.assertIn('"Thank you"', said)
-        # ...and a page that no longer shows that control: nothing pressed, said so, the card over
+        # ...and a page that no longer shows that control: nothing pressed, said so, the card over - on another task, since his yes to this
+        # press on this site stands for the task he gave it on (actrule.remember), and there it would run with no card at all
+        self.tid = Factory(self.s).task('Pay the parking invoice')
         self.held(); [rv] = self.pending(); gone = Tab(there=False)
         with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': 'https://pay.toll.example/checkout/other'}),                 mock.patch.object(signin, 'tab_at', lambda sid, url: gone):
             out = verdicts.decide(self.s, rv, 'approve')

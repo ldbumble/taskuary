@@ -1181,6 +1181,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                               important=intent.get('priority') == 'important')
         if (d := danger(store, {}, None, intent)): msg['_danger'] = d         # read before the route keeps it: the start below asks
         if intent['intent'] == 'reply_only': f['kind'] = 'reply'
+        # ONE ARRIVAL RULE (the owner's GO, 2026-11-19): anything placed in Tasks starts its agent as it arrives - "on your list, no agent works
+        # it" left a colleague's question and a vendor's invoice under "on you" with nothing lit. What only he can press, the agent sets up as
+        # its card; a start that may not happen says why under the arrival (not_started). Only a thread watched waits with no agent
+        elif f['kind'] == 'task' and not watching: f['kind'] = 'general'
         from . import playbooks as _pb
         # the verdict's own title/summary lead (PW-074); the router's subject/body cut is the fallback
         if intent.get('title'): f['title'] = intent['title']
@@ -2437,6 +2441,7 @@ def first_agent(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> 
     from . import general
     v, t = follow or {}, store.get_task(tid) or {}
     kind = str(v.get('kind') or '').lower()
+    kind = 'general' if kind == 'task' else kind          # ...the one arrival rule: work on his own list is the general agent's too
     if v.get('degraded') or v.get('intent') != 'task' or kind not in task_kinds.AGENT or live_agent(store, tid): return None
     if t.get('Kind') in task_kinds.AGENT and (general.history(store, tid) or store.list_runs(tid) or store.resumable_session(tid)
                                               or started(store, tid)): return None

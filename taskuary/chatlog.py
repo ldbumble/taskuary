@@ -29,8 +29,11 @@ def _frozen(kind: str, state, old: dict, new: dict) -> list:
 def _strict() -> bool: return 'PYTEST_CURRENT_TEST' in os.environ
 
 
+# EVERY USE OF THE WRITER'S CONNECTION IS UNDER THE STORE'S LOCK (walk 3, 2026-11-19, a py-spy dump of the freeze): `migrated` read
+# store.cx bare on a request thread while another held the lock mid-statement - sqlite's connection mutex on one side, the GIL on the
+# other, and every request stopped. The helpers take the (re-entrant) lock themselves, so no caller can forget it.
 def _bump(store, tid: int) -> None:
-    store.cx.execute('INSERT INTO chatlog_task (TaskId, Rev) VALUES (?, 1) ON CONFLICT(TaskId) DO UPDATE SET Rev = Rev + 1', (int(tid),))
+    with store.lock: store.cx.execute('INSERT INTO chatlog_task (TaskId, Rev) VALUES (?, 1) ON CONFLICT(TaskId) DO UPDATE SET Rev = Rev + 1', (int(tid),))
 
 
 def _poke(store, tid: int) -> None:
@@ -39,7 +42,7 @@ def _poke(store, tid: int) -> None:
 
 
 def _row(store, tid: int, key: str):
-    r = store.cx.execute('SELECT * FROM chatlog WHERE TaskId=? AND Key=?', (int(tid), key)).fetchone()
+    with store.lock: r = store.cx.execute('SELECT * FROM chatlog WHERE TaskId=? AND Key=?', (int(tid), key)).fetchone()
     return dict(r) if r else None
 
 
@@ -171,7 +174,7 @@ def _item(r: dict) -> dict:
 
 
 def rev(store, tid: int) -> int:
-    r = store.cx.execute('SELECT Rev FROM chatlog_task WHERE TaskId=?', (int(tid),)).fetchone()
+    with store.lock: r = store.cx.execute('SELECT Rev FROM chatlog_task WHERE TaskId=?', (int(tid),)).fetchone()
     return r['Rev'] if r else 0
 
 
@@ -846,7 +849,7 @@ def backed_up(store) -> bool:
 
 
 def migrated(store, tid: int) -> bool:
-    r = store.cx.execute('SELECT Migrated FROM chatlog_task WHERE TaskId=?', (int(tid),)).fetchone()
+    with store.lock: r = store.cx.execute('SELECT Migrated FROM chatlog_task WHERE TaskId=?', (int(tid),)).fetchone()
     return bool(r and r['Migrated'])
 
 

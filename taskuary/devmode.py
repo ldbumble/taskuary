@@ -15,7 +15,7 @@ def evidence(store, cfg: dict = None) -> str:
     "The first thing that says this home already codes, in a few words - '' when nothing does."
     from . import config, terminal
     cfg = config.load() if cfg is None else cfg
-    has = lambda sql: store.cx.execute(sql).fetchone() is not None
+    has = lambda sql: store._one(sql) is not None          # ...through the store's own read (under its lock): never the writer bare
     if has("SELECT 1 FROM task WHERE lower(Kind)='coding' LIMIT 1"): return 'a coding task'
     if has("SELECT 1 FROM run r JOIN agent a ON a.Name=r.AgentName WHERE lower(a.Kind) IN ('coding','cli') LIMIT 1"): return 'a coding agent run'
     # ...picked by the owner: one an older start saved for them (adopt_brain_setting) only says a CLI was connected

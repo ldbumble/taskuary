@@ -233,12 +233,17 @@ export const proposalPresentation = (review) => {
     rejectLabel: "Dismiss",
     readOnly: true,
   };
-  // A SCRIPT THE AGENT WROTE ON THE JOB, KEPT AS A ROUTINE (proposals 'save_routine', the owner 2026-11-10): the script stands whole and
-  // read-only in the box - Approve saves exactly that as a routine (workflows.save_script_routine) and runs nothing
+  // A SCRIPT THE AGENT WROTE ON THE JOB, KEPT AS A ROUTINE (proposals 'save_routine', the owner 2026-11-10) - Approve saves exactly that as a
+  // routine (workflows.save_script_routine) and runs nothing. SAID IN WORDS (design round 4, 2026-11-19: an ops manager was asked to approve
+  // 60 lines of Python): what it does, when and where it runs, its steps - the script folded under "Show the script"
   if (proposal?.action === "save_routine") return {
     kind: "action",
     title: "Save this as a routine",
     context: review.Reason || "Proposed · nothing is saved or run until you approve",
+    lead: upFirst(String(proposal.why || proposal.title || "A routine")),
+    leadWhy: `Runs ${proposal.runs || "when you run it"}, on this computer${Array.isArray(proposal.steps) && proposal.steps.length
+      ? `: ${proposal.steps.map((s, i) => (i ? String(s).toLowerCase() : String(s))).join(", then ")}` : ""}. Nothing is saved or run until you approve.`,
+    folded: true, foldWord: "script",
     destinationLabel: "It runs",
     destination: `${proposal.runs || "when you run it"} · ${proposal.title || ""}`,
     approveLabel: APPROVE,

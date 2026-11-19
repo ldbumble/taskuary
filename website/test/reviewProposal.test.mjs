@@ -165,7 +165,7 @@ test("a held shell step leads with what it does and why, its command folded", ()
   const gate = p({});
   assert.equal(gate.lead, "Delete build in ledger"); assert.equal(gate.leadWhy, "Held before it ran - it can't be undone.");
   const card = readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
-  assert.match(card, /\{cmdOpen \? "Hide the command" : "Show the command"\}/);
+  assert.match(card, /\$\{cmdOpen \? "Hide" : "Show"\} the \$\{proposal\.foldWord \|\| "command"\}/);
   assert.match(card, /\.\.\.\(\(proposal\?\.folded && !cmdOpen\) \|\| proposal\?\.bare \? \{ display: "none" \} : \{\}\)/, "the command's box stays folded until asked for");
 });
 
@@ -214,6 +214,10 @@ test("a save-as-routine card shows the script whole and read-only, with when it 
   assert.equal(reviewText({ Kind: "action", DraftText: JSON.stringify({ action: "save_routine", title: "Late fees", script }) }), script);
   const card = proposalPresentation(rv);
   assert.deepEqual([card.title, card.destinationLabel, card.destination, card.readOnly], ["Save this as a routine", "It runs", "daily 07:00 · Late fees", true]);
+  // ...SAID IN WORDS, the script folded (design round 4, 2026-11-19: an ops manager was asked to approve 60 lines of Python)
+  const said = proposalPresentation({ ...rv, DraftText: JSON.stringify({ ...p, why: "lists the invoices that carry a late fee", steps: ["Read", "Run the script", "Read what it found"] }) });
+  assert.deepEqual([said.lead, said.leadWhy, said.folded, said.foldWord], ["Lists the invoices that carry a late fee",
+    "Runs daily 07:00, on this computer: Read, then run the script, then read what it found. Nothing is saved or run until you approve.", true, "script"]);
   const done = { ...p, result: { source: 7, link: "#report=7", said: 'Saved the routine "Late fees" - it runs daily 07:00.' } };
   assert.deepEqual(resultOf({ Kind: "action", Status: "approved", FinalText: JSON.stringify(done) }),
     { said: "Approved · saved the routine", what: 'Saved the routine "Late fees" - it runs daily 07:00.', url: "", command: "" });

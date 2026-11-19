@@ -739,7 +739,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       {/* ...and while the AI writes it, its spinner IN the box (the owner, 2026-10-30: "spin in the box of drafting") */}
       {proposal?.folded && <Typography {...pressable(() => setCmdOpen((o) => !o))} data-tq-show-command="" aria-expanded={cmdOpen}
         sx={{ ...FOCUS_RING, display: "inline-block", fontSize: 11.5, color: "var(--tq-link, #55697a)", cursor: "pointer", fontWeight: 600, mb: cmdOpen ? 0.5 : 0,
-          "&:hover": { textDecoration: "underline" } }}>{cmdOpen ? "Hide the command" : "Show the command"}</Typography>}
+          "&:hover": { textDecoration: "underline" } }}>{`${cmdOpen ? "Hide" : "Show"} the ${proposal.foldWord || "command"}`}</Typography>}
       <Box ref={draftRef} data-tq-draft-box="" data-tq-field="draft" data-tq-label="Reply draft" sx={{ position: "relative", ...((proposal?.folded && !cmdOpen) || proposal?.bare ? { display: "none" } : {}) }}>
         {drafting && <CircularProgress size={14} data-tq-drafting-spin="" sx={{ position: "absolute", top: 12, right: 12, zIndex: 1, color: FAINT }} />}
         <DraftField value={value} onChange={(e) => setText(e.target.value)} marks={blanks}

@@ -82,5 +82,29 @@ class TwoTasksOneRoom(unittest.TestCase):
         self.assertEqual(_own(s, 'x2', '2026-10-29 08:00:00', 'early line'), t)
 
 
+class AnOlderTaskInTheRoom(unittest.TestCase):
+    """The live shape, 2026-11-19: a one-to-one chat holds months of lines. A coding task begun two days before took its first line from that
+    chat at 11:11; its chat then drew, at its top, the owner's own lines to the same person from yesterday and from 11:08 - each filed on
+    another task in the room - as if they had just arrived. A line on the room is this task's only from when the task joined the room."""
+    def test_lines_filed_on_another_task_before_this_one_joined_the_room_are_not_drawn(self):
+        from taskuary import conversation
+        s = MemoryStore()
+        old = s.create_task({'Title': 'Rota', 'Kind': 'task', 'Status': 'open'}, 'o')
+        new = s.create_task({'Title': 'Build the export', 'Kind': 'coding', 'Status': 'open'}, 'o')
+        s._exec("UPDATE task SET CreatedAt='2026-10-27 14:33:00' WHERE TaskId=?", (new,))
+        _in(s, old, 'e1', '2026-10-28 14:53:00', 'Can you look at the rota?')
+        self.assertEqual(_own(s, 'o1', '2026-10-28 15:16:00', 'on it'), old)
+        self.assertEqual(_own(s, 'o2', '2026-10-29 11:08:00', 'done'), old)
+        _in(s, new, 'e2', '2026-10-29 11:11:00', 'About the export: the dates come out wrong')
+        s._exec("UPDATE message SET CreatedAt=SentAt")
+        drawn = [m['ExternalId'] for m in conversation._mail(s, new)]
+        self.assertEqual(drawn, ['e2'])
+        # ...a line of his on the room after the task joined it is still drawn here, wherever it was filed
+        mid = s.add_message({'ExternalId': 'o3', 'ConversationId': CONV, 'Channel': 'whatsapp', 'FromName': 'Alex Doyle', 'Direction': 'out',
+                             'SentAt': '2026-10-29 11:15:00', 'BodyText': 'looking at it', 'Status': 'context'})
+        s.attach_message(mid, old)
+        self.assertEqual([m['ExternalId'] for m in conversation._mail(s, new)], ['e2', 'o3'])
+
+
 if __name__ == '__main__':
     unittest.main()

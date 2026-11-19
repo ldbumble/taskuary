@@ -1099,9 +1099,8 @@ def own_replies(store, tid: int, since: str = None) -> list:
     owner sent while the turn worked was older than the answer, and no turn ever heard it."""
     if since is None and not (since := last_turn_began(store, tid)): return []
     ours = went_from_here(store, tid)
-    rows = store._rows("SELECT * FROM message WHERE (IFNULL(Direction,'in')='out' OR Status='context') AND CreatedAt>? AND Status NOT IN ('history','skipped') "
-                       "AND (TaskId=? OR ConversationId IN (SELECT ConversationId FROM message WHERE TaskId=? AND ConversationId<>'')) "
-                       "ORDER BY SentAt, MessageId", (since, tid, tid))
+    rows = store._rows("SELECT * FROM message m WHERE (IFNULL(m.Direction,'in')='out' OR m.Status='context') AND m.CreatedAt>? "
+                       "AND m.Status NOT IN ('history','skipped') AND (m.TaskId=? OR " + ON_THREAD + ") ORDER BY m.SentAt, m.MessageId", (since, tid, tid))
     return [x for x in rows if not ours(x)]
 def own_heard(store, tid: int) -> list:
     """The owner's own replies on the thread that the turn now beginning hears: what the LEDGER says this hand-over took (conversation.with_turn)
@@ -1295,11 +1294,14 @@ def with_failure(store, tid: int, msgs: list) -> list:
 # ...AND THE OWNER'S LINE ON THE THREAD WHEREVER IT WAS FILED (the owner, 2026-11-09: "don't see the sent message on left side like we discussed"):
 # in a room holding two tasks, or with no task matching it, their reply is filed on one task or none (channels.ingest_own_message) - the agent
 # here heard it (own_replies reads the thread) and quoted it, while the chat drew it nowhere. The thread's own lines since the task began are
-# drawn on its chat too, on the left, as theirs
+# drawn on its chat too, on the left, as theirs.
+# ...only FROM WHEN THIS TASK JOINED THE ROOM (the live app, 2026-11-19): a one-to-one chat holds months of lines; a coding task begun two days
+# before took its first line from it at 11:11, and its chat drew his lines to that person from yesterday and 11:08 - filed on other tasks - on top
+ON_THREAD = ("IFNULL(m.ConversationId,'')<>'' AND EXISTS (SELECT 1 FROM message t WHERE t.TaskId=? AND t.ConversationId=m.ConversationId "
+             "AND IFNULL(t.SentAt,t.CreatedAt)<=IFNULL(m.SentAt,m.CreatedAt))")
 ROOM_OWN = ("SELECT m.* FROM message m WHERE (IFNULL(m.Direction,'in')='out' OR m.Status='context') AND IFNULL(m.TaskId,0)<>? "
-            "AND m.Status NOT IN ('history','skipped') AND IFNULL(m.Channel,'')<>'report' AND IFNULL(m.ConversationId,'')<>'' "
-            "AND m.ConversationId IN (SELECT ConversationId FROM message WHERE TaskId=? AND IFNULL(ConversationId,'')<>'') "
-            "AND IFNULL(m.SentAt,m.CreatedAt)>=? ORDER BY m.SentAt, m.MessageId")
+            "AND m.Status NOT IN ('history','skipped') AND IFNULL(m.Channel,'')<>'report' AND " + ON_THREAD +
+            " AND IFNULL(m.SentAt,m.CreatedAt)>=? ORDER BY m.SentAt, m.MessageId")
 def room_own(store, tid: int) -> list:
     "The owner's own lines on task `tid`'s thread filed elsewhere (another task in the room, or none), since the task began - as JOINED rows."
     t0 = str((store.get_task(tid) or {}).get('CreatedAt') or '')

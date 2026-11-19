@@ -684,9 +684,9 @@ def signed_in(store, tid: int, rid: str) -> dict:
     return {'delivered': True, 'state': 'delivered'} if told else {'delivered': False, 'state': 'failed', 'why': 'the agent could not be told - see the task'}
 
 
-def _audit(store, tid, site, how, ok, why='', saved=None, code=None):
+def _audit(store, tid, site, how, ok, why='', saved=None, code=None, signup=False):
     d = {'site': site, 'how': how, 'ok': bool(ok), **({'why': why} if why else {}), **({'saved': saved} if saved is not None else {}),
-         **({'code': code} if code is not None else {})}
+         **({'code': code} if code is not None else {}), **({'signup': True} if signup else {})}
     store.audit('task', tid, 'signin_fill', 'taskuary' if how == 'vault' else 'owner', 'system' if how == 'vault' else 'human', d)
 
 
@@ -1471,7 +1471,7 @@ def _no_box(site) -> str:
             '`agent-browser signup` on the page that asks for the password.')
 
 
-def _make(store, tid, sid, site, c, fill=None, send=None) -> tuple[bool, str]:
+def _make(store, tid, sid, site, c, fill=None, send=None, said: dict = None) -> tuple[bool, str]:
     """Type a new password into the page `c` is on, keep it, send the form, and say what the site answered. Kept BEFORE it is sent: a restart
     in those seconds left an account nobody could sign in to (2026-11-18). The row it replaced comes back if the site turns the form down."""
     f = c.js(FORM) or {}
@@ -1490,7 +1490,8 @@ def _make(store, tid, sid, site, c, fill=None, send=None) -> tuple[bool, str]:
     except Exception as e: got = {'ok': False, 'why': str(e) if isinstance(e, SignInError) else 'the browser could not be reached'}
     if not got.get('ok'):
         if not kept: _restore(store, site, prev)
-        _audit(store, tid, site, 'vault', False, got.get('why') or 'the form stayed up')
+        _audit(store, tid, site, 'vault', False, got.get('why') or 'the form stayed up', signup=True)
+        if said is not None: said['why'] = got.get('why') or ''
         return False, (f'No account: {site} kept its sign-up form up' + (f' - it says "{got["why"]}"' if got.get('why') else '') + '. Nothing was '
                        'kept. Fix what it asks for and run `agent-browser signup` again; a box only the owner can fill is theirs.')
     if (u := got.get('user')) and u != user and not kept: user = u; save(store, site, user, pw, by='taskuary', keep_old=True)
@@ -1521,12 +1522,12 @@ def _answered(store, tid, sid, site, c, user, kept) -> str:
     if f.get('top') and on_site(f.get('href'), site) and code_step(f):
         threading.Thread(target=code_watch, args=(store, tid, sid, site), kwargs={'url': str(f.get('href') or '')}, daemon=True,
                          name=f'code-watch-{tid}').start()
-        _audit(store, tid, site, 'vault', True, 'a code was asked', saved=not kept)
+        _audit(store, tid, site, 'vault', True, 'a code was asked', saved=not kept, signup=True)
         return (f'Not an account yet: {site} took the form{who} and asks for a code it emailed. Taskuary types it from the mail when it comes and tells '
                 f"you; never ask for it. The password is kept with the owner's saved sign-ins.{kept} Go on with the next one meanwhile.")
     there = f'"{look.get("title") or ""}" ({look.get("href") or f.get("href") or ""})'
     if f.get('top') and on_site(f.get('href'), site) and not f.get('password') and (status or 200) < 400:
-        _audit(store, tid, site, 'vault', True, 'signed up', saved=not kept)
+        _audit(store, tid, site, 'vault', True, 'signed up', saved=not kept, signup=True)
         return (f"Signed up on {site}{who}, and signed in: the page shows {there}.{coded} Its password is kept with the owner's saved sign-ins - you "
                 f'never need it; to sign in again later, open its sign-in page and end a turn with [[TASKUARY-SIGNIN: {site}]].{kept}')
     _audit(store, tid, site, 'vault', True, 'sent', saved=not kept)
@@ -1556,10 +1557,12 @@ def send_held(store, tid, sid, p) -> dict:
     try:
         with tab_at(sid, url) as (c, opened):
             if opened: c.js(f'{REFILL}({json.dumps(p.get("fields") or [])})')
-            ok, line = _make(store, tid, sid, site, c)
-    except SignInError as e: ok, line = False, f'Nothing was sent: {e}.'
+            ok, line = _make(store, tid, sid, site, c, said=(got := {}))
+    except SignInError as e: ok, line, got = False, f'Nothing was sent: {e}.', {'why': str(e)}
     _tell(store, tid, f'The owner approved the sign-up on {site}. {line}', wake=True)
-    if not ok: raise RuntimeError(line)
+    # ...his card says what became of it in his words (say.owner) - the agent's own next step ("run `agent-browser signup` again") is the agent's
+    from . import say
+    if not ok: raise RuntimeError(say.owner({'kind': 'signup_failed', 'site': site, 'why': (got or {}).get('why')}))
     return {'performed': p.get('what') or f'the sign-up on {site}', 'site': site}
 
 

@@ -636,16 +636,10 @@ def text(raw) -> str:
 # ...ONE LINE THAT SAYS WHY, never git's list of files (the owner, 2026-11-10: "no idea what this is" over "U site/demo/assets/...js / U ...").
 # By the tools' own grammar, not by meaning: a status entry, a commit line or a bare path is not a reason, and git, gh and WSL put theirs on
 # an `error:` / `fatal:` line; else its first line, where WSL says it
-_LISTED = re.compile(r'^([ MADRCU?!]{1,2}\s+\S+|[0-9a-f]{7,40}\s.*|[^\s:]+[/\\][^\s]+)$')
-_SAYS_WHY = re.compile(r'^(error|fatal|ERROR|FATAL)\b')
-# ...and PowerShell's own frame around its message - "At line:1 char:66", the echoed line and its `+ ~~~` marks, "+ CategoryInfo" - is where,
-# never why: the owner read "It failed: At line:1 char:66" (2026-11-19), the reason two lines under it
-_PS_FRAME = re.compile(r'^(At (line|char):\d|At [^:]+:\d+ char:\d+|\+ )')
 def failed(said: str, rc: int, what: str = '') -> str:
     "What the owner reads when the held step failed: what did not happen, in his words, and the one line where the tool says why."
-    lines = [l.strip() for l in str(said or '').splitlines() if l.strip()]
-    told = [l for l in lines if not _LISTED.match(l) and not l.lower().startswith('hint:') and not _PS_FRAME.match(l)] or lines
-    why = next((l for l in told if _SAYS_WHY.match(l)), told[0] if told else '')
+    from . import say
+    why = say.reason(said)
     step = str(what or 'the held step').split(';')[0].strip()
     return f"{step[:1].upper()}{step[1:]} failed: {why[:240] or f'exit {rc}'}"
 

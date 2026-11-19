@@ -44,6 +44,11 @@ HELD = 'Taskuary held this for the owner'
 
 
 # ── is it here, and is it on ──────────────────────────────────────────────────────────────────────────────────────────────
+def _unsure() -> str:
+    from .say import HELD
+    return HELD['unsure_undo']          # his words for the judge's doubt (say.owner), never "the AI could not tell"
+
+
 def path() -> str:
     from . import pathcache
     return pathcache.which(EXE) or ''
@@ -252,7 +257,7 @@ def _verdict(v: dict | None, w: str) -> dict:
     if v is None: return {'hold': True, 'what': w, 'why': "the AI's answer could not be read, so it waits for you"}
     said, app = ' '.join(str(v.get('what') or '').split())[:200] or w, ' '.join(str(v.get('app') or '').split())[:60]
     if v['irreversible']: return {'hold': True, 'what': said, 'why': "it can't be undone", **({'app': app} if app else {})}
-    if not v['sure']: return {'hold': True, 'what': said, 'why': 'the AI could not tell whether it can be undone', **({'app': app} if app else {})}
+    if not v['sure']: return {'hold': True, 'what': said, 'why': _unsure(), **({'app': app} if app else {})}
     return {'hold': False, 'what': said, 'why': ''}
 
 

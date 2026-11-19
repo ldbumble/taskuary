@@ -820,7 +820,8 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))} - pu
            # ...and the press that LANDED it: with no phrase of its own the line read "You landed." (agent walk 2, 2026-11-10)
            'landed': lambda d: f"pressed {_land_how(d)} on the agent's work - it went through" + (f" ({d['sha'][:7]})" if d.get('sha') else ''),
            # ...and one the remote or git REFUSED (landing.land): kept as their press, so the card's failure outlives its answer
-           'land_refused': lambda d: f"pressed {_land_how(d)} on the agent's work and it was REFUSED - nothing went out: {_cut(d.get('why'), 200)}",
+           # ...said by its reason line (say.owner): git's raw output under it read as his own words in the chat
+           'land_refused': lambda d: _say({'kind': 'land_refused', 'how': _land_how(d), 'why': d.get('why')}),
            # ...and the task's own Publish (server /land), which writes ci's rows in their name: "You pr opened." (the stress round, 2026-11-10)
            'pr_opened': lambda d: f"opened draft pull request {d.get('repo')}#{d.get('number')}",
            'pushed_direct': lambda d: f"pushed {plural(int(d.get('commits') or 0), 'commit')} straight onto {d.get('base') or 'the default branch'}"
@@ -885,11 +886,13 @@ def clock_of(at) -> str:
 def _detail(r):
     try: d = json.loads(r.get('Detail') or '{}'); return d if isinstance(d, dict) else {}
     except ValueError: return {}
+def _say(e) -> str:
+    from . import say
+    return say.owner(e)
 def _signed_in(d) -> str:
     from . import words
-    if not d.get('ok'): return f"tried to sign in to {d.get('site')} - it did not go in"
-    went = 'signed up on' if d.get('why') == 'signed up' else 'signed in to'
-    return f"{went} {d.get('site')}" + (f" - saved for next time (remove it under {words.name('signins')})" if d.get('saved') else '')
+    return _say({'kind': 'signin', 'site': d.get('site'), 'ok': d.get('ok'), 'signup': d.get('signup') or d.get('why') == 'signed up',
+                 'saved': d.get('saved'), 'where': words.name('signins')})
 def presses(store, tid: int, since: str = '') -> list:
     "The owner's presses on task `tid` after `since`, oldest first: [(audit id, at, what)] - its own and its shares."
     from .processing_unread import OWNER_ACTORS

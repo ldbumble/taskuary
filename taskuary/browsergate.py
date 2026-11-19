@@ -464,6 +464,11 @@ def _judge(store, todo: list, pg: dict, brain=None, said: str = '') -> list:
     return [_verdict(a, v, pg, said) for a, v in zip(todo, vs)]
 
 
+def _held_why(k: str) -> str:
+    from .say import HELD
+    return HELD[k]
+
+
 def _verdict(act: dict, v: dict | None, pg: dict, said: str) -> dict:
     if v is None: return {'hold': True, 'what': target(act, pg) or _cmd(act), 'why': "the AI's answer could not be read, so it waits for you"}
     what = ' '.join(str(v.get('what') or '').split())[:200]
@@ -481,7 +486,7 @@ def _verdict(act: dict, v: dict | None, pg: dict, said: str) -> dict:
     if setting(act) and not (big is None and v['irreversible'] and v['sure']): return {'hold': False, 'what': what, 'why': ''}
     if big is None and v['irreversible'] and v['sure']: return {'hold': True, 'what': what, 'why': "it can't be undone"}
     if big is None and v['sure']: return {'hold': False, 'what': what, 'why': ''}
-    return {'hold': True, 'what': what, 'why': 'the AI could not tell whether it spends money or sends your own details, so it waits for you'}
+    return {'hold': True, 'what': what, 'why': _held_why('unsure')}
 
 
 # ── held: the proposal, and the agent told why ────────────────────────────────────────────────────────────────────────────

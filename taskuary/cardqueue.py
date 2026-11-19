@@ -183,9 +183,14 @@ def what(store, u: dict) -> str:
         why = why.split(' - ')[0]
         # ...cut at a word, never mid-word ("so its effect is u" stood on the line, design round 6)
         return (why if len(why) <= 90 else why[:90].rsplit(' ', 1)[0].rstrip(',;:') + '…') or 'the next step'
-    try: env = json.loads(r.get('Deliver') or '{}') or {}
-    except (TypeError, ValueError): env = {}
-    if isinstance(env, dict) and env.get('kind') == 'calendar': return 'the calendar answer'
+    try: own = json.loads(r.get('Deliver') or '{}') or {}
+    except (TypeError, ValueError): own = {}
+    if isinstance(own, dict) and own.get('kind') == 'calendar': return 'the calendar answer'
+    # ...WHERE IT WENT IS THE ONE ANSWER THE CARD READS (outbound.review_envelope): what went out once sent, else where it would go - walk 2,
+    # 2026-11-19: the card said "Sent to Erin Blake" and the agent was told the reply went to Gail, and drafted an apology to her
+    from .outbound import review_envelope
+    try: env = review_envelope(store, r)
+    except Exception: env = own if isinstance(own, dict) else {}
     to = env.get('to') if isinstance(env, dict) else None
     to = ', '.join(to) if isinstance(to, list) else str(to or '')
     if not to and r.get('MessageId'): m = store.get_message(r.get('AnswersMid') or r['MessageId']) or {}; to = m.get('FromName') or m.get('FromEmail') or ''

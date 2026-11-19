@@ -751,6 +751,12 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
         theirs = taskcontext.sender_history(store, msg)
         if theirs: thread = {**thread, 'sender_history': theirs}
     except Exception as e: logger.debug(f'recent closures skipped: {e}')
+    # ...and never the task these very words just opened (same_work's `skip`: New opens its task at once, and the read beside it named that
+    # new task as the same work - walk 2, 2026-11-19: a second Payworth task stood beside the open one)
+    if (gone := {int(x) for x in msg.get('_skip') or ()}):
+        tid_of = lambda w: int(w.get('tid') or 0) if isinstance(w, dict) else int((re.findall(r'\(tid (\d+)\)', str(w)) or [0])[0])
+        thread = {k: ([w for w in v if tid_of(w) not in gone] if isinstance(v, list) and k in ('open_work', 'recently_closed', 'room_tasks', 'open_items',
+                                                                                                    'found_by_search') else v) for k, v in thread.items()}
     # ...and today's meetings, so a mail about one can be seen to be about something already on the owner's calendar (2026-10-15)
     try:
         from . import context as taskcontext
@@ -1583,7 +1589,8 @@ def same_work(store, words: str, who: str = OWNER_WORDS, skip=(), llm=None) -> i
         me, key = sorted(own_addresses(store)), hashlib.sha1(f'{who}\n{words}'.encode()).hexdigest()[:16]
         msg = {'external_id': f'{WORDS_CHANNEL}:{key}', 'conversation_id': f'{WORDS_CHANNEL}:{key}', 'channel': WORDS_CHANNEL, 'direction': 'in',
                'from_name': who, 'source_name': who, 'from_email': me[0] if me and who == OWNER_WORDS else '',
-               'subject': f'New work asked by {who}: {words[:100]}', 'body': words[:3000], 'sent_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+               'subject': f'New work asked by {who}: {words[:100]}', 'body': words[:3000], 'sent_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+               '_skip': sorted(skip)}
         intent, fail = judge(store, msg, llm, owner_addresses(store), own_addresses(store))
     except Exception as e:
         logger.info(f'the same-work reading was skipped, the work is new: {e}'); return None

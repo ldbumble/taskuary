@@ -380,7 +380,7 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
             store.add_comment(rv['TaskId'], actor, 'human', f"Reviewed draft ({verb}):\n{attempted['body']}")
             store.add_comment(rv['TaskId'], actor, 'human',
                               ('The earlier send was confirmed with the provider; nothing was sent again. ' if reconciled else '')
-                              + f"Sent by {sent.get('channel') or 'the channel'} to {', '.join(sent.get('to') or []) or 'the chat'}{copied}{files}.")
+                              + f"Sent by {sent.get('channel') or 'the channel'} to {', '.join(_went_to(store, rv, attempted) or sent.get('to') or []) or 'the chat'}{copied}{files}.")
         store.audit('review', rid, 'reconciled_sent' if reconciled else 'sent_outbound' if outgoing else verb, actor,
                     detail={'kind': rv.get('Kind'), 'sent': True, 'channel': sent.get('channel'), 'to': sent.get('to')})
         _settle_task_after_sent_reply(store, rv, actor, True)
@@ -699,6 +699,14 @@ def in_words(got, n: int = 300) -> str:
                      if isinstance(v, (str, int, float)) and not isinstance(v, bool) and str(w := rows(v)).strip())[:n]
 
 
+def _went_to(store, rv: dict, attempted: dict) -> list:
+    "Whom a send went to, as its card says it (outbound.review_envelope over the envelope it went out on) - one answer for the card, the line and the agent."
+    from .outbound import review_envelope
+    try: to = review_envelope(store, {**rv, 'DeliveryEnvelope': json.dumps({'envelope': attempted.get('envelope') or {}})}).get('to') or []
+    except Exception: return []
+    return [to] if isinstance(to, str) else list(to)
+
+
 def pressed(store, rv: dict, out: dict) -> tuple:
     "(the press, what it did) of an answered review, in words for its agent."
     if rv.get('Kind') == 'action':
@@ -717,7 +725,12 @@ def pressed(store, rv: dict, out: dict) -> tuple:
     # readdressed it, or copied someone): "the reply was sent" let its next turn tell him it had answered the person it drafted it for
     from .cardqueue import what
     named, got = what(store, {'rids': [rv['ReviewId']], 'rows': [rv]}), out.get('sent')
-    to, cc = ((got.get('to') or [], got.get('cc') or []) if isinstance(got, dict) else ([], []))
+    # ...whom it went to is the ONE answer the card reads (outbound.review_envelope: the envelope it went out on), never the send's own guess
+    # of it - walk 2, 2026-11-19: the card said "Sent to Erin Blake" and the agent was told it went to Gail
+    from .outbound import review_envelope
+    went = review_envelope(store, store.get_review(rv['ReviewId']) or rv)
+    to, cc = (went.get('to') or [], went.get('cc') or []) if isinstance(went, dict) else ([], [])
+    to, cc = [to] if isinstance(to, str) else list(to), [cc] if isinstance(cc, str) else list(cc)
     to = [str(a) for a in to if str(a).lower() not in named.lower()]
     whom = ' - it went' + (f" to {', '.join(to)}" if to else '') + (f", copying {', '.join(map(str, cc))}" if cc else '') if to or cc else ''
     return 'Send', f"rv{rv['ReviewId']} ({named}) was sent{whom}" + (f" ({got})" if isinstance(got, str) else '')

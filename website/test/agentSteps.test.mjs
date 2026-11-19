@@ -471,3 +471,9 @@ test("a command with no words of its own reads as the command itself, a script b
   assert.deepEqual(stepsOf([call("a", "git status"), call("b", "git status")]).map((s) => s.summary), ["Ran git status (2 times)"]);
   assert.equal(stepsOf([call("a", "python - <<'EOF'\nprint(1)\nEOF"), call("b", "python - <<'EOF'\nprint(2)\nEOF")]).length, 2);
 });
+
+// A FAILED STEP SAYS WHY IN HIS WORDS FROM THE SERVER (say.step_why, 2026-11-19) - a merged row of the same call made again keeps it
+test("a merged row of repeated tries keeps the server's why of the newest that failed", async () => {
+  const src = (await import("node:fs")).readFileSync(new URL("../src/agentSteps.js", import.meta.url), "utf8");
+  assert.match(src, /run\.some\(\(x\) => x\.why\) \? \{ why: run\.filter\(\(x\) => x\.why\)\.at\(-1\)\.why \}/);
+});

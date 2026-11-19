@@ -311,20 +311,8 @@ class Halt(Exception):
 def _stale(op, why): return {**_public(op), 'status': 'stale', 'error': why, 'duplicate': False}
 
 
-# A failure is said to the owner as it is stored: "422: I could not tell..." wore FastAPI's status prefix, and a refused
-# hand-off printed the full path of a checkout on this machine into the chat (2026-09-29 audit). The folder's own name
-# says which checkout; the rest of the path says nothing to the owner and does not belong in a chat.
-_PATH = re.compile(r'(?<![\w/:])(?:[A-Za-z]:[\\/]|/(?:Users|home|tmp|var|opt)/)[^\s\'",;)]+')
+from .say import names as plain      # one road for a failure's words (say.py)
 
-
-def plain(e) -> str:
-    detail = getattr(e, 'detail', None)
-    s = str(detail if isinstance(detail, str) else e)
-    s = re.sub(r'^\d{3}:\s*', '', s)
-    def name(m):
-        path = m.group(0).rstrip('.')                        # a sentence's full stop is not part of the folder
-        return path.replace('\\', '/').rstrip('/').rsplit('/', 1)[-1] + m.group(0)[len(path):]
-    return _PATH.sub(name, s)
 
 
 def execute(store, op_id: str, version: int, run, actor: str = 'owner') -> dict:

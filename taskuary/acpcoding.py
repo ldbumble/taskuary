@@ -21,6 +21,7 @@ does with the screen, this does with typed updates:
 
 An adapter that does not start puts today's pty in its place, said once (FELL_BACK). A turn that fails part-way is said, never retried."""
 import os, re, threading, time, uuid
+from .say import said as _said            # a failure written to the chat is said in his words (say.py)
 from collections import deque
 from datetime import datetime
 from loguru import logger
@@ -288,8 +289,8 @@ class ACPCoding:
             FELL_BACK.add(self.cli); logger.warning(f'acp: {self.cli} coding session did not start over ACP ({e}) - running it in its terminal')
         if not self.fallback:
             general.answered(self.task_id, every=True)
-            self.store.add_comment(self.task_id, 'router', 'agent', f'{self.cli} did not start over ACP ({str(e)[:200]}).'); return self._emit_end()
-        self.store.add_comment(self.task_id, 'router', 'agent', f'{self.cli} did not start over ACP ({str(e)[:200]}) - it runs in its terminal instead.')
+            self.store.add_comment(self.task_id, 'router', 'agent', f'{self.cli} did not start over ACP ({_said(e)}).'); return self._emit_end()
+        self.store.add_comment(self.task_id, 'router', 'agent', f'{self.cli} did not start over ACP ({_said(e)}) - it runs in its terminal instead.')
         try: self.fallback()
         except Exception as x:
             logger.warning(f'acp coding {self.sid}: the terminal fallback did not start either - {x}')

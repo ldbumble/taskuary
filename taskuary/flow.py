@@ -23,6 +23,7 @@ demand after a failure (repair, which only ever PROPOSES a changed list unless t
 A workflow with no `flow` is one agent step (steps_of), so every workflow saved before this runs exactly as it did.
 """
 import hashlib, json, re, time
+from .say import said as _said            # a failure written to the chat is said in his words (say.py)
 from datetime import datetime
 from loguru import logger
 
@@ -874,7 +875,7 @@ def _repair_now(store, src, cfg, tid, rid, stop, recs, llm, repairs):
         was = steps_of(cfg)
         try: d = apply(store, sid, out['flow'], 'workflow', out['why'])
         except Exception as e:
-            store.add_comment(tid, 'workflow', 'agent', f'The repair could not be kept: {e}'); return False
+            store.add_comment(tid, 'workflow', 'agent', f'The repair could not be kept: {_said(e)}'); return False
         # THE RECEIPT SAYS WHAT IT CHANGED - the steps it replaced are kept on the run; no Take it back (the owner, 2026-10-19: "no take it back
         # button. hate that"): a repair the owner does not want is changed back in the step editor, like any step
         repairs.append({'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'step': bad.get('id'), 'label': bad.get('label'),

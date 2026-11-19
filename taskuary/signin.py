@@ -37,6 +37,7 @@ Not built yet (next phase): reading a code out of the mail, a code split over on
 port is LAN-only), and a 1Password/Bitwarden provider.
 """
 import hashlib, html as H, ipaddress, json, logging, re, secrets, shutil, subprocess, tempfile, threading, time
+from .say import said as _said            # a failure written to the chat is said in his words (say.py)
 from pathlib import Path
 from urllib.parse import urlsplit
 from loguru import logger
@@ -780,7 +781,7 @@ def keep_typed(store, tid, site) -> bool:
     if t.get('site') != site or not t.get('pw'): return False
     try: save(store, site, t.get('user') or '', t['pw'], by='owner', extra=t.get('extra') or None)
     except ValueError as e:
-        store.add_comment(tid, 'taskuary', 'agent', f'Your {site} sign-in was not saved: {e}.'); return False
+        store.add_comment(tid, 'taskuary', 'agent', f'Your {site} sign-in was not saved: {_said(e)}.'); return False
     store.add_comment(tid, 'taskuary', 'agent', SAVED_LINE.format(site=site, where=words.name('signins')))
     return True
 
@@ -918,7 +919,7 @@ def _code_from_mail(store, tid, site, c, mid, code) -> bool:
         return True
     try: _type_code(c, site, lambda: code)
     except SignInError as e:
-        store.add_comment(tid, 'taskuary', 'agent', f'{site} emailed you {mail}, and its code could not be typed ({e}) - type it on the page.')
+        store.add_comment(tid, 'taskuary', 'agent', f'{site} emailed you {mail}, and its code could not be typed ({_said(e)}) - type it on the page.')
         return True
     _audit(store, tid, site, 'vault', True, 'the code it emailed', code=True)
     store.add_comment(tid, 'taskuary', 'agent', f'Typed the code {site} emailed you ({mail}).')

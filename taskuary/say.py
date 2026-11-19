@@ -105,10 +105,8 @@ def plain(text, who: str = 'ai') -> str:
     t = ' '.join(str(text or '').split('\n')[0].split())
     if not t: return ''
     if not raw(text):
-        from .operations import plain as names
         return names(t)
     if who == 'service':
-        from .channels import plain_failure
         s = plain_failure(RuntimeError(str(text)))
         return s if not raw(s) else 'The service answered with an error.'
     if who in ('start', 'any'):                         # a start or a press that failed: the one road a failure's sentence takes (failures.classify)
@@ -121,3 +119,102 @@ def plain(text, who: str = 'ai') -> str:
     s = turn_failed(text).split(' - ')[0].split(':')[0].rstrip('.') + '.'
     # ...a press or a page answered by some other service is never blamed on the AI
     return s.replace('The AI provider', 'The service it called').replace('The AI stopped', 'It stopped') if who == 'any' else s
+
+
+# ── the readings each surface had of its own, folded here (one road): a path's folder name, a service's failure, an AI's ──────────────
+# A failure is said to the owner as it is stored: "422: I could not tell..." wore FastAPI's status prefix, and a refused
+# hand-off printed the full path of a checkout on this machine into the chat (2026-09-29 audit). The folder's own name
+# says which checkout; the rest of the path says nothing to the owner and does not belong in a chat.
+_PATH = re.compile(r'(?<![\w/:])(?:[A-Za-z]:[\\/]|/(?:Users|home|tmp|var|opt)/)[^\s\'",;)]+')
+
+
+def names(e) -> str:
+    detail = getattr(e, 'detail', None)
+    s = str(detail if isinstance(detail, str) else e)
+    s = re.sub(r'^\d{3}:\s*', '', s)
+    def name(m):
+        path = m.group(0).rstrip('.')                        # a sentence's full stop is not part of the folder
+        return path.replace('\\', '/').rstrip('/').rsplit('/', 1)[-1] + m.group(0)[len(path):]
+    return _PATH.sub(name, s)
+
+
+# WHAT A FAILED TEST SAYS. The card used to print the exception as it came - a socket's
+# "[Errno 11001] getaddrinfo failed", a server's "401 Client Error: Unauthorized for url: ..." -
+# which tells the owner something broke and not what to do next. The common failures get a
+# sentence with the next step in it; anything else keeps its own words, which are usually ours.
+# LastError keeps the raw text: problems.lapsed() reads it to spot an expired sign-in.
+_DNS = re.compile(r'getaddrinfo failed|Name or service not known|nodename nor servname|Temporary failure in name resolution|NameResolutionError|No address associated', re.I)
+_TIMEOUT = re.compile(r'timed? ?out|ReadTimeout|ConnectTimeout', re.I)
+_REFUSED = re.compile(r'Connection refused|actively refused|ECONNREFUSED|WinError 10061', re.I)
+# ...a connection that dropped part-way through a read, as the socket, imaplib and requests each word it
+_DROPPED = re.compile(r'Connection aborted|Connection reset|RemoteDisconnected|socket error|EOF occurred|Broken pipe|IncompleteRead', re.I)
+_AUTH_WORDS = re.compile(r'\b(invalid_auth|not_authed|token_revoked|token_expired|account_inactive|bad credentials|invalid[_ ]api[_ ]key|incorrect api key)\b', re.I)
+def _status(e):
+    r = getattr(e, 'response', None)
+    code = getattr(r, 'status_code', None) or getattr(e, 'code', None) or getattr(e, 'status_code', None)
+    if isinstance(code, int): return code
+    # requests/httpx spell it "401 Client Error: Unauthorized for url" when only the text survives a re-raise
+    m = re.search(r'\b(401|403|429|5\d\d)\b[^\n]{0,20}(?:Client Error|Server Error|Unauthori[sz]ed|Forbidden|Too Many Requests)', str(e), re.I)
+    if m: return int(m.group(1))
+    # ...and an API that answers 200 with its own word for it: Slack's "invalid_auth" was printed to the owner as it came
+    return 401 if _AUTH_WORDS.search(str(e)) else None
+
+
+def plain_failure(e: Exception, signin: bool = False) -> str:
+    raw = str(e)
+    from . import googlecal, msauth
+    if msauth.LAPSED in raw or googlecal.lapsed(raw): return raw[:500]      # already says what to do: sign in again
+    code = _status(e)
+    # ...the service's own trouble (a Microsoft outage, 2026-11-12): the raw line put its URL, the mailbox in it, on the card and the
+    # bell - and there is nothing on the card to change
+    if isinstance(code, int) and 500 <= code < 600:
+        return (f"The service is having trouble on its side (it answered {code}). Nothing here needs changing - "
+                "it is tried again on every poll, and what came in meanwhile is read once it is back.")
+    if code == 429: return ("The service asked Taskuary to slow down (too many requests at once). Nothing is lost - it is tried again on "
+                            "every poll, and the rest is read then.")
+    # ...a sign-in card has no key to paste: its sign-in still renews (a lapsed one says LAPSED above), so the service refused the read
+    if code == 401 and signin: return ("Microsoft refused the read though the sign-in still works - usually trouble on its side, and it "
+                                       "is tried again on every poll. If it lasts, sign in again on the card.")
+    if code == 401: return ("The service turned the key or password down. Check it is the current one - "
+                            "paste it again if it was changed or has expired - then Save and Test again.")
+    if code == 403: return ("The service knows this account but would not let it in. The key may not have permission "
+                            "for this, or an administrator has to allow it.")
+    if _DNS.search(raw): return ("The server's address could not be found. Check the server name for typos, "
+                                 "and that this computer is online.")
+    if isinstance(e, TimeoutError) or _TIMEOUT.search(raw):
+        return ("The server did not answer in time. It may be down, or this network may block it - try again in a minute.")
+    # setup has one box for the server and none for a port: the name is what can be checked, and IT knows the rest (2026-10-17)
+    if _REFUSED.search(raw): return ("The server turned the connection away. Check the server name, or ask your IT team "
+                                     "for the right server and port.")
+    # ...a read cut off part-way, or a server never reached (failures._UNREACHED, the road the run cards read): the socket's words
+    # and requests' repr - the folder, the host, the mailbox in its URL - reached the card and the bell with no word of what happens next
+    from .failures import _UNREACHED
+    if _DROPPED.search(raw): return ("The connection to the server dropped part-way through the read. Nothing already in is lost, "
+                                     "and it is tried again on every poll.")
+    if _UNREACHED.search(raw): return ("The server could not be reached - check this computer is online. It is tried again on every poll.")
+    # ...and any other answer as requests words it, without the address it was asked at - the mailbox is in that URL
+    return re.sub(r' for url: \S+', '', raw)[:500] or type(e).__name__
+
+
+# A FAILING AI IN PLAIN WORDS: the raw exception ("'claude' not found on PATH", "not JSON") stood on the Advisor's line, and stayed
+# there days after (the non-coder audit, 2026-10-17). Matched on what the SYSTEM said, never on anything the owner typed.
+_AI_ERRS = ((r'not found on path|no such file|is not recognized|cannot find the file', "it isn't installed on this computer any more"),
+            (r'json|verdict|parse|could not be read', "its answers came back in a form Taskuary can't read"),
+            (r'timed? ?out|took too long|deadline', 'it took too long to answer'),
+            (r'\b(401|403)\b|unauthori[sz]ed|forbidden|api key|sign[ -]?in|log ?in|expired|credential', 'it needs you to sign in again, or its key stopped working'),
+            (r'\b429\b|rate.?limit|quota|usage limit|credit|billing|insufficient|cap reached', 'it reached its usage limit or ran out of credit'),
+            (r'connect|network|getaddrinfo|resolve|unreachable|offline', "Taskuary couldn't reach it - check this computer is online"))
+
+
+def plain_ai_error(raw: str) -> str:
+    low = str(raw or '').lower()
+    said = next((said for pat, said in _AI_ERRS if re.search(pat, low)), 'it stopped answering') if low.strip() else ''
+    # ...and an answer it could not read says what came back (llm.unreadable): "a form Taskuary can't read" alone left nothing to go on
+    came = re.search(r'the AI (sent back|answered) [^()]*', str(raw or ''))
+    return f"{said}: {came.group(0).strip()}" if came and said == _AI_ERRS[1][1] else said
+
+
+def said(e) -> str:
+    "An exception as a line of the chat says it (say.plain): a tool's raw text never reaches him there."
+    d = getattr(e, 'detail', None)
+    return plain(d if isinstance(d, str) else str(e), 'any')

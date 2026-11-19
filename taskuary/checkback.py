@@ -8,6 +8,7 @@ its next turn (general.BRIEF_ACTOR, as a passed-in mail is): queued behind a tur
 Nothing else moves: the task stays where it is in Tasks, nothing is sent, nobody's phone is written to, and a closed task has none.
 """
 from datetime import datetime
+from .say import said as _said            # a failure written to the chat is said in his words (say.py)
 from loguru import logger
 
 CLOSED = ('done', 'dropped')
@@ -138,4 +139,4 @@ def fire(store, tid: int, what: str):
     except general.Stopped: pass
     except Exception as e:
         logger.warning(f'check-back on task {tid} not handed to its agent: {e}')
-        store.add_comment(tid, 'router', 'agent', f"The check-back could not wake the agent: {' '.join(str(e).split())[:200]} - {general.CARRY_ON}.")
+        store.add_comment(tid, 'router', 'agent', f"The check-back could not wake the agent: {_said(e)} - {general.CARRY_ON}.")

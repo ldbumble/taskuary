@@ -6,6 +6,7 @@ Pipeline per message: dedup -> deterministic policy -> route to a task -> intent
 answering is the responder's job (reply_only), doing is the coding agent's.
 """
 import contextlib, contextvars, hashlib, json, re, threading, time
+from .say import said as _said            # a failure written to the chat is said in his words (say.py)
 from datetime import datetime, timedelta
 from loguru import logger
 from . import kinds as task_kinds
@@ -1449,7 +1450,7 @@ def _judged_then_failed(store, mid, before, after, e) -> bool:
     and opened a second task. It stays on its task, saying what broke - never re-triaged as new work."""
     if not after or after == before: return False
     store.arrive(mid, after, 'routed', decided=True)
-    store.add_comment(after, 'triage', 'agent', f'Triaged onto this task; a later step failed ({str(e)[:160]}) - nothing was re-triaged.')
+    store.add_comment(after, 'triage', 'agent', f'Triaged onto this task; a later step failed ({_said(e)}) - nothing was re-triaged.')
     logger.warning(f'ingest: message {mid} reached {task_ref(after)}, then a later step failed - {e}')
     return True
 
@@ -2720,7 +2721,7 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
         if getattr(ses, "alive", True) is False and joinable(store, tid, shut=False):
             general.OPENING.add(tid); _replan_general(store, tid, said, mails=kept); return
         logger.warning(f'passing a line to the assistant failed for task {tid}: {e}')
-        store.add_comment(tid, 'router', 'agent', f"The assistant couldn't take {_who_said(msg)}'s new message: {' '.join(str(e).split())[:200]} - {general.CARRY_ON}.")
+        store.add_comment(tid, 'router', 'agent', f"The assistant couldn't take {_who_said(msg)}'s new message: {_said(e)} - {general.CARRY_ON}.")
 
 
 def _said_coding(store, tid, msg: dict) -> bool:
@@ -2781,7 +2782,7 @@ def _continue_general(store, tid, msg: dict = None, mid=None):
     except Exception as e:
         # said, not retried: the start queue's retry opens a conversation without a turn (_start_general prompts a fresh one only)
         logger.warning(f'assistant carry-on failed for task {tid}: {e}')
-        if not general.provider_down(e): store.add_comment(tid, 'router', 'agent', f"The assistant couldn't carry on by itself: {' '.join(str(e).split())[:200]} - {general.CARRY_ON}.")
+        if not general.provider_down(e): store.add_comment(tid, 'router', 'agent', f"The assistant couldn't carry on by itself: {_said(e)} - {general.CARRY_ON}.")
     finally: general.OPENING.discard(tid)
 
 
@@ -2880,7 +2881,7 @@ def _replan_general(store, tid, turn: str, mails=()):
     except general.Stopped: pass
     except Exception as e:
         logger.warning(f'assistant re-plan failed for task {tid}: {e}')
-        if not general.provider_down(e): store.add_comment(tid, 'router', 'agent', f"The assistant couldn't look again by itself: {' '.join(str(e).split())[:200]} - {general.CARRY_ON}.")
+        if not general.provider_down(e): store.add_comment(tid, 'router', 'agent', f"The assistant couldn't look again by itself: {_said(e)} - {general.CARRY_ON}.")
     finally: general.OPENING.discard(tid)
 
 
@@ -2943,7 +2944,7 @@ def _continue_coding(store, tid, said: str = ''):
         general.tell(store, tid, '\n\n---\n\n'.join(x for x in (carry_on_turn(store, tid), said) if x), 'router')
     except Exception as e:
         logger.warning(f'coding carry-on failed for task {tid}: {e}')
-        store.add_comment(tid, 'router', 'agent', f"The coding agent couldn't reopen its session by itself: {' '.join(str(e).split())[:200]} - Continue picks it up.")
+        store.add_comment(tid, 'router', 'agent', f"The coding agent couldn't reopen its session by itself: {_said(e)} - Continue picks it up.")
     finally: general.OPENING.discard(tid)
 
 

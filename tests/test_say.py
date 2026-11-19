@@ -98,3 +98,16 @@ def test_a_failed_steps_row_says_why_in_his_words():
     for r in RAWS: _clean(say.step_why(r), 'step row')
     assert say.step_why("U a.js\nerror: failed to push some refs\nhint: pull first") == 'Why: error: failed to push some refs'
     assert say.step_why('') == 'It stopped without saying why.'
+
+
+def test_one_road_for_a_failures_words():
+    # the readings each surface had of its own are say's (operations.plain, channels.plain_failure, firstrun.plain_ai_error): one function each
+    from taskuary import channels, firstrun, operations
+    assert channels.plain_failure is say.plain_failure and firstrun.plain_ai_error is say.plain_ai_error and operations.plain is say.names
+    assert say.said(RuntimeError('No AI is connected - connect one under Connections.')) == 'No AI is connected - connect one under Connections.'
+    for r in RAWS: _clean(say.said(RuntimeError(r)), 'a line in the chat')
+    # ...and no chat line is written from a raw exception any more: every add_comment that names `e` says it through say
+    import pathlib, re
+    for p in pathlib.Path(say.__file__).parent.glob('*.py'):
+        for n, l in enumerate(p.read_text(encoding='utf-8').splitlines(), 1):
+            if 'add_comment(' in l and re.search(r"\{(str\(e\)|e)(\)?\[:\d+\])?\}|' '\.join\(str\(e\)", l): raise AssertionError(f'{p.name}:{n} writes a raw exception to the chat')

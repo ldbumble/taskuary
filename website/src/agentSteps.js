@@ -617,7 +617,9 @@ function group(steps) {
     const summary = run.length > 1 ? together(run) : null;
     // ...and a run still under way is doing its NEWEST call: "Reading 3 files" said less than "Reading BudgetTable.js"
     const last = run[run.length - 1], doing = last.status === "running" ? last.doing || present(last.summary) : present(summary || "");
-    if (run.length > 1 && summary) out.push({ ...s, id: run.map((x) => x.id).join("+"), summary: withCount(summary, run), doing, status: statusOf(run), detail: run.map(detailOf).join("\n\n") });
+    if (run.length > 1 && summary) out.push({ ...s, id: run.map((x) => x.id).join("+"), summary: withCount(summary, run), doing, status: statusOf(run), detail: run.map(detailOf).join("\n\n"),
+      // ...and the server's why of the newest try that failed rides on the merged row (say.step_why) - the page's reading is the fallback only
+      ...(run.some((x) => x.why) ? { why: run.filter((x) => x.why).at(-1).why } : {}) });
     else for (const x of run) out.push({ ...x, summary: withCount(x.summary, [x]), detail: detailOf(x) });
     i = j;
   }

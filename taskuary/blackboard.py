@@ -6,6 +6,7 @@ peer in another repo is none of its business, and its tokens); a task LIKELY to 
 queues behind the one already working - first agent in has control.
 """
 import contextlib, json, os, re, threading, time
+from .say import said as _said            # a failure written to the chat is said in his words (say.py)
 from loguru import logger
 
 from .store import task_ref
@@ -538,7 +539,7 @@ def drain(store):
                 # and counting that as a failed launch would start the work twice (PW-088)
                 if _occupied(q['TaskId']):
                     store.clear_dispatch(q['TaskId'])
-                    store.add_comment(q['TaskId'], 'router', 'agent', f'Started, but noting it afterwards failed: {str(e)[:200]}')
+                    store.add_comment(q['TaskId'], 'router', 'agent', f'Started, but noting it afterwards failed: {_said(e)}')
                     continue
                 logger.warning(f'queued dispatch failed for task {q["TaskId"]}: {e}')
                 record_failure(store, q['TaskId'], e, q.get('Agent') or '')

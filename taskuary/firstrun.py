@@ -116,23 +116,9 @@ def sources(store) -> list:
     return [{**m, 'title': 'Email'} for m in _mailboxes(store)] + others
 
 
-# A FAILING AI IN PLAIN WORDS: the raw exception ("'claude' not found on PATH", "not JSON") stood on the Advisor's line, and stayed
-# there days after (the non-coder audit, 2026-10-17). Matched on what the SYSTEM said, never on anything the owner typed.
 AI_ERR_HOURS = 6           # a failure nothing has repeated in this long is not today's news - a still-broken AI stamps a new one per mail
-_AI_ERRS = ((r'not found on path|no such file|is not recognized|cannot find the file', "it isn't installed on this computer any more"),
-            (r'json|verdict|parse|could not be read', "its answers came back in a form Taskuary can't read"),
-            (r'timed? ?out|took too long|deadline', 'it took too long to answer'),
-            (r'\b(401|403)\b|unauthori[sz]ed|forbidden|api key|sign[ -]?in|log ?in|expired|credential', 'it needs you to sign in again, or its key stopped working'),
-            (r'\b429\b|rate.?limit|quota|usage limit|credit|billing|insufficient|cap reached', 'it reached its usage limit or ran out of credit'),
-            (r'connect|network|getaddrinfo|resolve|unreachable|offline', "Taskuary couldn't reach it - check this computer is online"))
+from .say import plain_ai_error     # one road for a failure's words (say.py)
 
-
-def plain_ai_error(raw: str) -> str:
-    low = str(raw or '').lower()
-    said = next((said for pat, said in _AI_ERRS if re.search(pat, low)), 'it stopped answering') if low.strip() else ''
-    # ...and an answer it could not read says what came back (llm.unreadable): "a form Taskuary can't read" alone left nothing to go on
-    came = re.search(r'the AI (sent back|answered) [^()]*', str(raw or ''))
-    return f"{said}: {came.group(0).strip()}" if came and said == _AI_ERRS[1][1] else said
 
 
 def _ai_error(store) -> str:

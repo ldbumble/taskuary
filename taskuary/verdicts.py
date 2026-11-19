@@ -5,6 +5,7 @@ never left the machine. The corrections feed LEARNED.md (an edit shows how the o
 writes, a reject what should never have been drafted).
 """
 import contextvars, hashlib, json, re, threading
+from .say import said as _said            # a failure written to the chat is said in his words (say.py)
 from pathlib import Path
 
 from loguru import logger
@@ -895,7 +896,7 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
             if verb == 'close_pr':
                 try: out = proposals.close_pr(store, rv, actor)
                 except Exception as e:
-                    store.add_comment(rv['TaskId'], actor, 'human', f'CLOSING THE PULL REQUEST FAILED: {str(e)[:300]}')
+                    store.add_comment(rv['TaskId'], 'taskuary', 'agent', f'Closing the pull request did not go: {_said(e)}')   # Taskuary's line, never his
                     store.review_act_failed(rid, str(e), actor)
                     return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': str(e)[:300], 'act_failed': True}
                 if not store.decide_review(rid, 'rejected', None, actor, 'closed the pull request without merging'): return _delivery_busy(store, rid)
@@ -905,7 +906,7 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
                 try:
                     out = proposals.execute(store, rv, actor, final, skip_checks=verb == 'merge_anyway', fields=fields)
                 except Exception as e:
-                    store.add_comment(rv['TaskId'], actor, 'human', f'PROPOSAL FAILED: {str(e)[:300]}')
+                    store.add_comment(rv['TaskId'], 'taskuary', 'agent', f'It did not go: {_said(e)}')                # Taskuary's line, never his
                     store.review_act_failed(rid, str(e), actor)     # the card says it after a reload, and its agent hears it (general.failed)
                     # ...AND IS OVER (the owner, 2026-11-16: no Try again): what the agent set up failed and is its again - the card keeps
                     # the error, the agent is woken with it (decide) and sets up what goes next. A close-out is Taskuary's own, and a

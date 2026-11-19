@@ -6,6 +6,7 @@ live-session surface as ``terminal.Term`` so assistant-ui and xterm are only ren
 attachments, the Wall, browser association, and session lifetime all point at one session id.
 """
 import base64, contextvars, json, mimetypes, re, threading, time, uuid
+from .say import said as _said            # a failure written to the chat is said in his words (say.py)
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -1521,7 +1522,7 @@ def take_check(store, tid: int, check) -> None:
     from . import origin, checkback
     if origin.of_task(store, tid)[0] == 'stranger': return
     try: checkback.set_check(store, tid, check.get('when'), check.get('what'), 'assistant')
-    except ValueError as e: store.add_comment(tid, 'assistant', 'agent', f'The check-back was not set: {e}')
+    except ValueError as e: store.add_comment(tid, 'assistant', 'agent', f'The check-back was not set: {_said(e)}')
     except Exception as e: logger.warning(f'task {tid}: the check-back was not set - {e}')
 
 
@@ -4120,7 +4121,7 @@ def _start_line(store, tid, t, text, files, actor, line_id, wid, kw):
             answered(tid, every=True)
             take_kept(store, tid, {wid})
             from .ingest import held_start
-            if not held_start(store, tid, e): store.add_comment(tid, 'router', 'agent', f"The agent did not start: {' '.join(str(e).split())[:300]}")
+            if not held_start(store, tid, e): store.add_comment(tid, 'router', 'agent', f"The agent did not start: {_said(e)}")
         raise
     finally:
         if handles(t): answered(tid)

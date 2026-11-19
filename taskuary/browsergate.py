@@ -32,6 +32,7 @@ program by its full path, `npx`, its own DevTools client, a script). This gates 
 (browserview.brief), not every road there is.
 """
 import json, os, re, shlex, shutil, subprocess, tempfile, threading, time
+from .say import said as _said            # a failure written to the chat is said in his words (say.py)
 from pathlib import Path
 from urllib.parse import urlsplit
 from loguru import logger
@@ -759,7 +760,7 @@ def _tell(store, tid: int, text: str, wait: bool = False, wake: bool = False) ->
             else: term.type_into(sess, text, brief=True)       # Taskuary's note, never the owner's line
         except Exception as e:
             logger.warning(f'browsergate: task {tid} - the agent was not told - {e}')
-            store.add_comment(tid, 'taskuary', 'agent', f'{text} (The agent could not be told: {str(e)[:200]} - open the task and tell it.)')
+            store.add_comment(tid, 'taskuary', 'agent', f'{text} (The agent could not be told: {_said(e)} - open the task and tell it.)')
         finally: general.hand(tid, -1)
     th = threading.Thread(target=go, daemon=True); th.start()
     if wait: th.join(30)

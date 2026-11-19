@@ -17,6 +17,7 @@ Unknown actions, bad shapes and unpermitted actions are REFUSED and recorded - a
 proposal is never a partially-executed one.
 """
 import json, re, time
+from .say import said as _said            # a failure written to the chat is said in his words (say.py)
 from loguru import logger
 from .timewords import plural
 from . import buttons, words
@@ -287,7 +288,7 @@ def collect(store, task_id: int, transcript: str, actor='agent', refused: list |
     def one(p):
         try: return None if landing.from_proposal(store, task_id, p) else queue(store, task_id, p, actor, refused, unheard=True)    # the card is the review
         except ValueError as e:                   # ...said on the task, never dropped silently
-            store.add_comment(task_id, 'taskuary', 'agent', f"The {p.get('action')} proposal was not put on the card: {e}")
+            store.add_comment(task_id, 'taskuary', 'agent', f"The {p.get('action')} proposal was not put on the card: {_said(e)}")
             store.audit('task', task_id, 'proposal_refused', actor, detail={'action': p.get('action'), 'why': str(e), 'unheard': True})
             if refused is not None: refused.append(str(e))
             return None

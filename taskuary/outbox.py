@@ -22,6 +22,7 @@ approved review carrying `Deliver`), which is what keeps "the owner approves eve
 leaves" true no matter how many doors open onto the drafting.
 """
 import json
+from .say import said as _said            # a failure written to the chat is said in his words (say.py)
 import re
 from datetime import datetime
 from loguru import logger
@@ -214,7 +215,7 @@ def compose(store, channel: str, to, about: str, mode: str = 'draft', subject: s
             ses = term.start_on_task(store, tid, instruction=f'Find out what is needed to send this message to {to_text}: {about}', actor=actor, instruction_theirs=True)
         except Exception as e:
             logger.warning(f'outbox could not start an agent on {task_ref(tid)}: {e}')
-            store.add_comment(tid, 'router', 'agent', f'Could not start the agent ({str(e)[:200]}) - start it from the task.')
+            store.add_comment(tid, 'router', 'agent', f'Could not start the agent ({_said(e)}) - start it from the task.')
             ses = None
         return {'taskId': tid, 'ref': task_ref(tid), 'messageId': mid, 'reviewId': rid,
                 'mode': mode, 'subject': subject, 'draft': None, 'session': ses}
@@ -226,7 +227,7 @@ def compose(store, channel: str, to, about: str, mode: str = 'draft', subject: s
         # a review with no draft is still the right row: "Draft with AI" retries it, and the
         # owner can simply type the message themselves. Losing the row would lose the intent.
         logger.warning(f'outbox draft failed for {task_ref(tid)}: {e}')
-        store.add_comment(tid, 'router', 'agent', f'Could not draft this ({str(e)[:200]}) - write it yourself, or retry the draft.')
+        store.add_comment(tid, 'router', 'agent', f'Could not draft this ({_said(e)}) - write it yourself, or retry the draft.')
     rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending',
                             'DraftText': draft, 'Deliver': deliver,
                             'Reason': f'a message to {to_text} you started - approve to send it'})

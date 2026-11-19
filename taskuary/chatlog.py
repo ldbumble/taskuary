@@ -730,10 +730,16 @@ def advance(store, tid: int) -> None:
     front = [x for x in q['live'] if x != cardqueue.LAND]
     held = set(q['held'])
     # ...every card that stood reads as its review does now: pressed, withdrawn, moved past - in its place
-    for k, r in rows.items():
+    for k, r in list(rows.items()):
         rv = by.get(json.loads(r['Body']).get('review'))
         if not rv: continue
         st = _card(rv)['status']
+        # ...A REPLY RAISED EMPTY AND WRITTEN AFTER HIS LINE IS THE CARD OF THE TURN THAT WROTE IT (the real walk 2, 2026-11-19: the agent asked,
+        # he answered, and the letter its next turn wrote stood ABOVE his line, in the turn that had only asked): its words-less row was never
+        # a card he could press, so it is put again where the words were written
+        if st == 'pending' and not json.loads(r['Body']).get('was') and _card(rv).get('was') and (o := open_turn(store, tid)) and o['Id'] != r.get('Parent'):
+            with store.lock: store.cx.execute('DELETE FROM chatlog WHERE Id=?', (r['Id'],)); store.cx.commit()
+            rows.pop(k); continue
         # ...ONE TAKEN BACK BEFORE ITS TURN ENDED NEVER STOOD (drawn only then): its row goes, as nothing of it was ever on his screen
         if st not in ('pending', 'offer') and rv.get('DecidedBy') not in OWNER_ACTORS and (p := _above(store, r)) and p['State'] in LIVE:
             with store.lock: store.cx.execute('DELETE FROM chatlog WHERE Id=?', (r['Id'],)); store.cx.commit()
@@ -955,6 +961,8 @@ def _now(tid: int, turn: dict) -> dict:
     opening = 'opening' in kinds and kinds[::-1].index('opening') < (kinds[::-1].index('prompt') if 'prompt' in kinds else len(kinds))
     e = trace[-1] if trace else {}
     doing = clean(e.get('detail')) if e.get('type') == 'live' and e.get('name') == 'writing' else ''
+    # ...never words its steps already draw (the log writes what streams as the turn's own `said` step): said twice while it thought
+    if doing and any(doing[:80] in clean(x.get('text')) for x in turn.get('steps') or [] if x.get('k') == 'said'): doing = ''
     return {**({'opening': True} if opening else {}), **({'doing': doing} if doing else {})}
 
 

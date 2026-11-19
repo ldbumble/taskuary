@@ -100,6 +100,17 @@ export const canGoBack = () => depth() > 0;
 // rail's row above, the arrow skipping every task the walk's Next had moved through. Every move is a step (recordPlace "push"), and both
 // Backs, Alt+Left with them, step back over the one list - never out of the app
 export const navBack = () => { if (canGoBack()) window.history.back(); };
+// ...AND A STEP THE ADDRESS MADE ITSELF IS OURS TOO (reproduced on a scratch app, 2026-11-19): a link or a typed address (location.hash = ...)
+// makes an entry with no count, and Back onto it read "nothing behind": the corner arrow went and the bar's Back greyed with places still
+// behind. Each such entry is counted the moment it is made, one past the entry it was made from
+let lastDepth = 0;
+if (typeof window !== "undefined") {
+  const stamp = () => { const d = window.history.state?.tqDepth;
+    if (d == null) window.history.replaceState({ ...window.history.state, tqDepth: lastDepth + 1 }, "", window.location.href);
+    lastDepth = Number(window.history.state?.tqDepth) || 0; };
+  window.addEventListener("hashchange", stamp); window.addEventListener("tq-place", () => { lastDepth = depth(); });
+  window.addEventListener("popstate", () => { if (window.history.state?.tqDepth != null) lastDepth = depth(); });
+}
 const STEPS = ["popstate", "hashchange", "tq-place"];
 export const onStep = (fn) => { STEPS.forEach((e) => window.addEventListener(e, fn)); return () => STEPS.forEach((e) => window.removeEventListener(e, fn)); };
 

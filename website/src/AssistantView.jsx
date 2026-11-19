@@ -3344,7 +3344,10 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     // ...A MOVE FROM ONE TASK TO ANOTHER IS A STEP, whatever road moved the table (walk 2, 2026-11-19: Mark done moved to the next task by a road
     // that never marked its step, the closed task's place was written over, and Back went "home" with the next task drawn and no Back left).
     // Only a place the address itself asked for (Back, Forward, a link) is written in place
-    const moved = !!placeHash && !!lastPlace.current && placeHash !== lastPlace.current && !urlStep.current;
+    // ...read against the ADDRESS itself, which still names the task the table left (reproduced on a scratch app: the place the effect last
+    // wrote is missed whenever a turn or a request held it back, and a link-opened task was never one it wrote)
+    const at = window.location.hash || "", task = (h) => /^#task=\d+$/.test(h);
+    const moved = (task(placeHash) && task(at) && at !== placeHash) || (!!placeHash && !!lastPlace.current && placeHash !== lastPlace.current && !urlStep.current);
     recordPlace(placeHash, moved ? "push" : navHow.current); navHow.current = "replace"; urlStep.current = false; lastPlace.current = placeHash;
   }, [placeHash, active, state, old, firstRun, busy, request]);   // eslint-disable-line react-hooks/exhaustive-deps
   // BACK IN THE WINDOW ITSELF (TQ-1187): the desktop window has no browser bar, so the step behind a page or task the owner opened is

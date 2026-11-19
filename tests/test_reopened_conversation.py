@@ -143,6 +143,19 @@ class ClosedConversationTests(unittest.TestCase):
         s.update_task(tid, {'Status': 'done'}, 'owner'); s.update_task(tid, {'Status': 'open'}, 'owner')       # ...Reopen, pressed
         self.assertEqual([p['content'][0]['text'] for p in general.press_lines(s, tid)][-1], 'You reopened it.')
 
+    def test_his_words_by_any_road_open_a_closed_task_at_once_and_say_no_press(self):
+        """The redesign walk, 2026-11-19: marked done, then he wrote into it - the agent set to work while the task stayed off the rail and its
+        header read Reopen for the whole turn, and later the chat said "You reopened it", a press he never made. His words reopen it the moment
+        they are taken, whichever road they go: an answer to what its agent asked, words kept for its next stop (the phone), or a line."""
+        from taskuary import waitroom, workerstate as ws
+        for road in ({'request': 'open'}, {'wake': False}):
+            s, tid = reopened()
+            concierge.close_task(s, tid, 'owner')
+            with mock.patch.object(ws, 'answer_open', return_value={'delivered': True, 'state': 'delivered'}),                  mock.patch.object(waitroom, 'add', return_value={'queued': True}):
+                general.to_agent(s, tid, 'The checkout is under C:\work\ledger.', 'owner', frm='owner', **road)
+            self.assertEqual(s.get_task(tid)['Status'], 'open', road)
+            self.assertNotIn('You reopened it.', [p['content'][0]['text'] for p in general.press_lines(s, tid)], road)
+
     def test_a_closed_coding_task_typed_into_reopens_by_the_same_rule(self):
         """ONE ROAD (general.take_line, the owner 2026-11-10: "coding and general use the same code when it comes to interactions"): a closed
         coding task was refused "press Reopen, then Continue" while a chat task typed into opened again - now both open the same way."""

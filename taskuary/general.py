@@ -931,7 +931,9 @@ def presses(store, tid: int, since: str = '') -> list:
     rows = store._rows(f"SELECT * FROM audit WHERE EntityType='task' AND EntityId=? AND Actor IN ({who}) AND CreatedAt>? ORDER BY Id", (tid, *OWNER_ACTORS, since or ''))
     # ...A REOPEN HIS TYPED LINE MADE IS SAID BY THAT LINE (QUIET's reopened_by_typing, reopen): the store's own `reopened` row, written by the same
     # write, stood as "You reopened it" right above his line, a frame after the line was drawn (the Continue round, 2026-11-18)
-    typed = {a['Id'] for a, b in zip(rows, rows[1:]) if a['Action'] == 'reopened' and b['Action'] == 'reopened_by_typing'}
+    # ...by the row his typing wrote with it, the next of its kind, whatever another thread wrote between them in that second
+    nxt = lambda i: next((b for b in rows if b['Id'] > i and b['Action'] in ('reopened', 'reopened_by_typing')), None)
+    typed = {a['Id'] for a in rows if a['Action'] == 'reopened' and (b := nxt(a['Id'])) and b['Action'] == 'reopened_by_typing'}
     out = [(r['Id'], r['CreatedAt'], PRESSES[r['Action']](_detail(r)),
             *((_held_result(_detail(r)),) if r['Action'] in HELD_DONE else ()))
            for r in rows if r['Action'] in PRESSES and r['Id'] not in typed and not _detail(r).get('review')]   # a card's own act: said by its card (proposals.execute)
@@ -1094,6 +1096,9 @@ def to_agent(store, tid: int, said: str, actor: str = 'owner', heard=None, *, fr
     if frm not in FROM: raise ValueError(f"an input to an agent is the owner's, Taskuary's or a sender's - not {frm!r}")
     tid = int(tid)
     if frm == 'owner':
+        # ...HIS WORDS ON A CLOSED TASK OPEN IT, whichever road they take - a line, an answer to what its agent asked, words kept for its next
+        # stop (the phone): the walk's answer went by the ask's road, and the task stayed off the rail for the whole turn it began
+        reopen(store, tid, actor)
         if request: return (ws.answer_open(store, tid, said, actor, owner=owner) if request == 'open' else
                             ws.answer(store, tid, request, said, actor, owner=owner, press=bool(line.get('press'))))
         if not wake: return waitroom.add(store, tid, with_files(said, files) if files else said, 'owner', owner=owner)

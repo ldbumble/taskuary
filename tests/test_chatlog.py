@@ -339,3 +339,21 @@ def test_what_waits_by_the_box_is_read_beside_the_log_never_drawn_twice():
     conversation.hear(s, tid, ['l-wait'])
     got = chatlog.serve(s, tid)
     assert got['pending'] == [] and 'l-wait' in [x['id'] for x in got['items']]
+
+
+def test_for_you_to_do_stays_on_the_turn_that_wrote_it_and_is_not_said_again():
+    """"FOR YOU TO DO" IS THE TURN'S OWN (design round 5, I3): settled on the turn whose summary left it, kept there when he writes under it,
+    never moved to the next turn, and not said again by a next turn that leaves the same."""
+    import json as j
+    from taskuary import conversation, general
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The vendor form is ready.')
+    s.add_comment(tid, 'assistant', general.SUMMARY_TYPE, j.dumps({'about': 'the form', 'did': 'filled it', 'on_you': ['Sign the vendor form']}))
+    first = [x for x in chatlog.serve(s, tid)['items'] if x['kind'] == 'turn'][0]
+    assert first.get('on_you') and first['summary']['on_you'] == ['Sign the vendor form']
+    general.wait_line(s, tid, 'Signed', line_id='l-2'); conversation.hear(s, tid, ['l-2'], turn=True)
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Thanks - filed.')
+    s.add_comment(tid, 'assistant', general.SUMMARY_TYPE, j.dumps({'about': 'the form', 'did': 'filed it', 'on_you': ['Sign the vendor form']}))
+    turns = [x for x in chatlog.serve(s, tid)['items'] if x['kind'] == 'turn']
+    assert [bool(t.get('on_you')) for t in turns] == [True, False], 'kept on its own turn; the same words not said again'

@@ -325,6 +325,56 @@ def void(_): return None
 
 
 @_safe
+def summarized(store, tid: int, body: str) -> None:
+    "A turn's summary (what it was about, what it did, what is left on him) filed after its answer: kept on that turn's own row."
+    try: sm = json.loads(body or '')
+    except ValueError: return
+    with store.lock:
+        t = store.cx.execute("SELECT Key FROM chatlog WHERE TaskId=? AND Kind='turn' AND Parent IS NULL AND Body LIKE '%\"answer\"%' ORDER BY Id DESC LIMIT 1",
+                             (int(tid),)).fetchone()
+    if t: update(store, tid, t['Key'], summary=sm)
+
+
+WAITS = 'w'
+def left_on_him(store, tid: int, out: list, ask: dict = None, letters: str = None) -> None:
+    """"FOR YOU TO DO" IS THE TURN'S OWN, SAID ONCE AND KEPT (design round 5, I3, the owner's): whether a finished turn says what it left on him
+    (its summary's `on_you`) is settled the first read that can - its summary filed, its own question, letters and cards pressed, or his line
+    under it - and written on THAT turn's row (`on_you_kept`), never changed after: never grown above his reply, never moved to a later turn,
+    not said again where the turn before said the same. It stands at that turn's foot, under its cards."""
+    said = None
+    for i, x in enumerate(out):
+        if x['kind'] != 'turn' or x.get('state') in LIVE: continue
+        sm = x.get('summary') or {}
+        mine = [str(s) for s in sm.get('on_you') or [] if str(s).strip()] if not sm.get('nothing_left') else []
+        was = x.get('on_you_kept')
+        if was in (None, WAITS):
+            waits = (ask and ask.get('turn') == x['id']) or letters == x['id'] or any(c.get('status') == 'pending' for c in x.get('cards') or [])
+            under = any(y['kind'] in ('line', 'arrival') for y in out[i + 1:])
+            if waits and not under:
+                if was is None: update(store, tid, x['id'], on_you_kept=WAITS)
+                continue
+            if not sm and len(out) == i + 1: continue
+            was = '1' if mine and mine != said and not waits and not (was == WAITS and under) else ''
+            update(store, tid, x['id'], on_you_kept=was)
+        if was and was != WAITS: x['on_you'], said = True, mine
+
+
+@_safe
+def left_note(store, tid: int, at_work: bool) -> None:
+    """A CODING RUN THAT LEFT WITHOUT FINISHING SAYS SO IN ITS CHAT, WHERE IT HAPPENED (no dead ends - the owner's rule 4): the task's own idle
+    sentence (funnel.idle_state, the one its rail row reads) appended once under the turn it left after, and kept there when the run is taken up
+    again - a later leaving is a line of its own under its own turn."""
+    from . import codingchat, funnel, general, taskstate
+    task = store.get_task(int(tid)) or {}
+    if at_work or codingchat._live(int(tid)) or general.handles(task) or task.get('Status') in ('done', 'dropped'): return
+    t = _newest_turn(store, tid)
+    if not t: return
+    st = taskstate.task_state(store, tid=int(tid))
+    if st.finished or (idle := funnel.idle_state(store, int(tid), st))['kind'] != 'left' or not idle['line']: return
+    put(store, tid, 'note', f"n:left:{t['Key']}", {'text': idle['line']}, src='idle')
+
+
+@_safe
 def at_work(store, tid: int, sid: str = '') -> None:
     "The turn the agent has the prompt of: starting until then, working from its first word on (its road's own `prompt`)."
     if (t := open_turn(store, tid)) and t['State'] == 'starting': update(store, tid, t['Key'], state='working', **({'sid': sid} if sid else {}))
@@ -747,6 +797,7 @@ def serve(store, tid: int, level: str = None) -> dict:
     if not at_work and (t := _live(store, tid)):
         with store.lock: n = store.cx.execute('SELECT COUNT(*) FROM chatlog WHERE Parent=?', (t['Id'],)).fetchone()[0]
         if n or json.loads(t['Body'] or '{}').get('text'): update(store, tid, t['Key'], state='done')
+    left_note(store, tid, at_work)
     got = read(store, tid, level)
     out = got['items'] if at_work else [x for x in got['items'] if not (x['kind'] == 'turn' and x.get('state') in LIVE)]
     body = {'items': out, 'level': got['level'], **beside(store, tid, out, at_work, hold_)}
@@ -801,8 +852,7 @@ def beside(store, tid: int, out: list, at_work: bool, hold_) -> dict:
     # ...the turn whose letter waits for his Send (the page hangs the letters' block there), never one at work
     letters = next((x['id'] for x in reversed(turns) if x.get('state') not in LIVE
                     and any(c.get('status') == 'pending' and c.get('what') in (*DRAFTS, 'slot') for c in x.get('cards') or [])), None)
-    # ...what is left to him is said by the newest finished turn, the chat's last thing (its summary's "for you to do")
-    if last and last.get('state') not in LIVE and out and out[-1] is last: last['on_you'] = True
+    left_on_him(store, tid, out, ask, letters)
     lv = codingchat._live(tid)
     now = bool(at_work and pend and not perms and lv is not None and getattr(lv, 'steerable', lambda: False)())
     later = LATER if at_work and any(p['kind'] == 'line' for p in pend) and not getattr(live, 'hears_mid_turn', lambda: True)() else ''

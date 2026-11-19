@@ -5328,6 +5328,9 @@ class SQLiteStore:
         if actor_type == 'assistant_agent' and task_id:
             from . import chatlog
             chatlog.answered(self, task_id, cid, actor, body, at)
+        elif actor_type == 'assistant_summary' and task_id:
+            from . import chatlog                    # ...and its summary goes with the turn whose answer it sums up, in place
+            chatlog.summarized(self, task_id, body)
         elif line_id and task_id:
             from . import chatlog
             chatlog.filed(self, task_id, line_id, {'Body': body, 'ActorType': actor_type, 'CreatedAt': at})

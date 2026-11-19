@@ -59,6 +59,17 @@ class ModelsByJobTests(unittest.TestCase):
         self.assertEqual(tiers(['x-pro', 'x-flash']), ('x-flash', 'x-pro'))
         self.assertEqual(tiers([]), ('', ''))
 
+    def test_gemini_4_neon_is_the_step_up_for_hard_jobs_and_hydrogen_stays_the_everyday_agent(self):
+        """The owner, 2026-11-19: "add neon for hard jobs, keep hydrogen for quick and easy" - Neon, listed beside Hydrogen, fills the strong box
+        that hard work steps up to; Hydrogen stays the agent and Flash the quick work."""
+        from taskuary import firstrun
+        s = MemoryStore(); cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1, 'ConfigJson': json.dumps({'base_url': 'https://ai.northwind.example/v1'})}, 'owner')
+        with mock.patch('taskuary.llm.list_models', return_value=self.GATEWAY + ['gemini-4-neon']),              mock.patch('taskuary.firstrun.answers', side_effect=lambda c, conf, m: 'claude' not in m):
+            firstrun.fill_tiers(s, cid)
+        conf = json.loads(s.get_connector(cid)['ConfigJson'])
+        self.assertEqual((conf['model'], conf['light_model'], conf.get('strong_model')), ('gemini-4-hydrogen', 'gemini-3.8-flash', 'gemini-4-neon'))
+
     def test_where_claude_does_not_answer_the_agents_get_the_newest_generation_and_flash_keeps_the_quick_work(self):
         """The owner, 2026-11-15: where Claude does not answer, agents on a HIPAA AI card run the newest Gemini generation - not 2.5 Pro, "way
         overpriced for its intelligence" - and Gemini Flash stays for triage and the Assistant, never another vendor's flash. The gateway lists

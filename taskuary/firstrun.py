@@ -317,7 +317,7 @@ def _everywhere(store, pick: str, cli: str = ''):
 # from the family the agent tier leads with - one vendor for one card's work, never a stranger's flash because its number is higher.
 # The tier words, the one table of names here:
 _LIGHT = re.compile(r'(?:^|[-_./:])(?:lite|flash|haiku|nano|mini|small)(?:$|[-_./:])', re.I)
-_STRONG = re.compile(r'(?:^|[-_./:])(?:opus|pro|ultra|large|carbon)(?:$|[-_./:])|gpt-?5', re.I)
+_STRONG = re.compile(r'(?:^|[-_./:])(?:opus|pro|ultra|large|carbon|neon)(?:$|[-_./:])|gpt-?5', re.I)
 _LEAD = ('claude', 'hydrogen')     # at one generation and tier, these lead: Claude (the owner's ask), Gemini 4 Hydrogen (his price/speed pick)
 TIER_BOX = {'azure_openai': 'deployment'}          # the card's normal model is the box its requests name
 

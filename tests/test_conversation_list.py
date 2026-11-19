@@ -561,6 +561,14 @@ class TheList(unittest.TestCase):
         self.assertEqual(steps[0]['args']['command'], ['powershell.exe', '-Command', 'git log --oneline -10'])
         self.assertTrue(conversation.machinery(steps[1]))           # ...and Taskuary's own tick is no step, as its string form is not
 
+    def test_a_server_tool_codex_sends_as_execute_is_named_as_that_tool(self):
+        # the owner's live app, 2026-11-19: codex-acp sends a call to a server's tool as kind `execute` with {server, tool, arguments} -
+        # read as a shell with no command, its row said "Ran a command it did not show" over the reply the agent drafted
+        u = {'sessionUpdate': 'tool_call', 'toolCallId': 'c', 'kind': 'execute', 'title': 'mcp.taskuary.propose_reply', '_meta': {'is_mcp_tool_call': True},
+             'rawInput': {'server': 'taskuary', 'tool': 'propose_reply', 'arguments': {'to': 'erin@northwind.example', 'text': 'Yes, Thursday works.'}}}
+        st = conversation.acp_steps([u])[0]
+        self.assertEqual((st['name'], st['args']['to']), ('mcp__taskuary__propose_reply', 'erin@northwind.example'))
+
     def test_a_message_that_came_in_mid_turn_is_pending_then_heard_with_the_next_turn(self):
         self.brain.delay = 3
         self.say('Suggest two.', 'l-one', wait=False)
@@ -1667,3 +1675,24 @@ def test_a_turn_counts_from_its_own_head_not_the_turn_before():
     assert (out[1]['started'], out[3]['at'], out[3]['started']) == (ep(a) + 0.4, b, ep(b)), out
     out[3].update(at=a, started=ep(a) + 0.4, ended=ep(b) + 30); conversation.dated(s, tid, out)          # ...and the same once it is done
     assert (out[3]['at'], out[3]['started']) == (b, ep(b)), 'ran 30s, never 2m 30s'
+
+
+def test_steps_the_record_wrote_after_the_read_began_wait_for_the_next_read():
+    """The owner's live app, 2026-11-19 (a coding agent over ACP): one read of the chat took 17 s on a busy store - the ledger read at its
+    start, the session's record at its end. The agent's steps after his line were drawn while his line was not yet in the ledger, and a place
+    once served is kept: the turn and its "Thinking..." stood above his line for good. The record is read as of the moment the read began."""
+    import time as t_
+    from datetime import datetime
+    from unittest import mock
+    from taskuary import conversation, general
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = s.create_task({'Title': 'Fix the export dates', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
+    now = t_.time()
+    rec = [('s1', True, [{'k': 'said', 'text': 'Looking at the export now.', 'T': now + 5}])]
+    with mock.patch.object(conversation, '_session_steps', return_value=rec):
+        conversation.items(s, tid)                                      # the record already holds a step the ledger's moment had not seen
+        s.add_comment(tid, 'owner', general.USER_TYPE, 'Use the posting date, not the run date')
+        s._exec("UPDATE comment SET CreatedAt=? WHERE TaskId=?", (datetime.fromtimestamp(now + 1).strftime('%Y-%m-%d %H:%M:%S'), tid))
+        with mock.patch('time.time', return_value=now + 10): got = conversation.items(s, tid)['items']
+    kinds = [x['kind'] for x in got if x['kind'] in ('line', 'turn')]
+    assert kinds == ['line', 'turn'], kinds

@@ -346,8 +346,13 @@ def acp_steps(updates: list) -> list:
             s = by.get(u.get('toolCallId'))
             if not s:
                 if kind == 'tool_call_update' and not (u.get('rawInput') or u.get('title') or u.get('kind')): continue
-                s = by[u.get('toolCallId')] = {'k': 'tool', 'id': str(u.get('toolCallId') or ''), 'at': at, 'args': {},
-                                               'name': _meta(u, 'claudeCode', 'toolName') or _ACP_TOOL.get(u.get('kind')) or u.get('title') or u.get('kind') or 'tool'}
+                # ...A SERVER'S TOOL AS ITSELF (the owner's live app, 2026-11-19: codex-acp sends one as kind `execute`, its input {server, tool,
+                # arguments} - read as a shell with no command, the row said "Ran a command it did not show" over a reply it drafted)
+                mcp = raw if isinstance(raw := u.get('rawInput'), dict) and raw.get('server') and raw.get('tool') else None
+                s = by[u.get('toolCallId')] = {'k': 'tool', 'id': str(u.get('toolCallId') or ''), 'at': at,
+                                               'args': dict(mcp['arguments']) if mcp and isinstance(mcp.get('arguments'), dict) else {},
+                                               'name': f"mcp__{mcp['server']}__{mcp['tool']}" if mcp else
+                                               _meta(u, 'claudeCode', 'toolName') or _ACP_TOOL.get(u.get('kind')) or u.get('title') or u.get('kind') or 'tool'}
                 out.append(s)
             if (par := _meta(u, 'claudeCode', 'parentToolUseId') or _meta(u, 'parentToolUseId') or _meta(u, 'parentToolCallId')): s['parent'] = str(par)
             # ...a command as the words it was run with too (codex-acp's ["powershell.exe", "-Command", "..."]): dropped, the row read "Ran a command"
@@ -575,6 +580,10 @@ def _items(store, tid: int) -> dict:
     at_work, t0 = (general.working(store, tid), general.turn_started(tid)) if not hold_ else (bool(getattr(general._live_of(tid), 'busy', False)), general.turn_started(tid))
     # ...the lines BEFORE the ledger: a line at rest is heard and then kept (general.take_line), so one read here has its hand-over in the
     # ledger read after it - never by the box for a frame, with the answer above it marked at work
+    # ...and ONE MOMENT FOR THE WHOLE READ (the owner's live app, 2026-11-19): a read took 17 s on a busy store, the ledger read at its start
+    # and the session's record at its end - the agent's steps after his line were drawn while the line still waited by the box, and once a
+    # place is served it is kept: the turn and its "Thinking..." stood above his line for good. The record is read as of the ledger
+    cut = time.time()
     rows, kept = store.list_comments(tid, internal=True), {c['CommentId']: c for c in general.chat_rows(store, tid)}
     led = {(r['Kind'], r['Ref']): r for r in store._rows('SELECT * FROM heard WHERE TaskId=? ORDER BY HId', (tid,))}
     era = min((r['At'] for r in led.values()), default=INF)
@@ -692,6 +701,7 @@ def _items(store, tid: int) -> dict:
     live_sid = None
     for sid, live, steps in _session_steps(store, tid) if not general.handles(store.get_task(tid) or {}) or codingchat._live(tid) else []:
         if live: live_sid = sid
+        steps = [s for s in steps if s['T'] <= cut]          # its times only grow (_session_steps): what it wrote after the ledger is the next read's
         took, n = [x for x in lines], 0
         for i, s in enumerate(steps):
             k = s.get('k')

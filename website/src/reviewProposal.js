@@ -76,6 +76,9 @@ export const changeWords = (p) => (Array.isArray(p?.changes) ? p.changes : []).f
 // ...and what any proposal does, as the server worded it for its card (proposals.queue's Reason: "the agent proposes to <what> - <why>"),
 // without the lead that names who asked
 const saysOf = (review) => String(review?.Reason || "").replace(/^the (agent proposes|workflow asks) to /, "").trim();
+// ...AS EVERY CARD'S LEAD, one road (design round 5, 2026-11-19; round 4 did routines): what Approve does in words, bold over the card, and that
+// nothing happens before it - a step in a connected system, a part moved out, a routine's change and any other proposal alike
+const leadOf = (review, why) => { const says = saysOf(review); return says ? { lead: upFirst(says), leadWhy: why } : {}; };
 
 // WHAT A WAITING CARD SAYS OVER ITSELF IN THE CHAT - what its Approve does, in one line: a drafted playbook's, a held act's. Said with the one
 // card, wherever that card stands (a turn of the task's chat, the foot of a walk's)
@@ -169,6 +172,7 @@ export const proposalPresentation = (review) => {
     kind: "action",
     title: proposal.flow_run ? "A routine step waits for your yes" : "Run a step in a connected system",
     context: review.Reason || "Proposed action · nothing will be sent to the conversation",
+    ...leadOf(review, "Nothing runs until you approve."),
     destinationLabel: "Where",
     destination: toolWhere(proposal),
     approveLabel: APPROVE,
@@ -226,6 +230,7 @@ export const proposalPresentation = (review) => {
     kind: "action",
     title: "Move this part to a task of its own",
     context: review.Reason || "Proposed · nothing moves until you approve",
+    ...leadOf(review, "Nothing moves until you approve."),
     destinationLabel: "Its own task",
     destination: proposal.title || "",
     approveLabel: APPROVE,
@@ -256,6 +261,7 @@ export const proposalPresentation = (review) => {
     kind: "action",
     title: proposal.flow_run ? "Repair this routine's steps" : `Change the routine${proposal.title ? ` "${proposal.title}"` : ""}`,
     context: proposal.flow_run ? "A step failed · the AI wrote a fix · the steps change only if you approve" : "Proposed · the routine changes only if you approve",
+    ...leadOf(review, "The steps change only if you approve."),
     destinationLabel: "Changes",
     destination: "the routine's saved steps",
     approveLabel: APPROVE,
@@ -280,12 +286,13 @@ export const proposalPresentation = (review) => {
   // ...AND ANY OTHER PROPOSAL SAYS WHAT IT DOES IN THE SERVER'S OWN WORDS FOR IT (the card round, 2026-11-12: "Action · land" over the proposal's
   // JSON): its lead is what the gate wrote on the review, its box what it carries - none where it carries nothing
   const says = saysOf(review), act = String(proposal?.action || "proposed action").replaceAll("_", " ");
+  const said = leadOf(review, "Nothing is done until you approve.");
   return {
     kind: "action",
     title: review.Subject || review.Title || upFirst(says) || "Proposed action",
     context: "Proposed action · nothing will be sent to the conversation",
     // ...and where its lead says it, no "Action · open pr" row under that - the proposal's own key is not a place
-    ...(says ? { lead: upFirst(says), leadWhy: "Nothing is done until you approve.", destinationLabel: "On", destination: "this task" } : { destinationLabel: "Action", destination: act }),
+    ...(says ? { ...said, destinationLabel: "On", destination: "this task" } : { destinationLabel: "Action", destination: act }),
     approveLabel: APPROVE,
     busyLabel: "running…",
     rejectLabel: "Dismiss",

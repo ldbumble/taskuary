@@ -286,6 +286,10 @@ test("the browser's tabs read as a strip: title or host, the active one marked, 
     { id: "t2", name: "127.0.0.1:8932", url: "http://127.0.0.1:8932/", active: true },
     { id: "t3", name: "news.example", url: "https://news.example/today", active: false }]);
   assert.deepEqual(tabList({ type: "tabs" }), []);
+  // ...and a page keeps the title it once showed, where the browser names it in the background by its address (design round 5, 2026-11-19)
+  tabList({ type: "tabs", tabs: [{ tabId: "t4", title: "PermitWatch - Sign up", url: "http://127.0.0.6:18791/s/permitwatch/", active: true }] });
+  assert.equal(tabList({ type: "tabs", tabs: [{ tabId: "t4", title: "127.0.0.6:18791/s/permitwatch/", url: "http://127.0.0.6:18791/s/permitwatch/", active: false }] })[0].name,
+    "PermitWatch - Sign up");
   const { readFileSync } = await import("node:fs");
   const pane = readFileSync(new URL("../src/BrowserPane.jsx", import.meta.url), "utf8");
   assert.match(pane, /tabs\.length > 1 &&/, "one tab draws no strip");

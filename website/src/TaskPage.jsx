@@ -2146,7 +2146,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         {fromFacts()}
       </Box>
       <Box data-tq-sorted="" title={`${detail.ref} · ${made}${triaged.at ? ` · sorted ${whenShort(triaged.at)}` : ""}`} sx={CARD}>
-        <Typography sx={cardHead}>What triage made of it</Typography>
+        {/* ...in his words, never the app's own name for its sorting (design round 5, 2026-11-19: "What triage made of it") */}
+        <Typography sx={cardHead}>How Taskuary read it</Typography>
         <Typography sx={{ fontSize: 15, lineHeight: 1.5, color: INK }}>{madeOf(facts, t?.Kind || "task")}</Typography>
         {!cameSummary && triaged.why && <Typography sx={{ fontSize: 13, lineHeight: 1.5, color: DIM, overflowWrap: "anywhere" }}>{triaged.why}</Typography>}
         {triaged.later > 0 && <Typography sx={{ fontSize: 12.5, color: FAINT }}>{plural(triaged.later, "later message")} joined this task</Typography>}
@@ -3186,7 +3187,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     aria-label={fromDrawer || twoUp ? "Came from" : undefined} aria-hidden={twoUp && !isOpen("from") ? true : undefined}
                     onClickCapture={stacked && !solo ? phoneFromTap : undefined} sx={twoUp ? { ...SECTION(isOpen("from"), openW("from"), false, false, fades), gap: 1.75 }
                       : { minWidth: 0, display: "flex", flexDirection: "column", gap: 1.75, ...(fromDrawer ? { ...card, px: 1.5, py: 1.25, ...FROM_SIDE } : PHONE_FROM(fromOpen || solo)) }}>
-                    {twoUp && <SectionHead sec={SECTIONS[0]} sub="what came in, and what triage made of it" here={hereSec === "from"}
+                    {twoUp && <SectionHead sec={SECTIONS[0]} sub="what came in, and how Taskuary read it" here={hereSec === "from"}
  />}
                     {/* SECTION 1, IN THE ORDER THE OWNER APPROVED (2026-10-16): the ask, what there is to do, where it came from - and no
                         buttons. "The buttons stay on bottom by the prompt box like always. No buttons there." On the canvas that is the row

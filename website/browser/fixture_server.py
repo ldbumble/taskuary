@@ -330,7 +330,7 @@ def _install_fresh_routes(app, store):
         p = body.get("post") or {"action": "run_tool", "type": "jira_comment", "item": "NW-12", "body": "Fixed in the ledger totals, Erin - deployed this morning."}
         if cid: p = {**p, "connector_id": cid}
         legacy = {"Status": "rejected", "DecidedBy": "owner"} if body.get("legacy_dismissed_read") else {"Status": "pending"}
-        rid = store.add_review({"TaskId": tid, "Kind": "action", **legacy, "Origin": "agent", "DraftText": json.dumps(p), "Reason": "the comment Erin asked for"})
+        rid = store.add_review({"TaskId": tid, "Kind": "action", **legacy, "Origin": "agent", "DraftText": json.dumps(p), "Reason": body.get("reason") or "the comment Erin asked for"})
         return {"taskId": tid, "reviewId": rid}
 
     @app.post("/api/fixture/no-readonly")

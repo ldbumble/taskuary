@@ -18,7 +18,7 @@ small buttons in the task's top-right corner.
 
 | Section | What it records | Its moves | What it never does by itself |
 |---|---|---|---|
-| **Came from** | The message, what triage made of it and why, the ask, and who owns it | **Remind me**, **Watch it**, **Not for me**, **Change ▾** (split or merge, who does it, priority, where the code is) | Changing the task does not start or stop an agent. Who works it is decided in the **Agent** section - **Send to agent** or **Start** |
+| **Came from** | The message, how Taskuary read it and why, the ask, and who owns it | **Remind me**, **Watch it**, **Not for me**, **Change ▾** (split or merge, who does it, priority, where the code is) | Changing the task does not start or stop an agent. Who works it is decided in the **Agent** section - **Send to agent** or **Start** |
 | **Agent** | The one chat: the agent's turns, and the cards it set up - the reply to whoever asked with **Send and close**, **Send** and **Redraft**, the emails it owes, an invite's answers, the hand-off, and the last act where the task lives (merge its pull request, close its issue: **Approve and close**, **Approve**, **Decline**) | The box under the chat; **Mark done**, **Hand it to a person**, **Close with a note**, **Attach a file**, **Share** on its strip | Ending a session does not mark the task done or send a reply; **Send** and **Approve** never close it - the task stays open until you **Mark done** (or press a **... and close**) |
 
 **Mark done** always comes first on the task's row of moves, and is never folded away. When a strip runs out of

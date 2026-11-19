@@ -149,11 +149,16 @@ export const activeTab = (m) => String((m?.tabs || []).find((t) => t?.active)?.u
 // from the browser's `tabs` message - named by the page's title, or its host where the title is only its address. [] for a tabs message
 // with none, and the strip draws only for two or more: a one-site task looks as it always did
 export const TAB_ID = /^t\d{1,4}$/;
+// ...AND A PAGE KEEPS THE TITLE IT ONCE SHOWED (design round 5, 2026-11-19: thirteen vendor tabs read "127.0.0.1:18791", "127.0.0.2:18791" ... - the
+// browser names a tab in the background by its address alone): the title seen for an address names its tab until another title comes
+const TITLES = new Map();
 export const tabList = (m) => (Array.isArray(m?.tabs) ? m.tabs : []).filter((t) => t && TAB_ID.test(String(t.tabId || ""))).map((t) => {
-  const url = String(t.url || ""), title = String(t.title || "").trim();
+  const url = String(t.url || ""), at = url.split("#")[0], now = String(t.title || "").trim();
   let host = ""; try { host = new URL(url).host; } catch { /* not an address */ }
-  const bare = !title || title === host || url.includes(title);
-  return { id: String(t.tabId), name: (bare ? host || title || url : title) || "new tab", url, active: !!t.active };
+  const bare = (x) => !x || x === host || url.includes(x);
+  if (!bare(now)) TITLES.set(at, now);
+  const title = bare(now) ? TITLES.get(at) || "" : now;
+  return { id: String(t.tabId), name: (title || host || now || url) || "new tab", url, active: !!t.active };
 });
 
 // Dragging the splitter fires a resize every frame; Chrome should not be re-laid-out for six pixels.

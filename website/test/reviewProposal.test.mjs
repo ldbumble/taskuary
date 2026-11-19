@@ -245,3 +245,15 @@ test("an act whose press failed is a settled card with its error, never a waitin
   assert.equal(failedAsk({ ...rv, ActError: "" }), false, "a draft set aside is no failure");
   assert.equal(failedAsk({ ...rv, Status: "pending" }), false);
 });
+
+// EVERY APPROVAL SAYS IN WORDS WHAT IT WILL DO (design round 5, 2026-11-19; round 4 did routines): a step in a connected system, a part moved to
+// a task of its own and a routine's change lead with what Approve does - the server's words for it - as a held step and a routine do
+test("every card leads with what its Approve does, in words", () => {
+  const card = (p, Reason) => proposalPresentation({ Kind: "action", DraftText: JSON.stringify(p), Reason });
+  const tool = card({ action: "run_tool", type: "sharepoint", path: "/Shared/Q3.xlsx" }, "the agent proposes to write the Q3 totals to Q3.xlsx on SharePoint");
+  assert.deepEqual([tool.lead, tool.leadWhy], ["Write the Q3 totals to Q3.xlsx on SharePoint", "Nothing runs until you approve."]);
+  const out = card({ action: "break_out", title: "Book the caterer" }, 'the agent proposes to move the caterer emails to a task of its own, "Book the caterer"');
+  assert.deepEqual([out.lead, out.leadWhy], ['Move the caterer emails to a task of its own, "Book the caterer"', "Nothing moves until you approve."]);
+  const fix = card({ action: "repair_workflow", title: "Late fees" }, 'the agent proposes to change the routine "Late fees"');
+  assert.equal(fix.lead, 'Change the routine "Late fees"');
+});

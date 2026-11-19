@@ -11,7 +11,9 @@ test("the draft is one card, in the chat - no notice pointing anywhere else, no 
   const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   assert.doesNotMatch(page, /AgentDraftNotice|noticeOn|askWhere/, "nowhere else to point at");
   assert.doesNotMatch(page, /answeredYet|alreadyAnswered|answeredLine/, "the superseded draft is retired, never bannered");
-  assert.equal(page.match(/<ReviewDecision review=\{pendingReview\}/g).length, 1, "one card for the draft: the chat's");
+  // ...one card a chat draws: its turn's (replyNode) in a chat with turns, the chat's own (chatReview) only where there are none (a8fab80d9)
+  assert.equal(page.match(/<ReviewDecision review=\{pendingReview\}/g).length, 2, "the turn's card and the turnless chat's, never both");
+  assert.match(page, /const chatReview = !inTurns \? pendingReview : null;/, "never both");
 });
 
 // A REPLY THAT WAITS FOR HIS SEND IS THE PAGE'S, WHICHEVER AGENT SESSION DRAFTED IT (the owner, 2026-11-11: "reply cards should survive

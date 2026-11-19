@@ -14,7 +14,7 @@ test("a passed card is the server's word, drawn once in its turn as its own card
   // ...the pressed card says only what was pressed: no passed state, no reason
   assert.doesNotMatch(card, /passed \?|PASSED_LINE|r\.Why/);
   assert.match(page, /const \{ asks: askCards, past: pressedCards \} = splitHeld\(allReviews\.filter\(\(r\) => !isPassed\(r\)\), \[\.\.\.asks, \.\.\.decidedAsks\]\)/, "never drawn as Dismissed");
-  assert.match(page, /const turnCards = \[\.\.\.passedCards, /, "in the turn that raised it");
+  assert.match(page, /const turnCards = \[\.\.\.replyNode, \.\.\.passedCards, /, "in the turn that raised it");
 });
 
 // THE CARD ROUND, 2026-11-12 (every card kind drawn in every state and read): a draft a later turn replaced was the whole reply card drawn again,

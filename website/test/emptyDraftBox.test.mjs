@@ -46,7 +46,9 @@ test("an owed reply nobody wrote or spoke of is no card in an agent's chat; one 
   assert.equal(replyCardShown({ Kind: "draft", DraftText: "Friday." }), true);
   assert.equal(replyCardShown(null), false);
   const page = fs.readFileSync(path.join(process.cwd(), "src", "TaskPage.jsx"), "utf8");
-  assert.match(page, /const chatReview = !inTurns \|\| replyCardShown\(pendingReview\) \? pendingReview : null;/);
+  // ...its turn's card in a chat with turns (replyNode), drawn only once written or spoken of; the chat's own only with no turns (a8fab80d9)
+  assert.match(page, /const replyNode = inTurns && pendingReview && replyCardShown\(pendingReview\) \?/);
+  assert.match(page, /const chatReview = !inTurns \? pendingReview : null;/);
   assert.match(page, /const chatBody = \(pendingReview = chatReview\) =>/);
   assert.match(page, /const waits = !!\(chatReview \|\|/);
   assert.match(page, /\{replyEmpty && !inTurns && \(/, "the box nothing was said about only on a to-do no agent has touched");

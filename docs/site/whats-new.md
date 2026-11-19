@@ -2,6 +2,21 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.28 - 2026-11-19
+
+- An answer names nothing of Taskuary's own: the close, a task's number, his own ask
+- A turn's steps: a failed call is its own row with its output behind it; Taskuary's tools say what they did
+- A routine card says what it does, when and where it runs; the script folded
+- A control that comes under a still pointer takes no press for its first moment
+- The card counter in the chat's type; a narrow task keeps a box to write in
+- Words typed while any box-less pop-over is open go on into the box
+- An AI that cannot answer now is one state, queued and tried again; a failed turn leaves a good card live
+- His own words are never held behind a sender's Trust; the same-work check reads each ask in full
+- The agent is told the day, the address each person on the task wrote from, and the roads the app has
+- A try that failed ends where it failed: the turn that answers after an outage counts from its own try
+- A sign-up is one command in the agent's turn, and nothing it makes is lost
+- The browser hold hands the real program's output on, and runs its own server's code
+
 ## 0.4.0.27 - 2026-11-19
 
 - What waits by the box is drawn in the order it came, on the hand-over's own key

@@ -731,39 +731,17 @@ NEXT = ('Tell the owner in a line what it did, as far as the result shows - some
 
 
 def _tell(store, tid: int, text: str, wait: bool = False, wake: bool = False) -> None:
-    """Words to the agent working the task, as a sign-in's are told (signin._continue) - ON A THREAD: a general chat's send_prompt is
-    the agent's whole next turn, so Approve sat on "running..." for minutes, or up to WAIT_TURN and then nobody was told (2026-10-25).
-    Not told, the task says so. A task with none running gets the comment only - unless the words are a yes that RAN (`wake`): an agent
-    that answered and rests is started on them, as any approval starts it (general.tell). It was left asleep, the step done and nobody to say
-    so or go on (the spine audit, 2026-11-09). A no wakes nobody: it is heard with the owner's next line. `wait`: tests."""
-    import threading
-    from . import terminal as term, workerstate as ws
+    """Words to the agent working the task, by THE ONE ROAD every input to an agent takes (general.to_agent): a live chat hears them as its
+    next turn at once, a coding session or an agent asking by the waiting room. A task with none running gets the comment only - unless the
+    words are a yes that RAN (`wake`): an agent that answered and rests is started on them, as any approval starts it. It was left asleep,
+    the step done and nobody to say so or go on (the spine audit, 2026-11-09). A no wakes nobody: it is heard with the owner's next line.
+    A live full-tools session on a task a stranger now writes on is told nothing (terminal.stranger_now says why). `wait`: tests."""
+    from . import general, terminal as term, workerstate as ws
     sess = ws._live(tid)
-    if not sess:
-        try:
-            from . import general
-            woke = wake and general.tell(store, tid, text)
-        except Exception as e: woke = logger.warning(f'browsergate: task {tid} - its resting agent was not started - {e}')
-        return None if woke else store.add_comment(tid, 'taskuary', 'agent', f'{text} (No agent is running on this task to tell.)')
-    # ...A LIVE ONE IS TOLD HERE, NOT BY THE WAITING ROOM (general.tell's road for everything else): a press on the page is one quiet line
-    # and nothing more (the spine audit, 2026-11-09: "said once: no second line by Taskuary above it") - the waiting room draws its note in
-    # a chat as a line of Taskuary's own
-    if term.stranger_now(store, tid, sess): return None           # the task says why nothing went in
-    # ...AND THE TASK IS AT WORK FROM HERE (the browser audit, 2026-11-15): his I'm done closed the step, and until the told agent's turn began
-    # the task read as nothing at work, the page still beside a chat that said nothing was happening - the words are an input on its way to
-    # the agent, as a mail handed to it is (general.hand)
-    from . import general
-    general.hand(tid)
-    def go():
-        try:
-            if hasattr(sess, 'send_prompt'): sess.send_prompt(text, as_owner=False)
-            else: term.type_into(sess, text, brief=True)       # Taskuary's note, never the owner's line
-        except Exception as e:
-            logger.warning(f'browsergate: task {tid} - the agent was not told - {e}')
-            store.add_comment(tid, 'taskuary', 'agent', f'{text} (The agent could not be told: {_said(e)} - open the task and tell it.)')
-        finally: general.hand(tid, -1)
-    th = threading.Thread(target=go, daemon=True); th.start()
-    if wait: th.join(30)
+    if sess is not None and term.stranger_now(store, tid, sess): return None
+    try: how = general.to_agent(store, tid, text, **({'wait': True} if wait else {})) if sess is not None or wake else ''
+    except Exception as e: how = logger.warning(f'browsergate: task {tid} - its agent was not told - {e}')
+    if not how: store.add_comment(tid, 'taskuary', 'agent', f'{text} (No agent is running on this task to tell.)')
 
 
 # ── a step only the owner can do, handed over ON THE PAGE (a captcha, a code only he has - browserview.your_turn) ───────────────────────

@@ -84,7 +84,7 @@ class HeldStepsOneCard(unittest.TestCase):
         rv, told = self.hold('git push origin deploy'), []
         busy = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, busy=True)
         with mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': busy}, clear=True), \
-             mock.patch.object(general, 'tell', lambda st, t, said, *a, **k: told.append(said) or 'told'):
+             mock.patch.object(general, 'to_agent', lambda st, t, said, *a, **k: told.append(said) or 'told'):
             out = verdicts.decide(self.s, rv, 'approve')
         self.assertFalse(out['ok']); self.assertEqual(out['busy'], sg.BUSY); self.assertFalse(out.get('act_failed'))
         r = self.s.get_review(rv['ReviewId']); self.assertEqual(r['Status'], 'pending', 'still lit for the press it asks for'); self.assertFalse(r.get('ActError'))

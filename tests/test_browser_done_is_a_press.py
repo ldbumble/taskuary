@@ -97,18 +97,18 @@ class DoneIsAPress(unittest.TestCase):
         self.assertIn('NOT done', self.heard()[0][0]); self.assertEqual(self.lines(), [])
 
     def test_a_terminal_agent_is_told_the_same_way(self):
-        typed, pane = [], SimpleNamespace(sid='run1', alive=True, task_id=self.tid, cli='claude')
-        with mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': pane}, clear=True), \
-                mock.patch('taskuary.terminal.type_into', lambda s, t, **k: typed.append((t, k))):
+        # ...by the one road into the agent (general.to_agent): a terminal's is the waiting room, Taskuary's note typed in at its stop -
+        # never keys over a turn at work
+        pane = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, cli='claude')
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': pane}, clear=True), mock.patch('taskuary.waitroom.deliver', return_value={}):
             rid = self.turn()
             self.assertTrue(ws.answer(self.s, self.tid, rid, '', press=True)['delivered'])
-            end = time.time() + 5
-            while not typed and time.time() < end: time.sleep(.01)
-        self.assertIn("The owner pressed I'm done", typed[0][0]); self.assertEqual(typed[0][1], {'brief': True})
+        [n] = self.s.waiting_notes(self.tid)
+        self.assertIn("The owner pressed I'm done", n['Note']); self.assertEqual(n['CreatedBy'], 'router', "Taskuary's, never the owner's line")
 
     def test_a_resting_agent_is_started_on_it(self):
         rid, woke = self.turn(), []
-        with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True), mock.patch.object(general, 'tell', lambda s, t, w, *a: woke.append(w) or 'woke'):
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True), mock.patch.object(general, 'to_agent', lambda s, t, w, *a: woke.append(w) or 'woke'):
             self.assertTrue(ws.answer(self.s, self.tid, rid, '', press=True)['delivered'])
         self.assertIn('open it again', woke[0]); self.assertEqual(self.open(), [])
 
@@ -119,7 +119,7 @@ class DoneIsAPress(unittest.TestCase):
         from taskuary import taskstate
         rid, woke = self.turn(), []
         bg.HANDS.clear()
-        with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True), mock.patch.object(browserview, 'state', return_value={'open': False}),                 mock.patch.object(general, 'tell', lambda s, t, w, *a: woke.append(w) or 'woke'):
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True), mock.patch.object(browserview, 'state', return_value={'open': False}),                 mock.patch.object(general, 'to_agent', lambda s, t, w, *a: woke.append(w) or 'woke'):
             ask = bg.shown_ask({**taskstate.open_question(self.s, self.tid), 'resting': True})
             self.assertIn('has closed', ask['text']); self.assertNotIn('on the page. I', ask['text'])
             self.assertEqual(ask['choices'], ['Try again']); self.assertEqual(ask['request_id'], rid)

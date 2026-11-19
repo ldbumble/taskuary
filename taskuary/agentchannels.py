@@ -368,8 +368,7 @@ def framed(b: dict, m: dict, text: str) -> str:
 
 
 def _tell(store, b, tid: int, text: str, m, files=()):
-    from . import waitroom
-    from .general import with_files
+    from .general import to_agent, with_files
     ok, why = in_repo(store, b, tid)
     if not ok: return say(store, b, f'Nothing was sent - {why}.')
     if not store.get_task(tid): return say(store, b, f'There is no task {task_ref(tid)}.')
@@ -377,10 +376,10 @@ def _tell(store, b, tid: int, text: str, m, files=()):
     if (why := term.stranger_now(store, tid)): return say(store, b, f'Nothing was sent to {task_ref(tid)} - {why}.')
     if m is None:
         store.add_comment(tid, 'owner', 'human', with_files(text, files))
-        o = waitroom.add(store, tid, with_files(text, files), 'owner')
+        o = to_agent(store, tid, text, frm='owner', files=files or None, wake=False)      # the one road into the agent (general.to_agent)
     else:
         store.add_comment(tid, 'teammate', 'human', with_files(f"{label(m)} on {LABEL[b['Kind']]}: {text}", files))
-        o = waitroom.add(store, tid, with_files(framed(b, m, text), files), TEAMMATE)
+        o = to_agent(store, tid, framed(b, m, text), frm='sender', files=files or None)
     store.audit('task', tid, 'agent_channel_tell', 'owner' if m is None else 'teammate', detail={'channel': b['ChannelId'], 'chars': len(text)})
     if b.get('TaskId') is None:
         say(store, b, f"Told {task_ref(tid)} - " + ('it has it now.' if o.get('delivered') else 'it goes in when the agent stops.'))

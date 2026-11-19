@@ -128,7 +128,7 @@ def summary(store, key: str, st: dict) -> str:
 
 
 def told(store, key: str, st: dict, actor: str = 'owner') -> str:
-    "Its agent hears the whole run once, by the one road (general.tell) - and nothing is said of it again with his next line."
+    "Its agent hears the whole run once, by the one road (general.to_agent) - and nothing is said of it again with his next line."
     from . import general
     from .cardqueue import screen
     def heard(how):
@@ -136,4 +136,4 @@ def told(store, key: str, st: dict, actor: str = 'owner') -> str:
     # ...with what still waits in the line behind it, as a yes, a failure or a no on one card tells it (general.approved / failed, said_no)
     if not st.get('tid'): return ''
     line = screen(store, st['tid'])
-    return general.tell(store, st['tid'], summary(store, key, st) + (f'\n\n{line}' if line else ''), actor, heard=heard)
+    return general.to_agent(store, st['tid'], summary(store, key, st) + (f'\n\n{line}' if line else ''), actor, heard=heard)

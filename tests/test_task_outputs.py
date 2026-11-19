@@ -361,7 +361,7 @@ class TasksSharingAFileHearItChange(unittest.TestCase):
         self.book = outputs.folder(self.pack) / 'Q3 board pack working.xlsx'; _book(self.book)
         (outputs.folder(self.pack) / 'Q3 board report.pdf').write_bytes(b'%PDF-1.4 headcount 212')
         self.told = []
-        p = mock.patch.object(general, 'tell', lambda store, tid, said, actor='owner', heard=None: self.told.append((tid, said)) or 'told')
+        p = mock.patch.object(general, 'to_agent', lambda store, tid, said, actor='owner', heard=None: self.told.append((tid, said)) or 'told')
         p.start(); self.addCleanup(p.stop)
 
     def turn(self, tid, *cmds):

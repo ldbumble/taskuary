@@ -1217,7 +1217,7 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, fresh: dict = None, 
 
 
 # ...AND THE AGENT IS ASKED FOR IT, ONCE. An agent that ended its run itself (`taskuary --done`) without the reply it owes is told so, by the
-# road every Taskuary word to an agent takes (general.tell) - write it, or say none is needed. Once per reply owed, kept on the review's own
+# road every Taskuary word to an agent takes (general.to_agent) - write it, or say none is needed. Once per reply owed, kept on the review's own
 # audit: an agent that ends again without writing it is not told twice (no loop), and the reply waits as owed, its agent's start lit
 # (rulebook.reply_unwritten). A run the owner ended - Stop and save, Done - is not reopened for it: the same reply owed waits for their start.
 OWED = ('TASKUARY: your run ended and {who} is owed a reply that nobody has written. Write only that reply now (propose_reply, or '
@@ -1232,14 +1232,14 @@ def owed_to(store, mid, rv: dict = None) -> str:
     m = store.get_message(mid) or {}
     return m.get('FromName') or m.get('FromEmail') or 'the person who asked'
 def ask_for_reply(store, task_id: int, rid: int) -> str:
-    """Tell task `task_id`'s agent the reply on review `rid` is owed: 'told' / 'woke' as general.tell answers, '' where it was asked before,
+    """Tell task `task_id`'s agent the reply on review `rid` is owed: 'told' / 'woke' as general.to_agent answers, '' where it was asked before,
     is written or gone, or no agent can be asked - then the task says so in one line."""
     rv = store.get_review(rid) or {}
     if rv.get('Status') not in ('pending', 'held') or str(rv.get('DraftText') or '').strip(): return ''
     if any(r.get('Action') == ASKED for r in store.list_audit('review', rid, 50) or []): return ''
     from . import general
     who = owed_to(store, rv.get('MessageId'), rv)
-    got = general.tell(store, task_id, OWED.format(who=who), 'router')
+    got = general.to_agent(store, task_id, OWED.format(who=who), 'router')
     store.audit('review', rid, ASKED, 'router', detail={'how': got or 'nobody'})
     if got: store.update_review_reason(rid, f'reply owed to {who} - its agent was asked to write it', rv.get('RunId'))
     else: store.add_comment(task_id, 'router', 'agent', f'A reply to {who} is owed and no agent could be asked to write it.')

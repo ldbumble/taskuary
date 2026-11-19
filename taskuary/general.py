@@ -1070,35 +1070,95 @@ def follow_up(store, tid, press: str, actor: str = 'owner', said: str = None, he
     return True
 # AN APPROVAL WAKES THE AGENT THAT SET IT UP (the owner, 2026-11-09: "when you hit approve the agent continues and says what it did and what
 # the next steps are"): every press that sends or runs what an agent set up - a card's Post, a Send, a merge - is handed to it as Taskuary's
-# words, never the owner's line. A held step tells its own agent (browsergate._tell), in its own words, by the same road (tell); a
+# words, never the owner's line. A held step tells its own agent (browsergate._tell), in its own words, by the same road (to_agent); a
 # landing its own (landing._landed)
 APPROVED = 'The owner pressed {press} on what you set up, and it went through: {what}. '
-def tell(store, tid: int, said: str, actor: str = 'owner', heard=None) -> str:
-    """Hand task `tid`'s agent Taskuary's words `said` - THE ONE ROAD every word of Taskuary's to an agent takes (an approval, a held step's
-    result, a landing): 'told' through the waiting room (its holds: the owner typing, a stranger, a question) to a live agent, a resting
-    coding one, or a coding one whose session ended - reopened on its own run; 'woke' a resting general agent that has answered on it;
-    '' where no agent ever worked it. `heard(how)` runs once the words are with the agent - for a wake, only once its turn began: marked
-    told before the start, a wake that failed (no AI connected) hid the press from every later turn (the stress round, 2026-11-18)."""
+# ONE ROAD INTO THE AGENT (one road per decision, #10): his line, Taskuary's notes, a press's result, an answer to what it asked, a browser
+# hand-over closed, a sign-in done each woke the agent their own way - a chat told by the waiting room's 10-second clock after one road and
+# at once after another. Every input to a task's agent now goes through to_agent: who it is from, what it is, and whether to wake it now
+FROM = ('owner', 'taskuary', 'sender')
+def to_agent(store, tid: int, said: str, actor: str = 'owner', heard=None, *, frm: str = 'taskuary', files=None, wake: bool = True,
+             start: bool = False, request: str = None, owner: str = None, **line):
+    """THE ONE ROAD AN INPUT TAKES TO TASK `tid`'S AGENT. `frm` says who it is from:
+    - 'owner': his words. `request` - an ask's id, or 'open' for the newest one - makes them its answer (workerstate.answer); else they are his
+      line (take_line: kept, heard, its turn begun now - `line` is take_line's own: line_id, wait, a chat's pick); `wake=False` keeps them for
+      the agent's next stop instead (the waiting room), as the phone and a bound chat do. -> what that road answers.
+    - 'sender': a teammate's line from a bound chat: kept for the agent's next stop, never an answer to what it asked the owner. -> the room's.
+    - 'taskuary': Taskuary's words (a press and what became of it, a hand-over closed, a sign-in done, a landing): a chat at rest or at work
+      hears them as its next turn AT ONCE - queued on its own turn, never on a clock - 'told'; an agent asking, a coding session (its turn,
+      its holds: a stranger, the owner typing), or one whose session ended, by the waiting room - 'told'; a resting general agent that has
+      answered on it is woken when `wake` - 'woke'; one no agent ever worked is started on them when `start` - 'started'; else ''.
+      `heard(how)` runs once the words are with the agent - for a wake, only once its turn began: marked told before the start, a wake that
+      failed (no AI connected) hid the press from every later turn (the stress round, 2026-11-18)."""
     from . import acpcoding, waitroom, workerstate as ws
-    t = store.get_task(int(tid))
+    if frm not in FROM: raise ValueError(f"an input to an agent is the owner's, Taskuary's or a sender's - not {frm!r}")
+    tid = int(tid)
+    if frm == 'owner':
+        if request: return (ws.answer_open(store, tid, said, actor, owner=owner) if request == 'open' else
+                            ws.answer(store, tid, request, said, actor, owner=owner, press=bool(line.get('press'))))
+        if not wake: return waitroom.add(store, tid, with_files(said, files) if files else said, 'owner', owner=owner)
+        return take_line(store, tid, said, files, actor, **line)
+    if frm == 'sender': return waitroom.add(store, tid, with_files(said, files) if files else said, waitroom.TEAMMATE)
+    from . import origin
+    t, sess = store.get_task(tid), ws._live(tid)
+    # ...a task held for a stranger's Trust keeps them by the box with the rest (waitroom: held_stranger), never in a turn it would refuse
+    if sess is not None and hasattr(sess, 'send_prompt') and not _asking(store, sess) and not origin.hold(store, tid):
+        _next_turn(store, tid, sess, said, line.get('wait'))
+        if heard: heard('told')
+        return 'told'
     # ...A CODING AGENT WHOSE SESSION ENDED HEARS IT TOO (the north-star audit, 2026-11-10 - the owner: "it shoudl prompt you, should i deploy
     # and respond once deployed??? isnt' this the goal?"): an approved merge or comment was told nobody, and nothing said so, while a
     # landing's word reached the same agent by the waiting room
-    if ws._live(int(tid)) or acpcoding.idled(int(tid), store) or (t and not handles(t) and store.last_transcript(int(tid))):
-        waitroom.add(store, int(tid), said, 'router')
+    if sess is not None or acpcoding.idled(tid, store) or (t and not handles(t) and store.last_transcript(tid)):
+        waitroom.add(store, tid, said, 'router')
         if heard: heard('told')
         return 'told'
-    return 'woke' if t and handles(t) and follow_up(store, tid, 'send', actor, said=said, heard=heard and (lambda: heard('woke'))) else ''
+    if wake and t and handles(t) and follow_up(store, tid, 'send', actor, said=said, heard=heard and (lambda: heard('woke'))): return 'woke'
+    # ...AND WHERE NO AGENT EVER WORKED IT, ITS AGENT IS STARTED ON THEM (a join of the same work): kept nowhere, they vanished (rule 4)
+    if start and t and not starting(tid):
+        from . import kinds
+        from .server import _start_new_task
+        k = str(t.get('Kind') or '').lower()
+        if _start_new_task(tid, k if k in kinds.AGENT else 'general', said, '')['started']:
+            if heard: heard('started')
+            return 'started'
+    return ''
+def _asking(store, sess) -> bool:
+    "Is this live run waiting on an answer of its own (an open request)? Its answer is the waiting room's to bind (waitroom._deliver)."
+    from . import workerstate as ws
+    try: return bool(ws.asking_of(store, sess))
+    except Exception: return False
+def _deliver_soon(store, tid: int):
+    "The waiting room's hand-over for task `tid` now, on its own thread - never on the turn's, which the next turn would hold."
+    from . import waitroom
+    def go():
+        try: waitroom.deliver(store, tid)
+        except Exception as e: logger.warning(f'task {tid}: what waited for the turn did not go in - {e}')
+    threading.Thread(target=go, daemon=True, name=f'deliver-{tid}').start()
+def _next_turn(store, tid: int, sess, said: str, wait=None):
+    """Taskuary's words as a live chat's next turn, AT ONCE: on their own thread - the chat's send_prompt is its whole next turn, so a press
+    sat on "running..." for minutes (2026-10-25) - queued on the turn at work, never on the waiting room's clock. The task is at work from
+    here (the browser audit, 2026-11-15: until the told turn began, the chat said nothing was happening). Not told, the task says so."""
+    hand(tid)
+    def go():
+        try: sess.send_prompt(said, as_owner=False)
+        except Exception as e:
+            from .say import said as said_                 # a failure written to the chat is said in his words (say.py)
+            logger.warning(f'task {tid}: the agent was not told - {e}')
+            store.add_comment(tid, 'taskuary', 'agent', f'{said} (The agent could not be told: {said_(e)} - open the task and tell it.)')
+        finally: hand(tid, -1)
+    th = threading.Thread(target=go, daemon=True, name=f'told-{tid}'); th.start()
+    if wait: th.join(30)
 TOLD = 'told_agent'          # audit on a review: its agent was handed the yes in Taskuary's words - owner_did never says it again
 def approved(store, tid: int, press: str, what: str, actor: str = 'owner', review: int = None) -> str:
-    """Hand task `tid`'s agent the approval that went, as `tell` hands anything: 'told', 'woke' or ''. Said ONCE (the owner's rules, part 3:
+    """Hand task `tid`'s agent the approval that went, as `to_agent` hands anything: 'told', 'woke' or ''. Said ONCE (the owner's rules, part 3:
     "the same fact reads the same ... one function says it"): with what the owner changed before it went, and marked on `review` so the
     prompt's WHAT THE OWNER DID does not say it a second time."""
     from .browsergate import NEXT
     r = store.get_review(int(review)) if review else None
     from .cardqueue import screen
     mark = r and (lambda how: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': how}))
-    return tell(store, tid, APPROVED.format(press=press, what=' '.join(str(what or 'done').split())[:400] + (_changed(store, r) if r else '')) + NEXT
+    return to_agent(store, tid, APPROVED.format(press=press, what=' '.join(str(what or 'done').split())[:400] + (_changed(store, r) if r else '')) + NEXT
                 + (f'\n\n{line}' if (line := screen(store, tid)) else ''), actor, heard=mark)
 # A PRESS THAT FAILED IS HANDED BACK AT ONCE (the owner, 2026-11-16: "we can't have an agent asking to do something then it does nothing or
 # errors out, at least hand back to agent so we are not left hanging"): an approved INSERT failed on its card, the task sat on "waiting on you",
@@ -1110,7 +1170,7 @@ def failed(store, tid: int, review: int, actor: str = 'owner') -> str:
     r = store.get_review(int(review))
     if not r or not (failed_act(r) or r['Status'] == 'pending' and (r.get('ActError') or r.get('DeliveryState') in NOT_GONE)): return ''
     from .cardqueue import screen
-    got = tell(store, tid, f'The owner {_decided(store, r)}. {FAILED_NEXT}' + (f'\n\n{line}' if (line := screen(store, tid)) else ''), actor,
+    got = to_agent(store, tid, f'The owner {_decided(store, r)}. {FAILED_NEXT}' + (f'\n\n{line}' if (line := screen(store, tid)) else ''), actor,
                heard=lambda how: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': how, 'failed': True}))
     # ...and its card says so under the error, so the owner is not left wondering who moves next (an act's; a send's line is its own)
     if got and r.get('ActError'): store.review_act_failed(r['ReviewId'], f"{str(r['ActError'])[:250].rstrip('. ')}. {AGENT_TOLD}", r.get('DecidedBy') or actor)
@@ -3530,6 +3590,9 @@ class GeneralSession:
             if not getattr(self, 'waiting_turns', 0):
                 from . import blackboard
                 blackboard.freed(self.store)
+                # ...AND WHAT WAITED FOR THIS TURN'S END GOES IN NOW (one road into the agent, #10): a note kept while it worked - a press, a
+                # teammate's line - waited up to the waiting room's next look (10 s) with the chat at rest; an ACP session's end does the same
+                if self.alive and self.store.waiting_notes(self.task_id): _deliver_soon(self.store, self.task_id)
 
 
     def _end_soon(self, **kw):

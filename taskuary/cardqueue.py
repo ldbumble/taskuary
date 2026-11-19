@@ -306,5 +306,5 @@ def said_no(store, rv: dict, verb: str, actor: str = 'owner') -> str:
     if _p(rv).get('action') in HELD_ACTS or verb == 'close_unsent' and rv.get('Kind') != 'slot': return ''
     if not tid or not state(store, tid)['units']: return ''
     no = {'reject': 'turned down', 'no_reply': 'said no reply is needed for', 'close_unsent': 'closed without sending', 'close_pr': 'turned down'}.get(verb, 'turned down')
-    return general.tell(store, tid, f"The owner {no} rv{rv['ReviewId']} ({what(store, {'rids': [rv['ReviewId']], 'rows': [rv]})}) - their own no.\n\n{screen(store, tid)}", actor,
+    return general.to_agent(store, tid, f"The owner {no} rv{rv['ReviewId']} ({what(store, {'rids': [rv['ReviewId']], 'rows': [rv]})}) - their own no.\n\n{screen(store, tid)}", actor,
                         heard=lambda how: store.audit('review', int(rv['ReviewId']), general.TOLD, actor, 'system', {'task': int(tid), 'how': how, 'no': verb}))

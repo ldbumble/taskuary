@@ -84,7 +84,7 @@ def agents_text(store) -> str:
 def tell(store, p: dict) -> str:
     """The owner's words into the agent on that task, the road its box takes (waitroom.add) - typed at once when it is idle, as the answer
     when it is asking, else at its next stop - and filed on the task as the owner's own message."""
-    from . import peers, waitroom
+    from . import general, peers
     tid, text = _tid(p), ' '.join(str((p or {}).get('text') or '').split())
     if not text: raise LookupError('tell_agent needs `text` - the owner\'s words for the agent')
     if not any(t.task_id == tid for t in peers._cli_sessions()):
@@ -92,7 +92,7 @@ def tell(store, p: dict) -> str:
     from . import terminal as term
     if (why := term.stranger_now(store, tid)): return f'Nothing was sent to the agent on {task_ref(tid)}: {why}.'
     store.add_comment(tid, 'owner', 'human', text)
-    o = waitroom.add(store, tid, text, 'owner')
+    o = general.to_agent(store, tid, text, frm='owner', wake=False)       # ...the one road into the agent, kept for its next stop
     store.audit('task', tid, 'phone_tell_agent', 'owner', detail={'chars': len(text)})
     when = ('it has them now' if o.get('delivered') else 'they go in when it stops at its prompt')
     return f"Told the agent on {task_ref(tid)}: “{text[:160]}” - {when}."

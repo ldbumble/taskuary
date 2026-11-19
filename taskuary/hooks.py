@@ -406,13 +406,13 @@ def _events(t, p: dict) -> None:
             if his and not getattr(t, 'acp', False):
                 try:                                         # ...past every card raised before it (proposals.move_on, 2026-11-10)
                     from . import proposals
-                    # ...said to it as Taskuary's next line: the prompt that passed them is already in (general.tell, the one road)
+                    # ...said to it as Taskuary's next line: the prompt that passed them is already in (general.to_agent, the one road)
                     # ...and every card he wrote past, set aside as his line goes in (proposals.set_aside_drafts - the terminal's line is heard here)
                     now_ = time.time()
                     from .cardqueue import screen
                     if (proposals.move_on(st, tid) + proposals.set_aside_drafts(st, tid, now_, actions=now_)) and (note := screen(st, tid)):
                         from . import general
-                        general.tell(st, tid, note)
+                        general.to_agent(st, tid, note)
                 except Exception as e: logger.debug(f'task {tid}: a held step stayed pending - {e}')
             if not is_wake(p.get('prompt')):                # ...and the owner's words are their next move after a stop (outcomes.py)
                 try:

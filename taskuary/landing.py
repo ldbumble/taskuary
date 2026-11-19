@@ -614,9 +614,9 @@ def _conflict(store, tid: int, s: dict, how: str, files: list) -> dict:
 
 
 def _hand_back(store, tid, text):
-    "Taskuary's words to the task's agent by the one road (general.tell) - and where none ever worked it, the task says so, once."
+    "Taskuary's words to the task's agent by the one road (general.to_agent) - and where none ever worked it, the task says so, once."
     from . import general
-    try: told = general.tell(store, tid, text, 'router')
+    try: told = general.to_agent(store, tid, text, 'router')
     except Exception as e: told = logger.warning(f'{task_ref(tid)}: the landing was not handed back to the agent - {e}')
     if not told: store.add_comment_once(tid, 'taskuary', 'agent', 'No agent has worked this task, so none was told what landed.')
 

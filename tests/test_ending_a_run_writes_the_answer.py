@@ -30,7 +30,7 @@ class EndingTheRunTests(unittest.TestCase):
         self.drafted = mock.patch.object(responder, 'write_draft', side_effect=AssertionError('a second voice drafted the reply'))
         self.summary = mock.patch.object(wrapup, 'report_from_transcript',
                                           return_value={'summary': 'fixed the off-by-one', 'done': True})
-        self.told = mock.patch.object(general, 'tell', return_value='told')
+        self.told = mock.patch.object(general, 'to_agent', return_value='told')
 
     def test_save_and_end_session_raises_the_reply_owed_and_leaves_the_task_open(self):
         tid = _task_with_a_sender(self.s)
@@ -56,7 +56,7 @@ class EndingTheRunTests(unittest.TestCase):
 
     def test_an_agent_that_ends_its_run_without_the_reply_is_asked_for_it_once(self):
         """`taskuary --done` with nobody's reply written: the agent that did the work is told, by the road every Taskuary word to it
-        takes (general.tell), that Dana is owed one - and never twice, however often it ends again without it."""
+        takes (general.to_agent), that Dana is owed one - and never twice, however often it ends again without it."""
         tid = _task_with_a_sender(self.s)
         ws.record(self.s, tid, f'sid{tid}', 'finished', text='Fixed the off-by-one.', source='cli')
         with self.drafted, self.summary, self.told as told:
@@ -73,7 +73,7 @@ class EndingTheRunTests(unittest.TestCase):
     def test_where_no_agent_can_be_asked_the_reply_waits_owed_and_says_so(self):
         tid = _task_with_a_sender(self.s)
         ws.record(self.s, tid, f'sid{tid}', 'finished', text='Fixed the off-by-one.', source='cli')
-        with self.drafted, self.summary, mock.patch.object(general, 'tell', return_value=''):
+        with self.drafted, self.summary, mock.patch.object(general, 'to_agent', return_value=''):
             wrapup.wrap(self.s, tid, close=False, actor='coding')
         rv = self.s.pending_review(tid)
         self.assertEqual((rv['Status'], rv.get('DraftText') or ''), ('pending', ''))

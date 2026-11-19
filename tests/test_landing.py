@@ -392,7 +392,7 @@ class LandingTests(unittest.TestCase):
         for k, v in (('user.name', 'Ray Colton'), ('user.email', 'ray@northwind.example')): git(other, 'config', k, v)
         commit(other, 'notes.md', 'from a teammate\n'); git(other, 'push', '-q', 'origin', 'master')
         told = []
-        with mock.patch.object(general, 'tell', lambda st, t, said, actor='owner': (told.append(said), 'told')[1]):
+        with mock.patch.object(general, 'to_agent', lambda st, t, said, actor='owner': (told.append(said), 'told')[1]):
             with self.assertRaises(landing.Refused): landing.land(self.s, self.tid, 'push')
         self.assertFalse(self.pushed())
         [line] = [what for _, _, what, *_ in general.presses(self.s, self.tid) if 'Push' in what]

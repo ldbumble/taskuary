@@ -30,9 +30,10 @@ class HeldStep(unittest.TestCase):
 
     def test_over_acp_the_note_is_taskuarys_never_the_owners(self):
         got = []
-        sess = SimpleNamespace(sid='run1', acp=True, task_id=self.tid, prompt=lambda text, brief=False, shown=None, done=None: got.append((text, brief)),
+        sess = SimpleNamespace(sid='run1', acp=True, alive=True, task_id=self.tid, waiting=lambda: True, status_tail=lambda n=8: [],
+                               prompt=lambda text, brief=False, shown=None, done=None: got.append((text, brief)),
                                say=lambda *a, **k: self.fail('an approval note went in as an owner prompt'))
-        self.approve(sess)
+        with mock.patch.dict(term.SESSIONS, {'run1': sess}, clear=True): self.approve(sess)      # ...by the one road in (general.to_agent)
         end = time.time() + 5
         while not got and time.time() < end: time.sleep(.01)
         [(text, brief)] = got
@@ -138,8 +139,8 @@ class EveryYesCarriesOn(unittest.TestCase):
         told = []
         def start(*a, **kw): time.sleep(0.3); return SimpleNamespace(send_prompt=lambda text, **k: told.append((text, k)))
         with mock.patch.object(general, 'start_session', side_effect=start), mock.patch.object(general, 'handles', return_value=True):
-            self.assertEqual(general.tell(self.s, self.tid, 'The owner approved it and Taskuary ran `git push origin deploy`.'), 'woke')
-            self.assertEqual(general.tell(self.s, self.tid, 'The owner approved it and Taskuary ran `git push origin --tags`.'), 'woke')
+            self.assertEqual(general.to_agent(self.s, self.tid, 'The owner approved it and Taskuary ran `git push origin deploy`.'), 'woke')
+            self.assertEqual(general.to_agent(self.s, self.tid, 'The owner approved it and Taskuary ran `git push origin --tags`.'), 'woke')
             end = time.time() + 5
             while not told and time.time() < end: time.sleep(.01)
             time.sleep(0.1)
@@ -177,7 +178,7 @@ class EveryYesCarriesOn(unittest.TestCase):
 
     def test_an_approval_reaches_a_coding_agent_whose_session_ended(self):
         """The north-star audit, 2026-11-10: an approved merge or comment on a coding task whose session had ended was told nobody, and
-        nothing said so - while a landing on the same task reopened its agent through the waiting room. One road (general.tell) now."""
+        nothing said so - while a landing on the same task reopened its agent through the waiting room. One road (general.to_agent) now."""
         tid = self.ended()
         rid = Factory(self.s).review(tid, kind='action', reason='The agent asks', draft=json.dumps({'action': 'comment_issue', 'body': 'Fixed.'}))
         rv = self.s.get_review(rid if isinstance(rid, int) else rid['ReviewId'])
@@ -194,6 +195,39 @@ class EveryYesCarriesOn(unittest.TestCase):
         went.assert_not_called(); self.assertEqual(self.s.waiting_notes(self.tid), [])
         said = [c for c in self.s.list_comments(self.tid) if 'none was told' in c['Body']]
         self.assertEqual(len(said), 1, said)
+
+
+class OneRoadIntoTheAgent(unittest.TestCase):
+    """ONE ROAD INTO THE AGENT (one road per decision, #10): a press, a browser hand-over closed and a sign-in done each woke the agent their own
+    way - a chat heard a press only on the waiting room's next look (up to 10 s, the chat at rest meanwhile) and a page's Done at once."""
+    def setUp(self):
+        self.s = MemoryStore(); self.tid = Factory(self.s).task('Pay the toll invoice'); general._WOKEN.clear()
+
+    def test_a_press_and_a_page_done_reach_a_live_chat_the_same_way_at_once(self):
+        from taskuary import browsergate
+        told = []
+        sess = SimpleNamespace(sid='run1', task_id=self.tid, alive=True, send_prompt=lambda text, **kw: told.append((text, kw)))
+        with mock.patch.dict(term.SESSIONS, {'run1': sess}, clear=True), mock.patch.object(waitroom, 'tick', side_effect=AssertionError('no clock')):
+            t0 = time.time()
+            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent'), 'told')
+            browsergate._tell(self.s, self.tid, "The owner pressed I'm done: they say they finished the step.", wake=True)
+            end = time.time() + 5
+            while len(told) < 2 and time.time() < end: time.sleep(.01)
+        self.assertLess(time.time() - t0, 2, "heard at once - never on the waiting room's clock")
+        self.assertEqual([kw for _t, kw in told], [{'as_owner': False}] * 2, "one road: the same call for both, never the owner's line")
+        self.assertIn('pressed Send', told[0][0]); self.assertIn("I'm done", told[1][0])
+        self.assertEqual(self.s.waiting_notes(self.tid), [], 'nothing left for a clock to deliver')
+
+    def test_who_it_is_from_says_the_road(self):
+        with self.assertRaises(ValueError): general.to_agent(self.s, self.tid, 'hi', frm='the assistant')
+        with mock.patch.object(ws, 'answer', return_value={'delivered': True}) as ans, mock.patch.object(general, 'take_line', return_value={'kept': 1}) as line:
+            general.to_agent(self.s, self.tid, 'Yes', frm='owner', request='q1')
+            general.to_agent(self.s, self.tid, 'Also check March', frm='owner', wait=False)
+        self.assertEqual(ans.call_args.args[2:4], ('q1', 'Yes')); self.assertEqual(line.call_args.args[1:3], (self.tid, 'Also check March'))
+        with mock.patch.object(waitroom, 'deliver', return_value={}):
+            general.to_agent(self.s, self.tid, 'Kept for its next stop', frm='owner', wake=False)
+            general.to_agent(self.s, self.tid, 'Erin Blake on Teams: the file is up', frm='sender')
+        self.assertEqual([n['CreatedBy'] for n in self.s.waiting_notes(self.tid)], ['owner', waitroom.TEAMMATE])
 
 
 class ParkedOnItsOwnQuestion(unittest.TestCase):
@@ -322,7 +356,7 @@ def _line(s, tid, agent, said):
         a.store, a.task_id = s, tid
         return a._begins([(said, False, [], None)], said)[0]
     told = []                                     # a coding agent in a terminal: its prompt hook, then Taskuary's next line
-    with mock.patch.object(general, 'tell', lambda st, t, note, actor='owner': told.append(note) or 'told'):
+    with mock.patch.object(general, 'to_agent', lambda st, t, note, actor='owner': told.append(note) or 'told'):
         hooks._events(SimpleNamespace(store=s, task_id=tid, sid='run1', bg={}), {'hook_event_name': 'UserPromptSubmit', 'prompt': said})
     return '\n'.join(told)
 
@@ -371,7 +405,7 @@ def test_a_prompt_that_is_not_his_never_sets_his_waiting_reply_aside(acp, tmp_pa
     s._exec("UPDATE review SET CreatedAt='2026-01-01 09:00:01' WHERE ReviewId=?", (rid,))
     told, note = [], 'A note for you from the agent on TQ-0009: it changed totals.py in this checkout - read its diff before you edit the same lines.'
     sess = SimpleNamespace(store=s, task_id=tid, sid='run1', bg={}, acp=acp)
-    with mock.patch.object(general, 'tell', lambda st, t, n, actor='owner': told.append(n) or 'told'):
+    with mock.patch.object(general, 'to_agent', lambda st, t, n, actor='owner': told.append(n) or 'told'):
         sessionrecord.keep_seed(tid, note)                         # Taskuary typed it (terminal.type_into `brief`)
         hooks._events(sess, {'hook_event_name': 'UserPromptSubmit', 'prompt': note})
         assert s.get_review(rid)['Status'] == 'pending' and not told, (s.get_review(rid)['Status'], told)
@@ -523,7 +557,7 @@ class AFailedSendIsHandedBack(unittest.TestCase):
         sent = lambda st, m, body, to=None, cc=None, **k: {'channel': 'email', 'to': to, 'cc': cc or []}
         with mock.patch('taskuary.outbound.reply_to_message', side_effect=sent), mock.patch.object(outbound, 'send_block', return_value=''), \
              mock.patch.object(verdicts, 'context_moved', return_value=(False, None)), \
-             mock.patch.object(general, 'tell', side_effect=lambda st, tid, said, actor='owner', **k: heard.append(said) or 'told'):
+             mock.patch.object(general, 'to_agent', side_effect=lambda st, tid, said, actor='owner', **k: heard.append(said) or 'told'):
             out = verdicts.decide(self.s, self.s.get_review(self.rid), 'approve', None, None, 'owner', cc=['ray@northwind.example'])
         self.assertTrue(out['ok'], out)
         [said] = heard
@@ -602,7 +636,7 @@ class OneCardAtATime(unittest.TestCase):
         tid = Factory(self.s).task('Answer Gail and tell Ray'); self.answered(tid, 'Both letters are set up.', '2000-01-01 00:00:00')
         first, second = self.email(tid, 'gail@northwind.example', 'Gail - the rate is 4%.'), self.email(tid, 'ray@northwind.example', 'Ray - Gail has the rate.')
         told = []
-        with mock.patch.object(general, 'tell', lambda st, t, said, actor='owner', heard=None: told.append(said) or (heard and heard('woke')) or 'woke'):
+        with mock.patch.object(general, 'to_agent', lambda st, t, said, actor='owner', heard=None: told.append(said) or (heard and heard('woke')) or 'woke'):
             self.assertTrue(verdicts.decide(self.s, self.s.get_review(first), 'reject')['ok'])
         [said] = told
         self.assertIn(f'turned down rv{first} (the email to gail@northwind.example) - their own no', said); self.assertIn(f'rv{second}', said)
@@ -613,7 +647,7 @@ class OneCardAtATime(unittest.TestCase):
     def test_a_no_with_nothing_behind_it_wakes_nobody(self):
         tid = Factory(self.s).task('Answer Gail'); self.answered(tid, 'The letter is set up.', '2000-01-01 00:00:00')
         only = self.email(tid, 'gail@northwind.example', 'Gail - the rate is 4%.')
-        with mock.patch.object(general, 'tell', side_effect=AssertionError('a no with nothing behind it is heard with his next line')):
+        with mock.patch.object(general, 'to_agent', side_effect=AssertionError('a no with nothing behind it is heard with his next line')):
             self.assertTrue(verdicts.decide(self.s, self.s.get_review(only), 'reject')['ok'])
 
 
@@ -746,7 +780,7 @@ def test_a_post_its_agent_is_told_of_reads_as_the_card_it_was_never_the_tools_ro
 # it - nobody had answered. Every approval's note says a thing sent is sent, never received or acted on until someone answers
 def test_the_note_after_a_press_never_lets_sent_read_as_received():
     s = MemoryStore(); tid = Factory(s).task('Get the vendor invoice paid'); seen = []
-    with mock.patch.object(general, 'tell', lambda st, t, said, *a, **k: seen.append(said) or 'told'):
+    with mock.patch.object(general, 'to_agent', lambda st, t, said, *a, **k: seen.append(said) or 'told'):
         general.approved(s, tid, 'Send', 'the email to ap@northwind.example was sent')
     assert 'never received, read or acted on until someone answers' in seen[0]
 

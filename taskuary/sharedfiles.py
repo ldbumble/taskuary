@@ -5,7 +5,7 @@ the files "still show 212" minutes after they showed 214 - from memory, not the 
 A task's files live in its own outputs folder (outputs.folder). Plain code, no reading of meaning: at the end of each turn, the files of
 ANOTHER task's folder that the turn's tool calls name are that task's files this one uses (kept on the audit, once each); and every file a
 turn changed - its own, or another task's it wrote into - is said to each other live task that uses it, and to the task it belongs to, by
-the one road Taskuary's words reach an agent (general.tell). What it does about it is the agent's to judge."""
+the one road Taskuary's words reach an agent (general.to_agent). What it does about it is the agent's to judge."""
 import json, re
 
 from loguru import logger
@@ -71,6 +71,6 @@ def turn_ended(store, tid: int, trace: list, since: float, own: list) -> list:
         line = (f"{task_ref(tid)}'s agent just changed {said}. Read it again before you say what it holds, and bring up to date anything of "
                 "yours made from it - or say why it needs nothing.")
         try:
-            if general.tell(store, y, line, 'router'): told += [(y, p) for _, p in fs]
+            if general.to_agent(store, y, line, 'router'): told += [(y, p) for _, p in fs]
         except Exception as e: logger.warning(f'{task_ref(y)}: a change by {task_ref(tid)} to a file it uses was not told - {e}')
     return told

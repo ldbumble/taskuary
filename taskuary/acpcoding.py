@@ -157,7 +157,7 @@ class ACPCoding:
         Kept on the task, it is drawn as the owner's on every screen until a turn takes it. A session on no task has no room: its prompt."""
         if not (self.store and self.task_id): return self.prompt(line)
         # ...the one road every line the owner types takes (general.take_line, 2026-11-10)
-        threading.Thread(target=lambda: general.take_line(self.store, self.task_id, line, wait=False), daemon=True).start()
+        threading.Thread(target=lambda: general.to_agent(self.store, self.task_id, line, frm='owner', wait=False), daemon=True).start()
 
     # ── what the rest of Taskuary reads off a session ──────────────────────────────────────────────────────────────────────
     def idle(self) -> float: return round(time.time() - self.last, 1)

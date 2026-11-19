@@ -1189,7 +1189,8 @@ def answer_the_agent(store, item: dict | None, words: str, picked: bool, actor: 
     # match to pill action"): typed "next" over an asking agent went to the agent as its answer. The AI matches them - an answer is
     # answer_agent, which runs at once (concierge.AUTO), so it still goes straight in (2026-10-02); Next is Next.
     if not picked or words not in agent_answers(item): return ''
-    out = ws.answer_open(store, int(item['tid']), words, actor) if item.get('tid') else {'delivered': False, 'state': 'no_request'}
+    from . import general           # ...by the one road into the agent (general.to_agent): his answer to what it asks
+    out = general.to_agent(store, int(item['tid']), words, actor, frm='owner', request='open') if item.get('tid') else {'delivered': False, 'state': 'no_request'}
     who = item.get('agent') or 'the agent'
     if out.get('delivered'):
         # ...never the last word: it is followed up here when the agent is done with it, and the walk goes on meanwhile
@@ -1199,8 +1200,7 @@ def answer_the_agent(store, item: dict | None, words: str, picked: bool, actor: 
     if out.get('state') == 'no_request':
         # ...and SAVED, as the desktop saves it (server agent.answer -> waitroom_add): the phone said "it is in its
         # waiting room" and kept nothing (A12, 2026-09-25). It reaches the agent when it next stops.
-        from . import waitroom
-        try: waitroom.add(store, int(item['tid']), words, actor)
+        try: general.to_agent(store, int(item['tid']), words, actor, frm='owner', wake=False)
         except ValueError as e: return f'Could not save that for {who}: {e}'
         return f'{who} is not asking any more - your answer "{words}" is saved and reaches it when it next stops.'
     return f'Could not get that to {who} ({out.get("state")}): {out.get("why") or ""}'.strip()

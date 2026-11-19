@@ -765,7 +765,7 @@ class Handed(Exception):
 REDRAFT = ('The owner pressed {press} on the reply waiting on this task{said}. Write that reply again and save it in place of the one '
            'waiting - its card shows it; say nothing of the old one.')
 def to_agent(store, tid: int, nudge: str = None) -> str:
-    """Hand the owner's Redraft / Draft with AI to task `tid`'s agent, as every word of Taskuary's to an agent goes (general.tell): 'told' or
+    """Hand the owner's Redraft / Draft with AI to task `tid`'s agent, as every word of Taskuary's to an agent goes (general.to_agent): 'told' or
     'woke' - and his press is a line in the chat - or '' where no agent ever worked it."""
     from . import general, buttons
     t = store.get_task(int(tid)) if tid else None
@@ -774,7 +774,7 @@ def to_agent(store, tid: int, nudge: str = None) -> str:
     press = buttons.label('redraft') if rv and str(rv.get('DraftText') or '').strip() else buttons.label('redraft', 'none')
     # ...his press is written first: the turn it wakes reads it with what the owner did since its last answer
     store.audit('task', int(tid), 'redraft_asked', 'owner', 'human', {'said': said[:300]})
-    got = general.tell(store, int(tid), REDRAFT.format(press=press, said=f', saying: "{said}"' if said else ''))
+    got = general.to_agent(store, int(tid), REDRAFT.format(press=press, said=f', saying: "{said}"' if said else ''))
     if not got: store._exec("DELETE FROM audit WHERE Id=(SELECT MAX(Id) FROM audit WHERE EntityType='task' AND EntityId=? AND Action='redraft_asked')", (int(tid),))
     return got
 

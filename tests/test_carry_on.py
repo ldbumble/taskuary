@@ -199,7 +199,7 @@ class CodingCarryOnTests(unittest.TestCase):
         self.assertEqual((out['task_id'], spawned), (tid, ['_continue_coding']))
         self.assertTrue(any('coding agent reopens its own session' in c['Body'] for c in s.list_comments(tid)))
         self.assertIn(tid, general.OPENING)
-        # ...BY THE ONE ROAD (general.tell -> the waiting room -> waitroom.reopen_coding), as a typed line and an approval reach it: it
+        # ...BY THE ONE ROAD (general.to_agent -> the waiting room -> waitroom.reopen_coding), as a typed line and an approval reach it: it
         # started the CLI itself, so nothing was written down as heard and a start that found no room was never tried again
         with mock.patch.object(terminal, 'start_on_task', return_value={}) as start, mock.patch.object(ingest, 'has_room', return_value=True): ingest._continue_coding(s, tid)
         args, kw = start.call_args

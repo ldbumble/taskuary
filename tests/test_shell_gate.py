@@ -167,7 +167,7 @@ class Holding(unittest.TestCase):
         hooks._events(t, {'hook_event_name': 'UserPromptSubmit', 'prompt': '<task-notification>done</task-notification>'})
         self.assertEqual([r['ReviewId'] for r in self.pending()], [rv['ReviewId']], 'a wake leaves it lit')
         told = []
-        with mock.patch('taskuary.general.tell', lambda st, tid, note, actor='owner': told.append(note) or 'told'):
+        with mock.patch('taskuary.general.to_agent', lambda st, tid, note, actor='owner': told.append(note) or 'told'):
             hooks._events(t, {'hook_event_name': 'UserPromptSubmit', 'prompt': 'no, leave the checkout - is it ready to push?'})
         self.assertEqual(self.pending(), []); self.assertTrue(proposals.passed(self.s.get_review(rv['ReviewId'])))
         from taskuary import cardqueue

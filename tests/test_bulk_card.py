@@ -39,7 +39,7 @@ def emails(n): return [{'to': f'owner{i}@cedar.example', 'subject': f'Interest i
 
 def press(s, key, skip=(), told=None):
     told = [] if told is None else told
-    with mock.patch.object(general, 'tell', lambda st, t, said, actor='owner', heard=None: told.append(said) or (heard and heard('woke')) or 'woke'):
+    with mock.patch.object(general, 'to_agent', lambda st, t, said, actor='owner', heard=None: told.append(said) or (heard and heard('woke')) or 'woke'):
         return bulkcard.run(s, key, skip, wait=True), told
 
 
@@ -109,7 +109,7 @@ def test_cancel_stops_the_rest_and_what_was_not_run_still_waits_on_the_card():
     with mock.patch.object(server, 'store', s):
         out = call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='duplicates', items=[{'number': n} for n in range(1, 41)])
     gh, told = GitHub(delay=0.05), []
-    with mock.patch.object(github.requests, 'patch', gh.patch), mock.patch.object(general, 'tell', lambda st, t, said, actor='owner', heard=None: told.append(said) or (heard and heard('woke')) or 'woke'):
+    with mock.patch.object(github.requests, 'patch', gh.patch), mock.patch.object(general, 'to_agent', lambda st, t, said, actor='owner', heard=None: told.append(said) or (heard and heard('woke')) or 'woke'):
         bulkcard.run(s, out['batch'])
         end = time.time() + 20
         while bulkcard.state(s, out['batch'])['done'] < 5 and time.time() < end: time.sleep(0.01)
@@ -200,7 +200,7 @@ def test_a_press_on_a_bulk_card_the_chat_moved_past_sends_nothing():
     assert len(proposals.written_past(s, tid)) == 5
     sent = []
     with mock.patch.object(server, 'store', s), mock.patch.object(outbound, 'send_out', lambda *a, **k: sent.append(1) or {'channel': 'email'}), \
-         mock.patch.object(outbound, 'send_block', lambda *a, **k: ''), mock.patch.object(general, 'tell', lambda *a, **k: 'woke'):
+         mock.patch.object(outbound, 'send_block', lambda *a, **k: ''), mock.patch.object(general, 'to_agent', lambda *a, **k: 'woke'):
         r = c.post(f"/api/reviews/batch/{out['batch']}/run", json={'skip': []})
         time.sleep(0.5)
     assert r.status_code == 409 and 'hold off' in r.json()['detail'], r.json()
@@ -217,7 +217,7 @@ def test_two_presses_at_once_are_one_run_and_its_agent_hears_it_once():
     sent, told, slow = [], [], bulkcard.running
     def send(*a, **k): time.sleep(0.02); sent.append(k.get('to')); return {'channel': 'email', 'to': k.get('to') or []}
     with mock.patch.object(outbound, 'send_out', send), mock.patch.object(outbound, 'send_block', lambda *a, **k: ''), \
-         mock.patch.object(general, 'tell', lambda st, t, said, actor='owner', **k: told.append(said) or 'woke'), \
+         mock.patch.object(general, 'to_agent', lambda st, t, said, actor='owner', **k: told.append(said) or 'woke'), \
          mock.patch.object(bulkcard, 'running', lambda *a: (slow(*a), time.sleep(0.05))[0]):      # ...both presses read it before either marks it
         presses = [threading.Thread(target=bulkcard.run, args=(s, out['batch'])) for _ in range(2)]
         for t in presses: t.start()
@@ -375,7 +375,7 @@ def test_two_presses_at_once_are_one_run_and_one_true_telling():
     with mock.patch.object(server, 'store', s):
         out = call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='duplicates', items=[{'number': n} for n in range(1, 11)])
     gh, told, go = GitHub(delay=0.02), [], threading.Barrier(2)
-    with mock.patch.object(github.requests, 'patch', gh.patch), mock.patch.object(general, 'tell', lambda st, t, said, actor='owner', **k: told.append(said) or 'woke'):
+    with mock.patch.object(github.requests, 'patch', gh.patch), mock.patch.object(general, 'to_agent', lambda st, t, said, actor='owner', **k: told.append(said) or 'woke'):
         def press_it():
             go.wait()
             try: bulkcard.run(s, out['batch'], wait=True)

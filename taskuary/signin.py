@@ -193,7 +193,7 @@ def _seal_key(key) -> str:
     return k
 
 
-def save(store, site, user, pw, by='owner', key=None, extra=None):
+def save(store, site, user, pw, by='owner', key=None, extra=None, keep_old=False):
     """Keep a sign-in for `site`, sealed. The site is the one the owner saw on the fill page - pinned there, at save time. `key`: an
     authenticator key to keep with it; None keeps the one already saved (a changed password is not a new authenticator). `extra`: the
     other boxes its form asks for, {label: value} (a "Customer ID"); None keeps the ones already saved."""
@@ -212,7 +212,9 @@ def save(store, site, user, pw, by='owner', key=None, extra=None):
     old = saved(store, site) or {}
     store._exec('INSERT OR REPLACE INTO signin_vault (Site, User, Secret, Totp, Extra, SavedAt, SavedBy, LastUsed) VALUES (?,?,?,?,?,?,?,?)',
                 (site, u, p, k or old.get('Totp'), x if ex is not None else old.get('Extra'), _now(), by, None))
-    for v in old.get('User'), old.get('Secret'), (old.get('Totp') if k else None), (old.get('Extra') if ex is not None else None): vault.forget(v)
+    # ...`keep_old`: a row that may yet be put back (a sign-up the site has not answered) keeps the secrets it replaced until it is - on macOS
+    # a sealed secret is a keychain entry, and forgetting it here left the put-back row pointing at nothing (CI, 2026-11-19)
+    if not keep_old: forget_row(old, k, ex)
     store.audit('signin', 0, 'signin_saved', by, detail={'site': site, **({'code': True} if k else {})})
 
 
@@ -1349,6 +1351,18 @@ def answered(c, wait: float = ANSWER_WAIT) -> int | None:
     return None
 
 
+def forget_row(old, key=True, extra=True):
+    "A replaced row's own secrets out of the keychain: its user and password, and its code key and extras where they were replaced."
+    from . import vault
+    for v in (old or {}).get('User'), (old or {}).get('Secret'), ((old or {}).get('Totp') if key else None), ((old or {}).get('Extra') if extra is not None else None):
+        vault.forget(v)
+
+
+def _kept(prev, now):
+    "The site took the new row: the secrets of the one it replaced go now - never before, while it might still come back."
+    forget_row({k: v for k, v in (prev or {}).items() if v and v != (now or {}).get(k)})
+
+
 # ── the vault row a sign-up replaced comes back when the site turns the form down ───────────────────────────────────────────────────
 def _raw(store, site) -> dict | None:
     _tables(store)
@@ -1441,7 +1455,7 @@ def _make(store, tid, sid, site, c, fill=None, send=None) -> tuple[bool, str]:
         why = str(e) if isinstance(e, SignInError) else 'the browser could not be reached'
         _audit(store, tid, site, 'vault', False, why)
         return False, f'Nothing was sent: the password could not be typed - {why}. Look at the page and go on from what it shows.'
-    try: save(store, site, user, pw, by='taskuary'); kept = ''
+    try: save(store, site, user, pw, by='taskuary', keep_old=True); kept = ''
     except ValueError as e: kept = f' The password could not be kept: {e}.'
     try: got = (send or send_new)(sid, site, c)
     except Exception as e: got = {'ok': False, 'why': str(e) if isinstance(e, SignInError) else 'the browser could not be reached'}
@@ -1450,7 +1464,8 @@ def _make(store, tid, sid, site, c, fill=None, send=None) -> tuple[bool, str]:
         _audit(store, tid, site, 'vault', False, got.get('why') or 'the form stayed up')
         return False, (f'No account: {site} kept its sign-up form up' + (f' - it says "{got["why"]}"' if got.get('why') else '') + '. Nothing was '
                        'kept. Fix what it asks for and run `agent-browser signup` again; a box only the owner can fill is theirs.')
-    if (u := got.get('user')) and u != user and not kept: user = u; save(store, site, user, pw, by='taskuary')
+    if (u := got.get('user')) and u != user and not kept: user = u; save(store, site, user, pw, by='taskuary', keep_old=True)
+    if not kept: _kept(prev, _raw(store, site))
     return True, _answered(store, tid, sid, site, c, user, kept)
 
 
@@ -1532,7 +1547,7 @@ def pressing(store, tid, sid, site, conn=None) -> None:
     if f.get('user'): _USERS[(int(tid), site)] = f['user']
     if not pw: return
     prev = _raw(store, site)
-    try: save(store, site, f.get('user') or _USERS.get((int(tid), site), ''), pw, by='agent')
+    try: save(store, site, f.get('user') or _USERS.get((int(tid), site), ''), pw, by='agent', keep_old=True)
     except ValueError as e: return logger.info(f'signin: task {tid} pressed with a password on {site}, not kept - {e}')
     _PRESSED[str(sid)] = (int(tid), site, prev)
 
@@ -1558,6 +1573,7 @@ def settled(store, sid, conn=None) -> str:
             if conn is None: c.close()
     except Exception: ok = True                          # ...unreadable: what the site was sent stays kept - a password lost is the worse
     if not ok: _restore(store, site, prev); return ''
+    _kept(prev, _raw(store, site))
     _audit(store, tid, site, 'vault', True, 'kept from a press', saved=True)
     return (f"TASKUARY: the password that form sent to {site} is kept with the owner's saved sign-ins. Next time run `agent-browser signup` "
             'and type no password yourself.')

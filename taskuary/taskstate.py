@@ -314,7 +314,11 @@ def status(store, t: dict, session=None, queued=None, key: str = None) -> dict:
     k = key or state(store, t, session, queued)
     words = lambda x: {'key': x, 'word': lanes.word(x), 'hint': lanes.hint(x), 'mark': lanes.MARK.get(x, '')}
     if k == 'queued' and str((queued or {}).get('State') or (queued or {}).get('state') or '') == 'failed': return {**words('start_failed'), 'spins': False}
-    if k == 'approve' and (w := store.waiting_on_owner(t['TaskId'])) and w.get('Kind') in ('draft', 'draft_reply')             and not str(w.get('FinalText') or w.get('DraftText') or '').strip(): return {**words('owed'), 'spins': False}
+    w = store.waiting_on_owner(t['TaskId']) if k == 'approve' else None
+    if w and w.get('Kind') in ('draft', 'draft_reply') and not str(w.get('FinalText') or w.get('DraftText') or '').strip(): return {**words('owed'), 'spins': False}
+    # ...and it is the FRONT card that waits (cardqueue): a held step or an act at the front waits on him, never "ready to send" over a reply
+    # held behind it (the judge's look, 2026-11-19)
+    if w and w.get('Kind') == 'action': k = 'blocked'
     out = {**words(k), 'spins': k == 'working'}
     if handles(t) and not is_dock(t):
         if k in CHAT_READY: out = {**out, 'word': lanes.word('chat_ready'), 'hint': lanes.hint('chat_ready')}

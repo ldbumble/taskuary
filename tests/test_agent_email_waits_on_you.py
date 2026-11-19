@@ -89,3 +89,18 @@ def test_the_tasks_status_and_its_words_are_said_once_by_the_server():
     assert taskstate.state(r, r.get_task(t)) == 'approve' and taskstate.status(r, r.get_task(t))['word'] == lanes.word('owed')
     # ...and a start that failed says it could not start, never "waiting to start"
     assert taskstate.status(r, r.get_task(t), key='queued', queued={'State': 'failed'})['key'] == 'start_failed'
+
+
+def test_the_pill_reads_the_card_at_the_front_not_the_reply_held_behind_it():
+    # the judge's look at the redesign, 2026-11-19: a held browser step stood at the front and a reply waited behind it, and the pill said
+    # "ready to send" - the step is what waits on him now, said in its own words
+    from taskuary import lanes
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Pay the toll invoice', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
+    s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps({'action': 'browser_act', 'args': ['click', '@e5'],
+                  'what': 'pays the $412.50 order on toll.example', 'site': 'toll.example'})})
+    s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Erin - paid today.'})
+    front = s.waiting_on_owner(tid)
+    assert front['Kind'] == 'action', front
+    st = taskstate.status(s, s.get_task(tid))
+    assert st['word'] != lanes.word('approve') and st['word'] == lanes.word('blocked'), st

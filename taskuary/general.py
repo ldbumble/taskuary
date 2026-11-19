@@ -1638,19 +1638,6 @@ def dock_snapshot(store) -> str:
     return '\n'.join(lines)
 
 
-def _task_files(store, tid: int) -> list[dict]:
-    """Files that arrived with the task's source messages, once each, in message order."""
-    detail = store.task_detail(tid) or {}
-    out, seen = [], set()
-    for message in detail.get('messages') or []:
-        for attachment in store.list_attachments(message['MessageId']):
-            path = str(attachment.get('Path') or '').strip()
-            key = path or f"attachment:{attachment.get('AttachmentId')}"
-            if key in seen: continue
-            seen.add(key); out.append(attachment)
-    return out
-
-
 def report_note(store, tid: int, lead: str = ''):
     """What the agent did, for a general session as for a coding one (the owner, 2026-10-09: "general agent should also have
     the summary like cli no? ... that's all people want to see, it's the core thing what the agent did"). A coding session
@@ -3224,7 +3211,8 @@ class GeneralSession:
                 from . import playbooks as _pbk
                 if pbk := _pbk.seed_block(self.store.get_task(self.task_id)): system += '\n\nPROCEDURE FOR THIS JOB\n' + _cut(pbk, 3_000)
             if prior: user = f'{prior}\n\n{user}'
-            source_paths = [a.get('Path') for a in _task_files(self.store, self.task_id) if a.get('Path')]
+            from . import outputs
+            source_paths = [r['path'] for r in outputs.task_files(self.store, self.task_id) if r.get('attachment') and r['path']]
             paths = list(dict.fromkeys(source_paths + list(attachments or [])
                                        + [m.group('path') for m in _IMAGE_PATH.finditer(text)]))
             def visible(kind, name, detail):

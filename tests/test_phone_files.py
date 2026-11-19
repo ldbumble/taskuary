@@ -77,6 +77,24 @@ class TelegramFileTests(PhoneFiles):
             self.assertIn('was not sent', said, bad)
             self.ph.tap('Back to')                                            # the card again, its own pick under it
 
+    def test_the_file_the_task_came_with_is_the_phones_and_the_agents(self):
+        """WHICH FILES A TASK HAS is one list (outputs.task_files): the phone read the outputs folder alone, so the contract the task came
+        with was in the agent's turn and never on the phone's 📎 Send - and a mail's inline logo is neither's file to send."""
+        tid = self.task({'gl-recon.xlsx': BOOK})
+        mid = self.s.list_messages(tid)[0]['MessageId']
+        d = config.home() / 'attachments' / str(mid); d.mkdir(parents=True, exist_ok=True)
+        self.addCleanup(shutil.rmtree, d, True)
+        (d / 'march-close.pdf').write_bytes(b'%PDF invented contract'); (d / 'logo.png').write_bytes(b'\x89PNG logo')
+        self.s.add_attachment({'MessageId': mid, 'Name': 'march-close.pdf', 'ContentType': 'application/pdf', 'Size': 22, 'Path': str(d / 'march-close.pdf')})
+        self.s.add_attachment({'MessageId': mid, 'Name': 'logo.png', 'ContentType': 'image/png', 'Size': 9, 'Inline': 1, 'Path': str(d / 'logo.png')})
+        agent = {r['name'] for r in outputs.task_files(self.s, tid) if not r.get('chrome')}
+        phone = {r['name'] for r in ra.task_files(self.s, {'tid': tid})}
+        self.assertEqual(phone, agent); self.assertEqual(phone, {'march-close.pdf', 'gl-recon.xlsx'})
+        text, picks = self.card()
+        self.assertIn('march-close.pdf', text); self.assertIn('📎 Send the 2 files', picks)
+        self.ph.tap('📎 Send the 2 files')
+        self.assertEqual(sorted(n for _c, n, *_r in self.ph.docs), ['gl-recon.xlsx', 'march-close.pdf'])
+
     def test_a_file_too_big_is_said_plainly_with_the_desktop_instead(self):
         tid = self.task({'gl-recon.xlsx': BOOK})
         self.card()

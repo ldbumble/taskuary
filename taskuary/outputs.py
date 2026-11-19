@@ -403,6 +403,25 @@ def deliverables(rows: list) -> list:
     return made
 
 
+
+def task_files(store, tid: int) -> list:
+    """WHICH FILES A TASK HAS, one list for every surface: what CAME with it - its messages' attachments, once each, in message order,
+    `attachment` the id the agent and a Send name it by - then what its agent MADE (deliverables, newest first). The phone's Send files
+    read the outputs folder alone and never offered the contract the task came with; the agent's turn read the attachments alone.
+    `chrome`: a picture inline in a mail - a signature's logo, which the page draws as chrome (Attachments.jsx), not a file sent."""
+    came, seen = [], set()
+    for m in (store.task_detail(int(tid)) or {}).get('messages') or []:
+        for a in store.list_attachments(m['MessageId']) or []:
+            k = str(a.get('Path') or '').strip() or f"attachment:{a.get('AttachmentId')}"
+            if k in seen: continue
+            seen.add(k)
+            came.append({'id': f"attachment:{a['AttachmentId']}", 'name': a.get('Name') or 'a file', 'path': a.get('Path') or '', 'kind': 'attachment',
+                         'attachment': a['AttachmentId'], 'size': a.get('Size') or 0, 'saved': bool(a.get('Path')),
+                         'chrome': bool(a.get('Inline')) and m.get('Channel') == 'email'})
+    try: made = deliverables(listing(int(tid)))
+    except Exception: made = []
+    return came + made
+
 # WHERE IS THE EXCEL THE AGENT MADE (the owner, 2026-10-28: "if I ask the chat assistant to pull up the Excel created by the agent on the
 # task about X, could it find the link to it? It should be able to"). Every task's outputs folder and the pages its agents showed or
 # published, matched by the task's words and the file's own name - the model passes the words and the kind; nothing reads the sentence.

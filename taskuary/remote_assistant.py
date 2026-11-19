@@ -1585,14 +1585,15 @@ def _size(n: int) -> str:
 
 
 def task_files(store, item: dict | None) -> list:
-    """The files in the task's own outputs folder (outputs.listing - no link followed, nothing outside it), newest first - each thing it
-    made once, its newest version (outputs.deliverables)."""
+    """The task's files as every surface lists them (outputs.task_files): what came with it, then what its agent made - less a mail's
+    inline logo and a file never kept. A came file's `path` is its attachment id, which send_files resolves on this task's own mail."""
     tid = (item or {}).get('tid')
     if store is None or not str(tid or '').isdigit(): return []
     from . import outputs
-    try: return outputs.deliverables(outputs.listing(int(tid)))
+    try: rows = outputs.task_files(store, int(tid))
     except Exception as e:
         logger.debug(f'the phone could not list the task files: {e}'); return []
+    return [{**r, 'path': r['id']} if r.get('attachment') else r for r in rows if not r.get('chrome') and r.get('saved', True)]
 
 
 def file_picks(rows: list, tid) -> list:
@@ -1609,12 +1610,22 @@ def files_line(rows: list) -> str:
         (f' · and {more} more on the desktop' if more > 0 else '')
 
 
+def _sendable(store, tid: int, rel: str):
+    """The file a 📎 pick names, re-resolved as it goes: one that came on THIS task's own mail by its attachment id (agenttools.mail_file,
+    the lock an agent's attach goes through), else one inside the task's outputs folder (outputs.resolve) - else None."""
+    from . import agenttools, outputs
+    if rel.startswith('attachment:'):
+        try: return agenttools.mail_file(store, tid, rel.split(':', 1)[1])[1]
+        except ValueError: return None
+    return outputs.resolve(tid, rel)
+
+
 def send_files(store, act: dict, actor: str = 'owner') -> str:
     """A 📎 pick: the files themselves, as documents, into the chat the pick came from. Two locks, both in code:
     - THE CHAT is the owner's own Assistant chat, the one that pick came from (asking) - checked again here, so no other road (the
       desktop, an agent, a stranger's chat, the model) can send anything; elsewhere nothing is sent and nothing is said.
-    - THE FILE is re-resolved inside that task's outputs folder (outputs.resolve: no `..`, no absolute path, no link) at the moment it
-      goes - a name kept on the pick is only a name.
+    - THE FILE is re-resolved at the moment it goes (_sendable): inside that task's outputs folder (outputs.resolve: no `..`, no absolute
+      path, no link), or a file on that task's own mail by its id - a name kept on the pick is only a name.
     Too big says so, with the desktop's address; a failed send says why, with Try again. Nothing fails silently."""
     from . import general, messengers, outputs
     from .store import task_ref
@@ -1628,10 +1639,10 @@ def send_files(store, act: dict, actor: str = 'owner') -> str:
     ref, cap = task_ref(tid), messengers.FILE_MAX[ch]
     said, failed, big = [], [], []
     for rel in [str(r) for r in act.get('paths') or []][:FILES_SENT]:
-        p = outputs.resolve(tid, rel)
+        p = _sendable(store, tid, rel)
         name = rel.replace('\\', '/').rsplit('/', 1)[-1] or rel
         if p is None:
-            logger.warning(f'phone files: {ref} has no file {rel!r} in its outputs folder - refused')
+            logger.warning(f'phone files: {ref} has no file {rel!r} - refused')
             said.append(f'{_cut(name, 80)} is not one of {ref}\'s files - it was not sent.'); continue
         size = p.stat().st_size
         if size > cap: big.append((p.name, size)); continue

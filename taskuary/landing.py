@@ -39,9 +39,8 @@ def _run(cwd, *args, timeout=60) -> tuple:
     except Exception as e: return 1, '', str(e)
 
 
-def _git(cwd, *args) -> str:
-    rc, out, _ = _run(cwd, *args)
-    return out if rc == 0 else ''
+def _git(cwd, *args) -> str: return _ok(_run(cwd, *args))
+def _ok(r: tuple) -> str: return r[1] if r[0] == 0 else ''
 
 
 def head_branch(cwd) -> str:
@@ -53,7 +52,18 @@ def sha(cwd, ref) -> str: return _git(cwd, 'rev-parse', '--verify', '--quiet', f
 # ...by name, never by `status --porcelain`'s columns: _git strips its output, and the first line's " M " lost a character of the file's name
 def dirty(cwd) -> list:
     return [l for l in [*_git(cwd, 'diff', '--name-only', 'HEAD').splitlines(), *_git(cwd, 'ls-files', '--others', '--exclude-standard').splitlines()] if l.strip()]
-def is_ancestor(cwd, a, b) -> bool: return _run(cwd, 'merge-base', '--is-ancestor', a, b)[0] == 0
+def is_ancestor(cwd, a, b) -> bool: return _fixed(cwd, 'merge-base', '--is-ancestor', a, b)[0] == 0
+
+
+_FIXED, _SHA = {}, re.compile(r'[0-9a-f]{40}')
+def _fixed(cwd, *args) -> tuple:
+    """`_run`, kept where every ref it names is a commit's own sha: what git says of those never changes. A coding task's card asked git the
+    same eight questions of its commits on every poll, ~0.1 s a process on Windows (the owner's live app, 2026-11-19: /landing 23 s)."""
+    refs = [x for x in args if not x.startswith('-')][1:]
+    if not refs or not all(_SHA.fullmatch(x) for x in refs): return _run(cwd, *args)
+    k = (os.path.normcase(os.path.abspath(cwd)), args)
+    if k not in _FIXED and (got := _run(cwd, *args))[0] in (0, 1): _FIXED[k] = got        # ...an answer, never a failure to give one
+    return _FIXED.get(k) or _run(cwd, *args)
 def conflicted(cwd) -> list: return [l for l in _git(cwd, 'diff', '--name-only', '--diff-filter=U').splitlines() if l.strip()]
 
 
@@ -185,35 +195,27 @@ def saw(store, tid: int, tool: str, args: dict, at: float = None):
     if got: _save(store, tid, r)
 
 
-_SCAN = {}                          # an ACP record's path -> ((mtime, size), (calls, paths)): read again only once it grew
-
-
-def _scan(f) -> tuple:
-    c, p, calls = [], {}, {}
-    for line in f.read_text(encoding='utf-8', errors='replace').splitlines():
-        if '"tool_call' not in line: continue
-        try: u = json.loads(line)
-        except ValueError: continue
-        t = _epoch(u.get('_at'))
-        o = calls.setdefault(str(u.get('toolCallId') or ''), {'t0': t, 'cmd': ''})
-        if (cmd := _cmd((u.get('rawInput') or {}).get('command'))): o['cmd'] = cmd
-        for b in u.get('content') or []:
-            if isinstance(b, dict) and b.get('type') == 'diff' and b.get('path'): p[str(b['path'])] = t
-        for l in (u.get('locations') or []) if u.get('kind') == 'edit' else []:
-            if isinstance(l, dict) and l.get('path'): p[str(l['path'])] = t
-        if u.get('status') in ('completed', 'failed') and (n := len(_COMMIT.findall(o['cmd']))): c.append({'t0': o['t0'] or t, 't1': t, 'n': n}); o['cmd'] = ''
-    return c, p
+def _seen_fold(st: tuple, u: dict):
+    "One update into ([{t0, t1, n}], {path: at}, {call id: its start and command}) - read once, as it is appended (codingchat.follow)."
+    c, p, calls = st
+    if u.get('sessionUpdate') not in ('tool_call', 'tool_call_update'): return
+    t = _epoch(u.get('_at'))
+    o = calls.setdefault(str(u.get('toolCallId') or ''), {'t0': t, 'cmd': ''})
+    if (cmd := _cmd((u.get('rawInput') or {}).get('command'))): o['cmd'] = cmd
+    for b in u.get('content') or []:
+        if isinstance(b, dict) and b.get('type') == 'diff' and b.get('path'): p[str(b['path'])] = t
+    for l in (u.get('locations') or []) if u.get('kind') == 'edit' else []:
+        if isinstance(l, dict) and l.get('path'): p[str(l['path'])] = t
+    if u.get('status') in ('completed', 'failed') and (n := len(_COMMIT.findall(o['cmd']))): c.append({'t0': o['t0'] or t, 't1': t, 'n': n}); o['cmd'] = ''
 
 
 def _acp_seen(tid: int) -> tuple:
     "([{t0, t1, n}], {path: at}) - the commit calls and the edits of every ACP session of the task, read off its kept record."
-    from . import session_artifacts
+    from . import codingchat, session_artifacts
     calls, paths = [], {}
     for f in sorted((session_artifacts.root() / str(int(tid))).glob('acp-*.jsonl')):
-        try: st = f.stat(); key = (st.st_mtime, st.st_size)
-        except OSError: continue
-        if not ((hit := _SCAN.get(str(f))) and hit[0] == key): hit = _SCAN[str(f)] = (key, _scan(f))
-        calls += hit[1][0]; paths.update(hit[1][1])
+        c, p = codingchat.follow(f, _seen_fold, lambda: ([], {}, {}), lambda st: (list(st[0]), dict(st[1])))
+        calls += c; paths.update(p)
     return calls, paths
 
 
@@ -261,7 +263,7 @@ def _new_diff(cwd, f) -> str: return _run(cwd, 'diff', '--no-index', '--', '/dev
 
 def _own_files(cwd, o) -> list:
     got, ed = {}, _edited(cwd, list(o['paths']))
-    for h in o['commits']: _numstat(_git(cwd, 'show', '--numstat', '--format=', h), got)
+    for h in o['commits']: _numstat(_ok(_fixed(cwd, 'show', '--numstat', '--format=', h)), got)
     if ed: _numstat(_git(cwd, 'diff', '--numstat', 'HEAD', '--', *ed), got)
     for n in _untracked(cwd, ed):
         try:
@@ -377,9 +379,9 @@ def _unpushed(store, cwd, base, commits, prop, repo) -> dict | None:
     up = sha(cwd, f'refs/remotes/origin/{base}')
     # ...an origin with no copy of the base here yet (added, never fetched - the agent's `git remote add`): its push makes it
     if not (commits and (up or has_origin(cwd))): return None
-    tip = ''                                     # the newest by the graph, not the clock: two commits in one second sort either way
+    tip, on = '', sha(cwd, base) or base        # the newest by the graph, not the clock: two commits in one second sort either way
     for c in commits:
-        if is_ancestor(cwd, c, base) and (not tip or is_ancestor(cwd, tip, c)): tip = c
+        if is_ancestor(cwd, c, on) and (not tip or is_ancestor(cwd, tip, c)): tip = c
     if not tip or (up and is_ancestor(cwd, tip, up)): return None
     ahead = int(_git(cwd, 'rev-list', '--count', f'{up}..{tip}') or 0) if up else sum(is_ancestor(cwd, c, tip) for c in commits)
     return {'tip': tip, 'ahead': ahead, 'to': base, 'deploy': _deploy_to(store, prop, repo)}

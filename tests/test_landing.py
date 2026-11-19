@@ -254,6 +254,18 @@ class LandingTests(unittest.TestCase):
         self.dev(); landing.land(self.s, self.tid, 'push')
         self.assertIn("pressed Push on the agent's work - it went through", general.presses(self.s, self.tid)[-1][2])
 
+    def test_a_card_read_again_asks_git_nothing_it_already_said_of_its_commits(self):
+        """The owner's live app, 2026-11-19: /landing took 23 s - every poll asked git again for each own commit's files and whether each is on
+        the base, ~0.1 s a process on Windows. What git says of commits named by sha never changes; it is asked once."""
+        self.on_master_with_origin(); landing.state(self.s, self.tid)
+        from taskuary import spawn
+        with mock.patch.object(spawn, 'run', wraps=spawn.run) as run: s = landing.state(self.s, self.tid)
+        asked = [c.args[0][3:] for c in run.call_args_list]
+        self.assertFalse([a for a in asked if a[0] in ('show', 'merge-base') and len(a) > 2 and all(len(x) == 40 for x in a[-2:] if not x.startswith('-'))], asked)
+        self.assertEqual((s['push']['tip'], s['push']['ahead']), (self.sha('master'), 1))
+        commit(self.cwd, 'rounding.py', 'x\n'); landing.saw(self.s, self.tid, 'Bash', {'command': 'git commit -q -m "edit rounding.py"'})
+        self.assertEqual(landing.state(self.s, self.tid)['push']['ahead'], 2)        # ...and a new commit is asked of at once
+
     def test_two_commits_in_one_second_push_up_to_the_newer(self):
         self.on_master_with_origin()
         when = int(git(self.cwd, 'log', '-1', '--format=%ct'))

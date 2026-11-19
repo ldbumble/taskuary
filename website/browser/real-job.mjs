@@ -14,7 +14,8 @@ import { NAMES, sampler, check, rest } from "./real-conv.mjs";
 
 const [name = "job", job = "signups"] = process.argv.slice(2);
 const PY = process.env.PYTHON || "python", here = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
-const SITE = 18791, INBOX = path.join(out, `${name}-inbox.jsonl`);
+// ...a port of the walk's own (JOB_SITE_PORT): two walks' sites on one port served each other's accounts and codes (fake_signup.Alone)
+const SITE = +process.env.JOB_SITE_PORT || 18791, INBOX = path.join(out, `${name}-inbox.jsonl`);
 
 // ── THE WORLDS: invented data each job works from ──
 const worlds = {

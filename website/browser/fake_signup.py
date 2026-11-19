@@ -149,6 +149,20 @@ class H(BaseHTTPRequestHandler):
         with open(INBOX + '.log' if INBOX else 'signup.log', 'a', encoding='utf-8') as o: o.write(f'{time.strftime("%H:%M:%S")} {a[0] % a[1:] if len(a) > 1 else a}\n')
 
 
-import threading
-for h in ['127.0.0.1', *HOST.values()]: threading.Thread(target=ThreadingHTTPServer((h, PORT), H).serve_forever, daemon=True).start()
+import socket, threading
+
+
+class Alone(ThreadingHTTPServer):
+    """ONE WORLD A PORT (round 4, 2026-11-19): three walks started this on 18791 at once, and Windows let each bind it again - every vendor was
+    served by whichever walk's copy held that address. Accounts one walk made "already existed" for the next, a code went to another walk's
+    inbox, and a password that worked was "wrong" a minute later. A port already held is refused, so a second copy stops at once."""
+    allow_reuse_address = False
+    def server_bind(self):
+        if hasattr(socket, 'SO_EXCLUSIVEADDRUSE'): self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
+try: servers = [Alone((h, PORT), H) for h in ['127.0.0.1', *HOST.values()]]
+except OSError as e: sys.exit(f'port {PORT} is taken - the sites of another walk run there; pick another port ({e})')
+for sv in servers: threading.Thread(target=sv.serve_forever, daemon=True).start()
 threading.Event().wait()

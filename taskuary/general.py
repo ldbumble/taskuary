@@ -119,7 +119,8 @@ def cut_heard(store, tid: int) -> str:
     rows = store.list_comments(int(tid), internal=True)
     said = [i for i, c in enumerate(rows) if c.get('ActorType') == ASSISTANT_TYPE]
     if not said: return ''
-    bare = lambda i: (lambda w, f: bool(f) and not w)(*failed_line(rows[i].get('Body')))
+    # ...only a failure the AI never answered (provider_down's line): a turn cut part-way had heard its lines, and its conversation goes on
+    bare = lambda i: (lambda w, f: f.startswith(DOWN) and not w)(*failed_line(rows[i].get('Body')))
     if str(rows[said[-1]].get('Body') or '').rstrip().endswith((CUT, CUT_ON)): head, lo, hi = CUT_HEARD, (said[-2] + 1 if len(said) > 1 else 0), said[-1]
     elif bare(said[-1]): head, lo, hi = FAILED_HEARD, next((i + 1 for i in reversed(said) if not bare(i)), 0), len(rows)
     else: return ''
@@ -177,15 +178,19 @@ def failed_line(body: str) -> tuple:
 RETRY_TURN = 'retry'
 RETRY_WAITS = (60, 120, 300, 600, 600, 600)
 RETRY_ASK = "Taskuary tried your last turn again by itself: the AI could not answer it then. Do that turn's work now, from where it stopped."
+DOWN = ('The AI is over its limit', 'The AI stopped before it answered', "The AI didn't answer", "The AI couldn't be reached")
 def provider_down(e) -> str:
-    "The plain words for an AI that could not answer now - over its limit, not answering, stopped before its answer - else ''."
+    """The plain words for an AI that could not answer now - over its limit, not answering, stopped before its answer - else ''.
+    A turn cut part-way (clipool.Unfinished: its own limit, a timeout, a stop) is never one: its work may have run, so it is never run again
+    by itself (the owner's ruling: a cut turn is not resumed automatically) - it is said once, and his next line carries its conversation on."""
     import requests
-    from . import agents, llm
+    from . import agents, clipool, llm
     while e is not None:
-        if isinstance(e, (llm.BudgetSpent, agents.RateLimited)): return 'The AI is over its limit'
-        if isinstance(e, llm.NoAnswer): return 'The AI stopped before it answered'
-        if isinstance(e, (requests.Timeout, llm.ProviderDown)): return "The AI didn't answer"
-        if isinstance(e, requests.ConnectionError): return "The AI couldn't be reached"
+        if isinstance(e, clipool.Unfinished): return ''
+        if isinstance(e, (llm.BudgetSpent, agents.RateLimited)): return DOWN[0]
+        if isinstance(e, llm.NoAnswer): return DOWN[1]
+        if isinstance(e, (requests.Timeout, llm.ProviderDown)): return DOWN[2]
+        if isinstance(e, requests.ConnectionError): return DOWN[3]
         e = e.__cause__ or e.__context__
     return ''
 def _until(e):
@@ -268,6 +273,8 @@ def run_kept(store, tid: int) -> bool:
     does: the first begins it (say_line), the rest go with it (send_prompt). Run on the waiting room's clock; True when a turn was begun."""
     if tid in OPENING or _IN_FLIGHT.get(tid) or _at_work(_live_of(tid)): return False
     t, kept = store.get_task(tid) or {}, waiting_lines(store, tid)
+    from . import origin
+    if kept and origin.keeps_him(store, tid): return False         # a task a stranger's mail started: his lines wait behind its Trust (origin.his_own)
     if not kept or not handles(t) or t.get('Status') not in ('open', 'in_progress', 'waiting') or not provider_options(store): return False
     w = kept[0]
     PRESSED[tid] = time.time(); _IN_FLIGHT[tid] = 1; OPENING.add(tid)
@@ -2957,9 +2964,9 @@ class GeneralSession:
         mine = as_owner and not brief and not kept
         if mine and waiting is None: waiting = wait_line(self.store, self.task_id, text, attachments, line_id)
         # ...nothing a stranger's mail starts is handed over until Trust - but his line is kept first, so a refusal here never loses it (2026-11-17);
-        # and his own line is never held (origin.OWNER_SPEAKS): its turn runs as the task's mode is
+        # and on his own task his line is never held (origin.keeps_him): its turn runs as the task's mode is
         from . import origin
-        if not mine and (h := origin.hold(self.store, self.task_id)): raise origin.RefusedForStranger(h['line'])
+        if (h := origin.keeps_him(self.store, self.task_id) if mine else origin.hold(self.store, self.task_id)): raise origin.RefusedForStranger(h['line'])
         # ...and one sent while a turn works goes INTO it (steer): that turn answers for it, so this one has nothing more to say
         if mine and self.steer(): return ''
         if not self._take(WAIT_TURN, cancel):
@@ -3991,6 +3998,12 @@ def line_state(store, tid: int, rows: list = None, was: bool = False) -> dict:
     return {'working': was or starting(tid) or _at_work(s), 'turnStarted': at, 'waiting': waiting_lines(store, tid) if rows is None else rows}
 
 
+def kept_held(ref: str, out) -> str:
+    """What a door that handed a line on says when take_line HELD it (origin.keeps_him: a task a stranger's mail started) - '' when it went to
+    the agent. One sentence for every surface: the phone and the Assistant said "Continuing ..." / "Picked up ... again" while nothing ran (2026-11-18)."""
+    return f"Your note waits on {ref} - {out['held']}" if isinstance(out, dict) and out.get('held') else ''
+
+
 def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=None, wait=True, **kw):
     """THE ONE ROAD FOR A LINE THE OWNER TYPES TO A TASK'S AGENT, whatever agent takes it and whatever its session is doing - at work, at rest,
     idled out, ended, never started, closed, after a restart (the owner, 2026-11-10: "coding and general use the same code when it comes to
@@ -4011,7 +4024,10 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     if not text and not files: raise ValueError('empty message')
     t = reopen(store, tid, actor)
     if not t: raise ValueError(f'no task {tid}')
-    # ...AND NO SENDER'S TRUST HOLDS IT (origin.OWNER_SPEAKS): his line goes to the agent on a task an untrusted sender wrote on too
+    # ...A TASK A STRANGER'S MAIL STARTED HANDS NOTHING TO AN AGENT (origin.keeps_him): his line is kept and waits by the box, behind the Trust
+    # action - on his own task a stranger only joined, his line goes on (origin.his_own)
+    from . import origin
+    if (h := origin.keeps_him(store, tid)): return {'kept': wait_line(store, tid, text, files, line_id), 'held': h['line']}
     # ...A WATCHED TASK HE HANDS A LINE TO IS HIS AGAIN (the rail walk, 2026-11-12: its agent set to work while the row stood under Watching,
     # "on you"): back under Tasks before the turn starts, as every other move he makes on it (server.WATCH_ENDS) - from any door
     from . import watch

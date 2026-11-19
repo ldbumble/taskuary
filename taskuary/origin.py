@@ -80,10 +80,10 @@ def _lift(store, t: dict, o: str):
                            "tools and earlier mail" + (" - a coding session already open keeps its review mode until it is started again." if coding
                            else " from its next turn.") + " What the earlier sender wrote stays their words, never yours.")
 
-def _judge(store, tid: int, msgs, memo: dict, seen: dict) -> tuple:
-    "(origin, why, task row), read only: of_task's, and an idea's that cites this task (ref_origin). None: a cycle (idea_rests_on)."
-    t, msgs = store.get_task(tid) or {}, store.list_messages(tid) if msgs is None else msgs
-    o, why = t.get('OriginBase') or 'trusted', 'you made it' if t.get('OriginBase') == 'owner' else 'no stranger wrote on it'
+NO_BASE = ('trusted', 'no stranger wrote on it')       # a task row that says nothing of how it began: its messages say
+def _base(store, tid: int, t: dict, msgs, memo: dict, seen: dict):
+    "(origin, why) of how the task began, before any message on it is read - None: a cycle (idea_rests_on)."
+    o, why = (t['OriginBase'], 'you made it' if t['OriginBase'] == 'owner' else NO_BASE[1]) if t.get('OriginBase') else NO_BASE
     # what the owner asked the assistant for is the owner's: their own guide chat (general.is_dock) and what they asked it to set up or
     # hand off (concierge.setup_task) - assistant-sourced too, and made before OriginBase was stored: their base is the owner's (R15)
     from .general import is_dock
@@ -97,7 +97,13 @@ def _judge(store, tid: int, msgs, memo: dict, seen: dict) -> tuple:
             m.get('Channel') == 'report' for m in msgs) else ('stranger', f"written by Taskuary's {t['Source']} from what it read")
         if r is None: return None                     # a task this same idea made, met again while it is judged: a cycle, not evidence
         o, why = r
-    through, base = int(t.get('TrustedThrough') or 0), (o, why)
+    return o, why
+
+def _judge(store, tid: int, msgs, memo: dict, seen: dict) -> tuple:
+    "(origin, why, task row), read only: of_task's, and an idea's that cites this task (ref_origin). None: a cycle (idea_rests_on)."
+    t, msgs = store.get_task(tid) or {}, store.list_messages(tid) if msgs is None else msgs
+    if (b := _base(store, tid, t, msgs, memo, seen)) is None: return None
+    (o, why), through, base = b, int(t.get('TrustedThrough') or 0), b
     # ...every task page reads this, so a long group chat is judged per PERSON (memo), and its first stranger ends it: nothing is worse
     # (the owner, 2026-11-01: a 1,500-line chat held its page behind a spinner while each line asked again)
     def scan(o, why, after):
@@ -365,10 +371,28 @@ def _hold(store, tid: int, t: dict) -> dict | None:
             'after': TRUST_AFTER}
 
 
-# HIS OWN WORDS ARE NEVER HELD BEHIND A SENDER'S TRUST (design round 4, H4: "Push it now" on his own code task waited on "Trust Erin" - her chat
-# had joined it - and his answer on another on "Trust CI"). The hold keeps what a stranger's mail would start; a turn his line begins runs, as
-# the task's mode is - the stranger's words theirs, under the reviewer - and the Trust press still lifts it. Set for the turn his line begins
+# HIS OWN WORDS ON HIS OWN TASK ARE NEVER HELD BEHIND A SENDER'S TRUST (design round 4, H4: "Push it now" on his own code task waited on "Trust
+# Erin" - her chat had joined it). The hold keeps what a stranger's mail would start; a turn his line begins on his own task (keeps_him) runs,
+# as the task's mode is - the stranger's words theirs, under the reviewer - and the Trust press still lifts it. Set for the turn his line begins
 OWNER_SPEAKS = contextvars.ContextVar('tq_owner_speaks', default=False)
+
+
+# ...AND THE ONE RULE FOR HIS LINE (the owner's two rulings, reconciled 2026-11-19): on a task HE owns - he made it, or what started it is
+# trusted - his line is never held; a stranger's mail that joined it waits for Trust, and his turn runs as the task's mode is. On a task a
+# STRANGER's mail started, "Trust starts the held agent" (2026-11-11) stands: his line is kept by the box and nothing starts until Trust
+def his_own(store, tid) -> bool:
+    "He made the task, or what started it is trusted - a stranger's mail only joined it."
+    t, msgs = store.get_task(int(tid)) or {}, store.list_messages(int(tid))
+    if t.get('OriginBase'): return t['OriginBase'] != 'stranger'                 # ...made by him, or vouched for by his Trust (raise_to)
+    if not (b := _base(store, int(tid), t, msgs, {}, {})) or b[0] == 'stranger': return False
+    if b != NO_BASE: return True                                                # ...his guide chat, his ask to the assistant, a trusted report
+    # ...else the mail that made it says: a stranger's mail started it, or it came from someone trusted (or him)
+    first = min(msgs, key=lambda m: m['MessageId'], default=None)
+    return not first or first['MessageId'] <= int(t.get('TrustedThrough') or 0) or of_message(store, first)[0] != 'stranger'
+
+def keeps_him(store, tid) -> dict | None:
+    "The hold when it keeps his own line too (a task a stranger's mail started), else None - what every road his line takes asks."
+    return h if (h := hold(store, tid)) and not his_own(store, tid) else None
 
 
 def launch_mode(store, tid, cli: str, cmd: str = '') -> str:
@@ -377,7 +401,7 @@ def launch_mode(store, tid, cli: str, cmd: str = '') -> str:
     `cmd` is the profile's own command, so the version read is the binary that will launch."""
     from . import clis
     if not tid or of_task(store, tid)[0] != 'stranger': return 'full'
-    if not OWNER_SPEAKS.get() and (h := hold(store, tid)): raise Refusal(h['line'])     # an untrusted sender: no agent of its own, until Trust
+    if (h := keeps_him(store, tid) if OWNER_SPEAKS.get() else hold(store, tid)): raise Refusal(h['line'])     # an untrusted sender: no agent, until Trust
     cli = clis._base(cli)
     # ...`cli` IS claude in the version check - the CLI's own name; a reviewer too old to refuse is no reviewer
     if cli in clis.AUTO and not (cli == 'claude' and _claude_version(cmd or cli) < MIN_CLAUDE): return 'auto'

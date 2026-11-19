@@ -246,9 +246,34 @@ class BriefInParagraphsTests(unittest.TestCase):
 
 
 class PhoneTests(unittest.TestCase):
-    def test_his_note_on_a_strangers_task_goes_on_never_held_behind_trust(self):
-        """The Continue round, 2026-11-18, then design round 4 (H4): Continue from the phone on a stranger's task kept the note by the box behind
-        Trust. His own words are never held behind a sender's Trust - the note is his line, and it goes to the agent (general.take_line)."""
+    def test_a_note_held_behind_trust_is_said_as_held_never_as_continuing(self):
+        """The Continue round, 2026-11-18: Continue from the phone on a task a stranger's mail started. The note was kept by the box behind Trust -
+        nothing went to an agent - and the phone said "Continuing TQ-0001 with your note - it picks up where it left off". It says what happened."""
+        from taskuary import general, origin
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Quote request', 'Kind': 'general', 'Status': 'done'}, 'o')
+        line = 'You have not trusted Pat Lee (pat@vendor.example) yet - nothing goes to an agent until you do.'
+        with mock.patch.object(server, 'store', s), mock.patch.object(origin, 'hold', return_value={'line': line}),              mock.patch.object(origin, 'his_own', return_value=False),              mock.patch('taskuary.general.provider_options', return_value=['x']), mock.patch.object(server, '_brainless', return_value=''):
+            said = ra._continue(s, str(tid), 'send them our price list')
+        self.assertNotIn('Continuing', said); self.assertNotIn('picks up', said)
+        self.assertIn('Your note waits on TQ-0001', said); self.assertIn(line, said)
+        self.assertEqual([w['text'] for w in general.waiting_lines(s, tid)], ['send them our price list'])
+
+    def test_the_assistant_says_a_held_note_as_held_too(self):
+        "The same press from the Assistant's chat said \"Picked up TQ-0001 again with your note\" - one sentence for both (general.kept_held)."
+        from taskuary import general, origin
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Quote request', 'Kind': 'general', 'Status': 'done'}, 'o')
+        dock = s.create_task({'Title': 'Assistant', 'Kind': 'general', 'Status': 'open'}, 'o')
+        line = 'You have not trusted Pat Lee (pat@vendor.example) yet - nothing goes to an agent until you do.'
+        with mock.patch.object(server, 'store', s), mock.patch.object(origin, 'hold', return_value={'line': line}),              mock.patch.object(origin, 'his_own', return_value=False),              mock.patch('taskuary.general.provider_options', return_value=['x']), mock.patch.object(server, '_brainless', return_value=''),              mock.patch.object(concierge, 'continuable', return_value=True):
+            out = concierge._task_writes(s, dock, 'agent.continue', tid, {'note': 'send them our price list'}, 'TQ-0001', 'owner',
+                                         said='send them our price list')
+        self.assertEqual(out['say'], f'Your note waits on TQ-0001 - {line}')
+
+    def test_his_note_on_his_own_task_a_stranger_joined_goes_on_never_held_behind_trust(self):
+        """Design round 4 (H4): on his own task a stranger's mail only joined, his note is his line and goes to the agent (general.take_line)
+        - never kept behind the stranger's Trust (origin.keeps_him)."""
         from taskuary import general, origin
         s = MemoryStore()
         tid = s.create_task({'Title': 'Quote request', 'Kind': 'general', 'Status': 'done'}, 'o')

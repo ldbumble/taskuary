@@ -55,7 +55,8 @@ class FailedAgent(unittest.TestCase):
 
     def test_an_ai_that_never_answered_is_said_in_words_and_in_the_chat(self):
         """2026-11-09: a gateway that took the call and never answered reached the rail as "Failed - HTTPSConnectionPool(host=...): Read
-        timed out. (read timeout=180)", and the chat under the owner's ask was empty."""
+        timed out. (read timeout=180)", and the chat under the owner's ask was empty. Design round 4 (H3): an AI that never answered is one
+        queued state - its one plain line says when it is tried again (general.queue_retry), on the rail and in the chat alike."""
         import requests
         def brain(system, user, **kw): raise requests.ReadTimeout("HTTPSConnectionPool(host='ai.northwind.example', port=443): Read timed out.")
         with mock.patch.object(general, '_selected', return_value=('connector:9', 'Gateway (API)', 'm')):
@@ -66,11 +67,11 @@ class FailedAgent(unittest.TestCase):
             if not sess.alive: break
             time.sleep(0.05)
         line = funnel.agent_story(self.s, self.tid)['line']
-        self.assertTrue(line.startswith("Failed - Gateway didn't answer in time"), line)
+        self.assertTrue(line.startswith("The AI didn't answer - trying again at "), line)
         self.assertNotRegex(line, r'ConnectionPool|northwind|443|\(API\)')
         last = general.with_failure(self.s, self.tid, general.shown_history(self.s, self.tid))[-1]
         self.assertEqual((last['role'], last.get('failed')), ('assistant', True))
-        self.assertTrue(last['content'][0]['text'].startswith("⚠ Gateway didn't answer in time"), last)
+        self.assertTrue(last['content'][0]['text'].startswith("⚠ The AI didn't answer - trying again at "), last)
 
     def test_a_run_that_broke_is_tried_again_not_made_a_new_task(self):
         def brain(system, user, **kw): raise RuntimeError('the test database was not reachable')

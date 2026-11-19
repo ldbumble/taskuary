@@ -242,12 +242,22 @@ def test_a_chat_session_that_never_ran_a_turn_is_not_done_nor_waiting_on_him(mon
     assert not taskstate.done_for_now(s, s.get_task(t), parked)
     assert funnel.from_agents(s, live_state=[parked]) == []
 
-def test_a_turn_taskuary_begins_is_refused_for_the_hold_and_his_own_line_is_not():
-    "Design round 4 (H4): the hold keeps what a stranger's mail would start - never his own line (origin.OWNER_SPEAKS)."
+def test_send_prompt_keeps_the_line_before_it_refuses_for_the_hold():
     from taskuary import general
     s = MemoryStore(); t = _held(s)
+    with pytest.raises(origin.RefusedForStranger): general.GeneralSession(s, t).send_prompt('Reply and say thanks')
+    assert [w['text'] for w in general.waiting_lines(s, t)] == ['Reply and say thanks']
+
+def test_on_his_own_task_a_joined_stranger_holds_what_taskuary_begins_never_his_line():
+    """Design round 4 (H4), reconciled with "Trust starts the held agent" (2026-11-11): his own code task, then a build notice from an unknown
+    sender joined it. A turn Taskuary begins is refused for the hold; his own line goes on (origin.keeps_him) - never kept behind Trust."""
+    from taskuary import general
+    s = MemoryStore(); t = s.create_task({'Title': 'Fix the totals', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'o')
+    s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'ci@builds.example', 'FromName': 'CI', 'Subject': 'Build failed',
+                   'BodyText': '2 tests failed.', 'Status': 'routed'})
+    assert origin.hold(s, t) and origin.his_own(s, t) and not origin.keeps_him(s, t)
     with pytest.raises(origin.RefusedForStranger): general.GeneralSession(s, t).send_prompt('The thread moved - look again.', as_owner=False)
-    with pytest.raises(RuntimeError) as e: general.GeneralSession(s, t).send_prompt('Reply and say thanks')
+    with pytest.raises(RuntimeError) as e: general.GeneralSession(s, t).send_prompt('Push it now.')
     assert not isinstance(e.value, origin.RefusedForStranger), 'his line went on - to an AI this test has none of'
 
 # ── L8: Trust starts the held agent with his kept line, and a start that breaks is kept on the task (2026-11-17) ──────────
@@ -306,22 +316,24 @@ def test_trust_pressed_twice_hands_the_waiting_line_over_once(monkeypatch):
     assert len(got) == 1, got
     assert again.json()['started']          # ...and it still says an agent has it: the first press's is at work
 
-def test_a_line_typed_in_a_held_task_s_box_goes_to_its_agent_not_a_500(monkeypatch):
-    """The box's own door (assistant/messages) on a held task. Design round 4 (H4): his line is never held behind a sender's Trust - it takes
-    the one road (general.say_line), and the Trust still stands for the stranger's mail."""
+def test_a_line_typed_in_a_held_task_s_box_is_kept_and_answered_not_a_500(monkeypatch):
+    """The box's own door (assistant/messages): his line on a held task is kept by take_line, which answers {'kept', 'held'} - and the
+    door unpacked that as (session, reply), so 'kept' was taken for a session and the request died; the page read a failed send."""
     from taskuary import general
-    s = MemoryStore(); t = _held(s); monkeypatch.setattr(server, 'store', s); said = []
-    monkeypatch.setattr(general, 'say_line', lambda st, tid, text, *a, **k: said.append(text) or (None, 'It asks for a quote.'))
+    s = MemoryStore(); t = _held(s); monkeypatch.setattr(server, 'store', s)
     with mock.patch.dict(terminal.SESSIONS, {}, clear=True):
-        r = TestClient(server.app, raise_server_exceptions=False).post(f'/api/tasks/{t}/assistant/messages', json={'text': 'what does this mail want?'})
+        c = TestClient(server.app, raise_server_exceptions=False)
+        r = c.post(f'/api/tasks/{t}/assistant/messages', json={'text': 'what does this mail want?'})
+        st = c.post(f'/api/tasks/{t}/assistant/stream', json={'text': 'and who sent it?'})
     assert r.status_code == 200, r.text
-    assert said == ['what does this mail want?'] and origin.hold(s, t)
-    general.answered(t, every=True)
+    assert st.status_code == 200 and [json.loads(x)['type'] for x in st.text.splitlines()] == ['done'], st.text
+    assert r.json()['reply'] == '' and origin.hold(s, t), 'nothing answers for a held task - its line waits behind Trust'
+    assert [w['text'] for w in general.waiting_lines(s, t)] == ['what does this mail want?', 'and who sent it?']
 
 def test_continue_on_a_held_task_says_the_hold_and_starts_no_session(monkeypatch):
     """A worked task a stranger then wrote on is held again, and the rail's Continue still reaches it. Continue answered "continued",
     opened a session and filed "The owner chose Resume" - the turn was refused for the hold and only the log said so: nothing at work
-    under a press that said it went. It answers the hold's own line now, and starts nothing; a note given with it is his line and goes on."""
+    under a press that said it went. It answers the hold's own line now, and starts nothing; a note given with it waits behind Trust."""
     from taskuary import general
     s = MemoryStore(); t = _held(s); monkeypatch.setattr(server, 'store', s); opened = []
     monkeypatch.setattr(general, 'provider_options', lambda *a, **k: [{'pick': 'cli:claude', 'type': 'cli'}])
@@ -331,6 +343,7 @@ def test_continue_on_a_held_task_says_the_hold_and_starts_no_session(monkeypatch
         r = c.post(f'/api/tasks/{t}/continue-work', json={})
         assert r.status_code == 409 and r.json()['detail'] == origin.hold(s, t)['line'], r.text
         n = c.post(f'/api/tasks/{t}/continue-work', json={'note': 'check the tracking number'})
-    assert n.status_code == 200 and n.json()['continued'], n.text           # ...his note is his line: it goes on (design round 4, H4)
-    general.answered(t, every=True)
+    assert n.status_code == 200 and n.json()['held'] == origin.hold(s, t)['line'] and not n.json()['continued'], n.text
+    assert [w['text'] for w in general.waiting_lines(s, t)] == ['check the tracking number']
+    assert opened == [] and t not in general.OPENING
     assert not [x for x in s.list_comments(t, internal=True) if 'chose Resume' in (x['Body'] or '')]

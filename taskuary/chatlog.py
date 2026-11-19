@@ -421,7 +421,9 @@ def left_on_him(store, tid: int, out: list, ask: dict = None, letters: str = Non
     for i, x in enumerate(out):
         if x['kind'] != 'turn' or x.get('state') in LIVE: continue
         sm = x.get('summary') or {}
-        mine = [str(s) for s in sm.get('on_you') or [] if str(s).strip()] if not sm.get('nothing_left') else []
+        # ...A TURN THAT RAISED CARDS HAS THEM SAY WHAT IS ON HIM (DESIGN-FINAL 4b, facts from the app): each card, its "1 of 2" and its "Sent"
+        # are the app's, true as they stand - the agent's "Press Send on the notes" outlived both presses (the real-Claude walk, 2026-11-19)
+        mine = [str(s) for s in sm.get('on_you') or [] if str(s).strip()] if not sm.get('nothing_left') and not x.get('cards') else []
         was = x.get('on_you_kept')
         if was in (None, WAITS):
             waits = (ask and ask.get('turn') == x['id']) or letters == x['id'] or any(c.get('status') == 'pending' for c in x.get('cards') or [])

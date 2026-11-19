@@ -198,8 +198,10 @@ def _waits(u: dict) -> list:
 
 
 def line(s: dict) -> str:
-    "What the live card says of the line, plain: '1 of 2 · next: the email to Erin' - '' when nothing waits behind it."
-    return f"{s['n']} of {s['of']} · next: {s['next']}" if s['live'] and s['of'] > s['n'] else ''
+    """What the live card says of the line, plain: '1 of 2 · next: the email to Erin', and the last of them '2 of 2' (the real-Claude walk,
+    2026-11-19: the second letter stood with no count once the first went) - '' for a card alone in its line."""
+    if not s['live'] or s['of'] < 2: return ''
+    return f"{s['n']} of {s['of']}" + (f" · next: {s['next']}" if s['of'] > s['n'] else '')
 
 
 SCREEN_HEAD = ("WHAT THE OWNER'S SCREEN SHOWS ON THIS TASK NOW, AND WHAT CAME OF EACH CARD (Taskuary's record - a card it does not name is not "

@@ -5787,6 +5787,14 @@ class SQLiteStore:
             self.cx.commit(); self._writes += 1
         if cur.rowcount: self._review_changed(rid)
         return bool(cur.rowcount)
+    def restore_review(self, rid) -> bool:
+        "A card the conversation set aside, live again (proposals.restore_set_aside) - never one that went or that he decided."
+        with self.lock:
+            cur = self.cx.execute("UPDATE review SET Status='pending', FinalText=NULL, DecidedBy=NULL, DecidedAt=NULL, DecideNote=NULL "
+                                  "WHERE ReviewId=? AND Status='superseded' AND DeliveryClaim IS NULL", (rid,))
+            self.cx.commit(); self._writes += 1
+        if cur.rowcount: self._review_changed(rid)
+        return bool(cur.rowcount)
     def pending_review(self, task_id, kind=None, live_only=True):
         """The task's live pending review, by the SAME visibility rule the queue uses: a draft the
         owner can no longer see is not one to re-draft into or treat as already-answered. Pass

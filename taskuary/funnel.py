@@ -656,12 +656,18 @@ def idle_state(store, tid, st=None) -> dict:
     # THE QUEUE SAYS WHY (A3, 2026-09-25): a full house, a start that keeps failing and a CLI that is not installed all
     # read "nothing has started it" - only the Tasks list showed the queue
     q = store.get_dispatch(tid) or {}
+    from . import general
+    if q.get('Turn') == general.RETRY_TURN and general.at_work(tid): q = {}        # ...its try is at work now: said as live, below
     if q:
         err = ' '.join(str(q.get('LastError') or '').split()).rstrip('.')[:160]
         short = err.split(': ', 1)[0] if len(err) > 60 else err
         if q.get('State') == 'failed':
             return out('failed', failed_line(err or 'the start failed', is_permanent(err), int(q.get('Attempts') or 0)) + old,
                        f"couldn't start: {short or 'the start failed'}")
+        # ...the AI's own try again (general.queue_retry): what is wrong and when, the one line the chat holds
+        if q.get('Turn') == general.RETRY_TURN:
+            said = general.retry_said(err or 'The AI could not answer', q.get('NextAt'))
+            return out('retrying', said, said[:1].lower() + said[1:].rstrip('.'))
         if q.get('State') == 'retrying':
             at = str(q.get('NextAt') or '')[11:16]
             return out('retrying', f"Couldn't start yet ({err or 'no reason given'}) - trying again {f'at {at}' if at else 'shortly'}." + old,

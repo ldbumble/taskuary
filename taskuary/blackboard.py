@@ -444,6 +444,9 @@ def record_failure(store, tid: int, err, agent: str = '', label: str = 'The agen
     # a monitor's task, naming a Trust press that was nowhere): the task's one hold, said once, its Trust the way on (ingest.not_started)
     from .ingest import held_start
     if held_start(store, tid, err): return None
+    # ...and AN AI THAT COULD NOT ANSWER is the turn's own try again, queued and said where it failed (general.queue_retry) - never a second line
+    from . import general
+    if general.provider_down(err): return store.get_dispatch(tid)
     if not store.get_dispatch(tid): store.enqueue_dispatch(tid, None, agent, 'start failed - retrying')
     row = store.dispatch_failed(tid, str(err), is_permanent(err), BACKOFF, MAX_ATTEMPTS)
     if not row: return None
@@ -512,6 +515,8 @@ def drain(store):
             # assistant the owner opened meanwhile takes it next - only a coding session already open makes it moot
             if t.get('Status') not in ('open', 'in_progress', *(('waiting',) if turn else ())) or (_occupied(q['TaskId']) and not (turn and general.handles(t))):
                 store.clear_dispatch(q['TaskId']); continue
+            # ...A TRY AGAIN THE AI OWES (general.queue_retry) runs in its own thread, its row kept until a turn answers
+            if turn == general.RETRY_TURN: general.retry_turn(store, q['TaskId']); continue
             try:
                 if turn:
                     from .ingest import queued_turn

@@ -587,24 +587,89 @@ class TheSessionTests(unittest.TestCase):
         said = [c['Body'] for c in s.list_comments(tid) if c['ActorType'] == general.ASSISTANT_TYPE][-1]
         self.assertIn('quotes.xlsx', said); self.assertNotIn('```', said)
 
-    def test_while_the_provider_is_down_the_failure_is_said_once(self):
-        """The API walk, 2026-11-18: during the provider's outage every line he typed added another "⚠ ... over its quota (429)" to the chat.
-        The same failure on a turn that did nothing is the one failure already standing - his lines since wait for the next try."""
+    def _down_session(self, s, tid):
         from taskuary import general
+        session = general.GeneralSession(s, tid); session.pick, session.provider, session.model = 'connector:1', 'HIPAA AI', ''
+        return session
+
+    def _patched(self, brain):
+        from contextlib import ExitStack
+        st = ExitStack()
+        for p in (mock.patch.object(llm, 'build_llm', return_value=brain), mock.patch.object(bv, 'installed', return_value=False),
+                  mock.patch.object(bv, 'can_set_up', return_value=False), mock.patch.object(apiagent, 'taskuary_tools', return_value=[]),
+                  mock.patch('taskuary.blackboard.drain_later')):
+            st.enter_context(p)
+        return st
+
+    def test_while_the_provider_is_down_the_failure_is_one_plain_line_queued_to_try_again(self):
+        """The API walk, 2026-11-18/19: during the provider's outage every line he typed added another "⚠ HIPAA AI: Gemini ... over its quota at
+        the provider (it answered 429) - raise the quota there..." to the chat, and nothing tried again until he typed. One state: one plain line
+        that says when it is tried again, changed in place while the outage lasts, and the turn waits in the start queue."""
+        from taskuary import funnel, general
         class Down:
-            def chat(self, *a, **kw): raise RuntimeError('hipaa_ai error 429 at https://gateway.example: over its quota at the provider')
+            def chat(self, *a, **kw): raise llm.QuotaSpent(llm.QUOTA_LINE.format(name='HIPAA AI', model='Gemini 4'))
         s = MemoryStore()
         tid = s.create_task({'Title': 'Weekly spend summary', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
-        session = general.GeneralSession(s, tid)
-        session.pick, session.provider, session.model = 'connector:1', 'HIPAA AI', ''
-        with mock.patch.object(llm, 'build_llm', return_value=Down()), mock.patch.object(bv, 'installed', return_value=False), \
-             mock.patch.object(bv, 'can_set_up', return_value=False), mock.patch.object(apiagent, 'taskuary_tools', return_value=[]):
+        with self._patched(Down()):
             for line in ('set up the Monday summary', 'any luck?', 'Try again.'):
-                session = general.GeneralSession(s, tid); session.pick, session.provider, session.model = 'connector:1', 'HIPAA AI', ''
-                try: session.send_prompt(line, echo=False)
+                try: self._down_session(s, tid).send_prompt(line, echo=False)
                 except Exception: pass
-        failed = [c for c in s.list_comments(tid) if c['ActorType'] == general.ASSISTANT_TYPE and general.failed_line(c['Body'])[1]]
-        self.assertEqual(len(failed), 1, [c['Body'] for c in failed])
+        failed = [general.failed_line(c['Body'])[1] for c in s.list_comments(tid) if c['ActorType'] == general.ASSISTANT_TYPE and general.failed_line(c['Body'])[1]]
+        self.assertEqual(len(failed), 1, failed)
+        self.assertRegex(failed[0], r'^The AI is over its limit - trying again at \d')
+        self.assertNotIn('429', failed[0]); self.assertNotIn('quota', failed[0])
+        q = s.get_dispatch(tid)
+        self.assertEqual((q['Turn'], q['State']), (general.RETRY_TURN, 'retrying'))
+        self.assertEqual(funnel.idle_state(s, tid)['line'], failed[0])
+
+    def test_the_queued_try_runs_by_itself_and_its_answer_ends_the_outage(self):
+        "Rule 4: a start that cannot happen now is queued and retried - the try is Taskuary's, never a line in his name; answered, nothing is owed."
+        from taskuary import blackboard, general
+        class Down:
+            def chat(self, *a, **kw): raise llm.ProviderDown('hipaa_ai error 503 at https://gateway.example after 3 tries: overloaded')
+        heard = []
+        class Up:
+            def chat(self, msgs, tools, max_tokens, **kw): heard.append(str(msgs[-1]['content'])); return {'content': 'The Monday summary is set up.'}
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Weekly spend summary', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        with self._patched(Down()):
+            try: self._down_session(s, tid).send_prompt('set up the Monday summary', echo=False)
+            except Exception: pass
+        self.assertIn("The AI didn't answer - trying again at", [c['Body'] for c in s.list_comments(tid)][-1])
+        s._exec("UPDATE dispatchq SET NextAt='2000-01-01 00:00:00' WHERE TaskId=?", (tid,))
+        handed = []
+        with mock.patch.object(general, 'retry_turn', side_effect=lambda st, t: handed.append(t)), mock.patch('taskuary.ingest.has_room', return_value=True):
+            blackboard.drain(s)
+        self.assertEqual(handed, [tid])                           # the drain hands the row to the try, and keeps it
+        self.assertTrue(s.get_dispatch(tid))
+        import threading
+        with self._patched(Up()), mock.patch.object(general, 'start_session', side_effect=lambda *a, **kw: self._down_session(s, tid)):
+            self.assertTrue(general.retry_turn(s, tid))
+            for t in [t for t in threading.enumerate() if t.name == f'retry-{tid}']: t.join(20)
+        self.assertIsNone(s.get_dispatch(tid))
+        bodies = [c['Body'] for c in s.list_comments(tid)]
+        self.assertEqual(bodies[-1], 'The Monday summary is set up.')
+        self.assertEqual(bodies.count('set up the Monday summary'), 1)       # his line once, never again in his name
+        self.assertIn(general.RETRY_ASK, heard[0])
+
+    def test_a_failed_turn_leaves_a_draft_that_is_still_good_live(self):
+        """The API walk, 2026-11-19: Paula's reply was drafted; he asked for a PDF too, the AI failed, and the draft's Send stood greyed for 43
+        minutes while turn after turn failed. A card is set aside as its agent hears the input; a turn the AI never answered read past nothing."""
+        from taskuary import general, proposals
+        class Down:
+            def chat(self, *a, **kw): raise llm.NoAnswer('hipaa_ai: the model ran out of room before answering, even with 8000 tokens (finish_reason length)')
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'October spend summary for Paula', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The summary is drafted for Paula.')
+        rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Paula - the total is 103,190.', 'Reason': 'reply'})
+        s._exec("UPDATE review SET CreatedAt=datetime(CreatedAt,'-5 minutes') WHERE ReviewId=?", (rid,))
+        s._exec("UPDATE comment SET CreatedAt=datetime(CreatedAt,'-5 minutes') WHERE TaskId=?", (tid,))
+        with self._patched(Down()):
+            try: self._down_session(s, tid).send_prompt('make it a one-page PDF too', echo=False)
+            except Exception: pass
+        self.assertEqual(s.get_review(rid)['Status'], 'pending')
+        self.assertNotIn(rid, proposals.written_past(s, tid))
+        self.assertIn('The AI stopped before it answered - trying again at', [c['Body'] for c in s.list_comments(tid)][-1])
 
     def test_a_card_that_takes_no_tools_is_offered_only_the_ways_that_are_here(self):
         """The API walk, 2026-11-18: every answer of a card that takes no tools ended "connect an AI that can use tools ... or switch this task

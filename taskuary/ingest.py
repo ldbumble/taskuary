@@ -2769,7 +2769,7 @@ def _continue_general(store, tid, msg: dict = None, mid=None):
     except Exception as e:
         # said, not retried: the start queue's retry opens a conversation without a turn (_start_general prompts a fresh one only)
         logger.warning(f'assistant carry-on failed for task {tid}: {e}')
-        store.add_comment(tid, 'router', 'agent', f"The assistant couldn't carry on by itself: {' '.join(str(e).split())[:200]} - {general.CARRY_ON}.")
+        if not general.provider_down(e): store.add_comment(tid, 'router', 'agent', f"The assistant couldn't carry on by itself: {' '.join(str(e).split())[:200]} - {general.CARRY_ON}.")
     finally: general.OPENING.discard(tid)
 
 
@@ -2869,7 +2869,7 @@ def _replan_general(store, tid, turn: str, mails=()):
     except general.Stopped: pass
     except Exception as e:
         logger.warning(f'assistant re-plan failed for task {tid}: {e}')
-        store.add_comment(tid, 'router', 'agent', f"The assistant couldn't look again by itself: {' '.join(str(e).split())[:200]} - {general.CARRY_ON}.")
+        if not general.provider_down(e): store.add_comment(tid, 'router', 'agent', f"The assistant couldn't look again by itself: {' '.join(str(e).split())[:200]} - {general.CARRY_ON}.")
     finally: general.OPENING.discard(tid)
 
 

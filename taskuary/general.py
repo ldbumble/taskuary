@@ -113,12 +113,19 @@ CUT_HEARD = ("YOUR LAST TURN WAS CUT SHORT WHEN TASKUARY RESTARTED - it may neve
 def cut_heard(store, tid: int) -> str:
     """The lines the turn a restart cut had taken, for the next turn of a conversation picked back up (send_prompt): its CLI may never have
     been handed them - the cut can come before it heard the turn - and a resumed conversation is told only the new turn, so his line stood
-    heard in the chat and no agent ever read it (the timeline stress round, 2026-11-18). '' unless the newest answer is a cut one."""
+    heard in the chat and no agent ever read it (the timeline stress round, 2026-11-18). '' unless the newest answer is a cut one.
+    ...OR A FAILED ONE THAT SAID NOTHING (design round 4, H3): the AI never answered them, so the try after it is told every line of his since
+    the last real answer - the failure stands in place while the outage lasts, and lines he typed under it are its too."""
     rows = store.list_comments(int(tid), internal=True)
     said = [i for i, c in enumerate(rows) if c.get('ActorType') == ASSISTANT_TYPE]
-    if not said or not str(rows[said[-1]].get('Body') or '').rstrip().endswith((CUT, CUT_ON)): return ''
-    lines = [str(c.get('Body') or '').strip() for c in rows[(said[-2] + 1 if len(said) > 1 else 0):said[-1]] if c.get('ActorType') == USER_TYPE]
-    return f"{CUT_HEARD}\n" + '\n'.join(f'- {_quote(w, 1500)}' for w in lines if w) if any(lines) else ''
+    if not said: return ''
+    bare = lambda i: (lambda w, f: bool(f) and not w)(*failed_line(rows[i].get('Body')))
+    if str(rows[said[-1]].get('Body') or '').rstrip().endswith((CUT, CUT_ON)): head, lo, hi = CUT_HEARD, (said[-2] + 1 if len(said) > 1 else 0), said[-1]
+    elif bare(said[-1]): head, lo, hi = FAILED_HEARD, next((i + 1 for i in reversed(said) if not bare(i)), 0), len(rows)
+    else: return ''
+    lines = [str(c.get('Body') or '').strip() for c in rows[lo:hi] if c.get('ActorType') == USER_TYPE]
+    return f"{head}\n" + '\n'.join(f'- {_quote(w, 1500)}' for w in lines if w) if any(lines) else ''
+FAILED_HEARD = "YOUR LAST TURN NEVER GOT AN ANSWER FROM THE AI - it may never have reached you. It was answering:"
 def keep_cut_turns(store) -> list:
     "Every turn a restart cut, filed on its open task: [task ids]."
     from . import sessionrecord
@@ -163,14 +170,80 @@ def failed_line(body: str) -> tuple:
     return (head.strip(), tail[len(FAILED_MARK):].strip()) if tail.startswith(FAILED_MARK) and '\n' not in tail.strip() else (str(body or ''), '')
 
 
-# ...AND THE SAME FAILURE IS ONE FAILURE (the API walk, 2026-11-18): while the AI's provider was down every line he typed filed another
-# "⚠ ... over its quota (429)" under it. A turn that did nothing and failed as the newest answer on the task already says is not filed again:
-# that one stands, with its Try again (the page), and his lines since are the next try's to hear
-def same_failure(store, tid: int, trace: list, why: str) -> bool:
+# A PROVIDER THAT CANNOT ANSWER NOW IS ONE STATE, QUEUED AND RETRIED (design round 4, H3; rule 4): on the API walk a 429 stood twice with
+# nothing to press, "Hipaa_ai: the model ran out of room ... (finish_reason length)" reached him raw, and a task stayed dead until he typed.
+# Read off the failure's type, never its words: the turn waits in the start queue (blackboard.drain -> retry_turn) and the chat holds one plain
+# line - its time of the next try, its Try again - changed in place while the outage lasts. Waits grow; a limit's own reset time is waited out.
+RETRY_TURN = 'retry'
+RETRY_WAITS = (60, 120, 300, 600, 600, 600)
+RETRY_ASK = "Taskuary tried your last turn again by itself: the AI could not answer it then. Do that turn's work now, from where it stopped."
+def provider_down(e) -> str:
+    "The plain words for an AI that could not answer now - over its limit, not answering, stopped before its answer - else ''."
+    import requests
+    from . import agents, llm
+    while e is not None:
+        if isinstance(e, (llm.BudgetSpent, agents.RateLimited)): return 'The AI is over its limit'
+        if isinstance(e, llm.NoAnswer): return 'The AI stopped before it answered'
+        if isinstance(e, (requests.Timeout, llm.ProviderDown)): return "The AI didn't answer"
+        if isinstance(e, requests.ConnectionError): return "The AI couldn't be reached"
+        e = e.__cause__ or e.__context__
+    return ''
+def _until(e):
+    while e is not None and getattr(e, 'until', None) is None: e = e.__cause__ or e.__context__
+    return getattr(e, 'until', None) if e is not None else None
+def queue_retry(store, tid: int, e, why: str, fresh: bool = False) -> str:
+    """The turn queued for its next try (the start queue's row, Turn RETRY_TURN) -> the one line the chat holds. `fresh`: his own line or Try
+    again failed - a new round of tries. Past RETRY_WAITS the queue lets go, and the line says Try again is his."""
+    from datetime import datetime, timedelta
+    from . import blackboard
+    q = store.get_dispatch(tid) or {}
+    n = 1 if fresh or q.get('Turn') != RETRY_TURN else int(q.get('Attempts') or 0) + 1
+    if n > len(RETRY_WAITS):
+        store.clear_dispatch(tid)
+        return f'{why} - it was tried {n} times. Try again when you want one more try.'
+    wait = RETRY_WAITS[n - 1]
+    if (until := _until(e)): wait = max(wait, (until - datetime.now()).total_seconds())
+    at = datetime.now() + timedelta(seconds=wait)
+    store.enqueue_dispatch(tid, None, 'assistant', why, turn=RETRY_TURN)
+    store._exec("UPDATE dispatchq SET Turn=?, Attempts=?, LastError=?, NextAt=?, State='retrying' WHERE TaskId=?",
+                (RETRY_TURN, n, why, at.isoformat(sep=' ', timespec='seconds'), tid))
+    blackboard.drain_later(store, wait + 0.5)
+    return retry_said(why, at)
+def retry_said(why: str, at) -> str:
+    "One line, every surface: what is wrong and when it is tried again."
+    from datetime import datetime
+    if isinstance(at, str):
+        try: at = datetime.fromisoformat(at)
+        except ValueError: at = None
+    if not at: return f'{why} - trying again shortly.'
+    day = '' if at.date() == datetime.now().date() else at.strftime(' on %a %d %b')
+    return f"{why} - trying again at {at.strftime('%I:%M %p').lstrip('0')}{day}."
+def retry_turn(store, tid: int) -> bool:
+    "The queued try (queue_retry), run now: Taskuary's word to the agent, never a line in his name. The row goes when a turn answers (_file)."
+    t = store.get_task(tid) or {}
+    if not handles(t) or t.get('Status') not in ('open', 'in_progress', 'waiting'): store.clear_dispatch(tid); return False
+    if at_work(tid): return False
+    OPENING.add(tid)
+    def go():
+        try: start_session(store, tid, actor='router').send_prompt(RETRY_ASK, as_owner=False)
+        except Exception as e: logger.info(f'task {tid}: the try again by itself did not answer - {e}')
+        finally: OPENING.discard(tid)
+    threading.Thread(target=go, daemon=True, name=f'retry-{tid}').start()
+    return True
+def let_go_retry(store, tid: int) -> None:
+    "A turn answered, or failed some other way: the queued try is no longer owed."
+    if (store.get_dispatch(tid) or {}).get('Turn') == RETRY_TURN: store.clear_dispatch(tid)
+def say_failure(store, tid: int, trace: list, why: str, down: bool = False) -> None:
+    """A failed turn filed where it happened (file_turn) - but THE SAME OUTAGE IS ONE LINE: a turn that did nothing, failing under a newest answer
+    that is itself a failure with no words, changes that line in place (an outage's next time) or leaves it (the same failure again)."""
     from . import sessionrecord
-    if sessionrecord.said(trace) or any(e.get('type') == 'tool_call' for e in trace): return False
     last = next((c for c in reversed(store.list_comments(tid, internal=True)) if c.get('ActorType') == ASSISTANT_TYPE), None)
-    return bool(last) and failed_line(last.get('Body')) == ('', why)
+    quiet = not sessionrecord.said(trace) and not any(e.get('type') == 'tool_call' for e in trace)
+    words, was = failed_line(last.get('Body')) if last else ('', '')
+    if quiet and was and not words:
+        if down and was != why: store.set_comment_body(last['CommentId'], FAILED_MARK + why); store._poke('task-changed', task_id=int(tid))
+        if down or was == why: return
+    file_turn(store, tid, trace, FAILED_MARK + why)
 
 
 def file_turn(store, tid: int, trace: list, line: str) -> int:
@@ -3328,6 +3401,16 @@ class GeneralSession:
             # stopped: the agent stopped in the middle of its turn ... type to carry on" of a task its owner had just closed
             # ...ONE WORD FOR HIS STOP ON EVERY ROAD: a turn ended by it (clipool.Cancelled) read "cancelled" - error, trace and worker event alike
             if stopped and _unfinished(e): said = 'stopped'
+            # ...AN AI THAT COULD NOT ANSWER NOW is queued to try again (queue_retry) and said in its one line - and a card this turn set aside
+            # stands again: no agent read past it (proposals.restore_set_aside)
+            down = '' if stopped or timed is not None or is_dock(self.store.get_task(self.task_id)) else provider_down(e)
+            try:
+                if down:
+                    said = queue_retry(self.store, self.task_id, e, down, fresh=getattr(self, 'owned', False))
+                    from . import proposals
+                    proposals.restore_set_aside(self.store, self.task_id)
+                else: let_go_retry(self.store, self.task_id)
+            except Exception as skipped: logger.warning(f'task {self.task_id}: the try again was not queued - {skipped}')
             self._remember_trace('error', 'assistant', {'result': said, 'is_error': True})
             self._emit(f'\x1b[1;31merror>\x1b[0m {said}\r\n\r\n')
             self._unusable(e)
@@ -3361,8 +3444,8 @@ class GeneralSession:
             if not stopped and not is_dock(self.store.get_task(self.task_id)):
                 from . import funnel
                 try:
-                    kept, why = [x for x in self.trace if x.get('type') != 'error'], funnel.failure(said[:4000], self.task_id)['sentence']
-                    if not same_failure(self.store, self.task_id, kept, why): file_turn(self.store, self.task_id, kept, FAILED_MARK + why)
+                    kept, why = [x for x in self.trace if x.get('type') != 'error'], said if down else funnel.failure(said[:4000], self.task_id)['sentence']
+                    say_failure(self.store, self.task_id, kept, why, bool(down))
                 except Exception as skipped: logger.warning(f'task {self.task_id}: the failed turn was not filed - {skipped}')
             try:
                 from . import workerstate as ws
@@ -3411,6 +3494,7 @@ class GeneralSession:
         """File one turn's answer: its markers read, its draft, question or close raised, the reply kept as the task's comment.
         The warm agent's turn (quickwork) and the full agent's both end here, so the two can never file differently."""
         src = 'quick' if self.quick else 'api'     # quickwork.only_quick reads a task's runs by this source
+        let_go_retry(self.store, self.task_id)     # ...the AI answered: no try is owed any more (queue_retry)
         # ...and the warm agent's word that this needs the full agent (quickwork.HAND_ON) is Taskuary's to act on, never the owner's to read
         from . import quickwork
         reply, self.handed_on = quickwork.handed_on(reply) if self.quick else (reply, '')

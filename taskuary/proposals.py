@@ -608,6 +608,20 @@ def set_aside_drafts(store, tid: int, before: float, actions: float = 0) -> list
     return out
 
 
+def restore_set_aside(store, tid: int) -> list:
+    """A TURN THE AI NEVER ANSWERED SETS NOTHING ASIDE (design round 4, H3: a draft he needed stood greyed for 43 minutes while the provider
+    failed turn after turn on the line after it). Set aside as its agent heard the input (set_aside_drafts), a card no answer has come under
+    since stands again, live where it stood: no agent read past it. The input stays heard - the try after the failure answers it. -> ids."""
+    from . import general
+    rows = store.list_comments(int(tid), internal=True)
+    answer = next((c['CreatedAt'] for c in reversed(rows) if c.get('ActorType') == general.ASSISTANT_TYPE and c.get('Actor') == 'assistant'
+                   and not (lambda w, f: f and not w)(*general.failed_line(c.get('Body')))), '')
+    out = [r['ReviewId'] for r in store._rows("SELECT ReviewId FROM review WHERE TaskId=? AND Status='superseded' AND DecideNote=? AND DecidedBy='taskuary' "
+                                              "AND DecidedAt>=?", (int(tid), SET_ASIDE, str(answer or ''))) if store.restore_review(r['ReviewId'])]
+    if out: store.audit('task', tid, 'cards_restored', 'taskuary', 'system', {'rids': out})
+    return out
+
+
 def _older(store, tid: int, before: float, actions: float = 0) -> list:
     """The pending cards an input at `before` stands after - set_aside_drafts' and written_past's ONE rule, read only. Every kind: a reply, an
     email, a calendar answer, the agent's act or held step, and Taskuary's own close-out, playbook or routine step alike (the owner, 2026-11-16:

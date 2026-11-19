@@ -105,6 +105,12 @@ class QuotaSpent(BudgetSpent):
     def __init__(self, line: str): super().__init__(line, QUOTA_REST)
 
 
+# ...AND A PROVIDER THAT COULD NOT ANSWER NOW IS KNOWN BY ITS TYPE (design round 4, H3): down after every retry (5xx), or a model that stopped
+# before it answered - their words unchanged, so every reading of them stands; general.provider_down reads the type and queues the turn again
+class ProviderDown(RuntimeError): "The endpoint itself failed (a 5xx after every retry)."
+class NoAnswer(RuntimeError): "The model stopped before it answered: out of room, or nothing sent back."
+
+
 def words(model: str) -> str:
     "A model id as a person says it: 'vertex_ai/claude-sonnet-5-5@2026' -> 'Claude Sonnet 5.5', 'gemini-2.5-pro' -> 'Gemini 2.5 Pro'."
     out = []
@@ -147,7 +153,7 @@ def refused(t: str, r, url: str, model: str) -> Exception:
     "The error a refused call raises: a quota in plain words with the way on (QuotaSpent), else the provider's own."
     if r.status_code == 429:
         return QuotaSpent(QUOTA_LINE.format(name='HIPAA AI' if t == 'hipaa_ai' else t, model=words(model) or 'its model'))
-    return RuntimeError(f'{t} error {r.status_code} at {url.split("?")[0]}{tried(r)}: {r.text[:300]}')
+    return (ProviderDown if r.status_code >= 500 else RuntimeError)(f'{t} error {r.status_code} at {url.split("?")[0]}{tried(r)}: {r.text[:300]}')
 
 
 def budget_said(text) -> str:
@@ -1434,9 +1440,9 @@ def make_llm(t, cfg: dict, key: str):
                 if str(e) == 'length' and max_tokens < ROOM: max_tokens = ROOM; continue
                 if str(e) != 'length' and spent < 3: continue
                 if str(e) == 'length':
-                    raise RuntimeError(f'{t}: the model ran out of room before answering, even with {ROOM} tokens (finish_reason {e}) - '
+                    raise NoAnswer(f'{t}: the model ran out of room before answering, even with {ROOM} tokens (finish_reason {e}) - '
                                        f'model {model}; pick a non-thinking model on its card') from None
-                raise RuntimeError(f'{t} sent back no answer (finish_reason {e}) - model {model}') from None
+                raise NoAnswer(f'{t} sent back no answer (finish_reason {e}) - model {model}') from None
     # ONE STEP OF A TOOL LOOP (apiagent.py): the model's message - its words and/or tool_calls - for a whole conversation and the tools
     # it may call, in the OpenAI schema every endpoint here speaks. Without it an API brain was one system + one user message and nothing
     # it could DO: a HIPAA-only install, with no CLI, answered "logging in cannot be done from here" (the owner, 2026-11-09). LiteLLM

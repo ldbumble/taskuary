@@ -1,0 +1,23 @@
+{
+ "about": "A day of COMPLEX work for an agent playing the owner (user-walk.mjs complex-day.json). Hard jobs that make several files, several approval cards in a row, research, a browser job. Every person, company and number is invented (CLAUDE.md). `at`: minutes after the walk starts.",
+ "persona": "You are Alex Doyle, operations manager at Northwind (alex@northwind.example). Today is a board-pack day: hard, multi-part jobs with real deliverables. You judge Taskuary as a demanding user: does the agent finish complex work properly, are the files real and good, do approval cards come one at a time and wait for each other, is every line on the screen clean - no weird characters, no text in odd places, no internal words, nothing jumping?",
+ "goals": [
+  "Build the Q3 board pack from the attached numbers: a 4-page PDF report (summary, spend by vendor with a chart, headcount, risks), a 10-slide deck of the same, two chart images for the email, and a spreadsheet with the working - all four files, consistent numbers.",
+  "Email the board pack to the three board members (Erin Blake, Gail Moreno, Paula Vance) - one email each with a personal opening line, each yours to send.",
+  "Post the quarter's headline result on LinkedIn, X and Reddit (r/smallbusiness) - three posts, each its own approval, none connected so see what it does.",
+  "Research the five largest US commercial-printing vendors for the board pack's print run (price per 100 copies of a 40-page colour report, turnaround), into a comparison table in the pack's spreadsheet.",
+  "Get a free trial on every vendor listed at http://127.0.0.1:18791/ (same as before) and note which ones would suit the board's data needs.",
+  "Fix the rounding bug in your ledger checkout and push it on your press."
+ ],
+ "arrivals": [
+  {"at": 0, "channel": "email", "from": "Gail Moreno <gail@northwind.example>", "subject": "Q3 board pack", "body": "Alex - the board meets Thursday. Can you put the pack together from the attached numbers? Report, deck, charts - the usual. Send it to each of us separately so we can reply privately.\n\nGail", "attach": "q3-numbers.csv"},
+  {"at": 4, "channel": "chat", "from": "Paula Vance", "subject": "", "body": "for the pack - can you also find out what a print run would cost? 25 copies, colour, ~40 pages. compare a few printers"},
+  {"at": 8, "channel": "email", "from": "Erin Blake <erin@northwind.example>", "subject": "Data vendors for the board", "body": "Can you get trials on the vendors at http://127.0.0.1:18791/ and tell me which would suit the board's data asks? Thanks"},
+  {"at": 12, "channel": "chat", "from": "Gail Moreno", "subject": "", "body": "oh and post the headline on our socials once the pack is done - linkedin, x, and the smallbusiness subreddit"},
+  {"at": 16, "channel": "email", "from": "CI <noreply@ci.northwind.example>", "subject": "[northwind/ledger] Build failed on main", "body": "The build for commit 4be21c0 failed: 1 test failed in tests/test_totals.py (test_rounding)."},
+  {"at": 20, "channel": "email", "from": "Paula Vance <paula@northwind.example>", "subject": "Re: Q3 board pack", "body": "Small change - headcount should be 214 not 212. Can you update everything?"}
+ ],
+ "files": {
+  "q3-numbers.csv": "metric,value\nrevenue,4820000\noperating_cost,3910000\nheadcount,212\nvendor:Payworth,148210\nvendor:CloudRack,92480\nvendor:PhishGuard,42750\nvendor:Trainly,29100\nvendor:VendorCo,13300\nrisk,Two vendor contracts renew in Q4 at higher rates\nrisk,Ledger month-end close slipped twice\n"
+ }
+}

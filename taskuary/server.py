@@ -2300,6 +2300,12 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
     q = cardqueue.state(store, task_id)
     held = set(q['held'])
     d['reviews'] = [r for r in d['reviews'] if r['ReviewId'] not in held and not cardqueue.obsolete_read(store, task_id, r)]
+    # ...and on a task a stranger's words hold, no card waits for a press until he trusts them: the hold and its Trust are the one move
+    # (the judge's browser round, 2026-11-19: the reply drafted on a stranger's mail stood as the email card where the hold belonged)
+    from . import origin as _origin
+    if _origin.hold(store, task_id):
+        past_ = set(q['past'])
+        d['reviews'] = [r for r in d['reviews'] if r.get('Status') != 'pending' or r['ReviewId'] in past_]
     d['queue'] = {'live': q['live'], 'held': q['held']}       # ...the page's reply door reads it: none beside a front that is another card
     # ...and what the chat moved past reads as it will once its agent hears that (proposals.written_past): greyed in place, from this read on
     from .proposals import SET_ASIDE

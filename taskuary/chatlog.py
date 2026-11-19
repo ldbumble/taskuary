@@ -884,6 +884,11 @@ def serve(store, tid: int, level: str = None) -> dict:
     left_note(store, tid, at_work)
     got = read(store, tid, level)
     out = got['items'] if at_work else [x for x in got['items'] if not (x['kind'] == 'turn' and x.get('state') in LIVE)]
+    # ...A TASK A STRANGER'S WORDS HOLD DRAWS NO CARD TO PRESS until he trusts them (the judge's browser round, 2026-11-19: the reply drafted on a
+    # stranger's mail stood as the email card, Send lit, where the hold's line and its Trust belong): the hold is the one move, beside the list
+    if hold_:
+        waits = lambda c: c.get('kind') == 'card' and (c.get('status') or c.get('state')) in ('pending', 'offer')
+        out = [x if x['kind'] != 'turn' else {**x, 'cards': [c for c in x.get('cards') or [] if not waits(c)]} for x in out if not waits(x)]
     closed(store, tid, out)
     if at_work and (lv := next((x for x in reversed(out) if x['kind'] == 'turn' and x.get('state') in LIVE), None)): lv.update(_now(tid, lv))
     body = {'items': out, 'level': got['level'], **beside(store, tid, out, at_work, hold_)}

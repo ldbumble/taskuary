@@ -91,8 +91,12 @@ def _said(steps: list, body: str = '', seen: set = None) -> list:
         # ...a thought is one plain row: the same cleaner, and its markup said as words ("**Replacing the pending draft**" stood raw)
         if s.get('k') == 'thought' and (w := plain_text(clean(s.get('text'))) or clean(s.get('text'))): out.append({**s, 'text': w}); continue
         if s.get('k') != 'said': out.append(s); continue
-        w = clean(s.get('text'))
-        if w and w != body.strip(): out.append({**s, 'text': said_once(w, seen)})
+        w, b = clean(s.get('text')), body.strip()
+        if not w or w == b: continue
+        # ...a copy of the answer itself, part of it as it streamed, is no earlier message: the answer keeps its own opener (the parity audit)
+        f, fb = ' '.join(w.split()), ' '.join(b.split())
+        if fb and (fb.startswith(f) or f.startswith(fb)): out.append({**s, 'text': w}); continue
+        out.append({**s, 'text': said_once(w, seen)})
     return out
 
 

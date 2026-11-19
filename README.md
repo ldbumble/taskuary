@@ -116,4 +116,14 @@ nothing leaves. Details: [Privacy](docs/PRIVACY.md).
 
 ![Daily installs of taskuary from PyPI, mirror traffic excluded](https://raw.githubusercontent.com/ldbumble/taskuary/stats/downloads.svg)
 
-MIT licensed. Issues and pull requests welcome; security reports go to [SECURITY.md](SECURITY.md).
+## Help build it
+
+**⭐ If Taskuary helps you, please [star the repo](https://github.com/ldbumble/taskuary/stargazers).** Stars are how
+other people find it, and the clearest signal of what to keep building.
+
+Contributors are welcome. A good first PR is a report connector: about 15 lines turns any system (Postgres, Google
+Sheets, Jira...) into a report an agent reads. [CONTRIBUTING.md](CONTRIBUTING.md) has the recipe, the repo map and
+the dev setup, and the [good first issues](https://github.com/ldbumble/taskuary/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+are waiting. Tests run offline, with no credentials. Please read the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+MIT licensed. Security reports go to [SECURITY.md](SECURITY.md).

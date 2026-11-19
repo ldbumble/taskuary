@@ -834,6 +834,14 @@ const write = (method, url, body) => {
   if (method === "post" && (m = p.match(/^\/api\/workflows\/(\d+)\/repair$/))) return demoRepair(state, m[1]);
   if (method === "post" && p === "/api/sources" && (body?.Channel === "report"
     || (state["/api/sources"]?.data || []).some((s) => s.SourceId === body?.SourceId && s.Channel === "report"))) return demoSaveSource(state, body);
+  // a clock the editor holds, said as the server says it (reports.schedule_words): the demo has no server, so it reads the words recorded
+  // on the saved routine that keeps the same clock - the editor's line was blank in the demo
+  if (method === "post" && p === "/api/schedule-words") {
+    const CLOCK = ["cron", "daily_at", "every_minutes", "on_startup", "once_per_day", "once_per_week", "on_mail"];
+    const at = (c) => JSON.stringify(CLOCK.map((k) => c?.[k] || null)), want = at(body?.cfg);
+    const hit = (state["/api/sources"]?.data || []).find((s) => { try { return s.ScheduleWords && at(JSON.parse(s.ConfigJson || "{}")) === want; } catch { return false; } });
+    return { words: hit?.ScheduleWords || "on the clock you set", error: null };
+  }
   if (p === "/api/settings" || p.startsWith("/api/setup")) return { ok: true };
 
   // everything else is a door out of the demo - and there is nothing on the other side of it

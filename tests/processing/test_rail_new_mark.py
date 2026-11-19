@@ -67,22 +67,14 @@ def test_opening_clears_the_mark(db):
     assert lanes.level_of(row_of(store, tids[0])) == 'task' and task_rows(store) == tids
 
 
-def test_the_phone_says_it_short():
-    from taskuary import remote_assistant as ra
-    item = {'who': 'Erin Blake', 'channel': 'email', 'ref': 'TQ-0007'}
-    assert ra.source_line(item | {'new_n': 3}).endswith('TQ-0007 · +3 new')
-    assert '+' not in ra.source_line(item)
-
-
-def test_plus_n_is_news_on_the_desk_and_on_the_phone(db):
-    """WHAT "+N" MEANS is one thing (processing_unread.news_word): the messages since he opened it. The desk drew "+N" for the mails folded
-    on an FYI thread and never the news; the phone said "+3 new" for the news. The row the page draws carries the phone's very words."""
+def test_no_plus_n_for_new_replies_on_the_phone_or_the_desk(db):
+    """NO "+N" FOR NEW REPLIES (the owner, 2026-10-26), on the desk's rail and on the phone's card alike: the row keeps new_n for the walk
+    (Next stops on it, railwalk) and draws nothing of it; a folded FYI thread counts its mails in its own words (AssistantView)."""
     from taskuary import remote_assistant as ra
     store, tids = db
     opened(store, tids[0])
     for n in range(2): mail(store, TASKS[0][0], 0, tids[0], n=f':news{n}')
     settle(store)
     row = row_of(store, tids[0])
-    assert row['news'] == '+2 new', 'the desk row carries no news word'
-    assert ra.source_line(row).endswith(row['news']), 'the phone and the desk say two things'
-    assert not row_of(store, tids[1]).get('news')
+    assert row['new_n'] == 2 and not isinstance(row.get('news'), str), 'a word for it rides on the row'
+    assert '+' not in ra.source_line(row) and '+' not in ra.source_line({'who': 'Erin Blake', 'channel': 'email', 'ref': 'TQ-0007', 'new_n': 3})

@@ -6,6 +6,7 @@ at work that ends, a card he presses - is updated in place (`State`, `Body`, `Re
 Every producer writes through `put`/`update`/`step`; the reader is `read`. The rule for when a running turn is split by his line lives in
 `step`, at write time, decided once."""
 import hashlib, json, logging, os, re, time
+from .timewords import plural
 
 logger = logging.getLogger(__name__)
 
@@ -570,7 +571,7 @@ def fold_line(rows: list) -> str:
     by = {}
     for r in tools: by[r['verb']] = by.get(r['verb'], 0) + r.get('times', 1)
     said = [(_KIND[v][1].format(n=c) if c > 1 else _KIND[v][2]) for v, c in by.items()]
-    return f"{n} step{'s' if n != 1 else ''}" + (f" - {', '.join(said)}" if said else '')
+    return plural(n, 'step') + (f" - {', '.join(said)}" if said else '')
 
 
 def detailed(turn: dict, level: str) -> dict:
@@ -640,7 +641,7 @@ def came_in(store, tid: int) -> None:
         n = len(older) + len(rest)
         put(store, tid, 'arrival', f"j:{older[-1]['MessageId']}",
             {'thread': {'name': who, 'n': n, 'earlier': len(older), 'mids': [x['MessageId'] for x in older]},
-             'head': f"{who}'s thread joined ({n} message{'s' if n != 1 else ''}, {len(older)} earlier)", 'who': who, 'own': False,
+             'head': f"{who}'s thread joined ({plural(n, 'message')}, {len(older)} earlier)", 'who': who, 'own': False,
              'at': stamp(older[-1]['T']), 'words': '', 'files': 0}, src='thread')
         new = rest
     for x in new:

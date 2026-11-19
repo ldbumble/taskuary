@@ -4574,7 +4574,7 @@ def card_for(item: dict) -> dict:
                                        'danger', 'danger_aim', 'subject',
                                        'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'members', 'aliases', 'unread', 'deferred', 'watching', 'actionable', 'paused', 'closed',
                                        # ...and an FYI row speaking for its email thread: the mails it opens on (processing_unread.fold_fyi_threads)
-                                       'brief_today', 'thread', 'thread_n', 'thread_items', 'new_n', 'news')} | ({'dashboard': True} if item.get('dashboard') else {})   # a dashboard's row draws the dashboard
+                                       'brief_today', 'thread', 'thread_n', 'thread_items')} | ({'dashboard': True} if item.get('dashboard') else {})   # a dashboard's row draws the dashboard
 
 
 def _fyi_card(item: dict, batch: list, gists: dict) -> tuple:

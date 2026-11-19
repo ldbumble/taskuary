@@ -2047,10 +2047,8 @@ def source_line(item: dict | None) -> str:
     if not item: return ''
     who = ' '.join(str(item.get('who') or '').split())
     ch = str(item.get('channel') or '')
-    # ...and what landed since the owner last opened it, as the rail's row says it (processing_unread.news_word)
-    from .processing_unread import news_word
-    new = news_word(item.get('new_n'))
-    bits = ' · '.join(x for x in (who, ch.replace('_', ' '), str(item.get('ref') or ''), new) if x)
+    # NO "+N new" FOR REPLIES, here as on the desk's rail (the owner, 2026-10-26): what landed since is read by opening it, and Next stops there
+    bits = ' · '.join(x for x in (who, ch.replace('_', ' '), str(item.get('ref') or '')) if x)
     return ' '.join(x for x in (funnel.CHANNEL_MARKS.get(ch, ''), bits) if x) if bits else ''
 
 

@@ -392,7 +392,7 @@ def next(store, from_key: str = None, actor: str = 'owner', press: str = None, r
         if ln[n].get('new_n') and funnel.order_key(ln[n]) <= place[1]:     # ...news above: what landed on it is seen now, as an open clears it
             try: funnel.settle(store, ln[n]['key'], 'surfaced', actor, note=ln[n].get('sig'), read=True)
             except Exception as e: logger.debug(f'railwalk: the +N on {ln[n]["key"]} was not cleared - {e}')
-            ln[n] = {**ln[n], 'new_n': 0, 'news': ''}; rows = [ln[n] if r['key'] == ln[n]['key'] else r for r in rows]   # ...and so in the line held
+            ln[n] = {**ln[n], 'new_n': 0}; rows = [ln[n] if r['key'] == ln[n]['key'] else r for r in rows]   # ...and so in the line held
         item = as_item(store, _batch(store, ln, n, True))
         _put(st, item, rows)
         _write(store, st)

@@ -48,7 +48,7 @@ def test_the_browser_offer_is_short_and_its_rules_are_one_read_away():
     # ...and a sign-in is the page's, from the offer itself: an agent that never opens the browser never reads the guide (the recorded walk,
     # 2026-11-11: it fetched the form from its shell and asked the owner for the password, twice)
     for want in ('no connection', 'you do not need the password', '[[TASKUARY-SIGNIN:', 'Never ask for a password', 'never work a sign-in from your shell', 'keeps it for next time'): assert want in held, want
-    assert 'THEY press it' in held
+    assert 'his press on the card runs it' in held
     assert len(held) < len(browserview.brief(open_now=False)) / 2
     g = guides.read('browser')
     for want in ('TASKUARY-SIGNIN', 'TASKUARY-YOURTURN', 'snapshot -i -c', 'WHEN YOU ASK FOR A SIGN-IN'): assert want in g, want

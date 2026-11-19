@@ -122,12 +122,12 @@ class Run:
         from taskuary import codingchat, general
         return getattr(general.session_for(self.tid) or codingchat._live(self.tid), 'sid', '')
 
-    def hand_over(self):
-        "The agent's press held on its page and handed to the owner, as the browser hook does mid-turn (browsergate.hand_over)."
-        from taskuary import browsergate
-        self.mp.setattr(browsergate, 'gone', lambda sid: False)          # ...the page it was handed on is up (the browser view)
-        return browsergate.hand_over(self.s, self.tid, self.sid(), {'verb': 'click'}, {'url': 'https://portal.example/vendors/77', 'open': True},
-                                     {'what': 'Save on the vendor record', 'why': 'it changes the record on the portal'}, 'portal.example', watch=None)
+    def held(self):
+        "The agent's press held where it runs and put on the task as one card in the chat, as the browser gate does mid-turn (browsergate._check)."
+        from taskuary import proposals
+        return proposals.queue(self.s, self.tid, {'action': 'browser_act', 'sid': self.sid(), 'args': ['click', '@e9'], 'command': 'agent-browser click @e9',
+                                                  'url': 'https://portal.example/vendors/77', 'site': 'portal.example', 'what': 'Save on the vendor record',
+                                                  'why': 'it changes the record on the portal'}, 'agent')
 
     def asking_id(self) -> str:
         from taskuary import workerstate as ws
@@ -581,13 +581,18 @@ def c_bug_pushed(r: Run):
 
 @on('cli', 'acp')
 def d_page_step(r: Run):
-    "(d) 'log in to the portal and tell me what is wrong' -> a page step handed over -> the owner types instead -> raised again -> pressed -> answered."
+    "(d) 'log in to the portal and tell me what is wrong' -> a held Save, one card in the chat -> the owner types instead -> held again -> approved -> answered."
     r.task('Check the vendor record on the portal')
     r.type('log in to the portal and tell me what is wrong with the vendor record')
-    r.turn('Signed in and found the record: the bank details are missing. Saving the fix is your press on the page.', r.hand_over)
+    r.turn('Signed in and found the record: the bank details are missing. Saving the fix waits for your press.', r.held)
     r.type('what did you change on it?')
-    r.turn('I filled the bank details from the invoice; nothing is saved yet - the Save is yours on the page again.', r.hand_over)
-    r.press(f'/api/tasks/{r.tid}/worker/answer', {'request_id': r.asking_id(), 'text': '', 'press': True}, label='press Done')
+    r.turn('I filled the bank details from the invoice; nothing is saved yet - the Save waits for your press.', r.held)
+    from taskuary import browsergate
+    # ...the page itself stood in: the press runs the act and the agent is told, as browsergate.perform tells it
+    r.mp.setattr(browsergate, '_run', lambda sid, a, w, t, **k: (0, 'Done'))
+    r.mp.setattr(browsergate, 'address', lambda sid, st=None: 'https://portal.example/vendors/77')
+    r.mp.setattr('taskuary.browserview.state', lambda sid, fresh=False: {'open': True, 'url': 'https://portal.example/vendors/77'})
+    r.send(label='press Approve')
     r.turn('Saved: the record now shows the bank details. Nothing else was wrong with it.')
 
 

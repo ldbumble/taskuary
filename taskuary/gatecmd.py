@@ -6,7 +6,8 @@ So the hold moved under the road: every task session has a folder first on its P
 and an `agent-desktop` of Taskuary's own. Each runs main() here, which lets a command that only looks go straight to the real program,
 and asks the server (/api/agent/gate -> judge, the very function the API agent's browser calls) about every other one BEFORE it runs:
 browsergate / agentdesktop decide, and a press that can't be undone is held on the task for the owner's one press. Held, the command
-prints why and exits 1 without running; Taskuary unreachable, an act fails closed the same way.
+prints why and exits 1 without running; Taskuary unreachable, an act fails closed the same way. Run, an act or an open is followed by
+what the site did, where it is no working page (browsergate.outcome) - a load that never finished, an error status.
 
 What this still does not cover, said plainly: an agent that reaches the real program by its full path or through `npx`, or drives
 Chrome or the desktop some other way. It gates the road agents are told to take (browserview.brief), on every AI."""
@@ -73,16 +74,17 @@ def asks(name: str, cmd: str) -> tuple:
     return act, act or bool(browsergate.opens(cmd))
 
 
-def ask(name: str, args: list) -> str:
+def ask(name: str, args: list, after: bool = False) -> str:
     """'' runs the command; else why it was not run. Asked of the server this session belongs to, as `taskuary --note` asks it: its token
-    from the session (TASKUARY_TOKEN - or the app's own config where a CLI strips token-named variables from its shell, as Codex does)."""
+    from the session (TASKUARY_TOKEN - or the app's own config where a CLI strips token-named variables from its shell, as Codex does).
+    `after`: the browser command has run - what the site did, in one line when it is not a working page (browsergate.outcome), else ''."""
     from . import config, hooks
     from .guard import TASK_ENV, TASK_HDR
     cmd = shlex.join([name, *args])
     act, call = asks(name, cmd)
-    if not call: return ''
+    if not call or after and name != 'agent-browser': return ''
     env, srv = os.environ, config.load()['server']
-    body = json.dumps({'task': env.get('TASKUARY_TASK') or '', 'sid': env.get('TASKUARY_SID') or '', 'cmd': cmd, 'cwd': os.getcwd()}).encode()
+    body = json.dumps({'task': env.get('TASKUARY_TASK') or '', 'sid': env.get('TASKUARY_SID') or '', 'cmd': cmd, 'cwd': os.getcwd(), **({'after': True} if after else {})}).encode()
     hdr = {'Content-Type': 'application/json', **({'X-Taskuary-Token': srv['token']} if srv.get('token') else {}),
            **({TASK_HDR: env[TASK_ENV]} if env.get(TASK_ENV) else {})}
     import urllib.request
@@ -90,7 +92,7 @@ def ask(name: str, args: list) -> str:
         req = urllib.request.Request((env.get('TASKUARY_URL') or hooks.base_url()) + MARK, body, hdr)
         with urllib.request.urlopen(req, timeout=WAIT) as r: return str(json.load(r).get('why') or '')
     except Exception as e:
-        if not act: return ''
+        if not act or after: return ''
         return (f'Taskuary held this for the owner: it could not be asked whether this press may run ({str(e)[:120]}), so nothing was '
                 'done. Run it again; if it is refused like this again, tell the owner in one line what you were about to do and end your turn.')
 
@@ -115,7 +117,9 @@ def main(argv: list = None) -> int:
     why = ask(name, args)
     if why: print(why, file=sys.stderr); return 1
     from . import spawn
-    return spawn.run([exe, *args]).returncode
+    rc = spawn.run([exe, *args]).returncode
+    if (said := ask(name, args, after=True)): print(said, file=sys.stderr)
+    return rc
 
 
 if __name__ == '__main__': sys.exit(main())

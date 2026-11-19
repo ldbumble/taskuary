@@ -453,10 +453,12 @@ def tab_url(sid: str) -> str:
     return next((str(t.get('url') or '') for t in (_devtools(sid, '/json/list') or []) if tab and t.get('id') == tab), '') if tab else ''
 
 
-def unstick(sid: str, since: float = None) -> bool:
-    "Stop every load of `sid`'s browser still pending STUCK seconds after `since` (default: its last command's start). True when one was."
+def unstick(sid: str, since: float = None, every: bool = False) -> bool:
+    """Stop every load of `sid`'s browser still pending STUCK seconds after `since` (default: its last command's start). True when one was.
+    `every`: stop every tab's load now - a form posted to its own address that never answers reads as no pending load (browsergate.outcome)."""
     began = _BEGAN.get(str(sid)) if since is None else since
-    if not began or time.time() - began < STUCK or not (ws := devtools_url(sid)): return False
+    if not every and (not began or time.time() - began < STUCK): return False
+    if not (ws := devtools_url(sid)): return False
     from . import signin
     stopped, cut = False, lambda u: str(u or '').split('#')[0]
     for t in [t for t in _devtools(sid, '/json/list') or [] if t.get('type') == 'page']:
@@ -465,9 +467,9 @@ def unstick(sid: str, since: float = None) -> bool:
             try:
                 h = c.call('Page.getNavigationHistory', timeout=3)
                 on = ((h.get('entries') or [])[h.get('currentIndex', -1)] or {}).get('url') if h.get('entries') else ''
-                if on and cut(on) != cut(t.get('url')):
+                if every or on and cut(on) != cut(t.get('url')):
                     c.call('Page.stopLoading', timeout=3); stopped = True
-                    logger.info(f'browser {sid}: a page left loading for {time.time() - began:.0f}s was stopped')
+                    logger.info(f'browser {sid}: a page left loading for {time.time() - (began or time.time()):.0f}s was stopped')
             finally: c.close()
         except Exception as e: logger.debug(f'browser {sid}: a tab could not be checked for a stuck load - {e}')
     return stopped
@@ -565,12 +567,11 @@ def last_frame(tid) -> dict | None:
 # with [[TASKUARY-YOURTURN: <what>]] (selfclose.turn_marker); the request it raises is drawn ON the browser view as "Your turn", the page
 # handed to the owner's mouse and keys. Their Done on the view is a press (browsergate.done): Taskuary tells the agent, chat or terminal alike.
 # A chat's ask carries Done as a choice for where no view is drawn; a terminal CLI's choices are a chooser answered by number, so its ask
-# carries none. TURN_BACK: the words a page left open from an older build still sends - read as their Done (browsergate.owner_said).
+# carries none.
 TURN_PREFIX = 'yourturn:'
 # ...worded as the view's button says it, so the line his press leaves says what he pressed (the overnight walk, 2026-11-11: the view's
 # "I'm done" left "You pressed Done")
 TURN_DONE = "I'm done"
-TURN_BACK = 'Done - I finished that in the browser. Look at the page as it is now and continue.'
 
 def your_turn(store, tid: int, sid: str, what: str = '', watch=...) -> str:
     "Record the agent's hand-over as an open request on the task, watched on its page. The request id - `yourturn:<hash>`. `watch`: tests."
@@ -1066,13 +1067,13 @@ def set_viewport(sid: str, w: int, h: int) -> bool:
 # WHAT THE BRIEF SAYS ABOUT ACTS THAT CAN'T BE UNDONE, by whether this session's hook can hold them (browsergate.py). It used to
 # promise "HELD for the owner's press" to every brain, and an agent said "nothing gets paid until you approve it" and then paid
 # (the owner's computer-use walk, 2026-10-25). Promise the hold only where there is one; everywhere else the agent asks first.
-# ...AND THE LAST PRESS IS THE OWNER'S, ON THE PAGE (the owner, 2026-11-05: "you hit pay in the browser instead of a generated ui"): work that
-# ends at a payment, a form or any button that can't be undone is filled in and left on that page for them (browsergate.hand_over).
-HOLD_LINE = ('WHEN THE WORK ENDS AT A PAYMENT, A FORM TO SUBMIT OR ANY BUTTON THAT CAN\'T BE UNDONE (pay, order, submit for real, send, post, '
-             'delete, cancel): fill in everything first, then run the command for that last button as you would. Taskuary refuses it with '
-             '"held for the owner" and puts that button in front of them as a card in this task - THEY press it, and you are told when '
-             'they have and what the page shows (or that they did not). Then end your turn in one short line and run no browser command '
-             'until you hear back; never try the same act another way, and never ask the owner in words whether to submit, register or pay, or to click it. ')
+# ...AND WHAT HE ASKED FOR IS HIS GO-AHEAD (the owner, 2026-11-17/18): the hold is for what he did not ask for, and for a big act - money, a
+# resource that lasts, a public post, a delete - which is always one card in the chat for his press (browsergate._verdict).
+HOLD_LINE = ('PRESS WHAT THE OWNER ASKED FOR YOURSELF - his ask is his go-ahead (a sign-up, a form, a search he asked for). A press that '
+             'spends money, makes or ends something that lasts, posts publicly, or that he did not ask for is refused with "held for the owner" '
+             'and stands as one card in this chat: fill in everything first, run the command for that last button as you would, and when it is '
+             'held go on with the rest of the work - his press on the card runs it, and you are told what the page shows. Never try a held act '
+             'another way, and never ask him in words to approve or click it. ')
 # ...and a browser that did not come up is said, not hidden: the agent got no brief and answered "no browser here" or sent the owner
 # looking for a connector that does not exist (the 2026-10-02 live check's gap #2, still open on 2026-10-25)
 FAILED_LINE = ('THE BROWSER DID NOT OPEN for this task ({why}). Do everything the work allows without it, then tell the owner in one '
@@ -1213,7 +1214,8 @@ def brief(open_now: bool = True) -> str:
 # A SIGN-UP (signin.new_account, the real-CLI walk 2026-11-16): nine forms were handed back for him to type a password into. One line,
 # read wherever the sign-in is told (the brief, the offer, the API agent's brief)
 SIGNUP_LINE = ("A SIGN-UP is the same: fill every box but the password, end your turn with [[TASKUARY-SIGNUP: <the site's domain>]] - Taskuary "
-               "types a strong password and keeps it; the owner presses the site's button, and fills any box only they can (a person check). ")
+               "types a strong password, keeps it and sends the form the owner asked for. A code the site then emails is typed into its page by "
+               "Taskuary and you are told - never ask for it or send for another; go on with the next site meanwhile. ")
 SIGNIN_LINE = ("A SIGN-IN YOU HAVE NO PASSWORD FOR IS NOT A BLOCKER AND NEVER A QUESTION - you do not need the password. For a site with no "
                'connection among your systems, say so in one line, open its sign-in page in this browser, and end your turn with a final '
                "line [[TASKUARY-SIGNIN: <the site's domain>]]: Taskuary types a saved sign-in, or shows the owner the page and keeps it for next "

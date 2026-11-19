@@ -2955,14 +2955,6 @@ class GeneralSession:
             from . import proposals
             try: proposals.move_on(self.store, self.task_id)
             except Exception as e: logger.debug(f'task {self.task_id}: the cards before this turn stayed live - {e}')
-            # ...a press handed to the owner on its page (browsergate.hand_over) that they answered in words instead: the agent hears it was
-            # not pressed. Before `working`, which overtakes the hand-over
-            if as_owner:
-                from . import browsergate
-                try:
-                    if (note := browsergate.owner_said(self.store, self.task_id, self.sid, text)):
-                        delivery_instructions = f'{delivery_instructions}\n\n{note}' if delivery_instructions else note
-                except Exception as e: logger.debug(f'task {self.task_id}: the hand-over was not read - {e}')
             try:
                 from . import workerstate as ws
                 # ...Taskuary's own turn (a line on the thread, a check-back) is not the owner speaking: their question still waits (the night run,

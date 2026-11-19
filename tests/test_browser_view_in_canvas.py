@@ -40,8 +40,8 @@ class TheBrief(unittest.TestCase):
         self.assertIn('NEVER SOLVE, CLICK OR WORK AROUND A CAPTCHA', b)
         self.assertIn('[[TASKUARY-YOURTURN:', b)
         self.assertNotIn('card number is for the owner to type in the pane: ask with the ask marker', b)
-        # the agent runs the submit and the hold asks, on every AI (gatecmd)
-        self.assertIn('never ask the owner in words whether to submit, register or pay', b)
+        # the agent runs the press and the hold asks, on every AI (gatecmd) - one card in the chat
+        self.assertIn('never ask him in words to approve or click it', b)
 
 
 class YourTurn(unittest.TestCase):

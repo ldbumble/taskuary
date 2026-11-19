@@ -6300,7 +6300,9 @@ async def agent_gate(body: dict, request: Request):
     from . import gatecmd
     tid = int(body.get('task') or 0) if str(body.get('task') or '').isdigit() else 0
     _own_task_only(request, tid)
-    go = lambda: gatecmd.judge(store, tid, str(body.get('sid') or ''), str(body.get('cmd') or ''), str(body.get('cwd') or ''))
+    from . import browsergate
+    go = ((lambda: browsergate.outcome(str(body.get('sid') or ''))) if body.get('after') else
+          lambda: gatecmd.judge(store, tid, str(body.get('sid') or ''), str(body.get('cmd') or ''), str(body.get('cwd') or '')))
     return {'why': await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, go)}
 
 

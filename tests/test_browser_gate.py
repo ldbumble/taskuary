@@ -172,19 +172,22 @@ class Judging(unittest.TestCase):
             with verdict(sure): self.assertTrue(one(self.s, bg.acts(cmd)[0], {'url': CHECKOUT}, Brain(None))['hold'], cmd)
         with verdict(unsure): self.assertTrue(one(self.s, self.act, {'url': CHECKOUT}, Brain(None))['hold'])
 
-    def test_what_the_owner_asked_for_in_his_own_words_is_done_save_money(self):
-        """The owner, 2026-11-17: "If you ask it to sign up to those sites it should do it, nothing else required." His own words are given to
-        the verdict; an act they ask for is not held for a second yes - unless it pays or moves money, which always waits. No words of his,
-        no such pass, whatever the model says."""
+    def test_what_the_owner_asked_for_in_his_own_words_is_done_save_a_big_act(self):
+        """The owner, 2026-11-17: "If you ask it to sign up to those sites it should do it, nothing else required" - and 2026-11-18: "any big
+        action that will spend money, create resource should ask for approval". His own words are given to the verdict; an act they ask for
+        is not held for a second yes - unless it is big (money, a resource that lasts, a public post, a delete), which is always his card.
+        No words of his, no such pass, whatever the model says."""
         b = Brain(None)
         said = 'Sign up for a free account on each of the ten vendors and collect their tables.'
-        with verdict({'irreversible': True, 'sure': True, 'what': 'creates an account on rentscope.example', 'asked': True, 'money': False}):
+        with verdict({'irreversible': True, 'sure': True, 'what': 'creates an account on rentscope.example', 'asked': True, 'big': False}):
             self.assertFalse(one(self.s, self.act, {'url': CHECKOUT, 'elements': SNAP}, b, said=said)['hold'])
             self.assertTrue(one(self.s, self.act, {'url': CHECKOUT}, Brain(None), said='')['hold'], 'no words of his, no pass')
         self.assertIn(said, b.seen[0])
-        with verdict({'irreversible': True, 'sure': True, 'what': 'pays $49 on dealflow.example', 'asked': True, 'money': True}):
-            self.assertTrue(one(self.s, self.act, {'url': CHECKOUT}, Brain(None), said='Sign up and pay for DealFlow Pro')['hold'])
-        # ...and a verdict that does not say whether it moves money is no "it does not": a CLI judge carries no schema, and one that left the
+        for what in ('pays $49 on dealflow.example', 'starts a paid workspace on cloud.example', 'posts the announcement publicly on social.example'):
+            with verdict({'irreversible': True, 'sure': True, 'what': what, 'asked': True, 'big': True}):
+                v = one(self.s, self.act, {'url': CHECKOUT}, Brain(None), said='Sign up and pay for DealFlow Pro')
+                self.assertTrue(v['hold'], what); self.assertIn('yours to approve', v['why'])
+        # ...and a verdict that does not say whether it is big is no "it is not": a CLI judge carries no schema, and one that left the
         # key out passed a payment he had asked for with no press
         with verdict({'irreversible': True, 'sure': True, 'what': 'pays $49 on dealflow.example', 'asked': True}):
             self.assertTrue(one(self.s, self.act, {'url': CHECKOUT}, Brain(None), said='Sign up and pay for DealFlow Pro')['hold'])
@@ -193,6 +196,18 @@ class Judging(unittest.TestCase):
         self.s.add_comment(self.tid, general.BRIEF_ACTOR, general.USER_TYPE, 'Signed in to x - continue.')
         self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'Sure.')
         self.assertEqual(bg.asked(self.s, self.tid), said, "only his own lines, never Taskuary's or the agent's")
+
+    def test_his_go_ahead_typed_while_the_turn_runs_is_his_words_at_once(self):
+        """The vendor walk, 2026-11-18 (0 of 13 accounts): the task came from a colleague's chat, and "go ahead and submit them all yourself"
+        was typed while the agent's turn ran - kept for its next step, so not yet his words to the gate, which read "(none)" and held every
+        Create account. A line waiting for the agent is his words all the same."""
+        from taskuary import general
+        general.wait_line(self.s, self.tid, 'Go ahead and submit them all yourself - free plans only, make up the passwords.')
+        self.assertIn('submit them all yourself', bg.asked(self.s, self.tid))
+        b = Brain(None)
+        with verdict({'irreversible': True, 'sure': True, 'what': 'creates a free account on parcelpulse.example', 'asked': True, 'big': False}):
+            self.assertFalse(one(self.s, self.act, {'url': CHECKOUT}, b, said=bg.asked(self.s, self.tid))['hold'])
+        self.assertIn('submit them all yourself', b.seen[0])
 
     def test_a_reversible_act_sure_of_it_passes(self):
         with verdict({'irreversible': False, 'sure': True, 'what': 'opens the order summary'}):
@@ -247,14 +262,14 @@ class Holding(unittest.TestCase):
     def test_his_words_pass_each_act_on_its_own_and_never_a_payment(self):
         said = 'Sign up for DealFlow and buy the Pro plan.'
         todo = bg.acts('agent-browser fill @e1 "a" && agent-browser click @e12')
-        with answers({'irreversible': True, 'sure': True, 'what': 'types', 'asked': True, 'money': False},
-                     {'irreversible': True, 'sure': True, 'what': 'pays $49', 'asked': True, 'money': True}):
+        with answers({'irreversible': True, 'sure': True, 'what': 'types', 'asked': True, 'big': False},
+                     {'irreversible': True, 'sure': True, 'what': 'pays $49', 'asked': True, 'big': True}):
             self.assertEqual([v['hold'] for v in bg.judge(self.s, todo, {'url': CHECKOUT}, Brain(None), said=said)], [False, True])
 
     def test_a_payment_in_a_line_that_also_pushes_is_held_where_it_runs(self):
         """A line that clicks Pay and pushes (`click @e12 && git push`): the shell's gate judges the push, and the click is held where it
         runs (gatecmd) - never waved through with the push's card, a trusted repo or the terminal's own prompt."""
-        pay = {'irreversible': True, 'sure': True, 'what': 'pays the $412.50 order on toll.example', 'money': True}
+        pay = {'irreversible': True, 'sure': True, 'what': 'pays the $412.50 order on toll.example', 'big': True}
         with on(), verdict(pay), mock.patch('taskuary.shellgate.trusted', return_value='northwind/ledger'):
             self.assertEqual(hooks.command_gate(self.s, self.tid, 'run1', 'agent-browser click @e12 && git push origin main', 'Bash', r'C:\work\ledger'), {})
             self.assertIn(bg.HELD, gatecmd.judge(self.s, self.tid, 'run1', 'agent-browser click @e12', r'C:\work\ledger'))
@@ -348,20 +363,20 @@ class Page:
     def close(self): pass
 
 
-class HandingOver(unittest.TestCase):
-    """THE OWNER PRESSES PAY ON THE PAGE (the owner, 2026-11-05): where someone watches the session, the agent's held press is not a card - the
-    page is handed to the owner as the agent filled it, and their own press on it is the approval."""
+class HeldInTheChat(unittest.TestCase):
+    """A HELD PRESS IS ONE CARD IN THE CHAT, watched or not (the owner, 2026-11-18: "payment should be an approval like everything else").
+    It was handed to him inside the embedded page wherever someone watched (2026-11-05): in the vendor walk he had to find ten "press it"
+    banners in ten tabs of a small pane, and the app had no button of its own. What stays his on the page is only what only he can do there."""
     def setUp(self):
         from taskuary import workerstate as ws
         self.ws, self.s = ws, MemoryStore(); self.tid = Factory(self.s).task('Pay the course fee')
-        self.told, self.scrolled = [], []
+        self.told = []
         self.sess = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, send_prompt=lambda text, as_owner=True: self.told.append(text))
         self.live = mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': self.sess}, clear=True); self.live.start()
         self.addCleanup(self.live.stop); self.addCleanup(bg.HANDS.clear)
 
     def hand(self, url=PAY):
-        with on(url, PAY_SNAP), verdict({'irreversible': True, 'sure': True, 'what': 'pays $42.00 on the course page'}), \
-                mock.patch.object(bg, 'watch', None), mock.patch.object(bg, '_run', lambda sid, a, w, t: self.scrolled.append((sid, a)) or (0, '')):
+        with on(url, PAY_SNAP), verdict({'irreversible': True, 'sure': True, 'what': 'pays $42.00 on the course page'}),                 mock.patch.object(bg, 'watch', None), mock.patch.object(bg, '_run', lambda sid, a, w, t: (0, '')):
             return bg.check(self.s, self.tid, 'run1', "agent-browser click '@e12'", Brain(None))
 
     def pending(self): return self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (self.tid,))
@@ -370,102 +385,25 @@ class HandingOver(unittest.TestCase):
         while not self.told and time.time() < end: time.sleep(.01)
         return self.told
 
-    def test_an_agents_click_on_pay_becomes_a_hand_over_not_a_proposal(self):
+    def test_an_agents_click_on_pay_with_the_owner_watching_is_a_card_never_a_press_on_the_page(self):
         why = self.hand()['hookSpecificOutput']
         self.assertEqual(why['permissionDecision'], 'deny')
-        self.assertIn('a card in this task waiting for it', why['permissionDecisionReason'])
-        self.assertEqual(self.pending(), [])                                          # no Approve card
-        req = bg.handing(self.s, self.tid, 'run1')
-        self.assertTrue(req['RequestId'].startswith(bg.PRESS) and req['RequestId'].startswith(browserview.TURN_PREFIX))
-        self.assertEqual(req['Text'], 'Your turn: check it and press "Pay $42.00" on the page. I\'ll go on when you\'re done.')
-        self.assertEqual(self.scrolled, [('run1', ['scrollintoview', '@e12'])])        # the page is left on the button
+        [rv] = self.pending(); p = json.loads(rv['DraftText'])
+        self.assertEqual((p['action'], p['args'], p['control']), ('browser_act', ["click", "@e12"], {'name': 'Pay $42.00', 'role': 'button'}))
+        self.assertFalse([r for r in self.ws.open_requests(self.ws.events(self.s, self.tid)) if r['RequestId'].startswith(browserview.TURN_PREFIX)],
+                         'nothing is handed to him inside the page')
         self.assertTrue(bg.waiting(self.s, self.tid, 'run1')); self.assertTrue(hooks.held_for(self.s, self.tid, 'run1'))
-        self.hand()                                                                   # tried again: the same hand-over
-        self.assertEqual(len([r for r in self.ws.open_requests(self.ws.events(self.s, self.tid)) if r['RequestId'].startswith(bg.PRESS)]), 1)
-
-    def test_the_same_press_handed_over_again_is_on_screen_again(self):
-        # the owner, 2026-11-10 ("i cant see the screen"): a client record's Save on portal.vendor.example, handed over, closed (his Done, the
-        # page unmoved), then handed over again by the agent's next turn - recorded under the answered id, it was never open: no card, no
-        # chip, "agent done" and Mark done lit while the step waited on him
-        from taskuary import taskstate
-        self.hand(); rid = bg.handing(self.s, self.tid, 'run1')['RequestId']
-        self.assertTrue(bg.done(self.s, self.tid, rid)); self.heard()
-        self.ws.record(self.s, self.tid, 'run1', 'working', text=self.ws.WAKE, source='api')     # the agent's told turn
-        self.hand()
-        req = bg.handing(self.s, self.tid, 'run1')
-        self.assertIsNotNone(req, 'the second hand-over waits on the owner')
-        self.assertTrue(req['RequestId'].startswith(bg.PRESS)); self.assertNotEqual(req['RequestId'], rid)
-        self.assertEqual(self.ws.asking_of(self.s, self.sess)['request_id'], req['RequestId'])         # the chat's card, live
-        t = {**self.s.get_task(self.tid), 'Kind': 'general'}
-        self.assertFalse(taskstate.done_for_now(self.s, t, {'state': 'asking', 'request': self.ws.asking_of(self.s, self.sess)}))
-        with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True):                          # at rest, or after a restart
-            self.assertEqual(taskstate.open_question(self.s, self.tid)['request_id'], req['RequestId'])
-        self.hand(); self.assertEqual(bg.handing(self.s, self.tid, 'run1')['RequestId'], req['RequestId'])     # still one, not two
-
-    def test_the_page_moving_past_the_step_tells_the_agent_it_was_done(self):
-        self.hand(); rid = bg.handing(self.s, self.tid, 'run1')['RequestId']
-        here = {'href': PAY, 'title': 'Pay for your order', 'there': True}
-        done = {'href': 'http://127.0.0.1:8765/checkout/thanks', 'title': 'Thank you - payment received', 'there': False}
-        self.assertTrue(bg.watch(self.s, self.tid, 'run1', rid, conn=Page(here, here, done), every=0))
-        self.assertIn('The page moved on from "Pay $42.00"', self.heard()[0])
-        self.assertIn('Thank you - payment received', self.told[0])
-        # ...SAID AS SEEN: the page moving is not the press - "Back to cart" moves it too, and told "The owner pressed Pay", the agent
-        # reported a payment that was never made
-        self.assertNotIn('The owner pressed', self.told[0]); self.assertIn('not which control', self.told[0])
-        self.assertIsNone(bg.handing(self.s, self.tid, 'run1'))                       # the hand-over is closed
-        self.assertFalse(bg.watch(self.s, self.tid, 'run1', rid, conn=Page(done), every=0))   # ...once
+        self.hand(); self.assertEqual(len(self.pending()), 1, 'tried again: the same card')
 
     def test_a_button_gone_from_the_same_address_is_past_too(self):
         here, paid = {'href': PAY, 'title': 'Pay', 'there': True}, {'href': PAY + '#paid', 'title': 'Pay', 'there': False}
         self.assertTrue(bg.past(here, paid)); self.assertFalse(bg.past(here, {**here, 'href': PAY + '#top'}))
 
-    def test_the_owner_saying_no_tells_the_agent_it_was_not_done(self):
-        self.hand()
-        note = bg.owner_said(self.s, self.tid, 'run1', "don't - wrong card")
-        self.assertIn('NOT pressed', note); self.assertIn('"Pay $42.00"', note)
-        self.hand(); self.assertEqual(bg.owner_said(self.s, self.tid, 'run1', browserview.TURN_BACK), '')     # their Done is theirs, as it is
-
-    def test_words_instead_of_the_press_leave_nothing_waiting_and_the_agent_hears_so(self):
-        # the owner, 2026-11-10: "i cant see the screen" closed the hand-over; the agent, told only "NOT pressed", answered that Save was
-        # "held for your press in the browser pane beside this chat" - the chip read "agent done" and Mark done was lit, which was the truth
-        from taskuary import taskstate
-        self.hand()
-        note = bg.owner_said(self.s, self.tid, 'run1', 'i cant see the screen')
-        self.ws.record(self.s, self.tid, 'run1', 'working', source='api')             # his line is the agent's next turn
-        self.assertIsNone(bg.handing(self.s, self.tid, 'run1')); self.assertIsNone(taskstate.open_question(self.s, self.tid))
-        self.assertIn('nothing waits for their press now', note)
-        self.assertIn(proposals.AGAIN, note)   # the one sentence every passed card's agent hears (proposals.move_on)
-        self.hand(); self.assertIsNotNone(bg.handing(self.s, self.tid, 'run1'))      # ...and that brings it back in front of him
-
-    def test_a_pane_answered_in_words_hears_it_was_not_done(self):
-        pane = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, cli='claude')
-        with mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': pane}, clear=True):
-            self.hand(); rid = bg.handing(self.s, self.tid, 'run1')['RequestId']
-            typed = []
-            with mock.patch('taskuary.terminal.type_into', lambda s, t: typed.append(t)):
-                self.ws.answer(self.s, self.tid, rid, 'not now')
-        self.assertTrue(typed[0].startswith('not now (')); self.assertIn('NOT pressed', typed[0]); self.assertNotIn('\n', typed[0])
-        self.assertIsNone(bg.handing(self.s, self.tid, 'run1'))
-
-    def test_the_browser_closed_tells_the_agent_it_was_not_done(self):
-        self.hand(); rid = bg.handing(self.s, self.tid, 'run1')['RequestId']
-        here = {'href': PAY, 'title': 'Pay', 'there': True}
-        with mock.patch.object(browserview, 'state', return_value={'open': False}):
-            self.assertTrue(bg.watch(self.s, self.tid, 'run1', rid, conn=Page(here, RuntimeError('gone')), every=0))
-        self.assertIn('did not press "Pay $42.00"', self.heard()[0]); self.assertIn('NOT done', self.told[0])
-
-    def test_a_headless_run_still_gets_a_proposal(self):
-        with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True): self.hand()
-        self.assertEqual(len(self.pending()), 1); self.assertIsNone(bg.handing(self.s, self.tid, 'run1'))
-        self.s._exec("DELETE FROM review WHERE TaskId=?", (self.tid,))
-        self.hand('about:blank')                                                      # a session, but no page to show it on
-        self.assertEqual(len(self.pending()), 1); self.assertIsNone(bg.handing(self.s, self.tid, 'run1'))
-
     def test_a_captcha_hand_over_is_watched_and_goes_on_by_itself(self):
         # the owner, 2026-11-05: "if we need the user we should wait for them to do it" - the page moving on closes it, Done stays
         with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': PAY}):
-            rid = browserview.your_turn(self.s, self.tid, 'run1', 'tick the "I\'m not a robot" box', watch=None)
-        self.assertEqual(bg.HANDS[rid]['kind'], 'turn')
+            rid = browserview.your_turn(self.s, self.tid, 'run1', 'tick the "I am not a robot" box', watch=None)
+        self.assertIn(rid, bg.HANDS)
         self.assertEqual(json.loads(self.ws.events(self.s, self.tid)[-1]['ChoicesJson']), [browserview.TURN_DONE])
         here = {'href': PAY, 'title': 'Check', 'marks': ['f:https://challenge.example/box', 'i:card']}
         gone = {'href': PAY, 'title': 'Check', 'marks': ['i:notes']}                  # same address, the challenge and the box gone
@@ -473,27 +411,21 @@ class HandingOver(unittest.TestCase):
         self.assertIn('The owner did the step you handed them', self.heard()[0])
         self.assertIsNone(next((r for r in self.ws.open_requests(self.ws.events(self.s, self.tid)) if r['RequestId'] == rid), None))
 
-    def test_after_the_watch_stops_typing_still_goes_on(self):
-        self.hand(); rid = bg.handing(self.s, self.tid, 'run1')['RequestId']
-        here = {'href': PAY, 'title': 'Pay', 'there': True}
-        self.assertFalse(bg.watch(self.s, self.tid, 'run1', rid, conn=Page(here), every=0, until=0.05))
-        self.assertTrue(bg.HANDS[rid]['expired'])
-        note = bg.owner_said(self.s, self.tid, 'run1', 'paid it just now')        # the chat's send_prompt, on the owner's next line
-        self.assertIn('stopped watching the page', note); self.assertIn('Look at the page as it is now', note)
-        self.ws.record(self.s, self.tid, 'run1', 'working', source='api')           # ...and that line is the agent's next turn
-        self.assertIsNone(bg.handing(self.s, self.tid, 'run1'))
+    def test_a_captcha_whose_browser_closed_tells_the_agent_it_was_not_done(self):
+        with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': PAY}):
+            rid = browserview.your_turn(self.s, self.tid, 'run1', 'tick the check box', watch=None)
+        here = {'href': PAY, 'title': 'Check', 'marks': ['i:card']}
+        with mock.patch.object(browserview, 'state', return_value={'open': False}):
+            self.assertTrue(bg.watch(self.s, self.tid, 'run1', rid, conn=Page(here, RuntimeError('gone')), every=0))
+        self.assertIn('did not do the step you handed them', self.heard()[0]); self.assertIn('NOT done', self.told[0])
 
     def test_the_agent_is_told_the_step_is_a_card_never_a_screen_to_point_at(self):
-        # the owner, 2026-11-10: "please click Save at the bottom of the page in the browser pane" - "i cant see the screen". The pane is drawn
-        # only when the app shows it; the agent is told what is true wherever the owner stands, and never to ask for the click in words
-        handed = self.hand()['hookSpecificOutput']['permissionDecisionReason']
-        with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True): self.s._exec("DELETE FROM worker_event"); carded = self.hand()
-        carded = carded['hookSpecificOutput']['permissionDecisionReason']
-        for said in (handed, carded, browserview.brief(), browserview.offer()):
+        # the owner, 2026-11-10: "please click Save at the bottom of the page in the browser pane" - "i cant see the screen"
+        carded = self.hand()['hookSpecificOutput']['permissionDecisionReason']
+        for said in (carded, browserview.brief(), browserview.offer()):
             self.assertNotIn('beside', said); self.assertNotIn('WATCHING', said)
-        self.assertNotIn('in this browser', handed)
-        for said in (handed, carded, browserview.HOLD_LINE):
-            self.assertIn('card in this task', said); self.assertIn('never ask', said.lower())
+        self.assertIn('card in this task', carded); self.assertIn('never ask', carded.lower())
+        self.assertIn('one card in this chat', browserview.HOLD_LINE); self.assertIn('never ask', browserview.HOLD_LINE.lower())
 
     def test_the_brief_says_to_fill_it_and_leave_the_last_press_to_the_owner(self):
         self.assertIn('fill in everything first', browserview.brief())
@@ -623,3 +555,37 @@ def test_taskuarys_own_browser_calls_run_the_real_program_never_the_agents_hold_
     got = browserview.program()
     assert got and not gatecmd.is_gate(got) and os.path.dirname(got) == str(real), got
 
+
+
+class WhatTheSiteDid(unittest.TestCase):
+    """THE VENDOR WALKS, 2026-11-18 (the owner: "stuck sites should not happen. It should be able to figure out next steps or try another
+    way or ask the user for help"): a form posted to a site that never answers left the click "Done" and every command after it failing 30 s
+    later with a socket error - six minutes of fresh tabs; a site's 500 and a robots wall read as pages like any other. After an act or an
+    open, what the site did is the command's own result, in one line, at once; the next step is the agent's."""
+    def test_a_load_that_never_finishes_is_stopped_and_said(self):
+        stopped = []
+        with mock.patch.object(bg, '_run', side_effect=RuntimeError(bg.LATE)), \
+             mock.patch.object(browserview, 'unstick', lambda sid, since=None, every=False: stopped.append((sid, every)) or True):
+            line = bg.outcome('run1')
+        self.assertEqual(stopped, [('run1', True)])
+        self.assertIn('did not finish loading', line); self.assertIn('another way', line); self.assertIn('one question to the owner', line)
+
+    def test_an_error_status_is_said_by_its_number_and_a_working_page_says_nothing(self):
+        def said(status):
+            page = SimpleNamespace(js=lambda expr: {'status': status, 'url': 'http://127.0.0.12:18791/s/quotabase/signup'}, close=lambda: None)
+            with mock.patch.object(bg, '_run', return_value=(0, 'http://127.0.0.12:18791/s/quotabase/signup')), \
+                 mock.patch('taskuary.signin.connect', return_value=page):
+                return bg.outcome('run1')
+        self.assertIn('a server error (HTTP 500)', said(500))
+        self.assertIn('turns this visit away (HTTP 403)', said(403))
+        self.assertEqual(said(200), ''); self.assertEqual(said(0), '')
+
+    def test_the_command_prints_what_the_site_did_after_it_ran(self):
+        from taskuary import gatecmd
+        asked = []
+        def ask(name, args, after=False): asked.append(after); return 'TASKUARY: the page did not finish loading in 12 s' if after else ''
+        with mock.patch.object(gatecmd, 'real', return_value='agent-browser'), mock.patch.object(gatecmd, 'ask', ask), \
+             mock.patch('taskuary.spawn.run', return_value=SimpleNamespace(returncode=0)), mock.patch('sys.stderr') as err:
+            self.assertEqual(gatecmd.main(['gate', 'agent-browser', 'click', '@e7']), 0)
+        self.assertEqual(asked, [False, True])
+        self.assertIn('did not finish loading', ''.join(str(c.args[0]) for c in err.write.call_args_list))

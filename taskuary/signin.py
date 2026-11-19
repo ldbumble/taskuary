@@ -514,7 +514,7 @@ def _auto(store, tid, sid, site, rid, fill, ask=None):
         # (the owner's own sign-in, 2026-11-14: the agent asked again on the code page, the saved sign-in was tried on it, "there is no
         # sign-in form", and the task read "the saved sign-in was not used")
         if ask and not code and asks_code(sid) and not on_password_page(sid): return _ready_code(store, tid, sid, site) or ask(CODE_ASK.format(site=site))
-        typing(store, tid, site)
+        typing(store, tid, site, sid)
         got = fill(sid, site, user, pw, **({'code': code} if code else {}), **({'extra': ex} if ex else {})) or {}
         _used(store, site)
         # THE PASSWORD WENT IN AND THE SITE ASKS A CODE NOBODY KEEPS: that step is the owner's, on the page, and it is said in one line - the
@@ -801,21 +801,79 @@ def mailed_code(store, site: str, after: int, brain=None):
     return None
 
 
-_TYPING = {}                    # (task, site) -> (the newest mail, when) as Taskuary typed a password there: a code the site mails for it comes after
+_TYPING = {}                    # (task, site) -> (the newest mail, when, session) as an act of its agent's went to that site: a code it mails comes after
 CODE_FRESH = 10 * 60            # ...and is looked for from there this long; past it, from when the ask's watch begins
+CODE_EVERY = 2.0                # the agent's own sign-up: how often its page is looked at for the code step (code_watch)
 
 
 def _newest_mail(store) -> int: return (store._one('SELECT MAX(MessageId) AS m FROM message') or {}).get('m') or 0
 
 
-def typing(store, tid, site): _TYPING[(int(tid), site)] = (_newest_mail(store), _now())
+def typing(store, tid, site, sid: str = ''): _TYPING[(int(tid), site)] = (_newest_mail(store), _now(), str(sid or ''))
 
 
 def mail_since(store, tid, site) -> int:
     """The mail a code for this sign-in can be in: from just before Taskuary typed its password - the site mails the code as the password goes,
     and the code step is raised a turn later (its agent makes the page ready), when the code was in the inbox already - else from now."""
-    mid, at = _TYPING.pop((int(tid), site), (None, 0))
+    mid, at, _ = _TYPING.get((int(tid), site), (None, 0, ''))
     return mid if mid is not None and _now() - at < CODE_FRESH else _newest_mail(store)
+
+
+# THE AGENT'S OWN SIGN-UP COMES BACK AS MAIL (the vendor walks, 2026-11-18): it pressed Create account itself, the site emailed its code, and the
+# code landed on his rail as four "unverified sender" FYI rows while the agent asked for it again. An act of the agent's that went to a site
+# (browsergate lets it run) is marked here; a mail from that site, holding a code, while it is fresh, is that act returning - kept off the
+# inbox (ingest, ahead of triage, as an auto-reply is: triage itself is unchanged) and typed into that site's page only, never shown to the agent.
+def acting(store, tid, sid: str, site: str) -> None:
+    "An act of this agent's went to `site`: a code it mails from now is the agent's own (take_code). Kept from its first act while fresh."
+    if not site or not str(tid or '').isdigit(): return
+    k = (int(tid), site)
+    if k in _TYPING and _now() - _TYPING[k][1] < CODE_FRESH: _TYPING[k] = (*_TYPING[k][:2], str(sid))
+    else: typing(store, tid, site, sid)
+
+
+_CODE_WATCHED = set()           # (task, site) whose code watch runs
+def take_code(store, msg: dict, watch=..., brain=None) -> int | None:
+    """The task whose agent's own act this mail answers - its sender the site that agent acted on lately, a code-shaped number in it - with its
+    code watch started (code_watch); else None."""
+    frm, text = str(msg.get('from_email') or ''), f"{msg.get('subject') or ''}\n{msg.get('body') or ''}"
+    if '@' not in frm or not (found := set(CODE_RE.findall(text))): return None
+    site = registrable(frm.rsplit('@', 1)[-1])
+    tid, sid = next(((t, x) for (t, s), (_, at, x) in list(_TYPING.items()) if s == site and _now() - at < CODE_FRESH), (None, ''))
+    # ...and only a mail the model reads as a one-time code: an invoice from a site the agent just used holds numbers too, and is his
+    if tid is None or not _pick_code(store, text, found, brain): return None
+    if watch is ...: watch = code_watch
+    if watch and (tid, site) not in _CODE_WATCHED:
+        _CODE_WATCHED.add((tid, site))
+        def run():
+            try: watch(store, tid, sid, site)
+            finally: _CODE_WATCHED.discard((tid, site))
+        threading.Thread(target=run, daemon=True, name=f'code-watch-{tid}').start()
+    return tid
+
+
+def code_watch(store, tid: int, sid: str, site: str, every: float = CODE_EVERY, until: float = CODE_FRESH, conn=None) -> bool:
+    """While the agent's act on `site` is fresh: when its page there asks for a code and a mail from the site holds one, type it on the pinned
+    page (as the sign-in ask's watch does) and tell the agent to look. A sign-in ask open on the site watches for itself (watch)."""
+    end, after = time.time() + until, mail_since(store, tid, site)
+    while time.time() < end:
+        time.sleep(every)
+        if (pending(store, tid) or {}).get('request_id') == f'{PREFIX}{site}': return False
+        got = None
+        try:
+            c = conn or connect(sid)
+            try:
+                f = c.fields('')
+                if not (f.get('top') and on_site(f.get('href'), site) and code_step(f)): continue
+                if not (got := mailed_code(store, site, after)): continue
+                _code_from_mail(store, tid, site, c, *got)
+            finally:
+                if conn is None: c.close()
+        except SignInError: continue
+        if got[1]:
+            from .browsergate import _tell
+            _tell(store, tid, f'Taskuary typed the code {site} emailed for your sign-up into its page and sent it. Look at the page and continue.', wake=True)
+        return True
+    return False
 
 
 def _code_from_mail(store, tid, site, c, mid, code) -> bool:
@@ -1250,7 +1308,7 @@ def signed_up_words(site, user='', sent=True) -> tuple[str, str]:
 
 
 def _signup(store, tid, sid, site, rid, fill, watch):
-    pw = new_password(); typing(store, tid, site)
+    pw = new_password(); typing(store, tid, site, sid)
     try: fill(sid, site, pw)
     except Exception as e:
         why = str(e) if isinstance(e, SignInError) else 'the browser could not be reached'
@@ -1260,12 +1318,30 @@ def _signup(store, tid, sid, site, rid, fill, watch):
     _audit(store, tid, site, 'vault', True, 'a new password typed')
     # ...HE ASKED FOR IT, SO IT IS SENT (the owner, 2026-11-17: "If you ask it to sign up to those sites it should do it, nothing else required"):
     # the browser gate's own verdict, given his words - asked for, Taskuary presses the form's Enter and keeps the password it made; else his press
-    from . import browsergate
-    if not browsergate.judge(store, [{'verb': 'press', 'args': [], 'raw': f'send the filled sign-up form on {site}, creating an account there'}], browsergate.page(sid),
-                             said=browsergate.asked(store, tid))[0]['hold']:
-        return _sent_up(store, tid, sid, site, rid, pw, watch=watch)
+    # ...AND WHAT HE DID NOT ASK FOR, OR A PLAN THAT COSTS, IS ONE CARD IN THE CHAT (the owner, 2026-11-18): it was the site's own button, handed to
+    # him inside the embedded page - a press he had to find in a small pane. His press on the card sends it (send_held)
+    from . import browsergate, proposals
+    pg = browsergate.page(sid)
+    v = browsergate.judge(store, [{'verb': 'press', 'args': [], 'raw': f'send the filled sign-up form on {site}, creating an account there'}], pg,
+                          said=browsergate.asked(store, tid))[0]
+    if not v['hold']: return _sent_up(store, tid, sid, site, rid, pw, watch=watch)
     SIGNING_UP[(int(tid), site)] = {'pw': pw}       # memory only, as what he types on the page is (_TYPED)
-    _ask(store, tid, sid, site, rid, f'Sign up on {site}: check the form and press its button - the password is made and kept for you', watch)
+    proposals.queue(store, tid, {'action': 'browser_act', 'sid': str(sid), 'args': ['signup'], 'signup': site, 'command': f'send the sign-up form on {site}',
+                                 'url': pg.get('url') or '', 'site': site, 'what': v['what'], 'why': v['why']}, 'agent')
+    _continue(store, tid, rid, site, 'taskuary', words=(f'The sign-up on {site} waits for your press', f'The {site} form is filled and its password '
+              f'typed, and sending it is the owner\'s press ({v["why"]}): it stands as a card in this chat. Go on with the rest of the work; you are '
+              'told when it is sent and what the page shows.'))
+
+
+def send_held(store, tid, sid, p) -> dict:
+    """His press on a held sign-up's card (browsergate.perform): the form sent as an asked-for one is (_sent_up), the agent told by it."""
+    site = str(p.get('signup') or '')
+    up = SIGNING_UP.pop((int(tid), site), None) or {}
+    if not up.get('pw'):
+        from .browsergate import AGAIN
+        raise RuntimeError(f'Taskuary restarted since the {site} form was filled, so the password it typed is gone - nothing was sent. {AGAIN}')
+    _sent_up(store, tid, sid, site, f'{PREFIX}{site}', up['pw'], watch=watch)
+    return {'performed': p.get('what') or f'the sign-up on {site}', 'site': site}
 
 
 USER = "(() => { " + DEEP + " const a = deepActive(); return a && a.type !== 'password' ? String(a.value || '').slice(0, 200) : ''; })()"

@@ -903,6 +903,14 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         store.add_route(mid, None, 'feed', None,
                         msg.get('file_reason') or 'shown for information - this connection is a feed, not a task trigger', [], 'feed')
         return {'status': 'feed', 'task_id': None, 'message_id': mid}
+    # A CODE A SITE MAILED FOR AN AGENT'S OWN SIGN-UP is that act returning, never an arrival (signin.take_code): kept for the code watch to type
+    # into that site's page, off his rail - ahead of triage, as an auto-reply is below
+    from . import signin
+    if fresh and not is_chat(msg) and (own := signin.take_code(store, msg)):
+        mid = _land(store, msg, None, 'skipped')
+        store.add_route(mid, None, 'file', None, f"a code the site sent for the sign-up {task_ref(own)}'s agent is doing - typed into that site's "
+                        'page, never triaged', [], 'ingest')
+        return {'status': 'skipped', 'task_id': None, 'message_id': mid}
     # AN AUTO-REPLY IS NEVER TRIAGED (autoreply.py): kept so the Advisor knows who is away, and nothing else - no task,
     # no thread it joins, no rail row. Ahead of every rule and of triage, whatever the channel says.
     from . import autoreply

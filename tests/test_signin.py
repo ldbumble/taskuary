@@ -793,19 +793,28 @@ class SigningUp(unittest.TestCase):
         self.assertEqual(selfclose.signin_marker('Filled.\n[[TASKUARY-SIGNUP: rentscope.example]]'), ('Filled.', 'new:rentscope.example'))
         self.assertEqual(selfclose.signin_marker('x\n[[TASKUARY-SIGNIN: bank.example]]'), ('x', 'bank.example'))
 
-    def test_the_password_is_typed_and_the_page_is_his_to_send_watched_like_a_sign_in(self):
+    def test_a_sign_up_he_did_not_ask_for_is_one_card_in_the_chat_and_his_press_sends_it(self):
+        """The owner, 2026-11-18: a press that is his is "an approval like everything else" - one card in the chat, never the site's own button
+        handed to him inside the embedded page. Taskuary types the password; the sending is the card; his press sends it and keeps the password."""
         typed = []
-        self.run_signup(lambda sid, site, pw: typed.append((sid, site, pw)) or 2, until=lambda: self.watched)
+        self.run_signup(lambda sid, site, pw: typed.append((sid, site, pw)) or 2)
         (sid, site, pw), = typed
         self.assertEqual((sid, site), ('sess1', 'rentscope.example'))
         self.assertTrue(len(pw) >= 16 and any(ch.isdigit() for ch in pw) and any(not ch.isalnum() for ch in pw), 'a password a strict site takes')
-        req = signin.pending(self.s, self.tid)
-        self.assertEqual(req['site'], 'rentscope.example')
-        self.assertTrue(ws.status(self.s, self.tid)['requests'][-1]['text'].startswith('Sign up on rentscope.example: check the form and press its button'))
-        self.assertEqual([a[3] for a in self.watched], ['rentscope.example'], 'what he sends on it is heard and kept as a sign-in is (watch)')
+        self.assertIsNone(signin.pending(self.s, self.tid), 'nothing is handed to him on the page')
+        [rv] = self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (self.tid,))
+        p = json.loads(rv['DraftText'])
+        self.assertEqual((p['action'], p['signup'], p['sid']), ('browser_act', 'rentscope.example', 'sess1'))
+        self.assertIn('card in this chat', self.sess.said[0]); self.assertIn('Go on with the rest of the work', self.sess.said[0])
         self.assertIsNone(signin.saved(self.s, 'rentscope.example'), 'nothing is kept before the site took it')
-        self.assertEqual(self.sess.said, [], 'the agent waits for his press')
-        self.assertNotIn(pw, json.dumps([self.s._rows('SELECT * FROM audit'), self.s._rows('SELECT * FROM comment'), self.s._rows('SELECT * FROM worker_event')], default=str))
+        self.assertNotIn(pw, json.dumps([self.s._rows('SELECT * FROM audit'), self.s._rows('SELECT * FROM comment'), self.s._rows('SELECT * FROM review')], default=str))
+        # ...his press on the card: the form sent on the page it was filled on, the password kept, the agent told it signed up
+        from taskuary import browsergate
+        told = []
+        with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': 'https://www.rentscope.example/signup'}),              mock.patch.object(signin, 'send_new', return_value={'ok': True, 'user': USER}), mock.patch.object(signin, 'asks_code', return_value=False),              mock.patch.object(signin, '_continue', lambda *a, **k: told.append(k['words'])):
+            browsergate.perform(self.s, self.tid, p)
+        self.assertEqual(vault.unseal(signin.saved(self.s, 'rentscope.example')['Secret']), pw)
+        self.assertEqual(told[0][0], f'Signed up on rentscope.example as {USER}')
 
     def test_a_page_with_no_password_box_is_said_to_the_agent_and_nothing_is_asked(self):
         def fill(sid, site, pw): raise signin.SignInError(f'there is no password box on the {site} page')
@@ -934,6 +943,51 @@ class CodeByMail(unittest.TestCase):
         self.assertNotIn('383972', json.dumps([said, self.s._rows('SELECT * FROM audit')]))
 
 
+class TheAgentsOwnCode(unittest.TestCase):
+    """THE VENDOR WALKS, 2026-11-18: the agent pressed Create account itself, the site emailed its code, and the code landed on his rail as four
+    "unverified sender" FYI rows while the agent asked for it again. A code from the site the agent just acted on is its own act returning:
+    kept off the inbox ahead of triage (triage itself unchanged), typed into that site's page only, and never shown to the agent."""
+    def setUp(self):
+        self.s = MemoryStore(); self.tid = Factory(self.s).task('Market data from every vendor'); signin._TYPING.clear()
+        self.addCleanup(signin._TYPING.clear)
+
+    def msg(self, frm, body, ext='m1'):
+        return {'external_id': ext, 'channel': 'email', 'from_email': frm, 'from_name': 'LienLens', 'subject': 'Your LienLens code', 'body': body,
+                'to': ['alex@northwind.example']}
+
+    def test_a_code_from_the_site_the_agent_just_pressed_on_is_taken_off_his_rail_and_watched_for(self):
+        from taskuary import ingest
+        signin.acting(self.s, self.tid, 'sess1', 'lienlens.example')
+        watched = []
+        reads = lambda store, text, found, brain=None: '383972' if '383972' in found else ''
+        with mock.patch.object(signin, '_pick_code', reads), mock.patch.object(signin, 'code_watch', lambda *a: watched.append(a)):
+            out = ingest.ingest_message(self.s, self.msg('no-reply@lienlens.example', 'Your LienLens verification code is 383972.'))
+            self.assertEqual((out['status'], out['task_id']), ('skipped', None), 'never an arrival of its own: no FYI, no task')
+            end = time.time() + 5
+            while not watched and time.time() < end: time.sleep(.01)
+            self.assertEqual(watched, [(self.s, self.tid, 'sess1', 'lienlens.example')])
+            # ...an invoice from the same site holds numbers too, and is his: the model reads it as no code
+            self.assertIsNone(signin.take_code(self.s, self.msg('billing@lienlens.example', 'Invoice 48210 is due.', 'm2'), watch=None))
+            # ...and a code from a site no agent of his acted on is mail like any other
+            self.assertIsNone(signin.take_code(self.s, self.msg('no-reply@other.example', 'Your code is 555123.', 'm3'), watch=None))
+        signin._TYPING[(self.tid, 'lienlens.example')] = (0, time.time() - signin.CODE_FRESH - 1, 'sess1')
+        with mock.patch.object(signin, '_pick_code', reads):
+            self.assertIsNone(signin.take_code(self.s, self.msg('no-reply@lienlens.example', 'Code 383972.', 'm4'), watch=None), 'stale: his mail')
+
+    def test_the_code_is_typed_when_that_sites_page_asks_and_the_agent_told_to_look(self):
+        from taskuary import browsergate
+        signin.acting(self.s, self.tid, 'sess1', 'lienlens.example')
+        self.s.add_message({'Channel': 'email', 'FromEmail': 'no-reply@lienlens.example', 'FromName': 'LienLens', 'Subject': 'Your LienLens code',
+                            'BodyText': 'Your LienLens verification code is 383972.', 'Status': 'skipped'})
+        form_page = {'top': True, 'href': 'http://lienlens.example/signup', 'otp': False}
+        code_page = {'top': True, 'href': 'https://lienlens.example/verify', 'otp': True}
+        typed, told = [], []
+        with mock.patch.object(signin, '_type_code', lambda c, st, code: typed.append((st, code()))),              mock.patch.object(browsergate, '_tell', lambda s, t, text, **k: told.append(text)):
+            self.assertTrue(signin.code_watch(self.s, self.tid, 'sess1', 'lienlens.example', every=0, until=5, conn=WatchPage([form_page, code_page])))
+        self.assertEqual(typed, [('lienlens.example', '383972')])
+        self.assertIn('Taskuary typed the code lienlens.example emailed', told[0]); self.assertNotIn('383972', told[0])
+
+
 def test_a_sign_up_that_went_through_is_said_as_one():
     """The real-CLI walk, 2026-11-16: every account the sign-up road made read "You signed in to ... - saved for next time". The page's
     watch knows the ask was a sign-up, and the receipt says so."""
@@ -990,25 +1044,6 @@ def test_a_sign_up_taskuary_sent_that_asks_an_emailed_code_types_it_from_the_mai
     (actor, (did, said)), = told
     assert actor == 'taskuary' and did == f'Signed up on {site} as {USER}' and 'The owner pressed' not in said, told
     assert not any(r['Actor'] == 'owner' for r in s._rows("SELECT * FROM audit WHERE Action='signin_fill'")), 'nothing of it is said as his press'
-
-
-def test_a_sign_up_he_says_done_to_keeps_the_password_taskuary_made():
-    """A sign-up handed to him: Taskuary typed a password it made, he pressed the site's button and typed "done" in the chat before the page's
-    watch had seen it through (or with no watch able to reach the page). The ask closed as "Signed in", and the password - typed by Taskuary,
-    seen by nobody - was never kept: an account made with a password no one knows."""
-    from taskuary import browsergate
-    s = MemoryStore(); tid = Factory(s).task('Market data'); typed, told = [], []
-    site, rid = 'rentscope.example', 'signin:rentscope.example'
-    signin.SIGNING_UP.clear(); signin._TYPED.clear()
-    with mock.patch.object(browsergate, 'judge', return_value=[{'hold': True, 'what': 'creates an account', 'why': ''}]), \
-         mock.patch.object(browsergate, 'page', return_value={}):
-        signin._signup(s, tid, 'sess1', site, rid, lambda sid, st, pw: typed.append(pw) or 2, None)
-    assert signin.pending(s, tid)['request_id'] == rid
-    with mock.patch.object(signin, '_continue', lambda *a, **k: told.append(k.get('words')) or True):
-        signin.signed_in(s, tid, rid)
-    assert vault.unseal(signin.saved(s, site)['Secret']) == typed[0], 'the password the site was sent is kept'
-    assert told[0][0].startswith(f'Signed up on {site}'), told
-    assert (tid, site) not in signin.SIGNING_UP
 
 
 def test_a_saved_sign_in_whose_site_emails_a_code_types_the_code_from_the_mail():

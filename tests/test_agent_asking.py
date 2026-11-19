@@ -124,10 +124,12 @@ class AgentFinishedTests(unittest.TestCase):
 
 def test_every_worker_is_told_its_browser_is_the_way_where_no_connection_does_a_step():
     """The owner, 2026-11-18: asked for posts on three sites, the agent posted where a card could and wrote the other two as plain text - "it
-    should use browser if api not available of course". Every worker's rules say so, with the final press still his."""
+    should use browser if api not available of course". Every worker's rules say so - his ask its go-ahead, a held press his card - and a
+    site that fails is a fact to act on, never a blind retry (the owner, 2026-11-18: "stuck sites should not happen")."""
     from pathlib import Path
     rules = (Path(general.__file__).parent / 'templates' / 'agent.md').read_text(encoding='utf-8')
-    assert 'do it in your browser' in rules and 'for their press' in rules and "Never answer that you can't where a browser can" in rules
+    assert 'do it in your browser' in rules and 'their ask is the go-ahead' in rules and "Never answer that you can't where a browser can" in rules
+    assert 'A site that fails you' in rules and 'never retry it blindly' in rules
 
 
 

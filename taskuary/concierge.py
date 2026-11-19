@@ -4832,10 +4832,12 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
     tid = dock_tid or general.dock_task(store, actor)[0]['TaskId']
     # ...AND ONE JOB IS ONE TASK: his words arrive as a message does (ingest.arrive_words) - where triage reads an open task as already this
     # work, its agent hears his line there, by the one road into it - never a second task
+    # ...AND ITS TASK OPENS AT ONCE, his line on it and the agent shown at work (the judge's recording, 2026-11-19: New's words sat ~10 s on
+    # triage's read before any task existed): whether an open task is already this work is read alongside, before the agent is handed
+    # anything, and where it is, the new task folds into that one and the page follows it there (same_or_go, `foldedInto`)
     from . import ingest
     f = general.split_files(said or job)
-    if (same := ingest.arrive_words(store, f['text'] if said else job, 'owner', actor, skip={tid}, files=f['files'] or None, said=f['text'])):
-        return {'taskId': same['tid'], 'ref': task_ref(same['tid']), 'joined': True, 'started': True}
+    same_words = f['text'] if said else job
     brief = job if door else _handoff_brief(store, tid, job)
     # ...HIS WORDS ARE THE TASK'S OWN MESSAGE, AND ONLY HIS WORDS (recorded on the real CLI, 2026-11-15: the new task's bubble read his ask
     # and then "What we were talking about: remember that payroll questions go to Gail Got it - ..." - the Assistant's chat, in his name).
@@ -4852,6 +4854,7 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
         except Exception: general.OPENING.discard(made['taskId']); raise
         def first_turn():
             try:
+                if same_or_go(store, made['taskId'], same_words, actor, tid): return
                 from .server import _read_hand_task
                 _read_hand_task(made['taskId'], job, store=store)
                 # ...Taskuary's brief, never a second line in the owner's name: their words are the task's own message already, and the chat
@@ -4860,7 +4863,22 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
             finally: general.OPENING.discard(made['taskId'])
         threading.Thread(target=first_turn, daemon=True).start()
         made['started'] = True
+    else: threading.Thread(target=same_or_go, args=(store, made['taskId'], same_words, actor, tid), daemon=True).start()
     return made
+
+
+def same_or_go(store, new: int, words: str, actor: str, asked_on: int) -> bool:
+    """The same-work read a New task waits on, run beside its open (ingest.same_work): where triage names an open task as already this work,
+    the new one folds into it (reshape.merge_tasks - his words move with it, its agent told there) before its own agent was handed a thing.
+    True when it folded."""
+    from . import ingest, reshape
+    try: same = ingest.same_work(store, words, skip={asked_on, new})
+    except Exception as e: logger.info(f'the same-work read of {task_ref(new)} did not run, it stays new: {e}'); return False
+    if not same: return False
+    try: reshape.merge_tasks(store, new, same, actor)
+    except ValueError as e: logger.info(f'{task_ref(new)} was not folded into {task_ref(same)}: {e}'); return False
+    store.audit('task', same, 'joined_same_work', actor, detail={'from': 'owner', 'asked_on': [asked_on], 'opened': new})
+    return True
 
 
 def _resolve_named(store, phrase: str, item: dict | None) -> str | None:

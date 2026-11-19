@@ -946,6 +946,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   }, []);
   // ...and the read of the task just left is let go of: its answer would be thrown away (stale) after the server spent on it
   useEffect(() => { detailReads.current.drop(selected || null); }, [selected]);
+  // ...A NEW TASK FOLDED INTO THE OPEN ONE ITS WORDS ALREADY WERE (concierge.same_or_go) is followed there: one move, his line on it
+  const folded = detail?.task?.TaskId === selected ? detail?.foldedInto : null;
+  useEffect(() => { if (folded) (onOpenTask || onSelect)?.(folded); }, [folded]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // ...and keep it honest. The list was fetched ONCE, so a task whose agent picked it up
   // kept wearing "needs you" - and the pill counts kept agreeing with it - until something

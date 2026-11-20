@@ -149,6 +149,11 @@ def step(store, tid: int, sid: str, ref: str, step: dict, state=None) -> int:
         else:
             last = store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='turn' AND Parent IS NULL ORDER BY Id DESC LIMIT 1", (int(tid),)).fetchone()
             t = open_turn(store, tid)
+            # ...WHAT THE CLI WRITES AFTER HIS STOP IS NOT DRAWN (decided 2026-11-20): the turn reads stopped, the agent's record keeps the rest -
+            # no race between his Stop and its last words decides what he sees. Only his line or a message after the stop begins new work
+            if t is None and last and last['State'] == 'stopped' and not store.cx.execute(
+                    "SELECT 1 FROM chatlog WHERE TaskId=? AND Id>? AND Parent IS NULL AND Kind IN ('line','arrival') LIMIT 1", (int(tid), last['Id'])).fetchone():
+                return last['Id']
             if t is None:
                 prev = json.loads(last['Body']) if last else {}
                 k = f"{last['Key']}+{store.cx.execute('SELECT COUNT(*) FROM chatlog WHERE TaskId=? AND Kind=?', (int(tid), 'turn')).fetchone()[0]}" if last else f't:{sid}:0'
@@ -320,7 +325,10 @@ def _heard(store, tid: int, new: list, at: float) -> None:
             put(store, tid, 'turn', f't:{r}', {'started': at, 'ended': None, 'text': ''}, state='starting', src='heard', at=at)
     # ...HIS LINES HEARD AT A PRESS, THEIR TURN ON ITS WAY (general.stop_turn - the recorded stop, 2026-11-12: what waited is heard under the
     # stop, the turn that answers it at work from that moment): that turn stands under them from this read, never a beat of nothing under his line
-    if not any(k == 'turn' for k, _ in new) and any(k == 'line' for k, _ in new) and general.starting(tid) and not _live(store, tid):
+    # ...AND EVERY LINE OF HIS HEARD HAS ITS TURN UNDER IT AT ONCE (the owner's rule: after his line, the turn at work is under it; audit parity b:
+    # a card the agent raised in the gap before the turn's row landed loose): the turn at work above it goes on under it, from its own time
+    if not any(k == 'turn' for k, _ in new) and any(k == 'line' for k, _ in new) and not (open_turn(store, tid) or {}).get('State') in LIVE:
+        if (old := _live(store, tid)): update(store, tid, old['Key'], state='done')
         put(store, tid, 'turn', f't:{time.time_ns()}', {'started': at, 'ended': None, 'text': '', 'ahead': True}, state='starting', src='heard', at=at)
 
 
@@ -360,16 +368,18 @@ def answered(store, tid: int, cid: int, actor: str, body: str, created: str) -> 
     done = {'text': text, 'ended': _when(created), 'answer': f'comment-{cid}', **({'fail': fail.strip()} if fail else {})}
     # ...the turn at work, or one his stop or a failure ended that has not said its last words yet
     if t and (t['State'] in LIVE or t['State'] in ('failed', 'stopped') and not json.loads(t['Body'] or '{}').get('answer')):
+        if t['State'] == 'stopped': done = {**done, 'text': ''}       # ...an answer filed after his stop is the record's, never the stopped turn's words
         update(store, tid, t['Key'], state='failed' if fail or t['State'] == 'failed' else t['State'] if t['State'] == 'stopped' else 'done', **done)
     else:
+        with store.lock:                    # ...the last input before this answer: what its turn raised stands after it (below)
+            ins = store.cx.execute(f"SELECT MAX(Id) AS i FROM chatlog WHERE TaskId=? AND Parent IS NULL AND Kind IN ({','.join('?' * len(INPUTS))})",
+                                   (tid, *INPUTS)).fetchone()['i'] or 0
         opener(store, tid)                  # ...a task's first answer with no hand-over before it still opens on what started it
         n = put(store, tid, 'turn', f'a:c{cid}', {'started': _when(created), **done}, state='failed' if fail else 'done', src=f'comment:{cid}')
         # ...AND THE CARDS IT RAISED BEFORE ITS ANSWER WAS FILED ARE ITS OWN (audit parity, 2026-11-19: on the API road a reply raised mid-turn,
         # with no turn row yet, stood loose at the chat's foot while the CLI road's stood in its turn): what was put at the foot since the last
         # input is this turn's - still its last thing, under the words it just filed
         with store.lock:
-            ins = store.cx.execute(f"SELECT MAX(Id) AS i FROM chatlog WHERE TaskId=? AND Parent IS NULL AND Kind IN ({','.join('?' * len(INPUTS))})",
-                                   (tid, *INPUTS)).fetchone()['i'] or 0
             store.cx.execute("UPDATE chatlog SET Parent=?, Rev=Rev+1 WHERE TaskId=? AND Parent IS NULL AND Kind IN ('card','fail') AND Id>? AND Id<?",
                              (n, tid, ins, n)); store.cx.commit()
     # ...and a press he made while it worked, which no turn will hear (a second Trust, a tap on what was already done), goes in under it: kept
@@ -801,7 +811,8 @@ def advance(store, tid: int) -> None:
         if st != r['State']: update(store, tid, k, state=st, status=st)
     if front and (rv := by.get(front[0])) and f"r:{front[0]}" not in rows:
         # ...the turn that raised it (advance_soon kept it), else the one open now; a turn's card is drawn when that turn has ended
-        t = _raised(store, front[0]) or (open_turn(store, tid) or {}).get('Id')
+        # ...else the turn at work when it was raised, by its own time: a card is a turn's last thing, never loose where a turn was
+        t = _raised(store, front[0]) or (open_turn(store, tid) or _turn_at(store, tid, rv.get('CreatedAt')) or {}).get('Id')
         put(store, tid, 'card', f"r:{front[0]}", {**_card(rv), 'rids': front, 'line': cardqueue.line(q)}, parent=t,
             state='pending', src=f"review:{front[0]}")
     elif front and f"r:{front[0]}" in rows: update(store, tid, f"r:{front[0]}", line=cardqueue.line(q))
@@ -809,7 +820,7 @@ def advance(store, tid: int) -> None:
         if f'r:{rid}' in rows or rv['Status'] != 'pending' or cardqueue.in_line(rv) or rid in held: continue
         from .conversation import unwritten
         if unwritten(rv) or cardqueue.obsolete_read(store, tid, rv): continue
-        t = open_turn(store, tid)
+        t = open_turn(store, tid) or _turn_at(store, tid, rv.get('CreatedAt'))
         put(store, tid, 'card', f'r:{rid}', {**_card(rv), 'offer': True}, parent=t['Id'] if t else None, state='offer', src=f'review:{rid}')
     # ...AND ONE HE PRESSED BEFORE ITS ROW WAS WRITTEN STILL STANDS (nothing he did vanishes): raised and pressed - or pressed and failed -
     # within a beat, before the worker or any read put it, its row is written from the review as it is now, in the turn that raised it
@@ -820,7 +831,8 @@ def advance(store, tid: int) -> None:
         if f'r:{rid}' in rows or rv['Status'] == 'pending' or (rv.get('Batch') and rid != min(x for x, y in by.items() if y.get('Batch') == rv['Batch'])): continue
         if cardqueue.obsolete_read(store, tid, rv): continue      # ...a held read the gate lets through now was never his to answer, answered or not
         c = _card(rv)
-        if rv.get('DecidedBy') not in OWNER_ACTORS and c['status'] != 'failed': continue
+        # ...pressed, failed, or set aside because he wrote past it (his move, as a press is: it stood in front of him when he did)
+        if rv.get('DecidedBy') not in OWNER_ACTORS and c['status'] not in ('failed', 'passed'): continue
         t = _raised(store, rid) or (_turn_at(store, tid, rv.get('CreatedAt')) or {}).get('Id')
         put(store, tid, 'card', f'r:{rid}', c, parent=t, state=c['status'], src=f'review:{rid}')
 

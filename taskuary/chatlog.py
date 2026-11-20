@@ -706,7 +706,8 @@ def opener(store, tid: int, at: float = None) -> None:
 def _waits_from(store, tid: int):
     "When his oldest line still waiting for the agent was typed (epoch), or None - what comes in after it waits with it (came_in)."
     from . import general
-    ws = general.waiting_lines(store, int(tid))
+    led = {r['Ref'] for r in store._rows("SELECT Ref FROM heard WHERE TaskId=? AND Kind='line'", (int(tid),))}
+    ws = [w for w in general.waiting_lines(store, int(tid)) if (w.get('line') or '') not in led]      # ...one already heard is in the chat
     return min(_when(w['at']) for w in ws) if ws else None
 
 

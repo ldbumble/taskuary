@@ -91,7 +91,7 @@ class TheList(unittest.TestCase):
                 if when == 'answered': self.rest()
                 got = self.list()
                 self.assertEqual([(x['id'], x.get('state')) for x in got['items'][-4:-1]], [('l-one', None), ('t:l-one:0', 'failed'), ('l-two', None)], when)
-                self.assertEqual(got['items'][-3]['fail'], 'API Error: 529 overloaded.', when)
+                self.assertEqual(got['items'][-3]['fail'], "The AI provider didn't answer.", when)
             self.assertIsNone(got['items'][-3]['fix']); self.assertEqual(got['items'][-1]['text'], 'Answer 2.')
 
     def test_an_answer_from_before_the_ledger_stands_under_the_message_it_answered(self):

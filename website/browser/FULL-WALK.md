@@ -60,3 +60,37 @@ in the middle.
 For each finding: screenshot, the screen, the quote, the cause in the code (file:line). Group them into DESIGN flaws - one state said
 by one function, navigation that replaces, plain words from one wording function, one road per action - and fix the pattern at its
 source with a test that fails on the old code. Prove each fix with before/after screenshots on all three roads, then walk again.
+
+## Open issues to fix first (design walk, 2026-11-20 - owner approved)
+
+Screenshots of the walk that found them were taken on 0.4.1.2. Fix each PATTERN at its source, then walk again.
+
+**A. Two places state one fact and disagree** - compute each state once; every surface reads it.
+- WhatsApp card: "Starting the bridge..." beside "bridge not running · idle"; step 2 in bold says "The bridge is running"; Start and
+  Restart both lit. One status line, one button that fits the state, steps written as things to do.
+- Setup: "Nothing more is needed... press All ready" while the top bar says "connect your main source"; clicking Finish opened More
+  connections. All ready greys until the main source is set; the step you click is the step you get.
+- Agent permissions: "Full authority (default)" beside "Off for agents". One plain state per row.
+- HIPAA AI card: "Its agent runs on" said three times (box label, inside the box, help line).
+
+**B. Navigation stacks instead of replacing** (owner ruling 2026-11-20: going to a page REPLACES the view).
+- After Back, every page visited (Settings, Reports, Hub, About you, another task) sat above the task as a collapsed bar, the task
+  pushed half off the screen.
+- Three or four backs on one screen (header arrow, "Back to TQ-...", bottom Back, "‹ Email"); New has both × and Cancel and two
+  input boxes. One Back and one input per screen.
+- Section pickers (About you, Settings, Connections) open on chips and a blank page; the first click does nothing. Open on the first
+  section; the first press counts. An open connection card sits under the full 21-chip picker - collapse it.
+
+**C. Builder words and raw values on screen** - plain words from one wording function, the app's own font.
+- "Run CLI agents over ACP... Agent Client Protocol", "Default: on - unchanged" on every row, "fine-grained PAT", "Board's repo
+  picker", "coding agent's issue loop", "Baileys", "JOB.md", "0 reports (built under Reports)", "triage".
+- Reports rows in monospace; a run line "0.0s · nothing to say - no post · read 0 sender/subject lines"; all-caps "PLAYBOOKS - WHAT
+  THIS CONNECTION DOES FOR US"; Profiles rows "OUTSIDE information", "OUR OWN figures".
+- Step lines centred and quoting raw search queries; "next: the reply to gail@northwind.example" (an address, not a name).
+- File chips cut to "Q... 44 KB"; "a chat message cannot carry one".
+
+**Smaller**: an agent's decision left as prose ("For you to do: decide...") instead of a card; "Thinking..." under a finished answer;
+the header chip cut off ("Claude C..."); help text boxes narrower than their fields; "+ New playbook" wrapping alone; Hub's JOB.md
+tooltip covering search; New on "Working..." ~20 s before the task appeared.
+
+**Not yet walked**: search, FYI Send to agent, Settings toggles (the tool found no names for them), a Remind me date saved, autosave.

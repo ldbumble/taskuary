@@ -1116,8 +1116,9 @@ def to_agent(store, tid: int, said: str, actor: str = 'owner', heard=None, *, fr
     if frm == 'sender': return waitroom.add(store, tid, with_files(said, files) if files else said, waitroom.TEAMMATE)
     from . import origin
     t, sess = store.get_task(tid), ws._live(tid)
-    # ...a task held for a stranger's Trust keeps them by the box with the rest (waitroom: held_stranger), never in a turn it would refuse
-    if sess is not None and hasattr(sess, 'send_prompt') and not _asking(store, sess) and not origin.hold(store, tid):
+    # ...a task a stranger STARTED keeps them by the box with the rest (waitroom: held_stranger), never in a turn it would refuse - on his own
+    # task one who joined never holds back Taskuary's word of his own press (the Codex walk, 2026-11-19: Push's hand-back sat unheard)
+    if sess is not None and hasattr(sess, 'send_prompt') and not _asking(store, sess) and not origin.keeps_him(store, tid):
         _next_turn(store, tid, sess, said, line.get('wait'))
         if heard: heard('told')
         return 'told'

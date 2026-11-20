@@ -267,7 +267,8 @@ def _deliver(store, tid: int, new: int = None) -> dict:
     # ...AN UNTRUSTED SENDER'S TASK HANDS NOTHING OVER (origin.hold): it all waits, said in the chat with its Trust action - but on his own task
     # a stranger only joined (origin.his_own) his own words go on, and only what the stranger's mail brought waits for Trust
     if (h := origin.hold(store, tid)):
-        mine = [x for x in waiting if _by(x) == 'owner']
+        # ...his own notes and Taskuary's (a press told back - the Codex walk, 2026-11-19: Push's hand-back sat behind a joined notice)
+        mine = [x for x in waiting if _by(x) in ('owner', 'router')]
         if not (lines or mine) or not origin.his_own(store, tid): return {'delivered': 0, 'state': 'held_stranger', 'why': h['line'], 'left': len(pending)}
         waiting = mine; pending = lines + mine
     st, t = state(store, tid)

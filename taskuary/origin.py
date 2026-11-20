@@ -22,7 +22,9 @@ def own_system(store, row: dict) -> str:
     "Why this message is a notice from one of his own systems, else ''."
     if str(row.get('SenderClass') or row.get('HeaderClass') or '').lower() != 'automated' or _own(row): return ''
     dom = str(row.get('FromEmail') or '').rsplit('@', 1)[-1].lower() if '@' in str(row.get('FromEmail') or '') else ''
-    if dom and dom in senders.own_domains(store) - senders.PUBLIC_MAIL: return f'an automated notice from your own domain, {dom}'
+    # ...his domain or one under it: his CI mails from ci.northwind.example (the Codex walk, 2026-11-19: it joined his ledger task as a stranger)
+    own = senders.own_domains(store) - senders.PUBLIC_MAIL
+    if dom and any(dom == d or dom.endswith('.' + d) for d in own): return f'an automated notice from your own domain, {dom}'
     if (m := REPO_MARK.match(str(row.get('Subject') or ''))):
         # ...his repositories: the SOUL.md map, the coding checkouts and the ones his GitHub card reaches (its sources, channels.github_sync)
         from .terminal import known_repos
@@ -431,7 +433,9 @@ def launch_mode(store, tid, cli: str, cmd: str = '') -> str:
     cannot run safely.
     `cmd` is the profile's own command, so the version read is the binary that will launch."""
     from . import clis
-    if not tid or of_task(store, tid)[0] != 'stranger': return 'full'
+    # ...THE TASK'S MODE FOLLOWS WHO STARTED IT (the Codex walk, 2026-11-19: a notice that joined his own ledger task ran his next line in a
+    # stranger's folder with no checkout): on his own task a stranger who joined holds back their own words (JOINED_LINE), never his tools
+    if not tid or of_task(store, tid)[0] != 'stranger' or his_own(store, tid): return 'full'
     if (h := keeps_him(store, tid) if OWNER_SPEAKS.get() else hold(store, tid)): raise Refusal(h['line'])     # an untrusted sender: no agent, until Trust
     cli = clis._base(cli)
     # ...`cli` IS claude in the version check - the CLI's own name; a reviewer too old to refuse is no reviewer

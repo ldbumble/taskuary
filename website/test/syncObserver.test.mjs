@@ -112,3 +112,14 @@ test('a burst of live events is read once, after its last event', async () => {
   const f = fs.readFileSync(new URL('../src/FeedView.jsx', import.meta.url), 'utf8');
   assert.match(f, /api\.get\("\/api\/ingest\/status", \{ timeout: 10000 \}\)\.then\(\(\{ data \}\) => data\), gather: 250,/);
 });
+
+// A CARD'S SYNC NOW, BEFORE AND AFTER (the owner, 2026-11-20: "doesn't show what it syncs, how far back, how many messages etc.")
+test("a card's Sync now says what it pulls and how far back, then what it brought in and the tasks it made", async () => {
+  const { syncAsk, readSaid } = await import("../src/syncTiming.js");
+  assert.equal(syncAsk({ what: "3 chats switched on", readsBack: 0, lastAt: "" }), "Pulls in new messages from 3 chats switched on - everything waiting for it.");
+  assert.equal(syncAsk({ what: "alex@northwind.example", readsBack: 3 }), "Pulls in new messages from alex@northwind.example - going back 3 days the first time.");
+  assert.match(syncAsk({ what: "2 chats switched on", lastAt: "2026-11-20 09:00:00" }), /^Pulls in new messages from 2 chats switched on - everything since its last check, .*9:00/);
+  assert.match(readSaid({ n: 12, chats: 3, since: "2026-11-17 09:00:00", hours: 0, tasks: 2 }), /^12 messages from 3 chats since .*9:00.* - 2 new tasks$/);
+  assert.equal(readSaid({ n: 1, chats: 1, since: "", hours: 72, tasks: 0 }, "thread"), "1 message from 1 thread in the last 3 days - no new task from them yet");
+  assert.equal(readSaid(null), ""); assert.equal(readSaid({ n: 0 }), "");
+});

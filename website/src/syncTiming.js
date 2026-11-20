@@ -1,5 +1,5 @@
-import { clock } from "./dates.js";
-import { span } from "./timeWords.js";
+import { asUtc, clock, dayLabel } from "./dates.js";
+import { plural, span } from "./timeWords.js";
 // How long the Timeline waits before it asks the sync status again by itself. A sync that starts or ends says so on the
 // socket (store.set_setting('ingest_status') pushes ingest-status, and the observer reads at once), so an idle page only checks
 // slowly in case an event was lost. Watching twice a second for the 35 s before every due sync and the minute after it was
@@ -34,6 +34,16 @@ const lastOf = (h) => span(h * 60, true).replace(/^1 /, "");      // "the last 3
 // make drop down"): these, and the window the server says it will use now (`ReadsBack`, channels.first_read_hours) where that is another
 export const FIRST_DAYS = [1, 3, 7, 14, 30];
 export const backChoices = (now = 0) => [...new Set([...FIRST_DAYS, Number(now) || 0])].filter((d) => d > 0).sort((a, b) => a - b).map((d) => [d, span(d * 1440, true)]);
+// A CARD'S SYNC NOW SAYS WHAT IT PULLS AND WHAT IT GOT (the owner, 2026-11-20: "the Sync now button in connector ... doesn't show what it
+// syncs, how far back, how many messages"). Before the press: from where - `what`, its chats or its mailboxes - and how far back: the first
+// read's window (`readsBack` days, ReadsBack), else since its last check. After it: the card's last read (`LastRead`, channels.read_line).
+const when = (s) => { const d = dayLabel(s), t = clock(asUtc(s)); return d && d !== "Today" ? `${d.replace(/,.*$/, "")} ${t}` : t; };
+export const syncAsk = ({ what = "", readsBack = 0, lastAt = "" } = {}) =>
+  `Pulls in new messages from ${what || "this connection"} - ${readsBack ? `going back ${span(readsBack * 1440, true)} the first time`
+    : lastAt ? `everything since its last check, ${when(lastAt)}` : "everything waiting for it"}.`;
+export const readSaid = (r, noun = "chat") => !r?.n ? "" : [plural(r.n, "message"), r.chats ? `from ${plural(r.chats, noun)}` : "",
+  r.hours ? `in the last ${lastOf(r.hours)}` : r.since ? `since ${when(r.since)}` : ""].filter(Boolean).join(" ")
+  + ` - ${r.tasks ? plural(r.tasks, "new task") : "no new task from them yet"}`;
 export const broughtLine = (n, hours) => (hours ? `brought in ${n} from the last ${lastOf(hours)}` : n ? `brought in ${n}` : "");
 export const syncLine = ({ busy = false, phase = "", what = "", landed = 0, back = 0, brought = null } = {}) => {
   if (!busy) return brought ? broughtLine(brought.n || 0, brought.hours || 0) : "";

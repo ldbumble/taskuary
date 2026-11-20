@@ -55,7 +55,7 @@ import SavedSignins from "./SavedSignins.jsx";
 import { hint as btnHint, label as btnLabel } from "./buttons.js";
 import { noun, placeName } from "./words.js";
 import { plural } from "./timeWords.js";
-import { backChoices, broughtLine } from "./syncTiming.js";
+import { backChoices, broughtLine, readSaid, syncAsk } from "./syncTiming.js";
 import { openAppLink } from "./appLinks.js";
 import { LIT, lightField, lightStep } from "./connectorStep.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
@@ -2773,6 +2773,49 @@ const SIMPLE_HINT = {
 const metaOf = (conn) => { const p = presetOf(conn), m = META[conn.Type];
   return p && m ? { ...m, desc: p.desc, secretLabel: p.preset.secret || m.secretLabel, howto: p.preset.howto || m.howto } : m; };
 
+// ONE SYNC NOW ON EVERY CARD (the owner, 2026-11-20: "the Sync now button in connector (I was looking at WhatsApp) doesn't show what it
+// syncs, how far back, how many messages etc."): before the press, from where and how far back (syncTiming.syncAsk); after it, what the
+// card's last read brought in, from the server's own counts (LastRead, channels.read_line). Telegram's chat list had a button of its own
+// that said neither - it is this one now. `sync`: syncState - there once the server has the card on, greyed while an edit still saves.
+const READ_WAIT_MS = 90_000;
+function SyncNow({ conn, mine, sync, reload }) {
+  const { run, note } = useSaveNote();
+  const [pressed, setPressed] = useState(0), [heard, setHeard] = useState("");
+  const mail = MAIL_CARDS.includes(conn.Type), on = mine.filter((s) => s.Active), every = on.some((s) => s.Address === "*");
+  const what = mail ? on.map((s) => s.Address).join(", ") : every ? "every chat that writes to it" : on.length ? `${plural(on.length, "chat")} switched on` : "";
+  // ...pressed: read the card again until its check has moved past the press, then say what that check brought in
+  useEffect(() => {
+    if (!pressed) return undefined;
+    if (conn.LastSyncAt && conn.LastSyncAt !== heard) { setPressed(0); return undefined; }
+    if (Date.now() - pressed > READ_WAIT_MS) { setPressed(0); return undefined; }
+    const id = setTimeout(reload, 3000);
+    return () => clearTimeout(id);
+  }, [pressed, conn.LastSyncAt, heard, reload]);
+  const press = async () => {
+    setHeard(conn.LastSyncAt || "");
+    const r = await run(() => api.post("/api/ingest/poll"), { ok: "", lead: "Sync didn't start — " });
+    if (r.ok) setPressed(Date.now());
+  };
+  const got = readSaid(conn.LastRead, mail ? "thread" : "chat");
+  // ...a check after the last read that brought something found nothing new: said, with what the last one did
+  const fresh = !pressed && heard && conn.LastSyncAt !== heard;
+  const after = fresh && !(conn.LastRead?.at >= heard) ? `Nothing new${got ? ` - the last sync brought in ${got}` : ""}.` : got ? `Last sync: ${got}.` : "";
+  if (!sync.show) return null;
+  return (
+    <Box data-tq-sync-now="" sx={{ display: "flex", flexDirection: "column", gap: 0.5, flexBasis: "100%", alignItems: "flex-start" }}>
+      <Typography variant="body2" data-tq-sync-ask="" sx={{ color: DIM }}>{syncAsk({ what, readsBack: conn.ReadsBack, lastAt: conn.LastSyncAt })}</Typography>
+      {/* the reason sits on a wrapper: a disabled button takes no hover, so its own title never shows */}
+      <Box component="span" title={sync.why} data-tq-sync-why={sync.why || undefined} sx={{ display: "inline-flex" }}>
+        <Button size="small" variant="contained" disableElevation onClick={press} disabled={!!pressed || !sync.ok}
+          startIcon={pressed ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
+          sx={{ color: "#fff", background: sync.ok ? "linear-gradient(90deg, #55697a, #7d9a7c)" : undefined }}>{pressed ? "Syncing…" : btnLabel("sync_now")}</Button>
+      </Box>
+      {after && !pressed && <Typography variant="body2" data-tq-sync-got="" sx={{ color: INK }}>{after}</Typography>}
+      {note}
+    </Box>
+  );
+}
+
 export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, onBack: leave, onCreated, onNavigate, simple = false, onConnected, chatsAsk = null }) {
   // EVERY FIELD SAVES ITSELF (ConnectorDraft.jsx): every control below draws from the draft and stages into it, and the draft saves it
   const draft = useCardDraft(savedConn, savedSources, reload);
@@ -2833,8 +2876,6 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
     if (r.ok) setNewSrc("");
     reload();
   };
-  // the telegram flow says "hit Sync now" - so the button has to BE here, not on another tab
-  const [srcSync, setSrcSync] = useState(false);
   // the Outlook card leads with the sign-in; the tenant-app fields (an admin's road) fold
   // away unless they are already what this card runs on
   const [adminFields, setAdminFields] = useState(!MS_SIGNIN.includes(conn.Type) || (!!cfg.client_id && !!conn.HasSecret && cfg.auth !== "user"));
@@ -2850,12 +2891,6 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   const late = shownFields.filter(isPollField), early = shownFields.filter((f) => !isPollField(f));
   const need = early.filter((f) => !isOptional(f)), maybe = early.filter(isOptional);
   const [advanced, setAdvanced] = useState(false);
-  const syncHere = async () => {
-    setSrcSync(true);
-    const r = await run(() => api.post("/api/ingest/poll"), { ok: "Syncing — new items appear in a minute", lead: "Sync didn't start — " });
-    if (r.ok) setTimeout(() => { setSrcSync(false); reload(); }, 3000);
-    else setSrcSync(false);
-  };
   const toggleSource = (s) => draft.ctx.stageSource({ SourceId: s.SourceId, Active: !s.Active });
   // a source removed AT ONCE (the owner, 2026-10-21): "Removed <address> - Undo" under the list puts it back as it was
   const removeSrc = async (s) => { await run(() => removeNow(() => api.delete(`/api/sources/${s.SourceId}`), "source", s.Address), { ok: "", lead: "Not removed — " }); reload(); };
@@ -2944,7 +2979,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         {conn.Type === "telegram" && (
           <>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1, maxWidth: 560 }}>
-              No chat id to type: <b>message your bot</b> (or add it to a group), hit <b>{btnLabel("sync_now")}</b>, and the
+              No chat id to type: <b>message your bot</b> (or add it to a group), press <b>{btnLabel("sync_now")}</b> under Enable, and the
               chat appears below with its id — switched off. Flip on the chats that are yours; every other
               chat stays out, because a public bot can be messaged by anyone. The field at the bottom is only
               for an id you already know.
@@ -2952,15 +2987,6 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1, flexWrap: "wrap" }}>
               <Typography variant="caption" sx={{ color: FAINT }}>Your private chat with the Assistant, and the chats that reach your coding agents, are set on</Typography>
               <PhoneChatsLink onNavigate={onNavigate} />
-            </Box>
-            {/* one line at any width: wrapped on a phone, it shrank to one line as "Syncing…" and the list under it jumped */}
-            {/* the reason sits on a wrapper: a disabled button takes no hover, so its own title never shows */}
-            <Box component="span" title={sync.why} data-tq-sync-why={sync.why || undefined} sx={{ display: "inline-flex", maxWidth: "100%", mb: 1 }}>
-              <Button size="small" variant="outlined" onClick={syncHere} disabled={srcSync || (sync.show && !sync.ok)} sx={{ maxWidth: "100%" }}
-                startIcon={srcSync ? <CircularProgress size={11} /> : <SyncIcon sx={{ fontSize: 14 }} />}>
-                <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {srcSync ? "Syncing…" : "Sync now — pull in chats that messaged the bot"}</Box>
-              </Button>
             </Box>
           </>
         )}
@@ -3014,15 +3040,8 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
           </Typography>)}
         {/* another model answers this card's calls (brainroute.fell_line): the bell's own line, said where the card is */}
         {isAI && conn.FellBack && <Typography data-tq-fell-back="" variant="body2" sx={{ color: "var(--tq-warn, #7a5a1f)", flexBasis: "100%" }}>{conn.FellBack}</Typography>}
-        {/* the last step of a setup should be the first sync - not a wait for the ten-minute clock. It is there once the SERVER has the
-            card on (syncState), and greyed - the reason in its hover - while a box or a pick is still saving an edit it would not read */}
-        {sync.show && !isAI && (
-          <Box component="span" title={sync.why} data-tq-sync-why={sync.why || undefined} sx={{ display: "inline-flex" }}>
-            <Button size="small" variant="contained" disableElevation onClick={syncHere} disabled={srcSync || !sync.ok}
-              startIcon={srcSync ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
-              sx={{ color: "#fff", background: sync.ok ? "linear-gradient(90deg, #55697a, #7d9a7c)" : undefined }}>{srcSync ? "Syncing…" : btnLabel("sync_now")}</Button>
-          </Box>
-        )}
+        {/* the last step of a setup should be the first sync - not a wait for the ten-minute clock */}
+        {!isAI && <SyncNow conn={conn} mine={mine} sync={sync} reload={reload} />}
       </Box>
     )},
   ];

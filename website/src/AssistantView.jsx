@@ -3102,8 +3102,13 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   // `off`). A rail click mid-pull was refused as busy and did nothing at all. The latest ask wins; one queued before it is dropped.
   const pullRef = useRef(null), pressRowRef = useRef(null);   // ...pressRowRef: a rail row pressed by number (railPress, below)
   // `made`: the row of a task New just made (funnelPile.madeRow), which no rail row holds yet - drawn at the press as a rail row is
-  const pull = (key, asUser, made = null) => {
-    const row = (pileRef.current?.items || []).find((i) => i.key === key && !i.settling) || (made?.key === key ? made : null);
+  const pull = (asked, asUser, made = null) => {
+    // ...ONE ROAD TO A TASK (the owner, 2026-11-20: "Back is really slow"): Back, Forward, a link and search ask for `task:N`, which no rail row
+    // is keyed by - so nothing was drawn at the press and the table waited for the server's whole read (~800 ms against ~300 for the same task
+    // pressed on the rail). The task's own rail row is the one asked for, drawn at once and filled in place, as a rail press does
+    const tidOf = /^task:(\d+)$/.exec(asked || "")?.[1];
+    const row = (pileRef.current?.items || []).find((i) => (i.key === asked || (tidOf && String(i.tid) === tidOf)) && !i.settling) || (made?.key === asked ? made : null);
+    const key = row?.key || asked;
     const ahead = () => {
       rowsDrawn.current += 1; setRailOpen(false); browseDown(); setExpanded(false);
       const id = `a${Date.now()}`, was = openLater.current?.key;

@@ -716,13 +716,12 @@ def opener(store, tid: int, at: float = None) -> None:
     started it (a routine, a report - `s:`). Appended before the turn it began, once."""
     from . import ownwork
     from .conversation import started_by, stamp, _mail
-    from .general import split_files
     if _inputs(store, tid): return
     t = store.get_task(int(tid)) or {}
     row = next((x for x in _mail(store, int(tid)) if (x.get('Channel') or '') == OWN), None)
     if (said := ownwork.ask(store, t, row)):
         when = row['T'] if row else _when(t.get('CreatedAt'))
-        put(store, tid, 'line', f'a:{tid}', {'at': stamp(when), **split_files(said)}, src='ask', at=at)
+        put(store, tid, 'line', f'a:{tid}', {'at': stamp(when), **said}, src='ask', at=at)
     elif (by := started_by(store, t)):
         put(store, tid, 'arrival', f's:{tid}', {'who': by['head'], 'head': by['head'], 'channel': by['channel'], 'own': False,
                                                'at': t.get('CreatedAt'), 'files': 0, 'words': by['words']}, src='started', at=at)

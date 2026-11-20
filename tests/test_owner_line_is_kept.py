@@ -197,14 +197,14 @@ class AttachedFilesReachTheAgent(unittest.TestCase):
 
     def test_a_task_new_makes_with_a_file_names_it_in_its_own_folder(self):
         c = TestClient(server.app)
-        tid = c.post('/api/tasks', json={'Title': 'Who is this', 'Summary': f'Who is this?\n\nATTACHED IMAGES (read these files)\n{self.pic}'}).json()['taskId']
-        summary = self.s.get_task(tid)['Summary']
-        self.assertNotIn(str(self.pic), summary)
-        from taskuary import outputs
-        self.assertIn(str(outputs.folder(tid)), summary)
+        tid = c.post('/api/tasks', json={'Title': 'Who is this', 'Summary': 'Who is this?', 'Files': [str(self.pic)]}).json()['taskId']
+        from taskuary import outputs, store
+        t = self.s.get_task(tid)
+        self.assertEqual(t['Summary'], 'Who is this?', 'his words alone: the file is a field beside them')
+        self.assertEqual(store.files_of(t), [str(outputs.folder(tid) / 'the person.png')])
 
-    # ...AND A CARD HIS LINE GREYED SAYS HIS WORDS, NEVER THE FILE BLOCK (the attach stress round, 2026-11-18): once heard, his line's body is the
-    # words and the block (with_files), and the greyed card's sentence read it as JSON - the block's path ran into "you wrote ... after it",
+    # ...AND A CARD HIS LINE GREYED SAYS HIS WORDS, NEVER THE FILE BLOCK (the attach stress round, 2026-11-18): once heard, his line's body was the
+    # words and the block (with_files) - now the words, its files a field beside them - and the greyed card's sentence read it as JSON - the block's path ran into "you wrote ... after it",
     # a line of the file alone read as the path, and a heard "42" (JSON, but no line) threw, taking the whole chat's payload with it
     def heard_card(self, text, files=()):
         from taskuary import conversation, proposals
@@ -213,7 +213,9 @@ class AttachedFilesReachTheAgent(unittest.TestCase):
         self.s._exec("UPDATE review SET CreatedAt='2026-11-16 09:00:00' WHERE ReviewId=?", (rid,))
         general.wait_line(self.s, tid, text, list(files), line_id='l-1')
         general.take_kept(self.s, tid)
-        self.assertEqual(general.split_files(self.s.list_comments(tid, internal=True)[-1]['Body'])['files'], list(files))
+        from taskuary import store
+        row = self.s.list_comments(tid, internal=True)[-1]
+        self.assertEqual((row['Body'], store.files_of(row)), (text, list(files)), 'his words as the body, his files beside them')
         return tid, proposals.passed_why(self.s, self.s.get_review(rid))
 
     def test_a_card_his_line_with_a_file_greyed_says_his_words(self):
@@ -277,7 +279,7 @@ class AttachedFilesReachTheAgent(unittest.TestCase):
 
 # A TASK MADE IN NEW WITH A FILE OPENS ITS CHAT WITH HIS WORDS AND THE FILE'S PILL (the stress round of New's attachments): its ask line is the
 # task's own Summary - his words, then the block naming the file - and it was drawn with no files at all, so the paths stood in his bubble as
-# text and no pill was drawn. The ask is read the way every other line of his is (general.split_files)
+# text and no pill was drawn. Its files are the task's Files field now, read by ownwork.ask as a line's are by general.his_line
 class NewTasksAskKeepsItsFiles(unittest.TestCase):
     def setUp(self):
         from taskuary import config
@@ -288,7 +290,7 @@ class NewTasksAskKeepsItsFiles(unittest.TestCase):
     def made(self, name, data, words='what does this say?'):
         f = self.d / f'20991231-235959-abc123-{name}'; f.write_bytes(data); self.addCleanup(f.unlink, missing_ok=True)
         c = TestClient(server.app)
-        tid = c.post('/api/tasks', json={'Title': words, 'Summary': general.with_files(words, [str(f)]), 'Kind': 'general'}).json()['taskId']
+        tid = c.post('/api/tasks', json={'Title': words, 'Summary': words, 'Files': [str(f)], 'Kind': 'general'}).json()['taskId']
         from taskuary import ownwork, conversation
         ownwork.ensure(self.s, tid)
         return tid, next(x for x in conversation.items(self.s, tid)['items'] if x['kind'] == 'line')
@@ -313,14 +315,15 @@ class SendToAgentCarriesItsFiles(AttachedFilesReachTheAgent):
     class Session:
         quick, provider, model = False, 'Claude Code', ''
         def __init__(self): self.said = []
-        def send_prompt(self, prompt, brief=False): self.said.append(prompt)
+        # ...the turn names his files from the field it is handed (attachments): said here as the prompt the turn builds from them
+        def send_prompt(self, prompt, attachments=None, brief=False): self.said.append(general.with_files(prompt, attachments or []))
         def info(self, tail=0): return {}
 
     def send(self, mid, words):
         from fastapi import BackgroundTasks
         bg, ses = BackgroundTasks(), self.Session()
         with mock.patch.object(general, 'start_session', return_value=ses):
-            out = server.dispatch_message(mid, server.DispatchBody(kind='general', instruction=f'{words}\n\nATTACHED IMAGES (read these files)\n{self.pic}'), bg)
+            out = server.dispatch_message(mid, server.DispatchBody(kind='general', instruction=words, files=[str(self.pic)]), bg)
             for t in bg.tasks: t.func(*t.args, **t.kwargs)
         return out, ses.said
 
@@ -351,7 +354,8 @@ class SendToAgentCarriesItsFiles(AttachedFilesReachTheAgent):
         with mock.patch('taskuary.origin.hold', return_value=None):
             out, said = self.send(mid, f'Which of these change my week?{also}')
         self.assertIn('m7 - Gail Moreno: Parking moves Monday', said[0])                            # ...the agent is told
-        self.s.add_comment(out['taskId'], 'owner', general.USER_TYPE, said[0])                     # ...and the turn keeps it as his line
+        general.wait_line(self.s, out['taskId'], f'Which of these change my week?{also}', [str(outputs_folder(out['taskId']) / 'the person.png')], line_id='l-9')
+        general.take_kept(self.s, out['taskId'])                                                   # ...and the turn keeps it as his line
         line = next(x for x in conversation.items(self.s, out['taskId'])['items'] if x['kind'] == 'line')
         self.assertEqual(line['text'], 'Which of these change my week?')
         self.assertEqual(len(line['files']), 1)
@@ -363,3 +367,30 @@ class SendToAgentCarriesItsFiles(AttachedFilesReachTheAgent):
 def outputs_folder(tid):
     from taskuary import outputs
     return outputs.folder(tid)
+
+
+# ATTACHMENTS ARE A FIELD (the design loop, 2026-11-20): every door wrote his files into his words as a block, ~40 readers parsed it back, and a
+# door that wrote it slightly differently lost them from his bubble. A line, a task's ask and a kept note hold them in a Files field beside the
+# words; a home written before keeps every file it had - the block at the end of a row's words is moved into the field once, at start-up
+def test_a_line_and_an_ask_written_before_the_field_keep_their_files_after_the_upgrade():
+    from taskuary import conversation, ownwork
+    from taskuary.store import files_of
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Who is this', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'o')
+    block = lambda words, *fs: words + '\n\nATTACHED IMAGES (read these files)\n' + '\n'.join(fs)
+    s._exec('UPDATE task SET Summary=? WHERE TaskId=?', (block('who is this?', '/w/TQ-0001/badge.png'), tid))
+    s._exec("INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt,LineId) VALUES (?,?,?,?,?,?)",
+            (tid, 'owner', general.USER_TYPE, block('and her?', '/w/TQ-0001/a.png', '/w/TQ-0001/b.png'), '2026-11-19 09:00:00', 'l-old'))
+    s._exec("INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)",
+            (tid, 'owner', general.WAITING_TYPE, json.dumps({'text': 'one more', 'files': ['/w/TQ-0001/c.png'], 'after': 0}), '2026-11-19 09:01:00'))
+    with s.lock: s._files_out()
+    rows = s.list_comments(tid, internal=True)
+    assert [(general.his_line(r)['text'], files_of(r)) for r in rows] == [('and her?', ['/w/TQ-0001/a.png', '/w/TQ-0001/b.png']),
+                                                                          ('one more', ['/w/TQ-0001/c.png'])]
+    assert 'ATTACHED' not in ''.join(str(r['Body']) for r in rows)
+    t = s.get_task(tid)
+    assert (t['Summary'], files_of(t)) == ('who is this?', ['/w/TQ-0001/badge.png'])
+    assert ownwork.ask(s, t) == {'text': 'who is this?', 'files': ['/w/TQ-0001/badge.png']}
+    # ...and the prompt still names them, built from the field (general.prompt_line)
+    assert general.prompt_line(rows[0]).endswith('ATTACHED IMAGES (read these files)\n/w/TQ-0001/a.png\n/w/TQ-0001/b.png')
+    assert [x for x in conversation.items(s, tid)['items'] if x['kind'] == 'line']

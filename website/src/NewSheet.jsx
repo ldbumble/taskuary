@@ -23,7 +23,7 @@ import { ChannelIcon, MicButton, useAgents, usePeopleSearch } from "./ui.jsx";
 import { withFound } from "./peopleSearch.js";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { NO_REPO, REPEATS, hasWords, planTask, withDesktop } from "./newTask.js";
-import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
+import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { emailRecipientOptions, normalizeEmails, recipientId, recipientLabel, recipientOptions, sendPrefill, validEmail } from "./recipientOptions.js";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Checkbox from "@mui/material/Checkbox";
@@ -288,7 +288,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       if (kind === "send") {
         const { data } = await api.post("/api/outbox", {
           channel, to: channel === "email" ? emailTo : to.trim(),
-          cc: channel === "email" ? cc : [], about: withImages(about, pics.paths), mode,
+          cc: channel === "email" ? cc : [], about, files: pics.paths, mode,
         });
         setOk(mode === "task"
           ? `${data.ref} — an agent is finding out first; the message is drafted when it is done.`
@@ -311,7 +311,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         // A START REFUSED FILES ONE TASK, NOT ONE PER PRESS (the UI audit, 2026-10-21): the task was made before the start was asked
         // for, so each retry of a refused start filed another copy nobody worked on. The same words pressed again start the one filed.
         const again = filed.current?.about === about && filed.current.how === how ? filed.current : null;
-        const data = again || (await api.post("/api/tasks", { Title: about.slice(0, 300), Summary: withImages(about, pics.paths),
+        const data = again || (await api.post("/api/tasks", { Title: about.slice(0, 300), Summary: about, Files: pics.paths,
           Kind: plan.kind, Tags: withDesktop(plan.tags, deskOn && desk) })).data;
         if (!again) {
           filed.current = { ...data, about, how };
@@ -350,7 +350,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           setErr(NO_AI_PLAN); setErrAi(true); setBusy(false); return;
         }
         const title = about.split(/[.\n]/)[0].trim().slice(0, 120) || about.slice(0, 120);
-        const { data } = await api.post("/api/tasks", { Title: title, Summary: withImages(who ? `${about}\nInvolved: ${who}` : about, pics.paths),
+        const { data } = await api.post("/api/tasks", { Title: title, Summary: who ? `${about}\nInvolved: ${who}` : about, Files: pics.paths,
           DoneWhen: about.slice(0, 1000), DueAt: by || null, Kind: "task", Tags: "goal" });
         // the model writes the steps (server.plan_goal); "Track it" leaves the boxes to you
         if (plan && !noPlanner) api.post(`/api/tasks/${data.taskId}/read-ask`, { goal: true }).catch(() => null);

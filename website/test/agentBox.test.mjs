@@ -22,7 +22,7 @@ test("the box has the words, the mic and the paperclip, and says the one prompt 
 
 test("an item's box starts nothing by itself: its Start hands the words, the pictures and the agent chosen to the caller", () => {
   assert.match(ask, /data-tq-agent-start=\{coding \? "coding" : "general"\}\s[^>]*onClick=\{start\}/);
-  assert.match(ask, /text: withImages\(text\.trim\(\), pics\.paths\) \|\| ""/);
+  assert.match(ask, /text: text\.trim\(\), files: pics\.paths,/, "his files ride beside his words, never written into them");
   assert.match(ask, /agent: coding \? null : run\.agent \|\| null/);
   assert.match(ask, /brain: coding \? run\.brain \|\| null : null, pick: coding && run\.brain \? null : run\.pick \|\| null, model: run\.model \|\| null/);
   // ...the coding agent offered only where a coding tool is connected, the other kind one press away

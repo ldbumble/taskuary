@@ -974,7 +974,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ...the agent's turns, as the list holds them: what each said, by the name the page keys a turn by
   const turnsNow = (conv.list?.items || []).filter((x) => x.kind === "turn");
   // ...and what typing does there: into the running CLI as its next line, or the session picked back up with these words leading - the files
-  // named to the CLI by their paths after the words (promptImages.withImages), as every coding CLI reads a file
+  // a field beside the words, named to the CLI by their paths under them as the server builds its prompt (general.with_files)
   // ...and what a coding source reads once a line is in: its own sessions (the line itself goes the one road, holdText)
   const road = coding ? () => { onChanged?.(); conv.load(); } : null;
   // ...its screen is a card only on the pty road, and only while it asks (codingchat.live_of `asking`); over ACP Stop ends the turn

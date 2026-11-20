@@ -34,13 +34,12 @@ def test_the_assistants_own_chat_is_no_task_hit():
 
 
 def test_his_line_with_a_file_reads_as_his_words_and_the_files_name_never_the_block():
-    """The attach stress round, 2026-11-18: a heard line keeps its files in a block for the agent (general.with_files), and search drew that
-    block as his words - "look at this ATTACHED IMAGES (read these files) /home/.../scratch/outputs/TQ-0001/..." - and found the line by a word
+    """The attach stress round, 2026-11-18: a heard line kept its files in a block for the agent (general.with_files) - now a field beside his
+    words (comment.Files) - and search drew that block as his words - "look at this ATTACHED IMAGES (read these files) /home/.../scratch/outputs/TQ-0001/..." - and found the line by a word
     of the folder it was copied into."""
-    from taskuary.general import with_files
     s = MemoryStore()
     tid = s.create_task({'Title': 'Plan the offsite', 'Kind': 'general', 'Status': 'open'}, 't')
-    s.add_comment(tid, 'owner', USER_TYPE, with_files('look at this quokka', ['/home/alex/.taskuary/scratch/outputs/TQ-0001/venue plan.png']))
+    s.add_comment(tid, 'owner', USER_TYPE, 'look at this quokka', files=['/home/alex/.taskuary/scratch/outputs/TQ-0001/venue plan.png'])
     [h] = [x for x in search.everything(s, 'quokka')['hits'] if x.get('tid') == tid]
     assert 'ATTACHED' not in h['snippet'] and 'scratch' not in h['snippet'] and 'look at this quokka' in h['snippet'], h['snippet']
     assert [x['snippet'] for x in search.everything(s, 'venue plan')['hits'] if x.get('tid') == tid] == ['look at this quokka · venue plan.png']

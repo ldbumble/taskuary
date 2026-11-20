@@ -67,9 +67,9 @@ class NewsBoxIsTheOneStartTests(unittest.TestCase):
         r = self.start(ask, images=[str(self.up)])
         self.assertEqual(r.status_code, 200, r.text)
         t = self.s.get_task(r.json()['taskId'])
-        self.assertEqual((t['Kind'], general.split_files(t['Summary'])['text'].strip()), ('general', ask))
-        from taskuary import outputs
-        self.assertTrue((outputs.folder(t['TaskId']) / 'october-spend.csv').exists() or 'october-spend.csv' in t['Summary'])
+        self.assertEqual((t['Kind'], t['Summary']), ('general', ask), "his words alone: the file is the task's Files field")
+        from taskuary import outputs, store
+        self.assertEqual(store.files_of(t), [str(outputs.folder(t['TaskId']) / 'october-spend.csv')])
         self.assertTrue(r.json()['started']); general.start_session.assert_called_once()
         self.assertNotIn('the Assistant chat', ' '.join(str(c.get('Body')) for c in self.s.list_comments(t['TaskId'], internal=True)))
 

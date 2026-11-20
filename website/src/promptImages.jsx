@@ -14,7 +14,6 @@ import { pastedFiles } from "./promptPaste.js";
 export const IMAGE_TYPES = /^image\/(png|jpeg|gif|webp)$/;
 export const MAX_IMAGES = 8;
 export const IMAGE_ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
-export const isImagePath = (p) => /\.(png|jpe?g|gif|webp)$/i.test(String(p || ""));
 
 // one file to the server: a picture through the image road (its type check), anything else through the file road; { path, name, image }
 // ...IN A MINUTE OR TWO, or it says so (the owner, 2026-11-16: a paste's "Attaching..." never resolved and nothing was attached): an upload
@@ -179,7 +178,6 @@ export function ImageTray({ pics, sx, cannot = null }) {
 }
 
 // the words, then the files: how a CLI agent is shown a picture or a file (server.with_images says it the same way)
-// ...and the words alone, from a text withImages wrote (the server's general.split_files): a task's ask quoted on its page, never its paths
-export const wordsOf = (text) => String(text || "").replace(/\n\nATTACHED (?:IMAGES|FILES) \(read these files\)\n[\s\S]+$/, "");
-export const withImages = (text, paths) => (paths?.length
-  ? `${text || ""}\n\n${paths.every(isImagePath) ? "ATTACHED IMAGES" : "ATTACHED FILES"} (read these files)\n${paths.join("\n")}` : text || "");
+// WHAT HE ATTACHED IS A FIELD BESIDE HIS WORDS (the design loop, 2026-11-20): every door sends `files` (the saved uploads, pics.paths) next to
+// the words, and the server keeps them on the line or the task (store.files_json) - never a block written into the words, which ~40 readers
+// parsed back and a door that wrote it slightly differently lost from his bubble. A prompt's block is built on the server, from the field

@@ -37,6 +37,16 @@ def said(note) -> str:
     return f'{o} ({extra})' if extra else o
 
 
+def files_of(x: dict) -> list:
+    "What the owner attached to a waiting note - its Files field (store.files_of), or the files of his kept line it stands for (_lines)."
+    from .store import files_of as kept
+    return list(x.get('files') or kept(x))
+def told(x: dict, words: str = None) -> str:
+    "A note as a prompt carries it: its words, then the block naming his files (general.with_files) - built here, from the field."
+    from .general import with_files
+    return with_files(said(x.get('Note')) if words is None else words, files_of(x))
+
+
 def _by(x: dict) -> str:
     "Who wrote a waiting note: its writer as kept - one with none kept is Taskuary's, never the owner's (his own lines always name him)."
     return x.get('CreatedBy') or 'router'
@@ -63,7 +73,7 @@ def batch(notes: list, after_restart: bool = False, remaining: int = 0, waited: 
     ends = [n.rpartition('\n\n')[2] if '\n\n' in n else '' for n in (str(x.get('Note') or '') for x in notes if x.get('CreatedBy') == 'router')]
     once = ends[0] if len(ends) > 1 and ends[0] and len(set(ends)) == 1 else ''
     cut = lambda x: str(x.get('Note') or '')[:-len(once)] if once and x.get('CreatedBy') == 'router' else x.get('Note')
-    each = ' '.join(f'({i}) {said(cut(x))}' for i, x in enumerate(notes, 1))
+    each = ' '.join(f'({i}) {told(x, said(cut(x)))}' for i, x in enumerate(notes, 1))
     return ' '.join((head + ' ' + each + (f' FOR EACH MESSAGE ABOVE: {once}' if once else '') + tail).split())
 def together(lines: list, waiting: list) -> list:
     """What one hand-over takes of the waiting room, behind the owner's typed `lines`. WHAT TASKUARY ITSELF TELLS THE AGENT GOES IN TOGETHER
@@ -91,7 +101,7 @@ def to_general(store, tid, session, notes: list, after_restart: bool = False, re
         store.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, extra)
     for x in notes:
         store.add_comment(tid, 'owner' if _by(x) not in ('router', TEAMMATE) else general.BRIEF_ACTOR, general.USER_TYPE,
-                          parts(x.get('Note'))[0])
+                          parts(x.get('Note'))[0], files=files_of(x))
     if steer and session.steer(batch(notes, after_restart, remaining, waited=waited)): return True
     threading.Thread(target=session.send_prompt, args=(batch(notes, after_restart, remaining, waited=waited),), kwargs={'kept': True, 'brief': True},
                      daemon=True).start()
@@ -175,14 +185,15 @@ def _speaker(actor: str) -> str:
     return actor
 
 
-def add(store, tid: int, note: str, actor: str, owner: str = None) -> dict:
-    """Queue one note on a task. An agent already parked gets it at once; otherwise it waits."""
+def add(store, tid: int, note: str, actor: str, owner: str = None, files=None) -> dict:
+    """Queue one note on a task. An agent already parked gets it at once; otherwise it waits. `files`: what was attached to it, kept beside
+    its words (store.files_json) and named to the agent only as it is told them (told)."""
     note, actor = (note or '').strip(), _speaker(actor)
-    if not note: raise ValueError('empty note')
+    if not note and not files: raise ValueError('empty note')
     from .general import relayed
     if (extra := relayed(owner, note)): note = f"{' '.join(str(owner).split())}{SEP}{extra}"     # the owner's words kept as typed
     if not store.get_task(tid): raise ValueError(f'no task {tid}')
-    wid = store.add_waiting(tid, note, actor)
+    wid = store.add_waiting(tid, note, actor, files=files)
     store.audit('task', tid, 'waitroom_add', actor, detail={'wid': wid, 'chars': len(note)})
     # The note is QUEUED the moment it is written; handing it over may not be possible right now
     # (no CLI on this machine, no provider, every slot taken). That is not a failure of the note -
@@ -230,7 +241,7 @@ def _lines(store, tid: int) -> list:
     from . import general
     if general.handles(store.get_task(tid) or {}): return []
     return [{'WId': None, 'line': w['id'], **({'name': w['line']} if w.get('line') else {}), 'CreatedBy': 'owner', 'CreatedAt': w['at'],
-             'Note': general.with_files(w['text'], w['files'])}
+             'Note': w['text'], 'files': w['files']}
             for w in general.waiting_lines(store, tid)]
 
 
@@ -253,7 +264,7 @@ def _handed(store, tid: int, notes: list, how: str, takes: bool = False):
 
 def _shown(notes: list) -> list:
     "The owner's own words a prompt carries, drawn as his - each with its kept row's id where it has one."
-    return [{'text': parts(x.get('Note'))[0], 'line': x['line'], **({'name': x['name']} if x.get('name') else {})} if x.get('line') else parts(x.get('Note'))[0]
+    return [{'text': parts(x.get('Note'))[0], 'files': files_of(x), 'line': x['line'], **({'name': x['name']} if x.get('name') else {})} if x.get('line') else parts(x.get('Note'))[0]
             for x in notes if _by(x) not in ('router', TEAMMATE)]
 
 
@@ -326,7 +337,7 @@ def _deliver(store, tid: int, new: int = None) -> dict:
         # Taskuary's keep their place for the next plain stop, where they go as its brief
         if (his := [x for x in notes if _by(x) == 'owner']) and len(his) < len(notes): left += len(notes) - len(his); notes = his
         own, extra = parts(notes[0]['Note']) if len(notes) == 1 else ('', '')
-        text = (extra or own) if len(notes) == 1 else batch(notes, remaining=left)
+        text = told(notes[0], extra or own) if len(notes) == 1 else batch(notes, remaining=left)
         who = _by(notes[0])
         out = ws.answer_open(store, tid, text, who, owner=own if extra else None)
         # ...words that name none of a held request's buttons are no answer to it (workerstate.LINE): the line keeps its place, waiting for

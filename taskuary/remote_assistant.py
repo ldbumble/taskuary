@@ -969,11 +969,11 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
     """Answer synchronously; the poller runs this on a serialized background worker. `cancel` is set when a pick
     arrives behind this turn: the model's answer is dropped, never sent after the pick's.
     `images`: the pictures the owner sent with it, kept under attachments/ - shown to the Assistant as the desktop's are, and named
-    to an agent the words go on to (general.with_files)."""
+    to an agent the words go on to - as files beside the words (a hand-off's `files`, Continue's `images`), named in a prompt only (with_files)."""
     from . import concierge, general
     images = list(images or [])
     if images and not str(question or '').strip(): question = PICTURE_ONLY
-    told = general.with_files(question, images)                 # the words as they go on to an agent: the pictures named with them
+    told = general.with_files(question, images)                 # the words as a drafter's prompt reads them: the pictures named with them
     # `heard`: the words are a voice note's, as transcribed - the answer says them back first (A17)
     _ASKING.chat = {'channel': channel, 'chat': chat, 'connector_id': connector_id, **({'heard': question} if heard else {})}
     owner_spoke(store, channel, chat)                 # the owner wrote here: the chat may answer, for the session's window
@@ -1041,7 +1041,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
                 forget_offered(store, channel, chat)
                 try: was = json.loads(hand)
                 except ValueError: was = {}
-                send(store, channel, chat, run_act(store, {'t': 'hand', 'key': was.get('key') or '', 'verb': was.get('verb') or '', 'how': told}, item),
+                send(store, channel, chat, run_act(store, {'t': 'hand', 'key': was.get('key') or '', 'verb': was.get('verb') or '', 'how': question, 'files': images}, item),
                      connector_id)
                 return
             if hand: store.set_setting(f'{AGENT_KEY}:{channel}:{chat}', '', 'assistant')
@@ -1050,7 +1050,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             if pending and not picked:
                 # the line typed after "Continue" is what to tell the agent - a text field, not a word to read
                 forget_offered(store, channel, chat)
-                send(store, channel, chat, _continue(store, pending, told), connector_id)
+                send(store, channel, chat, _continue(store, pending, question, images), connector_id)
                 return
             if act and act.get('t') == 'page':
                 # the same list, the next page - kept whole again (the pick spent it above) so a typed number still answers
@@ -1751,7 +1751,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             if not _item_for(store, key, item): return 'That one is not in front of you any more - say next and I show what is.'
             verb = act.get('verb') if act.get('verb') in concierge.AGENT_STARTS[:2] else 'regular_agent'
             prop = concierge.propose_direct(store, verb, key, text=str(act.get('how') or '').strip(), actor=actor,
-                                            table=bool(item and item.get('key') == key), exact=True)
+                                            table=bool(item and item.get('key') == key), exact=True, picks={'files': list(act.get('files') or [])})
             return _settle(store, {**prop, 'alts': []}, item, actor)
         if t == 'trust': return _trust(store, int(act['tid']), act.get('key') or f"task:{int(act['tid'])}", actor)
         if t == 'files': return send_files(store, act, actor)
@@ -1867,11 +1867,11 @@ REDRAFT_KEY = 'remote_redraft'            # a Redraft pick waiting for what to c
 AGENT_KEY = 'remote_agent_ask'            # a Send to agent pick waiting for what it should do: the next typed or spoken line is it
 
 
-def _continue(store, tid, note: str) -> str:
-    """Continue, from the phone: the same road as the desktop's pill (server.continue_work)."""
+def _continue(store, tid, note: str, images=()) -> str:
+    """Continue, from the phone: the same road as the desktop's pill (server.continue_work) - his pictures as its files, beside his words."""
     from .server import ContinueBody, continue_work
     from fastapi import HTTPException
-    try: out = continue_work(int(tid), ContinueBody(note=note or None))
+    try: out = continue_work(int(tid), ContinueBody(note=note or None, images=list(images or [])))
     except HTTPException as e: return stuck(store, f'Could not continue it - {e.detail}.')
     ref = f'TQ-{int(tid):04d}'
     from . import concierge

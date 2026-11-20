@@ -262,7 +262,7 @@ test("every door that starts an agent on a task opens the box first - none start
   assert.match(form, /onClick=\{goalRun \? startGoalStep : startGeneralAgent\}/);
   // ...and a goal's step starts with what was said in its box
   const goal = tasks.slice(tasks.indexOf("const startGoalStep"), tasks.indexOf("CONTINUE SESSION is the rail's box here too"));
-  assert.match(goal, /instruction: withImages\(run\.instruction\.trim\(\), runPics\.paths\) \|\| null/);
+  assert.match(goal, /instruction: run\.instruction\.trim\(\) \|\| null, files: runPics\.paths/);
   // the canvas's own Send to agent (a chip or the Advisor's pick naming this task) opens the same box
   assert.match(tasks, /window\.addEventListener\("tq-agent-ask", on\)/);
 });

@@ -197,7 +197,8 @@ class AFileGoesWithTheJob(unittest.TestCase):
         tid = int(out['open'].split('=')[1])
         kept = outputs.folder(tid) / 'q3 census.pdf'
         self.assertTrue(kept.is_file(), 'the file is in the task folder')
-        self.assertIn(str(kept), s.get_task(tid)['Summary'], 'the task names it where its agent can read it')
+        from taskuary.store import files_of
+        self.assertEqual(files_of(s.get_task(tid)), [str(kept)], 'the task keeps it, beside his words, where its agent can read it')
         ownwork.ensure(s, tid)
         line = next(x for x in conversation.items(s, tid)['items'] if x['kind'] == 'line')
         self.assertEqual((line['text'], line['files']), ('summarise this for Erin', [str(kept)]))
@@ -218,8 +219,9 @@ class AFileGoesWithTheJob(unittest.TestCase):
         tid = int(out['open'].split('=')[1])
         kept = outputs.folder(tid) / 'q3 census.pdf'
         self.assertTrue(kept.is_file(), 'the file is in the task folder')
-        self.assertIn(str(kept), s.get_task(tid)['Summary'])
-        self.assertIn(str(kept), next(m for m in s.list_messages(tid) if outbox.is_ask(m))['BodyText'], 'his ask names the file')
+        from taskuary.store import files_of
+        self.assertEqual(files_of(s.get_task(tid)), [str(kept)], 'his ask keeps the file beside his words')
+        self.assertEqual(next(m for m in s.list_messages(tid) if outbox.is_ask(m))['BodyText'], 'The Q3 census, attached', 'his ask is his words, no path')
 
     def test_a_chat_messages_title_is_his_words_not_the_file_block(self):
         from taskuary import outbox
@@ -228,5 +230,5 @@ class AFileGoesWithTheJob(unittest.TestCase):
             o = outbox.compose(s, 'whatsapp', 'erin', 'see this', 'draft', llm=None)
         self.assertEqual(s.get_task(o['taskId'])['Title'], 'see this')
         with mock.patch('taskuary.capabilities.send_refusal', return_value=''), mock.patch.object(outbox, 'draft_message', return_value='Hi'):
-            o = outbox.compose(s, 'whatsapp', 'erin', 'see this\n\nATTACHED FILES (read these files)\n/x/q3.pdf', 'draft', llm=None)
+            o = outbox.compose(s, 'whatsapp', 'erin', 'see this', 'draft', llm=None, files=['/x/q3.pdf'])
         self.assertEqual(s.get_task(o['taskId'])['Title'], 'see this')

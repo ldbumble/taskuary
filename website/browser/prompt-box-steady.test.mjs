@@ -158,7 +158,7 @@ test("Enter in New while its file uploads: the task is made with the file", { ti
   await new Promise((r) => setTimeout(r, 2000));
   await typeThenPick(page, w, sel, "Make a one-page summary of this chart");
   assert.equal(posted.length, 1, JSON.stringify(posted));
-  assert.match(posted[0].body, /ATTACHED IMAGES|"images":\["/, `the task was made without its file: ${JSON.stringify(posted)}`);
+  assert.match(posted[0].body, /"(images|files|Files)":\["/, `the task was made without its file: ${JSON.stringify(posted)}`);
   assert.deepEqual(errors, []);
 });
 

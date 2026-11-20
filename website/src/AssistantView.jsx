@@ -73,7 +73,7 @@ import { SlotPicker } from "./CalendarPick.jsx";
 import ContinueBox from "./ContinueBox.jsx";
 import { AgentAsk } from "./RunForm.jsx";
 import CloseNote from "./CloseNote.jsx";
-import { AttachImage, ImageTray, usePromptImages, useSendWhenUp, withImages } from "./promptImages.jsx";
+import { AttachImage, ImageTray, usePromptImages, useSendWhenUp } from "./promptImages.jsx";
 import { handToItem } from "./ItemSections.jsx";
 import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, liveBrowseId, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, tableItemOf, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
@@ -2656,14 +2656,14 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     // ...A REPORT THE SAME (the owner, 2026-11-16: "report or dashboard or fyi they should all work the same ... it requires user prompt on what
     // they want to know about it"): his words start the task, its Came from the report and the agent working - never an empty task waiting on him
     if (handToItem(item.key, { verb: v, items: [{ key: item.key, title: item.title || item.ref || "this item" }],
-      start: (o) => startOnItem(item, { verb: o.verb, text: withImages(o.text, o.files) }) })) { setAgentOn(null); return; }
+      start: (o) => startOnItem(item, { verb: o.verb, text: o.text, files: o.files }) })) { setAgentOn(null); return; }
     setAgentOn({ item, coding });
   };
   // ...and its Start: the hand-off's own proposal, carrying what was said and the agent chosen (concierge.propose_direct), run at
   // once - the box was the confirmation. The walk then does what a hand-off always did: the task opens, working (runProposal)
   const startOnItem = async (item, o) => {
     const { data } = await api.post("/api/concierge/propose", { verb: o.verb, key: item.key, table: true, exact: true, text: o.text || null,
-      agent: o.agent || null, brain: o.brain || null, pick: o.pick || null, model: o.model || null, press: true });
+      agent: o.agent || null, brain: o.brain || null, pick: o.pick || null, model: o.model || null, files: o.files || [], press: true });
     if (!data?.id) throw new Error(data?.say || "It did not start.");
     setAgentOn(null);
     await runProposal({ ...data, key: data.key || item.key });

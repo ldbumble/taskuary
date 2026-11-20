@@ -556,6 +556,7 @@ class TaskBody(BaseModel):
     Title: str | None = None; Summary: str | None = None; Kind: str | None = None
     Priority: str | None = None; Status: str | None = None; Tags: str | None = None
     Assignee: str | None = None; DoneWhen: str | None = None; DueAt: str | None = None; ParentId: int | None = None
+    Files: list[str] | None = None   # ...what he attached to the ask (New), beside his words: saved uploads only (prompt_images)
 class ReadAskBody(BaseModel): goal: bool = False
 class MsgBody(BaseModel):
     external_id: str | None = None; channel: str = 'api'; subject: str | None = None
@@ -595,6 +596,7 @@ class DispatchBody(BaseModel):
     # general session resolves and saves; a cli_connections key would mean nothing to it.
     agent: str | None = None; brain: str | None = None; pick: str | None = None
     instruction: str | None = None; model: str | None = None
+    files: list[str] = []           # ...what he attached to the instruction, beside his words: saved uploads only (prompt_images)
     standing: bool = False          # a REPORT run only: learn this as a rule for every run, not a one-off use of this run
     # The button says "Send to agent".  The task's Kind remains authoritative once a task
     # exists; this hint is only how an unpromoted message says which kind of task to create.
@@ -1303,6 +1305,7 @@ def read_hand_task(task_id: int, background: BackgroundTasks, body: ReadAskBody 
 def create_task(body: TaskBody):
     if not body.Title: raise HTTPException(422, 'Title is required')
     fields = {k: v for k, v in body.model_dump().items() if v is not None}
+    if 'Files' in fields: fields['Files'] = prompt_images(fields['Files'])
     # A TITLE IS A LINE, NOT THE ASK (TQ-1215, the owner: "task name is 300 words. it should be limited"): + New filed its whole request
     # as the title. Cut at a word the way the assistant's own tasks are; the words as typed stay the Summary.
     # ...and a title that is his words is made by the one road (general.title_of) and marked his, so its agent may name it (take_name)
@@ -1316,7 +1319,7 @@ def create_task(body: TaskBody):
     if his: general.own_title(store, tid, words)
     # ...and a file attached in New is the task's own, in its folder - named under attachments/, its agent's Read was refused (2026-11-17)
     from . import outputs
-    outputs.take_in_summary(store, tid, ACTOR)
+    outputs.take_in_ask(store, tid, ACTOR)
     # A task created by the owner is their durable TODO. Agent runs may come and go without
     # silently completing it; only routed/triaged work is eligible for automatic completion.
     from . import selfclose
@@ -1335,10 +1338,10 @@ def start_from_words(body: StartBody):
     task made and its agent at work. Its answer went through the Assistant's model, which picked a form: "send me this every Monday" with a
     CSV landed on an empty SQL report, and a code fix was refused "No coding tool is connected" behind Developer mode. The agent does the
     kind with its tools; a start that cannot happen is the 422 every start door answers, with its way past it (StartRefused)."""
-    from . import concierge, general
+    from . import concierge
     words = str(body.text or '').strip()
     if not words: raise HTTPException(422, 'say what the agent should do')
-    try: made = concierge.handoff_task(store, words, 'general', ACTOR, said=general.with_files(words, prompt_images(body.images)), door='New')
+    try: made = concierge.handoff_task(store, words, 'general', ACTOR, said=words, files=prompt_images(body.images), door='New')
     except ValueError as e: _start_refused(None, None, e)
     return {'taskId': made['taskId'], 'ref': made['ref'], 'started': bool(made.get('started')), 'joined': bool(made.get('joined'))}
 
@@ -1517,13 +1520,13 @@ def _run_kind(op: dict, background: BackgroundTasks):
         k = str(p.get('kind') or 'task').lower()
         # WHAT THE OWNER SAID IN THE AGENT BOX starts it with those words (the owner, 2026-10-23): the chat road opened on the task's
         # own summary and dropped them. Said nothing and chose nothing, it is the chat road as it always was - the item is the ask
-        if k == 'general' and any(p.get(f) for f in ('instructions', 'agent', 'pick', 'model')):
+        if k == 'general' and any(p.get(f) for f in ('instructions', 'agent', 'pick', 'model', 'files')):
             return dispatch_message(mid, DispatchBody(kind='general', agent=p.get('agent'), pick=p.get('pick'), model=p.get('model'),
-                                                      instruction=p.get('instructions')), background)
+                                                      instruction=p.get('instructions'), files=p.get('files') or []), background)
         if k == 'general': return chat_message(mid, background)
         if k == 'coding':
             out = dispatch_message(mid, DispatchBody(kind='coding', agent=p.get('agent'), brain=p.get('brain'),
-                                                     instruction=p.get('instructions'), model=p.get('model')), background)
+                                                     instruction=p.get('instructions'), model=p.get('model'), files=p.get('files') or []), background)
             # a repository still to choose is a decision, not a start: the item stays where it is (PW-135)
             if out.get('dispatch') == 'needs_repo':
                 raise operations.Halt(f"{out.get('ref') or 'it'} needs a repository first - {out.get('reason') or 'pick one'}", out)
@@ -1539,7 +1542,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
         # checkout this belongs in" as a dead end - and its advice named a task menu the card redesign
         # had already removed (the owner, 2026-09-22: "don't see anywhere on agent or task to choose repo").
         out = dispatch_task(tid, DispatchBody(kind=p.get('kind'), agent=p.get('agent'), brain=p.get('brain'),
-                                              instruction=p.get('instructions'), model=p.get('model')), background)
+                                              instruction=p.get('instructions'), model=p.get('model'), files=p.get('files') or []), background)
         if out.get('dispatch') == 'needs_repo':
             raise operations.Halt(f"{out.get('ref') or 'it'} needs a repository first - {out.get('reason') or 'pick one'}", out)
         return out
@@ -1776,10 +1779,11 @@ def _run_kind(op: dict, background: BackgroundTasks):
     if kind == 'task.create_from_text':
         from . import concierge
         return concierge.handoff_task(store, str(p.get('text') or ''), str(p.get('kind') or 'coding'), ACTOR, title=p.get('title'),
-                                      repo=str(p.get('repo') or '') or None, profile=str(p.get('profile') or '') or None, said=p.get('said'))
+                                      repo=str(p.get('repo') or '') or None, profile=str(p.get('profile') or '') or None, said=p.get('said'),
+                                      files=p.get('files'))     # ...saved uploads, as the door that took them checked (prompt_images)
     if kind == 'task.setup':
         from . import concierge
-        return concierge.setup_task(store, str(p.get('text') or ''), ACTOR, title=str(p.get('title') or ''), said=p.get('said'))
+        return concierge.setup_task(store, str(p.get('text') or ''), ACTOR, title=str(p.get('title') or ''), said=p.get('said'), files=p.get('files'))
     if kind == 'message.archive': return file_message(mid, NotATaskBody(learn=False, archive=True), background)
     if kind == 'preference.exclude_sender': return not_mine(mid, NotMineBody(scope=str(p.get('scope') or 'sender')), background)
     # the bigger hammer, down the SAME road the card's own button took (ignore_sender, how='rule')
@@ -4759,9 +4763,10 @@ def _no_brain(task: dict | None, body: DispatchBody, kind: str = '') -> str:
 def _dispatch_task_to_its_agent(tid: int, body: DispatchBody, background: BackgroundTasks) -> dict:
     # ...WHAT HE ATTACHED ON THE BOX IS THE TASK'S OWN at this door too, as on his typed line (general.take_line): Send to agent on a report,
     # a dashboard or an FYI named the upload under Taskuary's own attachments, a path the agent's Read is refused
-    if body is not None and body.instruction and not body.app_words:
+    # ...a field beside his words (DispatchBody.files), never written into them
+    if body is not None and body.files and not body.app_words:
         from . import outputs
-        body = body.model_copy(update={'instruction': outputs.take_in_text(tid, body.instruction)})
+        body = body.model_copy(update={'files': outputs.take_in(tid, prompt_images(body.files))})
     with _STARTING_LOCK: gate = _STARTING.setdefault(int(tid), threading.Lock())
     waited = not gate.acquire(blocking=False)
     if waited: gate.acquire()
@@ -4830,7 +4835,7 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         from . import origin
         if (h := origin.hold(store, tid)):
             if (typed := str(body.instruction or '').strip()) and not body.app_words:
-                general.wait_line(store, tid, **general.split_files(typed))      # ...its files kept as files, a pill each, as take_line keeps them
+                general.wait_line(store, tid, typed, body.files)      # ...its files kept as files, a pill each, as take_line keeps them
                 return {'dispatch': 'held', 'started': False, 'existing': False, 'held': h['line'], 'taskId': tid, 'ref': task_ref(tid)}
             # ...and a press with no words of his is a start refused at the door, said with its way on (Trust) - as the offer's press is
             # (accept_offer): kept on the task for the Advisor, said as not done on the phone (2026-11-17, CI)
@@ -4860,8 +4865,11 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         # an explicit new instruction is sent, so clicking twice cannot duplicate the task.
         history = general.history(store, tid)
         typed = prompt = str(body.instruction or '').strip()
+        files = list(body.files or [])
         if not prompt and not history:
             prompt = str(task.get('Summary') or task.get('Title') or '').strip()
+            from .store import files_of
+            files = files or files_of(task)            # ...the ask's own files with it: the turn names them (send_prompt's attachments)
             # ...and a task triage left to the owner is the agent's now: its Summary said "Alex makes both changes by hand", and the agent
             # the owner sent it to read that as its orders and did nothing (the overnight run, 2026-11-03)
             if (was not in task_kinds.AGENT or body.handed) and prompt: prompt += '\n\n' + HANDED_OVER
@@ -4871,7 +4879,7 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         if prompt:
             def turn():
                 brief = not typed or body.app_words
-                try: session.send_prompt(prompt, brief=brief)
+                try: session.send_prompt(prompt, attachments=files or None, brief=brief)     # ...his files ride as the turn's own (send_prompt's attachments)
                 finally: general.OPENING.discard(tid)
             general.OPENING.add(tid)
             background.add_task(turn)
@@ -4884,7 +4892,8 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
     # THE BRAIN TRAVELS WITH THE ROLE. This called start_session without it, so a picked CLI got as
     # far as the door and no further: "chose devin from start coding agent screen but it started
     # claude code" (the owner, 2026-09-22). agent = who works it, brain = what runs it.
-    ses = start_session(store, tid, agent, body.model, body.instruction, brain=body.brain)
+    # ...a coding CLI is told his files under his words, the block built for its prompt from the field (general.with_files)
+    ses = start_session(store, tid, agent, body.model, general.with_files(body.instruction or '', body.files) if body.files else body.instruction, brain=body.brain)
     existing = bool((ses or {}).get('existing'))
     return {'dispatch': 'session', 'agent': agent, 'brain': body.brain, 'model': body.model, 'started': not existing, 'existing': existing,
             'accepted': (ses or {}).get('accepted'),      # the prompt was submitted, not merely typed (PW-209)
@@ -5774,6 +5783,7 @@ class OutboxBody(BaseModel):
     channel: str; to: str | list[str]; about: str; mode: str = 'draft'
     cc: list[str] = []
     subject: str | None = None; repo: str | None = None
+    files: list[str] = []           # ...what he attached to the ask, beside his words: saved uploads only (prompt_images)
 
 @app.post('/api/outbox')
 def outbox(body: OutboxBody):
@@ -5785,7 +5795,7 @@ def outbox(body: OutboxBody):
     review does, through the one door every outgoing message already goes through."""
     from . import outbox as ob
     try: return ob.compose(store, body.channel, body.to, body.about, body.mode, body.subject,
-                           body.repo, ACTOR, cc=body.cc)
+                           body.repo, ACTOR, cc=body.cc, files=prompt_images(body.files))
     except ValueError as e: raise HTTPException(422, str(e))
     except Exception as e: raise HTTPException(422, str(e)[:400])
 
@@ -7395,6 +7405,7 @@ class ConciergeProposeBody(BaseModel):
     press: bool = False
     # THE AGENT BOX'S ANSWERS (RunForm.AgentAsk): which profile, brain and model a hand-off runs on - the words ride in `text`
     agent: str | None = None; brain: str | None = None; pick: str | None = None; model: str | None = None
+    files: list[str] = []           # ...and what he attached on that box, beside the words (a hand-off's, AGENT_PICKS)
 
 @app.post('/api/concierge/propose')
 def concierge_propose(body: ConciergeProposeBody):
@@ -7405,7 +7416,7 @@ def concierge_propose(body: ConciergeProposeBody):
         tgt = rulebook.target_of(store, body.key)
         if tgt and rulebook.revision(store, *tgt) != body.revision:
             raise HTTPException(409, 'That one changed since its button was filled - read it again before pressing.')
-    picks = {'agent': body.agent, 'brain': body.brain, 'pick': body.pick, 'model': body.model}
+    picks = {'agent': body.agent, 'brain': body.brain, 'pick': body.pick, 'model': body.model, 'files': prompt_images(body.files)}
     try: return concierge.propose_direct(store, body.verb, body.key, body.text or '', ACTOR, table=body.table, exact=body.exact, picks=picks, press=body.press)
     except ValueError as e: raise HTTPException(422, str(e))
 
@@ -7542,12 +7553,6 @@ def prompt_images(paths) -> list[str]:
             if p.is_file() and p.is_relative_to(root): out.append(str(p))
         except (OSError, ValueError): continue
     return out
-
-
-def with_images(text: str, paths) -> str:
-    "The words, then the files this server saved - general.with_files, the one block every door writes."
-    from .general import with_files
-    return with_files(text, prompt_images(paths))
 
 
 def _upload_name(request: Request, ext: str = '') -> str:

@@ -14,7 +14,7 @@ import { Md } from "./md.jsx";
 import { MicButton } from "./ui.jsx";
 import { MESSAGE } from "./kinds.js";
 import { keepUnsent, unsent } from "./unsent.js";
-import { AttachRow, IMAGE_ACCEPT, INLINE_CHIPS, fileChips, fileState, usePromptImages, useSendWhenUp, withImages } from "./promptImages.jsx";
+import { AttachRow, IMAGE_ACCEPT, INLINE_CHIPS, fileChips, fileState, usePromptImages, useSendWhenUp } from "./promptImages.jsx";
 import { ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
 // ...a chatbot's answer, split into sections to read (the owner, 2026-11-05): a short bold heading over each, no rules, no boxes but the email's
@@ -119,7 +119,7 @@ export function NoAgentChat({ task, reviews = [], cards = null, closed = "", onS
     // had emptied, found the words still kept and put them back in its own box - under the same words in his bubble. A send that fails keeps them
     keepUnsent(task.TaskId, "");
     try {
-      const { data } = await api.post(`/api/tasks/${task.TaskId}/dispatch`, { kind: "general", instruction: withImages(words, pics.paths) });
+      const { data } = await api.post(`/api/tasks/${task.TaskId}/dispatch`, { kind: "general", instruction: words, files: pics.paths });
       setText(""); pics.clear(); onStarted?.(data);
     }
     catch (e) { keepUnsent(task.TaskId, text); setErr(e?.response?.data?.detail || "Could not start the agent - check that an AI is connected under Connections, then send it again."); }

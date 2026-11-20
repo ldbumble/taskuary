@@ -386,8 +386,8 @@ def _items(store, tid: int) -> dict:
     typed = any(k == 'line' and ref not in drawn0 for (k, ref) in led)
     if (asked or once or not any_mail and at_work and not pend and not typed and tid not in general.PRESSED) and (once or first is None or first['kind'] == 'turn') and (said := ownwork.ask(store, store.get_task(tid) or {}, asked)):
         at = asked['T'] if asked else ep((store.get_task(tid) or {}).get('CreatedAt'))
-        # ...his words and his files, read as every line of his is (split_files): a file attached in New stood in his bubble as its path
-        out.insert(0, {'id': f'a:{tid}', 'kind': 'line', 'at': stamp(at), **general.split_files(said), '_h': at})
+        # ...his words and his files, read as every line of his is (ownwork.ask): a file attached in New stood in his bubble as its path
+        out.insert(0, {'id': f'a:{tid}', 'kind': 'line', 'at': stamp(at), **said, '_h': at})
     # ...AND A START NOBODY TYPED OPENS IT AS WHAT STARTED IT (started_by): where no line or message stands above its first work
     work = next((i for i, x in enumerate(out) if x['kind'] in ('turn', 'step', 'line', 'arrival')), None)
     # ...from its first read on: a chat drawn without it (from before this) never gets it under what was already there

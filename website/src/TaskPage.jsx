@@ -6,7 +6,7 @@
 import { says, subState } from "./laneSays.js";
 import { outputRefs } from "./taskOutputs.js";
 import ContinueBox from "./ContinueBox.jsx";
-import { usePromptImages, withImages, wordsOf } from "./promptImages.jsx";
+import { usePromptImages } from "./promptImages.jsx";
 import { ASK_WHAT, RunForm } from "./RunForm.jsx";
 import CheckBackChip from "./CheckBackChip.jsx";
 import SwitchAi from "./SwitchAi.jsx";
@@ -1586,8 +1586,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // equally useful. This is the human TODO, not an agent-launch advertisement.
   // ...except where Summary is Taskuary's own brief to the agent (a playbook built with AI: the setup instructions and the example
   // email's raw record - ownwork.BRIEFED): its title is the ask, and the owner's words are in the conversation
-  // ...his words, never the files his ask names (wordsOf): those are pills on his line in the chat
-  const taskAsk = cleanText(t?.SourceRef === "assistant:playbook" ? t?.Title : wordsOf(t?.Summary) || sourceMessage?.BodyText || "");
+  // ...his words: the files his ask named are its Files field, pills on his line in the chat
+  const taskAsk = cleanText(t?.SourceRef === "assistant:playbook" ? t?.Title : t?.Summary || sourceMessage?.BodyText || "");
   // WHAT THEY ACTUALLY SAID. A task opens on one message and then keeps collecting the rest of
   // the conversation - three WhatsApp voice notes seconds apart are one thought, and ingest
   // attaches the later ones to the same task. The panel showed the FIRST and nothing else, so a
@@ -1641,7 +1641,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // THE ASK IS TRIAGE'S SUMMARY, whole (the owner, 2026-10-16: "the ask should be the triage summary") - its first sentence alone
   // read as the sender's voice ("Assistant for Backend Monitoring flags…") with the point cut off
   // ...never Taskuary's own brief to the agent (ownwork.BRIEFED: a playbook built with AI) - its title is the ask (taskAsk)
-  const askText = (t?.SourceRef === "assistant:playbook" ? "" : cleanText(verdict?.summary || wordsOf(t?.Summary) || opener?.ReadText || opener?.BodyText || "")) || taskAsk;
+  const askText = (t?.SourceRef === "assistant:playbook" ? "" : cleanText(verdict?.summary || t?.Summary || opener?.ReadText || opener?.BodyText || "")) || taskAsk;
   const askQuoted = !verdict?.summary && !t?.Summary && !!(opener?.ReadText || opener?.BodyText);   // the sender's words, not triage's
   // ...said once where it is the title's own words (taskLayout.askIsTitle): the band under the head is for a different sentence, or who it waits on
   // ...nor under What came in when it IS that one message's words (the product audit, 2026-11-08: the to-do's paragraph stood twice) - askInBody
@@ -2203,7 +2203,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // agent (422) and the repository come from the same road the general button and the assistant use -
       // no Kind PATCH before a terminal, so a failed start never leaves a relabelled, unstarted task
       const data = await runOperation(api, "dispatch.prepare", id, { kind: "coding", agent: run.agent || null, brain: run.brain || null, pick: run.brain ? null : run.pick || null,
-        model: run.model || null, instructions: withImages(run.instruction.trim(), runPics.paths) || null });
+        model: run.model || null, instructions: run.instruction.trim() || null, files: runPics.paths });
       if (!stale(id)) setTerm(data?.session || null);
       if (!stale(id)) {
         askTaken(id); runPics.clear();
@@ -2235,7 +2235,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       const { data } = await api.post(`/api/tasks/${id}/dispatch`,
         { kind: "general", agent: run.agent || null, pick: run.pick || null, model: run.model || null, ...(another ? { fresh: true } : {}),
           // what was typed in the box goes to it - this sent the pickers and dropped the words
-          instruction: withImages(run.instruction.trim(), runPics.paths) || null });
+          instruction: run.instruction.trim() || null, files: runPics.paths });
       const outcome = outcomeOf(data);
       if (!stale(id)) setTerm(outcome.state === "started" || outcome.state === "existing" ? (data.session || null) : null);
       // where the code is, still to say: the same question the coding start asks - it came back quietly and nothing opened
@@ -2286,7 +2286,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // `via`: the press was made HERE, so a start that fails is left on the goal, where its line is read (server._pressed_on)
       // ...with what was said in the box: the owner's words are the step's ask, the step and the goal its material
       const { data } = await api.post(`/api/tasks/${child}/dispatch`, { kind: "general", agent: run.agent || null, pick: run.pick || null, model: run.model || null, via: id,
-        instruction: withImages(run.instruction.trim(), runPics.paths) || null });
+        instruction: run.instruction.trim() || null, files: runPics.paths });
       if (!stale(id)) { askTaken(id); runPics.clear(); setRestartOpen(false); }
       const outcome = outcomeOf(data);
       if (outcome.state === "needs_repo") setErr(`${outcome.text} - open the step and pick one.`);

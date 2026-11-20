@@ -6,11 +6,11 @@ A typed ask that means an act brings its item up with the row's OWN button for i
 (`open`), or writes a new job into New (`new`) - and changes nothing until the owner presses. No proposal card is drawn from a typed
 ask on the desk; a phone chat, which has no buttons, keeps its text yes/no.
 """
-import json, unittest
+import json, os, unittest
 from datetime import datetime, timedelta
 from unittest import mock
 
-from taskuary import buttons, concierge, funnel, general, ingest, operations, server, terminal
+from taskuary import buttons, concierge, config, funnel, general, ingest, operations, server, terminal
 from taskuary.store import MemoryStore
 
 
@@ -490,11 +490,13 @@ class DeskRoutes(unittest.TestCase):
         for call in ({'kind': 'task.create_from_text', 'params': {'kind': 'routine', 'text': ask, 'recurs': recurs}},
                      {'kind': 'task.create_from_text', 'params': {'kind': 'report', 'text': ask}}):
             with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch.object(general, 'start_session') as began,                  mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(ingest, '_spawn'):
-                out = concierge.say(s, ask, llm=lambda *a, **k: 'CALL: ' + json.dumps(call), images=['uploads/october-spend.csv'])
+                up = config.home() / 'attachments' / 'router' / 'october-spend.csv'; up.parent.mkdir(parents=True, exist_ok=True); up.write_text('a,b')
+                out = concierge.say(s, ask, llm=lambda *a, **k: 'CALL: ' + json.dumps(call), images=[str(up)])
             self.assertNotIn('new', out, call); self.assertTrue(out.get('open', '').startswith('#task='), out)
             t = s.get_task(int(out['open'].split('=')[1]))
-            self.assertEqual(general.split_files(t['Summary'])['text'].strip(), ask)
-            self.assertIn('october-spend.csv', t['Summary']); self.assertEqual(t['Kind'], 'general'); began.assert_called_once()
+            from taskuary.store import files_of
+            self.assertEqual(t['Summary'], ask)
+            self.assertEqual([os.path.basename(f) for f in files_of(t)], ['october-spend.csv']); self.assertEqual(t['Kind'], 'general'); began.assert_called_once()
             self.assertNotIn('Wrote it into New', out['say'])
 
     def test_a_code_fix_with_developer_mode_off_is_a_general_agents_never_no_coding_tool(self):

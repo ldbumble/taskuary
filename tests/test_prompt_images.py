@@ -2,7 +2,7 @@
 import unittest
 from pathlib import Path
 from fastapi.testclient import TestClient
-from taskuary import config, server
+from taskuary import config, general, server
 
 c = TestClient(server.app)
 PNG = b'\x89PNG\r\n\x1a\n' + b'\0' * 32
@@ -39,10 +39,10 @@ class PromptImageTests(unittest.TestCase):
 
     def test_the_prompt_names_the_files_after_the_words(self):
         saved = c.post('/api/prompt-image', content=PNG, headers={'Content-Type': 'image/png'}).json()['path']
-        text = server.with_images('why does this fail?', [saved])
+        text = general.with_files('why does this fail?', server.prompt_images([saved]))
         self.assertTrue(text.startswith('why does this fail?\n\nATTACHED IMAGES'))
         self.assertIn(str(Path(saved).resolve()), text)
-        self.assertEqual(server.with_images('as is', []), 'as is')
+        self.assertEqual(general.with_files('as is', server.prompt_images([])), 'as is')
 
     def test_any_file_is_saved_by_its_name_and_named_as_a_file(self):
         r = c.post('/api/prompt-file', content=b'%PDF-1.4 hello', headers={'X-File-Name': 'q3%20report.pdf'})
@@ -50,7 +50,7 @@ class PromptImageTests(unittest.TestCase):
         p = Path(r.json()['path'])
         self.assertTrue(p.is_file() and p.name.endswith('q3 report.pdf'))
         self.assertEqual(server.prompt_images([str(p)]), [str(p.resolve())])
-        self.assertIn('ATTACHED FILES (read these files)', server.with_images('read it', [str(p)]))
+        self.assertIn('ATTACHED FILES (read these files)', general.with_files('read it', server.prompt_images([str(p)])))
 
     def test_a_file_name_never_climbs_out_of_its_folder(self):
         p = Path(c.post('/api/prompt-file', content=b'x', headers={'X-File-Name': '..%2F..%2Fconfig.toml'}).json()['path'])

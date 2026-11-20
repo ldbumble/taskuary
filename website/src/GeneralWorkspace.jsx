@@ -461,6 +461,10 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
     {!more && <div className="tq-aui-role">{name}{live ? <RunClock start={turnStart(t)} at={turnAt(t)} /> : <TurnTime t={t} />}</div>}
     <div className="tq-aui-agent-body">
       <TurnWorkView data={{ parts, level: t.level }} now={live} k={t.id} />
+      {/* ...WHAT IT MADE, WHERE IT STOOD WHILE IT WORKED (the API walk, 2026-11-20): under its work, above its words - an answer that comes at the
+          turn's end was drawn over a picture already on screen, and the picture jumped down */}
+      {!!rest.length && <PublishedPages pages={rest} open />}
+      {!!made.length && <TurnFiles files={made} />}
       {!!words && <SaidText text={words} mid={key} />}
       {/* ...A TURN THAT COULD NOT FINISH, WORTH ANOTHER TRY (its summary's `retry`): one button, never "send any message on this task to try
           again" (the 2026-11-18 walks) - pressed, it is his line "Try again." and the agent goes on */}
@@ -472,8 +476,6 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
             "I couldn't start yet" line under it (the judge's look, 2026-11-20) */}
         {newest && !!again && <div style={{ marginTop: 8, display: "flex", gap: 8 }}><button type="button" className="tq-chip primary" data-tq-turn-retry="" onClick={again}>{btn("try_again")}</button>
           {!!stopTries && <button type="button" className="tq-chip" data-tq-turn-stop-tries="" onClick={stopTries}>Cancel</button>}</div>}</div>}
-      {!!rest.length && <PublishedPages pages={rest} open />}
-      {!!made.length && <TurnFiles files={made} />}
       {/* ...what this turn asked him, where it asked it (the list's `asking.turn`): above its card, never at the chat's foot */}
       {ask}
       {!!cards?.length && <div data-tq-turn-cards="">{cards}</div>}

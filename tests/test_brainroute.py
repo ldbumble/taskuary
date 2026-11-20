@@ -366,3 +366,23 @@ def test_a_blank_anthropic_card_reads_mail_on_its_light_model_and_keeps_its_own_
         assert brainroute._words(s, f'connector:{cid}', cfg)['quick'] == llm.PROVIDER_LIGHT['anthropic']
         c = s.get_connector(cid); s.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps({**json.loads(c.get('ConfigJson') or '{}'), 'model': 'claude-sonnet-5'})}, 'owner')
         assert llm.PROVIDER_LIGHT['anthropic'] not in brainroute.choose(s, 'triage').model, 'a model he typed is his'
+
+
+def test_an_ai_cards_quick_agent_work_is_its_own_model_thinking_less_and_its_light_model_only_the_one_shot_jobs(real):
+    """A gateway card set up with a light model (firstrun.tier_models: a Flash) ran every agent task triage judged quick on it, and the agent
+    did the work badly (the owner, 2026-11-20). Its light box is for the one-shot jobs; an agent's quick gear is the card's own model at low
+    effort, normal its model, hard its strong one."""
+    s, cfg, cid = _home((), connector='hipaa_ai', settings={'ai_route_mode': 'auto'})
+    c = s.get_connector(cid)
+    s.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps({**json.loads(c.get('ConfigJson') or '{}'), 'base_url': 'https://gw.example',
+                      'model': 'gem-hydrogen', 'light_model': 'gem-flash', 'strong_model': 'gem-neon'})}, 'owner')
+    p = f'connector:{cid}'
+    for k in ('assistant_ai', 'triage_ai'): s.set_setting(k, p, 'owner')
+    with mock.patch.object(config, 'load', lambda: cfg):
+        assert brainroute.choose(s, 'triage').model in ('', 'gem-flash')       # ...the card's light box, swapped in by its gear
+        assert brainroute.choose(s, 'triage').gear == 'light'
+        q = brainroute.choose(s, 'general', difficulty='quick')
+        assert (q.pick, q.model) == (p, 'gem-hydrogen@low'), q.why
+        assert brainroute.choose(s, 'general', difficulty='standard').model in ('', 'gem-hydrogen')
+        assert 'gem-neon' in brainroute.choose(s, 'general', difficulty='hard').model or brainroute.choose(s, 'general', difficulty='hard').gear == 'strong'
+        assert brainroute._words(s, p, cfg)['quick'] == 'gem-hydrogen, low effort'

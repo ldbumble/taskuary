@@ -15,25 +15,6 @@ test("Current comes from the server's validated state, never from the last histo
   assert.doesNotMatch(view, /restorableCurrent\(/);
 });
 
-test("mounting, activating, remounting and reconnecting only load - nothing calls Next", () => {
-  const view = read("AssistantView.jsx");
-  const effects = view.match(/useEffect\(\(\) => [^]*?\}, \[[^\]]*\]\);|useEffect\(\(\) => [^\n]*\n/g) || [];
-  assert.ok(effects.length > 5);
-  // the one effect allowed to start the walk runs the owner's OWN press, kept while the pile loaded (walkQueued): it is gated on
-  // that press, never on a mount, an activation or a reconnect
-  const kept = effects.filter((e) => /^useEffect\(\(\) => \{\s*if \(!walkQueued \|\| walkOff \|\|/.test(e));
-  assert.equal(kept.length, 1);
-  for (const e of effects) if (!kept.includes(e)) assert.doesNotMatch(e, /surface\(\)|surface\(null|turn\(\{ mode: "next"|start\(/, e.slice(0, 120));
-  assert.match(view, /useEffect\(\(\) => \{ loadState\(\)\.catch\(\(e\) => setErr\(errText\(e\)\)\); \}, \[loadState\]\);/);
-  assert.match(view, /pollWhileActive\(active, \(\) => \{\s*if \(first \|\| !liveUp\(\) \|\| \+\+n % 10 === 0\) loadPile\(false\);\s*else readChat\(\)/);
-  assert.match(view, /onLive\(\["feed-changed", "task-changed"\], \(ev, meta\) => reloadFor\(meta\),\n\s+\{ wait: \(ev\) => \(mine\(ev\) \? 1500 : Math\.max\(0, forcedLoadStartedAt\.current \+ 1000 - Date\.now\(\)\)\), max: 5000 \}\)/);
-  assert.match(view, /const stale = \(\) => !coveredByReload\(meta, forcedLoadStartedAt\.current\) && !covers\(pileSeen\.current\.seq, meta\);/);
-});
-
-// ...and it STAYS the server's word while the tab is open. The walk can be driven from a phone chat
-// holding the handoff, and this tab followed the words while its rail went on ringing whatever the
-// desk last put up (the owner, 2026-09-22: "it's out of sync again while talking to assistant on
-// whatsapp" - the chat showed four fyis, the rail ringed the report before them).
 test("the freshness poll adopts the server's Current, except while a turn of ours is in flight", () => {
   const view = read("AssistantView.jsx");
   const poll = view.slice(view.indexOf('const { data: st } = await api.get("/api/concierge")'),

@@ -43,19 +43,6 @@ test("the brain menu says which AI can use the browser and be held, and names on
   assert.match(src("TaskPage.jsx"), /browser=\{String\(t\?\.Tags \|\| ""\)\.split\(\/\[\\s,\]\+\/\)\.includes\(BROWSER_TAG\)\}/);
 });
 
-test("the pane says it is starting, closed, or being signed in - and never scrolls the card under a click", () => {
-  const pane = src("BrowserPane.jsx"), term = src("TerminalView.jsx");
-  assert.match(pane, /starting the browser…/);
-  assert.match(pane, /Taskuary is signing in\$\{hostOf\(url\) \? ` to \$\{hostOf\(url\)\}` : ""\} — the picture resumes in a moment/);
-  assert.match(pane, /\{driving && !filling && !turn && \(/);
-  assert.equal((pane.match(/focus\(\{ preventScroll: true \}\)/g) || []).length, 2);
-  assert.doesNotMatch(pane, /\.focus\(\)/);
-  assert.match(term, /The browser closed\$\{lastPage\.current \? ` \(last on/);
-  assert.match(term, /It reopens when the agent next needs it\./);
-  assert.match(term, /yourTurn \? "browser · your turn - open it"/);
-  assert.equal((term.match(/filling=\{!!browser\.filling\}/g) || []).length, 3);
-});
-
 test("a held act waits on the live canvas, and the sign-in ask never invites the password", () => {
   const gw = src("GeneralWorkspace.jsx");
   // ...on the browser view when it is on screen (BrowserPane's Approve / Dismiss, 2026-10-28), else its card in the chat

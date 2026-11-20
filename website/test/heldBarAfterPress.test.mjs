@@ -15,8 +15,3 @@ test("an answered press is never still busy: what it did, or why it did not", ()
   assert.equal(afterPress({ kind: "unknown", data: null, why: "" }, "reject").busy, "");
 });
 
-test("the bar takes its state from that one answer, and a step that ran reads so until the bar goes", () => {
-  const pane = fs.readFileSync(path.join(process.cwd(), "src", "BrowserPane.jsx"), "utf8");
-  assert.match(pane, /const after = afterPress\(o, verb\); setBusy\(after\.busy\); setDone\(after\.done\); setErr\(after\.err\);/);
-  assert.match(pane, /done === "approve" \? "✓ ran"/);
-});

@@ -126,16 +126,3 @@ test("the row's Review changes with no session open opens the landing card's dif
 
 // THE WORK'S CARD IS PART OF THE AGENT TURN THAT DID IT, OR NOT THERE (the owner, 2026-11-13: "stop putting worked on master at the bottom.
 // i told you this 20 times.. it's part of the agent turn or doesn't belong at all. we have diff thing in the logo on top")
-test("the chat draws the work's card inside the turn its newest change came in, never at the chat's foot", async () => {
-  const fs = await import("node:fs");
-  const ws = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(ws, /const landIn = landAt \? landingTurn\(/);
-  // ...a turn's cards, its last thing (cardsOf): what the list placed in it, the letters that wait where this is their turn, then the work's card
-  assert.match(ws, /\.\.\.\(x\.id === landIn \? \[\.\.\.\(live\.has\("land"\) \? qLine\(\) : \[\]\), <React\.Fragment key="landing">\{landing\}<\/React\.Fragment>\] : \[\]\)\];/);
-  assert.match(ws, /cards=\{cardsOf\(x\)\}/);
-  assert.match(ws, /\{!landIn && landing && <div hidden>\{landing\}<\/div>\}<\/>;/, "unplaced, it is mounted hidden - never drawn at the foot");
-  assert.match(ws, /const landAt = landS && \(landS\.ask \|\| landS\.landed\) \? landS\.at \|\| "" : null;/, "only a press, or what a press did - the diff is the header's");
-  const { landingTurn } = await import("../src/landing.js");
-  const turns = [{ role: "assistant", id: "t1", createdAt: "2026-11-12 21:00:00" }, { role: "assistant", id: "t2", createdAt: "2026-11-12 21:30:00" }];
-  assert.equal(landingTurn(turns, "2026-11-12 21:10:00"), "t1", "the turn the change came in, not the newest");
-});

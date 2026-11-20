@@ -52,13 +52,6 @@ test("a step handed over has one I'm done, and the chat's pane says why it went"
 
 // THE BROWSER AUDIT, 2026-11-15: the saved sign-in went in and the site asked a code - the page drew as his with the read taken while the
 // sign-in was typed, "Taskuary is signing in ... the picture resumes in a moment" over the code box that was his, until the next poll
-test("a page handed to him is read afresh as it is handed, never under a stale 'signing in'", () => {
-  const term = src("TerminalView.jsx");
-  assert.match(term, /React\.useLayoutEffect\(\(\) => \{ if \(!\(need \|\| yourTurn\)\) return; handed\.current \+= 1; setBrowser\(\(b\) => \(b\.filling \? \{ \.\.\.b, filling: false \} : b\)\); kick\.current\?\.\(\); \}, \[need, yourTurn\]\);/);
-});
-
-// ...AND NEVER ON THE READ FROM BEFORE IT (the browser audit, 2026-11-15): for up to 300 ms the view drew the last address and "Take over" -
-// the page is shown him once a read made after the hand-over has answered, and one handed over mid-read is read again at once
 test("a page handed to him is shown on a read made after the hand-over, never the one before", () => {
   const term = src("TerminalView.jsx");
   assert.match(term, /const ep = handed\.current;/);

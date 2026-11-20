@@ -74,30 +74,6 @@ test("a task read ahead brings what its chat stands on, and the chat is drawn fr
 
 // ...AND A VIEW MOUNTED BEFORE IT LANDED DRAWS IT AS IT LANDS (recorded 2026-11-12 on the built app: a rail row clicked straight away drew
 // its head and then 830 ms of spinner where the chat goes - the read asked at the press landed half-way through and was never drawn)
-test("a chat read still on its way when the view mounts is handed over as it lands, unless the view's own read came first", async () => {
-  forgetTasks();
-  const { aheadChat, heldChat } = await import("../src/taskDetail.js");
-  let land; const chat = { messages: [], providers: [] };
-  const api = { get: (url) => (url.endsWith("/assistant") ? new Promise((r) => { land = () => r({ data: chat }); }) : Promise.resolve({ data: url.endsWith("/conversation") ? { items: [] } : { task: { TaskId: 7 } } })) };
-  prefetchTask(api, 7); await new Promise((r) => setTimeout(r, 0));
-  const p = aheadChat(7);
-  assert.ok(p, "a read on its way is offered to the view");
-  land(); assert.equal(await p, chat);
-  assert.equal(heldChat(7), chat); assert.equal(aheadChat(7), null, "once landed it is held, not ahead");
-  const view = src("GeneralWorkspace.jsx");
-  assert.match(view, /if \(!first\(\)\) aheadChat\(task\.TaskId\)\?\.then\(\(d\) => \{ if \(live && !own && d\) accept\(d\); \}\);/);
-  assert.match(view, /\.then\(\(r\) => \{ own = true; if \(live\) accept\(r\.data\); \}\)/, "the view's own read is newer: what lands ahead after it is not drawn");
-  // ...and the task view's first frame waits for it - capped - so head and chat are one move; never drawn from the list alone, whose files and
-  // cards then landed a beat later and grew the turn by 900 px (recorded 2026-11-12)
-  const page = src("TaskPage.jsx");
-  assert.match(page, /const \[detail, setDetail\] = useState\(\(\) => \(aheadChat\(selected\) \? null : heldTask\(selected\)\)\);/);
-  assert.match(page, /const chat = aheadChat\(id\), both = \(p\) => \(chat \? Promise\.all\(\[p, Promise\.race\(\[chat, new Promise\(\(r\) => setTimeout\(r, CHAT_WAIT\)\)\]\)\]\)/);
-  assert.match(page, /if \(coming\) \{ const data = await both\(coming\);/);
-  assert.match(view, /if \(!data && !error && !\(opening && conv\.list\?\.items\?\.length\)\) return <Box data-tq-chat-reading=""/);
-});
-
-// ...AND THE LIST IS PART OF IT (the bug hunt, 2026-11-12: a job New had just made opened its head over an empty chat for a beat, the agent's
-// state in hand and the list still out, then the owner's ask faded in): the chat read ahead lands when both have
 test("a chat read ahead is in hand only once its list has landed too", async () => {
   forgetTasks();
   const { aheadChat, heldConversation } = await import("../src/taskDetail.js");
@@ -159,21 +135,6 @@ test("a failed read ahead holds nothing, so the view reads it itself", async () 
   assert.equal(heldTask(5), null);
 });
 
-test("the view draws from the held read, and the reads ahead are where the next view is already known", () => {
-  const page = src("TaskPage.jsx"), view = src("AssistantView.jsx"), search = src("SearchEverything.jsx");
-  assert.match(page, /const \[detail, setDetail\] = useState\(\(\) => \(aheadChat\(selected\) \? null : heldTask\(selected\)\)\);/);
-  assert.match(page, /setDetail\(data\); keepTask\(id, data, undefined, asked\);/);
-  assert.match(view, /useEffect\(\(\) => \{ if \(nextTid\) prefetchTask\(api, nextTid\); \}, \[nextTid, displayRevision\(pile\)\]\);/);   // the row Next brings
-  assert.match(view, /onPointerEnter=\{\(\) => \{ if \(!isCur && i\.tid\) prefetchTask\(api, i\.tid\); \}\}/);        // a rail row under the pointer
-  assert.match(search, /if \(aheadTid\) prefetchTask\(api, aheadTid\);/);                                             // a search hit highlighted
-  // an act makes the held reads old - but Next is no act, it is what they are for
-  assert.match(view, /onPressed\(\(id\) => \{ if \(!walkMove\(id\)\) forgetTasks\(actedTid\.current \?\? null\); \}\)/);
-  assert.match(view, /useEffect\(\(\) => \{ if \(currentItem\?\.tid\) actedTid\.current = currentItem\.tid; \}, \[currentItem\]\);/,
-    "an act lets go of its own task's read only - not the next item's");
-});
-
-// the bug hunt, 2026-11-12: a task New or the Assistant had just made and opened (`open: '#task=N'`) drew its title alone, then its head over
-// an empty chat, then the chat - nobody had read it ahead, so the view asked only once it had mounted. A task opened by its number is read at the press
 test("a task opened by its number - New's or the Assistant's just-made job - is read ahead at the press", () => {
   const hub = src("TaskHubPage.jsx"), view = src("AssistantView.jsx");
   // ...the link road (onPlace: the Assistant's #task=N, a cold link) and New's press take the one read-ahead

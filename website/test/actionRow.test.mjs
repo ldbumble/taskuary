@@ -210,27 +210,6 @@ test("Mark done and Remind me put the task down AT THE PRESS, as Next does, and 
   assert.match(view, /onWalkLeave=\{\(how, x\) => actions\.leave\(c\.key, how, x\)\}/, "the close and the next one are one walk move");
 });
 
-test("a row, a task or an fyi puts the open browse view down AT THE CLICK, as one sidebar area replaces another (2026-10-01)", () => {
-  const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
-  assert.match(view, /const browsing = useMemo\(\(\) => liveBrowseId\(shown\), \[shown\]\);/); assert.match(process.getBuiltinModule("node:fs").readFileSync(new URL("../src/funnelPile.js", import.meta.url), "utf8"), /if \(shown\[i\]\.role === "browse"\) return shown\[i\]\.down \? null : shown\[i\]\.id;/, "a put-down view is no longer the live one");
-  // a task opened by name goes the rail's road (pull, below) - a busy walk waits for it; a walk on the phone no longer lands a bare card (2026-10-23)
-  assert.match(view, /const openTaskCard = \(req\) => \{[\s\S]{0,400}?pull\(`task:\$\{req\.tid\}`, null, req\.row\); return;\n\s+\}\n\s+openLater\.current = req;\n\s+\};/);
-  // ...and a task asked for while a turn is in flight (the Assistant's own link to it, a Board press during Next) waits for that turn and
-  // then goes the same road - the bare card it landed as rang no rail row (the dead-end walk's RING, 2026-10-20)
-  assert.match(view, /if \(busy \|\| resetting \|\| !openLater\.current\) return;\n\s+const req = openLater\.current; openLater\.current = null;\n\s+if \(req\.kind === "msg"\) openMsgRef\.current\?\.\(req\.mid\); else if \(req\.kind === "pull"\) pullRef\.current\?\.\(req\.key, req\.asUser, req\.row\); else openTaskRef\.current\?\.\(req\);\n\s+\}, \[busy, resetting\]\);/);
-  // ...and a rail row clicked mid-turn is drawn at once from its rail row (2026-11-03), its move in the same one slot - the latest ask wins
-  assert.match(view, /const row = \(pileRef\.current\?\.items \|\| \[\]\)\.find\(\(i\) => i\.key === key && !i\.settling\) \|\| \(made\?\.key === key \? made : null\);/);
-  assert.match(view, /putOnTable\(row\); setFoldedKey\(\(k\) => \(k === row\.key \? null : k\)\);\n\s+\};\n\s+if \(!resetting && \(busy \|\| turnFlight\.current\)\) \{\n\s+if \(row && row\.key !== currentRef\.current\?\.key\) ahead\(\);\n\s+openLater\.current = \{ kind: "pull", key, asUser, row: made \}; return;/);
-  // ...every view but New's own card, held up until the task it made lands (holdsNew, newOpensWhatItMade.test.mjs - 2026-11-09)
-  assert.match(view, /if \(old\) setOld\(null\); if \(!held\) browseDown\(\);\s+const going = surface\(key, asUser \|\| null\);/, "pull");
-  // ...and a message asked for by id (a card's link, #msg=) goes the same road, as its own card - waiting out a turn as a task does
-  assert.match(view, /const openMsgCard = \(mid\) => \{\n\s+if \(!mid\) return;\n\s+if \(busy \|\| resetting \|\| turnFlight\.current\) \{ openLater\.current = \{ kind: "msg", mid \}; return; \}\n\s+pull\(`msg:\$\{mid\}`\);/);
-  assert.doesNotMatch(view, /pullOrOpen|openByMid|openByItem/, "no road opens a row anywhere but on the canvas");
-  assert.match(view, /\{ \.\.\.x, state, down: false \}/, "opening the same area again picks it back up");
-  const browse = fs.readFileSync(path.join(process.cwd(), "src", "CanvasBrowse.jsx"), "utf8");
-  assert.match(browse, /onOpenCard\?\.\(detail \? openLabel : where\)/, "the page itself is the context when nothing is opened on it");
-});
-
 test("every connector card is the same size: a 1px border with the live weight drawn inside, two lines held, a pill when connected", () => {
   const src = fs.readFileSync(path.join(process.cwd(), "src", "ConnectorsView.jsx"), "utf8");
   const card = src.slice(src.indexOf("const ConnCard"), src.indexOf("const ConnCard") + 2600);

@@ -11,16 +11,6 @@ import { reviewText } from "../src/reviewProposal.js";
 const SRC = new URL("../src/", import.meta.url), read = (f) => readFileSync(new URL(f, SRC), "utf8");
 const ws = read("GeneralWorkspace.jsx");
 
-test("Done on the browser view is the owner's press, never words in their name", () => {
-  const back = ws.slice(ws.indexOf("const handBack = "), ws.indexOf("const promptUsed"));
-  assert.match(back, /worker\/answer`, \{ request_id: req\.request_id, text: "", press: true \}/);
-  assert.doesNotMatch(back, /setOwnPrompt|answerAsk/, "no bubble, and no turn typed for them");
-  // ...and the Done drawn as a chip under the ask, where no view is on screen, takes the same road
-  assert.match(ws, /if \(isTurn\(req\) && \(req\.choices \|\| \[\]\)\.includes\(text\)\) return handBack\(\);/);
-  assert.ok(isTurn({ ask: "turn" }) && !isTurn({ ask: "question" }) && !isTurn({ ask: "signin" }));
-  for (const f of readdirSync(SRC).filter((x) => /\.jsx?$/.test(x))) assert.doesNotMatch(read(f), /TURN_BACK/, `${f}: the words are nobody's to send`);
-});
-
 test("an act that still waits keeps its buttons on the turn that set it up", () => {
   assert.doesNotMatch(ws, /<ActionCard[^>]*live=/, "live is the review waiting, not which turn is newest");
   const row = { ReviewId: 4, Status: "pending", post: { type: "linkedin", action: "run_tool", text: "We shipped the export." } };

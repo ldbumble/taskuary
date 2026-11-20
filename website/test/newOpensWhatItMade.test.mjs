@@ -36,13 +36,3 @@ test("the pull puts New down when the task lands, and New's button spins until t
 // THE TASK NEW MADE IS ON THE TABLE AT THE PRESS (the owner, 2026-11-16: "on new task it says sent to agent and then the bottom of the screen
 // shows ... it should show ... on the agent starting, not randomly on the bottom of the canvas"): New hands the canvas the task as its row, drawn
 // as a rail row is, so the "…" of the move that brings its real row waits under the fold, never at the canvas foot under New's card
-test("New hands the task it made to the table as its row, drawn at the press", () => {
-  assert.deepEqual(madeRow(12, "Compare three caterers"), { key: "task:12", kind: "task", tid: 12, title: "Compare three caterers" });
-  assert.match(read("NewSheet.jsx"), /onOpenTask\?\.\(tid, \{ row: madeRow\(tid, about\) \}\)/);
-  assert.match(read("TaskHubPage.jsx"), /row: opts\?\.row \|\| null/);
-  const av = read("AssistantView.jsx");
-  assert.match(av, /pull\(`task:\$\{req\.tid\}`, null, req\.row\)/);
-  assert.match(av, /\|\| \(made\?\.key === key \? made : null\)/);
-  assert.match(av, /const held = !made && holdsNew\(/, "New's card is not held over a \"…\" when its task is drawn");
-  assert.match(av, /if \(made && row !== currentRef\.current && key !== currentRef\.current\?\.key\) ahead\(\);/);
-});

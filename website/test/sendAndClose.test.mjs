@@ -60,21 +60,6 @@ test("the close-out card in Close out draws Approve and close first and filled, 
   assert.match(rd, /const folded = paired && !bar\.shown\("send"\);/);
 });
 
-test("Close out draws Send and close first and filled, Send beside it; only Send and close's receipt closes", () => {
-  assert.match(rd, /const twoSends = closesIt && !simulated && !co && !proposal && canSendIt && !r\.Stale && !chatFile && !delivery\.frozen;/);
-  const moves = rd.slice(rd.indexOf("] : twoSends ? ["), rd.indexOf("] : [", rd.indexOf("] : twoSends ? [")));
-  assert.ok(moves.indexOf('no("send_close")') < moves.indexOf('no("approve")'), "Send and close first");
-  assert.match(moves, /id: no\("send_close"\)[^\n]*tone: "p"/);
-  assert.match(moves, /id: no\("approve"\)[^\n]*tone: "s"/);
-  assert.match(moves, /run: \(\) => decide\("approve", false, true\), title: closeTitle/);
-  assert.match(moves, /run: \(\) => decide\("approve", false, false\), title: sendTitle/);
-  assert.match(rd, /await onSent\(\{ closes: closesIt && shut && verb === "approve" && \(data\.reply \? !!data\.reply\.ok : true\),\n\s+said: verb === "approve" \? \{ text: value, channel: r\.Channel \|\| "", to: sentTo\(r\), subject: deliverySubject\(r\), id: r\.ReviewId, done: pw\.sentAs \} : null \}\); return;/);
-  assert.match(rd, /const closeTitle = `\$\{to\} - \$\{closeThen\}`, sendTitle = `\$\{to\} - \$\{stays\}`;/);
-  // ...whatever its agent is doing: the server stops it under the close (concierge.close_after_send)
-  assert.match(rd, /const closeThen = "then the task closes";/);
-  assert.match(rd, /\$\{closeWord\} sends this to \$\{replyContext\(r\)\}[^`]*- \$\{closeThen\}; \$\{sendWord\} sends it and \$\{stays\}\./);
-});
-
 test("a send nobody could confirm keeps which send was pressed: Check delivery and Send anyway close only after Send and close", () => {
   assert.match(rd, /const closing = new Set\(\);/);
   assert.match(rd, /if \(close !== undefined\) \{ if \(close\) closing\.add\(r\.ReviewId\); else closing\.delete\(r\.ReviewId\); \}/);

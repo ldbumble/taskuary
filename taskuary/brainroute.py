@@ -210,25 +210,30 @@ def _cli(store, pick: str, cfg=None) -> str:
     return _cli_of(cfg, agents.brain_key(store, pick, cfg))
 
 
-def lift(store, pick: str, tier: str, model: str = '', cfg=None) -> str:
+def lift(store, pick: str, tier: str, model: str = '', cfg=None, agent: bool = False) -> str:
     """'<model>@<effort>' - `model` (else the brain's own) at the effort `tier` runs at - for a brain with no model of its own for that
-    tier that takes an effort: a CLI with an effort flag, or an AI card whose provider takes one (an AI card has no quick model box, so
-    its quick work is always its one model, thinking less). '' otherwise. A quick gear a CLI already ships (llm.LIGHT_DEFAULT: claude's
-    haiku, codex's low effort) is its own answer, and an effort already at or past the step is no step."""
+    tier that takes an effort: a CLI with an effort flag, or an AI card whose provider takes one. '' otherwise. A quick gear a CLI already
+    ships (llm.LIGHT_DEFAULT: claude's haiku, codex's low effort) is its own answer, and an effort already at or past the step is no step.
+    `agent`: the tier is an AGENT's (LEVEL_JOBS) - on an AI card its quick work is its own model thinking less, never the card's light model,
+    which serves the one-shot jobs alone (the owner, 2026-11-20: a gateway's Flash took every quick agent task, and did it badly)."""
     p = str(pick or '')
-    if tier not in LIFT or not p.startswith(('cli:', 'connector:')) or _own(store, p, f'{tier}_model', cfg) or gear_of(store, p, tier, cfg): return ''
+    card_agent = agent and tier == 'light' and p.startswith('connector:') and bool(_own(store, p, 'model', cfg))
+    if tier not in LIFT or not p.startswith(('cli:', 'connector:')) or gear_of(store, p, tier, cfg): return ''
+    if _own(store, p, f'{tier}_model', cfg) and not card_agent: return ''
     from . import climodels, llm
     if p.startswith('cli:'):
         cli = _cli(store, p, cfg)
         if not climodels.effort_args(cli, 'x') or (tier == 'light' and llm.LIGHT_DEFAULT.get(cli)): return ''
     else:
         c = store.get_connector(int(p[10:])) if p[10:].isdigit() else None
-        if (c or {}).get('Type') not in llm.EFFORT_TAKERS: return ''
+        # ...a provider that takes no effort runs an agent's quick work on the card's own model all the same
+        if (c or {}).get('Type') not in llm.EFFORT_TAKERS: return _own(store, p, 'model', cfg) if card_agent else ''
         # ...a card whose model box is blank has its provider's light model for quick work (llm.light_of), not its default thinking less
-        if tier == 'light' and not model and (lt := llm.light_of(c['Type'], {'model': _own(store, p, 'model', cfg)})): return lt
+        if tier == 'light' and not model and not card_agent and (lt := llm.light_of(c['Type'], {'model': _own(store, p, 'model', cfg)})): return lt
     m, e = climodels.split_pick(model or _own(store, p, 'model', cfg))
     want = LIFT[tier]
-    if e in EFFORTS and (EFFORTS.index(e) <= EFFORTS.index(want) if tier == 'light' else EFFORTS.index(e) >= EFFORTS.index(want)): return ''
+    if e in EFFORTS and (EFFORTS.index(e) <= EFFORTS.index(want) if tier == 'light' else EFFORTS.index(e) >= EFFORTS.index(want)):
+        return (model or _own(store, p, 'model', cfg)) if card_agent else ''
     return f'{m}@{want}'
 
 
@@ -473,7 +478,7 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
             lvl = LEVEL_OF[tier]
             if tier == 'strong' and not cap_left(store): tier, said = 'standard', f"; today's {cap(store)} strong calls are spent, so standard"
             elif tier == 'strong' and not m and not strong_of(store, pick) and not lift(store, pick, 'strong'): tier, said = 'standard', '; it has no strong model, so standard'
-            g, model = GEAR_OF[tier], m or (lift(store, pick, tier) if tier in LIFT else '')
+            g, model = GEAR_OF[tier], m or (lift(store, pick, tier, agent=job in LEVEL_JOBS) if tier in LIFT else '')
             why = f"{JOB_WORDS[job]}{hard}: {lvl} work -> {_said(store, pick)}{f', {spell(model)}' if model else ''} as set in AI routing (rule {rule}){said}{held}"
         elif r and not want_model:
             tier, rule, said = r['use']['tier'], r['id'], ''
@@ -490,7 +495,7 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
             if tier == 'strong' and not cap_left(store): tier, said = 'standard', f"; today's {cap(store)} strong calls are spent, so standard"
             # the card's model IS the standard tier; strong runs the brain's strong gear and light its quick one - or, on a brain with
             # one model, that model at high or low effort
-            g, model = GEAR_OF[tier], (model if tier == 'standard' else lift(store, pick, tier, model))
+            g, model = GEAR_OF[tier], (model if tier == 'standard' else lift(store, pick, tier, model, agent=job in LEVEL_JOBS))
             # ...the CLI's own gear for the tier, model and effort, where he named none - but TRIAGE KEEPS ITS QUICK MODEL'S OWN EFFORT (the
             # owner, 2026-11-20: "I don't care about triage speed" - accuracy over speed): it reads on the light gear's model, thinking as it will
             if not model: model = gear_of(store, pick, tier) if job != 'triage' else gear_of(store, pick, tier).split('@')[0]
@@ -502,7 +507,7 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
         if to:
             why += f"; {_said(store, pick)} is limited until {clock(cold[pick])}, so {_said(store, to)}"
             # ...on its own model, as a failover always is: the resting brain's model id means nothing to another provider
-            chain, pick, model = [pick, *chain], to, (lift(store, to, tier) if tier in LIFT else '')
+            chain, pick, model = [pick, *chain], to, (lift(store, to, tier, agent=job in LEVEL_JOBS) if tier in LIFT else '')
             if tier == 'strong' and not strong_of(store, pick) and not model: tier, g = 'standard', GEAR_OF['standard']
     up = ''
     if pick and mode(store) == 'auto' and tier != 'strong' and job in ESCALATES and _first(store, f, 'escalate'): up = 'strong'
@@ -760,9 +765,11 @@ def _words(store, p: str, cfg) -> dict:
     from .llm import LIGHT_DEFAULT
     base = _base(store, p, cfg)
     name = base.split(', ')[0]
-    at = lambda tier: f'{name}, {LIFT[tier]} effort' if lift(store, p, tier, cfg=cfg) else base
+    at = lambda tier: f'{name}, {LIFT[tier]} effort' if lift(store, p, tier, cfg=cfg, agent=True) else base
     dflt = LIGHT_DEFAULT.get(_cli(store, p, cfg), '') if p.startswith('cli:') else _card_light(store, p)
-    quick = (spell(_own(store, p, 'light_model', cfg) or gear_of(store, p, 'light', cfg)) or (f'{name}, {dflt[7:]} effort' if dflt.startswith('effort:') else dflt)
+    # ...an AI card's quick AGENT work is its own model thinking less (lift's `agent`): its light box is the one-shot jobs'
+    own = _own(store, p, 'light_model', cfg) if p.startswith('cli:') or not _own(store, p, 'model', cfg) else ''
+    quick = (spell(own or gear_of(store, p, 'light', cfg)) or (f'{name}, {dflt[7:]} effort' if dflt.startswith('effort:') else dflt)
              or at('light'))
     return {'quick': quick, 'normal': base, 'hard': spell(strong_of(store, p, cfg)) or at('strong')}
 

@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
+import http from "node:http";
 import path from "node:path";
 import { startHarness } from "./harness.mjs";
 
@@ -66,7 +67,12 @@ const h = await startHarness({ fresh: true });
 // ...AND npx RUNS IN IT (the coding walk, 2026-11-12): APPDATA is the scratch home's, with no npm folder, so `npx -y <the ACP adapter>` failed
 // and every coding session fell back to its terminal - a road the owner's own machine does not take
 await mkdir(path.join(h.home, "appdata", "npm"), { recursive: true });
-const api = (p, body) => fetch(`${h.fixtureApi}${p}`, { method: body ? "POST" : "GET", headers: { "Content-Type": "application/json", "X-Taskuary-Token": h.token }, body: body && JSON.stringify(body) }).then((r) => r.json());
+// ...ON node:http, WITH NO CLOCK (the gateway walk, 2026-11-20): setting up a gateway card tests its models one by one, 15-25 s each, and
+// fetch's own 300 s wait for the answer's headers threw before the card was saved - the walk never started
+const api = (p, body) => new Promise((ok, no) => { const u = new URL(`${h.fixtureApi}${p}`), data = body ? JSON.stringify(body) : undefined;
+  const r = http.request(u, { method: body ? "POST" : "GET", headers: { "Content-Type": "application/json", "X-Taskuary-Token": h.token } },
+    (res) => { let t = ""; res.setEncoding("utf8"); res.on("data", (c) => (t += c)); res.on("end", () => { try { ok(JSON.parse(t)); } catch (e) { no(e); } }); });
+  r.on("error", no); r.setTimeout(0); r.end(data); });
 if (BRAIN === "gateway") {
   const { url, key, model } = GW;
   if (!url || !key) throw new Error("EVAL_BRAIN=gateway needs EVAL_AI_URL and EVAL_AI_KEY (or ~/.taskuary-eval.json)");

@@ -2,6 +2,145 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.1.0 - 2026-11-19
+
+- Gemini 4 Neon is the step up for hard jobs where a card lists it beside Hydrogen
+- An answer whose messages streamed as steps is drawn once
+- A turn's clock counts from its own head, and "N of M" counts only cards that stood for a press
+- The Push card a general agent raises in his named checkout is drawn, and its agent is told where it stands
+- An agent's chat reply is filed in the words it goes as, each link written out
+- The browser holds only the big step: money, his own details, speaking for him, a delete
+- A card not signed in says so in plain words with its card's link, and the agent never promises a saved sign-in
+- The live browser sits beside the chat and the task list stays; a chat's X goes to the list
+- A step never shows a value the shell fills in as it runs
+- A held browser step is named for the site and the outcome, and a failure a later step overcame reads done
+- Tasks that share a file hear when it changes, and an agent says what a file holds from the file
+- One action box at a time: a card the line holds behind its front stands on no surface
+- A line of his on a chat room is a task's only from when the task joined that room
+- An agent never hands him a file, folder or server to look at that it might reach itself
+- A chat read draws the agent's record as of the moment it read the ledger; a server tool Codex sends is named as that tool
+- A browser verdict out of shape is asked once more before the step waits on him; a held step names its site, not its address
+- Taskuary's notes are never his words: a waiting note names its writer, and an answer carries his alone
+- One log per task: the chat's table and its one write road, appended once and updated in place
+- The chat's log is written as the agent is handed things: what it heard, the turn it began, the answer that ended it
+- A coding session's record keeps a tool's output once and capped, and is read on from where the last read stopped
+- The landing card reads the ACP record incrementally and asks git once what it said of fixed commits
+- One rule for a step that needs his press: a trusted repo or a step he already answered on the task is never asked again
+- The chat's log is complete beside the old list: presses, failures, every road's steps, arrivals, the one card, and its migration
+- A held browser step's bar ends its press when the decide answers: it ran, or why not
+- A searched task on no rail row opens by the rail's own pull, not by its link
+- A site has one name on every card and hand-over, and the server says which kind of ask it is
+- What the owner reads is said by one function, never borrowed from what the agent is told
+- One Back over one list: both Backs step back through every place he and the walk moved through
+- A setting's address is built one way: settings_schema.href and the page's settingHref
+- Is this connection connected: one answer, connectorcatalog.state, read by every surface
+- The demo's recorded connections carry the server's State
+- A connection failing for a moment is still known: triage and the agent's brief name it with its state; search, setup's tick and a workflow's connections read the one answer
+- The task's chat is read from its log: what he saw stays where it stood, and the work shows at his level in one place
+- Backups keep the newest three database copies and no agent records; the rotation runs at every start
+- A session record kept before slim() is written again in its form, once, at start
+- Every coding road's own log writes the chat's steps, and a draft he wrote past is grey in the read that draws his line
+- A Connections card says a sign-in to do as the server's state says it: Gmail's lapse read 'on Â· ... Â· last test failed'
+- The chat is read from its log alone: the rebuild that pieced it together on every read is gone from the live road
+- The browser gate and the read gate ask the one action rule; the page asks the server whether he is needed on it
+- "For you to do" stays on the turn that wrote it, and a run that left unfinished says so where it happened
+- The page places no card of its own: the log places every card, the reply among them
+- Every close goes through close_task: Let it go, Answered elsewhere, a drop, an archive, a merged item and a folded batch no longer leave a draft or an agent on a closed task
+- One reopen (general.reopen) for every door: triage, a batch item, a workflow, CI, a turned-down close-out and Reopen bring a done or dropped task back the same way, its Remind me date cleared
+- Who a reply goes to has one answer (outbound.review_envelope): the agent's 'it went to', the answered check and the card's leaving line read the Reply-To the send uses, not the From address
+- One title from his words (general.title_of), marked his where it is made: take_name reads the mark, so a lower-case ask the Assistant capitalised takes its agent's name as New's does
+- One arrival road: store.arrive is the only writer of message.TaskId, and triage decides first - a join while triage still reads is refused, so a message is never on a task and 'triage is deciding' at once
+- His own systems are his: a machine's notice on his domain or naming one of his repositories never puts his task in safe mode, and vouches for nobody else's
+- A task he let go comes back when it is owed; only a task folded into another stays away. The last direct closes go through close_task
+- Is a machine the sender is one reading: the promoter and the chase both ask categories.automated
+- Which files a task has is one list: the phone's Send files offers what the task came with too
+- How old something is: one stamp reader and one age wording on every surface
+- A routine's clock is said once, by the server: reports.schedule_words, carried as ScheduleWords
+- +N on a row means one thing: new since he opened it, on the desk as on the phone
+- Is an agent on this task now, and which button leads: one answer each, the phone's own rules gone
+- No '+N new' for replies, on the desk's rail and on the phone alike (the owner's ruling, 2026-10-26); the demo says an editor's clock
+- One resolver says which AI runs a job, and one check says whether there is one
+- The page asks the server's one answer for whether an AI can run a job
+- A turn the AI provider ended says so once, in one plain line: what failed and what to do
+- What waits on his press is one rule: store.waiting_on_owner, which the pill, the rail, the desk's lit Send, the phone and the Assistant all ask
+- Trust is a press on a person: it starts every task of theirs the hold kept, not only the one he pressed it on
+- A failure reads in his words on every surface: the bell, the phone, a toast, a queued start
+- A failed step's row says why in his words, from the server
+- The desktop gate and every proposed card ask the one action rule (actrule.decide), as the shell, the browser and the push do
+- A push he presses runs through the one executor a held step's Approve does: shellgate.run_, the agent's own tool's shell and git
+- One road for a failure's words: the three readings fold into say, and no chat line is a raw exception
+- CI fixes on redesign: two names defined twice, an unclassified route, tests that pinned the old clock words and a non-owner brain pick
+- A task's status and its words are said once, by the server (taskstate.status), and the page's pill draws them as given
+- One road into the agent: general.to_agent delivers every input - his line, his answer, Taskuary's note after a press, a page's Done, a sign-in - by who it is from, and a chat hears a press at once
+- Same work is triage's decision: words that start work arrive as a message does, and samework is gone
+- Names left undefined on redesign: channels' HTTP status reads say's, a routine's runs_words says schedule_words, the demo's audit list is made before its loop
+- Imports left on the old roads: plain_failure, _DNS/_TIMEOUT and _status are say's; tests patch concierge._on_task
+- His close is his press only; a fold supersedes what the folded task held; tests set brains as his own pick and read the clock's new words
+- The records' slim pass is a named lifespan thread the tests stop; tests set the Assistant's CLI as his pick and count connections as the card says
+- A card the chat moved past stays where it stood, greyed with why: the log's card turned 'held' and was drawn nowhere
+- The turn at work says it is opening while its agent starts, and what it is writing: the log's read had dropped both
+- A card the chat moved past is the same card with its buttons greyed, no reason line (the owner, 2026-11-18)
+- A batch's let-in is its rows' verdict, so it places them while they still read 'triaging' (store.arrive refused every batch)
+- A reply whose people the card set is still a reply: its send is watched and its channel's block holds it (outbound.new_mail)
+- An answer taken back is its turn's step in the chat's log too (chatlog.took_back), and says how it ended in that line
+- Fix three redesign regressions my test files caught
+- A quota failure's notice is said once: the new carry-on sentence (say.NEXT) was read as part of the notice
+- A coding turn's last words reach the chat: what streamed in its last beat was held back and never written at its end
+- Nothing works under his stop while the session lets go, unless his waiting lines or the stopped turn's owed answer begin it
+- A failed turn, an answer that could not be delivered and a reopen that could not happen say their failure in his words
+- A line filed once reaches the chat's log as any filed line does: the demo's words after Send were never drawn
+- A dashboard's refused filters say why in words the error handler keeps: the JSON example read as a raw error
+- A routine running its steps reads at work in its chat, and its steps and outcome land in the chat's log as they go
+- His newest line always has the turn at work under it: an answered turn stops reading at work, and lines heard at his stop get their turn at once
+- A card stands in the chat's log from the moment it is raised, in the turn that raised it - never only once a read finds it
+- His close is one line with its note again, and a first answer with no hand-over opens on what started it
+- His words on a closed task open it whichever road they take, and the reopen is said by his words, never as a press
+- The pill reads the card at the front: a held step there waits on him, never 'ready to send' over a reply behind it
+- The agent is told the hour, and never to state a fact about the owner he did not give
+- Every review write puts its card in the chat's log at the source (store._poke_review), and a pressed card no longer carries the words it showed while waiting
+- A press told back to a resting AI card is heard with the screen fact once
+- Remind me pressed while the agent works is a line in place: it stops the turn, so no turn would ever hear it
+- A press no turn will hear is kept under the turn it came in; a coding turn's last words are written and read without the ask marker
+- One arrival rule: what is placed in Tasks starts its agent as it arrives - the owner's own list kind is the general agent's
+- A refused tool call reads failed and folds into the try that worked; a turn's fold line counts and names the rows it opens on
+- One clock on every surface: '4:15 PM', from timewords.clock on the server and dates.clock on the page
+- What came in shows the message, never Taskuary's notes on it; a colleague's line stands on the other side from his; a chat message is no email
+- The chat's log is written at the source for every card, and a permanent compare fails a test with the road that left something out
+- One task state: the rail's rows say what taskstate.status says, as the header does
+- Facts about the owner's cards are the app's: a turn that raised cards leaves its For-you-to-do to them, the last letter reads 2 of 2, and the agent claims no draft, send or push no card shows
+- New opens its task at once: the same-work read runs beside it, and a fold is followed by the page
+- The agent's question stands in the turn that asked it, and a turn that waited on his answer leaves no late to-do once it is settled
+- Back after Mark done steps to the place before: a rail sync no longer turns the close's move into a replace
+- The phone and the bell's alerts read each task's row in taskstate's words, as the rail and the header do
+- A task a stranger's words hold draws no card to press until Trust: the hold's line and its Trust are the one move
+- A reply raised empty and written after his line is the card of the turn that wrote it, and the words being written are not said twice
+- Walk 2: a move from one task to another is always a Back step; a typed reopen draws no 'You reopened it'; the agent speaks to him as you
+- Walk 2: whom a send went to is one answer for the card, the task's line and the agent; New's same-work read never names the task it just opened
+- A CLI being updated under a start is tried again for a few seconds, and a failure Windows names by code reads in plain words
+- A review's write never puts its card on the writer's thread: one worker does, holding nothing else (the walk-2 freeze)
+- A card he pressed before its row was written still stands, in the turn that raised it, as he left it
+- A step never names a host the shell fills in, and every Taskuary command says what it asked for
+- Opening a task's header pop-over moves nothing under it: no scroll lock, the focus kept where it was
+- A window the page opens is shown in the browser pane, and Google's refusal of the browser is said with the way past it
+- The chat log never touches the writer's connection without the store's lock (the walk-3 freeze, from its thread dump)
+- Every chat-log helper takes the store's lock itself, and a task search beside chat reads that migrate both finish
+- Back after Mark done, reproduced on a scratch app: an entry the address made itself is counted, and a table that left the task the address names is a step
+- His stop stays in the session's record and out of the chat's steps; tests read today's words for times, names and the one arrival rule
+- A held browser step is named for him and for the site, goes grey when its page is left, and his page press is a line
+- A held browser step greys as soon as its browser leaves the page, not at the agent's next command
+- One task state, kept narrow: a held stranger's task reads held before any card; an agent's own row keeps the live session's word; tests read it
+- New makes no task before same-work answers: his line stands at work under the box until the task it went to opens
+- His words start the general agent on a task of another kind by whichever door they come - the switch lived only in the task page's box
+- One card waits per task in the log too: a unit's other rows never stand pending beside its front, and the compare reads a unit by its card
+- A card pressed in the second the task was frozen into its log still stands; letters are card rows in their turn
+- CI on redesign: three real bugs, and tests brought to the hold, the one arrival rule and the one clock
+- The hold hides cards only on a task a stranger started: one who joined a known person's task never takes Send off the reply that waits
+- A provider's own status or error type is the provider's: "API Error: 529" reads the AI provider didn't answer, never this computer
+- A letter that never had words draws nowhere once it is not his to press
+- While a task's header pop-over stands open, nothing under it scrolls by itself
+- The chat log's last gaps: a run that left says so with no turn, a press heard mid-turn stands, a turn reads starting until its session has it, greying is the one rule
+- His line and the turn it begins land in one step, and a finished answer never reads at work; raising turns are kept per store, never per address
+
 ## 0.4.0.29 - 2026-11-19
 
 - A newer message never retires what is still owed to its sender

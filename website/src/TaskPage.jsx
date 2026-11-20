@@ -633,14 +633,30 @@ const EVEN_ROW = { ...ROW_LOOK, display: "flex", alignItems: "center", gap: 1, f
 // A QUIET CORNER BUTTON IN THE TASK'S HEADER (the owner, 2026-11-06: "AI used" and "Talk to this agent from…" must not sit at the bottom of the
 // chat): an icon with its tooltip beside Expand and the X, its content in a popover under it
 // ...`wide`: a popover with code in it (Changes) - a diff at 380px is a column of wrapped lines
+// ...AND WHILE IT STANDS OPEN NOTHING UNDER IT SCROLLS BY ITSELF (walk 4, 2026-11-19: Chat detail opened, the task's header went from y=133 to
+// y=468 as the canvas scrolled to the cards above it, twice in three tries, its cause never caught on a scratch app): every scroller around the
+// button and in the task's chat is held where it stood until it shuts - his own wheel or key moves it, as anywhere
+const heldScrolls = (btn) => {
+  const els = new Set();
+  for (let e = btn?.parentElement; e && e !== document.body; e = e.parentElement) if (e.scrollHeight > e.clientHeight + 1) els.add(e);
+  btn?.closest?.("[data-tq-task-page]")?.querySelectorAll(".tq-aui-viewport").forEach((e) => els.add(e));
+  const at = new Map([...els].map((e) => [e, e.scrollTop]));
+  let his = false;
+  const mine = () => { his = true; }, keep = (ev) => { const e = ev.target; if (!his && at.has(e) && e.scrollTop !== at.get(e)) e.scrollTop = at.get(e); else at.set(e, e.scrollTop); };
+  els.forEach((e) => e.addEventListener("scroll", keep, { passive: true }));
+  ["wheel", "touchmove", "keydown"].forEach((k) => window.addEventListener(k, mine, { capture: true, passive: true }));
+  return () => { els.forEach((e) => e.removeEventListener("scroll", keep)); ["wheel", "touchmove", "keydown"].forEach((k) => window.removeEventListener(k, mine, { capture: true })); };
+};
 function HeadPop({ id, icon, title, children, wide = false }) {
-  const [at, setAt] = useState(null);
+  const [at, setAt] = useState(null), held = useRef(null);
+  const shut = () => { held.current?.(); held.current = null; setAt(null); };
+  useEffect(() => () => held.current?.(), []);
   return <>
     <Tooltip title={title}><IconButton size="small" data-tq-head-pop={id} aria-label={title} aria-haspopup="dialog" aria-expanded={!!at}
-      onClick={(e) => setAt(e.currentTarget)} sx={{ color: "var(--tq-link, #41525f)", flexShrink: 0 }}>{icon}</IconButton></Tooltip>
+      onClick={(e) => { held.current?.(); held.current = heldScrolls(e.currentTarget); setAt(e.currentTarget); }} sx={{ color: "var(--tq-link, #41525f)", flexShrink: 0 }}>{icon}</IconButton></Tooltip>
     {/* ...and opening it moves nothing under it (walk 2, 2026-11-19: Chat detail threw the canvas down half a screen): no scroll lock - it
         turned the page's body into a scroller of its own (overflow hidden over the app's clip) - and the focus kept where it was */}
-    <Popover open={!!at} anchorEl={at} onClose={() => setAt(null)} disableScrollLock disableAutoFocus disableRestoreFocus anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+    <Popover open={!!at} anchorEl={at} onClose={shut} disableScrollLock disableAutoFocus disableRestoreFocus anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
       transformOrigin={{ vertical: "top", horizontal: "right" }} slotProps={{ paper: { "data-tq-head-pop-body": id, sx: { p: 1.5, width: wide ? 760 : 380, maxWidth: "92vw", maxHeight: wide ? "75vh" : "60vh", overflowY: "auto" } } }}>
       {at && children}</Popover>
   </>;

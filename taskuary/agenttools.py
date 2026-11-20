@@ -238,8 +238,9 @@ TOOLS = {
                            "[to-do ids]} (a part of this task that is another matter, to a task of its own), save_routine {title, script: whole standard-library Python, "
                            "rows on stdin and JSON rows out, reads?: {a source type and its keys}, prompt?: an AI step on its output, daily_at?: "
                            "\"07:00\" | cron? | every_minutes? - none: on demand} (a script you wrote for a job that will come again, kept as a "
-                           "routine), change_routine {prompt: its agent step's new instructions, or flow: its steps whole} (on a run of a routine: "
-                           "that routine changed). Always give `why`. It puts an Approve "
+                           "routine), change_routine {routine?: the title of the routine to change (none: the one this task is a run of), prompt: its "
+                           "agent step's new instructions, or flow: its steps whole, daily_at | cron | every_minutes?, title?} (a routine changed: "
+                           "his Approve on one card saves it). Always give `why`. It puts an Approve "
                            "button in front of the owner - nothing happens until they press it. `replaces`: as on propose_email.",
                 {'type': 'object', 'properties': {'action': _STR, 'why': _STR}, 'required': ['action', 'why'],
                  'additionalProperties': True}, ('POST', '/api/agent/propose')),

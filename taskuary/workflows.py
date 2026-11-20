@@ -344,20 +344,41 @@ def change_of(store, tid: int, p: dict) -> tuple:
     """(the repair_workflow card a change_routine ask is, '') or ({}, why not). `prompt` alone rewrites the routine's one agent step's
     instructions; `flow` is its steps whole."""
     from . import flow, origin
-    src = source_of(store, store.get_task(int(tid)) or {})
-    if not src: return {}, 'change_routine changes the routine this task is a run of - this one did not come from a routine (save_routine keeps a new one)'
+    # ...ANY ROUTINE OF HIS, NAMED (the owner's live task, 2026-11-20: asked to rewrite his routine's instructions, the agent wrote them into a
+    # .txt and handed back "save them from your signed-in app"): `routine` - its number or its title - else the one this task is a run of
+    src = named_routine(store, p.get('routine')) if str(p.get('routine') or '').strip() else source_of(store, store.get_task(int(tid)) or {})
+    if not src: return {}, ('no routine is called that - name it by its title or number as Reports lists it' if p.get('routine') else
+                            'change_routine changes the routine this task is a run of, or the one named in `routine` - this one did not come from a routine (save_routine keeps a new one)')
     if origin.of_task(store, tid)[0] == 'stranger': return {}, 'a routine is not changed from work a stranger started'
     cfg = cfg_of(src); was, new = flow.steps_of(cfg), p.get('flow')
+    # ...and its clock and its name, beside or without its steps: one card, one save (save - the editor's own)
+    patch = {k: p[k] for k in (*CLOCK, 'title') if p.get(k) not in (None, '')}
+    if patch:
+        from .reports import schedule_error
+        if (why := schedule_error({**{k: None for k in CLOCK}, **patch} if set(patch) & set(CLOCK) else {**cfg, **patch})): return {}, f'that schedule does not hold: {why}'
     if new is None and str(p.get('prompt') or '').strip():
         agent = [i for i, x in enumerate(was) if x.get('kind') == 'agent']
         if len(agent) != 1: return {}, "this routine has no one agent step to give new instructions to - send `flow`, its steps whole"
         new = [{**x, 'prompt': str(p['prompt']).strip()} if i == agent[0] else x for i, x in enumerate(was)]
-    if not isinstance(new, list) or not new: return {}, "change_routine needs `prompt` (its agent step's new instructions) or `flow` (its steps whole)"
+    if new is None and patch: new = was                                     # ...its clock or name alone
+    if not isinstance(new, list) or not new: return {}, "change_routine needs `prompt` (its agent step's new instructions), `flow` (its steps whole), or a schedule (daily_at, cron, every_minutes) or title"
     ok, why = flow.validate(store, new)
     if not ok: return {}, f'the changed steps do not hold: {why}'
-    if not (d := flow.diff(was, new)): return {}, 'that is the routine as it already is'
+    d = flow.diff(was, new)
+    clock = {k: patch.get(k) for k in CLOCK} if set(patch) & set(CLOCK) else {}
+    said = ([f"Runs: {runs_words(cfg)} -> {runs_words({**cfg, **clock})}"] if clock and runs_words({**cfg, **clock}) != runs_words(cfg) else []) +            ([f"Name: {cfg.get('title') or src.get('Address')} -> {patch['title']}"] if patch.get('title') and patch['title'] != cfg.get('title') else [])
+    if not d and not said: return {}, 'that is the routine as it already is'
     return {'action': 'repair_workflow', 'source_id': src['SourceId'], 'title': cfg.get('title') or src.get('Address') or '', 'flow': new,
-            'was': was, 'changes': flow.diff_text(d), 'why': ' '.join(str(p.get('why') or '').split())[:300]}, ''
+            'was': was, 'changes': '\n'.join([*said, *([flow.diff_text(d)] if d else [])]), 'why': ' '.join(str(p.get('why') or '').split())[:300],
+            **({'patch': {**clock, **({'title': patch['title']} if patch.get('title') else {})}} if said else {})}, ''
+
+
+def named_routine(store, name):
+    "The routine `name` names - its number, else its title (case aside) - or None."
+    n = str(name or '').strip()
+    rows = [s for s in store.list_sources(active_only=False) if is_workflow(s)]
+    if n.isdigit(): return next((s for s in rows if int(s['SourceId']) == int(n)), None)
+    return next((s for s in rows if str(cfg_of(s).get('title') or s.get('Address') or '').strip().lower() == n.lower()), None)
 
 
 def runs_words(cfg: dict) -> str:

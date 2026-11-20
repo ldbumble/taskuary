@@ -134,6 +134,24 @@ class ChangeTests(unittest.TestCase):
         self.assertIsNone(proposals.queue(self.s, own, {'action': 'change_routine', 'prompt': 'x', 'why': 'y'}, refused=why))
         self.assertIn('did not come from a routine', why[0])
 
+    def test_any_routine_he_names_changes_its_instructions_and_clock_on_one_card(self):
+        # the owner's live task, 2026-11-20: asked to rewrite his routine's instructions, the agent wrote them into a .txt and said "save them
+        # from your signed-in app" - a routine is changed by its card from any of his tasks, its instructions and its clock alike
+        from taskuary import proposals
+        own = self.s.create_task({'Title': 'Make the weekly review better', 'Kind': 'general', 'Status': 'open'}, 'o')
+        rv = proposals.queue(self.s, own, {'action': 'change_routine', 'routine': 'weekly review', 'prompt': 'List the stale pull requests first.',
+                                           'daily_at': '07:30', 'why': 'you asked for it'})
+        self.assertTrue(rv, 'queued as one card')
+        p = json.loads(self.s.get_review(rv['reviewId'])['DraftText'])
+        self.assertIn('Runs:', p['changes']); self.assertIn('07:30', p['changes'])
+        self.assertIn('List the stale pull requests first.', json.dumps(p['flow']))
+        with mock.patch('taskuary.docsync.sync_connections'): proposals.execute(self.s, self.s.get_review(rv['reviewId']), 'owner')
+        cfg = json.loads(self.s.get_source(self.sid)['ConfigJson'])
+        self.assertEqual((cfg['prompt'], cfg['daily_at']), ('List the stale pull requests first.', '07:30'))
+        why = []
+        self.assertIsNone(proposals.queue(self.s, own, {'action': 'change_routine', 'routine': 'nothing called this', 'prompt': 'x', 'why': 'y'}, refused=why))
+        self.assertIn('no routine is called that', why[0])
+
     def test_the_editor_saves_by_the_same_road(self):
         with self.assertRaises(ValueError): workflows.save(self.s, {'SourceId': self.sid, 'ConfigPatch': {'flow': [{'id': 's1', 'kind': 'nope'}]}}, 'o')
 

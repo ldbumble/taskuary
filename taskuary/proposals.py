@@ -1017,8 +1017,10 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
         # the fix was written against the steps as they stood then: a change made since would be thrown away by approving it
         now = flow.steps_of(workflows.cfg_of(store.get_source(int(p['source_id'])) or {}))
         if p.get('was') != now: raise RuntimeError('the steps have changed since this fix was written - run the workflow again, or Fix with AI on it')
-        d = flow.apply(store, p['source_id'], p['flow'], actor, p.get('why') or '')       # re-validated there, and audited
-        out = {'workflow': int(p['source_id']), 'changed': flow.diff_text(d)[:1200]}
+        d = flow.apply(store, p['source_id'], p['flow'], actor, p.get('why') or '') if p['flow'] != now else []      # re-validated there, and audited
+        # ...its clock and its name through the same one save the editor uses (workflows.save): one card, one press
+        if p.get('patch'): workflows.save(store, {'SourceId': int(p['source_id']), 'ConfigPatch': p['patch']}, actor)
+        out = {'workflow': int(p['source_id']), 'changed': (str(p.get('changes') or '') or flow.diff_text(d))[:1200]}
     elif a in HELD_ACTS: out = _gate(a).perform(store, tid, p)
     elif a == 'close_item':
         from . import trackers

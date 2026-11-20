@@ -6,6 +6,8 @@ morning digest screen will show up")."""
 import json, unittest
 from unittest import mock
 
+import pytest
+
 from taskuary import firstrun
 from taskuary.store import MemoryStore
 
@@ -30,6 +32,13 @@ def mailboxes(s, *boxes):
         s.save_connector({'ConnectorId': cid, 'Active': 1}, 't')
         s.save_source({'Channel': 'email', 'Address': addr, 'Active': 1, 'ConnectorId': cid}, 't')
     return s
+
+
+# the drafts wait for the first read of the mail (firstrun._await_first_read); these tests' mailboxes are never read, so it is in - but
+# for the tests of that wait itself
+@pytest.fixture(autouse=True)
+def _first_read_in(request, monkeypatch):
+    if 'first_read' not in request.node.name: monkeypatch.setattr(firstrun, 'first_read_done', lambda store: True)
 
 
 class AboutTests(unittest.TestCase):
@@ -243,6 +252,37 @@ class AboutTests(unittest.TestCase):
             with mock.patch.object(firstrun, 'sources', return_value=[{'address': 'alex@northwind.example', 'type': 'outlook', 'title': 'Email'}]):
                 firstrun.learn(s, {'name': 'Alex Doyle'}, wait=True, docs=('job',))
             self.assertEqual(firstrun.drafts(s)['job']['why'], firstrun.FIRST_READ)
+
+    def test_the_drafts_start_only_once_the_first_read_is_in(self):
+        """Written before the first read landed, "What you work on" stood in red - "your mail did not show separate workstreams yet" -
+        while that read was still running (2026-11-20). Until the read is in each draft is running and nothing is asked of the mail;
+        the moment it is in, they are written."""
+        s, asked, read = MemoryStore(), [], {'done': False}
+        def gen(store, name, days=90): asked.append(name); histgen.put_learned(store, name, f'_generated now_\n\n- {name}', 'histgen')
+        from taskuary import histgen
+        with mock.patch('taskuary.histgen.generate', side_effect=gen), mock.patch.object(firstrun, 'FIRST_TICK', 0.02), \
+             mock.patch.object(firstrun, 'first_read_done', side_effect=lambda st: read['done']):
+            firstrun.learn(s, {'name': 'Alex Doyle'}, docs=('job', 'style'))
+            import time; time.sleep(0.3)
+            self.assertEqual((asked, firstrun.drafts(s)['job']['state'], firstrun.drafts(s)['style']['state']), ([], 'running', 'running'))
+            read['done'] = True
+            for _ in range(100):
+                if firstrun.drafts(s)['style']['state'] == 'ready': break
+                time.sleep(0.05)
+        self.assertEqual(asked, ['job', 'style'])
+
+    def test_the_first_read_is_in_when_every_source_card_was_read_through_or_failed(self):
+        s = MemoryStore()
+        self.assertTrue(firstrun.first_read_done(s), 'nothing connected: nothing to wait for')
+        o = s.get_connector_by_type('outlook')
+        s.save_connector({'ConnectorId': o['ConnectorId'], 'Active': 1, 'Secret': 'S'}, 't')
+        sid = s.save_source({'Channel': 'email', 'Address': 'alex@northwind.example', 'ConnectorId': o['ConnectorId'], 'Active': 1}, 't')
+        self.assertFalse(firstrun.first_read_done(s), 'a mailbox never read')
+        s.cx.execute("UPDATE connector SET LastError='sign-in expired' WHERE ConnectorId=?", (o['ConnectorId'],))
+        self.assertTrue(firstrun.first_read_done(s), 'a card that failed says why on its card - no wait on it')
+        s.cx.execute("UPDATE connector SET LastError='' WHERE ConnectorId=?", (o['ConnectorId'],))
+        s.cx.execute("UPDATE source SET LastPolledAt='2026-11-20 09:00:00' WHERE SourceId=?", (sid,))
+        self.assertTrue(firstrun.first_read_done(s), 'read through once')
 
     def test_a_draft_accepted_as_edited_is_kept_and_one_left_alone_stays_as_written(self):
         s = MemoryStore()

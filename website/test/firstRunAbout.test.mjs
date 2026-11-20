@@ -167,7 +167,7 @@ test("one Next on About your work keeps the job and the workstreams - the list a
   assert.match(src, /const step = STEPS\[at\], draft = DRAFTS\.includes\(step\) \? drafts\[step\] : null;/);
   assert.match(src, /const ready = !!a && \(!draft \|\| draft\.state !== "running"\)/);
   // its line in place while it runs, and the small line that says Next need not wait
-  assert.match(src, /\{d\.state === "running" \|\| waiting\(d\) \? <>\s*<Box[^>]*><CircularProgress size=\{14\} \/>\s*<Typography[^>]*>\{waiting\(d\) \? d\.why : SAYS\.workstreams\.running\}/);
+  assert.match(src, /\{d\.state === "running" \? <>\s*<Box[^>]*><CircularProgress size=\{14\} \/>\s*<Typography[^>]*>\{SAYS\.workstreams\.running\}/);
   assert.equal(WS_LATER, "What you work on is still being read from your mail - it fills in on its own; you can change it later on About you.");
   // ...started as the step opens when the mailbox step did not queue it, once
   assert.match(src, /if \(step !== "job" \|\| !a \|\| wsStarted\.current \|\| drafts\.workstreams\.state !== "none"\) return;\s*wsStarted\.current = true; learn\(\["workstreams"\]\);/);

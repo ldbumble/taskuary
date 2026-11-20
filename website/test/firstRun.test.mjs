@@ -32,6 +32,7 @@ test("three questions on the page itself, each answered on the Connections page'
   // ...the fix it names is a button beside it, never one on the row that did not draw
   assert.match(fr, /data-tq-setup-fix=\{v\.id\} onClick=\{v\.run\}>\{v\.label\}<\/Button>/);
   // ...and one way out, never while a step runs
+  assert.match(fr, /disabled: !!m\.disabled \|\| \(m\.id !== "back" && running\)/, "Next greyed while the AI is checked");
   assert.match(fr, /const canLater = onFinish && !\["done", "about"\]\.includes\(q\) && !st\.ready && !busy && !signing;/);
   // ...the catalogue's own cards, in a grid that fits the shelf's width rather than the window's (the owner, 2026-11-03)
   assert.match(fr, /import \{ ChannelDetail, ConnCard, connCardOf \} from "\.\/ConnectorsView\.jsx";/);

@@ -249,7 +249,10 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
   // ...and BACK AND NEXT ARE THE WALK'S NAV PILL, in the bar's corner (the owner, 2026-11-03: "back, all ready, next in corner like in actual
   // app"): Back in its Back slot, Next - All ready on the last step - in Next's
   const navShown = ["done", "about"].includes(view) ? [] : nav;
-  useVerbs("setup", [...navShown.map((m) => ({ id: `setup:${m.id}`, group: m.id === "back" ? "back" : "next", disabled: !!m.disabled, why: m.why || "",
+  // ...and NEXT WAITS FOR A STEP AT WORK (2026-11-20): pressed while the AI was being checked, it left a check still running behind it
+  const running = !!busy || !!signing;
+  useVerbs("setup", [...navShown.map((m) => ({ id: `setup:${m.id}`, group: m.id === "back" ? "back" : "next",
+    disabled: !!m.disabled || (m.id !== "back" && running), why: m.why || (m.id !== "back" && running ? "still checking - Next once it answers" : ""),
     ...VERB[m.id], tone: toneOf(`setup:${m.id}`) }))], !hidden && navShown.length > 0);
   // an error is about the step it happened on: it followed the owner to the next one (the Advisor audit, 2026-10-15)
   useEffect(() => { setErr(""); }, [view]);

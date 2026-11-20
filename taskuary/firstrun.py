@@ -11,7 +11,7 @@ The step is read from real state (setup.py's own readers), never stored: a step 
 under each question are the Connections page's own (the owner, 2026-10-15: "Don't create new ui. keep the same as we have in
 connections but just show them/tell what to do next") - this file says which step, and the one line on top.
 """
-import json, re, threading, weakref
+import json, re, threading, time, weakref
 from . import buttons
 from loguru import logger
 from .timewords import plural
@@ -871,6 +871,7 @@ def learn(store, ans: dict, wait: bool = False, docs=DRAFTS):
         ds['_on'] = True
     def go():
         from . import histgen
+        _await_first_read(store)
         while True:
             with _LOCK:
                 if not ds['_q']: ds['_on'] = False; return
@@ -893,10 +894,28 @@ def learn(store, ans: dict, wait: bool = False, docs=DRAFTS):
     else: threading.Thread(target=go, daemon=True, name='setup-learn').start()
 
 
-# A MAILBOX CONNECTED BUT NOT YET READ is not "connect a mailbox" (the setup sweep, 2026-10-28): histgen finds no history until the
-# first sync lands, and the screen told an owner who had just connected one to go and connect one
-# ...and nothing to press for it (2026-11-20): the page writes it again by itself once the read is in (FirstRunAbout's `waiting`)
-FIRST_READ = 'Waiting for the first read of your mail to finish - it is written as soon as that is in.'
+# THE DRAFTS START ONCE THE FIRST READ IS IN (2026-11-20): written before it, "What you work on" failed in red ("your mail did not show
+# separate workstreams yet") while that read was still running - a failure said before anything had failed. Until then each draft is
+# running, and the page says only that. The wait ends when every source card has been read through or has failed, or after FIRST_WAIT.
+FIRST_WAIT, FIRST_TICK = 15 * 60, 3.0
+
+
+def first_read_done(store) -> bool:
+    """Every source card switched on has been read through once - or says why it could not be (LastError on its card)."""
+    from . import channels
+    cards = [c for c in store.list_connectors() if c.get('Active') and c['Type'] in source_types()]
+    return all(c.get('LastError') or not channels.reads_back(store, c) for c in cards)
+
+
+def _await_first_read(store):
+    t0 = time.monotonic()
+    while not first_read_done(store) and time.monotonic() - t0 < FIRST_WAIT: time.sleep(FIRST_TICK)
+
+
+# A MAILBOX CONNECTED BUT NOT READ is not "connect a mailbox" (the setup sweep, 2026-10-28): histgen finds no history until the first sync
+# lands, and the screen told an owner who had just connected one to go and connect one. Past the wait above, its read did not land: why,
+# and where it is fixed
+FIRST_READ = "Your mail has not been read yet - its card on Connections says why. Fix it there, then press Write it again."
 
 
 def _unread(store, e) -> str:

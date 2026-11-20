@@ -60,9 +60,7 @@ const SAYS = {
     none: "Press Write it - Taskuary describes how you like to work from your mail and your answers." },
 };
 const NONE = { state: "none", why: "", text: "" };
-// A MAILBOX CONNECTED BUT NOT READ YET (firstrun.FIRST_READ, the app's own words): the draft waits for it and is written again by itself
-const waiting = (d) => d?.state === "failed" && /first read/i.test(d.why || "");
-const WAIT_MS = 15_000;
+// ...A DRAFT STARTS ONCE THE FIRST READ OF THE MAIL IS IN (firstrun._await_first_read): until then it is running, and says only that
 // what the job was written from: the answers and every mailbox it read - one added since is a reason to write it again
 const who = (a, boxes = []) => JSON.stringify([...[a.name, a.org, a.role].map((x) => (x || "").trim()), ...boxes.map((b) => b.address.toLowerCase()).sort()]);
 
@@ -128,13 +126,6 @@ export default function FirstRunAbout({ onSaved, onBack, onStep, again = false, 
     try { took((await api.post("/api/setup/first-run/about/learn", { ...x, docs })).data.drafts || {}); }
     catch (e) { setDrafts((d) => ({ ...d, ...Object.fromEntries(docs.map((k) => [k, { state: "failed", why: errText(e), text: "" }])) })); }
   };
-  // ...and a draft waiting on the first read is asked again by itself - "press Write it again in a minute" left the owner polling
-  const waitingFor = DRAFTS.filter((k) => waiting(drafts[k])).join(",");
-  useEffect(() => {
-    if (!waitingFor) return undefined;
-    const id = setTimeout(() => learn(waitingFor.split(",")), WAIT_MS);
-    return () => clearTimeout(id);
-  }, [waitingFor, drafts]);   // eslint-disable-line react-hooks/exhaustive-deps
   // a draft as the owner left it, kept: only when it was written or they wrote it themselves
   const accept = (k) => (drafts[k].state === "ready" || edited[k]) && texts[k].trim()
     ? api.post("/api/setup/first-run/about/accept", { doc: k, text: texts[k] }) : Promise.resolve();
@@ -179,8 +170,8 @@ export default function FirstRunAbout({ onSaved, onBack, onStep, again = false, 
   const last = step === "soul";
   // THE ONE LIT MOVE (FirstRun.jsx, the owner 2026-10-19): Write it while there is no draft to look at, else the row's Next - and the
   // line names it by its label
-  const wait = waiting(draft), working = !!draft && (draft.state === "running" || wait);
-  const writeLit = !!draft && ["none", "failed"].includes(draft.state) && !wait;
+  const working = draft?.state === "running";
+  const writeLit = !!draft && ["none", "failed"].includes(draft.state);
   // ...and it says Next on every step (the owner, 2026-11-03): "Looks right", "That's all my sources" and "Save" named what each press did,
   // and a word that changes per step is one more thing to read before the same press. What it does is said on the line and in its hover
   const nextLabel = busy === "save" ? "Saving…" : "Next";
@@ -229,7 +220,7 @@ export default function FirstRunAbout({ onSaved, onBack, onStep, again = false, 
   ];
   const under = step === "job";          // what you work on, under the job
   // ...and Skip only while nothing runs on this question: the email being read is not a thing to skip past (the owner, 2026-11-20)
-  const skipper = !again && canSkip(step) && !reading && !working && !(under && (drafts.workstreams.state === "running" || waiting(drafts.workstreams)));
+  const skipper = !again && canSkip(step) && !reading && !working && !(under && drafts.workstreams.state === "running");
   return (
     <Box data-tq-firstrun-about={step} sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 720, width: "100%", mx: "auto" }}>
       <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
@@ -275,9 +266,9 @@ export default function FirstRunAbout({ onSaved, onBack, onStep, again = false, 
         </Box>
         {mailShelf}
       </>}
-      {draft && <Box data-tq-draft={wait ? "waiting" : draft.state} sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>{working ? (
+      {draft && <Box data-tq-draft={draft.state} sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>{working ? (
         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={14} />
-          <Typography sx={{ color: DIM, fontSize: 13.5 }}>{wait ? draft.why : says.running}</Typography></Box>
+          <Typography sx={{ color: DIM, fontSize: 13.5 }}>{says.running}</Typography></Box>
       ) : <>
         {draft.state === "failed" && <Typography data-tq-draft-failed="" sx={{ color: "var(--tq-danger, #9b2c2c)", fontSize: 13.5 }}>
           {says.failed(draft.why)}</Typography>}
@@ -312,9 +303,9 @@ export function WorkstreamsSection({ d, text, onChange, onAgain = null, busy = f
   return (
     <Box data-tq-workstreams={d.state} sx={{ display: "flex", flexDirection: "column", gap: 1, mt: heading ? 1 : 0 }}>
       {heading && <Typography component="h3" sx={{ fontSize: 15, fontWeight: 600, color: INK, m: 0 }}>What you work on</Typography>}
-      {d.state === "running" || waiting(d) ? <>
+      {d.state === "running" ? <>
         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={14} />
-          <Typography sx={{ color: DIM, fontSize: 13.5 }}>{waiting(d) ? d.why : SAYS.workstreams.running}</Typography></Box>
+          <Typography sx={{ color: DIM, fontSize: 13.5 }}>{SAYS.workstreams.running}</Typography></Box>
         {later && <Typography data-tq-workstreams-later="" sx={{ color: FAINT, fontSize: 12.5 }}>{later}</Typography>}
       </> : d.state === "failed" ? <>
         <Typography data-tq-draft-failed="" sx={{ color: "var(--tq-danger, #9b2c2c)", fontSize: 13.5 }}>{SAYS.workstreams.failed(d.why)}</Typography>

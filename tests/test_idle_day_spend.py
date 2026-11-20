@@ -92,10 +92,10 @@ def store():
     return s
 
 
-# per caller, for the day above: (calls, est. tokens). Triage is one call a mail; an agent turn of ten look-ups is eleven calls - the warm
-# agent's too, since it has the tools (the owner, 2026-11-13: "they should have tools"), so a quick question costs a turn, not one call;
-# hard work starts the full agent. The Advisor looks where something moved - once here, since nothing does after the mail
-CEILING = {'triage': (20, 320_000), 'quick_work': (8 * 12, 1_500_000), 'general': (8 * 12, 1_500_000), 'advisor': (3, 60_000)}
+# per caller, for the day above: (calls, est. tokens). Triage is one call a mail; an agent turn of ten look-ups is eleven calls, and every
+# question is its task's one agent's (2026-11-20: the quick lane is the same agent on its light gear, no second agent), so the 15 questions
+# cost at most 16 such turns. The Advisor looks where something moved - once here, since nothing does after the mail
+CEILING = {'triage': (20, 320_000), 'general': (16 * 12, 3_000_000), 'advisor': (3, 60_000)}
 
 
 def test_an_idle_day_calls_the_model_only_for_what_arrived():
@@ -243,7 +243,7 @@ def test_past_the_days_ceiling_nothing_starts_by_itself_the_bell_says_why_and_th
     s = store(); s.set_setting(brainroute.AUTO_CAP_KEY, '500', 't')
     s.add_brain_route({'At': time.strftime('%Y-%m-%d %H:%M:%S'), 'Job': 'general', 'Pick': 'connector:1', 'Tier': 'standard', 'Calls': 500})
     spent = day(s, n=17, looks=3)
-    assert 'general' not in spent and 'quick_work' not in spent and 0 < spent['triage'][0] <= 17, spent      # mail is still read; nobody started
+    assert 'general' not in spent and 0 < spent['triage'][0] <= 17, spent      # mail is still read; nobody started
     assert 'advisor' not in spent and assistant.run(s, force=True)['ran'], 'the clock waits; Run now is the owner asking'
     bell = [p for p in problems.collect(s) if p['key'] == 'auto_ai_cap']
     assert len(bell) == 1 and '500' in bell[0]['detail'] and 'what you ask for still runs' in bell[0]['detail']
@@ -295,7 +295,7 @@ def test_a_busy_day_stays_one_judgement_per_new_kind_of_mail_and_one_look_or_tur
     "150 mails, one in four a question, half of those needing a look-up: what the day costs, held under its own ceiling."
     spent = day(store(), n=150, looks=48, every=4)
     print(NL + 'BUSY DAY (calls, est. tokens):', json.dumps(spent))
-    assert spent['triage'][0] <= 42 and spent['quick_work'][0] <= 19 * 12 and spent['general'][0] <= 19 * 12 and spent.get('advisor', (0,))[0] <= 3, spent
+    assert spent['triage'][0] <= 42 and spent['general'][0] <= 38 * 12 and spent.get('advisor', (0,))[0] <= 3, spent
 
 
 def test_the_days_ceiling_is_a_settings_knob_that_says_where_it_is_and_takes_0_for_none():

@@ -1269,7 +1269,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                                   'Reason': f"needs a reply: {intent.get('why') or 'question for you'}"
                                                             + (f' · {unsendable}' if unsendable else '')})
                 starts.append((reply_to_agent, store, tid, rid, msg))
-            elif f['kind'] == 'reply' and (job := invite_agent(store, tid, msg, mid)): starts.append((_auto_general, store, tid, job, True))
+            elif f['kind'] == 'reply' and (job := invite_agent(store, tid, msg, mid)): starts.append((_auto_general, store, tid, job))
             # Almost everything a keyboard can do goes to the agent - the owner's rule (2026-08-27,
             # restated 2026-08-29): it does what it is supposed to, or says "nothing to do here" and
             # stops, and a job left on a list does not. Coding and general both self-dispatch when the Settings allow

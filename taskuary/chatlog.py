@@ -793,6 +793,7 @@ def advance(store, tid: int) -> None:
     for rid, rv in by.items():
         if froze and ep(rv.get('CreatedAt')) < froze - 1: continue       # ...what the old build drew was frozen as it was (migrate; a stamp is a whole second)
         if f'r:{rid}' in rows or rv['Status'] == 'pending' or (rv.get('Batch') and rid != min(x for x, y in by.items() if y.get('Batch') == rv['Batch'])): continue
+        if cardqueue.obsolete_read(store, tid, rv): continue      # ...a held read the gate lets through now was never his to answer, answered or not
         c = _card(rv)
         if rv.get('DecidedBy') not in OWNER_ACTORS and c['status'] != 'failed': continue
         t = _raised(store, rid) or (_turn_at(store, tid, rv.get('CreatedAt')) or {}).get('Id')

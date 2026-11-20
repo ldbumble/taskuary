@@ -1922,6 +1922,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   // grows - a reload drew the chat, then the task view, 285px at once, and the observer's "within 240px of the end" let go of it, so
   // the answer the reload was for sat under the fold (the 2026-10-19 UI walk)
   const stuck = useRef(false);
+  const anchor = useRef(null);          // where the card on the table last stood for him, once the pin let go (the observer below)
   // ...unless a line was said AFTER the view (the owner, 2026-10-28: a phone's answer sat under the chat box): a one-line answer under
   // a tall view is less than toEnd's 48px, and putting the view's top up put the answer below the fold
   // ...and the "…" of a move in flight is no line said (the owner, 2026-11-05: "try to smooth"): read as one after the card, a Send and close or
@@ -1979,18 +1980,39 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   useEffect(() => {
     const el = bodyRef.current, inner = el?.firstElementChild;
     if (!el || !inner || typeof ResizeObserver === "undefined") return undefined;
-    const ro = new ResizeObserver(() => { if (keepTable()) return; if (!holdBottom.current && (stuck.current || el.scrollHeight - el.scrollTop - el.clientHeight < 240) && el.querySelector(".tq-msg:not(.tq-welcome-msg)")) toEnd(el); });
+    // ...AND THE CARD ON THE TABLE STAYS WHERE HE SEES IT (walks 2, 4 and 5, 2026-11-19: the task dropped to mid-screen under the cards put down
+    // before it - recorded on a scratch app: a line put in above it pushed it down 54px, and the card shrinking for a beat let the body clamp
+    // and it never came back). Once the pin has let go, what grows, shrinks or comes in above it moves nothing: its top is held at the place
+    // it last stood for him - set by the pin, the end, or his own scroll - and put back there whenever the body can
+    const liveOf = () => [...el.querySelectorAll(".tq-canvas-live, .tq-live-card")].pop() || null;
+    const offOf = (c) => c.getBoundingClientRect().top - el.getBoundingClientRect().top;
+    const remember = () => { const c = liveOf(); anchor.current = c ? { el: c, off: offOf(c) } : null; };
+    const hold = () => {
+      const a = anchor.current, c = liveOf();
+      if (!a || !c || a.el !== c || saidAfter(c, lastSaid(el))) return false;
+      const d = offOf(c) - a.off;
+      if (Math.abs(d) > 1) placeAt(el, el.scrollTop + d);
+      return true;
+    };
+    const ro = new ResizeObserver(() => {
+      if (keepTable()) { remember(); return; }
+      if (hold()) return;
+      if (!holdBottom.current && (stuck.current || el.scrollHeight - el.scrollTop - el.clientHeight < 240) && el.querySelector(".tq-msg:not(.tq-welcome-msg)")) toEnd(el);
+      remember();
+    });
     ro.observe(inner);
-    // the owner's own scroll is theirs: the pin lets go, and so does the end - until they scroll back down to it
-    const own = () => { pin.current = false; stuck.current = false; };
-    const atEnd = () => { if (el.scrollHeight - el.scrollTop - el.clientHeight < 4) stuck.current = true; };
+    // the owner's own scroll is theirs: the pin lets go, and so does the end - until they scroll back down to it - and where he scrolled to
+    // is where the card is held from then on
+    let byHim = 0;
+    const own = () => { pin.current = false; stuck.current = false; byHim = Date.now(); };
+    const atEnd = () => { if (el.scrollHeight - el.scrollTop - el.clientHeight < 4) stuck.current = true; if (Date.now() - byHim < 1000) remember(); };
     el.addEventListener("wheel", own, { passive: true }); el.addEventListener("touchmove", own, { passive: true });
     el.addEventListener("scroll", atEnd, { passive: true });
     // ...and so is the owner's KEYBOARD (the 2026-10-19 UI walk): a card filled in by Tab and Enter snapped back to its top on Save -
     // 588px up, the button just pressed gone - because only a wheel or a finger let go of the pin. A key pressed in the thread, or
     // focus the keyboard moved into it (a Tab from the box below), is the owner working there; focus the app moves itself is not.
     let keyAt = 0;
-    const key = () => { keyAt = Date.now(); }, typed = () => { pin.current = false; };
+    const key = () => { keyAt = Date.now(); }, typed = () => { pin.current = false; byHim = Date.now(); };
     const tabbed = () => { if (Date.now() - keyAt < 800) pin.current = false; };
     // the scrollbar: a press on the body itself, not on a line in it. A press ON a line is the owner working there, as a key is: a
     // Connections step header or switch snapped the card back to its top on every click, the thing pressed gone (the UI audit, 2026-10-21)

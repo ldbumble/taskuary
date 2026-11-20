@@ -17,6 +17,7 @@ import {
 import { ButtonBar } from "./ButtonBar.jsx";
 import CloseIcon from "@mui/icons-material/Close";
 import api from "./api";
+import TalkButton from "./TalkButton.jsx";
 import { prefetchTask } from "./taskDetail.js";
 import { ACCENT, ACCENT2, BORDER, DIM, FAINT, INK, PANEL, ROLES, mono } from "./theme.jsx";
 import { ChannelIcon, MicButton, useAgents, usePeopleSearch } from "./ui.jsx";
@@ -469,7 +470,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
               its chat. With no AI connected it says so, with the way to connect one */}
           <PromptBox text={words} setText={setText} pics={pics} busy={busy} onSend={submit} label={aboutLabel} title={verb} autoFocus
             placeholder={kind === "chat" ? "build me a website · a report on overdue invoices every Monday · draft a reply to Erin" : "why did Site 3's census move four points in July?"}
-            sendOff={noAi} />
+            sendOff={noAi} extra={<TalkButton onNew={(t) => { wordsRef.current = t; setText(t); submit(); }} />} />
           {!!sentLine && <Box data-tq-new-sent="" sx={{ mt: 1.25 }}>
             {/* ...as the chat draws his line - its own bubble, in the chat's one column (walk 8, 2026-11-20: outside the chat the message grid's 66 px
                 gutter took it, and his ask stood one word wide down the page) */}

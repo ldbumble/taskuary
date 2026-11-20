@@ -41,6 +41,7 @@ OPTIONAL = {
     'openpyxl': 'openpyxl>=3',               # reading .xlsx attachments
     'pypdf': 'pypdf',                        # reading .pdf into the knowledge base
     'faster_whisper': 'faster-whisper>=1.0',  # local speech to text
+    'pipecat': 'pipecat-ai[webrtc,deepgram,cartesia,google]==0.0.108',   # live interaction (livevoice.py): pinned, installed when its card is on
     'winpty': 'pywinpty',                    # the interactive terminal on Windows
     'paramiko': 'paramiko>=2.11',            # the SFTP card (files.py)
     'pymongo': 'pymongo>=4',                 # the MongoDB card (nosql.py)

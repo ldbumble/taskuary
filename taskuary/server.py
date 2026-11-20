@@ -8237,6 +8237,10 @@ def save_connector(body: ConnectorBody):
         # undefined · undefined repos discovered" - the page had spelled GitHub's sentence over whatever a save returned)
         ms = [m for m in (discovery.get('fast'), discovery.get('agent')) if m]
         discovery['said'] = ('connected · its models: ' + ', '.join(dict.fromkeys(ms))) if ms else 'saved · its gateway listed no models yet - press Test'
+    # ...the Live interaction card switched on: Pipecat installs in the background, as a missing package should (livevoice.ensure)
+    if c.get('Type') == 'live_voice' and c.get('Active'):
+        from . import livevoice
+        livevoice.ensure(store)
     from .docsync import sync_connections
     sync_connections(store, ACTOR)
     return {'ok': True, 'connectorId': cid, 'discovery': discovery}
@@ -8437,6 +8441,56 @@ def task_reason_ask(tid: int, payload: dict):
     from . import reasonnet as rn
     return _reason(lambda: rn.ask(store, tid, str(payload.get('to') or ''), str(payload.get('text') or ''), ACTOR))
 
+
+# ── Live interaction (taskuary/livevoice.py): Talk with a task's agent over local WebRTC ──
+def _live_hand(tid: int, words: str):
+    "His spoken words, as a typed line goes: the one road into the task's agent, landing in the chat as his line."
+    from . import general
+    return general.to_agent(store, int(tid), words, ACTOR, frm='owner', wait=False)
+
+def _live_press(rid: int) -> tuple:
+    "His spoken yes on the card read back to him: the decide handler a click uses, once. -> (ok, why not)."
+    try: out = decide(int(rid), DecideBody(verb='approve'))
+    except HTTPException as e: return False, str(e.detail)
+    if isinstance(out, Response): return False, json.loads(out.body or b'{}').get('detail') or 'it was refused'
+    why = (out or {}).get('send_error') or (out or {}).get('error') or ''
+    return (not why and (out or {}).get('ok', True) is not False), why or 'it was refused'
+
+class LiveOffer(BaseModel):
+    sdp: str; type: str = 'offer'; task_id: int | None = None; pc_id: str | None = None
+
+@app.get('/api/live/status')
+def live_status():
+    "Can Talk start here: Pipecat installed (or installing), both chosen cards set up - and, said once, whether it is fit for HIPAA data."
+    from . import deps, livevoice
+    try: s = livevoice.setup(store); why, hipaa, on = '', s['hipaa'], bool(s['live']['Active'])
+    except RuntimeError as e: why, hipaa, on = str(e), False, False
+    if not why and not on: why = 'the Live interaction card is off - switch it on under Connections'
+    inst = deps.installed('pipecat')
+    if not inst and on: livevoice.ensure(store)
+    if not why and not inst: why = f'Pipecat is not installed yet - {livevoice.installing()}'
+    return {'ready': not why, 'why': why, 'hipaa': hipaa, 'installing': livevoice._install['state'] == 'running'}
+
+@app.post('/api/live/offer')
+async def live_offer(body: LiveOffer):
+    from . import livevoice
+    if not live_status()['ready']: raise HTTPException(409, live_status()['why'])
+    if body.task_id is not None and not store.get_task(body.task_id): raise HTTPException(404, 'task not found')
+    try: return await livevoice.offer(store, body.sdp, body.type, body.task_id, _live_hand, _live_press, pc_id=body.pc_id)
+    except RuntimeError as e: raise HTTPException(409, str(e))
+
+@app.post('/api/live/{pc_id}/bind')
+def live_bind(pc_id: str, body: dict):
+    "A session begun on New goes on with the task his first words made."
+    from . import livevoice
+    tid = int((body or {}).get('task_id') or 0)
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    return {'ok': livevoice.bind(pc_id, tid)}
+
+@app.post('/api/live/{pc_id}/stop')
+async def live_stop(pc_id: str):
+    from . import livevoice
+    return {'ok': await livevoice.stop(pc_id)}
 
 # ── Voice (taskuary/voice.py): speech to text for the funnel and for the prompt box ──
 @app.get('/api/voice/status')

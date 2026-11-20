@@ -10,6 +10,7 @@ import SendIcon from "@mui/icons-material/ArrowUpward";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import api from "./api.js";
+import TalkButton from "./TalkButton.jsx";
 import { liveUp, onLive, touches } from "./live.js";
 import { REST_LOOK_MS, changes, coalesced, restLook } from "./visible.js";
 import { aheadChat, heldChat, heldConversation } from "./taskDetail.js";
@@ -770,6 +771,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
                 {pics && <>{fileChips(pics)}{fileState(pics)}</>}</> : null}
               input={<ComposerPrimitive.Input className="tq-aui-input" onKeyDown={onKey} placeholder={askWords || placeholder || MESSAGE} />}
               onMic={(t) => { const c = runtime.thread.composer, was = c.getState().text; c.setText(was.trim() ? `${was.trimEnd()} ${t}` : t); }}
+              extra={<TalkButton taskId={task.TaskId} />}
               send={<button type="button" className="tq-aui-send" aria-label="Send" data-tq-send="" disabled={sendHeld} onClick={sendBox}>
                 {sendHeld ? <CircularProgress size={14} color="inherit" /> : <SendIcon fontSize="small" />}</button>} />
             <div className="tq-aui-hint">{hint || "Enter sends · Shift+Enter adds a line · paste, drop or attach a file"}</div></>}

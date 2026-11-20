@@ -521,6 +521,9 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
                            'assemblyai', 'speechmatics', 'gladia', 'azure_speech', 'amazon_transcribe'):
             from . import voice
             detail = voice.test(store, store.get_connector(cid, with_secret=True))   # a second of silence through the real endpoint
+        elif c['Type'] in ('live_voice', 'cartesia', 'google_speech'):
+            from . import livevoice
+            detail = livevoice.test(store, store.get_connector(cid, with_secret=True))   # one real call per provider card (livevoice)
         elif c['Type'] in ('openai_image', 'azure_openai_image', 'xai_image', 'image_server',
                            'gemini_image', 'stability_image', 'openrouter_image', 'replicate_image', 'runway_image'):
             from . import images

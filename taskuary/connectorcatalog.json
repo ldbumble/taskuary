@@ -1337,6 +1337,40 @@
       ]
     },
     {
+      "type": "live_voice",
+      "title": "Live interaction",
+      "group": "AI — live interaction",
+      "planned": false,
+      "desc": "Talk with a task's agent out loud: a fast voice in front hears you, says what the agent is doing and reads its answers; the agent does the work. Not for HIPAA data unless Google both hears and speaks.",
+      "match": [
+        "live interaction",
+        "talk to the agent",
+        "voice conversation"
+      ]
+    },
+    {
+      "type": "cartesia",
+      "title": "Cartesia",
+      "group": "AI — live interaction",
+      "planned": false,
+      "desc": "Cartesia Sonic - low-latency text-to-speech for live interaction. Not for HIPAA data.",
+      "match": [
+        "cartesia"
+      ]
+    },
+    {
+      "type": "google_speech",
+      "title": "Google Cloud speech",
+      "group": "AI — live interaction",
+      "planned": false,
+      "desc": "Google Cloud Speech-to-Text and Text-to-Speech on one credential - the pair for HIPAA data, under your own Google Cloud BAA.",
+      "match": [
+        "google cloud speech",
+        "google text-to-speech",
+        "google speech-to-text"
+      ]
+    },
+    {
       "type": "openai_image",
       "title": "OpenAI images",
       "group": "AI — images",

@@ -47,6 +47,7 @@ neo4j = ["neo4j>=5"]
 gcp = ["google-auth>=2"]   # the Google Cloud card: a service-account key swapped for a read-only token
 fhir = ["PyJWT[crypto]>=2"]   # Epic and Cerner: the SMART backend-services JWT, signed RS384
 voice = ["faster-whisper>=1.0"]   # Local Whisper: speech to text on this machine, no key, audio never leaves the box
+live = ["pipecat-ai[webrtc,deepgram,cartesia,google]==0.0.108"]   # Live interaction: talk with a task's agent (livevoice.py)
 desktop = ["pywebview>=5"]  # create_window(maximized=)
 build = ["pyinstaller>=6"]
 # what the DESKTOP EXE ships (taskuary.spec reads deps.BUNDLE and collects each one). A packaged

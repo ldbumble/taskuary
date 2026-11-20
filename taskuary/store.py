@@ -1164,6 +1164,8 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # speech to text: no role - the funnel and the prompt box ask the first active one
                  'gemini_stt': '', 'groq_stt': '', 'openai_stt': '', 'deepgram': '', 'elevenlabs_stt': '', 'stt_server': '', 'local_whisper': '',
                  'assemblyai': '', 'speechmatics': '', 'gladia': '', 'azure_speech': '', 'amazon_transcribe': '',
+                 # live interaction (livevoice.py): no role - a Talk button asks for it
+                 'live_voice': '', 'cartesia': '', 'google_speech': '',
                  # image models (images.py): a tool, never a poll - a picture is drawn when
                  # something asks for one, and lands as an attachment where the owner can see it
                  'openai_image': 'tool', 'azure_openai_image': 'tool', 'xai_image': 'tool', 'image_server': 'tool',
@@ -1709,6 +1711,7 @@ class SQLiteStore:
                          ('gemini_stt', 'Google Gemini transcription'), ('groq_stt', 'Groq (Whisper)'), ('openai_stt', 'OpenAI transcription'), ('deepgram', 'Deepgram'),
                          ('elevenlabs_stt', 'ElevenLabs Scribe'), ('stt_server', 'Any Whisper server'), ('local_whisper', 'Local Whisper'),
                          ('assemblyai', 'AssemblyAI'), ('speechmatics', 'Speechmatics'), ('gladia', 'Gladia'), ('azure_speech', 'Azure AI Speech'), ('amazon_transcribe', 'Amazon Transcribe'),
+                         ('live_voice', 'Live interaction'), ('cartesia', 'Cartesia'), ('google_speech', 'Google Cloud speech'),
                          # image models (images.py). Seeded like every other card: DEFAULT_ROLES
                          # says what a type IS, but the Connections page renders from ROWS, and a
                          # type with no row is a group with nothing in it (2026-09-15).

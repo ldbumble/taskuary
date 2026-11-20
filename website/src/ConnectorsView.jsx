@@ -937,6 +937,33 @@ const META = {
       "Test downloads the model on first use (a few hundred MB) and transcribes a second of silence. Enable, and voice notes are transcribed locally."],
     agent: ["Run `pip show faster-whisper` in the environment Taskuary runs in; if missing, install it yourself: pip install taskuary[voice]. Check for an NVIDIA GPU (nvidia-smi) and set device cuda only if there is one.",
       "Save model (small unless the owner wants otherwise) in ConfigJson, Test (POST {base}/api/connectors/{cid}/test{hdr}) - warn the owner the first Test downloads the model - turn it on, SETUP DONE."] },
+  /* ── AI — live interaction (livevoice.py): talk with a task's agent out loud. The Live interaction card picks who hears and who speaks;
+     each provider is its own card with its key and Test. Deepgram hearing is the Deepgram card above (one key, one card). ── */
+  live_voice: { group: "AI — live interaction", channel: "ai", srcLabel: null,
+    fields: [["hearing (speech to text)", "hearing", "", "Deepgram uses the Deepgram card under AI — voice; Google uses the Google Cloud speech card.",
+               [["deepgram", "Deepgram"], ["google", "Google Cloud Speech-to-Text"]]],
+             ["speaking (text to speech)", "speaking", "", "Each uses its own card here, with its key.", [["cartesia", "Cartesia"], ["google", "Google Cloud Text-to-Speech"]]],
+             ["model for the talking voice (optional — blank = your AI's quick model)", "model"]],
+    secretLabel: null,
+    desc: "Talk with a task's agent out loud: a fast voice in front hears you, says what the agent is doing and reads its answers; the agent does the work. Not for HIPAA data unless Google both hears and speaks.",
+    howto: ["Choose who hears you and who speaks, then set up that card with its key: Deepgram (under AI — voice), Cartesia, or Google Cloud speech.",
+      "Switch this card on: Pipecat, the voice pipeline, installs itself in the background (a few hundred MB, once).",
+      "Test checks Pipecat is here and makes one real call to each chosen card. Then press Talk beside any task's box, or on New.",
+      "The talking voice runs on your AI's quick model, as triage does - no new key. Name a model here only to use another one."] },
+  cartesia: { group: "AI — live interaction", channel: "ai", srcLabel: null,
+    fields: [["voice id (optional — default a stock Cartesia voice)", "voice_id"]],
+    secretLabel: "Cartesia API key",
+    desc: "Cartesia Sonic — low-latency text-to-speech for live interaction. Not for HIPAA data.",
+    howto: ["Create a key at play.cartesia.ai → API Keys.",
+      "Paste it under Credentials. Pick a voice in Cartesia's voice library and paste its id, or leave it blank for the default.",
+      "Test asks Cartesia for that voice with your key."] },
+  google_speech: { group: "AI — live interaction", channel: "ai", srcLabel: null,
+    fields: [["project (optional — the service account's own otherwise)", "project"], ["language code (default en-US)", "language"]],
+    secretLabel: "service-account JSON (or an API key, for Test only)",
+    desc: "Google Cloud Speech-to-Text and Text-to-Speech on one credential — the pair to choose for HIPAA data, under your own Google Cloud BAA.",
+    howto: ["In Google Cloud, enable the Speech-to-Text and Text-to-Speech APIs on a project, and make a service account with access to both.",
+      "Paste the service account's JSON key under Credentials. An API key passes Test, but a live session needs the service account.",
+      "Test speaks one word and hears it back."] },
   openai_image: { group: "AI — images", channel: "ai", srcLabel: null,
     fields: [["model (default gpt-image-1)", "model"], ["base URL (optional — default https://api.openai.com/v1)", "base_url"]],
     secretLabel: "OpenAI API key",
@@ -1752,9 +1779,13 @@ const savedOn = (c, key) => !!(parse(c?.ConfigJson)[key] || (c?.ConfigSaved || [
 // and empty once saved, its label saying so - the Gmail card's OAuth secret and refresh token came back readable in plain boxes
 // (the UI audit, 2026-10-21) because only one card drew them masked
 // ...its quiet "Saved" tick (useBoxesSave) at the end of the box: `tick`
-export function ConfigField({ conn, field: [label, key, ph, help], cfg, setCfg, tick = null, ...rest }) {
+export function ConfigField({ conn, field: [label, key, ph, help, choices], cfg, setCfg, tick = null, ...rest }) {
   const onChange = (e) => setCfg({ ...cfg, [key]: e.target.value });
   const end = tick ? { InputProps: { endAdornment: tick } } : {};
+  // ...a field with `choices` ([value, label] pairs) is a pick, its first the default
+  if (choices) return <TextField select label={label} helperText={help} value={cfg[key] || choices[0][0]} sx={{ bgcolor: "var(--tq-panel, #fff)" }}
+    data-tq-choice={key} onChange={onChange} {...end} {...rest}>
+    {choices.map(([v, l]) => <MenuItem key={v} value={v} sx={{ fontSize: 13 }}>{l}</MenuItem>)}</TextField>;
   if (!(conn?.WriteOnlyKeys || []).includes(key))
     return <TextField label={label} placeholder={ph || ""} helperText={help} value={cfg[key] || ""} sx={{ bgcolor: "var(--tq-panel, #fff)" }} onChange={onChange} {...end} {...rest} />;
   return <TextField type="password" data-tq-write-only={key} autoComplete="new-password" sx={{ bgcolor: "var(--tq-panel, #fff)" }} {...end} {...rest}
@@ -2306,6 +2337,10 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
           "amazon_transcribe", "stt_server", "local_whisper"]),
         ...catalogCards("AI — voice"),
       ] },
+    // talk with a task's agent out loud (livevoice.py): the Talk button beside a task's box and on New
+    { title: "AI — live interaction",
+      note: "Talk with a task's agent out loud: press Talk beside a task's box, or on New. Live interaction picks who hears you and who speaks; each provider is its own card with its key. Deepgram is the Deepgram card under AI — voice. Only the Google pair is for HIPAA data.",
+      cards: [...channelCards(["live_voice", "cartesia", "google_speech"]), ...catalogCards("AI — live interaction")] },
     // a picture when something asks for one: an agent drawing a diagram for a report, or the
     // assistant illustrating a reply. No poll and no trigger - it draws when called.
     { title: "AI — images",
@@ -2757,6 +2792,7 @@ const SIMPLE_FIELDS = { gmail: ["address"], imap: ["address", "imap_host"] };
 const KEYLESS_AI = ["ollama"];
 export const MAIL_READS = "Reads your inbox and sent mail. Never sends without you.";
 // a box the card runs without: it says optional, or what blank means, or its default - and never "required"
+const notHipaa = (cfg) => !((cfg.hearing || "deepgram") === "google" && (cfg.speaking || "cartesia") === "google");
 const isOptional = ([label]) => /optional|blank|default/i.test(label) && !/required/i.test(label);
 const SECRET_HELP = "Kept on this computer and never shown again.";      // firstrun.KEYLESS: an AI card that connects with its key box empty
 // the simple card's one hint under the password, in words a first-time owner has: the full card's Guide says "under Credentials"
@@ -2938,6 +2974,9 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
               <Collapse in={advanced} data-tq-advanced-fold=""><Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, pt: 0.5 }}>
                 {late.map((f) => <ConfigField key={f[1]} conn={conn} field={f} cfg={cfg} setCfg={setCfg} tick={boxes.tick(f[1])} onBlur={boxes.flush} />)}</Box></Collapse>
             </>}
+            {/* ...the live card says plainly when his voice goes where health data may not (livevoice.hipaa_ok) */}
+            {conn.Type === "live_voice" && <Typography variant="body2" data-tq-hipaa={notHipaa(cfg) ? "no" : "yes"} sx={{ color: notHipaa(cfg) ? "var(--tq-danger, #6b2733)" : DIM }}>
+              {notHipaa(cfg) ? "Not for HIPAA data - only Google hearing with Google speaking is." : "Google hears and speaks: usable for HIPAA data under your own Google Cloud BAA."}</Typography>}
             <TestLine test={saveSaid} mt={0} />
           </>
         )}

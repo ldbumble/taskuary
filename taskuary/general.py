@@ -1874,7 +1874,10 @@ def woke_for_silence(s, reply: str, owned: bool) -> bool:
     s.wake('', said=SILENT); return True
 # SEARCH BEFORE ASKING (the owner, 2026-11-05, from Hermes' session_search): a fact an earlier task already settled - found, confirmed, used
 # - is read from that task's ending (search.outcomes), never asked of the owner again. {where}: how this session reads them
-ASK_AFTER = "SEARCH BEFORE YOU ASK: what an earlier task settled is {where}; ask the owner only what none did, and say which task you took it from."
+# ...AND A THING THE MESSAGE NAMES IS LOOKED FOR AMONG HIS OPEN TASKS TOO (walk 8, 2026-11-20: told to post "once the pack is done", the agent
+# said "I don't know what 'the pack' is" while the board pack was an open task on the same rail)
+ASK_AFTER = ("SEARCH BEFORE YOU ASK: what an earlier task settled is {where}, and a thing the message names that you do not know may be another "
+             "task of his, open or closed - search for it; ask the owner only what none did, and say which task you took it from.")
 # THE OWNER'S OWN HISTORY FIRST (mailsearch.py): a researcher asked about a colleague's email wrote code of its own to find the mail
 # instead of reading what Taskuary already holds (the owner, 2026-10-21). Told only to a session with a shell, on the owner's task.
 HISTORY_TOOLS = ("`taskuary --search \"words\" --from \"name or address\" --since YYYY-MM-DD` finds their mail, messages, tasks and people, `taskuary --message ID` reads one whole with its thread, `taskuary --memory` prints what Taskuary has learned about them and `taskuary --remember \"fact\"` keeps one they tell you - never write scripts or code to read a mailbox or Taskuary's database.\n")

@@ -546,6 +546,8 @@ def feed(store, tid: int, sid: str, road: str, event) -> None:
     """ONE EVENT OF A ROAD'S RECORD (a chat agent's trace event, an ACP update, a line of a CLI's log), as it comes: the turn's steps are
     read in the one shape and each new or changed one is written in place - by its place in the turn, so an update never moves it."""
     if not store or not tid or event is None: return
+    # ...his stop is his press's line in the chat, never an error step of the turn (the trace marks it: general.send_prompt)
+    if isinstance(event, dict) and event.get('type') == 'error' and isinstance(event.get('detail'), dict) and event['detail'].get('stop'): return
     t = open_turn(store, tid)
     root = (t['Key'] if t else '').split('+')[0]
     f = _FEEDS.get((int(tid), sid))

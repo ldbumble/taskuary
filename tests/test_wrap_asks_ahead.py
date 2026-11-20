@@ -54,7 +54,10 @@ def world():
 
 
 def ended(s, tid):
-    """Every row of every table the ending can write, without the clock (columns named *At / *Time) or the session id."""
+    """Every row of every table the ending can write, without the clock (columns named *At / *Time) or the session id - the chat's log as a
+    read leaves it (its cards are put by the log's worker, off the writer's thread: chatlog.advance_soon)."""
+    from taskuary import chatlog
+    chatlog.advance(s, tid)
     out = {}
     for (name,) in s.cx.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"):
         cur = s.cx.execute(f'SELECT * FROM "{name}"')

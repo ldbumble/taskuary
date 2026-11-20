@@ -55,7 +55,7 @@ class TheDoor(Base):
     def test_a_second_reply_with_nothing_new_from_them_is_refused_and_says_why(self):
         out = wrapup.agent_reply(self.s, self.tid, AGAIN, 'coding')
         self.assertFalse(out['ok']); self.assertTrue(out['already_answered'])
-        self.assertIn('a reply to Gail Moreno already went at 05:33 PM', out['why'])
+        self.assertIn('a reply to Gail Moreno already went at 5:33 PM', out['why'])
         self.assertIn('--follow-up', out['why'])
         self.assertEqual(pending(self.s, self.tid), [], 'nothing waits in Close out')
 
@@ -69,8 +69,8 @@ class TheDoor(Base):
         out = wrapup.agent_reply(self.s, self.tid, AGAIN, 'coding', follow_up=True)
         self.assertTrue(out['ok'])
         rv = self.s.get_review(out['review_id'])
-        # ...its time, and its day when that is not today ("05:33 PM on Oct 27") - CI ran past midnight UTC and the bare time no longer matched
-        self.assertRegex(rv['Reason'], r'^a follow-up to your 05:33 PM( on \w{3} \d{1,2})? reply', rv['Reason'])
+        # ...its time, and its day when that is not today ("5:33 PM on Oct 27") - CI ran past midnight UTC and the bare time no longer matched
+        self.assertRegex(rv['Reason'], r'^a follow-up to your 5:33 PM( on \w{3} \d{1,2})? reply', rv['Reason'])
         with mock.patch('taskuary.responder.write_draft') as redraft: wrapup.finish(self.s, self.tid, REP, None, 'coding')
         redraft.assert_not_called()
         [rv] = pending(self.s, self.tid)
@@ -105,7 +105,7 @@ class TheEnding(Base):
             out = wrapup.finish(self.s, self.tid, REP, None, 'coding')
         redraft.assert_not_called()
         self.assertFalse(out['drafting']); self.assertEqual(pending(self.s, self.tid), [])
-        self.assertTrue(any('already went at 05:33 PM' in c['Body'] for c in self.s.list_comments(self.tid)))
+        self.assertTrue(any('already went at 5:33 PM' in c['Body'] for c in self.s.list_comments(self.tid)))
 
     def test_with_new_mail_the_ending_raises_the_reply_as_before(self):
         mail(self.s, self.tid, 'g-2', 'One more - can you also add September?', '18:00:00')
@@ -118,7 +118,7 @@ class TheEnding(Base):
 class TheAgentIsTold(Base):
     def test_continue_tells_it_the_reply_went_and_nothing_came_since(self):
         news = continuity.news_block(self.s, self.tid)
-        self.assertIn('YOUR REPLY WENT OUT: the reply to Gail Moreno was SENT at 05:33 PM', news)
+        self.assertIn('YOUR REPLY WENT OUT: the reply to Gail Moreno was SENT at 5:33 PM', news)
         self.assertIn('nothing new has come from them since', news); self.assertIn('August export was dropping rows', news)
 
     def test_the_resumed_cli_hears_it_in_its_seed_and_reads_it_in_its_file(self):

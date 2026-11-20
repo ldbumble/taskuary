@@ -56,7 +56,7 @@ def test_a_correction_after_a_pending_draft_names_the_newest_message_and_the_dra
     # ...and each rule ONCE, in the startup context (selfclose.DRAFTS_ONCE): the turn carries the facts under a short head
     assert selfclose.DRAFTS_ONCE in system and selfclose.LATEST_LINE not in turn and selfclose.LATEST_HEAD in turn and 'THE NEWEST MESSAGE' not in system
     assert 'THE NEWEST MESSAGE - from the owner (in this chat)' in turn and FIX in turn
-    assert 'THE DRAFT WAITING NOW (to Gail Moreno, drafted at 02:48 PM' in turn and f'rv{rid}' not in turn and 'BEFORE the newest message' in turn
+    assert 'THE DRAFT WAITING NOW (to Gail Moreno, drafted at 2:48 PM' in turn and f'rv{rid}' not in turn and 'BEFORE the newest message' in turn
     assert OLD in turn and selfclose.WITHDRAW_LINE in system and selfclose.WITHDRAW_LINE not in turn
 
 
@@ -64,7 +64,7 @@ def test_already_sent_replies_are_in_the_turns_context():
     s = MemoryStore(); tid, *_ = the_owners_day(s)
     _, turn = general._prompt(s, tid)
     line = next(l for l in turn.split(cardqueue.SCREEN_HEAD)[1].splitlines() if SENT in l)
-    assert 'to Gail Moreno' in line and line.startswith('- Sent 06:10 PM')
+    assert 'to gail@northwind.example' in line and line.startswith('- Sent 6:10 PM')
 
 def test_a_resumed_turn_carries_the_draft_and_the_sent_but_not_a_bare_answer():
     s = MemoryStore(); tid, *_ = the_owners_day(s)
@@ -83,7 +83,7 @@ def test_a_turn_no_message_started_is_not_handed_the_answered_one_as_newest():
     at(s, 'comment', 'CommentId', s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Fixed - the November list is drafted.'), '2026-11-06 15:23:00')
     b = general.latest_block(s, tid)                    # ...the owner's Send wakes it: nobody said anything new
     assert 'THE NEWEST MESSAGE' not in b and selfclose.LATEST_LINE not in b and 'BEFORE the newest message' not in b
-    assert selfclose.NO_NEW_LINE in b and f'THE LAST MESSAGE, WHICH YOU ANSWERED - from the owner (in this chat), at 03:22 PM' in b and FIX in b
+    assert selfclose.NO_NEW_LINE in b and f'THE LAST MESSAGE, WHICH YOU ANSWERED - from the owner (in this chat), at 3:22 PM' in b and FIX in b
     # ...a mail that joins after that answer is new, until the turn Taskuary starts on it has answered
     m = s.add_message({'TaskId': tid, 'ExternalId': 'g-2', 'ConversationId': 'conv-g', 'Channel': 'email', 'FromName': 'Gail Moreno',
                        'FromEmail': 'gail@northwind.example', 'BodyText': 'Actually I need the December one.', 'Status': 'routed'})

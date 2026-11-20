@@ -144,14 +144,14 @@ class GeneralDefaultTests(unittest.TestCase):
         s = store(replies_off=()); spawned = []
         with mock.patch.object(ingest, '_spawn', side_effect=lambda f, *a: spawned.append(f.__name__)):
             out = ingest.ingest_message(s, {**Q, 'body': 'Please sort out the badge situation.'}, llm=lambda *a, **k: '{"intent": "task", "why": "an ask"}')
-        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'task')
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')
         self.assertNotIn('_auto_code', spawned)                          # no coding session on a guess (PW-068)
 
     def test_an_invalid_kind_is_general_too(self):
         s = store(replies_off=())
         with mock.patch.object(ingest, '_spawn'):
             out = ingest.ingest_message(s, {**Q, 'body': 'Please sort out the badge situation.'}, llm=lambda *a, **k: '{"intent": "task", "kind": "robot", "why": "x"}')
-        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'task')
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')
 
     def test_explicit_coding_and_owner_task_decisions_are_kept(self):
         s = store(replies_off=()); spawned = []
@@ -159,7 +159,7 @@ class GeneralDefaultTests(unittest.TestCase):
             coding = ingest.ingest_message(s, {**Q, 'external_id': 'c', 'conversation_id': 'c', 'body': 'Fix the export job.'}, llm=lambda *a, **k: '{"intent": "task", "kind": "coding", "why": "x"}')
             own = ingest.ingest_message(s, {**Q, 'external_id': 'o', 'conversation_id': 'o', 'body': 'Sign the lease form in person.'}, llm=lambda *a, **k: '{"intent": "task", "kind": "task", "why": "x"}')
         self.assertEqual(s.get_task(coding['task_id'])['Kind'], 'coding'); self.assertIn('_auto_code', spawned)
-        self.assertEqual(s.get_task(own['task_id'])['Kind'], 'task')
+        self.assertEqual(s.get_task(own['task_id'])['Kind'], 'general')          # ...what is placed in Tasks is its agent's (one arrival rule)
 
     def test_the_keyword_fallback_no_longer_guesses_coding(self):
         f = routing.draft_task_fields({'subject': 'Stack trace in the nightly export', 'body': 'Traceback (most recent call last): the export crashed with a KeyError again, can someone fix'})

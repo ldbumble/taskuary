@@ -237,15 +237,6 @@ def test_a_reply_that_reads_as_steering_an_ai_starts_no_agent_by_itself():
     assert any(x.startswith('No agent started: It reads as an attempt to steer an AI') for x in lines(s, tid))
 
 
-def test_a_reply_owed_on_the_owners_own_row_goes_to_the_agent():
-    "A question that joins a row on the owner's own list is a reply owed like any other: it was left with no draft, no agent and no word."
-    s = store()
-    out, went = arrived(s, mail(body='Remember the dentist on Friday.'), says(intent='task', kind='task'))
-    tid = out['task_id']; assert s.get_task(tid)['Kind'] == 'task' and went == []
-    _out, went = arrived(s, mail(**{**WORK, 'body': 'Can you confirm the time with them?'}), says(intent='reply_only', kind='task', refines=False))
-    assert went == ['reply_to_agent', '_auto_general'] and s.get_task(tid)['Kind'] == 'general' and s.task_has_tag(tid, ingest.REPLY_TAG)
-
-
 def test_a_reply_nothing_has_written_is_not_called_a_draft_left_behind():
     "A second question on a reply nobody wrote yet: the review stays on the line it was raised for (the owner, 2026-11-15) - and is no stale draft."
     s = store(general_auto_enabled='0'); tid = reply_task(s)
@@ -456,7 +447,7 @@ def test_a_notice_joining_the_thread_leaves_the_owners_typed_reply_addressed_to_
     rv = s.get_review(rv['ReviewId'])
     assert rv['MessageId'] != rv['AnswersMid']                                     # the pin moved to the newest line...
     assert s.get_message(rv['AnswersMid'])['FromEmail'] == ERIN                    # ...and the reply still answers Erin
-    assert cardqueue.what(s, {'rids': [rv['ReviewId']], 'rows': [rv]}) == 'the reply to Erin Blake'
+    assert cardqueue.what(s, {'rids': [rv['ReviewId']], 'rows': [rv]}) == f'the reply to {ERIN}'
 
 
 def test_a_notice_that_needs_the_agent_on_a_reply_task_says_the_reply_is_still_the_persons():

@@ -60,16 +60,20 @@ def _post(url, json=None, headers=None, timeout=None):
     r = mock.Mock(status_code=200); r.json.return_value = agenttools.rpc(json, lambda n, a: '', ()); return r
 
 
+def _busy() -> int:
+    "Threads at work - not the chat log's card worker, which lives as long as the process once a card was raised (chatlog.advance_soon)."
+    return sum(t.name != 'chatlog-cards' for t in threading.enumerate())
+
 def _settle(base, wait=60):
     "Every thread the day set going has finished: a follow-up that wakes an agent again shows up as more calls, never as a hang."
     end = time.monotonic() + wait
-    while threading.active_count() > base and time.monotonic() < end: time.sleep(0.05)
+    while _busy() > base and time.monotonic() < end: time.sleep(0.05)
 
 
 def day(s, n=120, looks=48, model=Model, every=8) -> dict:
     "{job: (calls, est. tokens)} for one idle day of `n` mails and `looks` Advisor looks."
     Model.spent = {}
-    base, k = threading.active_count(), iter(range(10**6))
+    base, k = _busy(), iter(range(10**6))
     # the suite's guard lets only an owner's start through; the day's starts are the router's, run here as the app runs them
     owners, toolbox = general.start_session, apiagent.taskuary_tools
     with mock.patch.object(llm, 'build_llm', side_effect=lambda store, *a, job=None, **kw: model(job or 'triage')), \

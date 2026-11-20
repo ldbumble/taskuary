@@ -1412,6 +1412,15 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   const navHow = useRef("replace");
   // ...and whether the place now asked for came from the address itself (Back, Forward, a link): that one is never a step of its own
   const urlStep = useRef(false), lastPlace = useRef("");
+  // ...and the task Back, Forward or a link ASKED for, until the table is on it: while it loads the table still shows the task he left, and
+  // read against the address that was a move to write - walk 5, 2026-11-19: Back landed on the closed task, its slow open had not drawn yet,
+  // and the task he was on was pushed again over it, so the arrow seemed to do nothing and the next Back skipped the closed task
+  const urlWant = useRef("");
+  // ...set the moment the address moves by Back or Forward (a popstate), however busy the page is: until the table reaches that address,
+  // nothing is written over it (the in-flight close of walk 5: the landing wrote the drawn task again over the Back he had pressed)
+  // byUrl: the open the address asked for is under way (its move may start only once the page is free) - not a move of his own
+  const popped = useRef(false), byUrl = useRef(false);
+  useEffect(() => { const on = () => { popped.current = true; }; window.addEventListener("popstate", on); return () => window.removeEventListener("popstate", on); }, []);
   const cardRef = useRef(null);
   // every move of the table made HERE, counted: a server word read before one is older than it (readChat, loadPile)
   const tableMoves = useRef(0);
@@ -2085,6 +2094,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     setBusy(true); setErr(""); setFlight({ from: key && key === currentRef.current?.key ? null : currentRef.current?.key || null });
     pickedRef.current = !!key;
     navHow.current = "push";                         // every move is a step of the one list both Backs walk (appLinks.navBack), Next too
+    if (!byUrl.current) { urlWant.current = ""; popped.current = false; }    // ...a move of his own: no address request waits any more
     const optimisticId = asUser ? `u${Date.now()}` : null;
     if (optimisticId) setMsgs((m) => pickLine(m, { id: optimisticId, role: "user", text: asUser, pick: key || undefined }));
     // the row the press moves FROM: the one on the table, or the one the press names
@@ -2140,6 +2150,10 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
       setMsgs((m) => [...m, { id, role: "assistant", text: "", options: [], chips: [], card: belowItem, ahead: true }]);
       putOnTable(belowItem);
       if (how === "back") setFoldedKey((k) => (k === belowItem.key ? null : k));   // ...Back onto a row a close kept folded opens it
+      // ...AND ITS PLACE IS A STEP FROM THE PRESS, not from the answer (reproduced on a scratch app, walk 5 2026-11-19): Mark done on a task whose
+      // agent is written up first answers seconds later, the address kept naming the closed task while the next one was drawn, and a Back
+      // pressed meanwhile skipped the closed task and left the drawn one on screen
+      else if (belowItem.tid) { recordPlace(`#task=${belowItem.tid}`, "push"); lastPlace.current = `#task=${belowItem.tid}`; navHow.current = "replace"; }
     }
     // ...AND WHAT IT READS LEAVES THE RAIL AT THE PRESS (rule 4): Next on a row the walk says it reads (walk.reads - a report, an idea, an fyi),
     // a batch's "All read, next" (a settle). Held to the answer, a slow one kept a read batch in the FYI heading's count and a passed idea on
@@ -3300,7 +3314,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
       if (browsing) { setRailOpen(false); setFoldedKey(null); browseDownRef.current?.(); putOnTable(null, "view"); }
       navHow.current = "replace";
     }
-    else if (request.kind === "task") openTaskRef.current?.(request);
+    else if (request.kind === "task") { if (request.fromUrl) byUrl.current = true; openTaskRef.current?.(request); }
     else if (request.kind === "msg") openMsgRef.current?.(request.mid);   // #msg=N: that message's card (canvasLinks)
     else if (request.kind === "new") browseRef.current?.("new", request.state || {});     // #new-task: the New card in the conversation (addressed: Message them)
     // Back to the address with no place: the walk's own table, the page over it put down (appLinks.onPlace)
@@ -3308,7 +3322,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     // page headers stood in their place over a lone floor Next, one more for every trip (the 2026-10-25 sweep)
     else if (request.kind === "home") { setRailOpen(false); setFoldedKey(null); browseDownRef.current?.(); putOnTable(null, "view");
       setMsgs((m) => (m.length && m.every((x) => x.role === "browse") ? [] : m)); }
-    if (request.fromUrl) { navHow.current = "replace"; urlStep.current = true; }
+    if (request.fromUrl) { navHow.current = "replace"; urlStep.current = true; urlWant.current = request.kind === "task" && request.tid ? `#task=${request.tid}` : ""; }
   }, [request, state]);   // eslint-disable-line react-hooks/exhaustive-deps
   // A COLD LINK TO A TASK (#task=N in a new tab) draws that task first: the conversation came back with the walk's last item on
   // the table, which drew whole - its view and every read behind it - for the 0.6-1 s the link's own pull took, then gave way.
@@ -3347,6 +3361,10 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     // ...read against the ADDRESS itself, which still names the task the table left (reproduced on a scratch app: the place the effect last
     // wrote is missed whenever a turn or a request held it back, and a link-opened task was never one it wrote)
     const at = window.location.hash || "", task = (h) => /^#task=\d+$/.test(h);
+    if (urlWant.current && placeHash !== urlWant.current && at === urlWant.current) return;     // ...the asked-for task is still on its way
+    if (popped.current && task(at) && placeHash !== at) return;                                  // ...the task Back went to, still on its way
+    popped.current = false; byUrl.current = false;
+    urlWant.current = "";
     const moved = (task(placeHash) && task(at) && at !== placeHash) || (!!placeHash && !!lastPlace.current && placeHash !== lastPlace.current && !urlStep.current);
     recordPlace(placeHash, moved ? "push" : navHow.current); navHow.current = "replace"; urlStep.current = false; lastPlace.current = placeHash;
   }, [placeHash, active, state, old, firstRun, busy, request]);   // eslint-disable-line react-hooks/exhaustive-deps

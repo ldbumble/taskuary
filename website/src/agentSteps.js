@@ -585,9 +585,10 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
 }
 const tidy = ({ raw, output, live, q, host, file, pattern, count, asked, retry, kids, task, ...s }) => {
   if (s.kind !== "helper" || !(kids?.length || task)) return s;
-  // ...a helper reads by its own work: at it, "Handing part of the work to a helper: …"; done, "Helper: … (done, 4 steps)" - its steps under it
+  // ...a helper reads by its own work: at it, "Handing part of the work to a helper: …"; done, the work itself in plain words - "Fetch Boston
+  // catering prices · 4 steps" (walk 5, 2026-11-19: "helper: … (done)" said the machinery, not the work) - its steps under it
   const ks = kids?.length ? group(kids).map(tidy) : [], n = ks.filter(isWork).length;
-  const summary = s.status === "running" ? s.summary : `Helper: ${task || "part of the work"} (${s.status === "error" ? "failed" : "done"}${n ? `, ${plural(n, "step")}` : ""})`;
+  const summary = s.status === "running" ? s.summary : `${task || "Part of the work"}${s.status === "error" ? " - it did not finish" : ""}${n ? ` · ${plural(n, "step")}` : ""}`;
   return { ...s, summary, ...(ks.length ? { kids: ks } : {}) };
 };
 

@@ -55,7 +55,7 @@ test("a helper's own steps nest under its row, and while it runs alongside later
   assert.equal(main.summary, "Read status.md");
   // ...and done, the spinner goes and the row says what it was and how much it did
   const [ended] = turnParts([...trace, done("h")]);
-  assert.equal(ended.steps[0].summary, "Helper: Check live portal pages (done, 2 steps)");
+  assert.equal(ended.steps[0].summary, "Check live portal pages · 2 steps");
   assert.equal(ended.steps[0].alongside, undefined);
 });
 

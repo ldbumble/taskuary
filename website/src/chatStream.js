@@ -114,16 +114,26 @@ export function turnParts(events, { answer = "", keepStart = false, live = false
 }
 // what a turn did, counted for its fold's line: "6 steps" - its edits each one
 export const workCount = (parts) => workRows(parts).length;
-const workRows = (parts) => (parts || []).flatMap((p) => (p.type === "edit" ? [p] : p.type === "work" ? p.steps.filter(isWork) : []));
+// ...a helper's own steps among them (walk 5: "4 steps" stood five minutes while the helper under one of them did all the work)
+const withKids = (ss) => ss.filter(isWork).flatMap((s) => [s, ...withKids(s.kids || [])]);
+const workRows = (parts) => (parts || []).flatMap((p) => (p.type === "edit" ? [p] : p.type === "work" ? withKids(p.steps) : []));
 // ...AND ITS ONE LINE SAYS THE ROWS IT OPENS ON (the real-Claude walk, 2026-11-19: "3 steps - ran 2 commands, used a tool" opened on two rows,
 // and "1 step - used a tool" named nothing): counted from those rows, in their own words - the first few, then how many more
 const FEW = 3;
 const lower = (t) => String(t || "").replace(/^[A-Z](?![A-Z])/, (c) => c.toLowerCase());
+// ...and rows of one kind say it once, counted (walk 5: "read 3 web pages, read 4 web pages" - two runs of reads cut by a sentence)
+const KIND_SAID = { read: (k) => `read ${plural(k, "file")}`, page: (k) => `read ${plural(k, "web page")}`, run: (k) => `ran ${plural(k, "command")}`,
+  edit: (k) => `changed ${plural(k, "file")}`, search: (k) => `searched files ${k} times`, web: (k) => `searched the web ${k} times`, mail: () => "searched your mail" };
+const calls = (r) => String(r.id || "").split("+").length;
 export const foldLine = (parts) => {
   const rows = workRows(parts), n = rows.length;
   if (!n) return "";
-  const said = rows.slice(0, n > FEW ? FEW - 1 : FEW).map((r) => lower(r.summary)).filter(Boolean);
-  return `${plural(n, "step")}${said.length ? ` - ${said.join(", ")}${n > FEW ? `, and ${n - (FEW - 1)} more` : ""}` : ""}`;
+  const kinds = [], by = new Map();
+  for (const r of rows) { const k = r.type === "edit" ? "edit" : r.kind; if (!by.has(k)) { by.set(k, []); kinds.push(k); } by.get(k).push(r); }
+  const words = kinds.flatMap((k) => { const rs = by.get(k);
+    return rs.length > 1 && KIND_SAID[k] ? [KIND_SAID[k](rs.reduce((t, r) => t + (r.type === "edit" ? 1 : calls(r)), 0))] : rs.map((r) => lower(r.summary)); }).filter(Boolean);
+  const said = words.slice(0, words.length > FEW ? FEW - 1 : FEW);
+  return `${plural(n, "step")}${said.length ? ` - ${said.join(", ")}${words.length > FEW ? `, and ${words.length - (FEW - 1)} more` : ""}` : ""}`;
 };
 // A DRAFT WHERE IT STOOD, no longer the one to press (GeneralWorkspace wasCard, NotSent): the list's card in one of these states, carrying what it said
 export const isPastCard = (c) => ["superseded", "passed", "withdrawn", "rejected"].includes(c?.status) && !!c.was;

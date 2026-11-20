@@ -1464,8 +1464,11 @@ def run_x_post(cfg):
     if not text: raise RuntimeError('an X post needs `text`')
     if len(text) > X_CHARS: raise RuntimeError(f'X posts are capped at {X_CHARS} characters; this one is {len(text)}')
     if miss := [n for n in X_KEYS if not str(_cfg(c).get(n) or '').strip()]:
-        raise Fixable(f"posting needs your own X app's user keys ({', '.join(miss)} not saved) - developer.x.com: your app, then Keys and tokens; "
-                      'set the app to Read and write first', 'Open the X card', '#connector=x')
+        # ...SAID AS A SIGN-IN, IN PLAIN WORDS WITH THE WAY PAST IT (walk 8, 2026-11-20: "consumer_key, consumer_secret ... not saved" stood on his
+        # card): the keys are the X card's own setup, which that card walks him through
+        from .connectorcatalog import by_type
+        raise Fixable(f"{(by_type('x') or {}).get('title') or 'X'} isn't set up to post as you yet - [open its card](#connector=x) in Connections "
+                      'and follow its steps; nothing was posted', 'Open the X card', '#connector=x')
     body, media = {'text': text}, ''
     if cfg.get('image_path'):           # the picture goes up only after every check above: an upload X keeps is a stray if the post is refused here
         from pathlib import Path

@@ -366,11 +366,12 @@ class XPosts(unittest.TestCase):
         self.assertIn('not permitted', str(e.exception))
         self.assertIn('Read and write', str(e.exception))
 
-    def test_without_the_user_keys_it_says_which_and_where(self):
+    def test_without_the_user_keys_it_says_so_in_plain_words_and_where(self):
+        # walk 8, 2026-11-20: "consumer_key, consumer_secret ... not saved" stood on his card - setup words, the card's own to walk him through
         from taskuary.outbound import Fixable
         card = {**_x_card(), 'ConfigJson': json.dumps({'username': 'alexdoyle'})}
         with self.assertRaises(Fixable) as e: self.post(_Resp({}), card=card, text='hi')
-        self.assertIn('Keys and tokens', str(e.exception))
+        self.assertIn("isn't set up to post as you yet", str(e.exception)); self.assertNotIn('consumer', str(e.exception))
         self.assertEqual(e.exception.fix['href'], '#connector=x')
 
     def test_an_over_long_post_is_refused_before_the_call(self):

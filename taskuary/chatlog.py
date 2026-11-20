@@ -1202,7 +1202,12 @@ def beside(store, tid: int, out: list, at_work: bool, hold_) -> dict:
         at = next((t for t in reversed(turns) if q and q in said(t)), None)
         # ...one no turn's words hold (a CLI's own question tool, a step handed over): the turn at work when it was asked
         raised = (_turn_at(store, tid, ask['at']) or {}).get('Key') if ask.get('at') else None
-        ask = {**ask, 'turn': (at or next((t for t in turns if t['id'] == raised), None) or last)['id'], **({'said': True} if at else {})}
+        on = at or next((t for t in turns if t['id'] == raised), None) or last
+        # ...AND THE AGENT'S OWN WORDS ARE THE QUESTION (decided 2026-11-20, walk 8: asked in its prose and again in the marker, the turn asked
+        # Marcus's times twice): the marker sets the wait; its text is drawn only under a turn with no words of its own
+        # ...a plain question only: a chooser's picks and a sign-in's or a hand-over's own line are drawn whatever the turn said
+        mine = not ask.get('choices') and ask.get('ask', 'question') == 'question' and said(on)
+        ask = {**ask, 'turn': on['id'], **({'said': True} if at or mine else {})}
         # ...a missing fact is one question: the reply it cannot write yet is not drawn under it as an empty box
         for x in turns: x['cards'] = [c for c in x.get('cards') or [] if not (c.get('status') == 'pending' and c.get('what') in DRAFTS and not c.get('was'))]
     # ...the turn whose letter waits for his Send (the page hangs the letters' block there), never one at work

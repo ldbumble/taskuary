@@ -1286,7 +1286,7 @@ class TheList(unittest.TestCase):
         ask = {'request_id': 'q1', 'kind': 'input_needed', 'text': 'Should the draft say Tuesday or Thursday?', 'choices': []}
         with mock.patch('taskuary.taskstate.asking', return_value=dict(ask)): self.assertTrue(self.list()['asking'].get('said'))
         # ...one the turn did not say - a sign-in it waits on, a step handed over - is the page's own line still
-        with mock.patch('taskuary.taskstate.asking', return_value={**ask, 'text': 'Sign in to the portal to continue'}): self.assertNotIn('said', self.list()['asking'])
+        with mock.patch('taskuary.taskstate.asking', return_value={**ask, 'text': 'Sign in to the portal to continue', 'ask': 'signin'}): self.assertNotIn('said', self.list()['asking'])
 
     def test_an_open_question_stands_in_the_turn_that_asked_it_and_never_follows_the_chat_s_foot(self):
         """Recorded on the real CLI, 2026-11-13: the agent asked which city, the sender wrote again, and the turn that mail woke answered

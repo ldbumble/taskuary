@@ -432,3 +432,19 @@ def test_a_reply_raised_empty_and_written_after_his_line_stands_under_the_turn_t
     items = chatlog.read(s, tid)['items']
     at = {c['review']: i for i, x in enumerate(items) for c in x.get('cards') or []}
     assert [x['kind'] for x in items] == ['arrival', 'turn', 'line', 'turn'] and at.get(rid) == 3, (at, [x['kind'] for x in items])
+
+
+def test_the_agents_own_words_are_the_question_the_marker_only_marks_the_wait():
+    """WALK 8 (2026-11-20, decided that day): asked in its prose and again in its [[TASKUARY-ASK]], the turn asked Marcus's times twice. The
+    marker sets the wait; its text is drawn only under a turn that said nothing of its own."""
+    from unittest import mock
+    from taskuary import conversation, general, taskstate
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'I cannot see your calendar. Which Thursday times work for you?')
+    out = chatlog.read(s, tid)['items']
+    ask = {'text': 'Which Thursday 26 November times are you free for the call?', 'request_id': 'r1', 'source': 'marker'}
+    with mock.patch.object(taskstate, 'asking', return_value=ask):
+        assert chatlog.beside(s, tid, out, False, None)['asking'].get('said') is True, 'its own words asked it: the marker text is not drawn again'
+        bare = [{**x, 'text': '', 'steps': []} if x['kind'] == 'turn' else x for x in out]
+        assert not chatlog.beside(s, tid, bare, False, None)['asking'].get('said'), 'a turn with no words: the marker text is the question'

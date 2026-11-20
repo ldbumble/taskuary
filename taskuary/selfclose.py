@@ -636,8 +636,8 @@ def tick_markers(text: str) -> tuple:
 # it?" over the Send card that already asks it, while the summary line said the card IS the confirmation - the two now say one thing
 ASK_MARKER = '[[TASKUARY-ASK]]'
 _ASK_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\]\s*:?\s*(.*)', re.I | re.S)
-ASK_LINE = (f'ASKING THE OWNER: a real blocker - a fact or a decision only they can give - is one question, the last line of your reply: '
-            f'{ASK_MARKER} <the exact question, with your recommended answer> - never asked again in your words above it, and never for '
+ASK_LINE = (f'ASKING THE OWNER: a real blocker - a fact or a decision only they can give - is one question, asked once in your own words, with '
+            f'your recommended answer; end the reply with {ASK_MARKER} on its own line, which only marks that you wait on him. Never ask for '
             f'permission to do what a card already asks (its Send, Post or Approve is that question).')
 
 

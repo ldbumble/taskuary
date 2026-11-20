@@ -27,7 +27,7 @@ class AskMarker(unittest.TestCase):
         the agent "cannot continue without", and a third called the marker the way to "offer choices" - so an ask for leave to send stood
         over the card that already asked it."""
         ask, summary = selfclose.ASK_LINE, selfclose.SUMMARY_LINE
-        self.assertIn('a fact or a decision only they can give', ask); self.assertIn('never for permission to do what a card already asks', ask)
+        self.assertIn('a fact or a decision only they can give', ask); self.assertIn("ask for permission to do what a card already asks", ask)
         self.assertNotIn('offer choices', summary)
         # ...said ONCE, by the ask line (the design round, 2026-11-18): the summary line said it a second time in other words
         self.assertIn('(its Send, Post or Approve is that question)', ask); self.assertNotIn('IS the confirmation', summary); self.assertNotIn('shall I send', summary)

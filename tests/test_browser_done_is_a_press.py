@@ -91,6 +91,21 @@ class DoneIsAPress(unittest.TestCase):
         self.assertEqual(self.said(), [], 'said once: no second line by Taskuary above it')
         self.assertFalse(any('browser act' in x for x in self.lines()))
 
+    def test_a_page_the_agent_moved_on_is_never_said_as_his(self):
+        # the owner's rule, tell the truth (2026-11-19): the agent opened another page while a human check waited on him, and the chat read
+        # "You did the step on nowsecure.nl - the agent goes on" - he had done nothing
+        rid = self.turn()
+        browserview._BEGAN['run1'] = time.time() + 1                  # the agent's own command, after the hand-over
+        self.addCleanup(browserview._BEGAN.pop, 'run1', None)
+        self.assertTrue(bg.agent_moved('run1', rid))
+        self.assertTrue(bg.left_by_agent(self.s, self.tid, rid))
+        self.assertEqual(self.lines(), [], 'no press of his')
+        self.assertEqual(self.said(), [])
+        self.assertNotIn(rid, self.open())
+        notes = [c['Body'] for c in self.s.list_comments(self.tid, internal=True)]
+        self.assertTrue(any(n.startswith(bg.NOT_NEEDED_ANY_MORE) for n in notes)) and self.assertFalse(any('You did the step' in n for n in notes))
+        self.assertIn('they did nothing there', self.heard()[0][0])
+
     def test_a_step_that_was_not_done_draws_no_press(self):
         rid = self.turn()
         self.assertTrue(bg.not_pressed(self.s, self.tid, rid, 'the browser was closed before it was done'))

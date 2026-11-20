@@ -843,7 +843,7 @@ def watch_turn(store, tid: int, sid: str, rid: str, what: str, site: str, watch=
     2026-11-05: "if we need the user we should wait for them to do it"): when the page moves on, the agent hears it and goes on. Done stays."""
     if watch is ...: watch = globals()['watch']
     from . import browserview
-    with _HANDS_LOCK: HANDS[rid] = {'tid': tid, 'sid': str(sid), 'what': what, 'site': site, 'tab': browserview.active_tab(sid)}
+    with _HANDS_LOCK: HANDS[rid] = {'tid': tid, 'sid': str(sid), 'what': what, 'site': site, 'tab': browserview.active_tab(sid), 'at': time.time()}
     if watch: threading.Thread(target=watch, args=(store, tid, sid, rid), daemon=True, name=f'turn-watch-{tid}').start()
 
 
@@ -865,13 +865,14 @@ def watch(store, tid: int, sid: str, rid: str, conn=None, every: float = PRESS_E
                 if not browserview.state(sid, fresh=True).get('open'): return not_pressed(store, tid, rid, 'the browser was closed before it was done')
                 continue
             steady = steady + 1 if past(start, now) else 0
-            if steady >= PRESS_STEADY: return pressed(store, tid, rid, now)
+            # ...WHO MOVED IT (the owner's rule: tell the truth): the agent's own browser command since the hand-over is the agent's move, never his
+            if steady >= PRESS_STEADY: return left_by_agent(store, tid, rid) if agent_moved(sid, rid) else pressed(store, tid, rid, now)
         return False
     finally:
         if conn is None: c.close()
 
 
-def _close(store, tid: int, rid: str, said: str) -> dict | None:
+def _close(store, tid: int, rid: str, said: str, by: str = 'owner') -> dict | None:
     "Close the hand-over ONCE - the watch and the owner's words may race - and record its answer. What it was, or None if it was closed already."
     from . import workerstate as ws
     req = next((r for r in ws.open_requests(ws.events(store, tid)) if r['RequestId'] == rid), None)
@@ -880,8 +881,28 @@ def _close(store, tid: int, rid: str, said: str) -> dict | None:
     h = h or {'sid': str(req['Sid']), 'site': 'the page'}
     from . import browserview
     browserview.keep_soon(h['sid'])                         # a step through on the page - a code, a check: what it set is kept now
-    if req: ws.record(store, tid, h['sid'], 'answered', request_id=rid, text=said, source='owner')
+    if req: ws.record(store, tid, h['sid'], 'answered', request_id=rid, text=said, source=by)
     return h
+
+
+def agent_moved(sid: str, rid: str) -> bool:
+    "Whether a browser command of the agent's that can move the page began since hand-over `rid` was handed (browserview.began)."
+    from . import browserview
+    with _HANDS_LOCK: at = (HANDS.get(rid) or {}).get('at') or 0
+    return bool(at) and browserview._BEGAN.get(str(sid), 0) > at
+
+
+# A HAND-OVER THE AGENT WALKED AWAY FROM IS WITHDRAWN IN TASKUARY'S WORDS (the owner's rule, tell the truth - 2026-11-19: the agent opened
+# another page while a human check waited on him, and the chat read "You did the step on nowsecure.nl - the agent goes on"; he had done
+# nothing). Nothing is said as his, no press of his is recorded; the agent hears that the step is off his hands
+NOT_NEEDED_ANY_MORE = 'The agent left that page, so the step is no longer needed'
+def left_by_agent(store, tid: int, rid: str) -> bool:
+    h = _close(store, tid, rid, NOT_NEEDED_ANY_MORE, by='taskuary')
+    if not h: return False
+    store.add_comment(tid, 'taskuary', 'agent', f"{NOT_NEEDED_ANY_MORE} ({h.get('what') or 'on ' + h['site']}).")
+    _tell(store, tid, f"You moved the page on while the owner held the step you handed them ({h.get('what') or 'on the page'}), so it is off "
+                      "their hands - they did nothing there. If it is still needed, open that page again and hand it over again.")
+    return True
 
 
 def pressed(store, tid: int, rid: str, now: dict) -> bool:

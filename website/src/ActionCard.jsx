@@ -53,7 +53,9 @@ export default function ActionCard({ row: was, tid, live = true, onChanged, past
   // said "Post now" over the agent's words for a beat, then "Save as draft" over his: the card round, 2026-11-18)
   const shown = done ? { ...p, ...vals, [tk]: text } : p;
   const fields = fieldsOf(act, shown, !!st.live && !done), post = act.kind === "post", w = wordsOf(act, done || st.live ? vals : p);
-  const img = fields.find((f) => f.type === "image" && f.value), pic = img ? outputRow(tid ?? row?.TaskId, img.value) : null;
+  // ...EVERY POST CARRIES ITS PICTURE (the owner, 2026-11-20): one its network takes no upload for is shown all the same, to save and add by hand
+  const img = fields.find((f) => f.type === "image" && f.value) || (p.image ? { key: "image", value: p.image, manual: true } : null);
+  const pic = img ? outputRow(tid ?? row?.TaskId, img.value) : null;
   const max = fields.find((f) => f.key === tk)?.max, over = max && text.length > max;
   const go = done?.url || st.url, gone = !!done || st.done;
   // ...a press that failed before this card was drawn is still said on it: the review keeps it (store.review_act_failed), not the press
@@ -99,6 +101,8 @@ export default function ActionCard({ row: was, tid, live = true, onChanged, past
         : <Typography data-tq-act-text="" sx={{ px: 1.5, py: 0.5, fontSize: 13.5, lineHeight: 1.5, color: gone ? INK : DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{shown[tk]}</Typography>}
       {pic && <Box component="img" data-tq-act-image={img.value} src={attUrl(pic)} alt={p.alt || pic.name} onClick={() => setViewing(pic)}
         sx={{ display: "block", width: "100%", height: IMG_MAX, objectFit: "contain",   /* its room from the first frame: a picture landing grew the card 2 -> 180 px (2026-11-12) */ bgcolor: "var(--tq-canvas, #f6f4f1)", mt: 0.75, cursor: "zoom-in", borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }} />}
+      {pic && img.manual && !gone && <Typography data-tq-act-image-manual="" sx={{ px: 1.5, pt: 0.5, fontSize: 11.5, color: FAINT }}>
+        {`${row?.network || "This network"} gets the words from here - open the picture to save it, and add it yourself`}</Typography>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.5, py: 1, flexWrap: "wrap" }}>
         {gone ? <Typography data-tq-act-done="" sx={{ fontSize: 13, color: "var(--tq-success, #47654a)", fontWeight: 600 }}>✓ {done ? w.done : st.said}
           {go && <> · <a href={go} target="_blank" rel="noopener noreferrer" style={{ color: "var(--tq-link, #55697a)" }}>See it on {row?.network}<OpenInNewIcon sx={{ fontSize: 12, ml: 0.25, verticalAlign: "-1px" }} /></a></>}</Typography>

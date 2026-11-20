@@ -25,8 +25,9 @@ def _show():
     return f'{SHOW_TYPES}\n\nA WORKED SPEC - a grid of stats, a chart beside a table, and a checklist:\n{SHOW_EXAMPLE}'
 
 # ...and the shapes of the rarer proposals, out of every turn's tool list (2026-11-09)
-PROPOSE = ("THE SHAPES OF A `propose` run_tool: a post - {action: run_tool, type: linkedin_post, text, image: a picture in your task "
-           "folder}, drawn for the owner as the post with its Post button. A new GitHub issue - {type: github_issue, repo: owner/name, title, "
+PROPOSE = ("THE SHAPES OF A `propose` run_tool: a post - {action: run_tool, type: linkedin_post | x_post | reddit_post {subreddit, title} "
+           "| bluesky_post | mastodon_post, text, image: a picture in your task folder}, one card per network, connected or not, drawn for the "
+           "owner as the post with its Post button (or, not connected, Connect and the words to copy). A new GitHub issue - {type: github_issue, repo: owner/name, title, "
            "body, labels?}, drawn with its Create issue button. On a Jira, Monday or Linear item - type jira_comment {body}, jira_move "
            "{status}, jira_assign {assignee}, jira_close {body?} (monday_ and linear_ the same); `item` is the one this task came from "
            "unless you name another. Every one waits for the owner's press; always give `why`.")

@@ -132,7 +132,8 @@ def picture_why(tid, p: dict) -> str:
     """'' when a post's `image` is a picture in the task's own folder it can carry; else what is wrong, said to the agent."""
     if not p.get('image'): return ''
     from . import linkedin, outputs
-    if p.get('type') not in MEDIA: return f"{POSTS.get(p.get('type'), p.get('type'))} posts carry no picture from here - post the words alone"
+    # ...EVERY POST CARD CARRIES ITS PICTURE (the owner, 2026-11-20): one Taskuary cannot upload to that network (MEDIA) is shown on the card to
+    # save and add by hand, never refused - the card says so (ActionCard)
     f = outputs.named(int(tid), p['image']) if tid else None
     if not f: return f"{p['image']} is not a file in your task folder - save the picture there first"
     if f.suffix.lower() not in linkedin.IMAGE_TYPES: return f'{f.name} is not a PNG, JPG or GIF picture'
@@ -1048,7 +1049,8 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
         if p.get('image'):
             from . import outputs
             if why := picture_why(tid, p): raise RuntimeError(f'{why} - nothing was posted')
-            cfg['image_path'] = str(outputs.named(int(tid), p['image']))
+            if p.get('type') in MEDIA: cfg['image_path'] = str(outputs.named(int(tid), p['image']))
+            else: cfg.pop('image', None)          # ...a network Taskuary uploads no picture to posts the words; the card said so
         if (bad := unknown_tool(p.get('type'))): raise RuntimeError(f'{bad} - nothing was run')       # ...a card from before the gate refused it
         out = _ran(REGISTRY[p['type']](resolve_cfg(store, {**cfg, '_write': True})))
     return out

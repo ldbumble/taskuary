@@ -222,13 +222,14 @@ def test_the_default_question_lists_every_cli_that_can_take_work_and_ends_with_t
         brainroute.cool(s, 'cli:claude', datetime.now() + timedelta(hours=2))
         note = agents.default_ask(s)['note']
         assert ' are all connected ' in note and 'left out' not in note
-        assert f"Claude Code (resting until {brainroute.cooldowns(s)['cli:claude'].strftime('%H:%M')})" in note
+        from taskuary.timewords import clock
+        assert f"Claude Code (resting until {clock(brainroute.cooldowns(s)['cli:claude'])})" in note
         # ...THE ONE IT TOOK, RESTING (rendered 2026-11-11): the card's RUNS line named the CLI that had the work meanwhile and the question
         # under it still said "work runs on" the resting one - it does once it is back; and a card whose AI rests with nothing to
         # take its work says until when, as the "right now" rows do
         assert 'once it is back' not in note
         brainroute.cool(s, 'cli:codex', datetime.now() + timedelta(hours=2))
-        till = brainroute.cooldowns(s)['cli:codex'].strftime('%H:%M')
+        till = clock(brainroute.cooldowns(s)['cli:codex'])
         assert f'so work runs on OpenAI Codex CLI, the first one ready, once it is back.' in agents.default_ask(s)['note']
         s.set_setting('triage_backup_ai', '', 'owner')
         gen, rows = aidefaults.resolve(s, cfg, 'assistant_ai'), brainroute.now(s, cfg)

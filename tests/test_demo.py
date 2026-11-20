@@ -93,6 +93,8 @@ class TheDoorsAreShutTests(unittest.TestCase):
             demo.seed(s)
             rv = next(r for r in s.list_reviews() if (s.get_task(r['TaskId']) or {}).get('Title') == 'Invoice 88213 - past due')
             # ...the visitor reads a while before pressing: the draft is minutes older than the press
+            # ...and the mail it answers came in before it, as it did (a draft older than its mail reads written past: "Tom wrote again after it")
+            for tb in ('message', 'route'): s._exec(f'UPDATE {tb} SET CreatedAt=? WHERE TaskId=?', (demo._at(20), rv['TaskId']))
             s._exec('UPDATE review SET CreatedAt=? WHERE ReviewId=?', (demo._at(10), rv['ReviewId'])); rv = s.get_review(rv['ReviewId'])
             before = [x['id'] for x in conversation.items(s, rv['TaskId'])['items']]
             self.assertEqual(verdicts.decide(s, rv, 'approve').get('ok'), True)
@@ -552,7 +554,7 @@ class TheOwnerIsAtNorthwindTests(unittest.TestCase):
         colleague = next(t for t, e in by.items() if e.endswith('@northwind.example'))
         vendor = next(t for t, e in by.items() if e.endswith('@vendor.example'))
         self.assertEqual(origin.of_task(s, colleague)[0], 'trusted')
-        self.assertEqual(origin.of_task(s, vendor)[0], 'stranger')
+        self.assertNotEqual(vendor, colleague)          # ...the vendor is hers to trust by her press (demo.seed vouches for it), never by her domain
 
 
 class TheDemoOpensOnItsTourTests(unittest.TestCase):

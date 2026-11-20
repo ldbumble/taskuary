@@ -4367,9 +4367,11 @@ def owed_items(store, tid: int, asks: bool = True) -> list:
     says}: `line` one short line for the Assistant and the dock, `verb` the button that answers it (button.light), `says` the waiting
     words close_after_send keeps a task open with. The Assistant said "it's waiting on you, I haven't seen what it needs yet" of a task
     with two emails waiting to send (the owner, 2026-11-07)."""
-    from . import buttons, proposals, workerstate as ws
+    from . import buttons, origin, proposals, workerstate as ws
     A, S, out = buttons.label('approve', 'action'), buttons.label('approve'), []
-    for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status IN ('pending','held') ORDER BY ReviewId", (tid,)):
+    # ...and none on a task a stranger's words hold: its one move is Trust, never a Send the page does not draw (store._stands)
+    held = bool(origin.hold(store, tid))
+    for r in [] if held else store._rows("SELECT * FROM review WHERE TaskId=? AND Status IN ('pending','held') ORDER BY ReviewId", (tid,)):
         try: d = json.loads((r.get('DraftText') if r.get('Kind') == 'action' else r.get('Deliver')) or '{}') or {}
         except ValueError: d = {}
         d = d if isinstance(d, dict) else {}

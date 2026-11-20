@@ -94,7 +94,7 @@ class DismissTheSpam(unittest.TestCase):
         self.assertIn(tid, [i.get('tid') for i in left], 'the task on the owner stays')
         for m in spam: self.assertIn(f'(#msg={m})', out['say'])
         self.assertIn('Filed as not ours: 3 rows', out['say'])
-        self.assertIn('it waits on you', out['say']); self.assertIn(task_ref(tid), out['say'])
+        self.assertIn('Left alone', out['say']); self.assertIn(task_ref(tid), out['say'])      # ...and the line says so, with why
         taught.assert_not_called()                                   # a bulk dismiss teaches triage nothing unless "from now on"
         self.assertNotIn('proposal', out)
         a = s._one("SELECT * FROM audit WHERE Action='bulk_remove'")

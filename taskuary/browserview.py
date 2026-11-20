@@ -282,9 +282,12 @@ async def _relay(ws, sid: str, url: str):
                         continue
                     # ...an ack is not input: the page's ack of the frame it drew just before the fill still goes, or the stream stalls on it
                     if sid not in FILLING or _ACK.search(m): await up.send(m)
-            tasks = [asyncio.create_task(down()), asyncio.create_task(back()), asyncio.create_task(asyncio.to_thread(follow, sid, stop := threading.Event()))]
+            # ...the window follower rides beside the view and never ends it: it returns at once where another view follows the session,
+            # or where its Chrome does not answer - and taken as one of the view's own ends, that closed the stream as it opened (CI, 2026-11-19)
+            tail = asyncio.create_task(asyncio.to_thread(follow, sid, stop := threading.Event()))
+            tasks = [asyncio.create_task(down()), asyncio.create_task(back())]
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            stop.set()
+            stop.set(); tail.cancel()
             for t in pending: t.cancel()
             for t in done:
                 exc = t.exception()

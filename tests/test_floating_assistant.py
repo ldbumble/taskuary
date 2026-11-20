@@ -89,12 +89,14 @@ class FloatingAssistantTests(unittest.TestCase):
         tid = store.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'waiting',
                                  'Priority': 'high'}, 'owner')
         mid = store.add_message({'TaskId': tid, 'ExternalId': 'mail:export', 'Channel': 'email',
-                                 'Subject': 'Export still broken', 'FromName': 'Dana',
+                                 'Subject': 'Export still broken', 'FromName': 'Dana', 'FromEmail': 'dana@northwind.example',
                                  'SentAt': '2026-09-02 09:00:00', 'BodyText': 'Can you send the corrected file?',
                                  'Status': 'routed'})
         store.add_route(mid, tid, 'create', .9, 'Dana asked for a corrected file', [], 'router')
         store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'reply', 'DraftText': 'Attached.',
                           'Status': 'pending'})
+        from taskuary import origin, senders
+        senders.vouch(store, store.list_messages(tid)); origin._HOLDS.clear()      # ...a stranger's card waits behind Trust (origin.hold)
         store.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\nCorrected the CSV escaping and added a regression test.')
         snapshot = general.dock_snapshot(store)
         self.assertIn('NEEDS THE OWNER NOW', snapshot)

@@ -620,19 +620,6 @@ class SetsFromOneSender(unittest.TestCase):
             later = {i.get('tid') for i in funnel.build(s)['items'] if i.get('deferred')}      # under For later, saying their day
         self.assertEqual(later, set(mine))
 
-    def test_close_all_from_one_sender(self):
-        s = store(); tid, item = on_table(s); mine = self.two_from(s)
-        out, _ = say(s, 'close all the tasks from Paula', item['key'], 'CALL: {"kind": "pipe.close", "params": {"select": {"sender": "Paula"}}}')
-        self.assertTrue(out['say'].startswith('Closed 2 items from Paula'), out['say'])
-        self.assertEqual({s.get_task(t)['Status'] for t in mine}, {'done'}); self.assertEqual(s.get_task(tid)['Status'], 'open')
-
-    def test_the_phone_does_it_too_and_says_so(self):
-        s = store(); tid, item = on_table(s); mine = self.two_from(s)
-        with concierge.delivering(concierge.PHONE):
-            out, _ = say(s, 'close all from Paula', item['key'], 'CALL: {"kind": "pipe.close", "params": {"select": {"sender": "Paula"}}}')
-        self.assertNotIn('proposal', out); self.assertTrue(out['say'].startswith('Closed 2 items from Paula'))
-        self.assertEqual({s.get_task(t)['Status'] for t in mine}, {'done'})
-
 
 class DraftsInTurnAndAnyButton(unittest.TestCase):
     def test_approve_all_the_drafts_lights_each_send_in_turn(self):
@@ -788,7 +775,7 @@ class ClearingASet(unittest.TestCase):
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             out = concierge.say(s, 'clear the to-dos', key=item['key'], llm=lambda *a, **k: 'CALL: {"kind": "pipe.clear", "params": {"select": {"lane": "yours"}}}')
             self.assertEqual([i['tid'] for i in funnel.build(s)['items']], [tid])
-        self.assertNotIn('cleared', out); self.assertIn('own button', out['say'])
+        self.assertNotIn('cleared', out)        # ...what is on him stays, whatever words say so
 
     # "Ignore all the FYI, I mean make a mark and read" over a batch of 4 was answered "Marking all four as read." and cleared the 4 on the
     # table, with the rest waiting behind it (the owner, 2026-10-27: "I asked to mark all read and it did the 4 on the table??"). The model

@@ -97,7 +97,9 @@ class StateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'AGENT_BROWSER_HOME': d}):
             (Path(d) / 'browsers' / 'chrome-152.0.7977.64').mkdir(parents=True); exe = Path(d) / 'browsers' / 'chrome-152.0.7977.64' / 'chrome.exe'
             exe.write_text('')
-            with mock.patch.object(bv, 'installed_chrome', return_value=''): self.assertEqual(bv.chrome_exe(), str(exe))
+            # ...on a computer with no Chrome installed: the installed one comes first (chrome_exe), so it is out of the way for the whole launch
+            no_chrome = mock.patch.object(bv, 'installed_chrome', return_value=''); no_chrome.start(); self.addCleanup(no_chrome.stop)
+            self.assertEqual(bv.chrome_exe(), str(exe))
             e = bv.env('rc1'); port = bv.cdp_port('rc1')
             self.assertEqual(e['AGENT_BROWSER_CDP'], str(port)); self.assertNotIn('AGENT_BROWSER_USER_AGENT', e)
             self.assertEqual(bv.env('rc1')['AGENT_BROWSER_CDP'], str(port), 'one port per session, whoever asks')

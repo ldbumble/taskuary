@@ -1029,6 +1029,12 @@ def seed(store) -> int:
     seed_set_ups(store, f)
     seed_ai_usage(store)          # ...and the morning's asks, for their "AI used" folds
     run_dashboards(store)
+    # ...AND THE PEOPLE WHOSE LETTERS IT HAS DRAFTS FOR ARE ONES SHE TRUSTS (CI 2026-11-19: the vendor's invoice - the tour's Send - stood
+    # held behind a Trust the demo refuses, its card drawn nowhere): her Trust, given before the morning, by its one road (senders.vouch)
+    from . import origin, senders
+    for r in store._rows("SELECT DISTINCT TaskId FROM review WHERE Status='pending' AND TaskId IS NOT NULL"):
+        if origin.hold(store, r['TaskId']): senders.vouch(store, store.list_messages(r['TaskId']))
+    origin._HOLDS.clear()
     logger.info(f'demo: seeded {made} items of invented work')
     return made
 

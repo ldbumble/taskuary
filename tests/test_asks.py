@@ -598,7 +598,9 @@ def test_a_drop_pick_drops_that_email(s):
 
 
 def test_a_drafted_reply_is_shown_with_send(s):
+    from taskuary import origin, senders
     tid, mid, reply = mail_task(s); s.update_task(tid, {'AskedVia': 'desktop'}, 'owner')
+    senders.vouch(s, s.list_messages(tid)); origin._HOLDS.clear()          # ...a stranger's task offers no Send until Trust (origin.hold)
     text, rows = asks.phone_text(s, s.get_task(tid), 'approve', 'a reply is drafted for you to send')
     assert 'The export has been repaired and tested.' in text and 'Send the reply' in dict(rows)
 

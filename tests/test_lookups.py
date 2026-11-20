@@ -15,6 +15,9 @@ def world():
     return s
 
 def read(s, kind, **p): return concierge.read_op(s, kind, p)
+def trust(s, tid):
+    from taskuary import origin, senders
+    senders.vouch(s, s.list_messages(tid)); origin._HOLDS.clear()
 
 
 class LookupTests(unittest.TestCase):
@@ -140,6 +143,7 @@ class AppAtWorkTests(unittest.TestCase):
     def test_approvals_list_shows_drafts_and_proposals(self):
         s = world()
         self.assertIn('Nothing is waiting', read(s, 'approvals.list'))
+        trust(s, 1); trust(s, 2)            # ...a card on a task a stranger's words hold is none to press until Trust (origin.hold)
         s.add_review({'TaskId': 2, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Thanks, on it.'})
         s.add_review({'TaskId': 1, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{"action": "open_pr"}', 'Reason': 'the fix is ready'})
         out = read(s, 'approvals.list')

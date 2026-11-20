@@ -328,6 +328,13 @@ class TheServer(unittest.TestCase):
         self.assertFalse(err, text)
         self.assertIn("x_post: X (Twitter) isn't connected - the card shows Connect X (Twitter)", text)
 
+    def test_a_search_that_finds_nothing_says_each_word_must_match_and_what_to_try(self):
+        self.s.create_task({'Title': 'Build Q3 board pack report', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        text, err = tool(self.tid, 'search_tasks', words='the pack')
+        self.assertIn('each word must match', text)
+        text, err = tool(self.tid, 'search_tasks', words='pack')
+        self.assertIn('Build Q3 board pack report', text)
+
     def test_a_send_through_run_system_waits(self):
         card = self.s.get_connector_by_type('linkedin')
         self.s.save_connector({'ConnectorId': card['ConnectorId'], 'Active': 1, 'Roles': 'tool'}, 'test')

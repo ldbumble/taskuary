@@ -537,6 +537,9 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         got = search.everything(store, a.get('words', ''))
         # ...and the endings of earlier tasks on those words (search.outcomes): what one already settled is not asked of the owner again
         done = search.says_outcomes(search.outcomes(store, a.get('words', ''), skip=tid))
+        # ...AND NOTHING FOUND SAYS WHY AND WHAT NEXT (walk 8, 2026-11-20: "the pack" found nothing - "the" is in no title - beside the open board pack)
+        if not got.get('hits') and not done:
+            return f"Nothing has every word of {str(a.get('words') or '')!r} - each word must match. Search again with fewer or other words (a name, a key word)."
         # ...a report's number rides on its hit (`report`, the N of #report=N): share names a report by it, and nothing else told the agent
         return _out(_j([{**{k: h.get(k) for k in ('type', 'id', 'ref', 'title', 'sub', 'snippet', 'when', 'status') if h.get(k)},
                          **({'report': h['source']} if h.get('channel') == 'report' and h.get('source') else {})} for h in got.get('hits', [])][:40])

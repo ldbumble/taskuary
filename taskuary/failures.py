@@ -98,7 +98,9 @@ def classify(e, *, act: str = None, tid=None) -> dict:
     # ...and what no reading above put in words is never shown as the raw exception (say.raw): the rail read "Failed - [WinError 216] This
     # version of %1 is not compatible..." (walk 2, 2026-11-19). Its text stays in the log
     from . import say
-    if sentence == text and say.raw(text): sentence = "Something went wrong on this computer - Taskuary kept the details in its log. Try again"
+    # ...and one that names a provider's status or error type is the provider's, never this computer's (walk 4: "API Error: 529" - overloaded)
+    if sentence == text and say.raw(text):
+        sentence = say.plain(text, 'ai') if say.provider_said(text) else "Something went wrong on this computer - Taskuary kept the details in its log. Try again"
     unknown = act in SENDS and not isinstance(e, str) and outbound.delivery_uncertain(e)
     # ...and what KIND of failure it is, read off the exception's type, never its words: a start refused for a stranger's words has one way
     # on, the owner's Trust (concierge.recover) - a retry is refused the same way

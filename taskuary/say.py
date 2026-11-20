@@ -99,6 +99,7 @@ def agent(e: dict) -> str:
 # of failure it is, read off that structure, never shown as it came
 _RAW = re.compile(r'''[{\[]\s*["']|Traceback|File "|\b[A-Z]\w*(Error|Exception)\b:?|\bErrno\b|\b(HTTP|[Ss]tatus(?: code)?|[Ee]rror(?: code)?)\W{0,3}[45]\d\d\b|\b[45]\d\d (Client|Server) Error''')
 def raw(text) -> bool: return bool(_RAW.search(str(text or '')))
+def provider_said(text) -> bool: return bool(_STATUS.search(str(text or '')) or _TYPE.search(str(text or '')))
 
 
 def plain(text, who: str = 'ai') -> str:
@@ -111,13 +112,14 @@ def plain(text, who: str = 'ai') -> str:
     if who == 'service':
         s = plain_failure(RuntimeError(str(text)))
         return s if not raw(s) else 'The service answered with an error.'
-    if who in ('start', 'any'):                         # a start or a press that failed: the one road a failure's sentence takes (failures.classify)
-        from .failures import classify
+    from .failures import classify, refused
+    # ...a start or a press that failed: the one road a failure's sentence takes (failures.classify) - but a provider's own status or error
+    # type is the provider's, said by that structure below (walk 4: "API Error: 529" read "Something went wrong on this computer")
+    if who in ('start', 'any') and (not provider_said(text) or refused(str(text))):
         s = classify(str(text)).get('sentence') or ''
         if s and not raw(s): return s
         # ...and where it names no provider's status, no AI is to blame: said as a failure of its own, its text in the log
-        if not (_STATUS.search(str(text)) or _TYPE.search(str(text))):
-            return "The agent couldn't start - Taskuary kept the details in its log." if who == 'start' else "That didn't work - Taskuary kept the details in its log."
+        return "The agent couldn't start - Taskuary kept the details in its log." if who == 'start' else "That didn't work - Taskuary kept the details in its log."
     s = turn_failed(text).split(' - ')[0].split(':')[0].rstrip('.') + '.'
     # ...a press or a page answered by some other service is never blamed on the AI
     return s.replace('The AI provider', 'The service it called').replace('The AI stopped', 'It stopped') if who == 'any' else s

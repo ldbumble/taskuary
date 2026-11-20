@@ -14,6 +14,14 @@ _SAYS_WHY = re.compile(r'^(error|fatal|ERROR|FATAL)\b')
 _FRAME = re.compile(r'^(At (line|char):\d|At [^:]+:\d+ char:\d+|\+ |hint:|remote:\s*$|To \S+$)', re.I)
 
 
+# TASKUARY'S OWN FOLDERS ARE NO PLACE HE GOES (the judge's walk, 2026-11-19: "Files are in C:\Users\...\scratch\outputs\TQ-0001:" in an
+# answer whose files stood under it as cards): a task's outputs folder, read off the layout Taskuary itself writes, is said as its files
+_OUTPUTS = re.compile(r'''(?:[A-Za-z]:)?[\\/](?:[^\s"'`<>|\\/]+[\\/])*scratch[\\/]outputs[\\/]TQ-\d+(?:[\\/]([^\s"'`<>|\\/]*))?''')
+def paths(text) -> str:
+    "`text` with every path into a task's own outputs folder said as \"this task's files\" - a file in it by its own name."
+    return _OUTPUTS.sub(lambda m: m.group(1) or "this task's files", str(text or ''))
+
+
 def reason(said) -> str:
     "The one line where WSL, git, gh or PowerShell says why - '' when it printed nothing."
     lines = [l.strip() for l in str(said or '').splitlines() if l.strip()]

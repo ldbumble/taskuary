@@ -92,7 +92,7 @@ test("a held read has no command to show", () => {
   const r = { ReviewId: 9, TaskId: 7, Kind: "action", Status: "pending", DraftText: JSON.stringify({ action: "shell_act", sid: "run1", turn: 3, command: "",
     what: "read q3-budget.csv in Documents", why: "it is outside this task's own folders", where: "C:/Users/alex/Documents", reads: ["C:/Users/alex/Documents"] }) };
   const card = heldCard([r]);
-  assert.equal(card.folder, "C:/Users/alex/Documents");
+  assert.equal(card.folder, "Documents"); assert.equal(card.place, "C:/Users/alex/Documents");     // ...by its name, the whole path on hover (folderSaid)
   assert.match(card.steps[0].text, /read q3-budget\.csv/i);
   assert.match(read("HeldSteps.jsx"), /c\.steps\.some\(\(s\) => s\.command\) && <Typography/);
 });

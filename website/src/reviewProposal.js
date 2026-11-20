@@ -352,6 +352,15 @@ export const heldGroups = (rows) => {
 };
 // ...what the card says: its title, the one why, the folder, each step's words and state, and how its press ended
 export const READ_ALLOWED = "Allowed - this task may read that folder";
+// ...THE FOLDER BY ITS NAME, where the step really runs (the judge's walk, 2026-11-19: a push card read "In C:\Users\...\scratch" while its
+// command went into the ledger checkout): the folder a leading `cd` names, else the one it was held in - its last name only, and Taskuary's own
+// work folder said as the agent's
+const lastName = (p) => String(p || "").replace(/["']/g, "").replace(/[\\/]+$/, "").split(/[\\/]/).pop();
+export const folderSaid = (p) => {
+  const into = /^\s*cd\s+(?:\/d\s+)?("[^"]+"|'[^']+'|\S+)\s*(?:&&|;)/i.exec(String(p?.command || ""))?.[1];
+  const name = lastName(into || p?.where || p?.cwd || "");
+  return !name || name.toLowerCase() === "scratch" ? "the agent's own folder" : name;
+};
 export const heldCard = (reviews) => {
   const rs = [...(reviews || [])].sort((a, b) => a.ReviewId - b.ReviewId), ps = rs.map((r) => proposalFrom(r) || {});
   const n = rs.length, lead = (p) => heldLead(p).lead;
@@ -367,7 +376,7 @@ export const heldCard = (reviews) => {
   const why = bad ? bad.error.replace(/^The held step failed:\s*/, "") : "";
   const pressed = waiting.length ? null : steps.some((s) => s.state === "failed") ? "failed" : ran.length ? "approved" : "dismissed";
   return { title: n > 1 ? `${lead(ps[0])} - ${n} steps` : lead(ps[0]), why: `Held before it ran - ${whys.join("; ")}.`,
-    folder: ps[0].where || ps[0].cwd || "the agent's folder", steps, waiting: waiting.map((s) => s.id), pressed,
+    folder: folderSaid(ps[0]), place: ps[0].where || ps[0].cwd || "", steps, waiting: waiting.map((s) => s.id), pressed,
     // ...a read outside the task's folders runs nothing: its yes lets the task read there (readgate.ALLOWED, the owner 2026-11-16)
     said: pressed === "approved" ? (ps.every((p) => !p.command && p.reads?.length) ? READ_ALLOWED : n > 1 ? `${ran.length} of ${n} ran` : "it ran")
       : pressed === "failed" ? `${n > 1 ? `${ran.length} of ${n} ran, step ${k} failed` : "it failed"} - the agent was told and goes on from there`

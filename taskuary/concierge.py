@@ -6097,7 +6097,8 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
 ASKED_ON = ('report', 'fyi', 'dashboard', 'idea')   # ...and an Advisor item, answered from it the same way (the owner, 2026-11-05)
 ITEM_ONLY = ("THE OWNER ASKED IN THIS ITEM'S OWN BOX: answer from what is written above, in plain words. Nothing is done from this box - "
              "no task, no agent, no button, no look-up - so never say you started, filed, sent, changed or looked up anything; if what "
-             "they want needs doing, say which of the item's own buttons does it.")
+             "they want needs doing, say which of the item's own buttons does it - Send to agent takes what they just wrote here with it, so "
+             "they need not write it again.")
 
 def asked_on_item(view) -> str | None:
     """The item kind when the turn came from a report's, an FYI's or a dashboard's own box, else None (a dock turn)."""

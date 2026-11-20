@@ -34,7 +34,7 @@ export default function HeldSteps({ reviews, onChanged, toRow = false, past = fa
   return (<MovedPast on={past}>
     <Box data-tq-held-steps={n} data-tq-act-state={c.pressed || "waiting"} sx={{ mt: 0.5, px: 1.25, py: 0.9, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>
       <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: INK, lineHeight: 1.3, overflowWrap: "anywhere" }}>{c.title}</Typography>
-      <Typography noWrap title={c.folder} sx={{ fontSize: 11.5, color: FAINT }}>{live ? `${c.why.replace(/\.$/, "")} · in ` : "In "}
+      <Typography noWrap title={c.place || c.folder} sx={{ fontSize: 11.5, color: FAINT }}>{live ? `${c.why.replace(/\.$/, "")} · in ` : "In "}
         <Box component="span" sx={{ color: DIM, fontWeight: 600 }}>{c.folder}</Box></Typography>
       {n > 1 && <Box component="ol" data-tq-held-list="" sx={{ m: 0, mt: 0.5, pl: 2.5, fontSize: 12.5, color: INK, lineHeight: 1.5 }}>
         {c.steps.map((s) => <li key={s.id} data-tq-held-step={s.state}><span style={{ color: s.state === "dismissed" ? FAINT : INK }}>{s.text}</span>

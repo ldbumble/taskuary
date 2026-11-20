@@ -87,7 +87,7 @@ test("Send to agent on a report, a dashboard or an FYI opens a blank Agent canva
   assert.match(src, /const sections = hand && !all\.some\(\(s\) => s\.key === "agent" && s\.body\)/);
   assert.match(src, /useEffect\(\(\) => \{ if \(hand\) setOpen\(boxAt\);/);
   assert.doesNotMatch(src, /data-tq-item-agent-hint/, "the canvas is blank - the box asks");
-  assert.match(src, /What do you want to know about this \$\{noun\}\?/);
+  assert.match(src, /What should the agent do with this \$\{noun\}\?/);
   assert.match(src, /const ls = hand \? \[\] : itemLines/);
   assert.match(src, /data-tq-item-chip=\{i\.key\}/, "the item stays a chip on the box");
 });

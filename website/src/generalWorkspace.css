@@ -71,7 +71,9 @@
 .tq-aui-attachments { box-sizing: border-box; }
 /* ...but the line over a card in a row is words he reads, in the chat's own type (design round 4, 2026-11-19: "2 of 4 · next: the email to ..."
    in 9px grey monospace, missed by every walk) */
-.tq-aui-hint[data-tq-card-queue] { margin: 0 0 6px; text-align: left; font-family: inherit; font-size: 12.5px; font-weight: 500; line-height: 1.45; color: var(--tq-secondary, #5f5a50); }
+/* ...its own line over the card, clear of the words above it (the judge's walk, 2026-11-19: "...leave out the subreddit.
+1 of 4 · next" read glued) */
+.tq-aui-hint[data-tq-card-queue] { margin: 12px 0 6px; text-align: left; font-family: inherit; font-size: 12.5px; font-weight: 500; line-height: 1.45; color: var(--tq-secondary, #5f5a50); }
 /* on the assistant canvas the room is the agent's answer, not the keyboard help (the owner, 2026-10-18); a closed chat's notice keeps its line */
 [data-tq-canvas-item] .tq-aui-footer { padding: 8px 14px 7px; }
 [data-tq-canvas-item] .tq-aui-viewport { padding: 14px 18px 2px; }

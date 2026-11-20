@@ -354,7 +354,8 @@ def answered(store, tid: int, cid: int, actor: str, body: str, created: str) -> 
     from . import general, sessionrecord
     from .conversation import clean
     tid = int(tid)
-    words = clean(str(body or ''))
+    from . import say
+    words = say.paths(clean(str(body or '')))       # ...his words never carry Taskuary's own folders (say.paths)
     if actor == sessionrecord.NOTE_ACTOR: return void(put(store, tid, 'note', f'n:c{cid}', {'at': created, 'text': words}, src=f'comment:{cid}'))
     flush(store, tid)
     text, fail = general.failed_line(words)

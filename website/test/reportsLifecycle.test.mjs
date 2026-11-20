@@ -11,8 +11,8 @@ test("Run now is owned by the server and survives leaving the Reports tab", () =
   const block = source.slice(start, source.indexOf("const syncNow", start));
   assert.match(block, /\/api\/reports\/\$\{sid\}\/rerun/);
   assert.doesNotMatch(block, /\/api\/sources\/\$\{sid\}\/run/);
-  assert.match(block, /running in the background/);
-  assert.match(block, /leave this tab/);
+  // ...and its state is said on the row pressed, never a page-top banner (rowPress, the owner 2026-11-20)
+  assert.match(block, /press\.start\(sid/); assert.doesNotMatch(block, /setNote\(/);
 });
 
 test("an existing report has a visible top-level Remove button that acts at once (the owner, 2026-10-21: no confirm)", () => {

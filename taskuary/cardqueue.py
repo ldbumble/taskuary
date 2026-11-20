@@ -92,17 +92,11 @@ def _units(store, tid: int, past: set) -> list:
 # that ends the run (or one that fails, which wakes it at once - general.failed). An act's outcome is the agent's to go on from: it still wakes
 LETTERS = ('slot', 'draft_reply', 'draft')
 def _letters(rows) -> bool: return bool(rows) and all(r.get('Kind') in LETTERS for r in rows)
-def goes_on(store, rv: dict) -> bool:
-    "Did his press on letter `rv` bring forward a letter already written - so its agent is not woken for it (verdicts.decide)?"
-    if not rv or rv.get('Kind') not in LETTERS or not rv.get('TaskId') or rv.get('Batch'): return False
-    us = [u for u in _units(store, int(rv['TaskId']), set()) if u['done'] is None]
-    return bool(us) and _letters(us[0]['rows']) and min(us[0]['rids']) > rv['ReviewId']        # ...written behind it, not one that stood before it
-
 
 def _going_on(store, tid: int, since: float, own=(), front=()) -> bool:
     """Is the agent still going on from a press made after `since` on ANOTHER card - at work on it, or woken a moment ago and not yet begun?
     A press on the front itself (`own`: a Send that did not go, which still waits on its card) holds nothing back: it never left its place -
-    nor a letter's press with the `front` a letter too: nothing was woken for it (goes_on)."""
+    nor a letter's press with the `front` a letter too: the next letter stands at once."""
     from . import general
     from .conversation import ep
     # ...a PRESS: the agent taking back its own card is none - nothing wakes it, and the front stood held for WAKING seconds over it (a CI
@@ -143,7 +137,12 @@ def _state(store, tid: int) -> dict:
     # ...the run it is one of: the cards before it that were raised while the one before them still waited - each one that stood for his press
     us = [u for u in us if _stood(u)]
     i = us.index(front); n = 1
-    while i - n >= 0 and us[i - n + 1]['at'] <= (us[i - n]['done'] or float('inf')) + 1: n += 1
+    # ...AND ON THROUGH THE CARDS ITS AGENT RAISES AFTER A PRESS, while nothing of his came between (decided 2026-11-20: "2 of 7" went on as
+    # "1 of 6" when the agent wrote the next letters after his Send): only his line or a message that came in begins a new run
+    ins = sorted(r['At'] for r in store._rows("SELECT At FROM heard WHERE TaskId=? AND Kind IN ('line','mail')", (int(tid),)))
+    between = lambda a, b: any(a < x < b for x in ins)
+    while i - n >= 0 and (us[i - n + 1]['at'] <= (us[i - n]['done'] or float('inf')) + 1
+                          or not between(us[i - n]['done'] or 0., us[i - n + 1]['at'])): n += 1
     held = [x for u in waiting[1:] for x in u['rids']]
     live = [] if _going_on(store, tid, front['at'], set(front['rids']), front['rows']) else front['rids']
     if not live: held = front['rids'] + held

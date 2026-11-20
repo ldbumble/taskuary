@@ -653,7 +653,7 @@ def no_opening_carryover():
     """general.OPENING holds a task an agent is opening on: a reply writer's NEEDS hands the task on holding it until the start lets
     go (ingest.agent_on_reply `opening`) - and with `_spawn` patched the start never runs, so the next test's task 1 read as live."""
     from taskuary import general
-    before = set(general.OPENING); yield; general.OPENING.intersection_update(before)
+    general.OPENING.clear(); yield; general.OPENING.clear()      # ...each test starts with no task opening (a stand-in of the test before may still be)
 
 
 @pytest.fixture(autouse=True)

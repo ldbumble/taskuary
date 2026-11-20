@@ -70,7 +70,7 @@ def test_a_step_after_his_line_goes_on_in_a_new_turn_under_it_with_its_files():
     chatlog.step(s, tid, 'sid1', 'call-1', {'k': 'tool', 'what': 'Read the vendor sheet', 'status': 'completed'})    # ...an update of the first
     items = chatlog.read(s, tid, 'everything')['items']
     assert [(x['kind'], x['id']) for x in items][:2] == [('turn', 't:1'), ('line', 'l-2')]
-    assert items[2]['kind'] == 'turn' and items[2]['cont'] == 't:1' and items[2]['started'] == 1.0
+    assert items[2]['kind'] == 'turn' and items[2]['cont'] == 't:1' and items[2]['started'] > 1.0      # ...from its own time (decided 2026-11-20: never "working 18m" from the turn before)
     assert [x['what'] for x in items[0]['steps']] == ['Read the vendor sheet'] and items[0]['steps'][0]['status'] == 'completed'
     assert items[2]['fold'][0]['files'] == ['march-totals.csv'], 'still at work: its work under the count'
 

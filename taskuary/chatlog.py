@@ -93,7 +93,7 @@ def _goes_on_(store, tid: int, below: int) -> None:
     store.cx.execute("UPDATE chatlog SET State='done', Rev=Rev+1 WHERE Id=?", (t['Id'],))
     store.cx.execute('INSERT INTO chatlog (TaskId, Key, Kind, At, Src, Body, State) VALUES (?,?,?,?,?,?,?)',
                      (int(tid), f"{t['Key'].split('+')[0]}+{below}", 'turn', time.time(), t['Src'],
-                      json.dumps({'cont': t['Key'], 'started': b.get('started'), 'ended': None, 'text': '', **({'sid': b['sid']} if b.get('sid') else {})}), t['State']))
+                      json.dumps({'cont': t['Key'], 'started': time.time(), 'ended': None, 'text': '', **({'sid': b['sid']} if b.get('sid') else {})}), t['State']))
 
 
 def _update(store, tid: int, old: dict, state, patch: dict) -> bool:
@@ -157,7 +157,7 @@ def step(store, tid: int, sid: str, ref: str, step: dict, state=None) -> int:
             if t is None:
                 prev = json.loads(last['Body']) if last else {}
                 k = f"{last['Key']}+{store.cx.execute('SELECT COUNT(*) FROM chatlog WHERE TaskId=? AND Kind=?', (int(tid), 'turn')).fetchone()[0]}" if last else f't:{sid}:0'
-                body = {'cont': last['Key'], 'started': prev.get('started'), 'sid': sid} if last else {'started': time.time(), 'sid': sid}
+                body = {'cont': last['Key'], 'started': time.time(), 'sid': sid} if last else {'started': time.time(), 'sid': sid}
                 cur = store.cx.execute('INSERT INTO chatlog (TaskId, Key, Kind, At, Src, Body, State) VALUES (?,?,?,?,?,?,?)',
                                        (int(tid), k, 'turn', time.time(), f'sid:{sid}', json.dumps(body, default=str), last['State'] if last and last['State'] in LIVE else 'working'))
                 t = {'Id': cur.lastrowid}
@@ -749,10 +749,9 @@ def came_in(store, tid: int) -> None:
         rows = [dict(r) for r in store.cx.execute("SELECT Key, Body FROM chatlog WHERE TaskId=? AND Kind='arrival'", (tid,))]
         have = {r['Key'] for r in rows} | {f'm:{m}' for r in rows if r['Key'][:2] == 'j:' for m in (json.loads(r['Body']).get('thread') or {}).get('mids') or []}
         foot = store.cx.execute('SELECT MAX(At) AS a FROM chatlog WHERE TaskId=? AND Parent IS NULL', (tid,)).fetchone()['a'] or 0
-    # ...never what an untrusted sender wrote on a thread an agent works: it waits behind the Trust press (origin.hold)
-    from . import origin
-    held = set((origin.hold(store, tid) or {}).get('mids') or [])
-    new = [x for x in _mail(store, tid) if (x.get('Channel') or '') != OWN and f"m:{x['MessageId']}" not in have and x['MessageId'] not in held]
+    # ...AND WHAT A STRANGER WROTE TOO, the moment it is held (the Codex walk's judge, 2026-11-19: a failing CI build hidden 13 minutes behind
+    # Trust, then drawn out of order): in its place, in time order - the hold's line and its Trust stand beside it; no agent hears it until then
+    new = [x for x in _mail(store, tid) if (x.get('Channel') or '') != OWN and f"m:{x['MessageId']}" not in have]
     # ...AND NEVER WHAT CAME AFTER A LINE OF HIS THAT STILL WAITS (the recorded flood, 2026-11-11 - "34, 31, 46"): from his oldest waiting line on,
     # what comes in waits by the box with it, and the hand-over that takes them writes each in the order it came
     if (first := _waits_from(store, tid)) is not None: new = [x for x in new if _when(x.get('SentAt') or x.get('CreatedAt')) < first]

@@ -649,9 +649,9 @@ def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, **kw) -> dic
         # ended the played Send on "No AI is connected" under a turn marked failed
         from . import demo
         if demo.enabled(): demo.after_send(store, rv['TaskId'])
-        # ...and never for a letter with the next letter already written behind it: that one stands at once, and the press that ends the
-        # run tells it of them all (cardqueue.goes_on)
-        elif proposals._action(rv) not in proposals.HELD_ACTS and not (out.get('shut') or {}).get('closed') and not cardqueue.goes_on(store, rv):
+        # ...EACH SEND TOLD AT ONCE, even with the next letter already written behind it (decided 2026-11-20, truth first: the agent woken
+        # mid-run by a message said "Gail's email is no longer in the drafts" of one that had gone)
+        elif proposals._action(rv) not in proposals.HELD_ACTS and not (out.get('shut') or {}).get('closed'):
             try: general.approved(store, rv['TaskId'], *pressed(store, rv, out), actor, review=rv.get('ReviewId'))
             except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: the agent was not told it went - {e}")
     # ...AND EVERY ONE THAT RAN AND FAILED (general.failed): an act's error, a send that did not go or may have - never a refusal before it

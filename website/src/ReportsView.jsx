@@ -3,6 +3,7 @@
 // preview the whole pipeline, schedule it - results land on the Timeline. Connections
 // stay pure connections; this tab is where reports are built and managed.
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { RowPressLine, useRowPress } from "./rowPress.jsx";
 import {
   Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog,
   DialogContent, DialogTitle, IconButton, ListSubheader, Menu, MenuItem, Select, Step, StepButton, StepContent,
@@ -382,7 +383,11 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   const [draftNote, setDraftNote] = useState(null);
   // a NEW report's first save remounts its editor on its new id: what it said and where it stood ride across
   const [carry, setCarry] = useState(null);
-  const [running, setRunning] = useState(null);
+  // ...a row's press said on that row (rowPress): Run now reads "Running…" there until its own last run moves on, and a failure stays there
+  const lastRef = useRef({}); lastRef.current = lastRuns;
+  const runSig = (r) => (r ? `${r.run_id || ""}|${r.at || ""}` : "");
+  const press = useRowPress({ landed: useCallback((sid, before) => runSig(lastRef.current[sid]) !== before, []), reload: load });
+  useEffect(() => { press.check(); }, [lastRuns]);   // eslint-disable-line react-hooks/exhaustive-deps
   const [fixRun, setFixRun] = useState(null);     // {sid, runId}: Fix with AI pressed on a run in the list - the editor takes it
   const [routeAsk, setRouteAsk] = useState(null); // {sid, line, to, how}: the Assistant's "send it to ..." - the builder fills its box once
   useEffect(() => {
@@ -411,20 +416,19 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     return onDraftHanded(take);
   }, []);
   const runNow = async (sid) => {
-    setRunning(sid); setNote(null);
+    press.start(sid, runSig(lastRuns[sid]));
     try {
       const { data } = await api.post(`/api/reports/${sid}/rerun`);
       // a workflow run IS a task: open it where the agent and its browser can be watched (the owner, 2026-10-08)
-      if (data.task_id) { setNote({ sid, ok: true, detail: `${data.title || "Routine"} started as ${data.ref} — opening it.` }); openAppLink(`task=${data.task_id}`); }
-      // where a report lands is its own routing, and a failure is the bell's alone (reports.run_lands)
-      else setNote({ sid, ok: true, detail: `${data.title || "Report"} is running in the background — you can leave this tab. ${data.lands || "If it fails, the bell says why."}` });
-    } catch (e) { setNote({ sid, ok: false, detail: e?.response?.data?.detail || "report could not be queued" }); }
-    setRunning(null); load();
+      if (data.task_id) { press.done(sid); openAppLink(`task=${data.task_id}`); }
+      // ...a report runs in the background: its row reads Running… until its last run moves on, and that line says what came of it
+    } catch (e) { press.fail(sid, e?.response?.data?.detail || "It could not be started - press Run now again."); }
+    load();
   };
   // a report's clock, on or off - its row's switch and its builder's are this one road (the owner, 2026-11-02)
   const switchOn = async (s) => {
     try { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); }
-    catch (e) { setNote({ sid: s.SourceId, ok: false, detail: `${titleOf(s)} could not be switched ${s.Active ? "off" : "on"} — ${e?.response?.data?.detail || "the app did not answer"}. Try again.` }); }
+    catch (e) { press.fail(s.SourceId, `It could not be switched ${s.Active ? "off" : "on"} - ${e?.response?.data?.detail || "the app did not answer"}. Try again.`); }
     load();
   };
   const syncNow = async () => {
@@ -539,13 +543,14 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
             </Box>}
             {/* each named for its report (the everyday-asks audit, 2026-11-02): the Assistant reads the shelf by these names, and five
                 rows of "Run now" and a switch with no name at all left it nothing to tell the AP ageing's from the headcount's */}
-            <Button size="small" disabled={running === s.SourceId} aria-label={`Run now: ${c.title || s.Address}`}
-              startIcon={running === s.SourceId ? <CircularProgress size={12} /> : <PlayArrowIcon sx={{ fontSize: 14 }} />}
-              onClick={(e) => { e.stopPropagation(); runNow(s.SourceId); }}>{running === s.SourceId ? "Running…" : "Run now"}</Button>
+            <Button size="small" disabled={press.running(s.SourceId)} aria-label={`Run now: ${c.title || s.Address}`}
+              startIcon={press.running(s.SourceId) ? <CircularProgress size={12} /> : <PlayArrowIcon sx={{ fontSize: 14 }} />}
+              onClick={(e) => { e.stopPropagation(); runNow(s.SourceId); }}>{press.running(s.SourceId) ? "Running…" : "Run now"}</Button>
             <Button size="small" aria-label={`Edit: ${c.title || s.Address}`} onClick={() => openOne(s.SourceId)}>Edit</Button>
             <Switch checked={!!s.Active} onClick={(e) => e.stopPropagation()} inputProps={{ "aria-label": `${c.title || s.Address} on its clock` }}
               onChange={() => switchOn(s)} />
           </Box>
+          <RowPressLine press={press.of(s.SourceId)} />
           {lastRuns[s.SourceId] && <LastRun r={lastRuns[s.SourceId]} sid={s.SourceId} onChanged={load}
             onFix={lastRuns[s.SourceId].run_id ? (runId) => { setFixRun({ sid: s.SourceId, runId }); openOne(s.SourceId); } : null} />}
           </Box>
@@ -589,7 +594,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         types={types} connectors={connectors} draft={selectedConfig} workflow={workflowOpen}
         reload={load} onBack={onBack} onSaved={saved(onSaved)} note={wizardNote} lastRun={lastRuns[openId]}
         carry={carried} onCarried={() => setCarry(null)}
-        onRun={() => runNow(openId)} running={running === openId} onSwitch={switchOn} said={note}
+        onRun={() => runNow(openId)} running={press.running(openId)} onSwitch={switchOn} said={press.of(openId)?.state === "failed" ? { sid: openId, ok: false, detail: press.of(openId).said } : null}
         routeAsk={routeAsk?.sid === openId ? routeAsk : browse && browseState.route && browseState.open === openId ? browseState.route : null}
         onRouteTaken={() => { setRouteAsk(null); if (browse && browseState.route) onBrowseState?.({ ...browseState, route: null }); }} />;
 
@@ -697,7 +702,8 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         <Button size="small" variant={workflowOverview ? "contained" : "outlined"} disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
           onClick={() => { setQ(""); setDraft(null); setBucket("new-agent"); }} sx={workflowOverview ? { background: GRADIENT } : {}}>New routine</Button>
       </Box>
-      {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "var(--tq-success, #47654a)" : "var(--tq-danger, #6b2733)" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
+      {/* ...Run due now's word, under the row of buttons it was pressed in - a row's own press is said on that row (rowPress) */}
+      {note && <Typography variant="body2" sx={{ mt: -1, mb: 1.5, fontSize: 12.5, color: note.ok ? DIM : "var(--tq-danger, #6b2733)" }}>{note.detail}</Typography>}
       <UndoLine kinds={["report", "workflow", "dashboard"]} onRestored={load} />
       {!workflowOverview && !dashOverview && <SetupWithAi kind="report" sx={{ mb: 2 }} onOpen={() => { setDraft(null); setBucket("new-report"); }} />}
       {dashOverview && <SetupWithAi kind="dashboard" sx={{ mb: 2 }} onOpen={() => { setDashDraft(null); setBucket("new-dashboard"); }} />}

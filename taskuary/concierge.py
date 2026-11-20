@@ -4369,8 +4369,9 @@ def owed_items(store, tid: int, asks: bool = True) -> list:
     with two emails waiting to send (the owner, 2026-11-07)."""
     from . import buttons, origin, proposals, workerstate as ws
     A, S, out = buttons.label('approve', 'action'), buttons.label('approve'), []
-    # ...and none on a task a stranger's words hold: its one move is Trust, never a Send the page does not draw (store._stands)
-    held = bool(origin.hold(store, tid))
+    # ...and none on a task a stranger STARTED: its one move is Trust, never a Send the page does not draw - one who only joined a known
+    # person's task never takes Send off what waits there (the ruling, 2026-11-19: origin.keeps_him)
+    held = bool(origin.keeps_him(store, tid))
     for r in [] if held else store._rows("SELECT * FROM review WHERE TaskId=? AND Status IN ('pending','held') ORDER BY ReviewId", (tid,)):
         try: d = json.loads((r.get('DraftText') if r.get('Kind') == 'action' else r.get('Deliver')) or '{}') or {}
         except ValueError: d = {}

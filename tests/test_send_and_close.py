@@ -62,6 +62,7 @@ class Server(unittest.TestCase):
 
     def setUp(self):
         self.s = desk.store(); self.tid, self.rid, self.item = drafted(self.s)
+        self.s._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (10 ** 9, self.tid))   # ...a sender he trusts: a stranger-started task shows no card until Trust
         self._sessions = dict(term.SESSIONS); term.SESSIONS.clear()
     def tearDown(self): term.SESSIONS.clear(); term.SESSIONS.update(self._sessions)
 

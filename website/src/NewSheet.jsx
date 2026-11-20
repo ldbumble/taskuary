@@ -188,6 +188,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const [kind, setKind] = useState(initialKind);
   const said = useRef(null);      // the words, as the field debounces them
   const [busy, setBusy] = useState(false);
+  // ...HIS LINE, AT WORK FROM THE PRESS (the owner's rule, walk 4 2026-11-19): while the start reads whether an open task is already this work,
+  // his words stand under the box with the working dots - never a second task's row, never a blank beat - until the task it went to opens
+  const [sentLine, setSentLine] = useState("");
   const [err, setErr] = useState("");
   const [errAi, setErrAi] = useState(false);      // the error is "no AI is connected": it carries Connect an AI
   const [ok, setOk] = useState("");
@@ -333,7 +336,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         // NEW'S BOX IS THE ONE START (F1, the walks 2026-11-18): his words and files go to the server's one start (/api/start ->
         // concierge.handoff_task), its task opens with its agent at work. They went through the Assistant's model, which picked a form - "send
         // me this every Monday" with a CSV landed on an empty SQL report, his words and file gone. What the work is is the agent's to do
-        const { data } = await api.post("/api/start", { text: about, images: pics.paths || [] });
+        setSentLine(about); setText("");          // ...his words move from the box to his line; a start that fails puts them back
+        const { data } = await api.post("/api/start", { text: about, images: pics.paths || [] })
+          .catch((e) => { setText(about); throw e; }).finally(() => setSentLine(""));
         setText(""); pics.clear(); setOk(`${data.ref} — ${data.joined ? "already that work: its agent was told." : "an agent is on it."}`);
         onDone?.(); openIt(data.taskId);
       } else if (kind === "playbook") {
@@ -465,6 +470,10 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           <PromptBox text={words} setText={setText} pics={pics} busy={busy} onSend={submit} label={aboutLabel} title={verb} autoFocus
             placeholder={kind === "chat" ? "build me a website · a report on overdue invoices every Monday · draft a reply to Erin" : "why did Site 3's census move four points in July?"}
             sendOff={noAi} />
+          {!!sentLine && <Box data-tq-new-sent="" sx={{ mt: 1.25 }}>
+            <div className="tq-aui-message tq-aui-user" data-tq-chat-line="new"><div className="tq-aui-user-body">{sentLine}</div></div>
+            <Box data-tq-working="" sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.75, color: DIM, fontSize: 13 }}>
+              <CircularProgress size={12} sx={{ color: "inherit" }} />Working…</Box></Box>}
           {noAi && <Typography data-tq-new-no-ai="" variant="caption" sx={{ color: DIM, display: "block", mt: 0.75 }}>
             No AI is connected, so an agent can't run this yet - <Box component="a" href={place("ai").href}
               onClick={(e) => { e.preventDefault(); onClose?.(); openAppLink(place("ai").href); }} sx={{ color: "inherit", fontWeight: 600 }}>connect one</Box>.</Typography>}

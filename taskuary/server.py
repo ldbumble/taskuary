@@ -2441,10 +2441,7 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
             # stays here: the page needs to know a conversation is waiting, not how to address it.
             'resumable': {'sid': rs['Sid'], 'agent': rs['Agent'], 'cwd': rs['Cwd'], 'at': rs['CreatedAt']} if rs else None,
             # ...and a coding task running on an AI card is a chat, as a general task's is (general.on_card)
-            'onCard': _gen_on_card(task_id),
-            # ...and the task it was folded into, for the page to follow (concierge.same_or_go: New's words were already that work)
-            'foldedInto': next((json.loads(r.get('Detail') or '{}').get('into') for r in store.list_audit('task', task_id)
-                                if r['Action'] == 'merged_into_task'), None) if d['task'].get('Status') == 'dropped' else None}, rev)
+            'onCard': _gen_on_card(task_id)}, rev)
 
 
 def _task_state(task_id: int, d: dict, session=None):

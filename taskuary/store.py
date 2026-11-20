@@ -5461,8 +5461,9 @@ class SQLiteStore:
         # ...new mail's reopen is said twice, by the write ('reopened') and then by its door ('reopen', ingest._reopen): one reopen
         said = self._rows("SELECT Action, CreatedAt FROM audit WHERE EntityType='task' AND EntityId IN (?,?) AND Action IN ('reopen','reopened') "
                           "ORDER BY Id", (tid, str(tid)))
+        # ...whichever of the two was written first (general.reopen writes its door's row before the store's own)
         rs = [{'what': 'reopened', 'at': str(r['CreatedAt'] or '')} for i, r in enumerate(said)
-              if not (r['Action'] == 'reopen' and i and said[i - 1]['Action'] == 'reopened')]
+              if not (r['Action'] == 'reopen' and ((i and said[i - 1]['Action'] == 'reopened') or (i + 1 < len(said) and said[i + 1]['Action'] == 'reopened')))]
         # ...in turn: a task is closed, then opened, then closed - the clock is to the second, and a Reopen and the next close can share one
         ev, want = [], 'closed'
         while cs or rs:

@@ -284,10 +284,9 @@ async def _relay(ws, sid: str, url: str):
                     if sid not in FILLING or _ACK.search(m): await up.send(m)
             # ...the window follower rides beside the view and never ends it: it returns at once where another view follows the session,
             # or where its Chrome does not answer - and taken as one of the view's own ends, that closed the stream as it opened (CI, 2026-11-19)
-            tail = asyncio.create_task(asyncio.to_thread(follow, sid, stop := threading.Event()))
+            watch_windows(sid)                  # ...its windows followed while the browser is open (one watcher a session, never this view's)
             tasks = [asyncio.create_task(down()), asyncio.create_task(back())]
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            stop.set(); tail.cancel()
             for t in pending: t.cancel()
             for t in done:
                 exc = t.exception()
@@ -328,9 +327,23 @@ def left(sid: str, url: str) -> None:
     except Exception as e: logger.debug(f'browser {sid}: its held steps were not checked against the page - {e}')
 
 
+# ...WHILE THE BROWSER IS OPEN, VIEWED OR NOT (the owner, 2026-11-19: "the browser must work like a regular user's; no dead ends"): a chat's
+# pane is drawn only once he is needed, so what makes him needed - a human check, a download - is watched from the browser's start, not the view's
+_WINDOWS = {}
+def watch_windows(sid: str) -> None:
+    "Follow session `sid`'s windows, human checks and downloads until close() - one watcher a session (follow's own guard)."
+    with _KEEP_LOCK:
+        if sid in _WINDOWS: return
+        stop = _WINDOWS[sid] = threading.Event()
+    threading.Thread(target=follow, args=(sid, stop), daemon=True, name=f'windows-{sid}').start()
+
+
 def _follow(sid, stop, every, switch) -> None:
     known, came_from, was = {t['id'] for t in pages(sid)}, '', ''
+    files, checked = _downloaded(sid), {}
     while not stop.wait(every):
+        human(sid, checked)
+        files = arrived(sid, files)
         ts = pages(sid)
         if not ts: continue
         ids = {t['id'] for t in ts}
@@ -347,6 +360,58 @@ def _follow(sid, stop, every, switch) -> None:
         on = next((str(t.get('url') or '') for t in ts if t['id'] == active_tab(sid)), '')
         if on and on != was and not on.startswith('about:'): left(sid, on)
         was, known = on or was, ids
+
+
+# A HUMAN CHECK IS HIS, AT ONCE (the owner, 2026-11-19: a Cloudflare "Verify you are human" stood on the page with nobody told - a dead end). It
+# is read off the page's structure - a frame of challenges.cloudflare.com (Turnstile) - never its words; one that clears by itself in a few
+# seconds is nobody's. Still there after HUMAN_AFTER, it is handed to him with the hand-over's own Your turn / I'm done, and the agent waits
+HUMAN_AFTER = 6.0
+HUMAN_WHAT = "The site asks you to show you're human: tick its box in the browser here, then press I'm done"
+_HUMAN_AT = re.compile(r'^https://challenges\.cloudflare\.com/', re.I)
+_HUMAN_SAID = set()
+def human(sid: str, seen: dict) -> bool:
+    "Hand session `sid`'s human check to the owner once it has stood HUMAN_AFTER seconds on a page (`seen`: page -> since). True when handed."
+    try: ts = _devtools(sid, '/json/list') or []
+    except Exception: return False
+    page = next((str(t.get('url') or '') for t in ts if t.get('type') == 'page' and t.get('id') == active_tab(sid)), '')
+    if not page or not any(t.get('type') == 'iframe' and _HUMAN_AT.match(str(t.get('url') or '')) for t in ts):
+        seen.clear(); return False
+    since = seen.setdefault(page, time.time())
+    if time.time() - since < HUMAN_AFTER or (sid, page) in _HUMAN_SAID: return False
+    _HUMAN_SAID.add((sid, page))
+    try:
+        from . import server, terminal as hub_term
+        from .browsergate import _tell
+        t = hub_term.get(sid)
+        if not (t and getattr(t, 'task_id', None)): return False
+        your_turn(server.store, t.task_id, sid, what=HUMAN_WHAT)
+        _tell(server.store, t.task_id, "The page shows a human check (\"Verify you are human\"). Taskuary has handed it to the owner on the page - "
+                                       "wait for it; you are told when they press I'm done, then go on from the page as it is.")
+        logger.info(f'browser {sid}: a human check was handed to the owner')
+        return True
+    except Exception as e: logger.warning(f'browser {sid}: a human check was not handed over - {e}'); return False
+
+
+# A FILE THE PAGE DOWNLOADS IS SAID WHERE IT LANDED (the owner, 2026-11-19): it went to the browser's downloads folder and the agent was told
+# only the folder in its brief - never that this click brought a file, or which. Each finished file is told by its path, and how to hand it on
+def _downloaded(sid: str) -> set:
+    try: return {p.name for p in downloads(sid).iterdir() if p.is_file() and not p.name.endswith(('.crdownload', '.tmp'))}
+    except OSError: return set()
+
+
+def arrived(sid: str, had: set) -> set:
+    "Tell session `sid`'s agent of each file finished since `had`. -> the files there now."
+    now = _downloaded(sid)
+    for n in sorted(now - had):
+        try:
+            from . import server, terminal as hub_term
+            from .browsergate import _tell
+            t = hub_term.get(sid)
+            if t and getattr(t, 'task_id', None):
+                _tell(server.store, t.task_id, f"The page downloaded a file: {downloads(sid) / n}. Read or use it from there; to give it to the owner, "
+                                               "copy it into your outputs folder or attach it.")
+        except Exception as e: logger.warning(f'browser {sid}: a download was not told - {e}')
+    return now
 
 
 # ...AND A SIGN-IN GOOGLE WILL NOT DO HERE IS SAID, WITH THE WAY PAST IT: Google turns down a browser it reads as automated ("This browser or
@@ -573,6 +638,7 @@ def close(sid: str, tid: int = None):
         except Exception as e: logger.debug(f'the last frame of {sid} was not kept: {e}')
         if tid: keep_frame(tid, sid)
         if (stop := _CLOCKS.pop(sid, None)): stop.set()
+        if (stop := _WINDOWS.pop(sid, None)): stop.set()
         if exe and _read(session_name(sid), 'stream'):
             _safe_keep(sid)                                        # what it holds now, whether or not agent-browser's own save on close works
             try: spawn.run([exe, '--session', session_name(sid), 'close'], env=_cli_env(sid), timeout=20, capture_output=True)
@@ -948,13 +1014,15 @@ def _spawn_chrome(argv: list, hidden: bool = True) -> int:
 # folder, and reading it back was a read outside the task (readgate), held - a file the agent fetched it could not open without a card for
 # all of Downloads. agent-browser does not apply its download path to a Chrome it attaches to (0.41.2, recorded on a real Chrome), so the
 # session's own profile names the folder before Chrome starts: Taskuary's scratch, which every task's agent reads freely
-def downloads() -> Path:
+def downloads(sid: str = '') -> Path:
+    "Where a browser's downloads land: Taskuary's scratch downloads folder - each session's in a folder of its own, so its agent hears its own."
     from . import config
-    return config.home() / 'scratch' / 'downloads'
+    d = config.home() / 'scratch' / 'downloads'
+    return d / re.sub(r'[^\w.-]', '_', str(sid)) if sid else d
 
 
-def _downloads_to(prof: Path) -> None:
-    f, d = prof / 'Default' / 'Preferences', downloads()
+def _downloads_to(prof: Path, sid: str = '') -> None:
+    f, d = prof / 'Default' / 'Preferences', downloads(sid)
     try:
         d.mkdir(parents=True, exist_ok=True); f.parent.mkdir(parents=True, exist_ok=True)
         try: p = json.loads(f.read_text(encoding='utf-8'))
@@ -976,7 +1044,7 @@ def real_chrome(sid: str) -> int | None:
     if _listening(port): return 0
     exe = chrome_exe()
     if not exe: logger.warning(f'no Chrome for the browser of {sid}'); return None
-    prof = _profile(sid); prof.mkdir(parents=True, exist_ok=True); _downloads_to(prof)
+    prof = _profile(sid); prof.mkdir(parents=True, exist_ok=True); _downloads_to(prof, sid)
     argv = [exe, f'--remote-debugging-port={port}', f'--user-data-dir={prof}', *CHROME_ARGS, 'about:blank']
     # ...and where its own desktop cannot be had or Chrome does not come up on it, the same Chrome with its window off the screen: a browser
     # that works beats one that is out of sight, and the log says which it was
@@ -1009,7 +1077,7 @@ def start(sid: str, url: str = 'about:blank') -> bool:
     with _START_LOCKS_GUARD:
         lock = _START_LOCKS.setdefault(sid, threading.Lock())
     with lock:
-        if state(sid, fresh=True)['open']: return True             # the agent or mount got there first
+        if state(sid, fresh=True)['open']: watch_windows(sid); return True             # the agent or mount got there first
         # ...AND IT STAYS UP WHILE THE TASK IS OPEN. agent-browser shuts its daemon down after an hour
         # of inactivity by default, which is fine for a tool and wrong for a page someone is watching:
         # a walk left overnight at a half-finished ADP sign-in came back to a white pane, because the
@@ -1037,7 +1105,7 @@ def start(sid: str, url: str = 'about:blank') -> bool:
             return False
         for _ in range(int(LAUNCH_WAIT / LAUNCH_POLL)):            # it has a Chrome to launch
             time.sleep(LAUNCH_POLL)
-            if state(sid, fresh=True)['open']: listed(sid, True, [_daemon_pid(sid)]); clock(sid); return True
+            if state(sid, fresh=True)['open']: listed(sid, True, [_daemon_pid(sid)]); clock(sid); watch_windows(sid); return True
         logger.warning(f'the browser for {sid} did not come up within {LAUNCH_WAIT:.0f}s')
         return False
 

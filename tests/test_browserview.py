@@ -564,3 +564,29 @@ def test_google_s_own_refusal_page_is_said_with_the_way_past_it():
         assert not bv.refused('fw2', 'https://accounts.google.com/v3/signin/rejected')          # once a session
         assert not bv.refused('fw3', 'https://accounts.google.com/v3/signin/identifier')
     assert told == [bv.REFUSED_WHAT] and 'email and password' in told[0]
+
+
+# A HUMAN CHECK IS HIS, AT ONCE, and A DOWNLOAD IS TOLD BY ITS PATH (the owner, 2026-11-19: "the browser must work like a regular user's; no dead ends")
+def test_a_human_check_that_stands_is_handed_to_him_once_and_one_that_clears_is_nobodys():
+    tl = [{'type': 'page', 'id': 'P', 'url': 'https://portal.vendor.example/login'},
+          {'type': 'iframe', 'id': 'F', 'url': 'https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile'}]
+    handed, told, seen = [], [], {}
+    with mock.patch.object(bv, '_devtools', return_value=tl), mock.patch.object(bv, 'active_tab', return_value='P'), \
+            mock.patch.object(bv, 'HUMAN_AFTER', 0), mock.patch('taskuary.terminal.get', return_value=SimpleNamespace(task_id=7)), \
+            mock.patch.object(bv, 'your_turn', side_effect=lambda st, tid, sid, what='': handed.append(what)), \
+            mock.patch('taskuary.browsergate._tell', side_effect=lambda st, tid, text, **k: told.append(text)):
+        assert bv.human('hc1', seen) and not bv.human('hc1', seen)                       # once a page
+    assert handed == [bv.HUMAN_WHAT] and "I'm done" in handed[0] and 'wait' in told[0]
+    with mock.patch.object(bv, '_devtools', return_value=tl[:1]), mock.patch.object(bv, 'active_tab', return_value='P'):
+        assert not bv.human('hc2', {})                                                    # no check on the page: nothing
+
+
+def test_a_finished_download_is_told_by_its_path(tmp_path):
+    told = []
+    with mock.patch.object(bv, 'downloads', return_value=tmp_path), mock.patch('taskuary.terminal.get', return_value=SimpleNamespace(task_id=7)), \
+            mock.patch('taskuary.browsergate._tell', side_effect=lambda st, tid, text, **k: told.append(text)):
+        had = bv.arrived('dl1', set())
+        (tmp_path / 'statement.pdf.crdownload').write_text('x'); had = bv.arrived('dl1', had)
+        assert told == []                                                                 # still coming
+        (tmp_path / 'statement.pdf').write_text('x'); bv.arrived('dl1', had)
+    assert len(told) == 1 and str(tmp_path / 'statement.pdf') in told[0] and 'outputs folder' in told[0]

@@ -20,7 +20,7 @@ def test_the_agent_is_told_its_reply_is_a_card_under_next_steps():
     the task's home (2026-11-04) there is no Close out on it: the stress run (2026-11-05) had the agent say "The reply is in Close out" and
     list "Review the reply in Close out and press Send" as an On you step, over the draft's own card under Next steps."""
     from taskuary import general, selfclose
-    assert 'its card under your answer' in selfclose.CARD_SAID and 'Close out' not in selfclose.REPLY_LINE + selfclose.CARD_SAID      # said once (CARD_SAID)
+    assert 'end your turn' in selfclose.CARD_SAID and 'Close out' not in selfclose.REPLY_LINE + selfclose.CARD_SAID      # said once (CARD_SAID)
     assert 'are never an on_you step' in selfclose.SUMMARY_LINE      # ...nor its own question again (email-04 of the run: said twice)
     # ...nor its words again, nor a to-do under "nothing else is pending" (the walk, 2026-11-17): the page no longer dedupes against the prose
     assert 'said nowhere in your words above; [] when nothing_left' in selfclose.SUMMARY_LINE

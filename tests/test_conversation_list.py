@@ -771,12 +771,12 @@ class TheList(unittest.TestCase):
         self.assertEqual(cards(got), [], 'the question is the one thing asked: no empty reply card under it')
         with mock.patch('taskuary.taskstate.asking', return_value=None): self.assertEqual(cards(self.list()), [rid])   # ...nothing asked: the card says why
 
-    def test_a_reply_card_he_writes_past_greys_in_its_place_at_once_and_the_new_turns_card_comes_when_it_ends(self):
+    def test_a_reply_card_he_writes_past_greys_in_its_place_at_once_and_the_new_turns_card_comes_when_it_is_raised(self):
         """The owner's live task on 0.3.11.50, 2026-11-12 ("it shows ... on top of new prompt and action card is not greyed out ... the email
         from prior prompt disappears. I thought we keep it but grey out buttons right away"; and "it should finish thinking and last thing
         should be show action box"): a reply card waited, he wrote again. From the read after his press: the card greyed in its own place
-        with its words, his line under it, the turn at work under that - no card of that turn drawn while it works; at its end its draft is
-        its last thing. A draft the agent takes back stays greyed where it stood. Nothing drawn ever moves or goes."""
+        with its words, his line under it, the turn at work under that - its new draft drawn the moment its tool raised it (the owner,
+        2026-11-20), in its place still at the turn's end. A draft the agent takes back stays greyed where it stood. Nothing drawn ever moves or goes."""
         from taskuary import verdicts, wrapup
         self.say('Draft it.', 'l-one'); self.rest()
         rid = wrapup.agent_reply(self.s, self.tid, 'Hi Gail, which city? Alex', 'assistant', sid=general.session_for(self.tid).sid)['review_id']
@@ -791,14 +791,39 @@ class TheList(unittest.TestCase):
         self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
         rid2 = wrapup.agent_reply(self.s, self.tid, 'Hi Gail, Leeds it is. Alex', 'assistant', sid=general.session_for(self.tid).sid)['review_id']
         got = self.list()
-        self.assertEqual((got['items'][-1]['cards'], got['working']), ([], True))                                     # held back while the turn works
+        self.assertEqual(([c['review'] for c in got['items'][-1]['cards']], got['working']), ([rid2], True))          # drawn the moment it is raised
         self.brain.delay = 0; self.rest()
         got = self.list()
         self.assertEqual([x['id'] for x in got['items']][:len(ids)], ids)                                             # nothing drawn moved
-        self.assertEqual([(c['review'], c['status']) for c in got['items'][-1]['cards']], [(rid2, 'pending')])         # ...its last thing
+        self.assertEqual([(c['review'], c['status']) for c in got['items'][-1]['cards']], [(rid2, 'pending')])         # ...where it stood
         self.assertEqual(verdicts.withdraw(self.s, self.tid, 'she wrote that she will call instead', 'assistant')['ok'], True)
         got = self.list()
         self.assertEqual([(c['review'], c['status'], c['was']['text'][:25]) for c in got['items'][-1]['cards']], [(rid2, 'withdrawn', 'Hi Gail, Leeds it is. Alex'[:25])])
+
+    def test_a_card_raised_mid_turn_stands_at_once_keeps_its_place_and_its_send_mid_turn_reaches_the_agent_once(self):
+        """The owner, 2026-11-20: a card shows the moment the agent calls the tool that raises it, not when its turn ends - and its Send works
+        while the agent still works. Drawn in the turn at work under its steps so far, it keeps that place to the turn's end and after; pressed
+        mid-turn, the press is heard by the agent once, in the turn after the one at work, and said once in the chat."""
+        from taskuary import verdicts, wrapup
+        self.brain.delay = 30; self.say('Reply to Gail saying yes to Thursday.', 'l-one', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        rid = wrapup.agent_reply(self.s, self.tid, 'Hi Gail, Thursday works. Alex', 'assistant', sid=general.session_for(self.tid).sid)['review_id']
+        self.assertTrue(until(lambda: any(c['review'] == rid for c in self.list()['items'][-1].get('cards') or [])), self.kinds())
+        was = self.list(); t = was['items'][-1]
+        self.assertEqual((t['state'] in ('starting', 'working'), [(c['review'], c['status']) for c in t['cards']]), (True, [(rid, 'pending')]), 'drawn while its turn works')
+        heard = lambda: sum('Hi Gail, Thursday works' in c and 'pressed Send' in c for c in self.brain.calls)
+        with mock.patch.object(verdicts, '_send_snapshot', lambda st, snap: {'ok': True, 'channel': 'email'}), mock.patch('taskuary.learn.learn_from'):
+            self.assertTrue(verdicts.decide(self.s, self.s.get_review(rid), 'approve', None, None, 'owner')['ok'])
+            mid = self.list()
+            self.assertEqual(conversation.flow_breaks(mid, was), [])                                      # pressed in its place, nothing moved
+            self.assertEqual([(c['review'], c['status']) for c in mid['items'][-1]['cards']], [(rid, 'approved')])
+            self.brain.delay = 0; self.rest()
+        got = self.list()
+        self.assertEqual(conversation.flow_breaks(got, mid), [])
+        self.assertEqual([x['id'] for x in got['items']][:len(was['items'])], [x['id'] for x in was['items']])  # ...the turn it stood in where it was
+        self.assertEqual([(c['review'], c['status']) for c in got['items'][len(was['items']) - 1]['cards']], [(rid, 'approved')])
+        self.assertTrue(until(lambda: heard() == 1)); self.rest(); self.assertEqual(heard(), 1, 'the press reaches the agent once')
+        self.assertEqual(len(self.s._rows("SELECT 1 FROM audit WHERE EntityType='review' AND EntityId=? AND Action=?", (rid, general.TOLD))), 1)
 
     def test_a_reply_draft_the_sender_writes_past_greys_in_its_place_and_the_turn_that_hears_her_drafts_under_her_mail(self):
         """The rail walk, 2026-11-12: the sender wrote again, and the draft to refresh stood ABOVE her new mail, live. From the frame her mail
@@ -881,7 +906,7 @@ class TheList(unittest.TestCase):
         gone = {'items': [mail, turn('t:m:1:0'), line, turn('t:l-2:0', 'working', '')], 'working': True}
         self.assertTrue(any(b.startswith('c:') for b in conversation.flow_breaks(gone, good)))           # the card went from the chat
         early = {'items': [mail, turn('t:m:1:0', 'working', '', [card('pending')])], 'working': True}
-        self.assertTrue(any(b.startswith('g:') for b in conversation.flow_breaks(early)))                # a card drawn while its turn works
+        self.assertEqual(conversation.flow_breaks(early), [])                                            # a card drawn while its turn works
         above = {'items': [mail, {'id': 'p:9', 'kind': 'press', 'text': 'You sent the reply.'}, turn('t:m:1:0', cards=[card('approved')])], 'working': False}
         was = {'items': [mail, turn('t:m:1:0', cards=[card('pending')])], 'working': False}
         self.assertTrue(any(b.startswith('f:') for b in conversation.flow_breaks(above, was)))           # a press's line above the card pressed

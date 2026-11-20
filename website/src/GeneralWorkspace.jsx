@@ -551,7 +551,8 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next = null
       ...(post && !got.length && !used.has(`post:${c.review}`) && used.add(`post:${c.review}`) ? [<ActionCard key={`post:${c.review}`} row={post} tid={tid} onChanged={onChanged} past={past} />] : [])];
     return out.length && live.has(c.review) && c.status === "pending" ? [...qLine(), ...out] : out;
   });
-  // A TURN'S CARDS, ITS LAST THING: what the log placed in it - a reply, a letter, an act - then the work's card
+  // A TURN'S CARDS, ITS LAST THING, drawn from the moment each is raised (the owner, 2026-11-20): what the log placed in it - a reply, a
+  // letter, an act - then the work's card. What the agent writes after it goes above it, at the foot of the turn's work
   const cardsOf = (x) => [...draw(x.cards),
     ...(x.id === landIn ? [...(live.has("land") ? qLine() : []), <React.Fragment key="landing">{landing}</React.Fragment>] : [])];
   const rows = items.map((x, i) => {

@@ -48,15 +48,22 @@ def test_one_action_box_per_task_by_construction():
     assert [(c['id'], c['state']) for c in chatlog.read(s, tid, 'everything')['items'][0]['cards']] == [('r:7', 'sent'), ('r:8', 'pending')]
 
 
-def test_a_turn_at_work_draws_its_steps_and_holds_its_card_back():
+def test_a_turn_at_work_draws_its_card_the_moment_it_is_raised_as_its_last_thing():
+    "The owner, 2026-11-20: the card stands when its tool is called, not at the turn's end - the turn's last thing, what comes after drawn above it."
     s, tid = world()
     chatlog.put(s, tid, 'turn', 't:1', {'started': 1.0}, state='working')
     chatlog.step(s, tid, 'sid1', 'call-1', {'k': 'tool', 'what': 'Read the vendor sheet'}, state='completed')
     chatlog.put(s, tid, 'card', 'r:7', {'review': 7}, parent='t:1', state='pending')
     t = chatlog.read(s, tid, 'everything')['items'][0]
-    assert [x['what'] for x in t['fold']] == ['Read the vendor sheet'] and t['level'] == 'live' and t['cards'] == [], 'at work: its work counted, shut'
-    chatlog.update(s, tid, 't:1', state='done')
-    assert [c['id'] for c in chatlog.read(s, tid, 'everything')['items'][0]['cards']] == ['r:7']
+    assert [x['what'] for x in t['fold']] == ['Read the vendor sheet'] and t['level'] == 'live' and [c['id'] for c in t['cards']] == ['r:7'], 'at work: its card at once'
+    chatlog.step(s, tid, 'sid1', 'call-2', {'k': 'said', 'text': 'Drafted - it waits for your Send.'})
+    was = chatlog.read(s, tid, 'everything')
+    assert [x['k'] for x in was['items'][0]['steps']] == ['tool', 'said'] and [c['id'] for c in was['items'][0]['cards']] == ['r:7'], 'its words after it: in the turn, the card still last'
+    chatlog.update(s, tid, 't:1', state='done', text='Drafted - it waits for your Send.')
+    got = chatlog.read(s, tid, 'everything')
+    assert [(c['id'], c['state']) for c in got['items'][0]['cards']] == [('r:7', 'pending')], 'its own words never grey it'
+    from taskuary import conversation
+    assert conversation.flow_breaks(got, was) == []
 
 
 def test_a_step_after_his_line_goes_on_in_a_new_turn_under_it_with_its_files():

@@ -31,14 +31,14 @@ def test_a_draft_is_said_in_a_line_and_its_words_are_the_cards():
     line = selfclose.owner_closes_line()
     # ...and ONE duty about a card (the owner's rule, 2026-11-11: no repeating what the card says): told to say what it set up and for whom,
     # it said that over the card that says it. It adds only what the card cannot say
-    assert 'Say none of that' in line and 'Add only what the card cannot say' in line and 'assum' in line and 'what you set up and for whom' not in line
+    assert 'say none of that' in line and 'add only what the card cannot say' in line and 'end your turn there' in line and 'assum' in line and 'what you set up and for whom' not in line
     # ...nor its id (agent walk 2, 2026-11-10: "send it after rv3"): the prompt names drafts by Taskuary's handle, which the owner never sees
     assert selfclose.HANDLES_LINE in line and 'the owner never sees it' in line
     # ...and the close is never named at all (design round 4, 2026-11-19: "Ready for Mark done" ended answers on three AIs, this line taught
     # it): the page lights the button, the answer ends on the result - one sentence, every brain
     assert 'never name the button or the close: end on the result' in line and 'say it is ready for' not in line
     marked = general._prompt(s, t)[0]; tooled = general.by_tool(marked)
-    for system in (marked, tooled): assert system.count('Add only what the card cannot say') == 1
+    for system in (marked, tooled): assert system.count('add only what the card cannot say') == 1
     # ...a session that drafts by marked block writes the words once, in the block: there the block IS the draft
     assert 'the block IS the draft' in selfclose.REPLY_LINE and 'the block IS the draft' in selfclose.DRAFT_LINE
     assert 'the block IS the draft' not in tooled and 'never as text in the conversation' not in marked

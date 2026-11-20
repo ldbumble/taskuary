@@ -229,8 +229,8 @@ def steps_of(store, tid: int, sid: str, steps: list) -> None:
 
 def read(store, tid: int, level: str = None) -> dict:
     """`level`: how much of each turn's work is shown (detailed) - the task's own, else its kind's setting.
-    The task's chat in its one order: top-level rows by their place, each turn with its steps, and its cards and failures once it is
-    no longer at work (a card is a turn's last thing - the reader's one rule)."""
+    The task's chat in its one order: top-level rows by their place, each turn with its steps and its cards - its last thing, from the read
+    each card's row is put, at work or not - and its failure once it is no longer at work."""
     reconcile(store, tid)
     came_in(store, tid)
     advance(store, tid)
@@ -256,7 +256,9 @@ def read(store, tid: int, level: str = None) -> dict:
             if x.get('text'): x['text'] = said_once(str(x['text']), seen)
             # ...and one taken back (took_back) says so as its step: its words and their summary are no answer
             if any(s.get('took') for s in x['steps']): x['text'] = ''; x.pop('summary', None)
-            x['cards'] = [] if r['State'] in LIVE else [_item(k) for k in ks if k['Kind'] in ('card', 'fail') and _drawn(k, lit)]
+            # ...A CARD STANDS THE MOMENT ITS TOOL RAISED IT (the owner, 2026-11-20), as its turn's last thing: drawn in the turn at work, never held
+            # to the turn's end - what the agent does after it is drawn above it, at the foot of the turn's work; a turn's failure is its end
+            x['cards'] = [_item(k) for k in ks if (k['Kind'] == 'card' or k['Kind'] == 'fail' and r['State'] not in LIVE) and _drawn(k, lit)]
             # ...a turn that ended having said, done and left nothing is no item (a part a line cut off before it did anything)
             if r['State'] not in LIVE and not (x.get('text') or x['steps'] or x['cards'] or x.get('summary') or x.get('fail')): continue
         out.append(x)
@@ -779,7 +781,7 @@ def came_in(store, tid: int) -> None:
 @_safe
 def advance(store, tid: int) -> None:
     """The line of cards on task `tid` (cardqueue.state) into the log: the front is put as the ONE pending card - under the turn that raised
-    it, as its last thing (drawn once that turn is no longer at work), else at the foot where an input came after every turn - with the
+    it, drawn there at once (at work or not), else at the foot where an input came after every turn - with the
     line's "n of m · next" in it; a card that stood is updated in place as it
     is pressed, withdrawn or moved past, never moved; one held behind the front has no row, so nothing can draw it. A card outside the line
     (Taskuary's own offer beside a reply - a playbook) stands as an `offer`, drawn only while no card of the line waits."""
@@ -804,10 +806,6 @@ def advance(store, tid: int) -> None:
         if st == 'pending' and not json.loads(r['Body']).get('was') and _card(rv).get('was') and (o := open_turn(store, tid)) and o['Id'] != r.get('Parent'):
             with store.lock: store.cx.execute('DELETE FROM chatlog WHERE Id=?', (r['Id'],)); store.cx.commit()
             rows.pop(k); continue
-        # ...ONE TAKEN BACK BEFORE ITS TURN ENDED NEVER STOOD (drawn only then): its row goes, as nothing of it was ever on his screen
-        if st not in ('pending', 'offer') and rv.get('DecidedBy') not in OWNER_ACTORS and (p := _above(store, r)) and p['State'] in LIVE:
-            with store.lock: store.cx.execute('DELETE FROM chatlog WHERE Id=?', (r['Id'],)); store.cx.commit()
-            continue
         # ...one the chat moved past stays where it stood, its buttons greyed (proposals.written_past) - never taken off as if it waited behind
         # ...ONE card waits per task (one_live_card): the front's own row, never another row of its unit
         # ...ONE WORD FOR A CARD ITS AGENT TOOK THE PLACE OF (decided 2026-11-20, the moved-past ruling): greyed - 'passed' - whether his line set it
@@ -816,8 +814,8 @@ def advance(store, tid: int) -> None:
         if st == 'pending' and rv['ReviewId'] != (front[0] if front else None): st = 'passed' if rv['ReviewId'] in q['past'] else 'offer' if r['State'] == 'offer' else 'held'
         if st != r['State']: update(store, tid, k, state=st, status=st)
     if front and (rv := by.get(front[0])) and f"r:{front[0]}" not in rows:
-        # ...the turn that raised it (advance_soon kept it), else the one open now; a turn's card is drawn when that turn has ended
-        # ...else the turn at work when it was raised, by its own time: a card is a turn's last thing, never loose where a turn was
+        # ...the turn that raised it (advance_soon kept it), else the one open now, else the turn at work when it was raised, by its own time:
+        # never loose where a turn was
         t = _raised(store, front[0]) or (open_turn(store, tid) or _turn_at(store, tid, rv.get('CreatedAt')) or {}).get('Id')
         put(store, tid, 'card', f"r:{front[0]}", {**_card(rv), 'rids': front, 'line': cardqueue.line(q)}, parent=t,
             state='pending', src=f"review:{front[0]}")
@@ -922,13 +920,6 @@ def let_go(store, timeout: float = 10.) -> None:
     with _SOON_RUN:
         end = time.time() + timeout
         while _SOON_ON[0] == id(store) and time.time() < end: _SOON_RUN.wait(0.1)
-
-
-def _above(store, r: dict):
-    "The row a row stands under (its turn), or None."
-    if r.get('Parent') is None: return None
-    with store.lock: p = store.cx.execute('SELECT * FROM chatlog WHERE Id=?', (r['Parent'],)).fetchone()
-    return dict(p) if p else None
 
 
 def _newest_turn(store, tid: int):

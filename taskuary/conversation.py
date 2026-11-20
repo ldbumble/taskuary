@@ -483,7 +483,7 @@ def flow_breaks(got: dict, was: dict = None) -> list:
     d nothing is drawn empty
     e "working" is one fact: one turn at work, the last one, exactly when the list says working
     f nothing is drawn above what was there, and nothing that was there changes place; a past turn's words never change
-    g a turn at work draws no card (its card comes when it has ended, as its last thing); a step it is stopped at is its permission
+    g a card stands the moment it is raised, in the turn at work too, as its turn's last thing (the page draws later work above it)
     h an input is in exactly one place: waiting (`pending`) or on the canvas, never both, and one that leaves the waiting room is on the
       canvas in the same read - unless he took it back (`dropped`)"""
     xs, out = got.get('items') or [], []
@@ -516,11 +516,6 @@ def flow_breaks(got: dict, was: dict = None) -> list:
     if at and not got.get('working'): say(f"e: {at[0]['id']} reads at work and the list says nothing works")
     turns = [x for x in xs if x['kind'] == 'turn']
     if got.get('working') and turns and not live(turns[-1]) and at: say(f"e: the turn at work {at[-1]['id']} is not the last turn")
-    # g: a turn at work draws no NEW card - one already on the canvas before it worked stays (never closed under him, 2026-11-13)
-    seen = {c['id'] for x in (was or {}).get('items') or [] for c in ([x] if x.get('kind') == 'card' else x.get('cards') or [])}
-    for x in at:
-        for c in x.get('cards') or []:
-            if c['id'] not in seen: say(f"g: the turn at work {x['id']} draws its card {c['id']}")
     # h: ONE PLACE AT A TIME (the owner, 2026-11-12: "it does not show in 2 places"): waiting by the box or on the canvas, never both...
     for i in {p['id'] for p in got.get('pending') or []} & set(ids): say(f'h: {i} waits by the box AND stands on the canvas')
     if was is None: return out

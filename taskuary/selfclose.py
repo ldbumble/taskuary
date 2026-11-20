@@ -308,10 +308,11 @@ CHAT_LINE = (
 # ...ONE DUTY LINE (the owner's rule 8, 2026-11-11: the agent talks like a person helping - "no repeating what the card says"): it was told
 # to say what it set up and for whom, and said that over a card that says it - then "it waits for your Send", "nothing has been sent". What
 # the card shows is never said; the agent adds only what the card cannot
-CARD_SAID = ('A reply, an email or an act you set up is its card under your answer, with its own button - the result itself: it shows '
-             'what it is, to whom, its words, the file it carries, that it waits and that nothing went. Say none of that or what it replaced, and never '
-             'retell its content in other words. Add only what the card cannot say - what you will do after the press, an assumption in it (a '
-             'guessed address, a picked date), the one question - in one short line, or nothing. Raise your cards in the order they should '
+# ...AND IT STANDS THE MOMENT IT IS RAISED, AS THE TURN'S LAST THING (the owner, 2026-11-20): so the agent ends its turn there
+CARD_SAID = ('A reply, an email or an act you set up stands on his screen at once as its card, the last thing of your turn, with its own button - '
+             'the result itself: it shows what it is, to whom, its words, the file it carries, that it waits and that nothing went. So end your turn '
+             'there: say none of that or what it replaced, never retell its content in other words, and add only what the card cannot say - what you '
+             'will do after the press, an assumption in it (a guessed address, a picked date), the one question - in one short line, or nothing. Raise your cards in the order they should '
              'happen; what stands on his screen is told you at the head of every turn. Many of one act (25 emails, 40 issues to close) go as '
              'ONE card, in one call with `items`.')
 # ...AND A ROUTINE'S OWN EMAIL IS NO CARD (slots.routine_sends, the owner 2026-11-17: "routines should send on their own too"): it went at
@@ -326,7 +327,7 @@ def card_said(out: dict) -> str:
 # ...AND A STEP TASKUARY HELD IS A CARD TOO (the real-CLI walks, 2026-11-12: "The delete of old-export.csv is waiting for your approval",
 # over the card that says so; "still waiting for your Approve" the turn after): every hold's answer to its agent ends on this one tail
 CARD_TAIL = ('It is a card in this task now: the card says what it is and that it waits for their press - never say either. Add only what '
-             'you will do once it is pressed, in one short line, or nothing.')
+             'you will do once it is pressed, in one short line, or nothing, and end your turn there.')
 # ...and WHAT A TURN IS HANDED IS CONTEXT, NOT NEWS (same walks): each turn is told what waits, what went and what he pressed, and said it
 # back to him - so the block says once, at its head, that it is his page's own news (general.latest_block)
 FACTS_HEAD = ('WHAT TASKUARY TELLS YOU FOR THIS TURN - context for you alone: the owner sees each of these on the task already. Act on them; '

@@ -533,6 +533,11 @@ def check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> dic
 def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> dict:
     """The answer for one browser command, asked where it runs (gatecmd): {} lets it run; a refusal holds it and puts the act on the task."""
     from . import browserview, signin
+    # ...A TAB HOLDING A STEP IS THAT STEP'S (walk 8, 2026-11-20: the agent opened each next vendor in the tab its held sign-up stood on, and
+    # three cards went off the chat): its next site opens in a new tab - the one road for every held step, a click's and a sign-up's
+    if (held := holds_tab(store, tid, sid)) and (to := goes_to(cmd)) is not None:
+        return _deny(f"{HELD}: this tab holds your step on {held} for the owner's press - moving it would drop that card. Open the next page in "
+                     f"a new tab instead: `agent-browser tab new {to or '<address>'}`, and go on there.")
     todo = acts(cmd)
     if not todo or all(typing(a) for a in todo): return {}
     pg, said, vs = page(sid), asked(store, tid), None
@@ -592,6 +597,31 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         signin.acting(store, tid, sid, (here := signin.site_of(pg.get('url'))))
         signin.pressing(store, tid, sid, here)
     return {}
+
+
+def goes_to(cmd: str):
+    "The address a command takes the tab it works to (open/goto/navigate, back, forward) - '' with none named - else None. Never a new tab's."
+    for argv in _segments(cmd) or []:
+        a = _head(argv)
+        if not a: continue
+        i = 0
+        while i < len(a) and a[i].startswith('-'): i += 2 if a[i] in VALUED and '=' not in a[i] else 1
+        verb = a[i].lower() if i < len(a) else ''
+        if verb in NAVS: return a[i + 1] if i + 1 < len(a) else ''
+        if verb in ('back', 'forward'): return ''
+    return None
+
+
+def holds_tab(store, tid, sid: str) -> str:
+    "The site whose held step stands on the tab session `sid` works now - '' when none does (or the tab cannot be read)."
+    from . import browserview
+    if not store or not tid or not (tab := browserview.active_tab(sid)): return ''
+    for r in store._rows("SELECT DraftText FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (int(tid),)):
+        try: p = json.loads(r.get('DraftText') or '{}') or {}
+        except (TypeError, ValueError): continue
+        if p.get('action') == 'browser_act' and str(p.get('sid')) == str(sid) and str(p.get('tab') or '') == tab:
+            return str(p.get('name') or p.get('site') or 'its page')
+    return ''
 
 
 def waiting(store, tid: int, sid: str) -> bool:

@@ -776,3 +776,19 @@ def test_a_step_the_judge_says_is_not_big_runs_unless_it_is_also_unsure_and_for_
     assert v['hold'] and 'money' not in v['why']
     assert 'go-ahead HE GAVE' in bg.SYSTEM and 'work email' in bg.SYSTEM and 'never "the owner"' in bg.SYSTEM
     assert 'a post or message published in his name, still wait for his press' in bg.SYSTEM     # ...a post through the browser is always his press
+
+
+def test_a_tab_holding_a_step_is_never_moved_on_the_next_site_opens_in_a_new_tab():
+    """WALK 8 (2026-11-20): the agent opened each next vendor in the tab its held step stood on, and three cards went off the chat. A tab that
+    holds a step - a click's or a sign-up's, one road - is that step's: an open there is refused with the new-tab command; a new tab runs."""
+    s = MemoryStore(); tid = Factory(s).task('Trial accounts for Erin')
+    for args, extra in ((['click', '@e12'], {}), (['signup'], {'signup': 'toll.example'})):
+        rid = proposals.queue(s, tid, {'action': 'browser_act', 'sid': 'run1', 'args': args, 'url': CHECKOUT, 'tab': 'T1', 'site': 'toll.example',
+                                       'name': 'Toll', 'what': 'step', 'why': 'x', **extra}, 'agent')
+        with mock.patch.object(browserview, 'active_tab', return_value='T1'):
+            said = bg.check(s, tid, 'run1', 'agent-browser open https://next.vendor.example/signup')
+            assert 'tab new https://next.vendor.example/signup' in said['hookSpecificOutput']['permissionDecisionReason']
+            assert bg.check(s, tid, 'run1', 'agent-browser tab new https://next.vendor.example/signup') == {}
+        with mock.patch.object(browserview, 'active_tab', return_value='T2'):
+            assert bg.check(s, tid, 'run1', 'agent-browser open https://next.vendor.example/signup') == {}, 'another tab moves freely'
+        s._exec("UPDATE review SET Status='superseded' WHERE TaskId=?", (tid,))

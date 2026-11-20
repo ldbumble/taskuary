@@ -201,8 +201,9 @@ def test_light_on_one_model_is_low_effort_where_the_cli_ships_no_quick_gear(s):
     with _cli(s, model='sonnet'), mock.patch.dict(llm.LIGHT_DEFAULT, {'claude': ''}), mock.patch.dict(climodels.GEARS, {'claude': {}}):
         r = brainroute.choose(s, 'triage')
         assert (r.tier, r.model) == ('light', 'sonnet@low') and 'sonnet, low effort' in r.why
-    with _cli(s, model='sonnet'):                                                    # claude's own quick gear: haiku, thinking little
-        assert brainroute.choose(s, 'triage').model == 'haiku@low'
+    with _cli(s, model='sonnet'):                                                    # claude's own quick model - triage at its own effort
+        assert brainroute.choose(s, 'triage').model == 'haiku'                       # (the owner, 2026-11-20: accuracy over speed for triage)
+        assert brainroute.choose(s, 'general', task=_task(s, 'quick'), want_pick='cli:claude').model == 'haiku@low'
 
 
 def test_settings_says_what_each_level_runs_on_in_plain_words(s):

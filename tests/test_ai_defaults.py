@@ -44,7 +44,7 @@ class ResolveTests(unittest.TestCase):
         s.set_setting('triage_ai', 'cli:claude', 'o')
         r = aidefaults.resolve(s, cfg, 'triage_ai')
         self.assertEqual(r['model'], '')
-        self.assertEqual(r['default_hint'], 'haiku, low effort - the light default'); self.assertEqual(r['note'], '')
+        self.assertEqual(r['default_hint'], 'haiku - the light default'); self.assertEqual(r['note'], '')
 
     def test_codex_effort_only_light_gear_round_trips(self):
         """codex on a ChatGPT plan has no smaller model - its cheap gear IS the effort."""

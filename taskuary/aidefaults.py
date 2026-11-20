@@ -300,17 +300,13 @@ def _resolve(store, cfg, slot_key: str) -> dict:
             # light gear, which is triage's (the card showed and saved the light model while every agent ran the main one)
             from .brainroute import _base
             light, dflt, owner = model_on(store, s['model_setting'], f'cli:{key}', settings), _base(store, f'cli:{key}', cfg), 'this page'
-        # ...the quick gear a blank box runs (climodels.gears: model and effort), said as its model, its effort beside it
-        else: dflt, owner = climodels.gears(cli).get('light') or LIGHT_DEFAULT.get(cli, ''), f'the {key} connection (light model)'
-        if '@' in dflt:
-            from .brainroute import spell
-            said_dflt, dflt = spell(dflt), climodels.split_pick(dflt)[0]
-        else: said_dflt = ''
+        # ...triage's quick model a blank box runs (climodels.gears' light model): triage reads at its own effort (brainroute.choose)
+        else: dflt, owner = climodels.split_pick(climodels.gears(cli).get('light') or '')[0] or LIGHT_DEFAULT.get(cli, ''), f'the {key} connection (light model)'
         model, effort = ('', light[7:]) if light.startswith('effort:') else climodels.split_pick(light)
         if slot_key == 'concierge_ai' and not effort:
             from .llm import ASSISTANT_EFFORT
             effort = ASSISTANT_EFFORT.get(cli, '')          # what concierge.brain runs when the pick names no effort
-        said = said_dflt or ((f"{dflt[7:]} effort" if dflt.startswith('effort:') else dflt) if dflt else f'the {cli} default')
+        said = (f"{dflt[7:]} effort" if dflt.startswith('effort:') else dflt) if dflt else f'the {cli} default'
         # a blank box runs the gear's default model, so its efforts and version are that model's
         seen = model or ('' if dflt.startswith('effort:') else dflt)
         out.update(model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, seen), resolved=_resolved(cat, seen),

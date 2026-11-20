@@ -491,7 +491,9 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
             # the card's model IS the standard tier; strong runs the brain's strong gear and light its quick one - or, on a brain with
             # one model, that model at high or low effort
             g, model = GEAR_OF[tier], (model if tier == 'standard' else lift(store, pick, tier, model))
-            if not model: model = gear_of(store, pick, tier)          # ...the CLI's own gear for the tier, model and effort, where he named none
+            # ...the CLI's own gear for the tier, model and effort, where he named none - but TRIAGE KEEPS ITS QUICK MODEL'S OWN EFFORT (the
+            # owner, 2026-11-20: "I don't care about triage speed" - accuracy over speed): it reads on the light gear's model, thinking as it will
+            if not model: model = gear_of(store, pick, tier) if job != 'triage' else gear_of(store, pick, tier).split('@')[0]
             why = f"{JOB_WORDS[job]}{hard} -> {tier} on {_said(store, pick)}{f', {spell(model)}' if model else ''} (rule {rule}){said}{held}"
         why += miss
     # a brain resting on its usage limit hands the call to the first backup that is not (Auto mode; the cards stand in Fixed)

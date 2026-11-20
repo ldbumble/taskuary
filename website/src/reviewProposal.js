@@ -60,9 +60,7 @@ export const reviewText = (review) => {
   // a part of the task going to a task of its own (proposals.break_out): the new task's title, what it is, and each thing that moves
   if (proposal?.action === "break_out") return [proposal.summary, proposal.moves].filter(Boolean).join("\n\n");
   // a script to keep as a routine (proposals 'save_routine'): what feeds it, the script whole, and what the AI step is asked about its output
-  if (proposal?.action === "save_routine" && !proposal.script) return [String(proposal.prompt || ""), proposal.based_on ? `Built from: ${proposal.based_on}` : ""].filter(Boolean).join("
-
-");
+  if (proposal?.action === "save_routine" && !proposal.script) return [String(proposal.prompt || ""), proposal.based_on ? `Built from: ${proposal.based_on}` : ""].filter(Boolean).join("\n\n");
   if (proposal?.action === "save_routine") return [
     proposal.reads ? `It reads: ${toolWhere(proposal.reads)}` : "", String(proposal.script || ""),
     proposal.prompt ? `Then an AI step reads what it printed: ${proposal.prompt}` : ""].filter(Boolean).join("\n\n");

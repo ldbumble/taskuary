@@ -377,11 +377,13 @@ def change_of(store, tid: int, p: dict) -> tuple:
 
 # A REPORT OR A DASHBOARD IS CHANGED THE SAME WAY (the owner, 2026-11-20): its question, its schedule, its name - one card showing each old ->
 # new, saved on his Approve by the one save its editor uses (save). Its question is `ai_prompt` (`prompt` read as it)
-SETUP_KEYS = {'ai_prompt': 'Question', 'title': 'Name', 'query': 'Query'}
+SETUP_KEYS = {'ai_prompt': 'Question', 'prompt': 'Question', 'title': 'Name', 'query': 'Query'}
 def setup_change(src, cfg: dict, p: dict) -> tuple:
     from .reports import schedule_error
-    want = {**({'ai_prompt': p['prompt']} if str(p.get('prompt') or '').strip() and not p.get('ai_prompt') else {}),
-            **{k: p[k] for k in (*SETUP_KEYS, *CLOCK) if str(p.get(k) or '').strip()}}
+    # ...its question where it keeps it: an AI report's own `prompt`, else the AI pass over its data (`ai_prompt`)
+    q = 'prompt' if cfg.get('type') == 'agent' or ('prompt' in cfg and 'ai_prompt' not in cfg) else 'ai_prompt'
+    asked = str(p.get('prompt') or p.get('ai_prompt') or '').strip()
+    want = {**({q: asked} if asked else {}), **{k: p[k] for k in (*CLOCK, 'title', 'query') if str(p.get(k) or '').strip()}}
     clock = {k: want.get(k) for k in CLOCK} if set(want) & set(CLOCK) else {}
     if clock and (why := schedule_error(clock)): return {}, f'that schedule does not hold: {why}'
     patch = {**{k: v for k, v in want.items() if k in SETUP_KEYS and v != cfg.get(k)}, **clock}

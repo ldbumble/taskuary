@@ -657,6 +657,18 @@ def no_opening_carryover():
 
 
 @pytest.fixture(autouse=True)
+def no_handed_carryover():
+    """general.HANDED counts the inputs handed to a task's agent whose pass has not ended (general.hand) - a test whose told turn ran on a
+    stand-in thread that never let go left the next test's task 1 "agent working", and the rail, which reads the one task state
+    (funnel.one_state), drew every row of it at work (the release CI, 2026-11-20)."""
+    from taskuary import general
+    marks = (general.HANDED, general._IN_FLIGHT, general.PRESSED)
+    for m in marks: m.clear()                 # ...a stand-in's thread of the test before can still be letting go: each test starts with none
+    yield
+    for m in marks: m.clear()
+
+
+@pytest.fixture(autouse=True)
 def no_path_lookup_carryover():
     """pathcache remembers where a CLI was found while the PATH directories read the same - and a test that writes a fake
     CLI into one, or patches os.access or os.path.exists under the real which(), must not inherit the test before it (perf 2.7)."""

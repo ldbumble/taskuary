@@ -1911,6 +1911,25 @@ QUICK_HISTORY = ("TASKUARY HAS ALREADY SEARCHED THE OWNER'S SAVED MAIL FOR YOU: 
                  + ASK_AFTER.format(where='under WHAT EARLIER TASKS SETTLED in the material, when any did'))
 
 
+def meeting_times(store, tid: int) -> str:
+    """THE FREE TIMES A MEETING ASK NEEDS, READ BEFORE THE TURN (the owner, 2026-11-20: "if it's just 'respond with available dates'" the
+    agent answers at once): where triage read the newest message on the task as asking the owner for a time (calwrite.meet_of), the
+    calendar is read in plain code - the times the reply card's own Find times would offer (calwrite.slots_for) - and handed to the agent
+    with the ask, so it needs no tool call for them. With no calendar to read it is told so, with the link that connects one. '' otherwise."""
+    from . import calendar as cal, calwrite
+    m = next((x for x in reversed(store.list_messages(tid) or []) if x.get('Direction') != 'out' and calwrite.meet_of(x)), None)
+    if not m: return ''
+    if not cal.reachable(store):
+        fix = calwrite.connect_fix(store)
+        return f"THE MEETING ASKED FOR: no calendar is connected, so the owner's free times cannot be read. Give the owner this link: [{fix['label']}]({fix['href']})"
+    try: got = calwrite.slots_for(store, m, 'schedule')
+    except calwrite.NoAccess as e: return f'THE MEETING ASKED FOR: {e} [{e.fix["label"]}]({e.fix["href"]})'
+    except Exception as e: logger.debug(f'task {tid}: the free times were not read for its turn - {e}'); return ''
+    times = '; '.join(x['label'] for x in got.get('slots') or [])
+    return (f"THE MEETING ASKED FOR - the owner's free times for {got.get('minutes') or 30} minutes, read from the calendar just now: "
+            + (times or 'none in the days asked or the week after') + '. Offer these; the calendar tool is for anything more.')
+
+
 def history_brief(store, tid: int, hands: bool, quick: bool = False) -> tuple[str, str]:
     """(system line, user material) about the owner's earlier mail, by what this session can reach: its own search (HISTORY_LINE), the
     search done for it (SEARCHED_LINE + EARLIER MAIL), or nothing - a stranger's task hears why from _prompt, the dock needs none.
@@ -3347,7 +3366,9 @@ class GeneralSession:
             # ...and the owner's own mail, which a stranger's task never reads (the route refuses it too: server._owner_history): searched
             # by the session itself where it has hands, else for it
             from .brainroute import judged
-            said, prior = history_brief(self.store, self.task_id, hands, quick=judged(self.store, self.task_id)['difficulty'] == 'quick')
+            quick = judged(self.store, self.task_id)['difficulty'] == 'quick'
+            said, prior = history_brief(self.store, self.task_id, hands, quick=quick)
+            if quick and (meet := meeting_times(self.store, self.task_id)): prior = '\n\n'.join(x for x in (prior, meet) if x)
             late.append(said)
             # ...and with no hands to open a playbook's file, the one triage matched rides whole (the menu still names the rest)
             if not hands and 'PLAYBOOKS - ' in system:

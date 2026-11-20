@@ -112,3 +112,25 @@ def test_a_guessed_invitee_goes_on_the_invite_and_the_card_says_so():
     assert not bad and got['ok'] and 'guessed, check before Send: ' + guess in s.get_review(got['review'])['Reason']
     from taskuary import agenttools
     assert 'name it in `guessed`' in agenttools.TOOLS['set_up_meeting'][1] and 'never guess' not in agenttools.TOOLS['set_up_meeting'][1]
+
+
+# ── THE FREE TIMES COME WITH THE ASK (the owner, 2026-11-20: "if it's just 'respond with available dates'" the agent answers at once) ─────
+def _meet_task(s):
+    tid = s.create_task({'Title': 'Erin asks when you can meet Thursday', 'Status': 'open'}, 'owner')
+    s.add_message({'TaskId': tid, 'ExternalId': 'm-meet', 'Channel': 'email', 'FromEmail': 'erin@northwind.example', 'FromName': 'Erin Blake',
+                   'Subject': 'Thursday', 'BodyText': 'When works for you to meet Thursday?', 'Status': 'routed',
+                   'MeetJson': json.dumps({'minutes': 30, 'from': '2026-11-26', 'to': '2026-11-26'})})
+    return tid
+
+
+def test_a_meeting_ask_hands_the_agent_its_free_times_read_in_plain_code():
+    from taskuary import calendar as cal, general
+    s = MemoryStore(); tid = _meet_task(s)
+    slots = {'slots': [{'label': 'Thu 26 Nov 10:00-10:30 AM'}, {'label': 'Thu 26 Nov 2:00-2:30 PM'}], 'minutes': 30}
+    with mock.patch.object(cal, 'reachable', return_value=True), mock.patch.object(calwrite, 'slots_for', return_value=slots) as read:
+        said = general.meeting_times(s, tid)
+    assert read.call_args.args[2] == 'schedule' and 'Thu 26 Nov 10:00-10:30 AM; Thu 26 Nov 2:00-2:30 PM' in said and '30 minutes' in said
+    with mock.patch.object(cal, 'reachable', return_value=False):                  # ...no calendar: said, with the link that connects one
+        assert 'no calendar is connected' in general.meeting_times(s, tid) and '](#connector' in general.meeting_times(s, tid)
+    other = s.create_task({'Title': 'Q3 numbers', 'Status': 'open'}, 'owner')
+    assert general.meeting_times(s, other) == ''                                    # ...nothing asked for a time: nothing read

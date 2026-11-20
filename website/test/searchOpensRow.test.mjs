@@ -29,7 +29,7 @@ test("a search hit on a task goes the rail row's road, not a pull of task:N", ()
   assert.match(view, /<FeedView [\s\S]*?onPress=\{pressRow\}/);
   // ...AND A TASK ON NO ROW THE SAME ROAD (2026-11-19: a closed task searched while on another went by its link - a hash round trip, the task
   // left standing lit until the read came): its row made at the press, as New's is (madeRow), pulled with it so it draws at once
-  assert.match(view, /const pressRow = \(n, hit = null\) => \{\n\s*prefetchTask\(api, n\);\n\s*const row = rowOfTask\(pile\?\.items, n\);\n\s*if \(row\) railPress\(row\.key\); else openTaskCard\(\{ tid: n, row: hit \? madeRow\(n, hit\.title\) : null \}\);/);
+  assert.match(view, /const pressRow = \(n, hit = null\) => \{\n\s*prefetchTask\(api, n\);\n\s*const row = rowOfTask\(pile\?\.items, n\);\n\s*if \(row\) railPress\(row\.key\); else openTaskCard\(\{ tid: n, row: hit \? madeRow\(n, hit\.title, \[\"done\", \"dropped\"\]\.includes\(hit\.status\)\) : null \}\);/);
   assert.doesNotMatch(view, /openAppLink\(`task=\$\{n\}`\)/);
   assert.doesNotMatch(view, /`task:\$\{r\.TaskId\}`/);   // keyForRow's task-hit key: no road takes it now
 });

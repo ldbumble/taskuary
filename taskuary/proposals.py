@@ -103,7 +103,7 @@ ACTIONS = {
     # A SCRIPT WRITTEN ON THE JOB, KEPT AS A ROUTINE (the owner, 2026-11-10: "agent should be able to after building one should say should
     # we save this"): the card shows the script whole, and the owner's press is the save (workflows.save_script_routine) - nothing is
     # saved or run before it, and it is the one door by which an agent's script ever reaches a schedule
-    'save_routine': ('save this script as a routine', ('title', 'script'), None),
+    'save_routine': ('save this routine or report', ('title',), None),
 }
 FAILED_NOTE = 'failed'      # a pressed act that failed: settled, its error kept (ActError) - its agent sets up what goes next
 HELD_ACTS = ('browser_act', 'shell_act', 'desktop_act')     # raised by a hook before the act ran - never an agent's marker
@@ -458,7 +458,8 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
         cfg, miss = ({}, "a script from a task a stranger started is not offered as a routine") if origin.of_task(store, task_id)[0] == 'stranger' \
             else workflows.script_routine(store, p)
         if miss: ok, why = False, miss
-        else: p = {**p, 'title': cfg['title'], 'runs': workflows.runs_words(cfg), 'steps': [s['label'] for s in cfg['flow']]}
+        else: p = {**p, 'title': cfg['title'], 'runs': workflows.runs_words(cfg), 'steps': [s['label'] for s in cfg.get('flow') or []],
+                   'kind': 'routine' if workflows.is_workflow(cfg) else 'report'}
     if ok and p.get('action') in ('comment_issue', 'close_issue') and not linked(store, task_id):
         ok, why = False, f"{NO_LINK} - a comment or an issue on a repository you name is a run_tool (the guide tool's `propose` topic)"
     # ...THE ONE RULE (actrule.decide): the same card he dismissed since his last line is his no - refused in his voice, never a second card.
@@ -476,7 +477,9 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
     # a close-out is not the agent's ask ("proposes to merge the pull request this task opened" was said of a stranger's PR), and
     # neither is a workflow's own repair or write, raised by the run itself (flow.py) with no agent anywhere on the task
     said = (tool_words(store, p) if p['action'] == 'run_tool' else break_out_words(p) if p['action'] == 'break_out'
-            else f"save a script as the routine \"{p['title']}\", to run {p['runs']}" if p['action'] == 'save_routine'
+            else (f"save a script as the routine \"{p['title']}\", to run {p['runs']}" if p.get('script') else
+                  f"create the {p.get('kind') or 'routine'} \"{p['title']}\", to run {p['runs']}" + (f" - built from {p['based_on']}" if p.get('based_on') else ''))
+            if p['action'] == 'save_routine'
             else f"change the routine \"{p['title']}\"" if p['action'] == 'repair_workflow' and actor != 'workflow'
             else f"change the {p.get('kind') or 'report'} \"{p['title']}\"" if p['action'] == 'change_setup' else why)
     # ...nor a held browser act: the agent did not propose it, it tried it, and the hook stopped it (browsergate.check)

@@ -450,7 +450,9 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     # sent unopened): under bulkcard.MANY each is its own card in the line ("1 of 3"), as the same three raised one call each would be
     mine = [r['ReviewId'] for r in store._rows(f"SELECT ReviewId FROM review WHERE TaskId=? AND ReviewId>? AND Status='pending' AND ReviewId IN ({','.join('?' * len(mine))})",
                                                (int(tid), top, *mine))] if mine else []
-    bulk = len(mine) >= bulkcard.MANY
+    # ...and only MANY OF THE SAME THING is one card (the owner, 2026-11-20): posts for different networks are different things - each its own
+    # card in the row, with its own picture - however many there are
+    bulk = len(mine) >= bulkcard.MANY and len({str({**base, **it}.get('type') or '') for it in items}) <= 1
     if bulk: store._exec(f"UPDATE review SET Batch=? WHERE ReviewId IN ({','.join('?' * len(mine))})", (key, *mine))
     n = len(mine)
     card = ('They stand as ONE card: the owner reviews a few and does them all with one press; you hear the whole run once.' if bulk

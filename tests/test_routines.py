@@ -168,6 +168,33 @@ class ChangeTests(unittest.TestCase):
         cfg = json.loads(self.s.get_source(rep)['ConfigJson'])
         self.assertEqual((cfg['ai_prompt'], cfg['daily_at'], cfg['type']), ('Sum the bank balances by account.', '07:00', 'quickbooks'))
 
+    def test_a_new_routine_or_report_is_built_from_its_instructions_and_cites_its_source(self):
+        # the owner, 2026-11-20: a setup for a general job is built from the best-regarded skill or template found online, named on its card
+        from taskuary import proposals
+        own = self.s.create_task({'Title': 'Set up social posting', 'Kind': 'general', 'Status': 'open'}, 'o')
+        for kind in ('routine', 'report'):
+            rv = proposals.queue(self.s, own, {'action': 'save_routine', 'title': f'Social {kind}', 'kind': kind, 'daily_at': '09:00',
+                                               'prompt': 'Write one useful, non-promotional post per network, each with its own picture.',
+                                               'based_on': 'https://github.com/example/social-content-skill', 'why': 'you asked'})
+            self.assertTrue(rv); row = self.s.get_review(rv['reviewId'])
+            self.assertIn(f'create the {kind} "Social {kind}"', row['Reason']); self.assertIn('built from https://github.com/example/social-content-skill', row['Reason'])
+            with mock.patch('taskuary.docsync.sync_connections'): out = proposals.execute(self.s, row, 'owner')
+            cfg = json.loads(self.s.get_source(out['source'])['ConfigJson'])
+            self.assertEqual((cfg['prompt'][:20], cfg['daily_at'], cfg['based_on'], bool(workflows.is_workflow(cfg))),
+                             ('Write one useful, no', '09:00', 'https://github.com/example/social-content-skill', kind == 'routine'))
+
+    def test_a_routine_whose_words_ask_for_drafts_by_hand_has_its_goal_and_done_when_changed_by_its_card(self):
+        # the owner's live routine, 2026-11-20: its goal said "drafts ... for manual posting" and its done-when "three labeled drafts", so each
+        # run left a text file - its own words are changed by the same card
+        from taskuary import proposals
+        rv = proposals.queue(self.s, self.tid, {'action': 'change_routine', 'goal': 'One post card per network, each with its own picture.',
+                                                'done_when': 'Each network has its post card waiting for his press.', 'why': 'posts, not files'})
+        self.assertTrue(rv); p = json.loads(self.s.get_review(rv['reviewId'])['DraftText'])
+        self.assertIn('Goal: (none) -> One post card per network', p['changes']); self.assertIn('Done when:', p['changes'])
+        with mock.patch('taskuary.docsync.sync_connections'): proposals.execute(self.s, self.s.get_review(rv['reviewId']), 'owner')
+        cfg = json.loads(self.s.get_source(self.sid)['ConfigJson'])
+        self.assertEqual(cfg['done_when'], 'Each network has its post card waiting for his press.')
+
     def test_the_editor_saves_by_the_same_road(self):
         with self.assertRaises(ValueError): workflows.save(self.s, {'SourceId': self.sid, 'ConfigPatch': {'flow': [{'id': 's1', 'kind': 'nope'}]}}, 'o')
 

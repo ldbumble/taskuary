@@ -60,6 +60,9 @@ export const reviewText = (review) => {
   // a part of the task going to a task of its own (proposals.break_out): the new task's title, what it is, and each thing that moves
   if (proposal?.action === "break_out") return [proposal.summary, proposal.moves].filter(Boolean).join("\n\n");
   // a script to keep as a routine (proposals 'save_routine'): what feeds it, the script whole, and what the AI step is asked about its output
+  if (proposal?.action === "save_routine" && !proposal.script) return [String(proposal.prompt || ""), proposal.based_on ? `Built from: ${proposal.based_on}` : ""].filter(Boolean).join("
+
+");
   if (proposal?.action === "save_routine") return [
     proposal.reads ? `It reads: ${toolWhere(proposal.reads)}` : "", String(proposal.script || ""),
     proposal.prompt ? `Then an AI step reads what it printed: ${proposal.prompt}` : ""].filter(Boolean).join("\n\n");
@@ -244,6 +247,20 @@ export const proposalPresentation = (review) => {
   // A SCRIPT THE AGENT WROTE ON THE JOB, KEPT AS A ROUTINE (proposals 'save_routine', the owner 2026-11-10) - Approve saves exactly that as a
   // routine (workflows.save_script_routine) and runs nothing. SAID IN WORDS (design round 4, 2026-11-19: an ops manager was asked to approve
   // 60 lines of Python): what it does, when and where it runs, its steps - the script folded under "Show the script"
+  // ...and a routine or report built from its instructions (no script): what it will do, and the skill or template it was built from, cited
+  if (proposal?.action === "save_routine" && !proposal.script) return {
+    kind: "action",
+    title: `Create the ${proposal.kind || "routine"}${proposal.title ? ` "${proposal.title}"` : ""}`,
+    context: review.Reason || "Proposed · nothing is saved until you approve",
+    lead: upFirst(String(proposal.why || proposal.title || "A routine")),
+    leadWhy: `Runs ${proposal.runs || "when you run it"}${proposal.based_on ? ` · built from ${proposal.based_on}` : ""}. Nothing is saved until you approve.`,
+    destinationLabel: "It does",
+    destination: String(proposal.prompt || ""),
+    approveLabel: APPROVE,
+    busyLabel: "saving…",
+    rejectLabel: "Dismiss",
+    readOnly: true,
+  };
   if (proposal?.action === "save_routine") return {
     kind: "action",
     title: "Save this as a routine",

@@ -2025,10 +2025,14 @@ _ACTION = ("NEXT STEPS - DO WHAT YOU CAN DO, rather than hand it back. An act - 
            "it; a follow-up or correction on the same matter stays\n"
            # ...AND A RULE WORTH KEEPING (the owner, 2026-11-10: "agent should be able to after building one should say should we save this")
            "- a script for a job that recurs under the same rule, once it ran right: {routine} - never asked in prose, never for a one-off\n"
+           "- a new routine or report for a job he asks for: first look online for the most-used, best-regarded skill or template for that "
+           "job and build it from that, adapted to his ask - propose save_routine {{title, prompt: its instructions, kind?: \"report\", daily_at | "
+           "cron | every_minutes?, based_on: the skill or template's link}} - one card for his Approve\n"
            "- a change to one of Taskuary's own setups - a routine (the one this task is a run of, or one he names), a report or a "
            "dashboard: propose change_routine {{routine?: its title, prompt: its new instructions or question | flow: a routine's steps whole, "
-           "daily_at | cron | every_minutes?, title?}} - one card showing what changes, saved on his Approve; never a file of new "
-           "instructions, never \"do it in your app\"\n"
+           "daily_at | cron | every_minutes?, title?, goal?, done_when?}} - one card showing what changes, saved on his Approve; never a file "
+           "of new instructions, never \"do it in your app\". Where a routine's own saved words ask for less than these rules do (drafts left "
+           "for him to post by hand), do it the better way and propose that change to its words\n"
            # ...AND WHAT IT CAN REACH IS NOT HIS (the live app, 2026-11-19: "For you to do: check the import's error folder on the server"
            # - and it did, the moment he asked): a folder, a log, a server, a page it may open is its own to open first
            "Otherwise next steps is the one question first, or the one part only the owner can do and why - a file, log, folder, server "

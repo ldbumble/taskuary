@@ -219,6 +219,19 @@ def lift(store, pick: str, tier: str, model: str = '', cfg=None) -> str:
     return f'{m}@{want}'
 
 
+def quick_of(store, pick: str, cfg=None) -> str:
+    """AN AGENT'S QUICK GEAR THINKS LITTLE (the owner, 2026-11-20: "a simple reply like 'when do you want to meet' should take a second"):
+    '<its quick model>@low' for a CLI whose quick gear is a model it ships (llm.LIGHT_DEFAULT: claude's haiku, which its agent connector
+    runs at high effort) and the owner named no quick model of his own; '' otherwise. Agent work only - triage keeps its own reading."""
+    p = str(pick or '')
+    if not p.startswith('cli:') or _own(store, p, 'light_model', cfg): return ''
+    from . import climodels, llm
+    cli = _cli(store, p, cfg)
+    q = str(llm.LIGHT_DEFAULT.get(cli) or '')
+    if not q or ':' in q or '@' in q or not climodels.effort_args(cli, 'x'): return ''
+    return f"{q}@{LIFT['light']}"
+
+
 def spell(model: str) -> str:
     "'opus@high' -> 'opus, high effort'; '@high' -> 'its own model, high effort' - a pick as the reason line and Settings say it."
     m, _, e = str(model or '').partition('@')
@@ -478,6 +491,7 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
             # the card's model IS the standard tier; strong runs the brain's strong gear and light its quick one - or, on a brain with
             # one model, that model at high or low effort
             g, model = GEAR_OF[tier], (model if tier == 'standard' else lift(store, pick, tier, model))
+            if tier == 'light' and job in LEVEL_JOBS and not model: model = quick_of(store, pick)
             why = f"{JOB_WORDS[job]}{hard} -> {tier} on {_said(store, pick)}{f', {spell(model)}' if model else ''} (rule {rule}){said}{held}"
         why += miss
     # a brain resting on its usage limit hands the call to the first backup that is not (Auto mode; the cards stand in Fixed)

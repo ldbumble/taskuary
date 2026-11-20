@@ -159,7 +159,7 @@ Object.assign(OWN_CLI, { "--withdraw-draft": () => ({ kind: "edit", summary: "To
   "--reply-not-needed": () => ({ kind: "task", summary: "Said no reply is needed" }), "--no-reply": () => ({ kind: "task", summary: "Said no reply is needed" }),
   "--waiting-on": () => ({ kind: "task", summary: "Said what the task waits on" }), "--follow-up": () => ({ kind: "task", summary: "Picked the task up again" }),
   "--propose": () => ({ kind: "task", summary: "Proposed a step for your yes" }), "--slot": () => ({ kind: "edit", summary: "Drafted an email" }),
-  "--use-repo": () => ({ kind: "task", summary: "Picked the repository to work in" }), "--guide": () => ({ kind: "data", summary: "Read Taskuary's guide" }),
+  "--use-repo": () => ({ kind: "task", summary: "Picked the repository to work in" }), "--guide": (v) => ({ kind: "data", summary: v ? `Read the ${v.replace(/[_-]+/g, " ")} guide` : "Read its instructions" }),
   "--prompts": () => ({ kind: "data", summary: "Read its instructions" }), "--browser": () => ({ kind: "page", summary: "Used the browser" }),
   "--upvote": () => ({ kind: "data", summary: "Voted on a Hub post" }), "--downvote": () => ({ kind: "data", summary: "Voted on a Hub post" }),
   "--comment": () => ({ kind: "data", summary: "Commented on a Hub post" }) });
@@ -393,7 +393,9 @@ export const describeCall = (name, args = {}) => {
   if (key(name) === "search" && !kind) kind = a.pattern ? "search" : "web";
   const cmd = a.command || a.cmd || a.script;
   if (kind === "run" || (!kind && cmd)) {
-    const s = commandStep(Array.isArray(cmd) ? cmd.join(" ") : cmd);
+    // ...A LINE CUT SHORT FOR THE CHAT (sessionrecord.ARG_N, its "…") IS NOT READ AS IF IT WERE WHOLE (walk 8, 2026-11-20: a script's edits, cut
+    // mid-quote, read 'Read f"Headcount {hc} (…'): its own words say it, else the line itself
+    const line = Array.isArray(cmd) ? cmd.join(" ") : String(cmd), s = line.endsWith("…") ? null : commandStep(line);
     // ...Claude's own words for a browser step ("Press the pay button for invoice INV-1001") say more than the verb does
     // ...and so do its words for a step whose file or folder the shell had yet to fill in ($d)
     if (s && s.kind !== "run" && !((s.browser || s.vague) && a.description)) return s;
@@ -596,10 +598,8 @@ const tidy = ({ raw, output, live, q, host, file, pattern, count, asked, retry, 
 const listOf = (xs, n = 3) => { const u = [...new Set(xs.filter(Boolean))]; return u.length > n ? `${u.slice(0, n).join(", ")} and ${u.length - n} more` : u.join(", "); };
 const together = (run) => {
   const k = run[0].kind, n = run.length;
-  if (k === "read") {
-    const dirs = new Set(run.map((s) => parent(s.file)));
-    return dirs.size === 1 && [...dirs][0] ? `Read ${n} files in ${[...dirs][0]}/` : `Read ${n} files`;
-  }
+  // ...by their names, never the folder they sit in (walk 8: "Read 2 files in TQ-0001/" - the task's own outputs folder, Taskuary's word)
+  if (k === "read") return run.every((s) => named(s.file)) ? `Read ${andList([...new Set(run.map((s) => baseName(s.file)))])}` : `Read ${n} files`;
   if (k === "search") { const ws = listOf(run.map((s) => plainPat(s.pattern) && quoted(s.pattern))); return ws ? `Searched files for ${ws}` : "Searched files"; }
   if (k === "web") return `Searched the web for ${listOf(run.map((s) => s.q && quoted(s.q)))}`;
   // ...pages read, never the agent's own browser at work: two looks at its page read "Read 2 web pages" (design round 5, 2026-11-19)

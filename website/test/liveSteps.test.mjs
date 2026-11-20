@@ -39,7 +39,7 @@ test("a run of calls still under way says its newest one", () => {
   const [s] = stepsOf([call("a", "/n/Budget/StatusBoard.js"), { type: "tool_result", name: "a", detail: { result: "ok" } }, call("b", "/n/Budget/BudgetTable.js")], { keepStart: false });
   assert.equal(s.status, "running");
   assert.equal(stepLabel(s), "Reading BudgetTable.js");
-  assert.equal(s.summary, "Read 2 files in Budget/");
+  assert.equal(s.summary, "Read StatusBoard.js and BudgetTable.js");
 });
 
 test("the turn's stamp: working m:ss while it runs, ran once it answered, nothing it cannot know", () => {

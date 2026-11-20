@@ -48,7 +48,7 @@ const APIS = ["openai_responses", "anthropic_api"];
 const WORK = [
   "Searched your mail for 'budget review' (3 results)",
   "Opened TQ-1142",
-  "Read 2 files in Budget/",
+  "Read StatusBoard.js and BudgetTable.js",
   "Searched files for 'approvedTotal'",
   "Searched the web for 'northwind budget review policy'",
   "Read docs.northwind.example/budget/review",
@@ -497,4 +497,14 @@ test("a refused write the agent then made is one row, and the fold's line counts
   assert.equal(foldLine(shown), "2 steps - read totals.py, wrote totals.py (+1 −0)");
   const ws = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(ws, /p\.steps\.filter\(\(st\) => !\(chat && st\.status === "recovered"\)\)/, "the chat folds a try made good");
+});
+
+test("the agent's own words for a shell line are its step - never a reading of a script cut short for the chat (walk 8, 2026-11-20)", () => {
+  // ...the chat keeps a command cut at 300 characters (sessionrecord.ARG_N): the edit below, cut, read as 'Read f"Headcount {hc} (…'
+  const command = `W=/work/scratch; sed -i -e 's/rev, cost, hc = 4820000, 3910000, 212/rev, cost, hc = 4820000, 3910000, 214/' \\n -e 's/f"Headcount {hc} (provisional - may be revised)"/f"Headcount {hc}"/' \\n -e 's/Headcount was {hc} (provisional - this figure may be revised)\./Headcount was {hc}./' $W/build.py`.slice(0, 299) + "…";
+  assert.equal(describeCall("Bash", { command, description: "Change headcount to 214 and rebuild all files" }).summary, "Change headcount to 214 and rebuild all files");
+  assert.equal(describeCall("Bash", { command: "taskuary --guide browser 2>&1 | head -80" }).summary, "Read the browser guide");
+  const read = (id, file_path) => ({ type: "tool_call", name: "Read", detail: { tool_call_id: id, args: { file_path } } });
+  const [s] = stepsOf([read("a", "/s/outputs/TQ-0001/chart-2.png"), read("b", "/s/outputs/TQ-0001/Q3-board-report.pdf")], { keepStart: false });
+  assert.equal(s.summary, "Read chart-2.png and Q3-board-report.pdf");
 });

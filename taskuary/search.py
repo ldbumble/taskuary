@@ -127,7 +127,7 @@ def _tasks(store, q: str, words, status: str = '', today: bool = False) -> tuple
     ts.sort(key=lambda t: str(t.get('UpdatedAt') or t.get('CreatedAt') or ''), reverse=True)
     ts.sort(key=lambda t: (t['TaskId'] not in ids, t.get('Status') in CLOSED, not all(w in (t.get('Title') or '').lower() for w in lw)))
     top, mail = ts[:N_DONE if today else N_TASKS], {}
-    for r in store._rows(f"SELECT TaskId, Channel, SourceName, Subject, FromName, FromEmail, ExternalId, SourceLink FROM message WHERE TaskId IN "
+    for r in store._rows(f"SELECT TaskId, Channel, SourceName, Subject, FromName, FromEmail, ExternalId, SourceLink, Direction FROM message WHERE TaskId IN "
                          f"({','.join('?' * len(top))})", [t['TaskId'] for t in top]) if top else []:
         mail.setdefault(r['TaskId'], []).append(r)
     # THE RAIL'S OWN ROW RIDES ON A TASK STILL ON IT (the audit, 2026-11-15: a hit read "reply · email · 1m ago" beside a rail row that said
@@ -138,10 +138,18 @@ def _tasks(store, q: str, words, status: str = '', today: bool = False) -> tuple
     for i in (funnel.cached_pile(store) or {}).get('items') or ():
         if i.get('tid'): rail.setdefault(i['tid'], i)
     return [{'type': 'task', 'id': f"task:{t['TaskId']}", 'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '',
-             'sub': ' · '.join(x for x in (t.get('Kind'), t.get('Source')) if x), 'when': t.get('ClosedAt') or t.get('UpdatedAt') or t.get('CreatedAt'),
+             'sub': came(store, t['TaskId'], mail.get(t['TaskId'], [])), 'when': t.get('ClosedAt') or t.get('UpdatedAt') or t.get('CreatedAt'),
              'status': t.get('Status'), 'snippet': snippet(t.get('Summary'), words, 120),
              'why': _task_why(t, words, mail.get(t['TaskId'], [])),
              **({'row': rail[t['TaskId']]} if t['TaskId'] in rail and t.get('Status') not in CLOSED else {})} for t in top], len(ts)
+
+
+# WHERE A TASK CAME FROM, IN HIS WORDS (walk 8, 2026-11-20: a closed task's hit read "general · assistant · closed" - its kind and source,
+# Taskuary's own codes): whom its mail is from, else his own ask
+def came(store, tid: int, mail=None) -> str:
+    if mail is None: mail = store._rows("SELECT FromName, FromEmail, Direction FROM message WHERE TaskId=?", (int(tid),))
+    who = list(dict.fromkeys(m.get('FromName') or m.get('FromEmail') for m in mail if m.get('Direction') != 'out' and (m.get('FromName') or m.get('FromEmail'))))
+    return 'your ask' if not who else f"from {', '.join(who[:2])}" + (f' and {len(who) - 2} more' if len(who) > 2 else '')
 
 
 def _who(store, m: dict) -> str:
@@ -424,7 +432,7 @@ def _chat(store, words, skip) -> tuple:
         if not t or t.get('SourceRef') == DOCK_TAG: continue
         who = 'you' if c['ActorType'] == USER_TYPE else 'a draft' if c['ActorType'] == 'draft' else 'the agent'
         out.append({'type': 'task', 'id': f"chat:{tid}", 'tid': tid, 'ref': task_ref(tid), 'title': t.get('Title') or '', 'status': t.get('Status'),
-                    'sub': t.get('Kind') or '', 'tag': CHAT_TAG, 'who': who, 'line': c.get('line'), 'when': c.get('CreatedAt'),
+                    'sub': came(store, tid), 'tag': CHAT_TAG, 'who': who, 'line': c.get('line'), 'when': c.get('CreatedAt'),
                     'snippet': snippet(c['Body'], words, 120), 'why': ''})
     return out, len(best)
 

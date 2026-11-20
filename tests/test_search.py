@@ -123,6 +123,14 @@ class SearchTests(unittest.TestCase):
         self.assertEqual((h['tid'], h['why']), (t, 'a mail on it is from Ray Colton'))
         self.assertEqual(next(x for x in self.hits('cutover') if x['type'] == 'task')['why'], '')     # the title shows it
 
+    def test_a_task_hit_says_whom_it_came_from_never_its_kind_and_source(self):
+        """Walk 8, 2026-11-20: a closed task's hit read "general · assistant · closed" - Taskuary's own codes for its kind and where it began."""
+        own = self.s.create_task({'Title': 'Fix ledger rounding', 'Kind': 'general', 'Source': 'assistant', 'Status': 'done'}, 't')
+        t = self.s.create_task({'Title': 'AP cutover date', 'Kind': 'reply', 'Source': 'email', 'Status': 'open'}, 't')
+        mail(self.s, 'AP cutover - Thursday?', 'Are we still on?', 'c9', who='Ray Colton', tid=t, status='routed')
+        sub = {x['tid']: x['sub'] for x in self.hits('ledger cutover') + self.hits('ledger') + self.hits('cutover') if x['type'] == 'task'}
+        self.assertEqual((sub[own], sub[t]), ('your ask', 'from Ray Colton'))
+
     # ...and says WHAT matched, as the owner reads it (verify, 2026-10-20): "assigned to person:ray@...", and "a link on its mail"
     def test_the_why_names_the_holder_and_the_link_it_matched(self):
         t = self.s.create_task({'Title': 'Vendor follow-up', 'Kind': 'reply', 'Status': 'open', 'Assignee': 'person:ray@vendor.example'}, 't')

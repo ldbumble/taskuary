@@ -448,3 +448,20 @@ def test_the_agents_own_words_are_the_question_the_marker_only_marks_the_wait():
         assert chatlog.beside(s, tid, out, False, None)['asking'].get('said') is True, 'its own words asked it: the marker text is not drawn again'
         bare = [{**x, 'text': '', 'steps': []} if x['kind'] == 'turn' else x for x in out]
         assert not chatlog.beside(s, tid, bare, False, None)['asking'].get('said'), 'a turn with no words: the marker text is the question'
+
+
+def test_an_owed_replys_needs_line_is_said_once_by_the_one_rule_the_ask_follows():
+    """WALK 8 (2026-11-20, decided: never duplicate): the turn asked Ray's times in its own words, and the empty reply under it asked them again
+    on its card - with the app's own link written out. The card stays lit (the 11-13 ruling); its line goes where its turn said anything
+    (turn_words, the ask's one rule), and a line it keeps never shows an address of the app's own."""
+    from taskuary import conversation, general
+    s, tid = world()
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'rc1', 'Channel': 'email', 'FromName': 'Ray Colton', 'FromEmail': 'ray@northwind.example',
+                         'ToEmail': 'alex@northwind.example', 'Subject': 'Tuesday', 'BodyText': 'Free Tuesday? Ray', 'Status': 'routed'})
+    conversation.hear(s, tid, turn=True)
+    rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Channel': 'email', 'DraftText': '', 'Origin': 'triage'})
+    assert general.reply_needs(s, tid, summ={'on_you': ['Tell me your Tuesday times (Connect a calendar: #connector=outlook).']}) == 'Tell me your Tuesday times.'
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Which Tuesday times work for you?')
+    chatlog.settled(); chatlog.read(s, tid)
+    assert chatlog.card_said(s, tid, rid), 'its turn asked it in words: the card says it no more'
+    assert chatlog.turn_words({'text': '', 'steps': []}) == '' and not chatlog.card_said(s, tid, 9999)

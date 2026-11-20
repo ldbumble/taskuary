@@ -691,7 +691,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       {/* ...and a draft that FAILED says so the same plain way, Draft with AI under it to try again (the owner, 2026-11-03) - the arrival's
           failure was written on the review and shown nowhere, so its empty box read as a reply nobody had tried */}
       {/* ...and an EMPTY one, or a rewrite that came back with nothing over the draft that stands (2026-11-04): a blank box read as a draft */}
-      {!proposal && !drafting && !err && ["needs", "failed", "empty", "kept"].includes(draftState(r).state) && (
+      {!proposal && !drafting && !err && ["needs", "failed", "empty", "kept"].includes(draftState(r).state) && !!draftState(r).line && (
         <Typography variant="body2" data-tq-draft-needs="" sx={{ color: DIM, mb: 1 }}>{draftState(r).line}</Typography>
       )}
       {!proposal && <Inbound r={r} />}

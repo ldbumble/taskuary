@@ -1858,6 +1858,10 @@ def reply_needs(store, tid: int, asks=(), summ=None) -> str:
     first = next((str(x.get('text') if isinstance(x, dict) else x or '').strip() for x in (on if isinstance(on, list) else []) if x), '')
     # ...what THIS turn recorded, where it recorded anything; else what an earlier turn left on it stands
     why = next((str(q).strip() for q, *_ in asks or () if str(q).strip()), '') or first or str(rv.get('DraftNeeds') or '') or COULD_NOT
+    # ...a line on his card, never the app's own link written out ("(Connect a calendar: #connector=outlook)", walk 8): a link the agent wrote
+    # keeps its words, the bare address of one of the app's own pages goes - the card's buttons are the way there
+    import re
+    why = re.sub(r'\s*\((?:[^()]*:\s*)?#[a-z_]+=[^)\s]*\)|\s*#[a-z_]+=\S+', '', re.sub(r'\[([^\]]+)\]\(#[^)]*\)', r'\1', why)).strip()
     if why != str(rv.get('DraftNeeds') or ''): store.set_review_draft_needs(rv['ReviewId'], why)
     return why
 # THE SILENT TURN'S ROAD, EVERY AGENT'S (the audit, 2026-11-10: a coding agent's empty turn sat as nothing at all): `s` is the session - a chat's

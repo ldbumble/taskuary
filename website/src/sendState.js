@@ -99,6 +99,8 @@ export function draftState(rv) {
   if (err.startsWith(EMPTY_DRAFT) || (!err && !rv?.DraftNeeds && String(rv?.DraftBy || "").startsWith("agent:"))) return { state: "empty", line: EMPTY_LINE, retry: true };
   // THE WRITER SAID WHAT IT NEEDS (store.set_review_draft_needs): no failure - a plain line, whole, and the Advisor lights Send to agent /
   // Continue. It came as a DraftError: red, cut mid-word, "New task to fix this" (walk 2026-10-29)
+  // ...said once: the turn it stands in asked it in its own words (chatlog.card_said) - the card stays lit, its line is not said again
+  if (rv?.NeedsSaid) return { state: "needs", line: "", retry: true };
   if (rv?.DraftNeeds) { const s = String(rv.DraftNeeds).trim(); return { state: "needs", line: s.charAt(0).toUpperCase() + s.slice(1), retry: true }; }
   if (rv?.DraftError) return { state: "failed", line: `Draft failed: ${rv.DraftError}. Press ${label("redraft", "none")} again or write the answer yourself.`, retry: true };
   return { state: "undrafted", line: "No draft yet — draft it with AI or write the answer.", retry: true };

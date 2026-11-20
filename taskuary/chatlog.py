@@ -1151,6 +1151,22 @@ def _now(tid: int, turn: dict) -> dict:
     return {**({'opening': True} if opening else {}), **({'doing': doing} if doing else {})}
 
 
+# WHAT A TURN SAID IN ITS OWN WORDS - THE ONE RULE FOR WHAT IS SAID AGAIN UNDER IT (decided 2026-11-20, walk 8: never duplicate): an ask marker's
+# text, and an owed reply's "what the agent needs" line, are drawn only under a turn that said nothing of its own
+def turn_words(t: dict) -> str:
+    "A turn's words - its answer and the lines it said while it worked - as one flat line ('' when it said nothing)."
+    return ' '.join(re.sub(r'[*_`]', '', ' '.join([str(t.get('text') or ''), *(s.get('text') or '' for s in t.get('steps') or [] if s.get('k') == 'said')])).split())
+
+
+def card_said(store, tid: int, rid: int) -> bool:
+    "Did the turn review `rid`'s card stands in say something of its own (turn_words)? Then the card's own words of what it needs are not said again."
+    r = _row(store, tid, f'r:{int(rid)}')
+    if not r or r.get('Parent') is None: return False
+    with store.lock: rows = [dict(x) for x in store.cx.execute('SELECT * FROM chatlog WHERE TaskId=? AND (Id=? OR Parent=?)', (int(tid), r['Parent'], r['Parent']))]
+    t = next((_item(x) for x in rows if x['Id'] == r['Parent'] and x['Kind'] == 'turn'), None)
+    return bool(t and turn_words({**t, 'steps': [_item(x) for x in rows if x['Kind'] == 'step']}))
+
+
 def beside(store, tid: int, out: list, at_work: bool, hold_) -> dict:
     """What the page draws beside the chat's items, each from the fact that says it: what waits for the agent (`pending` - his lines not yet
     heard; a message, a press while a turn works; what an untrusted sender wrote), `now`/`later` (whether a waiting line goes in mid-turn),
@@ -1195,7 +1211,7 @@ def beside(store, tid: int, out: list, at_work: bool, hold_) -> dict:
             last.update(fail=notice, quota=True)
             if not at_work: ask = None
     if ask and last:
-        said = lambda t: flat(' '.join([str(t.get('text') or ''), *(s.get('text') or '' for s in t.get('steps') or [] if s.get('k') == 'said')]))
+        said = turn_words
         # ...IN THE TURN THAT ASKED IT (the real walk, 2026-11-19: the sender wrote again mid-question, and the new turn at work drew the old
         # question word for word as its own): the turn whose words hold it, else the newest one
         q = flat(ask.get('text'))

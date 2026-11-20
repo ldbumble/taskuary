@@ -336,3 +336,19 @@ def test_a_newer_message_never_retires_what_is_still_owed_to_its_sender():
     assert 'never an earlier ask again' not in selfclose.LATEST_LINE
     assert 'a newer message never retires what is still owed to its sender: answer that, then the new question' in selfclose.LATEST_LINE
     assert 'it may need no reply any more' not in ingest.REPLAN and 'LATEST MESSAGE WINS' in ingest.REPLAN
+
+
+def test_a_withdraw_marker_never_takes_back_the_letter_its_own_turn_wrote():
+    """WALK 8 (2026-11-20): a reply raised empty waited for his times; the next turn's propose_reply filled that very card, then the turn ended
+    with [[TASKUARY-WITHDRAW which=rv<n>]] for "the earlier draft" - its own new letter. The chat said "drafted for your Send" over no card."""
+    s = MemoryStore(); tid, _, _, rid = the_owners_day(s)
+    s._exec("UPDATE review SET DraftText='' WHERE ReviewId=?", (rid,))
+    summ = f"{selfclose.SUMMARY_OPEN}{json.dumps({'did': 'Drafted it'})}{selfclose.SUMMARY_CLOSE}"
+    def turn(system, user, **kw):
+        assert wrapup.agent_reply(s, tid, 'Hi Gail, the November list is attached. Alex', 'assistant')['review_id'] == rid
+        return f"[[TASKUARY-WITHDRAW which=rv{rid}: replaced by the new letter]]\nThe reply is drafted for your Send.\n{summ}"
+    with mock.patch.object(general, '_selected', return_value=('api:test', 'Test', 'm')): sess = general.GeneralSession(s, tid)
+    with mock.patch.object(general.llm_mod, 'build_llm', return_value=turn), mock.patch('taskuary.hooks.judge_ended'), \
+            mock.patch('taskuary.proposals.set_aside_drafts', return_value=[]):
+        sess.send_prompt('the November one, please')
+    assert s.get_review(rid)['Status'] == 'pending', 'the card it just wrote still stands'

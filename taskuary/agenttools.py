@@ -622,6 +622,12 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         who = {k: a[k] for k in ('answers', 'only', 'cc', 'why_to') if a.get(k) not in (None, '')}
         was = verdicts.unsent(store, tid)
         out = doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), attached(store, tid, a.get('attach')), **who)
+        out = json.loads(out.body) if hasattr(out, 'body') else out
+        # ...A CARD THAT WAITED FOR ITS WORDS IS FILLED, NOT REPLACED (walk 8, 2026-11-20): told nothing, the agent took the reply raised empty for
+        # "the earlier draft" and withdrew it - its own new letter, the same card
+        if isinstance(out, dict) and out.get('ok') and (rid := out.get('review_id')) in {r['rid'] for r in was}:
+            out = {**out, 'filled': f'rv{rid} is the reply that waited for your words - it now holds this letter and is the card that stands. '
+                                    'Nothing was replaced: withdraw nothing.'}
         return _j(said_once(replaced(store, doors, tid, was, out, a.get('replaces'), f"the reply to {a.get('to') or 'the newest mail'} takes its place")))
     if name == 'propose_email':
         was = verdicts.unsent(store, tid)

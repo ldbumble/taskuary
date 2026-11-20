@@ -1777,6 +1777,11 @@ def _show_files(store, tid: int, named: list, paths: list, actor='assistant'):
 def file_name(raw) -> str: return re.split(r'[\\/]', str(raw or '').strip().rstrip('\\/'))[-1] or 'A file'
 
 
+def _letters(store, tid: int) -> dict:
+    "{review id: its words} of the cards waiting on task `tid` - what a turn compares to know the letters it wrote itself."
+    return {r['ReviewId']: str(r.get('DraftText') or '') for r in store._rows("SELECT ReviewId, DraftText FROM review WHERE TaskId=? AND Status='pending'", (int(tid),))}
+
+
 def _files_to_attach(store, tid: int, named: list, paths: list) -> list:
     """The (name, bytes) of each file the chat named to send (_own_file - the reply goes to someone outside); the task
     says why one was refused."""
@@ -3182,6 +3187,7 @@ class GeneralSession:
         # cold) let a poll pair busy with the last turn's trace - the previous turn drawn again under his new line for ~200 ms
         from . import clipool; self.warm_ = clipool.is_live(self.keep())      # its CLI was already open at the start of this turn: the audit says so
         t0 = time.time(); self._turn_trace(t0)
+        self.words_at = _letters(self.store, self.task_id)      # ...what each card said as the turn began: the ones it writes are its own (_file)
         self.busy, self.last = True, t0
         # ...ON DISK FROM THE HAND-OVER (the timeline stress round, 2026-11-18): his lines are heard from the take above, and written only after
         # the provider was picked and the cards before moved on, a restart in between left them heard with nothing under them and no cut line
@@ -3718,9 +3724,16 @@ class GeneralSession:
         who = selfclose.reply_who(reply)        # ...who hears it, as the marker says (2026-11-06)
         # ...and a draft it takes back (selfclose.LATEST_LINE): first, so a corrected reply in the same answer is the one left standing
         reply, wds = selfclose.withdraw_markers(reply)
+        # ...NEVER THE LETTER THIS TURN WROTE (walk 8, 2026-11-20): its propose_reply filled the reply raised empty in its first turn - the same
+        # review - and the marker it ended with, meant for "the earlier draft", took the new letter back: "drafted for your Send" over no card
+        was = getattr(self, 'words_at', None)
+        mine = {k for k, v in _letters(self.store, self.task_id).items() if v and was is not None and was.get(k) != v}
         for which, wd in wds:
             from . import verdicts
-            got = verdicts.withdraw(self.store, self.task_id, wd or 'the newest message changed what is owed', 'assistant', which)
+            hit = str(which or '').casefold().removeprefix('rv')
+            if hit.isdigit() and int(hit) in mine:
+                logger.info(f'task {self.task_id}: rv{hit} was not withdrawn - this turn wrote it'); continue
+            got = verdicts.withdraw(self.store, self.task_id, wd or 'the newest message changed what is owed', 'assistant', which, keep=next(iter(mine), 0) if len(mine) == 1 else 0)
             if not got.get('ok'): logger.info(f"task {self.task_id}: {which or 'the draft'} was not withdrawn - {got.get('why')}")
         reply, drafted = selfclose.reply_marker(reply)
         reply, showing = selfclose.show_markers(reply)

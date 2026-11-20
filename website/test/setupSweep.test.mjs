@@ -61,5 +61,7 @@ test("a failed install stands alone with its words, as ChatGPT's failed sign-in 
 
 test("Your job, with a mailbox connected but not read yet, says wait - not connect one", () => {
   const ab = src("FirstRunAbout.jsx");
-  assert.match(ab, /const soon = \/first read is still running\/i\.test\(draft\?\.why \|\| ""\);/);
+  // ...and nothing to press for it: a draft starts once the first read is in, running until then (firstrun._await_first_read, 2026-11-20)
+  assert.match(ab, /const working = draft\?\.state === "running";/);
+  assert.doesNotMatch(ab, /waiting\(|WAIT_MS|\/first read\//, "no failure read out of a wait, no retry of the page's own");
 });

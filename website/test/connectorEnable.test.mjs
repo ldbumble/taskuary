@@ -61,9 +61,14 @@ test("every card that opens a draft switches through it, and every Sync now on a
   // Active: true with their settings, and reason_network, whose switch (ReasonNetwork.jsx) posts on the press - one press each already
   assert.equal(src.match(/const setActive = \(on\) => draft\.ctx\.stageConn\(\{ ConnectorId: conn\.ConnectorId, Active: on \}\)/g)?.length, 2);
   const body = src.slice(src.indexOf("export function ChannelDetail"), src.indexOf("function MssqlDetail"));
-  const syncs = body.match(/onClick=\{syncHere\}[^>]*>/g) || [];
-  assert.equal(syncs.length, 2);
-  for (const b of syncs) assert.match(b, /sync\.ok/, `a Sync now that does not read syncState: ${b}`);
+  // ...ONE Sync now on a card (the owner, 2026-11-20): SyncNow, drawn once, reading syncState - Telegram's own button is gone
+  assert.equal((body.match(/<SyncNow conn=\{conn\} mine=\{mine\} sync=\{sync\} reload=\{reload\} \/>/g) || []).length, 1);
+  assert.doesNotMatch(body, /syncHere|pull in chats that messaged the bot/);
+  const one = src.slice(src.indexOf("function SyncNow"), src.indexOf("export function ChannelDetail"));
+  assert.match(one, /if \(!sync\.show\) return null;/); assert.match(one, /disabled=\{!!pressed \|\| !sync\.ok\}/);
+  // ...and it says what it pulls before the press and what it got after, from the server's own counts
+  assert.match(one, /syncAsk\(\{ what, readsBack: conn\.ReadsBack, lastAt: conn\.LastSyncAt \}\)/);
+  assert.match(one, /readSaid\(conn\.LastRead, mail \? "thread" : "chat"\)/);
   assert.doesNotMatch(body, /\{conn\.Active && !isAI && \(/, "Sync now drawn off the draft, not what is saved");
   for (const t of ["mssql", "winrm", "reason_network"]) assert.ok(types.includes(t), t);
   assert.match(readFileSync(new URL("../src/ReasonNetwork.jsx", import.meta.url), "utf8"), /api\.post\("\/api\/connectors", \{ ConnectorId: conn\.ConnectorId, Active: e\.target\.checked \}\)/);

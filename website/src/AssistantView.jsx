@@ -95,7 +95,6 @@ import { CONNECT_AI, connectAi } from "./ConnectAi.jsx";
 // FirstRun, the walk's workspace and the browse cards are drawn after the pile or a click, never on the first frame: out of the entry chunk
 const FirstRun = lazyView(() => import("./FirstRun.jsx"));
 import SetupSteps from "./SetupSteps.jsx";
-import SetupLine from "./SetupLine.jsx";
 import { BriefCard, CardNav, DashboardCard, DayOpener, onYouCount, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, WalkCard, sourceColor } from "./assistantCards.jsx";
 import { summarize } from "./walkSummary.js";
 import { refreshToday, useCalendarToday } from "./calendarToday.js";
@@ -3891,8 +3890,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
           {/* ONE PANEL, THREE LAYERS (the owner, 2026-10-13: "i thought there will be one border around all 3"): the Advisor's
               suggestion, the row whose filled button it picked, and the box - one border, the box its floor */}
           <div className={firstRun && !setupCard ? "tq-dock tq-setup-dock" : "tq-dock"}>
-          {/* ...setup's own line only while setup is in view: a task opened over it speaks for itself (tableOf's `over`, 2026-10-26) */}
-          {firstRun && !setupCard && <SetupLine />}
+          {/* ...setup says its own on the page, never in a bar over the row (the owner, 2026-11-20: "the advisor ideas on the top of the chat in
+              the setup is useless. remove it") */}
           {/* NO STRIP OVER THE ROW (the owner, 2026-10-26: "maybe keep the box but remove the advisor? not sure the advisor is really
               useful"): the pick is the row's one dark button and says nothing. IT IS THE TASK'S OWN (the owner, 2026-11-09: "assistant/advisor
               should only be on rail"), and an Advisor idea's row fills none (2026-11-15: "remove the entire advisor from buttons thing") -
@@ -3905,8 +3904,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
           {/* ...A PRESS ON THE ROW LANDS WHERE IT WAS AIMED (the overnight walk, 2026-10-26): a press that shut the wide box slid the lit button
               away under the pointer. The open box stands over the canvas now and nothing on the row shuts it, so the row never moves */}
           <div className="tq-dock-line">
-          {/* ...and during setup its line is the Advisor's (SetupLine): the move setup fills (FirstRun's tone) is the one lit - nothing
-              was, so the line said "pick it" over a plain Back and a greyed Next (2026-10-19) */}
+          {/* ...and during setup the move setup fills (FirstRun's tone) is the one lit - nothing was, so the page said "pick it" over a
+              plain Back and a greyed Next (2026-10-19) */}
           <ActionRow advised={stripPick || setupLit} hold={rowHold} early={rowEarly} />
           {!chatApart && composeBox}
           </div>

@@ -57,7 +57,7 @@ test("the mailbox step comes right before the job, and Skip lands on it instead 
   // the rule as it is stated: every question before the mailboxes skips TO them; on them there is no Skip
   for (let i = 0; i < at; i++) assert.equal(skipTo(i), at, `Skip on ${steps[i]} lands on the mailboxes`);
   assert.equal(skipTo(at + 1), null); assert.equal(canSkip("mailboxes"), false); assert.equal(canSkip("job"), true);
-  assert.match(src, /const skipper = !again && canSkip\(step\),/);
+  assert.match(src, /const skipper = !again && canSkip\(step\) && /);
   assert.match(src, /\{skipper && <Button size="small" disabled=\{!!busy\} onClick=\{skip\}/);
   assert.match(src, /if \(to !== null\) return setAt\(to\);/);
   // Next moves on only with one connected - any source, not only a mailbox - and the cards are the main source step's own
@@ -67,18 +67,25 @@ test("the mailbox step comes right before the job, and Skip lands on it instead 
   assert.match(read("FirstRun.jsx"), /const mail = byType\(st\.source_types \|\| MAIL_TYPES\)/);
 });
 
-test("a failed email sign-in is the Advisor's line, with what to do", () => {
-  assert.match(read("FirstRun.jsx"), /: st\.mail_error \? \(litCard[\s\S]{0,200}: `\$\{st\.mail_error\} Fix it in the card and press Connect again/);
+test("a failed email sign-in is said once, with what to do - on its open card, else on the page without naming another card", () => {
+  const fr = read("FirstRun.jsx");
+  assert.match(fr, /: st\.mail_error \? `\$\{st\.mail_error\} Open its card to fix it and press Connect again - or pick a different source\.`/);
+  assert.match(fr, /if \(open && conn && st\.mail_error && !err\) line = "";/);
 });
 
-test("while About your work is on the canvas setup's own Back and Next stand aside, and its question is the Advisor's line", () => {
+test("while About your work is on the canvas setup's own Back and Next stand aside, and its question is page text", () => {
   const fr = read("FirstRun.jsx");
   assert.match(fr, /const navShown = \["done", "about"\]\.includes\(view\) \? \[\] : nav;/);
   // ...and About's own Back and Next are the Nav pill's, as every step's (the owner, 2026-11-03)
   const about = read("FirstRunAbout.jsx");
   assert.match(about, /id: "about:back", group: "back"/); assert.match(about, /id: "about:next", group: "next"/);
-  assert.match(fr, /<FirstRunAbout again=\{!!st\.about_done\} onBack=\{\(\) => go\("mail"\)\} onLine=\{setAboutLine\}/);
-  assert.match(fr, /about: aiErr \? `\$\{aiErr\} Change AI picks one that does\.` : aboutLine \|\|/);
+  assert.match(fr, /<FirstRunAbout again=\{!!st\.about_done\} onBack=\{\(\) => go\("mail"\)\} onSaved=\{afterAbout\}/);
+  assert.match(about, /\{line && <Typography role="status" data-tq-setup-line=""/);
+  // ...in the page's voice: "Taskuary reads the last three months of your email", never an "I" speaking for it
+  assert.match(about, /running: "Taskuary reads the last three months of your email to write your job description - about a minute\."/);
+  assert.doesNotMatch(about, /onLine|"I |I couldn't|I'm reading/);
+  // ...and Skip only while nothing runs on the question
+  assert.match(about, /const skipper = !again && canSkip\(step\) && !reading && !working/);
 });
 
 test("the job reads as a document, and Edit opens its text", () => {
@@ -123,13 +130,10 @@ test("an AI connected on the Connections page says so, and the one in use leads 
 
 // "No such buttons. If it suggest systems then you can do it in search ... don't like new buttons besides for what there was before"
 // (the owner, 2026-10-16) - and More connections ticks once something beyond the AI and the mail is connected
-test("More connections suggests in the catalogue's search, never as row buttons, and ticks by what is connected", async () => {
-  const fr = read("FirstRun.jsx"), cv = read("ConnectorsView.jsx");
-  assert.doesNotMatch(fr, /setup:open:/, "no suggestion buttons in the row");
-  assert.match(fr, /setBrowseSt\(\{ q: names\.join\(", "\), section: null, open: null \}\)/);
-  assert.match(cv, /const hits = matchCards\(groups, q\);/);
-  assert.match(read("connectorCatalog.js"), /const terms = String\(q \|\| ""\)\.split\(","\)/);
-  assert.match(cv, /const \[q, setQ\] = useState\(asked \|\| ""\);/);
+// ...and NO AI SUGGESTS THERE ANY MORE (the owner, 2026-11-20: "the advisor ideas on the top of the chat in the setup is useless. remove it")
+test("More connections is the catalogue as it is, nothing suggested into it, and ticks by what is connected", async () => {
+  const fr = read("FirstRun.jsx");
+  assert.doesNotMatch(fr, /setup:open:|suggest-connections|names\.join/, "no suggestion, in the row or typed into the search");
   // what ticks it is the server's (firstrun.rail, tests/test_setup_state.py); the rail shows the row as it comes
   const { stepsOf } = await import("../src/setupSteps.js");
   const other = stepsOf({ rail: [{ key: "other", done: true, open: true, optional: true, sub: "3 connected" }] })[0];
@@ -163,8 +167,7 @@ test("one Next on About your work keeps the job and the workstreams - the list a
   assert.match(src, /const step = STEPS\[at\], draft = DRAFTS\.includes\(step\) \? drafts\[step\] : null;/);
   assert.match(src, /const ready = !!a && \(!draft \|\| draft\.state !== "running"\)/);
   // its line in place while it runs, and the small line that says Next need not wait
-  assert.match(src, /\{d\.state === "running" \? <>\s*<Box[^>]*><CircularProgress size=\{14\} \/>\s*<Typography[^>]*>\{SAYS\.workstreams\.busy\}/);
-  assert.match(src, /busy: "Grouping your mail into what you work on…"/);
+  assert.match(src, /\{d\.state === "running" \? <>\s*<Box[^>]*><CircularProgress size=\{14\} \/>\s*<Typography[^>]*>\{SAYS\.workstreams\.running\}/);
   assert.equal(WS_LATER, "What you work on is still being read from your mail - it fills in on its own; you can change it later on About you.");
   // ...started as the step opens when the mailbox step did not queue it, once
   assert.match(src, /if \(step !== "job" \|\| !a \|\| wsStarted\.current \|\| drafts\.workstreams\.state !== "none"\) return;\s*wsStarted\.current = true; learn\(\["workstreams"\]\);/);

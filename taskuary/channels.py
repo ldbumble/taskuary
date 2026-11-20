@@ -2572,7 +2572,7 @@ def poll_channels(store, backfill_hours: float = 0, progress=None, only=None) ->
     if len(jobs) == 1:
         c, file_only = jobs[0]
         _say(c['Type'], 0, store)
-        with _first_read(store, c, backfill_hours), tally.on(lambda n: _say(c['Type'], n, store)):
+        with _card_read(store, c, backfill_hours), tally.on(lambda n: _say(c['Type'], n, store)):
             n = _poll_one(store, c, file_only, backfill_hours, llm)
         _say(c['Type'], tally.n, store)           # the whole count, never one the once-a-second say left behind
         return _file_after(store, n)
@@ -2586,7 +2586,7 @@ def poll_channels(store, backfill_hours: float = 0, progress=None, only=None) ->
             _say(c['Type'], tally.n, writer)
             # inherit the poll thread's deferred(): our threading.local is off, and without
             # this wrap we would triage in parallel - the thing drain exists to prevent
-            with ingest_mod.deferred() if ingest_mod._parent_deferring() else contextlib.nullcontext(),                  _first_read(writer, c, backfill_hours), tally.on(lambda n: _say(c['Type'], n, writer)):
+            with ingest_mod.deferred() if ingest_mod._parent_deferring() else contextlib.nullcontext(),                  _card_read(writer, c, backfill_hours), tally.on(lambda n: _say(c['Type'], n, writer)):
                 return _poll_one(writer, c, file_only, backfill_hours, llm)
         with ThreadPoolExecutor(max_workers=min(8, len(jobs)), thread_name_prefix='poll') as pool:
             futs = [pool.submit(run, c, fo) for c, fo in jobs]
@@ -2609,9 +2609,11 @@ class _Tally:
     @contextlib.contextmanager
     def on(self, say):
         from .ingest import LANDING
-        def count():
+        def count(msg=None):
             mine = LANDING_HERE.get()
-            if mine is not None: mine[0] += 1          # ...and the one card's own, for its first-read line (_first_read)
+            if mine is not None:                       # ...and the one card's own, for its line (_card_read): how many, in which chats
+                mine['n'] += 1
+                if (conv := (msg or {}).get('conversation_id') or (msg or {}).get('from_email')) and len(mine['convs']) < CONVS_KEPT: mine['convs'].add(str(conv))
             with self.lock:
                 self.n += 1
                 n, due = self.n, time.monotonic() - self.at >= 1
@@ -2623,22 +2625,40 @@ class _Tally:
 
 
 LANDING_HERE = contextvars.ContextVar('landing_here', default=None)
+CONVS_KEPT = 500          # the chats one read is told apart by - enough for any sync a person reads a line about
 
 
 @contextlib.contextmanager
-def _first_read(store, c, backfill_hours):
-    """A card read for the first time keeps what that read did on its own config - how far back it went and how many it brought
-    in - so its card says that instead of only "Connected" (the owner, 2026-11-10). Kept only once the read moved the watermark:
-    a first read that failed half-way is still a first read, and says nothing yet."""
-    first = reads_back(store, c)
-    got = [0]
+def _card_read(store, c, backfill_hours):
+    """What a read of card `c` brought in, kept on its own config: `last_read` {n, chats, since, hours, at, convs} for every read
+    that brought something (the owner, 2026-11-20: Sync now "doesn't show what it syncs, how far back, how many messages") - read
+    back as its card's line by read_line - and `first_read` {hours, n, at} once its first read moved the watermark (2026-11-10:
+    "it says connected but it's not going back"). A first read that failed half-way is still a first read, and says nothing yet."""
+    first, since = reads_back(store, c), c.get('LastSyncAt') or ''
+    got, start = {'n': 0, 'convs': set()}, datetime.now().isoformat(sep=' ', timespec='seconds')
     tok = LANDING_HERE.set(got)
     try: yield
     finally: LANDING_HERE.reset(tok)
-    if first and not reads_back(store, c):
-        try: store.merge_connector_config(c['ConnectorId'], {'first_read': {
-            'hours': max(first_read_hours(store, c), backfill_hours), 'n': got[0], 'at': datetime.now().isoformat(sep=' ', timespec='seconds')}})
-        except Exception as e: logger.warning(f"could not keep {c['Type']}'s first read on its card: {e}")
+    hours, done = max(first_read_hours(store, c), backfill_hours) if first else backfill_hours, first and not reads_back(store, c)
+    patch = {**({'first_read': {'hours': hours, 'n': got['n'], 'at': start}} if done else {}),
+             **({'last_read': {'n': got['n'], 'chats': len(got['convs']), 'since': '' if first else since, 'hours': hours, 'at': start,
+                               'convs': sorted(got['convs'])}} if got['n'] else {})}
+    if patch:
+        try: store.merge_connector_config(c['ConnectorId'], patch)
+        except Exception as e: logger.warning(f"could not keep {c['Type']}'s read on its card: {e}")
+
+
+def read_line(store, c) -> dict | None:
+    """The card's last read, said from its own counts: {n, chats, since, hours, at, tasks} - `tasks` the tasks made since that read
+    began from the chats it brought in, counted now, so the line grows as triage files them."""
+    try: r = json.loads(c.get('ConfigJson') or '{}').get('last_read')
+    except ValueError: r = None
+    if not r: return None
+    convs = r.get('convs') or []
+    tasks = store._rows(f"SELECT COUNT(DISTINCT t.TaskId) AS n FROM task t JOIN message m ON m.TaskId = t.TaskId WHERE t.CreatedAt >= ? "
+                        f"AND (m.ConversationId IN ({','.join('?' * len(convs))}) OR m.FromEmail IN ({','.join('?' * len(convs))}))",
+                        (r.get('at') or '', *convs, *convs))[0]['n'] if convs else 0
+    return {k: r.get(k) for k in ('n', 'chats', 'since', 'hours', 'at')} | {'tasks': tasks}
 
 
 def _file_after(store, n: int) -> int:

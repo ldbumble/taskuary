@@ -21,13 +21,19 @@ test("setup is the assistant canvas: no dialog opens itself, the chip goes to th
 
 // the owner, 2026-10-15: "Don't create new ui. keep the same as we have in connections but just show them/tell what to do next
 // using the advisor ... like what ai do you have? what email do you have? any other connection you would like to setup"
-test("three questions on the Advisor's line, each answered on the Connections page's own cards", () => {
+// ...and 2026-11-20: "the advisor ideas on the top of the chat in the setup is useless. remove it ... anything important put on page and
+// should be hard coded" - the question heads the page, its line under it, written in the page's own code
+test("three questions on the page itself, each answered on the Connections page's own cards", () => {
   const fr = read("FirstRun.jsx"), cv = read("ConnectorsView.jsx");
-  // the question is the ADVISOR'S line, in its bar over the row (setupLine.js) - one per step, the server's own when the AI is failing
-  assert.match(fr, /lineRef\.current = said \|\| err \|\| \{[\s\S]{0,3000}other: aiErr \? `\$\{aiErr\} Change AI picks one that does\.`/, "the question is the Advisor's, one per step");
-  // ...and nothing while it waits hidden under a page opened during setup (W2)
-  assert.match(fr, /useEffect\(\(\) => \{ writeSetupLine\(hidden \? "" : lineRef\.current\); \}\);/);
-  assert.match(fr, /className="tq-next"/, "in the Advisor's own line, not a box of our own");
+  assert.match(fr, /const ASK = \{ ai: "What AI do you have\?", mail: "Where does your work come in\?"/);
+  assert.match(fr, /let line = busy \|\| signing \? "" : err \|\| \{[\s\S]{0,3000}other: aiErr \? `\$\{aiErr\} Change AI picks one that does\.` : "Nothing more is needed/);
+  assert.match(fr, /\{line && <Typography role="status" data-tq-setup-line=""/, "on the page, under the question");
+  assert.doesNotMatch(fr, /setupLine|tq-next|suggest-connections|connSug/, "no bar over the row, no AI picking connections");
+  // ...the fix it names is a button beside it, never one on the row that did not draw
+  assert.match(fr, /data-tq-setup-fix=\{v\.id\} onClick=\{v\.run\}>\{v\.label\}<\/Button>/);
+  // ...and one way out, never while a step runs
+  assert.match(fr, /disabled: !!m\.disabled \|\| \(m\.id !== "back" && running\)/, "Next greyed while the AI is checked");
+  assert.match(fr, /const canLater = onFinish && !\["done", "about"\]\.includes\(q\) && !st\.ready && !busy && !signing;/);
   // ...the catalogue's own cards, in a grid that fits the shelf's width rather than the window's (the owner, 2026-11-03)
   assert.match(fr, /import \{ ChannelDetail, ConnCard, connCardOf \} from "\.\/ConnectorsView\.jsx";/);
   assert.match(fr, /gridTemplateColumns: `repeat\(auto-fill, minmax\(min\(100%, \$\{COL\}px\), 1fr\)\)`/);
@@ -139,7 +145,7 @@ test("the setup canvas has one quiet Set up later, on the existing dismiss", () 
   const fr = read("FirstRun.jsx");
   assert.equal((fr.match(/data-tq-setup-later/g) || []).length, 1);
   assert.match(fr, /api\.post\("\/api\/setup\/dismiss", \{ dismissed: true \}\)/);
-  assert.match(fr, /onFinish && q !== "done" && <Typography component="button"[^>]*data-tq-setup-later=""/);
+  assert.match(fr, /\{canLater && <Typography component="button"[^>]*data-tq-setup-later=""/);
 });
 
 // THE FIRST RUN, READ BY AN OFFICE MANAGER (the real-CLI audit, 2026-11-15, 5c / 5f / 5h)

@@ -8049,8 +8049,10 @@ def connectors(request: Request):
     rows = [c | {'GatewayBuiltIn': bool(OPENAI_COMPATIBLE['hipaa_ai'][0])} if c['Type'] == 'hipaa_ai' else c for c in rows]
     # ReadsBack: the days this card's first read will go back while that read is still due - its "How far back to bring in", 0 for a
     # reader that is not asked by date or has been read (channels.reads_back)
-    from .channels import first_read_hours, reads_back
-    rows = [c | {'ReadsBack': round(first_read_hours(store, c) / 24) if reads_back(store, c, srcs, unsourced=True) else 0} for c in rows]
+    # LastRead: what its last read brought in, from the read's own counts (channels.read_line) - the line under its Sync now
+    from .channels import first_read_hours, read_line, reads_back
+    rows = [c | {'ReadsBack': round(first_read_hours(store, c) / 24) if reads_back(store, c, srcs, unsourced=True) else 0,
+                 'LastRead': read_line(store, c)} for c in rows]
     # PeopleMissing: the contacts/people permissions this card's sign-in predates - the card says signing in again adds them
     from .peoplesearch import missing
     rows = [c | {'PeopleMissing': missing(c.get('ConfigJson'), c['Type'])} if c['Type'] in ('outlook', 'teams', 'gmail') else c
@@ -9993,12 +9995,6 @@ def first_run_about_skip():
     from . import firstrun
     firstrun.skip_about(store)
     return firstrun.state(store)
-
-@app.post('/api/setup/first-run/suggest-connections')
-def first_run_suggest_connections():
-    """What to connect next, from the setup answers and the job - the Advisor's line on More connections."""
-    from . import firstrun
-    return firstrun.suggest_connections(store)
 
 @app.post('/api/setup/first-run/finish')
 def first_run_finish():

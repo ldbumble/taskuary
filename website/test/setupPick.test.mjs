@@ -60,7 +60,7 @@ test("the line names the lit control by the words the screen draws on it", () =>
   const src = read("FirstRun.jsx");
   assert.doesNotMatch(src, /Microsoft 365 is one sign-in/);
   assert.match(src, /const named = canvas \? shown\.label : litCard \? litCard\.title : /, "a card by its title, a button by its own label");
-  assert.match(src, /else if \(!said && named && !lineRef\.current\.includes\(named\)\)/, "a line that does not name it ends by naming it");
+  assert.match(src, /else if \(line && named && !line\.includes\(named\)\)/, "a line that does not name it ends by naming it");
   assert.match(src, /onShown\(el && canvas \? \{ label: \(el\.innerText \|\| ""\)\.trim\(\)/, "the button's label is read off the button");
 });
 

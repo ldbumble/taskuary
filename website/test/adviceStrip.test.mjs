@@ -59,8 +59,8 @@ test("no line is still an answer: every silence lights Next - never nothing", ()
   // ...and the dead-end walk holds the page to all of it (STILL, STRIP, LIT)
   const walk = fs.readFileSync(path.join(process.cwd(), "deadend_check.mjs"), "utf8");
   for (const rule of ["STILL", "STRIP", "LIT"]) assert.ok(walk.includes(`note("${rule}"`), rule);
-  // ...and setup's own line, the one .tq-next the dock still draws, is one line tall (30px since the owner's 2026-10-26 laptop)
-  assert.match(read("assistantView.css"), /\.tq-dock \.tq-next \{ margin: 0; min-height: 30px;/);
+  // ...and setup's line left the dock too: it is page text now (the owner, 2026-11-20)
+  assert.doesNotMatch(read("assistantView.css"), /\.tq-dock[ >]+\.tq-next/);
 });
 
 // THE ADVISOR MATRIX (2026-10-19): every moment the Advisor speaks must match the screen. Two it caught: the draft's text cleared, Send

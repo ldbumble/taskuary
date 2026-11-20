@@ -107,18 +107,27 @@ class FirstReadTests(unittest.TestCase):
             self.assertLess(done['now'] - done['brought']['at'], 30)
             first = json.loads(self.s.get_connector(cid)['ConfigJson'])['first_read']   # ...and the card keeps what its first read did
             self.assertEqual((first['hours'], first['n']), (72, 3))
+            # ...AND ITS SYNC NOW SAYS IT (the owner, 2026-11-20: "doesn't show what it syncs, how far back, how many messages"): the card's
+            # own last read, from the read's counts - three messages in three threads, the window it went back, and no task yet
+            read = lambda: next(c for c in self.client.get('/api/connectors').json()['data'] if c['ConnectorId'] == cid)['LastRead']
+            self.assertEqual({k: read()[k] for k in ('n', 'chats', 'hours', 'since', 'tasks')}, {'n': 3, 'chats': 3, 'hours': 72, 'since': '', 'tasks': 0})
+            checked = self.s.get_connector(cid)['LastSyncAt']
 
             seen.clear()                                                                  # an ordinary sync that finds nothing new
             self.press()
             self.assertFalse([s for s in seen if s['state'] == 'running' and (s.get('back') or s.get('landed'))])
             self.assertEqual(self.client.get('/api/ingest/status').json()['brought']['n'], 3)     # the last one's, not a "0"
             self.assertEqual(json.loads(self.s.get_connector(cid)['ConfigJson'])['first_read'], first)
+            self.assertEqual(read()['n'], 3, 'a read that found nothing keeps the last one that did')
 
             seen.clear(); inbox.append(graph_mail(0, datetime.now(timezone.utc)))      # ...and one that brings in one
             self.press()
             self.assertEqual(max(s.get('landed', 0) for s in seen if s['state'] == 'running'), 1)
             self.assertFalse([s for s in seen if s.get('back')])
             self.assertEqual({k: v for k, v in self.client.get('/api/ingest/status').json()['brought'].items() if k != 'at'}, {'n': 1, 'hours': 0})
+            # ...an ordinary read: one message, since the check before it
+            self.assertEqual({k: read()[k] for k in ('n', 'chats', 'hours')}, {'n': 1, 'chats': 1, 'hours': 0})
+            self.assertTrue(read()['since'] and read()['since'] >= checked)
 
     def test_a_new_imap_mailbox_brings_in_the_whole_window_on_sync_now(self):
         cid = self.s.get_connector_by_type('gmail')['ConnectorId']
@@ -137,6 +146,23 @@ class FirstReadTests(unittest.TestCase):
             self.assertTrue({f'mail {u}' for u, h in enumerate(reversed(AGES), 1) if h < 72} <= set(got))
             self.press()
         self.assertEqual(self.subjects(), got)
+
+
+    def test_a_cards_last_read_counts_the_tasks_its_chats_became_since_it_began(self):
+        """"12 messages from 3 chats - 2 new tasks": a task made after the read began, from a chat it brought in, counts; one made
+        before it, or from a chat it never read, does not - counted when the card is drawn, so the line grows as triage files them."""
+        wa = self.s.get_connector_by_type('whatsapp')
+        self.s.merge_connector_config(wa['ConnectorId'], {'last_read': {'n': 4, 'chats': 2, 'since': '2026-11-20 08:00:00', 'hours': 0,
+                                                                        'at': '2026-11-20 09:00:00', 'convs': ['erin-chat', 'ray-chat']}})
+        def task(conv, at):
+            tid = self.s.create_task({'Title': f'from {conv}'}, 't')
+            self.s.cx.execute('UPDATE task SET CreatedAt=? WHERE TaskId=?', (at, tid))
+            self.s.add_message({'TaskId': tid, 'ConversationId': conv, 'Channel': 'whatsapp', 'ExternalId': f'{conv}-{at}'})
+        task('erin-chat', '2026-11-20 09:01:00'); task('ray-chat', '2026-11-20 09:02:00')
+        task('erin-chat', '2026-11-19 17:00:00'); task('gail-chat', '2026-11-20 09:03:00')
+        got = channels.read_line(self.s, self.s.get_connector(wa['ConnectorId']))
+        self.assertEqual(got, {'n': 4, 'chats': 2, 'since': '2026-11-20 08:00:00', 'hours': 0, 'at': '2026-11-20 09:00:00', 'tasks': 2})
+        self.assertIsNone(channels.read_line(self.s, self.s.get_connector_by_type('telegram')), 'a card never read says nothing')
 
 
 if __name__ == '__main__': unittest.main()

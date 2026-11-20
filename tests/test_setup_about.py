@@ -6,6 +6,8 @@ morning digest screen will show up")."""
 import json, unittest
 from unittest import mock
 
+import pytest
+
 from taskuary import firstrun
 from taskuary.store import MemoryStore
 
@@ -30,6 +32,13 @@ def mailboxes(s, *boxes):
         s.save_connector({'ConnectorId': cid, 'Active': 1}, 't')
         s.save_source({'Channel': 'email', 'Address': addr, 'Active': 1, 'ConnectorId': cid}, 't')
     return s
+
+
+# the drafts wait for the first read of the mail (firstrun._await_first_read); these tests' mailboxes are never read, so it is in - but
+# for the tests of that wait itself
+@pytest.fixture(autouse=True)
+def _first_read_in(request, monkeypatch):
+    if 'first_read' not in request.node.name: monkeypatch.setattr(firstrun, 'first_read_done', lambda store: True)
 
 
 class AboutTests(unittest.TestCase):
@@ -244,6 +253,37 @@ class AboutTests(unittest.TestCase):
                 firstrun.learn(s, {'name': 'Alex Doyle'}, wait=True, docs=('job',))
             self.assertEqual(firstrun.drafts(s)['job']['why'], firstrun.FIRST_READ)
 
+    def test_the_drafts_start_only_once_the_first_read_is_in(self):
+        """Written before the first read landed, "What you work on" stood in red - "your mail did not show separate workstreams yet" -
+        while that read was still running (2026-11-20). Until the read is in each draft is running and nothing is asked of the mail;
+        the moment it is in, they are written."""
+        s, asked, read = MemoryStore(), [], {'done': False}
+        def gen(store, name, days=90): asked.append(name); histgen.put_learned(store, name, f'_generated now_\n\n- {name}', 'histgen')
+        from taskuary import histgen
+        with mock.patch('taskuary.histgen.generate', side_effect=gen), mock.patch.object(firstrun, 'FIRST_TICK', 0.02), \
+             mock.patch.object(firstrun, 'first_read_done', side_effect=lambda st: read['done']):
+            firstrun.learn(s, {'name': 'Alex Doyle'}, docs=('job', 'style'))
+            import time; time.sleep(0.3)
+            self.assertEqual((asked, firstrun.drafts(s)['job']['state'], firstrun.drafts(s)['style']['state']), ([], 'running', 'running'))
+            read['done'] = True
+            for _ in range(100):
+                if firstrun.drafts(s)['style']['state'] == 'ready': break
+                time.sleep(0.05)
+        self.assertEqual(asked, ['job', 'style'])
+
+    def test_the_first_read_is_in_when_every_source_card_was_read_through_or_failed(self):
+        s = MemoryStore()
+        self.assertTrue(firstrun.first_read_done(s), 'nothing connected: nothing to wait for')
+        o = s.get_connector_by_type('outlook')
+        s.save_connector({'ConnectorId': o['ConnectorId'], 'Active': 1, 'Secret': 'S'}, 't')
+        sid = s.save_source({'Channel': 'email', 'Address': 'alex@northwind.example', 'ConnectorId': o['ConnectorId'], 'Active': 1}, 't')
+        self.assertFalse(firstrun.first_read_done(s), 'a mailbox never read')
+        s.cx.execute("UPDATE connector SET LastError='sign-in expired' WHERE ConnectorId=?", (o['ConnectorId'],))
+        self.assertTrue(firstrun.first_read_done(s), 'a card that failed says why on its card - no wait on it')
+        s.cx.execute("UPDATE connector SET LastError='' WHERE ConnectorId=?", (o['ConnectorId'],))
+        s.cx.execute("UPDATE source SET LastPolledAt='2026-11-20 09:00:00' WHERE SourceId=?", (sid,))
+        self.assertTrue(firstrun.first_read_done(s), 'read through once')
+
     def test_a_draft_accepted_as_edited_is_kept_and_one_left_alone_stays_as_written(self):
         s = MemoryStore()
         from taskuary import histgen
@@ -362,35 +402,11 @@ class FinishTests(unittest.TestCase):
 if __name__ == '__main__': unittest.main()
 
 
-class SuggestConnectionsTests(unittest.TestCase):
-    """More connections is the Connections page itself, and the Advisor's line over the row says which to connect, from the survey
-    and the job (the owner, 2026-10-15: "use ai to process their survey questions and then suggest what softwares they use ... advisor
-    is what tells you what to do next always")."""
+class MoreConnectionsTests(unittest.TestCase):
+    """More connections is the Connections page itself: what it counts, and what it never offers as a system."""
     def setUp(self):
         self.s = MemoryStore()
         firstrun.save_about(self.s, ANSWERS)
-
-    def test_the_ai_reads_the_answers_and_names_the_cards_and_their_sections(self):
-        def brain(system, user, **kw):
-            brain.user = user
-            return json.dumps({'line': 'You work in Workday and Salesforce - connect those first.', 'picks': ['workday', 'salesforce', 'nosuch']})
-        with mock.patch('taskuary.llm.build_llm', return_value=brain):
-            out = firstrun.suggest_connections(self.s)
-        self.assertIn('Workday', brain.user); self.assertIn('Finance systems lead', brain.user)
-        self.assertEqual(out['line'], 'You work in Workday and Salesforce - connect those first.')
-        self.assertEqual([p['type'] for p in out['picks']], ['workday', 'salesforce'])          # an unknown card is dropped
-        self.assertTrue(all(p['group'] and p['title'] for p in out['picks']))
-
-    def test_the_ais_sentence_stands_even_when_it_picks_nothing(self):
-        """Every system the owner named was planned, the AI said so and picked none - and its sentence was dropped for the plain
-        "You said you work in..." line (a fresh-install walk, 2026-10-16). And it is asked for cards that CAN connect, too."""
-        def brain(system, user, **kw):
-            brain.system = system
-            return json.dumps({'line': "Workday and Salesforce can't be connected yet - nothing else fits your work for now.", 'picks': []})
-        with mock.patch('taskuary.llm.build_llm', return_value=brain):
-            out = firstrun.suggest_connections(self.s)
-        self.assertEqual(out, {'line': "Workday and Salesforce can't be connected yet - nothing else fits your work for now.", 'picks': []})
-        self.assertIn('can be connected now', brain.system)
 
     def test_more_connections_counts_what_is_connected_beyond_the_ai_and_the_mail(self):
         """The rail never ticked More connections, however many were set up - it was optional, so never done (the owner, 2026-10-16:
@@ -403,21 +419,15 @@ class SuggestConnectionsTests(unittest.TestCase):
         self.s.save_connector({'ConnectorId': self.s.get_connector_by_type('linkedin')['ConnectorId'], 'Active': 1}, 'o')
         self.assertEqual(firstrun.more_connected(self.s), 2)
 
-    def test_a_generic_transfer_or_storage_card_is_never_a_system_or_a_suggestion(self):
+    def test_a_generic_transfer_or_storage_card_is_never_a_system(self):
         """"SFTP is the best next connection" - SFTP is how files move, not a system one works in (the owner, 2026-10-16: "remove
         this sftp because it can be many systems")."""
         self.assertFalse({'SFTP', 'Network file share'} & set(firstrun.about(self.s)['offered']))
-        with mock.patch('taskuary.llm.build_llm', return_value=lambda system, user, **kw: json.dumps(
-                {'line': 'Connect SFTP and Sage Intacct.', 'picks': ['sftp', 'smb_file', 'intacct']})):
-            out = firstrun.suggest_connections(self.s)
-        self.assertEqual([p['type'] for p in out['picks']], ['intacct'])
 
-    def test_with_no_ai_the_systems_ticked_are_matched_to_the_catalogue(self):
-        with mock.patch('taskuary.llm.build_llm', side_effect=RuntimeError('no brain')):
-            out = firstrun.suggest_connections(self.s)
-        titles = [p['title'] for p in out['picks']]
-        self.assertIn('Workday', titles); self.assertIn('Salesforce', titles)
-        self.assertIn('Workday', out['line'])
+    def test_more_connections_asks_no_ai_to_suggest(self):
+        """THE ADVISOR'S SUGGESTION OVER MORE CONNECTIONS IS GONE (the owner, 2026-11-20: "the advisor ideas on the top of the chat in
+        the setup is useless. remove it"): no model call picks cards there, and its route answers nothing."""
+        self.assertFalse(hasattr(firstrun, 'suggest_connections'))
 
 
 class FirstDigestTests(unittest.TestCase):

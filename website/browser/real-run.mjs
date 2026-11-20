@@ -62,7 +62,9 @@ const GW = BRAIN !== "gateway" ? {} : (() => { const f = path.join(os.homedir(),
   return { url: process.env.EVAL_AI_URL || c.url, key: process.env.EVAL_AI_KEY || c.key, model: process.env.EVAL_AI_MODEL || c.model }; })();
 // ...and a walk is the owner's day: its agents reach the web as they would for him (the test server's guard is for the suites, not a walk)
 process.env.TASKUARY_FIXTURE_ALLOW = "*";
-const h = await startHarness({ fresh: true });
+// ...REAL_BIN: a folder of stand-in CLIs on the server's own PATH (EVAL_BRAIN=stand-in) - a CLI dropped in it mid-walk is found then, so a
+// walk starts with no AI and connects one, as a new owner does
+const h = await startHarness({ fresh: true, bin: process.env.REAL_BIN || "" });
 // ...AND npx RUNS IN IT (the coding walk, 2026-11-12): APPDATA is the scratch home's, with no npm folder, so `npx -y <the ACP adapter>` failed
 // and every coding session fell back to its terminal - a road the owner's own machine does not take
 await mkdir(path.join(h.home, "appdata", "npm"), { recursive: true });

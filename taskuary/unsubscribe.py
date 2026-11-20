@@ -53,7 +53,11 @@ def run(store, mid: int, actor: str = 'owner') -> dict:
         # button left lit - it went out as a bare 500 the card could only call an error
         import requests
         try: r = _post(u['url'])
-        except requests.RequestException as e: raise RuntimeError(f'the list did not answer ({type(e).__name__}) - nothing is marked done; press Unsubscribe again to retry') from None
+        # ...said in words: the exception's class in it made the sentence read as a raw error, and the page put "something went wrong on this
+        # computer" in its place (say.raw) - the class goes to the log
+        except requests.RequestException as e:
+            logger.info(f'unsubscribe on {mid}: the list did not answer - {type(e).__name__}: {str(e)[:200]}')
+            raise RuntimeError('the list did not answer - nothing is marked done; press Unsubscribe again to retry') from None
         if not (200 <= int(getattr(r, 'status_code', 0) or 0) < 300): raise RuntimeError(f'the list answered {getattr(r, "status_code", "nothing")} - it did not take the unsubscribe')
         out = {'via': 'post'}
     else: out = {'via': u['via'], 'link': u.get('url') or u.get('mailto')}

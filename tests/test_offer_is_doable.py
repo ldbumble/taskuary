@@ -51,6 +51,8 @@ def _task_with_offer(s, offer, is_reply):
                                         'body': 'Could you look at this for me?', 'from_email': 'gail@northwind.example',
                                         'from_name': 'Gail Moreno', 'conversation_id': f'c-{offer[:5]}', 'sent_at': '2026-10-29 09:00',
                                         'source_name': ME}, llm=llm)
+    # ...a task with no agent on it - the one arrival rule starts one on what lands in Tasks, and an offer is for a task nobody works yet
+    s.update_task(out['task_id'], {'Kind': 'task'}, 'owner')
     return out['task_id']
 
 

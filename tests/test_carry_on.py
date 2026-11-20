@@ -159,7 +159,7 @@ class CarryOnTests(unittest.TestCase):
         # a full house queued the task's first start, and the sender wrote again before a slot freed: the line read "No agent started: no
         # conversation to carry on" under "Waiting its turn" - the queued start opens on the task with every message on it, the new one too
         s = store()
-        with mock.patch.object(ingest, 'has_room', return_value=False), mock.patch.object(ingest, '_reads_quick', return_value=False), \
+        with mock.patch.object(ingest, 'has_room', return_value=False), \
              mock.patch('taskuary.ingest._spawn', side_effect=lambda fn, *a, **k: fn(*a, **k)), \
              mock.patch.object(senders, 'wrote_to', return_value=True), \
              mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude', 'type': 'cli'}]):

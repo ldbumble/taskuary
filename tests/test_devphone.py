@@ -13,7 +13,7 @@ from taskuary.testing import Factory
 
 
 def pane(tid, cwd=r'C:\code\ledger'):
-    return SimpleNamespace(alive=True, task_id=tid, cwd=cwd, argv=['claude'], quick=False, agent='coding', label='coding', draft='',
+    return SimpleNamespace(alive=True, task_id=tid, cwd=cwd, argv=['claude'], agent='coding', label='coding', draft='',
                            started='2026-11-06 09:00:00', files=lambda: ['ledger/money.py', 'tests/test_money.py'], sid=f's{tid}')
 
 

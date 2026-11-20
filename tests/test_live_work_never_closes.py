@@ -26,13 +26,12 @@ class LiveWork(unittest.TestCase):
         self.assertEqual(ws.live_work(self.s, self.tid), [ws.LIVE_SESSION])
         self.assertEqual(ws.live_work(self.s, self.tid, but='run1'), [], 'the asking session is never counted against itself')
 
-    def test_a_quick_call_a_routine_and_a_queued_start_are_live(self):
-        from taskuary import quickwork, workflows
-        with mock.patch.object(quickwork, 'RUNNING', {self.tid}), mock.patch.object(workflows, '_STARTING', {self.tid}):
+    def test_a_routine_and_a_queued_start_are_live(self):
+        from taskuary import workflows
+        with mock.patch.object(workflows, '_STARTING', {self.tid}):
             self.s.enqueue_dispatch(self.tid, None, 'claude', 'every slot is busy')
             got = ws.live_work(self.s, self.tid)
             self.assertIn('its routine is still running', got); self.assertIn('an agent is queued to start on it', got)
-            self.assertTrue(any('quick answer' in x for x in got))
             self.assertNotIn('its routine is still running', ws.live_work(self.s, self.tid, skip=('routine',)))
 
     def test_send_and_close_is_the_owners_own_close_and_asks_it_no_more_than_mark_done_does(self):

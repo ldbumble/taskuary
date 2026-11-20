@@ -1829,7 +1829,7 @@ def close_upstream_ended(store, tid: int, said: str, actor: str = 'router'):
     rv = proposals.closeout_pending(store, tid)
     if rv: store.decide_review(rv['ReviewId'], 'no_reply', None, actor, 'the item ended upstream')
     # ...but NOT UNDER WORK STILL LIVE ON IT (the owner, 2026-11-01: "If anything still working never close the task automatically"): an
-    # agent at its prompt, a quick call, a routine - the task stays open, and a later poll meets this ending again once nothing is
+    # agent at its prompt, a routine - the task stays open, and a later poll meets this ending again once nothing is
     from . import workerstate as ws
     if ws.live_work(store, tid): return False
     # ...and a merged or closed item is FINISHED, a thank-you drafted beside it included: it closes, and closing retires

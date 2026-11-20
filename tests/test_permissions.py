@@ -24,7 +24,7 @@ def s():
 
 def coding(s, cwd=REPO):
     tid = Factory(s).task(title='Ledger rounding', kind='coding')
-    term.SESSIONS[f's{tid}'] = SimpleNamespace(alive=True, task_id=tid, cwd=cwd, argv=['claude'], quick=False, sid=f's{tid}', mode='full')
+    term.SESSIONS[f's{tid}'] = SimpleNamespace(alive=True, task_id=tid, cwd=cwd, argv=['claude'], sid=f's{tid}', mode='full')
     return tid
 
 

@@ -475,7 +475,7 @@ const foundNone = (s) => {
 // a thought's paragraphs, each one line - a header the model set in bold (Codex's `**Checking the dates**`) reads as its words
 const thoughtsOf = (text) => String(text || "").split(/\n\s*\n/).map((p) => flat(forScreen(p)).replace(/^\*\*(.+)\*\*$/, "$1")).filter(Boolean);
 const ECHO = /^(→ |· |✗ |session started\b)/;            // agents._live_line's own rows for a tool call, its result, the init line
-// A QUICK ANSWER'S RAW OBJECT (quickwork.RAW) is its fields, filed as the answer - never words of its working, whichever line carries it: a
+// A QUICK ANSWER'S RAW OBJECT (selfclose.RAW, stored before 2026-11-13) is its fields, filed as the answer - never words of its working, whichever line carries it: a
 // CLI's readable `live` line was the object cut at 300 characters, drawn under Taskuary (the owner, 2026-11-03)
 const RETRY = /^Can't reach Claude's servers right now/;      // agents._live_line's line for Claude's own api_retry
 const QUICK_RAW =/^\s*(?:```(?:json)?\s*)?\{\s*"(?:report|draft|question|done|escalate|why)"\s*:/i;

@@ -23,10 +23,10 @@ MAX = 1200
 
 
 def _cli_sessions() -> list:
-    "Live CLI panes on a task - a coding agent at work, idle or asking; never a quick answer's or a general chat's."
+    "Live CLI panes on a task - a coding agent at work, idle or asking; never a general chat's."
     from . import terminal as term
     return [t for t in list(term.SESSIONS.values()) if getattr(t, 'alive', False) and getattr(t, 'task_id', None)
-            and getattr(t, 'quick', False) is not True and getattr(t, 'argv', None)]
+            and getattr(t, 'argv', None)]
 
 
 def working(at_rest: bool = True) -> list:
@@ -36,7 +36,7 @@ def working(at_rest: bool = True) -> list:
     checkout while it lives, an agent on a card holds nothing once its turn has ended."""
     from . import terminal as term
     return _cli_sessions() + [t for t in list(term.SESSIONS.values()) if getattr(t, 'alive', False) and getattr(t, 'task_id', None)
-                              and getattr(t, 'quick', False) is not True and not getattr(t, 'argv', None) and getattr(t, 'cwd', '')
+                              and not getattr(t, 'argv', None) and getattr(t, 'cwd', '')
                               and (at_rest or getattr(t, 'busy', False))]
 
 

@@ -65,8 +65,8 @@ class NoOutboundSocket(socket.socket):
 
 
 def _install_fresh_routes(app, store):
-    """The starts no API press makes, shaped as triage makes them (browser/agent-starts-at-once): a quick call that holds the task opening
-    for `hold` seconds with no session, then hands it to the agent (quickwork.escalate); or a start queued behind full agent slots."""
+    """The starts no API press makes, shaped as triage makes them (browser/agent-starts-at-once): a start that holds the task opening
+    for `hold` seconds with no session, then starts its agent (ingest._auto_general); or a start queued behind full agent slots."""
     import threading, time
     from fastapi import Body
     from taskuary import general, ingest
@@ -79,10 +79,10 @@ def _install_fresh_routes(app, store):
             store.add_comment(tid, "router", "agent", "Waiting its turn: 2 agents are already running, and it starts by itself when there is room.")
             return {"queued": True}
         general.OPENING.add(tid)
-        def escalate():
-            try: time.sleep(float(body.get("hold") or 0)); ingest._auto_general(store, tid, deep=True)
+        def start():
+            try: time.sleep(float(body.get("hold") or 0)); ingest._auto_general(store, tid)
             finally: general.OPENING.discard(tid)
-        threading.Thread(target=escalate, daemon=True).start()
+        threading.Thread(target=start, daemon=True).start()
         return {"opening": True}
 
     @app.post("/api/fixture/coding")

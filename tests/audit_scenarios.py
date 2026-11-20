@@ -354,8 +354,7 @@ def world(backend: str, tmp: Path, monkeypatch):
     real = next(c.cell_contents for c in general.start_session.__closure__ or () if getattr(c.cell_contents, '__name__', '') == 'start_session') \
         if general.start_session.__closure__ else general.start_session
     monkeypatch.setattr(general, 'start_session', real)
-    from taskuary import clis, quickwork
-    monkeypatch.setattr(quickwork, 'takes', lambda store, tid: False)
+    from taskuary import clis
     if backend == 'coding':
         repo = tmp / 'ledger'; repo.mkdir()
         (repo / 'totals.py').write_text('def total(a, tax):\n    return a + tax\n', encoding='utf-8')

@@ -2387,20 +2387,17 @@ def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bo
         if code_of(why) in FIRST_AGENT and (went := first_agent(store, tid, msg, mid, follow, actor)) is not None: return went
         if code_of(why) not in QUIET_WHY: not_started(store, tid, why)
         return False
-    from . import blackboard as bb, general, quickwork
+    from . import blackboard as bb, general
     coding = not general.handles(store.get_task(tid) or {})
-    # a conversation of quick answers carries on quick while the task still reads quick: the warm agent, at a fraction of a desk (quickwork._take)
-    quick = not coding and quickwork.only_quick(store, tid) and _reads_quick(store, tid)
-    if not quick and not has_room(store):
+    if not has_room(store):
         queue_turn(store, tid)
         store.audit('task', tid, 'auto_continue', actor, 'agent', {'message_id': mid, 'kind': 'coding' if coding else 'general', 'queued': True})
         return True
     general.OPENING.add(tid)
     store.add_comment(tid, 'router', 'agent', f'{_who_said(msg)} wrote again with new work - the '
                       + ('coding agent reopens its own session' if coding else 'assistant carries on its conversation') + ' here by itself.')
-    store.audit('task', tid, 'auto_continue', actor, 'agent', {'message_id': mid, 'kind': 'coding' if coding else 'general', 'quick': quick})
-    if quick: _spawn(quickwork.start, store, tid, _pass_turn(msg))         # filed as Taskuary's brief: the chat shows what it was handed
-    elif coding: _spawn(_continue_coding, store, tid)
+    store.audit('task', tid, 'auto_continue', actor, 'agent', {'message_id': mid, 'kind': 'coding' if coding else 'general'})
+    if coding: _spawn(_continue_coding, store, tid)
     else: _spawn(_continue_general, store, tid, msg, mid)
     return True
 
@@ -2714,11 +2711,10 @@ def _pass_turn(msg: dict) -> str:
 def _pass_general(store, tid, msg: dict, turn: str = None):
     """The line as the assistant's NEXT turn: send_prompt takes its turn behind the one running (GeneralSession._take), so a line
     that lands mid-answer - or while a carried-on turn is still opening - is queued, never dropped."""
-    from . import general, quickwork
+    from . import general
     end = time.time() + PASS_WAIT
-    # a conversation still opening (carry-on, Continue) takes ITS turn first: this one waits until that turn has the session -
-    # past the deadline while a quick call is in flight, whose session opens only once its answer is in (a wait for a quick slot plus the call)
-    while (time.time() < end or tid in quickwork.RUNNING) and tid in general.OPENING and not getattr(general.session_for(tid), 'busy', False): time.sleep(.25)
+    # a conversation still opening (carry-on, Continue) takes ITS turn first: this one waits until that turn has the session
+    while time.time() < end and tid in general.OPENING and not getattr(general.session_for(tid), 'busy', False): time.sleep(.25)
     # ...and the turn that opened heard it as it began (general.send_prompt hears all that came in): that turn answers for it - "it is the
     # assistant's next turn" written under its answer was a turn nobody was going to take
     from . import conversation
@@ -2763,10 +2759,8 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
     lines, mails = [x[0] for x in got], [x[1] for x in got if x[1]]
     said = lines[0] if len(lines) == 1 else f'{len(lines)} NEW LINES ON THIS TASK, in the order they came - one turn for all of them:\n\n' + '\n\n---\n\n'.join(lines)
     try:
-        # a session of quick answers re-decides on the task's depth now: still quick, the warm agent's turn on it; else the full agent's
         kept = mails if len(mails) == len(got) else ()
-        if ses.quick and quickwork.takes(store, tid): quickwork.again(store, tid, ses, said, mails=kept)
-        else: ses.send_prompt(said, brief=True, mails=kept)      # Taskuary's brief, shown in the chat as coding's typed line is
+        ses.send_prompt(said, brief=True, mails=kept)      # Taskuary's brief, shown in the chat as coding's typed line is
     except Exception as e:
         # ...the session ended under it - the agent closed its own at the end of the turn this line waited behind (the stress run,
         # 2026-11-05): the line is not lost to a Continue, it carries the conversation on in a session of its own, as a mail on a quiet task does
@@ -3435,23 +3429,23 @@ def auto_sessions(store) -> int:
     return max(1, min(16, n))
 
 # LIGHT WORK COUNTS TOO, AS A FRACTION (the owner, 2026-10-30: "it should count like sub agents, 5 of them are one or something like
-# that"). A quick call and an agent's own subagent are each a real model working, so the machine's width covers them - but at a
+# that"). An agent's own subagent is a real model working, so the machine's width covers it - but at a
 # fraction of a session, LIGHT_PER_AGENT of them making one. A subagent cannot be held back from outside its session: it only adds load.
 LIGHT_PER_AGENT = 5
 
 def light_per_agent(store) -> int:
-    "How many quick calls or subagents count as one agent session (the 'auto_sessions_light' setting, 1..20)."
+    "How many subagents count as one agent session (the 'auto_sessions_light' setting, 1..20)."
     try: n = int(store.get_setting('auto_sessions_light') or LIGHT_PER_AGENT)
     except (ValueError, TypeError): return LIGHT_PER_AGENT
     return max(1, min(20, n))
 
 def agent_load(store) -> float:
-    "Live agent sessions, plus quick calls in flight and live subagents at 1/light_per_agent each - the one number the cap is read against."
-    from . import blackboard as bb, quickwork
-    return bb.live_count() + (quickwork.in_flight() + bb.subagent_count()) / light_per_agent(store)
+    "Live agent sessions, plus live subagents at 1/light_per_agent each - the one number the cap is read against."
+    from . import blackboard as bb
+    return bb.live_count() + bb.subagent_count() / light_per_agent(store)
 
 def has_room(store, need: float = 1.0) -> bool:
-    "True when `need` more (1 for a session, 1/light_per_agent for a quick call) still fits under auto_sessions."
+    "True when `need` more (1 for a session) still fits under auto_sessions."
     return agent_load(store) + need <= auto_sessions(store) + 1e-9      # 5 x 0.2 must make 1, not 1.0000000000000002
 
 def busy_words(store) -> str:
@@ -3459,7 +3453,7 @@ def busy_words(store) -> str:
     from . import blackboard as bb
     n, cap = bb.live_count(), auto_sessions(store)
     if n >= cap: return f'{cap} agents are already running'
-    return (f"{plural(n, 'agent')} plus " if n else '') + f'quick answers and subagents already fill the {cap} agent slots'
+    return (f"{plural(n, 'agent')} plus " if n else '') + f'subagents already fill the {cap} agent slots'
 
 def _auto_code(store, tid):
     """Auto-dispatch puts the CLI on the task in a REAL session - the same one you see when
@@ -3592,27 +3586,17 @@ def advisor_brief(store, msg: dict, mid: int) -> str | None:
     return '\n\n'.join(parts)
 
 
-def _reads_quick(store, tid) -> bool:
-    "quickwork.takes, or False - the full agent starts - when the depth cannot be read."
-    from . import quickwork
-    try: return quickwork.takes(store, tid)
-    except Exception as e:
-        logger.warning(f'the depth of task {tid} could not be read - it starts the agent: {e}')
-        return False
-
-
-def _auto_general(store, tid, brief: str = None, deep: bool = False):
+def _auto_general(store, tid, brief: str = None):
     """Auto-dispatch for a GENERAL task: the assistant's own per-task session, the same one the
     owner sees when they open the task (PW-069). A full house queues it like a coding task; the
     queue drain knows the kind. A live conversation is reused - the ask is put once.
-    `deep`: the quick path already handed this one on (quickwork.escalate), so it never goes back to it.
-    A task triage judged quick or normal (quickwork.takes) is the warm agent's instead: no desk, a fraction of one (quickwork._take). Every door
-    reaching here has passed auto_start_ok already, so the gate is the same for both."""
-    from . import blackboard as bb, general, quickwork
+    ONE AGENT PER TASK (the owner, 2026-11-20: "quick agent if the task is classified as quick but never 2 agents"): work triage judged quick
+    is this same agent on its light gear (brainroute, on every turn), never a warm agent first that hands on. Every door reaching here has
+    passed auto_start_ok already."""
+    from . import blackboard as bb, general
     try:
-        if not deep and _reads_quick(store, tid): return quickwork.start(store, tid, brief)
         if not has_room(store):
-            # the brief waits with it (a quick call's notes, an Advisor's idea): the drain starts the agent on it, not on the bare Summary
+            # the brief waits with it (an Advisor's idea, a routine's definition): the drain starts the agent on it, not on the bare Summary
             store.enqueue_dispatch(tid, None, 'assistant', busy_words(store), brief=brief)
             store.add_comment(tid, 'router', 'agent', f'Waiting its turn: {busy_words(store)}, and it starts by itself when there is room.')
             general.OPENING.discard(tid)            # queued is not live: the drain starts it
@@ -3635,7 +3619,7 @@ def _start_general(store, tid, brief: str = None) -> bool:
     """Open (or reuse) the assistant session and put the task to it - once. A failure is written on
     the task as a failure, never left looking like nobody got round to it (PW-073), counted on the retry
     budget, and reported as False so a queue drain neither clears the row nor says Started (PW-085)."""
-    from . import general, quickwork
+    from . import general
     try:
         session = general.start_session(store, tid, actor='router')
         general.OPENING.discard(tid)            # a hand-over's hold (agent_on_reply `opening`): the session is live from here
@@ -3644,8 +3628,7 @@ def _start_general(store, tid, brief: str = None) -> bool:
         fresh = not any(m['role'] == 'assistant' or not m.get('brief') for m in general.history(store, tid))
         store.add_comment(tid, 'router', 'agent', 'The assistant started by itself'
                           + ('.' if fresh else ' - it carries on the conversation already open here.'))
-        # ...and a conversation of quick answers only is put the ask too: the agent has not run on it yet (quickwork.escalate, a retry)
-        if (fresh or quickwork.only_quick(store, tid)) and (ask := first_ask(store, tid, brief)): session.send_prompt(ask, brief=True)
+        if fresh and (ask := first_ask(store, tid, brief)): session.send_prompt(ask, brief=True)
         return True
     except Exception as e:
         if isinstance(e, general.Stopped): return True         # the owner stopped it: nothing failed, and nothing starts it again

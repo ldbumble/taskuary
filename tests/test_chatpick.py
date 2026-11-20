@@ -85,7 +85,7 @@ def test_slack_lists_the_channels_its_token_is_in_and_falls_back_to_the_seen_one
 def test_the_endpoint_marks_what_an_agent_channel_cannot_bind_and_why(s):
     s.merge_connector_config(wa(s)['ConnectorId'], {'assistant_chat': OWN})
     tid = Factory(s).task(title='Ledger rounding', kind='coding')
-    term.SESSIONS[f's{tid}'] = SimpleNamespace(alive=True, task_id=tid, cwd=tempfile.mkdtemp(), argv=['claude'], quick=False, sid=f's{tid}',
+    term.SESSIONS[f's{tid}'] = SimpleNamespace(alive=True, task_id=tid, cwd=tempfile.mkdtemp(), argv=['claude'], sid=f's{tid}',
                                                mode='full', draft='')
     try: ac.bind(s, 'whatsapp', TEAM, tid, members=[])
     finally: term.SESSIONS.pop(f's{tid}', None)

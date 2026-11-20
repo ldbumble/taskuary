@@ -750,7 +750,7 @@ DRAFTED = 'The reply is drafted - it waits for your Send under Next steps.'
 def _split(store, tid: int) -> tuple[list, list]:
     "The task's chat as (before the current run, the current run), split at the last RUN_TYPE row if there is one."
     from . import selfclose
-    from .quickwork import report_of
+    from .selfclose import report_of
     rows = store.list_comments(tid, internal=True)
     at = max((i for i, c in enumerate(rows) if c.get('ActorType') == RUN_TYPE), default=-1)
     # ...an answer filed as a quick call's raw object reads back as its report, wherever the chat is read: the pane, the next turn, the close-out;
@@ -2719,8 +2719,6 @@ class GeneralSession:
     """A connector-backed conversation with the live-session contract used by the terminal."""
     mode = 'assistant'
     blocks_on_owner = False              # a turn that ended holds nothing up: no prompt to park at (PW-226)
-    quick = False                        # the warm agent's (quickwork): takes no desk until the full agent's turn runs on it
-    handed_on = ''                       # why its last warm turn handed the work to the full agent (quickwork.HAND_ON)
     argv = []
     _cwd, dirty0, _files = '', None, ([], 0.)
     # WHAT THE OPEN CHAT IS TOLD AS THE TURN MOVES (stress round, 2026-11-18): the page read the task's whole conversation every 600 ms while
@@ -2818,7 +2816,7 @@ class GeneralSession:
         self.store.save_session(self.task_id, self.pick, self.model, self.cli_sid,
                                 continuity.context_key(self.store, self.pick, self.model))
         # ...and WHAT THAT CONVERSATION WAS TOLD, kept with its id (the memory round, 2026-11-14): `frozen` lived in this object alone, so a
-        # conversation picked up by another one - the quick agent's by the full agent, any after a restart or an idle shutdown - was sent
+        # conversation picked up by another one - any after a restart or an idle shutdown - was sent
         # a system written afresh (the whole conversation at full price again) with nothing saying which line of it had changed
         if self.cli_sid and self.frozen:
             try: self.store.save_frozen(self.task_id, json.dumps([self.cli_sid, self.frozen[0], self.frozen[1], sorted(self.frozen[2])]))
@@ -3051,7 +3049,7 @@ class GeneralSession:
     def send_prompt(self, text: str, attachments=None, connector_id=None, model=None, echo=True,
                     pick=None, trace=None, cancel=None, as_owner=True,
                     delivery_instructions: str = None, kept: bool = False, brief: bool = False, waiting: int = None, line_id: str = None, mails=(),
-                    quick: bool = False, since: float = None) -> str:
+                    since: float = None) -> str:
         """`as_owner=False` is an instruction to the assistant that the OWNER did not say - used to
         make it open a conversation (the walk, a setup). It is not written to the history and
         not echoed, because putting words in the owner's mouth in their own transcript is a lie the
@@ -3059,7 +3057,6 @@ class GeneralSession:
         `brief`: the first ask of an agent that started by itself - kept as the conversation's turn, but filed by Taskuary (BRIEF_ACTOR).
         `waiting`: the owner's line already kept for the agent (wait_line) - a session that ended under it hands it to the next (say_line).
         `mails`: the messages (ids) this turn exists to pass in - where an earlier turn heard them all already, there is nothing to say.
-        `quick`: the warm agent's turn (quickwork.again) - the same turn and tools, on the quick_work job, at a fraction of a desk.
         `since`: Taskuary's own news of that moment (a sign-in that went in) - where a turn has ended after it by the time this one gets the
         session, the agent has worked past it and nothing more is said."""
         text = str(text or '').strip()
@@ -3109,7 +3106,6 @@ class GeneralSession:
             together = (f"THE OWNER SENT {n} MESSAGE{'S' if n > 1 else ''} while you worked - the last {n} USER turn{'s' if n > 1 else ''}. Read "
                         "them together with what came in: a later one may correct or clarify an earlier one. Answer all of it in one reply.")
             delivery_instructions = f'{delivery_instructions}\n\n{together}' if delivery_instructions else together
-        self.quick = quick                   # an agent's turn takes a desk from here; the warm agent's stays a fraction of one (quickwork._take)
         if as_owner: self.woke = self.silent = False       # ...and a turn the owner's words began may be woken once again (wake)
         self.owned = as_owner and not brief
         own_tok = origin.OWNER_SPEAKS.set(self.owned)
@@ -3170,7 +3166,7 @@ class GeneralSession:
                 from . import workerstate as ws
                 # ...Taskuary's own turn (a line on the thread, a check-back) is not the owner speaking: their question still waits (the night run,
                 # 2026-11-09: every wake cleared it, so the agent asked "who runs the portal?" again on six turns to keep it on screen)
-                ws.record(self.store, self.task_id, self.sid, 'working', text=ws.WAKE if brief or not as_owner else '', source='quick' if quick else 'api')
+                ws.record(self.store, self.task_id, self.sid, 'working', text=ws.WAKE if brief or not as_owner else '', source='api')
             except Exception: pass
             # ...and a run under way is not a session saved: a mark left on the task spoke over this run's own ending (2026-11-04)
             from . import terminal
@@ -3373,8 +3369,9 @@ class GeneralSession:
             # classifying one message. The dock is the Assistant's own chat and keeps the quick
             # gear it shares with triage (aidefaults). See the 2026-09-16 spec.
             build_args['gear'] = 'light' if is_dock(self.store.get_task(self.task_id)) else 'main'
-            # ...the warm agent's turn is routed as quick work (brainroute: quick and standard work on its tier), with the same tools
-            brain = llm_mod.build_llm(self.store, **build_args, job='quick_work') if quick else llm_mod.build_llm(self.store, **build_args, job='general')
+            # ...ONE AGENT, ITS GEAR THE TRIAGE CLASS'S (the owner, 2026-11-20: "quick agent if the task is classified as quick but never 2 agents"):
+            # brainroute reads the task's difficulty on every turn, so work judged quick runs on the light model from its first turn - no second voice
+            brain = llm_mod.build_llm(self.store, **build_args, job='general')
             if not brain: raise RuntimeError('the AI chosen for this is not available - pick another, or connect it again')
             from . import apiagent
             looped, api_tools, api_box, toolbox, card_fact = False, None, (), apiagent.TOOLS_BRIEF, None
@@ -3499,7 +3496,7 @@ class GeneralSession:
                 # tools was asked without them. Only what "resumed" changes is said again: no id, and the conversation in full
                 anew = {**build_args, 'resume': None}
                 system = freeze(self, head, late, False)[0]      # ...and a fresh conversation is told what is true now, frozen from here
-                brain = llm_mod.build_llm(self.store, **anew, job='quick_work') if quick else llm_mod.build_llm(self.store, **anew, job='general')
+                brain = llm_mod.build_llm(self.store, **anew, job='general')
                 if not brain: raise RuntimeError('the AI chosen for this is not available - pick another, or connect it again')
                 try: reply = ask(brain, whole + files(whole))
                 except Exception:
@@ -3588,7 +3585,7 @@ class GeneralSession:
                 except Exception as skipped: logger.warning(f'task {self.task_id}: the failed turn was not filed - {skipped}')
             try:
                 from . import workerstate as ws
-                ws.record(self.store, self.task_id, self.sid, 'stopped' if stopped else 'failed', text=said[:4000], source='quick' if quick else 'api')
+                ws.record(self.store, self.task_id, self.sid, 'stopped' if stopped else 'failed', text=said[:4000], source='api')
             except Exception as skipped: logger.debug(f'api worker event skipped: {skipped}')
             logger.warning(f'assistant turn failed on task {self.task_id}: {e}')
             # ITS CLI DIED PART-WAY THROUGH (clipool.MID_TURN): the turn was not sent again, as it may have done some of the work.
@@ -3635,13 +3632,9 @@ class GeneralSession:
 
     def _file(self, reply: str, paths: list, t0: float, browser_tools: bool = False, browser_offer: bool = False) -> str:
         """File one turn's answer: its markers read, its draft, question or close raised, the reply kept as the task's comment.
-        The warm agent's turn (quickwork) and the full agent's both end here, so the two can never file differently."""
-        src = 'quick' if self.quick else 'api'     # quickwork.only_quick reads a task's runs by this source
+"""
+        src = 'api'
         let_go_retry(self.store, self.task_id)     # ...the AI answered: no try is owed any more (queue_retry)
-        # ...and the warm agent's word that this needs the full agent (quickwork.HAND_ON) is Taskuary's to act on, never the owner's to read
-        from . import quickwork
-        reply, self.handed_on = quickwork.handed_on(reply) if self.quick else (reply, '')
-        if self.handed_on and not reply: return ''            # ...a hand-on that found nothing to say yet files nothing: the full agent's turn is next
         # ...A TURN THAT SAID NO WORD AT ALL is the turn that said nothing (SILENT), woken once and then asking - never "the model returned an
         # empty response" over a Continue (the audit, 2026-11-10 - the owner: "if you have nothing to reply just ask what should i reply?")
         if not reply and is_dock(self.store.get_task(self.task_id)): raise RuntimeError('the model returned an empty response')
@@ -3765,8 +3758,7 @@ class GeneralSession:
             except Exception as e: logger.warning(f'task {self.task_id}: the page the agent handed over was not raised - {e}')
         # A TURN THAT ENDED SHORT is not one waiting on the owner: read by the turn judge (hooks.judge_ended), it wakes the agent once to
         # do what it said it would - never a failure in the chat (the owner, 2026-11-05: "failure means nothing to the user")
-        # ...nor one that handed the work on: the full agent's start is what comes next (quickwork.again)
-        if not asks and signing is None and turn is None and closing is None and not self.handed_on and not is_dock(self.store.get_task(self.task_id)):
+        if not asks and signing is None and turn is None and closing is None and not is_dock(self.store.get_task(self.task_id)):
             from . import background, hooks, sessionrecord
             try: path = sessionrecord.READERS['claude'][0](self.cli_sid) if self.cli_sid and self.pick.startswith('cli:') and _cli_of_pick(self.store, self.pick) == 'claude' else None
             except Exception as e: logger.debug(f'task {self.task_id}: its CLI log was not found - {e}'); path = None
@@ -3826,8 +3818,8 @@ class GeneralSession:
         if is_dock(self.store.get_task(self.task_id)): return "the dock is the app's own chat"
         if self.busy or getattr(self, 'waiting_turns', 0) or (not locked and self._lock.locked()): return 'a turn is on'
         if ((now or time.time()) - max(self.last, self.seen)) < idle_for() and not self.cli_gone(): return 'not idle long enough'
-        from . import ingest, quickwork, workerstate as ws
-        if starting(self.task_id) or self.task_id in quickwork.RUNNING or self.task_id in ingest._PASSING: return 'an input is on its way'
+        from . import ingest, workerstate as ws
+        if starting(self.task_id) or self.task_id in ingest._PASSING: return 'an input is on its way'
         if self.store.waiting_notes(self.task_id): return 'notes wait for it'
         if ws.held_for(self.task_id): return 'a question is held for the owner'
         # ...nor while the owner has a part on its page (a sign-in, a step handed over, a held act): the browser stays up until the agent answers
@@ -3991,7 +3983,7 @@ class GeneralSession:
 # running, never polled again, and sat on its welcome copy through the whole first answer
 # (the owner, 2026-09-14: "it looked like it did not start").
 # ...and THE MARK ITSELF IS NEWS (the owner, 2026-11-04: "the agent tab did not say 'agent starting' right away. Until 10 seconds later it just
-# opened"): a quick call, a Continue or a carried-on turn holds a task here for seconds before a session exists, and nothing told the open task
+# opened"): a Continue or a carried-on turn holds a task here for seconds before a session exists, and nothing told the open task
 # page - it learned of the start only when the session wrote something. Marking and clearing wake its views (task-changed), as a write does.
 class _Opening(set):
     def add(self, tid):
@@ -4337,7 +4329,7 @@ def drop_session(tid: int) -> int:
     return len(gone)
 
 
-def start_session(store, tid: int, connector_id=None, model=None, actor='owner', pick=None, quick=False) -> GeneralSession:
+def start_session(store, tid: int, connector_id=None, model=None, actor='owner', pick=None) -> GeneralSession:
     from . import terminal
     task = store.get_task(tid)
     if not task: raise ValueError(f'no task {tid}')
@@ -4379,9 +4371,6 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     back = IDLED.pop(tid, None)
     session = GeneralSession(store, tid, connector_id, model, pick, sid=back)
     if back: session.resume_notice, session.spoke = '', True
-    # a quick answer's session is quick BEFORE it is registered: set after, it was one more live agent for an instant, and the width
-    # (ingest.agent_load) then held back the quick calls and agent starts that read it in that instant
-    session.quick = quick
     terminal.SESSIONS[session.sid] = session
     # ...and a saved session is live again, as every terminal door says (terminal.open_session, A22): Continue on a general task kept
     # "You stopped it and its report is written" over the new run, so a turn that then died read as stopped, not failed (2026-10-26)
@@ -4390,8 +4379,7 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     # a full house left the row, the rail read "queued - starts when a slot frees" over the working assistant, and the drain started it again.
     # A conversation's queued next TURN stays: the session takes it (blackboard.drain). The queue's own start (`router`) is the drain's to clear:
     # a send that fails after the session opened is counted on that row (blackboard.record_failure), and a row cleared here began again at try 1
-    # ...and a quick answer's session is no agent's start: the escalation queued behind it still waits (blackboard._occupied)
-    if actor != 'router' and not quick and (q := store.get_dispatch(tid)) and not q.get('Turn'): store.clear_dispatch(tid)
+    if actor != 'router' and (q := store.get_dispatch(tid)) and not q.get('Turn'): store.clear_dispatch(tid)
     # the chat is work too: a general task started from the Tasks tab gets its Timeline row
     # here, stamped at the moment the session opened (ownwork.ensure is a no-op when a message
     # already speaks for the task, which is every task that arrived from outside)
@@ -4402,13 +4390,11 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     # had started too (2026-10-25). Its first message launches it, once it runs.
     from . import agents as hub_agents
     signed_out = session.pick.startswith('cli:') and hub_agents.cli_tests(store).get(session.pick[4:]) is False
-    # ...nor for a quick answer: its one call never drives a page, and a Chrome left on about:blank beside it was the "empty tab, live" with
-    # "your turn" over it on a task that never needed one (the owner, 2026-11-03). A real turn on the session launches its own (send_prompt)
     # ...nor with no address to open (the owner, 2026-11-04: "no browser should open if we don't have a URL"): only on the page the task's
     # browser was last on - after a restart the agent's ask ("sign in on the page beside us") still points somewhere real. Else the agent's
     # first navigate launches it (browserview.on_demand)
     from . import browserview
     last = browserview.last_page(tid) if session.browser_wanted and page_needs_owner(store, tid) else ''
-    if last and not quick and not signed_out and not session.pick.startswith('connector:'):   # an API card can't drive it
+    if last and not signed_out and not session.pick.startswith('connector:'):   # an API card can't drive it
         threading.Thread(target=browserview.start, args=(session.sid, last), daemon=True).start()
     return session

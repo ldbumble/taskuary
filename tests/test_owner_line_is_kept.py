@@ -319,7 +319,7 @@ class SendToAgentCarriesItsFiles(AttachedFilesReachTheAgent):
     def send(self, mid, words):
         from fastapi import BackgroundTasks
         bg, ses = BackgroundTasks(), self.Session()
-        with mock.patch.object(general, 'start_session', return_value=ses), mock.patch('taskuary.ingest._reads_quick', return_value=False):
+        with mock.patch.object(general, 'start_session', return_value=ses):
             out = server.dispatch_message(mid, server.DispatchBody(kind='general', instruction=f'{words}\n\nATTACHED IMAGES (read these files)\n{self.pic}'), bg)
             for t in bg.tasks: t.func(*t.args, **t.kwargs)
         return out, ses.said

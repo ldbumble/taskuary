@@ -947,7 +947,7 @@ class TheList(unittest.TestCase):
         shut = next(x['id'] for x in self.list()['items'] if x.get('closes'))                 # drawn: "You marked it done"
         self.s.update_task(self.tid, {'Status': 'open'}, 'router')                  # ...a question reopened it
         mid = self.mail('One more - which of the two has parking?')
-        busy = SimpleNamespace(busy=True, trace=[], sid='s-new', last=0, alive=True, quick=False)
+        busy = SimpleNamespace(busy=True, trace=[], sid='s-new', last=0, alive=True)
         with mock.patch.object(general, 'working', return_value=True), mock.patch.object(general, 'session_for', return_value=busy):
             got = self.list()
         ids = [x['id'] for x in got['items']]

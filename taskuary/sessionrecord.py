@@ -667,7 +667,7 @@ def _marker(tid: int):
 
 def general_steps(store, tid: int) -> list:
     from .general import ASSISTANT_TYPE, chat_rows, is_brief
-    from .quickwork import is_raw
+    from .selfclose import is_raw
     p, by = _gen_path(tid), {}
     if p.is_file():
         for line in p.read_text(encoding='utf-8', errors='replace').splitlines():

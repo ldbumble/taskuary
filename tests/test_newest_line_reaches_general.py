@@ -8,7 +8,7 @@ was the gap: its CLI was handed only "The owner chose Resume", the new ask ridin
 import json, unittest
 from unittest import mock
 
-from taskuary import continuity, general, ingest, llm as llm_mod, quickwork, senders
+from taskuary import continuity, general, ingest, llm as llm_mod, senders
 from taskuary.ingest import ingest_message
 from taskuary.store import MemoryStore
 
@@ -154,21 +154,13 @@ class NextTurn(unittest.TestCase):
         ingest._pass_general(s, tid, {**mail(**AGAIN), 'message_id': 9})
         self.assertEqual([x['who'] for x in general.shown_history(s, tid)[-1]['mail']], ['Gail Moreno'])
 
-    def test_a_quick_conversation_is_asked_the_new_ask(self):
-        s = store(); tid = worked(s)
-        asked = []
-        with mock.patch.object(general, 'start_session', return_value=mock.Mock()), \
-             mock.patch.object(quickwork, 'again', side_effect=lambda st, t, ses, q, **k: (asked.append(q), 'filed')[1]):
-            quickwork.start(s, tid, ingest._pass_turn(mail(**AGAIN)))
-        self.assertIn(ASK, asked[0])
-
     def test_a_reply_task_agent_reads_the_new_ask_among_its_sources(self):
         s = store()
         tid = ingested(s, mail(), intent='reply_only')[0]['task_id']
         self.assertEqual(s.get_task(tid)['Kind'], 'reply')
         _out, spawned = ingested(s, mail(**AGAIN))
         self.assertIn('_auto_general', [c[0][0].__name__ for c in spawned])     # agent_on_reply starts a fresh conversation...
-        with mock.patch.object(ingest, '_reads_quick', return_value=False): ingest._auto_general(s, tid)
+        ingest._auto_general(s, tid)
         self.addCleanup(ended, tid)
         self.assertIn(ASK, self.brain.turn)                                     # ...whose source material holds the newest message
 

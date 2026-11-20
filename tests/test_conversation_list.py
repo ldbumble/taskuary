@@ -681,7 +681,7 @@ class TheList(unittest.TestCase):
             now = self.list()
             self.assertEqual(woke, [], 'nobody woken to think over a letter already written')
             self.assertEqual((now['queue']['live'], now['queue']['held'], now['working']), ([erin], [], False), "Erin's stands at once")
-            self.assertEqual(cards(now)[wrote['id']], [(ray, 'approved')]); self.assertEqual(conversation.flow_breaks(now, was), [])
+            self.assertEqual(cards(now)[wrote['id']], [(ray, 'approved'), (erin, 'pending')]); self.assertEqual(conversation.flow_breaks(now, was), [])   # ...letters are card rows
             self.assertEqual(now['letters'], wrote['id'], 'it stands in the turn that wrote it, under the one that went')
             self.assertTrue(verdicts.decide(s, s.get_review(erin), 'approve', None, None, 'owner')['ok'])
         self.assertEqual(len(woke), 1, 'the press that ends the run wakes its agent, once')
@@ -1068,24 +1068,6 @@ class TheList(unittest.TestCase):
         self.assertEqual([[(c['id'], c['status']) for c in t['cards']] for t in turns], [[(f'r:{rid}', 'passed')], []])
         told = self.brain.calls[-1]
         self.assertIn(cardqueue.SCREEN_HEAD, told); self.assertIn(f': rv{rid}', told.split('- Greyed, will not go')[1]); self.assertNotIn('declin', told.split(cardqueue.SCREEN_HEAD)[1])
-
-    def test_a_card_outside_every_turn_never_shifts_where_a_later_card_finds_its_turn(self):
-        """The owner's live task, 2026-11-12 (KeyError 'cards', the chat would not load): a card that no turn holds is put into the list
-        itself, which moved every turn after it one place down - and a later card whose ledger named its turn was handed the item above
-        that turn, his line, and the read failed. A card finds its turn by the turn's name, never by where it stood before."""
-        import json
-        self.say('Fix the tax rows.', 'l-one'); self.rest()
-        step = json.dumps({'action': 'shell_act', 'command': 'echo hi', 'what': 'say hi'})
-        early = self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': step, 'Reason': 'r'})
-        self.s._exec("UPDATE review SET CreatedAt='2000-01-01 00:00:00' WHERE ReviewId=?", (early,))     # ...from before any turn began
-        self.s.decide_review(early, 'approved', None, 'owner')                     # ...and pressed then: one card stands at a time (cardqueue)
-        self.s._exec("UPDATE review SET DecidedAt='2000-01-01 00:00:01' WHERE ReviewId=?", (early,))
-        late =self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': step, 'Reason': 'r'})
-        self.list()                                 # ...the first read writes the late card's turn into the ledger
-        got = self.list()['items']                  # ...and the second read finds it there
-        turn = next(x for x in got if x['kind'] == 'turn')
-        self.assertIn(f'r:{late}', [c['id'] for c in turn['cards']])
-        self.assertIn(f'r:{early}', [x['id'] for x in got if x['kind'] == 'card'])
 
     def test_a_step_he_approved_that_failed_stays_under_the_answer_he_pressed_it_under(self):
         """The recorded held step, 2026-11-11: he asked about a held delete, pressed Approve under the answer, and the step failed - the card

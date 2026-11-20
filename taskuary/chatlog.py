@@ -777,7 +777,7 @@ def advance(store, tid: int) -> None:
     from .conversation import ep
     with store.lock: froze = store.cx.execute("SELECT MAX(At) AS a FROM chatlog WHERE TaskId=? AND Src='legacy'", (tid,)).fetchone()['a'] or 0
     for rid, rv in by.items():
-        if ep(rv.get('CreatedAt')) <= froze: continue          # ...what the old build drew was frozen as it was (migrate)
+        if froze and ep(rv.get('CreatedAt')) < froze - 1: continue       # ...what the old build drew was frozen as it was (migrate; a stamp is a whole second)
         if f'r:{rid}' in rows or rv['Status'] == 'pending' or (rv.get('Batch') and rid != min(x for x, y in by.items() if y.get('Batch') == rv['Batch'])): continue
         c = _card(rv)
         if rv.get('DecidedBy') not in OWNER_ACTORS and c['status'] != 'failed': continue

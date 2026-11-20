@@ -88,7 +88,15 @@ def test_no_raw_text_reaches_any_surface_he_reads():
         cid = s.save_connector({'Type': 'imap', 'Name': 'Mail', 'Active': 1}, 't')
         s.touch_connector(cid, r)
         for p in problems.collect(s): _clean(p.get('detail') or p.get('title'), 'bell')
-    _clean(funnel._reason_said('triage: fyi - Erin Blake shares the rota'), 'rail')
+    # ...the rail: Taskuary's own line on a row is said, and triage's note to itself is not - its row says the lane's own words instead
+    _clean(funnel._reason_said('promoted by the owner - to hand it to an agent'), 'rail')
+    assert funnel._reason_said('triage: fyi - Erin Blake shares the rota') == ''
+    s = MemoryStore()
+    mid = s.add_message({'ExternalId': 'fy1', 'Channel': 'email', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example', 'Subject': 'Rota',
+                         'BodyText': 'the rota for next week', 'Status': 'filed'})
+    s.add_route(mid, None, 'file', None, 'triage: fyi - Erin Blake shares the rota', [], 'triage')
+    rows = funnel.build(s)['items']
+    assert rows and all(_clean(row.get('why'), 'rail') is None for row in rows)          # ...every row says something, in his words
     # ...and Taskuary's own sentences pass as they are, on every surface
     own = 'No AI is connected - connect one under Connections.'
     assert say.plain(own, 'any') == say.plain(own, 'start') == remote_assistant.plain(ValueError(own)) == own

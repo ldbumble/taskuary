@@ -16,7 +16,7 @@ import argparse, json, os, sys, time, urllib.request
 from pathlib import Path
 
 # a tool's class, by its name on either road (an AI card's own tools, a CLI's): one table, so a road is judged by what it did, not by its words
-CLASS = {'make': ('file_write', 'file_edit', 'write', 'edit', 'notebookedit', 'apply_patch'), 'cmd': ('run_command', 'bash', 'powershell', 'exec_command', 'shell'),
+CLASS = {'make': ('file_write', 'file_edit', 'write', 'edit', 'notebookedit', 'apply_patch'), 'cmd': ('run_command', 'bash', 'powershell', 'exec_command', 'shell', 'execute'),
          'read': ('file_read', 'files_list', 'read', 'glob', 'grep', 'ls'), 'web': ('web_search', 'websearch', 'web_fetch', 'webfetch'),
          'browser': ('browser_',), 'mail': ('search_messages', 'read_message', 'mail'), 'tasks': ('search_tasks', 'my_task', 'task'),
          'calendar': ('free_times', 'calendar', 'meeting'), 'show': ('show',), 'reply': ('propose_reply', 'reply')}

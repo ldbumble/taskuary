@@ -1520,7 +1520,10 @@ def present(store, payload: dict) -> dict:
 # ONE TASK STATE (the owner's GO, 2026-11-19): a task's row says what taskstate.status says - the header, the bell and the phone read it too.
 # The rail worked its own lane out of the feed's facts, and a task he had typed back open stayed off it, "Reopen" in its header, for a whole
 # turn. Only the arrival's own words that say more than "on you" (a person asked, a meeting, a report) stay the rail's
+# ...and a row that is not the task's own (an Advisor idea, a follow-up on a person who went quiet - `forgotten`, a goal) keeps its own word:
+# its lane is what it says about that, never the task's state (the release CI: a chase on a slipped thread was refused as "not slipped")
 ARRIVAL_WORDS = ('asked', 'time', 'report', 'fyi', 'broken', 'unjudged')
+OWN_WORDS = ('forgotten', 'goal', 'goal_slipped', 'goal_fresh', 'mine', 'withdrawn', 'answered')
 def one_state(store, payload: dict) -> dict:
     from . import taskstate
     payload = {**payload, 'items': [dict(i) for i in payload.get('items') or []],                  # ...the cached build is never written to
@@ -1530,13 +1533,13 @@ def one_state(store, payload: dict) -> dict:
     for i in rows:
         tid = i.get('tid') or (int(str(i.get('key'))[6:]) if str(i.get('key') or '').startswith('agent:') and str(i['key'])[6:].isdigit() else None)
         # ...an agent's own row is read off the live session it shows (observe) - the same facts taskstate reads, already in hand
-        if not tid or i.get('kind') == 'agent': continue
+        if not tid or i.get('kind') in ('agent', 'idea', 'followup') or i.get('idea'): continue
         if tid not in seen:
             t = store.get_task(int(tid))
             try: seen[tid] = taskstate.status(store, t) if t and t.get('Status') not in ('done', 'dropped') else None
             except Exception as e: logger.debug(f'funnel: the state of task {tid} was not read - {e}'); seen[tid] = None
         st = seen[tid]
-        if not st or st['key'] not in LANES or (st['key'] == 'yours' and i.get('lane') in ARRIVAL_WORDS): continue
+        if not st or st['key'] not in LANES or i.get('lane') in OWN_WORDS or (st['key'] == 'yours' and i.get('lane') in ARRIVAL_WORDS): continue
         i['lane'], i['status'] = st['key'], st
     return payload
 

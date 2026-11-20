@@ -85,6 +85,7 @@ def build(store, now: datetime = None) -> dict:
     f.run(t3, agent='general')
     t4, m4 = task('T4', 'PhishGuard training dates for the floor', 420, who=('Erin Blake', 'erin@vendor.example'), kind='reply')
     src['T4']['rid'] = f.review(t4, m4, draft='Tuesday and Thursday both work for the floor team.')
+    store._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (10 ** 9, t4))     # ...a vendor he works with: a stranger-started task shows no card
     task('T5', 'Order badges for the two new starters', 360)
     meeting(store, 10)
     src['M1'] = {'meeting': MEETING}

@@ -113,7 +113,9 @@ def kind_of(row: dict | None) -> str:
     if not row: return 'none'
     if row.get('kind') in ('agentdone', 'fyis'): return 'reads'
     level = lanes.level_of(row)
-    if row.get('closed') and level == 'task': return 'none'
+    # ...a CLOSED TASK opened by name is `none` whatever lane its card speaks through (a closed task's card reads as its last message, FYI):
+    # taken for an FYI, Next read it - and once he had typed it open again, its agent at work, Next took it off the rail (the owner, live)
+    if row.get('closed') and (level == 'task' or row.get('tid')): return 'none'
     return 'stays' if level in TASKS else 'none' if level in AWAY else 'reads'
 
 

@@ -344,6 +344,8 @@ def test_a_task_opened_from_search_and_typed_into_stays_and_next_never_takes_a_w
             rail = lambda: {i.get('tid'): i.get('lane') for i in c.get('/api/funnel/pile').json()['items']}
             assert rail().get(1) == 'working'
             on = next(i['key'] for i in c.get('/api/funnel/pile').json()['items'] if i.get('tid') == 1)
-            assert c.post('/api/walk/next', json={'key': on}).status_code == 200; funnel.invalidate()
+            went = c.post('/api/walk/next', json={'key': on}).json(); funnel.invalidate()
+            # ...Next never READS it (its card came as a closed task's, an FYI): the page takes what a Next reads off the rail at the press
+            assert on not in (went.get('read') or []), went.get('read')
             assert rail().get(1) == 'working', rail()                                       # ...moving on never takes live work off
         finally: general.OPENING.discard(1)

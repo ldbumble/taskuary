@@ -3112,7 +3112,9 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     // ...and A TASK OFF THE RAIL (closed, done) that this page has had on its table is drawn at once from what it last held, filled in place
     // as its read comes (the owner, 2026-11-20: "revisits never wait") - only a first-ever open waits for the server
     const seen = !railRow && tidOf && seenItems.current.get(tidOf);
-    const row = railRow || (seen ? { ...seen, key: asked } : null) || (made?.key === asked ? made : null);
+    // ...the press's own row first (made - a search hit knows if the task is closed), and a kept copy is drawn on the table only: it is the
+    // task as it stood when last seen, so it lends no rail row (offRail) - Search drew a closed task's old open row for a beat (owner, live)
+    const row = railRow || (made?.key === asked ? made : null) || (seen ? { ...seen, key: asked, offRail: true } : null);
     const key = row?.key || asked;
     const ahead = () => {
       rowsDrawn.current += 1; setRailOpen(false); browseDown(); setExpanded(false);

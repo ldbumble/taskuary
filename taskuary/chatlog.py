@@ -192,7 +192,9 @@ def reconcile(store, tid: int) -> None:
     agent in a terminal - Claude Code, Codex, any CLI whose own log Taskuary reads (codingchat.sessions) - has the steps its log added since
     written in the one shape, as every other road writes them as they come (logged)."""
     from . import general
-    if (t := _live(store, tid)) and t['State'] == 'starting' and general.working(store, int(tid)): update(store, tid, t['Key'], state='working')
+    # ...STARTING UNTIL ITS SESSION HAS IT (the walks, 2026-11-17): from his press the task is at work, but the turn reads "starting" until the
+    # hand-over took and its session is busy with it - working from then on, `opening` (_now) until its prompt is out
+    if (t := _live(store, tid)) and t['State'] == 'starting' and getattr(general._live_of(int(tid)), 'busy', False): update(store, tid, t['Key'], state='working')
     logged(store, tid)
 
 
@@ -248,24 +250,22 @@ def read(store, tid: int, level: str = None) -> dict:
             # ...a turn that ended having said, done and left nothing is no item (a part a line cut off before it did anything)
             if r['State'] not in LIVE and not (x.get('text') or x['steps'] or x['cards'] or x.get('summary') or x.get('fail')): continue
         out.append(x)
-    moved_past(store, out)
+    moved_past(store, out, tid)
     lvl = level_of(store, store.get_task(int(tid)) or {}, level)
     return {'rev': n, 'items': [detailed(x, lvl) for x in out], 'level': lvl}
 
 
 DRAFTS = ('draft_reply', 'draft')
-def moved_past(store, out: list) -> None:
+def moved_past(store, out: list, tid: int = None) -> None:
     """A CARD HE WROTE PAST IS GREY WHERE IT STANDS, from the read his line is drawn in (the owner, 2026-11-12; the recorded walk on the log,
-    2026-11-19: the old draft stood pressable over his newer line until the turn that heard it set it aside): a draft above a newer input, and
-    any card of the agent's above his newer line, reads `passed` - its words kept, nothing to press - and says why (proposals.passed_why)."""
+    2026-11-19: the old draft stood pressable over his newer line until the turn that heard it set it aside) - by the ONE rule of what the chat
+    moved past (proposals.written_past: never an email he wrote himself), its buttons greyed and no reason line (the owner, 2026-11-18)."""
     from . import proposals
-    last_in = max((i for i, x in enumerate(out) if x['kind'] in ('line', 'arrival')), default=-1)
-    last_his = max((i for i, x in enumerate(out) if x['kind'] == 'line'), default=-1)
-    for i, x in enumerate(out):
+    if tid is None: return
+    past = proposals.written_past(store, int(tid))
+    for x in out:
         for c in [x] if x['kind'] == 'card' else x.get('cards') or [] if x['kind'] == 'turn' else []:
-            if c.get('status') == 'pending' and (c.get('was') or c.get('what') == 'batch') and (c.get('what') in DRAFTS and i < last_in or i < last_his):
-                c['status'] = 'passed'
-                if (rv := store.get_review(c['review'])): c['why'] = proposals.passed_why(store, rv)
+            if c.get('status') == 'pending': c.update({'status': 'passed'} if c.get('review') in past else {'stands': True})   # ...one the rule keeps (his own email) still stands
 
 
 # ── the producers' doors (dual-write: the legacy reader still serves the page; the log is written beside it) ─────────────────────────
@@ -293,7 +293,8 @@ def heard(store, tid: int, new: list, at: float) -> None:
     mails = {str(x['MessageId']): x for x in _mail(store, tid)} if any(k == 'mail' for k, _ in new) else {}
     presses = {m['id'].split('-')[1]: m for m in general.press_lines(store, tid)} if any(k == 'press' for k, _ in new) else {}
     # ...the turn his lines were heard for at a press is the one that now begins (ahead, below): it takes them already heard
-    ahead = (o := open_turn(store, tid)) and o['State'] in LIVE and not _kids(store, o) and json.loads(o['Body'] or '{}').get('ahead')
+    # ...and so is one a task's first read froze while its start was on its way (migrate: the old list drew it "starting" from the press)
+    ahead = (o := open_turn(store, tid)) and o['State'] in LIVE and not _kids(store, o) and (json.loads(o['Body'] or '{}').get('ahead') or o.get('Src') == 'legacy')
     # ...one turn at work, ever: a turn the agent never answered is over when the next begins - before what this hand-over took is appended
     if any(k == 'turn' for k, _ in new) and not ahead and (old := _live(store, tid)): update(store, tid, old['Key'], state='done')
     if any(k == 'turn' for k, _ in new): opener(store, tid, at)
@@ -461,10 +462,10 @@ def left_note(store, tid: int, at_work: bool) -> None:
     task = store.get_task(int(tid)) or {}
     if at_work or codingchat._live(int(tid)) or general.handles(task) or task.get('Status') in ('done', 'dropped'): return
     t = _newest_turn(store, tid)
-    if not t: return
     st = taskstate.task_state(store, tid=int(tid))
     if st.finished or (idle := funnel.idle_state(store, int(tid), st))['kind'] != 'left' or not idle['line']: return
-    put(store, tid, 'note', f"n:left:{t['Key']}", {'text': idle['line']}, src='idle')
+    # ...and a run the log holds no turn of (its session's own record only - a CLI it never read) says it too, at the foot: never silent
+    put(store, tid, 'note', f"n:left:{t['Key'] if t else 'run'}", {'text': idle['line']}, src='idle')
 
 
 @_safe
@@ -889,7 +890,7 @@ def migrate(store, tid: int, legacy=None) -> bool:
                                    (int(tid), key, kind, parent, at or time.time(), 'legacy', json.dumps(body, default=str), state))
             return cur.lastrowid
         for x in got.get('items') or []:
-            body = {k: v for k, v in x.items() if k not in ('id', 'kind', 'state', 'steps', 'cards') and not k.startswith('_')}
+            body = {k: v for k, v in x.items() if k not in ('id', 'kind', 'state', 'steps', 'cards', 'opening', 'doing') and not k.startswith('_')}   # (what a turn does this moment is read live: _now)
             if x['kind'] != 'turn':
                 st = x.get('status') if x['kind'] == 'card' else None
                 if x['kind'] == 'card' and st == 'pending': st = 'pending' if not seen_live and (x.get('review') in live or not live) else 'held'
@@ -994,7 +995,8 @@ def missing(store, tid: int, got: dict) -> list:
             out.append(f"i: his line {k} is drawn nowhere")
     for rid in [x for x in cardqueue.state(store, int(tid))['live'] if x != cardqueue.LAND][:1]:      # ...a unit's card is its first row's
         rv = store.get_review(rid) or {}
-        if rv.get('Status') == 'pending' and rid not in cards:
+        # ...a reply no words were written for yet is no card while the agent asks for what it needs (beside: one question)
+        if rv.get('Status') == 'pending' and rid not in cards and not (rv.get('Kind') in DRAFTS and not str(rv.get('DraftText') or '').strip()):
             out.append(f"i: the card that waits on him, review {rid} ({rv.get('Kind')} from {rv.get('Origin') or rv.get('DraftBy') or 'its road'}), is drawn nowhere")
     return out
 
@@ -1020,7 +1022,7 @@ def _now(tid: int, turn: dict) -> dict:
     from . import general
     from .conversation import clean
     ses = general.session_for(tid)
-    if ses is None: return {'opening': True} if turn.get('state') == 'starting' and general.cold(tid) else {}
+    if ses is None or turn.get('state') == 'starting': return {'opening': True} if turn.get('state') == 'starting' and general.cold(tid) else {}
     trace = getattr(ses, 'trace', None) or []
     kinds = [e.get('type') for e in trace]
     opening = 'opening' in kinds and kinds[::-1].index('opening') < (kinds[::-1].index('prompt') if 'prompt' in kinds else len(kinds))
@@ -1077,7 +1079,9 @@ def beside(store, tid: int, out: list, at_work: bool, hold_) -> dict:
         # question word for word as its own): the turn whose words hold it, else the newest one
         q = flat(ask.get('text'))
         at = next((t for t in reversed(turns) if q and q in said(t)), None)
-        ask = {**ask, 'turn': (at or last)['id'], **({'said': True} if at else {})}
+        # ...one no turn's words hold (a CLI's own question tool, a step handed over): the turn at work when it was asked
+        raised = (_turn_at(store, tid, ask['at']) or {}).get('Key') if ask.get('at') else None
+        ask = {**ask, 'turn': (at or next((t for t in turns if t['id'] == raised), None) or last)['id'], **({'said': True} if at else {})}
         # ...a missing fact is one question: the reply it cannot write yet is not drawn under it as an empty box
         for x in turns: x['cards'] = [c for c in x.get('cards') or [] if not (c.get('status') == 'pending' and c.get('what') in DRAFTS and not c.get('was'))]
     # ...the turn whose letter waits for his Send (the page hangs the letters' block there), never one at work

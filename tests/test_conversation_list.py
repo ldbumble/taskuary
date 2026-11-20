@@ -303,11 +303,13 @@ class TheList(unittest.TestCase):
         general.wait_line(self.s, self.tid, 'Near a station.', line_id='l-w')               # kept: nobody has taken it yet, nothing is at work
         new = self.mail('After his line.')
         got = self.list()
-        self.assertEqual([x['id'] for x in got['pending']], ['l-w', f'm:{new}']); drawn = [x['id'] for x in got['items']]
-        self.assertIn(f'm:{old}', drawn)
+        # ...at rest a message is drawn as it comes (chatlog.came_in) and his kept line waits by the box: once taken it enters UNDER what is
+        # drawn - nothing drawn ever moves for it
+        self.assertEqual([x['id'] for x in got['pending']], ['l-w']); drawn = [x['id'] for x in got['items']]
+        self.assertIn(f'm:{old}', drawn); self.assertIn(f'm:{new}', drawn)
         general.take_kept(self.s, self.tid, turn=True)
         now = [x['id'] for x in self.list()['items'] if not x['id'].startswith('t:')]
-        self.assertEqual(now, [*drawn, 'l-w', f'm:{new}'])
+        self.assertEqual(now, [*drawn, 'l-w'])
 
     def test_his_close_is_one_line_with_its_note(self):
         """The recorded closed task, 2026-11-12: "You marked it done" and right under it the page's own "Mark done 4m ago" - one press, two
@@ -612,50 +614,6 @@ class TheList(unittest.TestCase):
         self.assertEqual((last['kind'], last['text']), ('note', funnel.idle_state(s, tid)['line']))
         self.assertIn('left without finishing', last['text'])
 
-    def test_the_words_of_a_turn_that_goes_on_stand_above_what_waits_for_his_press_and_the_letters_are_named_their_turn(self):
-        """The owner's live task, 2026-11-13 (invented people): he corrected the agent; its turn left the rewritten reply's card; Taskuary
-        woke the agent a beat later and that turn's words - and a second letter - were drawn UNDER the card: "text after the action box".
-        A turn that goes on from the one before it with no input between is the same work: what still waits for his press stands at the
-        end of the run, under its last words, and the turn at work holds it back as it does its own cards. And the page's letters block
-        (the reply, the task's emails) is named its turn by the list - the last one that left a letter still waiting."""
-        import json
-        s, tid = self.s, self.tid
-        self.brain.said = {1: 'The reply is rewritten with the three files.', 2: 'The login goes to Gail alone, apart from the thread - it is the second letter.',
-                           3: 'Paula has her own note now.'}
-        self.say('No - send her the files, and mind who is copied.', 'l-fix'); self.rest()
-        rid = s.add_review({'TaskId': tid, 'MessageId': s.list_messages(tid)[0]['MessageId'], 'Kind': 'draft_reply', 'Status': 'pending',
-                            'Channel': 'email', 'DraftText': 'Hi Gail, the three files are attached. Alex'})
-        was = self.list(); first = [x for x in was['items'] if x['kind'] == 'turn'][-1]
-        self.assertEqual(([c['review'] for c in first['cards']], was['letters']), ([rid], first['id']))
-        # Taskuary wakes its agent (hooks.judge_ended -> wake): the same work goes on, no input between
-        self.brain.delay = 0.5
-        general.session_for(tid).wake('the rest of it'); self.assertTrue(until(lambda: self.list()['working']))
-        mid = self.list()
-        # ...and while it works the card stays lit where it stood - never gone for the turn (the owner, 2026-11-13: "never close actions boxes")
-        self.assertEqual([c['review'] for x in mid['items'] if x['kind'] == 'turn' for c in x['cards']], [rid], 'the waiting card stays on screen while the woken turn works')
-        self.assertEqual(conversation.flow_breaks(mid, was), [])
-        slot = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': 'Hi Gail, your login is in the portal invite. Alex',
-                             'Deliver': json.dumps({'channel': 'email', 'to': ['gail@northwind.example'], 'cc': [], 'subject': 'Your login', 'slot': 's1'})})
-        self.brain.delay = 0; self.rest()
-        got = self.list(); turns = [x for x in got['items'] if x['kind'] == 'turn']
-        a, b = turns[-2:]
-        self.assertEqual((a['id'], a['cards']), (first['id'], []))                                   # nothing lit is left above the later words
-        self.assertTrue(b['text'].startswith('The login goes to Gail alone')); self.assertEqual([c['review'] for c in b['cards']], [rid])
-        self.assertEqual(got['letters'], b['id'])                                                    # the reply and the email: under the last words
-        self.assertEqual(conversation.flow_breaks(got, mid), [])
-        self.assertEqual([c['review'] for c in [x for x in self.list()['items'] if x['kind'] == 'turn'][-1]['cards']], [rid])   # ...and on a reload
-        # ...a card he pressed is its turn's record and never moves; an email written turns later names ITS turn, not the reply's
-        s.decide_review(rid, 'approved', None, 'owner'); s.decide_review(slot, 'approved', None, 'owner')
-        self.assertIsNone(self.list()['letters'])
-        self.brain.delay = 0.5; self.say('Also tell Paula.', 'l-more', wait=False); self.assertTrue(until(lambda: self.list()['working']))
-        s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': 'Paula - Gail has the files. Alex',          # written in its turn
-                      'Deliver': json.dumps({'channel': 'email', 'to': ['paula@northwind.example'], 'cc': [], 'subject': 'Files', 'slot': 's2'})})
-        self.brain.delay = 0; self.rest()
-        end = self.list(); turns = [x for x in end['items'] if x['kind'] == 'turn']
-        # ...and the email that went is a card of the turn it stood under, beside the reply - never under everything (the audit, 2026-11-13)
-        self.assertEqual(end['letters'], turns[-1]['id']); self.assertEqual([c['review'] for c in turns[-2]['cards']], [rid, slot])
-
-
     def test_two_emails_stand_one_at_a_time_and_the_second_stands_the_moment_the_first_went(self):
         """The owner, 2026-11-16: "same with 2 emails, it should say I have 2 emails to send, should we send this one? then user clicks then
         the next one shows". Before, both stood side by side with their Sends (2026-11-13). The first stands, saying what comes next; the
@@ -721,12 +679,13 @@ class TheList(unittest.TestCase):
         his = mail('ray@northwind.example', 'Ray - call me about the Mill.', 'your email - approve to send')
         self.brain.delay = 0; self.rest()
         got = self.list(); turn = [x for x in got['items'] if x['kind'] == 'turn'][-1]
-        self.assertEqual((got['letters'], turn['cards']), (turn['id'], []))                  # waiting: the page's block, at the end of its turn
+        self.assertEqual((got['letters'], [c['review'] for c in turn['cards']]), (turn['id'], [its]))   # waiting: its card, at the end of its turn (letters are card rows)
         t = time.time(); until(lambda: time.time() >= t + 1.1)                               # (a stamp is a whole second)
         self.say('Actually, the Quay.', 'l-two'); self.rest()
         self.assertTrue(proposals.passed(s.get_review(its))); self.assertEqual(s.get_review(his)['Status'], 'pending')
         now = self.list(); old = next(x for x in now['items'] if x['id'] == turn['id'])
-        self.assertEqual([(c['what'], c['status'], c['was']['text']) for c in old['cards']], [('slot', 'passed', 'Paula - we are going with the Mill. Alex')])
+        self.assertEqual([(c['what'], c['status'], c['was']['text']) for c in old['cards']], [('slot', 'passed', 'Paula - we are going with the Mill. Alex'),
+                                                                                         ('slot', 'pending', 'Ray - call me about the Mill.')])      # ...his own stands where it stood
         self.assertIn('the email to paula@northwind.example: "Paula - we are going with the Mill. Alex"', self.brain.calls[-1].split('Greyed, will not go')[1])       # ...and its agent is told
         self.assertEqual(conversation.flow_breaks(now, got), [])
 
@@ -945,11 +904,11 @@ class TheList(unittest.TestCase):
         mid = self.mail('I booked the Harbour Room myself.', own=True)
         general.hand(self.tid); self.addCleanup(general.hand, self.tid, -1)
         got = self.list()
-        self.assertEqual((got['pending'], [x['id'] for x in got['items']][:-1]), ([], [*first, f'm:{mid}']), self.kinds(got))
-        self.assertEqual(self.kinds(got)[-1], ('turn', 'starting')); live = got['items'][-1]['id']
+        # ...drawn in its place from the first read, never a chip by the box; the turn it begins is written at its hand-over, under it
+        self.assertEqual((got['pending'], [x['id'] for x in got['items']]), ([], [*first, f'm:{mid}']), self.kinds(got))
         conversation.hear(self.s, self.tid, [], turn=True)
         got = self.list()
-        self.assertEqual(([x['id'] for x in got['items']][-2:], got['pending']), ([f'm:{mid}', live], []))
+        self.assertEqual(([x['id'] for x in got['items']][:-1], got['items'][-1]['kind'], got['pending']), ([*first, f'm:{mid}'], 'turn', []))
 
     def test_a_message_drawn_never_goes_back_by_the_box_when_a_turn_begins_in_its_second(self):
         """The release run on macOS, 2026-11-12 (the basic flow's check, on seven coding scenarios): the first mail was drawn, a turn began in

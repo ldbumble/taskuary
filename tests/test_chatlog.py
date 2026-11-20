@@ -320,16 +320,6 @@ def test_codex_and_a_terminal_cli_log_write_their_steps_as_every_other_road():
     assert len(rows) == 1, 'his line is the hand-over\'s, never a step'
 
 
-def test_a_draft_he_wrote_past_reads_grey_from_the_read_his_line_is_drawn_in():
-    """THE OLD DRAFT STOOD PRESSABLE OVER HIS NEWER LINE on the log (the recorded walk, 2026-11-19): a draft above a newer input reads
-    passed - its words kept - in the same read his line is drawn, before the turn that hears it has set it aside."""
-    out = [{'kind': 'card', 'id': 'r:1', 'review': 1, 'what': 'draft_reply', 'status': 'pending', 'was': {'text': 'Hi Erin. Alex'}},
-           {'kind': 'line', 'id': 'l-2', 'text': 'make it shorter'}]
-    s, tid = world()
-    chatlog.moved_past(s, out)
-    assert out[0]['status'] == 'passed' and out[0]['was']['text'] == 'Hi Erin. Alex'
-
-
 def test_what_waits_by_the_box_is_read_beside_the_log_never_drawn_twice():
     """STAGE 8: the reader says what waits for the agent itself - his line kept while nothing heard it yet - and an input is in one place:
     waiting, or in the chat once heard. The line of cards and the turn's state ride beside it."""

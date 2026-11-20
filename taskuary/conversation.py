@@ -280,7 +280,9 @@ def hear_press(store, tid: int, action: str) -> None:
     let go worked on, and then entered above work already drawn (the recorded hold, 2026-11-11)."""
     r = store._one("SELECT MAX(Id) AS i FROM audit WHERE EntityType='task' AND EntityId=? AND Action=?", (int(tid), action))
     if not (r and r['i']): return
-    store._exec('INSERT OR IGNORE INTO heard (TaskId,Kind,Ref,At,Grp,Seq,Sid) VALUES (?,?,?,?,?,?,?)', (int(tid), 'press', str(r['i']), time.time(), 0, 0, ''))
+    store._exec('INSERT OR IGNORE INTO heard (TaskId,Kind,Ref,At,Grp,Seq,Sid) VALUES (?,?,?,?,?,?,?)', (int(tid), 'press', str(r['i']), now := time.time(), 0, 0, ''))
+    from . import chatlog                    # ...and it stands in the chat's log where it was heard (the one writer of what a hand-over took)
+    chatlog.heard(store, tid, [('press', str(r['i']))], now)
     store._poke('task-changed', task_id=int(tid))
 
 
@@ -498,7 +500,7 @@ def flow_breaks(got: dict, was: dict = None) -> list:
     for r in {c['review'] for _, c in lit if [d['review'] for _, d in lit].count(c['review']) > 1}: say(f'b: review {r} stands as two live cards')
     came = max((i for i, x in enumerate(xs) if x['kind'] in ('line', 'arrival')), default=-1)
     for i, c in lit:
-        if i < came and c.get('what') in DRAFTS or i < his: say(f"b: the live card {c['id']} stands above a newer input {ids[came]}")
+        if (i < came and c.get('what') in DRAFTS or i < his) and not c.get('stands'): say(f"b: the live card {c['id']} stands above a newer input {ids[came]}")
     # d
     for x in xs:
         k = x['kind']

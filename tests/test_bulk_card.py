@@ -433,3 +433,28 @@ def test_one_at_a_time_counts_only_the_cards_that_stood_for_his_press():
     try: q = cardqueue.state(s, tid)
     finally: cardqueue.FRESH = was
     assert (q['n'], q['of']) == (2, 3), 'the one he sent still counts'
+
+
+def test_three_posts_and_three_letters_raised_in_one_turn_all_stand_one_drawn_at_a_time():
+    """The owner, 2026-11-20 ("we have been going through this for weeks"): asked to post to three platforms - or send three letters - the
+    agent raised one card and the rest never appeared. Any number of cards may be raised in a turn; the chat draws one at a time ("1 of 6"),
+    and each press brings the next until the last."""
+    s, tid = world()
+    posts = [('linkedin_post', 'LinkedIn'), ('bluesky_post', 'Bluesky'), ('x_post', 'X')]
+    with mock.patch.object(server, 'store', s):
+        raised = [call(tid, 'propose', action='run_tool', type=t, text=f'Our March offsite is booked - {n}.', why='the launch post') for t, n in posts]
+        raised += [call(tid, 'propose_email', to=f'{w}@northwind.example', subject='Offsite', text=f'{w.title()} - the offsite is booked. Alex')
+                   for w in ('erin', 'gail', 'ray')]
+    rids = [r.get('review_id') or r.get('reviewId') or r.get('review') for r in raised]
+    assert all(rids) and len(set(rids)) == 6, raised
+    assert {s.get_review(r)['Status'] for r in rids} == {'pending'}, 'every one raised stands'
+    q = cardqueue.state(s, tid)
+    assert len(q['live'] + q['held']) == 6 and cardqueue.line(q).startswith('1 of 6'), q
+    seen = []
+    for k in range(6):
+        cards = [c for x in conversation.items(s, tid)['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or []) if c['status'] == 'pending']
+        assert len(cards) == 1, f'one drawn at a time, the next at once: {cards}'
+        assert cards[0]['line'].startswith(f'{k + 1} of 6') if cards[0].get('line') else k == 5, cards[0]
+        seen.append(cards[0]['review'])
+        s.decide_review(cards[0]['review'], 'rejected', None, 'owner')         # ...each press brings the next
+    assert sorted(seen) == sorted(rids), 'each of the six stood in its turn'

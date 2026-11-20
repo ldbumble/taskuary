@@ -754,7 +754,7 @@ def came_in(store, tid: int) -> None:
     new = [x for x in _mail(store, tid) if (x.get('Channel') or '') != OWN and f"m:{x['MessageId']}" not in have]
     # ...AND NEVER WHAT CAME AFTER A LINE OF HIS THAT STILL WAITS (the recorded flood, 2026-11-11 - "34, 31, 46"): from his oldest waiting line on,
     # what comes in waits by the box with it, and the hand-over that takes them writes each in the order it came
-    if (first := _waits_from(store, tid)) is not None: new = [x for x in new if _when(x.get('SentAt') or x.get('CreatedAt')) < first]
+    if (first := _waits_from(store, tid)) is not None: new = [x for x in new if _when(x.get('CreatedAt') or x.get('SentAt')) < first]      # ...by when it CAME, never its Date
     if not new: return
     # ...older by its OWN time (sent, else filed) - joined now, a thread from last week reads as now by when it joined
     # ...by more than a mail held up on its way takes (EARLIER): one a sender's clock or a slow server put a minute back stands as it came

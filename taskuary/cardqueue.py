@@ -25,7 +25,6 @@ def fresh(store, key, fn):
     if (got := _SEEN.get(k)) and got[3]() is store and got[0] == w and now - got[1] < FRESH: return got[2]
     if len(_SEEN) > 512: _SEEN.clear()
     v = fn(); _SEEN[k] = (w, now, v, weakref.ref(store)); return v
-WAKING = 20                     # seconds a woken agent has to begin its turn before the next card stands without it
 
 
 def _p(r) -> dict:
@@ -93,27 +92,6 @@ def _units(store, tid: int, past: set) -> list:
 LETTERS = ('slot', 'draft_reply', 'draft')
 def _letters(rows) -> bool: return bool(rows) and all(r.get('Kind') in LETTERS for r in rows)
 
-def _going_on(store, tid: int, since: float, own=(), front=()) -> bool:
-    """Is the agent still going on from a press made after `since` on ANOTHER card - at work on it, or woken a moment ago and not yet begun?
-    A press on the front itself (`own`: a Send that did not go, which still waits on its card) holds nothing back: it never left its place -
-    nor a letter's press with the `front` a letter too: the next letter stands at once."""
-    from . import general
-    from .conversation import ep
-    # ...a PRESS: the agent taking back its own card is none - nothing wakes it, and the front stood held for WAKING seconds over it (a CI
-    # flake twice, 2026-11-17: whenever the take-back fell in the second after its last answer)
-    rows = [r for r in store._rows("SELECT ReviewId, Kind, Batch, Status, DecidedAt AS at FROM review WHERE TaskId=? AND DecidedAt IS NOT NULL "
-                                   "AND COALESCE(DecidedBy, '') NOT LIKE 'agent%'", (int(tid),)) if r['ReviewId'] not in own]
-    last = max(rows, key=lambda r: ep(r['at']), default=None)
-    pressed = ep(last['at']) if last else 0.
-    if last and last['Kind'] in LETTERS and last['Status'] in ('approved', 'edited', 'sent') and not last['Batch'] and _letters(front)             and min(r['ReviewId'] for r in front) > last['ReviewId']: pressed = 0.
-    from . import landing
-    if LAND not in own: pressed = max(pressed, ep((landing.record(store, int(tid)).get('landed') or {}).get('at')))
-    if pressed < since: return False
-    last = ep(general._last_answer(store, int(tid)))
-    if not last or last >= pressed: return False
-    return general.working(store, int(tid)) or time.time() - pressed < WAKING
-
-
 def state(store, tid: int) -> dict: return fresh(store, ('state', int(tid)), lambda: _state(store, tid))
 
 
@@ -127,8 +105,7 @@ def _stood(u: dict) -> bool:
 
 def _state(store, tid: int) -> dict:
     """The line on task `tid`: {'live': the front's ids or [], 'held': ids that wait behind it, 'n': the front's place in the run it is one
-    of, 'of': that run's length, 'next': what comes next in words, 'units', 'past': the cards the chat moved past (proposals.written_past)}. The front itself is held while its agent goes on from the press
-    that brought it forward."""
+    of, 'of': that run's length, 'next': what comes next in words, 'units', 'past': the cards the chat moved past (proposals.written_past)}."""
     from .proposals import written_past
     us = _units(store, tid, past := written_past(store, int(tid)))
     waiting = [u for u in us if u['done'] is None]
@@ -144,8 +121,10 @@ def _state(store, tid: int) -> dict:
     while i - n >= 0 and (us[i - n + 1]['at'] <= (us[i - n]['done'] or float('inf')) + 1
                           or not between(us[i - n]['done'] or 0., us[i - n + 1]['at'])): n += 1
     held = [x for u in waiting[1:] for x in u['rids']]
-    live = [] if _going_on(store, tid, front['at'], set(front['rids']), front['rows']) else front['rids']
-    if not live: held = front['rids'] + held
+    # ...AND EACH PRESS BRINGS THE NEXT AT ONCE (the owner, 2026-11-20: asked to post to three platforms, one card stood and the rest never
+    # appeared - the next was held while the agent went on from the press, and a turn that went on longer hid it): every card raised stands
+    # queued, the front is drawn, and its agent hears each press as it is made (verdicts: told at once)
+    live = front['rids']
     return {'live': live, 'held': held, 'n': n, 'of': n + len(waiting) - 1, 'next': what(store, waiting[1]) if len(waiting) > 1 else '', 'units': waiting, 'past': past}
 
 

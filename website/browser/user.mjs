@@ -11,10 +11,12 @@
 //   node user.mjs sent                  what actually left the computer (the instance's outbox) - for checking what the app SAID it sent
 import path from "node:path";
 import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { connect, shot, sleep, out, info } from "./real-lib.mjs";
 
-const [cmd = "look", ...args] = process.argv.slice(2);
+// ...an argument "@<file>" is that file's text (the full walks, 2026-11-19: a 4-line message passed through `npm exec` on Windows was cut at
+// its first newline by cmd.exe and read as an app bug - multi-line words go in a file)
+const [cmd = "look", ...args] = process.argv.slice(2).map((a) => (a.startsWith("@") && existsSync(a.slice(1)) ? readFileSync(a.slice(1), "utf8") : a));
 const { browser, page } = await connect();
 const vis = `(e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== "hidden"; }`;
 

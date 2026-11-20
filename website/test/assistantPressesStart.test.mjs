@@ -14,7 +14,7 @@ test("an agent's job the Assistant made opens its task from New's box; no card p
   assert.doesNotMatch(canvas, /state\?\.start/);
   assert.doesNotMatch(sheet, /autoPressed|start = false/);
   // ...and New's box itself starts its agent by the one start, its task opened (F1, the walks 2026-11-18)
-  assert.ok(sheet.includes('const { data } = await api.post("/api/start", { text: about, images: pics.paths || [] });'));
+  assert.match(sheet, /const \{ data \} = await api\.post\("\/api\/start", \{ text: about, images: pics\.paths \|\| \[\] \}\)/);
   assert.match(sheet, /onDone\?\.\(\); openIt\(data\.taskId\);/);
 });
 

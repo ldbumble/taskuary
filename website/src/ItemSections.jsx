@@ -47,14 +47,16 @@ const ASK_ONLY = "the answer here reads the item only";
 // `draft`: { text, setText, pics } - his words and files, held by the item (ItemSections) so they stay his when Send to agent moves the box to the
 // Agent section: a box of its own lost what he had typed at the press (the stress round, 2026-11-18)
 const KIND_NOUN = { fyi: "notice", report: "report", dashboard: "dashboard", idea: "idea", review: "draft" };
-export function ItemAsk({ ask, hand = null, onHand = null, came = "", hint = "", draft }) {
+// ...his last line in an item's own box, by the item: the box Send to agent opens is drawn anew where the agent's section is, so it is kept here
+const ASKED = new Map();
+export function ItemAsk({ ask, hand = null, onHand = null, came = "", hint = "", draft, itemKey = "" }) {
   const ls = hand ? [] : itemLines(readingOf(ask?.reading));
   const { text, setText, pics } = draft;
   const [busy, setBusy] = useState(false), [said, setSaid] = useState([]), [err, setErr] = useState(""), input = useRef(null);
   useEffect(() => { setSaid([]); setErr(""); }, [ask?.key]);
   // ...AND SEND TO AGENT STARTS ON WHAT HE ALREADY WROTE HERE (the judge's walk, 2026-11-19: he asked this box for a fix, was told to press Send to
   // agent, and the box it opened was empty - his words were gone): his last line in this box stands in it, his to send or change
-  useEffect(() => { if (hand) { if (!text.trim() && said.length) setText(said[said.length - 1].q); setTimeout(() => input.current?.focus(), 0); } }, [hand]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (hand) { const last = ASKED.get(itemKey); if (!text.trim() && last) setText(last); setTimeout(() => input.current?.focus(), 0); } }, [hand]);   // eslint-disable-line react-hooks/exhaustive-deps
   const title = typeof ask?.title === "string" ? ask.title : "";
   const drop = (k) => { const left = hand.items.filter((i) => i.key !== k); onHand?.(left.length ? { ...hand, items: left } : null); };
   const send = async () => {
@@ -62,10 +64,10 @@ export function ItemAsk({ ask, hand = null, onHand = null, came = "", hint = "",
     if (!q || busy || pics.busy) return;
     setBusy(true); setErr("");
     try {
-      if (hand) { await hand.start({ verb: hand.verb, text: q, files: pics.paths, items: hand.items }); setText(""); pics.clear(); onHand?.(null); return; }
+      if (hand) { await hand.start({ verb: hand.verb, text: q, files: pics.paths, items: hand.items }); setText(""); pics.clear(); ASKED.delete(itemKey); onHand?.(null); return; }
       const { data } = await api.post("/api/concierge/say", { text: q, key: ask.key,
         view: { area: "item", title, item: { kind: ask.kind, id: ask.key, title, section: "ask" } } });
-      setSaid((w) => [...w, { q, a: String(data?.say || "") }]); setText("");
+      setSaid((w) => [...w, { q, a: String(data?.say || "") }]); setText(""); if (itemKey) ASKED.set(itemKey, q);
     } catch (e) { setErr(e?.response?.data?.detail || e?.message || (hand ? "It did not start - press Send again." : "That did not go through - try again.")); }
     finally { setBusy(false); }
   };
@@ -133,7 +135,7 @@ export default function ItemSections({ kind, label, title, aside, sections: all,
   }, [itemKey, takes, boxAt]);
   // ...opened where its box now is, the moment it is handed on - and back on the item once the chip is off and the section with it
   useEffect(() => { if (hand) setOpen(boxAt); else setOpen((o) => (sections.some((x) => x.key === o) ? o : about)); }, [hand, boxAt]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const box = (ask || hand) && <ItemAsk ask={ask} hand={hand} onHand={setHand} draft={draft} came={typeof title === "string" ? title : label}
+  const box = (ask || hand) && <ItemAsk ask={ask} hand={hand} onHand={setHand} draft={draft} itemKey={itemKey} came={typeof title === "string" ? title : label}
     hint={hand ? `What should the agent do with this ${noun}?` : ""} />;
   // ...and none once it is handed on: the press is made, the box is where it goes now
   const skip = (v) => (noAgent || !!hand) && AGENT_STARTS.has(String(v?.id || "").split(":").pop());

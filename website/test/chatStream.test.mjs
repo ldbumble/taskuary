@@ -262,7 +262,7 @@ test("a card he said no to is drawn where it stood, with its words", async () =>
   assert.ok(isPastCard({ id: "r:9", review: 9, status: "rejected", was: { text: "Hi Erin, the open house moved" } }));
   const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(src, /if \(isPastCard\(c\) && c\.status === "rejected"\) \{ if \(!stands\.has\(c\.review\)\) claim\(\); return \[<NotSent key=\{c\.id\} c=\{c\} \/>\]; \}/);
-  assert.match(src, /<div className="tq-conv-past-head">\{"Not sent - you said don't send"\}<\/div>/);
+  assert.match(src, /<div className="tq-conv-past-head">\{c\.what === "action" \? "You said no to this" : "Not sent - you said don't send"\}<\/div>/);
 });
 
 // A TURN AT WORK SHOWS ITS STEPS COUNTED, SHUT (the owner, 2026-11-17: "7 minutes this is all the agent did? and that little feedback?" - 19 steps

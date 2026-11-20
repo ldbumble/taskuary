@@ -423,7 +423,10 @@ export function useConversation(tid, on) {
 }
 // A TURN'S HEAD SAYS ONE TIME, SET ONCE (design round 5, I3): when it began in the chat (the list's `at`, conversation.dated) - at work and done
 // alike. It read its start while it worked and its END once done, and a turn begun at 4:57 was re-dated 5:12 under the owner's eyes
-export const turnAt = (t) => { const d = t?.at ? new Date(String(t.at).replace(" ", "T")) : null; return d && !Number.isNaN(+d) ? d : null; };
+// ...a turn's time as the log keeps it: a stamp, or the epoch seconds a row put with no stamp of its own carries (walk 5: a follow-up turn
+// showed no time - its `at` was 1795135... and read as no date), else when it began
+const stampOf = (v) => { const d = typeof v === "number" ? new Date(v * 1000) : v ? new Date(String(v).replace(" ", "T")) : null; return d && !Number.isNaN(+d) ? d : null; };
+export const turnAt = (t) => stampOf(t?.at) || stampOf(t?.started);
 const TurnTime = ({ t }) => {
   const at = turnAt(t), end = t.ended ? new Date(t.ended * 1000) : null;
   if (!at) return null;

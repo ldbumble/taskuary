@@ -244,6 +244,11 @@ def read(store, tid: int, level: str = None) -> dict:
             x['steps'] = [_item(k) for k in ks if k['Kind'] == 'step']
             # ...a turn with its failed line says the failure once: there, never again as an error step under it
             if x.get('fail'): x['steps'] = [s for s in x['steps'] if s.get('k') != 'error']
+            # ...AND WHAT THE ANSWER SAYS IS SAID ONCE (walk 5: "I can't look those up from here" twice, word for word): the words that streamed
+            # as its steps and its filed answer are one message - a step the answer holds is left out, each opener said once (conversation._said)
+            from .conversation import _said, said_once
+            seen = set(); x['steps'] = _said(x['steps'], str(x.get('text') or ''), seen)
+            if x.get('text'): x['text'] = said_once(str(x['text']), seen)
             # ...and one taken back (took_back) says so as its step: its words and their summary are no answer
             if any(s.get('took') for s in x['steps']): x['text'] = ''; x.pop('summary', None)
             x['cards'] = [] if r['State'] in LIVE else [_item(k) for k in ks if k['Kind'] in ('card', 'fail') and _drawn(k, lit)]

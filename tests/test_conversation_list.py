@@ -1000,7 +1000,8 @@ class TheList(unittest.TestCase):
         got = [(x['kind'], bool(x.get('own'))) for x in self.list()['items'] if x['kind'] != 'turn']
         self.assertEqual(sorted(got), [('arrival', False), ('arrival', False), ('arrival', True), ('line', False)])
         css = (Path(__file__).parent.parent / 'website' / 'src' / 'generalWorkspace.css').read_text(encoding='utf-8')
-        self.assertIn('.tq-aui-chat .tq-aui-arrived { justify-self: end;', css); self.assertIn('.tq-aui-chat .tq-aui-arrived-own { justify-self: start;', css)
+        # ...what others sent stands on their side, his own reply on his - as his typed lines do
+        self.assertIn('.tq-aui-chat .tq-aui-arrived { justify-self: start;', css); self.assertIn('.tq-aui-chat .tq-aui-arrived-own { justify-self: end;', css)
 
     def test_a_held_step_he_writes_past_greys_in_its_place_and_its_agent_is_told_to_raise_it_again(self):
         """The owner's live task, 2026-11-11 ("just asked it a question dots above the prompt starting going then the question has 2 approve

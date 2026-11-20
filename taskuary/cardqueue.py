@@ -210,8 +210,8 @@ def line(s: dict) -> str:
 
 
 SCREEN_HEAD = ("WHAT THE OWNER'S SCREEN SHOWS ON THIS TASK NOW, AND WHAT CAME OF EACH CARD (Taskuary's record - a card it does not name is not "
-               'on his screen; never say otherwise). Take back or replace one the newest message changes; one greyed or turned down is raised '
-               'again only as a new card:')
+               'on his screen; never say otherwise, and name a card by what it is, never by where it stands). Take back or replace one the newest '
+               'message changes; one greyed or turned down is raised again only as a new card:')
 NOTHING = 'Nothing waits for his press.'
 SETTLED = 6                     # the settled cards told, newest last: enough that a sent letter is never drafted again
 

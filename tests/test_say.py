@@ -116,3 +116,17 @@ def test_one_road_for_a_failures_words():
 def test_a_sign_up_that_made_no_account_says_who_moves_next_once():
     said = say.owner({'kind': 'signup_failed', 'site': 'Trainly sign-up', 'why': 'That email is already registered'})
     assert 'The agent was told' not in said and said.startswith('No account was made on Trainly sign-up')
+
+
+def test_a_failed_turn_says_taskuarys_own_reason_and_the_providers():
+    """The gateway walk, 2026-11-19: the chat said "The AI stopped on an error" while the log held why - over its limit, a model that thought past
+    its room, a gateway that turned the tools down. Taskuary's own sentence stands as it is; a provider's refusal is said with its own reason."""
+    from taskuary import general, llm
+    down = 'The AI is over its limit - trying again at 12:12.'
+    assert say.turn_failed(down) == down
+    room = llm.ROOM_LINE.format(name='HIPAA AI', model='Gemini 4 Hydrogen', room=llm.ROOM)
+    assert general.provider_down(llm.NoAnswer(room)) == room and say.turn_failed(general.retry_said(room, None)).startswith(room)
+    inner = json.dumps({'error': {'code': 400, 'message': 'Unable to submit request because `propose_email` functionDeclaration parameters schema should be of type OBJECT.'}})
+    raw = 'hipaa_ai error 400 at https://gateway.example/v1/chat/completions: ' + json.dumps({'error': {'message': f'litellm.BadRequestError: Vertex_aiException BadRequestError - {inner}'}})
+    said = say.turn_failed(raw)
+    assert said.startswith('HIPAA AI refused the request - it said: Unable to submit request because `propose_email`') and 'litellm' not in said

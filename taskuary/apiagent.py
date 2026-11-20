@@ -101,8 +101,8 @@ SHORT = {'browser_open': "Open a web page in this task's browser.",
          'browser_press': 'Press a key in the page (Enter, Tab).', 'browser_signup': 'Send the sign-up form here; Taskuary makes the password.', 'browser_screenshot': 'Save a picture of the page; answers with its path.',
          'show': 'Show the owner files in this chat, by path.', 'files_list': 'List a folder (default: your working folder).',
          'file_read': 'Read a file as text (also PDF, Word, Excel).',
-         'file_write': 'Write a file (docx/xlsx/pdf/pptx made real).',
-         'file_edit': 'Replace one exact piece of a file.',
+         'file_write': 'Write a new file whole (docx/xlsx/pdf/pptx made real, charts too).',
+         'file_edit': 'Change a file in place, one exact piece (a sheet keeps its formulas, a document its look).',
          'web_search': 'Search the web.', 'web_fetch': 'Read one public web page or file by its address.',
          'run_command': 'Run a shell command in your working folder.'}
 FULL = {}
@@ -131,9 +131,7 @@ NO_BROWSER = ('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET, so you cannot open a
 # answer "connect an AI that can use tools ... or switch this task to one?" - on a computer with no other AI, and on asks no browser served
 
 
-class ToolsRefused(RuntimeError): "The card's model would not take tools at all - its first call was refused."
 class Lost(RuntimeError): "The conversation carried from earlier turns was turned down on this turn's first call - it is said again, whole (general)."
-_REFUSED = re.compile(r' error (400|422)\b')
 
 
 def can(brain) -> bool:
@@ -207,13 +205,27 @@ def _mcp(tid: int, sid: str, method: str, params: dict = None, stranger: bool = 
     return got.get('result') or {}
 
 
-_DROP = ('$schema', 'additionalProperties', 'default', 'examples', 'title')       # keys a gateway's Gemini refuses in a function schema
-def _clean(x):
-    "A schema with those keys taken out - never a PROPERTY of that name: a tool's `title` field is its own (a gateway refused one taken, 2026-11-09)."
-    if isinstance(x, list): return [_clean(v) for v in x]
+# A FUNCTION SCHEMA EVERY PROVIDER TAKES, made in one place (portable) for every tool a turn is offered (tools_for). Gemini behind the gateway turned
+# the whole call down with a 400 when one tool's schema went past what it reads (the gateway walk, 2026-11-19): `propose_email`'s top-level
+# `anyOf` of `required` lists ("parameters schema should be of type OBJECT"), and an `items` object that required fields it never declared
+# ("required properties are specified but schema properties are empty"). The server checks every call's arguments itself (agenttools), so a
+# schema here says only what the model needs to fill: keys a gateway's Gemini refuses go, a constraint-only combinator goes, `required`
+# names only declared properties.
+_DROP = ('$schema', 'additionalProperties', 'default', 'examples', 'title')
+_ANY = ('anyOf', 'oneOf', 'allOf')
+def _typed(x) -> bool: return isinstance(x, dict) and bool({'type', 'properties', 'items', 'enum'} & set(x))
+def portable(x):
+    "A schema any provider takes - never a PROPERTY of a dropped key's name: a tool's `title` field is its own (a gateway refused one taken, 2026-11-09)."
+    if isinstance(x, list): return [portable(v) for v in x]
     if not isinstance(x, dict): return x
-    return {k: ({p: _clean(s) for p, s in v.items()} if k in ('properties', '$defs', 'definitions') and isinstance(v, dict) else _clean(v))
-            for k, v in x.items() if k not in _DROP}
+    out = {k: ({p: portable(s) for p, s in v.items()} if k in ('properties', '$defs', 'definitions') and isinstance(v, dict) else portable(v))
+           for k, v in x.items() if k not in _DROP and not (k in _ANY and not (isinstance(v, list) and v and all(map(_typed, v))))}
+    if 'required' in out:
+        need = [n for n in out['required'] or [] if n in (out.get('properties') or {})]
+        if need: out['required'] = need
+        else: out.pop('required')
+    return out
+def portable_tool(t: dict) -> dict: f = t['function']; return {**t, 'function': {**f, 'parameters': portable(f.get('parameters') or _S({}))}}
 
 
 def taskuary_tools(tid: int, sid: str, stranger: bool = False, post=None) -> list:
@@ -223,7 +235,7 @@ def taskuary_tools(tid: int, sid: str, stranger: bool = False, post=None) -> lis
         logger.warning(f'apiagent: task {tid} gets no Taskuary tools - {e}'); return []
     # ...and which only read Taskuary's own records, by the catalogue's own marks (agenttools.ANNOTATIONS): a repeat is answered from the turn
     READS[(tid, sid)] = {t['name'] for t in listed if (a := t.get('annotations') or {}).get('readOnlyHint') is True and a.get('openWorldHint') is False}
-    return [_fn(t['name'], str(t.get('description') or '')[:1024], _clean(t.get('inputSchema') or _S({}))) for t in listed if t.get('name')]
+    return [_fn(t['name'], str(t.get('description') or '')[:1024], t.get('inputSchema') or _S({})) for t in listed if t.get('name')]
 
 
 def call_taskuary(tid: int, sid: str, name: str, a: dict, stranger: bool = False, post=None) -> str:
@@ -478,7 +490,7 @@ def tools_for(tid: int, sid: str, browser: bool, stranger: bool = False, post=No
     # ...and a CLI's own hands where the owner gave them (general.full_hands: 'look things up only' reads, never writes or runs). A stranger's
     # task gets none of them: its CLI runs read-only on its words alone (origin.launch_mode 'look')
     mine = [] if stranger else [*(BROWSER if browser else []), *FILES, *WEB, *((WRITE + SHELL) if hands else [])]
-    out = [t for t in own if t['function']['name'] != LOAD] + mine + ([] if 'show' in TOOLBOX[(tid, sid)] else [SHOW])
+    out = [portable_tool(t) for t in [t for t in own if t['function']['name'] != LOAD] + mine + ([] if 'show' in TOOLBOX[(tid, sid)] else [SHOW])]
     OFFERED[(tid, sid)] = {t['function']['name'] for t in out}
     later = [t for t in out if t['function']['name'] in LATER]
     DEFERRED[(tid, sid)] = {t['function']['name']: t for t in later}
@@ -690,8 +702,8 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
                 # ...the conversation it was handed is what this call could not take (too long for the model now, or a gateway that
                 # dropped it): nothing of this turn has run, so it is asked again with the conversation said whole (general)
                 if i == 0 and history: raise Lost(str(e)) from e
-                # a model behind a gateway that turns `tools` down on the FIRST call: the turn is asked the plain way instead (general)
-                if i == 0 and isinstance(e, RuntimeError) and _REFUSED.search(str(e)): raise ToolsRefused(str(e)) from e
+                # ...and a call turned down for its tools fails the turn with the provider's reason (say.turn_failed): it was asked again
+                # with no tools, and the agent told the owner it had no files, browser or shell (the gateway walk, 2026-11-19)
                 raise
             begun = True
             calls = m.get('tool_calls') or []

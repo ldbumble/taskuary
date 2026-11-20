@@ -2651,9 +2651,7 @@ def _assistant_payload(task_id: int, session=None):
             # ...AND A HELD BROWSER ACT, the same way (2026-10-25): its card sat inside the hidden Close out, so the owner reached it only
             # by Stop and save - which closed the agent's browser, and then Approve said "the agent's browser is closed"
             # ...ONLY THE ONE THE LINE HAS AT ITS FRONT (cardqueue; a hard rule): one held behind it is its front's "next" and nothing more
-            'browserActs': (acts_ := [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' "
-                                                             "ORDER BY ReviewId", (task_id,)) if _proposals._action(r) in _proposals.HELD_ACTS
-                                      and r['ReviewId'] not in _cardqueue.held(store, task_id)]),
+            'browserActs': (acts_ := taskstate.browser_acts(store, task_id)),
             # ...and WHETHER HE HAS A PART ON THE PAGE, said once here (taskstate.needs_owner) - the page drew its own answer from the ask's id
             'needsOwner': taskstate.needs_owner(asking_, acts_, getattr(session, 'sid', '') if session else ''),
             # triage's reading of the thread (who asks what, the owner's part, the mails aside): None before the first verdict

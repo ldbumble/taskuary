@@ -6,15 +6,13 @@ import {
   fitFrame,
   keyMessage, isPaste, pasteMessages,
   isLocalPage,
-  layoutFor,
-  MIN_CHAT_PX,
+  paneLayout,
   mayShape,
   mouseMessage,
   parseMessage,
   ratioFromPointer,
   shortUrl,
   showsBrowser,
-  splitRatio,
   toPage,
   viewportFor,
   viewportMoved,
@@ -116,22 +114,15 @@ test("a page the agent opened from disk is its file's name, never the path to it
   assert.doesNotMatch(shortUrl(`file:///C:/Users/alex/${"deep/".repeat(30)}report.html`, 28), /Users|C:|\//);
 });
 
-test("the slot decides: no browser is nothing, a narrow slot is a chip, otherwise the split unless folded", () => {
-  assert.equal(layoutFor(1200, false, false), "none");
-  assert.equal(layoutFor(500, true, false), "chip");
-  assert.equal(layoutFor(1200, true, false), "split");
-  assert.equal(layoutFor(1200, true, true), "folded");
-});
-
-// THE BROWSER IN THE AGENT'S CANVAS (the owner, 2026-10-28): an agent's conversation too narrow to split stacks the view above it -
-// only a phone's width folds it to the chip, its link
-test("an agent's conversation stacks the view above it when narrow, and a phone gets the chip", () => {
-  assert.equal(layoutFor(600, true, false, true), "stack");
-  assert.equal(layoutFor(600, true, true, true), "folded");
-  assert.equal(layoutFor(390, true, false, true), "chip");
-  assert.equal(layoutFor(1200, true, false, true), "split");
-  assert.equal(layoutFor(600, true, false), "chip", "a Wall tile keeps its chip");
-  assert.ok(viewOnScreen("split") && viewOnScreen("stack") && !viewOnScreen("chip") && !viewOnScreen("folded"));
+// ONE LAYOUT FOR EVERY SLOT (the design loop, 2026-11-20): the same hand-over drew as a chip on a coding task (layoutFor: chip under 700/560,
+// the view stacked over the chat) and a split on a chat task (quietLayout: chip under 420)
+test("one rule lays out every pane: nothing, the view beside the chat, folded by his Fold, a chip only at a phone's width", () => {
+  assert.equal(paneLayout(1200, false), "none");
+  for (const w of [0, 420, 555, 600, 700, 900, 1400]) assert.equal(paneLayout(w, true), "split", `${w}px is beside the chat`);
+  assert.equal(paneLayout(390, true), "chip");
+  assert.equal(paneLayout(900, true, true), "folded");
+  assert.equal(paneLayout(390, true, true), "chip", "a phone's width is the chip, folded or not");
+  assert.ok(viewOnScreen("split") && !viewOnScreen("chip") && !viewOnScreen("folded") && !viewOnScreen("none"));
 });
 
 test("what waits on the view: a held act of THIS browser, and the agent's hand-over", () => {
@@ -167,15 +158,6 @@ test("dragging the splitter does not re-lay-out Chrome for six pixels", () => {
   assert.equal(viewportMoved(was, { w: 1200, h: 1460 }), true);
   assert.equal(viewportMoved(null, was), true, "the first measurement always lands");
   assert.equal(viewportMoved(was, null), false);
-});
-
-// The 2026-10-02 pane pass: a live run of Board -> New task -> "It needs a browser", watched from a desktop and a phone.
-test("the chat keeps a readable width whatever share the browser was dragged to", () => {
-  assert.equal(splitRatio(0.8, 1000), (1000 - MIN_CHAT_PX - 8) / 1000);   // 4/5 of 1000 left the chat ~200px
-  assert.ok((1 - splitRatio(0.8, 1000)) * 1000 - 8 >= MIN_CHAT_PX);
-  assert.equal(splitRatio(0.5, 2000), 0.5);                               // room enough: the owner's ratio stands
-  assert.equal(splitRatio(0.8, 0), 0.8);                                  // not measured yet
-  assert.equal(splitRatio(0.6, 400), 0.3);                                // never below the browser's own floor
 });
 
 test("only a browser open on a page is shown: not one still starting, nor an empty tab (2026-11-04)", () => {
@@ -217,12 +199,8 @@ test("an empty tab is not a page: the view folds to its chip until the agent ope
 // A CHAT TASK'S BROWSER (the owner, 2026-11-05): drawn only when the owner has a part on the page, and then beside the chat
 test("a chat task's browser shows only when the owner is needed, side by side", async () => {
   // ...whether he is needed is the server's answer (taskstate.needs_owner, tests/test_signin.py); the page lays it out
-  const { quietLayout, quietRatio, CHAT_SHARE } = await import("../src/browserSplit.js");
-  assert.equal(quietLayout(1200, false), "none");
-  for (const w of [555, 600, 700, 900, 1400]) assert.equal(quietLayout(w, true), "split");     // never stacked at a desktop's width
-  assert.equal(quietLayout(380, true), "chip");                                            // a phone's width: the view as a link
-  assert.equal(quietLayout(900, true, true), "folded");                                    // the owner's own Fold
-  for (const r of [0.3, 0.58, 0.8, NaN]) assert.ok(1 - quietRatio(r) >= CHAT_SHARE - 1e-9 && quietRatio(r) >= 0.3);
+  const { paneShare, CHAT_SHARE } = await import("../src/browserSplit.js");
+  for (const r of [0.3, 0.58, 0.8, NaN]) assert.ok(1 - paneShare(r) >= CHAT_SHARE - 1e-9 && paneShare(r) >= 0.3);
 });
 
 // THE CHAT'S WIDTH, SAMPLED EVERY PAINTED FRAME while a browser opened, folded, came back and closed beside it (2026-11-11, a 1600px window):

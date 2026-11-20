@@ -22,8 +22,8 @@ import { terminalOutputBatcher } from "./terminalOutput.js";
 import { createPool, paneCap } from "./terminalPool.js";
 import api from "./api.js";
 import BrowserPane, { LastView } from "./BrowserPane.jsx";
-import { layoutFor, ratioFromPointer, rememberFold, rememberRatio, savedFold, savedRatio, shortUrl, showsBrowser, isLocalPage, isBlankPage,
-  splitRatio, viewOnScreen, PHONE_BELOW, quietLayout, quietRatio } from "./browserSplit.js";
+import { paneLayout, paneShare, ratioFromPointer, rememberFold, rememberRatio, savedFold, savedRatio, shortUrl, showsBrowser, isLocalPage, isBlankPage,
+  viewOnScreen, CHIP_BELOW } from "./browserSplit.js";
 
 // Programming fonts first: agent TUIs draw boxes and progress bars out of block glyphs,
 // which only line up in a font with real box-drawing coverage.
@@ -727,13 +727,13 @@ export const TerminalPreview = ({ sid, height = 280, onOpen }) => {
 // appearing when a page opens and folding when it closes. Whether a browser is open comes from the
 // server (agent-browser's own state files), polled - nothing here asks the agent. A slot too
 // narrow for two panes (a Wall tile three across) gets a chip instead, which opens the browser
-// OVER the terminal until dismissed.
-// `stack` (an agent's conversation, GeneralWorkspace): too narrow to split, the browser sits ABOVE the chat instead of in a chip, and once
-// seen it stays on its last frame when it closes; with no browser showing, the task's kept last view (LastView). `held`, `turn`,
+// OVER the terminal until dismissed. Every slot is laid out by the one rule (paneLayout): beside the chat, a chip only at a phone's width.
+// `stack` (an agent's conversation, GeneralWorkspace): once seen the view stays on its last frame when it closes; with no browser showing,
+// the task's kept last view (LastView). `held`, `turn`,
 // `onHandBack`, `onDecided`: what waits on the owner, drawn on the view (BrowserPane). `onView(bool)`: whether the view is on screen to
 // draw them - when it is not (a phone's chip), the conversation keeps their cards.
 // `quiet` (a chat task's conversation, 2026-11-05): the browser is drawn only while `need` - the owner has a part on the page (needsOwner)
-// - and then BESIDE the chat (quietLayout); no last frame, no kept view, no "closed" line: the agent's answer is in the chat.
+// - and then BESIDE the chat, as every pane is (paneLayout); no last frame, no kept view, no "closed" line: the agent's answer is in the chat.
 export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus = true,
                              canFull = false, yourTurn = false, idle = false, stack = false, taskId = null, held = [], turn = null,
                              onHandBack, onDecided, onView, quiet = false, need = false }) => {
@@ -793,7 +793,13 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   // step drew the page his with the read taken while it was typed - "Taskuary is signing in ... the picture resumes in a moment" over the code
   // box that was his to fill, for up to a poll. A step of his is raised only once any typing of Taskuary's has ended (signin._auto), so that
   // read's `filling` is over; set before the paint, then asked again at once
-  React.useLayoutEffect(() => { if (!(need || yourTurn)) return; handed.current += 1; setBrowser((b) => (b.filling ? { ...b, filling: false } : b)); kick.current?.(); }, [need, yourTurn]);
+  // ...and A STEP OF HIS IS SHOWN, whatever Fold was kept for this session (savedFold): a fold from an earlier look hid the page he was now
+  // asked to sign in on behind a chip (the design loop, 2026-11-20). His Fold from here folds it again
+  React.useLayoutEffect(() => {
+    if (!(need || yourTurn)) return;
+    handed.current += 1; setFolded(false); rememberFold(false, sid);
+    setBrowser((b) => (b.filling ? { ...b, filling: false } : b)); kick.current?.();
+  }, [need, yourTurn]);  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     // ...drawn for the new width in the frame that has it (flushSync: the observer runs before that frame's paint) - set a beat later, the
     // pane that had just been given the task list's room drew one frame with the chat at its old share of it (479px, then 655)
@@ -806,8 +812,9 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   const showingBrowser = !!sid && (quiet ? need && readFor === handed.current && showsBrowser(browser.open, browser.url) : showsBrowser(browser.open, browser.url) || (stack && seen));
   const ended = !quiet && stack && seen && !browser.open;
   useEffect(() => { if (quiet && showingBrowser) setLent(true); }, [quiet, showingBrowser]);
-  const layout = quiet ? quietLayout(width, showingBrowser, folded) : layoutFor(width, showingBrowser, folded || (isLocalPage(browser.url) && !localOk), stack);
-  const share = quiet ? quietRatio(ratio) : splitRatio(ratio, width);
+  // ...ONE LAYOUT for every slot and kind (paneLayout): the agent's own file waits folded until he opens it, never a page his step is on
+  const layout = paneLayout(width, showingBrowser, folded || (isLocalPage(browser.url) && !localOk && !(need || yourTurn)));
+  const share = paneShare(ratio);
   const onScreen = showingBrowser && viewOnScreen(layout);
   // ...told BEFORE the paint (a layout effect): told after it, the frame that first drew the view still drew his step in the chat too -
   // its words and its I'm done twice on one screen for a beat (recorded, the browser round 2026-11-14)
@@ -858,7 +865,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
     </Typography>
   );
   return (
-    <Box ref={slot} data-tq-browser-layout={layout} sx={{ display: "flex", flexDirection: layout === "stack" ? "column" : "row", position: "relative", minHeight: 0, minWidth: 0,
+    <Box ref={slot} data-tq-browser-layout={layout} sx={{ display: "flex", flexDirection: "row", position: "relative", minHeight: 0, minWidth: 0,
       ...(fixed ? { height } : { flex: 1 }),
       ...(full ? { ...FULL_SX, bgcolor: "#101010", flex: "unset" } : null) }}>
       {canFull && (
@@ -870,24 +877,13 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
           </IconButton>
         </Tooltip>
       )}
-      {/* THE OWNER'S TURN ON THE PAGE TAKES THE ROOM: 560px is a page to watch, and the page is shaped to the pane - Google's 2-Step
-          Verification put its Next under the bottom edge, with nothing saying the picture scrolls (Gabi, TQ-1354, 2026-11-08) */}
-      {layout === "stack" && (
-        <Box data-tq-browser-view="" data-tq-browser-turn-room={yourTurn || turn || held.length ? "" : undefined}
-          sx={{ display: "flex", flexDirection: "column",
-          ...(yourTurn || turn || held.length ? { flex: "0 1 85%", minHeight: 360, maxHeight: 900 } : { flex: "0 1 60%", minHeight: 220, maxHeight: 560 }),
-          mb: 1, "& > *": { flex: 1, minHeight: 0 } }}>
-          <BrowserPane sid={sid} taskId={taskId} url={browser.url || (ended ? lastPage.current : "")} open={browser.open} filling={!!browser.filling}
-            yourTurn={yourTurn} onFold={() => fold(true)} waiting={held} turn={turn} onHandBack={onHandBack} onDecided={onDecided} ended={ended} />
-        </Box>
-      )}
       <Box sx={{ flex: layout === "split" ? `0 0 calc(${((1 - share) * 100).toFixed(2)}% - 4px)` : 1, minWidth: 0, minHeight: 0,
         display: "flex", flexDirection: "column", position: "relative",
         // the terminal takes what is left after the chip's row; only IT stretches
         "& > .tq-term-slot": { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" },
         "& > .tq-term-slot > *": { flex: 1, minHeight: 0 } }}>
         {chip}{closedLine}
-        {!showingBrowser && stack && !quiet && taskId && sid && <LastView taskId={taskId} sid={sid} narrow={width > 0 && width < PHONE_BELOW} />}
+        {!showingBrowser && stack && !quiet && taskId && sid && <LastView taskId={taskId} sid={sid} narrow={width > 0 && width < CHIP_BELOW} />}
         <Box className="tq-term-slot">{children || <TermOnly sid={sid} height="100%" onExit={onExit} autoFocus={autoFocus} />}</Box>
       </Box>
       {layout === "split" && (

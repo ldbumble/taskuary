@@ -5,18 +5,10 @@
 
 export const DEFAULT_RATIO = 0.58;          // the browser's share of the width
 export const MIN_RATIO = 0.3, MAX_RATIO = 0.8;
-export const CHIP_BELOW = 700;              // a slot narrower than this (a Wall tile) gets a chip, not a split
 const KEY_RATIO = "tq-browser-ratio", KEY_FOLD = "tq-browser-folded";
 const foldKey = (sid) => sid ? `${KEY_FOLD}.${sid}` : KEY_FOLD;
 
 export const clampRatio = (r) => (Number.isFinite(r) ? Math.min(MAX_RATIO, Math.max(MIN_RATIO, r)) : DEFAULT_RATIO);
-// ...AND THE CHAT KEEPS A READABLE WIDTH. Four fifths of a 1000px slot left the conversation ~200px - a
-// column of two-word lines beside a browser nobody needed that wide (the 2026-10-02 pane pass). The ratio
-// is still the owner's; it just never takes the chat below this many pixels (plus the 8px handle).
-export const MIN_CHAT_PX = 360;
-export const splitRatio = (r, width) =>
-  (width > 0 ? Math.max(MIN_RATIO, Math.min(clampRatio(r), (width - MIN_CHAT_PX - 8) / width)) : clampRatio(r));
-
 // the pointer's position across the whole split, as the browser's share (it sits on the right)
 export const ratioFromPointer = (x, left, width) => (width > 0 ? clampRatio(1 - (x - left) / width) : DEFAULT_RATIO);
 
@@ -204,16 +196,18 @@ export const isBlankPage = (url) => { const u = String(url || "").trim(); return
 // never a question it asked in words, which is answered in the chat's box
 export const waitsOnPage = (asking) => isTurn(asking) || isSignin(asking);
 
-// Should this slot hold the split, or just a chip? The Wall tiles three or four sessions across.
-// `stack`: an agent's conversation on its task (GeneralWorkspace) - too narrow to split, the browser goes ABOVE the chat instead of
-// into a chip, so the page the agent is on is in its canvas (the owner, 2026-10-28: "it should show up as a BROWSER inside the agent
-// canvas"). Only a phone's width still gets the chip - the view as a link.
-export const PHONE_BELOW = 560;
-export const layoutFor = (width, open, folded, stack = false) => (!open ? "none"
-  : width < CHIP_BELOW ? (!stack || width < PHONE_BELOW ? "chip" : folded ? "folded" : "stack")
-  : folded ? "folded" : "split");
+// THE ONE LAYOUT OF THE BROWSER PANE, for every slot it is drawn in - a chat task, a coding task, a Wall tile, a setup's terminal (the design
+// loop, 2026-11-20: three rules - layoutFor's chip under 700/560 with a view stacked over the chat, quietLayout's chip under 420 - drew the same
+// hand-over as a chip on a coding task and a split on a chat task). The view sits BESIDE the chat, never above it and never over the task list;
+// only a phone's width gets the chip, the view as a link. `folded`: the owner's own Fold (or an agent's own file it opened, isLocalPage)
+export const CHIP_BELOW = 420;
+export const paneLayout = (width, open, folded = false) => (!open ? "none" : width > 0 && width < CHIP_BELOW ? "chip" : folded ? "folded" : "split");
 // the layouts where the view itself is on screen, so what waits on it (a held act, the owner's turn) is drawn on it
-export const viewOnScreen = (layout) => layout === "split" || layout === "stack";
+export const viewOnScreen = (layout) => layout === "split";
+// ...and the chat keeps CHAT_SHARE of the width whatever the ratio dragged: at a laptop's ~555px slot a pixel floor for the chat left the page
+// ~190px, too small to sign in on - and four fifths of a wide slot left the chat a column of two-word lines
+export const CHAT_SHARE = 0.45;
+export const paneShare = (r) => Math.min(1 - CHAT_SHARE, clampRatio(r));
 
 // WHICH KIND OF ASK IT IS, as the server says it (workerstate.ask_of: 'signin' | 'turn' | 'question') - the page never reads a request id's marker.
 // A STEP ONLY THE OWNER CAN DO ON THE PAGE: the agent handed the page over - drawn on the view as "Your turn"
@@ -239,13 +233,4 @@ export const heldOn = (review, sid) => {
 // unless they need login ... Browser should open side by side not top/bottom"). The agent browsing is a "Working on this…" line in the
 // chat and nothing more; the page is drawn for a sign-in or a code the vault does not keep (a `signin:` ask), a hand-over - a captcha,
 // a step only a person may do (isTurn) - or a step it held for Approve (heldOn). A saved sign-in raises no ask (signin.needs), so it
-// is never drawn. Then it sits BESIDE the chat, never over it: the chat keeps CHAT_SHARE of the width, a phone's width gets the chip.
-export const CHAT_SHARE = 0.45;
-// ...folded by the owner's own Fold, it is the chip that says "your turn - open it". A 1024px laptop's chat slot is ~555px - under
-// PHONE_BELOW, where the other layouts chip it - and still split here: hiding the page the owner was asked to sign in on is worse than a
-// small one. Only a phone's slot gets the chip.
-export const QUIET_CHIP_BELOW = 420;
-export const quietLayout = (width, open, folded = false) => (!open ? "none" : width > 0 && width < QUIET_CHIP_BELOW ? "chip" : folded ? "folded" : "split");
-// ...the chat's floor here is its share, not MIN_CHAT_PX: at a laptop's ~555px slot that floor left the page ~190px, too small to sign in on
-export const quietRatio = (r) => Math.min(1 - CHAT_SHARE, clampRatio(r));
-
+// is never drawn. Then it is laid out as every pane is (paneLayout).

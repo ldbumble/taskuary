@@ -333,6 +333,16 @@ def _install_fresh_routes(app, store):
             state.fixture = True; browserview.state = state
         return {"ok": True}
 
+    @app.post("/api/fixture/your-turn")
+    def fixture_your_turn(body: dict = Body(...)):
+        """The task's live agent hands its page over (browserview.your_turn), as a coding agent's marker does - any kind's session, so a coding
+        task's hand-over is laid out beside its chat as a chat task's is (browser/one-layout)."""
+        from taskuary import browserview, terminal
+        tid = int(body["taskId"])
+        sid = next((s for s, t in list(terminal.SESSIONS.items()) if getattr(t, "task_id", None) == tid and getattr(t, "alive", True)), None)
+        if not sid: return {"ok": False, "why": "no live session on the task"}
+        return {"ok": True, "sid": sid, "request": browserview.your_turn(store, tid, sid, body.get("what") or "sign in to the vendor portal", watch=False)}
+
     @app.post("/api/fixture/outbox")
     def fixture_outbox(body: dict = Body(...)):
         """A mailbox that sends nowhere: every send is a line in the home's outbox.jsonl and answers as sent (a recorded walk presses Send

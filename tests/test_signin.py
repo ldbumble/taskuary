@@ -1185,3 +1185,15 @@ def test_the_server_says_whether_he_is_needed_on_the_page():
     assert taskstate.needs_owner({'ask': 'signin', 'site': 'bank.example'}) and taskstate.needs_owner({'ask': 'turn'})
     assert taskstate.needs_owner(None, [act('s1')], 's1') and not taskstate.needs_owner(None, [act('s2')], 's1')
     assert not taskstate.needs_owner(None, [{'DraftText': json.dumps({'action': 'shell_act', 'sid': 's1'})}], 's1')
+
+
+# ...AND IT RIDES THE PAYLOAD THAT CARRIES THE ASK (chatlog.beside), every kind's: a coding task read its chat's own state once at opening, so
+# its agent's hand-over never drew the page (the design loop, 2026-11-20)
+def test_the_chat_payload_says_whether_he_is_needed_on_the_page():
+    from taskuary import chatlog, taskstate
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Comment the ledger totals', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
+    with mock.patch.object(taskstate, 'asking', return_value={'ask': 'turn', 'request_id': 'yourturn:1', 'text': 'sign in'}):
+        assert chatlog.beside(s, tid, [], False, None)['needsOwner'] is True
+    with mock.patch.object(taskstate, 'asking', return_value={'ask': 'question', 'request_id': 'q1', 'text': 'which month?'}):
+        assert chatlog.beside(s, tid, [], False, None)['needsOwner'] is False

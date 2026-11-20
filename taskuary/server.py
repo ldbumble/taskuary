@@ -8047,6 +8047,9 @@ def connectors(request: Request):
     # GatewayBuiltIn: this build ships the organisation gateway's address, so its card's address field is optional (llm.gateway_base)
     from .llm import OPENAI_COMPATIBLE
     rows = [c | {'GatewayBuiltIn': bool(OPENAI_COMPATIBLE['hipaa_ai'][0])} if c['Type'] == 'hipaa_ai' else c for c in rows]
+    # Harness: the CLI an API card's agent runs on - Codex or OpenCode, its choice and its one line (harness.line); an active card's starts installing
+    from . import harness
+    rows = [c | {'Harness': h} if c['IsAI'] and (h := harness.line(store, c)) else c for c in rows]
     # ReadsBack: the days this card's first read will go back while that read is still due - its "How far back to bring in", 0 for a
     # reader that is not asked by date or has been read (channels.reads_back)
     # LastRead: what its last read brought in, from the read's own counts (channels.read_line) - the line under its Sync now

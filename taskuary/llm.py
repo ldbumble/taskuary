@@ -750,7 +750,7 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
         if identity not in identities:
             picks.append(candidate); identities.add(identity)
 
-    from . import origin as origin_mod
+    from . import origin as origin_mod, harness
 
     def one(candidate, first=False):
         # the conversation - its resume id and its live process - belongs to the FIRST brain only; a failover
@@ -769,6 +769,11 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
             except hub_agents.NoAI:
                 if first: raise
                 return None
+        # AN API CARD'S AGENT WORK RUNS ON ITS HARNESS CLI (harness.py): the Codex road, pointed at the card - its gear in the card's own models
+        if str(chosen_keep or '').startswith('general:') and (to := harness.road(store, candidate)) != candidate:
+            return _Cooling(store, candidate, make_cli_llm(
+                store, to[4:], harness.spell(store, to, chosen_model) or None, trace=trace, cancel=cancel, resume=chosen_resume, cli_tools=cli_tools,
+                extra_env=extra_env, research=research, gear=gear, keep=chosen_keep, task_id=task_id, hold_sid=hold_sid))
         want = candidate[10:] if candidate.startswith('connector:') else None
         want_id = int(want) if want and want.isdigit() else None
         from .agents import PICKED_ONLY
@@ -1237,6 +1242,67 @@ def blocks(system, marks: int = 4, ttl: bool = True, seconds: bool = False):
 def cached(system, marks: int = 4): return blocks(system, marks) or str(system)
 
 
+def endpoint(t, cfg: dict, key: str) -> tuple:
+    """(urls, headers, model) an OpenAI-shaped card is asked at - its chat completions address(es), its auth header and its model. ONE
+    ANSWER for make_llm's own calls and for the CLI harness its agent runs on (harness.py), so the two never reach different hosts."""
+    if t == 'openai':
+        urls = ['https://api.openai.com/v1/chat/completions']
+        headers, model = {'Authorization': f'Bearer {key}'}, cfg.get('model') or PROVIDER_DEFAULT['openai']
+    elif t == 'openrouter':
+        # one key, the whole catalog behind the OpenAI schema - open-weights models included.
+        # Model strings are OpenRouter's names ('meta-llama/llama-3.3-70b-instruct', ...);
+        # 'openrouter/auto' lets their router pick, so an empty model box still works.
+        urls = ['https://openrouter.ai/api/v1/chat/completions']
+        headers, model = {'Authorization': f'Bearer {key}', 'X-Title': 'Taskuary'}, cfg.get('model') or PROVIDER_DEFAULT['openrouter']
+    elif t == 'meta':
+        # Meta Model API - Muse Spark behind the OpenAI chat-completions schema, so it needs no
+        # branch of its own beyond the base url. This is the road to Muse Spark on a machine that
+        # cannot run the muse CLI at all (its installer is posix-only), and it is a triage brain
+        # only: the CODING side is the CLI. base_url is overridable for the same reason ollama's
+        # is - the surface is standard, so a gateway or proxy in front of it still speaks it.
+        # muse-spark-1.2-contributor is ~12x cheaper AND trains Meta's products on what you send;
+        # the default stays on the private tier, and the card says so rather than deciding for you.
+        base = (cfg.get('base_url') or 'https://api.meta.ai/v1').rstrip('/')
+        urls = [f'{base}/chat/completions']
+        headers, model = {'Authorization': f'Bearer {key}'}, cfg.get('model') or PROVIDER_DEFAULT['meta']
+    elif t == 'ollama':
+        # a LOCAL server speaking the OpenAI surface. Ollama's port out of the box, but base_url
+        # reaches LM Studio (:1234), llama.cpp, vLLM - anything /v1-compatible - so open-source
+        # models triage your mail without a byte leaving the machine. No key unless the server
+        # demands one; the model must be named because only `ollama list` knows what's pulled.
+        base = (cfg.get('base_url') or 'http://127.0.0.1:11434').rstrip('/')
+        if not cfg.get('model'): raise RuntimeError('a local brain needs its model named - `ollama list` shows what is installed')
+        urls, model = [f'{base}/v1/chat/completions'], cfg['model']
+        headers = {'Authorization': f'Bearer {key}'} if key else {}
+    elif t in OPENAI_COMPATIBLE:
+        default_base, default_model = OPENAI_COMPATIBLE[t]
+        base = gateway_base(cfg) if t == 'hipaa_ai' else (cfg.get('base_url') or default_base).rstrip('/')
+        if not base: raise RuntimeError('no gateway address on its card - add the one you were sent with your access code')
+        urls = [f'{base}/chat/completions']
+        headers, model = {'Authorization': f'Bearer {key}'}, cfg.get('model') or default_model
+    elif t == 'vertex_ai':
+        # Google's Agent Platform (Vertex AI): the same chat completions, under a project and a location. Its API key rides
+        # x-goog-api-key - Bearer there wants an OAuth token - and its models are named by publisher (google/, meta/ ...)
+        if not cfg.get('project'): raise RuntimeError('vertex_ai needs its Google Cloud project id')
+        loc = (cfg.get('location') or 'global').strip()
+        host = 'aiplatform.googleapis.com' if loc == 'global' else f'{loc}-aiplatform.googleapis.com'
+        urls = [f"https://{host}/v1/projects/{cfg['project'].strip()}/locations/{loc}/endpoints/openapi/chat/completions"]
+        model = (cfg.get('model') or VERTEX_DEFAULT).strip()
+        headers, model = {'x-goog-api-key': key}, model if '/' in model else f'google/{model}'
+    elif t == 'azure_openai':
+        ep = (cfg.get('endpoint') or '').rstrip('/')
+        if not (ep and cfg.get('deployment')): raise RuntimeError('azure_openai needs endpoint + deployment')
+        # Azure's v1 surface first (no api-version, OpenAI-compatible, all params work);
+        # legacy deployments URL as fallback for resources without it. An explicit
+        # api_version in the config skips straight to legacy with that version.
+        legacy = f"{ep}/openai/deployments/{cfg['deployment']}/chat/completions?api-version={cfg.get('api_version') or '2024-12-01-preview'}"
+        urls = [legacy] if cfg.get('api_version') else [f'{ep}/openai/v1/chat/completions', legacy]
+        headers, model = {'api-key': key}, cfg['deployment']
+    else:
+        raise RuntimeError(f'unknown AI connector type: {t}')
+    return urls, headers, model
+
+
 def make_llm(t, cfg: dict, key: str):
     m, effort = split_effort(cfg.get('model'))
     if effort: cfg = {**cfg, 'model': m}
@@ -1295,61 +1361,7 @@ def make_llm(t, cfg: dict, key: str):
         llm.chat, llm.search = chat, search
         llm.takes_want = llm.takes_web = True
         return llm
-    if t == 'openai':
-        urls = ['https://api.openai.com/v1/chat/completions']
-        headers, model = {'Authorization': f'Bearer {key}'}, cfg.get('model') or PROVIDER_DEFAULT['openai']
-    elif t == 'openrouter':
-        # one key, the whole catalog behind the OpenAI schema - open-weights models included.
-        # Model strings are OpenRouter's names ('meta-llama/llama-3.3-70b-instruct', ...);
-        # 'openrouter/auto' lets their router pick, so an empty model box still works.
-        urls = ['https://openrouter.ai/api/v1/chat/completions']
-        headers, model = {'Authorization': f'Bearer {key}', 'X-Title': 'Taskuary'}, cfg.get('model') or PROVIDER_DEFAULT['openrouter']
-    elif t == 'meta':
-        # Meta Model API - Muse Spark behind the OpenAI chat-completions schema, so it needs no
-        # branch of its own beyond the base url. This is the road to Muse Spark on a machine that
-        # cannot run the muse CLI at all (its installer is posix-only), and it is a triage brain
-        # only: the CODING side is the CLI. base_url is overridable for the same reason ollama's
-        # is - the surface is standard, so a gateway or proxy in front of it still speaks it.
-        # muse-spark-1.2-contributor is ~12x cheaper AND trains Meta's products on what you send;
-        # the default stays on the private tier, and the card says so rather than deciding for you.
-        base = (cfg.get('base_url') or 'https://api.meta.ai/v1').rstrip('/')
-        urls = [f'{base}/chat/completions']
-        headers, model = {'Authorization': f'Bearer {key}'}, cfg.get('model') or PROVIDER_DEFAULT['meta']
-    elif t == 'ollama':
-        # a LOCAL server speaking the OpenAI surface. Ollama's port out of the box, but base_url
-        # reaches LM Studio (:1234), llama.cpp, vLLM - anything /v1-compatible - so open-source
-        # models triage your mail without a byte leaving the machine. No key unless the server
-        # demands one; the model must be named because only `ollama list` knows what's pulled.
-        base = (cfg.get('base_url') or 'http://127.0.0.1:11434').rstrip('/')
-        if not cfg.get('model'): raise RuntimeError('a local brain needs its model named - `ollama list` shows what is installed')
-        urls, model = [f'{base}/v1/chat/completions'], cfg['model']
-        headers = {'Authorization': f'Bearer {key}'} if key else {}
-    elif t in OPENAI_COMPATIBLE:
-        default_base, default_model = OPENAI_COMPATIBLE[t]
-        base = gateway_base(cfg) if t == 'hipaa_ai' else (cfg.get('base_url') or default_base).rstrip('/')
-        if not base: raise RuntimeError('no gateway address on its card - add the one you were sent with your access code')
-        urls = [f'{base}/chat/completions']
-        headers, model = {'Authorization': f'Bearer {key}'}, cfg.get('model') or default_model
-    elif t == 'vertex_ai':
-        # Google's Agent Platform (Vertex AI): the same chat completions, under a project and a location. Its API key rides
-        # x-goog-api-key - Bearer there wants an OAuth token - and its models are named by publisher (google/, meta/ ...)
-        if not cfg.get('project'): raise RuntimeError('vertex_ai needs its Google Cloud project id')
-        loc = (cfg.get('location') or 'global').strip()
-        host = 'aiplatform.googleapis.com' if loc == 'global' else f'{loc}-aiplatform.googleapis.com'
-        urls = [f"https://{host}/v1/projects/{cfg['project'].strip()}/locations/{loc}/endpoints/openapi/chat/completions"]
-        model = (cfg.get('model') or VERTEX_DEFAULT).strip()
-        headers, model = {'x-goog-api-key': key}, model if '/' in model else f'google/{model}'
-    elif t == 'azure_openai':
-        ep = (cfg.get('endpoint') or '').rstrip('/')
-        if not (ep and cfg.get('deployment')): raise RuntimeError('azure_openai needs endpoint + deployment')
-        # Azure's v1 surface first (no api-version, OpenAI-compatible, all params work);
-        # legacy deployments URL as fallback for resources without it. An explicit
-        # api_version in the config skips straight to legacy with that version.
-        legacy = f"{ep}/openai/deployments/{cfg['deployment']}/chat/completions?api-version={cfg.get('api_version') or '2024-12-01-preview'}"
-        urls = [legacy] if cfg.get('api_version') else [f'{ep}/openai/v1/chat/completions', legacy]
-        headers, model = {'api-key': key}, cfg['deployment']
-    else:
-        raise RuntimeError(f'unknown AI connector type: {t}')
+    urls, headers, model = endpoint(t, cfg, key)
     ek = (t, urls[0], model)
     # ...marked as the model it reaches caches (cache_mode): Claude's TTL in its own words, Gemini's cachedContent in seconds
     claude = lambda: bool(_CLAUDE.search(str(_ANSWERED.get(ek) or model or '')))

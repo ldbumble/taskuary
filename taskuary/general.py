@@ -3001,12 +3001,16 @@ class GeneralSession:
     # ...a turn he STOPPED that has not let go yet (its CLI takes seconds to end): busy, but no longer at work for him (take_line)
     def letting_go(self): return self.busy and self._cancel is not None and self._cancel.is_set()
     def keep(self) -> str: return f"{'dock' if is_dock(self.store.get_task(self.task_id)) else 'general'}:{self.task_id}"     # its live CLI (clipool)
+    def road(self) -> str:
+        "The pick this agent's turn RUNS on: an API card's agent is its harness CLI (harness.road, `cli:card-<id>`); the dock keeps the card's own."
+        from . import harness
+        return self.pick if is_dock(self.store.get_task(self.task_id)) else harness.road(self.store, self.pick)
     # A TURN WHOSE CLI IS NOT UP IS OPENING FROM ITS FIRST READ UNTIL ITS PROMPT IS HANDED OVER (the walks, 2026-11-17, 7 of 20): said only once
     # clipool began opening it, the turn read "Thinking..." first and then stepped back to "Waiting for the agent to start". ONE fact, read
     # by the turn's own trace (`opening` here, ended by the road's `prompt`) and by the turn not yet handed over (cold)
     def cold(self) -> bool:
         from . import clipool
-        return self.pick.startswith('cli:') and not clipool.is_live(self.keep())
+        return self.road().startswith('cli:') and not clipool.is_live(self.keep())
     # ...and THE SAME TURN'S START DRAWN AGAIN (its provider picked) KEEPS WHAT IT HAS SAID SINCE (CI, 0.4.0.27): it is busy from the hand-over,
     # and words written before its start named its provider went - from the chat and from disk, so a restart filed the cut turn without them
     def _turn_trace(self, t0) -> None:
@@ -3267,8 +3271,9 @@ class GeneralSession:
             browser_tools, browser_env, browser_offer = False, None, False
             # AN API CARD HAS NO SHELL - but it can call tools (apiagent.py): the browser is the server's to run for it, on the owner's own
             # task. Which of hands, "the browser is not set up" or "this AI takes no tools" it gets is read once the brain is built (below)
-            api_hands = not self.pick.startswith('cli:') and not is_dock(self.store.get_task(self.task_id))
-            if self.pick.startswith('cli:'):
+            run = self.road()           # ...an API card's agent on its harness CLI runs as that CLI does (harness.py)
+            api_hands = not run.startswith('cli:') and not is_dock(self.store.get_task(self.task_id))
+            if run.startswith('cli:'):
                 # This is still the conversational Assistant, not a coding PTY. Give its headless
                 # CLI the same named browser session as the pane, and wait for the one background
                 # launch so its first command reuses that Chrome instead of racing a second one.
@@ -3293,7 +3298,7 @@ class GeneralSession:
                 setup_why, coming = '', False
                 if browserview.can_set_up():
                     if self.browser_wanted: setup_why = browserview.set_up(lambda s: self._remember_trace('progress', 'browser', s))
-                    elif browser_offered(self.store, self.task_id, self.pick): setup_why = browserview.set_up_soon(); coming = not setup_why
+                    elif browser_offered(self.store, self.task_id, run): setup_why = browserview.set_up_soon(); coming = not setup_why
                     # ...and SAID in the turn (the owner, 2026-11-10: "check why it did not start right away"): a sign-in asked of a fresh
                     # computer sat on its turn's header while the agent waited out the download with nothing written under it
                     if coming: self._remember_trace('progress', 'browser', browserview.GETTING)
@@ -3315,7 +3320,7 @@ class GeneralSession:
                     self._emit(f'\x1b[33mThe browser did not open: {why}.\x1b[0m\r\n')
                     self._remember_trace('progress', 'browser', f'The browser did not open: {why}.')
                     late.append(browserview.FAILED_LINE.format(why=why))
-                elif browser_offered(self.store, self.task_id, self.pick):
+                elif browser_offered(self.store, self.task_id, run):
                     # ...and a task nobody marked still gets the browser OFFERED, so a link in a message is followed in Taskuary's own
                     # browser and not in a tool of the CLI's own that nobody can watch or hold (browserview.OWN_ONLY, 2026-10-28)
                     if browserview.installed() or coming:
@@ -3333,11 +3338,11 @@ class GeneralSession:
             # ...and the owner's desktop apps, once the owner turned Agent Desktop on - on the browser's own terms (agentdesktop.offered):
             # a CLI with hands, the owner's own task, the same hook holding what can't be undone
             from . import agentdesktop
-            desk = agentdesktop.offered(self.store, self.task_id, self.pick)
+            desk = agentdesktop.offered(self.store, self.task_id, run)
             if desk: late.append(agentdesktop.brief())
             # only a CLI-backed chat can post to the wall: an API provider has no shell to
             # run the command in, and telling it about a command it cannot run is a lie
-            if self.pick.startswith('cli:'):
+            if run.startswith('cli:'):
                 from . import selfclose
                 # ...and where a file it makes FOR the owner goes, so the page can serve it (outputs.py): told nothing, Codex filed a
                 # workbook under a folder of its own choosing and handed the owner a made-up http://127.0.0.1:7787/outputs/... link
@@ -3354,24 +3359,24 @@ class GeneralSession:
                 if hub.enabled(self.store): system = f'{system}\n\n{hub.ASSISTANT_LINE}'
             from . import selfclose as _sc
             system = f'{system}\n\n{_sc.ASK_LINE}'                     # a question is an event, not prose (PW-225)
-            hands = self.pick.startswith('cli:') and full_hands(self.store)
+            hands = run.startswith('cli:') and full_hands(self.store)
             # a stranger's task on a CLI with no reviewer runs in that CLI's own read-only mode (origin.launch_mode 'look') - it reads and
             # answers - where it used to be refused outright with "start it with claude"
             if hands:
                 from . import origin
-                try: hands = origin.launch_mode(self.store, self.task_id, _cli_of_pick(self.store, self.pick)) != 'look'
+                try: hands = origin.launch_mode(self.store, self.task_id, _cli_of_pick(self.store, run)) != 'look'
                 except origin.Refusal: pass                 # ...its run refuses it, and says so where it starts (llm.make_cli_llm)
             # ...and WHAT IT CAN DO HERE, in one fact (capabilities.fact) - on a CLI here, on a card below, where it knows what the card takes
             from . import capabilities
             told = not is_dock(self.store.get_task(self.task_id)) and _origin_of(self.store, self.task_id) != 'stranger'
-            if told and self.pick.startswith('cli:'): late.append(capabilities.fact(self.store, 'all' if hands else 'look', self.pick))
+            if told and run.startswith('cli:'): late.append(capabilities.fact(self.store, 'all' if hands else 'look', self.pick))
             # ...and with no shell, its to-dos are ticked by a mark in the reply (selfclose.tick_markers), never a command it cannot run
             if not hands and self.store.task_checklist(self.task_id): late.append(_sc.TICK_CHAT_LINE)
             # ...ONE WAY TO WRITE A REPLY (2026-11-09): a session with Taskuary's own tools (agenttools.session_args: Claude and Codex, with
             # hands) writes it with propose_reply - the marker line rode beside it and the agent was told two ways at once (audit3 #3)
             # ...and an email the same (by_tool, 2026-11-10). Never a stranger's session: llm.for_agent wires it no tools, and with the
             # marker line gone too it had no way left to write the reply
-            tooled = hands and _cli_of_pick(self.store, self.pick) in REPLY_TOOL_CLIS and _origin_of(self.store, self.task_id) != 'stranger'
+            tooled = hands and _cli_of_pick(self.store, run) in REPLY_TOOL_CLIS and _origin_of(self.store, self.task_id) != 'stranger'
             if tooled: system = by_tool(system)
             systems = ''
             if hands:
@@ -3594,7 +3599,7 @@ class GeneralSession:
                 self.resume_notice = 'Continuing from the saved conversation with the backup provider.'
             from . import continuity
             native_id = getattr(brain, 'session_id', '')
-            self.cli_sid = ((native_id if isinstance(native_id, str) else '') or self.cli_sid) if continuity.can_resume(self.store, self.pick) else ''
+            self.cli_sid = ((native_id if isinstance(native_id, str) else '') or self.cli_sid) if continuity.can_resume(self.store, run) else ''
             self._remember_session()
             # ...A TURN STOPPED WHILE ITS BRAIN WAS ANSWERING IS STOPPED: a CLI is killed under it, an AI card's one call cannot be - its answer
             # came back after the x or Remind me and was filed as the turn (the audit, 2026-11-10). Stopped, as the CLI's is
@@ -3607,7 +3612,7 @@ class GeneralSession:
             # ...A TURN THAT DID NOT FINISH KEEPS ITS CONVERSATION, whichever way it ended (clipool.Unfinished: stopped, out of time, ended early,
             # on any road): a stopped first turn lost its id and the next opened a fresh conversation
             from . import continuity
-            if (u := _unfinished(e)) and u.session_id and continuity.can_resume(self.store, self.pick): self.cli_sid = u.session_id; self._remember_session()
+            if (u := _unfinished(e)) and u.session_id and continuity.can_resume(self.store, self.road()): self.cli_sid = u.session_id; self._remember_session()
             # ...a turn that ran out of time says so in words, not as "Codex exit 1: timed out after 1500s." (2026-11-04)
             said = timed_out_line(e) if timed is not None else (unreached_line(e, self.provider) or refused_line(e, self.provider) or str(e))
             # ...and A TURN TASKUARY STOPPED IS NOT A CLI THAT DIED (the real-CLI walk, 2026-11-11): its process is killed under it by the

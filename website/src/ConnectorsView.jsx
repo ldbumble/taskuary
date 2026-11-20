@@ -2941,6 +2941,13 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
             <TestLine test={saveSaid} mt={0} />
           </>
         )}
+        {/* WHAT ITS AGENT RUNS ON (harness.line): an API card's agent works through Codex, or OpenCode if he picks it - saved as picked */}
+        {conn.Harness && (
+          <TextField select size="small" label="Its agent runs on" value={cfg.harness || conn.Harness.harness} data-tq-harness=""
+            onChange={(e) => setCfg({ ...cfg, harness: e.target.value })} InputProps={{ endAdornment: boxes.tick("harness") }}
+            sx={{ bgcolor: "var(--tq-panel, #fff)", maxWidth: 260 }} helperText={conn.Harness.line}>
+            {conn.Harness.choices.map((c) => <MenuItem key={c.value} value={c.value} sx={{ fontSize: 13 }}>{c.label}</MenuItem>)}</TextField>
+        )}
         {/* HOW FAR BACK ITS FIRST SYNC GOES, until that sync has run (`ReadsBack`, channels.first_read_hours) - a reader asked for what is
             pending, not by date (Telegram, WhatsApp, Apple Messages), has none. Saved as it is picked, like every box here */}
         {conn.ReadsBack > 0 && !isAI && (

@@ -671,6 +671,14 @@ def no_handed_carryover():
 
 
 @pytest.fixture(autouse=True)
+def no_card_harness():
+    """An API card's agent runs on its harness CLI (harness.py) - found on this machine, or installed for it. A test's card keeps its own
+    loop and starts no install; tests/test_harness.py turns it on over stand-in CLIs."""
+    from taskuary import harness
+    harness.ON = False; yield; harness.ON = True
+
+
+@pytest.fixture(autouse=True)
 def no_path_lookup_carryover():
     """pathcache remembers where a CLI was found while the PATH directories read the same - and a test that writes a fake
     CLI into one, or patches os.access or os.path.exists under the real which(), must not inherit the test before it (perf 2.7)."""

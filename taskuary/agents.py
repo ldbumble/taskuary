@@ -769,7 +769,8 @@ def agent_row(store, name: str) -> dict | None:
     profiles exist. A profile name here is a pick saved before brains named tools (`cli:<profile>`) - still run, by its row, so an
     old chat keeps working until migrate_brain_settings rewrites it."""
     if not name: return None
-    from . import config
+    from . import config, harness
+    if harness.card_id(name) is not None: return harness.row(store, name)      # an API card's agent, on its harness CLI (harness.py)
     from .cli_connections import with_defaults
     conn = (config.load().get('cli_connections') or {}).get(str(name))
     if conn: return {'Name': name, 'Kind': 'general', 'Runner': 'cli', 'Config': json.dumps(with_defaults(conn))}
@@ -1884,7 +1885,8 @@ def spawn_env(profile: dict, extra_env: dict = None) -> dict:
     "A headless CLI's environment: the process's own, or - for a stranger's task (profile strict_env) - only what terminal.STRICT_ENV lets through."
     from .terminal import strict_ok          # lazy: terminal imports this module
     base = {k: v for k, v in os.environ.items() if not profile.get('strict_env') or strict_ok(k)}
-    return child_env({**base, **(extra_env or {})})
+    # ...and the profile's own (an API card's harness: its CODEX_HOME and its key - in the environment, never on disk; harness.row)
+    return child_env({**base, **(profile.get('env') or {}), **(extra_env or {})})
 
 
 def sees_images(family: str, args, resume=None) -> bool:

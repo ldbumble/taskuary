@@ -125,9 +125,10 @@ def test_an_explicit_pick_wins_with_exactly_its_own_model(real):
     with mock.patch.object(config, 'load', lambda: cfg):
         r = brainroute.choose(s, 'report', want_pick=f'connector:{cid}', want_model='claude-opus-5')
         assert (r.pick, r.model, r.rule) == (f'connector:{cid}', 'claude-opus-5', 'you chose it')
-        # a session's own pick keeps the model it came with - '' is the brain's own, not the saved assistant_model
+        # a session's own pick keeps the model it came with - none is the brain's own normal gear (climodels.gears: the owner's ruling,
+        # 2026-11-20), never the saved assistant_model
         r = brainroute.choose(s, 'general', want_pick='cli:claude')
-        assert (r.pick, r.model) == ('cli:claude', '')
+        assert (r.pick, r.model) == ('cli:claude', 'sonnet@medium')
         # ...and an empty pick is what blank means - the reading build_llm always made of it, now said on the route
         assert brainroute.choose(s, 'general', want_pick='').pick == llm.effective_pick(s, '')
 

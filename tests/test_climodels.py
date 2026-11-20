@@ -222,3 +222,25 @@ class EffortFlagTests(unittest.TestCase):
             s.set_setting('concierge_model', 'claude-sonnet-5', 't'); concierge.brain(s, fast=True)
             s.set_setting('concierge_model', 'claude-sonnet-5@high', 't'); concierge.brain(s, fast=True)
         self.assertEqual(seen, ['claude-sonnet-5@low', 'claude-sonnet-5@high'])
+
+
+# ── THREE GEARS BY TRIAGE'S CLASS (the owner, 2026-11-20: quick = small model thinking little, normal = the middle one, hard = the largest
+# thinking hard) ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+def test_claude_s_gears_are_haiku_low_sonnet_medium_opus_high():
+    assert climodels.gears('claude') == {'light': 'haiku@low', 'standard': 'sonnet@medium', 'strong': 'opus@high'}
+
+
+def test_codex_s_gears_are_read_off_its_own_model_list_newest_of_each_size():
+    ids = ['gpt-6.2-sol', 'gpt-6.2-astra', 'gpt-6.1-terra', 'gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-luna']
+    from unittest import mock
+    with mock.patch.object(climodels, 'codex_models', return_value=[{'id': i} for i in ids]):
+        assert climodels.gears('codex') == {'light': 'gpt-6-luna@low', 'standard': 'gpt-6.2-sol@medium', 'strong': 'gpt-6.2-astra@high'}
+    with mock.patch.object(climodels, 'codex_models', return_value=[]):
+        assert climodels.gears('codex') == {}                     # ...no list read: its own model, as before
+    assert climodels.gears('gemini') == {}
+
+
+def test_the_gateway_card_s_tiers_are_flash_hydrogen_neon():
+    from taskuary import firstrun
+    assert firstrun.tier_models(['gemini-4-flash', 'gemini-4-hydrogen', 'gemini-4-neon', 'gemini-4-carbon', 'gemini-2.5-pro']) == \
+        {'model': 'gemini-4-hydrogen', 'light_model': 'gemini-4-flash', 'strong_model': 'gemini-4-neon'}

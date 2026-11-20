@@ -91,8 +91,10 @@ KNOWN = [
 # The @zed-industries packages were renamed to these; their claude adapter (0.16.2) failed session/new on Claude Code 2.1.318.
 ADAPTERS = {'claude': {'pkg': '@agentclientprotocol/claude-agent-acp@0.101.0', 'bin': 'claude-agent-acp',
                        'env': {'CLAUDE_CODE_EXECUTABLE': '{cli}'}, 'mode': 'default'},
+            # `unnamed_own`: codex-acp names every message of the model by its item id, and sends its OWN lines - Codex's warnings, a turn's
+            # terminal error - as a chunk with no id (2.5.0: createWarningEvent, createErrorEvent). Those are kept out of the answer (acp.prompt)
             'codex': {'pkg': '@agentclientprotocol/codex-acp@2.5.0', 'bin': 'codex-acp',
-                      'env': {'CODEX_PATH': '{cli}'}, 'mode': 'workspace-write'}}
+                      'env': {'CODEX_PATH': '{cli}'}, 'mode': 'workspace-write', 'unnamed_own': True}}
 
 
 def name_of(cmd: str) -> str:

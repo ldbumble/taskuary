@@ -94,6 +94,13 @@ def searcher(store, tid):
     except Exception as e: logger.info(f'harness: card {c["ConnectorId"]} has no search here - {e}'); return None
 
 
+def runs_on(store, pick) -> str:
+    "'Codex' or 'OpenCode' where that harness runs this card's agent here, else ''."
+    if not road(store, pick).startswith(f'cli:{PREFIX}'): return ''
+    t, cfg, _ = _cfg(store, _card(store, pick)['ConnectorId'])
+    return LABEL[harness_of(cfg, t)]
+
+
 def card_id(name: str) -> int | None:
     "5 for 'card-5' (or 'cli:card-5'); None for any other CLI name."
     n = str(name or '').removeprefix('cli:')
@@ -154,7 +161,7 @@ def _toml(v) -> str:
     return json.dumps(str(v))             # a TOML basic string takes JSON's escapes
 
 
-def codex_config(cid: int, name: str, base: str, header: str, extra: dict, model: str, window: int = 0) -> str:
+def codex_config(cid: int, name: str, base: str, header: str, extra: dict, model: str, window: int = 0, catalog: str = '') -> str:
     """config.toml for a card's own CODEX_HOME: the card as Codex's model provider, and every road out of this computer but the card's own
     endpoint closed - nothing reaches OpenAI. Each switch is named where it is set."""
     prov = f'card{int(cid)}'
@@ -167,6 +174,9 @@ def codex_config(cid: int, name: str, base: str, header: str, extra: dict, model
            'check_for_update_on_startup': False,      # the update check (it asks GitHub / OpenAI for the latest release)
            'web_search': 'disabled',                  # hosted web_search is OpenAI's tool: the model's own search or Taskuary's web tools
            'forced_login_method': 'api'}              # no ChatGPT login: the key in the env is the only sign-in
+    # ...and THE CARD'S MODELS IN CODEX'S OWN CATALOGUE (catalog): a model it has no entry for is run on fallback metadata and said as
+    # "Warning: Model metadata for <model> not found" above every answer in the chat
+    if catalog: top['model_catalog_json'] = catalog.replace(chr(92), '/')
     tables = {
         'analytics': {'enabled': False},              # analytics upload
         'feedback': {'enabled': False},               # /feedback upload of logs
@@ -206,6 +216,34 @@ def _write(path: Path, text: str):
     if not path.exists() or path.read_text(encoding='utf-8') != text: path.write_text(text, encoding='utf-8')
 
 
+_BUNDLED: dict = {}
+
+
+def bundled(cmd: str) -> dict:
+    """Codex's own first catalogue entry, from the catalogue its binary ships (`codex debug models --bundled`: nothing is fetched) - the one
+    it falls back to for a model it does not know, its base instructions included. Read once per binary."""
+    import os, subprocess
+    key = (cmd, os.path.getmtime(cmd) if os.path.exists(cmd) else 0)
+    if key not in _BUNDLED:
+        from . import config
+        empty = config.home() / 'harness' / 'empty-home'; empty.mkdir(parents=True, exist_ok=True)       # never the owner's own ~/.codex
+        out = subprocess.run([cmd, 'debug', 'models', '--bundled'], capture_output=True, text=True, encoding='utf-8', timeout=60,
+                             stdin=subprocess.DEVNULL, env={**os.environ, 'CODEX_HOME': str(empty)}).stdout
+        _BUNDLED[key] = json.loads(out)['models'][0]
+    return _BUNDLED[key]
+
+
+def catalog(cmd: str, models: list, window: int) -> dict:
+    """model_catalog_json for a card: each of its models as Codex's own fallback entry - the same instructions, tools and shell it ran on
+    unnamed - named, with the card's context window, and none of OpenAI's own service: no fast tiers, no hosted search, no code mode."""
+    t = bundled(cmd)
+    one = lambda i, m: {**t, 'slug': m, 'display_name': m, 'priority': i + 1, 'visibility': 'list', 'context_window': window,
+                        'max_context_window': window, 'service_tiers': [], 'additional_speed_tiers': [],
+                        'upgrade': None, 'availability_nux': None, 'supports_search_tool': False, 'tool_mode': None,
+                        'experimental_supported_tools': []}
+    return {'models': [one(i, m) for i, m in enumerate(models)]}
+
+
 def row(store, name: str) -> dict | None:
     """The agent row `cli:card-<id>` runs (agents.agent_row): the card's harness CLI, its gears in the card's models, and its environment.
     None for any other name, or a card whose harness cannot run here."""
@@ -223,7 +261,11 @@ def row(store, name: str) -> dict | None:
     d, label = folder(cid), f'{(store.get_connector(cid) or {}).get("Name") or t} (card {cid})'
     if h == 'codex':
         home = d / 'codex'; home.mkdir(exist_ok=True)
-        _write(home / 'config.toml', codex_config(cid, label, base, header, extra, model, cfg.get('context_window') or 0))
+        window = int(cfg.get('context_window') or 1_000_000)
+        cat = home / 'models.json'
+        try: _write(cat, json.dumps(catalog(cmd, [x for x in dict.fromkeys((model, split_pick(hard)[0])) if x], window)))
+        except Exception as e: cat = None; logger.warning(f'harness: no model catalogue for card {cid} - Codex says its fallback warning ({e})')
+        _write(home / 'config.toml', codex_config(cid, label, base, header, extra, model, window, str(cat) if cat else ''))
         env = {'CODEX_HOME': str(home)}
     else:
         strong = split_pick(hard)[0] if cfg.get('strong_model') else ''

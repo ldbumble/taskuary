@@ -66,6 +66,7 @@ class ACPClient:
         # each caller the other's reply to drop
         self._id, self._waiters, self._idlock, self._alive = 0, {}, threading.Lock(), True
         self._caps, self._meta, self._write_lock, self.options, self.last_turn = {}, {}, threading.Lock(), [], {}
+        self.unnamed_own = False         # a chunk with no message id is the adapter's own line, not the model's (clis.ADAPTERS `unnamed_own`)
         try:
             self.p = spawn.popen([cmd] + list(args or []), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace',
@@ -219,11 +220,16 @@ class ACPClient:
         THE ANSWER IS WHAT IT SAID LAST, after its last tool call - what claude's `result` and codex's last agent_message are on the
         argv road. Its words before are steps in the trace (agents.ACPSteps); joined into the answer they read "I'll list the
         files... There are 3 files" as one reply. All of it when it said nothing after its last call."""
-        said, cut, of = [], [0], [None]
+        said, cut, of, own = [], [0], [None], []
         self.last_turn = {}
         outer = self.on_update
         def collect(u):
             kind = u.get('sessionUpdate')
+            # ...THE ADAPTER'S OWN LINE IS NEVER THE AGENT'S WORDS (clis.ADAPTERS `unnamed_own`): Codex's "Warning: Model metadata ... not found"
+            # stood above every answer, and a turn's provider error stood as its answer, raw JSON and all (the gateway walk, 2026-11-20). It
+            # goes to the log; a turn that said nothing else failed, in those words (say.turn_failed reads them for him)
+            if kind == 'agent_message_chunk' and self.unnamed_own and not u.get('messageId'):
+                own.append(_text_of(u.get('content'))); logger.info(f'acp: the adapter said: {own[-1].strip()[:400]}'); return
             # a message resumed after a tool call is a new paragraph: copilot and devin both stream
             # "Hello!" / tool_call / "What would you like..." and the result read "Hello!What would you"
             if kind == 'agent_message_chunk':
@@ -241,6 +247,7 @@ class ACPClient:
         finally:
             self.on_update = outer
         self.last_turn = r              # ...the whole PromptResponse: its `usage` and _meta are what the turn used (aiusage.acp)
+        if own and not ''.join(x for x in said if x).strip() and r.get('stopReason') != 'cancelled': raise ACPAgentError(''.join(own).strip())
         last = ''.join(x for x in said[cut[0]:] if x).strip()
         return r.get('stopReason'), last or ''.join(x for x in said if x).strip()
 

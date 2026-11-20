@@ -535,9 +535,12 @@ def provider_options(store) -> list:
         try: cfg = json.loads(row.get('ConfigJson') or '{}')
         except ValueError: cfg = {}
         model = cfg.get('model') or cfg.get('deployment') or ''
+        # ...ITS AGENT'S HARNESS BY NAME where one runs it ("HIPAA AI · Codex"), so the chip says what does the work (harness.py)
+        from . import harness
+        on = harness.runs_on(store, f"connector:{row['ConnectorId']}")
         out.append({'id': f"connector:{row['ConnectorId']}", 'connector_id': row['ConnectorId'],
                     'pick': f"connector:{row['ConnectorId']}", 'type': row['Type'],
-                    'label': f"{row.get('Name') or row['Type']} (API)", 'model': model})
+                    'label': f"{row.get('Name') or row['Type']} · {on}" if on else f"{row.get('Name') or row['Type']} (API)", 'model': model})
     return out
 
 

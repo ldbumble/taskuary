@@ -157,3 +157,26 @@ def test_a_card_session_is_served_tool_schemas_its_model_takes():
     raw = {t['name']: t['inputSchema'] for t in agenttools.listing()}
     fit = {t['name']: t['inputSchema'] for t in agenttools.listing(portable=True)}
     assert 'anyOf' in raw['propose'] and fit['propose']['type'] == 'object' and 'anyOf' not in fit['propose']
+
+
+def test_the_cards_models_are_in_codexs_own_catalogue_so_no_metadata_warning_fires(here, monkeypatch):
+    "Codex runs a model it has no catalogue entry for on fallback metadata, and says so above every answer (the gateway walk, 2026-11-20)."
+    tpl = {'slug': 'gpt-x', 'base_instructions': 'You are Codex.', 'tool_mode': 'code_mode_only', 'supports_search_tool': True,
+           'service_tiers': [{'id': 'priority'}], 'available_access_programs': {'cyber': ['standard']}, 'context_window': 1}
+    monkeypatch.setattr(harness, 'bundled', lambda cmd: tpl)
+    s = MemoryStore(); cid = _card(s)
+    prof = json.loads(agents.agent_row(s, f'card-{cid}')['Config'])
+    home = harness.folder(cid) / 'codex'
+    c = tomllib.loads((home / 'config.toml').read_text(encoding='utf-8'))
+    assert c['model_catalog_json'] == str(home / 'models.json').replace(chr(92), '/')
+    ms = json.loads((home / 'models.json').read_text(encoding='utf-8'))['models']
+    assert [m['slug'] for m in ms] == ['hydrogen', 'neon'] and all(m['base_instructions'] == 'You are Codex.' for m in ms)
+    assert all(m['tool_mode'] is None and m['supports_search_tool'] is False and m['service_tiers'] == [] and m['context_window'] == 1_000_000 for m in ms)
+    assert prof['env']['CODEX_HOME'] == str(home)
+
+
+def test_the_chip_names_the_harness_that_runs_the_cards_agent(here):
+    from taskuary import general
+    s = MemoryStore(); cid = _card(s)
+    row = next(o for o in general.provider_options(s) if o['pick'] == f'connector:{cid}')
+    assert (row['label'], row['model']) == ('HIPAA AI · Codex', 'hydrogen')

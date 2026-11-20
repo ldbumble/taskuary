@@ -1613,7 +1613,7 @@ def acp_launch(profile: dict) -> dict:
         opts = claude_acp_options(args)
         if opts: meta = {'claudeCode': {'options': opts}}
     elif family == 'codex' and (cfg := codex_acp_config(args)): env['CODEX_CONFIG'] = json.dumps(cfg)
-    return {'cmd': cmd, 'env': env, 'mode': ad['mode'], 'meta': meta, 'adapter': ad['pkg']}
+    return {'cmd': cmd, 'env': env, 'mode': ad['mode'], 'meta': meta, 'adapter': ad['pkg'], 'unnamed_own': bool(ad.get('unnamed_own'))}
 
 
 def _long(cwd):
@@ -1700,6 +1700,7 @@ def _acp_open(name: str, launch: dict, cwd, env: dict, resume, timeout, trace, f
     except PermissionError as e:
         if launch['adapter']: raise acp_mod.ACPStartError(f"{launch['adapter']} was refused: {e}") from e   # the adapter, not the CLI
         raise FileNotFoundError(denied_msg(name, launch['cmd'][0], e)) from e
+    client.unnamed_own = bool(launch.get('unnamed_own'))           # ...its adapter's own lines, told from the model's (acp.prompt)
     if spare: _acp_ready(launch['cmd'], base, timeout)              # ...the next task's, started now
     try:
         caps = client._caps if client._caps else client.connect()

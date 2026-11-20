@@ -361,7 +361,7 @@ export const resultOf = (review) => {
 // ONE CARD FOR A TURN'S HELD STEPS (the owner, 2026-11-09: "this should be one action button and one card. make it smaller and more
 // combined"): the shell steps one agent turn had held (shellgate.turn_of - the owner's last line when it held them) are one action. One title,
 // why it waits said once, the folder once, the steps numbered, every command under one "Show the commands", one Approve that runs them in order
-// (/api/reviews/steps) and one Dismiss. A step held after the owner wrote again is another turn's card. Each item: { key, reviews }
+// (the one decide door) and one Dismiss. A step held after the owner wrote again is another turn's card. Each item: { key, reviews }
 const isHeldStep = (r) => proposalFrom(r)?.action === "shell_act";
 // ...a proposal the owner pressed, kept as its pressed card (PassedCard) - a close-out's press is its own card's (closeoutState)
 // ...and one whose press FAILED (verdicts: settled with its error, the owner 2026-11-16 - no Try again): the error is its line, its agent sets up what goes next

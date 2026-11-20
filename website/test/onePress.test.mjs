@@ -42,11 +42,11 @@ test("every press is the one post, with the one patience", async () => {
   assert.deepEqual(a.calls[1], { url: "/api/reviews/8/decide", body: { final_text: null, note: null, verb: "reject" }, opts: { timeout: DECIDE_TIMEOUT } });
 });
 
-test("a turn's held steps go together, and the step that stopped them is the reason", async () => {
+test("a turn's held steps go together through the one decide door, and the step that stopped them is the reason", async () => {
   const a = api({ ok: false, done: [{ review: 4 }], failed: { review: 5, step: 2, error: "exit 1" }, left: [6] });
   const o = await pressSteps(a, [4, 5, 6], "approve");
-  assert.deepEqual([o.kind, o.why, a.calls[0].url, a.calls[0].opts.timeout], ["failed", "exit 1", "/api/reviews/steps", DECIDE_TIMEOUT * 3]);
-  assert.deepEqual(a.calls[0].body, { ids: [4, 5, 6], verb: "approve" });
+  assert.deepEqual([o.kind, o.why, a.calls[0].url, a.calls[0].opts.timeout], ["failed", "exit 1", "/api/reviews/4/decide", DECIDE_TIMEOUT * 3]);
+  assert.deepEqual(a.calls[0].body, { final_text: null, note: null, verb: "approve", steps: [4, 5, 6] });
   assert.equal((await pressSteps(api({ ok: true, done: [{ review: 4 }], failed: null, left: [] }), [4], "approve")).kind, "ok");
   assert.equal(failLine(await pressSteps(api({ code: "ETIMEDOUT" }), [4], "approve"), "run"), STILL);
 });

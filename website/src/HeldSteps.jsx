@@ -1,7 +1,7 @@
 // ONE CARD FOR A TURN'S HELD STEPS (the owner, 2026-11-09: "this should be one action button and one card. make it smaller and more
 // combined, an action card if you can"): the steps the agent's turn had held, as one act - its title, why it waits once, the folder once, the
 // steps numbered, every command under one "Show the commands", one Approve that runs them in order through the one decide door
-// (/api/reviews/steps, shellgate.approve_steps: it stops at the first that fails and says which) and one Dismiss. Once pressed it STAYS in the
+// (the one decide door with its `steps`, shellgate.approve_steps: it stops at the first that fails and says which) and one Dismiss. Once pressed it STAYS in the
 // turn (the owner, 2026-11-09: "leave the approval card in the agent turn as well with approved"): the press it took, and what came of it.
 import React, { useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";

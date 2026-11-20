@@ -238,7 +238,7 @@ def _put(st: dict, item: dict, rows: list, place=None):
     """`item` on screen at its place: Next measures from its last member, Back from its first; its effect class as it is now (3.5)."""
     keys = members_of(item['key']) if item.get('kind') == 'fyis' else [item['key']]
     first, last = place or ((funnel.order_key(find(rows, keys[0]) or item), funnel.order_key(find(rows, keys[-1]) or item)))
-    st.update(on=item['key'], on_tid=item.get('tid'), members=keys, first=list(first), last=list(last), ended=False,
+    st.update(on=item['key'], members=keys, first=list(first), last=list(last), ended=False,
               kind='reads' if item.get('kind') == 'fyis' else kind_of(find(rows, item['key']) or item))
     places = st.setdefault('places', {})
     for k in {item['key'], *keys, *(item.get('aliases') or ())}:

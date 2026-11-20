@@ -6904,15 +6904,6 @@ def _pile_payload(force: bool = False, current: str = None, only: str = None,
     try: walk = railwalk.peek(store, ACTOR)
     except Exception as e: logger.debug(f'no walk beside the rail: {e}'); walk = None
     p['walk'] = walk
-    # ...AND THE ITEM HE HAS OPEN IS ON IT, whatever its lane (the owner, live 2026-11-20: a task opened from search stood on the rail, then the
-    # next read dropped it - closed, it was in no lane - until he typed into it): one source, the walk's own `on`, held while he is on it
-    on = (walk or {}).get('on')
-    if on and not any(i.get('key') == on for i in p.get('items') or []):
-        try:
-            tid = railwalk.state(store).get('on_tid')
-            it = railwalk._lookup(store, f'task:{tid}' if tid else on)
-        except Exception as e: logger.debug(f'the open item {on} was not read for the rail: {e}'); it = None
-        if it and not any(i.get('key') == it.get('key') for i in p.get('items') or []): p = {**p, 'items': [*(p.get('items') or []), {**it, 'open': True}]}
     # `fyi`: the page's own rail pages its plain FYI tail (funnel.page_fyi). Whatever is on the table or drawn next is sent whole.
     if fyi is not None:
         below = (walk or {}).get('below') or ''

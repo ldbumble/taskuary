@@ -1471,7 +1471,7 @@ def signup(store, tid, sid) -> tuple[bool, str]:
                                      'what': v['what'], 'why': v['why']}, 'agent')
         return True, (f'HELD for the owner: {v["what"]} ({v["why"]}). It stands as one card in the chat; their press fills this form again as you '
                       'left it, makes and keeps the password and sends it - even after you have moved on - and you are told what the site '
-                      'answered. Do not ask them in words; go on with the rest of the work.')
+                      'answered. Do not ask them in words; go on with the rest of the work.' + browsergate.stands(store, tid))
     finally: c.close()
 
 

@@ -471,7 +471,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
             placeholder={kind === "chat" ? "build me a website · a report on overdue invoices every Monday · draft a reply to Erin" : "why did Site 3's census move four points in July?"}
             sendOff={noAi} />
           {!!sentLine && <Box data-tq-new-sent="" sx={{ mt: 1.25 }}>
-            <div className="tq-aui-message tq-aui-user" data-tq-chat-line="new"><div className="tq-aui-user-body">{sentLine}</div></div>
+            {/* ...as the chat draws his line - its own bubble, in the chat's one column (walk 8, 2026-11-20: outside the chat the message grid's 66 px
+                gutter took it, and his ask stood one word wide down the page) */}
+            <div className="tq-aui-chat"><div className="tq-aui-message tq-aui-user" data-tq-chat-line="new"><div className="tq-aui-user-bubble" dir="auto">{sentLine}</div></div></div>
             <Box data-tq-working="" sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.75, color: DIM, fontSize: 13 }}>
               <CircularProgress size={12} sx={{ color: "inherit" }} />Working…</Box></Box>}
           {noAi && <Typography data-tq-new-no-ai="" variant="caption" sx={{ color: DIM, display: "block", mt: 0.75 }}>

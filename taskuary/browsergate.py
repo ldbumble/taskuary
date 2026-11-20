@@ -589,7 +589,7 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         from .selfclose import CARD_TAIL
         return _deny(f"{HELD}: {v['what']} ({v['why']}). Once they approve it, Taskuary runs this exact command in your browser and tells you "
                      f"what happened. Never ask them in words to approve or click it, and do not try it another way. {CARD_TAIL} End your turn "
-                     "now, or go on with work that does not need it.")
+                     "now, or go on with work that does not need it." + stands(store, tid))
     if (browserview.ENDED_ON.get(str(sid)) or ('',))[0] == 'failed': browserview.ended_on(sid)     # it went on past the failure
     # ...and a press that went to a site is the agent's own act there: a code that site mails now comes back to it (signin.acting), and a
     # password a box of the form holds is kept before the press sends it (signin.pressing) - nothing a site was sent is lost
@@ -597,6 +597,15 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         signin.acting(store, tid, sid, (here := signin.site_of(pg.get('url'))))
         signin.pressing(store, tid, sid, here)
     return {}
+
+
+def stands(store, tid) -> str:
+    """WHAT STANDS AFTER A HOLD, AS EVERY CARD TOOL SAYS IT (agenttools._card_call's your_cards - cardqueue.screen): the agent reads its cards from
+    the record, never from its own memory of what it raised."""
+    from . import cardqueue
+    try: line = cardqueue.screen(store, int(tid))
+    except Exception: return ''
+    return '\n' + line if line else ''
 
 
 def goes_to(cmd: str):

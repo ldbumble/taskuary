@@ -1107,6 +1107,8 @@ def test_a_held_sign_up_is_sent_on_its_own_tab_only_never_the_tab_shown():
     with gate(True), on_page(page.href), mock.patch.object(signin, 'connect', return_value=page):
         ok, said = signin.signup(s, tid, 'sess1')
     assert ok and said.startswith('HELD for the owner')
+    from taskuary import cardqueue
+    assert cardqueue.SCREEN_HEAD[:40] in said, 'what stands, told from the record as every card tool tells it'
     [rv] = s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
     p = json.loads(rv['DraftText'])
     assert (p['action'], p['signup'], p['tab']) == ('browser_act', 'rentscope.example', 'T1')

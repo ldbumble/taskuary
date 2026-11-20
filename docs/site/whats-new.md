@@ -2,6 +2,46 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.1.1 - 2026-11-20
+
+- Send and close only on a line's last card; a fold's line counts in one unit; a step names what it wrote and says a search in a few words, on one left-aligned line
+- A human check is handed to him at once, and a download is told to the agent by its path
+- A hand-over the agent walked away from is withdrawn in Taskuary's words, never said as his
+- One hand-back for every wait on the page, a card's verdict as the step ended, one Approve in one place, and his ask is his go-ahead
+- A post to a tool that is not one is refused to its agent, a post card names its network, and a card set aside before its turn is greyed, never gone
+- Not for me on a report's task is remembered: one plain line in his memory - the report and what the finding is about
+- A task he makes from a message is his, and the message he put to work is vouched for by that press
+- His own task keeps its mode when someone joins: his CI's notices are his, and a stranger who joined holds back only their words
+- A turn reads done only when it did the work, a failed start is over when it fails, and the rail never shows triage's own reasoning
+- Send to agent starts on what he wrote in the item's box; Taskuary's folders and the queue line read in his words; the copy press keeps off the words
+- Send to agent finds his line in the box it opens: the line is kept by the item, the box Send to agent draws being a new one
+- His own bubble keeps his line breaks and spaces: pre-wrap on the bubble itself, the rule on a paragraph it never has gone
+- A failed AI turn says its own reason with its card a press away, is not retried when only he can mend it, and the bell counts it
+- One double-click never sends two letters: the next card drawn in the same button takes no press for its first moment
+- The box's files go with the line typed in it, once: a send empties the box, and a line the page sends itself (Try again) takes none
+- The agent is told the files its card really carries, every save: none means its words must not say one is attached
+- An AI card's agent keeps its tools on Gemini: every schema it is offered is one Gemini takes, and a refused call fails in the provider's words
+- A post card's button comes from its network's one state: signed out is its Connect and the draft to copy, never a press that can only fail
+- A failed turn Taskuary tries again is said once, with its Try again and Cancel together, and the task reads trying again
+- A line of his already heard never keeps a finished turn reading at work; a card the agent replaced reads greyed by the stored reviews, never by a race
+- A row's press is said on that row: Run now reads Runningâ€¦ on its button until its own last run moves on, a failure stays on the row
+- Each send is told at once; N of M counts through the agent's new cards; a continued turn starts at its own time; a held mail stands in its place
+- One agent per task: a quick task's own agent starts at once on its light gear, never a warm agent first that hands on
+- Every network is a post card with its picture, connected or not, one at a time - drafts for posting are never a file
+- A network not connected is posted to through the agent's browser, its final Post press held for his yes
+- A check-back outlives Mark done: at its time the agent checks and the task comes back to the rail with what it found
+- Every card raised stands queued and each press brings the next at once: three posts or three letters in one turn are three cards, one drawn at a time
+- A routine is changed by one card from any of his tasks - its instructions, steps, schedule or name - never "do it in your app"
+- A report or a dashboard is changed by the same one card - its question, schedule or name, old -> new, saved by its editor's own save
+- Back opens a task the way a rail press does: from its rail row at once, filled in place
+- A report's question is changed where it keeps it: an AI report's own prompt, else the AI pass over its data
+- One layout for the browser pane, and a coding task's hand-over shows its page
+- What he attaches is a field beside his words, never a block written into them
+- Every button opens a task the same way: Back opens first and writes the address after, and a revisit draws at once
+- His line keeps its words through the swap: one identity from the send, never drawn empty between the page's copy and the server's
+- A routine or report for a job is built from the best-regarded skill or template found online and cites it; different networks never combine into one card
+- The created-setup card's text joins its lines again: a newline written raw into the page's source broke reviewProposal.js
+
 ## 0.4.1.0 - 2026-11-19
 
 - Gemini 4 Neon is the step up for hard jobs where a card lists it beside Hydrogen

@@ -75,6 +75,7 @@ def state(name: str, refresh: bool = False, busy: bool = True) -> dict:
     got = installed(refresh)
     if got is None: return {**out, 'status': 'no_npm'}
     have = got.get(pkg, '')
+    if have != want and kept(ad): return {**out, 'have': want, 'status': 'installed'}       # ...Taskuary's own copy runs: no npx either
     st = 'installed' if have == want else 'missing' if not have else 'update' if _ver(have) < _ver(want) else 'other'
     return {**out, 'have': have, 'status': st}
 
@@ -139,3 +140,50 @@ def start(name: str) -> bool:
         finally: _BUSY.discard(name)
     threading.Thread(target=work, daemon=True, name=f'connector-{name}').start()
     return True
+
+
+# TASKUARY'S OWN COPY (the speed round, 2026-11-20: a quick reply's agent spent 4-9 s of its start in `npx -y` resolving the adapter,
+# against ~1 s from an installed one - on every task, as nobody had pressed the card's line). Where the owner's npm has no pinned global,
+# the pinned adapter is fetched once, behind the first agent's start, into Taskuary's own folder - as its browser is (browserruntime) -
+# and every start after runs it directly. The owner's global npm is never touched, and the card's own install still works as before.
+def _kept_dir(ad: dict) -> Path:
+    from . import config
+    pkg, want = split(ad['pkg'])
+    return config.home() / 'connectors' / f"{pkg.lstrip('@').replace('/', '-')}-{want}"
+
+
+def kept(ad: dict) -> str:
+    "The launcher of Taskuary's own pinned copy of this adapter - '' until one is there, whole, at the pinned version."
+    pkg, want = split(ad['pkg'])
+    d = _kept_dir(ad) / 'node_modules'
+    exe = d / '.bin' / (ad['bin'] + ('.cmd' if os.name == 'nt' else ''))
+    try: ok = exe.is_file() and json.loads((d / pkg / 'package.json').read_text(encoding='utf-8')).get('version') == want
+    except (OSError, ValueError): ok = False
+    return str(exe) if ok else ''
+
+
+_TRIED = set()
+
+
+def keep_soon(ad: dict, runner=None) -> bool:
+    """Fetch the pinned adapter into Taskuary's own folder in the background - once a run of the app, never twice at a time. True when it
+    started. With no npm, or a fetch that failed, agents go on starting through npx as before; the log says why once."""
+    from .cliinstall import npm
+    pkg = ad['pkg']
+    if pkg in _TRIED or kept(ad) or not (exe := npm()): return False
+    _TRIED.add(pkg)
+    d = _kept_dir(ad)
+    def work():
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            rc, said = (runner or _fetch)([exe, 'install', '--prefix', str(d), '--include=optional', '--no-audit', '--no-fund', pkg])
+            if kept(ad): logger.info(f'agent connector {pkg} kept at {d} - agents start without npx from now on')
+            else: logger.warning(f'agent connector {pkg} was not fetched (npm exited {rc}): {str(said)[-300:]} - agents start through npx')
+        except Exception as e: logger.warning(f'agent connector {pkg} was not fetched - {e}; agents start through npx')
+    threading.Thread(target=work, daemon=True, name=f'connector-keep-{split(pkg)[0]}').start()
+    return True
+
+
+def _fetch(cmd: list) -> tuple:
+    from . import cliinstall
+    return cliinstall._run(cmd, timeout=600)

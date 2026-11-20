@@ -516,7 +516,9 @@ def pytest_configure(config):
 def no_real_acp_adapters(request, monkeypatch):
     """The ACP road (agents._acp_road) launches claude and codex through npm adapters (clis.ADAPTERS): a test driving a fake `claude`
     would fetch and start the real adapter instead - minutes on CI, and the argv road's own behaviour never tested. Only the ACP
-    road's own tests see the adapters."""
+    road's own tests see the adapters - and no test fetches Taskuary's own copy of one (acpadapter.keep_soon: a real npm install)."""
+    from taskuary import acpadapter
+    monkeypatch.setattr(acpadapter, 'keep_soon', lambda *a, **k: False)
     if request.module.__name__.rsplit('.', 1)[-1] in ('test_acp_road',) or request.node.get_closest_marker('acp'): return
     from taskuary import clis
     monkeypatch.setattr(clis, 'ADAPTERS', {})

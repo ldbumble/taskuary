@@ -178,3 +178,38 @@ def test_a_slow_agent_start_is_answered_with_the_connector_install(npm):
     assert troubleshoot.health(s, 'claude')['fix']['label'] == 'Update the connector'
     npm.pkgs[PKG] = WANT; acpadapter.forget()
     assert troubleshoot.health(s, 'claude')['ok']
+
+
+# ── 5. Taskuary's own copy where the owner has none (the speed round, 2026-11-20: npx cost every agent start 4-9 s) ───────────────────
+from taskuary.acpadapter import keep_soon as _keep_soon             # the real one: conftest stands a no-op in front of it for every test
+
+
+def kept_layout(home, version):
+    "What `npm install --prefix` leaves: the launcher in node_modules/.bin, the package's own package.json beside it."
+    d = acpadapter._kept_dir(clis.ADAPTERS['claude']) / 'node_modules'
+    (d / PKG).mkdir(parents=True, exist_ok=True); (d / '.bin').mkdir(parents=True, exist_ok=True)
+    (d / PKG / 'package.json').write_text(json.dumps({'name': PKG, 'version': version}), encoding='utf-8')
+    exe = d / '.bin' / ('claude-agent-acp' + ('.cmd' if os.name == 'nt' else '')); exe.write_text('', encoding='utf-8')
+    return str(exe)
+
+
+def test_with_no_global_adapter_the_first_start_fetches_taskuary_s_own_copy_and_the_next_runs_it(npm, monkeypatch):
+    ad, fetched = clis.ADAPTERS['claude'], []
+    acpadapter._TRIED.clear()
+    monkeypatch.setattr(acpadapter, 'keep_soon', lambda a: _keep_soon(a, runner=lambda cmd: (fetched.append(cmd), kept_layout(None, WANT), (0, 'ok'))[-1]))
+    launch = lambda: agents.acp_launch({'cmd': 'claude', 'args': []})['cmd']
+    with mock.patch.object(agents.pathcache, 'which', return_value=None), \
+         mock.patch.object(agents, '_resolve_cmd', side_effect=lambda c: ['npx'] if c == 'npx' else ['/opt/bin/claude']):
+        assert launch() == ['npx', '-y', f'{PKG}@{WANT}']                      # ...the first start is not held up: npx, the fetch behind it
+        for _ in range(100):
+            if acpadapter.kept(ad): break
+            import time; time.sleep(0.05)
+        assert launch() == [acpadapter.kept(ad)]                                # ...and the next runs the copy, no npx
+    assert len(fetched) == 1 and fetched[0][1:4] == ['install', '--prefix', str(acpadapter._kept_dir(ad))] and fetched[0][-1] == f'{PKG}@{WANT}'
+    assert not npm_installs(npm)                                                # ...the owner's global npm untouched
+    assert acpadapter.state('claude')['status'] == 'installed'                  # ...and the card says agents start without npx
+
+
+def test_a_kept_copy_at_another_version_is_never_run(npm):
+    kept_layout(None, '0.1.0')
+    assert acpadapter.kept(clis.ADAPTERS['claude']) == ''

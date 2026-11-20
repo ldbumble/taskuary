@@ -90,7 +90,7 @@ def test_the_rows_filed_under_the_old_marks_are_marked_once(tmp_path):
     with s.lock: s.cx.execute('DROP TABLE review'); s.cx.execute(old.replace(', Origin TEXT', '')); s.cx.commit()
     for why in ('chase:2 cc:omar@northwind.example', 'needs a reply: asked for the W-9', 'the agent drafted it'):
         s._exec("INSERT INTO review (TaskId, Kind, Status, Reason) VALUES (1, 'draft', 'pending', ?)", (why,))
-    s.cx.close()
+    s.close()
     s = SQLiteStore(p)
     assert [r['Origin'] for r in s._rows('SELECT Origin FROM review ORDER BY ReviewId')] == ['chase', 'triage', None]
     assert s.get_review(s.add_review({'TaskId': 1, 'Kind': 'draft', 'Status': 'pending', 'Origin': 'chase'}))['Origin'] == 'chase'

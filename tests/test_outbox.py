@@ -118,7 +118,7 @@ class OwnersAskTests(unittest.TestCase):
         tid = s.create_task({'Title': 'Census', 'Kind': 'reply', 'Status': 'open', 'Source': 'outbox'}, 'owner')
         mid = s.add_message({'TaskId': tid, 'ExternalId': f'outbox:{tid}', 'ConversationId': f'outbox:{tid}', 'Channel': 'email',
                              'SourceName': 'gail@northwind.example', 'FromName': 'You', 'Direction': 'out', 'BodyText': 'ask her', 'Status': 'routed'})
-        s.cx.close()
+        s.close()
         m = SQLiteStore(p).get_message(mid)
         self.assertNotEqual(m.get('Direction'), 'out')
         self.assertFalse(m.get('SourceName'))

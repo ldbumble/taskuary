@@ -839,16 +839,39 @@ def advance_soon(store, tid: int, rid: int = None) -> None:
     if rid and not get(store, tid, f'r:{int(rid)}'):
         try: _RAISED.setdefault(store, {})[int(rid)] = (open_turn(store, tid) or {}).get('Id')
         except TypeError: pass                     # ...a store that cannot be held weakly keeps no note: the time of its raise places it
+    if getattr(store, '_closed', False) or getattr(store, '_closing', False): return
+    try: ref = weakref.ref(store)
+    except TypeError: return advance(store, tid)                   # ...a store that cannot be held weakly is advanced where it was written
     with _SOON_LOCK:
-        _SOON[(id(store), int(tid))] = (store, int(tid))
+        _SOON[(id(store), int(tid))] = (ref, int(tid))
         if not (_SOON_T[0] and _SOON_T[0].is_alive()):
             _SOON_T[0] = threading.Thread(target=_soon_loop, daemon=True, name='chatlog-cards'); _SOON_T[0].start()
     _SOON_GO.set()
+# ...AND NEVER ON A STORE BEING CLOSED (the release run, 2026-11-19: the worker read a store a test's cleanup had torn down - an access violation):
+# it holds a store only weakly and only for one job, never starts one on a closed store, and store.close() waits for the one at work (let_go)
+_SOON_RUN = threading.Condition()
+_SOON_ON = [None]                                 # id() of the store the worker is advancing right now
 def _soon_loop() -> None:
     while True:
         _SOON_GO.wait(); _SOON_GO.clear()
         with _SOON_LOCK: jobs = list(_SOON.values()); _SOON.clear()
-        for st, tid in jobs: advance(st, tid)
+        for ref, tid in jobs:
+            st = ref()
+            if st is None: continue
+            with _SOON_RUN:
+                if getattr(st, '_closed', False) or getattr(st, '_closing', False): continue
+                _SOON_ON[0] = id(st)
+            try: advance(st, tid)
+            finally:
+                with _SOON_RUN: _SOON_ON[0] = None; _SOON_RUN.notify_all()
+            del st
+def let_go(store, timeout: float = 10.) -> None:
+    """Before `store` closes: what the worker was told of it is dropped, and a job at work on it is waited for - nothing reads it after."""
+    with _SOON_LOCK:
+        for k in [k for k in _SOON if k[0] == id(store)]: _SOON.pop(k, None)
+    with _SOON_RUN:
+        end = time.time() + timeout
+        while _SOON_ON[0] == id(store) and time.time() < end: _SOON_RUN.wait(0.1)
 
 
 def _above(store, r: dict):

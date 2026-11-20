@@ -87,7 +87,7 @@ class StrandedRowsAreBackfilled(unittest.TestCase):
                      "VALUES (NULL,'action','pending','{}','a setting waits for your yes','2026-09-21 08:00:00')")
         s.cx.execute("DELETE FROM setting WHERE Name='review_task_backfilled'")
         s.cx.commit(); s.close()
-        SQLiteStore(path).cx.close()
+        SQLiteStore(path).close()
         s3 = SQLiteStore(path)
         self.assertEqual(s3.cx.execute("SELECT COUNT(*) c FROM task WHERE Source='review'").fetchone()['c'], 1,
                          'a second open must not mint a second task for the same review')

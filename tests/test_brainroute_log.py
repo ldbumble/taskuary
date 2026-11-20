@@ -85,11 +85,11 @@ def test_the_migration_sweeps_rows_of_brains_never_called_once():
     for rec in ({'Job': 'triage', 'Outcome': 'ok'}, {'Job': 'triage', 'Outcome': 'ok', 'Ms': 120}, {'Job': 'triage', 'Outcome': 'refused:no AI'},
                 {'Job': 'coding', 'Outcome': 'ok', 'TokensIn': 900}):
         s.add_brain_route({'At': old, **rec})
-    s.cx.execute("DELETE FROM setting WHERE Name='brainroute_uncalled_swept'"); s.cx.commit(); s.cx.close()
+    s.cx.execute("DELETE FROM setting WHERE Name='brainroute_uncalled_swept'"); s.cx.commit(); s.close()
     s = SQLiteStore(p)
     assert sorted((r['Outcome'], r['Ms'] or 0, r['TokensIn'] or 0) for r in s.brain_routes()) == [('ok', 0, 900), ('ok', 120, 0), ('refused:no AI', 0, 0)]
     assert s.get_setting('brainroute_uncalled_swept') == '1'
-    s.add_brain_route({'At': old, 'Job': 'triage', 'Outcome': 'ok'}); s.cx.close()
+    s.add_brain_route({'At': old, 'Job': 'triage', 'Outcome': 'ok'}); s.close()
     assert len(SQLiteStore(p).brain_routes()) == 4                                                      # once, never again
 
 

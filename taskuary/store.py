@@ -4168,6 +4168,10 @@ class SQLiteStore:
         file open on Windows and its temporary directory cannot be removed. Under the store's lock: a background thread
         mid-query (the reply watch's judge, 2026-10-11) had its connection closed beneath it and the process died with an
         access violation - after this, a late reader gets sqlite's "closed database" error instead."""
+        self._closing = True                      # ...no new background job starts on it from here
+        try:                                      # ...and the chat log's own worker lets go of it first: nothing of it runs after (chatlog.let_go)
+            from . import chatlog; chatlog.let_go(self)
+        except Exception as e: logger.warning(f'store: the chat log worker was not let go before close - {e}')
         with self.lock, self._rail_lock:
             with self._readers_lock: self._closed, readers, self._readers = True, self._readers, []
             for cx in (self._rail_cx, self.cx, *readers):

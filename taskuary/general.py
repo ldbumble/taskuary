@@ -1939,7 +1939,9 @@ def history_brief(store, tid: int, hands: bool, quick: bool = False) -> tuple[st
     if hands and not quick: return HISTORY_LINE, ''
     got, done = earlier_mail(store, tid), earlier_tasks(store, tid)
     from .terminal import fence
-    return (QUICK_HISTORY if hands else SEARCHED_LINE).format(none='' if got else ' (it found none)'), '\n\n'.join(x for x in (
+    # ...and where it found nothing, a quick turn is told that is the answer: it searched the same mail again before asking (the speed round)
+    none = '' if got else ' (it found none: the saved mail holds nothing more on this - do not search it again)' if hands else ' (it found none)'
+    return (QUICK_HISTORY if hands else SEARCHED_LINE).format(none=none), '\n\n'.join(x for x in (
         f'EARLIER MAIL (Taskuary searched it for you)\n{fence(got)}' if got else '', fence(done) if done else '') if x)
 
 

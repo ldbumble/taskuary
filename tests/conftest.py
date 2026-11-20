@@ -868,3 +868,11 @@ def no_spare_left_running():
     from taskuary import clipool
     with clipool._LOCK: gone = list(clipool._SPARES.values()); clipool._SPARES.clear()
     for lv in gone: lv.close()
+
+
+@pytest.fixture(autouse=True)
+def no_connector_left_running():
+    "A connector started ahead (agents._acp_ready) is a real process: none outlives the test that started it."
+    yield
+    from taskuary import agents
+    agents._close_spares()

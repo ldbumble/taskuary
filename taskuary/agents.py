@@ -4,7 +4,7 @@ over STDIN (argv length limits are real on Windows), JSON output parsed when ava
 (Claude-style {result, session_id} -> resumable sessions), git diff captured around the
 run so code changes are first-class, every run traced + audited.
 """
-import contextlib, contextvars, hashlib, json, os, re, shutil, subprocess, threading, time
+import atexit, contextlib, contextvars, hashlib, json, os, re, shutil, subprocess, threading, time
 from datetime import datetime
 from pathlib import Path
 from loguru import logger
@@ -1646,16 +1646,62 @@ def said_afresh(store, task_id) -> None:
     try: store.add_comment(task_id, sessionrecord.NOTE_ACTOR, general.ASSISTANT_TYPE, GONE_LINE)
     except Exception as e: logger.debug(f'task {task_id}: the fresh start was not said - {e}')
 
-def _acp_open(name: str, launch: dict, cwd, env: dict, resume, timeout, trace, fresh_if_gone: bool = False):
+# A CONNECTOR STARTED AHEAD (the speed round, 2026-11-20: every new task's agent waited ~1 s for claude's adapter to start and initialise,
+# before its session even began). Claude's adapter takes a session's own environment with the session (_meta.claudeCode.options.env -
+# claude-agent-acp hands it to the CLI it starts), so the adapter process itself carries nothing of any task: one is started and
+# initialised ahead, the next task's session opens on it, and the next is started behind it. One per launch, never shared.
+_ACP_SPARE, _ACP_SPARE_LOCK = {}, threading.Lock()
+
+
+def _spare_key(cmd, env: dict, timeout) -> str:
+    return hashlib.sha1(json.dumps([list(cmd), sorted(env.items()), timeout]).encode('utf-8')).hexdigest()[:16]
+
+
+def _acp_ready(cmd, env: dict, timeout) -> None:
+    "Start and initialise the next connector for this launch, in the background."
+    key = _spare_key(cmd, env, timeout)
+    def go():
+        try:
+            from . import config
+            c = acp_mod.ACPClient(cmd[0], cmd[1:], cwd=str(config.home()), env=env, timeout=timeout); c.connect()
+        except Exception as e: logger.debug(f'acp: no connector started ahead - {e}'); return
+        with _ACP_SPARE_LOCK: old = _ACP_SPARE.pop(key, None); _ACP_SPARE[key] = c
+        if old: old.close()
+    threading.Thread(target=go, daemon=True, name='acp-spare').start()
+
+
+def _acp_spare(cmd, env: dict, timeout):
+    "The connector started ahead for this launch, initialised and alive - or None."
+    with _ACP_SPARE_LOCK: c = _ACP_SPARE.pop(_spare_key(cmd, env, timeout), None)
+    if c is not None and not c._alive: c.close(); c = None
+    return c
+
+
+@atexit.register
+def _close_spares():
+    with _ACP_SPARE_LOCK: gone = list(_ACP_SPARE.values()); _ACP_SPARE.clear()
+    for c in gone: c.close()
+
+
+def _acp_open(name: str, launch: dict, cwd, env: dict, resume, timeout, trace, fresh_if_gone: bool = False, base: dict = None):
     """A connected session, ready for a prompt: started, initialized, the conversation opened (resumed where there is one),
     its mode, model and effort set. ACPStartError for anything before the session exists - nothing has run, so run_cli takes
-    the argv road instead."""
-    try: client = acp_mod.ACPClient(launch['cmd'][0], launch['cmd'][1:], cwd=cwd, env=env, timeout=timeout)
+    the argv road instead. `base`: the environment with nothing of this task in it - given, claude's adapter runs on it (one started
+    ahead where there is one) and the task's own part rides with its session."""
+    spare = base is not None and bool(launch['adapter']) and _cli_name(name) == 'claude'
+    if spare:
+        own = {k: v for k, v in env.items() if base.get(k) != v}
+        launch = {**launch, 'meta': {'claudeCode': {**((launch['meta'] or {}).get('claudeCode') or {}),
+                                                    'options': {**(((launch['meta'] or {}).get('claudeCode') or {}).get('options') or {}), 'env': own}}}}
+        client, env = _acp_spare(launch['cmd'], base, timeout), base
+    else: client = None
+    try: client = client or acp_mod.ACPClient(launch['cmd'][0], launch['cmd'][1:], cwd=cwd, env=env, timeout=timeout)
     except PermissionError as e:
         if launch['adapter']: raise acp_mod.ACPStartError(f"{launch['adapter']} was refused: {e}") from e   # the adapter, not the CLI
         raise FileNotFoundError(denied_msg(name, launch['cmd'][0], e)) from e
+    if spare: _acp_ready(launch['cmd'], base, timeout)              # ...the next task's, started now
     try:
-        caps = client.connect()
+        caps = client._caps if client._caps else client.connect()
         try:
             if resume and (caps.get('loadSession') or client.can_resume()):
                 try: client.load_session(resume, cwd, meta=launch['meta'])
@@ -1739,10 +1785,10 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     """
     profile = with_cmd(profile, store); name = profile['cmd']
     launch, cwd, keep = acp_launch(profile), _long(profile.get('cwd')), profile.get('keep_alive')
-    env = {**spawn_env(profile, extra_env), **launch['env']}
+    env, base = {**spawn_env(profile, extra_env), **launch['env']}, {**spawn_env(profile), **launch['env']}
     from . import acpgate, clipool
     sig = _acp_sig(launch, cwd, env)
-    opener = lambda: acp_mod.Conversation(_acp_open(name, launch, cwd, env, resume, profile.get('timeout'), trace, fresh_if_gone=True), sig)
+    opener = lambda: acp_mod.Conversation(_acp_open(name, launch, cwd, env, resume, profile.get('timeout'), trace, fresh_if_gone=True, base=base), sig)
     conv = clipool.take(keep, sig, opener, resume) if keep else opener()      # ...its turn read opening from its start where none was up (general.cold)
     client = conv.client
     # ...ITS CONVERSATION WAS GONE: nothing is asked of the fresh one here - this turn's words assume what it no longer has. The caller says the
@@ -2196,10 +2242,10 @@ def _warm_acp(profile: dict, resume, extra_env, store, swap: bool) -> bool:
     from . import clipool
     try:
         name, launch, cwd = profile['cmd'], acp_launch(profile), _long(profile.get('cwd'))
-        env = {**spawn_env(profile, extra_env), **launch['env']}
+        env, base = {**spawn_env(profile, extra_env), **launch['env']}, {**spawn_env(profile), **launch['env']}
         sig = _acp_sig(launch, cwd, env)
         return clipool.warm_with(profile['keep_alive'], sig, lambda: acp_mod.Conversation(
-            _acp_open(name, launch, cwd, env, resume, profile.get('timeout'), lambda *a: None, fresh_if_gone=True), sig), resume, swap=swap)
+            _acp_open(name, launch, cwd, env, resume, profile.get('timeout'), lambda *a: None, fresh_if_gone=True, base=base), sig), resume, swap=swap)
     except acp_mod.ACPStartError as e:
         logger.info(f"acp: {profile['cmd']} not warmed over ACP - {e}"); return None
 

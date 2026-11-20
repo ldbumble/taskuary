@@ -1,7 +1,7 @@
 """EVERY CLI RUN OF THE GENERAL AGENT OVER ACP, argv as the fallback (the owner, 2026-11-06): claude and codex through their adapters,
 Taskuary's own rules answering each permission, the run's model and effort as session options, a kept conversation holding its
 connection between turns, and a switch to turn it off. The agent here is tests/fake_acp_server.py; no vendor CLI is installed."""
-import json, sys, threading
+import json, os, sys, threading
 from types import SimpleNamespace
 from pathlib import Path
 from unittest import mock
@@ -519,3 +519,32 @@ def test_every_road_reads_a_failure_by_one_function(said):
     f = agents.failure_of('codex', said, 'codex')
     assert isinstance(f, agents.RateLimited) if 'limit' in said else 'sign' in str(f).lower() or 'log' in str(f).lower()
     with pytest.raises(type(f)): agents.raise_failure('codex', said, 'codex')
+
+
+# ── A CONNECTOR STARTED AHEAD (the speed round, 2026-11-20: every new task's agent waited ~1 s for claude's adapter to start) ──────────────
+def test_claude_s_adapter_runs_on_no_task_s_environment_and_the_next_task_opens_on_one_started_ahead(tmp_path, monkeypatch):
+    import time
+    log = tmp_path / 'acp.jsonl'
+    monkeypatch.setenv('FAKE_ACP_LOG', str(log))
+    launch = {'cmd': FAKE, 'env': {}, 'mode': '', 'meta': {'claudeCode': {'options': {'promptSuggestions': False}}}, 'adapter': 'claude-agent-acp@0'}
+    base = {**os.environ}
+    open_for = lambda tid: agents._acp_open('claude', launch, str(tmp_path), {**base, 'TQ_TASK': str(tid)}, None, 60, lambda *a: None, base=base)
+    try:
+        t = time.time(); a = open_for(1)
+        for _ in range(100):                                                   # ...the next one starting behind it
+            if agents._ACP_SPARE: break
+            time.sleep(0.05)
+        ahead = next(iter(agents._ACP_SPARE.values())).p.pid
+        b = open_for(2)
+        rows = [json.loads(l) for l in log.read_text().splitlines()]
+        assert [r['env'] for r in rows] == [{'TQ_TASK': '1'}, {'TQ_TASK': '2'}]      # ...each task's own part rides with its session
+        assert all(r['proc'] == {} for r in rows)                                       # ...never in the adapter's own process
+        assert b.p.pid == ahead != a.p.pid and rows[1]['pid'] == ahead                   # ...task 2 on the one started ahead
+        for _ in range(100):
+            if agents._ACP_SPARE: break
+            time.sleep(0.05)
+        assert agents._ACP_SPARE                                                         # ...and a third already up for the next
+    finally:
+        for c in (locals().get('a'), locals().get('b')):
+            if c: c.close()
+        agents._close_spares()

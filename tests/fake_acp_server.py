@@ -25,6 +25,7 @@ Set in its environment, for the tests that need more:
   FAKE_ACP_STOP=<reason> every turn ends with that stopReason (refusal, max_tokens, max_turn_requests), as an adapter's PromptResponse says it
   FAKE_ACP_USAGE=1       each turn's answer carries its usage and _meta.quota, as both adapters' PromptResponses do
   FAKE_ACP_MODELS=<a,b>  the model values it offers (default opus,sonnet)
+  FAKE_ACP_LOG=<file>    each session/new, as a line: the env its _meta handed it, and its own process's TQ_ variables
   FAKE_DIRECTOR=<folder> each turn's words come from a scenario (fake_director.py), no permission asked; a session/cancel ends it meanwhile
   FAKE_ACP_SCRIPT=<file>  fake_claude's script: the first rule whose `when` the owner's words match answers `first`, after its `post`s ran
                          as the agent's own `taskuary --reply` would (fake_director.post) - a coding agent filing a reply, no permission asked;
@@ -120,6 +121,11 @@ for line in sys.stdin:
     elif method == 'session/new':
         # the cwd we were given is echoed back so a test can prove the run was placed correctly
         os.environ['FAKE_ACP_CWD'] = str(msg['params'].get('cwd') or '')
+        # ...FAKE_ACP_LOG=<file>: each session's opening, with the environment it was handed and the one its process runs on
+        if os.environ.get('FAKE_ACP_LOG'):
+            with open(os.environ['FAKE_ACP_LOG'], 'a', encoding='utf-8') as f:
+                f.write(json.dumps({'pid': os.getpid(), 'env': ((((msg['params'].get('_meta') or {}).get('claudeCode') or {}).get('options') or {}).get('env')),
+                                    'proc': {k: v for k, v in os.environ.items() if k.startswith('TQ_')}}) + chr(10))
         reply(mid, {'sessionId': SID, 'configOptions': options()})
     elif method in ('session/load', 'session/resume') and os.environ.get('FAKE_ACP_GONE') == '1':
         send({'jsonrpc': '2.0', 'id': mid, 'error': {'code': -32603, 'message': f"No conversation found with session ID: {msg['params'].get('sessionId')}"}})

@@ -591,9 +591,9 @@ class AFailedSendIsHandedBack(unittest.TestCase):
 
 class OneCardAtATime(unittest.TestCase):
     """THE OWNER, 2026-11-16: "where there are 2 action cards, like approve push then email, it should wait on each approval step or action
-    card, so the agent should wait on it and then go to next steps". Every kind of card stands in one line (cardqueue): the next is shown only
-    once the one before it was pressed and its agent has heard how it went - so a failed push holds back the email announcing it, and a no
-    is the agent's to decide on before anything behind it stands. Invented people."""
+    card, so the agent should wait on it and then go to next steps". Every kind of card stands in one line (cardqueue), one drawn at a time -
+    and EACH PRESS BRINGS THE NEXT AT ONCE (the owner, 2026-11-20: the hold while the agent went on from a press hid the rest of three posts):
+    the agent hears each press as it is made, with what now waits, and takes back what the press changed. Invented people."""
     setUp, coding_ended, card, press = (AFailedPressIsHandedBack.setUp, AFailedPressIsHandedBack.coding_ended, AFailedPressIsHandedBack.card,
                                         AFailedPressIsHandedBack.press)
 
@@ -615,13 +615,13 @@ class OneCardAtATime(unittest.TestCase):
             out = self.press(push)
         self.assertFalse(out['ok']); [n] = self.s.waiting_notes(tid)
         self.assertIn('branch is protected', n['Note'])
-        self.assertIn(f'Comes forward once your turn ends (you are going on from his last press): rv{note}, the email to erin@northwind.example', n['Note'], 'it hears what waits, in the same hand-back')
-        self.assertEqual(cardqueue.held(self.s, tid), {note}, 'never shown as-is while its agent goes on from the failure')
+        self.assertIn(f'Waiting for his press now: rv{note}, the email to erin@northwind.example', n['Note'], 'it hears what waits, in the same hand-back')
+        self.assertEqual((cardqueue.state(self.s, tid)['live'], cardqueue.held(self.s, tid)), ([note], set()), 'the press brings the next at once')
         verdicts.withdraw(self.s, tid, 'the push was refused - nothing is live', 'agent', which=str(note))
         self.answered(tid, 'GitHub refused the push; I took the note to Erin back.')
-        self.assertEqual(cardqueue.state(self.s, tid)['units'], [], 'nothing of it ever stood in front of the owner')
+        self.assertEqual(cardqueue.state(self.s, tid)['live'], [], 'its agent took it back: nothing waits')
 
-    def test_a_push_that_went_brings_the_email_forward_once_its_agent_has_heard_it(self):
+    def test_a_push_that_went_brings_the_email_forward_at_the_press(self):
         tid = self.coding_ended(); self.s.set_setting('agent_push_enabled', '1', 'test')
         self.answered(tid, 'The push and the note to Erin are set up.', '2000-01-01 00:00:00')
         push, note = self.card(tid, '', 'open_pr'), self.email(tid, 'erin@northwind.example', 'Erin - the ledger fix is live.')
@@ -629,11 +629,9 @@ class OneCardAtATime(unittest.TestCase):
         with mock.patch('taskuary.ci.open_for_task', return_value={'url': 'https://github.com/northwind/ledger/pull/12'}):
             self.assertTrue(self.press(push)['ok'])
         [n] = self.s.waiting_notes(tid); self.assertIn('it went through', n['Note']); self.assertIn(f'rv{note}', n['Note'])
-        self.assertEqual(cardqueue.held(self.s, tid), {note})
-        self.answered(tid, 'The pull request is open.')
         self.assertEqual((cardqueue.state(self.s, tid)['live'], cardqueue.held(self.s, tid)), ([note], set()))
 
-    def test_a_no_to_the_first_card_tells_its_agent_whose_no_it_was_and_the_next_waits_for_it(self):
+    def test_a_no_to_the_first_card_tells_its_agent_whose_no_it_was_and_the_next_comes_forward(self):
         tid = Factory(self.s).task('Answer Gail and tell Ray'); self.answered(tid, 'Both letters are set up.', '2000-01-01 00:00:00')
         first, second = self.email(tid, 'gail@northwind.example', 'Gail - the rate is 4%.'), self.email(tid, 'ray@northwind.example', 'Ray - Gail has the rate.')
         told = []
@@ -641,9 +639,7 @@ class OneCardAtATime(unittest.TestCase):
             self.assertTrue(verdicts.decide(self.s, self.s.get_review(first), 'reject')['ok'])
         [said] = told
         self.assertIn(f'turned down rv{first} (the email to gail@northwind.example) - their own no', said); self.assertIn(f'rv{second}', said)
-        self.assertEqual(cardqueue.held(self.s, tid), {second}, 'the line does not go on past a no by itself')
-        self.answered(tid, 'Leaving the note to Ray as it is.')
-        self.assertEqual(cardqueue.state(self.s, tid)['live'], [second])
+        self.assertEqual((cardqueue.state(self.s, tid)['live'], cardqueue.held(self.s, tid)), ([second], set()), 'the press brings the next at once')
 
     def test_a_no_with_nothing_behind_it_wakes_nobody(self):
         tid = Factory(self.s).task('Answer Gail'); self.answered(tid, 'The letter is set up.', '2000-01-01 00:00:00')

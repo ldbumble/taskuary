@@ -30,12 +30,12 @@ class SendToAgentTests(unittest.TestCase):
     def test_nothing_typed_sends_the_summary_as_taskuarys_brief(self):
         r = self.c.post(f'/api/tasks/{self.tid}/dispatch', json={'kind': 'general'})
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertEqual(self.ses.sent, [('Marcus wants a 1 or 3 year renewal picked.', {'brief': True})])
+        self.assertEqual(self.ses.sent, [('Marcus wants a 1 or 3 year renewal picked.', {'attachments': None, 'brief': True})])
 
     def test_words_the_owner_typed_stay_theirs(self):
         r = self.c.post(f'/api/tasks/{self.tid}/dispatch', json={'kind': 'general', 'instruction': 'Go with three years.'})
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertEqual(self.ses.sent, [('Go with three years.', {'brief': False})])
+        self.assertEqual(self.ses.sent, [('Go with three years.', {'attachments': None, 'brief': False})])
 
     def test_a_task_triage_left_to_the_owner_is_the_agents_once_sent(self):
         "Its Summary said the owner does it by hand, and the agent it was sent to read that as its orders and did nothing."
@@ -44,4 +44,4 @@ class SendToAgentTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.text)
         [(text, kw)] = self.ses.sent
         self.assertTrue(text.startswith('Omar wants a file deleted') and text.endswith(server.HANDED_OVER), text)
-        self.assertEqual(kw, {'brief': True})
+        self.assertEqual(kw, {'attachments': None, 'brief': True})

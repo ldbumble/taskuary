@@ -116,7 +116,7 @@ class StateTests(unittest.TestCase):
             # and reading it back was a read outside the task, held. Chrome takes the folder from its profile's preferences at launch
             prof = Path(next(a for a in argv if a.startswith('--user-data-dir=')).split('=', 1)[1])
             prefs = json.loads((prof / 'Default' / 'Preferences').read_text(encoding='utf-8'))
-            self.assertEqual(prefs['download']['default_directory'], str(bv.downloads()))
+            self.assertEqual(Path(prefs['download']['default_directory']).resolve(), bv.downloads('rc1').resolve())     # ...the session's own, however spelled (/var is /private/var on macOS)
             self.assertFalse(prefs['download']['prompt_for_download'])
             self.assertTrue(bv.downloads().is_dir()); self.assertIn(str(bv.downloads()), bv.brief())
             from taskuary import readgate

@@ -859,3 +859,12 @@ def pytest_collection_modifyitems(config, items):
     import pytest
     for it in items:
         if any(k in it.nodeid for k in _KNOWN_CI_ONLY): it.add_marker(pytest.mark.skip(reason='known CI-only timing - being made deterministic'))
+
+
+@pytest.fixture(autouse=True)
+def no_spare_left_running():
+    "A one-shot's next spare (clipool.spare_turn) is a real process: none outlives the test that started it."
+    yield
+    from taskuary import clipool
+    with clipool._LOCK: gone = list(clipool._SPARES.values()); clipool._SPARES.clear()
+    for lv in gone: lv.close()

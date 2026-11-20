@@ -4,7 +4,7 @@ over STDIN (argv length limits are real on Windows), JSON output parsed when ava
 (Claude-style {result, session_id} -> resumable sessions), git diff captured around the
 run so code changes are first-class, every run traced + audited.
 """
-import contextlib, contextvars, json, os, re, shutil, subprocess, threading, time
+import contextlib, contextvars, hashlib, json, os, re, shutil, subprocess, threading, time
 from datetime import datetime
 from pathlib import Path
 from loguru import logger
@@ -1888,6 +1888,9 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     keep = profile.get('keep_alive')
     if _keeps(profile, family, args):
         return _run_live(profile, name, cmd, prompt, trace, keep, resume, cancel, extra_env)
+    # ...and a ONE-SHOT JUDGEMENT on a process already up (clipool.spare_turn): no tools, no conversation to resume, no picture to show
+    if _spares(profile, family, args, resume, images):
+        return _run_live(profile, name, cmd, prompt, trace, None, None, cancel, extra_env, spare=True)
     # A PICTURE IS SHOWN, NOT NAMED (2026-11-09): triage on claude has no tools to open a file, so a screenshot-only chat line was judged
     # blind and became its own task beside the one it was about. Claude's stream-json input takes image blocks, as the API does
     # ...and Codex's exec takes them as files: each written to a private temp file for the run and removed after it, as the devin prompt is
@@ -2162,6 +2165,13 @@ def _keeps(profile: dict, family: str, args: list) -> bool:
     return bool(profile.get('keep_alive')) and family == 'claude' and 'stream-json' in args and ('-p' in args or '--print' in args)
 
 
+def _spares(profile: dict, family: str, args: list, resume, images) -> bool:
+    "A one-shot claude call with every tool off (`--tools ''`: triage, a summary, a judge) - one a process started ahead can answer."
+    bare = '--tools' in args and args.index('--tools') + 1 < len(args) and args[args.index('--tools') + 1] == ''
+    return (bare and family == 'claude' and not profile.get('keep_alive') and not resume and not images and 'stream-json' in args
+            and ('-p' in args or '--print' in args) and '--input-format' not in args)
+
+
 def warm_cli(profile: dict, resume: str = None, extra_env: dict = None, store=None, swap: bool = False) -> bool:
     """Start a kept conversation's process ahead of its first turn (clipool.warm) - the command run_cli's live road would
     launch for this profile, so that turn finds it running. False for a profile that keeps no conversation (a one-shot
@@ -2191,14 +2201,14 @@ def _warm_acp(profile: dict, resume, extra_env, store, swap: bool) -> bool:
         logger.info(f"acp: {profile['cmd']} not warmed over ACP - {e}"); return None
 
 
-def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str, resume, cancel, extra_env):
+def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str, resume, cancel, extra_env, spare: bool = False):
     """run_cli's turn on a conversation's LIVE process: the same trace events, the same errors, the same
     (result, session_id, diff) - with no checkout to diff, since neither the Assistant nor a general agent
-    works in one."""
+    works in one. `spare`: a one-shot answer on a process started ahead for this command (clipool.spare_turn)."""
     from . import clipool
     cwd = profile.get('cwd')
     trace('prompt', 'prompt_sent_to_agent', prompt)
-    trace('tool', 'cli', f'{name} cwd={cwd or os.getcwd()} live={keep}' + (f' resume={resume}' if resume else ''))
+    trace('tool', 'cli', f'{name} cwd={cwd or os.getcwd()} live={keep or "spare"}' + (f' resume={resume}' if resume else ''))
     # THE WORDS AS THEY ARE WRITTEN, for a conversation that asked for them (--include-partial-messages: the Assistant): the page
     # draws them while the rest is still coming, instead of after the whole answer (the owner, 2026-10-20: "it should respond to
     # things quickly"). Only what the owner would read - the machine's CALL line never - and the finished answer replaces them.
@@ -2220,8 +2230,12 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
         # a CLI with its tools off (the Assistant deciding: nothing happens until the app carries the decision out) may be sent its
         # turn again after any end; one with tools may have done work mid-turn, and never is
         bare = '--tools' in cmd and cmd.index('--tools') + 1 < len(cmd) and cmd[cmd.index('--tools') + 1] == ''
-        final, raw = clipool.run(keep, cmd, prompt, on, cwd=cwd, env=spawn_env(profile, extra_env),
-                                 resume=resume, cancel=cancel, timeout=profile.get('timeout'), resend=bare)
+        env = spawn_env(profile, extra_env)
+        if spare:
+            # ...keyed by everything it was started with, the environment's values too: a spare is never a call's under another token
+            key = 'spare:' + hashlib.sha1(json.dumps([cmd, str(cwd or ''), sorted(env.items())]).encode('utf-8')).hexdigest()[:16]
+            final, raw = clipool.spare_turn(key, cmd, prompt, on, cwd=cwd, env=env, cancel=cancel, timeout=profile.get('timeout'))
+        else: final, raw = clipool.run(keep, cmd, prompt, on, cwd=cwd, env=env, resume=resume, cancel=cancel, timeout=profile.get('timeout'), resend=bare)
     except PermissionError as e:
         raise FileNotFoundError(denied_msg(name, cmd[0] if cmd else '', e)) from e
     except Cancelled: raise

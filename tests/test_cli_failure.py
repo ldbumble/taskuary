@@ -187,3 +187,37 @@ def test_an_error_the_turn_got_past_is_no_failure(tmp_path):
     got = printed(tmp_path, lines, code=0, cmd='codex', args=('exec', '--json'))
     assert not isinstance(got, Exception) and got[0] == 'Done: three posts drafted.', got
 
+
+
+# ── A ONE-SHOT JUDGEMENT ON A PROCESS STARTED AHEAD (clipool.spare_turn; the speed round, 2026-11-20: triage paid 3-7 s of CLI start-up
+# on every arrival) ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+def test_a_bare_one_shot_takes_the_spare_started_by_the_call_before_and_each_answer_is_its_own_conversation(tmp_path):
+    import time
+    rules, log = tmp_path / 'r.json', tmp_path / 'log.jsonl'
+    rules.write_text(json.dumps([{'when': '.', 'first': 'verdict'}]))
+    sysf = tmp_path / 'triage.md'; sysf.write_text('Judge one message.', encoding='utf-8')
+    prof = {'cmd': 'claude', 'args': ['-p', '--output-format', 'stream-json', '--verbose', '--tools', '', '--system-prompt-file', str(sysf)], 'cwd': str(tmp_path)}
+    env = {'FAKE_CLAUDE_SCRIPT': str(rules), 'FAKE_CLAUDE_SPAWN': '1.5', 'FAKE_CLAUDE_THINK': '0', 'FAKE_CLAUDE_LOG': str(log)}
+    try:
+        with mock.patch.object(agents, '_resolve_cmd', return_value=FAKE):
+            t = time.time(); a, sid_a, _ = agents.run_cli(prof, 'mail one', lambda *x: None, extra_env=env); cold = time.time() - t
+            assert clipool.spares() == 1                                          # ...the next one up and waiting
+            time.sleep(2)                                                          # ...its start-up paid between the calls
+            t = time.time(); b, sid_b, _ = agents.run_cli(prof, 'mail two', lambda *x: None, extra_env=env); warm = time.time() - t
+        assert a == b == 'verdict' and sid_a != sid_b                             # ...a conversation each: nothing of mail one in mail two
+        assert cold > 1.5 > warm, (cold, warm)
+        assert len({json.loads(l)['pid'] for l in log.read_text().splitlines() if 'turn' in l or 'result' in l}) >= 2   # ...two processes answered
+        assert clipool.spares() == 1                                              # ...and the next is already starting
+    finally:
+        with clipool._LOCK: gone = list(clipool._SPARES.values()); clipool._SPARES.clear()
+        for lv in gone: lv.close()
+
+
+def test_a_one_shot_with_tools_or_a_conversation_never_takes_a_spare():
+    base = ['-p', '--output-format', 'stream-json', '--verbose']
+    assert agents._spares({}, 'claude', base + ['--tools', ''], None, None)
+    assert not agents._spares({}, 'claude', base, None, None)                              # ...tools: it may act, never run twice
+    assert not agents._spares({}, 'claude', base + ['--tools', ''], 'sid-1', None)         # ...a conversation to go on
+    assert not agents._spares({}, 'claude', base + ['--tools', ''], None, [('image/png', 'x')])
+    assert not agents._spares({'keep_alive': 'general:1'}, 'claude', base + ['--tools', ''], None, None)
+    assert not agents._spares({}, 'codex', ['exec', '--json'], None, None)

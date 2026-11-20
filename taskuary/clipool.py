@@ -330,6 +330,48 @@ def run(key: str, cmd: list, prompt: str, on_event, *, cwd=None, env=None, resum
                 lv.close(); raise
 
 
+# ── A SPARE FOR A ONE-SHOT ANSWER (the speed round, 2026-11-20): triage started a fresh `claude -p` for every arrival and paid its start-up
+# each time - 3-7 s of a 10-13 s verdict, measured on the real CLI. A one-shot call with no tools (a judgement: nothing it can do, so asking
+# again repeats nothing) now takes a process started ahead for its exact command, waiting for its one message, and starts the next one
+# for the call after. Taken whole, never shared: each answer is a conversation of its own. Kept apart from the pool's conversations, so a
+# spare never pushes an agent's out, and few: the oldest goes when there are more than SPARES.
+_SPARES: dict[str, Live] = {}
+SPARES = 2
+
+
+def spare_turn(key: str, cmd: list, prompt: str, on_event, *, cwd=None, env=None, cancel=None, timeout: float = None) -> tuple:
+    """One answer on a fresh process for `cmd` - the spare started ahead when there is one - then the next spare started. (result, raw).
+    A process that ended before or during the answer is replaced once and asked again, as nothing it was asked can have run."""
+    cmd = list(cmd) + INPUT
+    with _LOCK: lv = _SPARES.pop(key, None)
+    if lv is not None and (not lv.alive() or time.time() - lv.used > GRACE): lv.close(); lv = None
+    try:
+        for attempt in (1, 2):
+            if lv is None: lv = Live(key, cmd, cwd, env, ())
+            try: return lv.turn(prompt, on_event, cancel=cancel, timeout=timeout)
+            except Ended as e:
+                lv.close(); lv = None
+                if attempt == 2: raise Ended(f'{RESTART_FAILED} ({e})') from e
+    finally:
+        if lv is not None: lv.close()
+        if cancel is None or not cancel.is_set(): _ready(key, cmd, cwd, env)
+
+
+def _ready(key: str, cmd: list, cwd, env):
+    "The next spare for this command, started now so its CLI is up by the next call."
+    try: nxt = Live(key, cmd, cwd, env, ())
+    except Exception as e: logger.debug(f'clipool: no spare started for {key} - {e}'); return
+    with _LOCK:
+        old = [x for x in [_SPARES.pop(key, None)] if x]
+        _SPARES[key] = nxt
+        while len(_SPARES) > SPARES: old.append(_SPARES.pop(next(iter(_SPARES))))
+    for x in old: x.close()
+
+
+def spares() -> int:
+    with _LOCK: return sum(1 for lv in _SPARES.values() if lv.alive())
+
+
 # ── an ACP conversation: a connection, not a process we write lines to (agents.run_acp) ─────────────────────────────────────────
 # The same pool, so the idle clock, MAX_LIVE, New chat (close) and shutdown treat it as they treat a claude process. Opening one
 # takes seconds (an adapter's start, initialize, session/new), so it happens OUTSIDE the lock.
@@ -415,3 +457,5 @@ def live() -> list:
 @atexit.register
 def shutdown():
     close('')
+    with _LOCK: gone = list(_SPARES.values()); _SPARES.clear()
+    for lv in gone: lv.close()

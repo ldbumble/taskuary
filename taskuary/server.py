@@ -6565,11 +6565,13 @@ async def mcp_rpc(request: Request, task: int = 0):
         return out.body.decode() if isinstance(out, JSONResponse) else out
     from .wrapup import no_correspondent
     from .general import GENERAL_KINDS
+    from . import harness
     skip = (agenttools.REPLY_TOOLS if no_correspondent(store, task) else ()) + (
-        agenttools.CODING_TOOLS if (store.get_task(task) or {}).get('Kind') in GENERAL_KINDS else ())
+        agenttools.CODING_TOOLS if (store.get_task(task) or {}).get('Kind') in GENERAL_KINDS else ()) + (
+        () if (card := harness.on_card(store, task)) else ('web_search',))         # ...the web through the card, only for its harness CLI (harness.py)
     # ...a stranger's session is served the owner's harmless tools and nothing else (agenttools.STRANGER_TOOLS)
     if guard.scope_of(cfg['server'], request.headers) == guard.STRANGER: skip = tuple(n for n in agenttools.TOOLS if n not in agenttools.STRANGER_TOOLS)
-    def one(m): return agenttools.rpc(m, run, skip) if isinstance(m, dict) else {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32600, 'message': 'not a request'}}
+    def one(m): return agenttools.rpc(m, run, skip, card) if isinstance(m, dict) else {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32600, 'message': 'not a request'}}
     out = await run_in_threadpool(lambda: [r for r in map(one, msg if isinstance(msg, list) else [msg]) if r is not None])   # the doors are sync
     if not out: return Response(status_code=202)
     return JSONResponse(out if isinstance(msg, list) else out[0])

@@ -14,16 +14,23 @@ from loguru import logger
 
 HARNESSES = ('codex', 'opencode')
 LABEL = {'codex': 'Codex', 'opencode': 'OpenCode'}
-KEY_ENV = 'TASKUARY_AI_KEY'            # the variable the card's key is handed in at launch - named in the config, never its value
+KEY_ENV = 'TASKUARY_CARD_KEY'            # the variable the card's key is handed in at launch - named in the config, never its value
 PREFIX = 'card-'                       # cli:card-<id>
 _MARK = '\x00key\x00'                  # stands in for the key while llm.endpoint says which header carries it
 _TRIED: set = set()                    # harnesses whose install already failed in this process: not started again on every turn
 ON = True                              # tests/conftest.py turns it off: a test's API card keeps its own loop and installs nothing
 
 
-def harness_of(cfg: dict) -> str:
-    "The card's chosen harness: Codex unless it names OpenCode."
-    return h if (h := str((cfg or {}).get('harness') or '').strip().lower()) in HARNESSES else 'codex'
+# CODEX SPEAKS ONLY THE RESPONSES API (wire_api "chat" was removed): the card kinds whose endpoint serves /v1/responses - the organisation's
+# gateway (LiteLLM), OpenAI and Azure. A fact about the kind, kept here, never a probe per run: every other kind (Vertex direct, a local
+# vLLM or Ollama, the chat-completions vendors) has OpenCode as its agent's harness unless the owner picks Codex
+RESPONSES = ('hipaa_ai', 'openai', 'azure_openai')
+
+
+def harness_of(cfg: dict, t: str = '') -> str:
+    "The card's chosen harness, else its kind's: Codex where the endpoint serves the Responses API, OpenCode elsewhere."
+    if (h := str((cfg or {}).get('harness') or '').strip().lower()) in HARNESSES: return h
+    return 'codex' if not t or t in RESPONSES else 'opencode'
 
 
 def _card(store, pick) -> dict | None:
@@ -63,8 +70,28 @@ def road(store, pick) -> str:
     "The pick an API card's agent runs on: `cli:card-<id>` where its harness runs here, else the pick itself (apiagent's loop)."
     c = _card(store, pick)
     if not c: return str(pick or '')
-    _, cfg, _ = _cfg(store, c['ConnectorId'])
-    return f"cli:{PREFIX}{c['ConnectorId']}" if where(harness_of(cfg)) else str(pick or '')
+    t, cfg, _ = _cfg(store, c['ConnectorId'])
+    return f"cli:{PREFIX}{c['ConnectorId']}" if where(harness_of(cfg, t)) else str(pick or '')
+
+
+def _task_card(store, tid) -> dict | None:
+    "The API card whose harness CLI runs this task's agent, else None - read off the session it saved (general._remember_session)."
+    try: pick = str((store.saved_session(int(tid)) or {}).get('Pick') or '')
+    except (TypeError, ValueError): return None
+    c = _card(store, pick)
+    return c if c and road(store, pick).startswith(f'cli:{PREFIX}') else None
+
+
+def on_card(store, tid) -> bool: return _task_card(store, tid) is not None
+
+
+def searcher(store, tid):
+    "The task's card as its own one-shot brain, for its model's own web search through its endpoint (llm `search`) - None for any other task."
+    if not (c := _task_card(store, tid)): return None
+    from . import llm
+    t, cfg, key = _cfg(store, c['ConnectorId'])
+    try: return llm.make_llm(t, cfg, key)
+    except Exception as e: logger.info(f'harness: card {c["ConnectorId"]} has no search here - {e}'); return None
 
 
 def card_id(name: str) -> int | None:
@@ -88,10 +115,10 @@ def spell(store, pick: str, model: str) -> str:
     cid = card_id(pick)
     if cid is None or not model: return model or ''
     from .climodels import split_pick
-    _, cfg, _ = _cfg(store, cid)
+    t, cfg, _ = _cfg(store, cid)
     m, e = split_pick(model)
     if m and m == str(cfg.get('light_model') or '').strip(): return ''
-    return oc_name(model) if harness_of(cfg) == 'opencode' else model
+    return oc_name(model) if harness_of(cfg, t) == 'opencode' else model
 
 
 def oc_name(model: str) -> str:
@@ -121,20 +148,22 @@ def _provider(t: str, cfg: dict) -> tuple:
 
 def _toml(v) -> str:
     if isinstance(v, bool): return 'true' if v else 'false'
+    if isinstance(v, (int, float)): return str(v)
     if isinstance(v, dict): return '{ ' + ', '.join(f'{json.dumps(k)} = {_toml(x)}' for k, x in v.items()) + ' }'
     if isinstance(v, (list, tuple)): return '[' + ', '.join(_toml(x) for x in v) + ']'
     return json.dumps(str(v))             # a TOML basic string takes JSON's escapes
 
 
-def codex_config(cid: int, name: str, base: str, header: str, extra: dict, model: str) -> str:
+def codex_config(cid: int, name: str, base: str, header: str, extra: dict, model: str, window: int = 0) -> str:
     """config.toml for a card's own CODEX_HOME: the card as Codex's model provider, and every road out of this computer but the card's own
     endpoint closed - nothing reaches OpenAI. Each switch is named where it is set."""
     prov = f'card{int(cid)}'
-    p = {'name': name, 'base_url': base, 'wire_api': 'responses'}           # Codex speaks only the Responses API (chat was removed)
+    p = {'name': name, 'base_url': base, 'wire_api': 'responses', 'request_max_retries': 2}     # Codex speaks only the Responses API
     if header: p['env_http_headers'] = {header: KEY_ENV}                   # Azure's api-key, Vertex's x-goog-api-key: read from the env
     else: p['env_key'] = KEY_ENV                                           # a Bearer token, read from the env at launch
     if extra: p['http_headers'] = extra
     top = {'model': model, 'model_provider': prov,
+           'model_context_window': int(window or 1_000_000),     # a model Codex has no metadata for warns on every run without it
            'check_for_update_on_startup': False,      # the update check (it asks GitHub / OpenAI for the latest release)
            'web_search': 'disabled',                  # hosted web_search is OpenAI's tool: the model's own search or Taskuary's web tools
            'forced_login_method': 'api'}              # no ChatGPT login: the key in the env is the only sign-in
@@ -163,11 +192,12 @@ def opencode_config(name: str, base: str, header: str, extra: dict, model: str, 
     # ...each model once as itself and once per effort (oc_name), so a gear is a model name - the one thing its command line takes
     models = {}
     for m in dict.fromkeys(x for x in (model, strong) if x):
-        models[m] = {'name': m}
-        models.update({f'{m}-{e}': {'id': m, 'name': f'{m} ({e})', 'options': {'reasoningEffort': e}} for e in ('low', 'medium', 'high')})
+        models[m] = {'name': m, 'tool_call': True}
+        models.update({f'{m}-{e}': {'id': m, 'name': f'{m} ({e})', 'tool_call': True, 'options': {'reasoningEffort': e}} for e in ('low', 'medium', 'high')})
     return {'$schema': 'https://opencode.ai/config.json', 'model': f'card/{model}',
             'provider': {'card': {'npm': '@ai-sdk/openai-compatible', 'name': name, 'options': opts, 'models': models}},
             'enabled_providers': ['card'],     # no other provider is loaded
+            'tools': {'websearch': False},     # its web search goes to Exa: Taskuary's own web tools search through the card instead
             'share': 'disabled',               # session sharing uploads to opencode.ai
             'autoupdate': False}               # the update check
 
@@ -183,7 +213,7 @@ def row(store, name: str) -> dict | None:
     if cid is None: return None
     t, cfg, key = _cfg(store, cid)
     if not t: return None
-    h = harness_of(cfg)
+    h = harness_of(cfg, t)
     if not (cmd := where(h, install=False)): return None
     from .clis import preset_args
     from .climodels import split_pick
@@ -193,7 +223,7 @@ def row(store, name: str) -> dict | None:
     d, label = folder(cid), f'{(store.get_connector(cid) or {}).get("Name") or t} (card {cid})'
     if h == 'codex':
         home = d / 'codex'; home.mkdir(exist_ok=True)
-        _write(home / 'config.toml', codex_config(cid, label, base, header, extra, model))
+        _write(home / 'config.toml', codex_config(cid, label, base, header, extra, model, cfg.get('context_window') or 0))
         env = {'CODEX_HOME': str(home)}
     else:
         strong = split_pick(hard)[0] if cfg.get('strong_model') else ''
@@ -220,7 +250,7 @@ def line(store, c: dict) -> dict | None:
     if c.get('Type') not in llm.AI_TYPES or c.get('Type') in ('anthropic', 'chatgpt'): return None
     try: cfg = json.loads(c.get('ConfigJson') or '{}')
     except ValueError: cfg = {}
-    h = harness_of(cfg)
+    h = harness_of(cfg, c.get('Type'))
     on = bool(c.get('Active') and (c.get('HasSecret') or c.get('Type') == 'ollama'))
     p = where(h, install=on)
     st = cliinstall.state()

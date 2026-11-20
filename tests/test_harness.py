@@ -81,7 +81,7 @@ def test_opencode_is_the_second_launcher_on_the_same_road(here):
     prof = json.loads(agents.agent_row(s, f'card-{cid}')['Config'])
     assert agents.cli_of(prof) == 'opencode' and prof['model'] == 'card/hydrogen' and prof['light_model'] == 'card/hydrogen-low'
     f = json.loads((harness.folder(cid) / 'opencode.json').read_text(encoding='utf-8'))
-    assert KEY not in json.dumps(f) and f['provider']['card']['options']['apiKey'] == '{env:TASKUARY_AI_KEY}'
+    assert KEY not in json.dumps(f) and f['provider']['card']['options']['apiKey'] == '{env:TASKUARY_CARD_KEY}'
     assert f['share'] == 'disabled' and f['autoupdate'] is False and f['provider']['card']['models']['hydrogen-low']['id'] == 'hydrogen'
     assert prof['env']['OPENCODE_DISABLE_AUTOUPDATE'] == '1' and prof['env']['OPENCODE_CONFIG'].endswith('opencode.json')
 
@@ -118,3 +118,42 @@ def test_no_harness_can_run_here_so_the_agent_keeps_its_own_loop_and_the_card_sa
     s = MemoryStore(); cid = _card(s)
     assert harness.road(s, f'connector:{cid}') == f'connector:{cid}'
     assert "can't run on this computer" in harness.line(s, _row(s, cid))['line']
+
+
+def test_every_switch_the_gateway_proof_needed_is_pinned():
+    "Without these Codex reached OpenAI's telemetry host and GitHub; with them the gateway was the only host in 32 runs (2026-11-20)."
+    c = tomllib.loads(harness.codex_config(1, 'AI', 'https://gateway.example/v1', '', {}, 'hydrogen'))
+    p = c['model_providers'][c['model_provider']]
+    assert (p['env_key'], p['wire_api'], harness.KEY_ENV) == ('TASKUARY_CARD_KEY', 'responses', 'TASKUARY_CARD_KEY')
+    assert c['model_context_window'] == 1_000_000 and c['check_for_update_on_startup'] is False and c['web_search'] == 'disabled'
+    assert c['analytics'] == {'enabled': False} and c['feedback'] == {'enabled': False}
+    assert all(c['otel'][k] == 'none' for k in ('exporter', 'trace_exporter', 'metrics_exporter'))
+    assert all(c['features'][k] is False for k in ('apps', 'plugins', 'remote_plugin'))
+
+
+def test_a_chat_completions_only_card_defaults_to_opencode_and_its_websearch_is_off(here):
+    assert harness.harness_of({}, 'hipaa_ai') == 'codex' and harness.harness_of({}, 'vertex_ai') == 'opencode'
+    assert harness.harness_of({'harness': 'codex'}, 'groq') == 'codex'                       # ...his pick stands
+    f = harness.opencode_config('AI', 'https://x.example/v1', '', {}, 'm', '')
+    assert f['tools']['websearch'] is False and f['provider']['card']['models']['m']['tool_call'] is True
+
+
+def test_the_card_agents_web_search_is_its_models_own_through_the_tool_server(here):
+    from taskuary import agenttools
+    s = MemoryStore(); cid = _card(s)
+    tid = s.create_task({'Title': 'look something up'}, 't')
+    s.save_session(tid, f'connector:{cid}', 'hydrogen', '', 'k')
+    asked = []
+    brain = type('B', (), {'search': lambda self, q: asked.append(q) or 'Answer, with sources.'})()
+    with mock.patch.object(harness, 'searcher', return_value=brain):
+        out = agenttools.call(s, tid, 'web_search', {'query': 'capital of Peru'}, {})
+    assert 'Answer, with sources.' in out and asked == ['capital of Peru']
+    assert harness.on_card(s, tid) and not harness.on_card(s, tid + 999)
+
+
+def test_a_card_session_is_served_tool_schemas_its_model_takes():
+    "Gemini behind the gateway refused the whole turn: propose's parameters were a top-level anyOf, not an OBJECT (the gateway walk, 2026-11-20)."
+    from taskuary import agenttools
+    raw = {t['name']: t['inputSchema'] for t in agenttools.listing()}
+    fit = {t['name']: t['inputSchema'] for t in agenttools.listing(portable=True)}
+    assert 'anyOf' in raw['propose'] and fit['propose']['type'] == 'object' and 'anyOf' not in fit['propose']

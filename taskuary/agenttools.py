@@ -86,6 +86,10 @@ TOOLS = {
     # ...and a how-to read when the work comes to one, instead of riding in every prompt (guides.py, 2026-11-09)
     'guide': ('read', "Read one of Taskuary's how-tos before work that needs it - " + __import__('taskuary.guides', fromlist=['index']).index()
               + ". Read-only.", _S({'topic': _STR}, ('topic',)), ('GET', '/api/tasks/1')),
+    # ...and THE WEB, for an API card's agent on its harness CLI (harness.py): that CLI's own hosted search goes to its vendor, so it is off,
+    # and the search runs here - the card's model's own search through its endpoint (apiagent.search). Served only to such a session
+    'web_search': ('reach', "Search the web - through this task's AI card's own search, else a connected search service - and read "
+                            "what comes back. Read-only.", _S({'query': _STR}, ('query',)), ('GET', '/api/search')),
     'run_system': ('reach', "Run one tool on one of the owner's systems (list_systems): {type, connector_id, ...its fields}. Reads run"
                            " at once; a file saved to SharePoint or OneDrive runs at write Authority and says where it landed. A "
                            "send, post, pay or order never runs here - it waits for the owner's press, and you are told so.",
@@ -288,6 +292,7 @@ SHORT = {
     'list_systems': "The owner's other systems you may use, with their connector ids and tool types.",
     'guide': "Read one of Taskuary's how-tos (browser, number, propose ...).",
     'run_system': "Run one tool on one of the owner's systems: {type, connector_id, ...its fields}.",
+    'web_search': "Search the web through this task's AI card.",
     'show': 'Draw a view (table, chart, tiles) or show files in this chat.',
     'tick': "Tick or untick one of this task's to-dos.",
     'todos': "Add, reword or merge this task's to-dos.",
@@ -326,9 +331,10 @@ def found(query, names: dict) -> list:
     ws = [w for w in re.findall(r'[a-z0-9_]+', q) if len(w) > 2]
     score = lambda n: sum((w in n) * 3 + (w in str(names[n]).lower()) for w in ws)
     return [n for n in sorted(names, key=lambda n: -score(n)) if score(n)][:4]
-def listing(skip=()) -> list:
+def listing(skip=(), portable: bool = False) -> list:
     "tools/list: every tool by its name, its line and its parameters, and whether it only reads - but those in `skip`."
-    return [{'name': n, 'description': SHORT.get(n) or d, 'inputSchema': lean(s), 'annotations': ANNOTATIONS[c], **({'_meta': {'anthropic/alwaysLoad': True}} if n in ALWAYS_LOAD else {})}
+    from .apiagent import portable as fit_all
+    return [{'name': n, 'description': SHORT.get(n) or d, 'inputSchema': fit_all(lean(s)) if portable else lean(s), 'annotations': ANNOTATIONS[c], **({'_meta': {'anthropic/alwaysLoad': True}} if n in ALWAYS_LOAD else {})}
             for n, (c, d, s, _) in TOOLS.items() if n not in skip]
 
 
@@ -585,6 +591,12 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
             return f"{a['query'].strip()} is not offered on this task - tools/list names the ones it has; say what you need in words to find one of them."
         return '\n\n'.join(map(instructions, hits)) if hits else (f"No tool fits {a.get('query')!r} - name one, or say what it should do in other words. Work no tool of Taskuary's does (a file to make, a page to "
                                                    "read, code to run) is done with your session's own tools; a file for the owner is saved in your outputs folder.")
+    if name == 'web_search':
+        from . import apiagent, harness
+        if not str(a.get('query') or '').strip(): raise ValueError('`query` is empty - say what to search for')
+        return _out(apiagent.search(store, tid, str(a['query']), harness.searcher(store, tid),
+                                    lambda x: _call(store, tid, 'run_system', x, doors, skip),
+                                    lambda u: apiagent._hands(store, tid, '', 'web_fetch', {'url': u})), fence_it=True)
     if name == 'run_system':
         r = doors['tool_run']({**a, 'task_id': tid})
         return _out(_j(json.loads(r.body) if hasattr(r, 'body') else r), fence_it=True)     # a 202 (queued) comes back as a response
@@ -822,9 +834,10 @@ def proposal_of(args: dict) -> dict:
 PROTOCOLS = ('2025-06-18', '2025-03-26', '2024-11-05')
 
 
-def rpc(msg: dict, run, skip=()) -> dict | None:
+def rpc(msg: dict, run, skip=(), portable: bool = False) -> dict | None:
     """One JSON-RPC message in, its answer out (None for a notification). `run(name, args)` executes a tool and returns text; `skip`: the
-    tools this session is not offered (REPLY_TOOLS on the owner's own ask)."""
+    tools this session is not offered (REPLY_TOOLS on the owner's own ask). `portable`: schemas every provider takes (an API card's model
+    behind its harness CLI - Gemini refused propose's top-level anyOf, "parameters schema should be of type OBJECT", and with it the turn)."""
     mid, m, p = msg.get('id'), msg.get('method'), msg.get('params') or {}
     ok = lambda r: {'jsonrpc': '2.0', 'id': mid, 'result': r}
     err = lambda code, text: {'jsonrpc': '2.0', 'id': mid, 'error': {'code': code, 'message': text}}
@@ -838,7 +851,7 @@ def rpc(msg: dict, run, skip=()) -> dict | None:
                                    "with a tool's name gives its whole instructions - read them before its first use where the line does not say enough. "
                                    + SHOW_WHAT})
     if m == 'ping': return ok({})
-    if m == 'tools/list': return ok({'tools': listing(skip)})
+    if m == 'tools/list': return ok({'tools': listing(skip, portable)})
     if m == 'tools/call':
         name = p.get('name')
         if name not in TOOLS or name in skip: return err(-32602, f"unknown tool {name!r} - this task's tools are the ones tools/list names")

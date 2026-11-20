@@ -759,6 +759,27 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
     return {'performed': p.get('what') or p.get('command'), 'site': p.get('site'), 'page': now}
 
 
+# THE OWNER'S NO IS SAID AS THEIRS, AND ONCE (agent walk 2, 2026-11-10): Reject on a held push reached the agent as the adapter's "User
+# refused permission to run tool" - the sentence it also gets when Taskuary blocks a step by itself - so it ended its turn asking for the
+# same push again. One sentence for every road a no comes by (a dismissed card, the held steps of a turn, the Allow/Reject buttons)
+OWNER_NO = ("That is the owner's own answer, not a block of Taskuary's. Do not try it another way and do not ask for the same step again - "
+            'carry on without it, and ask only if you need to know what they want instead.')
+def not_approved(what) -> str: return f'The owner did not approve it: {what} was NOT done. {OWNER_NO}'
+def declined(store, tid: int, p: dict) -> None:
+    from . import actrule
+    actrule.remember(store, tid, p.get('keys'), 'dismissed')
+    _tell(store, tid, not_approved(p.get('what') or p.get('command')))
+
+
+# the turn an approval wakes says what happened. ...AND NOTHING ABOUT WHAT DID NOT (agent walk 2, 2026-11-10): told "(with its link, if it
+# gave one)", the agent closed every sent mail with "No link came back with it."
+# ...AS FAR AS THE RESULT GOES (a walk, 2026-11-18): told "what it did" after a payment note was sent, the agent said "Accounts Payable
+# received the payment request" - a mail that went is sent, not read, and nobody had answered
+NEXT = ('Tell the owner in a line what it did, as far as the result shows - something sent is sent, never received, read or acted on until '
+        'someone answers - and what comes next, then carry on. A link the result gave goes in that line; where it gave none, say nothing '
+        'about links.')
+
+
 def _tell(store, tid: int, text: str, wait: bool = False, wake: bool = False) -> None:
     """Words to the agent working the task, by THE ONE ROAD every input to an agent takes (general.to_agent): a live chat hears them as its
     next turn at once, a coding session or an agent asking by the waiting room. A task with none running gets the comment only - unless the

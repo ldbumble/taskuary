@@ -2844,7 +2844,7 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
     files its reply on the task.
     """
     from . import general
-    await run_in_threadpool(_chat_kind, task_id)             # a store write: off the loop
+    # ...the kind switch his words make is general.take_line's, the one road his line takes (fce96f199)
     if (said := await run_in_threadpool(_demo_turn, task_id, body.text)) is not None:
         payload = await run_in_threadpool(_assistant_payload, task_id)
         line = json.dumps({'type': 'done', 'reply': said, 'payload': payload}) + '\n'

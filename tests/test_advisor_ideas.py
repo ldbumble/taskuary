@@ -30,7 +30,7 @@ def test_each_idea_is_graded_by_the_owners_own_act(tmp_path):
 
 
 def test_the_tool_never_writes_to_the_home_it_measures(tmp_path):
-    SQLiteStore(str(tmp_path / 'taskuary.db'))
+    SQLiteStore(str(tmp_path / 'taskuary.db')).close()     # ...its own store closed first: its background writers finishing is not the tool's write (CI)
     before = (tmp_path / 'taskuary.db').stat().st_mtime_ns
     assert I.main(['--home', str(tmp_path), '--since', DAY, '--line']) == 0
     assert (tmp_path / 'taskuary.db').stat().st_mtime_ns == before

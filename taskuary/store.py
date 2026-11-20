@@ -2439,7 +2439,10 @@ class SQLiteStore:
             # a closed task waits on nobody: their later line is judged as any line on a closed thread (ingest._reopen)
             # ...and a closed task is watched by nobody (watch.py): Mark done ends a watch like any task
             # ...and checked back on by nobody: a check-back is the agent's, and a closed task has none at work (checkback.py)
-            self._exec('UPDATE task SET WaitingOn=NULL, WatchedAt=NULL, WatchBack=NULL, CheckBackAt=NULL, CheckBackWhat=NULL WHERE TaskId=?', (task_id,))
+            self._exec('UPDATE task SET WaitingOn=NULL, WatchedAt=NULL, WatchBack=NULL WHERE TaskId=?', (task_id,))
+            # ...BUT A CHECK-BACK OUTLIVES MARK DONE (the owner, 2026-11-20): "Checks back Sat 8 AM" was cancelled by the close it promised to
+            # come back after - at its time the agent checks, and the task comes back with what it found (checkback.due). Let it go ends it
+            if fields.get('Status') == 'dropped': self._exec('UPDATE task SET CheckBackAt=NULL, CheckBackWhat=NULL WHERE TaskId=?', (task_id,))
             self._exec("UPDATE review SET Status='superseded', DecidedBy=?, DecidedAt=? "
                        "WHERE TaskId=? AND Status='pending'", (actor, _now(), task_id))
             # ...and so does the Advisor idea the task was MADE from: left open, 96 ideas outlived their closed tasks

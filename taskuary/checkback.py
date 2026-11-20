@@ -5,7 +5,7 @@ The agent names WHEN and WHAT to verify - `taskuary --check-back`, the check_bac
 that one). It rides on the task (CheckBackAt / CheckBackWhat), one at a time, and comes due on the reminders' own clock (remind.tick: on
 start, every sync, the five-minute sweep) - no daemon of its own. When it is due the SAME task's agent is handed one short Taskuary line as
 its next turn (general.BRIEF_ACTOR, as a passed-in mail is): queued behind a turn at work, an idled-out agent brought back as the same run.
-Nothing else moves: the task stays where it is in Tasks, nothing is sent, nobody's phone is written to, and a closed task has none.
+Nothing else moves: the task stays where it is in Tasks, nothing is sent, nobody's phone is written to; a task marked done since comes back for it (reopen), one let go has none.
 """
 from datetime import datetime
 from .say import said as _said            # a failure written to the chat is said in his words (say.py)
@@ -24,7 +24,7 @@ def _stamp(at: datetime = None) -> str: return f"{at or datetime.now():%Y-%m-%d 
 def of_task(task) -> dict | None:
     "{'at', 'what'} of the check-back waiting on the task, or None."
     t = task or {}
-    return {'at': t['CheckBackAt'], 'what': t.get('CheckBackWhat') or ''} if t.get('CheckBackAt') and t.get('Status') not in CLOSED else None
+    return {'at': t['CheckBackAt'], 'what': t.get('CheckBackWhat') or ''} if t.get('CheckBackAt') and t.get('Status') != 'dropped' else None
 
 
 def set_check(store, tid: int, when, what, actor: str = 'agent') -> dict:
@@ -116,11 +116,13 @@ def due(store, now: datetime = None, spawn=None) -> int:
     n = 0
     for t in store._rows("SELECT TaskId, Status, Kind, CheckBackWhat FROM task WHERE IFNULL(CheckBackAt,'')<>'' AND CheckBackAt<=?", (_stamp(now),)):
         tid = t['TaskId']
-        if t.get('Status') in CLOSED or not general.handles(t):
+        if t.get('Status') == 'dropped' or not general.handles(t):
             store.update_task(tid, {'CheckBackAt': '', 'CheckBackWhat': ''}, 'assistant'); continue
         if not general.session_for(tid) and not general.idled(tid, store) and not ingest.has_room(store): continue
         if brainroute.auto_held(store): continue           # past the day's ceiling for what nobody asked for: due again tomorrow
         store.update_task(tid, {'CheckBackAt': '', 'CheckBackWhat': ''}, 'assistant')        # cleared first: it speaks once
+        # ...A TASK MARKED DONE SINCE COMES BACK FOR IT (the owner, 2026-11-20): through the one reopen, on the rail with the turn that checks
+        if t.get('Status') == 'done': general.reopen(store, tid, 'router', 'check_back', {'what': t.get('CheckBackWhat') or ''})
         (spawn or ingest._spawn)(fire, store, tid, t.get('CheckBackWhat') or 'what you said you would verify')
         n += 1
     return n

@@ -925,7 +925,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       const opened = held?.id !== id;
       const { data } = await api.get(`/api/tasks/${id}`, { signal, params: rev ? { rev } : opened ? { opened: 1 } : {} });
       if (stale(id)) return;
-      if (data?.same) { if (loadFailed.current) { loadFailed.current = false; setErr(""); } return false; }
+      // ...and "nothing new" is the fresh word too: what stands is the server's, pressable
+      if (data?.same) { setKeptCopy(null); if (loadFailed.current) { loadFailed.current = false; setErr(""); } return false; }
       servedDetail.current = { id, data };
       const seen = detailSeen(data);
       if (seen !== detailLast.current) { detailLast.current = seen; detailMoves.current += 1; }
@@ -957,7 +958,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // ...A REVISIT NEVER WAITS (the owner, 2026-11-20): with no fresh read held, the last one this page had of the task is drawn at once and the
     // read below replaces it in place - Back to a task closed since stood on the task it left until the server answered
     const was = !ahead && lastTask(id);
-    if (was) { setKeptCopy(was); setDetail((d) => (d?.task?.TaskId === id ? d : was)); }
+    // ...a revisit only: the task already on screen is no kept copy (walk 8, 2026-11-20: every re-read of the open task marked what it showed as
+    // kept - the same object the last read left - and an answer of "nothing new" never took the mark off: Post to X and every button took no press)
+    if (was && detailNow.current?.task?.TaskId !== id) { setKeptCopy(was); setDetail((d) => (d?.task?.TaskId === id ? d : was)); }
     // ...AND ITS CHAT WITH IT (recorded 2026-11-12 on the built app: a task opened for the first time stood its head over a spinner where the
     // chat goes, its chat's read asked at the press still out): the task's first frame waits - its title and spinner standing - for the chat's
     // read asked ahead with it too, never longer than CHAT_WAIT, so the task and its chat are drawn as one move

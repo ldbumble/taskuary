@@ -1117,8 +1117,22 @@ def test_a_held_sign_up_is_sent_on_its_own_tab_only_never_the_tab_shown():
         browsergate.perform(s, tid, p)
     assert attached == [('T1', True)], 'on the tab it was held on, never the one shown'
     assert told and told[0].startswith('The owner approved the sign-up on rentscope.example. Signed up on rentscope.example as'), told
-    with mock.patch.object(browserview, 'pages', return_value=[{'id': 'T1', 'url': shown['url']}]),          mock.patch.object(browserview, 'state', return_value={'open': True, 'url': shown['url']}), pytest.raises(RuntimeError, match='already left that page'):
+    # WALK 8 (2026-11-20): the agent took that tab on to the next vendor - as it was told it could - and the held card went off the chat. A held
+    # sign-up stays lit wherever its tab goes; his press opens its form again in a tab of Taskuary's own, fills back the boxes kept with it, sends
+    left = [{'id': 'T1', 'url': shown['url']}]
+    with mock.patch.object(browserview, 'pages', return_value=left), mock.patch.object(browsergate, '_tell'):
+        assert browsergate.left_page(s, tid, 'sess1') == [] and s.get_review(rv['ReviewId'])['Status'] == 'pending'
+    again, told = UpPage(user=''), []
+    class Own:
+        def __init__(self, sid, url): self.url = url
+        def __enter__(self): again.href = self.url; return again, True
+        def __exit__(self, *a): pass
+    with mock.patch.object(browserview, 'pages', return_value=left), mock.patch.object(signin, 'tab_at', Own), mock.patch.object(signin, 'type_new', lambda *a: 1), \
+         mock.patch.object(signin, 'send_new', lambda sid, site, c: c.go('data', 'https://www.rentscope.example/data') or {'ok': True}), \
+         mock.patch.object(signin, 'SETTLE', 0), mock.patch.object(browsergate, '_tell', lambda s_, t, text, **k: told.append(text)):
         browsergate.perform(s, tid, p)
+    assert any(x.startswith(signin.REFILL) and 'Alex Doyle' in x for x in again.ran), 'the boxes kept with the card filled back'
+    assert told[0].startswith('The owner approved the sign-up on rentscope.example. Signed up on rentscope.example as'), told
 
 
 def test_an_agent_that_still_ends_its_turn_with_the_sign_up_marker_gets_the_commands_answer():

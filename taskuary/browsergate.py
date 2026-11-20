@@ -661,7 +661,8 @@ def left_page(store, tid: int, sid: str, url: str = '') -> list:
     for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' AND DeliveryClaim IS NULL", (int(tid),)):
         try: p = json.loads(r.get('DraftText') or '{}') or {}
         except (TypeError, ValueError): continue
-        if p.get('action') != 'browser_act' or str(p.get('sid')) != str(sid) or not p.get('url'): continue
+        # ...never a held sign-up: its press opens its form again wherever the tab went (signin.send_held), so its card stays lit
+        if p.get('action') != 'browser_act' or p.get('signup') or str(p.get('sid')) != str(sid) or not p.get('url'): continue
         ts = browserview.pages(sid) if ts is None else ts
         if held_on(sid, p, ts) is not False: continue                       # ...on its page, or a browser it cannot read: lit
         if store.decide_review(r['ReviewId'], 'superseded', None, 'taskuary', note=PAGE_LEFT):

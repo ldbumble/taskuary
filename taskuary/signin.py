@@ -1561,16 +1561,23 @@ def new_account(store, tid, sid, site, rid, fill=None, watch=...) -> dict:
 
 def send_held(store, tid, sid, p) -> dict:
     """His press on a held sign-up's card (browsergate.perform): the form filled again where the agent has moved on, sent, and the agent told."""
-    from .browsergate import _tell
-    from .browsergate import held_tab
+    from .browsergate import _tell, held_on
     site, url = str(p.get('signup') or ''), str(p.get('url') or '')
-    # ...ON THE TAB IT WAS HELD ON, while that tab is on its page (browsergate.held_tab) - never the tab shown now, never another page of the
-    # site (walk 5, 2026-11-19: his yes to one site's sign-up ran on another site's page). Else nothing is sent and he reads why
-    tab = held_tab(sid, p)
+    got = {}
     try:
-        c = Cdp(_cdp_url(sid), tab, exact=True) if tab else connect(sid)
-        try: ok, line = _make(store, tid, sid, site, c, said=(got := {}))
-        finally: c.close()
+        # ...ON THE TAB IT WAS HELD ON while that tab is on its form - never the tab shown now, never another page of the site (walk 5, 2026-11-19:
+        # his yes to one site's sign-up ran on another site's page)
+        if p.get('tab') and held_on(sid, p):
+            c = Cdp(_cdp_url(sid), str(p['tab']), exact=True)
+            try: ok, line = _make(store, tid, sid, site, c, said=got)
+            finally: c.close()
+        # ...ELSE ITS FORM OPENED AGAIN at its own address in a tab of Taskuary's own, its kept boxes filled back (walk 8, 2026-11-20: the agent
+        # took its tab on to the next vendor, as it was told it could, and three held sign-ups went off their cards before he pressed)
+        else:
+            with tab_at(sid, url) as (c, _):
+                if not _same(c.js('location.href'), url): raise SignInError(f'its sign-up page at {url} did not open again')
+                c.js(f'{REFILL}({json.dumps(p.get("fields") or [])})')
+                ok, line = _make(store, tid, sid, site, c, said=got)
     except SignInError as e: ok, line, got = False, f'Nothing was sent: {e}.', {'why': str(e)}
     _tell(store, tid, f'The owner approved the sign-up on {site}. {line}', wake=True)
     # ...his card says what became of it in his words (say.owner) - the agent's own next step ("run `agent-browser signup` again") is the agent's

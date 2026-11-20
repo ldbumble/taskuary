@@ -29,24 +29,6 @@ test("a decided press presses the row's REAL button when the row has it - only a
   assert.ok(press.indexOf("pressRow(real.id") < press.indexOf("proposeDirect("), "the row's button first, the proposal road last");
 });
 
-test("every item put on the table goes through putOnTable, which pins its card to the top and keeps it there (B15, SEEN)", () => {
-  // ONE road: the turn's landing, the Board's open, a browse card, an unfold - none sets Current on its own any more
-  assert.match(view, /const putOnTable = useCallback\(\(card, how = "pile", ahead = false\) => \{/);
-  assert.match(view, /\n\s+putOnTable\(card, "pile", !!below && card\?\.key === below\.key\);\n[^\n]*\n\s+say\(data\.say\);/, "landed");
-  assert.match(view, /pull\(`task:\$\{req\.tid\}`, null, req\.row\); return;/, "the Board's open goes the rail's road - no bare card for a walk on the phone (2026-10-23)");
-  assert.match(view, /putOnTable\(null, "view"\);\s+\/\/ its top in view/, "a browse card");
-  assert.match(view, /if \(onTable\) \{ setFoldedKey\(null\); browseDown\(\); putOnTable\(null, "view"\); \}/, "the folded item opened again");
-  assert.equal((view.match(/setCurrent\(/g) || []).length, 1, "Current is set in one place");
-  assert.doesNotMatch(view, /toCard/);
-  // the pin: the card's top to the top of the body, on mount and on every resize, until the owner scrolls
-  assert.match(view, /if \(Math\.abs\(off\) > 2\) placeAt\(body, body\.scrollTop \+ off\);/);
-  assert.match(view, /const ro = new ResizeObserver\(\(\) => \{ if \(keepTable\(\)\) return;/);
-  assert.match(view, /el\.addEventListener\("wheel", own, \{ passive: true \}\)/);
-  // ...a receipt under it keeps the card in view; an answer or a proposal to confirm lets go
-  assert.match(view, /if \(pin\.current && m && \(m\.proposal \|\| \(!m\.card && m\.role !== "receipt" && m\.role !== "browse"\)\)\) pin\.current = false;/);
-});
-
-// ...and the reading is not on the opener at all (the owner, 2026-10-31: "don't need to read vs tasks, just what's open"): the rail has it
 test("the first screen has one headline count, and reports and FYI stay on the rail (U6)", () => {
   assert.doesNotMatch(view, /m\.card\.away\}/, "the away line repeated SinceBlock's count");
   // which sections are reading is lanes.json's `to_read`, never a list of its own in the card

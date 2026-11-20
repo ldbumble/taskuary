@@ -783,6 +783,9 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
                 # no such tier) - into the box its requests name, Azure's deployment (firstrun.TIER_BOX)
                 box, tier = ('deployment' if full['Type'] == 'azure_openai' else 'model'), {'strong': 'strong_model', 'light': 'light_model'}.get(gear)
                 if tier and not chosen_model and str(config.get(tier) or '').strip(): config = {**config, box: str(config[tier]).strip()}
+                # ...and the light gear THINKS LITTLE where its box names no effort: a gateway's Flash, thinking as it would, took up to 169 s
+                # to sort one mail (the owner, 2026-11-20: "it can't be 169 seconds, that's broken")
+                if gear == 'light' and not chosen_model and str(config.get('light_model') or '').strip() and full['Type'] in EFFORT_TAKERS                         and not split_effort(config[box])[1]: config = {**config, box: f"{config[box]}@low"}
                 if chosen_model: config = {**config, 'model': chosen_model}
                 return _Cooling(store, candidate, make_llm(full['Type'], config, full.get('Secret')))
         return None

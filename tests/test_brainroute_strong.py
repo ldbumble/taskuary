@@ -101,3 +101,16 @@ def test_the_provider_list_is_one_cached_read_that_fails_soft():
     with mock.patch.object(llm, 'list_models', side_effect=RuntimeError('openai answered 401')):
         assert llm.connector_models(s, cid)['models'] == [] and '401' in llm.connector_models(s, cid)['error']
     assert llm.connector_models(s, s.get_connector_by_type('github')['ConnectorId'] if s.get_connector_by_type('github') else 99999) is None
+
+
+def test_an_api_card_s_light_gear_thinks_little():
+    # a gateway's Flash, thinking as it would, took up to 169 s to sort one mail (the owner, 2026-11-20: "it can't be 169 seconds")
+    s = MemoryStore()
+    cid = s.get_connector_by_type('anthropic')['ConnectorId']
+    s.save_connector({'ConnectorId': cid, 'Secret': 'sk-test-0123456789', 'Active': 1,
+                      'ConfigJson': json.dumps({'model': 'claude-sonnet-5', 'light_model': 'claude-haiku-5'})}, 'owner')
+    s.set_setting('ai_route_mode', 'fixed', 'owner')
+    seen = []
+    with mock.patch.object(llm, 'make_llm', lambda t, conf, key: seen.append(conf['model']) or (lambda *a, **k: 'ok')):
+        llm.build_llm(s, pick=f'connector:{cid}', gear='light', job='triage')
+    assert seen == ['claude-haiku-5@low']

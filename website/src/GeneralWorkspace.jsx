@@ -613,11 +613,13 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
   const runtime = useLocalRuntime(useMemo(() => ({ async *run() { /* the server's list is the conversation */ } }), []));
   /* ONE ROAD FOR A LINE HE SENDS, whatever the agent is and whatever it is doing: named here, drawn at once, posted with that name - the
      server's list answers for it from then on (general.take_line: heard now by an agent at rest, kept for one at work) */
-  const sendLine = useCallback((given) => {
-    const c = runtime.thread.composer, w = String(given ?? c.getState().text).trim(), files = [...attachmentsRef.current];
+  // ...THE BOX'S FILES GO WITH THE LINE TYPED IN IT, ONCE (the Hydrogen walk, 2026-11-19: a file's chip stayed in the box after its line went and
+  // rode on his next two lines, Try again among them): a line the page sends itself (`given`: Try again) takes none, and a send empties the box
+  const sendLine = useCallback((given, boxFiles = given == null) => {
+    const c = runtime.thread.composer, w = String(given ?? c.getState().text).trim(), files = boxFiles ? [...attachmentsRef.current] : [];
     if (!w && !files.length) return;
     if (given == null) c.setText("");
-    if (files.length) onClearAttachments(files.map((a) => a.path));
+    if (files.length) onClearAttachments(null);
     const id = `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, sel = selectionRef.current || {};
     setMine((m) => [...m, { id, kind: "line", text: w, files: files.map((a) => a.path), at: new Date(), rest: !listNow.current?.working && !listNow.current?.hold && !listNow.current?.permissions?.length }]);      // ...on an untrusted sender's task it waits by the box at once (the list's `hold`), and under a step that waits on his Allow (`permissions`)
     stick.current = true;
@@ -627,7 +629,8 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
     setTimeout(() => reloadList?.(), 120);
   }, [runtime, attachmentsRef, selectionRef, onClearAttachments, onAttachBack, onSent, road, reloadList, task.TaskId]);
   // ...and a line whose send failed is sent again as it was typed, the failed one taken off the screen
-  const retry = useCallback((l) => { setMine((m) => m.filter((x) => x.id !== l.id)); sendLine(String(l.text || "")); }, [sendLine]);
+  // ...with the files its failure put back in the box (onAttachBack)
+  const retry = useCallback((l) => { setMine((m) => m.filter((x) => x.id !== l.id)); sendLine(String(l.text || ""), true); }, [sendLine]);
   const again = useCallback(() => sendLine(TRY_AGAIN), [sendLine]);
   // ...and what waits, taken back or sent in now - the server's word, read again at once (the list moves it, never the page)
   const dropLine = useCallback((l) => { setMine((m) => m.filter((x) => x.id !== l.id)); api.post(`/api/tasks/${task.TaskId}/waiting/${encodeURIComponent(l.id)}/drop`).catch(() => {}).finally(() => reloadList?.()); }, [task.TaskId, reloadList]);

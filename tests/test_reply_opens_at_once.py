@@ -16,6 +16,7 @@ class ReplyOpensAtOnceTests(unittest.TestCase):
         self.s = MemoryStore()
         p = mock.patch.object(server, 'store', self.s); p.start(); self.addCleanup(p.stop)
         self.c = TestClient(server.app)
+        self.s.set_setting('owner_email', 'alex@northwind.example', 'owner')       # ...Erin is a colleague: a stranger's task offers no card until Trust
         self.tid = self.s.create_task({'Title': 'Rota for Tuesday', 'Kind': 'task', 'Status': 'open'}, 'owner')
         self.mid = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'rota-1', 'Channel': 'email', 'Subject': 'Rota',
                                        'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',

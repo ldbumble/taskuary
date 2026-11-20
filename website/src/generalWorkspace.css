@@ -7,15 +7,14 @@
 /* THE TURN'S HEAD IN THE CHAT'S OWN TYPE, as his "You · 11:18 PM" is (the owner, again 2026-11-18): it was 9px monospace capitals */
 .tq-aui-role { padding-top: 8px; color: var(--tq-warning, #6b6559); font-weight: 600; font-size: 11.5px; line-height: 1.3; }
 .tq-aui-brief > * { grid-column: 1 / -1; }
-.tq-aui-user-bubble { justify-self: start; min-width: 0; max-width: 88%; border: 1px solid var(--tq-border, #dfdbd3); background: var(--tq-inset, #f1eee8); border-radius: 13px; padding: 9px 13px; font-size: 13px; line-height: 1.48; overflow-wrap: anywhere; word-break: break-word; }
-.tq-aui-user-bubble p { margin: 0; white-space: pre-wrap !important; overflow-wrap: anywhere; }
+.tq-aui-user-bubble { justify-self: start; min-width: 0; max-width: 88%; border: 1px solid var(--tq-border, #dfdbd3); background: var(--tq-inset, #f1eee8); border-radius: 13px; padding: 9px 13px; font-size: 13px; line-height: 1.48; overflow-wrap: anywhere; word-break: break-word; white-space: pre-wrap; }
 .tq-aui-agent-body { min-width: 0; max-width: 100%; padding: 5px 3px; overflow-wrap: anywhere; word-break: break-word; }
 .tq-aui-agent-body * { max-width: 100%; min-width: 0; box-sizing: border-box; }
 .tq-aui-agent-body p, .tq-aui-agent-body li { max-width: 110ch; }
 /* right-to-left words read right to left: each paragraph takes its own direction from its first letter, so a Hebrew line's "!" ends it
    instead of opening it, and an English answer quoting one stays left to right; a bubble of them also sits right (dir=auto, GeneralWorkspace)
    (the scenario run, 2026-11-06) */
-.tq-aui-agent-body p, .tq-aui-agent-body li, .tq-aui-user-bubble p, .tq-aui-arrived-words, .tq-aui-ask { unicode-bidi: plaintext; }
+.tq-aui-agent-body p, .tq-aui-agent-body li, .tq-aui-user-bubble, .tq-aui-arrived-words, .tq-aui-ask { unicode-bidi: plaintext; }
 .tq-aui-agent-body pre, .tq-aui-agent-body code { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .tq-aui-agent-body table { width: 100%; table-layout: fixed; }
 .tq-aui-agent-body th, .tq-aui-agent-body td, .tq-aui-agent-body a { overflow-wrap: anywhere; word-break: break-word; }

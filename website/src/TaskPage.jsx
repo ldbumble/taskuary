@@ -801,7 +801,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const caps = useCapabilities(), canCode = caps.coding;     // no coding tool connected: coding is not offered (capabilities.js)
   const manual = caps.ai === false;                          // no AI: the owner replies and hands off from the bar's ▾ themselves
   // ...drawn from the task's read held ahead of it (taskDetail.js) - a view on the table opens whole, not as an empty shell (G8)
-  const [detail, setDetail] = useState(() => (aheadChat(selected) ? null : heldTask(selected) || lastTask(selected)));     // ...with its chat (loadDetail)
+  const [detail, setDetail] = useState(() => (aheadChat(selected) ? null : heldTask(selected) || lastTask(selected)));
+  // ...A KEPT COPY IS SEEN, NEVER PRESSED (the owner, 2026-11-20): drawn from the last read on a revisit, its buttons stand as they look and take
+  // no press until the fresh read has replaced it - a press never acts on a card or a state the server has moved past
+  const [keptCopy, setKeptCopy] = useState(() => (aheadChat(selected) || heldTask(selected) ? null : lastTask(selected)));
+  const fromKept = !!detail && detail === keptCopy;     // ...with its chat (loadDetail)
   // Which task is on screen RIGHT NOW, readable from inside any await. Every fetch here is
   // keyed to a task, and a response that lands after you clicked another one must be dropped:
   // a wrap-up finishing 8 seconds later used to paint ITS task's header and report over the
@@ -953,7 +957,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // ...A REVISIT NEVER WAITS (the owner, 2026-11-20): with no fresh read held, the last one this page had of the task is drawn at once and the
     // read below replaces it in place - Back to a task closed since stood on the task it left until the server answered
     const was = !ahead && lastTask(id);
-    if (was) setDetail((d) => (d?.task?.TaskId === id ? d : was));
+    if (was) { setKeptCopy(was); setDetail((d) => (d?.task?.TaskId === id ? d : was)); }
     // ...AND ITS CHAT WITH IT (recorded 2026-11-12 on the built app: a task opened for the first time stood its head over a spinner where the
     // chat goes, its chat's read asked at the press still out): the task's first frame waits - its title and spinner standing - for the chat's
     // read asked ahead with it too, never longer than CHAT_WAIT, so the task and its chat are drawn as one move
@@ -3053,7 +3057,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           and borders sat OUTSIDE a height of 100% (14px over), and that 100% was of a box with only a max-height - which a percentage
           cannot resolve against - so a long task grew to its whole content (34px over) and the next line of the chat landed on it.
           On the canvas the chain is flex columns that SHRINK to the box instead, and the task's own scroller takes what is left. */}
-      <Box ref={pageRef} data-tq-task-page={selected || ""} sx={{ ...frame, ...(canvas ? { p: 0, bgcolor: "transparent", border: 0, boxShadow: "none" } : {}), flex: 1, minWidth: 0, height: canvas ? "auto" : "calc(100vh - 118px)", minHeight: canvas ? 0 : 420,
+      <Box ref={pageRef} data-tq-task-page={selected || ""} data-tq-kept={fromKept ? "" : undefined} aria-busy={fromKept || undefined} sx={{ ...frame,
+        ...(fromKept ? { "& button, & [role=button], & a[href]": { pointerEvents: "none" } } : {}), ...(canvas ? { p: 0, bgcolor: "transparent", border: 0, boxShadow: "none" } : {}), flex: 1, minWidth: 0, height: canvas ? "auto" : "calc(100vh - 118px)", minHeight: canvas ? 0 : 420,
         ...(canvas ? { boxSizing: "border-box", flex: "1 1 auto", display: "flex", flexDirection: "column" }
                    : { display: { xs: selected ? "block" : "none", md: "block" } }) }}>
         <Box sx={{ ...frameInner, display: "flex", flexDirection: "column",

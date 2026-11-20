@@ -86,6 +86,8 @@ export const openAppLink = (h) => {
   if (s) { window.dispatchEvent(new CustomEvent(OPEN_SEARCH, { detail: { q: s[1] ? decodeURIComponent(s[1]) : "" } })); return; }
   // ...the same link again is cleared without a step of its own (it was a hash of its own, a bare "#" for Back to land on)
   if (window.location.hash.replace(/^#/, "") === want) window.history.replaceState(window.history.state, "", here(""));
+  // ...ONE ROAD FOR EVERY MOVE (the owner, 2026-11-20): a link opens first, as Back does (onBackTo), and its address is written after
+  if (backTo && /^task=\d+$/.test(want)) { try { backTo(`#${want}`); } catch { /* the address's own road still opens it */ } }
   const d = depth();
   window.location.hash = want;
   window.history.replaceState({ ...window.history.state, tqDepth: d + 1 }, "", window.location.href);   // a step of ours: Back may take it

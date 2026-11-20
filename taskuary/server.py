@@ -1265,6 +1265,12 @@ def _read_hand_task(tid: int, text: str, goal: bool = False, store=None):
         from .responder import owner_of
         ask = triage.extract_ask({'body': text}, concierge.brain(store, fast=True))
         if ask.get('checklist') and not store.task_checklist(tid): store.set_task_checklist(tid, ask['checklist'], 'triage')
+        # ...AND A TITLE THAT IS ONLY A LINK IS NAMED FROM THE ASK (walk 5, 2026-11-19: "http://127.0.0.1:18803/" stood on the rail): the
+        # model's reading of what he asked, its first sentence - a link alone says nothing of the work
+        link = re.compile(r'\s*<?https?://\S+>?\s*')
+        said = ' '.join(str(ask.get('summary') or '').split())
+        if link.fullmatch(str((store.get_task(tid) or {}).get('Title') or '')) and said and not link.fullmatch(said):
+            store.update_task(tid, {'Title': re.split(r'(?<=[.!?])\s', said)[0][:120]}, 'triage')
         # ...HIS OWN ASK OWES HIM NO EMAIL (a walk, 2026-11-18): "set it up for my press" was read as an email owed to the owner, and its
         # agent drafted "please approve the note" to him - he is this ask's sender, and his press on the card is the approval
         me = {'name': owner_of(store), 'address': min(own_addresses(store), default='')}

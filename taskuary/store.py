@@ -57,7 +57,7 @@ class _Writer(sqlite3.Connection):
     lock, so it never lands under a statement another thread is running."""
     _owner = None
     def close(self):
-        st = self._owner() if self._owner else None
+        st = o() if (o := getattr(self, '_owner', None)) else None
         if st is None: return super().close()
         st._closing = True
         # ...waiting for the worker's job only where this thread does not hold the store's lock: a job at work may need it to finish, and a
@@ -1183,7 +1183,8 @@ class SQLiteStore:
         # Timeline read proceed while a poll is writing. :memory: cannot WAL (it has
         # nowhere to put the -wal file), so tests keep the default journal.
         self.cx = sqlite3.connect(path, check_same_thread=False, timeout=5.0, factory=_Writer)
-        self.cx._owner = weakref.ref(self)
+        try: self.cx._owner = weakref.ref(self)
+        except AttributeError: pass               # ...a plain connection a caller opened in its place (a test's own connect) closes as plain
         self.cx.row_factory = sqlite3.Row
         # SQLite's own LOWER()/LIKE fold ASCII only, so "muller" finds "MULLER" and "muller" does
         # not find "MULLER" once it is spelt MULLER with an umlaut. Search folds both the column

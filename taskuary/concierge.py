@@ -2614,7 +2614,10 @@ def record(store, tid: int, role: str, text: str, card: dict = None, phone: bool
     # idempotent across tabs. Deliberately repeated words still record once another turn separates
     # them, so this only removes adjacent duplicates.
     add = getattr(store, 'add_comment_once', store.add_comment)
-    return add(tid, actor, actor_type, body)
+    # ...A STORE THAT REFUSES THE WRITE NEVER SWALLOWS WHAT IS SAID (a disk I/O error): the line is still answered, and the failure logged
+    try: return add(tid, actor, actor_type, body)
+    except Exception as e:
+        logger.warning(f"the Assistant's line was not kept on task {tid} - {e}"); return None
 
 
 RECEIPT_STATUS = ('done', 'warn', 'error')

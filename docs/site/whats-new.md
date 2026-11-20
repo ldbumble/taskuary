@@ -2,6 +2,41 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.1.2 - 2026-11-20
+
+- The task he has open stays on the rail, whatever its lane: one source, the walk's own open item
+- Revert "The task he has open stays on the rail, whatever its lane: one source, the walk's own open item"
+- Search opens a task as every other press does; a closed hit is never a rail row, at the press or after
+- Next never reads a closed task opened by name, and a kept copy lends no rail row: the search flicker and the lost working task, at their source
+- Agents start without npx: Taskuary keeps its own pinned copy of the agent connector
+- Quick agent work runs its quick model at low effort
+- A one-shot judgement answers on a claude process started ahead
+- Say how long an agent's connection took to open
+- Quick work finds its mail search done, and no turn asks for a predicted next prompt
+- Claude's agent connector is started ahead: a new task's session opens on one already up
+- A New ask is classed as a mail is, from the reading that already asks whether it is open work
+- Three gears by triage's class: quick on Haiku low, normal on Sonnet medium, hard on Opus high
+- A quick meeting ask hands its agent the owner's free times, read in plain code before the turn
+- A quick turn whose mail search found nothing is told not to search the same mail again
+- Triage reads on the quick model at its own effort again
+- A held sign-up stays on its card when the agent's tab moves on
+- Step lines and search hits say what was done in plain words, never a cut script or Taskuary's codes
+- A reply raised empty is drawn under the turn that wrote its words, not above his answer
+- A turn's withdraw never takes back the letter that same turn wrote; the agent is told its reply filled the waiting card
+- The open task is never taken for a kept copy: its buttons take presses after a re-read that found nothing new
+- A post card's result tells the agent the button it stands with, from the function the card draws its Connect from
+- An agent looks for a thing the message names among the owner's open tasks too, before saying it does not know it
+- search_tasks that finds nothing says every word must match and what to try next
+- A Connect card has its Dismiss, and X not set up to post says so in plain words with the way past it
+- A tab holding a step is never moved: the agent's next site opens in a new tab, for a held click and a sign-up alike
+- A held browser step tells its agent what stands, as every card tool does; New draws his ask as the chat's bubble
+- The rules say a press shows its result on its card, never repeated in the chat
+- The agent's own words are its question; the ask marker only marks the wait
+- A turn's held steps are pressed through the one decide door; their own endpoint is gone
+- An owed reply's needs line is said once, by the one rule the ask follows; never with the app's own link written out
+- No prompt box under an item's own content: the box is the Agent tab's, after Send to agent
+- A model that spends even its room thinking is asked once more to think less, before anyone is told to change its card
+
 ## 0.4.1.1 - 2026-11-20
 
 - Send and close only on a line's last card; a fold's line counts in one unit; a step names what it wrote and says a search in a few words, on one left-aligned line

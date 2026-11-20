@@ -282,6 +282,7 @@ def env_of(store, tid: int, sid: str) -> dict:
 
 SAY = {}                       # (tid, sid) -> how this turn says a step of Taskuary's own (the browser being set up) in the chat
 STOPS = {}                     # (tid, sid) -> this turn's Stop switch: a command under way is killed by it (_hands)
+SEARCH_PAGE = 'https://html.duckduckgo.com/html/?q='   # a results page that reads as text with no script and no sign-in
 BRAINS = {}                    # (tid, sid) -> the brain this turn runs on: web_search asks it, with its own search on
 
 
@@ -292,8 +293,10 @@ def _search(store, tid: int, sid: str, q: str) -> str:
         try: return _cut(brain.search(q))
         except Exception as e: logger.info(f'apiagent: task {tid} native search refused, trying a search card - {e}')
     cards = [c for c in store.list_connectors() if c['Type'] in SEARCHERS and c['Active'] and c.get('HasSecret')]
-    if not cards: raise ValueError('this AI could not search the web, and no search service is connected - web_fetch a page you know, '
-                                   'or browser_open a search page')
+    # ...and with neither, the search is done here by reading a search engine's plain results page, as web_fetch reads any page - never
+    # handed back as a failure: a HIPAA AI Hydrogen agent's every search came back "could not search the web" (the owner, 2026-11-20)
+    from urllib.parse import quote
+    if not cards: return _hands(store, tid, sid, 'web_fetch', {'url': SEARCH_PAGE + quote(q)})
     c = cards[0]
     return call_taskuary(tid, sid, 'run_system', {'type': c['Type'], 'connector_id': c['ConnectorId'], 'query': q}, stranger=(tid, sid) in STRANGERS)
 

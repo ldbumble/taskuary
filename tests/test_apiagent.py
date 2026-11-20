@@ -1084,7 +1084,11 @@ class EveryCardTests(unittest.TestCase):
         try:
             with mock.patch.object(s, 'list_connectors', return_value=cards), mock.patch.object(apiagent, 'call_taskuary', return_value='[1] Payworth'):
                 self.assertEqual(apiagent.run_tool(s, 1, 'g', 'web_search', {'query': 'payroll'}), '[1] Payworth')
-            with self.assertRaisesRegex(ValueError, 'no search service is connected'): apiagent.run_tool(s, 1, 'g', 'web_search', {'query': 'payroll'})
+            # ...and with neither, it reads a search engine's results page itself - never a failure handed to the agent (2026-11-20)
+            seen = []
+            with mock.patch.object(apiagent, '_hands', side_effect=lambda *x: seen.append(x[4]['url']) or 'PAGE results - Payworth pricing'):
+                self.assertIn('Payworth', apiagent._search(s, 1, 'g', 'payroll pricing'))
+            self.assertEqual(seen, [apiagent.SEARCH_PAGE + 'payroll%20pricing'])
         finally: apiagent.BRAINS.pop((1, 'g'), None)
 
     def test_the_chatgpt_plan_runs_the_loop_on_its_responses_api(self):

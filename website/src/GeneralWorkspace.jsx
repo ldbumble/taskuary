@@ -56,7 +56,7 @@ import { label as btn } from "./buttons.js";
 import { placeName } from "./words.js";
 import { plural } from "./timeWords.js";
 import ConnectAi from "./ConnectAi.jsx";
-import ReviewDecision from "./ReviewDecision.jsx";
+import ReviewDecision, { MoreCardsCtx } from "./ReviewDecision.jsx";
 import { askNote, heldActsLine, proposalFrom } from "./reviewProposal.js";
 import BriefLine from "./BriefLine.jsx";
 import { OneBox } from "./AgentSummary.jsx";
@@ -565,11 +565,11 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next = null
     return <div key={x.id} className={`tq-aui-message tq-aui-press${prev && (prev.kind === "press" || prev.kind === "note") ? " tq-aui-press-more" : ""}`} data-tq-item={x.id} data-tq-chat-press="">
       <div className="tq-aui-press-line">{pressLine(x.text, x.at ? when(String(x.at)) : "")}</div></div>;
   });
-  return <>{rows}
+  return <MoreCardsCtx.Provider value={[...held].some((x) => x !== "land")}>{rows}
     {/* ...EVERY CARD IS A ROW THE LOG PLACED (chatlog.advance - one road): under everything only the page's own block, a hand-off or a
         write-up he opened, never a card of the line */}
     {!!next && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>{next}</Box>}
-    {!landIn && landing && <div hidden>{landing}</div>}</>;
+    {!landIn && landing && <div hidden>{landing}</div>}</MoreCardsCtx.Provider>;
 }
 /* WHAT WAITS FOR THE AGENT, BY THE BOX: accepted, not yet handed over - never in the conversation until it is (the heard rule).
    ...A ROW IS NOT MARKED [data-tq-held] (seen 2026-11-11: with lines waiting, the task's card stood 8 px under the canvas's head): that name

@@ -157,6 +157,9 @@ export const BlankAsk = ({ line, onSend, onCancel }) => (
 // ...an act a connector declares a card for (a post, a tracker comment) is drawn as that card (ActionCard.jsx), wherever its proposal shows -
 // the same decide road, its own face
 // `past`: the chat moved past it - the card as it stood while it waited, every button greyed, nothing registered on the row (MovedPast)
+// ...AND SEND AND CLOSE ONLY ON A LINE'S LAST CARD (the judge's walk, 2026-11-19: "Send and close" the main button on "1 of 4"): while cards wait
+// behind this one in the task's line (cardqueue: queue.held), closing the task with this send would close over them - the conversation says so
+export const MoreCardsCtx = React.createContext(false);
 export default function ReviewDecision({ past = false, ...props }) {
   const r = past ? asLive(props.review) : props.review, act = cardOf(r);
   return act ? <ActionCard row={act} tid={r?.TaskId} onChanged={props.onChanged} past={past} />
@@ -298,7 +301,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     : onTask && !r.Stale && canSendIt ? (closesIt ? `${closeWord} sends this to ${replyContext(r)} - ${closeThen}; ${sendWord} sends it and ${stays}.`
       : `${sendWord} sends this to ${replyContext(r)} - ${stays}.`) : "";
   // each send's hover says exactly what it does here
-  const twoSends = closesIt && !simulated && !co && !proposal && canSendIt && !r.Stale && !chatFile && !delivery.frozen;
+  const moreCards = React.useContext(MoreCardsCtx);
+  const twoSends = closesIt && !moreCards && !simulated && !co && !proposal && canSendIt && !r.Stale && !chatFile && !delivery.frozen;
   const copying = ccNow.length && !isCal ? `, copying ${ccNow.length}` : "", to = isCal ? "Tells the calendar" : `Sends this to ${replyContext(r)}`;
   const closeTitle = `${to} - ${closeThen}`, sendTitle = `${to} - ${stays}`;
   // ...and A CLOSE-OUT'S TWO (the owner, 2026-11-03): Approve and close - the merge or the issue's close, then the reply, then the task's close -

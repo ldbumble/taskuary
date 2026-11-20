@@ -654,11 +654,15 @@ def _verb(name: str) -> str:
 def _on(s: dict, verb: str) -> str:
     import os, re
     a = s.get('args') or {}
-    if verb in ('Read', 'Edited', 'Wrote') and (f := s.get('file') or a.get('file_path') or a.get('path')): return os.path.basename(str(f).replace('\\', '/').rstrip('/')) or str(f)
+    # ...and what it wrote BY ITS NAME, whichever argument holds it (the judge's walk, 2026-11-19: "wrote Directory" - a tool's own noun, not the folder)
+    f = s.get('file') or a.get('file_path') or a.get('path') or next((v for v in a.values() if isinstance(v, str) and ('/' in v or '\\' in v)), '')
+    if verb in ('Read', 'Edited', 'Wrote') and f: return os.path.basename(str(f).replace('\\', '/').rstrip('/')) or str(f)
     if verb == 'Opened' and (u := a.get('url') or s.get('text')) and (m := re.match(r'https?://(?:www\.)?([^/\s]+)', str(u))): return m.group(1)
     if verb == 'Ran': return str(s.get('detail') or a.get('command') or s.get('text') or '')[:160]
     if verb == 'Used': return str(s.get('name') or 'a tool').rsplit('__', 1)[-1]
-    return str(a.get('query') or a.get('pattern') or s.get('text') or '')[:160]
+    # ...a search in a few plain words: its query cut at a word, never the raw string run on (the whole of it is behind the row)
+    q = ' '.join(str(a.get('query') or a.get('pattern') or s.get('text') or '').split())
+    return q if len(q) <= 60 else q[:60].rsplit(' ', 1)[0].rstrip(',;:') + '…'
 
 
 def outcome(s: dict) -> str:

@@ -125,15 +125,18 @@ const lower = (t) => String(t || "").replace(/^[A-Z](?![A-Z])/, (c) => c.toLower
 const KIND_SAID = { read: (k) => `read ${plural(k, "file")}`, page: (k) => `read ${plural(k, "web page")}`, run: (k) => `ran ${plural(k, "command")}`,
   edit: (k) => `changed ${plural(k, "file")}`, search: (k) => `searched files ${k} times`, web: (k) => `searched the web ${k} times`, mail: () => "searched your mail" };
 const calls = (r) => String(r.id || "").split("+").length;
+// ...ONE COUNTING UNIT (the judge's walk, 2026-11-19: "1 step - ..., and 2 more" - the head counted rows, the tail counted calls): every
+// number is of calls - a row folding three calls is three steps - and "and N more" is the steps the named words did not cover
+const callsOf = (r) => (r.type === "edit" ? 1 : calls(r));
 export const foldLine = (parts) => {
-  const rows = workRows(parts), n = rows.length;
+  const rows = workRows(parts), n = rows.reduce((t, r) => t + callsOf(r), 0);
   if (!n) return "";
   const kinds = [], by = new Map();
   for (const r of rows) { const k = r.type === "edit" ? "edit" : r.kind; if (!by.has(k)) { by.set(k, []); kinds.push(k); } by.get(k).push(r); }
-  const words = kinds.flatMap((k) => { const rs = by.get(k);
-    return rs.length > 1 && KIND_SAID[k] ? [KIND_SAID[k](rs.reduce((t, r) => t + (r.type === "edit" ? 1 : calls(r)), 0))] : rs.map((r) => lower(r.summary)); }).filter(Boolean);
-  const said = words.slice(0, words.length > FEW ? FEW - 1 : FEW);
-  return `${plural(n, "step")}${said.length ? ` - ${said.join(", ")}${words.length > FEW ? `, and ${words.length - (FEW - 1)} more` : ""}` : ""}`;
+  const words = kinds.flatMap((k) => { const rs = by.get(k), c = rs.reduce((t, r) => t + callsOf(r), 0);
+    return rs.length > 1 && KIND_SAID[k] ? [[KIND_SAID[k](c), c]] : rs.map((r) => [lower(r.summary), callsOf(r)]); }).filter(([w]) => w);
+  const said = words.slice(0, words.length > FEW ? FEW - 1 : FEW), more = n - said.reduce((t, [, c]) => t + c, 0);
+  return `${plural(n, "step")}${said.length ? ` - ${said.map(([w]) => w).join(", ")}${more > 0 && words.length > said.length ? `, and ${more} more` : ""}` : ""}`;
 };
 // A DRAFT WHERE IT STOOD, no longer the one to press (GeneralWorkspace wasCard, NotSent): the list's card in one of these states, carrying what it said
 export const isPastCard = (c) => ["superseded", "passed", "withdrawn", "rejected"].includes(c?.status) && !!c.was;

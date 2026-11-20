@@ -31,11 +31,24 @@ def _name(day: str, why: str = '') -> str: return f"taskuary-{day}{'-' + why if 
 def copy_db(src: str, dest: Path) -> Path:
     "A consistent copy of the database at `src`, written beside `dest` first and moved in whole - a copy cut short is never a backup."
     tmp = dest.with_suffix('.partial')
+    _gone(tmp)                                # ...one a run cut short left behind is no copy: away before this one
     a, b = sqlite3.connect(src, timeout=30), sqlite3.connect(str(tmp))
     try: a.backup(b)
     finally: a.close(); b.close()             # a `with` only commits: Windows will not move a file still open
-    os.replace(tmp, dest)
+    # ...AND MOVED WHEN WINDOWS LETS GO OF IT (the owner's live app, 2026-11-19: WinError 32 on every try - an indexer or a virus scan holds a
+    # new file for a moment): tried again for a few seconds, then the half copy is removed and the failure said
+    for i in range(20):
+        try: os.replace(tmp, dest); return dest
+        except PermissionError:
+            if i == 19: _gone(tmp); raise
+            time.sleep(0.25)
     return dest
+
+
+def _gone(p: Path) -> None:
+    try: p.unlink()
+    except FileNotFoundError: pass
+    except OSError as e: logger.warning(f'backup: {p.name} could not be removed - {e}')
 
 
 def mirror(home: Path, to: Path) -> int:

@@ -856,21 +856,33 @@ def live_card(store, tid: int):
 
 # ── MIGRATION (stage 6): what he saw stays as he saw it ───────────────────────────────────────────────────────────────────────────────────
 _BACKED = set()
+_BACKUP = {}          # db path -> {'thread': the copy at work, 'failed': when it last failed}
+BACKUP_AGAIN = 600.   # seconds before a copy that failed is tried again
 def backed_up(store) -> bool:
     """A copy of the database before the first task is written into the log - nothing is migrated without one (backups.make, `before-chatlog`).
-    A store in memory has nothing to lose. False where the copy could not be made: then nothing migrates."""
+    NEVER MADE INSIDE A READ (the owner's live app, 2026-11-19: the copy failed on every chat read and each read waited 6-19 s for it): made
+    once per process on its own thread, a failure remembered and tried again after BACKUP_AGAIN, never on every read. True once it exists;
+    a store in memory has nothing to lose."""
     from pathlib import Path
-    from . import backups
     db = getattr(store, '_path', '') or ''
     if db in _BACKED or db == ':memory:' or not Path(db).is_file(): return True
     try:
-        if not store.get_setting('chatlog_backup', ''):
+        if store.get_setting('chatlog_backup', ''): _BACKED.add(db); return True
+    except Exception: return False
+    st = _BACKUP.setdefault(db, {})
+    if (t := st.get('thread')) and t.is_alive(): return False
+    if time.time() - st.get('failed', 0) < BACKUP_AGAIN: return False
+    def make():
+        from . import backups
+        try:
             out = backups.make(db, Path(db).parent, why='before-chatlog', files=False)
-            if not out: return False
-            store.set_setting('chatlog_backup', str(out), 'router')
-        _BACKED.add(db); return True
-    except Exception as e:
-        logger.warning(f'chatlog: no copy of the database before the log - nothing migrates ({e})'); return False
+            if not out: raise RuntimeError('no database to copy')
+            store.set_setting('chatlog_backup', str(out), 'router'); _BACKED.add(db)
+        except Exception as e:
+            st['failed'] = time.time()
+            logger.warning(f'chatlog: no copy of the database before the log yet - nothing migrates; tried again in {int(BACKUP_AGAIN)} s ({e})')
+    st['thread'] = threading.Thread(target=make, daemon=True, name='chatlog-backup'); st['thread'].start()
+    return False
 
 
 def migrated(store, tid: int) -> bool:
@@ -945,7 +957,9 @@ def serve(store, tid: int, level: str = None) -> dict:
     (migrate); what waits is never also drawn (an input is in one place)."""
     from . import general, origin, workflows
     tid = int(tid)
-    if not migrated(store, tid): migrate(store, tid)
+    # ...A TASK NOT YET FROZEN WHILE THE COPY BEFORE THE LOG IS STILL BEING MADE (backed_up, on its own thread) reads as the old build drew it -
+    # exactly what the freeze will write - and never waits for the copy
+    if not migrated(store, tid) and not migrate(store, tid) and not migrated(store, tid): return _legacy(store, tid)
     hold_ = origin.hold(store, tid)
     at_work = general.working(store, tid) if not hold_ else bool(getattr(general._live_of(tid), 'busy', False))
     # ...A TURN WHOSE ANSWER IS FILED IS OVER (recorded 2026-11-12: its session read busy a beat after the answer was filed, and the dots stood

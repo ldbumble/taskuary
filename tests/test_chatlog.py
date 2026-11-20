@@ -261,6 +261,10 @@ def test_migration_freezes_what_he_saw_and_a_turn_at_work_goes_on_in_its_own_row
                                    {'id': 'r:8', 'kind': 'card', 'review': 8, 'what': 'draft_reply', 'status': 'pending'}]},
                         {'id': 'l-2', 'kind': 'line', 'at': '2026-11-19 09:05:00', 'text': 'Also check the price', 'files': []},
                         {'id': 't:l-2:0', 'kind': 'turn', 'state': 'working', 'sid': 'sid9', 'text': '', 'started': 2.0, 'steps': []}]}
+    import time as t_
+    assert not chatlog.migrate(s, tid, legacy=legacy), 'nothing is frozen before the copy, which is made on its own thread - never in the read'
+    end = t_.time() + 10
+    while not chatlog.backed_up(s) and t_.time() < end: t_.sleep(0.05)
     assert chatlog.migrate(s, tid, legacy=legacy) and not chatlog.migrate(s, tid, legacy=legacy), 'once'
     assert s.get_setting('chatlog_backup', '') and (tmp_path / 'backups').exists(), 'a copy before anything was written'
     rows = {r['Key']: r['State'] for r in s._rows('SELECT Key, State FROM chatlog WHERE TaskId=?', (tid,))}

@@ -190,6 +190,9 @@ async def _lifespan(_app):
             from . import recentlydeleted; recentlydeleted.purge(store)
         except Exception as e: logger.warning(f'Recently deleted not purged: {e}')
         backups.start(config.db_path())               # a copy of the database and its files once a day, the newest three kept
+        try:                                          # ...and the copy before the chat's log, on its own thread from the start: never in a read
+            from . import chatlog; chatlog.backed_up(store)
+        except Exception as e: logger.warning(f'the copy before the chat log was not begun: {e}')
         # ...and the agents' records kept before slim(), written again in its form, once
         threading.Thread(target=slim_records, daemon=True, name='taskuary-slim-records').start()
     else:

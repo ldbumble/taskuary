@@ -435,7 +435,9 @@ def launch_mode(store, tid, cli: str, cmd: str = '') -> str:
     from . import clis
     # ...THE TASK'S MODE FOLLOWS WHO STARTED IT (the Codex walk, 2026-11-19: a notice that joined his own ledger task ran his next line in a
     # stranger's folder with no checkout): on his own task a stranger who joined holds back their own words (JOINED_LINE), never his tools
-    if not tid or of_task(store, tid)[0] != 'stranger' or his_own(store, tid): return 'full'
+    # ...but A TEAMMATE CHAT BOUND TO IT is no stranger who joined: their lines go straight to the agent, so his own task runs safe while it
+    # is bound, until he chooses full power (teammate_bound; the setting Teammate chats)
+    if not tid or of_task(store, tid)[0] != 'stranger' or (his_own(store, tid) and not teammate_bound(store, tid)): return 'full'
     if (h := keeps_him(store, tid) if OWNER_SPEAKS.get() else hold(store, tid)): raise Refusal(h['line'])     # an untrusted sender: no agent, until Trust
     cli = clis._base(cli)
     # ...`cli` IS claude in the version check - the CLI's own name; a reviewer too old to refuse is no reviewer

@@ -514,7 +514,7 @@ def test_a_quota_refusal_is_the_providers_quota_in_plain_words_and_the_card_rest
         from taskuary import brainroute
         brainroute.unspend(s, pick)
         with mock.patch.object(llm, 'post_retrying', return_value=quota), pytest.raises(llm.QuotaSpent) as e: ask()
-        assert str(e.value) == ('HIPAA AI: Claude Sonnet 5.5 is over its quota at the provider (it answered 429) - raise the quota there, '
+        assert str(e.value) == ('HIPAA AI: Claude Sonnet 5.5 is over its quota at the provider - raise the quota there, '     # his words, no code
                                 'or pick another model on its card')
     assert brainroute.spent(s, pick) == str(e.value), 'it rests: the next call says the same line at once, and a backup takes it'
     with mock.patch.object(llm, 'post_retrying') as post, pytest.raises(llm.BudgetSpent): brain('sys', 'again')

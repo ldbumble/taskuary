@@ -153,7 +153,8 @@ ASK = {'action': 'save_routine', 'title': 'Late fees', 'script': LATE_FEE, 'prom
        'daily_at': '07:00', 'why': 'the same rule every month', 'reads': {'type': 'local_file', 'path': 'C:/exports/ar-*.csv'}}
 
 
-@pytest.mark.parametrize('bad,says', [({'script': ''}, 'save_routine needs script'), ({'script': 'print("{{inputs.month}}")'}, 'run exactly as saved'),
+# ...a routine with no script is its instructions (workflows.script_routine, the owner 2026-11-20): refused only when it has neither
+@pytest.mark.parametrize('bad,says', [({'script': '', 'prompt': ''}, 'needs `title` and `script`'), ({'script': 'print("{{inputs.month}}")'}, 'run exactly as saved'),
                                       ({'reads': {'type': 'python_script', 'script': 'print(1)'}}, 'never a write'),
                                       ({'reads': {'type': 'smb_write', 'path': 'x'}}, 'never a write'), ({'daily_at': '7am'}, 'not a time')])
 def test_a_routine_that_would_not_hold_is_refused_at_the_door(bad, says):

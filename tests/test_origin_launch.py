@@ -87,7 +87,8 @@ def test_his_own_ci_s_notice_keeps_his_task_his_and_a_stranger_s_mail_does_not()
     s, t = task()
     s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'erin@vendor.example', 'FromName': 'Erin Blake', 'Subject': 'Re: ledger totals',
                    'BodyText': 'Can you also send me the totals?', 'Status': 'routed'})
-    assert origin.of_task(s, t)[0] == 'stranger' and mode(s, t) != 'full'
+    # ...a stranger who joined HIS task holds back only their own words: his task keeps its mode (the Codex walk, 2026-11-19 - origin.launch_mode)
+    assert origin.of_task(s, t)[0] == 'stranger' and mode(s, t) == 'full' and origin.keeps_him(s, t) is None
     # ...and the CI's notice vouches for nobody: on a task a stranger's mail started, it lifts nothing (origin.lifted)
     s, t = task()
     s.update_task(t, {'OriginBase': ''}, 'owner')

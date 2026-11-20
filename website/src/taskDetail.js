@@ -99,8 +99,13 @@ let pileAt = 0;
 const reads = new Map();                // tid -> { at, state, live, rec }
 const watchers = new Set(), recWatchers = new Set();
 export const notePile = (at) => { pileAt = Math.max(pileAt, Number(at) || 0); };
+// ...AND THE LAST READ OF EVERY TASK THIS PAGE HAS HAD, kept whatever was written since (the owner, 2026-11-20: "revisits never wait"): what a
+// view draws on its first frame when no fresh read is held - Back to a task closed a minute ago - and reads again under, in place
+const last = new Map();
+export const lastTask = (tid) => last.get(Number(tid)) || null;
 export function noteRead(tid, data, at = now()) {
   const id = Number(tid), was = reads.get(id);
+  if (id && data?.task?.TaskId === id) last.set(id, data);
   if (!id || data?.task?.TaskId !== id || (was && was.at > at)) return;
   // ...and THE TASK'S OWN RECOMMENDED MOVE rides the same read (the owner, 2026-11-09: "the agents while running should recommend actions, no
   // assistant"): the payload's `recommended` - the agent's turn and the task's facts, read by the server (rulebook.recommended)

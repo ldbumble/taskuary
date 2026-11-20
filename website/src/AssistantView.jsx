@@ -86,7 +86,7 @@ import { actReceipt, lineKeys, mergeDurableTurns, nextBadge, pickLine, placeLine
 import { lightOf, litAfter, litOn, litPick, litPull } from "./assistantLight.js";
 import * as pageView from "./pageView.js";
 import DigestText from "./DigestText.jsx";
-import { canGoBack, firstAppLink, linkName, navBack, onStep, openAppLink, recordPlace } from "./appLinks.js";
+import { canGoBack, firstAppLink, linkName, navBack, onBackTo, onStep, openAppLink, recordPlace } from "./appLinks.js";
 import { goStraight } from "./SetupWithAi.jsx";
 import { BOARD, hashFor, opensTask } from "./canvasLinks.js";
 import { canSend, cannotStart, useCapabilities } from "./capabilities.js";
@@ -1423,12 +1423,13 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   useEffect(() => { const on = () => { popped.current = true; }; window.addEventListener("popstate", on); return () => window.removeEventListener("popstate", on); }, []);
   const cardRef = useRef(null);
   // every move of the table made HERE, counted: a server word read before one is older than it (readChat, loadPile)
-  const tableMoves = useRef(0);
+  const tableMoves = useRef(0), seenItems = useRef(new Map());
   // THE WALK HAS ONE OWNER (railwalk, 2026-10-30): which row comes next, which is above and what leaving one does are the server's - the
   // page sends the row it has on screen and draws the answer. `leftKey`: the row a press just left, so its own Advisor read is not made
   const leftKey = useRef(null), pickedRef = useRef(false);
   // `ahead`: the answer filling in the row its press drew (landed) - the stamp stays the press's own, see there
   const putOnTable = useCallback((card, how = "pile", ahead = false) => {
+    if (card?.tid && how !== "card") seenItems.current.set(String(card.tid), card);       // ...what a revisit draws at once (pull)
     if (how !== "sync") tableMoves.current += 1;
     if (how !== "view") {
       const item = how === "card" ? null : card || null;
@@ -2175,7 +2176,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
       // ...AND ITS PLACE IS A STEP FROM THE PRESS, not from the answer (reproduced on a scratch app, walk 5 2026-11-19): Mark done on a task whose
       // agent is written up first answers seconds later, the address kept naming the closed task while the next one was drawn, and a Back
       // pressed meanwhile skipped the closed task and left the drawn one on screen
-      else if (belowItem.tid) { recordPlace(`#task=${belowItem.tid}`, "push"); lastPlace.current = `#task=${belowItem.tid}`; navHow.current = "replace"; }
+      else if (belowItem.tid && !byUrl.current) { recordPlace(`#task=${belowItem.tid}`, "push"); lastPlace.current = `#task=${belowItem.tid}`; navHow.current = "replace"; }
     }
     // ...AND WHAT IT READS LEAVES THE RAIL AT THE PRESS (rule 4): Next on a row the walk says it reads (walk.reads - a report, an idea, an fyi),
     // a batch's "All read, next" (a settle). Held to the answer, a slow one kept a read batch in the FYI heading's count and a passed idea on
@@ -3107,7 +3108,11 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     // is keyed by - so nothing was drawn at the press and the table waited for the server's whole read (~800 ms against ~300 for the same task
     // pressed on the rail). The task's own rail row is the one asked for, drawn at once and filled in place, as a rail press does
     const tidOf = /^task:(\d+)$/.exec(asked || "")?.[1];
-    const row = (pileRef.current?.items || []).find((i) => (i.key === asked || (tidOf && String(i.tid) === tidOf)) && !i.settling) || (made?.key === asked ? made : null);
+    const railRow = (pileRef.current?.items || []).find((i) => (i.key === asked || (tidOf && String(i.tid) === tidOf)) && !i.settling);
+    // ...and A TASK OFF THE RAIL (closed, done) that this page has had on its table is drawn at once from what it last held, filled in place
+    // as its read comes (the owner, 2026-11-20: "revisits never wait") - only a first-ever open waits for the server
+    const seen = !railRow && tidOf && seenItems.current.get(tidOf);
+    const row = railRow || (seen ? { ...seen, key: asked } : null) || (made?.key === asked ? made : null);
     const key = row?.key || asked;
     const ahead = () => {
       rowsDrawn.current += 1; setRailOpen(false); browseDown(); setExpanded(false);
@@ -3127,12 +3132,15 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     // ...but New's own press, opening the task it just made, keeps the card up - its button spinning - until that task is on the table
     // (holdsNew): put down at the press, the task it was opened over came back under the "…" (the owner, 2026-11-09)
     const held = !made && holdsNew(msgsRef.current, browsingRef.current, pileRef.current?.items, key);
-    if (made && row !== currentRef.current && key !== currentRef.current?.key) ahead();
+    if ((made || seen) && row !== currentRef.current && key !== currentRef.current?.key) ahead();
     setRailOpen(false); if (old) setOld(null); if (!held) browseDown();
     const going = surface(key, asUser || null);
     if (held) Promise.resolve(going).finally(() => browseDownRef.current?.());
   };
   pullRef.current = pull;
+  // ...AND BACK OPENS BY THE SAME ROAD, BEFORE ITS ADDRESS IS WRITTEN (appLinks.navBack): the task behind is pulled as a rail press pulls it,
+  // and the browser's step back then finds it on the table (the owner, 2026-11-20: every button opens the same)
+  useEffect(() => (active ? onBackTo((h) => { const m = /^#task=(\d+)$/.exec(h || ""); if (m) { prefetchTask(api, m[1]); byUrl.current = true; navHow.current = "replace"; pullRef.current?.(`task:${m[1]}`); } }) : undefined), [active]);
 
   // A MESSAGE ASKED FOR BY ID - a card's "<name>'s message ↗", an idea's "Based on", a #msg= link - is put on the table as ITS card, the
   // one the walk shows for it (funnel.item_for_key answers msg:N for any message, through its task's row when it has one). It opened a

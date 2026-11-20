@@ -140,7 +140,7 @@ import { PICK_REPO, openAppLink, takeRepoPick } from "./appLinks.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { place } from "./words.js";
 import { announceRemoved, fromAnswer } from "./removed.js";
-import { aheadChat, aheadTask, heldSteps, heldTask, heldTerm, keepTask, keepTerms, pageRead } from "./taskDetail.js";
+import { aheadChat, aheadTask, heldSteps, heldTask, lastTask, heldTerm, keepTask, keepTerms, pageRead } from "./taskDetail.js";
 const CHAT_WAIT = 1200;
 import { coalesce } from "./coalesce.js";
 
@@ -801,7 +801,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const caps = useCapabilities(), canCode = caps.coding;     // no coding tool connected: coding is not offered (capabilities.js)
   const manual = caps.ai === false;                          // no AI: the owner replies and hands off from the bar's ▾ themselves
   // ...drawn from the task's read held ahead of it (taskDetail.js) - a view on the table opens whole, not as an empty shell (G8)
-  const [detail, setDetail] = useState(() => (aheadChat(selected) ? null : heldTask(selected)));     // ...with its chat (loadDetail)
+  const [detail, setDetail] = useState(() => (aheadChat(selected) ? null : heldTask(selected) || lastTask(selected)));     // ...with its chat (loadDetail)
   // Which task is on screen RIGHT NOW, readable from inside any await. Every fetch here is
   // keyed to a task, and a response that lands after you clicked another one must be dropped:
   // a wrap-up finishing 8 seconds later used to paint ITS task's header and report over the
@@ -950,6 +950,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const loadDetail = useCallback(async (id, first = false) => {
     if (!id) { setDetail(null); return; }
     const ahead = heldTask(id), coming = !ahead && first && aheadTask(id);
+    // ...A REVISIT NEVER WAITS (the owner, 2026-11-20): with no fresh read held, the last one this page had of the task is drawn at once and the
+    // read below replaces it in place - Back to a task closed since stood on the task it left until the server answered
+    const was = !ahead && lastTask(id);
+    if (was) setDetail((d) => (d?.task?.TaskId === id ? d : was));
     // ...AND ITS CHAT WITH IT (recorded 2026-11-12 on the built app: a task opened for the first time stood its head over a spinner where the
     // chat goes, its chat's read asked at the press still out): the task's first frame waits - its title and spinner standing - for the chat's
     // read asked ahead with it too, never longer than CHAT_WAIT, so the task and its chat are drawn as one move

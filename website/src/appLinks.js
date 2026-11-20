@@ -89,6 +89,7 @@ export const openAppLink = (h) => {
   const d = depth();
   window.location.hash = want;
   window.history.replaceState({ ...window.history.state, tqDepth: d + 1 }, "", window.location.href);   // a step of ours: Back may take it
+  PLACES[d + 1] = window.location.hash || "";
 };
 
 // HOW MANY STEPS OF OURS STAND BEHIND THIS ONE (TQ-1187: "there is no easily accessible back button" - the desktop window has no browser
@@ -99,15 +100,27 @@ export const canGoBack = () => depth() > 0;
 // ONE BACK OVER ONE LIST (the spec's part E, 2026-11-19): the corner arrow and the walk bar's Back landed in different places - the bar on the
 // rail's row above, the arrow skipping every task the walk's Next had moved through. Every move is a step (recordPlace "push"), and both
 // Backs, Alt+Left with them, step back over the one list - never out of the app
-export const navBack = () => { if (canGoBack()) window.history.back(); };
+// ...AND THE OPEN GOES FIRST, THE ADDRESS AFTER (the owner, 2026-11-20: every button opens the same): the place each step of ours holds is kept
+// here, so Back opens the place behind it by the open road a rail press takes (onBackTo) in the same moment, and the browser's step back
+// only writes the address after it - which then finds the table already there
+const PLACES = [];
+let backTo = null;
+export const onBackTo = (fn) => { backTo = fn; return () => { if (backTo === fn) backTo = null; }; };
+export const navBack = () => {
+  if (!canGoBack()) return;
+  const to = PLACES[depth() - 1];
+  if (to != null && backTo) { try { backTo(to); } catch { /* the address's own road still opens it */ } }
+  window.history.back();
+};
 // ...AND A STEP THE ADDRESS MADE ITSELF IS OURS TOO (reproduced on a scratch app, 2026-11-19): a link or a typed address (location.hash = ...)
 // makes an entry with no count, and Back onto it read "nothing behind": the corner arrow went and the bar's Back greyed with places still
 // behind. Each such entry is counted the moment it is made, one past the entry it was made from
 let lastDepth = 0;
+if (typeof window !== "undefined") PLACES[Number(window.history.state?.tqDepth) || 0] = window.location.hash || "";
 if (typeof window !== "undefined") {
   const stamp = () => { const d = window.history.state?.tqDepth;
     if (d == null) window.history.replaceState({ ...window.history.state, tqDepth: lastDepth + 1 }, "", window.location.href);
-    lastDepth = Number(window.history.state?.tqDepth) || 0; };
+    lastDepth = Number(window.history.state?.tqDepth) || 0; PLACES[lastDepth] = window.location.hash || ""; };
   window.addEventListener("hashchange", stamp); window.addEventListener("tq-place", () => { lastDepth = depth(); });
   window.addEventListener("popstate", () => { if (window.history.state?.tqDepth != null) lastDepth = depth(); });
 }
@@ -124,6 +137,7 @@ export const recordPlace = (want, how = "replace") => {
   if (typeof window === "undefined" || placeOf(window.location.hash) === placeOf(want)) return;
   const push = how === "push";
   window.history[push ? "pushState" : "replaceState"]({ ...window.history.state, tqDepth: depth() + (push ? 1 : 0) }, "", here(want));
+  PLACES[depth()] = want || "";
   window.dispatchEvent?.(new Event("tq-place"));
 };
 // a followed link fires hashchange (and popstate with it); Back and Forward fire popstate (and hashchange when the hash differs):

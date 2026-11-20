@@ -50,9 +50,14 @@ def _cap(s: str) -> str: return s[:1].upper() + s[1:]
 _STATUS = re.compile(r'\b(4\d\d|5\d\d)\b')
 _TYPE = re.compile(r'''["']type["']\s*:\s*["'](\w+)["']''')
 NEXT = 'write to carry on, or press Try again'
-def turn_failed(raw) -> str:
+def turn_failed(said) -> str:
     from .failures import cli_quota
-    r = str(raw or '')
+    r = str(said or '')
+    # ...TASKUARY'S OWN SENTENCE STANDS AS IT IS (say.plain's rule): "The AI is over its limit - trying again at 12:12" and "HIPAA AI refused the
+    # request - it said: ..." were read again as an unknown error, and he saw "The AI stopped on an error" over the reason (the gateway walk, 2026-11-19)
+    if (own := ' '.join(r.split())) and not raw(r) and not provider_said(r): return own
+    from .failures import refused
+    if (why := refused(r)): return f'{why} - {NEXT}.'
     codes, types = {int(c) for c in _STATUS.findall(r)}, set(_TYPE.findall(r))
     # ...the CLI's own quota notice says when it resets; a provider's typed error that merely mentions "rate limit" is read by its type
     if (q := cli_quota(r)) and ('reset' in q.lower() or not types): return f'{q} - {NEXT} once it resets.'

@@ -94,7 +94,11 @@ class BudgetSpent(RuntimeError):
 # LiteLLM counts its fallbacks in a header; where one of them shows another model answered, the call says so (fell_back) and the router
 # keeps it as the card's episode (brainroute.heard) - the card, the bell and the task's "AI used" read one line (fallback_line). A call
 # turned down outright on a quota (429, every retry spent) is the provider's quota, in those words, with the way on (QuotaSpent).
-QUOTA_LINE = "{name}: {model} is over its quota at the provider (it answered 429) - raise the quota there, or pick another model on its card"
+QUOTA_LINE = "{name}: {model} is over its quota at the provider - raise the quota there, or pick another model on its card"
+# ...and A MODEL THAT THOUGHT PAST ITS ROOM, in the same words (the gateway walk, 2026-11-19: "hipaa_ai: ... (finish_reason length)" stood in the log
+# and he read "The AI stopped on an error")
+ROOM_LINE = "The AI stopped before it answered: {name}'s {model} ran out of room, even with {room:,} tokens - pick a model that thinks less on its card"
+def card_name(t: str) -> str: return 'HIPAA AI' if t == 'hipaa_ai' else t
 QUOTA_REST = 600           # seconds before a card over its quota is asked again: a per-minute quota is back by then, a raised one too
 _FAMILY = re.compile(r'claude|gemini|gpt|o\d|llama|mistral|grok|deepseek|qwen|command|sonar|kimi', re.I)
 _FELL = contextvars.ContextVar('tq_llm_fell', default=None)
@@ -154,7 +158,8 @@ def refused(t: str, r, url: str, model: str) -> Exception:
     "The error a refused call raises: a quota in plain words with the way on (QuotaSpent), else the provider's own."
     if r.status_code == 429:
         return QuotaSpent(QUOTA_LINE.format(name='HIPAA AI' if t == 'hipaa_ai' else t, model=words(model) or 'its model'))
-    return (ProviderDown if r.status_code >= 500 else RuntimeError)(f'{t} error {r.status_code} at {url.split("?")[0]}{tried(r)}: {r.text[:300]}')
+    # ...with room for the provider's own reason, which a gateway nests inside its own wrapper (failures.refused reads the innermost)
+    return (ProviderDown if r.status_code >= 500 else RuntimeError)(f'{t} error {r.status_code} at {url.split("?")[0]}{tried(r)}: {r.text[:1200]}')
 
 
 def budget_said(text) -> str:
@@ -1442,9 +1447,9 @@ def make_llm(t, cfg: dict, key: str):
                 if str(e) == 'length' and max_tokens < ROOM: max_tokens = ROOM; continue
                 if str(e) != 'length' and spent < 3: continue
                 if str(e) == 'length':
-                    raise OutOfRoom(f'{t}: the model ran out of room before answering, even with {ROOM} tokens (finish_reason {e}) - '
-                                       f'model {model}; pick a non-thinking model on its card') from None
-                raise NoAnswer(f'{t} sent back no answer (finish_reason {e}) - model {model}') from None
+                    raise OutOfRoom(ROOM_LINE.format(name=card_name(t), model=words(model) or 'model', room=ROOM)) from None
+                raise NoAnswer(f"The AI stopped before it answered: {card_name(t)}'s {words(model) or 'model'} sent back nothing (it stopped on '{e}') - "
+                               "pick another model on its card") from None
     # ONE STEP OF A TOOL LOOP (apiagent.py): the model's message - its words and/or tool_calls - for a whole conversation and the tools
     # it may call, in the OpenAI schema every endpoint here speaks. Without it an API brain was one system + one user message and nothing
     # it could DO: a HIPAA-only install, with no CLI, answered "logging in cannot be done from here" (the owner, 2026-11-09). LiteLLM

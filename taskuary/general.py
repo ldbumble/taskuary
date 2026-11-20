@@ -190,7 +190,7 @@ def provider_down(e) -> str:
         # ...nor one only he can mend (llm.OutOfRoom: the card's model): said in its own words with its card, never tried again by itself
         if isinstance(e, (clipool.Unfinished, llm.OutOfRoom)): return ''
         if isinstance(e, (llm.BudgetSpent, agents.RateLimited)): return DOWN[0]
-        if isinstance(e, llm.NoAnswer): return DOWN[1]
+        if isinstance(e, llm.NoAnswer): return str(e) if str(e).startswith(DOWN[1]) else DOWN[1]     # ...with why, where it is said (llm.ROOM_LINE)
         if isinstance(e, (requests.Timeout, llm.ProviderDown)): return DOWN[2]
         if isinstance(e, requests.ConnectionError): return DOWN[3]
         e = e.__cause__ or e.__context__
@@ -3377,7 +3377,7 @@ class GeneralSession:
             brain = llm_mod.build_llm(self.store, **build_args, job='quick_work') if quick else llm_mod.build_llm(self.store, **build_args, job='general')
             if not brain: raise RuntimeError('the AI chosen for this is not available - pick another, or connect it again')
             from . import apiagent
-            looped, api_tools, api_box, toolbox, card_fact = False, None, (), apiagent.TOOLS_BRIEF, None
+            looped, api_tools, api_box, card_fact = False, None, (), False
             if api_hands:
                 # THE CLI'S TOOLBOX ON AN API CARD (the owner, 2026-11-09: "make sure hipaa thing matches capabilities of claude cli"): Taskuary's
                 # own tools through the same gated server a CLI session reaches (apiagent.tools_for), and the browser on the owner's own task.
@@ -3405,8 +3405,7 @@ class GeneralSession:
                     toolbox = '\n\n'.join(x for x in (apiagent.TOOLS_BRIEF, '' if stranger else docsync.agent_systems(self.store, True)) if x)
                     system = f'{system}\n\n{toolbox}\n\n{apiagent.where_line(self.store, self.task_id)}'
                     # ...ONE WAY TO WRITE A REPLY, as on a CLI with the toolbox: propose_reply, not the marker line beside it - and its own
-                    # search and tick the same (for_toolbox). Swapped where the turn is asked, never here: a card that then refuses tools
-                    # is asked the plain way, and needs the block
+                    # search and tick the same (for_toolbox), swapped where the turn is asked
                     api_box = tuple(apiagent.TOOLBOX.get((self.task_id, self.sid), ()))
                 if browser:
                     browser_tools, browser_offer = True, not browserview.state(self.sid, fresh=True).get('open')
@@ -3415,11 +3414,13 @@ class GeneralSession:
                     # ...and where it cannot, the next real step as the owner's question - never "cannot be done from here" (2026-11-09)
                     if self.browser_wanted and not apiagent.can(brain): self._remember_trace('progress', 'browser', no_browser_line(self.store, self.pick))     # true of a card that takes no tools, and only of it
                     if apiagent.can(brain): system = f'{system}\n\n{apiagent.no_browser_line()}'
-                # ...and WHAT IT CAN DO HERE (capabilities.fact): a card that takes no tools hears it has words alone, and only the AIs really here
+                # ...and WHAT IT CAN DO HERE (capabilities.fact): a card that takes no tools hears it has words alone, one with tools what its
+                # own hands make - read off the tools it is offered - and only the AIs really here
                 if not stranger:
                     from . import capabilities
-                    card_fact = lambda tooled: capabilities.fact(self.store, ('all' if full_hands(self.store) else 'look') if tooled else 'none', self.pick)
-                    late.append(card_fact(looped))
+                    card_fact = True
+                    late.append(capabilities.fact(self.store, ('all' if full_hands(self.store) else 'look') if looped else 'none', self.pick,
+                                                  tools=[t['function']['name'] for t in api_tools or ()] if looped else ()))
             kept_conv = bool(self.cli_sid or (looped and self.card_msgs))
             if kept_conv and self.frozen is None: self.frozen = self._told()
             head, system, news = system, *freeze(self, system, [*late, unlearned(self.store, self.frozen)] if kept_conv else late, kept_conv, by_line=True)
@@ -3461,15 +3462,12 @@ class GeneralSession:
             limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS
             def ask(brain, user):
                 "The turn, asked of this brain: with its tools where it takes them (apiagent.turn), else the plain way."
-                nonlocal looped, system
+                # ...A CARD THAT TURNS ITS TOOLS DOWN FAILS THE TURN, in the provider's words (say.turn_failed) - never asked again without them:
+                # the agent then told him it had no files, browser or shell, and to install a CLI (the gateway walk, 2026-11-19)
                 if looped:
-                    try: return str(apiagent.turn(brain, self.store, self.task_id, self.sid, for_toolbox(system, api_box), user, limit,
-                                                  trace=visible, cancel=cancel, images=_images(paths), tools=api_tools, history=self.card_msgs,
-                                                  ear=self.keep()) or '').strip()
-                    except apiagent.ToolsRefused as e:
-                        logger.info(f'task {self.task_id}: {self.provider} took no tools - asked the plain way ({str(e)[:160]})')
-                        looped, system = False, system.replace(apiagent.BRIEF, '').replace(toolbox, '')
-                        if card_fact: system = system.replace(card_fact(True), card_fact(False))
+                    return str(apiagent.turn(brain, self.store, self.task_id, self.sid, for_toolbox(system, api_box), user, limit,
+                                             trace=visible, cancel=cancel, images=_images(paths), tools=api_tools, history=self.card_msgs,
+                                             ear=self.keep()) or '').strip()
                 if card_fact: user += texts(user)
                 with llm_mod.watching(visible):          # an API brain's own web searches are steps too (llm.watching)
                     said = str(brain(system, user, max_tokens=limit, images=_images(paths), **_web(brain)) or '').strip()

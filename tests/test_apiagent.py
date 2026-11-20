@@ -125,13 +125,13 @@ class OneRoundTripTests(unittest.TestCase):
         self.assertIsInstance(heard[0][1]['content'], list, 'the picture went with the turn it was sent on - and is not carried')
         self.assertEqual([m['role'] for m in kept], ['user', 'assistant', 'tool', 'assistant', 'user', 'assistant'])
 
-    def test_a_carried_conversation_turned_down_on_the_first_call_is_lost_not_tools_refused(self):
+    def test_a_carried_conversation_turned_down_on_the_first_call_is_lost_and_a_fresh_one_fails_as_it_failed(self):
         kept = [{'role': 'user', 'content': 'the whole task'}, {'role': 'assistant', 'content': 'Done.'}]
         class Brain:
             def chat(self, *a, **kw): raise RuntimeError('gateway error 400 at https://gateway.example: too many tokens')
         with self.assertRaises(apiagent.Lost): apiagent.turn(Brain(), MemoryStore(), 1, 's', 'sys', 'and now?', 500, history=kept)
         self.assertEqual(len(kept), 2)
-        with self.assertRaises(apiagent.ToolsRefused): apiagent.turn(Brain(), MemoryStore(), 1, 's', 'sys', 'go', 500, history=[])
+        with self.assertRaisesRegex(RuntimeError, 'error 400'): apiagent.turn(Brain(), MemoryStore(), 1, 's', 'sys', 'go', 500, history=[])
         stop = __import__('threading').Event(); stop.set()
         with self.assertRaisesRegex(RuntimeError, 'stopped'): apiagent.turn(Brain(), MemoryStore(), 1, 's', 'sys', 'no - the July one', 500, history=kept, cancel=stop)
         self.assertEqual(kept[-1], {'role': 'user', 'content': 'no - the July one'}, 'stopped before an answer, the line was still said')
@@ -252,6 +252,28 @@ class OneRoundTripTests(unittest.TestCase):
         hold.set()
         self.assertLess(time.monotonic() - t0, 5)
         self.assertEqual([m['role'] for m in kept], ['user', 'assistant', 'tool'], 'what it had done is kept, its open call answered')
+
+    def test_every_tool_offered_has_a_schema_gemini_takes(self):
+        """The gateway walk, 2026-11-19: Gemini behind the HIPAA AI gateway turned every tooled call down with a 400 - propose_email's top-level
+        `anyOf` ("parameters schema should be of type OBJECT"), and an `items` object requiring fields it never declared ("required properties
+        are specified but schema properties are empty"). Every schema a turn is offered, its later tools too, is one Gemini takes."""
+        from taskuary import agenttools
+        def post(url, json=None, headers=None, timeout=None):
+            r = mock.Mock(status_code=200); r.json.return_value = agenttools.rpc(json, lambda n, a: '', ()); return r
+        tools = apiagent.tools_for(1, 'g', True, post=post) + list(apiagent.DEFERRED[(1, 'g')].values())
+        def walk(x, name):
+            if isinstance(x, list): return [walk(v, name) for v in x]
+            if not isinstance(x, dict): return
+            bad = {'anyOf', 'oneOf', 'allOf'} & set(x)
+            assert not [k for k in bad if not all(isinstance(b, dict) and 'type' in b for b in x[k])], (name, x)
+            assert set(x.get('required') or ()) <= set(x.get('properties') or {}), (name, x)
+            assert not {'additionalProperties', '$schema', 'default', 'title'} & set(x), (name, x)
+            for k, v in x.items(): [walk(s, name) for s in v.values()] if k == 'properties' else walk(v, name)
+        assert {'propose_email', 'propose', 'sign_form'} <= {t['function']['name'] for t in tools}
+        for t in tools:
+            assert t['function']['parameters']['type'] == 'object'; walk(t['function']['parameters'], t['function']['name'])
+        # ...the server still holds a call to what one card needs: the schema the model reads is not the check
+        with self.assertRaisesRegex(ValueError, 'not given'): agenttools.fit('propose_email', {'subject': 'Q3'})
 
     def test_tools_are_offered_as_the_work_needs_them_and_a_loaded_one_is_added_at_the_end(self):
         """The owner's rule, "model sees all, tools progressive" (2026-11-10: "the ai limits as much as possible to use ai"): every schema rode
@@ -383,8 +405,8 @@ class TheSessionTests(unittest.TestCase):
 
     def _turn(self, brain, installed=True, toolbox=()):
         from taskuary import general, llm as llm_mod
-        s = MemoryStore()
-        tid = s.create_task({'Title': 'Read the denials on the scheduling portal', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        self._s = s = MemoryStore()
+        self._tid = tid = s.create_task({'Title': 'Read the denials on the scheduling portal', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
         session = general.GeneralSession(s, tid)
         session.pick, session.provider, session.model = 'connector:1', 'HIPAA AI', ''
         with mock.patch.object(llm_mod, 'build_llm', return_value=brain), mock.patch.object(bv, 'installed', return_value=installed), \
@@ -502,15 +524,20 @@ class TheSessionTests(unittest.TestCase):
         self.assertIn(selfclose.OWNER_ANSWERED_LINE, said); self.assertTrue(said.startswith(general.UPDATED))
         self.assertNotIn(selfclose.OWNER_ANSWERED_LINE, again, 'said once')
 
-    def test_a_model_that_refuses_tools_is_asked_the_plain_way(self):
-        seen = []
+    def test_a_model_that_refuses_its_tools_fails_the_turn_in_the_providers_words(self):
+        """The gateway walk, 2026-11-19: the gateway turned the tools down (400) and the turn was asked again with none - the agent then told him
+        it had no files, browser or shell, and to install a CLI. The turn fails, and he reads the provider's reason, never a tool-less agent."""
+        from taskuary import conversation
+        inner = json.dumps({'error': {'code': 400, 'message': 'Duplicate function declaration found: show', 'status': 'INVALID_ARGUMENT'}}, indent=2)
+        why = json.dumps({'error': {'message': f'litellm.BadRequestError: Vertex_aiException BadRequestError - {inner}', 'type': 'invalid_request_error'}})
         class Brain:
-            def __call__(self, system, user, **kw): seen.append(system); return 'Here is what I can do without a browser.'
-            def chat(self, *a, **kw): raise RuntimeError('hipaa_ai error 400 at https://gateway.example: tools are not supported')
-        self._turn(Brain())
-        from taskuary import capabilities
-        self.assertIn(capabilities.HANDS['none'], seen[0]); self.assertNotIn(capabilities.HANDS['all'], seen[0])
-        self.assertNotIn(apiagent.BRIEF, seen[0])
+            def __call__(self, *a, **kw): raise AssertionError('never asked again without its tools')
+            def chat(self, *a, **kw): raise RuntimeError(f'hipaa_ai error 400 at https://gateway.example/v1/chat/completions: {why}')
+        try: s, tid = self._turn(Brain(), toolbox=('search_messages', 'show'))
+        except RuntimeError: s, tid = self._s, self._tid
+        [t] = [x for x in conversation.items(s, tid)['items'] if x['kind'] == 'turn']
+        self.assertIn('refused the request - it said: Duplicate function declaration found: show', t['fail'])
+        self.assertNotIn('litellm', t['fail']); self.assertNotIn('{', t['fail'])
 
     def test_the_clis_toolbox_rides_with_the_browser(self):
         seen = []
@@ -524,36 +551,24 @@ class TheSessionTests(unittest.TestCase):
 
     def test_a_card_with_tools_is_told_the_owners_systems_and_mailboxes_as_a_cli_is(self):
         # design round 2, 2026-11-18: one prompt for every road - a CLI with hands is told the owner's connections and the mailboxes it sends
-        # from (docsync.agent_systems); an AI card's agent with the same tools was not, and called around for them. A card that refuses tools
-        # is asked the plain way, with no word of tools it cannot call
+        # from (docsync.agent_systems); an AI card's agent with the same tools was not, and called around for them
         from taskuary import docsync
         SYSTEMS = 'YOUR SYSTEMS - Northwind books (connector_id 4). MAILBOXES you can send FROM: alex@northwind.example (gmail)'
-        seen, plain = [], []
+        seen = []
         class Brain:
             def chat(self, msgs, tools, max_tokens, **kw): seen.append(msgs[0]['content']); return {'content': 'ok'}
-        class Refuses:
-            def __call__(self, system, user, **kw): plain.append(system); return 'ok'
-            def chat(self, *a, **kw): raise RuntimeError('hipaa_ai error 400 at https://gateway.example: tools are not supported')
         with mock.patch.object(docsync, 'agent_systems', return_value=SYSTEMS):
             self._turn(Brain(), toolbox=('search_messages', 'run_system'))
-            self._turn(Refuses(), toolbox=('search_messages', 'run_system'))
         self.assertIn(SYSTEMS, seen[0])
-        self.assertNotIn(SYSTEMS, plain[0]); self.assertNotIn(apiagent.TOOLS_BRIEF, plain[0])
 
-    def test_a_card_with_the_email_tool_hears_the_tool_and_one_that_refuses_tools_the_block(self):
-        # the agent walk, 2026-11-10: one road for an email by what the session has - and a model that would not take tools is asked the
-        # plain way with the plain way's road, where it used to be left with the name of a tool it had just refused
+    def test_a_card_with_the_email_tool_hears_the_tool(self):
+        # the agent walk, 2026-11-10: one road for an email by what the session has
         from taskuary import selfclose
         seen = []
         class Brain:
             def chat(self, msgs, tools, max_tokens, **kw): seen.append(msgs[0]['content']); return {'content': 'ok'}
         self._turn(Brain(), toolbox=('search_messages', 'propose_email', 'show'))
         self.assertIn('propose_reply / propose_email', seen[0]); self.assertNotIn(selfclose.DRAFT_OPEN, seen[0])
-        class Refuses:
-            def __call__(self, system, user, **kw): seen.append(system); return 'Here is what I can do.'
-            def chat(self, *a, **kw): raise RuntimeError('hipaa_ai error 400 at https://gateway.example: tools are not supported')
-        self._turn(Refuses(), toolbox=('search_messages', 'propose_email', 'show'))
-        self.assertIn(selfclose.DRAFT_LINE, seen[1]); self.assertNotIn('propose_email', seen[1])
 
     def test_no_browser_but_a_toolbox_still_loops_and_says_set_the_browser_up(self):
         seen = []
@@ -617,7 +632,7 @@ class TheSessionTests(unittest.TestCase):
                 except Exception: pass
         failed = [general.failed_line(c['Body'])[1] for c in s.list_comments(tid) if c['ActorType'] == general.ASSISTANT_TYPE and general.failed_line(c['Body'])[1]]
         self.assertEqual(len(failed), 3, failed)
-        for f in failed: self.assertRegex(f, r'^The AI is over its limit - trying again at \d'); self.assertNotIn('429', f); self.assertNotIn('quota', f)
+        for f in failed: self.assertIn('over its quota', f); self.assertIn('trying again at', f); self.assertNotIn('429', f)
         items = [x for x in conversation.items(s, tid)['items'] if x['kind'] == 'turn']
         self.assertEqual([x['fail'] for x in items], failed, 'each try stands as its own failed turn, in the order it failed')
         q = s.get_dispatch(tid)
@@ -742,7 +757,7 @@ class TheToolboxTests(unittest.TestCase):
             sent.append((url, json, headers))
             return _R({'jsonrpc': '2.0', 'id': 1, 'result': {'tools': [{'name': 'search_messages', 'description': 'Search saved mail.',
                        'inputSchema': {'type': 'object', 'additionalProperties': False, 'properties': {'words': {'type': 'string', 'default': ''}}}}]}})
-        got = apiagent.taskuary_tools(7, 'sid-7', post=post)
+        got = [t for t in apiagent.tools_for(7, 'sid-7', False, post=post) if t['function']['name'] == 'search_messages']      # ...made safe where every tool is
         url, body, h = sent[0]
         self.assertIn('/api/mcp?task=7', url); self.assertEqual(body['method'], 'tools/list')
         from taskuary import guard
@@ -762,7 +777,7 @@ class TheToolboxTests(unittest.TestCase):
 
     def test_a_property_named_like_a_dropped_key_is_kept(self):
         # a gateway's Gemini refused the whole turn: "required fields ['title'] are not defined" once `title` the FIELD was cut (2026-11-09)
-        got = apiagent._clean({'type': 'object', 'title': 'x', 'properties': {'title': {'type': 'string', 'title': 'T'}}, 'required': ['title']})
+        got = apiagent.portable({'type': 'object', 'title': 'x', 'properties': {'title': {'type': 'string', 'title': 'T'}}, 'required': ['title', 'gone']})
         self.assertEqual(got, {'type': 'object', 'properties': {'title': {'type': 'string'}}, 'required': ['title']})
 
     def test_a_refusal_from_the_server_is_the_models_to_read(self):

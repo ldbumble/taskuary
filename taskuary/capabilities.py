@@ -125,20 +125,25 @@ def other_ais(store, pick: str = '', clis: bool = False) -> list:
             if o.get('pick') != pick and (o['pick'] in ready if o.get('type') == 'cli' else not clis)]
 
 
-def fact(store, hands: str, pick: str = '') -> str:
+def fact(store, hands: str, pick: str = '', tools=()) -> str:
     """WHAT THIS AGENT CAN DO HERE, in one block: `hands` 'all' (a shell and files), 'look' (reads only) or 'none' (a card that takes no
     tools); the AIs the owner could hand it to instead, from his own menu; Developer mode, as it stands. Said where every turn's late facts
-    are (general), so a change - a switch flipped, an AI connected - reaches a conversation under way."""
+    are (general), so a change - a switch flipped, an AI connected - reaches a conversation under way. `tools`: the names an AI card's agent is
+    offered this turn - its own hands among them said by their own lines, so what it can make is read off what it has, never guessed."""
     from . import agents, words
     others = other_ais(store, pick)
     dev = agents.developer_mode(store)
     # ...AND THE APP'S OWN ROADS WHERE THIS AGENT HAS NONE (design round 4, H5: an AI card told him "there is no button or setting you can press"
     # with the install of a CLI one page away, and "I cannot schedule this" in an app that runs routines): a road that is here is named
     cli = _safe(lambda: agents.cli_ready(store))
+    from .apiagent import LOCAL, SHORT
+    mine = [f'{n} ({SHORT[n].rstrip(".")})' for n in tools if n in LOCAL]
     out = [FACT_HEAD, f'- {HANDS.get(hands, HANDS["none"])}',
+           *([f"- Your own hands here, as tools: {'; '.join(mine)}."] if mine else []),
            f"- Another AI could do this task: {', '.join(others)} - he picks it in the Agent menu on this task." if others else
            '- No other AI is connected here: never offer to switch this task to one.',
-           *([] if cli else [f"- An AI CLI - a shell, files and a browser on this computer - can be installed from {words.link('ai_apps')}: "
+           # ...the road for hands it LACKS: an agent with tools has them, and was told to send him off to install one as a to-do (2026-11-19)
+           *([] if cli or hands != 'none' else [f"- An AI CLI - a shell, files and a browser on this computer - can be installed from {words.link('ai_apps')}: "
                              'where the work needs hands you lack, that is the road to name.']),
            '- Work that should run again by itself is a routine Taskuary runs: set it up for his one press (save_routine), never "it cannot be '
            'scheduled".',

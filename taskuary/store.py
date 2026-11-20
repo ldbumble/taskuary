@@ -60,9 +60,12 @@ class _Writer(sqlite3.Connection):
         st = self._owner() if self._owner else None
         if st is None: return super().close()
         st._closing = True
-        try:
-            from . import chatlog; chatlog.let_go(st)
-        except Exception: pass
+        # ...waiting for the worker's job only where this thread does not hold the store's lock: a job at work may need it to finish, and a
+        # close under the lock (store.close, a caller's own hold) would wait out let_go's timeout on every close (the release run's 20 min)
+        if not st.lock._is_owned():
+            try:
+                from . import chatlog; chatlog.let_go(st)
+            except Exception: pass
         with st.lock: st._closed = True; return super().close()
 
 
@@ -4187,9 +4190,10 @@ class SQLiteStore:
         mid-query (the reply watch's judge, 2026-10-11) had its connection closed beneath it and the process died with an
         access violation - after this, a late reader gets sqlite's "closed database" error instead."""
         self._closing = True                      # ...no new background job starts on it from here
-        try:                                      # ...and the chat log's own worker lets go of it first: nothing of it runs after (chatlog.let_go)
-            from . import chatlog; chatlog.let_go(self)
-        except Exception as e: logger.warning(f'store: the chat log worker was not let go before close - {e}')
+        if not self.lock._is_owned():             # ...and the chat log's own worker lets go of it first, never waited for under the lock (_Writer.close)
+            try:
+                from . import chatlog; chatlog.let_go(self)
+            except Exception as e: logger.warning(f'store: the chat log worker was not let go before close - {e}')
         with self.lock, self._rail_lock:
             with self._readers_lock: self._closed, readers, self._readers = True, self._readers, []
             for cx in (self._rail_cx, self.cx, *readers):

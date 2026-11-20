@@ -33,6 +33,17 @@ class RoomTests(unittest.TestCase):
             with self.assertRaises(RuntimeError) as e: llm.make_llm('vertex_ai', CFG, 'key')('sys', 'user')
         self.assertIn('ran out of room', str(e.exception))
 
+    def test_a_model_that_spends_even_room_thinking_is_asked_once_more_to_think_less(self):
+        # a HIPAA AI Flash ran out of room on a one-shot job and the owner was told to pick another model (2026-11-20)
+        sent = []
+        def post(url, headers, body, timeout):
+            sent.append(body.get('reasoning_effort'))
+            return reply(None, 'length') if len(sent) < 3 else reply('{"intent": "fyi"}')
+        with mock.patch.object(llm, 'post_retrying', side_effect=post):
+            out = llm.make_llm('hipaa_ai', {'base_url': 'https://gateway.example/v1', 'model': 'gemini-3.8-flash'}, 'key')('sys', 'user')
+        self.assertEqual(out, '{"intent": "fyi"}')
+        self.assertEqual(sent[-1], 'low')
+
     def test_triage_asks_for_room_a_thinking_model_can_answer_in(self):
         def brain(system, user, **kw): brain.kw = kw; return '{"intent": "fyi", "why": "x"}'
         triage.classify_intent({'from_email': 'erin@northwind.example', 'subject': 'Hi', 'body': 'x'}, llm=brain)

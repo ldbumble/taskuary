@@ -1390,7 +1390,7 @@ def make_llm(t, cfg: dict, key: str):
             for url in urls:
                 for tok_param in ('max_completion_tokens', 'max_tokens'):
                     body = {'messages': msgs, tok_param: max_tokens, **({'model': model} if model else {}),
-                            **({'response_format': fmt} if fmt else {}), **({'reasoning_effort': effort} if effort and ek not in _NO_EFFORT else {})}
+                            **({'response_format': fmt} if fmt else {}), **({'reasoning_effort': thin or effort} if (thin or effort) and ek not in _NO_EFFORT else {})}
                     # a local model may spend its first call loading weights off disk, a reasoning deployment its time on a long
                     # prompt - room to answer, and a quick give-up on an endpoint that is not there
                     r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
@@ -1439,12 +1439,16 @@ def make_llm(t, cfg: dict, key: str):
                     return out
             raise refused(t, last, urls[-1], model)
         # ...and an empty 'stop' is asked once more as it was: Gemini behind the HIPAA AI gateway now and then thinks and writes nothing
-        spent = 0
+        # ...and a model that spends even ROOM thinking is asked once more told to think less, before anyone is asked to change its card: a
+        # HIPAA AI Flash ran out of room on a one-shot job and the owner was told to pick another model (2026-11-20)
+        spent, thin = 0, ''
         while True:
             try: return ask()
             except _Empty as e:
                 spent += 1
                 if str(e) == 'length' and max_tokens < ROOM: max_tokens = ROOM; continue
+                if str(e) == 'length' and not thin and ek not in _NO_EFFORT and str(effort or '').lower() not in ('low', 'minimal', 'none'):
+                    thin = 'low'; continue
                 if str(e) != 'length' and spent < 3: continue
                 if str(e) == 'length':
                     raise OutOfRoom(ROOM_LINE.format(name=card_name(t), model=words(model) or 'model', room=ROOM)) from None

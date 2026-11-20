@@ -366,5 +366,5 @@ def test_a_report_on_taskuary_s_own_data_sent_to_an_agent_runs_as_trusted_work()
     assert json.loads(s.get_message(mid)['MailMetaJson'])['built_from'][0]['own'] is True
     t = task_from_message(s, mid, 'owner', 'general')
     o, why = origin.of_task(s, t)
-    assert o == 'trusted', why
+    assert o in ('owner', 'trusted'), why          # ...his press made it his (task_from_message), never a stranger's
     assert origin.launch_mode(s, t, 'claude') == 'full'                # ...not the stranger's sandbox

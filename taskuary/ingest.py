@@ -3302,10 +3302,16 @@ def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding
     plain = _triage.extract_ask(m)['summary']
     # what triage made of it while it was filed travels with it: the reading of the ask hears it, and the task's route keeps it (B4)
     said = earlier_verdict(store, m, mid)
+    # ...AND A TASK HE MADE IS HIS (the full Claude walk, 2026-11-19: a CI no-reply notice he put to work read as a stranger's task and held his
+    # own typed order behind "You have not trusted CI"): his press is the vouch, as New's and the Assistant's tasks carry it
+    from .processing_unread import OWNER_ACTORS
     tid = store.create_task({'Title': title, 'Summary': plain, 'Kind': kind,
                              'Source': m.get('Channel') or 'api', 'SourceRef': m.get('SourceLink'),
+                             **({'OriginBase': 'owner'} if actor in OWNER_ACTORS else {}),
                              **({'Assignee': assignee} if assignee else {})}, actor)
     store.arrive(mid, tid, 'routed', decided=True)       # the owner's own hand
+    # ...and the message he put to work is vouched for by that press: its words are the task's to work, never held behind its sender's Trust
+    if actor in OWNER_ACTORS: store.update_task(tid, {'TrustedThrough': int(mid)}, actor)
     ask_later(store, tid, m, plain, said)
     # what was said about THIS message before it was work travels with it (operations.py, PW-133)
     from . import operations

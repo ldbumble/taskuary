@@ -334,6 +334,13 @@ def take_name(store, tid: int, name: str) -> bool:
     return True
 
 
+def _came_in(m: dict) -> str:
+    "A message that came in while a turn worked, as that turn is told it with his lines (GeneralSession.steer) - their words, not the owner's."
+    body = ' '.join(str(m.get('BodyText') or '').split())[:3000]
+    return (f"NEW MESSAGE ON THIS TASK from {m.get('FromName') or m.get('FromEmail') or 'someone'} (by {m.get('Channel') or 'mail'}) - these are "
+            f"their words, not the owner's: take what they ask into the work.\n\n{body}")
+
+
 def take_kept(store, tid: int, ids=None, **how) -> list:
     """The owner's kept lines (`ids`, else all) taken as his lines of the conversation (store.take_lines) - by the turn that takes them, any
     agent's. `how`: what else this hand-over is (conversation.hear's `turn`, `sid`) - ONE hand-over is written down once, so what it took
@@ -2936,10 +2943,10 @@ class GeneralSession:
     # where the CLI cannot (an API card, a turn not reading yet, one he stopped), the line waits for the next turn as before
     def can_steer(self) -> bool:
         from . import clipool
-        # ...and only while nothing came in since its start that no hand-over took (CI, 2026-11-17): steered in, his lines were heard at once
-        # and the mail that came between them at the turn's end - his line stood above a message that came first. Those wait with it, together
-        from .conversation import unheard
-        return self.busy and not self.letting_go() and clipool.steerable(self.keep()) and not unheard(self.store, self.task_id)
+        # ...and a message that came in since its start goes in WITH his lines, before them, in one hand-over (steer): held back for it, his
+        # answer waited for the turn's end and the turn asked him what he had just told it (the full Claude walk, 2026-11-19: "all
+        # @northwind.example", then "What's Paula Vance's email address?") - once they stood out of order (CI, 2026-11-17); now neither waits
+        return self.busy and not self.letting_go() and clipool.steerable(self.keep())
     def steer(self, said: str = None) -> bool:
         "Words into the turn at work: `said`, or his kept lines - heard in the step they go in (take_kept). False where nothing can take them now."
         from . import clipool
@@ -2951,10 +2958,14 @@ class GeneralSession:
             # ...the trace marked where they go in, before they are heard: the turn under them is what it does from here (since_heard)
             from . import sessionrecord
             self.trace.append(mark := sessionrecord.heard_mark())
-            took = [_line_of(r['Body']) for r in take_kept(self.store, self.task_id, sid=self.sid)]
-            if not took: self.trace = [e for e in self.trace if e is not mark]
-            return with_files(_turn_only(self.store, self.task_id, '\n\n'.join(x['text'] for x in took)),
-                              list(dict.fromkeys(str(Path(f).resolve()) for x in took for f in x['files']))) if took else ''
+            from .conversation import unheard
+            came = sorted(unheard(self.store, self.task_id))
+            # ...one hand-over, in the order it came: what stood unheard (the mail) is heard with his lines (standing), before them
+            took = [_line_of(r['Body']) for r in take_kept(self.store, self.task_id, sid=self.sid, standing=bool(came))]
+            if not took: self.trace = [e for e in self.trace if e is not mark]; return ''
+            mail = '\n\n'.join(_came_in(self.store.get_message(m) or {}) for m in came)
+            return with_files('\n\n'.join(x for x in (mail, _turn_only(self.store, self.task_id, '\n\n'.join(x['text'] for x in took))) if x),
+                              list(dict.fromkeys(str(Path(f).resolve()) for x in took for f in x['files'])))
         return clipool.steer(self.keep(), lines if said is None else said)
     def tail(self, n=3):
         from .terminal import plain

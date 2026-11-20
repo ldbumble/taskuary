@@ -4141,6 +4141,13 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     if not text and not files: raise ValueError('empty message')
     t = reopen(store, tid, actor)
     if not t: raise ValueError(f'no task {tid}')
+    # ...AND WHAT HE TYPES STARTS THE GENERAL AGENT on a task of another kind - a reply, his own list's (the owner, 2026-11-06: no separate Send
+    # to agent form), whichever door his words came by: New's words joined to his own Payworth task sat "waiting to start" for 17 minutes,
+    # the switch made only by the task page's box (walk 4, 2026-11-19). A coding task is never one
+    if not handles(t) and str(t.get('Kind') or '') != 'coding' and not is_dock(t):
+        store.update_task(tid, {'Kind': 'general'}, actor)
+        store.audit('task', tid, 'kind_by_typing', actor, detail={'from': t.get('Kind')})
+        t = store.get_task(tid) or t
     # ...A TASK A STRANGER'S MAIL STARTED HANDS NOTHING TO AN AGENT (origin.keeps_him): his line is kept and waits by the box, behind the Trust
     # action - on his own task a stranger only joined, his line goes on (origin.his_own)
     from . import origin

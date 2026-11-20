@@ -2713,15 +2713,6 @@ def _chat_failed(e):
     c = failures.classify(e, act='assistant.message')
     return JSONResponse(status_code=422, content={'detail': c['sentence'], 'fix': c['fix'], 'retry': c['retry']})
 
-def _chat_kind(task_id: int):
-    """WHAT IS TYPED IN A TASK'S ONE BOX STARTS THE GENERAL AGENT (the owner, 2026-11-06: no separate Send to agent form): a task of another
-    kind - a reply, your own task - becomes the general agent's first, as Send to agent's dispatch switched it. A coding task is never one."""
-    from . import general
-    t = store.get_task(task_id) or {}
-    if not t or general.handles(t) or str(t.get('Kind') or '') == 'coding' or general.is_dock(t): return
-    store.update_task(task_id, {'Kind': 'general'}, ACTOR)
-    store.audit('task', task_id, 'kind_by_typing', ACTOR, detail={'from': t.get('Kind')})
-
 def _demo_turn(task_id: int, text: str, line_id=None):
     """THE DEMO HAS NO AI (the owner, 2026-11-05: "of course no prompts work since there is no AI"): what is typed into a task's chat is
     kept, and the answer under it says so in plain words - never "No AI is connected" over a chat whose turns were all written in
@@ -2741,7 +2732,6 @@ def assistant_message(task_id: int, body: AssistantMessageBody):
     use the same code when it comes to interactions so there should be no difference"). A chat answers with its turn, as it always did; a
     coding session's turn is its own, and this answers once the line is kept and handed on."""
     from . import codingchat, general
-    _chat_kind(task_id)
     if (said := _demo_turn(task_id, body.text, _line_id(body))) is not None: return {'reply': said, **_assistant_payload(task_id)}
     # ...A LINE SENT WHILE A TURN WORKS IS KEPT, AND THIS ANSWERS (the flood, 2026-11-11: fifty lines held fifty requests open until the turn
     # ended): it waits by the box (conversation.items `pending`) and the turn that takes it is the one that answers for it

@@ -86,6 +86,8 @@ export const fromServer = (s) => (s?.key ? said(s.key, { ...(taskStateMeta(s.key
 // `chat`: the task is a general chat task (chatReady)
 // `queued`: the task's dispatch-queue row - a start that FAILED says "couldn't start", never "waiting to start" (the owner, 2026-11-06)
 export const taskStatus = ({ chat = false, queued = null, ...o } = {}) => {
+  // ...a turn Taskuary tries again by itself is its own, never his (the judge's look, 2026-11-20: "agent waiting on you" over it) - taskstate.status
+  if (queued?.retryTurn && queued.state === "retrying" && !o.live?.working) return said("retrying", KIND_META.retrying, false);
   const st = chatReady(taskStatus_({ ...o, chat }), chat);
   return st?.key === "queued" && queued?.state === "failed" ? said("start_failed", KIND_META.start_failed, false) : st;
 };

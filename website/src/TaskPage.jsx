@@ -3599,7 +3599,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           source (chatStream.chatSource) - a coding task's sessions, or the general agent's conversation - and the branch's landing
                           card joins it wherever the task works in a checkout */}
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead}
-                        queued={chatPane && !liveSession && queuedRow ? <QueuedStart taskId={t.TaskId} queued={queuedRow} line onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} /> : null}
+                        queued={chatPane && !liveSession && queuedRow && !queuedRow.retryTurn ? <QueuedStart taskId={t.TaskId} queued={queuedRow} line onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} /> : null}
+                        stopTries={queuedRow?.retryTurn ? () => api.delete(`/api/tasks/${t.TaskId}/dispatch`).then(() => { loadTasks(); loadDetail(t.TaskId); }).catch(() => {}) : null}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}
                         mails={storedMessages} reviews={detail?.reviews || []} checklist={detail?.checklist || null} next={chatCards}
                         onAnswered={() => { findTerm(selected); loadTasks(); loadDetail(selected); onChanged?.(); }}

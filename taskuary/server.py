@@ -1175,6 +1175,7 @@ def processing_item_detail(item_id: str, kind: str = None, id: int = None, view_
 def _queued_info(q):
     """The card's hover text for a held-back dispatch: what it waits for, and why."""
     if not q: return None
+    from .general import RETRY_TURN
     b = q.get('BehindTaskId')
     return {'behind': task_ref(b) if b else None, 'value': q.get('Value'), 'why': q.get('Why'),
             'behindTitle': (store.get_task(b) or {}).get('Title') if b else None,
@@ -1183,7 +1184,9 @@ def _queued_info(q):
             # ...its last error in his words (say.plain): the raw text stays on the queue row, where the start and its retries read it
             'state': q.get('State') or 'waiting', 'attempts': int(q.get('Attempts') or 0), 'lastError': _sayer().plain(q.get('LastError'), 'start'), 'nextAt': q.get('NextAt'),
             # a setup error fails every Start the same way, so the card must not offer Start as the fix (blackboard.failed_line)
-            'permanent': q.get('State') == 'failed' and blackboard.is_permanent(q.get('LastError'))}
+            'permanent': q.get('State') == 'failed' and blackboard.is_permanent(q.get('LastError')),
+            # ...a turn Taskuary tries again by itself (general.queue_retry): its failed turn's own line in the chat says it, with Cancel there
+            'retryTurn': q.get('Turn') == RETRY_TURN}
 
 
 def _playbook_brief(task, books=None):

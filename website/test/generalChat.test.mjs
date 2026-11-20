@@ -94,6 +94,7 @@ test("a turn worth another try ends on a Try again button that sends his line", 
 // The API walk, 2026-11-18: a provider's outage left "⚠ ... 429" under every line and nothing to press - the newest failed turn carries Try again
 test("the newest turn that failed carries the Try again button, an older one does not", () => {
   const src = read("../src/GeneralWorkspace.jsx");
-  assert.match(src, /data-tq-turn-failed="">⚠ \{t\.fail\}\s*\{newest && !!again && <div style=\{\{ marginTop: 8 \}\}><button type="button" className="tq-chip primary" data-tq-turn-retry="" onClick=\{again\}>/);
+  assert.match(src, /data-tq-turn-failed="">⚠ \{t\.fail\}/);
+  assert.match(src, /\{newest && !!again && <div style=\{\{ marginTop: 8, display: "flex", gap: 8 \}\}><button type="button" className="tq-chip primary" data-tq-turn-retry="" onClick=\{again\}>/);
   assert.match(src, /newest=\{!items\.slice\(i \+ 1\)\.some\(\(y\) => y\.kind === "turn"\)\}/);
 });

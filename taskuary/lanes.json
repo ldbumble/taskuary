@@ -183,6 +183,13 @@
       "hint": "the agent on this chat task answered or drafted, and its next move is yours - a draft to send, a step to approve, or an answer"
     },
     {
+      "key": "retrying",
+      "word": "trying again",
+      "role": "working",
+      "mark": "⏳",
+      "hint": "the AI could not answer, and Taskuary tries the turn again by itself at the time its line in the chat says - nothing is yours yet"
+    },
+    {
       "key": "start_failed",
       "word": "couldn't start",
       "role": "bad",

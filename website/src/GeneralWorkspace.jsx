@@ -447,7 +447,7 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
   // Tell me your plate number"): what it asks him IS what is left to him, said once. THE TURN'S OWN, KEPT (design round 5, I3): the list says
   // which turns say it (`on_you`, conversation.left_on_him), settled once - it never leaves a turn for the next one
   const onYou = t.on_you && !live && sum ? turnOnYou(sum) : "";
-  const again = React.useContext(AgainCtx);
+  const again = React.useContext(AgainCtx), stopTries = React.useContext(StopTriesCtx);
   // ...WHILE THE CLI COMPACTS ITS CONTEXT the turn at work says so (the owner, 2026-11-10: "show compacting like claude code does"): its newest
   // step is the compaction, not yet over
   const compacting = live && ((x) => x?.k === "compact" && !!x.status && !["completed", "failed", "cancelled"].includes(x.status))((t.steps || []).at(-1));
@@ -468,7 +468,10 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
       {/* ...and THE NEWEST TURN THAT FAILED carries the same one button (the API walk, 2026-11-18: a provider's outage left "⚠ ... 429" and nothing
           to press) - each try that failed keeps its own dated line (general.say_failure); only the newest carries the button */}
       {t.state === "failed" && !!t.fail && <div className="tq-aui-note tq-aui-note-error" role="alert" data-tq-turn-failed="">⚠ {t.fail}
-        {newest && !!again && <div style={{ marginTop: 8 }}><button type="button" className="tq-chip primary" data-tq-turn-retry="" onClick={again}>{btn("try_again")}</button></div>}</div>}
+        {/* ...and while Taskuary tries it again by itself, its Cancel stands beside it - ONE line and one set of moves for the try, never a second
+            "I couldn't start yet" line under it (the judge's look, 2026-11-20) */}
+        {newest && !!again && <div style={{ marginTop: 8, display: "flex", gap: 8 }}><button type="button" className="tq-chip primary" data-tq-turn-retry="" onClick={again}>{btn("try_again")}</button>
+          {!!stopTries && <button type="button" className="tq-chip" data-tq-turn-stop-tries="" onClick={stopTries}>Cancel</button>}</div>}</div>}
       {!!rest.length && <PublishedPages pages={rest} open />}
       {!!made.length && <TurnFiles files={made} />}
       {/* ...what this turn asked him, where it asked it (the list's `asking.turn`): above its card, never at the chat's foot */}
@@ -486,6 +489,7 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
 };
 const RetryCtx = React.createContext(null);
 const AgainCtx = React.createContext(null);
+const StopTriesCtx = React.createContext(null);
 // the line a Try again press puts in his voice - the agent reads it as the go-ahead to try what failed once more
 export const TRY_AGAIN = "Try again.";
 const WaitOnCtx = React.createContext("");
@@ -600,7 +604,7 @@ const PendingStrip = ({ items, now = false, later = "", onRetry = null, onDrop =
 
 function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onAttachBack, pics = null,
   prompt, onPromptUsed, name = "Taskuary", asking, onAnswer, drafts = [], acts = [], onDraftDecided, noComposer = false,
-  chat = false, reading = null, came = null, noAi = null, closedLine = "", road = null, cards = null, landing = null, turnCards = null, queued = null, hold = null, idle = "", onTrusted, hint = "", placeholder = "",
+  chat = false, reading = null, came = null, noAi = null, closedLine = "", road = null, cards = null, landing = null, turnCards = null, queued = null, stopTries = null, hold = null, idle = "", onTrusted, hint = "", placeholder = "",
   empty = "", seed = null, list = null, reloadList = null }) {
   // A TASK'S CHAT DRAWS THE SERVER'S LIST (Conversation) - whatever agent works it; this holds the box, what it sent, and the view's end
   const turnName = React.useContext(AgentNameCtx);
@@ -715,8 +719,8 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
             {!!list && !merged.items.length && !empty && !(chat && reading) && <div className="tq-aui-welcome"><TaskuaryMark size={22} /><div>
               <div className="tq-aui-welcome-title">Work on this with your assistant</div>
               <div className="tq-aui-welcome-copy">Research, plan, write, analyze, or coordinate. This conversation stays on the task.</div></div></div>}
-            <RetryCtx.Provider value={retry}><AgainCtx.Provider value={again}><WaitOnCtx.Provider value={waitingOn(list)}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} reviews={nextAt?.reviews || []} next={askedFirst(asking, nextAt?.reviews) ? null : nextAt?.next || null}
-              landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} ask={askNode} askAt={askAt} queue={list?.queue || null} /></WaitOnCtx.Provider></AgainCtx.Provider></RetryCtx.Provider>
+            <RetryCtx.Provider value={retry}><StopTriesCtx.Provider value={stopTries}><AgainCtx.Provider value={again}><WaitOnCtx.Provider value={waitingOn(list)}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} reviews={nextAt?.reviews || []} next={askedFirst(asking, nextAt?.reviews) ? null : nextAt?.next || null}
+              landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} ask={askNode} askAt={askAt} queue={list?.queue || null} /></WaitOnCtx.Provider></AgainCtx.Provider></StopTriesCtx.Provider></RetryCtx.Provider>
             {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
             {cards}
             {/* ...under everything only while the list names no turn for it (a read behind, a chat with no turn yet) */}
@@ -774,7 +778,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
 
 export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, toolsAt = null,
   prompt, onPromptUsed, noAiSaid = false, noTools = false, noComposer = false, liveSid = "", reread = 0, mails = [], reviews = [],
-  checklist = null, opening = false, next = null, chat = false, came = null, closedLine = "", term = null, landing = null, turnCards = null, queued = null, onChanged, seed = null }) {
+  checklist = null, opening = false, next = null, chat = false, came = null, closedLine = "", term = null, landing = null, turnCards = null, queued = null, stopTries = null, onChanged, seed = null }) {
   // ...drawn on its first frame from what is held of it (chatOf); a coding task's chat stands on its list alone
   const first = () => (chatSource(task, term) === "coding" ? { messages: [] } : chatOf(task.TaskId));
   const [data, setData] = useState(first);
@@ -1054,7 +1058,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} seed={seed}
         chat={chat} reading={chat && readingOf(data?.thread || task?.ThreadJson)?.asking
           ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null}
-        came={chat ? came : null} closedLine={chat ? closedLine : ""} queued={chat ? queued : null} hold={conv.list?.hold || null} idle={conv.list?.idle || ""} onTrusted={() => { conv.load(); onAnswered?.(); onChanged?.(); }}
+        came={chat ? came : null} closedLine={chat ? closedLine : ""} queued={chat ? queued : null} stopTries={chat ? stopTries : null} hold={conv.list?.hold || null} idle={conv.list?.idle || ""} onTrusted={() => { conv.load(); onAnswered?.(); onChanged?.(); }}
         road={road} cards={codingCards} landing={chat ? landing : null} turnCards={chat ? turnCards : null}
         // ...THE BOX SAYS WHAT THE HEADER SAYS (the owner's live task, 2026-11-12: "Write to pick the session back up" under a turn at work - its
         // session was being opened again for his line): "working" is the list's one fact, whatever process is up yet

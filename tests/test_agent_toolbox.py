@@ -321,6 +321,13 @@ class TheServer(unittest.TestCase):
         text, err = tool(self.tid, 'propose', action='merge_pr', repo='northwind/ledger', number=3, why='x')
         self.assertTrue(err); self.assertIn("owner's own act", text)
 
+    def test_a_post_card_is_told_back_as_the_button_it_stands_with(self):
+        """Walk 8, 2026-11-20: the agent said "I can't post to LinkedIn directly" over a card lit Post to LinkedIn. Its result says each card's
+        road as the card draws it (outbound.connect_fix): a network not connected is its Connect and the words to copy."""
+        text, err = tool(self.tid, 'propose', items=[{'action': 'run_tool', 'type': 'x_post', 'text': 'Q3 is in.', 'why': 'the headline'}])
+        self.assertFalse(err, text)
+        self.assertIn("x_post: X (Twitter) isn't connected - the card shows Connect X (Twitter)", text)
+
     def test_a_send_through_run_system_waits(self):
         card = self.s.get_connector_by_type('linkedin')
         self.s.save_connector({'ConnectorId': card['ConnectorId'], 'Active': 1, 'Roles': 'tool'}, 'test')

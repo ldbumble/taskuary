@@ -644,7 +644,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'propose':
         old, was = a.get('replaces'), verdicts.unsent(store, tid)
         out = doors['propose'](tid, {k: v for k, v in a.items() if k != 'replaces'})
-        return _j(replaced(store, doors, tid, was, out, old, 'a new proposal takes its place'))
+        return _j(card_roads(store, replaced(store, doors, tid, was, out, old, 'a new proposal takes its place'), a))
     raise ValueError(f'no tool {name!r} - tools/list names them; use one of those')
 
 
@@ -682,6 +682,22 @@ def show_files(store, tid: int, paths) -> str:
     if not rows: raise ValueError('nothing was shown - ' + '; '.join(why))
     said = f"Shown in the owner's chat under your answer: {', '.join(r['name'] for r in rows)}." + (f" Not shown - {'; '.join(why)}." if why else '')
     return f'{said} {FILES_MARK}{json.dumps(rows, ensure_ascii=False, separators=(",", ":"))}'
+
+
+# WHICH BUTTON EACH CARD STANDS WITH, AS ITS CARD DRAWS IT (walk 8, 2026-11-20: the agent said "I can't post to LinkedIn directly" over a card
+# lit Post to LinkedIn, and another's press failed "not signed in"): one answer for the card and the agent - outbound.connect_fix, the function
+# the card's Connect is drawn from - so what it says of its cards is what he sees on them
+def card_roads(store, o, a: dict):
+    if not (isinstance(o, dict) and o.get('ok')): return o
+    from . import connectorcatalog, outbound
+    roads = []
+    for p in (a.get('items') if isinstance(a.get('items'), list) else [a]):
+        act = connectorcatalog.action_for(p.get('type')) if isinstance(p, dict) and p.get('action') == 'run_tool' else None
+        if not act: continue
+        fix = outbound.connect_fix(store, act['card'])
+        roads.append(f"{p['type']}: " + (f"{fix['says']} - the card shows {fix['label']} and the words to copy; nothing goes from it until he connects"
+                                         if fix else f"its press ({act.get('press') or 'Approve'}) runs it on his connected account"))
+    return {**o, 'cards_stand_as': roads} if roads else o
 
 
 def said_once(o):

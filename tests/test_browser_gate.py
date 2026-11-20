@@ -775,3 +775,4 @@ def test_a_step_the_judge_says_is_not_big_runs_unless_it_is_also_unsure_and_for_
     v = bg._verdict(a, {'big': False, 'sure': False, 'irreversible': True, 'what': 'Submit the sign-up on Trainly'}, pg, '')
     assert v['hold'] and 'money' not in v['why']
     assert 'go-ahead HE GAVE' in bg.SYSTEM and 'work email' in bg.SYSTEM and 'never "the owner"' in bg.SYSTEM
+    assert 'a post or message published in his name, still wait for his press' in bg.SYSTEM     # ...a post through the browser is always his press

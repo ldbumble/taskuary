@@ -167,7 +167,9 @@ def test_every_network_is_a_post_card_with_its_picture_one_at_a_time_connected_o
     f = outputs.folder(tid); f.mkdir(parents=True, exist_ok=True); (f / 'ipo.png').write_bytes(PNG)
     try:
         line = general.action_line(s)
-        assert 'ONE post card per network' in line and 'x_post' in line and 'reddit_post' in line and 'Not connected' in line
+        assert 'one per network' in line and 'through your browser on its site' in line and 'final Post press held for his yes' in line
+        assert 'Not connected - post through your browser on its site: ' in line and 'X' in line.split('post through your browser on its site: ')[1]
+        assert 'only what needs his press waits in the row' in line
         rids = [proposals.queue(s, tid, {'action': 'run_tool', 'type': t, 'text': 'Anthropic IPO, in one picture.', 'image': 'ipo.png',
                                          **({'subreddit': 'SideProject', 'title': 'The IPO in one picture'} if t == 'reddit_post' else {})}, 'agent')['reviewId']
                 for t in ('x_post', 'reddit_post', 'linkedin_post')]

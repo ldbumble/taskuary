@@ -2009,7 +2009,10 @@ _ACTION = ("NEXT STEPS - DO WHAT YOU CAN DO, rather than hand it back. An act - 
            "organisation, someone there from the owner's mail\n"
            "- a post, send or order on a connected system: propose {{\"action\": \"run_tool\", \"type\": ..., \"connector_id\": ..., ...}} "
            "(no tools: a line TASKUARY-PROPOSE {{...}}), a post's words in `text`, its picture in `image` (a task-folder file). Drafts meant for "
-           "posting go as ONE post card per network, each with its own picture, connected or not - never as drafts in a file. {roads}\n"
+           "posting go one per network, each with its own picture, never as drafts in a file: on a connected network as its post card; on "
+           "one that is not, through your browser on its site - his sign-in handed to him if he is not signed in, the post written with its "
+           "picture, and its final Post press held for his yes; copy-it-yourself only where the site cannot be used. In a set of several, "
+           "only what needs his press waits in the row - anything else you just do. {roads}\n"
            "- a meeting: answer an invite with answer_invite (accept, decline, propose a time) after reading the calendar; a new one is "
            "set_up_meeting (who, title, length), never an .ics. Share a dashboard or report with share\n"
            "- a payment, booking or form on a website: fill it and run its last press as usual - Taskuary stops it, hands the real page to the "
@@ -2158,19 +2161,20 @@ def action_line(store, tools: bool = False) -> str:
     r, off = roads(store), unconnected_posts(store)
     return _ACTION.format(mail=_MAIL[tools], guess=_GUESS[tools], brk=_BREAK[tools], routine=_ROUTINE[tools],
                           roads=(f'Connected for this owner: {r}.' if r else 'Nothing that posts or sends is connected for this owner yet.')
-                          + (f' Not connected, a post card all the same (its card offers Connect and the words to copy): {off}.' if off else ''))
+                          + (f' Not connected - post through your browser on its site: {off}.' if off else ''))
 
 
-# EVERY NETWORK IS A POST CARD, CONNECTED OR NOT (the owner's live routine, 2026-11-20: drafts for X, Reddit, LinkedIn went into one text file
-# and only Reddit - the one connected - got a card: the agent was told only of connected roads). A network not connected is still its card -
-# Connect and the words to copy (outbound.connect_fix) - so the agent is told of each by its tool
+# EVERY NETWORK IS POSTED TO, CONNECTED OR NOT (the owner's live routine, 2026-11-20: drafts for X, Reddit, LinkedIn went into one text file and
+# only Reddit - the one connected - got a card: the agent was told only of connected roads). One road per post: connected, its card; not, the
+# agent's browser on the site, whose final press the browser gate holds for his yes (the owner: "of course it should work through browser as
+# well if no connection card") - so the agent is told of each network not connected, by name
 def unconnected_posts(store) -> str:
     from .connectorcatalog import connected
-    from .proposals import MEDIA, POSTS
+    from .proposals import POSTS
     from .reports import card_of
     try: live = {str(c['Type']).lower() for c in connected(store, failing=True)}
     except Exception: live = set()
-    return '; '.join(f"{name}: {t}" + (', with a picture' if t in MEDIA else '') + takes(t) for t, name in POSTS.items() if card_of(t) not in live)
+    return ', '.join(name for t, name in POSTS.items() if card_of(t) not in live)
 def by_tool(system: str) -> str:
     "`system` for a session that has Taskuary's reply and email tools: the tools' words in place of the marked blocks'."
     from . import selfclose as sc

@@ -2303,7 +2303,9 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
     # ...and on a task a stranger's words hold, no card waits for a press until he trusts them: the hold and its Trust are the one move
     # (the judge's browser round, 2026-11-19: the reply drafted on a stranger's mail stood as the email card where the hold belonged)
     from . import origin as _origin
-    if _origin.hold(store, task_id):
+    # ...only where a stranger STARTED the task (origin.keeps_him): one who joined a task he or a known person started holds back their own
+    # words, never Send on the reply to the known person (the ruling, 2026-11-19)
+    if _origin.keeps_him(store, task_id):
         past_ = set(q['past'])
         d['reviews'] = [r for r in d['reviews'] if r.get('Status') != 'pending' or r['ReviewId'] in past_]
     d['queue'] = {'live': q['live'], 'held': q['held']}       # ...the page's reply door reads it: none beside a front that is another card

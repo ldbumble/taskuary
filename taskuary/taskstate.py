@@ -229,9 +229,12 @@ class TaskState:
         if t.get('RunStatus') == 'running': return 'working'
         # A NEW SENDER'S TASK IS HELD, never "waiting to start" (2026-11-17): nothing starts on it until the owner trusts the sender, and the
         # chip, the list and the Board read the word the phone said alone (lanes.json `held`) - off the tag ingest leaves, which Trust lifts.
-        # ...and before a card on it: its one move is Trust, the card held with it (the judge's browser round, 2026-11-19)
+        # ...and before a card on it where a stranger STARTED it: its one move is Trust (the judge's browser round, 2026-11-19) - one who only
+        # joined a known person's task never takes Send off the reply that waits (the ruling, 2026-11-19)
+        if waits_press(store, t, row=True):
+            from . import origin
+            return 'held' if self.held and origin.keeps_him(store, tid) else 'approve'
         if self.held: return 'held'
-        if waits_press(store, t, row=True): return 'approve'
         # still waiting to start, a failed start included - the row carries the error and the page offers Start now / Cancel (T10)
         if self.queued: return 'queued'
         left = funnel.left_by_facts(t.get('Tags'), [{'Status': t.get('RunStatus')}] if t.get('RunStatus') else [])

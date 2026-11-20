@@ -107,7 +107,7 @@ A dead end is any state where something is owed and nothing is running, nothing 
 button is lit. For every state ask: who moves next, and can they see how?
 
 - A start that cannot happen now is **queued and retried**, or says why in one line.
-- Every press leaves a line in the chat in the owner's voice and reaches the agent once.
+- Every press shows its result on what was pressed (a card says what it did, never repeated as a chat line) and reaches the agent once.
 - A failure is kept where it happened, with the way past it.
 - Nothing an agent can call answers without saying what to do next.
 

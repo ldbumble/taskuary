@@ -810,3 +810,15 @@ def test_the_screen_fact_says_what_waits_what_is_held_what_is_greyed_and_what_ha
     assert 'Waiting for his press now' not in said and 'Nothing waits for his press' in said, said
     assert said.count('Greyed') == 2 and 'Not sent - you wrote "Give me a button for each" after it' in said, said
     assert 'run_tool' not in said and 'superseded' not in said and 'pending' not in said, 'his words, never the rows'
+
+
+def test_a_card_set_aside_while_it_waited_its_turn_is_greyed_in_the_chat_never_gone():
+    # the Hydrogen walk, 2026-11-19: "the Reddit post is up next" - card 6 of 6, set aside by his line before its turn came, had no row and vanished
+    from taskuary import chatlog
+    s = MemoryStore(); f = Factory(s); tid = f.task('Announce the ledger portal')
+    post = lambda kind, words: s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': f'post on {kind}',
+                                              'DraftText': json.dumps({'action': 'run_tool', 'type': f'{kind.lower()}_post', 'text': words})})
+    x, reddit = post('X', 'The portal launches Monday.'), post('Reddit', 'Northwind ledger portal: invoices in one place.')
+    for r in (x, reddit): s.decide_review(r, 'superseded', None, 'taskuary', proposals.SET_ASIDE)     # his line moved past both
+    cards = [c['review'] for i in chatlog.read(s, tid)['items'] for c in ([i] if i['kind'] == 'card' else i.get('cards') or [])]
+    assert reddit in cards, 'greyed where it stood, never gone'

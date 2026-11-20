@@ -489,3 +489,27 @@ class RedditAndXAreWired(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# THE HYDROGEN WALK, 2026-11-19: a card for a tool named "linkedin" raised, its Approve answered "Failed 'linkedin'" (a raw key), and its card
+# read "Write linkedin on LinkedIn / Where linkedin" - nothing before the press said LinkedIn was not connected
+def test_a_post_to_a_tool_that_is_not_one_is_refused_to_its_agent_never_at_his_press():
+    from taskuary import proposals
+    from taskuary.store import MemoryStore
+    from taskuary.testing import Factory
+    s = MemoryStore(); tid = Factory(s).task('Announce the portal'); refused = []
+    assert proposals.queue(s, tid, {'action': 'run_tool', 'type': 'linkedin', 'text': 'The portal launches Monday.'}, 'agent', refused) is None
+    assert refused and "no tool 'linkedin'" in refused[0] and 'linkedin_post' in refused[0]
+    with __import__('pytest').raises(RuntimeError, match="no tool 'linkedin'"):
+        proposals.execute(s, {'TaskId': tid, 'Kind': 'action', 'DraftText': '{"action": "run_tool", "type": "linkedin"}', 'ReviewId': 9}, 'owner')
+
+
+def test_a_post_card_names_its_network_in_his_words():
+    from taskuary import proposals
+    from taskuary.store import MemoryStore
+    from taskuary.testing import Factory
+    s = MemoryStore(); tid = Factory(s).task('Announce the portal')
+    out = proposals.queue(s, tid, {'action': 'run_tool', 'type': 'x_post', 'text': 'The portal launches Monday.'}, 'agent')
+    import json
+    p = json.loads(s.get_review(out['ReviewId'] if isinstance(out, dict) and 'ReviewId' in out else s._rows("SELECT ReviewId FROM review")[0]['ReviewId'])['DraftText'])
+    assert p['network'] == 'X' and proposals.tool_words(s, p).lower().startswith('post to x')

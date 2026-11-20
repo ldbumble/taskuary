@@ -37,8 +37,9 @@ export const PAGES = new Set(["write_playbook", "amend_playbook"]);
 // a tool run's place (proposals.WHERE_KEYS, the same order) and what it carries: the text it writes, the query or script it runs,
 // else its other settings one per line - the plumbing (the action, the run it belongs to, the connection id) left out
 const WHERE_KEYS = ["path", "to", "folder", "table", "url", "bucket", "key", "container", "blob", "channel", "list", "database", "item"];
-const PLUMBING = new Set(["action", "type", "flow_run", "connector_id", "why", ...WHERE_KEYS]);
+const PLUMBING = new Set(["action", "type", "flow_run", "connector_id", "why", "network", ...WHERE_KEYS]);
 export const toolWhere = (p) => {
+  if (p?.network) return String(p.network);            // ...a post says its network as he knows it (proposals.queue), never "x post"
   const k = WHERE_KEYS.find((x) => p?.[x]);
   const sys = String(p?.type || "").replace(/_/g, " ");
   return k ? `${String(p[k])} · ${sys}` : sys || "a connected system";

@@ -250,6 +250,15 @@ def setting_changes(p: dict) -> tuple:
     return out, '' if out else 'no change was named'
 
 
+def unknown_tool(t) -> str:
+    "Why `t` is no tool a run_tool can run - '' when it is one; the names nearest it said so the agent can propose it again."
+    from .reports import REGISTRY
+    t = str(t or '').strip()
+    if not t or t == 'mcp' or t in REGISTRY: return ''
+    near = sorted(k for k in REGISTRY if k.startswith(t) or t in k)[:6]
+    return f"there is no tool {t!r}" + (f" - did you mean {', '.join(near)}?" if near else '')
+
+
 def validate(store, p: dict) -> tuple:
     """(ok, reason). The whole gate: known action, required fields present, switch on."""
     a = p.get('action')
@@ -262,6 +271,9 @@ def validate(store, p: dict) -> tuple:
     # ...an MCP call is a call to one of its server's tools: none named could only fail at the press
     missing = [k for k in (*need, *(('tool',) if a == 'run_tool' and p.get('type') == 'mcp' else ())) if not str(p.get(k) or '').strip()]
     if missing: return False, f'{a} needs {", ".join(missing)}'
+    # ...A TOOL THAT IS NOT ONE IS REFUSED TO ITS AGENT NOW, NEVER AT HIS PRESS (the Hydrogen walk, 2026-11-19: a card for a tool named
+    # "linkedin" raised, its Approve answered "Failed 'linkedin'" - and nothing before the press said LinkedIn was not connected)
+    if a == 'run_tool' and (bad := unknown_tool(p.get('type'))): return False, bad
     # NOTHING EMPTY IS PUT IN FRONT OF THE OWNER: a playbook that could not be filed, or says nothing of how the job is done, is refused at
     # this one gate - the tool, a marker in the agent's words, the on-close question - and its writer is told what it lacks
     if a == PLAYBOOK:
@@ -409,6 +421,7 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
     # ...a picture on a post is one in the task's own folder, named - never a path the agent wrote (execute resolves it again)
     if ok and p.get('action') == 'run_tool':
         p = {k: v for k, v in p.items() if k != 'image_path'}
+        if p.get('type') in POSTS: p = {**p, 'network': POSTS[p['type']]}       # ...its card says where in his words ("LinkedIn"), never "linkedin post"
         if why := picture_why(task_id, p): ok = False
         elif p.get('image'):                     # ...kept as its name in the folder: an agent names it by its full path as often as not
             from . import outputs
@@ -1031,10 +1044,11 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
     else:                                   # run_tool
         from .reports import REGISTRY, resolve_cfg
         # the owner approved THIS query, so it may commit - the one road to a write on a read-level SQL card
-        cfg = {k: v for k, v in p.items() if k not in ('action', 'flow_run', 'image_path', 'result')}
+        cfg = {k: v for k, v in p.items() if k not in ('action', 'flow_run', 'image_path', 'result', 'network')}
         if p.get('image'):
             from . import outputs
             if why := picture_why(tid, p): raise RuntimeError(f'{why} - nothing was posted')
             cfg['image_path'] = str(outputs.named(int(tid), p['image']))
+        if (bad := unknown_tool(p.get('type'))): raise RuntimeError(f'{bad} - nothing was run')       # ...a card from before the gate refused it
         out = _ran(REGISTRY[p['type']](resolve_cfg(store, {**cfg, '_write': True})))
     return out

@@ -258,3 +258,10 @@ test("every card leads with what its Approve does, in words", () => {
   const fix = card({ action: "repair_workflow", title: "Late fees" }, 'the agent proposes to change the routine "Late fees"');
   assert.equal(fix.lead, 'Change the routine "Late fees"');
 });
+
+// THE HYDROGEN WALK, 2026-11-19: "Where x" under a post card - a post says its network as he knows it (proposals.queue's `network`)
+test("a post card says where it goes by its network's name", async () => {
+  const { toolWhere } = await import("../src/reviewProposal.js");
+  assert.equal(toolWhere({ action: "run_tool", type: "x_post", network: "X", text: "The portal launches Monday." }), "X");
+  assert.equal(toolWhere({ action: "run_tool", type: "linkedin_post", network: "LinkedIn" }), "LinkedIn");
+});

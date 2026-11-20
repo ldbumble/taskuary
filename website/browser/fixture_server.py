@@ -362,7 +362,12 @@ def _install_fresh_routes(app, store):
             to = k.get("to") or (a[2] if len(a) > 2 and isinstance(a[2], (list, str)) and a[0] is not None and isinstance(a[1], str) else None)
             return {"channel": "email", "to": ([to] if isinstance(to, str) else to) or ["gail@northwind.example"], "cc": k.get("cc") or []}
         outbound.send_out = outbound.reply_to_message = out
-        outbound.send_block = lambda *a, **k: ""; outbound.review_connect = lambda *a, **k: None
+        # ...the MAILBOX is the fixture's, so a letter's card needs no Connect - but a post's network is not: its card reads its own connection
+        # (walk 8, 2026-11-20: stubbed for every card, the walk drew "Post to LinkedIn" over a network never connected and read it as the app's)
+        real = getattr(outbound.review_connect, "real", outbound.review_connect)
+        outbound.send_block = lambda *a, **k: ""
+        outbound.review_connect = lambda st, r, memo=None: real(st, r, memo) if r.get("Kind") == "action" else None
+        outbound.review_connect.real = real
         server._refresh_chat_context = lambda *a, **k: {}          # no mailbox to read before a Send
         return {"ok": True, "outbox": str(box)}
 

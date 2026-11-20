@@ -469,6 +469,7 @@ def at_work(store, tid: int, sid: str = '') -> None:
 
 
 ENDS = ('stopped_turn', 'close_from_assistant')      # ...his stop and his close end the turn they were pressed under, and never wait
+AT_ONCE = {'browser_act_pressed'}         # presses drawn where he made them even under a turn at work
 @_safe
 def pressed(store, tid: int, aid: int, action: str) -> None:
     """His press (an audit row of his whose words general.PRESSES says): appended where he made it - unless a turn is at work, which hears
@@ -483,7 +484,9 @@ def pressed(store, tid: int, aid: int, action: str) -> None:
     # ...and so does Remind me with a day: it puts the agent to rest (remind.rest stops its turn), so no turn would ever hear it - kept for one,
     # the line stood by the box while the turn ran and was gone the moment it stopped
     stops = action == 'stopped_turn' or action == 'remind' and bool(_detail(store, aid).get('to'))
-    if live and not stops and action not in ENDS and m.get('press'): return
+    # ...but HIS PRESS ON THE PAGE stands at once (the walk, 2026-11-19: "I'm done" in the browser left no line): the agent waits on that page
+    # in a turn still open, the press is told to it as Taskuary's note - no heard line ever named it - so it was never drawn at all
+    if live and not stops and action not in ENDS and action not in AT_ONCE and m.get('press'): return
     if live and (stops or action in ENDS): update(store, tid, live['Key'], state='stopped' if stops else 'done')
     put(store, tid, 'press' if m.get('press') else 'note', f'p:{aid}', {'at': m['createdAt'], 'text': m['content'][0]['text'],
         **({'perm': m['perm']} if m.get('perm') else {}), **({'stop': True} if action == 'stopped_turn' else {})}, src=f'audit:{aid}')

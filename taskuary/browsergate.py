@@ -324,8 +324,10 @@ def page(sid: str) -> dict:
     except Exception as e: logger.debug(f'browsergate: no snapshot of {sid} - {e}'); rc, snap = 1, ''
     # ...and what the form's boxes hold now: a press sends it, and his own details in it are what make the press his (BIG)
     from . import signin
-    return {'url': address(sid, st), 'open': bool(st.get('open')), 'elements': snap[:SNAP_MAX] if rc == 0 else '',
-            'fields': signin.form_fields(sid) if rc == 0 else []}
+    url = address(sid, st)
+    # ...and what the site is called for him (signin.site_name): a page reached by a bare address by its own title, never "127.0.0.5"
+    return {'url': url, 'open': bool(st.get('open')), 'elements': snap[:SNAP_MAX] if rc == 0 else '',
+            'fields': signin.form_fields(sid) if rc == 0 else [], 'name': signin.site_name(url, sid) if url else ''}
 
 
 # WHEN THE PAGE CANNOT BE NAMED, the agent is told what that means and what to say - never "could not verify the current page address"
@@ -385,13 +387,26 @@ def control(act: dict, pg: dict) -> dict:
 
 def target(act: dict, pg: dict) -> str:
     "'click the \"Pay $412.50\" button on toll.example' - an act said by the control it names, read off the page's snapshot; '' when it names none."
-    c = control(act, pg)
-    if not c: return ''
     from . import signin
-    host = signin.site_name(pg.get('url'))
+    host = pg.get('name') or signin.site_name(pg.get('url'))
     on, verb = (f' on {host}' if host else ''), _VERB.get(act.get('verb') or '', act.get('verb') or 'use')
+    c = control(act, pg)
+    if not c: return (f'{w}{on}' if (w := found(act, verb)) else '')
     if not c['role']: return f'{verb} an element the page no longer shows{on}'
     return f'{verb} the "{c["name"]}" {c["role"]}{on}' if c['name'] else f'{verb} a {c["role"]}{on}'
+
+
+# ...AND A CONTROL FOUND BY WHAT IT IS, not by a ref (the walk, 2026-11-19: a card titled "Agent-browser find role button click --name
+# Next"): agent-browser's own `find <role|text|label|placeholder> <value> <action> [--name N]`, said as the control it names
+def found(act: dict, verb: str = '') -> str:
+    a = [str(x) for x in act.get('args') or []]
+    if len(a) < 4 or a[0] != 'find': return ''
+    by, val, how = a[1].lower(), a[2], a[3]
+    name = next((a[i + 1] for i, x in enumerate(a[:-1]) if x == '--name'), '')
+    v = _VERB.get(how, verb or how)
+    if by == 'role': return f'{v} the "{name}" {val}' if name else f'{v} a {val}'
+    if by in ('label', 'placeholder'): return f'{v} the "{val}" box'
+    return f'{v} "{val}"'
 
 
 def asked(store, tid) -> str:
@@ -471,13 +486,13 @@ def _held_why(k: str) -> str:
 
 
 def _verdict(act: dict, v: dict | None, pg: dict, said: str) -> dict:
-    if v is None: return {'hold': True, 'what': target(act, pg) or _cmd(act), 'why': "the AI's answer could not be read, so it waits for you"}
+    if v is None: return {'hold': True, 'what': target(act, pg) or _cmd(act), 'why': "Taskuary couldn't tell what it does, so it waits for you"}
     what = ' '.join(str(v.get('what') or '').split())[:200]
     # ...a ref is agent-browser's grammar, never his words ("clicks ref e640 on uprinting.com, which is not in the visible snapshot"): the
     # control the page names it, else the site (design round 6, D3)
     if not what or _REF.search(what):
         from . import signin
-        h = signin.site_name(pg.get('url'))
+        h = pg.get('name') or signin.site_name(pg.get('url'))
         what = target(act, pg) if control(act, pg).get('role') else f"a step on {h}" if h else target(act, pg) or _cmd(act)
     big = v.get('big')
     if big is True: return {'hold': True, 'what': what, 'why': WHY.get(str(v.get('kind') or ''), BIG_WHY)}
@@ -518,6 +533,7 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
     todo = acts(cmd)
     if not todo or all(typing(a) for a in todo): return {}
     pg, said, vs = page(sid), asked(store, tid), None
+    if pg.get('url'): left_page(store, tid, sid, pg['url'])
     for i, a in enumerate(todo):
         if a['verb'] == 'batch':
             return _deny(f"{HELD}: a batch that reads its steps from its input shows none of them. Pass each step as its own quoted argument "
@@ -555,7 +571,7 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
             from . import proposals
             c = control(a, pg)
             proposals.queue(store, tid, {'action': 'browser_act', 'sid': str(sid), 'args': args, 'command': ' '.join([EXE, *args]),
-                                         'url': pg['url'], 'site': site, 'what': v['what'], 'why': v['why'], **({'cwd': cwd} if cwd else {}),
+                                         'url': pg['url'], 'site': site, 'name': pg.get('name') or site, 'what': v['what'], 'why': v['why'], **({'cwd': cwd} if cwd else {}),
                                          'keys': [step['key']],
                                          'fields': signin.form_fields(sid),
                                          **({'control': {'name': c['name'], 'role': c['role']}} if c.get('role') else {})}, 'agent')
@@ -588,6 +604,28 @@ def _deny(why: str) -> dict:
 
 
 # ── approved: run it, on the same page; dismissed: say so ─────────────────────────────────────────────────────────────────
+# A HELD STEP ITS BROWSER LEFT IS OVER, WHERE IT STOOD (the walk, 2026-11-19: an Approve looked live after the browser had moved on, and his press
+# failed "the agent's browser has moved on from the page this was held on"). A step tied to its page - a ref, a `find` on that page - cannot run
+# anywhere else: once the browser is on another page its card greys where it stood (proposals.PAGE_LEFT, no line of why) and the agent is told
+# once. A click on a named control is not: his press opens its page again and presses it there (_again), so it stays lit
+def left_page(store, tid: int, sid: str, url: str) -> list:
+    "Grey the held steps of session `sid` whose page its browser has left. -> their review ids."
+    from .proposals import PAGE_LEFT
+    out, said = [], []
+    for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' AND DeliveryClaim IS NULL", (int(tid),)):
+        try: p = json.loads(r.get('DraftText') or '{}') or {}
+        except (TypeError, ValueError): continue
+        if p.get('action') != 'browser_act' or str(p.get('sid')) != str(sid) or p.get('signup') or not p.get('url') or _same_page(url, str(p['url'])): continue
+        if (p.get('control') or {}).get('name') and (p.get('args') or [''])[0] in ('click', 'dblclick'): continue
+        if store.decide_review(r['ReviewId'], 'superseded', None, 'taskuary', note=PAGE_LEFT):
+            out.append(r['ReviewId']); said.append(p.get('what') or p.get('command') or 'a step')
+    if out:
+        store.audit('task', tid, 'cards_passed', 'taskuary', 'system', {'rids': out, 'why': PAGE_LEFT})
+        _tell(store, tid, f"Your held step ({'; '.join(said)[:300]}) is off the card: your browser left the page it was held on, so it can no "
+                          "longer run there. If it is still needed, go back to that page and do it again - it is held anew for the owner's press.")
+    return out
+
+
 def _same_page(a: str, b: str) -> bool: return a.split('#', 1)[0].rstrip('/') == b.split('#', 1)[0].rstrip('/')
 
 
@@ -636,18 +674,18 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
     here = address(sid, st)
     if not here or not p.get('url'):
         raise RuntimeError(f"Taskuary could not read which page the agent's browser is on, so it could not check it is still on "
-                           f"{p.get('site') or 'the page'} - nothing was done. {AGAIN}")
+                           f"{p.get('name') or p.get('site') or 'the page'} - nothing was done. {AGAIN}")
     # ...HIS PRESS IS TIED TO THE JOB, NOT TO THE AGENT'S TAB (the vendor walk, 2026-11-19: "the agent's browser has moved on from the page this was
     # held on - nothing was done"): the page is opened again in a tab of Taskuary's own, its boxes filled as the agent left them, and the control
     # pressed there by its role and name
     if not _same_page(here, str(p.get('url') or '')):
         if (p.get('control') or {}).get('name') and args[0] in ('click', 'dblclick'): return _again(store, tid, sid, p)
-        raise RuntimeError(f"the agent's browser has moved on from the page this was held on ({p.get('site') or 'its site'}) - nothing was done. {AGAIN}")
+        raise RuntimeError(f"the agent's browser has moved on from the page this was held on ({p.get('name') or p.get('site') or 'its site'}) - nothing was done. {AGAIN}")
     # ...AND THE REF STILL NAMES THE CONTROL IT WAS HELD ON: a page that re-draws itself on one address (a checkout's next step, a list that
     # reloaded) gives @e12 to another control at its next snapshot, and the owner's yes to "Continue" clicked "Remove item"
     if (was := p.get('control')) and (now := control({'args': args}, page(sid))) and (now.get('role'), now.get('name')) != (was.get('role'), was.get('name')):
         raise RuntimeError(f"the {was.get('role') or 'control'} \"{was.get('name')}\" this was held on is no longer where it was on "
-                           f"{p.get('site') or 'the page'} - the page has changed since, so nothing was done. {AGAIN}")
+                           f"{p.get('name') or p.get('site') or 'the page'} - the page has changed since, so nothing was done. {AGAIN}")
     # ...WHERE THE AGENT RAN IT: `upload @e5 ./resume.pdf` approved ran from the server's own folder, and its relative path named another file
     rc, said = (run or (lambda s, a: _run(s, a, 60, 'act', **({'cwd': p['cwd']} if p.get('cwd') else {}))))(sid, args)
     said = ' '.join(str(said or '').split())[-600:]
@@ -662,7 +700,7 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
                           "opened or closed first, or the page opened by its address - then continue.", wake=True)
         if p.get('sid'): browserview.ended_on(sid, 'failed', store, tid)
         store.audit('task', tid, 'browser_act_refused', 'owner', 'human', {'site': p.get('site'), 'what': p.get('what')})
-        return {'performed': None, 'refused': f"{p.get('site') or 'The page'} did not take it - {why}. The agent was told and goes on another way."}
+        return {'performed': None, 'refused': f"{p.get('name') or p.get('site') or 'The page'} did not take it - {why}. The agent was told and goes on another way."}
     now = str(browserview.state(sid, fresh=True).get('url') or '')
     from . import signin
     signin.acting(store, tid, sid, signin.site_of(here))
@@ -686,7 +724,7 @@ PRESS_JS = r"""((role, name) => { const norm = (t) => String(t || '').replace(/\
 def _again(store, tid: int, sid: str, p: dict) -> dict:
     "The held click done on its own page again: opened in a tab of Taskuary's own, filled as the agent left it, pressed, and read."
     from . import signin
-    ctl, site = p['control'], p.get('site') or 'its site'
+    ctl, site = p['control'], p.get('name') or p.get('site') or 'its site'
     try:
         with signin.tab_at(sid, str(p.get('url') or '')) as (c, _):
             c.js(f"{signin.REFILL}({json.dumps(p.get('fields') or [])})")

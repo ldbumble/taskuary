@@ -261,7 +261,7 @@ def screen(store, tid: int, skip=()) -> str:
     def name(u, r):
         ids = [w['ReviewId'] for w in _waits(u)] or u['rids']
         return (f"{' + '.join(f'rv{x}' for x in ids)}, {what(store, u)}" if u['rows'] else what(store, u)) + (f': {w}' if r and (w := _words(r)) else '')
-    def greyed(r, n): settled.append((r.get('DecidedAt') or r.get('CreatedAt') or '', f'Greyed, will not go ({passed_why(store, r)}): {n}'))
+    def greyed(r, n): settled.append((r.get('DecidedAt') or r.get('CreatedAt') or '', f"Greyed, will not go{f' ({w})' if (w := passed_why(store, r)) else ''}: {n}"))
     for u in _units(store, tid, set()):
         seen.update(u['rids'])
         if set(u['rids']) & set(skip): continue

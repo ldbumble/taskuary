@@ -721,3 +721,37 @@ def test_an_answer_out_of_shape_is_asked_once_more_before_anything_waits_on_him(
     with mock.patch('taskuary.llm.ask_json', ask):
         v = one(s, bg.acts('agent-browser click @e12')[0], {'url': 'https://app.box.example/folder/9', 'elements': SNAP}, Brain(None))
     assert (v['hold'], len(calls)) == (False, 2), (v, calls)
+
+
+# ── the walk, 2026-11-19 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+def test_a_step_found_by_what_it_is_is_named_for_him_never_as_the_command():
+    pg = {'url': 'https://pay.toll.example/checkout', 'elements': ''}
+    a = bg.acts('agent-browser find role button click --name Next')[0]
+    assert bg.target(a, pg) == 'click the "Next" button on toll.example'
+    assert bg.target(bg.acts('agent-browser find label Email fill alex@northwind.example')[0], pg) == 'type into the "Email" box on toll.example'
+    # ...and a page reached by a bare address by its own name (signin.site_name, its title), never "127.0.0.5"
+    assert bg.target(a, {'url': 'http://127.0.0.5:8080/signup', 'elements': '', 'name': 'Trainly sign-up'}) == 'click the "Next" button on Trainly sign-up'
+    with verdict(ValueError('no answer')):
+        v = one(MemoryStore(), a, pg, Brain(None))
+    assert not v['what'].lower().startswith('agent-browser')
+
+
+def test_a_held_step_its_browser_left_greys_where_it_stood_and_the_agent_is_told():
+    s, told = MemoryStore(), []
+    tid = Factory(s).task('Sign up on the vendor portal')
+    proposals.queue(s, tid, {'action': 'browser_act', 'sid': 'run1', 'args': ['find', 'role', 'button', 'click', '--name', 'Next'], 'url': CHECKOUT,
+                             'site': 'toll.example', 'what': 'click the "Next" button on toll.example', 'why': 'x'}, 'agent')
+    proposals.queue(s, tid, {'action': 'browser_act', 'sid': 'run1', 'args': ['click', '@e12'], 'url': CHECKOUT, 'site': 'toll.example',
+                             'control': {'name': 'Continue', 'role': 'button'}, 'what': 'click Continue', 'why': 'x'}, 'agent')
+    with mock.patch.object(bg, '_tell', side_effect=lambda st, t, text, **k: told.append(text)):
+        assert bg.left_page(s, tid, 'run1', CHECKOUT) == []                                  # still on its page: lit
+        [gone] = bg.left_page(s, tid, 'run1', 'https://pay.toll.example/receipt')
+    rv = s.get_review(gone)
+    assert rv['Status'] == 'superseded' and proposals.passed(rv) and proposals.passed_why(s, rv) == ''
+    assert len([r for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (tid,))]) == 1   # a named click is pressed on its page again
+    assert len(told) == 1 and 'left the page' in told[0]
+
+
+def test_his_done_on_the_page_is_a_line_in_the_chat_even_under_a_turn_at_work():
+    from taskuary import chatlog
+    assert 'browser_act_pressed' in chatlog.AT_ONCE

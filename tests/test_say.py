@@ -111,3 +111,8 @@ def test_one_road_for_a_failures_words():
     for p in pathlib.Path(say.__file__).parent.glob('*.py'):
         for n, l in enumerate(p.read_text(encoding='utf-8').splitlines(), 1):
             if 'add_comment(' in l and re.search(r"\{(str\(e\)|e)(\)?\[:\d+\])?\}|' '\.join\(str\(e\)", l): raise AssertionError(f'{p.name}:{n} writes a raw exception to the chat')
+
+
+def test_a_sign_up_that_made_no_account_says_who_moves_next_once():
+    said = say.owner({'kind': 'signup_failed', 'site': 'Trainly sign-up', 'why': 'That email is already registered'})
+    assert 'The agent was told' not in said and said.startswith('No account was made on Trainly sign-up')

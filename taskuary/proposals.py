@@ -568,11 +568,12 @@ LAND = 'land'                  # move_on's mark for the landing question (landin
 
 
 NOT_NEEDED = 'not needed - the agent finished without it'
+PAGE_LEFT = 'the browser left the page it was held on'      # browsergate.left_page: greyed where it stood, no line of why
 
 
 def passed(rv: dict | None) -> bool:
     "Whether review `rv` is a card the conversation moved past (move_on) - not pressable, and its press route says so (passed_why)."
-    return bool(rv) and rv.get('Status') == 'superseded' and rv.get('DecideNote') in (SET_ASIDE, NOT_NEEDED)
+    return bool(rv) and rv.get('Status') == 'superseded' and rv.get('DecideNote') in (SET_ASIDE, NOT_NEEDED, PAGE_LEFT)
 
 
 def finished_without(store, tid: int) -> list:
@@ -703,6 +704,7 @@ def passed_why(store, r: dict) -> str:
     from . import continuity, general
     from .conversation import _mail, ep
     if r.get('DecideNote') == NOT_NEEDED: return 'Not needed - the agent finished without it'
+    if r.get('DecideNote') == PAGE_LEFT: return ''
     card, end = ep(r.get('DraftAt') or r.get('CreatedAt')), ep(r.get('DecidedAt')) or time.time()
     # ...A REPLY TO FILED MAIL HAS NO TASK (2026-11-18): retired by his answer, its press crashed reading one - its thread is its own message's
     tid = int(r['TaskId']) if r.get('TaskId') else None

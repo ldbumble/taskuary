@@ -1181,7 +1181,7 @@ def failed(store, tid: int, review: int, actor: str = 'owner') -> str:
     got = to_agent(store, tid, f'The owner {_decided(store, r)}. {FAILED_NEXT}' + (f'\n\n{line}' if (line := screen(store, tid)) else ''), actor,
                heard=lambda how: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': how, 'failed': True}))
     # ...and its card says so under the error, so the owner is not left wondering who moves next (an act's; a send's line is its own)
-    if got and r.get('ActError'): store.review_act_failed(r['ReviewId'], f"{str(r['ActError'])[:250].rstrip('. ')}. {AGENT_TOLD}", r.get('DecidedBy') or actor)
+    if got and r.get('ActError') and 'The agent was told' not in str(r['ActError']): store.review_act_failed(r['ReviewId'], f"{str(r['ActError'])[:250].rstrip('. ')}. {AGENT_TOLD}", r.get('DecidedBy') or actor)
     return got
 def last_turn_began(store, tid: int) -> str | None:
     """When the turn task `tid`'s agent last answered BEGAN - the owner's line or Taskuary's brief it answered, or its start on the worker record,

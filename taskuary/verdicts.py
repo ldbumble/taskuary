@@ -780,7 +780,7 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
     # ...nor one it moved past that no agent has heard yet (written_past): greyed on every surface from the moment the input came
     # ...refused with the one sentence its greyed card reads (passed_why, 2026-11-17), never a fixed "set aside when you moved on"
     if proposals.passed(rv) or rv.get('Status') == 'pending' and rv.get('TaskId') and rv['ReviewId'] in proposals.written_past(store, rv['TaskId']):
-        return {'ok': False, 'status': rv['Status'], 'sent': None, 'passed': True, 'send_error': proposals.passed_why(store, rv)}
+        return {'ok': False, 'status': rv['Status'], 'sent': None, 'passed': True, 'send_error': proposals.passed_why(store, rv) or 'Nothing was done - it is over.'}
     if unpressed(actor) and verb_in in ('approve', 'edit', 'merge_anyway', 'close_pr') and not saved_for(store, rv):
         return {'ok': False, 'status': rv.get('Status'), 'sent': None, 'held': True, 'send_error': HELD}
     if rv.get('Status') == 'pending' and verb_in in ('approve', 'edit'):

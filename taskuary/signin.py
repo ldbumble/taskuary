@@ -1563,7 +1563,7 @@ def send_held(store, tid, sid, p) -> dict:
     _tell(store, tid, f'The owner approved the sign-up on {site}. {line}', wake=True)
     # ...his card says what became of it in his words (say.owner) - the agent's own next step ("run `agent-browser signup` again") is the agent's
     from . import say
-    if not ok: raise RuntimeError(say.owner({'kind': 'signup_failed', 'site': site, 'why': (got or {}).get('why')}))
+    if not ok: raise RuntimeError(say.owner({'kind': 'signup_failed', 'site': site_name(url or site, sid), 'why': (got or {}).get('why')}))
     return {'performed': p.get('what') or f'the sign-up on {site}', 'site': site}
 
 

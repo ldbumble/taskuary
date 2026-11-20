@@ -62,10 +62,11 @@ class AutoStartTests(unittest.TestCase):
         _out, spawned = ingested(s, mail(subject='importer down', body='the importer throws in jobs/import.py'), 'coding')
         self.assertEqual(spawned, ['_auto_code'])
 
-    def test_a_personal_task_starts_nothing(self):
+    def test_a_task_on_his_list_starts_its_agent(self):
+        # ONE ARRIVAL RULE (the owner's GO, 2026-11-19): what is placed in Tasks starts its agent - his own list's kind is the general agent's
         s = store()
         _out, spawned = ingested(s, mail(), 'task')
-        self.assertEqual(spawned, []); self.assertTrue(last_reason(s).startswith('triage: yours to do'), last_reason(s))
+        self.assertEqual(spawned, ['_auto_general']); self.assertTrue(last_reason(s).startswith('triage: work for'), last_reason(s))
 
     def test_each_kind_has_its_own_switch_and_off_keeps_the_work_visible_for_a_click(self):
         s = store(general_auto_enabled='0')

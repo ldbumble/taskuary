@@ -60,14 +60,13 @@ class DispatchTests(unittest.TestCase):
         self.assertIn('the agent was set to start by itself', reason)
         self.assertNotIn('coding agent', reason)                             # it was not
 
-    def test_a_plain_task_is_nobodys_but_yours(self):
+    def test_a_plain_task_is_the_general_agents_never_the_coders(self):
+        # ONE ARRIVAL RULE (2026-11-19): his own list's kind starts the general agent - never a coding session
         s = store()
         out, spawned = ingested(s, mail(), 'task')
-        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'task')
-        self.assertEqual(spawned, [])
-        reason = s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason']
-        self.assertTrue(reason.startswith('triage: yours to do'), reason)
-        self.assertNotIn('coding agent', reason)
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')
+        self.assertEqual(spawned, ['_auto_general'])
+        self.assertNotIn('coding agent', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
 
     def test_coding_still_goes_straight_to_the_agent(self):
         """The rule that must not move: err toward the agent for anything a keyboard can do."""

@@ -110,7 +110,7 @@ class LearningTests(unittest.TestCase):
         s = store(); out = mail(s, 'p1', brain('task'))
         watch.watch(s, out['task_id']); self.press(s, out['task_id'])
         c = operations.corrections(s, task_id=out['task_id'])
-        self.assertEqual([(x['Verdict'], x['Change']) for x in c], [('task', 'watch')])
+        self.assertEqual([(x['Verdict'], x['Change']) for x in c], [('general', 'watch')])   # his own list's kind is the general agent's (2026-11-19)
         self.assertEqual(evalset._labels(s)[out['message_id']][:2], ('watch', 'owner:watch'))
         self.assertIn('watch', evalset.LABELS)
 

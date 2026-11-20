@@ -355,7 +355,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(first.status_code, 200)
         tid = first.json()['task_id']
         self.assertIsNotNone(tid)
-        self.assertEqual((server.store.get_message(mid)['TaskId'], server.store.get_task(tid)['Kind']), (tid, 'task'))
+        self.assertEqual((server.store.get_message(mid)['TaskId'], server.store.get_task(tid)['Kind']), (tid, 'general'))      # the one arrival rule: his own list's kind is the general agent's
         self.assertEqual(second.status_code, 409)
 
     def test_task_crud_and_board(self):
@@ -1113,6 +1113,7 @@ class ApiTests(unittest.TestCase):
                                         'Subject': 'Import', 'BodyText': 'did the import finish?', 'FromName': 'Gail Moreno',
                                         'Status': 'routed'})
         server.store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'yes'})
+        server.store._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (10 ** 9, tid))   # ...a sender he trusts: a held task shows no card until Trust
         with mock.patch.object(server, '_can_send', return_value=False):
             rv = c.get(f'/api/tasks/{tid}').json()['reviews'][0]
         self.assertEqual((rv['FromName'], rv['Channel'], rv['SourceName']), ('Gail Moreno', 'teams', 'Ops chat'))

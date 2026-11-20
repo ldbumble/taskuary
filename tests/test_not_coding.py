@@ -80,12 +80,12 @@ class DispatchGateTests(unittest.TestCase):
     def test_a_task_with_no_code_in_it_is_general_and_buys_no_session(self):
         s, out, started = self._ingest('Teams chat with Priya', JOB_SCOPE)
         self.assertEqual(started, [])                                    # no session bought
-        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'task')  # labelled with the default, honestly
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')  # ...the general agent's, by the one arrival rule (2026-11-19)
 
     def test_code_words_without_a_classifier_no_longer_reach_the_coder(self):
         s, out, started = self._ingest('export down', 'The export is broken and the deploy failed.')
         self.assertEqual(started, [])
-        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'task')
+        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')
 
     def test_the_classifiers_explicit_coding_still_reaches_the_coder(self):
         s, out, started = self._ingest('export down', 'The export is broken and the deploy failed.',
@@ -95,7 +95,7 @@ class DispatchGateTests(unittest.TestCase):
 
     def test_the_route_line_says_which_way_it_went(self):
         s, _out, _ = self._ingest('Teams chat with Priya', JOB_SCOPE)
-        self.assertIn('yours to do', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])   # unnamed kind: the owner's list (2026-09-23)
+        self.assertIn('work for the agent', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])   # unnamed kind: the general agent's (2026-11-19)
         s2, _out2, _ = self._ingest('export down', 'The export is broken and the deploy failed.',
                                     llm=lambda *a, **k: '{"intent": "task", "kind": "coding", "why": "a broken job"}', classify='1')
         self.assertTrue(s2._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'].startswith('triage: work for the coding agent'))

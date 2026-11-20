@@ -4,6 +4,7 @@ the audit log is a Buzz-style tamper-evident hash chain (each row hashes the pre
 """
 import contextlib, contextvars, copy, hashlib, json, os, re, sqlite3, sys, threading, time, uuid
 from datetime import datetime, timedelta
+import weakref
 from loguru import logger
 from . import vault
 from .inboxes import TYPES as INBOXES, NAMES as INBOX_NAMES     # the helpdesks and newer trackers: seeded and triggering like the rest
@@ -47,6 +48,22 @@ def lock_wait_meter():
     m = [0.0]; tok = _LOCK_WAITED.set(m)
     try: yield m
     finally: _LOCK_WAITED.reset(tok)
+
+
+class _Writer(sqlite3.Connection):
+    """THE STORE'S WRITER, CLOSED ONE WAY ONLY (the release runs, 2026-11-19: a background job of the chat log mid-statement on a store whose
+    connection a test's cleanup closed - an access violation, twice): however its close() is reached - store.close(), a test closing `cx`, a
+    teardown - its store is marked closing, the chat log's worker lets go of it first (chatlog.let_go), and the close waits for the store's
+    lock, so it never lands under a statement another thread is running."""
+    _owner = None
+    def close(self):
+        st = self._owner() if self._owner else None
+        if st is None: return super().close()
+        st._closing = True
+        try:
+            from . import chatlog; chatlog.let_go(st)
+        except Exception: pass
+        with st.lock: st._closed = True; return super().close()
 
 
 class _TimedLock:
@@ -1162,7 +1179,8 @@ class SQLiteStore:
         # timeout= is sqlite's lock wait in seconds; WAL below is what actually lets a
         # Timeline read proceed while a poll is writing. :memory: cannot WAL (it has
         # nowhere to put the -wal file), so tests keep the default journal.
-        self.cx = sqlite3.connect(path, check_same_thread=False, timeout=5.0)
+        self.cx = sqlite3.connect(path, check_same_thread=False, timeout=5.0, factory=_Writer)
+        self.cx._owner = weakref.ref(self)
         self.cx.row_factory = sqlite3.Row
         # SQLite's own LOWER()/LIKE fold ASCII only, so "muller" finds "MULLER" and "muller" does
         # not find "MULLER" once it is spelt MULLER with an umlaut. Search folds both the column

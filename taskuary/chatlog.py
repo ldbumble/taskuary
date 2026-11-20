@@ -166,8 +166,13 @@ def step(store, tid: int, sid: str, ref: str, step: dict, state=None) -> int:
 
 
 def _drawn(r: dict, lit: bool) -> bool:
-    "A card waiting behind the front is drawn nowhere; an offer outside the line only while no card of the line waits (one box, D)."
-    return r['Kind'] not in ('card',) or r['State'] != 'held' and not (r['State'] == 'offer' and lit)
+    """A card waiting behind the front is drawn nowhere; an offer outside the line only while no card of the line waits (one box, D). And a
+    letter that never had words is no card he saw (walk 4, 2026-11-19: a greyed "Subject / Attach a file / Send" stood where a newer draft
+    replaced an empty one): once it is not his to press it draws nowhere."""
+    if r['Kind'] != 'card': return True
+    if r['State'] == 'held' or r['State'] == 'offer' and lit: return False
+    b = json.loads(r['Body'] or '{}')
+    return not (b.get('what') in ('draft', 'draft_reply', 'slot') and not b.get('was') and (b.get('status') or r['State']) not in ('pending', 'approved', 'edited', 'sent'))
 
 
 def _item(r: dict) -> dict:

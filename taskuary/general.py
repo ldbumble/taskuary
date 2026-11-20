@@ -4221,6 +4221,9 @@ def _start_line(store, tid, t, text, files, actor, line_id, wid, kw):
             take_kept(store, tid, {wid})
             from .ingest import held_start
             if not held_start(store, tid, e): store.add_comment(tid, 'router', 'agent', f"The agent did not start: {_said(e)}")
+        # ...and a chat's turn that could not begin (no AI connected, a refused start) is over from the moment it failed: its failed line said
+        # it, and the header read "agent working" over it (the Neon walk, 2026-11-19) - one state, from the turn as it ended
+        else: answered(tid, every=True)
         raise
     finally:
         if handles(t): answered(tid)

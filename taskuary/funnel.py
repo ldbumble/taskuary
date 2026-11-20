@@ -28,9 +28,12 @@ from .workerstate import says as agent_says, sub_state, request_line   # funnel.
 
 
 def _reason_said(reason) -> str:
-    "A reader's reason as the row says it to him (say.owner): never triage's own head."
+    """A reader's reason as the row says it to him (say.owner): never triage's own head - and never triage's own reasoning, which is its note
+    to itself, written about him by name ("no indication the commit or repository is Alex's to fix" stood on the rail - the Neon walk,
+    2026-11-19): such a row says its lane's own words instead. Taskuary's own lines (a promote, a not-ours) are said."""
     from . import say
-    return say.owner({'kind': 'reason', 'text': reason}) if reason else ''
+    if not reason or re.match(r'\s*triage\s*:', str(reason), re.I): return ''
+    return say.owner({'kind': 'reason', 'text': reason})
 
 
 # NOTHING IS ASKED ON THE RAIL (the owner, 2026-11-10: "why would we ask anything in the assistant rail? remove that no need for that

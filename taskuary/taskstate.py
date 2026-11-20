@@ -82,8 +82,21 @@ def _chat_resting(store, t: dict) -> str | None:
     if not handles(t) or is_dock(t) or t.get('Status') not in ('open', 'in_progress'): return None
     if open_question(store, t['TaskId']): return 'blocked'
     if store.waiting_on_owner(t['TaskId']): return 'approve'          # an email it set up waits for your Send, never "agent done"
-    spoke = store._one('SELECT 1 AS x FROM comment WHERE TaskId=? AND ActorType=? LIMIT 1', (t['TaskId'], ASSISTANT_TYPE))
-    return 'agentdone' if spoke else None
+    return turn_outcome(store, t['TaskId'])
+
+
+def turn_outcome(store, tid: int) -> str | None:
+    """HOW THE LAST TURN ENDED, off the stored turn - one reading for a chat at rest and one whose session is still up: 'agentdone' only for a
+    turn that did the work (the Neon walk, 2026-11-19: a green "agent done" and "Finished at 11:53 PM" over a turn that failed, and over one
+    that refused and left him "Enable local shell access"). A failed turn is 'stopped', its reason on it; one whose own summary left
+    something on him is 'blocked'. None: it never answered."""
+    from .general import ASSISTANT_TYPE, failed_line, turn_summaries
+    last = store._one('SELECT CommentId, Body FROM comment WHERE TaskId=? AND ActorType=? ORDER BY CommentId DESC LIMIT 1', (int(tid), ASSISTANT_TYPE))
+    if not last: return None
+    if failed_line(last['Body'])[1]: return 'stopped'
+    sm = turn_summaries(store, int(tid)).get(last['CommentId']) or {}
+    if not sm.get('nothing_left') and any(str(s).strip() for s in sm.get('on_you') or []): return 'blocked'
+    return 'agentdone'
 
 
 class TaskState:
@@ -213,7 +226,9 @@ class TaskState:
             # done lit over a chat that held only the sender's message and the Trust action): the task reads as it does with no session
             if not (parked and never_ran(store, t, session)):
                 # ...and an agent whose turn asked nothing is done for now, never waiting on you (the owner, 2026-11-07) - as it reads once idled out
-                return 'agentdone' if done_for_now(store, t, session) else 'blocked'
+                if not done_for_now(store, t, session): return 'blocked'
+                from .general import handles
+                return (turn_outcome(store, tid) or 'agentdone') if handles(t) else 'agentdone'
         st = t.get('Status')
         if st == 'dropped': return 'dropped'
         # ...and a start in flight for his line is at work from the press, whichever agent comes up (general.OPENING - one mark for every kind): a
@@ -241,7 +256,7 @@ class TaskState:
         # ...and HOW ITS LAST RUN ENDED, in the run's own word (workerstate.ended) - the reading the rail takes too: a run that failed
         # or was stopped read "on you", and one that finished read "waiting to start", while the worker said what happened (G7)
         end = None if left else self.end
-        if end == 'finished': return 'approve' if store.waiting_on_owner(tid) else 'agentdone'     # a post or an act left for your press
+        if end == 'finished': return 'approve' if store.waiting_on_owner(tid) else (turn_outcome(store, tid) or 'agentdone')     # a post or an act left for your press
         if end: left = 'stopped'
         if not left and str(t.get('Assignee') or '').startswith('agent:') and self.transcript: left = 'stopped'
         if left: return left

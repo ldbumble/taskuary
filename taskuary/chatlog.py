@@ -808,6 +808,9 @@ def advance(store, tid: int) -> None:
             continue
         # ...one the chat moved past stays where it stood, its buttons greyed (proposals.written_past) - never taken off as if it waited behind
         # ...ONE card waits per task (one_live_card): the front's own row, never another row of its unit
+        # ...ONE WORD FOR A CARD ITS AGENT TOOK THE PLACE OF (decided 2026-11-20, the moved-past ruling): greyed - 'passed' - whether his line set it
+        # aside first or the agent's rewrite did; which came first is a race, and no race decides what he sees
+        if st == 'superseded' and rv.get('DecidedBy') not in OWNER_ACTORS: st = 'passed'
         if st == 'pending' and rv['ReviewId'] != (front[0] if front else None): st = 'passed' if rv['ReviewId'] in q['past'] else 'offer' if r['State'] == 'offer' else 'held'
         if st != r['State']: update(store, tid, k, state=st, status=st)
     if front and (rv := by.get(front[0])) and f"r:{front[0]}" not in rows:
@@ -832,10 +835,20 @@ def advance(store, tid: int) -> None:
         if f'r:{rid}' in rows or rv['Status'] == 'pending' or (rv.get('Batch') and rid != min(x for x, y in by.items() if y.get('Batch') == rv['Batch'])): continue
         if cardqueue.obsolete_read(store, tid, rv): continue      # ...a held read the gate lets through now was never his to answer, answered or not
         c = _card(rv)
-        # ...pressed, failed, or set aside because he wrote past it (his move, as a press is: it stood in front of him when he did)
-        if rv.get('DecidedBy') not in OWNER_ACTORS and c['status'] not in ('failed', 'passed'): continue
+        # ...pressed, failed, set aside because he wrote past it - or REPLACED BY ITS AGENT WHILE IT WAS THE CARD IN FRONT (it stood, whether or not
+        # a read drew it before the rewrite): greyed where it stood. One that waited behind another never stood
+        if rv.get('DecidedBy') not in OWNER_ACTORS and c['status'] != 'failed':
+            if c['status'] not in ('passed', 'superseded') or not _was_front(by, rv): continue
+            c = {**c, 'status': 'passed'}
         t = _raised(store, rid) or (_turn_at(store, tid, rv.get('CreatedAt')) or {}).get('Id')
         put(store, tid, 'card', f'r:{rid}', c, parent=t, state=c['status'], src=f'review:{rid}')
+
+
+def _was_front(by: dict, rv: dict) -> bool:
+    "Was review `rv` the card in front - no older card of the task still waiting when it was raised? Read from the stored reviews alone."
+    from .conversation import ep
+    at = ep(rv.get('CreatedAt'))
+    return not any(r['ReviewId'] < rv['ReviewId'] and (r['Status'] == 'pending' or ep(r.get('DecidedAt')) > at) for r in by.values())
 
 
 def _turn_at(store, tid: int, created):
@@ -1037,7 +1050,7 @@ def serve(store, tid: int, level: str = None) -> dict:
     at_work = general.working(store, tid) if not hold_ else bool(getattr(general._live_of(tid), 'busy', False))
     # ...A TURN WHOSE ANSWER IS FILED IS OVER (recorded 2026-11-12: its session read busy a beat after the answer was filed, and the dots stood
     # under that answer): with nothing heard since and no line of his waiting, nothing works - a hand-over on its way writes its turn as it goes
-    if at_work and (t := open_turn(store, tid)) and t['State'] not in LIVE and not general.waiting_lines(store, tid): at_work = False
+    if at_work and (t := open_turn(store, tid)) and t['State'] not in LIVE and _waits_from(store, tid) is None: at_work = False      # (a line of his not yet heard keeps it)
     if at_work and (h := _halted(store, tid)): at_work = any(not get(store, tid, w.get('line') or f"c:{w['id']}") for w in general.waiting_lines(store, tid)) or h == 'stopped_turn' and bool(getattr(general._live_of(tid), 'owes_stop', lambda: False)())
     at_work = at_work or workflows.at_work(tid)            # ...a routine running its steps is at work with no agent at all (flow.turn)
     # ..."working" is one fact (general.working): a turn the log holds at work while nothing works has either not begun yet - nothing of it is
@@ -1053,7 +1066,7 @@ def serve(store, tid: int, level: str = None) -> dict:
     # ...the same rule on what this read holds (its answer may be filed between the check above and the read): the newest thing a finished
     # turn with nothing heard under it and no line of his waiting - nothing works, no dots under a finished answer
     tail = next((x for x in reversed(got['items']) if x['kind'] in ('turn', 'line', 'arrival', 'press')), None)
-    if at_work and tail and tail['kind'] == 'turn' and tail.get('state') not in LIVE and not general.waiting_lines(store, tid) and not workflows.at_work(tid):
+    if at_work and tail and tail['kind'] == 'turn' and tail.get('state') not in LIVE and _waits_from(store, tid) is None and not workflows.at_work(tid):
         at_work = False
     out = got['items'] if at_work else [x for x in got['items'] if not (x['kind'] == 'turn' and x.get('state') in LIVE)]
     # ...A TASK A STRANGER'S WORDS HOLD DRAWS NO CARD TO PRESS until he trusts them (the judge's browser round, 2026-11-19: the reply drafted on a

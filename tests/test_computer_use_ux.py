@@ -181,7 +181,7 @@ class TheHeldActInWords(unittest.TestCase):
         slow = lambda *a, **k: time.sleep(2) or {'hold': False, 'what': 'x', 'why': ''}
         with mock.patch.object(bg, '_judge', slow):
             t0 = time.time(); [v] = bg.judge(MemoryStore(), bg.acts('agent-browser click @e12'), {'url': 'https://x.example/'}, wait=.2)
-        self.assertTrue(v['hold']); self.assertIn('did not answer in time', v['why']); self.assertLess(time.time() - t0, 1.5)
+        self.assertTrue(v['hold']); self.assertIn('in time', v['why']); self.assertLess(time.time() - t0, 1.5)
         self.assertLess(bg.JUDGE_WAIT + 20, hooks.BROWSER_WAIT)       # verdict + snapshot always land before curl gives up
 
     def test_approve_returns_before_the_agents_turn_and_a_failed_tell_is_on_the_task(self):

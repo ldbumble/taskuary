@@ -1098,30 +1098,27 @@ def test_a_password_the_agents_own_press_sends_is_kept_and_put_back_when_refused
     assert vault.unseal(signin.saved(s, 'vacancyiq.example')['Secret']) == PW, 'the sign-in that works is back'
 
 
-def test_a_held_sign_up_is_filled_again_and_sent_by_his_press_after_the_agent_moved_on():
-    """The vendor walk, 2026-11-19: "the agent's browser has moved on from the page this was held on (127.0.0.3) - nothing was done" - an
-    Approve that could not succeed, because the hold was tied to a tab the agent left. The card keeps the form's boxes; his press opens the
-    page again in a tab of Taskuary's own, fills it as the agent left it, makes and keeps the password, sends it, and the agent is told."""
+def test_a_held_sign_up_is_sent_on_its_own_tab_only_never_the_tab_shown():
+    """Walk 5, 2026-11-19: a sign-up held on one site's tab stayed lit while another site's tab was shown, and his Approve ran on that other
+    site's page. The card names the tab it was held on; his press sends the form there only - while that tab is on its page - and where it
+    left, nothing is sent and he reads why."""
     from taskuary import browsergate
-    s = MemoryStore(); tid = Factory(s).task('Trial accounts for Erin'); page = UpPage()
+    s = MemoryStore(); tid = Factory(s).task('Trial accounts for Erin'); page = UpPage(); page.target = 'T1'
     with gate(True), on_page(page.href), mock.patch.object(signin, 'connect', return_value=page):
         ok, said = signin.signup(s, tid, 'sess1')
-    assert ok and said.startswith('HELD for the owner') and 'even after you have moved on' in said
+    assert ok and said.startswith('HELD for the owner')
     [rv] = s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
     p = json.loads(rv['DraftText'])
-    assert (p['action'], p['signup'], p['fields']) == ('browser_act', 'rentscope.example', page.fields_)
-    again, told = UpPage(user=''), []
-    class Tab:
-        def __enter__(self): return again, True
-        def __exit__(self, *a): pass
-    with mock.patch.object(signin, 'tab_at', lambda sid, url: Tab()), mock.patch.object(signin, 'type_new', lambda *a: 1), \
-         mock.patch.object(signin, 'send_new', lambda sid, site, c: c.go('data', 'https://www.rentscope.example/data') or {'ok': True}), \
-         mock.patch.object(signin, 'SETTLE', 0), mock.patch.object(browsergate, '_tell', lambda s_, t, text, **k: told.append(text)), \
-         mock.patch.object(browserview, 'state', return_value={'open': True, 'url': 'https://vacancyiq.example/signup'}):
+    assert (p['action'], p['signup'], p['tab']) == ('browser_act', 'rentscope.example', 'T1')
+    shown = {'id': 'T2', 'url': 'http://127.0.0.12:8080/quota'}
+    attached, told = [], []
+    def exact(url, tab, exact=False): attached.append((tab, exact)); return UpPage(user='')
+    with mock.patch.object(browserview, 'pages', return_value=[{'id': 'T1', 'url': p['url']}, shown]), mock.patch.object(signin, 'Cdp', exact),          mock.patch.object(signin, '_cdp_url', return_value='ws://x'), mock.patch.object(signin, 'type_new', lambda *a: 1),          mock.patch.object(signin, 'send_new', lambda sid, site, c: c.go('data', 'https://www.rentscope.example/data') or {'ok': True}),          mock.patch.object(signin, 'SETTLE', 0), mock.patch.object(browsergate, '_tell', lambda s_, t, text, **k: told.append(text)),          mock.patch.object(browserview, 'state', return_value={'open': True, 'url': shown['url']}):
         browsergate.perform(s, tid, p)
-    assert any(e.startswith(signin.REFILL) for e in again.ran), 'the boxes filled as the agent left them'
+    assert attached == [('T1', True)], 'on the tab it was held on, never the one shown'
     assert told and told[0].startswith('The owner approved the sign-up on rentscope.example. Signed up on rentscope.example as'), told
-    assert vault.unseal(signin.saved(s, 'rentscope.example')['User']) == USER
+    with mock.patch.object(browserview, 'pages', return_value=[{'id': 'T1', 'url': shown['url']}]),          mock.patch.object(browserview, 'state', return_value={'open': True, 'url': shown['url']}), pytest.raises(RuntimeError, match='already left that page'):
+        browsergate.perform(s, tid, p)
 
 
 def test_an_agent_that_still_ends_its_turn_with_the_sign_up_marker_gets_the_commands_answer():

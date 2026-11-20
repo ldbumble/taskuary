@@ -1027,13 +1027,15 @@ STILL = "(() => { " + DEEP + " const a = deepActive(); return { href: location.h
 class Cdp:
     """One DevTools connection to a session's Chrome, attached to the tab the agent is on. A refusal is said by WHICH call, never
     with the call's parameters - one of them is the password."""
-    def __init__(self, ws_url: str, target: str):
+    def __init__(self, ws_url: str, target: str, exact: bool = False):
         from websockets.sync.client import connect
         kw = dict(open_timeout=5, max_size=8 * 1024 * 1024, logger=_QUIET)   # no Origin: Chrome refuses a browser-looking client
         try: self.ws = connect(ws_url, proxy=None, **kw)
         except TypeError: self.ws = connect(ws_url, **kw)              # websockets before 15 has no proxy setting
         self.n, self.session, self.events, self.url = 0, None, [], ws_url
-        self.session = self.call('Target.attachToTarget', {'targetId': self.tab(target), 'flatten': True}, top=True)['sessionId']
+        # the tab it is on: a held step names it (browsergate.held_tab) - and attaches to that tab only, `exact`, never a stand-in for it
+        self.target = target if exact else self.tab(target)
+        self.session = self.call('Target.attachToTarget', {'targetId': self.target, 'flatten': True}, top=True)['sessionId']
 
     def tab(self, target: str) -> str:
         """The tab to attach to: agent-browser's own word for it when that tab is still there - its .target file is not rewritten every
@@ -1450,17 +1452,23 @@ def signup(store, tid, sid) -> tuple[bool, str]:
     site = site_of(url)
     if not site: return False, ('Nothing was typed: no page a password may go on is open in this browser (https, or this computer). Open the '
                                 "site's sign-up page, fill every box but the password, and run `agent-browser signup` again.")
-    pg = browsergate.page(sid)
-    v = browsergate.judge(store, [{'verb': 'press', 'args': [], 'raw': f'send the filled sign-up form on {site}, creating an account there'}], pg,
-                          said=browsergate.asked(store, tid))[0]
     try: c = connect(sid)
     except SignInError as e: return False, f'Nothing was typed: {e}.'
     try:
+        # ...THE FORM IS THE ONE ON THE TAB THE COMMAND WORKS, by that tab's own address (walk 5, 2026-11-19: the card named one site's form while
+        # the address read was another tab's) - the card names that tab, and his press runs there only (browsergate.held_tab)
+        here = str(c.js('location.href') or '')
+        if site_of(here) and site_of(here) != site: url, site = here, site_of(here)
+        pg = browsergate.page(sid)
+        name = site_name(url, sid) or site
+        v = browsergate.judge(store, [{'verb': 'press', 'args': [], 'raw': f'send the filled sign-up form on {name}, creating an account there'}], pg,
+                              said=browsergate.asked(store, tid))[0]
         if not v['hold']: return _make(store, tid, sid, site, c)
         f = c.js(FORM) or {}
         if not f.get('password'): return False, _no_box(site)
-        proposals.queue(store, tid, {'action': 'browser_act', 'sid': str(sid), 'args': ['signup'], 'signup': site, 'url': url, 'site': site,
-                                     'fields': f.get('fields') or [], 'command': f'send the sign-up form on {site}', 'what': v['what'], 'why': v['why']}, 'agent')
+        proposals.queue(store, tid, {'action': 'browser_act', 'sid': str(sid), 'args': ['signup'], 'signup': site, 'url': here or url, 'site': site,
+                                     'name': name, **({'tab': t} if (t := getattr(c, 'target', '')) else {}), 'fields': f.get('fields') or [], 'command': f'send the sign-up form on {name}',
+                                     'what': v['what'], 'why': v['why']}, 'agent')
         return True, (f'HELD for the owner: {v["what"]} ({v["why"]}). It stands as one card in the chat; their press fills this form again as you '
                       'left it, makes and keeps the password and sends it - even after you have moved on - and you are told what the site '
                       'answered. Do not ask them in words; go on with the rest of the work.')
@@ -1554,11 +1562,15 @@ def new_account(store, tid, sid, site, rid, fill=None, watch=...) -> dict:
 def send_held(store, tid, sid, p) -> dict:
     """His press on a held sign-up's card (browsergate.perform): the form filled again where the agent has moved on, sent, and the agent told."""
     from .browsergate import _tell
+    from .browsergate import held_tab
     site, url = str(p.get('signup') or ''), str(p.get('url') or '')
+    # ...ON THE TAB IT WAS HELD ON, while that tab is on its page (browsergate.held_tab) - never the tab shown now, never another page of the
+    # site (walk 5, 2026-11-19: his yes to one site's sign-up ran on another site's page). Else nothing is sent and he reads why
+    tab = held_tab(sid, p)
     try:
-        with tab_at(sid, url) as (c, opened):
-            if opened: c.js(f'{REFILL}({json.dumps(p.get("fields") or [])})')
-            ok, line = _make(store, tid, sid, site, c, said=(got := {}))
+        c = Cdp(_cdp_url(sid), tab, exact=True) if tab else connect(sid)
+        try: ok, line = _make(store, tid, sid, site, c, said=(got := {}))
+        finally: c.close()
     except SignInError as e: ok, line, got = False, f'Nothing was sent: {e}.', {'why': str(e)}
     _tell(store, tid, f'The owner approved the sign-up on {site}. {line}', wake=True)
     # ...his card says what became of it in his words (say.owner) - the agent's own next step ("run `agent-browser signup` again") is the agent's

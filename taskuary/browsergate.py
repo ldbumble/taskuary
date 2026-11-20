@@ -424,7 +424,7 @@ def asked(store, tid) -> str:
 # wait - a sign-up's "fill && fill && check && click" was four. The line is asked once, an entry per act in order, and each entry is read
 # by the same rules an act alone was; an entry missing or out of shape holds that act, and so everything after it (check stops there).
 def _cmd(act: dict, exe: str = EXE) -> str: return ' '.join([exe, *act['args']]) if act.get('args') else act.get('raw', '')
-def _late(what: str) -> dict: return {'hold': True, 'what': what, 'why': 'the AI did not answer in time, so it waits for you'}
+def _late(what: str) -> dict: return {'hold': True, 'what': what, 'why': "Taskuary couldn't tell in time what it does, so it waits for you"}
 
 
 def timed(go, wait: float, late: list) -> list:
@@ -571,7 +571,9 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
             from . import proposals
             c = control(a, pg)
             proposals.queue(store, tid, {'action': 'browser_act', 'sid': str(sid), 'args': args, 'command': ' '.join([EXE, *args]),
-                                         'url': pg['url'], 'site': site, 'name': pg.get('name') or site, 'what': v['what'], 'why': v['why'], **({'cwd': cwd} if cwd else {}),
+                                         # ...WITH THE TAB IT WAS HELD ON (held_tab): his press runs there, and only while that tab is on this page
+                                         'url': (tab_ := _held_at(sid))[1] or pg['url'], **({'tab': tab_[0]} if tab_[0] else {}),
+                                         'site': site, 'name': pg.get('name') or site, 'what': v['what'], 'why': v['why'], **({'cwd': cwd} if cwd else {}),
                                          'keys': [step['key']],
                                          'fields': signin.form_fields(sid),
                                          **({'control': {'name': c['name'], 'role': c['role']}} if c.get('role') else {})}, 'agent')
@@ -604,43 +606,76 @@ def _deny(why: str) -> dict:
 
 
 # ── approved: run it, on the same page; dismissed: say so ─────────────────────────────────────────────────────────────────
-# A HELD STEP ITS BROWSER LEFT IS OVER, WHERE IT STOOD (the walk, 2026-11-19: an Approve looked live after the browser had moved on, and his press
-# failed "the agent's browser has moved on from the page this was held on"). A step tied to its page - a ref, a `find` on that page - cannot run
-# anywhere else: once the browser is on another page its card greys where it stood (proposals.PAGE_LEFT, no line of why) and the agent is told
-# once. A click on a named control is not: his press opens its page again and presses it there (_again), so it stays lit
-def left_page(store, tid: int, sid: str, url: str) -> list:
-    "Grey the held steps of session `sid` whose page its browser has left. -> their review ids."
+def _held_at(sid: str) -> tuple:
+    "(the tab session `sid`'s commands work, its address) as its own Chrome lists it - ('', '') when that cannot be read."
+    from . import browserview
+    tab = browserview.active_tab(sid)
+    return (tab, next((str(t.get('url') or '') for t in browserview.pages(sid) if t.get('id') == tab), '')) if tab else ('', '')
+
+
+def held_on(sid: str, p: dict, ts: list = None) -> bool | None:
+    """Whether held step `p`'s OWN TAB is still on the page it was held on - True / False, None when the browser cannot be read. ...BY ITS TAB,
+    never the page the browser shows (walk 5, 2026-11-19: a sign-up held on one site's tab stayed lit while another site's tab was shown, and
+    its Approve ran on that other site's page). An older card that named no tab is on its page while some tab of the browser is."""
+    from . import browserview
+    ts = browserview.pages(sid) if ts is None else ts
+    if not ts: return None
+    url, tab = str(p.get('url') or ''), str(p.get('tab') or '')
+    if tab: return any(t.get('id') == tab and _same_page(str(t.get('url') or ''), url) for t in ts)
+    return any(_same_page(str(t.get('url') or ''), url) for t in ts)
+
+
+LEFT = "The browser had already left that page on {name}, so nothing was done. The agent goes back and holds it again for your press."
+def left_line(p: dict) -> str: return LEFT.format(name=p.get('name') or p.get('site') or p.get('signup') or 'the site')
+
+
+def held_tab(sid: str, p: dict) -> str:
+    "The tab held step `p` runs on: the one it was held on, while it is still on that page - else RuntimeError(LEFT). Never the tab shown now."
+    from . import browserview
+    ts = browserview.pages(sid)
+    if not ts:                  # ...a browser whose tabs cannot be listed (no DevTools port of ours): its page is read the old way, never run blind
+        if _same_page(address(sid, browserview.state(sid, fresh=True)), str(p.get('url') or '')): return ''
+        raise RuntimeError(left_line(p))
+    if p.get('tab'):
+        if held_on(sid, p, ts): return str(p['tab'])
+    else:
+        on = [t for t in ts if _same_page(str(t.get('url') or ''), str(p.get('url') or ''))]
+        if len(on) == 1: return str(on[0]['id'])
+    raise RuntimeError(left_line(p))
+
+
+# A HELD STEP ITS TAB LEFT IS OVER, WHERE IT STOOD (the walk, 2026-11-19: an Approve looked live after the browser had moved on, and his press
+# failed - or ran on the page now shown). A held step runs only on its own tab while that tab is on its page (held_tab): once it is not, its
+# card greys where it stood (proposals.PAGE_LEFT, no line of why) and the agent is told once
+def left_page(store, tid: int, sid: str, url: str = '') -> list:
+    "Grey session `sid`'s held steps on task `tid` whose own tab has left its page. -> their review ids."
     from .proposals import PAGE_LEFT
-    out, said = [], []
+    from . import browserview
+    out, said, ts = [], [], None
     for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' AND DeliveryClaim IS NULL", (int(tid),)):
         try: p = json.loads(r.get('DraftText') or '{}') or {}
         except (TypeError, ValueError): continue
-        if p.get('action') != 'browser_act' or str(p.get('sid')) != str(sid) or p.get('signup') or not p.get('url') or _same_page(url, str(p['url'])): continue
-        if (p.get('control') or {}).get('name') and (p.get('args') or [''])[0] in ('click', 'dblclick'): continue
+        if p.get('action') != 'browser_act' or str(p.get('sid')) != str(sid) or not p.get('url'): continue
+        ts = browserview.pages(sid) if ts is None else ts
+        if held_on(sid, p, ts) is not False: continue                       # ...on its page, or a browser it cannot read: lit
         if store.decide_review(r['ReviewId'], 'superseded', None, 'taskuary', note=PAGE_LEFT):
             out.append(r['ReviewId']); said.append(p.get('what') or p.get('command') or 'a step')
     if out:
         store.audit('task', tid, 'cards_passed', 'taskuary', 'system', {'rids': out, 'why': PAGE_LEFT})
-        _tell(store, tid, f"Your held step ({'; '.join(said)[:300]}) is off the card: your browser left the page it was held on, so it can no "
+        _tell(store, tid, f"Your held step ({'; '.join(said)[:300]}) is off the card: the tab it was held on left that page, so it can no "
                           "longer run there. If it is still needed, go back to that page and do it again - it is held anew for the owner's press.")
     return out
 
 
 def left_now(store, tid: int) -> list:
-    """Grey task `tid`'s held steps whose browser is on another page NOW, read off each session's own Chrome (browserview.tab_url) - called
-    where the card is served and while the view watches its session, so a stale Approve is never drawn live. -> their review ids."""
-    from . import browserview
+    """Grey task `tid`'s held steps whose own tab has left its page NOW - called where the card is served and while the view watches its
+    session, so a stale Approve is never drawn live. -> their review ids."""
     sids = set()
     for r in store._rows("SELECT DraftText FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (int(tid),)):
         try: p = json.loads(r.get('DraftText') or '{}') or {}
         except (TypeError, ValueError): continue
-        if p.get('action') == 'browser_act' and p.get('sid') and not p.get('signup'): sids.add(str(p['sid']))
-    out = []
-    for sid in sids:
-        try: url = browserview.tab_url(sid)
-        except Exception: url = ''
-        if url and not url.startswith('about:'): out += left_page(store, tid, sid, url)       # ...a browser it cannot read greys nothing
-    return out
+        if p.get('action') == 'browser_act' and p.get('sid'): sids.add(str(p['sid']))
+    return [rid for sid in sids for rid in left_page(store, tid, sid)]
 
 
 def _same_page(a: str, b: str) -> bool: return a.split('#', 1)[0].rstrip('/') == b.split('#', 1)[0].rstrip('/')
@@ -688,18 +723,11 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
     st = browserview.state(sid, fresh=True)
     # ...and the way on, said: the same Approve stayed and failed every time, with nothing saying Dismiss it (2026-10-25)
     if not st.get('open'): raise RuntimeError(f"the agent's browser is closed - nothing was done. {AGAIN}")
-    here = address(sid, st)
-    if not here or not p.get('url'):
-        raise RuntimeError(f"Taskuary could not read which page the agent's browser is on, so it could not check it is still on "
-                           f"{p.get('name') or p.get('site') or 'the page'} - nothing was done. {AGAIN}")
-    # ...HIS PRESS IS TIED TO THE JOB, NOT TO THE AGENT'S TAB (the vendor walk, 2026-11-19: "the agent's browser has moved on from the page this was
-    # held on - nothing was done"): the page is opened again in a tab of Taskuary's own, its boxes filled as the agent left them, and the control
-    # pressed there by its role and name
-    if not _same_page(here, str(p.get('url') or '')):
-        if (p.get('control') or {}).get('name') and args[0] in ('click', 'dblclick'): return _again(store, tid, sid, p)
-        # ...one that slipped through before its card greyed (left_now) says so in his words, and who moves next - never a dead end
-        raise RuntimeError(f"The browser had already left that page on {p.get('name') or p.get('site') or 'the site'}, so nothing was done. "
-                           "The agent goes back and holds it again for your press.")
+    # ...ON THE TAB IT WAS HELD ON, AND ONLY WHILE THAT TAB IS ON ITS PAGE (walk 5, 2026-11-19: his yes to one site's step ran on another
+    # site's page, the tab then shown): never whatever tab is active - that tab is made the one the command works, or nothing runs
+    tab = held_tab(sid, p)
+    if tab and browserview.active_tab(sid) != tab and not browserview.switch_tab(sid, tab): raise RuntimeError(left_line(p))
+    here = str(p.get('url') or '')
     # ...AND THE REF STILL NAMES THE CONTROL IT WAS HELD ON: a page that re-draws itself on one address (a checkout's next step, a list that
     # reloaded) gives @e12 to another control at its next snapshot, and the owner's yes to "Continue" clicked "Remove item"
     if (was := p.get('control')) and (now := control({'args': args}, page(sid))) and (now.get('role'), now.get('name')) != (was.get('role'), was.get('name')):
@@ -729,62 +757,6 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
                                                           'said': now or said[-300:]})
     overcome(store, tid, p.get('site'), f"Done on a later try: {p.get('what') or p.get('command')}", command=str(p.get('command') or ''))
     return {'performed': p.get('what') or p.get('command'), 'site': p.get('site'), 'page': now}
-
-
-PRESS_JS = r"""((role, name) => { const norm = (t) => String(t || '').replace(/\s+/g, ' ').trim().toLowerCase(), want = norm(name);
-  const sel = role === 'link' ? 'a[href], [role=link]' : role === 'button' ? 'button, input[type=submit], input[type=button], input[type=image], [role=button]'
-    : '[role=' + role + '], ' + role;
-  const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 1 && r.height > 1 && !e.disabled; };
-  const said = (e) => norm(e.innerText || e.value || e.getAttribute('aria-label') || e.title);
-  const el = [...document.querySelectorAll(sel)].filter(vis).find((e) => said(e) === want);
-  if (!el) return false; el.click(); return true; })"""
-
-
-def _again(store, tid: int, sid: str, p: dict) -> dict:
-    "The held click done on its own page again: opened in a tab of Taskuary's own, filled as the agent left it, pressed, and read."
-    from . import signin
-    ctl, site = p['control'], p.get('name') or p.get('site') or 'its site'
-    try:
-        with signin.tab_at(sid, str(p.get('url') or '')) as (c, _):
-            c.js(f"{signin.REFILL}({json.dumps(p.get('fields') or [])})")
-            signin.pressing(store, tid, sid, signin.site_of(p.get('url')), conn=c)
-            try: c.js(signin.LEAVING)
-            except signin.SignInError: pass
-            if not c.js(f'{PRESS_JS}({json.dumps(ctl.get("role") or "button")}, {json.dumps(ctl["name"])})'):
-                signin._PRESSED.pop(str(sid), None)
-                raise RuntimeError(f'the page this was held on was opened again, and its {ctl.get("role") or "control"} "{ctl["name"]}" is not on it '
-                                   f'any more - nothing was done. {AGAIN}')
-            status = signin.answered(c, SETTLE_WAIT)
-            kept = signin.settled(store, sid, conn=c)
-            now, title = str(c.js('location.href') or ''), str(c.js('document.title') or '')
-    except signin.SignInError as e: raise RuntimeError(f'the page this was held on could not be opened again ({e}) - nothing was done. {AGAIN}')
-    how = f'answered with an error (HTTP {status})' if status and status >= 400 else 'did not answer' if status is None else f'now shows "{title}" ({now})'
-    _tell(store, tid, f"The owner approved it. Your browser had moved on, so Taskuary opened {p.get('url')} again in a tab of its own, filled it "
-                      f"as you had left it and pressed the \"{ctl['name']}\" {ctl.get('role') or 'control'}: the site {how}. That tab is closed; "
-                      f"what it did stands on {site}. {kept} " + NEXT, wake=True)
-    store.audit('task', tid, 'browser_act_done', 'owner', 'human', {'site': p.get('site'), 'what': p.get('what'), 'again': True, 'said': now})
-    return {'performed': p.get('what') or p.get('command'), 'site': p.get('site'), 'page': now}
-
-
-# THE OWNER'S NO IS SAID AS THEIRS, AND ONCE (agent walk 2, 2026-11-10): Reject on a held push reached the agent as the adapter's "User
-# refused permission to run tool" - the sentence it also gets when Taskuary blocks a step by itself - so it ended its turn asking for the
-# same push again. One sentence for every road a no comes by (a dismissed card, the held steps of a turn, the Allow/Reject buttons)
-OWNER_NO = ("That is the owner's own answer, not a block of Taskuary's. Do not try it another way and do not ask for the same step again - "
-            'carry on without it, and ask only if you need to know what they want instead.')
-def not_approved(what) -> str: return f'The owner did not approve it: {what} was NOT done. {OWNER_NO}'
-def declined(store, tid: int, p: dict) -> None:
-    from . import actrule
-    actrule.remember(store, tid, p.get('keys'), 'dismissed')
-    _tell(store, tid, not_approved(p.get('what') or p.get('command')))
-
-
-# the turn an approval wakes says what happened. ...AND NOTHING ABOUT WHAT DID NOT (agent walk 2, 2026-11-10): told "(with its link, if it
-# gave one)", the agent closed every sent mail with "No link came back with it."
-# ...AS FAR AS THE RESULT GOES (a walk, 2026-11-18): told "what it did" after a payment note was sent, the agent said "Accounts Payable
-# received the payment request" - a mail that went is sent, not read, and nobody had answered
-NEXT = ('Tell the owner in a line what it did, as far as the result shows - something sent is sent, never received, read or acted on until '
-        'someone answers - and what comes next, then carry on. A link the result gave goes in that line; where it gave none, say nothing '
-        'about links.')
 
 
 def _tell(store, tid: int, text: str, wait: bool = False, wake: bool = False) -> None:
@@ -922,6 +894,7 @@ def shown_ask(req: dict | None) -> dict | None:
     return {**req, 'text': GONE_LINE.format(again=again), 'choices': [again], 'gone': True}
 
 
+_DONE_AT = {}
 def done(store, tid: int, rid: str) -> bool:
     """THE VIEW'S DONE IS THE OWNER'S PRESS (the spine audit, 2026-11-09). It went to a chat as words typed in their name - a bubble they
     never wrote, a turn of its own, known here only by matching those words. It closes the hand-over as the page moving on does, and the
@@ -932,7 +905,14 @@ def done(store, tid: int, rid: str) -> bool:
     req = next((r for r in ws.open_requests(ws.events(store, tid)) if r['RequestId'] == rid), None)
     lost = bool(req) and gone(req['Sid'])
     h = _close(store, tid, rid, 'Try again' if lost else browserview.TURN_DONE)
-    if not h: return False
+    # ...A PRESS ON A HAND-OVER ALREADY CLOSED IS STILL HIS PRESS (walk 5, 2026-11-19: "I'm done" left no line and nothing moved for a minute -
+    # the watch had closed the hand-over a beat before): a line in his voice, and the agent told to look and go on - never a press into nothing
+    if not h:
+        if time.time() - _DONE_AT.get(int(tid), 0) < 10: return True          # ...a second press of the same Done: said once
+        _DONE_AT[int(tid)] = time.time()
+        store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': 'the page', 'btn': '', 'by': 'done'})
+        _tell(store, tid, f"The owner pressed {browserview.TURN_DONE} on the page. Look at it as it is now and continue.", wake=True)
+        return True
     if lost:
         store.audit('task', tid, 'browser_act_not_pressed', 'owner', 'human', {'site': h['site'], 'why': 'the page had closed'})
         url = browserview.last_page(tid) or 'its address'
@@ -944,6 +924,7 @@ def done(store, tid: int, rid: str) -> bool:
     # the tab shown - so the browser goes back to the step's own tab before the agent is told to look
     if h.get('tab'): browserview.switch_tab(h['sid'], h['tab'])
     step = f"the step you handed them ({h.get('what') or 'on the page'})"
+    _DONE_AT[int(tid)] = time.time()
     store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': h['site'], 'btn': '', 'by': 'done'})
     _tell(store, tid, f"The owner pressed {browserview.TURN_DONE}: they say they finished {step} on the page. Taskuary did not see the page move - "
                       "look at it as it is now and continue.", wake=True)

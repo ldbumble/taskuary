@@ -350,37 +350,37 @@ class Holding(unittest.TestCase):
         self.assertIn('The owner approved it', self.heard()[0]); self.assertIn('agent-browser click @e12', self.told[0])
         self.assertEqual(self.pending(), [])
 
-    def test_a_click_held_on_a_page_the_agent_left_is_pressed_there_again(self):
-        """The vendor walk, 2026-11-19: "the agent's browser has moved on from the page this was held on - nothing was done" - his Approve could
-        not succeed, because the hold was tied to a tab the agent had left. His press is tied to the job: the page is opened again in a tab of
-        Taskuary's own, its boxes filled as the agent left them, and the control pressed there by its role and name."""
-        from taskuary import signin
-        self.held(); [rv] = self.pending()
-        class Tab:
-            def __init__(s, there=True): s.there, s.ran = there, []
-            def js(s, expr):
-                s.ran.append(expr)
-                if expr.startswith(bg.PRESS_JS): return s.there
-                return {'location.href': 'https://pay.toll.example/checkout/done', 'document.title': 'Thank you', 'document.readyState': 'complete',
-                        bg.STATUS_JS: {'status': 200}}.get(expr, False if 'tqLeaving' in expr else None)
-            def __enter__(s): return s, True
-            def __exit__(s, *a): pass
-        tab = Tab()
-        with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': 'https://pay.toll.example/checkout/other'}),                 mock.patch.object(bg, '_run') as run, mock.patch.object(signin, 'tab_at', lambda sid, url: tab),                 mock.patch('taskuary.workerstate._live', return_value=self.sess):
+    def test_his_yes_runs_only_on_the_tab_it_was_held_on_while_that_tab_is_on_its_page(self):
+        """Walk 5, 2026-11-19: a sign-up held on one site's tab stayed lit while another site's tab was shown, and his Approve ran on that other
+        site's page. A held step names its tab; Approve runs there only (switched to it if another is shown), and refuses where that tab left
+        its page - in plain words, the card over, the agent told."""
+        with mock.patch.object(browserview, 'active_tab', return_value='T1'),                 mock.patch.object(browserview, 'pages', return_value=[{'id': 'T1', 'url': CHECKOUT, 'type': 'page'}]):
+            self.held()
+        [rv] = self.pending(); p = json.loads(rv['DraftText'])
+        self.assertEqual((p['tab'], p['url']), ('T1', CHECKOUT))
+        other = {'id': 'T2', 'url': 'http://127.0.0.12:8080/quota', 'type': 'page'}
+        switched = []
+        with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': other['url']}),                 mock.patch.object(browserview, 'pages', return_value=[{'id': 'T1', 'url': CHECKOUT, 'type': 'page'}, other]),                 mock.patch.object(browserview, 'active_tab', side_effect=lambda sid: switched[-1] if switched else 'T2'),                 mock.patch.object(browserview, 'switch_tab', side_effect=lambda sid, t: switched.append(t) or True),                 mock.patch.object(bg, 'page', return_value={'url': CHECKOUT, 'open': True, 'elements': SNAP}),                 mock.patch.object(bg, '_run', return_value=(0, 'done')) as run, mock.patch('taskuary.workerstate._live', return_value=self.sess):
             out = verdicts.decide(self.s, rv, 'approve')
-        self.assertTrue(out['ok'], out); run.assert_not_called()
-        self.assertTrue(any(e.startswith(signin.REFILL) for e in tab.ran))
-        self.assertIn(f'{bg.PRESS_JS}("button", "Continue")', tab.ran)
-        said = self.heard()[0]
-        self.assertIn('opened https://pay.toll.example/checkout/review again in a tab of its own', said); self.assertIn('"Thank you"', said)
-        # ...and a page that no longer shows that control: nothing pressed, said so, the card over - on another task, since his yes to this
-        # press on this site stands for the task he gave it on (actrule.remember), and there it would run with no card at all
+        self.assertTrue(out['ok'], out); self.assertEqual(switched, ['T1']); run.assert_called_once()     # on its own tab, never the one shown
+        # ...and where its tab has left its page: nothing runs, said plainly
         self.tid = Factory(self.s).task('Pay the parking invoice')
-        self.held(); [rv] = self.pending(); gone = Tab(there=False)
-        with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': 'https://pay.toll.example/checkout/other'}),                 mock.patch.object(signin, 'tab_at', lambda sid, url: gone):
+        with mock.patch.object(browserview, 'active_tab', return_value='T1'),                 mock.patch.object(browserview, 'pages', return_value=[{'id': 'T1', 'url': CHECKOUT, 'type': 'page'}]):
+            self.held()
+        [rv] = self.pending()
+        with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': other['url']}),                 mock.patch.object(browserview, 'pages', return_value=[{'id': 'T1', 'url': other['url'], 'type': 'page'}]),                 mock.patch.object(bg, '_run') as run, mock.patch('taskuary.workerstate._live', return_value=self.sess):
             out = verdicts.decide(self.s, rv, 'approve')
-        self.assertFalse(out['ok']); self.assertIn('is not on it any more - nothing was done', out['send_error'])
-        self.assertEqual(self.pending(), [], 'over, its error kept - the agent holds it anew (the owner, 2026-11-16: no Try again)')
+        self.assertFalse(out['ok']); run.assert_not_called()
+        self.assertIn('already left that page', out['send_error']); self.assertIn('holds it again', out['send_error'])
+
+    def test_a_held_step_greys_when_its_own_tab_leaves_its_page_whatever_tab_is_shown(self):
+        with mock.patch.object(browserview, 'active_tab', return_value='T1'),                 mock.patch.object(browserview, 'pages', return_value=[{'id': 'T1', 'url': CHECKOUT, 'type': 'page'}]):
+            self.held()
+        with mock.patch.object(browserview, 'pages', return_value=[{'id': 'T1', 'url': CHECKOUT}, {'id': 'T2', 'url': 'http://127.0.0.12/q'}]),                 mock.patch.object(bg, '_tell'):
+            self.assertEqual(bg.left_now(self.s, self.tid), [])                    # another tab shown: its own is on its page, lit
+        with mock.patch.object(browserview, 'pages', return_value=[{'id': 'T1', 'url': 'https://pay.toll.example/receipt'}]), mock.patch.object(bg, '_tell'):
+            [rid] = bg.left_now(self.s, self.tid)
+        self.assertTrue(proposals.passed(self.s.get_review(rid)))
 
     def test_a_held_upload_runs_in_the_agents_folder_on_approve(self):
         """`upload @e5 ./resume.pdf` held and approved ran from the SERVER's folder: the relative path named another file, or none, and a held
@@ -736,20 +736,19 @@ def test_a_step_found_by_what_it_is_is_named_for_him_never_as_the_command():
     assert not v['what'].lower().startswith('agent-browser')
 
 
-def test_a_held_step_its_browser_left_greys_where_it_stood_and_the_agent_is_told():
+def test_a_held_step_its_tab_left_greys_where_it_stood_and_the_agent_is_told():
     s, told = MemoryStore(), []
     tid = Factory(s).task('Sign up on the vendor portal')
-    proposals.queue(s, tid, {'action': 'browser_act', 'sid': 'run1', 'args': ['find', 'role', 'button', 'click', '--name', 'Next'], 'url': CHECKOUT,
-                             'site': 'toll.example', 'what': 'click the "Next" button on toll.example', 'why': 'x'}, 'agent')
-    proposals.queue(s, tid, {'action': 'browser_act', 'sid': 'run1', 'args': ['click', '@e12'], 'url': CHECKOUT, 'site': 'toll.example',
-                             'control': {'name': 'Continue', 'role': 'button'}, 'what': 'click Continue', 'why': 'x'}, 'agent')
+    for args in (['find', 'role', 'button', 'click', '--name', 'Next'], ['click', '@e12']):        # a named click too: its tab is its page
+        proposals.queue(s, tid, {'action': 'browser_act', 'sid': 'run1', 'args': args, 'url': CHECKOUT, 'tab': 'T1', 'site': 'toll.example',
+                                 'what': f'step {args[-1]}', 'why': 'x'}, 'agent')
     with mock.patch.object(bg, '_tell', side_effect=lambda st, t, text, **k: told.append(text)):
-        assert bg.left_page(s, tid, 'run1', CHECKOUT) == []                                  # still on its page: lit
-        [gone] = bg.left_page(s, tid, 'run1', 'https://pay.toll.example/receipt')
-    rv = s.get_review(gone)
-    assert rv['Status'] == 'superseded' and proposals.passed(rv) and proposals.passed_why(s, rv) == ''
-    assert len([r for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (tid,))]) == 1   # a named click is pressed on its page again
-    assert len(told) == 1 and 'left the page' in told[0]
+        with mock.patch.object(browserview, 'pages', return_value=[{'id': 'T1', 'url': CHECKOUT}]): assert bg.left_page(s, tid, 'run1') == []
+        with mock.patch.object(browserview, 'pages', return_value=[]): assert bg.left_page(s, tid, 'run1') == []     # unread: nothing greys
+        with mock.patch.object(browserview, 'pages', return_value=[{'id': 'T1', 'url': 'https://pay.toll.example/receipt'}]):
+            gone = bg.left_page(s, tid, 'run1')
+    assert len(gone) == 2 and all(proposals.passed(s.get_review(r)) and proposals.passed_why(s, s.get_review(r)) == '' for r in gone)
+    assert len(told) == 1 and 'left that page' in told[0]
 
 
 def test_his_done_on_the_page_is_a_line_in_the_chat_even_under_a_turn_at_work():
@@ -757,13 +756,12 @@ def test_his_done_on_the_page_is_a_line_in_the_chat_even_under_a_turn_at_work():
     assert 'browser_act_pressed' in chatlog.AT_ONCE
 
 
-def test_a_held_step_greys_when_the_task_is_read_after_its_browser_left_the_page():
+def test_a_held_step_greys_when_the_task_is_read_after_its_tab_left_the_page():
     # the merge blocker (2026-11-19): greyed when it is served, not at the agent's next command
     s = MemoryStore(); tid = Factory(s).task('Sign up on the vendor portal')
     proposals.queue(s, tid, {'action': 'browser_act', 'sid': 'run1', 'args': ['find', 'role', 'button', 'click', '--name', 'Next'], 'url': CHECKOUT,
-                             'site': 'toll.example', 'what': 'click the "Next" button on toll.example', 'why': 'x'}, 'agent')
-    with mock.patch.object(browserview, 'tab_url', return_value=CHECKOUT), mock.patch.object(bg, '_tell'): assert bg.left_now(s, tid) == []
-    with mock.patch.object(browserview, 'tab_url', return_value=''), mock.patch.object(bg, '_tell'): assert bg.left_now(s, tid) == []   # unread: nothing greys
-    with mock.patch.object(browserview, 'tab_url', return_value='https://pay.toll.example/receipt'), mock.patch.object(bg, '_tell') as told:
-        [rid] = bg.left_now(s, tid)
+                             'tab': 'T1', 'site': 'toll.example', 'what': 'click the "Next" button on toll.example', 'why': 'x'}, 'agent')
+    with mock.patch.object(browserview, 'pages', return_value=[{'id': 'T1', 'url': CHECKOUT}]), mock.patch.object(bg, '_tell'): assert bg.left_now(s, tid) == []
+    with mock.patch.object(browserview, 'pages', return_value=[{'id': 'T2', 'url': CHECKOUT}]), mock.patch.object(bg, '_tell') as told:
+        [rid] = bg.left_now(s, tid)                                         # its own tab gone - another tab on the same address is not it
     assert proposals.passed(s.get_review(rid)) and told.call_count == 1

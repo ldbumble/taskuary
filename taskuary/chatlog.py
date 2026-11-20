@@ -703,6 +703,13 @@ def opener(store, tid: int, at: float = None) -> None:
                                                'at': t.get('CreatedAt'), 'files': 0, 'words': by['words']}, src='started', at=at)
 
 
+def _waits_from(store, tid: int):
+    "When his oldest line still waiting for the agent was typed (epoch), or None - what comes in after it waits with it (came_in)."
+    from . import general
+    ws = general.waiting_lines(store, int(tid))
+    return min(_when(w['at']) for w in ws) if ws else None
+
+
 @_safe
 def came_in(store, tid: int) -> None:
     """WHAT CAME IN WHILE NOTHING WORKED is appended at the foot as it is found (a turn at work hears it at its end - `heard` - and until then
@@ -720,6 +727,9 @@ def came_in(store, tid: int) -> None:
     from . import origin
     held = set((origin.hold(store, tid) or {}).get('mids') or [])
     new = [x for x in _mail(store, tid) if (x.get('Channel') or '') != OWN and f"m:{x['MessageId']}" not in have and x['MessageId'] not in held]
+    # ...AND NEVER WHAT CAME AFTER A LINE OF HIS THAT STILL WAITS (the recorded flood, 2026-11-11 - "34, 31, 46"): from his oldest waiting line on,
+    # what comes in waits by the box with it, and the hand-over that takes them writes each in the order it came
+    if (first := _waits_from(store, tid)) is not None: new = [x for x in new if _when(x.get('SentAt') or x.get('CreatedAt')) < first]
     if not new: return
     # ...older by its OWN time (sent, else filed) - joined now, a thread from last week reads as now by when it joined
     # ...by more than a mail held up on its way takes (EARLIER): one a sender's clock or a slow server put a minute back stands as it came
@@ -1079,7 +1089,7 @@ def beside(store, tid: int, out: list, at_work: bool, hold_) -> dict:
     drawn = {x['id'] for x in out}
     led = {(r['Kind'], r['Ref']) for r in store._rows('SELECT Kind, Ref FROM heard WHERE TaskId=?', (tid,))}
     held = set((hold_ or {}).get('mids') or [])
-    pend = []
+    pend, waits = [], _waits_from(store, tid) is not None
     for c in store.list_comments(tid, internal=True):
         k = c.get('LineId') or f"c:{c['CommentId']}"
         # ...AND ONE A TURN HAS TAKEN BUT ITS HAND-OVER HAS NOT YET WRITTEN INTO THE CHAT (store.take_lines, then hear): still by the box -
@@ -1089,7 +1099,7 @@ def beside(store, tid: int, out: list, at_work: bool, hold_) -> dict:
         pend.append({'id': k, 'kind': 'line', 'at': c['CreatedAt'], **general.his_line(c), '_k': came(c)})
     for x in _mail(store, tid):
         k = f"m:{x['MessageId']}"
-        if (x.get('Channel') or '') == OWN or k in drawn or ('mail', str(x['MessageId'])) in led or not (at_work or x['MessageId'] in held): continue
+        if (x.get('Channel') or '') == OWN or k in drawn or ('mail', str(x['MessageId'])) in led or not (at_work or x['MessageId'] in held or waits): continue
         pend.append({'id': k, 'kind': 'arrival', **general.mail_row(store, x), 'joined': stamp(x['T']), '_k': came(x)})
     if at_work:
         for m in general.press_lines(store, tid):

@@ -252,11 +252,13 @@ if __name__ == '__main__':
 class TypingIsTheStart(unittest.TestCase):
     def test_what_is_typed_in_a_reply_tasks_box_makes_it_the_general_agents_and_a_coding_task_stays(self):
         """ONE PROMPT BOX (the owner, 2026-11-06): no Send to agent form - the box's words start the general agent, as the dispatch did."""
-        from taskuary import server
+        from taskuary import general, server
         tid = c.post('/api/tasks', json={'Title': 'confirm the cutover', 'Kind': 'reply'}).json()['taskId']
-        server._chat_kind(tid)
+        try: general.take_line(server.store, tid, 'Confirm the cutover with them.', line_id='l-cut')   # ...the one road his line takes, every door
+        except RuntimeError: pass                                                                     # (no AI here: the start says so; the kind moved first)
         self.assertEqual(_task(tid)['Kind'], 'general')
         code = c.post('/api/tasks', json={'Title': 'fix the import', 'Kind': 'coding'}).json()['taskId']
-        server._chat_kind(code)
+        try: general.take_line(server.store, code, 'Look at the import.', line_id='l-code')
+        except Exception: pass                                                                        # (no coding tool here either)
         self.assertEqual(_task(code)['Kind'], 'coding')
         self.assertEqual(c.get(f'/api/tasks/{code}/assistant').status_code, 422)

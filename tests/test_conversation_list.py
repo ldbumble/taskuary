@@ -303,13 +303,11 @@ class TheList(unittest.TestCase):
         general.wait_line(self.s, self.tid, 'Near a station.', line_id='l-w')               # kept: nobody has taken it yet, nothing is at work
         new = self.mail('After his line.')
         got = self.list()
-        # ...at rest a message is drawn as it comes (chatlog.came_in) and his kept line waits by the box: once taken it enters UNDER what is
-        # drawn - nothing drawn ever moves for it
-        self.assertEqual([x['id'] for x in got['pending']], ['l-w']); drawn = [x['id'] for x in got['items']]
-        self.assertIn(f'm:{old}', drawn); self.assertIn(f'm:{new}', drawn)
+        self.assertEqual([x['id'] for x in got['pending']], ['l-w', f'm:{new}']); drawn = [x['id'] for x in got['items']]
+        self.assertIn(f'm:{old}', drawn)
         general.take_kept(self.s, self.tid, turn=True)
         now = [x['id'] for x in self.list()['items'] if not x['id'].startswith('t:')]
-        self.assertEqual(now, [*drawn, 'l-w'])
+        self.assertEqual(now, [*drawn, 'l-w', f'm:{new}'])
 
     def test_his_close_is_one_line_with_its_note(self):
         """The recorded closed task, 2026-11-12: "You marked it done" and right under it the page's own "Mark done 4m ago" - one press, two

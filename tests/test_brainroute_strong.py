@@ -35,7 +35,8 @@ def test_the_strong_gear_runs_the_strong_model():
 def test_a_blank_strong_gear_is_no_strong_tier_and_never_the_light_one():
     s = _cli_store(model='sonnet', light_model='haiku')
     assert _ran(s, 'strong') == 'sonnet'
-    assert brainroute.strong_of(s, 'cli:claude', {'cli_connections': {'claude': {'cmd': 'claude', 'model': 'sonnet'}}}) == ''
+    # ...where the router asks for one, a blank box on Claude Code is its opus at high effort (climodels.gears, the owner's ruling 2026-11-20)
+    assert brainroute.strong_of(s, 'cli:claude', {'cli_connections': {'claude': {'cmd': 'claude', 'model': 'sonnet'}}}) == 'opus@high'
 
 
 def test_an_api_card_s_strong_gear_is_swapped_in_for_the_call():

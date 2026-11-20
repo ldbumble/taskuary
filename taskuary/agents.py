@@ -4,7 +4,7 @@ over STDIN (argv length limits are real on Windows), JSON output parsed when ava
 (Claude-style {result, session_id} -> resumable sessions), git diff captured around the
 run so code changes are first-class, every run traced + audited.
 """
-import contextlib, contextvars, json, os, re, shutil, subprocess, threading, time
+import atexit, contextlib, contextvars, hashlib, json, os, re, shutil, subprocess, threading, time
 from datetime import datetime
 from pathlib import Path
 from loguru import logger
@@ -1552,6 +1552,9 @@ def claude_acp_options(args: list) -> dict:
                 extra[a.lstrip('-')] = None
                 if nxt is not None: back.append(nxt)
     if extra: opt['extraArgs'] = extra
+    # ...and NO PREDICTED NEXT PROMPT (claude-agent-acp turns promptSuggestions on: one more model call after every turn, for a composer's gray
+    # text nothing of Taskuary draws - the speed round, 2026-11-20)
+    opt['promptSuggestions'] = False
     return opt
 
 
@@ -1595,6 +1598,8 @@ def acp_launch(profile: dict) -> dict:
     # ...but only the PINNED one (acpadapter.runs_pinned): a global left by an older release speaks what that release spoke, so npx
     # fetches the pinned version instead and the card's line offers Update
     if own and not acpadapter.runs_pinned(ad, own): own = None
+    # ...else TASKUARY'S OWN PINNED COPY (acpadapter.kept), fetched once behind the first start that had none - npx only until it is there
+    if not own and not profile.get('acp_cmd') and not (own := acpadapter.kept(ad)): acpadapter.keep_soon(ad)
     # ...and no npx is a start failure, not a missing CLI: the owner's claude is there, and the argv road runs it (a machine with no
     # Node on PATH answered every general turn "'npx' not found on PATH" and nothing else - 2026-11-06)
     try: cmd = list(profile.get('acp_cmd') or ([own] if own else _resolve_cmd('npx') + ['-y', ad['pkg']]))
@@ -1641,16 +1646,62 @@ def said_afresh(store, task_id) -> None:
     try: store.add_comment(task_id, sessionrecord.NOTE_ACTOR, general.ASSISTANT_TYPE, GONE_LINE)
     except Exception as e: logger.debug(f'task {task_id}: the fresh start was not said - {e}')
 
-def _acp_open(name: str, launch: dict, cwd, env: dict, resume, timeout, trace, fresh_if_gone: bool = False):
+# A CONNECTOR STARTED AHEAD (the speed round, 2026-11-20: every new task's agent waited ~1 s for claude's adapter to start and initialise,
+# before its session even began). Claude's adapter takes a session's own environment with the session (_meta.claudeCode.options.env -
+# claude-agent-acp hands it to the CLI it starts), so the adapter process itself carries nothing of any task: one is started and
+# initialised ahead, the next task's session opens on it, and the next is started behind it. One per launch, never shared.
+_ACP_SPARE, _ACP_SPARE_LOCK = {}, threading.Lock()
+
+
+def _spare_key(cmd, env: dict, timeout) -> str:
+    return hashlib.sha1(json.dumps([list(cmd), sorted(env.items()), timeout]).encode('utf-8')).hexdigest()[:16]
+
+
+def _acp_ready(cmd, env: dict, timeout) -> None:
+    "Start and initialise the next connector for this launch, in the background."
+    key = _spare_key(cmd, env, timeout)
+    def go():
+        try:
+            from . import config
+            c = acp_mod.ACPClient(cmd[0], cmd[1:], cwd=str(config.home()), env=env, timeout=timeout); c.connect()
+        except Exception as e: logger.debug(f'acp: no connector started ahead - {e}'); return
+        with _ACP_SPARE_LOCK: old = _ACP_SPARE.pop(key, None); _ACP_SPARE[key] = c
+        if old: old.close()
+    threading.Thread(target=go, daemon=True, name='acp-spare').start()
+
+
+def _acp_spare(cmd, env: dict, timeout):
+    "The connector started ahead for this launch, initialised and alive - or None."
+    with _ACP_SPARE_LOCK: c = _ACP_SPARE.pop(_spare_key(cmd, env, timeout), None)
+    if c is not None and not c._alive: c.close(); c = None
+    return c
+
+
+@atexit.register
+def _close_spares():
+    with _ACP_SPARE_LOCK: gone = list(_ACP_SPARE.values()); _ACP_SPARE.clear()
+    for c in gone: c.close()
+
+
+def _acp_open(name: str, launch: dict, cwd, env: dict, resume, timeout, trace, fresh_if_gone: bool = False, base: dict = None):
     """A connected session, ready for a prompt: started, initialized, the conversation opened (resumed where there is one),
     its mode, model and effort set. ACPStartError for anything before the session exists - nothing has run, so run_cli takes
-    the argv road instead."""
-    try: client = acp_mod.ACPClient(launch['cmd'][0], launch['cmd'][1:], cwd=cwd, env=env, timeout=timeout)
+    the argv road instead. `base`: the environment with nothing of this task in it - given, claude's adapter runs on it (one started
+    ahead where there is one) and the task's own part rides with its session."""
+    spare = base is not None and bool(launch['adapter']) and _cli_name(name) == 'claude'
+    if spare:
+        own = {k: v for k, v in env.items() if base.get(k) != v}
+        launch = {**launch, 'meta': {'claudeCode': {**((launch['meta'] or {}).get('claudeCode') or {}),
+                                                    'options': {**(((launch['meta'] or {}).get('claudeCode') or {}).get('options') or {}), 'env': own}}}}
+        client, env = _acp_spare(launch['cmd'], base, timeout), base
+    else: client = None
+    try: client = client or acp_mod.ACPClient(launch['cmd'][0], launch['cmd'][1:], cwd=cwd, env=env, timeout=timeout)
     except PermissionError as e:
         if launch['adapter']: raise acp_mod.ACPStartError(f"{launch['adapter']} was refused: {e}") from e   # the adapter, not the CLI
         raise FileNotFoundError(denied_msg(name, launch['cmd'][0], e)) from e
+    if spare: _acp_ready(launch['cmd'], base, timeout)              # ...the next task's, started now
     try:
-        caps = client.connect()
+        caps = client._caps if client._caps else client.connect()
         try:
             if resume and (caps.get('loadSession') or client.can_resume()):
                 try: client.load_session(resume, cwd, meta=launch['meta'])
@@ -1734,10 +1785,10 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     """
     profile = with_cmd(profile, store); name = profile['cmd']
     launch, cwd, keep = acp_launch(profile), _long(profile.get('cwd')), profile.get('keep_alive')
-    env = {**spawn_env(profile, extra_env), **launch['env']}
+    env, base = {**spawn_env(profile, extra_env), **launch['env']}, {**spawn_env(profile), **launch['env']}
     from . import acpgate, clipool
     sig = _acp_sig(launch, cwd, env)
-    opener = lambda: acp_mod.Conversation(_acp_open(name, launch, cwd, env, resume, profile.get('timeout'), trace, fresh_if_gone=True), sig)
+    opener = lambda: acp_mod.Conversation(_acp_open(name, launch, cwd, env, resume, profile.get('timeout'), trace, fresh_if_gone=True, base=base), sig)
     conv = clipool.take(keep, sig, opener, resume) if keep else opener()      # ...its turn read opening from its start where none was up (general.cold)
     client = conv.client
     # ...ITS CONVERSATION WAS GONE: nothing is asked of the fresh one here - this turn's words assume what it no longer has. The caller says the
@@ -1886,6 +1937,9 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     keep = profile.get('keep_alive')
     if _keeps(profile, family, args):
         return _run_live(profile, name, cmd, prompt, trace, keep, resume, cancel, extra_env)
+    # ...and a ONE-SHOT JUDGEMENT on a process already up (clipool.spare_turn): no tools, no conversation to resume, no picture to show
+    if _spares(profile, family, args, resume, images):
+        return _run_live(profile, name, cmd, prompt, trace, None, None, cancel, extra_env, spare=True)
     # A PICTURE IS SHOWN, NOT NAMED (2026-11-09): triage on claude has no tools to open a file, so a screenshot-only chat line was judged
     # blind and became its own task beside the one it was about. Claude's stream-json input takes image blocks, as the API does
     # ...and Codex's exec takes them as files: each written to a private temp file for the run and removed after it, as the devin prompt is
@@ -2160,6 +2214,13 @@ def _keeps(profile: dict, family: str, args: list) -> bool:
     return bool(profile.get('keep_alive')) and family == 'claude' and 'stream-json' in args and ('-p' in args or '--print' in args)
 
 
+def _spares(profile: dict, family: str, args: list, resume, images) -> bool:
+    "A one-shot claude call with every tool off (`--tools ''`: triage, a summary, a judge) - one a process started ahead can answer."
+    bare = '--tools' in args and args.index('--tools') + 1 < len(args) and args[args.index('--tools') + 1] == ''
+    return (bare and family == 'claude' and not profile.get('keep_alive') and not resume and not images and 'stream-json' in args
+            and ('-p' in args or '--print' in args) and '--input-format' not in args)
+
+
 def warm_cli(profile: dict, resume: str = None, extra_env: dict = None, store=None, swap: bool = False) -> bool:
     """Start a kept conversation's process ahead of its first turn (clipool.warm) - the command run_cli's live road would
     launch for this profile, so that turn finds it running. False for a profile that keeps no conversation (a one-shot
@@ -2181,22 +2242,22 @@ def _warm_acp(profile: dict, resume, extra_env, store, swap: bool) -> bool:
     from . import clipool
     try:
         name, launch, cwd = profile['cmd'], acp_launch(profile), _long(profile.get('cwd'))
-        env = {**spawn_env(profile, extra_env), **launch['env']}
+        env, base = {**spawn_env(profile, extra_env), **launch['env']}, {**spawn_env(profile), **launch['env']}
         sig = _acp_sig(launch, cwd, env)
         return clipool.warm_with(profile['keep_alive'], sig, lambda: acp_mod.Conversation(
-            _acp_open(name, launch, cwd, env, resume, profile.get('timeout'), lambda *a: None, fresh_if_gone=True), sig), resume, swap=swap)
+            _acp_open(name, launch, cwd, env, resume, profile.get('timeout'), lambda *a: None, fresh_if_gone=True, base=base), sig), resume, swap=swap)
     except acp_mod.ACPStartError as e:
         logger.info(f"acp: {profile['cmd']} not warmed over ACP - {e}"); return None
 
 
-def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str, resume, cancel, extra_env):
+def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str, resume, cancel, extra_env, spare: bool = False):
     """run_cli's turn on a conversation's LIVE process: the same trace events, the same errors, the same
     (result, session_id, diff) - with no checkout to diff, since neither the Assistant nor a general agent
-    works in one."""
+    works in one. `spare`: a one-shot answer on a process started ahead for this command (clipool.spare_turn)."""
     from . import clipool
     cwd = profile.get('cwd')
     trace('prompt', 'prompt_sent_to_agent', prompt)
-    trace('tool', 'cli', f'{name} cwd={cwd or os.getcwd()} live={keep}' + (f' resume={resume}' if resume else ''))
+    trace('tool', 'cli', f'{name} cwd={cwd or os.getcwd()} live={keep or "spare"}' + (f' resume={resume}' if resume else ''))
     # THE WORDS AS THEY ARE WRITTEN, for a conversation that asked for them (--include-partial-messages: the Assistant): the page
     # draws them while the rest is still coming, instead of after the whole answer (the owner, 2026-10-20: "it should respond to
     # things quickly"). Only what the owner would read - the machine's CALL line never - and the finished answer replaces them.
@@ -2218,8 +2279,12 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
         # a CLI with its tools off (the Assistant deciding: nothing happens until the app carries the decision out) may be sent its
         # turn again after any end; one with tools may have done work mid-turn, and never is
         bare = '--tools' in cmd and cmd.index('--tools') + 1 < len(cmd) and cmd[cmd.index('--tools') + 1] == ''
-        final, raw = clipool.run(keep, cmd, prompt, on, cwd=cwd, env=spawn_env(profile, extra_env),
-                                 resume=resume, cancel=cancel, timeout=profile.get('timeout'), resend=bare)
+        env = spawn_env(profile, extra_env)
+        if spare:
+            # ...keyed by everything it was started with, the environment's values too: a spare is never a call's under another token
+            key = 'spare:' + hashlib.sha1(json.dumps([cmd, str(cwd or ''), sorted(env.items())]).encode('utf-8')).hexdigest()[:16]
+            final, raw = clipool.spare_turn(key, cmd, prompt, on, cwd=cwd, env=env, cancel=cancel, timeout=profile.get('timeout'))
+        else: final, raw = clipool.run(keep, cmd, prompt, on, cwd=cwd, env=env, resume=resume, cancel=cancel, timeout=profile.get('timeout'), resend=bare)
     except PermissionError as e:
         raise FileNotFoundError(denied_msg(name, cmd[0] if cmd else '', e)) from e
     except Cancelled: raise

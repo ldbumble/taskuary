@@ -1577,8 +1577,9 @@ def joinable(store, tid, shut: bool = True):
 # message: two deciders of one question, each shown the open work its own way. Now triage answers it for them too - the words are read as a
 # message is, with the same open work beside them, and its same_as is the join. No triage brain, no answer, nothing open: new work.
 OWNER_WORDS, WORDS_CHANNEL = 'the owner himself', 'words'
-def same_work(store, words: str, who: str = OWNER_WORDS, skip=(), llm=None) -> int | None:
-    "The open task triage reads `words` as already being (its same_as), or None. `who`: who asks it; `skip`: tasks never to name (the asker)."
+def same_work(store, words: str, who: str = OWNER_WORDS, skip=(), llm=None, verdict: dict = None) -> int | None:
+    """The open task triage reads `words` as already being (its same_as), or None. `who`: who asks it; `skip`: tasks never to name (the asker).
+    `verdict`: filled with the whole reading - how hard the work is among it - for the caller that makes the new task (handoff_task)."""
     words, skip = ' '.join(str(words or '').split()), {int(x) for x in skip if x}
     if not words: return None
     try:
@@ -1595,17 +1596,19 @@ def same_work(store, words: str, who: str = OWNER_WORDS, skip=(), llm=None) -> i
     except Exception as e:
         logger.info(f'the same-work reading was skipped, the work is new: {e}'); return None
     if fail or intent.get('degraded'): return None
+    if verdict is not None: verdict.update(intent)
     try: tid = int(intent.get('same_as'))
     except (TypeError, ValueError): return None
     return tid if tid not in skip and joinable(store, tid, shut=False) else None
 
 
-def arrive_words(store, words: str, frm: str = 'owner', actor: str = 'owner', who: str = None, skip=(), files=None, said: str = None, llm=None):
+def arrive_words(store, words: str, frm: str = 'owner', actor: str = 'owner', who: str = None, skip=(), files=None, said: str = None, llm=None,
+                 verdict: dict = None):
     """WORDS THAT START WORK ARRIVE AS A MESSAGE DOES: triage says whether an open task is already that work (same_work), and where it is they go
     to that task's agent by the one road into it (general.to_agent) - his words as his line (`frm` 'owner'), Taskuary's (an agent's ask, a part
     broken out) as its note, its agent started where none ever worked it. `said`: the words as he typed them, where `words` is a rewording.
-    -> {'tid', 'how'} when they joined; None when they are new work, which the caller makes."""
-    tid = same_work(store, words, who or (OWNER_WORDS if frm == 'owner' else 'Taskuary, for the agent of another task'), skip, llm)
+    -> {'tid', 'how'} when they joined; None when they are new work, which the caller makes - `verdict` then holds triage's reading of it."""
+    tid = same_work(store, words, who or (OWNER_WORDS if frm == 'owner' else 'Taskuary, for the agent of another task'), skip, llm, verdict)
     if not tid: return None
     from . import general
     how = general.to_agent(store, tid, said or words, actor, frm=frm, files=files, **({'wait': False} if frm == 'owner' else {'start': True}))

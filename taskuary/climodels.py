@@ -198,6 +198,23 @@ def claude_models() -> list:
     return models + [m for m in _claude_granted() if m['id'] not in seen] if models else []
 
 
+# THREE GEARS BY TRIAGE'S CLASS (the owner, 2026-11-20): quick work on a CLI's small model thinking little, normal work on its middle one,
+# hard work on its largest thinking hard - model AND effort, where the owner set none on the CLI's card. Claude's by its aliases; Codex's
+# read off its own /model list (its small, middle and large families, newest generation of each - firstrun.tier_models' one table of words)
+GEAR_EFFORT = {'light': 'low', 'standard': 'medium', 'strong': 'high'}
+GEARS = {'claude': {'light': 'haiku@low', 'standard': 'sonnet@medium', 'strong': 'opus@high'}}
+
+
+def gears(cli: str) -> dict:
+    "{light, standard, strong}: 'model@effort' each tier runs on this CLI when its card names none - {} for a CLI with no such defaults."
+    if cli in GEARS: return GEARS[cli]
+    if cli != 'codex': return {}
+    from .firstrun import tier_models
+    t = tier_models([m['id'] for m in codex_models()])
+    got = {'light': t.get('light_model'), 'standard': t.get('model'), 'strong': t.get('strong_model')}
+    return {k: f'{v}@{GEAR_EFFORT[k]}' for k, v in got.items() if v}
+
+
 def codex_home() -> Path: return Path(os.getenv('CODEX_HOME') or Path.home() / '.codex')
 
 

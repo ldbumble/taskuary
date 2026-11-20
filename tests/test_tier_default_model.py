@@ -42,7 +42,9 @@ def test_a_default_model_session_routes_by_tier(s):
     assert (ses.pick, ses.model, ses.chosen) == ('cli:claude', 'claude-opus-5-5', '')     # the picker's "default · claude-opus-5-5"
     row, (pick, model, gear) = _turn(s, ses)
     assert (row['Tier'], row['Rule']) == ('light', 'quick-work') and gear == 'light'
-    assert row['Why'] == 'General work judged quick -> light on Claude Code (rule quick-work)'
+    # ...ON ITS QUICK MODEL THINKING LITTLE (the speed round, 2026-11-20: claude's agent connector runs haiku at high effort unless told)
+    assert model == 'haiku@low' and row['Model'] == 'haiku@low'
+    assert row['Why'] == 'General work judged quick -> light on Claude Code, haiku, low effort (rule quick-work)'
     row, _ = _turn(s, general.GeneralSession(s, _task(s, 'standard')))
     assert (row['Tier'], row['Rule']) == ('standard', 'work')
 
@@ -71,3 +73,12 @@ def test_the_router_itself_takes_no_default_as_a_choice(s):
     assert (r.tier, r.rule) == ('light', 'quick-work')
     r = brainroute.choose(s, 'general', task=_task(s, 'quick'), want_pick='cli:claude', want_model='claude-sonnet-5-5')
     assert (r.tier, r.rule, r.model) == ('fixed', 'you chose it', 'claude-sonnet-5-5')
+
+
+def test_the_owner_s_own_quick_model_is_kept_as_he_set_it(s):
+    "A quick model the owner named on the CLI's card is his choice: the router adds no effort to it."
+    cfg = {**config.load(), 'cli_connections': {'claude': {'cmd': 'claude', 'model': 'claude-opus-5-5', 'light_model': 'sonnet'}}}
+    with mock.patch.object(config, 'load', lambda: cfg):
+        r = brainroute.choose(s, 'general', task=_task(s, 'quick'))
+        assert (r.tier, r.model) == ('light', '')
+        assert brainroute.choose(s, 'triage').model == ''                     # ...and triage never takes the agents' low effort

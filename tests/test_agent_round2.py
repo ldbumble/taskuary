@@ -142,6 +142,12 @@ class SearchBeforeAskingTests(unittest.TestCase):
         self.assertIn('SEARCH BEFORE YOU ASK', general.HISTORY_LINE); self.assertIn('SEARCH BEFORE YOU ASK', general.SEARCHED_LINE)
         said, prior = general.history_brief(s, tid, hands=False)                        # a brain with no search is handed them
         self.assertIn('V-2231', prior); self.assertIn('WHAT EARLIER TASKS SETTLED', said)
+        # ...AND QUICK WORK FINDS ITS SEARCH DONE, its own still there (the speed round, 2026-11-20: a quick reply's agent searched the sender's
+        # mail itself first - one more model round and a shell call, 4-6 s of an 11 s turn)
+        self.assertEqual(general.history_brief(s, tid, hands=True), (general.HISTORY_LINE, ''))
+        said, prior = general.history_brief(s, tid, hands=True, quick=True)
+        self.assertIn('V-2231', prior); self.assertIn('ALREADY SEARCHED', said); self.assertIn('taskuary --search', said)
+        self.assertNotIn('NO SEARCH OF ITS OWN', said)
 
 
 # ── 8. check-backs ──────────────────────────────────────────────────────────────────────────

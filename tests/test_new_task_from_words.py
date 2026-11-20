@@ -217,6 +217,19 @@ class SameWorkIsTriagesDecisionTests(unittest.TestCase):
         self.assertEqual([m['channel'] for m in seen], [ingest.WORDS_CHANNEL] * 2)
         self.assertEqual([c.kwargs['frm'] for c in told.call_args_list], ['owner', 'taskuary'], "his words as his line, the agent's as Taskuary's")
 
+    def test_new_work_is_classed_by_the_reading_that_asked_whether_it_was_open_already(self):
+        """A New ask got no triage class and ran on the normal gear (the big model) - "17% of 2,340" with it (the owner, 2026-11-20). The one
+        reading of his words that answers same_as says how hard they are too: kept on the new task, so its agent starts on the quick gear."""
+        s, seen = MemoryStore(), []
+        def judge(store, msg, llm, *a, **k):
+            seen.append(msg); return {'intent': 'task', 'same_as': None, 'difficulty': 'quick', 'sure': True, 'data_class': 'ordinary'}, {}
+        with mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: ''), mock.patch.object(ingest, 'judge', judge),              mock.patch.object(general, 'start_session'), mock.patch('taskuary.capabilities.has_ai', return_value=True):
+            made = concierge.handoff_task(s, 'What is 17% of 2,340?', 'general', 'owner', door='New')
+        self.assertEqual(len(seen), 1, 'one reading, no second call for the class')
+        self.assertEqual(s.task_judged(made['taskId'])['Difficulty'], 'quick')
+        from taskuary import brainroute
+        self.assertEqual(brainroute.judged(s, made['taskId'])['difficulty'], 'quick')
+
     def test_who_asks_skip_and_a_closed_task_are_kept(self):
         s = MemoryStore()
         fix = s.create_task({'Title': 'Fix the ledger rounding bug', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')

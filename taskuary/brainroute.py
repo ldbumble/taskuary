@@ -178,8 +178,21 @@ def _own(store, pick: str, field: str, cfg=None) -> str:
 
 def strong_of(store, pick: str, cfg=None) -> str:
     """This brain's STRONG gear - the owner's strong_model on its CLI connection or its AI card - or '' when it has none.
-    Blank is no strong tier, and nothing is inferred from a model's name (setup never assumes an AI)."""
-    return _own(store, pick, 'strong_model', cfg)
+    Blank is no strong tier, and nothing is inferred from a model's name (setup never assumes an AI) - but a CLI with gears of its own
+    (climodels.gears: claude's opus, codex's largest) has that one where the owner named none."""
+    return _own(store, pick, 'strong_model', cfg) or gear_of(store, pick, 'strong', cfg)
+
+
+def gear_of(store, pick: str, tier: str, cfg=None) -> str:
+    """THREE GEARS BY TRIAGE'S CLASS (the owner, 2026-11-20: quick = Haiku low, normal = Sonnet medium, hard = Opus high on Claude Code; the
+    same shape on Codex): the 'model@effort' a CLI runs `tier` on where the owner left that box on its card blank - '' where he filled
+    it (his stands, read where it always was) or where the CLI has no such defaults. A blank box is never his choice, so an install that
+    never set one moves to these with nothing to migrate."""
+    p = str(pick or '')
+    if not p.startswith('cli:') or tier not in ('light', 'standard', 'strong'): return ''
+    if _own(store, p, {'light': 'light_model', 'standard': 'model', 'strong': 'strong_model'}[tier], cfg): return ''
+    from . import climodels
+    return climodels.gears(_cli(store, p, cfg)).get(tier, '')
 
 
 # ONE MODEL, STILL THREE STEPS (the owner, 2026-11-06: "if it's api or something that only has one model use effort instead if they
@@ -203,7 +216,7 @@ def lift(store, pick: str, tier: str, model: str = '', cfg=None) -> str:
     its quick work is always its one model, thinking less). '' otherwise. A quick gear a CLI already ships (llm.LIGHT_DEFAULT: claude's
     haiku, codex's low effort) is its own answer, and an effort already at or past the step is no step."""
     p = str(pick or '')
-    if tier not in LIFT or not p.startswith(('cli:', 'connector:')) or _own(store, p, f'{tier}_model', cfg): return ''
+    if tier not in LIFT or not p.startswith(('cli:', 'connector:')) or _own(store, p, f'{tier}_model', cfg) or gear_of(store, p, tier, cfg): return ''
     from . import climodels, llm
     if p.startswith('cli:'):
         cli = _cli(store, p, cfg)
@@ -478,6 +491,9 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
             # the card's model IS the standard tier; strong runs the brain's strong gear and light its quick one - or, on a brain with
             # one model, that model at high or low effort
             g, model = GEAR_OF[tier], (model if tier == 'standard' else lift(store, pick, tier, model))
+            # ...the CLI's own gear for the tier, model and effort, where he named none - but TRIAGE KEEPS ITS QUICK MODEL'S OWN EFFORT (the
+            # owner, 2026-11-20: "I don't care about triage speed" - accuracy over speed): it reads on the light gear's model, thinking as it will
+            if not model: model = gear_of(store, pick, tier) if job != 'triage' else gear_of(store, pick, tier).split('@')[0]
             why = f"{JOB_WORDS[job]}{hard} -> {tier} on {_said(store, pick)}{f', {spell(model)}' if model else ''} (rule {rule}){said}{held}"
         why += miss
     # a brain resting on its usage limit hands the call to the first backup that is not (Auto mode; the cards stand in Fixed)
@@ -735,7 +751,7 @@ def _base(store, p: str, cfg) -> str:
     config (climodels), else the provider's default - 'its default model' only when nothing here names one."""
     if not p.startswith('cli:'): return _card_model(store, p)
     from . import climodels
-    return (spell(_own(store, p, 'model', cfg)) or str((climodels.catalog(_cli(store, p, cfg)).get('current') or {}).get('model') or '')
+    return (spell(_own(store, p, 'model', cfg) or gear_of(store, p, 'standard', cfg)) or str((climodels.catalog(_cli(store, p, cfg)).get('current') or {}).get('model') or '')
             or 'its default model')
 
 
@@ -746,7 +762,8 @@ def _words(store, p: str, cfg) -> dict:
     name = base.split(', ')[0]
     at = lambda tier: f'{name}, {LIFT[tier]} effort' if lift(store, p, tier, cfg=cfg) else base
     dflt = LIGHT_DEFAULT.get(_cli(store, p, cfg), '') if p.startswith('cli:') else _card_light(store, p)
-    quick = spell(_own(store, p, 'light_model', cfg)) or (f'{name}, {dflt[7:]} effort' if dflt.startswith('effort:') else dflt) or at('light')
+    quick = (spell(_own(store, p, 'light_model', cfg) or gear_of(store, p, 'light', cfg)) or (f'{name}, {dflt[7:]} effort' if dflt.startswith('effort:') else dflt)
+             or at('light'))
     return {'quick': quick, 'normal': base, 'hard': spell(strong_of(store, p, cfg)) or at('strong')}
 
 

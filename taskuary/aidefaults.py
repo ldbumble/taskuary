@@ -300,7 +300,8 @@ def _resolve(store, cfg, slot_key: str) -> dict:
             # light gear, which is triage's (the card showed and saved the light model while every agent ran the main one)
             from .brainroute import _base
             light, dflt, owner = model_on(store, s['model_setting'], f'cli:{key}', settings), _base(store, f'cli:{key}', cfg), 'this page'
-        else: dflt, owner = LIGHT_DEFAULT.get(cli, ''), f'the {key} connection (light model)'
+        # ...triage's quick model a blank box runs (climodels.gears' light model): triage reads at its own effort (brainroute.choose)
+        else: dflt, owner = climodels.split_pick(climodels.gears(cli).get('light') or '')[0] or LIGHT_DEFAULT.get(cli, ''), f'the {key} connection (light model)'
         model, effort = ('', light[7:]) if light.startswith('effort:') else climodels.split_pick(light)
         if slot_key == 'concierge_ai' and not effort:
             from .llm import ASSISTANT_EFFORT

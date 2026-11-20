@@ -322,3 +322,28 @@ class AdvisorTaskWearsTheAdvisorMarkTests(unittest.TestCase):
         mail(s, 'lunch on friday', who='Gail Moreno', email='gail@northwind.example', hours=1)
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
         self.assertEqual([i.get('channel') for i in rail(s) if i.get('tid') == tid], ['teams'])
+
+
+def test_a_task_opened_from_search_and_typed_into_stays_and_next_never_takes_a_working_task_off():
+    """The owner, live 2026-11-20: Next on a task took the task before it - its agent at work - off the rail. A closed task opened from
+    search is opened as any task is; typed into, it is open and on the rail, and Next past it while its agent works leaves it there."""
+    from fastapi.testclient import TestClient
+    from taskuary import concierge, general, server
+    from taskuary.store import MemoryStore
+    s = MemoryStore()
+    with mock.patch.object(server, 'store', s):
+        c = TestClient(server.app)
+        for n in range(3):
+            t = s.create_task({'Title': f'Vendor review {n}', 'Kind': 'general', 'Status': 'open'}, 'owner')
+            s.add_message({'TaskId': t, 'ExternalId': f'sr{n}', 'Channel': 'email', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
+                           'Subject': f'Vendor review {n}', 'BodyText': 'x', 'Status': 'routed'})
+        concierge.close_task(s, 1, 'owner'); funnel.invalidate()
+        c.post('/api/walk/open', json={'key': 'task:1'}); funnel.invalidate()
+        general.reopen(s, 1, 'owner'); general.OPENING.add(1); funnel.invalidate()       # his line reopened it; its agent is at work
+        try:
+            rail = lambda: {i.get('tid'): i.get('lane') for i in c.get('/api/funnel/pile').json()['items']}
+            assert rail().get(1) == 'working'
+            on = next(i['key'] for i in c.get('/api/funnel/pile').json()['items'] if i.get('tid') == 1)
+            assert c.post('/api/walk/next', json={'key': on}).status_code == 200; funnel.invalidate()
+            assert rail().get(1) == 'working', rail()                                       # ...moving on never takes live work off
+        finally: general.OPENING.discard(1)

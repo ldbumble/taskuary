@@ -275,6 +275,13 @@ test('a task pulled onto the table from outside the pile sits under On you, not 
   assert.equal(levelOf(pulledRow({ key: 'msg:9', kind: 'fyi', lane: 'fyi', order_band: 4 })), 'fyi');
 });
 
+test('a closed task opened from search is never a rail row - not at the press, not after its card comes back', async () => {
+  // the owner, live 2026-11-20: it stood on the rail at the press (its row made from the hit) and was taken off a beat later
+  const { madeRow, pulledRow } = await import("../src/funnelPile.js");
+  assert.equal(pulledRow(madeRow(7, "Harbor invoice", true)), null);
+  assert.equal(levelOf(pulledRow(madeRow(8, "Lantern budget", false))), 'task');      // ...an open one is its row from the press, as before
+});
+
 test('an agent on the table keeps its own lane on the rail when the walk has taken its row out of the pile (G7)', async () => {
   const { pulledRow } = await import("../src/funnelPile.js");
   // it asked while it stood there: the rail said "on you" under a header saying the agent waited on you

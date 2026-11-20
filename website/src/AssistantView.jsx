@@ -3956,7 +3956,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   const pressRow = (n, hit = null) => {
     prefetchTask(api, n);
     const row = rowOfTask(pile?.items, n);
-    if (row) railPress(row.key); else openTaskCard({ tid: n, row: hit ? madeRow(n, hit.title) : null });
+    if (row) railPress(row.key); else openTaskCard({ tid: n, row: hit ? madeRow(n, hit.title, ["done", "dropped"].includes(hit.status)) : null });
     return !!row;
   };
   pressRowRef.current = pressRow;

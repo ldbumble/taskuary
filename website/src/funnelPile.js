@@ -370,7 +370,9 @@ export const holdsNew = (msgs, browsing, rail, key) => !!key && !!browsing
 // key is, so nothing drew at the click, the light went out over the task left standing, and the task came a round trip later (the owner,
 // 2026-11-18: "it does nothing then moves to new one slowly ... and then the walk highlight disappears"). Unjudged rows are no row to stand on
 export const rowOfTask = (items, n) => (items || []).find((i) => Number(i.tid) === Number(n) && i.lane !== "unjudged") || null;
-export const madeRow = (tid, title) => ({ key: `task:${tid}`, kind: "task", tid: Number(tid), title: String(title || "").slice(0, 300) });
+// ...`closed`: a hit on a task closed or let go, drawn as the closed card it is - with no row on the rail (pulledRow), never one drawn at the
+// press and taken off a beat later when its card came back closed (the owner, live 2026-11-20)
+export const madeRow = (tid, title, closed = false) => ({ key: `task:${tid}`, kind: "task", tid: Number(tid), title: String(title || "").slice(0, 300), ...(closed ? { closed: true } : {}) });
 // NEXT TURNS BLUE AS SOON AS THE MOVE SAVES (the owner, 2026-11-06): a light walk answer (no rail rides) carries the walk's whole word -
 // below included - and the rail on screen takes it until its own read lands, so a second press draws its row and Back stands at once
 export const withWalk = (pile, walk) => (pile && walk && "below" in walk ? { ...pile, walk } : pile);

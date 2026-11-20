@@ -52,7 +52,9 @@ def dump_owner_tables(store):
 
 def test_empty_inventory_reports_uncatalogued_raw_entities_without_allocating(tmp_path):
     store = SQLiteStore(str(tmp_path / 'empty-gaps.db'))
-    seed_four_entity_kinds(store)
+    task_id = seed_four_entity_kinds(store)[0]
+    from taskuary import chatlog
+    chatlog.advance(store, task_id)          # ...the seed's own card, put by the log's worker (advance_soon) - a write of the seeding, not the read
     before = dump_owner_tables(store)
 
     picture = store.processing_inventory_snapshot(fixed_now=NOW)

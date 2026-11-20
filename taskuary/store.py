@@ -5668,13 +5668,10 @@ class SQLiteStore:
         """THE ONE RULE FOR WHAT WAITS ON HIS PRESS, over pending review rows: less any reply draft the thread has moved past
         (proposals.written_past - the one rule the chat greys it by), any card that waits behind another on its task (cardqueue: one
         stands at a time, on every surface) and an obsolete read request. waiting_reviews (every task) and waiting_on_owner (one) read it."""
-        from . import cardqueue, origin, proposals
-        off, held = {}, {}
+        from . import cardqueue, proposals
+        off = {}
         gone = lambda t: off[t] if t in off else off.setdefault(t, proposals.written_past(self, t) | cardqueue.held(self, t))
-        # ...and nothing on a task a stranger's words hold: its one move is Trust, never a Send under it (the judge's browser round, 2026-11-19)
-        stranger = lambda t: held[t] if t in held else held.setdefault(t, bool(origin.hold(self, t)))
-        return [r for r in rows if not (r.get('TaskId') and (r['ReviewId'] in gone(r['TaskId']) or stranger(r['TaskId'])))
-                and not cardqueue.obsolete_read(self, r.get('TaskId'), r)]
+        return [r for r in rows if not (r.get('TaskId') and r['ReviewId'] in gone(r['TaskId'])) and not cardqueue.obsolete_read(self, r.get('TaskId'), r)]
     @contextlib.contextmanager
     def review_delivery_edit(self, rid):
         """Exclude send claims while attachment bytes/envelopes change, even in another process."""

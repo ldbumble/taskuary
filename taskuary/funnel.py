@@ -1529,7 +1529,8 @@ def one_state(store, payload: dict) -> dict:
     seen = {}
     for i in rows:
         tid = i.get('tid') or (int(str(i.get('key'))[6:]) if str(i.get('key') or '').startswith('agent:') and str(i['key'])[6:].isdigit() else None)
-        if not tid: continue
+        # ...an agent's own row is read off the live session it shows (observe) - the same facts taskstate reads, already in hand
+        if not tid or i.get('kind') == 'agent': continue
         if tid not in seen:
             t = store.get_task(int(tid))
             try: seen[tid] = taskstate.status(store, t) if t and t.get('Status') not in ('done', 'dropped') else None

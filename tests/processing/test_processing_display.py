@@ -189,7 +189,7 @@ def test_task_priority_status_and_native_question_content_are_revision_bound():
     before, initial = one(store)
     store.update_task(tid, {"Priority": "high", "Status": "waiting"}, "test")
     changed, task_item = one(store)
-    assert (task_item["key"], task_item["lane"]) == (initial["key"], initial["lane"])
+    assert task_item["key"] == initial["key"] and task_item["lane"] == "theirs"     # ...its lane taskstate's: a task waiting on them (one task state)
     assert task_item["presentation_revision"] != initial["presentation_revision"]
 
     session = {"taskId": tid, "waiting": True, "phase": "parked", "agent": "codex",

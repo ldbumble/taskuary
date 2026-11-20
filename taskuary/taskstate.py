@@ -227,10 +227,11 @@ class TaskState:
             if str(t.get('UpdatedBy') or '') in OWNER_ACTORS: return 'closed'        # yours: no need to read its notes
             return 'agentdone' if finish_evidence(store, tid) else 'closed'
         if t.get('RunStatus') == 'running': return 'working'
-        if waits_press(store, t, row=True): return 'approve'
         # A NEW SENDER'S TASK IS HELD, never "waiting to start" (2026-11-17): nothing starts on it until the owner trusts the sender, and the
-        # chip, the list and the Board read the word the phone said alone (lanes.json `held`) - off the tag ingest leaves, which Trust lifts
+        # chip, the list and the Board read the word the phone said alone (lanes.json `held`) - off the tag ingest leaves, which Trust lifts.
+        # ...and before a card on it: its one move is Trust, the card held with it (the judge's browser round, 2026-11-19)
         if self.held: return 'held'
+        if waits_press(store, t, row=True): return 'approve'
         # still waiting to start, a failed start included - the row carries the error and the page offers Start now / Cancel (T10)
         if self.queued: return 'queued'
         left = funnel.left_by_facts(t.get('Tags'), [{'Status': t.get('RunStatus')}] if t.get('RunStatus') else [])

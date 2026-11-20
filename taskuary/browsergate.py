@@ -634,7 +634,10 @@ def held_tab(sid: str, p: dict) -> str:
     from . import browserview
     ts = browserview.pages(sid)
     if not ts:                  # ...a browser whose tabs cannot be listed (no DevTools port of ours): its page is read the old way, never run blind
-        if _same_page(address(sid, browserview.state(sid, fresh=True)), str(p.get('url') or '')): return ''
+        here = address(sid, browserview.state(sid, fresh=True))
+        if not here: raise RuntimeError(f"Taskuary could not read which page the agent's browser is on, so it could not check it is still on "
+                                        f"{p.get('name') or p.get('site') or 'the page'} - nothing was done. {AGAIN}")
+        if _same_page(here, str(p.get('url') or '')): return ''
         raise RuntimeError(left_line(p))
     if p.get('tab'):
         if held_on(sid, p, ts): return str(p['tab'])

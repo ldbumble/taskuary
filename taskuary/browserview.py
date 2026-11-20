@@ -304,7 +304,8 @@ async def _relay(ws, sid: str, url: str):
 FOLLOW_EVERY = 1.0
 def pages(sid: str) -> list:
     "Session `sid`'s page targets as its own Chrome lists them - [] when it does not answer."
-    return [t for t in _devtools(sid, '/json/list') or [] if t.get('type') == 'page']
+    try: return [t for t in _devtools(sid, '/json/list') or [] if t.get('type') == 'page']
+    except Exception as e: logger.debug(f'browser {sid}: its tabs could not be listed - {e}'); return []      # ...unread: the callers say so
 
 
 def follow(sid: str, stop, every: float = FOLLOW_EVERY, switch=None) -> None:

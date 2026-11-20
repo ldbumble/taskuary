@@ -287,19 +287,19 @@ BRAINS = {}                    # (tid, sid) -> the brain this turn runs on: web_
 
 
 def _search(store, tid: int, sid: str, q: str) -> str:
-    "The model's OWN web search (llm `search`, each provider's own); a connected search card where the card has none or refuses it."
+    """The model's OWN web search (llm `search`, each provider's own); a connected search card where the card has none or refuses it; and
+    with neither, a search engine's plain results page read as web_fetch reads any page - never a failure handed back and no browser
+    opened (the owner, 2026-11-20: a HIPAA AI Hydrogen's every search came back "could not search the web")."""
     brain = BRAINS.get((tid, sid))
     if callable(getattr(brain, 'search', None)):
         try: return _cut(brain.search(q))
         except Exception as e: logger.info(f'apiagent: task {tid} native search refused, trying a search card - {e}')
     cards = [c for c in store.list_connectors() if c['Type'] in SEARCHERS and c['Active'] and c.get('HasSecret')]
-    # ...and with neither, the search is done here by reading a search engine's plain results page, as web_fetch reads any page - never
-    # handed back as a failure: a HIPAA AI Hydrogen agent's every search came back "could not search the web" (the owner, 2026-11-20)
+    if cards:
+        c = cards[0]
+        return call_taskuary(tid, sid, 'run_system', {'type': c['Type'], 'connector_id': c['ConnectorId'], 'query': q}, stranger=(tid, sid) in STRANGERS)
     from urllib.parse import quote
-    if not cards: return _hands(store, tid, sid, 'web_fetch', {'url': SEARCH_PAGE + quote(q)})
-    c = cards[0]
-    return call_taskuary(tid, sid, 'run_system', {'type': c['Type'], 'connector_id': c['ConnectorId'], 'query': q}, stranger=(tid, sid) in STRANGERS)
-
+    return _hands(store, tid, sid, 'web_fetch', {'url': SEARCH_PAGE + quote(q)})
 
 def _hands(store, tid: int, sid: str, name: str, a: dict) -> str:
     "A CLI's own hands, run by the server: files, the web, and commands under the ONE gate a CLI's commands pass (hooks.command_gate)."

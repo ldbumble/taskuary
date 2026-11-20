@@ -301,6 +301,9 @@ ROOM = 8000
 # ...and an answer CUT SHORT by its thinking is no answer either: the HIPAA AI gateway's Gemini spent 360 of the Assistant's 380 tokens
 # reasoning and handed back 16 words with finish_reason 'length' - "Tell me what you'd like the routine to do-what", a CALL cut at
 # `{"params` - and the chat showed the stub (the owner, 2026-11-09). A route seen thinking is asked with ROOM from then on.
+# ...and a card whose own search came back empty or refused is not asked again: a HIPAA AI Hydrogen spent ~35 s on each search that
+# returned nothing before the results page was read (the owner, 2026-11-20: "it should be a quick tool call")
+_NO_SEARCH = set()
 _THINKS = set()            # (type, endpoint, model) whose answers were seen cut by reasoning tokens
 _SAID = {}                 # a CLI conversation's id -> the hash of the instructions it was last typed (make_cli_llm: said once)
 def cut_by_thinking(j: dict) -> bool:
@@ -1492,16 +1495,20 @@ def make_llm(t, cfg: dict, key: str):
             got = _responses_web(t, cfg, headers, model, SEARCH_ASK, question, None, max(max_tokens, 4000), effort if ek not in _NO_EFFORT else '')
             if (got or '').strip(): return got
         if g := _google_url(t, cfg, model): return _google_search(g, headers, question)
+        if ek in _NO_SEARCH: raise RuntimeError('this card answered no search before')
         body = {'messages': [{'role': 'user', 'content': f'{SEARCH_ASK} {question}'}],
-                'max_tokens': max_tokens, 'web_search_options': {'search_context_size': 'medium'}, **({'model': model} if model else {})}
+                # ...with room and told to think little: Hydrogen given 2,000 tokens thought 3,000 and came back empty after 35 s; at low it
+                # answers with sources in ~5 s (the HIPAA AI gateway, 2026-11-20)
+                'max_tokens': max(max_tokens, ROOM), 'web_search_options': {'search_context_size': 'low'}, **({'model': model} if model else {}),
+                **({'reasoning_effort': 'low'} if t in EFFORT_TAKERS and ek not in _NO_EFFORT else {})}
         r = post_retrying(urls[0], headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
         if budget_spent(r): raise BudgetSpent(BUDGET_LINE.format(name='HIPAA AI' if t == 'hipaa_ai' else t))
-        if r.status_code != 200: raise refused(t, r, urls[0], model)
+        if r.status_code != 200: _NO_SEARCH.add(ek); raise refused(t, r, urls[0], model)
         aiusage.openai(r.json())
         m = (r.json().get('choices') or [{}])[0].get('message') or {}
         cites = list(dict.fromkeys(str((a.get('url_citation') or a).get('url') or '') for a in m.get('annotations') or [] if isinstance(a, dict)))
         said = said_text(m).strip()
-        if not said: raise RuntimeError('the search came back empty')
+        if not said: _NO_SEARCH.add(ek); raise RuntimeError('the search came back empty')
         return said + ('\n\nSOURCES\n' + '\n'.join(c for c in cites if c) if any(cites) else '')
     # ...only where the card HAS a search of its own: a model asked with an option it ignores answers from memory as if it had looked
     # (groq, mistral, a local model); without one apiagent's web_search goes to a connected search card and says when there is none

@@ -192,3 +192,44 @@ class NothingElseChangesTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def _stub_turn(updates, unnamed_own=True, stop='end_turn'):
+    "A client whose session/prompt streams `updates` and ends - no process: what acp.prompt makes of them is the thing tested."
+    c = object.__new__(acp.ACPClient)
+    c.session_id, c.on_update, c.unnamed_own, c.last_turn = 's1', None, unnamed_own, {}
+    def request(method, params, sent=None, **kw):
+        for u in updates: c.on_update(u)
+        return {'stopReason': stop}
+    c.request = request
+    return c
+
+
+def _chunk(text, mid=None): return {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': text}, **({'messageId': mid} if mid else {})}
+
+
+RAW_400 = ("stream disconnected before completion: litellm.BadRequestError: Vertex_ai_betaException BadRequestError - b'{\n \"error\": "
+           "{\n \"code\": 400,\n \"message\": \"functionDeclaration parameters schema should be of type OBJECT.\",\n \"status\": \"INVALID_ARGUMENT\"\n }\n}\n'")
+
+
+class TheAdaptersOwnLinesTests(unittest.TestCase):
+    """codex-acp sends Codex's own lines - a warning, a turn's terminal error - as a chunk with no message id; the model's words always carry
+    one. "Warning: Model metadata ... not found" stood above every answer, and a provider's 400 stood as the answer, raw JSON and all."""
+    def test_a_warning_is_never_the_answer(self):
+        c = _stub_turn([_chunk('Warning: Model metadata for `m` not found.\n\n'), _chunk('The answer is 7.', 'item_1')])
+        self.assertEqual(c.prompt('q'), ('end_turn', 'The answer is 7.'))
+
+    def test_a_turn_that_only_failed_raises_and_reads_as_one_plain_line(self):
+        from taskuary import say
+        c = _stub_turn([_chunk(RAW_400)])
+        with self.assertRaises(acp.ACPAgentError) as e: c.prompt('q')
+        line = say.owner({'kind': 'turn_failed', 'raw': str(e.exception)})
+        self.assertTrue(line.startswith('The AI provider refused the request'), line)
+        self.assertNotIn('{', line); self.assertNotIn('litellm', line)
+
+    def test_another_adapter_keeps_its_unnamed_words(self):
+        self.assertEqual(_stub_turn([_chunk('Hello.')], unnamed_own=False).prompt('q'), ('end_turn', 'Hello.'))
+
+    @__import__('pytest').mark.acp               # ...the real adapter rows, which every other test runs without (conftest)
+    def test_the_codex_adapter_is_marked(self):
+        self.assertTrue(clis.ADAPTERS['codex']['unnamed_own']); self.assertFalse(clis.ADAPTERS['claude'].get('unnamed_own'))

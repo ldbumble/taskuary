@@ -286,20 +286,24 @@ SEARCH_PAGE = 'https://html.duckduckgo.com/html/?q='   # a results page that rea
 BRAINS = {}                    # (tid, sid) -> the brain this turn runs on: web_search asks it, with its own search on
 
 
-def _search(store, tid: int, sid: str, q: str) -> str:
+def search(store, tid: int, q: str, brain, system, fetch) -> str:
     """The model's OWN web search (llm `search`, each provider's own); a connected search card where the card has none or refuses it; and
     with neither, a search engine's plain results page read as web_fetch reads any page - never a failure handed back and no browser
-    opened (the owner, 2026-11-20: a HIPAA AI Hydrogen's every search came back "could not search the web")."""
-    brain = BRAINS.get((tid, sid))
+    opened (the owner, 2026-11-20: a HIPAA AI Hydrogen's every search came back "could not search the web"). ONE ROAD for this loop's
+    web_search and the tool server's (agenttools: an API card's agent on its harness CLI): `system(card)` runs a search card, `fetch(url)` a page."""
     if callable(getattr(brain, 'search', None)):
         try: return _cut(brain.search(q))
         except Exception as e: logger.info(f'apiagent: task {tid} native search refused, trying a search card - {e}')
     cards = [c for c in store.list_connectors() if c['Type'] in SEARCHERS and c['Active'] and c.get('HasSecret')]
-    if cards:
-        c = cards[0]
-        return call_taskuary(tid, sid, 'run_system', {'type': c['Type'], 'connector_id': c['ConnectorId'], 'query': q}, stranger=(tid, sid) in STRANGERS)
+    if cards: return system({'type': cards[0]['Type'], 'connector_id': cards[0]['ConnectorId'], 'query': q})
     from urllib.parse import quote
-    return _hands(store, tid, sid, 'web_fetch', {'url': SEARCH_PAGE + quote(q)})
+    return fetch(SEARCH_PAGE + quote(q))
+
+
+def _search(store, tid: int, sid: str, q: str) -> str:
+    return search(store, tid, q, BRAINS.get((tid, sid)),
+                  lambda a: call_taskuary(tid, sid, 'run_system', a, stranger=(tid, sid) in STRANGERS),
+                  lambda url: _hands(store, tid, sid, 'web_fetch', {'url': url}))
 
 def _hands(store, tid: int, sid: str, name: str, a: dict) -> str:
     "A CLI's own hands, run by the server: files, the web, and commands under the ONE gate a CLI's commands pass (hooks.command_gate)."
@@ -487,7 +491,7 @@ def forget(tid: int, sid: str):
 def tools_for(tid: int, sid: str, browser: bool, stranger: bool = False, post=None, hands: bool = True) -> list:
     """What an API session is offered this turn: Taskuary's toolbox (the CLI's, gated as the CLI's), and the browser on the owner's own task
     where agent-browser is installed. `show` is the server's where its toolbox answered, else the local one."""
-    own = taskuary_tools(tid, sid, stranger=stranger, post=post)
+    own = [t for t in taskuary_tools(tid, sid, stranger=stranger, post=post) if t['function']['name'] != 'web_search']      # its own (WEB)
     TOOLBOX[(tid, sid)] = {t['function']['name'] for t in own}
     (STRANGERS.add if stranger else STRANGERS.discard)((tid, sid))
     # ...and a CLI's own hands where the owner gave them (general.full_hands: 'look things up only' reads, never writes or runs). A stranger's

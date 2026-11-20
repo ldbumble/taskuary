@@ -6565,11 +6565,13 @@ async def mcp_rpc(request: Request, task: int = 0):
         return out.body.decode() if isinstance(out, JSONResponse) else out
     from .wrapup import no_correspondent
     from .general import GENERAL_KINDS
+    from . import harness
     skip = (agenttools.REPLY_TOOLS if no_correspondent(store, task) else ()) + (
-        agenttools.CODING_TOOLS if (store.get_task(task) or {}).get('Kind') in GENERAL_KINDS else ())
+        agenttools.CODING_TOOLS if (store.get_task(task) or {}).get('Kind') in GENERAL_KINDS else ()) + (
+        () if (card := harness.on_card(store, task)) else ('web_search',))         # ...the web through the card, only for its harness CLI (harness.py)
     # ...a stranger's session is served the owner's harmless tools and nothing else (agenttools.STRANGER_TOOLS)
     if guard.scope_of(cfg['server'], request.headers) == guard.STRANGER: skip = tuple(n for n in agenttools.TOOLS if n not in agenttools.STRANGER_TOOLS)
-    def one(m): return agenttools.rpc(m, run, skip) if isinstance(m, dict) else {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32600, 'message': 'not a request'}}
+    def one(m): return agenttools.rpc(m, run, skip, card) if isinstance(m, dict) else {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32600, 'message': 'not a request'}}
     out = await run_in_threadpool(lambda: [r for r in map(one, msg if isinstance(msg, list) else [msg]) if r is not None])   # the doors are sync
     if not out: return Response(status_code=202)
     return JSONResponse(out if isinstance(msg, list) else out[0])
@@ -8047,6 +8049,9 @@ def connectors(request: Request):
     # GatewayBuiltIn: this build ships the organisation gateway's address, so its card's address field is optional (llm.gateway_base)
     from .llm import OPENAI_COMPATIBLE
     rows = [c | {'GatewayBuiltIn': bool(OPENAI_COMPATIBLE['hipaa_ai'][0])} if c['Type'] == 'hipaa_ai' else c for c in rows]
+    # Harness: the CLI an API card's agent runs on - Codex or OpenCode, its choice and its one line (harness.line); an active card's starts installing
+    from . import harness
+    rows = [c | {'Harness': h} if c['IsAI'] and (h := harness.line(store, c)) else c for c in rows]
     # ReadsBack: the days this card's first read will go back while that read is still due - its "How far back to bring in", 0 for a
     # reader that is not asked by date or has been read (channels.reads_back)
     # LastRead: what its last read brought in, from the read's own counts (channels.read_line) - the line under its Sync now

@@ -16,7 +16,7 @@ import argparse, json, os, sys, time, urllib.request
 from pathlib import Path
 
 # a tool's class, by its name on either road (an AI card's own tools, a CLI's): one table, so a road is judged by what it did, not by its words
-CLASS = {'make': ('file_write', 'file_edit', 'write', 'edit', 'notebookedit'), 'cmd': ('run_command', 'bash', 'powershell'),
+CLASS = {'make': ('file_write', 'file_edit', 'write', 'edit', 'notebookedit', 'apply_patch'), 'cmd': ('run_command', 'bash', 'powershell', 'exec_command', 'shell', 'execute'),
          'read': ('file_read', 'files_list', 'read', 'glob', 'grep', 'ls'), 'web': ('web_search', 'websearch', 'web_fetch', 'webfetch'),
          'browser': ('browser_',), 'mail': ('search_messages', 'read_message', 'mail'), 'tasks': ('search_tasks', 'my_task', 'task'),
          'calendar': ('free_times', 'calendar', 'meeting'), 'show': ('show',), 'reply': ('propose_reply', 'reply')}
@@ -114,7 +114,7 @@ class App:
 
 def run(app: App, ask: str, wait: float) -> dict:
     "One ask on New: the task it made, its turn's calls as first seen, the seconds, the answer and the files."
-    t0 = time.time(); tid = app.call('/api/start', {'text': ask, 'images': []})['taskId']
+    t0 = time.time(); tid = app.call('/api/start', {'text': ask, 'images': []}, timeout=300)['taskId']   # New's triage on a slow card took 125 s
     seen, c = [], {}
     while time.time() - t0 < wait:
         try: c = app.call(f'/api/tasks/{tid}/conversation?level=everything')

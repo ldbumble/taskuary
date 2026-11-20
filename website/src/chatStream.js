@@ -295,4 +295,4 @@ export const onYouTurn = (items, { askAt = "", lettersAt = "", landAt = "" } = {
 // ...(a question the agent asked before is no wait while it works: the recorded walk, 2026-11-12, read "Waiting for your answer" over a turn
 // already at work on his answer - only a step it is stopped at, or a sign-in on the page, holds a turn at work)
 export const waitingOn = (list) => (list?.permissions?.length ? "Waiting for your Allow once"
-  : isSignin(list?.asking) ? "Waiting for you to sign in" : "");
+  : isSignin(list?.asking) ? (list.asking.named ? list.asking.text : "Waiting for you to sign in") : "");      // ...a step the agent named, by its name

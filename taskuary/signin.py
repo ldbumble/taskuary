@@ -469,7 +469,7 @@ def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=..., wh
     if signing_up(claimed): return new_account(store, tid, sid, site, rid, fill, watch)
     name = site_name(site, sid)
     what = ' '.join(str(what or '').split()).rstrip('.')
-    text = f'Your turn in the browser on {name}: {what}' if what else f'Sign in to {name} to continue'
+    text = f'{ws.NAMED_STEP} on {name}: {what}' if what else f'Sign in to {name} to continue'      # ...named: the page says these words (workerstate)
     # "Signed in" as a CHOICE only where an answer arrives as words (the chat's own agent): a pty's choices are a chooser, answered
     # by number (workerstate.answer). A pty's ask still has the press - the card draws it for every `signin:` ask, and its answer goes
     # through signed_in, never the chooser (2026-10-25)

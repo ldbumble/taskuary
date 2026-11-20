@@ -206,8 +206,14 @@ def _public_request(e: dict) -> dict:
     except ValueError: choices = []
     # `source` travels with it because it changes what an ANSWER is: a request read off a chooser is
     # answered by picking, not by typing the option's words back at it (see `answer`)
+    a = ask_of(e['RequestId'])
+    # ...A STEP THE AGENT NAMED IS ASKED BY ITS NAME (the owner's ruling, 2026-11-19: "PermitWatch asks a human check", never "sign in" because
+    # the page also has a password field): a sign-in ask whose words are the agent's step (signin.needs: "Your turn in the browser on ...")
+    # is `named` - the page says those words; the vault's road on that page runs all the same
+    if a.get('ask') == 'signin' and str(e.get('Text') or '').startswith(NAMED_STEP): a = {**a, 'named': True}
     return {'request_id': e['RequestId'], 'kind': e['Kind'], 'text': e['Text'], 'choices': choices,
-            'sid': e['Sid'], 'at': e['CreatedAt'], 'source': e.get('Source') or 'api', **ask_of(e['RequestId'])}
+            'sid': e['Sid'], 'at': e['CreatedAt'], 'source': e.get('Source') or 'api', **a}
+NAMED_STEP = 'Your turn in the browser'          # the words signin.needs and browserview.your_turn open a step the agent named with
 
 
 # WHICH KIND OF ASK, SAID BY THE SERVER (the roads audit, 2026-11-19): the page read `signin:` and `yourturn:` off the request id in five places,

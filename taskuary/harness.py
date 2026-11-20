@@ -227,7 +227,8 @@ def bundled(cmd: str) -> dict:
     if key not in _BUNDLED:
         from . import config
         empty = config.home() / 'harness' / 'empty-home'; empty.mkdir(parents=True, exist_ok=True)       # never the owner's own ~/.codex
-        out = subprocess.run([cmd, 'debug', 'models', '--bundled'], capture_output=True, text=True, encoding='utf-8', timeout=60,
+        from . import spawn
+        out = spawn.run([cmd, 'debug', 'models', '--bundled'], capture_output=True, text=True, encoding='utf-8', timeout=60,
                              stdin=subprocess.DEVNULL, env={**os.environ, 'CODEX_HOME': str(empty)}).stdout
         _BUNDLED[key] = json.loads(out)['models'][0]
     return _BUNDLED[key]

@@ -91,8 +91,8 @@ def test_an_invite_goes_to_the_agent_where_one_may_start_by_itself():
         out = arrive(s)
     t = s.get_task(out['task_id'])
     assert t['Kind'] == 'general'
-    (fn, _, tid, job, deep), = [a for a in started if a[0] is ingest._auto_general]
-    assert tid == t['TaskId'] and deep and 'answer_invite' in job and INVITE['subject'] in job
+    (fn, _, tid, job), = [a for a in started if a[0] is ingest._auto_general]          # one agent per task: no second, deeper start
+    assert tid == t['TaskId'] and 'answer_invite' in job and INVITE['subject'] in job
 
 
 def test_with_no_agent_to_start_an_invite_stays_the_owners_reply():

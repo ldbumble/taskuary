@@ -80,10 +80,11 @@ def owner_spoke(store, tid: int) -> bool:
     if any(c.get('ActorType') in (USER_TYPE, WAITING_TYPE) and not is_brief(c) for c in store.list_comments(tid, internal=True)): return True
     from .outbox import is_ask
     return not any(str(m.get('Direction') or 'in') != 'out' and not is_ask(m) for m in store.list_messages(tid))
-def _line_of(body) -> dict:
+def _kept_text(body) -> str:
+    "The words of a line kept for a turn (wait_line's JSON)."
     try: got = json.loads(body or '{}')
-    except ValueError: got = {'text': str(body or '')}
-    return {'text': str(got.get('text') or ''), 'files': list(got.get('files') or [])}
+    except ValueError: return str(body or '')
+    return str((got if isinstance(got, dict) else {}).get('text') or '')
 def wait_line(store, tid: int, text: str, files=None, line_id=None) -> int:
     """Keep the owner's line for the agent now - every screen draws it at once (task-changed): its row id.
     `line_id`: THE NAME THE PAGE GAVE IT (the spine audit, 2026-11-09). The page that sent a line draws it at once and has to know when the
@@ -93,7 +94,7 @@ def wait_line(store, tid: int, text: str, files=None, line_id=None) -> int:
     # ...`after`: the newest message the store held when it was typed - a stamp is a whole second, and a line and a message of one second
     # stand in the order they came (conversation.hear)
     after = (store._one('SELECT MAX(MessageId) AS m FROM message') or {}).get('m') or 0
-    wid = store.add_comment(tid, 'owner', WAITING_TYPE, json.dumps({'text': text, 'files': list(files or []), 'after': after}), line_id=line_id or new_line_id())
+    wid = store.add_comment(tid, 'owner', WAITING_TYPE, json.dumps({'text': text, 'after': after}), line_id=line_id or new_line_id(), files=files)
     from . import handraise
     handraise.moved(tid)
     return wid
@@ -307,13 +308,13 @@ def drop_line(store, tid: int, line_id: str) -> dict:
 
 def waiting_lines(store, tid: int) -> list:
     "The owner's lines no turn has taken yet, oldest first: [{id, text, files, at}]."
-    return [{'id': r['CommentId'], 'at': r['CreatedAt'], **_line_of(r['Body']), **({'line': r['LineId']} if r.get('LineId') else {})}
+    return [{'id': r['CommentId'], 'at': r['CreatedAt'], **line_said(r), **({'line': r['LineId']} if r.get('LineId') else {})}
             for r in store.list_comments(tid, internal=True) if r.get('ActorType') == WAITING_TYPE]
 HIS_TITLE = 'title_his_words'          # the audit row that says a task's title is his own words, as made (title_of) - take_name reads it
 def title_of(words: str, n: int = 120) -> str:
     "THE ONE TITLE MADE FROM HIS WORDS - New's, the Assistant's set-up, a hand-off's: one line, cut at a word, its first letter a capital."
     from .concierge import _title_cut
-    t = _title_cut(' '.join(split_files(str(words or ''))['text'].split()), n)
+    t = _title_cut(' '.join(str(words or '').split()), n)
     return t[:1].upper() + t[1:]
 def own_title(store, tid: int, words: str) -> bool:
     "Record, once at its making, that task `tid` is called by his words (its title is title_of them) - a name he gave it is not marked."
@@ -355,7 +356,7 @@ def take_kept(store, tid: int, ids=None, **how) -> list:
     with store.lock:
         rows = [r for r in store.list_comments(tid, internal=True) if r.get('ActorType') == WAITING_TYPE and (ids is None or r['CommentId'] in ids)] if ids is None or ids else []
         conversation.hear(store, tid, rows, **how)
-        return store.take_lines(tid, WAITING_TYPE, USER_TYPE, lambda b: with_files(**_line_of(b)), ids={r['CommentId'] for r in rows}) if rows else []
+        return store.take_lines(tid, WAITING_TYPE, USER_TYPE, line_said, ids={r['CommentId'] for r in rows}) if rows else []
 # A SESSION THAT ENDED UNDER A LINE (failed, closed, idled out) - never "reload the page" (the owner, 2026-11-07): say_line starts a fresh one,
 # which takes the kept line. 'has ended' is what every caller reads it by
 ENDED = 'this assistant session has ended - it starts again with the next line you send'
@@ -775,7 +776,7 @@ def chat_rows(store, tid: int, run: bool = False) -> list:
 def _as_messages(rows) -> list:
     return [{'id': f"comment-{c['CommentId']}",
              'role': 'assistant' if c.get('ActorType') == ASSISTANT_TYPE else 'user',
-             'content': [{'type': 'text', 'text': (split_files(c.get('Body')) if c.get('ActorType') != ASSISTANT_TYPE else {'text': c.get('Body') or ''})['text']}],
+             'content': [{'type': 'text', 'text': his_line(c)['text'] if c.get('ActorType') != ASSISTANT_TYPE else c.get('Body') or ''}],
              'createdAt': c.get('CreatedAt'), **({'brief': True} if is_brief(c) else {}), **({'line': c['LineId']} if c.get('LineId') else {})} for c in rows]
 
 
@@ -1114,9 +1115,9 @@ def to_agent(store, tid: int, said: str, actor: str = 'owner', heard=None, *, fr
         reopen(store, tid, actor)
         if request: return (ws.answer_open(store, tid, said, actor, owner=owner) if request == 'open' else
                             ws.answer(store, tid, request, said, actor, owner=owner, press=bool(line.get('press'))))
-        if not wake: return waitroom.add(store, tid, with_files(said, files) if files else said, 'owner', owner=owner)
+        if not wake: return waitroom.add(store, tid, said, 'owner', owner=owner, files=files)
         return take_line(store, tid, said, files, actor, **line)
-    if frm == 'sender': return waitroom.add(store, tid, with_files(said, files) if files else said, waitroom.TEAMMATE)
+    if frm == 'sender': return waitroom.add(store, tid, said, waitroom.TEAMMATE, files=files)
     from . import origin
     t, sess = store.get_task(tid), ws._live(tid)
     # ...a task a stranger STARTED keeps them by the box with the rest (waitroom: held_stranger), never in a turn it would refuse - on his own
@@ -2323,6 +2324,7 @@ def prompt_parts(store, tid: int, turn: bool = False, heard: str = '') -> tuple[
     """(the system's lines that stay the same turn after turn, those a turn can change, the user turn) - _prompt joins them. `turn`: built for
     a session's turn that just began (turn_facts) - the thread as its hand-over took it: what came in since is the next turn's to hear.
     `heard`: Taskuary's words this turn carries besides (a press told back) - a fact they say already is not said again."""
+    from .store import files_of
     detail = store.task_detail(tid) or {}
     if turn:
         from . import conversation
@@ -2478,7 +2480,7 @@ def prompt_parts(store, tid: int, turn: bool = False, heard: str = '') -> tuple[
     turns, said = [], chat_rows(store, tid, run=True)
     for c in said[-TURNS:]:
         role = 'ASSISTANT' if c.get('ActorType') == ASSISTANT_TYPE else 'USER'
-        turns.append(f"{role}: {_cut(c.get('Body'), TURN_CHARS)}")
+        turns.append(f"{role}: {_cut(c.get('Body') if role == 'ASSISTANT' else prompt_line(c), TURN_CHARS)}")
     # ...a SECOND agent (new_run) has a conversation of its own, and is told where the earlier one got to: its last answer, not its chat
     before = next((c for c in reversed(_split(store, tid)[0]) if c.get('ActorType') == ASSISTANT_TYPE), None)
     prior = (f"WHERE THE EARLIER AGENT ON THIS TASK GOT TO - its last answer. You are a new agent on the task, with a conversation of "
@@ -2548,7 +2550,7 @@ def prompt_parts(store, tid: int, turn: bool = False, heard: str = '') -> tuple[
     # as its material. The conversation still ends on the same words; this is where they are read FIRST.
     rows = chat_rows(store, tid, run=True)
     last = rows[-1] if rows else {}
-    ask = _cut(last.get('Body'), OWNER_ASK_CHARS) if sources and not dock and last.get('ActorType') == USER_TYPE else ''
+    ask = _cut(prompt_line(last), OWNER_ASK_CHARS) if sources and not dock and last.get('ActorType') == USER_TYPE else ''
     # ...and a turn Taskuary started - a sender's new line, a press, a check-back come due - is headed as Taskuary's, never the owner's (the
     # agent map, 2026-11-10: "THE OWNER'S ASK" stood over "These are their words, not the owner's")
     lead = ("TASKUARY'S WORDS ON THIS TURN - not the owner's" if is_brief(last) else "THE OWNER'S ASK - what they want done") + ' about the task and the material below'
@@ -2557,7 +2559,7 @@ def prompt_parts(store, tid: int, turn: bool = False, heard: str = '') -> tuple[
     code = coding_brief(store, tid, stranger, opening=not any(r.get('ActorType') == ASSISTANT_TYPE for r in rows)) if tid in ON_CARD else ''
     head = ((f"{lead}:\n{ask}\n\n" if ask else '')
             + f"TASK {detail.get('ref') or tid}\n" + ours(f"TITLE: {task.get('Title') or ''}\n")
-            + ours(f"SUMMARY: {task.get('Summary') or ''}\n") + f"STATUS: {task.get('Status') or ''}\n"
+            + ours(f"SUMMARY: {with_files(task.get('Summary') or '', files_of(task))}\n") + f"STATUS: {task.get('Status') or ''}\n"
             + ours(chk) + "\n"
             + (f'{rd}\n\n' if rd else '')
             + (f'{code}\n\n' if code else '')
@@ -2675,15 +2677,23 @@ def compacted_mail(mails) -> str:
 
 # ...a file that is no picture is named as a file (server.prompt_file): "ATTACHED IMAGES" over a PDF told the agent to look at it as one
 def files_head(paths) -> str: return 'ATTACHED IMAGES' if all(_IMAGE_FILE.search(str(p)) for p in paths) else 'ATTACHED FILES'
-# HIS WORDS AND WHAT HE ATTACHED, AS ONE LINE - the block every door writes (the page's withImages, the waiting room's note) and the one his
-# heard line keeps (2026-11-17: once a turn took his line its files were dropped, and his bubble drew the words alone). Read back by split_files
+# HIS FILES, AS A PROMPT NAMES THEM - built here, from the field, only where an agent is told (a turn, a CLI's seed, a note typed into a pane).
+# What he attached is never written into his words: it is the Files field of his line or his task's ask (store.files_json), read by line_said
+# (the design loop, 2026-11-20: every door wrote this block into the words and ~40 readers parsed it back; written slightly differently, his
+# files went from his bubble)
 _FILES = re.compile(r'\n\nATTACHED (?:IMAGES|FILES) \(read these files\)\n(.+)\Z', re.S)
 def with_files(text: str = '', files=()) -> str:
     return (text or '') + (f"\n\n{files_head(files)} (read these files)\n" + '\n'.join(map(str, files)) if files else '')
-def split_files(body) -> dict:
-    "{'text', 'files'} of a line written by with_files - the words alone where it names no files."
-    b = str(body or ''); m = _FILES.search(b)
-    return {'text': b[:m.start()] if m else b, 'files': [x.strip() for x in m.group(1).splitlines() if x.strip()] if m else []}
+def prompt_files(prompt: str) -> list:
+    "The files a PROMPT already names in its blocks (each block a paragraph of its own) - never a path met in prose; never read off a stored row."
+    return [x.strip() for part in str(prompt or '').split('\n\n') if (m := _FILES.search('\n\n' + part)) for x in m.group(1).splitlines() if x.strip()]
+def line_said(c) -> dict:
+    """THE ONE READ OF A LINE OF HIS: {'text', 'files'} - the words as they went to the agent (with any list Taskuary named under them, _ALSO) and
+    the files he attached, from the row's Files field. `c`: its comment row, kept for a turn (wait_line's JSON) or heard; a bare string is words."""
+    if not isinstance(c, dict): return {'text': str(c or ''), 'files': []}
+    from .store import files_of
+    return {'text': _kept_text(c.get('Body')) if c.get('ActorType') == WAITING_TYPE else str(c.get('Body') or ''), 'files': files_of(c)}
+def prompt_line(c) -> str: return with_files(**line_said(c))          # ...a line of his as a prompt carries it: his words, then his files' block
 def line_words(c) -> str:
     "A line of his as words, where one is quoted back to him (a greyed card, search): what he typed, then each file by its name - never the block."
     from .outputs import _STAMPED              # ...by his name for it, as his bubble's pill reads it - never the upload's stamp
@@ -2692,12 +2702,11 @@ def line_words(c) -> str:
 _IMAGE_FILE = re.compile(r'\.(png|jpe?g|gif|webp)$', re.I)
 # ...AND THE OTHER LINES OF AN FYI HANDFUL he sent on with it (the page's FyisCard handAll writes this block under his words, for the agent to
 # read each one): Taskuary's words, never drawn as his - his bubble read "m7 - Gail Moreno: ..." as if he had typed it (the stress round, 2026-11-18)
-_ALSO = re.compile(r'\n\nTHE OTHER MESSAGES OF THIS LIST IT IS ABOUT \(read each with read_message\)\n.*?(?=\n\nATTACHED (?:IMAGES|FILES) \(read these files\)\n|\Z)', re.S)
-def his_line(c, kept: bool = False) -> dict:
+_ALSO = re.compile(r'\n\nTHE OTHER MESSAGES OF THIS LIST IT IS ABOUT \(read each with read_message\)\n.*\Z', re.S)
+def his_line(c) -> dict:
     """{'text', 'files'} of a line of his as he wrote it - the words he typed and the files he attached, without what Taskuary added for the
-    agent - the one read on every surface. `c`: its comment, kept (wait_line's JSON) or heard (with_files' block), else a body (`kept` says which)."""
-    if isinstance(c, dict): c, kept = c.get('Body'), c.get('ActorType') == WAITING_TYPE
-    got = _line_of(c) if kept else split_files(c)
+    agent - the one read on every surface (line_said, less _ALSO)."""
+    got = line_said(c)
     return {**got, 'text': _ALSO.sub('', got['text'])}
 
 
@@ -2985,7 +2994,7 @@ class GeneralSession:
             from .conversation import unheard
             came = sorted(unheard(self.store, self.task_id))
             # ...one hand-over, in the order it came: what stood unheard (the mail) is heard with his lines (standing), before them
-            took = [_line_of(r['Body']) for r in take_kept(self.store, self.task_id, sid=self.sid, standing=bool(came))]
+            took = [line_said(r) for r in take_kept(self.store, self.task_id, sid=self.sid, standing=bool(came))]
             if not took: self.trace = [e for e in self.trace if e is not mark]; return ''
             mail = '\n\n'.join(_came_in(self.store.get_message(m) or {}) for m in came)
             return with_files('\n\n'.join(x for x in (mail, _turn_only(self.store, self.task_id, '\n\n'.join(x['text'] for x in took))) if x),
@@ -3119,7 +3128,7 @@ class GeneralSession:
         if (mine and not waits) or (not waits and mails and conversation.heard(self.store, self.task_id, 'mail', mails)): self._lock.release(); return ''
         # ...ONE hand-over, written once (take_kept -> conversation.hear): his lines, what came in and was pressed since the last turn, and the
         # turn's own start - so they stand together in the order they came
-        took = [{**r, **_line_of(r['Body'])} for r in take_kept(self.store, self.task_id, turn=True, sid=self.sid)]
+        took = [{**r, **line_said(r)} for r in take_kept(self.store, self.task_id, turn=True, sid=self.sid)]
         if mine and not took: self._lock.release(); return ''          # ...taken back in that instant (a cancelled wait drops its line): nothing to say
         if took: attachments = list(dict.fromkeys([*(() if mine else attachments or ()), *(p for r in took for p in r['files'])]))
         if mine: lines = [r['text'] for r in took]; text, kept = '\n\n'.join(lines), True
@@ -3467,16 +3476,16 @@ class GeneralSession:
             # line also carries images attached directly in the composer.
             # ...IN THE ONE BLOCK (with_files: "read these files", as every door writes it), for each file no block in the turn already carries -
             # the first turn names his line's files in his line's own block, and said once more under a second wording the agent read it three
-            # times. Carried means in a block (split_files: each block stands as a paragraph of its own), never a path met in prose - "compare
+            # times. Carried means in a block (prompt_files: each block stands as a paragraph of its own), never a path met in prose - "compare
             # /d/a.pdf.bak with it" names no /d/a.pdf
             def files(u):
-                named = {str(Path(f).resolve()) for part in u.split('\n\n') for f in split_files('\n\n' + part)['files']}
+                named = {str(Path(f).resolve()) for f in prompt_files(u)}
                 return with_files('', rest) if (rest := [r for p in paths if (r := str(Path(p).resolve())) not in named]) else ''
             # ...and to an AI card asked the plain way - no hands to open a file - the small text files among them whole (outputs.texts): this
             # turn's own, and the task's on a conversation's first turn
             from . import outputs
             def texts(u):
-                named = [f for part in u.split('\n\n') for f in split_files('\n\n' + part)['files']]
+                named = prompt_files(u)
                 return f'\n\n{t}' if (t := outputs.texts([*named, *([] if kept_conv else paths)])) else ''
             limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS
             def ask(brain, user):

@@ -954,8 +954,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // sign-in's pages there is a moment with no ask open, and the page went away under them
   // ...what the agent asks, by the one read both payloads carry (taskstate.asking): gone from the card the moment it is answered
   const ask = (conv.list || data)?.asking, asking = ask && ask.request_id !== answered ? ask : null;
-  // ...whether he has a part on the page is the server's one answer (taskstate.needs_owner); an ask he has just answered here stops it at once
-  const needRaw = !!data?.needsOwner && (!!asking || (data?.browserActs || []).some((r) => heldOn(r, data?.session?.sid))), answers = (conv.list?.items || []).filter((x) => x.kind === "turn" && x.state !== "working" && x.state !== "starting").length;
+  // ...whether he has a part on the page is the server's one answer (taskstate.needs_owner), read from the payload that carries the ask - a coding
+  // task reads its chat's state once, and its agent's hand-over never drew (the design loop, 2026-11-20); an ask he has just answered here stops it at once
+  const needRaw = !!(conv.list || data)?.needsOwner && !(ask && ask.request_id === answered), answers = (conv.list?.items || []).filter((x) => x.kind === "turn" && x.state !== "working" && x.state !== "starting").length;
   const [needHeld, setNeedHeld] = useState(null);
   useEffect(() => { if (needRaw) setNeedHeld(answers); }, [needRaw]);   // eslint-disable-line react-hooks/exhaustive-deps
   // ...or is AT WORK again: his part is done the moment it goes on (the owner, 2026-11-11: "seamlessly hand off once login is in to go back to
@@ -973,7 +974,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ...the agent's turns, as the list holds them: what each said, by the name the page keys a turn by
   const turnsNow = (conv.list?.items || []).filter((x) => x.kind === "turn");
   // ...and what typing does there: into the running CLI as its next line, or the session picked back up with these words leading - the files
-  // named to the CLI by their paths after the words (promptImages.withImages), as every coding CLI reads a file
+  // a field beside the words, named to the CLI by their paths under them as the server builds its prompt (general.with_files)
   // ...and what a coding source reads once a line is in: its own sessions (the line itself goes the one road, holdText)
   const road = coding ? () => { onChanged?.(); conv.load(); } : null;
   // ...its screen is a card only on the pty road, and only while it asks (codingchat.live_of `asking`); over ACP Stop ends the turn

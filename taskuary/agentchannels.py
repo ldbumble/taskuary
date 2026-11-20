@@ -368,17 +368,17 @@ def framed(b: dict, m: dict, text: str) -> str:
 
 
 def _tell(store, b, tid: int, text: str, m, files=()):
-    from .general import to_agent, with_files
+    from .general import to_agent
     ok, why = in_repo(store, b, tid)
     if not ok: return say(store, b, f'Nothing was sent - {why}.')
     if not store.get_task(tid): return say(store, b, f'There is no task {task_ref(tid)}.')
     from . import terminal as term
     if (why := term.stranger_now(store, tid)): return say(store, b, f'Nothing was sent to {task_ref(tid)} - {why}.')
     if m is None:
-        store.add_comment(tid, 'owner', 'human', with_files(text, files))
+        store.add_comment(tid, 'owner', 'human', text, files=files)
         o = to_agent(store, tid, text, frm='owner', files=files or None, wake=False)      # the one road into the agent (general.to_agent)
     else:
-        store.add_comment(tid, 'teammate', 'human', with_files(f"{label(m)} on {LABEL[b['Kind']]}: {text}", files))
+        store.add_comment(tid, 'teammate', 'human', f"{label(m)} on {LABEL[b['Kind']]}: {text}", files=files)
         o = to_agent(store, tid, framed(b, m, text), frm='sender', files=files or None)
     store.audit('task', tid, 'agent_channel_tell', 'owner' if m is None else 'teammate', detail={'channel': b['ChannelId'], 'chars': len(text)})
     if b.get('TaskId') is None:

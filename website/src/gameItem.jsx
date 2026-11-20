@@ -176,7 +176,7 @@ function Draft({ item, busy, play }) {
 // (concierge.propose_direct), run at once - the box was the confirmation. A repository still to choose comes back as the picker.
 const AGENT_VERBS = ["coding_agent", "regular_agent", "coder"];
 export const handOver = async (item, o, onRepo) => {
-  const { data: p } = await api.post("/api/concierge/propose", { verb: o.verb, key: item.key, table: true, exact: true, text: o.text || null,
+  const { data: p } = await api.post("/api/concierge/propose", { verb: o.verb, key: item.key, table: true, exact: true, text: o.text || null, files: o.files || [],
     agent: o.agent || null, brain: o.brain || null, pick: o.pick || null, model: o.model || null });
   if (!p?.id) throw new Error(p?.say || "it did not start");
   let res;

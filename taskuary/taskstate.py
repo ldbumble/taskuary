@@ -64,6 +64,14 @@ def asking(store, task: dict, session=None) -> dict | None:
     return browsergate.shown_ask({**q, 'resting': True}) if rests and (q := open_question(store, tid)) else None
 
 
+def browser_acts(store, tid: int) -> list:
+    "The held browser/shell acts of task `tid` waiting on his press - only the one the line has at its front (cardqueue; a hard rule)."
+    from . import cardqueue, proposals
+    held = cardqueue.held(store, tid)
+    return [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' ORDER BY ReviewId", (tid,))
+            if proposals._action(r) in proposals.HELD_ACTS and r['ReviewId'] not in held]
+
+
 def needs_owner(ask: dict | None, acts: list = (), sid: str = '') -> bool:
     """WHETHER THE OWNER HAS A PART ON THE PAGE - the one answer the task's view draws its browser by (the roads audit, 2026-11-19: the page
     rebuilt it from the ask's id): a sign-in or a step handed over to him there, or a browser step of this session held for his press."""

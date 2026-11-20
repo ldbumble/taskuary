@@ -83,11 +83,12 @@ def take_in_text(tid: int, text: str) -> str:
     return re.sub(re.escape(root) + r'[^\r\n]*', lambda m: (take_in(tid, [m.group(0)]) or [m.group(0)])[0], str(text), flags=re.I)
 
 
-def take_in_summary(store, tid: int, actor: str) -> str:
-    "Task `tid`'s Summary with every file it names that this server saved taken into its folder (take_in_text) - kept, and returned."
-    s = str((store.get_task(tid) or {}).get('Summary') or '')
-    if (s2 := take_in_text(tid, s)) != s: store.update_task(tid, {'Summary': s2}, actor)
-    return s2
+def take_in_ask(store, tid: int, actor: str) -> list:
+    "The files of task `tid`'s ask (its Files field) taken into its folder (take_in) - kept as the task's, and returned."
+    from .store import files_of
+    was = files_of(store.get_task(tid))
+    if (now := take_in(tid, was) if was else []) != was: store.update_task(tid, {'Files': now}, actor)
+    return now
 
 
 def resolve(tid: int, rel: str, base: Path = None):
@@ -336,11 +337,11 @@ def turn_versions(tid: int) -> list:
 
 def his(store, tid: int) -> set:
     """The files in task `tid`'s folder the owner attached, as he attached them: what a line of his sent (sent), and what the task's own
-    words name (New's ask, general.split_files) - one written since is the agent's."""
-    from . import general
+    ask names (New's, the task's Files field) - one written since is the agent's."""
     from .conversation import ep
+    from .store import files_of
     t, out = store.get_task(tid) or {}, sent(store, tid)
-    for f in general.split_files(t.get('Summary'))['files']:
+    for f in files_of(t):
         try:
             q = folder(tid) / rel(tid, Path(f))
             if q.is_file() and q.stat().st_mtime <= ep(t.get('CreatedAt')) + 2: out.add(rel(tid, Path(f)))

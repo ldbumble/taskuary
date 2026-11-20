@@ -402,11 +402,13 @@ def _chat(store, words, skip) -> tuple:
     from .general import ASSISTANT_TYPE, DOCK_TAG, USER_TYPE, line_words
     from .selfclose import report_of
     from .store import is_internal
-    TEXT = "COALESCE(rv.FinalText, rv.DraftText, '')"
+    TEXT, SAID = "COALESCE(rv.FinalText, rv.DraftText, '')", "Body || ' ' || COALESCE(Files, '')"
     lk = lambda col: ' AND '.join(f"tq_fold({col}) LIKE ? ESCAPE '\\'" for _ in words)
     pat = [store._like_pat(w) for w in words]
     said = [{**c, 'line': f"comment-{c['CommentId']}", 'Body': report_of(c['Body']) if c['ActorType'] == ASSISTANT_TYPE else line_words(c)}
-            for c in store._rows(f"SELECT CommentId, TaskId, Actor, ActorType, Body, CreatedAt FROM comment WHERE ActorType IN (?,?) AND {lk('Body')} "
+            # ...his files by their names too (comment.Files, read back by line_words) - a word of the folder they sit in finds nothing (_in below)
+            for c in store._rows(f"SELECT CommentId, TaskId, Actor, ActorType, Body, CreatedAt, Files FROM comment WHERE ActorType IN (?,?) "
+                                 f"AND {lk(SAID)} "
                                  "ORDER BY CommentId DESC LIMIT 200", (USER_TYPE, ASSISTANT_TYPE, *pat)) if not is_internal(c)]
     drafts = store._rows(f"SELECT rv.TaskId, {TEXT} Body, rv.CreatedAt, (SELECT 'comment-' || s.CommentId FROM draft_snapshot s "
                          f"WHERE s.ReviewId=rv.ReviewId ORDER BY s.Id DESC LIMIT 1) line FROM review rv WHERE rv.Kind IN ({','.join('?' * len(DRAFTS))}) "

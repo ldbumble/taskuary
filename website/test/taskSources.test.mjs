@@ -142,7 +142,7 @@ test("the task view draws the new section: read-only pills, no in-section button
   assert.ok(!page.includes("sx={chipSel}"), "no dropdowns by the triage results");
   // each part named in its own column, so the three read as separate parts with no rule between them
   for (const part of ["The ask", "To do", "Came from"]) assert.ok(page.includes(`<Part label="${part}"`), `${part} is its own part`);
-  assert.match(page, /verdict\?\.summary \|\| wordsOf\(t\?\.Summary\)/, "the ask is triage's summary first - and the task's own words, never the files it names");
+  assert.match(page, /verdict\?\.summary \|\| t\?\.Summary/, "the ask is triage's summary first - and the task's own words: its files are its Files field");
   assert.match(page, /maxHeight: THREAD_MAX, overflowY: "auto"/, "Show all scrolls when it goes far back");
   // ...in a box as tall as the window leaves, never the 360px that held three lines of seven (the owner, 2026-10-20)
   assert.match(page, /const THREAD_MAX = "max\(360px, calc\(100vh - 160px\)\)";/);

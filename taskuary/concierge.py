@@ -1824,7 +1824,7 @@ def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = ''
         ch, to = send_to(store, channel, to)
         # ...with what he attached to the line that asked for it (his_words' files), as New's own Send something carries them
         files = (_TURN.get() or {}).get('files')
-        if to and str(text or '').strip(): return _made_now(store, tid, 'outbox', {'channel': ch, 'to': to, 'about': general.with_files(str(text).strip(), files)}, lead)
+        if to and str(text or '').strip(): return _made_now(store, tid, 'outbox', {'channel': ch, 'to': to, 'about': str(text).strip(), **({'files': list(files)} if files else {})}, lead)
         # A MESSAGE THAT CANNOT BE PLACED IS HIS SENTENCE TO AN AGENT (2026-11-17): "email Erin and Gail that the offsite moved to Friday"
         # came up in New cut down to the model's "The offsite moved to Friday.", To empty, under a line naming Draft it - and with nothing
         # able to send, New had already switched itself to the agent tab, so the line named a button that was not there. A recipient
@@ -1870,7 +1870,7 @@ def _made_now(store, tid: int, op: str, params: dict, lead: str = '', actor: str
     try:
         if op == 'outbox':
             from . import outbox
-            o = outbox.compose(store, params['channel'], params['to'], params['about'], 'draft', actor=actor)
+            o = outbox.compose(store, params['channel'], params['to'], params['about'], 'draft', actor=actor, files=params.get('files'))
             o = {**o, 'drafted': bool(o.get('draft'))}
         else:
             done = run_proposal(store, operations.propose(store, op, 0, his_words(op, params), actor), actor)
@@ -4496,16 +4496,18 @@ def his_words(kind: str, params: dict) -> dict:
     turn = _TURN.get() or {}
     typed = str(turn.get('typed') or '').strip()
     # ...AND WHAT HE ATTACHED TO IT (the stress round of New's attachments): a PDF given with the words reached the Assistant's model and
-    # not the task it started - his line is his words and his files, in the one block every door writes (general.with_files)
-    return {**params, 'said': general.with_files(typed, turn.get('files'))} if kind in STARTS_FROM_WORDS and typed and not params.get('said') else params
+    # not the task it started - his line is his words and his files, the files a field beside them (store.files_json)
+    return {**params, 'said': typed, **({'files': list(turn['files'])} if turn.get('files') else {})} \
+        if kind in STARTS_FROM_WORDS and typed and not params.get('said') else params
 
 
 def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: str = SETUP_KIND,
-               agent_job: bool = False, repo: str = None, profile: str = None, said: str = None, door: str = 'the Assistant chat') -> dict:
+               agent_job: bool = False, repo: str = None, profile: str = None, said: str = None, door: str = 'the Assistant chat', files=None) -> dict:
     """'Set up a report that...': a task with the owner's words in it, opened for the agent that can
     walk them through it. `kind` is 'general' for a walk-through and 'coding' for a hand-off the owner
     asked for (concierge's `coding_agent` verb), which is the only path that starts an agent in a checkout.
-    `said`: the line he typed, verbatim (his_words) - where the model wrote `text` from it, `text` is Taskuary's brief."""
+    `said`: the line he typed, verbatim (his_words) - where the model wrote `text` from it, `text` is Taskuary's brief. `files`: what he
+    attached to it - the task's Files, beside his words (store.files_json)."""
     from . import asks, ingest
     from .brief import HANDOFF_HEAD
     text = str(text or '').strip()
@@ -4514,13 +4516,12 @@ def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: st
     # reworded "can you login to the portal and see if there is report named ..." into a polished ask with a sentence he never said, and
     # the task drew it as "You" - its own row (ownwork.yours reads Summary), its checklist, its first line. What he typed is the task's;
     # what the model made of it reaches the agent as Taskuary's (below, and handoff_task's first prompt)
-    own = str(said or '').strip() or text
-    words = general.split_files(own)['text'].strip() or text          # ...his words, without the files his line names (his_words)
+    own = words = str(said or '').strip() or text
     # the title the model named (the set-up sort's, the hand-off's), or the owner's sentence as said. A regex used to strip a
     # leading verb off it, and "Add Erin to payroll" became "Erin to payroll" (the owner, 2026-10-11: no word lists)
     title = general.title_of(title) or general.title_of(words)
     from . import browserview
-    tid = store.create_task({'Title': title, 'Summary': own, 'Kind': kind, 'Status': 'open', 'Priority': 'normal', 'OriginBase': 'owner',
+    tid = store.create_task({'Title': title, 'Summary': own, 'Files': list(files or []), 'Kind': kind, 'Status': 'open', 'Priority': 'normal', 'OriginBase': 'owner',
                              # a CODING hand-off is the owner's own job, not a Taskuary set-up: marked
                              # assistant:setup it read as "Taskuary's own work" and opened in Taskuary's
                              # checkout, whatever it was about (the owner, 2026-09-24: an issue in another repository)
@@ -4533,9 +4534,9 @@ def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: st
                              'Tags': browserview.WANTS if kind == SETUP_KIND and not agent_job else (f'repo:{repo}' if repo else ''),
                              # the worker the owner's hand-off named: its rules seed the session (general.assigned_role)
                              **({'Assignee': f'agent:{profile}'} if profile else {})}, actor)
-    # ...and a file he attached is the task's own, in its folder, named there (outputs.take_in_summary - New's own road too)
+    # ...and a file he attached is the task's own, in its folder, named there (outputs.take_in_ask - New's own road too)
     from . import outputs
-    own = outputs.take_in_summary(store, tid, actor) or own
+    files = outputs.take_in_ask(store, tid, actor)
     general.own_title(store, tid, words)            # ...called by his words, until its agent names it (general.take_name)
     # A task the owner creates in the Assistant deserves the same concrete list surface as work
     # triage creates from an incoming ask. With no checklist the card rendered Summary as a banner,
@@ -4546,8 +4547,8 @@ def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: st
     # the chat does not render it, so a walk showed an answer with no question above it and read as
     # a walk that had never started (the owner, 2026-09-14). A hand-off has no conversation to open
     # here - the agent's own brief becomes its first turn - so there the ask stays a note.
-    if kind == SETUP_KIND and not agent_job: store.add_comment(tid, actor, general.USER_TYPE, own)
-    else: store.add_comment(tid, actor, 'human', f'Asked in {door}: {own}')
+    if kind == SETUP_KIND and not agent_job: store.add_comment(tid, actor, general.USER_TYPE, own, files=files)
+    else: store.add_comment(tid, actor, 'human', f'Asked in {door}: {own}', files=files)
     # ...and the brief, filed as Taskuary's: a walk-through hears it as its next turn, drawn as Taskuary's (general.is_brief); a coding
     # agent reads it beside his words (brief.handoff). A general hand-off is told it as its first prompt, so it is not filed twice
     if text != own and not agent_job:
@@ -4822,12 +4823,13 @@ def no_brain() -> str:
 
 
 def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', title: str = None, dock_tid: int = None, repo: str = None,
-                 profile: str = None, said: str = None, door: str = '') -> dict:
+                 profile: str = None, said: str = None, door: str = '', files=None) -> dict:
     """THE ONE START FROM THE OWNER'S WORDS (F1, the walks 2026-11-18): New's box (server /api/start), the Assistant's hand-off (the confirmed
     `task.create_from_text`), a phone's - each hands his words and files here, and the task is made and its agent started only then (PW-124).
     What the work is - a code fix, a routine, a report, research - is the agent's to do with its tools; nothing here picks a form. A start
     that cannot happen says why before anything is made; the same work already open is that task's (ingest.arrive_words).
-    `door`: '' for the Assistant's chat, whose talk rides to the agent as Taskuary's brief - else where he typed it ("New"), with no chat."""
+    `door`: '' for the Assistant's chat, whose talk rides to the agent as Taskuary's brief - else where he typed it ("New"), with no chat.
+    `said`: his words as typed, where `text` is a rewording; `files`: what he attached to them, a field beside them (store.files_json)."""
     job = str(text or '').strip()
     if not job: raise ValueError('say what the agent should do')
     # ...DEVELOPER MODE OFF, A CODING JOB IS A GENERAL AGENT'S, as at the dispatch door (server._dispatch_one): refused here instead, New said
@@ -4842,16 +4844,15 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
     # work, its agent hears his line there, by the one road into it - never a second task. No row is made before that answer (walk 4,
     # 2026-11-19: a task opened first stood as a second rail row for 15-25 s and was then "merged"); New draws his line at work meanwhile
     from . import ingest
-    f = general.split_files(said or job)
-    if (same := ingest.arrive_words(store, f['text'] if said else job, 'owner', actor, skip={tid}, files=f['files'] or None, said=f['text'])):
+    if (same := ingest.arrive_words(store, said or job, 'owner', actor, skip={tid}, files=list(files or []) or None, said=said or job)):
         return {'taskId': same['tid'], 'ref': task_ref(same['tid']), 'joined': True, 'started': True}
     brief = job if door else _handoff_brief(store, tid, job)
     # ...HIS WORDS ARE THE TASK'S OWN MESSAGE, AND ONLY HIS WORDS (recorded on the real CLI, 2026-11-15: the new task's bubble read his ask
     # and then "What we were talking about: remember that payroll questions go to Gail Got it - ..." - the Assistant's chat, in his name).
     # A general agent hears the brief as Taskuary's first prompt (below); a coding one is seeded from the task itself, so it keeps the brief
     # ...and where the model reworded what he typed, `said` is his and `job` is Taskuary's brief (setup_task, his_words)
-    made = setup_task(store, job if kind == 'general' else brief, actor, title=title or _handoff_title(store, tid, general.split_files(said)['text'] if said else job), kind=kind, agent_job=kind == 'general',
-                      repo=repo, profile=profile, said=said, door=door or 'the Assistant chat')
+    made = setup_task(store, job if kind == 'general' else brief, actor, title=title or _handoff_title(store, tid, said or job), kind=kind, agent_job=kind == 'general',
+                      repo=repo, profile=profile, said=said, door=door or 'the Assistant chat', files=files)
     if kind == 'general':
         # ...AT WORK FROM THE MOMENT IT IS MADE (the bug hunt, 2026-11-12: New opened the task at once, and for the seconds its outputs were
         # read before the first turn it said "agent done" with Mark done lit, over an agent that had not begun): a start in flight, as
@@ -4982,7 +4983,7 @@ def _no_task(store, tid: int, it: dict, kind: str) -> str:
             + 'Nothing was changed.')
 
 
-AGENT_PICKS = ('agent', 'brain', 'pick', 'model')     # what the agent box chose besides the words (operations params, DispatchBody fields)
+AGENT_PICKS = ('agent', 'brain', 'pick', 'model', 'files')     # what the agent box chose and attached besides the words (operations params, DispatchBody fields)
 
 
 def _brief_from_item(store, item: dict) -> str:
@@ -5028,7 +5029,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
             # - only for a press ON the item (propose_direct): typed words naming a new job are that job alone (test_new_task_from_words)
             job = f"{said_}\n\n{_brief_from_item(store, it)}" if said_ and decision.get('on_item') else said_ or _brief_from_item(store, it)
             title = _handoff_title(store, dock_tid, job) if (d_text or text or '').strip() else (it.get('title') or 'Look into this')
-            kind, target, params = 'task.create_from_text', 0, {'kind': want, 'text': job, 'title': title}
+            kind, target, params = 'task.create_from_text', 0, {'kind': want, 'text': job, 'title': title, **({'files': picked['files']} if picked.get('files') else {})}
             # a coding job names its checkout on the card, and the one confirmed is the one it opens in
             if want == 'coding':
                 from . import terminal as term

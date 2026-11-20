@@ -262,7 +262,7 @@ def test_a_conversation_its_cli_no_longer_has_is_one_plain_line_and_the_turn_run
 # turn adds the block for each file no block in it carries; a path met in his words is not a block - "compare /d/a.pdf.bak with it" names no a.pdf
 def _blocked(user):
     "Each file the files blocks of a turn name, as often as they name it."
-    return [f for part in user.split('\n\n') for f in general.split_files('\n\n' + part)['files']]
+    return general.prompt_files(user)
 
 
 def _turn_with(words, resumed):

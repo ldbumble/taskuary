@@ -18,7 +18,7 @@ test("the socket connects only while the browser is open, and backs off", () => 
   assert.match(pane, /\}, \[sid, open\]\);/);
   assert.match(pane, /2000 \* 2 \*\* tries\+\+/);
   assert.match(term, /showsBrowser\(browser\.open, browser\.url\)/);
-  assert.equal((term.match(/open=\{browser\.open\}/g) || []).length, 3, "the stack, the split and the peek all pass it");
+  assert.equal((term.match(/open=\{browser\.open\}/g) || []).length, 2, "the split and the peek both pass it");
 });
 
 test("the first frame of a connection sends the pane's shape, which a still-starting browser was refused (2026-11-04)", () => {
@@ -36,8 +36,10 @@ test("the viewport is set only by the tab the owner is at", () => {
   assert.match(pane, /onPointerDown=\{\(\) => fitViewport\(\)\}/);
 });
 
-test("the split never takes the chat below its minimum width", () => {
-  assert.match(term, /splitRatio\(ratio, width\)/);
+test("the split never takes the chat below its share, and every slot is laid out by the one rule (paneLayout)", () => {
+  assert.match(term, /const share = paneShare\(ratio\);/);
+  assert.equal((term.match(/paneLayout\(/g) || []).length, 1, "one call: no second rule for a chat, a coding task or a Wall tile");
+  assert.doesNotMatch(term, /layoutFor|quietLayout|quietRatio|splitRatio|"stack"/);
 });
 
 test("the top bar wraps on a phone instead of widening the page", () => {
@@ -46,9 +48,8 @@ test("the top bar wraps on a phone instead of widening the page", () => {
   assert.match(nav, /flexWrap: \{ xs: "wrap", md: "nowrap" \}/);
 });
 
-test("the owner's turn on a stacked page takes the room, and says the page scrolls (TQ-1354)", () => {
+test("the owner's turn on the page says the page scrolls (TQ-1354)", () => {
   // Google's 2-Step Verification put its Next under a 560px pane's edge, with nothing saying the picture scrolls
-  assert.match(term, /yourTurn \|\| turn \|\| held\.length \? \{ flex: "0 1 85%", minHeight: 360, maxHeight: 900 \} : \{ flex: "0 1 60%", minHeight: 220, maxHeight: 560 \}/);
   assert.match(pane, /your turn — click the page and type; scroll it for a button below the edge/);
 });
 

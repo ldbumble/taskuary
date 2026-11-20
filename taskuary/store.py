@@ -151,7 +151,25 @@ GENESIS = '0' * 64
 OWN_CHANNELS = ('report', 'assistant')
 TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags', 'RemindAt', 'AskedVia', 'DueAt',
              'DoneWhen', 'ParentId', 'OriginBase', 'TrustedThrough', 'Origin', 'OriginWhy', 'WatchedAt', 'WatchBack', 'ThreadJson',
-             'CheckBackAt', 'CheckBackWhat')
+             'CheckBackAt', 'CheckBackWhat', 'Files')
+# ATTACHMENTS ARE A FIELD (the design loop, 2026-11-20): what the owner attached to a line of his (comment.Files), to the ask that made a task
+# (task.Files) or to a note kept for a coding agent (waitroom.Files) is a JSON list of paths beside his words - never a block at the end of them,
+# which every door wrote and ~40 readers parsed: a door that wrote it slightly differently lost his files from his bubble. The block is built
+# only where a prompt needs it (general.with_files)
+def files_json(files) -> str | None:
+    "The list of paths as the Files column keeps it - None for none."
+    got = [str(f) for f in (files or []) if str(f or '').strip()]
+    return json.dumps(got) if got else None
+def files_of(row) -> list:
+    "The paths a row's Files column keeps - [] for none. The one reader of the column (general.his_line reads a line by it)."
+    try: got = json.loads((row or {}).get('Files') or '[]')
+    except (TypeError, ValueError): return []
+    return [str(f) for f in got] if isinstance(got, list) else []
+_LEGACY_FILES = re.compile(r'\n\nATTACHED (?:IMAGES|FILES) \(read these files\)\n(.+)\Z', re.S)
+def _legacy_split(body) -> tuple:
+    "A row written before the field: (its words, its files) out of the block at its end - read once, by the migration (_files_out)."
+    b = str(body or ''); m = _LEGACY_FILES.search(b)
+    return (b[:m.start()], [x.strip() for x in m.group(1).splitlines() if x.strip()]) if m else (b, [])
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
             'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction', 'RecipientsJson',
             'MailMetaJson', 'OwnText', 'TriageTitle', 'RankValue', 'RankWhy', 'SenderClass', 'MeetJson', 'HeaderClass')
@@ -544,7 +562,7 @@ CREATE TABLE IF NOT EXISTS task (TaskId INTEGER PRIMARY KEY, Title TEXT, Summary
   Assignee TEXT, Source TEXT DEFAULT 'manual', SourceRef TEXT, Tags TEXT,
   CreatedBy TEXT, CreatedAt TEXT, UpdatedBy TEXT, UpdatedAt TEXT, ClosedAt TEXT, RemindAt TEXT,
   AskedVia TEXT, AskedTold TEXT, AskedToldAt TEXT, AskedWatch TEXT, AskedSeenMid INTEGER, RemindVia TEXT, RemindOwed TEXT,
-  AskedWatchAt TEXT, AskedNudgedAt TEXT, DueAt TEXT, DueSaid TEXT, DueRaised TEXT, DoneWhen TEXT, ParentId INTEGER);
+  AskedWatchAt TEXT, AskedNudgedAt TEXT, DueAt TEXT, DueSaid TEXT, DueRaised TEXT, DoneWhen TEXT, ParentId INTEGER, Files TEXT);
 CREATE TABLE IF NOT EXISTS message (MessageId INTEGER PRIMARY KEY, TaskId INTEGER, ExternalId TEXT,
   ConversationId TEXT, Channel TEXT, SourceName TEXT, Subject TEXT, FromName TEXT, FromEmail TEXT,
   SentAt TEXT, BodyText TEXT, SourceLink TEXT, Status TEXT DEFAULT 'routed', CreatedAt TEXT,
@@ -565,7 +583,7 @@ CREATE TABLE IF NOT EXISTS route (RouteId INTEGER PRIMARY KEY, MessageId INTEGER
   Decision TEXT, Score REAL, Reason TEXT, CandidatesJson TEXT, RoutedBy TEXT, CreatedAt TEXT,
   RawOutput TEXT, ParseError TEXT, VerdictJson TEXT);
 CREATE TABLE IF NOT EXISTS comment (CommentId INTEGER PRIMARY KEY, TaskId INTEGER, Actor TEXT,
-  ActorType TEXT, Body TEXT, CreatedAt TEXT, LineId TEXT);
+  ActorType TEXT, Body TEXT, CreatedAt TEXT, LineId TEXT, Files TEXT);
 CREATE TABLE IF NOT EXISTS audit (Id INTEGER PRIMARY KEY, EntityType TEXT, EntityId INTEGER,
   Action TEXT, Actor TEXT, ActorType TEXT, RunId INTEGER, Detail TEXT, PrevHash TEXT, RowHash TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS agent (AgentId INTEGER PRIMARY KEY, Name TEXT UNIQUE, Kind TEXT,
@@ -625,7 +643,7 @@ CREATE TABLE IF NOT EXISTS batch_item (ItemId INTEGER PRIMARY KEY, TaskId INTEGE
   EndedWhy TEXT, Sha TEXT, Propose TEXT, CreatedAt TEXT, UpdatedAt TEXT, UNIQUE(TaskId, ConversationId));
 CREATE INDEX IF NOT EXISTS idx_batch_item_conv ON batch_item(ConversationId);
 CREATE TABLE IF NOT EXISTS waitroom (WId INTEGER PRIMARY KEY, TaskId INTEGER, Note TEXT, CreatedBy TEXT,
-  CreatedAt TEXT, DeliveredAt TEXT, How TEXT);
+  CreatedAt TEXT, DeliveredAt TEXT, How TEXT, Files TEXT);
 -- WHAT THE AGENT HEARD, AND WHEN (conversation.py): one row per input handed to a task's agent - his line (by the name it was sent under), a
 -- message that came in, a press - and one per turn begun. An input is in it once: that is the chat's "told once", kept by the key.
 CREATE TABLE IF NOT EXISTS heard (HId INTEGER PRIMARY KEY, TaskId INTEGER, Kind TEXT, Ref TEXT, At REAL, Grp INTEGER, Seq INTEGER, Sid TEXT,
@@ -1287,6 +1305,10 @@ class SQLiteStore:
             # reply-needed, the reason is shown beside it with a retry, never mistaken for a draft
             # the name the page gave a line it sent (general.wait_line): the page knows its own line by it, never by its words
             if 'LineId' not in {r[1] for r in self.cx.execute('PRAGMA table_info(comment)')}: self.cx.execute('ALTER TABLE comment ADD COLUMN LineId TEXT')
+            # ...and what he attached, beside his words (files_json): a line's, a task's ask's, a note kept for a coding agent's
+            for tbl in ('comment', 'task', 'waitroom'):
+                if 'Files' not in {r[1] for r in self.cx.execute(f'PRAGMA table_info({tbl})')}: self.cx.execute(f'ALTER TABLE {tbl} ADD COLUMN Files TEXT')
+            self._files_out()
             if 'Host' not in {r[1] for r in self.cx.execute('PRAGMA table_info(shown)')}: self.cx.execute('ALTER TABLE shown ADD COLUMN Host TEXT')
             rvcols ={r[1] for r in self.cx.execute('PRAGMA table_info(review)')}
             if 'DraftError' not in rvcols:
@@ -2371,7 +2393,7 @@ class SQLiteStore:
         # id and one of them hit the primary key (audit 2026-09-02)
         # one of the three priorities, whatever word the caller used (processing_order.level, 2026-10-25) - regular when it gave none
         from .processing_order import level
-        fields = {**fields, 'Priority': level(fields.get('Priority'))}
+        fields = {**fields, 'Priority': level(fields.get('Priority')), **({'Files': files_json(fields['Files'])} if 'Files' in fields else {})}
         with self.idlock:
             tid = self._insert('task', {**fields, 'TaskId': self._next_task_id() if numbered else self._next_internal_id()},
                                 TASK_COLS + ('TaskId',), {'CreatedBy': actor, 'CreatedAt': _now()})
@@ -2419,6 +2441,7 @@ class SQLiteStore:
         if 'Priority' in fields:
             from .processing_order import level
             fields = {**fields, 'Priority': level(fields['Priority'])}
+        if 'Files' in fields and not isinstance(fields['Files'], (str, type(None))): fields = {**fields, 'Files': files_json(fields['Files'])}
         cols = [c for c in TASK_COLS if c in fields]
         if not cols: return
         was_row = (self._one('SELECT Status, Assignee, DueAt, Tags FROM task WHERE TaskId=?', (task_id,)) or {}) if 'Status' in fields else {}
@@ -5355,9 +5378,23 @@ class SQLiteStore:
             except Exception: continue
         return out
     def list_routes(self, task_id): return self._rows('SELECT * FROM route WHERE TaskId=? ORDER BY RouteId', (task_id,))
-    def add_comment(self, task_id, actor, actor_type, body, line_id=None):
-        cid = self._exec('INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt,LineId) VALUES (?,?,?,?,?,?)',
-                         (task_id, actor, actor_type, body, at := _now(), line_id))
+    def _files_out(self):
+        "Rows written before the Files field: the block at the end of a line's words, a task's ask or a kept note moved into its Files, once."
+        for tbl, key, col in (('comment', 'CommentId', 'Body'), ('task', 'TaskId', 'Summary'), ('waitroom', 'WId', 'Note')):
+            for k, v in self.cx.execute(f"SELECT {key}, {col} FROM {tbl} WHERE Files IS NULL AND {col} LIKE '%ATTACHED %(read these files)%'").fetchall():
+                words, files = _legacy_split(v)
+                if files: self.cx.execute(f'UPDATE {tbl} SET {col}=?, Files=? WHERE {key}=?', (words, files_json(files), k))
+        # ...and a line kept for a turn kept its files in its own JSON (general.wait_line)
+        for k, v in self.cx.execute("SELECT CommentId, Body FROM comment WHERE Files IS NULL AND ActorType='assistant_waiting' AND Body LIKE '%\"files\": [\"%'").fetchall():
+            try: got = json.loads(v or '{}')
+            except ValueError: continue
+            if isinstance(got, dict) and got.get('files'):
+                self.cx.execute('UPDATE comment SET Body=?, Files=? WHERE CommentId=?',
+                                (json.dumps({n: x for n, x in got.items() if n != 'files'}), files_json(got['files']), k))
+    def add_comment(self, task_id, actor, actor_type, body, line_id=None, files=None):
+        "`files`: what he attached to this line of his - kept beside its words (files_json), never written into them."
+        cid = self._exec('INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt,LineId,Files) VALUES (?,?,?,?,?,?,?)',
+                         (task_id, actor, actor_type, body, at := _now(), line_id, fj := files_json(files)))
         # ...an answer filed ends its turn in the chat's log, in place (chatlog.answered: the one door every answer road goes through)
         if actor_type == 'assistant_agent' and task_id:
             from . import chatlog
@@ -5367,10 +5404,10 @@ class SQLiteStore:
             chatlog.summarized(self, task_id, body)
         elif line_id and task_id:
             from . import chatlog
-            chatlog.filed(self, task_id, line_id, {'Body': body, 'ActorType': actor_type, 'CreatedAt': at})
+            chatlog.filed(self, task_id, line_id, {'Body': body, 'ActorType': actor_type, 'CreatedAt': at, 'Files': fj})
         elif actor_type == 'assistant_user' and actor in ('owner', 'you') and task_id:
             from . import chatlog                    # ...a line of his filed with no name to hear it by: his line where it is filed
-            chatlog.put(self, task_id, 'line', f'c:{cid}', {'at': at, **chatlog.his(body)}, src=f'comment:{cid}')
+            chatlog.put(self, task_id, 'line', f'c:{cid}', {'at': at, **chatlog.his({'Body': body, 'Files': fj})}, src=f'comment:{cid}')
         return cid
     def add_comment_once(self, task_id, actor, actor_type, body):
         """Append a turn unless it is already the last turn on this task.
@@ -5395,7 +5432,7 @@ class SQLiteStore:
         rows = self._rows('SELECT * FROM comment WHERE TaskId=? ORDER BY CommentId', (task_id,))
         return rows if internal else [c for c in rows if not is_internal(c)]
     def drop_comment(self, comment_id): self._exec('DELETE FROM comment WHERE CommentId=?', (comment_id,))
-    def take_lines(self, task_id, kind, as_kind, words=str, ids=None) -> list:
+    def take_lines(self, task_id, kind, as_kind, words=lambda r: {'text': r['Body'], 'files': files_of(r)}, ids=None) -> list:
         """THE OWNER'S LINES KEPT FOR A TURN, taken by it (general.send_prompt): each `kind` row moved to the END of the conversation as an
         `as_kind` row - its words read out of the kept body by `words`, the time it was typed kept - so the conversation reads in the order the
         agent read it. In one step under the lock: two turns never take one line. [the rows as they waited], oldest first."""
@@ -5404,8 +5441,9 @@ class SQLiteStore:
                    if ids is None or r['CommentId'] in ids]       # `ids`: only the lines a session was handed - one kept since waits for its turn
             for r in got:
                 self.cx.execute('DELETE FROM comment WHERE CommentId=?', (r['CommentId'],))
-                self.cx.execute('INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt,LineId) VALUES (?,?,?,?,?,?)',
-                                (task_id, r['Actor'], as_kind, words(r['Body']), r['CreatedAt'], r.get('LineId')))
+                w = words(r)              # ...{'text', 'files'} of the kept row: his words as the Body, his files beside them
+                self.cx.execute('INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt,LineId,Files) VALUES (?,?,?,?,?,?,?)',
+                                (task_id, r['Actor'], as_kind, w['text'], r['CreatedAt'], r.get('LineId'), files_json(w['files'])))
             if got: self.cx.commit(); self._writes += 1
         if got: self._poke('task-changed', task_id=task_id)
         return got
@@ -5610,8 +5648,8 @@ class SQLiteStore:
         return self._rows('SELECT * FROM learned_history' + (' WHERE Key=?' if key else '') + ' ORDER BY Id', (key,) if key else ())
 
     # the waiting room (waitroom.py): owner notes queued on a task while its agent works
-    def add_waiting(self, task_id, note, actor):
-        return self._exec('INSERT INTO waitroom (TaskId, Note, CreatedBy, CreatedAt) VALUES (?,?,?,?)', (task_id, note, actor, _now()))
+    def add_waiting(self, task_id, note, actor, files=None):
+        return self._exec('INSERT INTO waitroom (TaskId, Note, CreatedBy, CreatedAt, Files) VALUES (?,?,?,?,?)', (task_id, note, actor, _now(), files_json(files)))
     def waiting_notes(self, task_id): return self._rows('SELECT * FROM waitroom WHERE TaskId=? AND DeliveredAt IS NULL ORDER BY WId', (task_id,))
     def waitroom(self, task_id, limit=40):
         return self._rows('SELECT * FROM waitroom WHERE TaskId=? ORDER BY WId DESC LIMIT ?', (task_id, limit))[::-1]

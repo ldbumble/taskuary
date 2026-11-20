@@ -298,7 +298,7 @@ class PhoneTests(unittest.TestCase):
              mock.patch.object(concierge, 'say', side_effect=AssertionError('the note is not words for the model')), \
              mock.patch.object(ra, '_continue', return_value='Continuing') as cont:
             ra.respond(s, 'whatsapp', JID, 'run the tests first', None)
-        cont.assert_called_once_with(s, str(tid), 'run the tests first')
+        cont.assert_called_once_with(s, str(tid), 'run the tests first', [])
 
 
 if __name__ == '__main__': unittest.main()

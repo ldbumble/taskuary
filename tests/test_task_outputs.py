@@ -313,7 +313,7 @@ class HisFilesAreNotMadeTests(unittest.TestCase):
         pic = d / '20990301-090909-abc125-shot.png'; pic.write_bytes(b'\x89PNG fake'); self.addCleanup(pic.unlink, missing_ok=True)
         p = mock.patch.object(server, 'store', self.s); p.start(); self.addCleanup(p.stop)
         self.c = TestClient(server.app)
-        self.tid = self.c.post('/api/tasks', json={'Title': 'what is this', 'Summary': general.with_files('what is this', [str(pic)]), 'Kind': 'general'}).json()['taskId']
+        self.tid = self.c.post('/api/tasks', json={'Title': 'what is this', 'Summary': 'what is this', 'Files': [str(pic)], 'Kind': 'general'}).json()['taskId']
         (outputs.folder(self.tid) / 'answer.md').write_text('# It is a chart', encoding='utf-8')
 
     def test_the_chat_lists_only_what_the_agent_made(self):

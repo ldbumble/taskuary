@@ -8,7 +8,7 @@ history included, cleaned and budgeted the way triage reads it), the attachments
 and the revision of the context it was built from, so a worker's result can be checked against
 what it actually read. Rules ride separately: AGENT.md for both kinds, CODING.md on top for coding.
 """
-from .store import task_ref
+from .store import files_of, task_ref
 
 # WHAT THE ASSISTANT MADE OF HIS ASK (the owner, 2026-11-15: "i only typed this? did the agent add on more to my prompt???"): a task the
 # Assistant starts shows his words as his (concierge.setup_task); the Assistant's fuller reading - its wording, the talk before them - is
@@ -26,6 +26,7 @@ def build(store, tid: int, instruction: str = None, repo: str = None, context_bu
     from . import operations
     from .ingest import exchange_lines
     from .triage import own_words
+    from .general import with_files as _with_files
     t = store.get_task(tid) or {}
     msgs = [m for m in store.list_messages(tid) if m.get('Status') not in ('context', 'skipped')]
     last = msgs[-1] if msgs else None
@@ -38,7 +39,7 @@ def build(store, tid: int, instruction: str = None, repo: str = None, context_bu
     atts = [a for m in msgs for a in store.list_attachments(m['MessageId']) if a.get('Path')]
     return {
         'task': f"{task_ref(tid)} - {t.get('Title') or ''}",
-        'objective': str(t.get('Summary') or '').strip(),
+        'objective': _with_files(str(t.get('Summary') or '').strip(), files_of(t)),     # ...his ask's files named under it (task.Files)
         'checklist': store.checklist_markdown(tid, ids=True) if hasattr(store, 'checklist_markdown') else '',   # ids: the agent ticks its own (--tick)
         'instruction': (instruction or '').strip(),
         'handoff': handoff(store, tid),

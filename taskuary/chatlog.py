@@ -720,13 +720,12 @@ def opener(store, tid: int, at: float = None) -> None:
     started it (a routine, a report - `s:`). Appended before the turn it began, once."""
     from . import ownwork
     from .conversation import started_by, stamp, _mail
-    from .general import split_files
     if _inputs(store, tid): return
     t = store.get_task(int(tid)) or {}
     row = next((x for x in _mail(store, int(tid)) if (x.get('Channel') or '') == OWN), None)
     if (said := ownwork.ask(store, t, row)):
         when = row['T'] if row else _when(t.get('CreatedAt'))
-        put(store, tid, 'line', f'a:{tid}', {'at': stamp(when), **split_files(said)}, src='ask', at=at)
+        put(store, tid, 'line', f'a:{tid}', {'at': stamp(when), **said}, src='ask', at=at)
     elif (by := started_by(store, t)):
         put(store, tid, 'arrival', f's:{tid}', {'who': by['head'], 'head': by['head'], 'channel': by['channel'], 'own': False,
                                                'at': t.get('CreatedAt'), 'files': 0, 'words': by['words']}, src='started', at=at)
@@ -1228,7 +1227,11 @@ def beside(store, tid: int, out: list, at_work: bool, hold_) -> dict:
         return (t.get('answer') or t['id']) if t else None
     published = [{**p, 'after': after(ep(p.get('created_at')) + 0.999)} for p in outputs.pages(store, tid)]
     q = cardqueue.state(store, tid)
-    return {'pending': pend, 'now': now, 'later': later, 'dropped': [d for d in dropped if d], 'working': at_work,
+    # ...AND WHETHER HE HAS A PART ON THE PAGE, by the one answer the assistant read gives (taskstate.needs_owner) - in the payload that carries
+    # the ask, so a coding task's hand-over is shown him as a chat's is: read only from the chat's own state, which a coding task reads once
+    # at its opening, its page never drew (the design loop, 2026-11-20)
+    sid = getattr(lv, 'sid', '') or getattr(live, 'sid', '') or ''
+    return {'pending': pend, 'needsOwner': taskstate.needs_owner(ask, taskstate.browser_acts(store, tid), sid), 'now': now, 'later': later, 'dropped': [d for d in dropped if d], 'working': at_work,
             'started': general.turn_started(tid) if at_work else None, 'asking': ask, 'permissions': perms, 'live': codingchat.live_of(lv),
             'letters': letters, 'idle': idle, 'queue': {'live': q['live'], 'held': q['held'], 'line': cardqueue.line(q)},
             'hold': hold_ and {**{k: hold_[k] for k in ('line', 'person', 'org')},

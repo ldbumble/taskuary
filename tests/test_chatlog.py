@@ -403,3 +403,32 @@ def test_a_task_search_and_a_chat_read_that_migrates_on_two_threads_both_finish(
     for x in ts: x.start()
     for x in ts: x.join(10)
     assert sorted(done) == ['read', 'search'], f'a thread never finished: {done}'
+
+
+def test_a_reply_raised_empty_and_written_after_his_line_stands_under_the_turn_that_wrote_it():
+    """WALK 8 (2026-11-20): Marcus asked for free times; the first turn asked the owner which (its reply raised empty, with what it needs), he
+    answered, and the next turn wrote the letter - "drafted for your Send" - but its card stood in the first turn, above his line, where nobody
+    looked. The card is the last thing of the turn that wrote its words. Invented people."""
+    import time as t_
+    from taskuary import conversation, general, wrapup
+    from taskuary.store import set_owner
+    s, tid = world()
+    set_owner(s, 'Alex Doyle', 'alex@northwind.example')
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'mr1', 'Channel': 'email', 'FromName': 'Marcus Reed', 'FromEmail': 'marcus@northwind.example',
+                         'ToEmail': 'alex@northwind.example', 'Subject': 'Thursday', 'BodyText': 'Send me your free times Thursday? Marcus', 'Status': 'routed'})
+    conversation.hear(s, tid, turn=True)
+    rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Channel': 'email', 'DraftText': '', 'Origin': 'triage'})
+    s._exec('UPDATE review SET DraftNeeds=? WHERE ReviewId=?', ('Which Thursday times are you free?', rid))
+    chatlog.advance_soon(s, tid, rid)
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Which Thursday times are you free?')
+    chatlog.settled(); chatlog.read(s, tid)
+    t_.sleep(1.1)
+    general.wait_line(s, tid, '10-11am or 2-3pm', line_id='l-times'); conversation.hear(s, tid, ['l-times'], turn=True)
+    assert wrapup.agent_reply(s, tid, 'Hi Marcus, 10-11am or 2-3pm Thursday. Alex', to='marcus@northwind.example')['review_id'] == rid
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The reply to Marcus is drafted for your Send.')
+    chatlog.settled()
+    from taskuary import cardqueue
+    cardqueue._SEEN.clear()
+    items = chatlog.read(s, tid)['items']
+    at = {c['review']: i for i, x in enumerate(items) for c in x.get('cards') or []}
+    assert [x['kind'] for x in items] == ['arrival', 'turn', 'line', 'turn'] and at.get(rid) == 3, (at, [x['kind'] for x in items])

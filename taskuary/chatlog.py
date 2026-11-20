@@ -878,7 +878,9 @@ def advance_soon(store, tid: int, rid: int = None) -> None:
     """The line of cards on task `tid` moved: put into the log by the one worker, never on the thread that wrote it. `rid`: the review that
     moved - until its card stands, the turn open at each of its writes is kept as the one that raised it (the one that wrote its words, for
     a reply raised empty) - plain reads, no other lock taken."""
-    if rid and not get(store, tid, f'r:{int(rid)}'):
+    # ...AND A LETTER RAISED EMPTY (its row has no words) IS THE CARD OF THE TURN WRITING IT NOW (walk 8, 2026-11-20: Marcus's reply, raised empty in
+    # the turn that asked him for times, was written by the turn after his answer - and put back in the first, above his line, where none looked)
+    if rid and (not (row := get(store, tid, f'r:{int(rid)}')) or row.get('what') in DRAFTS + ('slot',) and not row.get('was')):
         # ...the turn at work raised it even where his line landed under it a beat before its next step (the turn is cut there only at that step)
         try: _RAISED.setdefault(store, {})[int(rid)] = (open_turn(store, tid) or _live(store, tid) or {}).get('Id')
         except TypeError: pass                     # ...a store that cannot be held weakly keeps no note: the time of its raise places it

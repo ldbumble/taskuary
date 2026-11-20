@@ -93,3 +93,18 @@ test("a control that came under the pressed spot takes no press for its first mo
   t = 40000; click(first); under = second; t = 41000; check(); on.pointermove({ clientX: 300, clientY: 200 });
   t = 41100; assert.ok(!click(second, 300, 200).stopped);
 });
+
+// THE HYDROGEN WALK, 2026-11-19: Send on Gail's letter, and the next letter's card was drawn in the same element - its Send one button at
+// 477,702 then 477,703 - and the second press of his double-click sent Erin's letter. The card a control presses is part of what it is
+test("the next card drawn in the same button takes no press for its first moment: one double-click never sends two letters", () => {
+  const on = {}; let t = 0, check = null, card = "11";
+  const button = { matches: () => false, contains: (x) => x === button, disabled: false, closest: (sel) => (sel === "[data-tq-review]" ? { getAttribute: () => card } : button) };
+  const doc = { addEventListener: (k, f) => { on[k] = f; }, removeEventListener: (k) => { delete on[k]; }, elementFromPoint: () => button };
+  installSecondClick(doc, { now: () => t, watch: (f) => { check = f; return () => { check = null; }; } });
+  const click = (x = 477, y = 702) => { const e = { target: button, timeStamp: t, clientX: x, clientY: y, isTrusted: true, stopped: false,
+    preventDefault() {}, stopImmediatePropagation() { this.stopped = true; } }; on.click(e); return e; };
+  t = 1000; assert.ok(!click().stopped, "his Send on Gail's letter");
+  t = 1700; card = "12"; check();                          // ...Erin's card, drawn in the same button
+  t = 1900; assert.ok(click(477, 703).stopped, "the double-click's second press never sends the letter that just came");
+  t = 2800; assert.ok(!click(477, 703).stopped, "a moment later it is his to press");
+});

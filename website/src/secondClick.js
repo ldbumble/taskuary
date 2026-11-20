@@ -17,13 +17,16 @@ const SPOT_PX = 6;
 const BACKDROP = ".MuiBackdrop-root, .MuiModal-backdrop, .MuiDialog-container";
 const CONTROL = "button, a[href], input, select, textarea, label, [role=button], [role=menuitem], [role=checkbox], [role=option], [role=tab], [role=switch]";
 const controlOf = (el) => el?.closest?.(CONTROL) || null;
+// ...and WHAT IT PRESSES: the card a control stands in (data-tq-review) - the next letter's card can be drawn in the same element as the one
+// just sent (the Hydrogen walk, 2026-11-19: Send stayed one button, at 477,702 then 477,703, and his second press sent Erin's letter)
+const cardOf = (c) => c?.closest?.("[data-tq-review]")?.getAttribute?.("data-tq-review") || "";
 // ...one control still: a label and the box it clicks for the hand, a button and a control inside it
 const same = (a, b) => a === b || (!!a && !!b && (a.contains?.(b) || b.contains?.(a) || a.control === b || b.control === a));
 // `now`: the clock clicks are stamped on (performance.now); `watch(check)`: calls `check` whenever the page may have changed, returns its stop
 const pageWatch = (doc) => (check) => {
   const MO = doc.defaultView?.MutationObserver;
   if (!MO || !doc.body) return () => {};
-  const mo = new MO(check); mo.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "aria-disabled"] });
+  const mo = new MO(check); mo.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "aria-disabled", "data-tq-review"] });
   return () => mo.disconnect();
 };
 export const installSecondClick = (doc = globalThis.document, { grace = GRACE_MS, moment = MOMENT_MS, now = () => globalThis.performance?.now() ?? Date.now(), watch = pageWatch(doc) } = {}) => {
@@ -36,7 +39,7 @@ export const installSecondClick = (doc = globalThis.document, { grace = GRACE_MS
   const look = () => {
     if (!at) return;
     const c = controlOf(doc.elementFromPoint?.(at.x, at.y));
-    if (c !== at.under || live(c) !== at.alive) Object.assign(at, { under: c, alive: live(c), since: now() });
+    if (c !== at.under || live(c) !== at.alive || cardOf(c) !== at.card) Object.assign(at, { under: c, alive: live(c), card: cardOf(c), since: now() });
   };
   const leave = (e) => { if (at && (Math.abs(e.clientX - at.x) > SPOT_PX || Math.abs(e.clientY - at.y) > SPOT_PX)) { stop(); stop = () => {}; at = null; } };
   const click = (e) => {
@@ -48,12 +51,13 @@ export const installSecondClick = (doc = globalThis.document, { grace = GRACE_MS
     // ...the same spot, another control: what the first click drew under the pointer a moment ago, or what came there since and is still new
     if (at && e.isTrusted !== false && Math.abs(e.clientX - at.x) <= SPOT_PX && Math.abs(e.clientY - at.y) <= SPOT_PX) {
       const c = controlOf(el);
-      if (c && !same(c, at.control) && (soon || (look(), same(c, at.under) && now() - at.since < moment))) { swallow(e); return; }
+      const other = c && (!same(c, at.control) || cardOf(c) !== at.pressed);
+      if (other && (soon || (look(), same(c, at.under) && now() - at.since < moment))) { swallow(e); return; }
     }
     last = e.timeStamp;
     stop();
     const c = controlOf(el);
-    at = { x: e.clientX, y: e.clientY, control: c, under: c, alive: live(c), since: -Infinity };
+    at = { x: e.clientX, y: e.clientY, control: c, under: c, alive: live(c), card: cardOf(c), pressed: cardOf(c), since: -Infinity };
     stop = watch(look);
   };
   doc.addEventListener("click", click, true);

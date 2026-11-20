@@ -53,9 +53,10 @@ for (const kind of (process.env.STA_KINDS || "report,dashboard").split(",")) tes
       place: document.querySelector("[data-tq-item-ask] textarea")?.placeholder || "", value: document.querySelector("[data-tq-item-ask] textarea")?.value ?? null, reading: document.querySelectorAll("[data-tq-item-reading]").length,
       task: !!document.querySelector("[data-tq-task-page]"), buttons: [...document.querySelectorAll("button")].filter(vis).map((b) => b.innerText.trim()).filter((x) => /agent/i.test(x)) };
   });
-  // ...what he had typed in the item's box before he pressed it stays his (the stress round, 2026-11-18)
-  await page.type("[data-tq-item-ask] textarea", "Which invoices are over 90 days?");
+  // ...NO BOX UNDER THE ITEM BEFORE THE PRESS (the owner, 2026-11-20: "if you put prompt box on the bottom of Came from you are confusing the 2
+  // tabs"): the box is the Agent tab's alone
   const before = await look();
+  assert.equal(before.value, null, `a box under the item before Send to agent: ${JSON.stringify(before)}`);
   // Send to agent - the item's own button, wherever it is laid
   const pressed = await page.evaluate(() => { const b = [...document.querySelectorAll("button")].find((x) => /^Send to agent/.test(x.innerText.trim()) && x.getBoundingClientRect().width > 0); b?.click(); return !!b; });
   assert.ok(pressed, `no Send to agent: ${JSON.stringify(before)}`);
@@ -84,7 +85,7 @@ for (const kind of (process.env.STA_KINDS || "report,dashboard").split(",")) tes
   await note(dir, { done: `A ${kind} run lands; he opens it, presses Send to agent, presses Send empty, types, Send.`, expect: "Blank Agent canvas with the item a chip; Send unlit until words; the task opens with his line under the report's pill and the agent's answer.",
     saw: JSON.stringify(saw), verdict: "see assertions" });
   console.log(JSON.stringify(saw, null, 1));
-  assert.equal(kept, "Which invoices are over 90 days?", "what he typed before the press is still in the box");
+  assert.equal(kept, "", "the Agent tab's box opens empty, the item a chip on it");
   assert.equal(handed.open, "agent"); assert.equal(handed.reading, 0);
   assert.equal(handed.send, "lit"); assert.equal(empty.send, "off"); assert.equal(typed.send, "lit");
   assert.ok(after.came.some((c) => c.includes(kind === "dashboard" ? "Receivables board" : "Weekly AR aging")), JSON.stringify(after));

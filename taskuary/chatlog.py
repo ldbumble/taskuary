@@ -1062,7 +1062,10 @@ def beside(store, tid: int, out: list, at_work: bool, hold_) -> dict:
     pend = []
     for c in store.list_comments(tid, internal=True):
         k = c.get('LineId') or f"c:{c['CommentId']}"
-        if c.get('ActorType') != WAITING_TYPE or k in drawn or ('line', c.get('LineId') or '') in led: continue
+        # ...AND ONE A TURN HAS TAKEN BUT ITS HAND-OVER HAS NOT YET WRITTEN INTO THE CHAT (store.take_lines, then hear): still by the box -
+        # every read sees his line in exactly one place, from the moment he sends it (nothing lost; the log, never the ledger, says drawn)
+        taken = c.get('ActorType') == general.USER_TYPE and c.get('LineId') and c.get('Actor') != general.BRIEF_ACTOR
+        if k in drawn or not (c.get('ActorType') == WAITING_TYPE and ('line', c.get('LineId') or '') not in led or taken): continue
         pend.append({'id': k, 'kind': 'line', 'at': c['CreatedAt'], **general.his_line(c), '_k': came(c)})
     for x in _mail(store, tid):
         k = f"m:{x['MessageId']}"

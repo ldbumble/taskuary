@@ -187,13 +187,16 @@ def provider_down(e) -> str:
     import requests
     from . import agents, clipool, llm
     while e is not None:
-        if isinstance(e, clipool.Unfinished): return ''
+        # ...nor one only he can mend (llm.OutOfRoom: the card's model): said in its own words with its card, never tried again by itself
+        if isinstance(e, (clipool.Unfinished, llm.OutOfRoom)): return ''
         if isinstance(e, (llm.BudgetSpent, agents.RateLimited)): return DOWN[0]
         if isinstance(e, llm.NoAnswer): return DOWN[1]
         if isinstance(e, (requests.Timeout, llm.ProviderDown)): return DOWN[2]
         if isinstance(e, requests.ConnectionError): return DOWN[3]
         e = e.__cause__ or e.__context__
     return ''
+def _chain(e):
+    while e is not None: yield e; e = e.__cause__ or e.__context__
 def _until(e):
     while e is not None and getattr(e, 'until', None) is None: e = e.__cause__ or e.__context__
     return getattr(e, 'until', None) if e is not None else None
@@ -3539,7 +3542,9 @@ class GeneralSession:
             down = '' if stopped or timed is not None or is_dock(self.store.get_task(self.task_id)) else provider_down(e)
             try:
                 if down:
-                    said = queue_retry(self.store, self.task_id, e, down, fresh=getattr(self, 'owned', False))
+                    # ...in its own words where Taskuary wrote them (llm.QuotaSpent: which model, and the way past it), else the plain kind
+                    q = next((x for x in _chain(e) if isinstance(x, llm_mod.QuotaSpent)), None)
+                    said = queue_retry(self.store, self.task_id, e, str(q) if q else down, fresh=getattr(self, 'owned', False))
                     from . import proposals
                     proposals.restore_set_aside(self.store, self.task_id)
                 else: let_go_retry(self.store, self.task_id)

@@ -109,6 +109,7 @@ class QuotaSpent(BudgetSpent):
 # before it answered - their words unchanged, so every reading of them stands; general.provider_down reads the type and queues the turn again
 class ProviderDown(RuntimeError): "The endpoint itself failed (a 5xx after every retry)."
 class NoAnswer(RuntimeError): "The model stopped before it answered: out of room, or nothing sent back."
+class OutOfRoom(NoAnswer): "The model spent its room thinking and wrote nothing: its card's model is his to change - trying again cannot help."
 
 
 def words(model: str) -> str:
@@ -1441,7 +1442,7 @@ def make_llm(t, cfg: dict, key: str):
                 if str(e) == 'length' and max_tokens < ROOM: max_tokens = ROOM; continue
                 if str(e) != 'length' and spent < 3: continue
                 if str(e) == 'length':
-                    raise NoAnswer(f'{t}: the model ran out of room before answering, even with {ROOM} tokens (finish_reason {e}) - '
+                    raise OutOfRoom(f'{t}: the model ran out of room before answering, even with {ROOM} tokens (finish_reason {e}) - '
                                        f'model {model}; pick a non-thinking model on its card') from None
                 raise NoAnswer(f'{t} sent back no answer (finish_reason {e}) - model {model}') from None
     # ONE STEP OF A TOOL LOOP (apiagent.py): the model's message - its words and/or tool_calls - for a whole conversation and the tools

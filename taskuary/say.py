@@ -56,12 +56,28 @@ def turn_failed(raw) -> str:
     codes, types = {int(c) for c in _STATUS.findall(r)}, set(_TYPE.findall(r))
     # ...the CLI's own quota notice says when it resets; a provider's typed error that merely mentions "rate limit" is read by its type
     if (q := cli_quota(r)) and ('reset' in q.lower() or not types): return f'{q} - {NEXT} once it resets.'
+    # ...AND ONE TASKUARY SAID IN WORDS IS SAID AS IT WAS (the Hydrogen walk, 2026-11-19: "the model ran out of room ... pick a non-thinking
+    # model on its card" sat in the log while three turns read "The AI stopped on an error"), its card a press away
+    if r.strip() and not _RAW.search(r): return own_failure(r)
     if 429 in codes or types & {'rate_limit_error', 'insufficient_quota', 'quota_exceeded'}: return f'The AI provider is over its quota or rate limit - {NEXT} in a minute.'
     if codes & {401, 403} or types & {'authentication_error', 'permission_error'}:
         return "The AI provider refused the request: its sign-in or access was turned down - check the AI's card under Connections, then " + NEXT + '.'
     if codes & {400, 404, 413, 422} or types & {'invalid_request_error', 'not_found_error'}: return f'The AI provider refused the request - {NEXT}.'
     if any(c >= 500 for c in codes) or types & {'overloaded_error', 'api_error', 'timeout'}: return f"The AI provider didn't answer - {NEXT}."
     return f'The AI stopped on an error before it finished - {NEXT}.'
+
+
+_CARD_OF = re.compile(r'^([a-z][a-z0-9_]*):\s+')
+def own_failure(text) -> str:
+    """A failure Taskuary itself wrote in words, as he reads it: its first line, the AI card it names (a leading `<card type>: `) by its title
+    and a link to it - "its card" in it becomes that link."""
+    from .connectorcatalog import by_type
+    t = ' '.join(str(text or '').split('\n')[0].split())
+    m = _CARD_OF.match(t); card = by_type(m.group(1)) if m else None
+    if not card: return names(t).rstrip('.') + '.'
+    href, rest = f"#connector={m.group(1)}", t[m.end():]
+    said = rest.replace('its card', f'[its card]({href})', 1) if 'its card' in rest else f"{rest} - [open its card]({href})"
+    return f"{str(card.get('title') or m.group(1)).split(' - ')[0]}: {names(said).rstrip('.')}."
 
 
 def owner(e: dict) -> str:

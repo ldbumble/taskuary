@@ -637,6 +637,7 @@ export default function TaskHubPage() {
           <Bell onGo={(p) => {
             if (p.connector) { openAppLink(`connector=${p.connector}`); return; }   // the link opens its card in the canvas
             if (p.report) { openAppLink(`report=${p.report}`); return; }
+            if (p.task) { openAppLink(`task=${p.task}`); return; }            // ...the task whose turn failed (problems.collect `ai_turns`)
             go(p.where || "Connections");
           }} onAsk={(p) => { go("Assistant"); askAssistant(failureAsk(p)); }} />
           {!phone && <Tooltip title="Refresh">

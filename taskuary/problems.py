@@ -344,6 +344,20 @@ def collect(store, all_of_them: bool = False) -> list:
         out.append({'key': f'fell_back:{pick}', 'title': f'{name}: {fell_line(store, pick)}', 'detail': 'Every call still gets an answer - '
                     'from the model the gateway fell back to.', 'back': f"{name}: {words(e.get('asked'))} answers again", 'since': e.get('from') or '',
                     'now': True, 'where': 'Connections', 'connector': pick[10:] if c else None, 'fix': 'Open the card'})
+    # ...AND THE AI FAILING ON HIS TASKS (the Hydrogen walk, 2026-11-19: "Nothing is failing" over three turns that failed): every open task whose
+    # newest turn failed, read off the chat's own record of it - one line, its newest failure in his words, gone once a turn answers
+    try:
+        failed = store._rows("SELECT c.TaskId, c.Body, c.At FROM chatlog c JOIN task t ON t.TaskId=c.TaskId WHERE c.Kind='turn' AND c.Parent IS NULL "
+                             "AND c.State='failed' AND t.Status NOT IN ('done','dropped') AND c.Id=(SELECT MAX(x.Id) FROM chatlog x WHERE x.TaskId=c.TaskId "
+                             "AND x.Kind='turn' AND x.Parent IS NULL) ORDER BY c.Id DESC")
+    except Exception: failed = []
+    if failed:
+        from .timewords import plural
+        newest = json.loads(failed[0].get('Body') or '{}').get('fail') or ''
+        out.append({'key': 'ai_turns', 'title': f"The AI failed on {plural(len(failed), 'task')}", 'detail': str(newest)[:400],
+                    'since': datetime.fromtimestamp(float(failed[0].get('At') or 0)).strftime('%Y-%m-%d %H:%M:%S') if failed[0].get('At') else '',
+                    'back': 'The AI is answering on your tasks again', 'now': True, 'where': 'Connections', 'fix': 'Open the task',
+                    'task': failed[0]['TaskId']})
     # ...and the day's ceiling for AI work nobody asked for, while it holds: one line, gone tomorrow or when the limit is raised
     from .brainroute import auto_held
     if held := auto_held(store):

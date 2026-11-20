@@ -445,7 +445,11 @@ def test_a_coding_chat_polled_again_reads_each_cli_log_once_per_version(home, mo
     for _ in range(5):
         again = conversation.items(s, tid)
         # ...a poll that changes nothing reads the same (a read that writes is churn): what moved, named, if it ever does
-        assert again['rev'] == first['rev'], {k: (first.get(k), again.get(k)) for k in set(first) | set(again) if k != 'rev' and first.get(k) != again.get(k)}
+        moved = {k: (first.get(k), again.get(k)) for k in set(first) | set(again) if k != 'rev' and first.get(k) != again.get(k)}
+        if 'items' in moved:                           # ...the first item that differs, whole, and the items each side has the other has not
+            a, b = moved.pop('items'); i = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
+            moved['items'] = {'at': i, 'first': a[i] if i < len(a) else None, 'again': b[i] if i < len(b) else None, 'lengths': (len(a), len(b))}
+        assert again['rev'] == first['rev'], moved
     assert len(reads) == 3, f'a poll read a log again: {reads}'
     f = home / '.claude' / 'projects' / 'C--work-ledger' / 'big1.jsonl'
     f.write_text(f.read_text(encoding='utf-8') + '\n' + json.dumps({'type': 'assistant', 'message': {'content': [{'type': 'text', 'text': 'One more check.'}]}}), encoding='utf-8')

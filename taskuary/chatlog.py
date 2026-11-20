@@ -213,7 +213,7 @@ def _logged(store, tid: int) -> None:
 
 def steps_of(store, tid: int, sid: str, steps: list) -> None:
     "A CLI log's steps (sessionrecord: Claude's, Codex's, Copilot's, Gemini's) by their place in its log: new ones appended, changed ones in place."
-    f = _FEEDS.setdefault((int(tid), f'log:{sid}'), {'wrote': {}})
+    f = _feeds(store).setdefault((int(tid), f'log:{sid}'), {'wrote': {}})
     for i, s in enumerate(steps):
         if s.get('k') in ('you', 'brief'): continue
         x = one_step(s)
@@ -557,7 +557,13 @@ def _convert(road: str, events: list) -> list:
     return st['out']
 
 
-_FEEDS: dict = {}
+import weakref as _weakref
+# ...WHAT EACH ROAD HAS WRITTEN, PER STORE (CI, 2026-11-19: a poll read differently from the one before on a busy runner): keyed by task and
+# session alone, one store's record of what it wrote stood for another's - a test's store at the same task id - and steps went unwritten
+_FEEDS = _weakref.WeakKeyDictionary()
+def _feeds(store) -> dict:
+    try: return _FEEDS.setdefault(store, {})
+    except TypeError: return {}
 @_safe
 def feed(store, tid: int, sid: str, road: str, event) -> None:
     """ONE EVENT OF A ROAD'S RECORD (a chat agent's trace event, an ACP update, a line of a CLI's log), as it comes: the turn's steps are
@@ -567,8 +573,8 @@ def feed(store, tid: int, sid: str, road: str, event) -> None:
     if isinstance(event, dict) and event.get('type') == 'error' and isinstance(event.get('detail'), dict) and event['detail'].get('stop'): return
     t = open_turn(store, tid)
     root = (t['Key'] if t else '').split('+')[0]
-    f = _FEEDS.get((int(tid), sid))
-    if not f or f['root'] != root: f = _FEEDS[(int(tid), sid)] = {'root': root, 'seq': f'{int(time.time() * 1000)}', 'events': [], 'wrote': {}}
+    fs = _feeds(store); f = fs.get((int(tid), sid))
+    if not f or f['root'] != root: f = fs[(int(tid), sid)] = {'root': root, 'seq': f'{int(time.time() * 1000)}', 'events': [], 'wrote': {}}
     f['events'].append(event); f['road'] = road
     # ...words a token at a time are written a few times a second, not once a token: the rest at the next step or the answer (flush)
     if _chunk(event) and time.time() - f.get('at', 0) < CHUNK_S: f['dirty'] = True; return
@@ -584,7 +590,7 @@ def _chunk(e) -> bool:
 def flush(store, tid: int) -> None:
     "What the roads of task `tid` still hold back (a sentence's last tokens): written now - its answer is filed, or its turn ended."
     if not store or not tid: return
-    for (t, sid), f in list(_FEEDS.items()):
+    for (t, sid), f in list(_feeds(store).items()):
         if t == int(tid) and f.get('dirty'): _write(store, tid, sid, f)
 
 

@@ -316,8 +316,16 @@ def follow(sid: str, stop, every: float = FOLLOW_EVERY, switch=None) -> None:
 
 
 _FOLLOWING = set()
+def left(sid: str, url: str) -> None:
+    "Grey the held steps of session `sid`'s task whose page its browser has left (browsergate.left_page)."
+    try:
+        from . import browsergate, server, terminal as hub_term
+        if (t := hub_term.get(sid)) and getattr(t, 'task_id', None): browsergate.left_page(server.store, t.task_id, sid, url)
+    except Exception as e: logger.debug(f'browser {sid}: its held steps were not checked against the page - {e}')
+
+
 def _follow(sid, stop, every, switch) -> None:
-    known, came_from = {t['id'] for t in pages(sid)}, ''
+    known, came_from, was = {t['id'] for t in pages(sid)}, '', ''
     while not stop.wait(every):
         ts = pages(sid)
         if not ts: continue
@@ -331,7 +339,10 @@ def _follow(sid, stop, every, switch) -> None:
             switch(sid, came_from); came_from = ''                     # ...its window closed: back where it came from
         for t in ts:
             if t['id'] in known: refused(sid, t.get('url'))
-        known = ids
+        # ...and a held step whose page the browser has just left greys at once, while he watches (browsergate.left_page)
+        on = next((str(t.get('url') or '') for t in ts if t['id'] == active_tab(sid)), '')
+        if on and on != was and not on.startswith('about:'): left(sid, on)
+        was, known = on or was, ids
 
 
 # ...AND A SIGN-IN GOOGLE WILL NOT DO HERE IS SAID, WITH THE WAY PAST IT: Google turns down a browser it reads as automated ("This browser or

@@ -626,6 +626,23 @@ def left_page(store, tid: int, sid: str, url: str) -> list:
     return out
 
 
+def left_now(store, tid: int) -> list:
+    """Grey task `tid`'s held steps whose browser is on another page NOW, read off each session's own Chrome (browserview.tab_url) - called
+    where the card is served and while the view watches its session, so a stale Approve is never drawn live. -> their review ids."""
+    from . import browserview
+    sids = set()
+    for r in store._rows("SELECT DraftText FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (int(tid),)):
+        try: p = json.loads(r.get('DraftText') or '{}') or {}
+        except (TypeError, ValueError): continue
+        if p.get('action') == 'browser_act' and p.get('sid') and not p.get('signup'): sids.add(str(p['sid']))
+    out = []
+    for sid in sids:
+        try: url = browserview.tab_url(sid)
+        except Exception: url = ''
+        if url and not url.startswith('about:'): out += left_page(store, tid, sid, url)       # ...a browser it cannot read greys nothing
+    return out
+
+
 def _same_page(a: str, b: str) -> bool: return a.split('#', 1)[0].rstrip('/') == b.split('#', 1)[0].rstrip('/')
 
 
@@ -680,7 +697,9 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
     # pressed there by its role and name
     if not _same_page(here, str(p.get('url') or '')):
         if (p.get('control') or {}).get('name') and args[0] in ('click', 'dblclick'): return _again(store, tid, sid, p)
-        raise RuntimeError(f"the agent's browser has moved on from the page this was held on ({p.get('name') or p.get('site') or 'its site'}) - nothing was done. {AGAIN}")
+        # ...one that slipped through before its card greyed (left_now) says so in his words, and who moves next - never a dead end
+        raise RuntimeError(f"The browser had already left that page on {p.get('name') or p.get('site') or 'the site'}, so nothing was done. "
+                           "The agent goes back and holds it again for your press.")
     # ...AND THE REF STILL NAMES THE CONTROL IT WAS HELD ON: a page that re-draws itself on one address (a checkout's next step, a list that
     # reloaded) gives @e12 to another control at its next snapshot, and the owner's yes to "Continue" clicked "Remove item"
     if (was := p.get('control')) and (now := control({'args': args}, page(sid))) and (now.get('role'), now.get('name')) != (was.get('role'), was.get('name')):

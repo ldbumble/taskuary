@@ -2548,6 +2548,7 @@ def _assistant_payload(task_id: int, session=None):
     # opens on its chat; what is typed there makes it the general agent's (_chat_kind), as Send to agent's dispatch did
     if str(task.get('Kind') or '') == 'coding':
         raise HTTPException(422, 'a coding task is worked in its terminal, not a chat')
+    _left_now(task_id)
     session = session or general.session_for(task_id)
     was = general.at_work(task_id)                        # ...and whether a turn works, before it too (line_state `was`)
     kept = general.waiting_lines(store, task_id)          # ...BEFORE the conversation: a turn takes a line from one into the other (line_state)
@@ -2666,6 +2667,14 @@ def _revisioned(got, rev: str = ''):
 def assistant_state(task_id: int, rev: str = ''):
     return _revisioned(_assistant_payload(task_id), rev)
 
+def _left_now(task_id: int) -> None:
+    """A HELD STEP WHOSE BROWSER HAS LEFT ITS PAGE IS GREYED BEFORE IT IS SERVED (browsergate.left_now; the walk, 2026-11-19: an Approve looked
+    live after the browser moved on, and his press failed) - the page's every read of the task asks, so it is never drawn as a live Approve."""
+    from . import browsergate
+    try: browsergate.left_now(store, task_id)
+    except Exception as e: logger.debug(f'TQ-{task_id}: held browser steps were not checked against their page - {e}')
+
+
 @app.get('/api/tasks/{task_id}/conversation')
 def conversation_list(task_id: int, rev: str = '', level: str = ''):
     """THE TASK'S CHAT, ONE LOG FOR EVERY KIND OF AGENT (chatlog.serve): what the page draws, in order, and what waits by the box.
@@ -2673,6 +2682,7 @@ def conversation_list(task_id: int, rev: str = '', level: str = ''):
     choice (summary, steps, everything) - else its kind's setting."""
     from . import chatlog
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    _left_now(task_id)
     got = chatlog.serve(store, task_id, level or None)
     return _revisioned(got, rev)
 

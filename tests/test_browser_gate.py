@@ -755,3 +755,15 @@ def test_a_held_step_its_browser_left_greys_where_it_stood_and_the_agent_is_told
 def test_his_done_on_the_page_is_a_line_in_the_chat_even_under_a_turn_at_work():
     from taskuary import chatlog
     assert 'browser_act_pressed' in chatlog.AT_ONCE
+
+
+def test_a_held_step_greys_when_the_task_is_read_after_its_browser_left_the_page():
+    # the merge blocker (2026-11-19): greyed when it is served, not at the agent's next command
+    s = MemoryStore(); tid = Factory(s).task('Sign up on the vendor portal')
+    proposals.queue(s, tid, {'action': 'browser_act', 'sid': 'run1', 'args': ['find', 'role', 'button', 'click', '--name', 'Next'], 'url': CHECKOUT,
+                             'site': 'toll.example', 'what': 'click the "Next" button on toll.example', 'why': 'x'}, 'agent')
+    with mock.patch.object(browserview, 'tab_url', return_value=CHECKOUT), mock.patch.object(bg, '_tell'): assert bg.left_now(s, tid) == []
+    with mock.patch.object(browserview, 'tab_url', return_value=''), mock.patch.object(bg, '_tell'): assert bg.left_now(s, tid) == []   # unread: nothing greys
+    with mock.patch.object(browserview, 'tab_url', return_value='https://pay.toll.example/receipt'), mock.patch.object(bg, '_tell') as told:
+        [rid] = bg.left_now(s, tid)
+    assert proposals.passed(s.get_review(rid)) and told.call_count == 1

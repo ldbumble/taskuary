@@ -4844,7 +4844,8 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
     # work, its agent hears his line there, by the one road into it - never a second task. No row is made before that answer (walk 4,
     # 2026-11-19: a task opened first stood as a second rail row for 15-25 s and was then "merged"); New draws his line at work meanwhile
     from . import ingest
-    if (same := ingest.arrive_words(store, said or job, 'owner', actor, skip={tid}, files=list(files or []) or None, said=said or job)):
+    read = {}
+    if (same := ingest.arrive_words(store, said or job, 'owner', actor, skip={tid}, files=list(files or []) or None, said=said or job, verdict=read)):
         return {'taskId': same['tid'], 'ref': task_ref(same['tid']), 'joined': True, 'started': True}
     brief = job if door else _handoff_brief(store, tid, job)
     # ...HIS WORDS ARE THE TASK'S OWN MESSAGE, AND ONLY HIS WORDS (recorded on the real CLI, 2026-11-15: the new task's bubble read his ask
@@ -4853,6 +4854,9 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
     # ...and where the model reworded what he typed, `said` is his and `job` is Taskuary's brief (setup_task, his_words)
     made = setup_task(store, job if kind == 'general' else brief, actor, title=title or _handoff_title(store, tid, said or job), kind=kind, agent_job=kind == 'general',
                       repo=repo, profile=profile, said=said, door=door or 'the Assistant chat', files=files)
+    # ...AND CLASSED AS A MAIL IS (the owner, 2026-11-20: "17% of 2,340" ran on the big model): the reading that asked whether it is open work
+    # already says how hard it is - kept on the task, so its agent starts on the gear for it (brainroute), with no second model call
+    if read: store.judge_task(made['taskId'], read, 'triage')
     if kind == 'general':
         # ...AT WORK FROM THE MOMENT IT IS MADE (the bug hunt, 2026-11-12: New opened the task at once, and for the seconds its outputs were
         # read before the first turn it said "agent done" with Mark done lit, over an agent that had not begun): a start in flight, as

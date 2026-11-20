@@ -419,7 +419,8 @@ def take(key: str, sig: tuple, open_conn, resume=None):
         if lv is not None and (why := _stale(lv, sig, resume) or 'none was open') != 'none was open' and not lv.lock.locked(): _POOL.pop(key).close(); lv = None
     if lv is not None: return lv
     logger.info(f'clipool: opening {key}{" on " + resume if resume else ""} - {why}')
-    lv = open_conn(); _put(key, lv)
+    t0 = time.time(); lv = open_conn(); _put(key, lv)
+    logger.info(f'clipool: {key} open in {time.time() - t0:.1f}s')          # ...the start-up a first turn waits on, said beside its reason
     return lv
 
 

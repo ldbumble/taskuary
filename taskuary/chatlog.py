@@ -363,7 +363,15 @@ def answered(store, tid: int, cid: int, actor: str, body: str, created: str) -> 
         update(store, tid, t['Key'], state='failed' if fail or t['State'] == 'failed' else t['State'] if t['State'] == 'stopped' else 'done', **done)
     else:
         opener(store, tid)                  # ...a task's first answer with no hand-over before it still opens on what started it
-        put(store, tid, 'turn', f'a:c{cid}', {'started': _when(created), **done}, state='failed' if fail else 'done', src=f'comment:{cid}')
+        n = put(store, tid, 'turn', f'a:c{cid}', {'started': _when(created), **done}, state='failed' if fail else 'done', src=f'comment:{cid}')
+        # ...AND THE CARDS IT RAISED BEFORE ITS ANSWER WAS FILED ARE ITS OWN (audit parity, 2026-11-19: on the API road a reply raised mid-turn,
+        # with no turn row yet, stood loose at the chat's foot while the CLI road's stood in its turn): what was put at the foot since the last
+        # input is this turn's - still its last thing, under the words it just filed
+        with store.lock:
+            ins = store.cx.execute(f"SELECT MAX(Id) AS i FROM chatlog WHERE TaskId=? AND Parent IS NULL AND Kind IN ({','.join('?' * len(INPUTS))})",
+                                   (tid, *INPUTS)).fetchone()['i'] or 0
+            store.cx.execute("UPDATE chatlog SET Parent=?, Rev=Rev+1 WHERE TaskId=? AND Parent IS NULL AND Kind IN ('card','fail') AND Id>? AND Id<?",
+                             (n, tid, ins, n)); store.cx.commit()
     # ...and a press he made while it worked, which no turn will hear (a second Trust, a tap on what was already done), goes in under it: kept
     # for a turn that never comes, it stood by the box while this one ran and was gone the moment it answered. One a next turn hears is in place
     began = json.loads(t['Body'] or '{}').get('started') if t and t['State'] in LIVE else None
@@ -843,7 +851,8 @@ def advance_soon(store, tid: int, rid: int = None) -> None:
     moved - until its card stands, the turn open at each of its writes is kept as the one that raised it (the one that wrote its words, for
     a reply raised empty) - plain reads, no other lock taken."""
     if rid and not get(store, tid, f'r:{int(rid)}'):
-        try: _RAISED.setdefault(store, {})[int(rid)] = (open_turn(store, tid) or {}).get('Id')
+        # ...the turn at work raised it even where his line landed under it a beat before its next step (the turn is cut there only at that step)
+        try: _RAISED.setdefault(store, {})[int(rid)] = (open_turn(store, tid) or _live(store, tid) or {}).get('Id')
         except TypeError: pass                     # ...a store that cannot be held weakly keeps no note: the time of its raise places it
     if getattr(store, '_closed', False) or getattr(store, '_closing', False): return
     try: ref = weakref.ref(store)

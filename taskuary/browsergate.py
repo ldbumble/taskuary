@@ -344,7 +344,12 @@ NO_PAGE = ('{held}: Taskuary could not read which page your browser is on, so it
 # it can't be undone", one press each). One sentence for the model to read, on every road the browser is held by (check, judge, signup).
 BIG = ('it SPENDS HIS MONEY (pays, buys, orders, subscribes, upgrades a plan, enters or confirms a payment card), SENDS HIS OWN PRIVATE '
        'DETAILS (his real phone number, card, home address, ID or date of birth, anything personal of his - never a made-up value or a '
-       'login Taskuary generated), SPEAKS FOR HIM to other people (sends a message, posts, invites), or DELETES OR CANCELS something of his')
+       'login Taskuary generated), SPEAKS FOR HIM to other people (sends a message, posts, invites), or DELETES OR CANCELS something of his. '
+       # ...HIS ASK IS HIS GO-AHEAD (the owner's ruling, 2026-11-17; the Codex walk, 2026-11-19: "You have my go-ahead to sign up on every one
+       # ... Don't ask me per site" - and each sign-up with his name and work email was held, 2 of 13 in 33 minutes)
+       "A go-ahead HE GAVE in his own words for this kind of step - on this site, or on every such site - covers it: then it is not big. His "
+       'name and work email sent in a sign-up he asked for are covered by that ask. Money, his phone, home address, card, ID or date of birth '
+       'still wait for his press whatever he said')
 SYSTEM = ('You guard the browser of an AI agent that works for its owner. Before the agent runs a browser command, you decide whether '
           f'it is BIG: {BIG}. Everything else runs without asking him - a free sign-up or trial filled with made-up details, a search, a '
           'filter, a page of a form: say big false for it, whatever it creates. Typing, ticking or choosing in a box sends nothing until '
@@ -356,7 +361,8 @@ SYSTEM = ('You guard the browser of an AI agent that works for its owner. Before
           'order. Reply with JSON only, one entry per command: {"acts": [{"big": true or false, "kind": "money", "private", "speaks" or '
           '"deletes" when big, "sure": true or false, "irreversible": true or false (it cannot be undone outside this browser), "what": '
           'what it does FOR THE OWNER, named for the site and the outcome in a few plain words - e.g. "Pay the $412.50 invoice on '
-          'toll.example", "Submit the sign-up on UPrinting" - never a ref, an @id, a mouse or key action, or what you could not see}]}.')
+          'toll.example", "Submit the sign-up on UPrinting", "Send your name and work email to CapRateHub" - said TO him ("your", '
+          'never "the owner" or "his"), never a ref, an @id, a mouse or key action, or what you could not see}]}.')
 ITEM = {'type': 'object', 'properties': {'big': {'type': 'boolean'}, 'kind': {'type': 'string', 'enum': ['money', 'private', 'speaks', 'deletes', '']},
                                          'sure': {'type': 'boolean'}, 'irreversible': {'type': 'boolean'}, 'what': {'type': 'string'}},
         'required': ['big', 'sure', 'irreversible']}
@@ -480,11 +486,6 @@ def _judge(store, todo: list, pg: dict, brain=None, said: str = '') -> list:
     return [_verdict(a, v, pg, said) for a, v in zip(todo, vs)]
 
 
-def _held_why(k: str) -> str:
-    from .say import HELD
-    return HELD[k]
-
-
 def _verdict(act: dict, v: dict | None, pg: dict, said: str) -> dict:
     if v is None: return {'hold': True, 'what': target(act, pg) or _cmd(act), 'why': "Taskuary couldn't tell what it does, so it waits for you"}
     what = ' '.join(str(v.get('what') or '').split())[:200]
@@ -498,11 +499,13 @@ def _verdict(act: dict, v: dict | None, pg: dict, said: str) -> dict:
     if big is True: return {'hold': True, 'what': what, 'why': WHY.get(str(v.get('kind') or ''), BIG_WHY)}
     # ...only a verdict that SAYS it is not big passes on that: one that left `big` out (a CLI judge carries no schema) is read the old way -
     # it passed a payment he had asked for with no press, 2026-11-18
-    if big is False and v['sure']: return {'hold': False, 'what': what, 'why': ''}
+    # ...and one it says is not big passes unless it also cannot be undone and it is unsure (the walk, 2026-11-19: a free sign-up the judge
+    # said was not big, only unsure, was held as "it may spend money")
+    if big is False and (v['sure'] or not v['irreversible']): return {'hold': False, 'what': what, 'why': ''}
     if setting(act) and not (big is None and v['irreversible'] and v['sure']): return {'hold': False, 'what': what, 'why': ''}
     if big is None and v['irreversible'] and v['sure']: return {'hold': True, 'what': what, 'why': "it can't be undone"}
     if big is None and v['sure']: return {'hold': False, 'what': what, 'why': ''}
-    return {'hold': True, 'what': what, 'why': _held_why('unsure')}
+    return {'hold': True, 'what': what, 'why': "Taskuary couldn't tell for sure what it does, so it waits for you"}
 
 
 # ── held: the proposal, and the agent told why ────────────────────────────────────────────────────────────────────────────

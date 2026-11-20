@@ -635,3 +635,14 @@ def test_a_curl_of_taskuarys_own_api_reads_no_file():
     assert readgate.command_paths('curl -s "$TASKUARY_URL/api/tasks/3"', 'C:/work/ledger') == []
     assert readgate.command_paths('curl -s ${TASKUARY_URL}/api/tasks/3 | python -c "import json,sys"', 'C:/work/ledger') == []
     assert readgate.command_paths('cat "$SECRETS_DIR/x"', 'C:/work/ledger') == [None]                # a variable it cannot read is still held
+
+
+def test_a_step_piped_into_a_tool_that_exits_zero_is_as_it_ended():
+    # the Claude walk, 2026-11-19: `git push ... | tail -3` exited 0 and the card read "Approved · it ran" over a refused push
+    s = MemoryStore(); tid = Factory(s).task('Ship the export fix')
+    said = "To https://github.com/northwind/ledger.git\n ! [rejected]        main -> main (fetch first)\nerror: failed to push some refs to 'https://github.com/northwind/ledger.git'"
+    with mock.patch.object(sg, '_tell'), mock.patch.object(sg.os.path, 'isdir', return_value=True):
+        try: sg.perform(s, tid, {'command': 'git push origin main | tail -3', 'shell': 'Bash', 'cwd': 'C:/work/ledger', 'what': 'push 1 commit to northwind/ledger main'},
+                        run=lambda argv, cwd: (0, said))
+        except RuntimeError as e: assert str(e).startswith('Push 1 commit to northwind/ledger main failed: error: failed to push some refs')
+        else: raise AssertionError('a refused push read as run')

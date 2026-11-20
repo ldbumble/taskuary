@@ -158,7 +158,9 @@ export const tabList = (m) => (Array.isArray(m?.tabs) ? m.tabs : []).filter((t) 
   const bare = (x) => !x || x === host || url.includes(x);
   if (!bare(now)) TITLES.set(at, now);
   const title = bare(now) ? TITLES.get(at) || "" : now;
-  return { id: String(t.tabId), name: (title || host || now || url) || "new tab", url, active: !!t.active };
+  // ...a page reached by a bare address with no title of its own reads by its address without the port (never "127.0.0.4:18811")
+  const where = /^\d+\.\d+\.\d+\.\d+(:\d+)?$|^\[/.test(host) ? host.replace(/:\d+$/, "") : host;
+  return { id: String(t.tabId), name: (title || where || now || url) || "new tab", url, active: !!t.active };
 });
 
 // Dragging the splitter fires a resize every frame; Chrome should not be re-laid-out for six pixels.

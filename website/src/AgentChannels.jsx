@@ -40,7 +40,7 @@ export function PermissionCards({ taskId, items = [], onAnswered }) {
       {l.why && <Typography variant="caption" sx={{ display: "block", color: DIM, mt: 0.2 }}>{l.why}</Typography>}
       {l.command && <Box component="details" open={l.open || undefined} data-tq-permission-command sx={{ mt: 0.4, fontSize: 12, color: DIM, "& summary": { cursor: "pointer" },
         "& code": { display: "block", whiteSpace: "pre-wrap", overflowWrap: "anywhere", mt: 0.4, fontSize: 11.5, fontFamily: mono, color: INK } }}>
-        <summary>Show the command</summary><code>{l.command}</code></Box>}
+        <summary>What it runs</summary><code>{l.command}</code></Box>}
       <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mt: 0.8 }}>
         {p.options.map((o) => <Button key={o.kind} size="small" disableElevation disabled={!!busy[p.id]} data-tq-permission-answer={o.kind}
           variant={o.kind === "allow_once" ? "contained" : "outlined"}

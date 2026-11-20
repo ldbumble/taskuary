@@ -189,7 +189,8 @@ export const proposalPresentation = (review) => {
     ...heldLead(proposal),
     destinationLabel: "On",
     // ...the SITE, never its raw address (the owner's live app, 2026-11-19: "On https://app.box.example/folder/..." under the step)
-    destination: proposal.site || proposal.url || "the agent's browser",
+    // ...by the name the server gives it (its `name`: signin.site_name - a bare address by its page's title), never "127.0.0.4"
+    destination: proposal.name || proposal.site || proposal.url || "the agent's browser",
     approveLabel: APPROVE,
     busyLabel: "running…",
     rejectLabel: "Dismiss",
@@ -321,7 +322,8 @@ export const resultOf = (review) => {
   if (review?.Kind !== "action" || !["approved", "edited"].includes(review?.Status)) return null;
   let p = {};
   try { p = JSON.parse(review.FinalText || review.DraftText || "{}") || {}; } catch { p = {}; }
-  const r = p.result || {}, url = r.url || (/https?:\/\/\S+/.exec(String(r.said || "")) || [""])[0].replace(/[.,)]+$/, "");
+  // ...a link read off what it said keeps none of the quote or bracket around it (the Claude walk, 2026-11-19: "...ledger.git/'")
+  const r = p.result || {}, url = r.url || (/https?:\/\/[^\s'"<>()\]]+/.exec(String(r.said || "")) || [""])[0].replace(/[.,)]+$/, "");
   // ...a yes the page refused (browsergate._perform's `refused`) is over, and did nothing: it never reads "ran on the page"
   if (r.refused) return { said: "Approved · not done", what: String(r.refused), url: "", command: String(p.command || "") };
   const what = String(p.about || p.what || r.performed || r.commented || r.closed || r.merged || (r.task || r.source ? r.said : "") || "").trim();

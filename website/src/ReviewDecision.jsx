@@ -634,7 +634,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     <Box data-tq-act-result="" sx={{ mt: 0.75, p: 1, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
       <Typography variant="body2" sx={{ color: INK, overflowWrap: "anywhere" }}>
         <b>{done.said}</b>{done.what ? ` · ${done.what}` : ""}{done.url && <> · <a href={done.url} target="_blank" rel="noreferrer">{done.url.replace(/^https?:\/\//, "").slice(0, 80)}</a></>}</Typography>
-      {done.command && <details><summary style={{ fontSize: 12, color: DIM, cursor: "pointer" }}>Show the command</summary>
+      {done.command && <details><summary style={{ fontSize: 12, color: DIM, cursor: "pointer" }}>What it runs</summary>
         <Typography component="code" variant="caption" sx={{ whiteSpace: "pre-wrap", color: DIM, display: "block" }}>{done.command}</Typography></details>}
     </Box>);
   if (r.Status !== "pending") {

@@ -667,6 +667,9 @@ def mid_turn(store, tid: int, sid: str) -> str:
     return BUSY if getattr(s, 'busy', False) or (str(st.get('sid')) == str(sid) and st.get('state') == 'working') else ''
 
 
+_FAILED_LINE = re.compile(r'^\s*(?:error|fatal):|^\s*! \[(?:rejected|remote rejected)\]', re.M)
+
+
 def perform(store, tid: int, p: dict, run=None) -> dict:
     """The owner's yes: run the held command, as it was, in the folder it was held in. `run`: the runner (tests stand one in)."""
     cmd, cwd = str(p.get('command') or ''), str(p.get('cwd') or '')
@@ -683,6 +686,10 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
     from . import actrule
     actrule.remember(store, tid, p.get('keys'), 'approved')       # his yes to this kind of step on this target stands for the task
     rc, said = run_(p, cwd) if run is None else run(replay(p), cwd)
+    # ...A STEP IS AS IT ENDED, NOT AS ITS LAST PIPE DID (the Claude walk, 2026-11-19: a push piped through `| tail` exited 0 and its card read
+    # "Approved · it ran" with the refused push's address under it): a tool's own failure line - git's `error:` / `fatal:`, its "! [rejected]" -
+    # in what it printed is a failure, read off that grammar
+    if rc == 0 and _FAILED_LINE.search(str(said or '')): rc = 1
     if rc != 0:
         store.audit('task', tid, 'shell_act_failed', 'owner', 'human', {'what': p.get('what'), 'command': cmd[:300], 'said': str(said or '')[-1500:]})
         raise RuntimeError(failed(said, rc, p.get('what')))

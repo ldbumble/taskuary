@@ -274,7 +274,7 @@ test("the browser's tabs read as a strip: title or host, the active one marked, 
     { tabId: "x;rm", title: "bad", url: "https://bad.example/", active: false }] };
   assert.deepEqual(tabList(m), [
     { id: "t1", name: "Payworth - Sign in", url: "http://localhost:8931/login", active: false },
-    { id: "t2", name: "127.0.0.1:8932", url: "http://127.0.0.1:8932/", active: true },
+    { id: "t2", name: "127.0.0.1", url: "http://127.0.0.1:8932/", active: true },
     { id: "t3", name: "news.example", url: "https://news.example/today", active: false }]);
   assert.deepEqual(tabList({ type: "tabs" }), []);
   // ...and a page keeps the title it once showed, where the browser names it in the background by its address (design round 5, 2026-11-19)

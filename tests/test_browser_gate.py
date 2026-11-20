@@ -765,3 +765,13 @@ def test_a_held_step_greys_when_the_task_is_read_after_its_tab_left_the_page():
     with mock.patch.object(browserview, 'pages', return_value=[{'id': 'T2', 'url': CHECKOUT}]), mock.patch.object(bg, '_tell') as told:
         [rid] = bg.left_now(s, tid)                                         # its own tab gone - another tab on the same address is not it
     assert proposals.passed(s.get_review(rid)) and told.call_count == 1
+
+
+def test_a_step_the_judge_says_is_not_big_runs_unless_it_is_also_unsure_and_for_good():
+    # the walk, 2026-11-19: a free sign-up the judge said was not big, only unsure, was held as "it may spend money"
+    pg = {'url': 'https://events.trainly.example/signup', 'elements': '- button "Create account" [ref=e5]'}
+    a = bg.acts('agent-browser click @e5')[0]
+    assert not bg._verdict(a, {'big': False, 'sure': False, 'irreversible': False, 'what': 'Submit the sign-up on Trainly'}, pg, '')['hold']
+    v = bg._verdict(a, {'big': False, 'sure': False, 'irreversible': True, 'what': 'Submit the sign-up on Trainly'}, pg, '')
+    assert v['hold'] and 'money' not in v['why']
+    assert 'go-ahead HE GAVE' in bg.SYSTEM and 'work email' in bg.SYSTEM and 'never "the owner"' in bg.SYSTEM

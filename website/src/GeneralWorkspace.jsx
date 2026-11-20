@@ -1011,7 +1011,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
      flows better to go back and continue"). A held act of this session's browser shows its Approve / Dismiss on the view, and the
      agent's hand-over of the page ("your turn") its Done - both into this same conversation. Off screen (a phone's chip), their cards. */
   const viewActs = (data?.browserActs || []).map((r) => heldOn(r, session?.sid)).filter(Boolean);
-  const turn = asking && isTurn(asking) ? asking : null;
+  // ...EVERY WAIT ON THE PAGE IS ONE TURN (a sign-in too - the Claude walk, 2026-11-19: a sign-in drew the toolbar's "I'm done", which only let
+  // go of the page and told nobody): its bar's I'm done is the one hand-back - his line, the agent woken (handBack)
+  const turn = asking && waitsOnPage(asking) ? asking : null;
   // ...a held SHELL step is the task page's card in Next steps, one card for the turn (HeldSteps) - it was drawn here a second time, per step
   const actsHere = (viewShown ? (data?.browserActs || []).filter((r) => !heldOn(r, session?.sid)) : data?.browserActs || []).filter((r) => proposalFrom(r)?.action !== "shell_act");
   // Approve runs the act and tells the agent on a thread of its own (browsergate._tell): its next turn starts a moment after the press
@@ -1020,7 +1022,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // server closes the hand-over and tells the agent itself (workerstate.answer `press`, browsergate.done); the chat reads one quiet line
   const handBack = async () => {
     const req = asking;
-    try { await api.post(`/api/tasks/${task.TaskId}/worker/answer`, { request_id: req.request_id, text: "", press: true }); }
+    // ...a sign-in is handed back by its own answer (signin.DONE - its road keeps what he typed); a step on the page by his press
+    const body = isSignin(req) ? { text: (req.choices || [])[0] || "Signed in" } : { text: "", press: true };
+    try { await api.post(`/api/tasks/${task.TaskId}/worker/answer`, { request_id: req.request_id, ...body }); }
     catch (e) { if (e?.response?.status !== 409) throw e; }      // closed already: the page moved on first, and the agent was told that
     setAnswered(req.request_id); onAnswered?.(); decidedOnView();
   };

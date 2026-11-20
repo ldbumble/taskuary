@@ -5,8 +5,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Box, Typography } from "@mui/material";
 import api from "./api.js";
-import { afterPress, press as pressReview } from "./press.js";
-import { label } from "./buttons.js";
 import { useAgents } from "./ui.jsx";
 import { ACCENT, BORDER, CATPPUCCIN, DIM, FAINT, INK, PANEL, PANEL2, mono, sans } from "./theme.jsx";
 import { activeTab, tabList, FIRST_WAIT, fitFrame, holdFirst, isPaste, keyMessage, mayShape, pasteMessages, mouseMessage, parseMessage, shortUrl, viewportFor,
@@ -290,11 +288,12 @@ Take over to drive it yourself; close the session to close it."
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           color: note.bad ? CATPPUCCIN.red : CATPPUCCIN.green }}>{note.t}</Typography>}
         {/* ...but not while the agent has handed him the page: its bar's "I'm done" is that step's one press, and this stood beside it as a
-            second, greyed one (the overnight walk, 2026-11-11) */}
+            second, greyed one (the overnight walk, 2026-11-11). THIS BUTTON ONLY EVER MEANS TAKE OVER (the Claude walk, 2026-11-19: its "I'm
+            done" let go of the page and told nobody, beside the turn's real one) - driving, it gives the page back, in those words */}
         {!turn && <Box component="button" onClick={() => (driving ? setDriving(false) : takeOver())}
-          title={driving ? "give the page back to the agent" : "drive the page yourself - for a password or a code the agent must not type"}
+          title={driving ? "stop driving - the page is the agent's again" : "drive the page yourself - for a password or a code the agent must not type"}
           sx={{ ...btn, ...sans, ...(driving ? { color: CATPPUCCIN.yellow, borderColor: CATPPUCCIN.yellow } : {}) }}>
-          {driving ? "I'm done" : "Take over"}
+          {driving ? "Give it back" : "Take over"}
         </Box>}
         {/* ...Snapshot only in Developer mode (audit, 2026-11-05): a frame filed as an attachment is a developer's record */}
         {devMode && <Box component="button" onClick={snapshot} title="keep this frame on the task as an attachment" sx={btn}>Snapshot</Box>}
@@ -400,7 +399,11 @@ ${t.active ? "the tab the agent is working on - shown now" : driving ? "show thi
       </Box>
       {/* WHAT WAITS ON THE OWNER, ON THE PAGE IT WAITS ON - below the page, never over it: a CAPTCHA box under a bar is not one they
           can tick. A held act's Approve / Dismiss, and the owner's turn with its hand-back; both flow back into the agent's chat. */}
-      {waiting.map((h) => <HeldBar key={h.id} held={h} onDecided={onDecided} />)}
+      {/* ...A HELD STEP IS ONE CARD, IN ONE PLACE (the Codex walk, 2026-11-19: the same Approve stood in the chat and again here): its card is
+          the chat's - the page says only that it waits there */}
+      {!!waiting.length && <Box data-tq-browser-waits="" sx={bar}>
+        <Typography sx={barText}><Box component="span" sx={{ color: CATPPUCCIN.yellow, fontWeight: 600 }}>Waits for your Approve in the chat: </Box>
+          {waiting.map((h) => h.what).join("; ")}</Typography></Box>}
       {turn && <TurnBar turn={turn} url={url} onHandBack={onHandBack} short={short} />}
     </Box>
   );
@@ -412,36 +415,8 @@ const bar = { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1, p
 const barText = { fontSize: 12.5, color: "var(--tq-muted, #e1dcd5)", flex: "1 1 220px", minWidth: 0, lineHeight: 1.4 };
 // ...the hand-over's words and presses in the app's own face: they are his to read, not the page's address bar (design round 5)
 const press = { ...btn, ...sans, fontSize: 12, px: 1.25, py: 0.6 };
-const primary = { ...press, color: "var(--tq-text, #101010)", bgcolor: CATPPUCCIN.yellow, borderColor: CATPPUCCIN.yellow,
-  "&:hover": { bgcolor: "var(--tq-tint-brass, #f3d98f)", borderColor: "var(--tq-edge-brass, #f3d98f)", color: "var(--tq-text, #101010)" } };
 const failed = (e, data) => data?.send_error || e?.response?.data?.detail || (e ? "That did not go through - nothing was done. Try again." : "");
 
-// A HELD ACT (browsergate.check): Approve runs that exact command in this browser and the agent is told what happened - it goes on
-// in the same conversation by itself; Dismiss tells it the step was not done. The existing decide road, the same as the card's.
-function HeldBar({ held: h, onDecided }) {
-  const [busy, setBusy] = useState(""), [done, setDone] = useState(""), [err, setErr] = useState("");
-  const decide = async (verb) => {
-    if (busy || done) return;
-    setBusy(verb); setErr("");
-    const o = await pressReview(api, h.id, { verb, cc: null, anyway: false }, 2);       // the one press (press.js)
-    const after = afterPress(o, verb); setBusy(after.busy); setDone(after.done); setErr(after.err);
-    if (o.kind !== "error") onDecided?.();
-  };
-  return (
-    <Box data-tq-browser-held={h.id} sx={bar}>
-      <Typography sx={barText} title={[h.url, h.why].filter(Boolean).join("\n")}>
-        <Box component="span" sx={{ color: CATPPUCCIN.yellow, fontWeight: 600 }}>Approve: </Box>{h.what}
-        {h.why && <Box component="span" sx={{ color: "var(--tq-warning, #a8a196)" }}>{` — held because ${h.why}`}</Box>}
-      </Typography>
-      <Box component="button" onClick={() => decide("approve")} disabled={!!busy || !!done} sx={primary}
-        title="Taskuary runs exactly this in the agent's browser, and the agent carries on from there">
-        {done === "approve" ? "✓ ran" : busy === "approve" ? "running…" : label("approve", "action")}</Box>
-      <Box component="button" onClick={() => decide("reject")} disabled={!!busy || !!done} sx={press}
-        title="Not done - the agent is told, and carries on without it or asks you">{done === "reject" ? "✓ dismissed" : busy === "reject" ? "…" : "Dismiss"}</Box>
-      {err && <Typography role="alert" sx={{ ...mono, fontSize: 10.5, color: CATPPUCCIN.red, flexBasis: "100%" }}>{err}</Typography>}
-    </Box>
-  );
-}
 
 // THE OWNER'S TURN (browserview.your_turn): the page is theirs to click and type on (yourTurn hands it over), and Done hands it back -
 // their press, never words in their name: Taskuary tells the agent, which looks at the page and goes on (browsergate.done).

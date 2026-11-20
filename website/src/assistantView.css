@@ -634,11 +634,7 @@
 /* ...and A THIRD OF A LAPTOP NO MORE (the owner, 2026-10-26, 1600x810: "you can't see anything ... button height is too high? you can't see
    what you have to do"): 138px of dock over a task whose reason was out of sight. Each band is as tall as its one line - the strip 30, the
    row its 30px pills in a 3px section (.tq-cl), the box its 34px line - about 115px; a touch screen keeps its 44px targets (pointer: coarse) */
-.tq-dock .tq-next { margin: 0; min-height: 30px; padding: 0 16px; justify-content: flex-start; background: var(--tq-panel, #f6f5f1); border-bottom: 1px solid var(--tq-border, #ece7de); }
-.tq-dock .tq-next .tq-next-why { margin-left: auto; padding-block: 2px; }
-/* NO STRIP (the owner, 2026-10-26: "maybe keep the box but remove the advisor?"): the dock is the row and the box, one line - a .tq-next here
-   is setup's own line (SetupLine), drawn only while setup is in view */
-.tq-dock > .tq-next { border-bottom: 1px solid var(--tq-border, #ece7de); }
+/* NO STRIP (the owner, 2026-10-26: "maybe keep the box but remove the advisor?"; setup's too, 2026-11-20): the dock is the row and the box */
 .tq-dock .tq-arow { width: 100%; margin: 0; min-height: 0; justify-content: center; padding: 3px 12px; box-sizing: border-box; border-bottom: 1px solid var(--tq-border, #ece7de); }
 .tq-dock .tq-compose-box { width: 100%; min-height: 40px; align-items: center; border: 0; border-radius: 0; box-shadow: none; padding: 3px 8px; }
 .tq-compose-box { width: min(980px, 100%); margin: 0 auto; display: flex; align-items: flex-end; gap: 5px; padding: 6px 7px; border: 1px solid var(--tq-border, #d5d0c7); background: var(--tq-panel, #fff); border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
@@ -889,6 +885,8 @@
    beside it the dock ran the whole window - its line ~1800px across a 1920 screen and Back/Next at its far left, far from the cards. It
    takes the step's own width (FirstRun's 980px column), centred, so its line and Back/Next sit under the cards */
 .tq-dock.tq-setup-dock { width: min(980px, 100%); margin-inline: auto; }
+/* ...and with nothing on its row (Setup complete's own big button) no empty frame stands under the page (2026-11-20) */
+.tq-dock.tq-setup-dock:not(:has(.tq-arow)) { display: none; }
 .tq-arow-verbs.tight > .tq-cl:not(.tq-cl-next) { flex-shrink: 1; }
 /* ...and there MARK DONE KEEPS ITS WORDS (the owner, 2026-11-15: a phone's bar read "Mark d…"): only the lit move beside it is shortened */
 .tq-arow-verbs.tight .tq-ab[data-tq-verb="done"], .tq-arow-verbs.tight .tq-ab[data-tq-verb$=":done"], .tq-arow-verbs.tight .tq-cl-more { flex-shrink: 0; }

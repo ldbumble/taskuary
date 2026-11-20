@@ -12,6 +12,7 @@ test("a CLI that failed its test says so, unlit, before any Connected", () => {
   assert.ok(body.indexOf("ai.failed") < body.indexOf("ai.connected ?"), "failed wins over connected");
 });
 
-test("a sign-in that is running says its own line over an older failure", () => {
-  assert.match(src, /ai: \(signing \? "Finish signing in to ChatGPT[^"]*" : ""\) \|\| \(!browse && fix\?\.why\) \|\|/);
+test("a sign-in that is running says its own line over an older failure - under its card, once", () => {
+  assert.match(src, /let line = busy \|\| signing \? "" : err \|\| \{/);
+  assert.match(src, /Finish signing in to ChatGPT in your browser - Taskuary carries on by itself when you're done\.<\/Typography>/);
 });

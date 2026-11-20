@@ -210,6 +210,7 @@ def test_present_is_detached_read_only_and_card_keeps_revision():
     store, _tid, _mid, _rid = seeded()
     _picture, item = one(store)
     payload = {"rev": "legacy", "items": [item], "events": [{"kind": "asking"}], "alerts": []}
+    from taskuary import chatlog; chatlog.settled()     # ...the chat log's card worker writes on its own time: done before writes are counted
     writes = (store.cx.total_changes, store._writes)
     reads = 0
     original_read = store._processing_read

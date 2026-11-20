@@ -65,6 +65,7 @@ def test_failed_projection_closes_read_transaction_without_partial_inventory(tmp
     db, _, _, _, _ = seed(tmp_path / 'failed-inventory.db')
     try:
         before = db.processing_inventory_snapshot(fixed_now=NOW)
+        from taskuary import chatlog; chatlog.settled()     # ...the chat log's card worker writes on its own time: done before writes are counted
         changes = db.cx.total_changes
         original = processing_projection.processing_projection
         calls = 0
@@ -138,6 +139,7 @@ def test_uncatalogued_arrival_changes_coverage_without_getter_backfill(tmp_path)
         late = db.add_message({'Channel': 'email', 'SentAt': '2001-01-01T00:00:00Z',
                                'BodyText': 'Old source date, newly persisted arrival.'})
         writes = db._writes
+        from taskuary import chatlog; chatlog.settled()
         changes = db.cx.total_changes
         after = db.processing_inventory_snapshot(fixed_now=NOW)
         assert db._writes == writes

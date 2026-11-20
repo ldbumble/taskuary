@@ -865,6 +865,11 @@ def _soon_loop() -> None:
             finally:
                 with _SOON_RUN: _SOON_ON[0] = None; _SOON_RUN.notify_all()
             del st
+def settled(timeout: float = 5.) -> bool:
+    "Has the worker put everything it was told of? A reader that counts the store's writes waits for it first. Waits up to `timeout`."
+    end = time.time() + timeout
+    while (_SOON or _SOON_ON[0] is not None) and time.time() < end: time.sleep(0.01)
+    return not (_SOON or _SOON_ON[0] is not None)
 def let_go(store, timeout: float = 10.) -> None:
     """Before `store` closes: what the worker was told of it is dropped, and a job at work on it is waited for - nothing reads it after."""
     with _SOON_LOCK:

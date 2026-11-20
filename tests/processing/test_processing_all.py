@@ -116,6 +116,7 @@ def test_real_generic_roots_hidden_history_tombstones_and_detail_gets_are_readon
         store.set_funnel_state(f'msg:{old}', 'done', note='Explicit old read')
         store.save_doc('counsel', 'Exact owner custom document', 'owner')
         store.reconcile_processing_membership(fixed_now=NOW)
+        from taskuary import chatlog; chatlog.settled()     # ...the chat log's card worker writes on its own time: done before writes are counted
         writes, changes = store._writes, store.cx.total_changes
         states = store.funnel_states()
         with mock.patch.object(server, 'store', store), mock.patch.object(server, '_processing_live', return_value=[]):

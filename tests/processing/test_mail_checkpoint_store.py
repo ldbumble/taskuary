@@ -65,6 +65,7 @@ def test_checkpoint_merges_latest_owner_config_across_connections(checkpoint):
 def test_stale_or_missing_checkpoint_performs_zero_writes(checkpoint):
     db, _, _, row_id, patch, get, _ = checkpoint
     before = get(row_id)
+    from taskuary import chatlog; chatlog.settled()     # ...the chat log's card worker writes on its own time: done before writes are counted
     changes, writes = db.cx.total_changes, db._writes
     assert patch(row_id, config_set={'cursor': 99}, expect_config={'folders': ['sentitems']}) is False
     assert patch(row_id, config_remove=['owner'], expect_fields={'Active': 999}) is False
@@ -78,6 +79,7 @@ def test_stale_or_missing_checkpoint_performs_zero_writes(checkpoint):
 def test_invalid_owner_config_is_preserved(checkpoint, invalid):
     db, _, kind, row_id, patch, get, key = checkpoint
     db._exec(f'UPDATE {kind} SET ConfigJson=? WHERE {key}=?', (invalid, row_id))
+    from taskuary import chatlog; chatlog.settled()
     changes = db.cx.total_changes
     with pytest.raises(ValueError): patch(row_id, config_set={'cursor': 99})
     assert get(row_id)['ConfigJson'] == invalid

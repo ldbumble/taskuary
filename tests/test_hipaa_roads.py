@@ -4,7 +4,7 @@ sure the hipaa thing works both for triage and agent as it was not working in th
 The fake answers as LiteLLM does: its own error envelope, the model ids its key may call, Gemini and Claude-on-Vertex each with the
 rules their provider enforces behind it (an empty system or user turn refused, Claude's thinking budget against max_tokens, a forced
 tool call refused while it thinks), `usage` on every answer. Each test goes in through the app's own door - build_llm, ingest_message,
-draft_reply, GeneralSession, quickwork.again, concierge.brain - never by calling make_llm with a hand-built config."""
+draft_reply, GeneralSession, concierge.brain - never by calling make_llm with a hand-built config."""
 import json, unittest
 from pathlib import Path
 from unittest import mock
@@ -212,15 +212,14 @@ class GeneralAgentRoad(unittest.TestCase):
 
 
 class QuickWorkRoad(unittest.TestCase):
-    "(e) The warm agent's turn on the card: the agent's own turn (quickwork.again), routed as quick work, on the card's model."
-    def test_a_warm_turn_answers_on_the_card(self):
-        from taskuary import general, quickwork
+    "(e) A task triage judged quick: its one agent's own turn (GeneralSession.send_prompt), on the card's model."
+    def test_a_quick_tasks_turn_answers_on_the_card(self):
+        from taskuary import general
         for model in (FLASH, SONNET):
             s = MemoryStore(); fx = Factory(s); jobs_on(s, card(s, model))
-            tid = fx.task(title='What is the PTO policy?', kind='general')
+            tid = fx.task(title='What is the PTO policy?', kind='general'); s.judge_task(tid, {'difficulty': 'quick'}, 'triage')
             with Gateway(lambda b: 'Fifteen days a year.') as g, mock.patch('taskuary.browserview.installed', return_value=False),                  mock.patch('taskuary.apiagent.can', return_value=False):
-                ses = general.GeneralSession(s, tid); ses.quick = True
-                self.assertEqual(quickwork.again(s, tid, ses, 'How many PTO days?'), 'filed')
+                general.GeneralSession(s, tid).send_prompt('How many PTO days?', brief=True)
             self.assertEqual(general.history(s, tid)[-1]['content'][0]['text'], 'Fifteen days a year.', model)
             self.assertEqual(g.said()['model'], model)
 

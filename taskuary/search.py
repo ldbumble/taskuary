@@ -400,7 +400,7 @@ CHAT_TAG, DRAFTS = 'in agent chat', ('draft_reply', 'draft', 'clarification', 's
 
 def _chat(store, words, skip) -> tuple:
     from .general import ASSISTANT_TYPE, DOCK_TAG, USER_TYPE, line_words
-    from .quickwork import report_of
+    from .selfclose import report_of
     from .store import is_internal
     TEXT = "COALESCE(rv.FinalText, rv.DraftText, '')"
     lk = lambda col: ' AND '.join(f"tq_fold({col}) LIKE ? ESCAPE '\\'" for _ in words)

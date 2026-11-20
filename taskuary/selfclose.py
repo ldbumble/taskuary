@@ -178,12 +178,11 @@ def declare(store, tid: int, summary: str = '', agent: str = 'agent', no_reply: 
         store.add_comment(tid, agent, 'agent', f'{DONE_SAID}{line}' if line else 'The agent says it is finished.')
         return {'closed': False, 'why': OWNER_ENDS}
     # ...NOR WHILE ANYTHING ELSE ON IT IS STILL WORKING (the owner, 2026-11-01: "If anything still working never close the task
-    # automatically"): another session open on it, a quick call, a routine, a write-up - the word is filed and the task stays open.
+    # automatically"): another session open on it, a routine, a write-up - the word is filed and the task stays open.
     # `sid` is the asker's own session (TASKUARY_SID); an older CLI that sends none is taken to be the task's one live session
     from . import workerstate as ws
     me = sid or getattr(term.session_for(tid), 'sid', None) or ''
-    # ...and a quick session's own turn is the asker too: its close can land before the turn that filed it lets go (quickwork.again)
-    live = ws.live_work(store, tid, but=me, skip=('quick',) if getattr(term.SESSIONS.get(me), 'quick', False) else ())
+    live = ws.live_work(store, tid, but=me)
     if live:
         store.add_comment(tid, agent, 'agent', f'{DONE_SAID}{line}' if line else 'The agent says it is finished.')
         return {'closed': False, 'why': f"{'; '.join(live)} - the task stays open and the owner completes it"}
@@ -692,6 +691,27 @@ _TAG = re.compile(r'<\s*TASKUARY-HUB[^>]*>.*?<\s*/\s*TASKUARY-HUB[^>]*>|\[\[\s*/
 def unmark(text) -> str:
     "Every Taskuary tag out: words for the owner."
     return _TAG.sub('', str(text or '')).strip()
+
+
+# A TURN STORED AS ONE CALL'S RAW OBJECT (until 2026-11-13 a quick answer was one JSON object, and a few were filed whole, fenced or cut
+# short - the owner, 2026-11-03): a database still holds them, and they read back as the report they hold wherever the chat is read
+RAW = re.compile(r'^\s*(?:```(?:json)?\s*)?\{\s*"(?:report|draft|question|done|escalate|why)"\s*:', re.I)
+def is_raw(text) -> bool: return bool(RAW.match(str(text or '')))
+
+_REPORT = re.compile(r'"report"\s*:\s*"((?:[^"\\]|\\.)*)', re.S)
+def report_of(text) -> str:
+    "The report a raw stored answer holds - or the text as it is, when it is not one."
+    t = str(text or '')
+    if not is_raw(t): return t
+    clean = lambda x: unmark(for_screen(draft_markers(reply_marker(str(x or ''))[0])[0]))
+    body = re.sub(r'^\s*```(?:json)?\s*|\s*```\s*$', '', t)
+    try: d = json.loads(body)
+    except ValueError: d = None
+    if isinstance(d, dict) and d.get('report'): return clean(d['report'])
+    m = _REPORT.search(body)                       # cut short: the report as far as it got, its last escape whole or dropped
+    if not m: return ''
+    try: return clean(json.loads('"' + re.sub(r'\\u?[0-9a-fA-F]{0,3}$|\\$', '', m.group(1)) + '"'))
+    except ValueError: return clean(m.group(1).replace('\\n', '\n'))
 
 
 def for_screen(text: str) -> str:

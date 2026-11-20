@@ -404,7 +404,7 @@ def live_count() -> int:
     def working(t):
         try: return t.phase() != 'parked'
         except Exception: return True          # a session that cannot say counts, as before
-    return len([t for t in list(term.SESSIONS.values()) if t.alive and getattr(t, 'quick', False) is not True and working(t)])   # a quick answer is one call, no desk
+    return len([t for t in list(term.SESSIONS.values()) if t.alive and working(t)])
 
 def subagent_count() -> int:
     "Subagents the live sessions left running at their last Stop (hooks.py keeps them on the session) - light load, ingest.agent_load."
@@ -484,9 +484,9 @@ def schedule_due(store, startup: bool = False):
 def _due(q, now: str) -> bool: return not q.get('NextAt') or str(q['NextAt']) <= now
 
 def _occupied(tid) -> bool:
-    "A live session working the task - not a quick answer's (quickwork), which takes no desk and is what an escalation queued behind."
+    "A live session working the task."
     from . import terminal as term
-    return any(t.task_id == tid and t.alive and getattr(t, 'quick', False) is not True for t in list(term.SESSIONS.values()))
+    return any(t.task_id == tid and t.alive for t in list(term.SESSIONS.values()))
 
 
 def drain(store):

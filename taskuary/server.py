@@ -2402,7 +2402,7 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
             # The detail page only needs lifecycle here; its terminal pane loads its own rich data.
             # Do not block selecting a task on git status.
             'session': session,
-            # ...and a start UNDER WAY before it has a session (general.OPENING: a quick call, a Continue, a carried-on turn), or one waiting
+            # ...and a start UNDER WAY before it has a session (general.OPENING: a Continue, a carried-on turn), or one waiting
             # on a free agent slot: the Agent section says "Starting…" or "Waiting its turn" at once, not when the session first speaks (2026-11-04)
             'starting': task_id in general.OPENING,
             'queued': _queued_info(store.get_dispatch(task_id)),
@@ -4852,12 +4852,9 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         if card:                                    # ...a coding task on an AI card works in the checkout its CLI would have
             try: general.place_coding(store, tid)
             except ValueError as e: raise HTTPException(422, str(e))
-        # THE OWNER'S OWN START TAKES THE SAME ROAD AS AN ARRIVAL'S (the owner, 2026-11-13: "that warm agent should be open for all the easy
-        # tasks"): quick and normal work is the warm agent's turn (quickwork.again), on the AI he picked if he picked one; the rest the full agent's
-        from . import ingest as _ing, quickwork
-        quick = not card and not had_session and _ing._reads_quick(store, tid)
+        # ...the task's one agent, as an arrival's is: work judged quick runs on its light gear (brainroute), never a warm agent first
         try:
-            session = general.start_session(store, tid, model=body.model, pick=body.pick or card or None, actor=ACTOR, quick=quick)
+            session = general.start_session(store, tid, model=body.model, pick=body.pick or card or None, actor=ACTOR)
         except (ValueError, RuntimeError) as e:
             raise HTTPException(422, str(e))
         # The source messages and their files are injected by GeneralSession.send_prompt.  On a
@@ -4876,7 +4873,7 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         if prompt:
             def turn():
                 brief = not typed or body.app_words
-                try: quickwork.again(store, tid, session, prompt, brief=brief) if getattr(session, 'quick', False) is True else session.send_prompt(prompt, brief=brief)
+                try: session.send_prompt(prompt, brief=brief)
                 finally: general.OPENING.discard(tid)
             general.OPENING.add(tid)
             background.add_task(turn)

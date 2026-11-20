@@ -29,7 +29,7 @@ class World:
 
     def task(self, cwd=REPO):
         tid = Factory(self.s).task(title='Ledger rounding', kind='coding')
-        term.SESSIONS[f's{tid}'] = SimpleNamespace(alive=True, task_id=tid, cwd=cwd, argv=['claude'], quick=False, sid=f's{tid}', mode='auto', draft='')
+        term.SESSIONS[f's{tid}'] = SimpleNamespace(alive=True, task_id=tid, cwd=cwd, argv=['claude'], sid=f's{tid}', mode='auto', draft='')
         return tid
 
     def bind(self, kind='slack', chat=CHAN, members=(ME, GAIL, RAY), tid=None, **kw):

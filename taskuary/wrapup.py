@@ -340,6 +340,17 @@ def refused_line(store, task_id: int) -> str:
     rv = store.pending_review(task_id, 'draft_reply', live_only=False) or {}
     got = refused_files(store, rv.get('ReviewId'))
     return f'{REFUSED_HEAD}\n' + '\n'.join(f'- {w}' for w in got) + f'\n{REFUSED_TELL}' if got else ''
+# ...AND WHAT THE CARD CARRIES IS TOLD BACK EVERY TIME, FROM THE CARD (the Hydrogen walk, 2026-11-19: "I've attached the working spreadsheet"
+# in letters that went with no file): the agent reads the files its card really has, and with none, that it must not say one is attached
+NO_FILES = ("This card carries no file - its words must not say anything is attached. Pass `attach` (a file in your folder) with it to put "
+            "one on the card.")
+def carries(store, rid) -> dict:
+    try: env = json.loads((store.get_review(int(rid)) or {}).get('Deliver') or '{}') or {} if rid else {}
+    except (TypeError, ValueError): env = {}
+    names = [f.get('name') for f in (env.get('attachments') or [] if isinstance(env, dict) else []) if isinstance(f, dict) and f.get('name')]
+    return {'card_attachments': names, **({} if names else {'attachments_note': NO_FILES})}
+
+
 def _told(store, rid, out: dict) -> dict:
     no = list(out.get('not_attached') or [])
     no += [w for w in refused_files(store, rid) if not any(x.split(':')[0] == w.split(':')[0] for x in no)]
@@ -564,7 +575,7 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     from .general import own_replies, USER_TYPE
     turn = (store._one('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=?', (task_id, USER_TYPE)) or {}).get('at')
     meanwhile = [' '.join(str(x.get('OwnText') or x.get('BodyText') or '').split())[:300] for x in own_replies(store, task_id, turn)] if turn else []
-    return {'ok': True, 'review_id': rid, 'message_id': mid, 'answers': ans or mid, 'to': m.get('FromName') or m.get('FromEmail') or '', **ends,
+    return {'ok': True, 'review_id': rid, 'message_id': mid, 'answers': ans or mid, 'to': m.get('FromName') or m.get('FromEmail') or '', **ends, **carries(store, rid),
             **({'owner_wrote_on_the_thread_while_you_worked': meanwhile} if meanwhile else {}),
             **({'replaced_the_owners_version': str(mine.get('DraftText') or '')} if mine else {}),
             **({'recipients': {'to': env.get('to') or [], 'cc': env.get('cc') or []}} if env else {}),

@@ -5969,7 +5969,8 @@ def agent_draft(body: AgentDraftBody, request: Request):
     from . import wrapup
     files = _agent_files(body.files, body.task_id)
     out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent, cc=body.cc, mailbox=body.mailbox, guessed=body.guessed)
-    return {**out, **wrapup.attach_files(store, out['review_id'], files, body.agent)} if out.get('ok') and files else out
+    if out.get('ok') and files: out = {**out, **wrapup.attach_files(store, out['review_id'], files, body.agent)}
+    return {**out, **wrapup.carries(store, out['review_id'])} if out.get('ok') and out.get('review_id') else out
 
 class AgentWaitBody(BaseModel): task_id: int; who: str; agent: str = 'agent'
 

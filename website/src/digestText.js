@@ -56,17 +56,18 @@ export function digestSections(text) {
 
 export function parseDigest(text) {
   const body = String(text || "").replace(/\r/g, "").trim();
-  const failed = /^\((?:AI summary failed|AI prompt set, but no active AI connector|the model returned an empty summary)/i.test(body);
+  const failed = /^\((?:AI summary failed|AI prompt set, but no active AI connector|the model returned an empty summary)|^No AI is connected, so this report/i.test(body);
   // what the model was GIVEN rides under its brief for the record and is never part of it: parsed as one, the evidence's
   // asks merged into the model's own "People want" and the blocks' explanations became numbered items (2026-10-13)
   const cut = body.indexOf("\n--- raw data ---");
   if (!failed) return { error: "", plain: "", source: "", ...digestSections(cut >= 0 ? body.slice(0, cut) : body) };
   const lines = body.split("\n");
   const sourceAt = lines.findIndex((line) => /^NOW:\s*/.test(line));
-  const errorLines = lines.slice(0, sourceAt < 0 ? lines.length : sourceAt).filter((line) => line.trim());
+  const errorLines = lines.slice(0, sourceAt < 0 ? lines.length : sourceAt).filter((line) => line.trim() && line.trim() !== "--- raw data ---");
   const error = errorLines.join(" ")
     .replace(/^\(AI summary failed:\s*/i, "")
     .replace(/^\(AI prompt set, but no active AI connector\s*-?\s*/i, "No active AI connector. ")
+    .replace(/^No AI is connected, so this report could not be written[^\n]*/i, "No active AI connector.")
     .replace(/^\(the model returned an empty summary\s*-?\s*/i, "The model returned an empty summary. ")
     .replace(/\)\s*$/, "").trim();
   const source = sourceAt < 0 ? "" : lines.slice(sourceAt).join("\n");

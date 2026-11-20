@@ -268,9 +268,11 @@ def collect(store, hours: int = HOURS) -> dict:
     from .store import task_ref
     done = store._rows("SELECT TaskId, Title, Priority FROM task WHERE Status='done' AND ClosedAt>=? "
                        "ORDER BY ClosedAt DESC LIMIT 80", (since,))
-    open_ = store._rows("SELECT TaskId, Title, Priority, Status FROM task WHERE Status IN ('open','in_progress','waiting') "
+    # ...never the Assistant's own chat (general.DOCK_TAG): it is no work of his (walk 5: "Taskuary guide" stood as an open task)
+    from .general import DOCK_TAG
+    open_ = store._rows("SELECT TaskId, Title, Priority, Status FROM task WHERE Status IN ('open','in_progress','waiting') AND IFNULL(SourceRef,'')<>? "
                         "ORDER BY CASE Priority WHEN 'urgent' THEN 0 WHEN 'important' THEN 1 WHEN 'high' THEN 1 ELSE 2 END, COALESCE(UpdatedAt, CreatedAt) DESC "
-                        "LIMIT 40", ())
+                        "LIMIT 40", (DOCK_TAG,))
     runs = store._rows("SELECT r.AgentName, r.Status, r.LastError, r.TaskId, t.Title FROM run r LEFT JOIN task t ON t.TaskId=r.TaskId "
                        "WHERE COALESCE(r.FinishedAt, r.UpdatedAt, r.StartedAt)>=? ORDER BY r.RunId DESC LIMIT 80", (since,))
     def task_line(t, state):

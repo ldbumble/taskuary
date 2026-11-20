@@ -1695,7 +1695,9 @@ def report_system(store, cfg: dict, charts: bool = False) -> str:
 # it is the report, and the owner may want it - but a row whose own first line says it could not do
 # the thing it exists for is not something to walk somebody through: three of them came out of the
 # pipe one per turn on a fresh install (the 2026-09-03 break test). funnel.from_feed reads this.
-NO_BRAIN = '(AI prompt set, but no active AI connector'
+# ...said in his words with the way past it, its rows under the raw mark the page folds away (walk 5, 2026-11-19: "(AI prompt set, but no active
+# AI connector - raw data below)" over a page of evidence lines)
+NO_BRAIN = 'No AI is connected, so this report could not be written'
 
 
 def headline_from(summary: str, fallback: str) -> str:
@@ -1847,7 +1849,8 @@ def render_report(store, cfg: dict, llm=None, notes: list = None, files: list = 
         # ...written again over a kept one says why, under the summary (the first line stays the summary's own: headline_from)
         return headline_from(ai, head), f"{ai}{f'{chr(10) * 2}{says}' if says else ''}{RAW_MARK}{summary[:4000]}"
     if cfg.get('ai_prompt') and not llm:
-        return head, f'{NO_BRAIN} - raw data below)\n\n{summary}'
+        from . import words
+        return head, f"{NO_BRAIN} - [connect one under {words.name('ai')}]({words.href('ai_apps')}) and it is written at its next run.{RAW_MARK}{summary}"
     return head, summary
 
 

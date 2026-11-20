@@ -55,7 +55,7 @@ export const reviewText = (review) => {
   const proposal = proposalFrom(review);
   if (CLOSEOUT[proposal?.action]) return proposal.text || "";      // never the JSON envelope: an empty box sends nothing extra
   // a workflow repair reads as what was wrong and what changes, never the step list's JSON (flow.repair)
-  if (proposal?.action === "repair_workflow") return [proposal.why, proposal.changes].filter(Boolean).join("\n\n");
+  if (["repair_workflow", "change_setup"].includes(proposal?.action)) return [proposal.why, proposal.changes].filter(Boolean).join("\n\n");
   if (proposal?.action === "run_tool") return toolBody(proposal);
   // a part of the task going to a task of its own (proposals.break_out): the new task's title, what it is, and each thing that moves
   if (proposal?.action === "break_out") return [proposal.summary, proposal.moves].filter(Boolean).join("\n\n");
@@ -267,6 +267,18 @@ export const proposalPresentation = (review) => {
     ...leadOf(review, "The steps change only if you approve."),
     destinationLabel: "Changes",
     destination: "the routine's saved steps",
+    approveLabel: APPROVE,
+    busyLabel: "saving…",
+    rejectLabel: "Dismiss",
+  };
+  // ...and a report's or dashboard's own setup changed the same way (workflows.setup_change): its question, schedule or name, old -> new
+  if (proposal?.action === "change_setup") return {
+    kind: "action",
+    title: `Change the ${proposal.kind || "report"}${proposal.title ? ` "${proposal.title}"` : ""}`,
+    context: `Proposed · the ${proposal.kind || "report"} changes only if you approve`,
+    ...leadOf(review, `The ${proposal.kind || "report"} changes only if you approve.`),
+    destinationLabel: "Changes",
+    destination: `the ${proposal.kind || "report"}'s saved setup`,
     approveLabel: APPROVE,
     busyLabel: "saving…",
     rejectLabel: "Dismiss",

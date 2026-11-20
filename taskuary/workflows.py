@@ -346,11 +346,13 @@ def change_of(store, tid: int, p: dict) -> tuple:
     from . import flow, origin
     # ...ANY ROUTINE OF HIS, NAMED (the owner's live task, 2026-11-20: asked to rewrite his routine's instructions, the agent wrote them into a
     # .txt and handed back "save them from your signed-in app"): `routine` - its number or its title - else the one this task is a run of
-    src = named_routine(store, p.get('routine')) if str(p.get('routine') or '').strip() else source_of(store, store.get_task(int(tid)) or {})
+    src = named_setup(store, p.get('routine')) if str(p.get('routine') or '').strip() else source_of(store, store.get_task(int(tid)) or {})
     if not src: return {}, ('no routine is called that - name it by its title or number as Reports lists it' if p.get('routine') else
                             'change_routine changes the routine this task is a run of, or the one named in `routine` - this one did not come from a routine (save_routine keeps a new one)')
     if origin.of_task(store, tid)[0] == 'stranger': return {}, 'a routine is not changed from work a stranger started'
-    cfg = cfg_of(src); was, new = flow.steps_of(cfg), p.get('flow')
+    cfg = cfg_of(src)
+    if not is_workflow(src): return setup_change(src, cfg, p)             # ...a report or a dashboard: its own fields, the same one card and save
+    was, new = flow.steps_of(cfg), p.get('flow')
     # ...and its clock and its name, beside or without its steps: one card, one save (save - the editor's own)
     patch = {k: p[k] for k in (*CLOCK, 'title') if p.get(k) not in (None, '')}
     if patch:
@@ -373,10 +375,28 @@ def change_of(store, tid: int, p: dict) -> tuple:
             **({'patch': {**clock, **({'title': patch['title']} if patch.get('title') else {})}} if said else {})}, ''
 
 
-def named_routine(store, name):
-    "The routine `name` names - its number, else its title (case aside) - or None."
+# A REPORT OR A DASHBOARD IS CHANGED THE SAME WAY (the owner, 2026-11-20): its question, its schedule, its name - one card showing each old ->
+# new, saved on his Approve by the one save its editor uses (save). Its question is `ai_prompt` (`prompt` read as it)
+SETUP_KEYS = {'ai_prompt': 'Question', 'title': 'Name', 'query': 'Query'}
+def setup_change(src, cfg: dict, p: dict) -> tuple:
+    from .reports import schedule_error
+    want = {**({'ai_prompt': p['prompt']} if str(p.get('prompt') or '').strip() and not p.get('ai_prompt') else {}),
+            **{k: p[k] for k in (*SETUP_KEYS, *CLOCK) if str(p.get(k) or '').strip()}}
+    clock = {k: want.get(k) for k in CLOCK} if set(want) & set(CLOCK) else {}
+    if clock and (why := schedule_error(clock)): return {}, f'that schedule does not hold: {why}'
+    patch = {**{k: v for k, v in want.items() if k in SETUP_KEYS and v != cfg.get(k)}, **clock}
+    said = [f"{SETUP_KEYS[k]}: {cfg.get(k) or '(none)'} -> {v}" for k, v in patch.items() if k in SETUP_KEYS]
+    if clock and runs_words({**cfg, **clock}) != runs_words(cfg): said.insert(0, f"Runs: {runs_words(cfg)} -> {runs_words({**cfg, **clock})}")
+    if not said: return {}, 'that is the setup as it already is - give its new question (prompt), schedule (daily_at, cron, every_minutes) or title'
+    kind = 'dashboard' if cfg.get('type') == 'dashboard' else 'report'
+    return {'action': 'change_setup', 'source_id': src['SourceId'], 'kind': kind, 'title': cfg.get('title') or src.get('Address') or '',
+            'patch': patch, 'was': {k: cfg.get(k) for k in patch}, 'changes': '\n'.join(said), 'why': ' '.join(str(p.get('why') or '').split())[:300]}, ''
+
+
+def named_setup(store, name):
+    "The routine, report or dashboard `name` names - its number, else its title (case aside) - or None."
     n = str(name or '').strip()
-    rows = [s for s in store.list_sources(active_only=False) if is_workflow(s)]
+    rows = [s for s in store.list_sources(active_only=False) if is_workflow(s) or cfg_of(s).get('title')]
     if n.isdigit(): return next((s for s in rows if int(s['SourceId']) == int(n)), None)
     return next((s for s in rows if str(cfg_of(s).get('title') or s.get('Address') or '').strip().lower() == n.lower()), None)
 

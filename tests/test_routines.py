@@ -152,6 +152,22 @@ class ChangeTests(unittest.TestCase):
         self.assertIsNone(proposals.queue(self.s, own, {'action': 'change_routine', 'routine': 'nothing called this', 'prompt': 'x', 'why': 'y'}, refused=why))
         self.assertIn('no routine is called that', why[0])
 
+    def test_a_report_and_a_dashboard_change_by_the_same_one_card(self):
+        # the owner, 2026-11-20: a report's question, schedule or name is changed by its card too, saved by its editor's own save
+        from taskuary import proposals
+        rep = self.s.save_source({'Channel': 'report', 'Address': 'Cash on hand', 'Owner': 'o', 'Active': 1, 'ConfigJson': json.dumps(
+            {'type': 'quickbooks', 'title': 'Cash on hand', 'ai_prompt': 'Sum the bank balances.', 'daily_at': '08:00'})}, 'o')
+        own = self.s.create_task({'Title': 'Report changes', 'Kind': 'general', 'Status': 'open'}, 'o')
+        rv = proposals.queue(self.s, own, {'action': 'change_routine', 'routine': 'Cash on hand', 'prompt': 'Sum the bank balances by account.',
+                                           'daily_at': '07:00', 'why': 'you asked'})
+        self.assertTrue(rv)
+        row = self.s.get_review(rv['reviewId']); p = json.loads(row['DraftText'])
+        self.assertEqual(p['action'], 'change_setup'); self.assertIn('change the report "Cash on hand"', row['Reason'])
+        self.assertIn('Question: Sum the bank balances. -> Sum the bank balances by account.', p['changes']); self.assertIn('Runs:', p['changes'])
+        with mock.patch('taskuary.docsync.sync_connections'): proposals.execute(self.s, row, 'owner')
+        cfg = json.loads(self.s.get_source(rep)['ConfigJson'])
+        self.assertEqual((cfg['ai_prompt'], cfg['daily_at'], cfg['type']), ('Sum the bank balances by account.', '07:00', 'quickbooks'))
+
     def test_the_editor_saves_by_the_same_road(self):
         with self.assertRaises(ValueError): workflows.save(self.s, {'SourceId': self.sid, 'ConfigPatch': {'flow': [{'id': 's1', 'kind': 'nope'}]}}, 'o')
 

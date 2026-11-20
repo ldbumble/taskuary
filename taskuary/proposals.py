@@ -71,6 +71,7 @@ ACTIONS = {
     'close_item': ('comment on the tracker item this task came from and move it to done', ('tracker', 'item'), None),
     # a workflow step that failed, fixed by the model on the owner's say-so (flow.repair): the new list is saved only past their yes
     'repair_workflow': ("change this workflow's steps to the repaired list", ('source_id', 'flow'), None),
+    'change_setup': ("change a report's or dashboard's setup", ('source_id', 'patch'), None),
     # the on-close "did this session do a kind of job that will recur?" answer (playbooks.draft),
     # and an agent that knows it did: a playbook is filed only past the owner's click
     'write_playbook': ('file a new PLAYBOOK - how this kind of job is done here - for the next agent to follow',
@@ -115,7 +116,7 @@ def _gate(a: str):
 # WHAT NO AGENT MAY ASK FOR, AND THE MARKS NONE MAY PUT ON ITS OWN ASK - one list for both doors: the marker (parse) and the tool
 # (agenttools.proposal_of). They were two, and had drifted (the spine audit, 2026-11-09): the tool's did not name the held steps, so an agent
 # could file a "held step" of its own - a command of its choosing, on the card the owner reads as one Taskuary stopped
-NOT_ASKED = ('merge_pr', 'close_item', 'repair_workflow', *HELD_ACTS)
+NOT_ASKED = ('merge_pr', 'close_item', 'repair_workflow', 'change_setup', *HELD_ACTS)
 MARKS = ('closeout', 'flow_run')
 
 # A POST IS DRAWN AS THE POST (the owner, 2026-11-05: "it's not showing the post and the image as a linkedin post and asking me if i want to
@@ -476,7 +477,8 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
     # neither is a workflow's own repair or write, raised by the run itself (flow.py) with no agent anywhere on the task
     said = (tool_words(store, p) if p['action'] == 'run_tool' else break_out_words(p) if p['action'] == 'break_out'
             else f"save a script as the routine \"{p['title']}\", to run {p['runs']}" if p['action'] == 'save_routine'
-            else f"change the routine \"{p['title']}\"" if p['action'] == 'repair_workflow' and actor != 'workflow' else why)
+            else f"change the routine \"{p['title']}\"" if p['action'] == 'repair_workflow' and actor != 'workflow'
+            else f"change the {p.get('kind') or 'report'} \"{p['title']}\"" if p['action'] == 'change_setup' else why)
     # ...nor a held browser act: the agent did not propose it, it tried it, and the hook stopped it (browsergate.check)
     # ...a shell step by what it does, never its raw line: the card folds the command under "Show the command"
     reason = (f"held before it ran, {HELD_IN[p['action']]}: {p.get('what') or ('a step' if p['action'] == 'shell_act' else p.get('command'))}"
@@ -1021,6 +1023,16 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
         # ...its clock and its name through the same one save the editor uses (workflows.save): one card, one press
         if p.get('patch'): workflows.save(store, {'SourceId': int(p['source_id']), 'ConfigPatch': p['patch']}, actor)
         out = {'workflow': int(p['source_id']), 'changed': (str(p.get('changes') or '') or flow.diff_text(d))[:1200]}
+    elif a == 'change_setup':
+        from . import workflows
+        src = store.get_source(int(p['source_id']))
+        if not src: raise RuntimeError(f"that {p.get('kind') or 'report'} is gone - nothing was changed")
+        now = workflows.cfg_of(src)
+        # ...written against the setup as it stood then: a change made since is never thrown away by approving this one
+        if any(now.get(k) != v for k, v in (p.get('was') or {}).items()):
+            raise RuntimeError(f"the {p.get('kind') or 'report'} has changed since this was written - nothing was changed; ask the agent again")
+        workflows.save(store, {'SourceId': int(p['source_id']), 'ConfigPatch': p['patch']}, actor)      # ...its editor's own save
+        out = {'source': int(p['source_id']), 'changed': str(p.get('changes') or '')[:1200]}
     elif a in HELD_ACTS: out = _gate(a).perform(store, tid, p)
     elif a == 'close_item':
         from . import trackers

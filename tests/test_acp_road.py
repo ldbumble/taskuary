@@ -361,7 +361,10 @@ def test_claude_s_argv_reaches_the_adapter_as_sdk_options(tmp_path):
     # dropped - its session ran with no hook of Taskuary's (a held step reached the model only as "User refused permission") and read the
     # owner's own CLAUDE.md, which that file excludes
     o = agents.claude_acp_options(['-p', '--setting-sources', 'project,local', '--strict-mcp-config', '--settings', '/h/general-7.json', '--add-dir', '/h/out'])
-    assert o == {'settingSources': ['project', 'local'], 'extraArgs': {'strict-mcp-config': None}, 'settings': '/h/general-7.json', 'additionalDirectories': ['/h/out']}
+    assert o == {'settingSources': ['project', 'local'], 'extraArgs': {'strict-mcp-config': None}, 'settings': '/h/general-7.json', 'additionalDirectories': ['/h/out'],
+                 'promptSuggestions': False}
+    # ...and NO PREDICTED NEXT PROMPT: the adapter's default is one more model call after every turn, for gray text nothing here draws
+    assert agents.claude_acp_options([])['promptSuggestions'] is False
 
 
 def test_codex_s_config_flags_become_its_session_config():

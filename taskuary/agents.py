@@ -1552,6 +1552,9 @@ def claude_acp_options(args: list) -> dict:
                 extra[a.lstrip('-')] = None
                 if nxt is not None: back.append(nxt)
     if extra: opt['extraArgs'] = extra
+    # ...and NO PREDICTED NEXT PROMPT (claude-agent-acp turns promptSuggestions on: one more model call after every turn, for a composer's gray
+    # text nothing of Taskuary draws - the speed round, 2026-11-20)
+    opt['promptSuggestions'] = False
     return opt
 
 

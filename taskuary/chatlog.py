@@ -381,7 +381,7 @@ def answered(store, tid: int, cid: int, actor: str, body: str, created: str) -> 
         # with no turn row yet, stood loose at the chat's foot while the CLI road's stood in its turn): what was put at the foot since the last
         # input is this turn's - still its last thing, under the words it just filed
         with store.lock:
-            store.cx.execute("UPDATE chatlog SET Parent=?, Rev=Rev+1 WHERE TaskId=? AND Parent IS NULL AND Kind IN ('card','fail') AND Id>? AND Id<?",
+            store.cx.execute("UPDATE chatlog SET Parent=?, Rev=Rev+1 WHERE TaskId=? AND Parent IS NULL AND Kind='card' AND State IN ('pending','offer') AND Id>? AND Id<?",
                              (n, tid, ins, n)); store.cx.commit()
     # ...and a press he made while it worked, which no turn will hear (a second Trust, a tap on what was already done), goes in under it: kept
     # for a turn that never comes, it stood by the box while this one ran and was gone the moment it answered. One a next turn hears is in place

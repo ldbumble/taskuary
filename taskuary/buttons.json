@@ -80,6 +80,7 @@
   "choices": {
     "_": "The card's own question after Not for me / Send to agent - answers, not buttons of their own",
     "not_ours": [["not_ours", "Just this once"], ["not_ours_sender", "From now on - mail like this from them is filed for you"], ["block_sender", "A rule in Settings - their mail never comes in"]],
+    "report": [["not_ours", "Just this once"], ["not_ours_sender", "From now on - findings like this from this report are filed for you"]],
     "idea": [["not_ours", "Just this one"], ["not_ours_kind", "No more ideas like this"]],
     "agent": [["coding_agent", "A coding agent"], ["regular_agent", "An agent"]],
     "share": [["email", "Email the result"], ["summary", "Email a summary"], ["link", "Shared link"], ["onedrive", "OneDrive"], ["gdrive", "Google Drive"]]

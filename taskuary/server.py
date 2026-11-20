@@ -3632,6 +3632,15 @@ class NotATaskBody(BaseModel):
     # no way to hold a system that is not a git repository at all (TQ-0501: clocking in is ADP).
     belongs_to: str | None = None
 
+def report_not_for_me(m: dict, src: str, title: str = '') -> str:
+    """A REPORT'S FINDING PUT DOWN FOR GOOD (the owner's GO, 2026-11-19): one plain line in his memory - the report, and what this finding
+    is about - written as it stands (memorylines.say). The routing judge and triage read the whole memory (reports.judge_memory), so the
+    next run of that finding makes no task. A finding has no sender or subject to key a verdict on; this is its whole lesson."""
+    about = ' '.join(str(title or m.get('TriageTitle') or m.get('Subject') or 'this').split())[:160]
+    line = f"Not for me: {m.get('SourceName') or 'this report'} findings about {about}"
+    return memorylines.say(store, 'not_ours', src, line) or line
+
+
 def _teach_not_a_task(m: dict, background=None):
     """The NOT A TASK verdict, written the SAME way whichever door it came through - the task
     list's "Not a task" and the timeline's "Not a task - just conversation" are one judgement
@@ -3646,6 +3655,10 @@ def _teach_not_a_task(m: dict, background=None):
     chat has no address, and a two-word subject has no topic - there is nothing to key a note
     to, and a note keyed to nothing is a verdict against everyone, so none is written. The
     thread is still ruled either way: that is the ignore route the callers add."""
+    # ...a report's finding is one plain line, the report and what it is about (report_not_for_me) - no sender, no subject to key it on
+    if m.get('Channel') == 'report':
+        src = f"msg{m['MessageId']}"
+        report_not_for_me(m, src, (store.get_task(m['TaskId']) or {}).get('Title') if m.get('TaskId') else ''); return src
     em, topic = (m.get('FromEmail') or '').lower(), _topic_key(m)
     if not (em or topic): return None
     # ...what it teaches about the owner, in words, or nothing (memorylines.teach - the owner, 2026-10-27): the line is the record, its
@@ -4527,6 +4540,7 @@ def not_mine(mid: int, body: NotMineBody, background: BackgroundTasks = None):
     note = (body.note or '').strip() or _not_mine_note(m, scope, key if scope == 'subject' else None)
     src = f'msg{mid}'
     tid = m.get('TaskId')
+    was_title = (store.get_task(tid) or {}).get('Title') if tid else ''      # ...what the finding's task was called, before it is filed
     fate = ''
     if tid and store.get_task(tid):
         store.audit('task', tid, 'not_mine_delete', ACTOR, detail={'message_id': mid, 'learned': src})
@@ -4534,6 +4548,13 @@ def not_mine(mid: int, body: NotMineBody, background: BackgroundTasks = None):
     store.set_message_status(mid, 'ignored')
     store.add_route(mid, None, 'ignore', None, f'not ours - {note[:200]}', [], ACTOR)
     store.audit('message', mid, 'not_mine', ACTOR, detail={'scope': scope, 'key': key, 'from': em, 'was': m.get('Status')})
+    # A REPORT'S FINDING HAS NO SENDER OR SUBJECT TO KEY ON (the owner's GO, 2026-11-19): From now on on a report's task is one plain line in
+    # his memory - the report, and what this finding is about - which the routing judge and triage read whole (reports.judge_memory), so the
+    # next run of that finding makes no task. Just this once (scope None: learn=False) writes nothing, as before
+    if m.get('Channel') == 'report':
+        line = report_not_for_me(m, src, was_title)
+        return {'ok': True, 'learned': src, 'note': line, 'scope': scope, 'scopeKey': key, 'taskDeleted': fate == 'deleted',
+                'taskArchived': fate == 'archived', 'ref': task_ref(tid) if tid else None, 'alsoCovered': []}
     # "not ours" draws a responsibility boundary: what it says about the owner - whose work this kind is, and why - is a line in their
     # memory, in words, or nothing (memorylines.teach, 2026-10-27); the owner's own words, when they typed some, are its best evidence
     memorylines.teach_soon(store, 'not_ours', src, _verdict_facts(m, said=f"the owner's words: {body.note.strip()}" if (body.note or '').strip() else ''),

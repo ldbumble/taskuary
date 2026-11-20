@@ -23,4 +23,5 @@ export const ALL_LABELS = [...new Set(Object.values(VERBS).flatMap((v) => [v.lab
 export const choice = (q, verb) => (CHOICES[q] || []).find(([k]) => k === verb)?.[1] || "";
 // ...and NOT FOR ME'S OWN QUESTION, how far (the phone's numbered answers, remote_assistant.proposal_choices): an idea's - this one, or
 // this kind - else a mail's - this once, their mail filed from now on, a rule. [] where there is nothing to ask (a task: no sender)
-export const howFar = (item) => (item?.kind === "idea" ? CHOICES.idea : item?.mid ? CHOICES.not_ours : null) || [];
+// ...and a REPORT's finding has no sender: this once, or findings like it from this report filed from now on (a line in his memory)
+export const howFar = (item) => (item?.kind === "idea" ? CHOICES.idea : item?.mid ? (String(item.channel || "").toLowerCase() === "report" ? CHOICES.report : CHOICES.not_ours) : null) || [];

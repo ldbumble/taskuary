@@ -196,7 +196,7 @@ def test_one_action_box_a_held_browser_step_with_the_reply_behind_it():
     items = chatlog.read(s, tid)['items']
     cards = [c for x in items for c in x.get('cards') or []]
     assert [(c['review'], c['status']) for c in cards] == [(act, 'pending')]
-    assert '1 of 2 · next: the reply to Gail Moreno' in cards[0]['line'] and chatlog.live_card(s, tid)['review'] == act
+    assert '1 of 2 · next: the reply to gail@northwind.example' in cards[0]['line'] and chatlog.live_card(s, tid)['review'] == act
     s.decide_review(act, 'approved', None, 'owner')
     general.PRESSED.pop(tid, None)
     from taskuary import cardqueue
@@ -275,7 +275,9 @@ def test_the_page_reads_the_log_through_a_timeline_and_nothing_he_saw_moves():
     """THE READER SWITCH (stage 7): what the page reads is the log - a message, a turn with its reply card, his line, a restart in the middle,
     his Send and a second press. Every read keeps what the one before drew in its place (flow_breaks), and the card stands where it stood."""
     from taskuary import cardqueue, conversation, general
+    from taskuary.store import set_owner
     s, tid = world()
+    set_owner(s, 'Alex Doyle', 'alex@northwind.example')       # Erin is a colleague: a stranger's task draws no card until Trust
     mid = s.add_message({'TaskId': tid, 'ExternalId': 'e1', 'Channel': 'email', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
                          'ToEmail': 'alex@northwind.example', 'Subject': 'Review?', 'BodyText': 'Your review of the tool? Erin', 'Status': 'routed'})
     reads, was = [], None

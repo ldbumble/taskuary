@@ -757,7 +757,8 @@ def advance(store, tid: int) -> None:
             with store.lock: store.cx.execute('DELETE FROM chatlog WHERE Id=?', (r['Id'],)); store.cx.commit()
             continue
         # ...one the chat moved past stays where it stood, its buttons greyed (proposals.written_past) - never taken off as if it waited behind
-        if st == 'pending' and rv['ReviewId'] not in front: st = 'passed' if rv['ReviewId'] in q['past'] else 'offer' if r['State'] == 'offer' else 'held'
+        # ...ONE card waits per task (one_live_card): the front's own row, never another row of its unit
+        if st == 'pending' and rv['ReviewId'] != (front[0] if front else None): st = 'passed' if rv['ReviewId'] in q['past'] else 'offer' if r['State'] == 'offer' else 'held'
         if st != r['State']: update(store, tid, k, state=st, status=st)
     if front and (rv := by.get(front[0])) and f"r:{front[0]}" not in rows:
         # ...the turn that raised it (advance_soon kept it), else the one open now; a turn's card is drawn when that turn has ended
@@ -985,7 +986,7 @@ def missing(store, tid: int, got: dict) -> list:
             out.append(f"i: answer comment-{c['CommentId']} filed by {c.get('Actor')!r} is in no turn")
         if c.get('ActorType') == general.USER_TYPE and c.get('Actor') != general.BRIEF_ACTOR and (k := c.get('LineId')) and k not in ids:
             out.append(f"i: his line {k} is drawn nowhere")
-    for rid in (x for x in cardqueue.state(store, int(tid))['live'] if x != cardqueue.LAND):
+    for rid in [x for x in cardqueue.state(store, int(tid))['live'] if x != cardqueue.LAND][:1]:      # ...a unit's card is its first row's
         rv = store.get_review(rid) or {}
         if rv.get('Status') == 'pending' and rid not in cards:
             out.append(f"i: the card that waits on him, review {rid} ({rv.get('Kind')} from {rv.get('Origin') or rv.get('DraftBy') or 'its road'}), is drawn nowhere")

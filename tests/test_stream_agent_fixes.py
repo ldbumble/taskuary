@@ -211,6 +211,8 @@ def chat_task(s, live=False):
     tid = s.create_task({'Title': 'Budget meeting today?', 'Kind': 'general', 'Status': 'open'}, 'router')
     mid = s.add_message({'TaskId': tid, 'ExternalId': 'wa1', 'ConversationId': CONV, 'Channel': 'whatsapp', 'FromName': 'Erin Blake',
                          'FromEmail': 'whatsapp:15550001', 'SentAt': stamp(-600), 'BodyText': 'still on for 3pm? and is the room booked?', 'Status': 'routed'})
+    from taskuary import senders
+    senders.vouch(s, s.list_messages(tid))                     # ...Erin is someone he knows: a stranger's task draws no card until Trust
     for who, kind, words in ((general.BRIEF_ACTOR, general.USER_TYPE, 'brief'), ('assistant', general.ASSISTANT_TYPE, 'Drafted the answer.')):
         s._exec('UPDATE comment SET CreatedAt=? WHERE CommentId=?', (stamp(-500), s.add_comment(tid, who, kind, words)))
     rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'ConversationId': CONV, 'Kind': 'draft_reply', 'Status': 'pending', 'SentAt': stamp(-600),

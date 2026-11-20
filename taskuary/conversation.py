@@ -493,7 +493,9 @@ def flow_breaks(got: dict, was: dict = None) -> list:
     # a
     for x in xs[:max(his, 0)]:
         if live(x): say(f"a: the turn at work {x['id']} stands above his newest line {ids[his]}")
-    if his >= 0 and got.get('working') and not any(live(x) for x in xs[his + 1:]): say(f"a: his newest line {ids[his]} has no turn at work under it")
+    # ...a line of his still waiting by the box (`pending`) is drawn under the chat, the working line under it
+    if his >= 0 and got.get('working') and not any(live(x) for x in xs[his + 1:]) and not any(p.get('kind') == 'line' for p in got.get('pending') or []):
+        say(f"a: his newest line {ids[his]} has no turn at work under it")
     # b
     cards = [(i, c) for i, x in enumerate(xs) for c in ([x] if x['kind'] == 'card' else x.get('cards') or [] if x['kind'] == 'turn' else [])]
     lit = [(i, c) for i, c in cards if c.get('status') == 'pending']

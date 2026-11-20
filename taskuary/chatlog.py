@@ -286,7 +286,10 @@ def _kids(store, t: dict) -> bool:
 @_safe
 def heard(store, tid: int, new: list, at: float) -> None:
     """What one hand-over took (conversation.hear), in the order it took it: his lines, the messages, the presses - and the turn it began.
-    Each is appended now, under everything already in the log - the place it is heard is its place for good."""
+    Each is appended now, under everything already in the log - the place it is heard is its place for good. ALL OF IT IN ONE STEP under the
+    store's lock (the owner, ~10x: the working line is under his line at once): no read ever sees his line without the turn it began."""
+    with store.lock: _heard(store, tid, new, at)
+def _heard(store, tid: int, new: list, at: float) -> None:
     from . import general
     from .conversation import _mail, stamp
     tid = int(tid)
@@ -768,7 +771,7 @@ def advance(store, tid: int) -> None:
         if st != r['State']: update(store, tid, k, state=st, status=st)
     if front and (rv := by.get(front[0])) and f"r:{front[0]}" not in rows:
         # ...the turn that raised it (advance_soon kept it), else the one open now; a turn's card is drawn when that turn has ended
-        t = _RAISED.get((id(store), int(front[0]))) or (open_turn(store, tid) or {}).get('Id')
+        t = _raised(store, front[0]) or (open_turn(store, tid) or {}).get('Id')
         put(store, tid, 'card', f"r:{front[0]}", {**_card(rv), 'rids': front, 'line': cardqueue.line(q)}, parent=t,
             state='pending', src=f"review:{front[0]}")
     elif front and f"r:{front[0]}" in rows: update(store, tid, f"r:{front[0]}", line=cardqueue.line(q))
@@ -787,7 +790,7 @@ def advance(store, tid: int) -> None:
         if f'r:{rid}' in rows or rv['Status'] == 'pending' or (rv.get('Batch') and rid != min(x for x, y in by.items() if y.get('Batch') == rv['Batch'])): continue
         c = _card(rv)
         if rv.get('DecidedBy') not in OWNER_ACTORS and c['status'] != 'failed': continue
-        t = _RAISED.get((id(store), int(rid))) or (_turn_at(store, tid, rv.get('CreatedAt')) or {}).get('Id')
+        t = _raised(store, rid) or (_turn_at(store, tid, rv.get('CreatedAt')) or {}).get('Id')
         put(store, tid, 'card', f'r:{rid}', c, parent=t, state=c['status'], src=f'review:{rid}')
 
 
@@ -805,14 +808,20 @@ def _turn_at(store, tid: int, created):
 # and advance reads the whole line of cards through other roads that take their own. Two of those in opposite orders on two threads is a
 # deadlock. The write only says the line moved; one worker puts it, holding nothing else, and every read still advances first.
 _SOON, _SOON_LOCK, _SOON_GO, _SOON_T = {}, threading.Lock(), threading.Event(), [None]
-_RAISED = {}         # (store, review id) -> the Id of the turn open at the review's last write before its card stood: the turn that raised it
+import weakref
+# store -> {review id: the Id of the turn open at the review's last write before its card stood - the turn that raised it}; held by the store
+# itself, never by its address (a store gone and a new one at the same address - a test's - would read another task's turns)
+_RAISED = weakref.WeakKeyDictionary()
+def _raised(store, rid) -> int:
+    try: return (_RAISED.get(store) or {}).get(int(rid))
+    except TypeError: return None
 def advance_soon(store, tid: int, rid: int = None) -> None:
     """The line of cards on task `tid` moved: put into the log by the one worker, never on the thread that wrote it. `rid`: the review that
     moved - until its card stands, the turn open at each of its writes is kept as the one that raised it (the one that wrote its words, for
     a reply raised empty) - plain reads, no other lock taken."""
     if rid and not get(store, tid, f'r:{int(rid)}'):
-        if len(_RAISED) > 4096: _RAISED.clear()
-        _RAISED[(id(store), int(rid))] = (open_turn(store, tid) or {}).get('Id')
+        try: _RAISED.setdefault(store, {})[int(rid)] = (open_turn(store, tid) or {}).get('Id')
+        except TypeError: pass                     # ...a store that cannot be held weakly keeps no note: the time of its raise places it
     with _SOON_LOCK:
         _SOON[(id(store), int(tid))] = (store, int(tid))
         if not (_SOON_T[0] and _SOON_T[0].is_alive()):
@@ -954,6 +963,11 @@ def serve(store, tid: int, level: str = None) -> dict:
         if n or json.loads(t['Body'] or '{}').get('text'): update(store, tid, t['Key'], state='done')
     left_note(store, tid, at_work)
     got = read(store, tid, level)
+    # ...the same rule on what this read holds (its answer may be filed between the check above and the read): the newest thing a finished
+    # turn with nothing heard under it and no line of his waiting - nothing works, no dots under a finished answer
+    tail = next((x for x in reversed(got['items']) if x['kind'] in ('turn', 'line', 'arrival', 'press')), None)
+    if at_work and tail and tail['kind'] == 'turn' and tail.get('state') not in LIVE and not general.waiting_lines(store, tid) and not workflows.at_work(tid):
+        at_work = False
     out = got['items'] if at_work else [x for x in got['items'] if not (x['kind'] == 'turn' and x.get('state') in LIVE)]
     # ...A TASK A STRANGER'S WORDS HOLD DRAWS NO CARD TO PRESS until he trusts them (the judge's browser round, 2026-11-19: the reply drafted on a
     # stranger's mail stood as the email card, Send lit, where the hold's line and its Trust belong): the hold is the one move, beside the list

@@ -442,7 +442,10 @@ def test_a_coding_chat_polled_again_reads_each_cli_log_once_per_version(home, mo
     monkeypatch.setitem(sessionrecord.READERS, 'claude', (real[0], lambda f: reads.append(f.name) or real[1](f), real[2]))
     first = conversation.items(s, tid)
     assert sorted(reads) == ['big0.jsonl', 'big1.jsonl', 'big2.jsonl']
-    for _ in range(5): assert conversation.items(s, tid)['rev'] == first['rev']
+    for _ in range(5):
+        again = conversation.items(s, tid)
+        # ...a poll that changes nothing reads the same (a read that writes is churn): what moved, named, if it ever does
+        assert again['rev'] == first['rev'], {k: (first.get(k), again.get(k)) for k in set(first) | set(again) if k != 'rev' and first.get(k) != again.get(k)}
     assert len(reads) == 3, f'a poll read a log again: {reads}'
     f = home / '.claude' / 'projects' / 'C--work-ledger' / 'big1.jsonl'
     f.write_text(f.read_text(encoding='utf-8') + '\n' + json.dumps({'type': 'assistant', 'message': {'content': [{'type': 'text', 'text': 'One more check.'}]}}), encoding='utf-8')

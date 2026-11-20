@@ -10,7 +10,7 @@ from taskuary.store import MemoryStore
 
 def test_one_answer_says_what_is_not_connected_and_where_to_connect_it():
     s = MemoryStore()
-    assert outbound.connect_fix(s, 'linkedin') == {'says': "LinkedIn isn't connected", 'label': 'Connect LinkedIn', 'href': '#connector=linkedin'}
+    assert outbound.connect_fix(s, 'linkedin') == {'says': "LinkedIn isn't connected", 'label': 'Connect LinkedIn', 'href': '#connector=linkedin', 'waits': 'the draft waits here - copy it to post it yourself'}
     s.save_connector({'Type': 'outlook', 'Name': 'Outlook', 'Active': 0}, 'owner')
     assert outbound.connect_fix(s, 'email') == {'says': 'No mailbox is connected', 'label': 'Connect email', 'href': '#connector=outlook'}
     assert outbound.connect_fix(s, 'own') is None and outbound.connect_fix(s, '') is None      # nothing to connect for those
@@ -61,3 +61,16 @@ def test_a_tracker_comment_whose_tracker_is_not_connected_offers_connect():
         assert card['connect'] == got, (tool, card['connect'])
     # ...while a reply on a tracker's own thread still has nothing to connect here
     assert outbound.review_connect(s, {'Kind': 'outbound', 'Channel': 'jira', 'Deliver': '{}'}) is None
+
+
+def test_a_network_signed_in_once_and_signed_out_since_is_its_connect_never_its_press():
+    # the judge's look, 2026-11-20: a LinkedIn card signed in once kept "Post to LinkedIn" lit, and the press failed into "LinkedIn isn't signed in"
+    from unittest import mock
+    from taskuary import connectorcatalog
+    s = MemoryStore(); s.save_connector({'Type': 'linkedin', 'Name': 'LinkedIn', 'Active': 1}, 't')
+    for st, says in (('signed_out', 'LinkedIn needs you to sign in again'), ('not_signed_in', "LinkedIn isn't signed in")):
+        with mock.patch.object(connectorcatalog, 'state', return_value={'state': st}):
+            got = outbound.connect_fix(s, 'linkedin')
+        assert got['label'] == 'Connect LinkedIn' and got['says'] == says and 'copy' in got['waits']
+    for st in ('connected', 'failing'):
+        with mock.patch.object(connectorcatalog, 'state', return_value={'state': st}): assert outbound.connect_fix(s, 'linkedin') is None

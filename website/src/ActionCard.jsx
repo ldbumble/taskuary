@@ -14,7 +14,7 @@ import { attUrl } from "./fileSave.js";
 import { FileDialog } from "./PublishedPages.jsx";
 import { actionFor, changed, choiceOf, fieldsOf, pressable, stateOf, textKey, valuesOf, wordsOf } from "./actionCard.js";
 import { outputRow } from "./taskOutputs.js";
-import { hint } from "./buttons.js";
+import { hint, label as btn } from "./buttons.js";
 import { failLine, landed, press } from "./press.js";
 import { asLive, MovedPast } from "./PassedCard.jsx";
 import { MdLine } from "./md.jsx";
@@ -42,7 +42,7 @@ export default function ActionCard({ row: was, tid, live = true, onChanged, past
   const answered = !!settled && given?.Status === "pending", row = answered && settled.mine ? { ...given, Status: settled.Status, ActError: settled.ActError || given.ActError } : given;
   const held = answered && !settled.mine ? "held" : "";
   const p = row?.post || {}, act = actionFor(p.type), st = stateOf(row, live), tk = textKey(act);
-  const [text, setText] = useState(String(p[tk] || "")), [vals, setVals] = useState(() => valuesOf(act, p));
+  const [text, setText] = useState(String(p[tk] || "")), [vals, setVals] = useState(() => valuesOf(act, p)), [copied, setCopied] = useState(false);
   const [pressing, setBusy] = useState(""), [err, setErr] = useState(""), [viewing, setViewing] = useState(null);
   // ...gone by THIS card's press: said in the words of what he picked ("Saved as a draft"), with its link, until the row says what went. One
   // gone from another window (`already`) is never said in this window's words: that edit was not what went (the card round, 2026-11-18)
@@ -105,7 +105,11 @@ export default function ActionCard({ row: was, tid, live = true, onChanged, past
           : st.live && row?.connect ? <>
             {/* ...its network not connected (outbound.connect_fix, the owner 2026-11-08): said, and Connect opens that card - the post waits */}
             <Button size="small" variant="contained" disableElevation data-tq-act-connect="" onClick={() => openAppLink(row.connect.href)}>{row.connect.label}</Button>
-            <Typography data-tq-not-connected="" sx={{ fontSize: 11.5, color: FAINT }}>{row.connect.says}</Typography></>
+            {/* ...and the draft copy-ready beside it: never a press that can only fail (the judge's look, 2026-11-20) */}
+            <Button size="small" data-tq-act-copy="" disabled={!text.trim()} title={hint("copy")}
+              onClick={() => { try { navigator.clipboard?.writeText(text); setCopied(true); } catch { /* the words stay on the card */ } }}>
+              {copied ? `✓ ${btn("copy", "done") || "Copied"}` : btn("copy")}</Button>
+            <Typography data-tq-not-connected="" sx={{ fontSize: 11.5, color: FAINT }}>{row.connect.says}{row.connect.waits ? ` - ${row.connect.waits}` : ""}</Typography></>
           : st.live ? <>
             <Button size="small" variant="contained" disableElevation data-tq-act-press="" disabled={!!busy || !pressable(act, p, text) || !!over} onClick={() => decide("approve")}
               title={act.note || hint("approve", post ? "post" : "action")} startIcon={busy === "approve" ? <CircularProgress size={12} color="inherit" /> : null}>

@@ -531,10 +531,17 @@ def connect_fix(store, kind) -> dict | None:
         return {'says': 'No mailbox is connected', 'label': 'Connect email', 'href': f'#connector={had}' if had else MAIL[1]}
     # ...an act's network by the Connections page's own rule (connectorcatalog.signed_in): a LinkedIn card switched on and never signed in
     # had Post to LinkedIn lit over it (the walks, 2026-11-18)
+    # ...BY ITS ONE STATE (connectorcatalog.state; the judge's look, 2026-11-20: a LinkedIn card signed in once and since signed out kept "Post to
+    # LinkedIn" lit, and the press failed into "LinkedIn isn't signed in"): only a connection that can act now takes the press - connected, or
+    # failing for a moment; anything else is its Connect, with the draft kept to copy
     card = connectorcatalog.by_type(k)
-    if not card or any(str(c.get('Type') or '').lower() == k and connectorcatalog.signed_in(c) for c in cards): return None
-    name = card.get('title') or k
-    return {'says': f"{name} isn't connected", 'label': f'Connect {name}', 'href': f'#connector={k}'}
+    if not card: return None
+    srcs = store.list_sources() if hasattr(store, 'list_sources') else ()
+    mine = [c for c in cards if str(c.get('Type') or '').lower() == k]
+    if any(connectorcatalog.state(c, srcs)['state'] in ('connected', 'failing') for c in mine): return None
+    name, st = card.get('title') or k, (connectorcatalog.state(mine[0], srcs)['state'] if mine else 'off')
+    says = {'signed_out': f'{name} needs you to sign in again', 'not_signed_in': f"{name} isn't signed in"}.get(st, f"{name} isn't connected")
+    return {'says': says, 'label': f'Connect {name}', 'href': f'#connector={k}', 'waits': 'the draft waits here - copy it to post it yourself'}
 
 
 def review_connect(store, r: dict, memo: dict = None) -> dict | None:

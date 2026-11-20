@@ -114,7 +114,7 @@ class App:
 
 def run(app: App, ask: str, wait: float) -> dict:
     "One ask on New: the task it made, its turn's calls as first seen, the seconds, the answer and the files."
-    t0 = time.time(); tid = app.call('/api/start', {'text': ask, 'images': []})['taskId']
+    t0 = time.time(); tid = app.call('/api/start', {'text': ask, 'images': []}, timeout=300)['taskId']   # New's triage on a slow card took 125 s
     seen, c = [], {}
     while time.time() - t0 < wait:
         try: c = app.call(f'/api/tasks/{tid}/conversation?level=everything')

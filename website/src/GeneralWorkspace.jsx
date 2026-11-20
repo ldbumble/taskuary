@@ -609,7 +609,8 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
   // A TASK'S CHAT DRAWS THE SERVER'S LIST (Conversation) - whatever agent works it; this holds the box, what it sent, and the view's end
   const turnName = React.useContext(AgentNameCtx);
   const [mine, setMine] = useState([]), merged = useMemo(() => withMine(list, mine), [list, mine]);
-  useEffect(() => { if (!list) return; const known = new Set([...list.items, ...list.pending].map((x) => x.id));
+  // ...let go of a line he sent only once the server's copy carries its words (chatStream.withMine `said`): placed before it is filed, it has none
+  useEffect(() => { if (!list) return; const known = new Set([...list.items, ...list.pending].filter((x) => x.kind !== "line" || String(x.text || "").trim() || (x.files || []).length).map((x) => x.id));
     setMine((m) => (m.some((l) => known.has(l.id) && !l.err) ? m.filter((l) => !known.has(l.id) || l.err) : m)); }, [list]);
   const stick = useRef(true), inner = useRef(null), viewport = useRef(null), listNow = useRef(list); listNow.current = list;
   const nextAt = React.useContext(WorkCtx);

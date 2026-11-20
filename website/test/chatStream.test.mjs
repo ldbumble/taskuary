@@ -295,3 +295,13 @@ test("a line waiting by the box draws a pill for every file he sent with it", ()
   assert.match(strip, /\(x\.files \|\| \[\]\)\.map\(\(f\) => <AttachChip key=\{f\} name=\{fileName\(f\)\}/);
   assert.match(fs.readFileSync(new URL("../src/generalWorkspace.css", import.meta.url), "utf8"), /\.tq-conv-pending-row > \.tq-attach-chip \{ flex: 0 0 auto;/, "never squeezed to a few letters");
 });
+
+test("his line keeps its words through the swap: placed by the server before it is filed, it never draws empty", async () => {
+  const { withMine } = await import("../src/chatStream.js");
+  const mine = [{ id: "l-9", kind: "line", text: "Post it to all three.", files: [], at: new Date(), rest: true }];
+  const placed = { items: [{ id: "l-9", kind: "line", text: "", files: [] }, { id: "t:9", kind: "turn", state: "starting", steps: [], cards: [] }], pending: [], working: true };
+  const got = withMine(placed, mine);
+  assert.deepEqual(got.items.filter((x) => x.kind === "line").map((x) => [x.id, x.text]), [["l-9", "Post it to all three."]], "one line, its words, in the server's place");
+  const filed = { ...placed, items: [{ ...placed.items[0], text: "Post it to all three." }, placed.items[1]] };
+  assert.deepEqual(withMine(filed, mine).items.filter((x) => x.kind === "line").map((x) => x.text), ["Post it to all three."]);
+});

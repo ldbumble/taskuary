@@ -215,7 +215,12 @@ export const withMine = (list, mine) => {
   // ... after it" - he never saw it lit. A card from his line's own second on is the answer to it (the server's rule: proposals._older)
   const before = (c) => !c.at || +new Date(String(c.at).replace(" ", "T")) + 1000 <= +new Date(by.at);
   const aside = (c) => (by && c.status === "pending" && (c.was || c.aside) && before(c) ? { ...c, status: "passed" } : c);
-  const greyed = items.map((x) => (x.kind === "card" ? aside(x) : x.kind === "turn" && (x.cards || []).length ? { ...x, cards: x.cards.map(aside) } : x));
+  // ...AND HIS LINE KEEPS ITS WORDS THROUGH THE SWAP (the owner, live 2026-11-20: his line showed, vanished, came back): the server places his
+  // line the moment it is heard and fills its words a beat later, when its row is filed - in that beat its item had no words and drew nothing.
+  // One identity from the send: the server's item takes the place, the words he sent stay in it until the server's own arrive
+  const sent = new Map(mine.map((l) => [l.id, l]));
+  const said = (x) => (x.kind === "line" && !String(x.text || "").trim() && sent.has(x.id) ? { ...x, text: sent.get(x.id).text, files: x.files?.length ? x.files : sent.get(x.id).files || [] } : x);
+  const greyed = items.map((x) => (x.kind === "card" ? aside(x) : x.kind === "turn" && (x.cards || []).length ? { ...x, cards: x.cards.map(aside) } : said(x)));
   return { items: [...greyed.slice(0, at), ...rest, ...greyed.slice(at), ...tail], pending: [...pending, ...wait] };
 };
 // THE BASIC FLOW OF WHAT THE PAGE DRAWS (conversation.flow_breaks, the page's half): his newest line has no turn at work above it, and

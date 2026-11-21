@@ -47,6 +47,7 @@ import { useSaveNote } from "./SaveNote.jsx";
 import { plainError } from "./apiError.js";
 import { namesRestart, pairAgain, restartBridge, startBridge } from "./waBridge.js";
 import { waLine, waPair } from "./waStatus.js";
+import { ACCESS } from "./agentAccess.js";
 import { DraftProvider, Tick, useBoxesSave, useCardDraft, useSaveConnector, useSaveSource } from "./ConnectorDraft.jsx";
 import { cfgPatch, editedBoxes, syncState } from "./connectorDraft.js";
 import { AI_SHELF, needsGateway } from "./aiShelf.js";
@@ -4150,9 +4151,9 @@ const RoleRow = ({ on, onToggle, label, desc }) => (
    Read is the safe floor and the default for every tracker - a connection only gains a verb
    when the owner hands it over. */
 const SCOPE_META = {
-  read: ["Read only", "Look, never touch: list, fetch, search, query. Nothing upstream changes; any change an agent wants becomes a proposal you approve on the task."],
-  write: ["Read and write", "The everyday work as well: create, update, comment, assign, complete, send. No deleting, no closing, no running code."],
-  admin: ["Full authority", "Everything, including the destructive and the structural: delete, close, archive, manage access, run scripts on a box - what a CLI agent with full permissions can already do. Every connection starts here; narrow it when you want to."],
+  read: [ACCESS.read, "Look, never touch: list, fetch, search, query. Nothing upstream changes; any change an agent wants becomes a proposal you approve on the task."],
+  write: [ACCESS.write, "The everyday work as well: create, update, comment, assign, complete, send. No deleting, no closing, no running code."],
+  admin: [ACCESS.admin, "Everything, including the destructive and the structural: delete, close, archive, manage access, run scripts on a box - what a CLI agent with full permissions can already do. Every connection starts here; narrow it when you want to."],
 };
 const SCOPE_KEYS = ["read", "write", "admin"];
 
@@ -4178,7 +4179,7 @@ const AuthorityRow = ({ conn, reload }) => {
           <Radio checked={(current || fallback) === s} disabled={busy} onChange={() => set(s)} sx={{ mt: -0.75 }} />
           <Box sx={{ minWidth: 0 }}>
             <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13 }}>
-              {SCOPE_META[s][0]}{!current && fallback === s ? " — default" : ""}
+              {SCOPE_META[s][0]}
             </Typography>
             <Typography variant="body2" sx={{ color: DIM }}>{SCOPE_META[s][1]}</Typography>
           </Box>

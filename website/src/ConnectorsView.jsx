@@ -45,8 +45,8 @@ import { githubInboundValue } from "./githubInbound.js";
 import { ALWAYS, ENDS, HI, LO, MARKS, SAYS, clampLevel, combines, defaultLevel, kindOf } from "./combineLevel.js";
 import { useSaveNote } from "./SaveNote.jsx";
 import { plainError } from "./apiError.js";
-import { namesRestart, pairAgain, restartBridge } from "./waBridge.js";
-import { waLine } from "./waStatus.js";
+import { namesRestart, pairAgain, restartBridge, startBridge } from "./waBridge.js";
+import { waLine, waPair } from "./waStatus.js";
 import { DraftProvider, Tick, useBoxesSave, useCardDraft, useSaveConnector, useSaveSource } from "./ConnectorDraft.jsx";
 import { cfgPatch, editedBoxes, syncState } from "./connectorDraft.js";
 import { AI_SHELF, needsGateway } from "./aiShelf.js";
@@ -1802,12 +1802,12 @@ const BridgeRestart = ({ cid, text }) => {
 
 // THE WHATSAPP STATUS LINE (waStatus.js, 2026-10-23): what the bridge says, not what the switch says - short words, the
 // turned-away count a link into the chat picker where they can be switched on, and the next step as a button, not a paragraph
-const WaStatusLine = ({ st, cid, onTurnedAway, fixes = ["restart", "pair"] }) => {
+const WaStatusLine = ({ st, cid, onTurnedAway, fixes = ["start", "restart", "pair"] }) => {
   const [busy, setBusy] = useState("");
   const line = waLine(st);
   if (!line) return null;
   const fix = fixes.includes(line.fix) ? line.fix : "";
-  const act = async () => { setBusy(fix); try { await (fix === "pair" ? pairAgain(cid) : restartBridge(cid)); } catch { /* the pairing box shows the outcome */ } setBusy(""); };
+  const act = async () => { setBusy(fix); try { await (fix === "pair" ? pairAgain(cid) : fix === "start" ? startBridge(cid) : restartBridge(cid)); } catch { /* the pairing box shows the outcome */ } setBusy(""); };
   return (
     <Box data-tq-wa-status={line.fix || "ok"} sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
       <Typography variant="body2" sx={{ color: DIM }}>
@@ -1818,13 +1818,15 @@ const WaStatusLine = ({ st, cid, onTurnedAway, fixes = ["restart", "pair"] }) =>
           {line.away} turned away</Button></>}
       </Typography>
       {fix && <Button size="small" variant="outlined" disabled={!!busy} data-tq-wa-fix={fix} sx={{ fontSize: 11.5, textTransform: "none" }}
-        startIcon={busy ? <CircularProgress size={12} /> : <RestartAltIcon sx={{ fontSize: 15 }} />}
+        startIcon={busy ? <CircularProgress size={12} /> : fix === "start" ? <PlayArrowIcon sx={{ fontSize: 15 }} /> : <RestartAltIcon sx={{ fontSize: 15 }} />}
         title={fix === "pair" ? "Unlink this computer on your phone and show a new QR to scan - the old pairing is kept aside, not deleted"
+          : fix === "start" ? "Start the bridge on this computer - Taskuary sets up what it needs first"
           : "Start the bridge again on this machine - you stay paired"}
-        onClick={act}>{busy ? (fix === "pair" ? "Unlinking…" : "Restarting…") : fix === "pair" ? "Pair again" : "Restart bridge"}</Button>}
+        onClick={act}>{busy ? (fix === "pair" ? "Unlinking…" : "Starting…") : WA_FIX[fix]}</Button>}
     </Box>
   );
 };
+const WA_FIX = { start: "Start bridge", restart: "Restart bridge", pair: "Pair again" };
 
 const TestLine = ({ test, mt = 1, cid }) => {
   const [busy, setBusy] = useState(false);
@@ -4316,7 +4318,7 @@ const credsDone = (conn, cfg, m) => conn.Type === "chatgpt" ? cfg?.auth === "use
 const WaPair = ({ conn, reload, onStatus, onTurnedAway }) => {
   const [st, setSt] = useState(null);
   const kicked = useRef(false);
-  const startBridge = useCallback(async () => { try { await api.post(`/api/connectors/${conn.ConnectorId}/wa/bridge/start`); } catch { /* status polling shows the failure */ } }, [conn.ConnectorId]);
+  const start = useCallback(async () => { try { await startBridge(conn.ConnectorId); } catch { /* status polling shows the failure */ } }, [conn.ConnectorId]);
   useEffect(() => {
     let alive = true, wasConnected = null;
     const tick = async () => {
@@ -4330,7 +4332,7 @@ const WaPair = ({ conn, reload, onStatus, onTurnedAway }) => {
         // Node is there and the bridge is not: start it, once per visit - the owner opened this card to pair. Not one stopped on purpose
         // (manager.held): a Remove stopped it, and starting it here put the card straight back up (TQ-1320) - Start bridge is the way back
         // ...Node or not: Start sets up Taskuary's own Node first (#278 - "just install in background and get it to work")
-        if (data.bridge === false && !data.manager?.held && !kicked.current && !["installing", "starting", "failed"].includes(data.manager?.phase)) { kicked.current = true; startBridge(); }
+        if (data.bridge === false && !data.manager?.held && !kicked.current && !["installing", "starting", "failed"].includes(data.manager?.phase)) { kicked.current = true; start(); }
         setTimeout(tick, data.connected ? 30000 : data.bridge === false ? (data.node ? 3000 : 6000) : 4000);
       // A STATUS WE COULD NOT READ IS NOT "NODE IS MISSING". Faking {bridge:false} here sent the owner
       // off to install Node they already had, because the app was restarting or busy for a moment.
@@ -4338,7 +4340,7 @@ const WaPair = ({ conn, reload, onStatus, onTurnedAway }) => {
     };
     tick();
     return () => { alive = false; };
-  }, [conn.ConnectorId, reload, startBridge, onStatus]);
+  }, [conn.ConnectorId, reload, start, onStatus]);
   // ROOM HELD FOR IT WHILE IT IS READ (the 2026-10-19 UI walk, G8): nothing was drawn until the bridge answered, and then the box
   // pushed the rest of the card ~250px down under the owner's eyes. The box is there from the first frame, at about the height of
   // the steps and QR it will hold - the unpaired box, which is the one a person opens this card to see.
@@ -4358,71 +4360,33 @@ const WaPair = ({ conn, reload, onStatus, onTurnedAway }) => {
       </Typography>
     </Box>
   );
-  const phase = st.manager?.phase, busy = ["installing", "starting"].includes(phase);
-  const reconnect = st.reconnect || {};
-  const stepNo = st.connected ? 4 : st.bridge === false ? (st.node ? 2 : 1) : 3;
+  const pair = waPair(st), reconnect = st.reconnect || {};
   const StepLine = ({ n, label, state }) => (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.5 }}>
+    <Box data-tq-wa-step={state} sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.5 }}>
       <Box sx={{ width: 18, height: 18, borderRadius: "50%", fontSize: 11, fontWeight: 600, display: "grid", placeItems: "center",
         bgcolor: state === "done" ? "#47654a" : state === "now" ? "#55697a" : "var(--tq-inset, #e6e2dc)", color: state === "todo" ? DIM : "#fff" }}>{state === "done" ? "✓" : n}</Box>
       <Typography variant="body2" sx={{ fontSize: 13, fontWeight: state === "now" ? 700 : 500, color: state === "todo" ? DIM : INK }}>{label}</Typography>
-      {state === "now" && busy && <CircularProgress size={11} sx={{ color: DIM }} />}
+      {state === "now" && pair.busy && <CircularProgress size={11} sx={{ color: DIM }} />}
     </Box>
   );
-  const stateOf = (n) => (n < stepNo ? "done" : n === stepNo ? "now" : "todo");
+  const stateOf = (n) => (n < pair.step ? "done" : n === pair.step ? "now" : "todo");
   return (
     <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", gap: 2, alignItems: "flex-start", flexWrap: "wrap" }}>
       <Box sx={{ flex: 1, minWidth: 240 }}>
         <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Pair with your phone</Typography>
-        {!st.connected && (
-          <Box sx={{ mb: 1 }}>
-            <StepLine n={1} label={phase === "installing" && !st.node ? (st.manager?.detail || "Setting up Node.js") : "Node.js on this computer (Taskuary sets it up)"} state={stateOf(1)} />
-            <StepLine n={2} label={phase === "installing" ? "Fetching the bridge (a minute or two, first time only)" : "The bridge is running"} state={stateOf(2)} />
-            <StepLine n={3} label="Scan the QR from your phone" state={stateOf(3)} />
-          </Box>
-        )}
-        {/* the bridge's own controls, whatever state it is in. A bridge that wedged, or one started before
-            the code on disk changed, is fixed HERE - the log's "start it: cd taskuary/whatsapp && node bridge.mjs"
-            sent people to a shell for a button's worth of work. The pairing survives a restart: it lives in
-            the auth folder, not the process. */}
-        <Box sx={{ display: "flex", gap: 1, mt: 0.75, mb: 0.75, flexWrap: "wrap", alignItems: "center" }}>
-          <Button size="small" variant="outlined" startIcon={<RestartAltIcon sx={{ fontSize: 15 }} />} disabled={busy}
-            title="Stop the running bridge (ours, or one started by hand - found by its port) and start it again from the code on disk. You stay paired."
-            onClick={async () => { try { await api.post(`/api/connectors/${conn.ConnectorId}/wa/bridge/restart`); } catch { /* status polling shows the outcome */ } }}>
-            Restart bridge
-          </Button>
-          {st.bridge === false && !busy && phase !== "failed" && (
-            <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon sx={{ fontSize: 15 }} />} onClick={startBridge}>Start bridge</Button>
-          )}
-          {/* connected or logged out: the card's own status line (Restart bridge is already beside it, so only Pair again) */}
-          {st.connected || st.logged_out ? <WaStatusLine st={st} cid={conn.ConnectorId} onTurnedAway={onTurnedAway} fixes={["pair"]} /> : (
-            <Typography variant="caption" sx={{ color: FAINT }}>
-              {reconnect.paused ? "automatic reconnect paused" : st.bridge === false ? "bridge not running" : "bridge up, not connected"}{st.manager?.phase ? ` · ${st.manager.phase}` : ""}
-            </Typography>)}
-        </Box>
+        {!st.connected && <Box sx={{ mb: 1 }}>{pair.steps.map((label, i) => <StepLine key={i} n={i + 1} label={label} state={stateOf(i + 1)} />)}</Box>}
+        {/* ONE LINE AND ONE BUTTON, whatever state the bridge is in (waStatus.waPair) - the same line the card's Enable step says. A bridge that
+            wedged is fixed HERE: the log's "start it: cd taskuary/whatsapp && node bridge.mjs" sent people to a shell for a button's worth of
+            work. The pairing survives a restart: it lives in the auth folder, not the process. */}
+        <Box sx={{ mt: 0.75, mb: 0.75 }}><WaStatusLine st={st} cid={conn.ConnectorId} onTurnedAway={onTurnedAway} /></Box>
         {reconnect.paused && reconnect.reason !== "logged out" && (
           <Alert severity="warning" sx={{ mb: 1, fontSize: 12.5 }}>
             The WhatsApp connection kept dropping, so Taskuary stopped retrying before WhatsApp could flood your phone with linked-device sync notices. Check the network, then click Restart bridge once.
           </Alert>
         )}
         {st.connected ? (
-          <Box sx={{ mt: 0.5 }}>
-            <Typography variant="body2" sx={{ color: "var(--tq-success, #47654a)", fontWeight: 600 }}>✓ Paired{st.me ? ` as ${st.me}` : ""}{st.phone ? ` · ${st.phone}` : ""} — the bridge is connected. Test, then enable.</Typography>
-          </Box>
-        ) : st.bridge === false ? (
-          <Box>
-            <Typography variant="caption" sx={{ color: phase === "failed" ? "var(--tq-danger, #a33)" : DIM, lineHeight: 1.5, display: "block", mb: 0.75 }}>
-              {phase === "installing" ? (st.node ? "Fetching the bridge's dependency (Baileys, not bundled on purpose). The QR appears here the moment the bridge is up."
-                : `${st.manager?.detail || "Setting up Node.js"} - the bridge starts by itself once it is done.`)
-                : phase === "failed" ? `The bridge could not start: ${st.manager.detail}`
-                : st.manager?.held ? "The bridge is stopped and this computer is unpaired. Start bridge to pair a phone again."
-                : "Starting the bridge…"}
-            </Typography>
-            {phase === "failed" && (
-              <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon sx={{ fontSize: 15 }} />} onClick={startBridge}>{btnLabel("try_again")}</Button>
-            )}
-          </Box>
-        ) : st.pairing_code ? (
+          <Typography variant="body2" sx={{ color: "var(--tq-success, #47654a)", fontWeight: 600, mt: 0.5 }}>✓ Paired{st.me ? ` as ${st.me}` : ""}{st.phone ? ` · ${st.phone}` : ""}. Test, then enable.</Typography>
+        ) : st.bridge === false ? null : st.pairing_code ? (
           <Typography variant="body2" sx={{ color: INK, mt: 0.5 }}>
             Enter this code on your phone — WhatsApp → Linked devices → Link a device → Link with phone number:
             <Box component="span" sx={{ ...mono, fontSize: 22, fontWeight: 600, letterSpacing: 3, display: "block", mt: 0.5 }}>{st.pairing_code}</Box>

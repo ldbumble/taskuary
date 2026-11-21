@@ -8,3 +8,5 @@ export const namesRestart = (text) => /Restart bridge/.test(String(text || ""));
 export const restartBridge = (cid) => api.post(`/api/connectors/${cid}/wa/bridge/restart`);
 // unlink, set the old pairing aside, start unpaired - the pairing box then shows the QR (wabridge.pair_again)
 export const pairAgain = (cid) => api.post(`/api/connectors/${cid}/wa/bridge/pair-again`);
+// start it where it is not running - Taskuary sets up its own Node first (wabridge.start)
+export const startBridge = (cid) => api.post(`/api/connectors/${cid}/wa/bridge/start`);

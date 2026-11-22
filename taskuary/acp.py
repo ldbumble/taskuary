@@ -233,8 +233,10 @@ class ACPClient:
         said, cut, of, own = [], [0], [None], []
         self.last_turn = {}
         outer = self.on_update
+        t0, first = time.time(), [None]          # ...the wait before the model's first word, in the log (a slow start read, never guessed)
         def collect(u):
             kind = u.get('sessionUpdate')
+            if first[0] is None: first[0] = time.time(); logger.info(f'acp: first update {first[0] - t0:.1f}s after the prompt ({kind})')
             # ...THE ADAPTER'S OWN LINE IS NEVER THE AGENT'S WORDS (clis.ADAPTERS `unnamed_own`): Codex's "Warning: Model metadata ... not found"
             # stood above every answer, and a turn's provider error stood as its answer, raw JSON and all (the gateway walk, 2026-11-20). It
             # goes to the log; a turn that said nothing else failed, in those words (say.turn_failed reads them for him)

@@ -67,7 +67,17 @@ const STEPS = {
       page_ ||= (await where()).includes("task=") && Date.now() - t0;
       await sleep(100);
     }
-    return { row_ms: row || null, page_ms: page_ || null, problem: !row ? "no new row on the rail within 60 s" : !page_ ? "his task's page never opened" : "" };
+    // ...AND HOW LONG UNTIL ITS AGENT IS AT WORK (the owner, 2026-11-22: "still takes 40 seconds" under "Waiting for the agent to start"): the
+    // Stop beside a working turn, or the turn's first step row - the walk measured the page opening and never this
+    let start = null;
+    while (row && page_ && Date.now() - t0 < 90000 && !start) {
+      const on = await page.evaluate(() => !!document.querySelector("[data-tq-task-page] [data-tq-stop-run]") &&
+        !/Waiting for the agent to start/.test(document.querySelector("[data-tq-task-page] .tq-aui-viewport")?.innerText || ""));
+      if (on) start = Date.now() - t0; else await sleep(200);
+    }
+    return { row_ms: row || null, page_ms: page_ || null, start_ms: start,
+      problem: !row ? "no new row on the rail within 60 s" : !page_ ? "his task's page never opened"
+        : !start ? "its agent never started within 90 s" : start > 15000 ? `its agent took ${Math.round(start / 1000)} s to start` : "" };
   },
   async type(s) { return { problem: (await typeIn(s.say)) ? "" : "no box to type in" }; },
   async press(s) {                                 // the same button pressed `times` times as fast as a hand can: it must act once
@@ -109,6 +119,10 @@ const STEPS = {
   },
   async quiet(s) { const t0 = Date.now(), ok = await untilQuiet((s.max || 600) * 1000); return { took_ms: Date.now() - t0, problem: ok ? "" : `still working after ${s.max || 600} s` }; },
   async wait(s) { await sleep((s.s || 5) * 1000); return {}; },
+  async picture(s) {                               // a picture he asked for stands in the chat as one, never words about one
+    const n = await page.evaluate(() => [...document.querySelectorAll("[data-tq-task-page] img")].filter((i) => i.naturalWidth > 64 && i.getBoundingClientRect().width > 64).length);
+    return { pictures: n, problem: n ? "" : "no picture in the chat" };
+  },
   async expect(s) {                                // what must (or must not) be on the screen now - the step's own words
     const text = await page.evaluate(() => document.body.innerText);
     const miss = (s.see || []).filter((w) => !new RegExp(w, "i").test(text)), bad = (s.never || []).filter((w) => new RegExp(w, "i").test(text));

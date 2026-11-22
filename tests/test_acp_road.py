@@ -594,3 +594,18 @@ def test_a_start_that_fails_once_is_tried_again_before_he_hears_of_it():
     with mock.patch.object(agents, '_acp_road', return_value=True), \
          mock.patch.object(agents, 'run_acp', side_effect=acp_mod.ACPStartError('session/new: Internal error')):
         with pytest.raises(RuntimeError, match='did not start'): agents.run_cli(prof, 'draw it', lambda *a, **k: None)
+
+
+def test_each_installed_adapter_is_primed_once_and_let_go():
+    """The owner, 2026-11-22: "still takes 40 seconds" - the first start after launch spent 9.4 s loading the adapter cold; later ones under 4 s.
+    Each adapter this computer has is started once in the background and closed; none it lacks."""
+    from taskuary import acp as acp_mod
+    made = []
+    class Fake:
+        def __init__(self, *a, **k): made.append(a[0]); self.closed = False
+        def connect(self): return {}
+        def close(self): self.closed = True
+    have = lambda c: [f'/opt/bin/{c}'] if c == 'codex' else []
+    with mock.patch.object(agents, '_resolve_cmd', side_effect=have), mock.patch.object(acp_mod, 'ACPClient', Fake), \
+         mock.patch.object(agents.pathcache, 'which', return_value=None):
+        assert agents._prime_adapters(0) == ['codex'] and len(made) == 1

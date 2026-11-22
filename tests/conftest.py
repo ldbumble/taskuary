@@ -521,6 +521,13 @@ def no_stop_left_over():
 
 
 @pytest.fixture(autouse=True)
+def no_adapter_priming(monkeypatch):
+    "A server a test starts never launches the real ACP adapters to warm them (agents.prime_adapters)."
+    from taskuary import agents
+    monkeypatch.setattr(agents, 'prime_adapters', lambda *a, **k: [])
+
+
+@pytest.fixture(autouse=True)
 def no_real_acp_adapters(request, monkeypatch):
     """The ACP road (agents._acp_road) launches claude and codex through npm adapters (clis.ADAPTERS): a test driving a fake `claude`
     would fetch and start the real adapter instead - minutes on CI, and the argv road's own behaviour never tested. Only the ACP

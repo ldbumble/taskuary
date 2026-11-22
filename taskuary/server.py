@@ -260,6 +260,8 @@ async def _lifespan(_app):
     except Exception as e: logger.warning(f'reminders on start skipped: {e}')
     _start_new_walk()              # a relaunch opens a NEW chat rather than resuming the last one - off the window's path
     threading.Thread(target=_warm_reads, daemon=True, name='warm-reads').start()     # the page's first reads, made before it asks
+    if not demo.enabled():          # ...and the agents' adapters, loaded once in the background so his first ask does not wait on a cold start
+        threading.Thread(target=hub_agents.prime_adapters, daemon=True, name='prime-adapters').start()
     catch_up_on_startup()          # defined below; resolved when the app actually starts
     try:                           # archived chats past their keep-days go on the app's own clock (PW-158), never on a history read
         from . import retention

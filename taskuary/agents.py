@@ -1709,6 +1709,27 @@ def _acp_spare(cmd, env: dict, timeout):
     return c
 
 
+# THE FIRST START AFTER THE APP OPENS IS PAID FOR IN THE BACKGROUND (the owner, 2026-11-22: "still takes 40 seconds" under "Waiting for the agent
+# to start"; timed: the first start's connect took 9.4 s, every later one under 4 s - the adapter and its CLI loading cold from disk). Each
+# adapter a road here uses is started once, a while after launch, and let go once it answers: nothing is asked of it, nothing is kept
+PRIME_AFTER = 20
+def prime_adapters(wait: float = PRIME_AFTER) -> list:
+    "Start and close each installed ACP adapter once (clis.ADAPTERS), so his first real start finds them warm. -> the ones primed."
+    time.sleep(wait)
+    from . import config
+    done = []
+    for name in clis_mod.ADAPTERS:
+        try:
+            if not _resolve_cmd(name): continue                  # ...a CLI this computer does not have needs no warm adapter
+            l = acp_launch({'cmd': name, 'args': clis_mod.preset_args(name) or []})
+            t0 = time.time(); c = acp_mod.ACPClient(l['cmd'][0], l['cmd'][1:], cwd=str(config.home()), env={**os.environ, **l['env']}, timeout=120)
+            try: c.connect(); done.append(name); logger.info(f'acp: {name} adapter primed in {time.time() - t0:.1f}s - the first task start finds it warm')
+            finally: c.close()
+        except Exception as e: logger.debug(f'acp: {name} adapter not primed - {e}')
+    return done
+_prime_adapters = prime_adapters      # ...the real one, for its own test (tests/conftest.py turns priming off for every server a test starts)
+
+
 @atexit.register
 def _close_spares():
     with _ACP_SPARE_LOCK: gone = list(_ACP_SPARE.values()); _ACP_SPARE.clear()
@@ -1720,6 +1741,9 @@ def _acp_open(name: str, launch: dict, cwd, env: dict, resume, timeout, trace, f
     its mode, model and effort set. ACPStartError for anything before the session exists - nothing has run, so run_cli takes
     the argv road instead. `base`: the environment with nothing of this task in it - given, claude's adapter runs on it (one started
     ahead where there is one) and the task's own part rides with its session."""
+    # ...EACH PHASE OF A START TIMED, in the log (the owner, 2026-11-22: "still takes 40 seconds" under "Waiting for the agent to start"): spawn,
+    # connect, session - so where a slow start spends its seconds is read, never guessed
+    t0 = time.time(); at = {}
     spare = base is not None and bool(launch['adapter']) and _cli_name(name) == 'claude'
     if spare:
         own = {k: v for k, v in env.items() if base.get(k) != v}
@@ -1731,10 +1755,12 @@ def _acp_open(name: str, launch: dict, cwd, env: dict, resume, timeout, trace, f
     except PermissionError as e:
         if launch['adapter']: raise acp_mod.ACPStartError(f"{launch['adapter']} was refused: {e}") from e   # the adapter, not the CLI
         raise FileNotFoundError(denied_msg(name, launch['cmd'][0], e)) from e
+    at['spawn'] = time.time()
     client.unnamed_own = bool(launch.get('unnamed_own'))           # ...its adapter's own lines, told from the model's (acp.prompt)
     if spare: _acp_ready(launch['cmd'], base, timeout)              # ...the next task's, started now
     try:
         caps = client._caps if client._caps else client.connect()
+        at['connect'] = time.time()
         try:
             if resume and (caps.get('loadSession') or client.can_resume()):
                 try: client.load_session(resume, cwd, meta=launch['meta'])
@@ -1751,6 +1777,9 @@ def _acp_open(name: str, launch: dict, cwd, env: dict, resume, timeout, trace, f
             raise acp_mod.ACPStartError(f'session: {e}') from e
         if launch['mode'] and not client.set_option('mode', launch['mode']):
             logger.warning(f"acp: {name} has no '{launch['mode']}' mode - it runs in {client.option('mode').get('currentValue') or 'its own'}")
+        done = time.time()
+        logger.info(f"acp: {name} opened in {done - t0:.1f}s - spawn {at.get('spawn', t0) - t0:.1f}s, connect {at.get('connect', t0) - at.get('spawn', t0):.1f}s, "
+                    f"session {done - at.get('connect', t0):.1f}s{' (resumed)' if resume else ''}")
         return client
     except BaseException:
         client.close(); raise

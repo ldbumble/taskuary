@@ -59,14 +59,15 @@ class TheRosterTests(unittest.TestCase):
     def test_researcher_and_analyst_are_split_on_whose_information_it_is(self):
         """The first pair of purpose lines both read as "find out something", so "look into last
         month's spend" could land on either (the owner, 2026-09-10: "sharpen analyst vs
-        researcher"). The line is OUTSIDE vs OUR OWN, and each document says it too, so a session
+        researcher"). The line is from outside vs our own (said in sentence case since the design walk,
+        2026-11-20), and each document says it too, so a session
         that starts on the wrong side of it hands the job back instead of guessing."""
         from pathlib import Path
         import taskuary
         res, ana = hub_agents.DEFAULT_PROFILES['researcher']['purpose'], hub_agents.DEFAULT_PROFILES['analyst']['purpose']
-        self.assertIn('OUTSIDE', res)
-        self.assertIn('OUR OWN', ana)
-        self.assertNotIn('OUTSIDE', ana)
+        self.assertIn('from outside', res.lower())
+        self.assertIn('our own', ana.lower())
+        self.assertNotIn('outside', ana.lower())
         tpl = Path(taskuary.__file__).parent / 'templates'
         self.assertIn('analyst', tpl.joinpath('researcher.md').read_text(encoding='utf-8'))
         self.assertIn('researcher', tpl.joinpath('analyst.md').read_text(encoding='utf-8'))

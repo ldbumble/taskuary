@@ -160,6 +160,8 @@ class NoBlanketSoulTests(unittest.TestCase):
         rv = {'Deliver': json.dumps({'kind': 'email', 'channel': 'email'})}                  # an email of its own, as propose_email files it
         self.assertEqual(signatures.agent_signed(s, rv, 'Hi Gail,\n\nThe contract is attached.\n\nThanks,\nAlex Doyle'),
                          'Hi Gail,\n\nThe contract is attached.\n\nBest,\nAlex')
+        self.assertEqual(signatures.agent_signed(s, rv, 'Hi Paula,\n\nDoes Tuesday at 10:00 suit you?\n\nThanks,'),     # ...a closing left nameless
+                         'Hi Paula,\n\nDoes Tuesday at 10:00 suit you?\n\nBest,\nAlex')
         tid = make(s, 'general')
         told = ' '.join(general._prompt(s, tid)[0].split())
         self.assertNotIn('Sign letters and emails as Alex Doyle', told)

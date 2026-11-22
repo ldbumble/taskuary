@@ -278,6 +278,10 @@ def signed(text: str, sig: str, names=()) -> str:
     if body.endswith(sig.strip()): body = body[:-len(sig.strip())].rstrip()
     lines = [l for l in sig.splitlines() if l.strip()]
     body = strip_signoff(body, lines + [l.split()[0] for l in lines] + list(names)) or body
+    # ...and a closing left with no name under it ("Thanks," - the writer told its name goes on) is the letter's closing by its SHAPE: the saved
+    # block is the closing now (the fix1 walk, 2026-11-21: "Thanks,\n\nBest, Alex")
+    ls = body.rstrip().splitlines()
+    if len(ls) > 1 and ls[-1].rstrip().endswith(','): body = '\n'.join(ls[:-1]).rstrip()
     return with_signature(plain_text(body) or body, sig)
 
 

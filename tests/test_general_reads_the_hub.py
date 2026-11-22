@@ -67,3 +67,24 @@ class GeneralReadsTheHubTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ASlowRankingNeverHoldsTheTurn(unittest.TestCase):
+    """Timed on New, 2026-11-22: the ranking of what is already known (context.recall - a model call) held the first turn 2-3 s before
+    its agent began. An agent's turn waits on it a moment (RECALL_WAIT), and what it finds lands in the turn after."""
+
+    def test_the_turn_goes_at_once_and_the_next_one_reads_what_was_found(self):
+        import threading, time
+        s, tid = GeneralReadsTheHubTests._store(None)
+        old = next(t['TaskId'] for t in s.list_tasks(status='done'))
+        gate = threading.Event()
+        def slow(*a, **k): ran.append(1); gate.wait(5); return {'hub': [], 'past': [f'task:{old}'], 'repo': []}
+        ran = []
+        with mock.patch('taskuary.textsim.pick', side_effect=slow), mock.patch('taskuary.calendar.today', return_value=TODAY):
+            t0 = time.time(); first = context.for_prompt(s, tid); took = time.time() - t0
+            self.assertLess(took, 2, 'the turn waited on the ranking')
+            self.assertTrue(ran, 'the ranking was never asked'); gate.set()
+            self.assertTrue(any(time.sleep(0.05) or not context._judging for _ in range(100)))
+            second = context.for_prompt(s, tid)
+        self.assertNotIn(context.KNOWN_HEAD, first)            # ...the turn went without it
+        self.assertIn(context.KNOWN_HEAD, second)              # ...and the next one reads what was found

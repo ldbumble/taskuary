@@ -13,7 +13,7 @@ a stray file in a shared checkout gets staged by somebody (commit 8abb175 exists
 and a .gitignore in every repo is not ours to write. The seed points at it: "read this first".
 """
 import json, re, threading
-from concurrent.futures import Future
+from concurrent.futures import Future, TimeoutError as FutureTimeout
 from datetime import datetime, timedelta
 from loguru import logger
 
@@ -84,7 +84,7 @@ DONE_POOL = 400          # the closed tasks a past-work read looks among, newest
 # matched only a post carrying the whole query. Now one judgement of meaning (textsim.pick: embeddings, else one light model call over
 # the titles) picks the few Hub notes, closed tasks and the repository this task is about, once per task, and the brief leads with them
 RECALL_HUB, RECALL_PAST, RECALL_LINE, RECALL_TTL = 5, 5, 220, 6 * 3600
-RECALL_RETRY, RECALL_KEPT = 120, 512    # an open does not ask again for 2 min after a judgement failed; at most this many are kept
+RECALL_RETRY, RECALL_KEPT, RECALL_WAIT = 120, 512, 0.5    # an open does not ask again for 2 min after a judgement failed; at most this many are kept
 _recalled: dict = {}             # (task, what it is about) -> (until, picks, made): every turn rebuilds the brief, the judgement is made once
 # ...AND IT IS MADE BEFORE THE TURN ASKS FOR IT (speed round, 2026-11-18): on a store with a few hundred closed tasks the one light model call
 # that reads their titles took ~3 s of the ~4 s before a first turn's prompt was handed to its CLI. warm() starts that same judgement when
@@ -97,10 +97,13 @@ REPO_LIST = "the owner's repositories and what each is"
 NOTHING = {'hub': [], 'past': [], 'repo': '', 'why': ''}
 
 
-def recall(store, tid: int, msgs: list = None, repo: str = None) -> dict:
+def recall(store, tid: int, msgs: list = None, repo: str = None, wait: float = None) -> dict:
     """{'hub': [post rows], 'past': [task ids], 'repo': name or '', 'why': how the repo was found} - what is already known that bears on
-    this task. NOTHING on a stranger's task (the Hub and the owner's past work are company fact) and where nothing can judge."""
-    return _judgement(store, tid, msgs, repo, now=True).result()
+    this task. NOTHING on a stranger's task (the Hub and the owner's past work are company fact) and where nothing can judge.
+    `wait`: at most this long, else NOTHING now - the judgement goes on behind, kept for the next read (an agent's turn: build)."""
+    f = _judgement(store, tid, msgs, repo, now=True, behind=wait is not None)
+    try: return f.result(timeout=wait)
+    except FutureTimeout: return NOTHING
 
 
 def warm(store, tid: int) -> None:
@@ -117,7 +120,7 @@ def brief_messages(store, tid: int) -> list:
     return [m for m in store.list_messages(tid) if m.get('Status') != 'context']
 
 
-def _judgement(store, tid, msgs, repo, now: bool) -> Future:
+def _judgement(store, tid, msgs, repo, now: bool, behind: bool = False) -> Future:
     """The Future of recall's picks for what the task is about now: the one kept, the one in flight, or a new one - run here (`now`) or
     behind the caller. Keyed by what it ranks, so a judgement made for other words is never the answer."""
     from . import origin
@@ -143,7 +146,7 @@ def _judgement(store, tid, msgs, repo, now: bool) -> Future:
         _keep(key, out or NOTHING, RECALL_TTL if out else RECALL_RETRY, bool(out))
         done.set_result(out or NOTHING)
         with _judging_lock: _judging.pop(key, None)
-    if now: judge()
+    if now and not behind: judge()
     else: threading.Thread(target=judge, daemon=True, name=f'recall-{tid}').start()
     return done
 
@@ -770,7 +773,9 @@ def build(store, tid: int, msgs: list = None, repo: str = None, general: bool = 
     try: came = came_in(store, tid)
     except Exception as e: logger.debug(f'context: what came in skipped - {e}'); came = ''
     if came: parts.append(came)
-    try: rc = recall(store, tid, msgs, repo)
+    # ...an agent's turn waits on it only a moment (timed on New, 2026-11-22: the ranking held the first turn 2-3 s before its agent began):
+    # what is known lands in the turn after, never in place of a start
+    try: rc = recall(store, tid, msgs, repo, wait=RECALL_WAIT if general else None)
     except Exception as e: logger.debug(f'context: nothing recalled for task {tid} - {e}'); rc = NOTHING
     # WHO THE OWNER IS (SOUL.md + JOB.md), the same background the general assistant reads (brief.background) - here, not in the
     # seed, which a terminal types and must keep short (the owner, 2026-10-14)

@@ -339,8 +339,9 @@ class SignedInIsAPressOnEveryAgent(unittest.TestCase):
             out = ws.answer(s, tid, 'signin:toll.example', 'Signed in', 'owner')
             self.assertEqual(ws.status(s, tid)['requests'], [])
         self.assertTrue(out['delivered'], out)
-        self.assertEqual(typed, [('run1', 'Signed in to toll.example - continue. The owner signed in on the page themselves.')])
-        self.assertTrue(any('Signed in to toll.example - the agent goes on.' in (c.get('Body') or '') for c in s.list_comments(tid)))
+        # ...told as the press it is (round 3, 2026-11-22: a press with nothing typed was told "the owner signed in on the page themselves")
+        self.assertEqual(len(typed), 1); self.assertTrue(typed[0][1].startswith('The owner pressed Signed in on the toll.example page'), typed)
+        self.assertTrue(any('You pressed Signed in on toll.example' in (c.get('Body') or '') for c in s.list_comments(tid)))
 
     def test_other_words_to_a_sign_in_ask_stay_the_owners(self):
         self.assertTrue(signin.said_done('signin:toll.example', ' signed in. '))

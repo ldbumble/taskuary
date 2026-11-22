@@ -609,5 +609,5 @@ def test_each_installed_adapter_is_primed_once_and_let_go():
         def close(self): self.closed = True
     have = lambda c: [f'/opt/bin/{c}'] if c == 'codex' else []
     with mock.patch.object(agents, '_resolve_cmd', side_effect=have), mock.patch.object(acp_mod, 'ACPClient', Fake), \
-         mock.patch.object(agents.pathcache, 'which', return_value=None):
+         mock.patch.object(agents.pathcache, 'which', return_value=None), mock.patch.object(agents.acpadapter, 'kept', return_value='/opt/kept/codex-acp'):
         assert agents._prime_adapters(0) == ['codex'] and len(made) == 1

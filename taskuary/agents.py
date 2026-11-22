@@ -1721,6 +1721,13 @@ def prime_adapters(wait: float = PRIME_AFTER) -> list:
     for name in clis_mod.ADAPTERS:
         try:
             if not _resolve_cmd(name): continue                  # ...a CLI this computer does not have needs no warm adapter
+            # ...and one NOT YET KEPT is fetched now, not behind his first ask (timed 2026-11-22: through npx a Claude start's connect took 3-10 s,
+            # from the kept copy 0.6-0.8 s); acp_launch starts that fetch, and the prime waits for it to land before warming the copy itself
+            l = acp_launch({'cmd': name, 'args': clis_mod.preset_args(name) or []})
+            ad = clis_mod.ADAPTERS[name]
+            for _ in range(60):
+                if acpadapter.kept(ad) or (pathcache.which(ad['bin']) and acpadapter.runs_pinned(ad, pathcache.which(ad['bin']))): break
+                time.sleep(5)
             l = acp_launch({'cmd': name, 'args': clis_mod.preset_args(name) or []})
             t0 = time.time(); c = acp_mod.ACPClient(l['cmd'][0], l['cmd'][1:], cwd=str(config.home()), env={**os.environ, **l['env']}, timeout=120)
             try: c.connect(); done.append(name); logger.info(f'acp: {name} adapter primed in {time.time() - t0:.1f}s - the first task start finds it warm')

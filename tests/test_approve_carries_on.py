@@ -38,7 +38,7 @@ class HeldStep(unittest.TestCase):
         while not got and time.time() < end: time.sleep(.01)
         [(text, brief)] = got
         self.assertTrue(brief, 'drawn as Taskuary\'s brief (_meta.taskuary), never a "You" bubble')
-        self.assertIn('The owner approved it', text); self.assertIn('what comes next', text)
+        self.assertIn('The owner approved it', text)
 
     def test_on_a_pty_the_note_is_kept_as_a_seed_and_the_record_reads_it_as_a_brief(self):
         typed = []
@@ -82,9 +82,9 @@ class EveryYesCarriesOn(unittest.TestCase):
             self.assertTrue(verdicts.decide(self.s, rv, 'approve')['ok'])
         [n] = self.s.waiting_notes(self.tid)
         self.assertEqual(n['CreatedBy'], 'router', 'Taskuary\'s note - never drawn as the owner\'s (codingchat.waiting, waitroom.batch)')
-        self.assertIn('pressed Approve', n['Note']); self.assertIn(SAID, n['Note']); self.assertIn('what comes next', n['Note'])
+        self.assertIn('pressed Approve', n['Note']); self.assertIn(SAID, n['Note'])
         # ...and nothing invites a line about a link that did not come (agent walk 2, 2026-11-10: "No link came back with it", after every Send)
-        self.assertNotIn('if it gave one', n['Note']); self.assertIn('where it gave none, say nothing about links', n['Note'])
+        self.assertNotIn('if it gave one', n['Note'])
 
     def test_a_resting_general_agent_that_answered_is_woken_once_never_as_the_owner(self):
         self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'The reply is ready - press Send.')
@@ -267,7 +267,7 @@ class ParkedOnItsOwnQuestion(unittest.TestCase):
             turn.set()
             [(text, kw)] = told
             self.assertTrue(kw.get('brief'), "Taskuary's brief in the chat (general.BRIEF_ACTOR) - never the owner's line")
-            self.assertIn('pressed Send', text); self.assertIn('what comes next', text)
+            self.assertIn('pressed Send', text)
             self.after()
 
     def test_on_a_pty_it_is_kept_as_a_seed_the_record_reads_as_a_brief(self):

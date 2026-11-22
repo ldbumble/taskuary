@@ -1065,9 +1065,14 @@ def _changed(store, r) -> str:
     return f" - they changed your text first; {'what went' if state == 'sent' else 'what they pressed Send on'}: {_quote(went, 600)}" if changed else ''
 # A PRESS THE AGENT SAID IT WAITS ON WAKES IT, ONCE (the owner, 2026-11-08): a press is otherwise a line it hears with the owner's next one -
 # but a turn that asked for Send or a hand-off and said it would follow up (its summary's `after_press`) is started again by that press
+# ...AND A PRESS ON A CARD IS SAID BY ITS CARD (the owner's rules, part 4: "a card says what it did, never repeated as a chat line"): woken by
+# Send, the agent wrote "Your email to Erin has been sent" under the card reading Sent - told to say in a line what the press did (NEXT, the
+# browser's word, where no card shows it)
+CARD_SAYS = ('Its card already says what the press did: never say that again - say only the next thing you do, or nothing; something '
+             'sent is sent, never received, read or acted on until someone answers. A link the result gave that the card does not show goes '
+             'in that line.')
 FOLLOW_UP = ('The owner just pressed what your last turn waited on (see what the owner did since your last answer). Carry on from there as '
-             'you said you would - check it landed first; never redo it. Its card already says what the press did: never say that again - '
-             'say only the next thing you do, or nothing.')
+             'you said you would - check it landed first; never redo it. ' + CARD_SAYS)
 _WOKEN: set = set()
 # ...AND WHAT IS SAID WHILE THAT WAKE IS STILL STARTING RIDES IN IT (the held-steps round, 2026-11-18): two cards pressed a few seconds apart on a
 # resting agent - the second press found its answer already woken, no session up yet to queue for, and its words went nowhere: the task said
@@ -1203,7 +1208,6 @@ def approved(store, tid: int, press: str, what: str, actor: str = 'owner', revie
     """Hand task `tid`'s agent the approval that went, as `to_agent` hands anything: 'told', 'woke' or ''. Said ONCE (the owner's rules, part 3:
     "the same fact reads the same ... one function says it"): with what the owner changed before it went, and marked on `review` so the
     prompt's WHAT THE OWNER DID does not say it a second time."""
-    from .browsergate import NEXT
     # ...A PRESS WAKES ITS AGENT ONLY WHERE THERE IS A NEXT STEP (the owner, 2026-11-22: "only wake agent where there is next steps"): woken by
     # every Send, it said "I've sent the email to Gail" under the card that already read Sent. One at work hears it now; one at rest that said
     # nothing comes after the press hears it in its next turn's WHAT THE OWNER DID - unmarked here, so said there once
@@ -1211,7 +1215,7 @@ def approved(store, tid: int, press: str, what: str, actor: str = 'owner', revie
     r = store.get_review(int(review)) if review else None
     from .cardqueue import screen
     mark = r and (lambda how: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': how}))
-    return to_agent(store, tid, APPROVED.format(press=press, what=' '.join(str(what or 'done').split())[:400] + (_changed(store, r) if r else '')) + NEXT
+    return to_agent(store, tid, APPROVED.format(press=press, what=' '.join(str(what or 'done').split())[:400] + (_changed(store, r) if r else '')) + CARD_SAYS
                 + (f'\n\n{line}' if (line := screen(store, tid)) else ''), actor, heard=mark)
 # A PRESS THAT FAILED IS HANDED BACK AT ONCE (the owner, 2026-11-16: "we can't have an agent asking to do something then it does nothing or
 # errors out, at least hand back to agent so we are not left hanging"): an approved INSERT failed on its card, the task sat on "waiting on you",

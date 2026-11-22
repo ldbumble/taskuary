@@ -27,6 +27,9 @@ if (BRAIN === "cli") { const claude = where("claude").find((p) => !WIN || /\.cmd
 // scratch profile (the folder above AGENT_BROWSER_HOME, harness.mjs). Nothing of a walk is written to the person's own driver folder.
 // ...REAL_EXTRA_PATH: more folders of programs - an ACP adapter installed in a scratch folder (npm i --prefix), found on PATH as the owner's own
 if (process.env.REAL_EXTRA_PATH) real.unshift(...process.env.REAL_EXTRA_PATH.split(path.delimiter));
+// ...and the machine's python, as a real one has it on its PATH (the walk, 2026-11-22: only `py` was found, so every made-file ask began with
+// one failed `python` call - a walk artefact, not the app's)
+try { const py = where("python").find((p) => !/WindowsApps/i.test(p)); if (py) real.push(path.dirname(py)); } catch { /* no python here: nothing to add */ }
 if (process.env.REAL_BROWSER === "own") real.push(path.dirname(where("agent-browser")[0]));
 else if (process.env.REAL_BROWSER) {
   const exe = path.join(path.dirname(where("agent-browser")[0]), "node_modules", "agent-browser", "bin", "agent-browser-win32-x64.exe"), shim = path.join(out, "shim");

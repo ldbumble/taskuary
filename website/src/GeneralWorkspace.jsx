@@ -60,7 +60,6 @@ import ReviewDecision, { MoreCardsCtx } from "./ReviewDecision.jsx";
 import { askNote, heldActsLine, proposalFrom } from "./reviewProposal.js";
 import BriefLine from "./BriefLine.jsx";
 import { OneBox } from "./AgentSummary.jsx";
-import { turnOnYou } from "./agentSummary.js";
 import HeldStart from "./HeldStart.jsx";
 import { readingOf } from "./threadReading.js";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
@@ -446,7 +445,7 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
   // ...and never under the turn's own open question (the audit, 2026-11-15: "What is your plate number?" in its words, then "For you to do:
   // Tell me your plate number"): what it asks him IS what is left to him, said once. THE TURN'S OWN, KEPT (design round 5, I3): the list says
   // which turns say it (`on_you`, conversation.left_on_him), settled once - it never leaves a turn for the next one
-  const onYou = t.on_you && !live && sum ? turnOnYou(sum) : "";
+  // ...AND WHAT IS LEFT ON HIM IS ITS BUTTON OR NOTHING (the owner, 2026-11-22: "For you to do:" prose goes) - the card, the bar or his box says it
   const again = React.useContext(AgainCtx), stopTries = React.useContext(StopTriesCtx);
   // ...WHILE THE CLI COMPACTS ITS CONTEXT the turn at work says so (the owner, 2026-11-10: "show compacting like claude code does"): its newest
   // step is the compaction, not yet over
@@ -481,7 +480,6 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
       {!!cards?.length && <div data-tq-turn-cards="">{cards}</div>}
       {/* ...what it left on him, at its FOOT, under its cards (design round 5, I3): said once they are pressed, it stood up over them - a line
           drawn in the middle of what was already there */}
-      {!!onYou && <div className="tq-aui-summary" data-tq-on-you="" style={{ marginTop: 10 }}><Md text={onYou} /></div>}
       {/* ...and the dots say what is happening, or what we wait for, on every level: one quiet line that keeps its place (workingLine) -
           LAST in the turn, under what it has made and asked so far: a chat's newest word is at its foot (the owner, 2026-11-18) */}
       {live && <div className="tq-aui-thinking" role="status" aria-label="The agent is at work" data-tq-working="" {...(t.state === "starting" ? { "data-tq-starting-line": "" } : {})}><i /><i /><i />{compacting

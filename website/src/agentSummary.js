@@ -1,7 +1,6 @@
 // WHERE THE OWNER STANDS AFTER A TURN (general.SUMMARY_TYPE, Task 3.5): each answer may carry `summary` = {about, did, on_you, nothing_left},
 // drawn as "What this is about" / "What I did" / "Next steps" (AgentSummary.jsx). No React, so it runs under bare node.
 import { asUtc } from "./dates.js";
-import { stepOf, stepsLine } from "./checklist.js";
 
 // a reply drafted and not yet sent - an action (a playbook, a held browser act) or a slot email is not one
 const isDraft = (r) => !!r && r.Kind !== "action" && r.Kind !== "slot" && r.Status === "pending";
@@ -56,7 +55,6 @@ const answerWords = (w) => { const t = String(w || "").trim(); return !!t && (t.
 // the words, on each turn the list says left something on him (conversation.left_on_him)
 // ...the agent keeps it out of its words (selfclose.SUMMARY_LINE): a substring match on them missed every rephrasing and repeated the prose (the
 // walk, 2026-11-17), so none is made - and a turn that said nothing is left has nothing left to draw
-export const turnOnYou = (summary) => (summary?.nothing_left ? "" : stepsLine("For you to do", (summary?.on_you || []).filter(stepOf)));
 export const answerShown = (summary, words) => !String(words || "").trim() ? false
   : typeof summary?.answer_is_result === "boolean" ? summary.answer_is_result : answerWords(words);
 

@@ -7,12 +7,7 @@ const read = (f) => readFileSync(fileURLToPath(new URL(f, import.meta.url)), "ut
 
 
 // A QUESTION IS SAID ONCE (the audit, 2026-11-15: the agent's words ended on its question, and "For you to do: Tell me ..." said it again under them)
-test("a turn's open question is not said again as what is left to him", async () => {
-  const fs = await import("node:fs");
-  const src = read("../src/GeneralWorkspace.jsx");
-  assert.match(src, /const onYou = t\.on_you && !live && sum \? turnOnYou\(sum\) : "";/);   // ...each turn's own, settled by the list (design round 5)
-  assert.match(src, /owes = onYouTurn\(items, \{ askAt, landAt: landIn \}\)/);
-});
+
 
 // The chat's stylesheet styles only what the chat draws: a rule for a class no element carries is a second, drifting copy of a look
 // (several such rules still carried the 9px tracked capitals the chat dropped). A class is carried when a source file names it, or

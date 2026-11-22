@@ -8,7 +8,6 @@ import AttachFileIcon from "@mui/icons-material/AttachFile";
 import SendIcon from "@mui/icons-material/ArrowUpward";
 import api from "./api.js";
 import { hasReply, nextSteps, oneLine } from "./agentSummary.js";
-import { stepsLine } from "./checklist.js";
 import { isCardReview } from "./actionCard.js";
 import { Md } from "./md.jsx";
 import { MicButton } from "./ui.jsx";
@@ -26,14 +25,7 @@ const who = (r) => r.FromName || r.FromEmail || "";
 const PARA = { ...LINE, mt: 1 };
 // A REGULAR CHAT (the owner, 2026-11-05: "it's just a chat with it summarizing in different paragraphs (short text as possible) this is the chat,
 // this is what i did about it and this is what i suggest" - "hate all the boxes ... no lines"): plain paragraphs, no rules, no boxes, no
-// "On you:" line per step - the steps only the owner can take are ONE sentence, the first three and how many more the To do holds
-const ONYOU_SHOWN = 3;
-const OnYou = ({ items }) => {
-  if (!items.length) return null;
-  const more = items.length - ONYOU_SHOWN;
-  return <Typography data-tq-on-you={items.map((i) => i.id || "").join(" ")} sx={LINE}>
-    {stepsLine("For you to do", items.slice(0, ONYOU_SHOWN).map((i) => i.text), more > 0 ? `, and ${more} more in the On you line under To do` : "")}</Typography>;
-};
+// "On you:" line - a step only the owner can take is its button, or not drawn (the owner, 2026-11-22)
 // NEXT STEPS HOLD THE REPLY (the owner, 2026-11-05: "next steps should be above or combined with suggested reply as that's the next steps.
 // meaning review the file then send it"): one head, what is on the owner first, then the draft with its Send
 const DraftHead = () => <Head>Next steps</Head>;
@@ -78,16 +70,16 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
     </Box>}
     {made}{lead}
     <Drafted /></>) : made || lead ? <>{made}{lead}</> : null;
-  const { drafts, onYou, held: heldAll, nothing } = nextSteps({ summary, reviews, checklist, acts, cards });
+  const { drafts, held: heldAll, nothing } = nextSteps({ summary, reviews, checklist, acts, cards });
   const held = heldAll.filter((r) => !isCardReview(r));        // an act with its card (a post) leads Next steps - never "a step waits, below"
   return (
     <Box data-tq-summary="open" className="tq-aui-summary">
       {!!about && <><Head first>What this is about</Head><Typography data-tq-summary-about="" sx={LINE}>{about}</Typography></>}
       {!!did && <><Head first={!about}>What I did</Head><Box data-tq-summary-did="" sx={LINE}><Md text={did} /></Box></>}
       {made}
-      {lead || (next && hasReply(reviews)) || (drafts.length && !next) || held.length || onYou.length || (nothing && !lead) ? <DraftHead /> : null}
+      {lead || (next && hasReply(reviews)) || (drafts.length && !next) || held.length || (nothing && !lead) ? <DraftHead /> : null}
       {lead}
-      <OnYou items={onYou} />
+      {/* ...what is left on him is its button or nothing (the owner, 2026-11-22): no "For you to do" line */}
       {!!held.length && <Typography data-tq-summary-held={held.length} sx={LINE}>
         {held.length === 1 ? "One step waits for your Approve, below." : `${held.length} steps wait for your Approve, below.`}</Typography>}
       {!next && drafts.map((r) => <Typography key={r.ReviewId} data-tq-summary-draft={r.ReviewId} sx={LINE}>

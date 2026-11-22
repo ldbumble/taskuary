@@ -524,6 +524,9 @@ def test_a_usage_limit_over_acp_is_the_limit_every_road_raises():
     with pytest.raises(agents.RateLimited) as e:
         run(profile(), 'go', env={'FAKE_ACP_FAIL': 'quota'})
     assert str(e.value) == "You've hit your 5-hour limit · resets 12:10pm (America/New_York)"
+    # ...and it keeps the conversation it was on (the HIPAA walk, 2026-11-21): a 429's try again opened a fresh Codex thread and did the work twice
+    from taskuary import general
+    assert general._unfinished(e.value).session_id == 'sess_fake_1'
 
 
 @pytest.mark.parametrize('said', ["You've hit your usage limit. Upgrade to Pro or try again at 3:05 PM.", 'Not logged in · Please run /login'])

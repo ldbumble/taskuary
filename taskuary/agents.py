@@ -14,7 +14,7 @@ from . import clis as clis_mod
 from .store import task_ref
 from .timewords import clock
 from .clis import preset_args
-from .clipool import LIMITS, MID_TURN, Cancelled, PartWay, TimedOut, ended_early
+from .clipool import LIMITS, MID_TURN, Cancelled, PartWay, TimedOut, Unfinished, ended_early
 from .selfclose import without_summary
 
 _CLI_CHILDREN = set()
@@ -294,7 +294,9 @@ def raise_failure(name: str, said: str, cmd0: str = '', resume=None, raw=None, p
     the one-shot run's death with no words): what it is (failure_of) - else its own words. `part_way` is (sentence, conversation id) where the
     road knows the turn ended part-way (it died mid-turn, or ended early (a refusal, a limit), before a word or after some): raised as
     clipool.PartWay in that sentence alone."""
-    if e := failure_of(name, said, cmd0, resume, raw): raise e
+    if e := failure_of(name, said, cmd0, resume, raw):
+        if part_way: raise e from Unfinished(said, part_way[1])        # ...its conversation kept for the try again (run_acp)
+        raise e
     # ...no process name before it and no "(the CLI exited (3))" or stop code after it (the overnight walk, 2026-11-11) - those are the log's
     if part_way: logger.warning(f'{name}: {said[:500]}'); raise PartWay(*part_way)
     raise RuntimeError(f'{name}: {said[:500]}')
@@ -1890,8 +1892,11 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         # ...a stopped turn its agent did not end was ended by the backstop: still his stop, never a death
         if cancel is not None and cancel.is_set(): raise Cancelled(client.session_id) from e
         # ...a usage limit, a sign-in: read as every road reads them (failure_of) - an ACP limit was raw adapter text, and the router never rested it
-        if f := failure_of(name, str(e), launch['cmd'][0]): raise f from e
-        raise
+        # ...AND A TURN THAT FAILED KEEPS THE CONVERSATION IT WAS ON (the HIPAA walk, 2026-11-21): a gateway's 429 ended a first turn, and its
+        # try again opened a fresh Codex thread that learned it all again and wrote the workbook a second time. The try resumes this one
+        kept = Unfinished(str(e), client.session_id); kept.__cause__ = e
+        if f := failure_of(name, str(e), launch['cmd'][0]): raise f from kept
+        raise e from kept
     finally:
         over.set(); asked.set()
         # ...and a refusal's reason the turn went on past (its adapter answered the step "refused") is said by the one road, as it always was

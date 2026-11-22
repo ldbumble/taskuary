@@ -127,3 +127,16 @@ class OwnersAskTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_his_ask_from_new_is_his_own_words_so_what_he_asks_to_remember_is_kept():
+    """The walk, 2026-11-22: "Two things to remember from now on: I sign 'Best, Alex'; Gail handles payroll now" typed in New - the memory tool
+    refused both, "the owner has said nothing in this chat": the task's own row New files for his words (own:) read as a sender's mail. One
+    answer to "are these his own words" (wrapup.from_owner) reads it as his."""
+    from taskuary import general, ownwork, wrapup
+    s = MemoryStore(); tid = s.create_task({'Title': 'Remember how I sign and who does payroll', 'Kind': 'general', 'Status': 'in_progress',
+                                            'Summary': "I sign my emails 'Best, Alex'. Gail Moreno handles payroll now."}, 'owner')
+    mid = ownwork.ensure(s, tid)
+    assert mid and wrapup.from_owner(s, s.get_message(mid)) and general.owner_spoke(s, tid)
+    s.add_message({'TaskId': tid, 'ExternalId': 'm9', 'Channel': 'email', 'FromEmail': 'ray@northwind.example', 'BodyText': 'Payroll is mine.', 'Status': 'routed'})
+    assert not general.owner_spoke(s, tid), "a sender's mail on it is still not his"

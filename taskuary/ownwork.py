@@ -26,6 +26,7 @@ from loguru import logger
 CHANNEL = 'own'
 KIND = 'note'                      # the task kind a note-to-self creates
 SOURCE = 'you'                     # what the row says it came from
+def is_own(m) -> bool: return str((m or {}).get('ExternalId') or '').startswith(f'{CHANNEL}:')    # ...the task's own row: his ask from New (own_row)
 
 
 def _stamp(when=None) -> str:

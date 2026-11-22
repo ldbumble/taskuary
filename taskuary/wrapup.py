@@ -104,11 +104,13 @@ def resolution_text(rep: dict) -> str:
 
 
 def from_owner(store, m: dict, own: set = None) -> bool:
-    """Did the owner write this row - mail from one of their own addresses (ingest.own_addresses), or his ask from the New box (outbox.is_ask,
-    2026-11-17)? Nobody else is behind it."""
+    """Did the owner write this row - mail from one of their own addresses (ingest.own_addresses), his ask from the New box (outbox.is_ask,
+    2026-11-17), or the task's own row New files for his words (ownwork.is_own - the walk, 2026-11-22: missing here, "remember this" asked in
+    New was refused as "the owner has said nothing in this chat")? Nobody else is behind it. THE ONE ANSWER to "are these his own words"."""
     from .ingest import own_addresses
     from .outbox import is_ask
-    return is_ask(m) or str((m or {}).get('FromEmail') or '').strip().lower() in (own if own is not None else own_addresses(store)) - {''}
+    from .ownwork import is_own
+    return is_ask(m) or is_own(m) or str((m or {}).get('FromEmail') or '').strip().lower() in (own if own is not None else own_addresses(store)) - {''}
 
 
 def reply_target(store, task_id: int):

@@ -82,8 +82,11 @@ def owner_spoke(store, tid: int) -> bool:
     """Whether the owner's own words are on this task: a line they typed in its chat, or the task itself where no mail made it. What goes
     into their memory from a task is only theirs (the remember tool) - a sender's mail on a task they never spoke on is not."""
     if any(c.get('ActorType') in (USER_TYPE, WAITING_TYPE) and not is_brief(c) for c in store.list_comments(tid, internal=True)): return True
-    from .outbox import is_ask
-    return not any(str(m.get('Direction') or 'in') != 'out' and not is_ask(m) for m in store.list_messages(tid))
+    from .ingest import own_addresses
+    from .wrapup import from_owner
+    ms, own = store.list_messages(tid), None
+    if ms: own = own_addresses(store)
+    return not any(str(m.get('Direction') or 'in') != 'out' and not from_owner(store, m, own) for m in ms)
 def _kept_text(body) -> str:
     "The words of a line kept for a turn (wait_line's JSON)."
     try: got = json.loads(body or '{}')

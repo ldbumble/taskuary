@@ -595,7 +595,7 @@ def test_a_start_that_fails_once_is_tried_again_before_he_hears_of_it():
         assert agents.run_cli(prof, 'draw it', lambda *a, **k: None) == ('done', 'sid1', '') and len(calls) == 2
     with mock.patch.object(agents, '_acp_road', return_value=True), \
          mock.patch.object(agents, 'run_acp', side_effect=acp_mod.ACPStartError('session/new: Internal error')):
-        with pytest.raises(RuntimeError, match='did not start'): agents.run_cli(prof, 'draw it', lambda *a, **k: None)
+        with pytest.raises(RuntimeError, match="couldn't start just now"): agents.run_cli(prof, 'draw it', lambda *a, **k: None)
 
 
 def test_each_installed_adapter_is_primed_once_and_let_go():

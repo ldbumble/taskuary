@@ -351,7 +351,7 @@ class GatewayAddressTests(unittest.TestCase):
     def test_the_saved_address_is_what_test_and_the_model_list_use(self):
         with _Gateway(self.allow) as g:
             self.s.save_connector({'ConnectorId': self.cid, 'Secret': self.CODE, 'ConfigJson': json.dumps({'base_url': g.url})}, 'owner')
-            self.assertIn('model responded: ok', llm.test_ai(self.s, self.cid))
+            self.assertEqual(llm.test_ai(self.s, self.cid), 'The AI answered - it is ready to use.')
             self.assertEqual(llm.list_models('hipaa_ai', {'base_url': g.url}, self.CODE), ['hipaa-ai'])
 
     def test_the_connections_card_saves_it_normalised_and_says_when_it_is_built_in(self):
@@ -543,3 +543,13 @@ def test_a_session_saved_on_hipaa_ai_follows_the_setting_once_it_is_put_back():
     assert general._unset_gateway(s, pick) is False                 # set: a saved session on it is kept
     s.set_setting('assistant_ai', '', 'owner')
     assert general._unset_gateway(s, pick) is True and general.default_pick(s, s.get_task(tid)) != pick
+
+
+def test_a_turned_down_key_is_said_in_plain_words_never_the_raw_http_answer():
+    "Walk 5, 2026-11-22: a connection's Test printed \"openrouter error 401 at https://... {\\\"error\\\": ...}\" - its status went unread."
+    from types import SimpleNamespace
+    from taskuary import llm, say
+    e = llm.refused('openrouter', SimpleNamespace(status_code=401, text='{"error":{"message":"User not found."}}', headers={}),
+                    'https://openrouter.example/api/v1/chat/completions', 'm')
+    said = say.plain_failure(e)
+    assert said.startswith('The service turned the key or password down') and 'http' not in said and '{' not in said

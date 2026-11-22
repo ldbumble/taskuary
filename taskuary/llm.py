@@ -159,7 +159,11 @@ def refused(t: str, r, url: str, model: str) -> Exception:
     if r.status_code == 429:
         return QuotaSpent(QUOTA_LINE.format(name='HIPAA AI' if t == 'hipaa_ai' else t, model=words(model) or 'its model'))
     # ...with room for the provider's own reason, which a gateway nests inside its own wrapper (failures.refused reads the innermost)
-    return (ProviderDown if r.status_code >= 500 else RuntimeError)(f'{t} error {r.status_code} at {url.split("?")[0]}{tried(r)}: {r.text[:1200]}')
+    e = (ProviderDown if r.status_code >= 500 else RuntimeError)(f'{t} error {r.status_code} at {url.split("?")[0]}{tried(r)}: {r.text[:1200]}')
+    # ...carrying its status, so every reader words it from the code (say.plain_failure; walk 5, 2026-11-22: a connection's Test printed "openrouter
+    # error 401 at https://... {"error": ...}" where "the key was turned down" was meant)
+    e.status_code = r.status_code
+    return e
 
 
 def budget_said(text) -> str:
@@ -1745,4 +1749,4 @@ def test_ai(store, cid: int) -> str:
         raise RuntimeError(why)
     out = make_llm(c['Type'], json.loads(c.get('ConfigJson') or '{}'), c.get('Secret'))(
         'Reply with exactly: ok', 'ping')
-    return f'model responded: {(out or "").strip()[:80]} - wired into intent triage'
+    return 'The AI answered - it is ready to use.' if (out or '').strip() else 'The AI was reached but answered nothing - try Test again in a minute.'

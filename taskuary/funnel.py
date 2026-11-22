@@ -334,21 +334,13 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             reviews.add(r['ReviewId'])
             action = r.get('ReviewKind') == 'action'
             rv = store.get_review(r['ReviewId']) or {}
-            # A review row is joined to the message the draft originally saw.  Keep that review
-            # at the front of its thread, but let its card speak with the newest inbound line on
-            # the task.  Otherwise the Assistant can truthfully have six newer Teams messages in
-            # SQLite and still show only the old "yes" that opened the draft.
-            latest = None if canonical else (store.last_inbound_on_task(r.get('TaskId')) if r.get('TaskId') else
-                      store.last_inbound_in(cid) if cid else None)
-            # ...and WHETHER THE DRAFT IS BEHIND THE THREAD is not this row's to say (the card audit, 2026-11-22: it compared the newest line on
-            # the task with the card's message, with no time - a mail that came BEFORE the draft marked it stale, and the Advisor was told
-            # not to recommend it): a draft an unheard line came after is off the rail already (store.off_table - proposals.written_past)
-            if latest:
-                base.update(mid=latest.get('MessageId'), when=latest.get('SentAt'),
-                            who=latest.get('FromName') or latest.get('FromEmail') or who,
-                            preview=latest.get('BodyText') or base.get('preview'),
-                            channel=latest.get('Channel') or base.get('channel'))
-                subj = says(latest) or subj
+            # ...A DRAFT'S ROW NAMES WHOM IT ANSWERS (the card audit C2; the owner, 2026-11-22: "yes"): it took who, words and channel from the
+            # newest line on the task - Gail's, under a reply to Erin. A draft newer lines came after is off the rail already (store.off_table).
+            # The feed joins a review by its freshness marker (MessageId - its plan is pinned), so a reply that answers another message is
+            # named here by that one (continuity.answers, the one reading of it)
+            from .continuity import answers
+            if answers(rv) != r.get('MessageId') and (am := store.get_message(answers(rv))):
+                base.update(who=am.get('FromName') or am.get('FromEmail') or base.get('who'), preview=am.get('BodyText') or base.get('preview'))
             from . import capabilities
             out.append(_item(f"review:{r['ReviewId']}", 'action' if action else 'review', 'approve', subj, rid=r['ReviewId'],
                              why='an agent proposed an action - it runs only if you say so' if action

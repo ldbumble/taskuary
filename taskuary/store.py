@@ -223,7 +223,7 @@ ARTIFACT_COLS = ('TaskId', 'Name', 'ContentType', 'Size', 'Path', 'Kind', 'Creat
 # Both list_reviews (the queue) and pending_review (the funnel's "is a draft already
 # waiting?") read these, so a review cannot be gone from one and live to the other.
 _REVIEW_FROM = ('FROM review rv LEFT JOIN task t ON t.TaskId=rv.TaskId '
-                'LEFT JOIN message m ON m.MessageId=rv.MessageId')
+                'LEFT JOIN message m ON m.MessageId=COALESCE(rv.AnswersMid, rv.MessageId)')     # the message it ANSWERS (C2)
 _NOT_ORPHAN = '(rv.TaskId IS NULL OR t.TaskId IS NOT NULL)'
 # ...the comment kinds that are prompt machinery, not something said on the task (Store.list_comments): a kept line, a line put back in the
 # owner's box, a turn's summary JSON, and a brief - a user turn filed by Taskuary (general.BRIEF_ACTOR) - each its own ActorType already

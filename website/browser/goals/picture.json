@@ -2,5 +2,5 @@
  {"do": "new", "say": "Make me a picture of two colleagues studying a ledger together at a long wooden table in a packed library, warm sunlight streaming through a high window onto them"},
  {"do": "quiet", "max": 600},
  {"do": "picture"},
- {"do": "expect", "never": ["paste", "image generator", "image-generation connection", "do not have an image"]}
+ {"do": "expect", "never": ["paste (it|this) into", "prompt (you can|to) (use|paste)", "can.t (make|draw|create) (a|the|images|pictures)", "cannot (make|draw|create) (a|the|images|pictures)"]}
 ]

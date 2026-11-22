@@ -220,7 +220,7 @@ def ask_of(rid) -> dict:
     from .browserview import TURN_PREFIX
     from .signin import PREFIX
     r = str(rid or '')
-    return {'ask': 'signin', 'site': r[len(PREFIX):]} if r.startswith(PREFIX) else {'ask': 'turn' if r.startswith(TURN_PREFIX) else 'question', 'site': ''}
+    return {'ask': 'signin', 'site': r[len(PREFIX):].split('~')[0]} if r.startswith(PREFIX) else {'ask': 'turn' if r.startswith(TURN_PREFIX) else 'question', 'site': ''}
 
 
 def reconcile_screen_request(store, t, asking: bool) -> dict | None:

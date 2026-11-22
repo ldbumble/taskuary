@@ -47,7 +47,8 @@ TTL = 15 * 60                   # a fill link lives this long, and opens once
 AGAIN = 10 * 60                 # a saved sign-in the site asks for again inside this is not tried a second time
 STEP_WAIT = 20.0                # a two-step sign-in: how long the password page is given to appear after the user name
 CODE_WAIT = 15.0                # after the password: how long a site is given to show its code prompt before none is taken as asked
-PREFIX = 'signin:'              # the request id of a sign-in ask: `signin:<site>`
+PREFIX = 'signin:'              # the request id of a sign-in ask: `signin:<site>`, `~N` after it when raised again (workerstate.fresh_id)
+def ask_site(rid) -> str: return str(rid or '')[len(PREFIX):].split('~')[0]      # the site a sign-in ask is for, by its id
 DONE = 'Signed in'
 CODE_ASK = '{site} took the saved sign-in and asks for a code - type it on the page to continue'
 # ...AND THE CODE PAGE IS MADE READY FOR HIM FIRST (the owner, 2026-11-15: "why can't you click save for 30 days when you sign in ... so you
@@ -338,7 +339,7 @@ def pending(store, tid: int) -> dict | None:
     reqs = [r for r in ws.status(store, tid)['requests'] if str(r.get('request_id') or '').startswith(PREFIX)]
     if not reqs: return None
     r = reqs[-1]
-    return {'site': r['request_id'][len(PREFIX):], 'sid': str(r.get('sid') or ''), 'request_id': r['request_id'], 'text': r.get('text')}
+    return {'site': ask_site(r['request_id']), 'sid': str(r.get('sid') or ''), 'request_id': r['request_id'], 'text': r.get('text')}
 
 
 def link(store, tid: int) -> dict:
@@ -465,7 +466,9 @@ def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=..., wh
                   source='api')
         return {'site': '', 'auto': False}
     # A SIGN-UP (the agent's own marker said so - signing_up): Taskuary makes the password, types it and keeps it - nobody is asked
-    rid = f'{PREFIX}{site}'
+    # ...A FRESH ID FOR A SIGN-IN ASKED AGAIN (round 3, 2026-11-22: a second hand-over on the same site was recorded under the answered one -
+    # "nothing waits on you" on screen while the agent waited on him, a dead end)
+    rid = ws.fresh_id(store, tid, f'{PREFIX}{site}')
     if signing_up(claimed): return new_account(store, tid, sid, site, rid, fill, watch)
     name = site_name(site, sid)
     what = ' '.join(str(what or '').split()).rstrip('.')
@@ -681,7 +684,7 @@ def signed_in(store, tid: int, rid: str) -> dict:
     """The owner signed in by hand and said so (workerstate.answer). Told as a fill is (_continue), on every kind of agent: a terminal
     CLI's ask had no Signed in press, only a box to type it in, and the bare words reached its prompt with no site and no "continue"
     (the owner, 2026-10-25: both kinds of agent ask alike)."""
-    told = _through(store, tid, rid, rid[len(PREFIX):], seen=False)
+    told = _through(store, tid, rid, ask_site(rid), seen=False)
     return {'delivered': True, 'state': 'delivered'} if told else {'delivered': False, 'state': 'failed', 'why': 'the agent could not be told - see the task'}
 
 
@@ -888,7 +891,7 @@ def code_watch(store, tid: int, sid: str, site: str, every: float = CODE_EVERY, 
     end, after = time.time() + until, mail_since(store, tid, site)
     while time.time() < end:
         time.sleep(every)
-        if (pending(store, tid) or {}).get('request_id') == f'{PREFIX}{site}': return False
+        if ask_site((pending(store, tid) or {}).get('request_id')) == site: return False
         got = None
         try:
             c = conn or connect(sid)
@@ -931,6 +934,10 @@ def _through(store, tid, rid, site, seen=True):
     agent once, in words that say who did it."""
     kept = keep_typed(store, tid, site)
     if seen: _audit(store, tid, site, 'page', True, saved=kept)
+    # ...AND HIS PRESS IS SAID AS A PRESS (round 3, 2026-11-22: "I'm done" on a sign-up page, nothing typed, told the agent "the owner signed in
+    # on the page themselves"): seen on the page, he signed in; only pressed, the agent looks at the page before it goes on
+    if not seen: return _continue(store, tid, rid, site, 'owner', words=(f'You pressed {DONE} on {site}', f"The owner pressed {DONE} on the {site} "
+                                  "page. Look at the page before you go on - nothing says what, if anything, was done on it."))
     return _continue(store, tid, rid, site, 'owner')
 
 

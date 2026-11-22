@@ -561,8 +561,10 @@ class TheOwnerSignsInOnThePage(Asking):
         # closed every later ask of the same site, so nothing was shown and nothing lit
         with on_page('https://login.bank.example/signin'), mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}):
             signin._TRIED[(self.tid, 'bank.example')] = signin._now(); signin.needs(self.s, self.tid, 'sess1', watch=None)
-        self.assertEqual((signin.pending(self.s, self.tid) or {}).get('request_id'), 'signin:bank.example')
-        ws.record(self.s, self.tid, 'sess1', 'answered', request_id='signin:bank.example', text='Signed in', source='owner')
+        # ...asked again, it is an ask of its own (round 3, 2026-11-22: under the answered id it was never shown - a dead end), for the same site
+        again = (signin.pending(self.s, self.tid) or {}).get('request_id')
+        self.assertEqual((again, signin.ask_site(again)), ('signin:bank.example~2', 'bank.example'))
+        ws.record(self.s, self.tid, 'sess1', 'answered', request_id=again, text='Signed in', source='owner')
         # ...and his sign-in is one line of the chat in his voice, saying it is kept and where to remove it
         from taskuary import general
         self.assertEqual([m['content'][0]['text'] for m in general.press_lines(self.s, self.tid)],
@@ -1213,3 +1215,15 @@ def test_the_chat_payload_says_whether_he_is_needed_on_the_page():
         assert chatlog.beside(s, tid, [], False, None)['needsOwner'] is True
     with mock.patch.object(taskstate, 'asking', return_value={'ask': 'question', 'request_id': 'q1', 'text': 'which month?'}):
         assert chatlog.beside(s, tid, [], False, None)['needsOwner'] is False
+
+
+def test_a_press_of_done_is_told_as_a_press_never_as_a_sign_in():
+    """Round 3, 2026-11-22: I'm done pressed on a sign-up page with nothing typed told the agent "the owner signed in on the page themselves".
+    Seen on the page, he signed in; only pressed, the agent is told he pressed, and looks before it goes on."""
+    from unittest import mock
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = s.create_task({'Title': 'Sign up for DealFlow', 'Kind': 'general', 'Status': 'in_progress'}, 'owner')
+    with mock.patch.object(signin, '_continue') as told, mock.patch.object(signin, 'keep_typed', return_value=''):
+        signin._through(s, tid, 'signin:dealflow.example', 'dealflow.example', seen=False)
+    did, said = told.call_args.kwargs['words']
+    assert did == f'You pressed {signin.DONE} on dealflow.example' and 'themselves' not in said and 'Look at the page' in said

@@ -2,6 +2,101 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.1.3 - 2026-11-22
+
+- The WhatsApp pairing box says the bridge's state once
+- Agent permissions shows one state per connection
+- An AI card names its agent's harness once
+- Setup's All ready and Finish wait for the main source, and Finish opens Setup complete
+- Going to a page replaces the view, with one Back and one box on a screen
+- Screens say plain words in the app's own case and font
+- An agent is told where a card went by address; the owner's screen names the person
+- What the owner says about himself reaches every agent, and how he signs is the saved signature
+- His files reach every ACP agent as content blocks, not only as a path in the words
+- A step line says what the agent did in plain words, on every road
+- The agent is told what its tools do, from the tools themselves
+- A no of Taskuary's that ends a Codex turn is heard in the same conversation, and the work goes on
+- Codex's shell calls are read, held and approved as the script that ran, by the grammar its argv was joined with
+- A browser step's verdict is read by what decides it: a terse not-big passes, never held for the fields it left out
+- A sign-off he gives re-signs the drafts waiting for his Send, and is kept as the block itself
+- A reply's card keeps the person it was made for: the message it answers sets its channel, its person and its thread
+- A closing left with no name under it gives way to the saved signature
+- The agent is told a signature is kept as the block itself, where it reads its tools
+- Words that start work keep separate: a new ask in New is its own task unless it is the same problem
+- A tool's answer over ACP is read in every shape it comes in: on Codex, Taskuary's own tools answered nothing
+- An ACP turn that failed keeps the conversation it was on, so its try again resumes it
+- Words handed to a chat agent go in as a prompt, never typed into its composer as the owner's line
+- Only a line that is a file rides as a file block
+- A file an agent puts on a card is handed back to it as it reads, and a script runs from a file, not a shell's quotes
+- A turn is at work from the moment it takes what waited, and the chat reads the hand-over in one view
+- A question asked in the agent's own words over a bare ask marker is recorded as its question
+- A chat turn that left a step on the owner waits on him on the rail as it does in the header
+- An answer that names a made file is drawn once: its streamed words and its filed answer are compared with paths read as names
+- A draft whose card says Connect is never ready to send: the card, the page's chip and the task's state say one thing
+- The turn that asks the owner carries no summary-made Try again under its question
+- A PowerShell here-string's body is its program's data, never commands or paths read
+- An agent is told when its email or reply card stands with Connect, not Send
+- A turn whose own summary left a step on the owner asks no turn-end model
+- A return a day or more off is counted by the calendar on the rail and the server
+- A shipped profile purpose still in its old capitals takes today's wording once
+- Red CI from the tools and memory round, fixed forward
+- A picture on a kept CLI conversation is sent as an image block
+- Small screen fixes from the walk: names on Settings switches, no builder words, a signature saved as typed, plain-case rail sections
+- A draft's Connect is read by one function, and a canvas test stops grepping the page source
+- A bare ask marker followed by the turn's summary asks the paragraph above it, not the summary's JSON
+- A New task's agent starts on its own launch, not after the checklist is read
+- The browser tests are gone, and CI runs no browser smoke job
+- A summary block streamed across several of a turn's steps is cut whole, never drawn as the agent's words
+- A sheet's formulas nothing worked out preview as their numbers
+- A view with no root stands on its one top element
+- Revert "A New task's agent starts on its own launch, not after the checklist is read"
+- A failure whose cause chain comes back on itself is read to its end, never walked forever
+- Test worlds that send email connect a mailbox, and a reply's message is the one it answers
+- A New ask takes the one reading triage already made: no second model call before its agent starts
+- A piece of the same message goes on with it: a tool update mid-message never cuts an ACP turn's answer
+- One message is one row in the chat, past a tool's update between its pieces
+- More test worlds that send email connect a mailbox, an Outlook card that also brings its calendar
+- A closed Taskuary is no failed hook: the event hook ends 0 when nothing answers
+- A sheet's preview fits its card: words wrap within a column, and the last column is never cut off
+- The rail stands only the card that stands: a reply held behind another card is not "ready to send" there
+- A draft is behind the thread only where an unheard line came after it: the rail's own stale compare is gone
+- A turn heard twice keeps the start it was first heard at
+- His line is taken only once it went into the turn: a steer the agent did not take leaves it waiting for the next turn
+- What the agent wrote for the app before its last tool call goes with its answer: a question then a tick is still a question
+- An email rewritten in place says so, and a second letter to one person is asked for with slot "new"
+- The show tool never tells the agent where on the page its picture stands
+- A try Taskuary makes by itself reads "trying again" on the rail too, never Failed or waiting on him
+- A turn's answer is filed whatever one of its acts does: an act that fails is its own line on the task
+- The event hook's closed-app ending is one named constant, the one operator a hook line may carry
+- What he asks to remember in New is kept: his ask's own row is his words on the one road that says so
+- A turn Taskuary tries again by itself is told what the task already made, and builds on it
+- An FYI row says who sent it by the mail's stored sender class, never a fixed "a person told you something"
+- One cleaner decides what of an agent's text the owner reads, on every surface
+- A question is the marker's own line, else the paragraph above it: words written after it stay the answer's
+- An ACP agent that dies says why in the log: its exit code and the end of its stderr, read to its end first
+- A sheet previews its numbers as their cells format them: money, percents, thousands and decimals
+- The browser gate's wording example is a step that really waits: never a sign-up's name and email he asked for
+- I'm done reads as the press it is, never "the step is finished"
+- The turn-end check's dead guard goes: a summary's drafted is set after it runs, and letter_waits covers the case
+- Revert "The turn-end check's dead guard goes: a summary's drafted is set after it runs, and letter_waits covers the case"
+- An agent computes every figure in what it makes from its source, by its script
+- An owner's older AGENT.md hears the computed-figures line too, from the one constant the shipped copy says
+- Several web searches in one call run together: a lookup is one model round, not one per search
+- A turn he stopped reads stopped on every surface, never "agent waiting on you"
+- The Ask window opens by his own hand only: a press on it or a key typed in it, never a focus
+- A promotion whose task ended with nothing sent teaches how it ended, against the line the press taught
+- A moved clock is said as the time at the head of a kept turn, never as a change to its instructions
+- A held step whose press failed says the one line of what went wrong, never a traceback
+- A sheet's preview in the chat wraps its cells at words: the chat's own table rule never breaks them letter by letter
+- An agent at rest is what the task's one state says, on the page and the rail: a Stop reads stopped
+- A sign-in asked again on a site is an ask of its own, and a press of Signed in is told as a press
+- An address the owner gave in his own words is known: found by the name beside it, never refused as a guess
+- A turn that goes on after a restart cut it is told what the task already made, as a retry is
+- A database card's missing driver is its Install button, never a pip command
+- An unconfirmed send is said once on its card: the failure block with its reason, never also a banner saying the same
+- The end-of-day brief tells the day his agents had: no thread already answered as owed, no Assistant chat as done
+- A view of several top elements with no root stands them in one column, never a refusal and a second try
+
 ## 0.4.1.2 - 2026-11-20
 
 - The task he has open stays on the rail, whatever its lane: one source, the walk's own open item

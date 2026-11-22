@@ -100,3 +100,16 @@ def test_a_stepped_up_draft_is_still_only_a_draft(s):
     with mock.patch.object(llm, 'make_llm', make), mock.patch('taskuary.outbound.send_out', side_effect=AssertionError('sent')) as send:
         responder.draft_reply(s, tid)
     assert not send.called and not [m for m in s.list_messages(tid) if m.get('Direction') == 'out' and m.get('Status') == 'sent']
+
+
+def test_an_answer_of_false_is_an_answer_never_asked_again():
+    """Round 4, 2026-11-22: the turn-end check ran twice on every finished turn - `unfinished: false` read as a field left out, and a strong
+    model (on Codex, a whole session) was asked again."""
+    from taskuary import llm
+    from taskuary.llm import JsonAnswer
+    asked = []
+    class Brain:
+        is_step_up = True
+        def step_up(self, why): asked.append(why); return None
+    out = llm._stepped(Brain(), 'sys', 'user', None, ('unfinished',), {}, JsonAnswer({'unfinished': False}, '{"unfinished": false}', None))
+    assert out.data == {'unfinished': False} and asked == []

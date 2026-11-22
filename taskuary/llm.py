@@ -881,7 +881,7 @@ def ask_json(brain, system: str, user: str, want: dict = None, need=(), **kw) ->
     carries = getattr(brain, 'takes_want', None)
     if want is not None and carries: kw['want'] = want
     # `false` and 0 are answers: reading them as left out asked every "no" a second time, and the second time it said yes
-    def blank(v): return v is None or (not v and not isinstance(v, (bool, int, float)))
+    blank = _blank
     def short(a): return [k for k in need if blank((a.data or {}).get(k))] if carries is False else []
     first = ask(user)
     if first.data is not None and not short(first): return _stepped(brain, system, user, want, need, kw, first)
@@ -978,19 +978,24 @@ def unreadable(raw: str) -> str:
     return f'the AI sent back JSON that was cut off or broken: {q}'
 
 
+def _blank(v) -> bool:
+    "A field the answer left out: missing or empty - never False or 0, which are answers (round 4, 2026-11-22: unfinished: false asked again)."
+    return v is None or (not v and not isinstance(v, (bool, int, float)))
+
+
 def _stepped(brain, system, user, want, need, kw, out: JsonAnswer) -> JsonAnswer:
     """An answer still unreadable after its own retry, or one the model said it was not sure of, is asked ONCE of a strong model -
     where the owner turned that on (brainroute's 'unsure' rule, Auto mode). These jobs only read and write, so asking again cannot
     act twice; a strong answer that is no better leaves the first one standing."""
     if getattr(brain, 'is_step_up', False) is not True: return out      # said out loud: a stand-in brain answers any attribute
     up = brain.step_up
-    bad = out.data is None or any(not out.data.get(k) for k in need)
+    bad = out.data is None or any(_blank(out.data.get(k)) for k in need)
     unsure = not bad and out.data.get('sure') is False
     if not (bad or unsure): return out
     strong = up('unsure' if unsure else 'unreadable')
     if strong is None: return out
     again = ask_json(strong, system, user, want=want, need=need, **{k: v for k, v in kw.items() if k != 'want'})
-    return again if again.data is not None and not any(not again.data.get(k) for k in need) else out
+    return again if again.data is not None and not any(_blank(again.data.get(k)) for k in need) else out
 
 
 def retry_wait(last, attempt: int) -> float:

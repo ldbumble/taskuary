@@ -288,7 +288,10 @@ def unknown_tool(t) -> str:
 def validate(store, p: dict) -> tuple:
     """(ok, reason). The whole gate: known action, required fields present, switch on."""
     a = p.get('action')
-    if a not in ACTIONS: return False, f'unknown action {a!r}'
+    # ...AND SAYS WHAT WOULD BE ONE (the owner's rules, part 4: nothing an agent calls answers without what to do next): a Claude agent
+    # proposed its LinkedIn post twice as 'post_linkedin', was told only "unknown action", and handed the post to the owner as prose
+    if a not in ACTIONS: return False, (f"unknown action {a!r} - the actions are {', '.join(ACTIONS)}; a post is run_tool with type "
+                                        f"{' | '.join(POSTS)} and its words in `text` (connector_id where that network is connected)")
     words, need, switch = ACTIONS[a]
     if a == 'settings':
         changes, why = setting_changes(p)

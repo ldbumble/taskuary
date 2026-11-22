@@ -307,3 +307,13 @@ def test_post_via_the_browser_hands_the_post_as_he_left_it_to_its_agent_once():
     assert json.loads(s.get_review(rid)['FinalText'])['result'] == {'browser': True}
     mail = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps({'action': 'run_tool', 'type': 'github_issue'})})
     assert proposals.via_browser(s, mail, 'x')['ok'] is False
+
+
+def test_an_action_that_is_none_is_refused_with_the_ones_that_are():
+    """A Claude agent proposed its LinkedIn post as 'post_linkedin' twice, was told only "unknown action", and handed the post to the owner
+    as prose (goal walk, 2026-11-22). The refusal names the actions and how a post is written - which then goes, with no connection."""
+    from taskuary import proposals
+    from taskuary.store import MemoryStore
+    ok, why = proposals.validate(MemoryStore(), {'action': 'post_linkedin', 'why': 'a post'})
+    assert not ok and 'run_tool' in why and 'linkedin_post' in why
+    assert proposals.validate(MemoryStore(), {'action': 'run_tool', 'type': 'linkedin_post', 'text': 'Three lines.', 'why': 'a post'})[0]

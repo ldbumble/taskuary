@@ -361,7 +361,7 @@ SYSTEM = ('You guard the browser of an AI agent that works for its owner. Before
           'order. Reply with JSON only, one entry per command: {"acts": [{"big": true or false, "kind": "money", "private", "speaks" or '
           '"deletes" when big, "sure": true or false, "irreversible": true or false (it cannot be undone outside this browser), "what": '
           'what it does FOR THE OWNER, named for the site and the outcome in a few plain words - e.g. "Pay the $412.50 invoice on '
-          'toll.example", "Submit the sign-up on UPrinting", "Send your name and work email to CapRateHub" - said TO him ("your", '
+          'toll.example", "Submit the sign-up on UPrinting", "Send your home address to CapRateHub" - said TO him ("your", '
           'never "the owner" or "his"), never a ref, an @id, a mouse or key action, or what you could not see}]}.')
 ITEM = {'type': 'object', 'properties': {'big': {'type': 'boolean'}, 'kind': {'type': 'string', 'enum': ['money', 'private', 'speaks', 'deletes', '']},
                                          'sure': {'type': 'boolean'}, 'irreversible': {'type': 'boolean'}, 'what': {'type': 'string'}},

@@ -513,6 +513,14 @@ def pytest_configure(config):
 
 
 @pytest.fixture(autouse=True)
+def no_stop_left_over():
+    """general.STOPPED_AT keeps a turn's stop by task number (a stop is heard once a turn, 2026-11-22): each test's tasks number from 1 again,
+    so one test's stop read as the next one's already heard."""
+    from taskuary import general
+    general.STOPPED_AT.clear(); yield
+
+
+@pytest.fixture(autouse=True)
 def no_real_acp_adapters(request, monkeypatch):
     """The ACP road (agents._acp_road) launches claude and codex through npm adapters (clis.ADAPTERS): a test driving a fake `claude`
     would fetch and start the real adapter instead - minutes on CI, and the argv road's own behaviour never tested. Only the ACP

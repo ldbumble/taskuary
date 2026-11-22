@@ -72,10 +72,12 @@ class EveryPressOfTheOwnersIsSaidInWords(Acts):
 
     def test_the_x_on_a_turn_is_one_press_whatever_agent_works_it(self):
         # ...a general chat's turn stopped read "cancelled" as a failure, a coding one's nothing at all (the side-by-side walk, 2026-11-11)
-        chat = SimpleNamespace(stop=lambda: True)
+        chat = SimpleNamespace(stop=lambda: True); general.STOPPED_AT.clear()      # ...each test's task numbers start again at 1
         with mock.patch.object(general, 'session_for', return_value=chat): self.assertTrue(general.stop_turn(self.s, self.tid))
+        general.STOPPED_AT.clear()                     # ...another turn, on another agent: its own stop (a stop is heard once a turn)
         with mock.patch.object(general, 'session_for', return_value=None), mock.patch.object(term, 'cancel_turn', return_value=True):
             self.assertTrue(general.stop_turn(self.s, self.tid))
+        general.STOPPED_AT.clear()
         with mock.patch.object(general, 'session_for', return_value=None), mock.patch.object(term, 'cancel_turn', return_value=False):
             self.assertFalse(general.stop_turn(self.s, self.tid), 'nothing at work: nothing stopped, nothing said')
         self.assertEqual(self.lines(), ['You stopped the agent.', 'You stopped the agent.'])

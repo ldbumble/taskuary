@@ -1656,3 +1656,11 @@ def test_a_turn_counts_from_its_own_head_not_the_turn_before():
     assert (out[1]['started'], out[3]['at'], out[3]['started']) == (ep(a) + 0.4, b, ep(b)), out
     out[3].update(at=a, started=ep(a) + 0.4, ended=ep(b) + 30); conversation_legacy.dated(s, tid, out)          # ...and the same once it is done
     assert (out[3]['at'], out[3]['started']) == (b, ep(b)), 'ran 30s, never 2m 30s'
+
+
+def test_a_lists_number_is_no_sentence_said_twice():
+    """The goal walk, 2026-11-22: a turn's second message opened "1." as its first had; the "1." was cut as said already and the ten results
+    drew as one run-on paragraph (Markdown starts no list at "2.")."""
+    seen = set()
+    conversation.said_once('1. Totalled the hours.', seen)
+    assert conversation.said_once('1. **Timesheet total** - 34.75 hours.\n2. **Bar chart** - shown above.', seen).startswith('1. **Timesheet')

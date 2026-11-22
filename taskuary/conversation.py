@@ -76,7 +76,9 @@ _LEAD = re.compile(r'\s*(.+?[.!?])(?=\s|$)', re.S)
 def _lead(t: str) -> tuple:
     "(its first sentence with its spaces made one, where that sentence ends) - ('', 0) where it has none."
     m = _LEAD.match(t or '')
-    return (' '.join(m.group(1).split()), m.end()) if m else ('', 0)
+    # ...and a sentence has words: a list's "1." is none (the goal walk, 2026-11-22: a turn's second message opened "1." as its first had, the
+    # "1." was cut as said already, and the list drew as one run-on paragraph - Markdown starts no list at "2.")
+    return (' '.join(m.group(1).split()), m.end()) if m and re.search(r'[^\W\d_]{2}', m.group(1)) else ('', 0)
 def said_once(t: str, seen: set) -> str:
     "`t` without its opening sentence where `seen` holds it already - and that sentence added to `seen`."
     lead, end = _lead(t)

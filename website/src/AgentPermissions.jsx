@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Box, MenuItem, Select, Typography } from "@mui/material";
 import api from "./api";
-import { BORDER, DIM, FAINT, INK } from "./theme.jsx";
+import { BORDER, DIM, INK } from "./theme.jsx";
 import { ACCESS, accessOf, accessSave } from "./agentAccess.js";
 
 // AGENT PERMISSIONS, IN ONE PLACE (the owner, 2026-10-05: "make place in settings for permissions"). Each connection already
@@ -37,7 +37,6 @@ export default function AgentPermissions({ onLoaded }) {
         <Box key={c.ConnectorId} data-tq-access-row={c.ConnectorId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.1, borderBottom: `1px solid ${BORDER}`, flexWrap: "wrap" }}>
           <Box sx={{ flex: 1, minWidth: 180 }}>
             <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13 }}>{c.Name || c.Type}</Typography>
-            <Typography variant="caption" sx={{ color: FAINT }}>{c.Type}</Typography>
           </Box>
           <Select size="small" value={accessOf(c)} disabled={busy === c.ConnectorId} onChange={(e) => save(c, accessSave(c, e.target.value))}
             inputProps={{ "aria-label": `What agents may do in ${c.Name || c.Type}` }} sx={{ minWidth: 170, fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)" }}>

@@ -188,3 +188,11 @@ class ARunOutsideACheckoutTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ProfileWordsTest(unittest.TestCase):
+    def test_a_profile_purpose_is_said_without_shouting(self):
+        "The design walk, 2026-11-20: Profiles read 'OUTSIDE information' and 'OUR OWN figures' - capitals where the owner reads a sentence."
+        for name, p in agents.DEFAULT_PROFILES.items():
+            first = p['purpose'].split(' - ')[0]
+            self.assertFalse(any(w.isupper() and len(w) > 2 for w in first.split()), (name, first))

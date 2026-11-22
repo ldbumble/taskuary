@@ -530,7 +530,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
             <ChannelIcon channel={isWorkflowConfig(c) ? "workflow" : "report"} />
             <Box sx={{ flex: { xs: "1 1 calc(100% - 64px)", sm: 1 }, minWidth: 0 }}>
               <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }} noWrap>{c.title || s.Address}</Typography>
-              <Typography variant="caption" sx={{ ...mono, color: FAINT }}>
+              <Typography variant="caption" sx={{ color: FAINT }}>
                 {asSteps(c) && c.flow.length ? plural(c.flow.length, "step")
                   : (c.sources || []).length > 1 ? `${c.sources.length} sources` : (TYPE_LABELS[c.type] || c.type || "rest")} · {sched || "no schedule"}{s.LastPolledAt ? ` · ran ${timeAgo(s.LastPolledAt)}` : " · never ran"}
               </Typography>
@@ -900,7 +900,7 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
       <Crumb section="Routines" onBack={onBack} title={cur ? cfg.title : "New monthly invoice routine"} />
       {note && <Alert severity={note.severity} sx={{ mb: 1.5, fontSize: 12.5 }}>{note.text}</Alert>}
       <Box sx={{ ...card, p: 2, mb: 2 }}>
-        <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.4, fontSize: 10 }}>ROUTINE SETUP</Typography>
+        <Typography variant="overline" sx={{ color: ACCENT2, fontSize: 10 }}>Routine setup</Typography>
         <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15, mb: 0.4 }}>Monthly invoices → Zoho drafts → Review</Typography>
         <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>The schedule starts a monthly checklist. You confirm amounts; Prepare creates drafts; approving each Review card sends it.</Typography>
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(240px,1fr) 250px 220px" }, gap: 1 }}>
@@ -928,7 +928,7 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
       </Box>
       {cur && <Box sx={{ ...card, p: 2 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 1.5 }}>
-          <Box sx={{ flex: 1 }}><Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.4, fontSize: 10 }}>MONTHLY BATCH</Typography>
+          <Box sx={{ flex: 1 }}><Typography variant="overline" sx={{ color: ACCENT2, fontSize: 10 }}>Monthly batch</Typography>
             <Typography sx={{ fontWeight: 600, color: INK }}>{batch ? `${batch.Period} · ${String(batch.Status).replaceAll("_", " ")}` : "No batch opened yet"}</Typography></Box>
           {batches.length > 1 && <Select size="small" value={batch?.BatchId || ""} onChange={async (e) => setBatch((await api.get(`/api/invoice-batches/${e.target.value}`)).data)}>
             {batches.map((b) => <MenuItem key={b.BatchId} value={b.BatchId}>{b.Period} · {String(b.Status).replaceAll("_", " ")}</MenuItem>)}</Select>}
@@ -1029,7 +1029,7 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
     <Box sx={{ mt: 2, ...card, p: 1.5, maxWidth: 720, bgcolor: "var(--tq-panel, #fffdf7)", borderColor: "var(--tq-border, #d8cfbe)" }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.25 }}>
         <AutoAwesomeIcon sx={{ fontSize: 15, color: "var(--tq-link, #55697a)" }} />
-        <Typography variant="caption" sx={{ color: "var(--tq-link, #55697a)", fontWeight: 600, flex: 1 }}>ONE PROMPT THAT ROUTES EACH RUN</Typography>
+        <Typography variant="caption" sx={{ color: "var(--tq-link, #55697a)", fontWeight: 600, flex: 1 }}>One prompt that routes each run</Typography>
       </Box>
       {drawn.map((line) => {
         const [how, when, r] = shownAs(line);
@@ -1160,8 +1160,8 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
       )}
       {replay && (
         <Box sx={{ mt: 1.2, pt: 1.2, borderTop: `1px solid ${BORDER}` }}>
-          <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, display: "block" }}>
-            ON THE LAST RUNS THIS WOULD HAVE
+          <Typography variant="overline" sx={{ color: ACCENT2, fontSize: 11.5, display: "block" }}>
+            On the last runs this would have
           </Typography>
           {replay.error ? <Typography variant="caption" sx={{ color: "var(--tq-danger, #8c3b3b)" }}>{replay.error}</Typography>
             : !replay.data?.length ? <Typography variant="caption" sx={{ color: FAINT }}>This report has not run yet — there is nothing to replay.</Typography>
@@ -1636,7 +1636,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 somebody the first time you saved it would be the worst kind of surprise. */}
             <Box sx={{ mt: 2, ...card, p: 1.5, maxWidth: 720 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, flex: 1 }}>
+                <Typography variant="overline" sx={{ color: ACCENT2, fontSize: 10, flex: 1 }}>
                   SEND IT SOMEWHERE (OPTIONAL)
                 </Typography>
                 <Switch size="small" checked={!!cfg.deliver}
@@ -1683,8 +1683,8 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 and its chart. On by default; the run that became WORK is never retired. */}
             <Box sx={{ mt: 2, ...card, p: 1.5, maxWidth: 720 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, flex: 1 }}>
-                  RETIRE THE PREVIOUS RUN
+                <Typography variant="overline" sx={{ color: ACCENT2, fontSize: 11.5, flex: 1 }}>
+                  Retire the previous run
                 </Typography>
                 <Switch size="small" checked={cfg.expire !== false}
                   onChange={(e) => setCfg({ ...cfg, expire: e.target.checked })} />
@@ -2214,17 +2214,17 @@ function LastRun({ r, sid, embedded, flush, onFix, fixing, onChanged }) {
   const rv = r.reviewed || null;
   const outcome = r.steps?.length ? (r.failed || r.steps.some((x) => x.status === "waiting") ? runWords(r.steps, true) : r.summary || runWords(r.steps))
     : r.failed ? `failed${r.error ? ` — ${r.error}` : ""}`
-    : r.type === "assistant" ? (r.said ? `posted ${plural(r.said, "line")}` : "nothing to say — no post")
+    : r.type === "assistant" ? (r.said ? `posted ${plural(r.said, "line")}` : "nothing new to post")
     : r.subject ? `filed: ${r.subject}` : "ran";
   const read = rv?.scope === "sources" ? [`${plural(rv.systems ?? 0, "configured data source")} only`]
-    : rv ? [`${rv.recent ?? rv.today ?? 0} sender/subject lines from the last two days`, `${rv.week ?? 0} tasks closed this week`,
+    : rv ? [`${plural(rv.recent ?? rv.today ?? 0, "message")} from the last two days`, `${rv.week ?? 0} tasks closed this week`,
       `${rv.open ?? 0} open`, `${rv.said ?? 0} already said`, Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${ideaCounted(k)}`).join(", ") || "no candidates"] : [];
   return (
     <Box sx={{ pl: embedded || flush ? 0 : 5.5, pr: embedded ? 0 : 1, pb: embedded || flush ? 0 : 1.25, mt: embedded ? 0 : flush ? 0.5 : -0.5 }}>
       {!embedded && (
       <Typography variant="caption" sx={{ color: r.failed ? "var(--tq-danger, #8a3646)" : FAINT, display: "block", lineHeight: 1.5 }}>
         <Box component="span" sx={{ fontWeight: 600, color: r.failed ? "var(--tq-danger, #8a3646)" : DIM }}>last run</Box>
-        {` · ${timeAgo(r.at)}${r.ms != null ? ` · ${(r.ms / 1000).toFixed(1)}s` : ""} · ${outcome}`}
+        {` · ${timeAgo(r.at)} · ${outcome}`}
         {rv && ` · read ${read.slice(0, 2).join(", ")}`}
         <Box component="span" onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
           sx={{ ml: 1, color: "var(--tq-link, #55697a)", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>

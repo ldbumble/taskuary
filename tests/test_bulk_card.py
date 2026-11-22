@@ -458,3 +458,14 @@ def test_three_posts_and_three_letters_raised_in_one_turn_all_stand_one_drawn_at
         seen.append(cards[0]['review'])
         s.decide_review(cards[0]['review'], 'rejected', None, 'owner')         # ...each press brings the next
     assert sorted(seen) == sorted(rids), 'each of the six stood in its turn'
+
+
+def test_a_card_next_in_line_names_its_person_not_their_address():
+    "The design walk, 2026-11-20: the line said 'next: the reply to gail@northwind.example' - an address where the owner reads a name."
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        call(tid, 'propose_email', to='erin@northwind.example', subject='Issues', text='Erin - closing the stale issues next.')
+    u = cardqueue.state(s, tid)['units'][0]
+    from taskuary import peoplesearch
+    with mock.patch.object(peoplesearch, 'known', lambda store, kind: [{'to': 'erin@northwind.example', 'name': 'Erin Blake'}]):
+        assert cardqueue.what(s, u) == 'the email to Erin Blake'

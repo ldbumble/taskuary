@@ -120,7 +120,7 @@ export function RouteRules() {
           task's AI line says for the same route */}
       {!!(p.now || []).length && (
         <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px solid ${BORDER}` }} data-tq-route-now="">
-          <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, display: "block", mb: 0.25 }}>RIGHT NOW, AGENT WORK RUNS ON</Typography>
+          <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, display: "block", mb: 0.25 }}>Right now, agent work runs on</Typography>
           {/* three levels on one AI and model for one reason are one line, not the same line three times */}
           {nowRows(p.now).map((n) => (
             <Box key={n.level} data-tq-route-now-level={n.level} sx={{ mb: 0.25 }}>
@@ -232,7 +232,7 @@ export function RecentRoutes() {
   if (!rows?.length) return null;
   return (
     <Box data-tq-recent-routes="" sx={{ ...card, p: 2, mb: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>
-      <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, display: "block", mb: 0.5 }}>RECENT ROUTES</Typography>
+      <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, display: "block", mb: 0.5 }}>Recent routes</Typography>
       {rows.map((r) => (
         <Typography key={r.Id} sx={{ ...mono, fontSize: 11.5, color: INK, whiteSpace: "pre-wrap" }} title={r.Outcome && r.Outcome !== "ok" ? r.Outcome : undefined}>
           {[r.Job, r.ref, `${r.Tier} -> ${r.brain}${r.Model ? `, ${r.Model}` : ""}`].filter(Boolean).join(" · ")}

@@ -392,7 +392,8 @@ const defaultNote = (s, m) => {
   const d = showValue(s.Default, m);
   if (!d) return "";
   const now = showValue(s.Value, m);
-  return now === d ? `Default: ${d} \u2014 unchanged.` : `Default: ${d}. Yours: ${now}.`;
+  // ...said only where it was changed (the design walk, 2026-11-20: "Default: on - unchanged" under every row said nothing)
+  return now === d ? "" : `Changed - the default is ${d}.`;
 };
 
 // ONLY A KNOB THE SCHEMA NAMES IS DRAWN (the 2026-10-19 UI walk): Configuration > Other listed twelve one-shot migration flags

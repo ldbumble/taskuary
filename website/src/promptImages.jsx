@@ -129,8 +129,10 @@ export function AttachChip({ name, icon = null, thumb = "", warn = "", note = ""
       boxSizing: "border-box", textDecoration: "none", ...(opens ? { cursor: "pointer", "&:hover": { borderColor: "var(--tq-border, #b9c6d1)" } } : {}), ...sx }}>
     {thumb ? <Box component="img" src={thumb} alt="" sx={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
       : icon === false ? null : icon || <AttachFileIcon sx={{ fontSize: 13, color: "var(--tq-link, #55697a)", flexShrink: 0 }} />}
-    <Box component="span" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</Box>
-    {note && <Box component="span" sx={{ color: "var(--tq-link, #7d8a94)", fontSize: 11, whiteSpace: "nowrap", flexShrink: 0 }}>{note}</Box>}
+    {/* ...THE NAME BEFORE ITS SIZE (the design walk, 2026-11-20: a cramped chip read "Q... 44 KB"): the name keeps a few letters and the size
+        gives way first */}
+    <Box component="span" sx={{ minWidth: "min(7ch, 100%)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</Box>
+    {note && <Box component="span" sx={{ color: "var(--tq-link, #7d8a94)", fontSize: 11, whiteSpace: "nowrap", flexShrink: 1, minWidth: 0, overflow: "hidden" }}>{note}</Box>}
     {warn && <Box component="span" sx={{ color: "var(--tq-warning, #8a5a1c)", whiteSpace: "nowrap", flexShrink: 0 }}>· {warn.length > 24 ? "can't go" : warn}</Box>}
     {onRemove && <IconButton size="small" aria-label={`Remove ${name}`} onClick={(e) => { e.stopPropagation(); onRemove(e); }} sx={{ width: 18, height: 18, p: 0, color: "var(--tq-link, #55697a)", flexShrink: 0 }}>
       <CloseIcon sx={{ fontSize: 12 }} /></IconButton>}
@@ -151,7 +153,7 @@ export function AttachRow({ children, sx, few = ATTACH_FEW, ...rest }) {
   const [at, setAt] = useState(null);
   const all = flat(children), chips = all.filter(isChip), other = all.filter((c) => !isChip(c)), k = attachSplit(chips.length, few), more = chips.slice(k);
   return <Box data-tq-attach-row="" {...rest} sx={{ display: "flex", flexWrap: "nowrap", alignItems: "center", gap: 0.5, minWidth: 0, maxWidth: "100%", overflow: "hidden",
-    pb: 0.25, "& > .tq-attach-chip": { flexShrink: 1, minWidth: 56 }, "& > [data-tq-attach-more]": { flexShrink: 0 }, ...sx }}>
+    pb: 0.25, "& > .tq-attach-chip": { flexShrink: 1, minWidth: 96 }, "& > [data-tq-attach-more]": { flexShrink: 0 }, ...sx }}>
     {chips.slice(0, k)}
     {more.length > 0 && <AttachChip name={`+${more.length} more`} icon={false} component="button" type="button" data-tq-attach-more={more.length}
       aria-haspopup="dialog" aria-expanded={!!at} title={`Show all ${chips.length}`} onClick={(e) => setAt(e.currentTarget)}

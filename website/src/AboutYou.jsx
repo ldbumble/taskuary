@@ -33,7 +33,7 @@ function AboutWorkstreams() {
   const change = (v) => { setText(v); setMsg(""); clearTimeout(timer.current); timer.current = setTimeout(() => save(v), 700); };
   return (
     <Box data-tq-about-workstreams="" sx={{ mb: 3 }}>
-      <Typography sx={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT, mb: 1 }}>WHAT YOU WORK ON</Typography>
+      <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 1 }}>What you work on</Typography>
       {!d ? <CircularProgress size={16} /> : <WorkstreamsSection d={d} text={text} onChange={change} heading={false}
         later="What you work on is still being read from your mail - it fills in on its own." />}
       {msg && <Typography variant="caption" sx={{ color: msg === "Saved" ? FAINT : "var(--tq-danger, #6b2733)", display: "block", mt: 0.5 }}>{msg}</Typography>}
@@ -111,7 +111,7 @@ export default function AboutYou() {
           <TextField variant="standard" value={f.owner_email} placeholder="you@yourdomain.com"
             onChange={(e) => setP({ ...p, facts: { ...f, owner_email: e.target.value } })}
             onBlur={(e) => saveOwner(f.owner_name, e.target.value.trim())} onKeyDown={(e) => e.key === "Enter" && e.target.blur()}
-            inputProps={{ "aria-label": "Email address", style: { fontSize: 13, color: DIM, ...mono } }} sx={{ width: 300, mt: 0.75 }} />
+            inputProps={{ "aria-label": "Email address", style: { fontSize: 13, color: DIM } }} sx={{ width: 300, mt: 0.75 }} />
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.25 }}>your owner address — agents sign as this</Typography>
           <TextField variant="standard" fullWidth multiline value={f.owner_bio} placeholder="a line about you — what you own, how you like things done; the agents read this"
             onChange={(e) => setP({ ...p, facts: { ...f, owner_bio: e.target.value } })} onBlur={(e) => save({ owner_bio: e.target.value.trim() })}
@@ -122,7 +122,7 @@ export default function AboutYou() {
       <AboutWorkstreams />
 
       {/* who you are on each channel, with provenance */}
-      <Typography id={secId("about", S_CHANNEL)} sx={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT, mb: 1 }}>WHO YOU ARE, PER CHANNEL</Typography>
+      <Typography id={secId("about", S_CHANNEL)} sx={{ fontSize: 11.5, color: FAINT, mb: 1 }}>Who you are, per channel</Typography>
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         Everything a connector has learned about you, and where it learned it. Nothing here is guessed from mail — it is what you signed in as,
         typed under Sources, or set as the chat that pings you.
@@ -138,15 +138,15 @@ export default function AboutYou() {
             <ChannelIcon channel={ch} sx={{ fontSize: 17 }} />
             <Typography sx={{ fontWeight: 600, fontSize: 13.5, color: INK }}>{CHANNEL_LABEL[ch] || ch}</Typography>
             <Box sx={{ flex: 1 }} />
-            <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT }}>{rows.length}</Typography>
+            <Typography sx={{ fontSize: 11.5, color: FAINT }}>{rows.length}</Typography>
           </Box>
           {rows.map((r, i) => {
             const live = r.source !== TYPED;
             return (
               <Box key={i} sx={{ display: "grid", gridTemplateColumns: "96px minmax(0,1fr) auto", gap: 1.75, alignItems: "center",
                 px: 2, py: 1, borderTop: i ? "1px solid var(--tq-border, #efeae2)" : 0 }}>
-                <Typography sx={{ ...mono, fontSize: 10.5, letterSpacing: ".04em", textTransform: "uppercase", color: FAINT }}>{r.kind}</Typography>
-                <Typography noWrap sx={{ ...mono, fontSize: 13, color: INK, fontWeight: r.primary ? 700 : 500 }}
+                <Typography sx={{ fontSize: 12, color: FAINT, "&::first-letter": { textTransform: "uppercase" } }}>{r.kind}</Typography>
+                <Typography noWrap sx={{ fontSize: 13, color: INK, fontWeight: r.primary ? 700 : 500 }}
                   title={r.value + (r.name ? ` · ${r.name}` : "")}>
                   {r.value}{r.name ? <Box component="span" sx={{ color: FAINT }}>{`  ·  ${r.name}`}</Box> : null}
                   {r.primary ? <Box component="span" sx={{ color: "var(--tq-warning, #6b5f45)", fontSize: 11, ml: 0.75 }}>★ owner</Box> : null}
@@ -162,7 +162,7 @@ export default function AboutYou() {
       ))}
 
       {/* honesty about the gap between "known here" and "told to the agents" */}
-      <Typography id={secId("about", S_TOLD)} sx={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT, mt: 3, mb: 1 }}>WHAT THE AGENTS ARE TOLD ABOUT YOU</Typography>
+      <Typography id={secId("about", S_TOLD)} sx={{ fontSize: 11.5, color: FAINT, mt: 3, mb: 1 }}>What the agents are told about you</Typography>
       <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
         Agents read SOUL.md, where your name and email are filled in as tokens. Below is all of it, exactly as they read it; edit it on the Docs page.
       </Typography>

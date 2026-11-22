@@ -52,7 +52,7 @@ test("a chat offers no picker that lies, and says a file cannot ride only where 
   assert.match(pane, /\) : \(promised \|\| files\.length\) \? \(/);
   assert.match(read("ReviewDecision.jsx"), /promised=\{filesPromised\(r\)\}/);
   assert.match(read("ReviewDecision.jsx"), /deliveryFiles\(filedDelivery\)\.length > 0 \|\| filesPromised\(r\)\)/);
-  assert.match(pane, /message cannot carry one — reply by email with the file instead/);
+  assert.match(pane, /files can't be sent on \$\{channel\} from here - reply by email to send it/);
   // ...no line under every chat draft that promises nothing (the owner, 2026-10-22: no explanation lines)
   assert.doesNotMatch(pane, /answer by email to attach one/);
   assert.match(pane, /const mail = String\(channel \|\| "email"\)\.toLowerCase\(\) === "email"/);

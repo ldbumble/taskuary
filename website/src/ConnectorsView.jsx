@@ -152,7 +152,7 @@ const META = {
       "Your own private chat with the bot — Taskuary walks you through your work there. Easier picked on Settings → Phone & chats"],
       pollSecondsField("telegram")],
     secretLabel: "bot token (from @BotFather)",
-    desc: "A Telegram bot as an inbound channel - approved chats flow through triage; approved replies go back into the same chat. Unknown chats never become work: a bot is public.",
+    desc: "A Telegram bot as an inbound channel - approved chats come into your list; approved replies go back into the same chat. Unknown chats never become work: a bot is public.",
     howto: ["Message @BotFather in Telegram → /newbot → copy the token.",
       "Paste the token under Credentials (write-only) and Test.",
       "Finding a chat id is automatic: message your bot (or add it to a group) and Sync — the chat appears under Sources with its chat id, switched OFF. Flip on the ones that are yours; messages flow from then on.",
@@ -170,7 +170,7 @@ const META = {
        "Your private Message yourself chat - Taskuary walks you through your work there"],
       pollSecondsField("whatsapp")],
     secretLabel: null,
-    desc: "Your own WhatsApp, via a small bridge that runs beside Taskuary (Baileys, installed separately) - chats flow through triage, approved replies go back into the chat.",
+    desc: "Your own WhatsApp, through a small bridge Taskuary runs on this computer - chats come into your list, and the replies you approve go back into the chat.",
     howto: ["Three steps, all in the Pair with your phone box above. 1 - Node 18+ on this machine (Windows: `winget install OpenJS.NodeJS.LTS`, or nodejs.org). The box checks for it and tells you if it is missing; nothing else to install.",
       "2 - The bridge starts by itself once Node is there (first time it fetches its dependency, Baileys - a minute or two). 3 - The QR appears; on your phone: WhatsApp → Linked devices → Link a device → scan. The box turns green when the phone accepts.",
       "Leave the bridge running (it survives closing the browser; a reboot stops it - the box starts it again when you open this card). Test confirms the pairing; it does not authorize any chat for you.",
@@ -188,7 +188,7 @@ const META = {
     fields: [["Look back this many days on first sync (blank = from now on)", "lookback_days", "", "Only read on the FIRST sync — years of private history never import by accident"],
       pollSecondsField("imessage")],
     secretLabel: null,
-    desc: "The Mac's own Messages — iMessage, SMS and RCS that reach this machine. Chats flow through triage, approved replies go back into the same chat through Messages.app. macOS only.",
+    desc: "The Mac's own Messages — iMessage, SMS and RCS that reach this machine. Chats come into your list, approved replies go back into the same chat through Messages.app. macOS only.",
     howto: ["No token: Messages.app is the account. Taskuary reads the history macOS already keeps on this Mac (~/Library/Messages/chat.db) and asks Messages.app to send.",
       "Reading needs Full Disk Access — a macOS permission, granted to the app Taskuary was launched from (Terminal, iTerm, your IDE, or the python binary itself). Test tells you which one it detected, and Settings usually needs that host relaunched before it takes.",
       "System Settings → Privacy & Security → Full Disk Access → switch on (or + and add) the host Test named, then Test again. A real read of the database is the proof — not the checkbox.",
@@ -204,7 +204,7 @@ const META = {
       ["Client ID", "google_client_id", "", "From your Desktop client in Google Cloud - it ends .apps.googleusercontent.com"],
       ["Client secret", "google_client_secret", "", "From the same client."]],
     secretLabel: "App Password - or Sign in with Google, above",
-    desc: "A Gmail or Google Workspace mailbox - IMAP in through triage, replies back over Gmail's own SMTP, in-thread. Sign in with Google for the mail, calendar and contacts together, or use an App Password for the mail alone.",
+    desc: "A Gmail or Google Workspace mailbox - mail comes into your list, replies back over Gmail's own SMTP, in-thread. Sign in with Google for the mail, calendar and contacts together, or use an App Password for the mail alone.",
     howto: ["Two ways in. Sign in with Google brings the mail, the calendar and the contacts; an App Password brings the mail alone. Enter the mailbox address under Credentials either way.",
       "Sign in with Google needs a Google client of your own - the box at the top of this card lists the steps: a Google Cloud project, the Gmail, Calendar and People APIs enabled, the consent screen with yourself as a test user, and a Desktop app client whose ID and secret go into the box.",
       "Then press Sign in with Google and leave Google's boxes ticked. With no App Password saved, mail comes in and replies go out through that sign-in; invites are accepted and declined, and meetings set up, on the same one.",
@@ -221,7 +221,7 @@ const META = {
              ["IMAP port (blank = 993; 143 or 1143 upgrade with STARTTLS)", "imap_port"], ["SMTP port (blank = 587)", "smtp_port"],
              ["TLS certificate (blank = check it; a sha256 to accept that one; 'any' for none)", "tls_accept"]],
     secretLabel: "Email password",
-    desc: "Any mailbox that speaks IMAP - a domain.com address, Yahoo, an ISP, your webhost. In through triage, replies out over its SMTP.",
+    desc: "Any mailbox that speaks IMAP - a domain.com address, Yahoo, an ISP, your webhost. Mail comes into your list, replies out over its SMTP.",
     howto: ["Find your provider's IMAP and SMTP hostnames (usually imap./smtp. + your domain; ports 993/587).",
       "Enter the address and IMAP host under Credentials; SMTP host only if it does not follow the imap->smtp pattern.",
       "Paste the mailbox password (write-only). Providers with app passwords (Yahoo, iCloud) want those.",
@@ -231,8 +231,8 @@ const META = {
       "Microsoft-hosted mailbox (outlook.com, hotmail, Microsoft 365)? IMAP passwords no longer work there - point the owner at the Outlook card and stop.",
       "Ask for the mailbox password (Yahoo and iCloud want an app password instead) and save it as Secret; save address, imap_host and, only if it breaks the imap->smtp pattern, smtp_host in ConfigJson. Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on, SETUP DONE."] },
   github: { group: "Developer", channel: "github", srcLabel: "Repositories", srcPh: "org/repo",
-    fields: [], secretLabel: "fine-grained PAT",
-    desc: "Paste a personal access token - repos are auto-discovered, feed the Board's repo picker and the coding agent's issue loop. Per repo, choose what issues and PRs do: tasks, feed, or off.",
+    fields: [], secretLabel: "GitHub access token",
+    desc: "Paste a personal access token - repos are auto-discovered, so tasks can be worked in them and coding agents can pick up their issues. Per repo, choose what issues and PRs do: tasks, feed, or off.",
     howto: ["Create a fine-grained PAT: GitHub → Settings → Developer settings → Fine-grained tokens.",
       "Repository access: the repos the agent may touch. Permissions: Issues Read+Write, Pull requests Read+Write, Metadata Read.",
       "Paste the token under Credentials - that's ALL the config: on save Taskuary discovers every repo the token reaches, adds them under Sources, and writes the repository map into SOUL.md.",
@@ -624,7 +624,7 @@ const META = {
       ["user id (issued beside the token)", "user_id", "", "Rocket.Chat authenticates with two values: the token and the id of the user it belongs to. Only the token is a secret."],
       pollSecondsField("rocketchat")],
     secretLabel: "personal access token (write-only)",
-    desc: "Rocket.Chat rooms through triage, replies back in the room. Two values, not one — the token and the user id issued with it.",
+    desc: "Rocket.Chat rooms come into your list, replies back in the room. Two values, not one — the token and the user id issued with it.",
     howto: ["Avatar → My Account → Personal Access Tokens → Add. Rocket.Chat shows a TOKEN and a USER ID; you need both.",
       "Paste the token under Credentials (write-only) and the user id in its own field.",
       "Enter the server url (https://chat.yourcompany.com — no /api/v1, that is added).",
@@ -661,20 +661,20 @@ const META = {
       "Turn the connector on, SETUP DONE."] },
   anthropic: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default claude-opus-5)", "model"]], secretLabel: "API key",
-    desc: "Claude via the Anthropic API - powers intent triage (task / reply-only / FYI) once enabled.",
+    desc: "Claude via the Anthropic API - sorts what comes in once it is on.",
     howto: ["Create an API key at console.anthropic.com → API keys.",
       "Paste it under Credentials (write-only). Optionally set a model - default is claude-opus-5.",
       "Test runs a real round trip through the model.",
       "Enable it and every new inbound message is classified by the model, guided by SOUL.md - the first active AI connector wins."] },
   openai: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default gpt-4o-mini)", "model"]], secretLabel: "API key",
-    desc: "OpenAI models for intent triage - alternative to the Anthropic connector.",
+    desc: "OpenAI models to sort what comes in.",
     howto: ["Create an API key at platform.openai.com.",
       "Paste it under Credentials; optionally set a model.",
-      "Test runs a real round trip. Enable to wire it into triage - the first active AI connector wins."] },
+      "Test runs a real round trip. Turn it on to sort what comes in - the first AI card that is on does it."] },
   azure_openai: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["Endpoint", "endpoint", "https://YOUR-RESOURCE.openai.azure.com"], ["Deployment name", "deployment"], ["API version (optional)", "api_version"]], secretLabel: "API key",
-    desc: "Your Azure OpenAI deployment for intent triage - endpoint + deployment + key.",
+    desc: "Your Azure OpenAI deployment to sort what comes in - endpoint + deployment + key.",
     howto: ["Azure Portal → your Azure OpenAI resource → Keys and Endpoint.",
       "Enter the endpoint (https://YOUR-RESOURCE.openai.azure.com), the deployment name, and optionally an api_version.",
       "Paste a key under Credentials. Test runs a real round trip through the deployment."] },
@@ -683,15 +683,15 @@ const META = {
     desc: "One key, the whole catalog — open-weights Llama / Qwen / Mistral and every closed model, through OpenRouter's OpenAI-compatible API.",
     howto: ["Create a key at openrouter.ai → Keys.",
       "Paste it under Credentials; optionally set a model from openrouter.ai/models (e.g. meta-llama/llama-3.3-70b-instruct). Empty = openrouter/auto picks per request.",
-      `Test runs a real round trip. Enable to wire it into triage, drafts, the digest and LEARNED.md — or pick it explicitly under ${placeName("sorting")}.`] },
+      `Test runs a real round trip. Turn it on for sorting, drafts, the digest and what Taskuary learns.md — or pick it explicitly under ${placeName("sorting")}.`] },
   meta: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default muse-spark-1.2)", "model"], ["base_url (default https://api.meta.ai/v1)", "base_url"]],
     secretLabel: "Meta Model API key",
-    desc: "Meta's Muse Spark models through the Meta Model API, billed per token — the triage road; coding sessions use the muse CLI.",
+    desc: "Meta's Muse Spark models through the Meta Model API, billed per token — for sorting what comes in; coding sessions use the muse CLI.",
     howto: ["Create a key at dev.meta.ai → API keys (a payment method is required; Meta publishes no free tier).",
       "Paste it under Credentials. Leave model blank for muse-spark-1.2, or name muse-spark-1.3.",
       "muse-spark-1.2-contributor costs about a twelfth as much — because you opt in to Meta using your prompts and completions to improve its products, and it is rate-limited to 100 requests/minute against 3,000. Do not point it at real work mail unless you mean to share it.",
-      `Test runs a real round trip. Enable to wire it into triage, drafts and the digest — or pick it explicitly under ${placeName("sorting")}.`,
+      `Test runs a real round trip. Turn it on for sorting, drafts and the digest — or pick it explicitly under ${placeName("sorting")}.`,
       `This is the TRIAGE road. For coding sessions on Muse Spark, install the muse CLI under ${placeName("ai_apps")} (Windows, macOS and Linux).`] },
   // NINE PROVIDERS, ONE SURFACE. Each of these speaks the OpenAI chat-completions schema exactly,
   // so llm.py holds them as a table (OPENAI_COMPATIBLE) rather than nine branches, and a card here
@@ -704,13 +704,13 @@ const META = {
     desc: "Your organisation's own AI, run in its own cloud - switched on with the access code it sent you. Nothing to install, no API account of your own.",
     howto: ["Paste the gateway address and the access code you were sent. The code is yours alone - usage is counted against it.",
       "The address starts with https:// - with or without /v1 at the end, either works.",
-      "Test runs a real round trip. Enable to wire it into triage, drafts and the digest."] },
+      "Test runs a real round trip. Turn it on for sorting, drafts and the digest."] },
   groq: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default llama-3.3-70b-versatile)", "model"], ["base_url", "base_url"]], secretLabel: "API key",
-    desc: "Open-weights models at the fastest tokens-per-second anywhere, on a free tier generous enough to triage a real mailbox.",
+    desc: "Open-weights models at the fastest tokens-per-second anywhere, on a free tier generous enough to sort a real mailbox.",
     howto: ["Create a key at console.groq.com → API Keys. Free, no card.",
       "Paste it under Credentials. Leave model blank for llama-3.3-70b-versatile, or name one from console.groq.com/docs/models.",
-      "Test runs a real round trip. Enable to wire it into triage, drafts and the digest."] },
+      "Test runs a real round trip. Turn it on for sorting, drafts and the digest."] },
   cerebras: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default llama-3.3-70b)", "model"], ["base_url", "base_url"]], secretLabel: "API key",
     desc: "Wafer-scale silicon running Llama faster than an ordinary GPU can — free tier, no card.",
@@ -731,7 +731,7 @@ const META = {
       "Paste the key under Credentials. Test runs a real round trip."] },
   deepseek: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default deepseek-chat)", "model"], ["base_url", "base_url"]], secretLabel: "API key",
-    desc: "Open reasoning models at roughly a tenth of the usual price — the cheapest capable triage brain here.",
+    desc: "Open reasoning models at roughly a tenth of the usual price — the cheapest capable AI here for sorting.",
     howto: ["Create a key at platform.deepseek.com → API keys (prepaid balance, no subscription).",
       "Paste it under Credentials. deepseek-chat is the general model; deepseek-reasoner thinks before it answers and costs more.",
       "Test runs a real round trip."] },
@@ -766,49 +766,49 @@ const META = {
     desc: "Sonar answers a question with the live web behind it and cites what it read — a search engine shaped like a model.",
     howto: ["Create a key at perplexity.ai → Settings → API (prepaid credit).",
       "Paste it under Credentials. sonar is the everyday model; sonar-pro searches harder and costs more.",
-      "Test runs a real round trip. Useful as the brain for a research report rather than for triage."] },
+      "Test runs a real round trip. Useful as the brain for a research report rather than for sorting."] },
   fireworks_ai: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default accounts/fireworks/models/glm-5p3-flash)", "model"], ["base_url", "base_url"]], secretLabel: "API key",
     desc: "Open models on fast serverless inference - one key, any model in its library.",
     howto: ["Create a key at app.fireworks.ai → Settings → API Keys.",
       "Paste it under Credentials. Leave model blank for accounts/fireworks/models/glm-5p3-flash, or name another from the provider's model list.",
-      "Test runs a real round trip. Enable to wire it into triage, drafts and the digest."] },
+      "Test runs a real round trip. Turn it on for sorting, drafts and the digest."] },
   nvidia_nim: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default meta/llama-3.3-70b-instruct)", "model"], ["base_url", "base_url"]], secretLabel: "API key",
     desc: "Open models served by NVIDIA's NIM microservices, with free credits to start.",
     howto: ["Create a key at build.nvidia.com → any model → Get API Key.",
       "Paste it under Credentials. Leave model blank for meta/llama-3.3-70b-instruct, or name another from the provider's model list.",
-      "Test runs a real round trip. Enable to wire it into triage, drafts and the digest."] },
+      "Test runs a real round trip. Turn it on for sorting, drafts and the digest."] },
   sambanova: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default Meta-Llama-3.3-70B-Instruct)", "model"], ["base_url", "base_url"]], secretLabel: "API key",
     desc: "Llama and other open models on SambaNova's own chips - fast, with a free tier.",
     howto: ["Create a key at cloud.sambanova.ai → APIs.",
       "Paste it under Credentials. Leave model blank for Meta-Llama-3.3-70B-Instruct, or name another from the provider's model list.",
-      "Test runs a real round trip. Enable to wire it into triage, drafts and the digest."] },
+      "Test runs a real round trip. Turn it on for sorting, drafts and the digest."] },
   deepinfra: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default meta-llama/Llama-3.3-70B-Instruct-Turbo)", "model"], ["base_url", "base_url"]], secretLabel: "API key",
     desc: "Open models at low per-token prices, pay as you go.",
     howto: ["Create a key at deepinfra.com → Dashboard → API Keys.",
       "Paste it under Credentials. Leave model blank for meta-llama/Llama-3.3-70B-Instruct-Turbo, or name another from the provider's model list.",
-      "Test runs a real round trip. Enable to wire it into triage, drafts and the digest."] },
+      "Test runs a real round trip. Turn it on for sorting, drafts and the digest."] },
   novita: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default meta-llama/llama-3.3-70b-instruct)", "model"], ["base_url", "base_url"]], secretLabel: "API key",
     desc: "Open models on pay-as-you-go GPUs, one key for the whole library.",
     howto: ["Create a key at novita.ai → Settings → Key Management.",
       "Paste it under Credentials. Leave model blank for meta-llama/llama-3.3-70b-instruct, or name another from the provider's model list.",
-      "Test runs a real round trip. Enable to wire it into triage, drafts and the digest."] },
+      "Test runs a real round trip. Turn it on for sorting, drafts and the digest."] },
   hyperbolic: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default glm-5.3-flash)", "model"], ["base_url", "base_url"]], secretLabel: "API key",
     desc: "Open models on low-cost GPU inference.",
     howto: ["Create a key at app.hyperbolic.ai → Settings → API Keys.",
       "Paste it under Credentials. Leave model blank for glm-5.3-flash, or name another from the provider's model list.",
-      "Test runs a real round trip. Enable to wire it into triage, drafts and the digest."] },
+      "Test runs a real round trip. Turn it on for sorting, drafts and the digest."] },
   bedrock: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default openai.gpt-oss-120b-1:0)", "model"], ["base_url", "base_url"]], secretLabel: "API key",
     desc: "Models in your own AWS account through Bedrock's chat completions - with a Bedrock API key.",
     howto: ["Create a key at AWS console → Amazon Bedrock → API keys (a Bedrock API key, not an access key pair).",
       "Paste it under Credentials. Leave model blank for openai.gpt-oss-120b-1:0, or name another from the provider's model list.",
-      "Test runs a real round trip. Enable to wire it into triage, drafts and the digest."] },
+      "Test runs a real round trip. Turn it on for sorting, drafts and the digest."] },
   // A decision model, not a brain. It sits in this group because it is an AI card you paste a key
   // on, but it is offered in exactly ONE picker (Settings → How mail is sorted → Where runs go): it
   // emits no text at all, so chosen as the Assistant's brain it would have nothing to say.
@@ -817,7 +817,7 @@ const META = {
   chatgpt: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (blank = the first model your plan lists)", "model"]], secretLabel: null,
     // the allowance and the cap are the sign-in box's own words, right above this line - said twice, one under the other
-    desc: "Your ChatGPT plan as Taskuary's brain - triage, the Assistant, reports.",
+    desc: "Your ChatGPT plan as Taskuary's AI - sorting, the Assistant, reports.",
     howto: ["Sign in with ChatGPT above: your browser opens auth.openai.com, you sign in with your own ChatGPT account and allow plan usage, and the card finishes by itself.",
       `Then pick it as a brain under ${placeName("sorting")}. It is text only: screenshots are not sent, and it has no tools.`,
       "Set or raise the weekly cap for Taskuary in ChatGPT's settings. When the cap is used up the brain stops and says so - it does not fall back to paid credits unless you allow that in ChatGPT.",
@@ -1435,7 +1435,7 @@ const DATA_META = {
       ["client certificate path (.pem) — development and production only", "cert_path", "C:/taskuary/teller/certificate.pem"],
       ["private key path (.pem) — development and production only", "key_path", "C:/taskuary/teller/private_key.pem"]],
     secretLabel: "access token (write-only) — Connect a bank fills it in",
-    desc: "What left the bank and the cards, as rows: every account under one bank login, its transactions newest first, its balances. Read-only by construction — a feed cannot move money. Schedule the transactions with 'can become work' and each new one is a message triage judges.",
+    desc: "What left the bank and the cards, as rows: every account under one bank login, its transactions newest first, its balances. Read-only by construction — a feed cannot move money. Schedule the transactions with 'can become work' and each new one is sorted like a message.",
     connect: { widget: "teller", label: "Connect a bank", status: (cid) => `/api/connectors/${cid}/teller/status`, enroll: (cid) => `/api/connectors/${cid}/teller/enroll`,
       text: "Opens the bank's own sign-in (Teller Connect). The token for that login lands on this card; the browser never keeps it." },
     howto: ["teller.io → sign up → create an application. The dashboard hands you an application id and, for development and production, a certificate.pem and private_key.pem — save both somewhere on this machine and put their paths on the card. Sandbox needs no certificate and accepts any login at its fake banks, which is how to try the loop first.",
@@ -1494,7 +1494,7 @@ const DATA_META = {
     desc: "US public-company filings and the XBRL facts inside them, straight from SEC EDGAR — no key, though SEC asks every caller to identify itself, which this card does for you.",
     howto: ["Nothing to configure. Test looks up Apple's filings (CIK 320193).",
       "Build the reports on the REPORTS tab: 'edgar_filings' for a company's recent filings by CIK (find one at sec.gov/cgi-bin/browse-edgar), optionally filtered to certain forms (8-K,10-Q); 'edgar_facts' for one reported XBRL number over time (a tag like Revenues) as the company itself filed it.",
-      "Schedule 'edgar_filings' with 'can become work' and a new 8-K is a message triage judges."],
+      "Schedule 'edgar_filings' with 'can become work' and a new 8-K is sorted like a message."],
     agent: ["A CIK is a number, not a ticker - sec.gov/cgi-bin/browse-edgar looks one up by company name. Nothing else to ask the owner for."] },
   screen: { title: "Strategy screen", types: ["markets_screen"], fields: [], noSecret: true,
     desc: "Not a data source of its own: a screen BORROWS another card's connection to filter its rows down to the ones that match a condition. Its connector_id — set on the 'markets_screen' report, not here — names the provider card to read through; this card holds no credentials of its own.",
@@ -2238,12 +2238,12 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   // ...the data source's connection said by the server's state (connectorcatalog.state): a failing or switched-off card read "connection ✓"
   const connWord = (c) => ({ connected: "connection ✓", off: NOT_SET_UP })[connStateOf(c)] || `connection: ${c.State.line.toLowerCase()}`;
   const dataDesc = (c, rtype) => connWord(c)
-    + ` · ${plural(reports.filter((s2) => (parse(s2.ConfigJson).type || "rest") === rtype).length, "report")} (built under Reports)`;
+    + ` · ${plural(reports.filter((s2) => (parse(s2.ConfigJson).type || "rest") === rtype).length, "report")}`;
   const dataCards = (keys) => keys.flatMap((t) => allOf(t).filter(() => DATA_META[t]).map((c) => {
     const dm = DATA_META[t];
     return { key: `d${c.ConnectorId}`, title: c.Name, channel: t,
       desc: connWord(c)
-        + ` · ${plural(reports.filter((s2) => dm.types.includes(parse(s2.ConfigJson).type)).length, "report")} (built under Reports)`,
+        + ` · ${plural(reports.filter((s2) => dm.types.includes(parse(s2.ConfigJson).type)).length, "report")}`,
       haystack: `${dm.title} ${t} ${dm.desc} ${dm.types.join(" ")} ` + dm.howto.join(" "),
       go: () => setOpen({ kind: "connector", id: c.ConnectorId }), remove: removable(c) ? { conn: c, channel: "data", reload: load } : null };
   }));
@@ -2569,7 +2569,7 @@ function CardPlaybooks({ type }) {
   return (
     <Box sx={{ mt: 3, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL }}>
       <Typography variant="caption" sx={{ color: "var(--tq-success, #6f8a6e)", fontWeight: 600, letterSpacing: 1, display: "block", mb: 0.75 }}>
-        PLAYBOOKS — WHAT THIS CONNECTION DOES FOR US
+        Playbooks - what this connection does for you
       </Typography>
       {books.length === 0 && (
         <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
@@ -3452,7 +3452,7 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
 const CLOUD_MODES = [
   ["report", "report only — selectable under Reports, never polled"],
   ["feed", "feed — new items show up to read, never become work"],
-  ["tasks", "tasks — new items go through triage and can become work"],
+  ["tasks", "tasks — new items are sorted and can become work"],
   ["off", "off — ignored entirely"],
 ];
 // prefix -> (short type label, filter pill label). The prefix IS the type, so one place
@@ -3879,7 +3879,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
 /* What a connection IS to the hub. Three independent jobs - a system can do all three,
    or just be something the agents are allowed to touch. */
 const ROLE_META = {
-  trigger: ["Inbound trigger — creates work", "Poll it for new items, run them through triage, open tasks and draft replies. This is what turns a connection into work (mail, chats, GitHub issues…)."],
+  trigger: ["Inbound trigger — creates work", "Poll it for new items, sort them, open tasks and draft replies. This is what turns a connection into work (mail, chats, GitHub issues…)."],
   feed: ["Feed — shows, never assigns", "Check it and show every new item to read, but stop there: no sorting, no AI, no task. Good for GitHub issues or a chatty channel you want to SEE without being handed."],
   report: ["Report source", "Selectable under Reports: query it on a schedule and put the (optionally AI-summarized) result under Reports on your work rail."],
   tool: ["Agent tool", "Named for the agents in SOUL.md as a system they may use — pull data from it, create and update things in it while working a task."],
@@ -3895,7 +3895,7 @@ const GITHUB_PERMS = [
   ["agents_push", "Agents may push / deploy",
    "On: agents push and deploy as the work needs. Off (default): commits stay local for your review - you push - and only a task whose ask explicitly says to push may. Force-pushes and archived repositories stay forbidden either way."],
   ["reply_comments", "Reply to issue/PR authors",
-   "On: questions from GitHub get a drafted reply, finished work drafts a closing note, and approving one posts it as a PUBLIC comment on the issue/PR. Off (default): GitHub items never get reply drafts - questions file with their triage reason, finished work just closes with its report, and nothing is ever posted to a public thread on your behalf."],
+   "On: questions from GitHub get a drafted reply, finished work drafts a closing note, and approving one posts it as a PUBLIC comment on the issue/PR. Off (default): GitHub items never get reply drafts - questions are filed with the reason they were sorted there, finished work just closes with its report, and nothing is ever posted to a public thread on your behalf."],
 ];
 
 // REPLIES ON THIS CARD (the owner, 2026-11-08: "do replying back new source as well"): a reply you Send on a task this card filed goes
@@ -4026,7 +4026,7 @@ const GithubCloseout = ({ conn, mine, reload }) => {
       ))}
       {mine.filter((s) => s.Active).length > 0 && (
         <Box sx={{ mt: 1.5 }}>
-          <Typography variant="caption" sx={{ ...mono, color: FAINT, letterSpacing: 1, fontSize: 10 }}>PER REPOSITORY — WHERE ONE DIFFERS</Typography>
+          <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>Per repository — where one differs</Typography>
           {mine.filter((s) => s.Active).map((s) => {
             const own = JSON.parse(s.ConfigJson || "{}").closeout || {};
             const val = (k) => (own[k] === undefined ? "" : k === "anyway" ? (own[k] ? "on" : "off") : own[k]);
@@ -4511,8 +4511,8 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle, ask = null 
         </Box>
         <PhoneChatsLink onNavigate={onNavigate} />
       </Box>
-      <Typography variant="overline" sx={{ color: DIM, letterSpacing: 1.4, fontSize: 10, fontWeight: 600, display: "block" }}>
-        WHAT COMES IN
+      <Typography variant="overline" sx={{ color: DIM, fontSize: 11.5, fontWeight: 600, display: "block" }}>
+        What comes in
       </Typography>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
         Chats reachable through this paired account. Groups are loaded from WhatsApp; direct chats appear once Taskuary or the

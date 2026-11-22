@@ -1079,7 +1079,7 @@ export const SideRail = ({ title, note, items, value, onChange, q, setQ, placeho
       {items.map((it) => {
         if (it.section) return (
           <Typography key={`section-${it.section}`} variant="overline"
-            sx={{ display: "block", color: ACCENT2, letterSpacing: 1.35, fontWeight: 600,
+            sx={{ display: "block", color: ACCENT2, fontWeight: 600,
               fontSize: 9.5, px: 1.25, mt: it.first ? 0 : 1.6, mb: 0.3 }}>
             {it.section}
           </Typography>
@@ -1140,7 +1140,7 @@ export const LandingCard = ({ icon, title, desc, onOpen, foot }) => (
 
 export const SectionLabel = ({ children, right }) => (
   <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1, mt: 2 }}>
-    <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontWeight: 600, fontSize: 10 }}>{children}</Typography>
+    <Typography variant="overline" sx={{ color: ACCENT2, fontWeight: 600, fontSize: 10 }}>{children}</Typography>
     {right}
   </Box>
 );

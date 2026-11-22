@@ -155,12 +155,12 @@ agent</strong> group is not shown and every job goes to a general agent - see
 <p>Left blank, it is your default brain on its light gear (haiku for Claude) - never whichever connector was added first. Obvious automated noise is filtered by cheap heuristics before any AI is called either way.</p>
 <h3 id="backup-ai-connections">Backup AI connections<a class="anchor" href="#backup-ai-connections" aria-label="Link to this section">#</a></h3>
 <p><code>triage_backup_ai</code> · type: brains · default: blank</p>
-<p>Ordered alternatives for triage, reply drafts, summaries, reports, and assistant chat when the chosen AI is unavailable.</p>
+<p>Ordered alternatives for sorting what comes in, reply drafts, summaries, reports, and assistant chat when the chosen AI is unavailable.</p>
 <p>Pick more than one. Taskuary tries them in the order shown when the primary brain hits a session or usage limit, is signed out, has no key, or otherwise refuses the call. A fallback uses its own default model; a model name chosen for Claude is never handed to Codex.</p>
 <p>This starts blank because crossing from a cloud API to a local CLI can change cost and privacy. Once you name backups, the same chain protects every short/background AI job as well as the non-coding assistant.</p>
 <h3 id="use-playbooks">Use playbooks<a class="anchor" href="#use-playbooks" aria-label="Link to this section">#</a></h3>
 <p><code>playbooks_enabled</code> · type: switch · default: on</p>
-<p>Triage matches new mail to your playbooks, and agents may propose new ones.</p>
+<p>New mail is matched to your playbooks, and agents may propose new ones.</p>
 <p>On: triage is shown every playbook that is switched on, a message that is an instance of one becomes a task worked from it, and a finished job that will recur is proposed as a new playbook for your approval. Off: no playbook is matched or proposed; the playbooks themselves stay on Reports → Playbooks, and a single one can be switched off there instead.</p>
 <h3 id="ai-for-taskuary">AI for Taskuary<a class="anchor" href="#ai-for-taskuary" aria-label="Link to this section">#</a></h3>
 <p><code>concierge_ai</code> · type: brain · set on a card at the top of the page</p>
@@ -181,7 +181,7 @@ agent</strong> group is not shown and every job goes to a general agent - see
 <p>Normally set on the &#39;Where reports go&#39; card at the top of this section; this row is the fallback if that panel cannot load. Four yes/nos about a result somebody else wrote, judged against the sentences on the report&#39;s own card - it never has to write anything, so a decision model belongs here and a chat model is wasted on it. Blank = the brain that writes each report judges its own run.</p>
 <h3 id="which-ai-does-each-job">Which AI does each job<a class="anchor" href="#which-ai-does-each-job" aria-label="Link to this section">#</a></h3>
 <p><code>ai_route_mode</code> · type: select · default: <code>auto</code> · set on a card at the top of the page</p>
-<p>Auto, the default: triage judges each task quick, normal or hard, and quick work runs on a smaller model, hard work on a stronger one. Fixed runs every job exactly as its card says.</p>
+<p>Auto, the default: each task is judged quick, normal or hard, and quick work runs on a smaller model, hard work on a stronger one. Fixed runs every job exactly as its card says.</p>
 <p>Options: <code>fixed</code>, <code>auto</code></p>
 <p>Normally set on the line above the AI cards; this row is the fallback if that panel cannot load. In Auto each card is its job&#39;s normal model, and the rules under it say when the quick or the strong model runs instead - each shown as a sentence with its own switch. An AI with only one model thinks less for quick work and harder for hard work instead, where it takes an effort setting (Claude Code, Codex, and the Anthropic, OpenAI and Azure OpenAI API cards); any other AI stays on its one model. An explicit pick - yours, a report&#39;s, a workflow&#39;s - always wins, and nothing is sent without your press either way.</p>
 <h3 id="ai-calls-a-day-before-automatic-work-waits">AI calls a day before automatic work waits<a class="anchor" href="#ai-calls-a-day-before-automatic-work-waits" aria-label="Link to this section">#</a></h3>
@@ -404,7 +404,7 @@ agent</strong> group is not shown and every job goes to a general agent - see
 <p>A first-time sender from outside your domains never starts an agent by itself - the task lands, you press the button. Requires the CLI installed and signed in on this machine. Nothing ships or sends without your approval either way.</p>
 <h3 id="who-may-start-a-worker-without-you">Who may start a worker without you<a class="anchor" href="#who-may-start-a-worker-without-you" aria-label="Link to this section">#</a></h3>
 <p><code>trust_own_domain</code> · type: flags · default: <code>1</code></p>
-<p>An inbound message can open a task AND start the agent on it unattended. These are the four rules that allow it; a sender matching none of them still gets triaged and lands on the Board, and only the unattended start waits for your click.</p>
+<p>An inbound message can open a task AND start the agent on it unattended. These are the four rules that allow it; a sender matching none of them is still sorted onto your list, and only the unattended start waits for your click.</p>
 <p>One control over: <strong>your own domains</strong> (<code>trust_own_domain</code>), <strong>people you have written to</strong> (<code>trust_sent_history</code>), <strong>people you talk with in chats, and your own feeds</strong> (<code>trust_non_email</code>), <strong>members of your trackers&#39; projects</strong> (<code>trust_trackers</code>)</p>
 <p>Three separate switches until 2026-09-16, which meant reading all three to know the answer to one question.</p>
 <p>your own domains — every connected mailbox&#39;s domain and the owner address.</p>
@@ -436,9 +436,9 @@ agent</strong> group is not shown and every job goes to a general agent - see
 <p>At the defaults (four agents, five here) four sessions fill the room; three sessions leave room for five quick answers at once; with nothing else running, twenty quick answers can run together. A new session or quick answer waits for room, then starts by itself.</p>
 <p>An agent&#39;s subagents are never stopped - they belong to its session - so they only make new work wait. Raise this if quick answers queue behind agents too often; lower it to count light work more heavily. 1 counts each one as a whole agent.</p>
 <h2 id="agent-permissions">Agent permissions<a class="anchor" href="#agent-permissions" aria-label="Link to this section">#</a></h2>
-<h3 id="run-cli-agents-over-acp">Run CLI agents over ACP<a class="anchor" href="#run-cli-agents-over-acp" aria-label="Link to this section">#</a></h3>
+<h3 id="taskuary-approves-each-step-of-an-agent">Taskuary approves each step of an agent<a class="anchor" href="#taskuary-approves-each-step-of-an-agent" aria-label="Link to this section">#</a></h3>
 <p><code>acp_cli</code> · type: switch · default: on</p>
-<p>General agents on Claude Code, Codex, Gemini and the other CLIs run through the Agent Client Protocol: every tool call and permission is a request Taskuary sees and answers. Off: they run on the command line as before.</p>
+<p>Agents on Claude Code, Codex, Gemini and the other AI tools ask before each tool they use, and Taskuary answers by your rules. Off: they run on their own, as before.</p>
 <p>On (the default): each tool an agent wants to use is asked for first, and Taskuary answers by its own rules - its own tools and anything that only reads or works in the agent&#39;s folder are allowed; a tool that sends mail or chat, a push, a publish or a delete outside the folder waits for you, as it does in a pane. What the agent did is shown step by step, the same as before. Claude Code and Codex speak it through a small adapter, started with npx (installed with <code>npm i -g @agentclientprotocol/claude-agent-acp @agentclientprotocol/codex-acp</code>, each start is about 2 seconds quicker); it drives the CLI you already have, with its own login.</p>
 <p>If an agent cannot start that way, that run goes on the command line instead and the log says so once. Off: every CLI run goes on the command line. Coding sessions in a terminal are not affected.</p>
 <h3 id="general-agents-can">General agents can<a class="anchor" href="#general-agents-can" aria-label="Link to this section">#</a></h3>
@@ -490,7 +490,7 @@ agent</strong> group is not shown and every job goes to a general agent - see
 <h2 id="attachments-images">Attachments &amp; images<a class="anchor" href="#attachments-images" aria-label="Link to this section">#</a></h2>
 <h3 id="ai-reads-attached-images">AI reads attached images<a class="anchor" href="#ai-reads-attached-images" aria-label="Link to this section">#</a></h3>
 <p><code>vision_enabled</code> · type: switch · default: on</p>
-<p>Screenshots go to the triage AI — &quot;see below&quot; mail is read, not guessed at.</p>
+<p>Screenshots go to the AI that sorts what comes in — &quot;see below&quot; mail is read, not guessed at.</p>
 <p>Half of &quot;see below&quot; mail says nothing in its body: the screenshot IS the request. On: attached images (PNG/JPEG/GIF/WebP, up to 4 per message, 5MB each) ride along into triage when the model has vision, and coding sessions get the local file paths to open themselves.</p>
 <p>Off: only text is ever sent to the AI — the setting to use if your model lacks vision or images must never leave the machine. The panel still displays attachments either way.</p>
 <h3 id="charts-on-reports">Charts on reports<a class="anchor" href="#charts-on-reports" aria-label="Link to this section">#</a></h3>

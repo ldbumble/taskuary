@@ -596,12 +596,6 @@ def feed(store, tid: int, sid: str, road: str, event) -> None:
     if not store or not tid or event is None: return
     # ...his stop is his press's line in the chat, never an error step of the turn (the trace marks it: general.send_prompt)
     if isinstance(event, dict) and event.get('type') == 'error' and isinstance(event.get('detail'), dict) and event['detail'].get('stop'): return
-    # ...AND THE HAND-OVER IS NEWS FOR THE PAGE (the goal walk on Claude, 2026-11-22: the turn's own state said at work from 8 s, the page drew
-    # "Waiting for the agent to start" until its first step at 24 s - nothing changed in the log, so nothing told the page to read it again)
-    if isinstance(event, dict) and event.get('type') == 'prompt':
-        _bump(store, tid)
-        with store.lock: store.cx.commit()
-        _poke(store, tid)
     t = open_turn(store, tid)
     root = (t['Key'] if t else '').split('+')[0]
     fs = _feeds(store); f = fs.get((int(tid), sid))

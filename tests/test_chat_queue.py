@@ -52,9 +52,16 @@ class TakingTurnsTests(unittest.TestCase):
         got, prompts = [], []
         with patched, mock.patch.object(general.llm_mod, 'build_llm', return_value=lambda system, user, **kw: (prompts.append(f'{system} {user}'), time.sleep(0.8), 'answered')[-1]):
             first = threading.Thread(target=lambda: got.append(sess.send_prompt('one')))
-            first.start(); time.sleep(0.2)
-            more = [threading.Thread(target=lambda w=w: got.append(sess.send_prompt(w))) for w in ('two', 'actually three')]
-            for t in more: t.start(); time.sleep(0.1)
+            first.start()
+            # ...each line once the state it is about holds, never after a fixed sleep (a slow CI runner sent "two" before "one" was at work)
+            def until(ok, s=10):
+                end = time.time() + s
+                while not ok() and time.time() < end: time.sleep(0.02)
+            until(lambda: bool(prompts))
+            more = []
+            for n, w in enumerate(('two', 'actually three'), 1):
+                more.append(t := threading.Thread(target=lambda w=w: got.append(sess.send_prompt(w)))); t.start()
+                until(lambda n=n: len(general.waiting_lines(self.s, self.tid)) >= n)
             for t in [first, *more]: t.join(15)
         self.assertEqual(sorted(got), ['', 'answered', 'answered'], 'two turns: the first, and one for both lines behind it')
         users = [c['Body'] for c in general.chat_rows(self.s, self.tid) if c['ActorType'] == general.USER_TYPE]

@@ -81,10 +81,9 @@ def can_send_draft(store, rid) -> bool:
     """False only where the draft's channel is known and cannot deliver - the Send that would only ever fail."""
     ch = draft_channel(store, rid)
     if ch and not can_send(store, ch): return False
-    # ...and never one whose card says Connect instead (outbound.review_connect; the walk, 2026-11-21: "ready to send" over "No mailbox is connected")
-    from . import outbound
-    r = store.get_review(int(rid)) if store is not None and rid else None
-    return not (r and _safe(lambda: outbound.review_connect(store, r), None))
+    # ...and never one whose card says Connect instead: one reader of that, rulebook.unconnected (the walk, 2026-11-21)
+    from . import rulebook
+    return not (store is not None and rid and _safe(lambda: rulebook.unconnected(store, {'rid': rid}), False))
 
 
 def channels() -> tuple:

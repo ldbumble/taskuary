@@ -2,7 +2,10 @@
 connection TYPE (the owner, 2026-10-29). The level is handed to triage with the message; what each level means is the guide's
 (templates/triage.md, "How far to combine") and the model decides - nothing here reads a word of any message."""
 KEY, LO, HI, BASE = 'combine:', 1, 5, 3
-DEFAULTS = {'whatsapp': 4, 'email': 4}
+# ...and WORDS THAT START WORK (ingest.WORDS_CHANNEL: his ask in New, the Assistant's or the phone's, an agent's new task) keep separate - only
+# the same problem joins (the owner, 2026-11-02: "if it's not the exact same thing you are working on put another agent on it"). At the base 3
+# they joined by subject: in the HIPAA walk, 2026-11-21, three of four separate asks in New were filed into open tasks about the same people
+DEFAULTS = {'whatsapp': 4, 'email': 4, 'words': 1}
 MAILBOXES = ('outlook', 'gmail', 'imap')     # the connector types whose messages arrive as channel 'email'
 RECENT_DAYS = 7                              # how far back a closed task is still one a message may join
 

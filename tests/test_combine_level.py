@@ -45,6 +45,11 @@ class TheSetting(unittest.TestCase):
         self.assertEqual({k: combine.level(s, k) for k in ('whatsapp', 'email', 'outlook', 'gmail', 'imap', 'teams', 'slack', 'telegram')},
                          {'whatsapp': 4, 'email': 4, 'outlook': 4, 'gmail': 4, 'imap': 4, 'teams': 3, 'slack': 3, 'telegram': 3})
 
+    def test_words_that_start_work_keep_separate(self):
+        """The HIPAA walk, 2026-11-21: New's words were judged at the base level 3 - "one task per subject" - and three separate asks went
+        into open tasks about the same people. A new ask is a new task with its own agent (the owner, 2026-11-02); only the same problem joins."""
+        self.assertEqual(combine.for_triage(store(), {'channel': ingest.WORDS_CHANNEL}), {'connection': ingest.WORDS_CHANNEL, 'level': 1})
+
     def test_a_mailbox_card_and_the_email_channel_share_one_level(self):
         s = store(); combine.set_level(s, 'outlook', 2)
         self.assertEqual((combine.level(s, 'email'), combine.level(s, 'gmail')), (2, 2))

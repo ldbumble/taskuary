@@ -70,9 +70,6 @@ CHANNEL_MARKS = {'email': '📧', 'teams': '👥', 'slack': '💬', 'telegram': 
                  'promise': '🤝', 'followup': '📨', 'prep': '📅', 'cold': '🥶'}
 
 
-def _written_past(store, tid) -> set:
-    from . import proposals
-    return proposals.written_past(store, tid)
 def owed_no_draft(item: dict) -> bool:
     """A reply owed with NO DRAFT YET (the owner, 2026-10-27): it rode the 'approve' lane and said "ready to send" with its flag on the
     rail, the header and the phone over a reply nothing had written. It reads "reply owed" until the draft lands (railStatus.owedNoDraft)."""
@@ -329,9 +326,10 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
                              ranked_wait=waits, **base))
             if group and threads.get(group) is None: threads[group] = out[-1]
             continue
-        # ...never a reply draft the thread has moved past (proposals.written_past, the one rule the chat greys it by and the task's state
-        # reads): after a restart the row said "ready to send" over a draft the owner had answered past (the owner's live task, 2026-11-13)
-        if r.get('ReviewStatus') == 'pending' and r.get('ReviewId') and not (r.get('TaskId') and r['ReviewId'] in _written_past(store, r['TaskId'])):
+        # ...never a reply draft the thread has moved past (the owner's live task, 2026-11-13: "ready to send" over a draft he had answered
+        # past), nor a card waiting behind another on its task (cardqueue, the audit 2026-11-22: a reply behind an Approve read "ready to send"
+        # and could be sent out of turn) - store.off_table, the one rule every surface reads what stands by
+        if r.get('ReviewStatus') == 'pending' and r.get('ReviewId') and not (r.get('TaskId') and r['ReviewId'] in store.off_table(r['TaskId'])):
             if r['ReviewId'] in reviews: continue
             reviews.add(r['ReviewId'])
             action = r.get('ReviewKind') == 'action'

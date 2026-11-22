@@ -71,6 +71,21 @@ def test_a_reply_held_behind_a_post_is_lit_and_offered_nowhere():
     assert s.waiting_on_owner(tid, ('draft', 'draft_reply')) is None
 
 
+def test_the_rail_offers_no_reply_held_behind_another_card():
+    # the card audit, 2026-11-22 (C4): the rail read only "written past", never the card queue - a reply waiting behind a post stood on the
+    # rail as "ready to send" and could be sent there out of turn, while the task drew the post alone. One rule: store.off_table
+    from taskuary import cardqueue
+    s = MemoryStore(); tid = s.create_task({'Title': 'Expense tool rollout', 'Kind': 'general', 'Status': 'in_progress'}, 'owner')
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'r1', 'Channel': 'email', 'FromName': 'Ray Colton', 'FromEmail': 'ray@northwind.example',
+                         'Subject': 'Rollout?', 'BodyText': 'When does the post go up?', 'Status': 'routed', 'SentAt': '2026-11-21 09:00:00'})
+    s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'the agent proposes to post on LinkedIn',
+                  'DraftText': json.dumps({'action': 'run_tool', 'type': 'linkedin_post', 'text': 'Northwind rolled out Spendly.'})})
+    reply = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'Channel': 'email', 'DraftText': 'Hi Ray - today.'})
+    assert cardqueue.held(s, tid) == {reply}
+    rows = [r for r in s.feed(limit=50, days=3650, ids=[mid]) if r.get('ReviewId')]
+    assert rows and not any(i.get('rid') == reply for i in funnel.from_feed(s, rows, canonical=True))
+
+
 def test_the_tasks_status_and_its_words_are_said_once_by_the_server():
     # the roads audit, 2026-11-19 (#9): the pill put a chat's words, a reply owed and a failed start over the state key in the page, while the
     # phone and the list said the key's own words - one function says the status and its words, and the page's detail carries it

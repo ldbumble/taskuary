@@ -139,10 +139,12 @@ class NewsBoxIsTheOneStartTests(unittest.TestCase):
         # the owner, 2026-11-22: "it should not go through triage, no one asked for that. It should create new task right away"
         there = self.s.create_task({'Title': 'Find caterers for the offsite', 'Kind': 'general', 'Status': 'open'}, 'owner')
         seen = []
-        with triage_reads(there, seen), mock.patch.object(general, 'take_line') as told:
+        with triage_reads(there, seen), mock.patch.object(general, 'take_line') as told, mock.patch.object(ingest, 'ask_later') as read:
             r = self.start('Find three caterers near the office for the offsite')
         self.assertNotEqual(r.json()['taskId'], there); self.assertFalse(r.json().get('joined'))
         self.assertEqual(seen, [], 'no reading before the task stands'); told.assert_not_called()
+        # ...and its ask is still read into its steps, beside its agent (walk 5: a 10-step ask got one box, ticked whole)
+        self.assertEqual((read.call_count, read.call_args.args[1]), (1, r.json()['taskId']))
 
 
 class AgentsNewTaskIsTheSameRoadTests(unittest.TestCase):

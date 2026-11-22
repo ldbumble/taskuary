@@ -4871,7 +4871,8 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
                 # ...AND ITS ASK IS THE ONE READING NEW ALREADY MADE (walk 2, 2026-11-21: a second model reading of the same words held the agent
                 # 46 s of a 61 s answer): triage's summary and checklist go on the task at once, as a promoted message's do (ingest.ask_later) -
                 # read again, beside the turn, only where triage read the words as steering an AI. Who else is written to is the agent's to judge
-                if read: ingest.ask_later(store, made['taskId'], {'body': job}, job, {k: read.get(k) for k in ('summary', 'checklist', 'danger')})
+                # ...read beside its agent where triage did not (New - walk 5, 2026-11-22: a 10-step ask got one box, ticked whole): never waited on
+                ingest.ask_later(store, made['taskId'], {'body': job}, job, {k: read.get(k) for k in ('summary', 'checklist', 'danger')} if read else None)
                 # ...Taskuary's brief, never a second line in the owner's name: their words are the task's own message already, and the chat
                 # drew them twice (the click-through, 2026-11-12)
                 session.send_prompt(brief, brief=True)

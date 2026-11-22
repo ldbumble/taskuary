@@ -11104,11 +11104,9 @@ def _refresh_chat_key(key: str = None, seen_mid: int = None, on_fetched=None) ->
     # the poll may have landed lines; only then is a second build worth its cost
     fresh = (funnel.next_item(store, key) or funnel.item_for_key(store, key) or item) if out.get('newer') or out.get('added') else item
     after = _latest_context_message(fresh.get('tid'), fresh.get('mid'))
-    # `stale` catches a background sync that landed before this request; seen_mid catches the
-    # narrower race where it landed after the browser's last five-second pile refresh.
-    out['newer'] = bool(out.get('newer') or
-                        (seen_mid and after and after.get('MessageId') != seen_mid) or
-                        (seen_mid is None and fresh.get('stale')))
+    # seen_mid catches a line that landed after the browser's last five-second pile refresh (a draft an unheard line came after
+    # is off the pile already: store.off_table)
+    out['newer'] = bool(out.get('newer') or (seen_mid and after and after.get('MessageId') != seen_mid))
     out['item'] = fresh
     out['after'] = after or out.get('after')
     return out

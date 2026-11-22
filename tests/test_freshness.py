@@ -161,3 +161,21 @@ class WriterReadsTheChainTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_a_draft_written_after_a_second_persons_mail_is_not_behind_the_thread():
+    """The card audit, 2026-11-22 (C1): the rail called a draft stale whenever the newest mail on the task was not the card's - Gail's mail
+    that came BEFORE the draft of Erin's reply marked it so, and the Advisor was told "do not recommend approving it" over a card with Send
+    lit. A draft is behind only where an input nobody heard came after it (store.off_table); otherwise it stands, on every surface."""
+    from taskuary import concierge, funnel
+    from taskuary.testing import mailbox
+    s = mailbox(MemoryStore()); tid = s.create_task({'Title': 'Rota questions', 'Kind': 'reply', 'Status': 'open'}, 'router')
+    add = lambda ext, who, at: s.add_message({'TaskId': tid, 'ExternalId': ext, 'ConversationId': ext, 'Channel': 'email', 'FromName': who,
+                                              'FromEmail': f"{who.split()[0].lower()}@northwind.example", 'Subject': 'Rota', 'BodyText': 'Can you check the rota?',
+                                              'Status': 'routed', 'SentAt': at})
+    erin = add('e1', 'Erin Blake', stamp(-600)); gail = add('g1', 'Gail Moreno', stamp(-300))
+    rid = s.add_review({'TaskId': tid, 'MessageId': erin, 'Kind': 'draft_reply', 'Status': 'pending', 'Channel': 'email', 'DraftText': 'Hi Erin - checked.'})
+    rows = [r for r in s.feed(limit=50, days=3650, ids=[erin, gail]) if r.get('ReviewId') == rid]
+    item = next(i for i in funnel.from_feed(s, rows) if i.get('rid') == rid)
+    assert not item.get('stale')
+    assert 'stale' not in concierge.facts(s, item)

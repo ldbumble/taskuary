@@ -340,9 +340,9 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             # SQLite and still show only the old "yes" that opened the draft.
             latest = None if canonical else (store.last_inbound_on_task(r.get('TaskId')) if r.get('TaskId') else
                       store.last_inbound_in(cid) if cid else None)
-            # ...and only a draft that EXISTS is behind a newer line: a reply nobody wrote yet stays on the message it was raised for
-            # (ingest.land_on, 2026-11-15) and is behind nothing
-            stale = bool(r.get('HasDraft') and latest and latest.get('MessageId') != rv.get('MessageId'))
+            # ...and WHETHER THE DRAFT IS BEHIND THE THREAD is not this row's to say (the card audit, 2026-11-22: it compared the newest line on
+            # the task with the card's message, with no time - a mail that came BEFORE the draft marked it stale, and the Advisor was told
+            # not to recommend it): a draft an unheard line came after is off the rail already (store.off_table - proposals.written_past)
             if latest:
                 base.update(mid=latest.get('MessageId'), when=latest.get('SentAt'),
                             who=latest.get('FromName') or latest.get('FromEmail') or who,
@@ -356,7 +356,6 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
                                  else (('a reply is drafted for you to send' if capabilities.can_send_draft(store, r['ReviewId']) else lanes.hint('unsendable'))
                                        if r.get('HasDraft') else 'a reply is owed - no draft yet'),   # the agent drafts on arrival, never a chore for him (2026-11-17)
                              draft=bool(r.get('HasDraft')), summary=agent_found(store, r.get('TaskId')),
-                             stale=stale,
                              sig=hashlib.sha1(str(rv.get('DraftText') or '').encode()).hexdigest()[:10],   # the draft's fingerprint: a rewrite is news
                              **base))
             # A SEND THE SERVER REFUSED IS NOT READY TO SEND: the row said "ready to send" in green over a reply the mail server

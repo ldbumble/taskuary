@@ -635,8 +635,6 @@ def facts(store, item: dict, whole: bool = False) -> str:
         rv = store.get_review(item['rid']) or {}
         d = str(rv.get('DraftText') or '').strip()
         lines.append(f"THE DRAFT (shown to the owner in the card):\n{_cut(d, 1200)}" if d else f"no draft yet - the card offers {buttons.label('redraft', 'none')}")
-        if item.get('stale'):
-            lines.append('IMPORTANT: newer messages arrived after that draft. It is stale and must be redrafted before sending; do not recommend approving it.')
     if item['kind'] == 'agent':
         lines.append('the agent\'s last lines:\n' + '\n'.join(item.get('tail') or ['(nothing captured)']))
     if docs := documents_line(store, item): lines.append(docs)

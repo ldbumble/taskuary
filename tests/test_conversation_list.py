@@ -588,7 +588,7 @@ class TheList(unittest.TestCase):
         self.assertEqual((st['name'], st['args']['to']), ('mcp__taskuary__propose_reply', 'erin@northwind.example'))
 
     def test_a_message_that_came_in_mid_turn_is_pending_then_heard_with_the_next_turn(self):
-        self.brain.delay = 3
+        self.brain.delay = 8          # ...the mail lands while the turn works, however slow the runner (CI, 2026-11-22)
         self.say('Suggest two.', 'l-one', wait=False)
         self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
         time.sleep(1.1); mid = self.mail('One more thing: near a station.')
@@ -605,7 +605,7 @@ class TheList(unittest.TestCase):
         end of its own second) pushed the answer after the reply, which read at its own time: for a read the finished turn stood UNDER his
         reply, named as the next turn's, then went back - a turn and its card gone from the canvas and drawn again."""
         from taskuary.sessionrecord import NOTE_ACTOR
-        self.brain.delay = 3
+        self.brain.delay = 8
         self.say('Suggest two.', 'l-one', wait=False)
         self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
         time.sleep(1.1); mid = self.mail('I booked the Harbour Room myself.', own=True)

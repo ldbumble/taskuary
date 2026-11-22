@@ -6093,8 +6093,15 @@ def agent_browser(body: AgentBrowserBody, request: Request):
     s = hub_term.SESSIONS.get(str(body.sid)) or general._live_of(body.task_id)
     if s is None or not getattr(s, 'alive', False) or getattr(s, 'task_id', None) != body.task_id:
         raise HTTPException(409, 'no session of this task is running to open a browser for')
-    if not (browserview.wanted(t) or general.browser_offered(store, body.task_id, getattr(s, 'pick', '') or 'cli:')):
-        raise HTTPException(403, 'this task has no browser: it carries a message from someone the owner has not vouched for')
+    # ...asked of the road its turns are offered the browser on (GeneralSession.road - an API card's agent runs as its harness CLI): asked of
+    # the card's pick, HIPAA AI's first `taskuary --browser` was refused while its prompt offered the browser (the HIPAA walk, 2026-11-22),
+    # and refused as "a message from someone the owner has not vouched for" on his own New task - the refusal says its own reason
+    road = s.road() if callable(getattr(s, 'road', None)) else (getattr(s, 'pick', '') or 'cli:')
+    if not (browserview.wanted(t) or general.browser_offered(store, body.task_id, road)):
+        from . import origin
+        if origin.of_task(store, body.task_id)[0] == 'stranger':
+            raise HTTPException(403, 'this task has no browser: it carries a message from someone the owner has not vouched for')
+        raise HTTPException(403, general.no_browser_line(store, road))
     try: return {'ok': True, **browserview.ask_open(str(s.sid), body.url)}
     except ValueError as e: raise HTTPException(422, str(e))
 

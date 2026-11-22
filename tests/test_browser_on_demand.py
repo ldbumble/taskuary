@@ -166,6 +166,15 @@ class TheAgentAsksForIt(unittest.TestCase):
         r, started, _ = self._ask('https://portal.example/', tid=other, sid='nobody')
         self.assertEqual(r.status_code, 409); started.assert_not_called()
 
+    def test_an_api_cards_agent_is_asked_of_by_the_road_it_runs_on(self):
+        """The HIPAA walk, 2026-11-22: HIPAA AI's agent runs on its Codex harness and its prompt offered the browser - asked of the card's own
+        pick, its first `taskuary --browser` was refused, said as "a message from someone the owner has not vouched for" on his New task."""
+        self.sess.pick, self.sess.road = 'gateway:23', mock.Mock(return_value='cli:codex')
+        seen = []
+        with mock.patch.object(general, 'browser_offered', side_effect=lambda st, t, pick: seen.append(pick) or pick.startswith('cli:')):
+            r, started, _ = self._ask('https://portal.example/')
+        self.assertEqual((r.status_code, seen), (200, ['cli:codex'])); started.assert_called_once()
+
     def test_the_agent_is_told_of_it_in_one_sentence_where_it_is_told_its_browser(self):
         self.assertIn('taskuary --browser <url>', bv.offer()); self.assertEqual(bv.offer().count('taskuary --browser'), 1)
 

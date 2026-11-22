@@ -3411,6 +3411,10 @@ def _fill(store, tid: int, plain: str, ask: dict):
     if not t: return
     if ask.get('summary') and ask['summary'] != plain and (t.get('Summary') or '') == plain: store.update_task(tid, {'Summary': ask['summary']}, 'triage')
     if ask.get('checklist') and not store.task_checklist(tid): store.set_task_checklist(tid, ask['checklist'], 'triage')
+    # ...and a title that is only a link is named from the ask (walk 5, 2026-11-19: "http://127.0.0.1:18803/" stood on the rail)
+    link, said = re.compile(r'\s*<?https?://\S+>?\s*'), ' '.join(str(ask.get('summary') or '').split())
+    if link.fullmatch(str(t.get('Title') or '')) and said and not link.fullmatch(said):
+        store.update_task(tid, {'Title': re.split(r'(?<=[.!?])\s', said)[0][:120]}, 'triage')
 
 
 @aiusage.named('triage.title')       # the triage brain titling a task the owner made by hand: not a mail's triage (aiusage.asking)

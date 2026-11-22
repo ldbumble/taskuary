@@ -311,22 +311,18 @@ def handoff(s, brain):
     return made, session
 
 
-def test_a_chat_handoff_reads_its_slots_before_the_agents_first_turn(s):
-    llm = lambda sys, user, **k: json.dumps({'summary': 's', 'checklist': [], 'outputs': FOUR})
-    made, session = handoff(s, {'return_value': llm})
-    assert len(slots.open_(s, made['taskId'])) == 4 and session.send_prompt.called
-
-
-def test_the_slots_are_there_when_the_agent_is_prompted(s):
-    llm = lambda sys, user, **k: json.dumps({'summary': 's', 'checklist': [], 'outputs': FOUR[:1]})
-    session, seen = mock.Mock(), []
-    session.send_prompt.side_effect = lambda text, **k: seen.append(len(slots.open_(s, made_box[0])))
+def test_a_new_ask_takes_the_one_reading_triage_made_and_its_agent_is_prompted_at_once(s):
+    """Walk 2, 2026-11-21: a second model reading of New's words held its agent 46 s of a 61 s answer. Triage's reading - the one that asked
+    whether the work was open already - is the task's; no model is asked again, and no email is listed for the agent before it writes one
+    (an email nobody wrote is no debt)."""
+    from taskuary import ingest
+    seen, asked = [], []
+    judge = lambda store, msg, llm, *a, **k: ({'intent': 'task', 'same_as': None, 'summary': 'Check the four tabs', 'checklist': ['Tab 1', 'Tab 2']}, {})
+    session = mock.Mock(); session.send_prompt.side_effect = lambda *a, **k: seen.append(len(s.task_checklist(made_box[0])))
     made_box = []
-    real_start = lambda st, tid, **k: made_box.append(tid) or session
-    with mock.patch('taskuary.concierge.brain', return_value=llm), mock.patch('taskuary.general.start_session', side_effect=real_start), \
-         mock.patch('taskuary.concierge.threading.Thread', Inline):
-        concierge.handoff_task(s, 'Email Paula where tab 1 stands', kind='general')
-    assert seen == [1]
+    with mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: ''), mock.patch.object(ingest, 'judge', judge),          mock.patch('taskuary.concierge.brain', return_value=lambda *a, **k: asked.append(a) or '{}'),          mock.patch('taskuary.general.start_session', side_effect=lambda st, tid, **k: made_box.append(tid) or session),          mock.patch('taskuary.concierge.threading.Thread', Inline):
+        made = concierge.handoff_task(s, 'Check the four tabs and draft an email to each owner', kind='general')
+    assert seen == [1] and asked == [] and slots.open_(s, made['taskId']) == []      # ...his words, the one box New gives it (setup_task)
 
 
 def test_a_handoff_reads_at_work_from_the_moment_it_is_made_until_its_first_turn_ends(s):
@@ -336,12 +332,13 @@ def test_a_handoff_reads_at_work_from_the_moment_it_is_made_until_its_first_turn
     from taskuary import general
     seen = []
     def llm(sys, user, **k): seen.append(('reading', general.working(s, made_box[0]))); return json.dumps({'summary': 's', 'checklist': [], 'outputs': []})
+    # ...and no second reading stands before it (walk 2, 2026-11-21): the turn is the first thing, at work
     session, made_box = mock.Mock(busy=False), []
     session.send_prompt.side_effect = lambda text, **k: seen.append(('turn', general.working(s, made_box[0])))
     with mock.patch('taskuary.concierge.brain', return_value=llm), mock.patch('taskuary.general.start_session', side_effect=lambda st, tid, **k: made_box.append(tid) or session), \
          mock.patch('taskuary.general._live_of', return_value=None), mock.patch('taskuary.concierge.threading.Thread', Inline):
         concierge.handoff_task(s, 'Find three cafes near the office that cater lunch for 12', kind='general')
-        assert seen == [('reading', True), ('turn', True)] and not general.working(s, made_box[0])
+        assert seen == [('turn', True)] and not general.working(s, made_box[0])
 
 
 def test_an_agent_the_assistant_starts_carries_his_words_alone_as_his_and_the_talk_before_them_as_taskuarys_brief(s):
@@ -835,8 +832,3 @@ def test_a_sent_email_is_named_by_whom_it_went_to_not_by_its_cards_reason(s):
 
 # HIS OWN ASK OWES HIM NO EMAIL (a walk, 2026-11-18): "set it up for my press" was read as an email owed to the owner, its agent drafted
 # "please approve the note" to him, and he had to drop it. He is the sender of his own ask: his press on the card is the approval
-def test_a_handoff_never_owes_the_owner_an_email_to_himself(s):
-    s.set_setting('owner_name', 'Alex Doyle', 'owner'); s.set_setting('owner_email', 'alex@northwind.example', 'owner')
-    out = [{'to': 'Alex', 'about': 'approve the note'}, {'to': 'alex@northwind.example', 'about': 'approve'}, FOUR[0]]
-    made, _ = handoff(s, {'return_value': lambda sys, user, **k: json.dumps({'summary': 's', 'checklist': [], 'outputs': out})})
-    assert [i['out']['to'] for i in slots.open_(s, made['taskId'])] == ['paula@northwind.example']

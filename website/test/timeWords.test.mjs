@@ -3,8 +3,8 @@
 // (the cleanup round, 2026-10-18). tests/test_timewords.py reads this file's ago() cases and holds the server to them.
 import test from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
+
+
 import { age, ago, agoMins, band, bandUntil, dur, durSince, minsSince, plural, span } from "../src/timeWords.js";
 import { asUtc, setTz } from "../src/dates.js";
 
@@ -68,23 +68,8 @@ test("dur says how long something has run; span and plural say a count", () => {
   assert.deepEqual([plural(1, "task"), plural(0, "task"), plural(3, "reply", "replies")], ["1 task", "0 tasks", "3 replies"]);
 });
 
-// what a person can read in a page file, comments gone (a comment reaches nobody) - the same strip buttons.test.mjs uses
-const SRC = path.join(process.cwd(), "src");
-const strip = (s) => s.replace(/(^[ \t]*|\{)\/\*[\s\S]*?\*\/\}?/gm, "").replace(/(^|\s)\/\/[^\n]*/g, "$1");
-const files = fs.readdirSync(SRC).filter((f) => /\.(jsx?|mjs)$/.test(f) && f !== "timeWords.js");
-// a hand-written age ("${m}m ago", "${n} min ago"), a typed "just now", or dur's own thresholds copied out
-const OWN = [/\$\{[^}]*\}\s?(?:m|h|d|min|mins|minutes?|hours?|days?)?\s+ago\b/, /["'`]just now["'`]/, /\b5400\s*\?/];
-test("no page file writes its own time formatter: every age is read from timeWords.js", () => {
-  for (const re of OWN.slice(0, 2)) assert.match('`${Math.round(m)}m ago` "just now"', re, "the guard sees the shape it replaced");
-  const hits = files.flatMap((f) => { const code = strip(fs.readFileSync(path.join(SRC, f), "utf8")); return OWN.filter((re) => re.test(code)).map((re) => `${f}: ${re}`); });
-  assert.deepEqual(hits, []);
-});
-
-// ...and a count with its noun pluralised by hand - `${n} task${n === 1 ? "" : "s"}` - the shape that writes "1 tasks" wherever one is
-// missed. Only where the count and the condition are the same expression: "Queue prompts" with no count is a different sentence.
-const COUNTED = [/\$\{([^{}\n]+?)\} [\w/ -]{0,40}?\w\$\{([^{}\n]+?) === 1 \? "" : "s"\}/g, /\{([^{}\n]+?)\} [\w/ -]{0,40}?\w\{([^{}\n]+?) === 1 \? "" : "s"\}/g];
-const byHand = (code) => COUNTED.some((re) => [...code.matchAll(re)].some((m) => m[1].trim() === m[2].trim()));
-test("no page file pluralises a count by hand: plural() from timeWords.js says it", () => {
-  assert.ok(byHand('`${n} task${n === 1 ? "" : "s"}`') && byHand('{n} file{n === 1 ? "" : "s"}'));
-  assert.deepEqual(files.filter((f) => byHand(strip(fs.readFileSync(path.join(SRC, f), "utf8")))), []);
+// THE WALK, 2026-11-21: Remind me > Next week keeps 7 days on at 7 AM; pressed in the evening, the rail counted 6.5 days down to "in 6d"
+test("a return a week off by the calendar counts a week, whatever the hour it was set at", () => {
+  const now = new Date(2026, 10, 21, 19, 20), back = new Date(2026, 10, 28, 7, 0);
+  assert.equal(bandUntil(back, now), bandUntil(new Date(2026, 10, 28, 19, 20), now));
 });

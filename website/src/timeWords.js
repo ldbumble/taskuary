@@ -51,6 +51,9 @@ export const bandUntil = (at, now) => {
   const m = minsSince(at, now);
   if (m == null) return "";
   const r = Math.round(-m);
+  // ...a day off or more is counted BY THE CALENDAR (the walk, 2026-11-21: Next week, kept as 7 days on at 7 AM, read "in 6d" that evening)
+  if (r >= 1440) { const day = (x) => { const d = new Date(ms(x)); d.setHours(0, 0, 0, 0); return d.getTime(); };
+    return `in ${Math.round((day(at) - day(now ?? Date.now())) / 864e5)}d`; }
   return r <= 0 ? "" : r < 30 ? "in 30m" : r < 60 ? "in 1h" : `in ${span(r)}`;
 };
 // how long something has RUN, to the second while it is fresh: "45s", "12m", "1.5h" - an agent's turn, a step, a session

@@ -81,3 +81,11 @@ def test_one_stamp_reader_and_one_age_for_every_surface():
     assert context._age(utc) == context._age(local) == tw.ago(local)          # the agent's list said 'today' where the rail said '3h ago'
     assert rulebook.ago(utc, now) == rulebook.ago(local, now) == '3 hours ago'
     assert tw.stamp('not a date') is None and tw.stamp(None) is None
+
+
+def test_a_return_a_week_off_by_the_calendar_counts_a_week_whatever_the_hour_it_was_set_at():
+    """The walk, 2026-11-21: Remind me > Next week keeps 7 days on at 7 AM; pressed in the evening, the rail counted 6.5 days down to "in 6d"."""
+    from datetime import datetime
+    from taskuary import timewords
+    now = datetime(2026, 11, 21, 19, 20)
+    assert timewords.back_in('2026-11-28 07:00:00', now) == timewords.back_in('2026-11-28 19:20:00', now)

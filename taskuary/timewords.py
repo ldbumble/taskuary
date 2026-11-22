@@ -67,6 +67,9 @@ def until_m(m) -> str:
 def back_in(stamp, now: datetime = None) -> str:
     """'in 30m', 'in 1h', 'in 3h', 'in 2d' until a For later row comes back - "< 30m" read as an age (the owner, 2026-09-30), so it
     reads forward as a meeting's does. '' once due, or for no time. funnelPile.railBack (timeWords.bandUntil) is the rail's live copy."""
-    m = mins(stamp, now)
+    at, m = _stamp(stamp), mins(stamp, now)
     m = None if m is None else round(-m)
+    # ...a day off or more is counted BY THE CALENDAR (the walk, 2026-11-21: Next week, kept as 7 days on at 7 AM, read "in 6d" that evening)
+    if m is not None and m >= 1440: return f'in {(at.date() - (now or datetime.now()).date()).days}d'
     return '' if m is None or m <= 0 else 'in 30m' if m < 30 else 'in 1h' if m < 60 else f'in {span(m)}'
+_stamp = stamp

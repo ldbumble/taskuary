@@ -222,6 +222,14 @@ def typing(act: dict) -> bool:
     return ok and not act.get('nl') and not any('\n' in t or '\r' in t for t in a)
 
 
+# ...AND A CLICK ON A FIELD OF THE FORM IS FILLING IT TOO, by the role the page's snapshot gives the control (the ZoningNow walk, 2026-11-22: the
+# terms box ticked with `click @e7` was judged "speaks for you" and held as its own card, a second beside the sign-up's own)
+FIELDS = frozenset('checkbox radio textbox searchbox combobox option spinbutton listbox'.split())
+def fills(act: dict, pg: dict) -> bool:
+    "Does this act only fill in the form: setting() by its verb, or a click on a control the page says is one of its fields (FIELDS)?"
+    return setting(act) or (act.get('verb') == 'click' and control(act, pg).get('role', '').lower() in FIELDS)
+
+
 def setting(act: dict) -> bool:
     "Does this act only fill in the form - type into a box, or tick, untick or choose a field? By agent-browser's verb (SETS), as typing is."
     a, i = act.get('args') or [], 0
@@ -499,15 +507,16 @@ def _verdict(act: dict, v: dict | None, pg: dict, said: str) -> dict:
         from . import signin
         h = pg.get('name') or signin.site_name(pg.get('url'))
         what = target(act, pg) if control(act, pg).get('role') else f"a step on {h}" if h else target(act, pg) or _cmd(act)
-    big = v.get('big')
+    big, sure, irr = v.get('big'), v.get('sure'), v.get('irreversible')
+    # ...filling the form sends nothing - the press that sends it is judged by what it then holds - unless the judge is SURE it saves itself
+    # and cannot be undone (a settings toggle)
+    if fills(act, pg) and not (sure and irr): return {'hold': False, 'what': what, 'why': ''}
     if big is True: return {'hold': True, 'what': what, 'why': WHY.get(str(v.get('kind') or ''), BIG_WHY), 'kind': str(v.get('kind') or '')}
     # ...only a verdict that SAYS it is not big passes on that: one that left `big` out (a CLI judge carries no schema) is read the old way -
     # it passed a payment he had asked for with no press, 2026-11-18
     # ...and one it says is not big passes unless it also cannot be undone and it is unsure (the walk, 2026-11-19: a free sign-up the judge
     # said was not big, only unsure, was held as "it may spend money")
-    sure, irr = v.get('sure'), v.get('irreversible')
     if big is False and (sure is not False or not irr): return {'hold': False, 'what': what, 'why': ''}
-    if setting(act) and not (big is None and irr and sure): return {'hold': False, 'what': what, 'why': ''}
     if big is None and irr and sure: return {'hold': True, 'what': what, 'why': "it can't be undone"}
     if big is None and sure: return {'hold': False, 'what': what, 'why': ''}
     return {'hold': True, 'what': what, 'why': "Taskuary couldn't tell for sure what it does, so it waits for you"}

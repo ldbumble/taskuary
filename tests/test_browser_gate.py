@@ -197,6 +197,16 @@ class Judging(unittest.TestCase):
             with verdict(sure): self.assertTrue(one(self.s, bg.acts(cmd)[0], {'url': CHECKOUT}, Brain(None))['hold'], cmd)
         with verdict(unsure): self.assertTrue(one(self.s, self.act, {'url': CHECKOUT}, Brain(None))['hold'])
 
+    def test_a_click_that_ticks_a_box_of_the_form_is_filling_it_whatever_the_judge_calls_it(self):
+        """The ZoningNow walk, 2026-11-22: the terms box ticked with `click @e7` was judged "speaks for you" and held as its own card beside
+        the sign-up's. The page's snapshot says the control is a checkbox: filling the form sends nothing, the press that sends it is judged.
+        A button clicked on the same verdict still waits, and so does a field the judge is sure saves itself."""
+        pg = {'url': CHECKOUT, 'elements': '- checkbox "I agree to the terms of use" [ref=e7]\n- button "Create account" [ref=e8]'}
+        big = {'big': True, 'kind': 'speaks', 'sure': False, 'irreversible': False, 'what': 'Agree to the terms'}
+        with verdict(big): self.assertFalse(one(self.s, bg.acts('agent-browser click @e7')[0], pg, Brain(None))['hold'])
+        with verdict(big): self.assertTrue(one(self.s, bg.acts('agent-browser click @e8')[0], pg, Brain(None))['hold'])
+        with verdict({**big, 'sure': True, 'irreversible': True}): self.assertTrue(one(self.s, bg.acts('agent-browser click @e7')[0], pg, Brain(None))['hold'])
+
     def test_a_free_sign_up_runs_and_money_or_his_own_details_wait_as_one_card(self):
         """The owner, 2026-11-19: "anything big like spending money or putting in private info should wait for user for now". The vendor
         walk held every free sign-up "because it can't be undone" - one press each, on work Erin had asked for and he had opened. The gate's

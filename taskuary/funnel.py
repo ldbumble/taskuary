@@ -976,6 +976,12 @@ def paused_conversation(store, item: dict, st=None) -> dict:
     tid = item.get('tid')
     if not tid or item.get('lane') == 'working': return item
     from . import taskstate
+    # ...A TRY TASKUARY MAKES BY ITSELF IS ITS MOVE (the walk, 2026-11-22: the row read "Failed" and "waiting on you" with the hand while the
+    # header said trying again): the row says the queue's own sentence (idle_state), the one the task page says
+    if taskstate.retrying(store, tid):
+        said = idle_state(store, tid)
+        return item | {'kind': 'agent', 'key': f'agent:{tid}', 'lane': 'queued', 'agent': 'assistant', 'mode': 'assistant', 'retrying': True,
+                       'why': said.get('line') or lanes.hint('retrying')}
     st = st or taskstate.task_state(store, tid=tid)
     task = st.t
     if task.get('Status') not in ('open', 'waiting', 'in_progress') or not store.saved_session(tid): return item

@@ -72,6 +72,12 @@ class FailedAgent(unittest.TestCase):
         last = general.with_failure(self.s, self.tid, general.shown_history(self.s, self.tid))[-1]
         self.assertEqual((last['role'], last.get('failed')), ('assistant', True))
         self.assertTrue(last['content'][0]['text'].startswith("⚠ The AI didn't answer - trying again at "), last)
+        # ...and the rail's row says the same, never "Failed" or a hand that waits on him (the walk, 2026-11-22): the try is the app's move
+        from taskuary import taskstate
+        row = funnel.paused_conversation(self.s, {'tid': self.tid, 'lane': 'yours', 'key': f'task:{self.tid}'})
+        self.assertTrue(taskstate.retrying(self.s, self.tid))
+        self.assertEqual((row['lane'], row.get('failed'), row.get('asking')), ('queued', None, None))
+        self.assertTrue(row['why'].startswith("The AI didn't answer - trying again at "), row['why'])
 
     def test_a_run_that_broke_is_tried_again_not_made_a_new_task(self):
         def brain(system, user, **kw): raise RuntimeError('the test database was not reachable')

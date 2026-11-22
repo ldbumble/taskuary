@@ -113,7 +113,7 @@ def fetched(p: str, cwd: str = '', sids=()) -> bool:
     if cwd:
         base = _n(Path(claude_home()) / 'projects' / _slug(cwd))
         if _in(p, base):
-            rest = p[len(base):].lstrip('\/').split(os.sep)
+            rest = p[len(base):].lstrip('\\/').split(os.sep)
             if len(rest) >= 3 and rest[1] == 'tool-results' and rest[0]: return True
     codex = _n(Path(os.environ.get('CODEX_HOME') or Path.home() / '.codex') / 'generated_images')
     return any(_in(p, _n(Path(codex) / str(sid))) for sid in sids if sid)

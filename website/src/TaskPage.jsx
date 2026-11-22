@@ -1886,6 +1886,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const fadeMemo = useRef(null); fadeMemo.current = sectionFade(fadeMemo.current, section, selected, hereSec);
   const fades = fadeMemo.current.moved;
   const openSection = (s) => setSecPick({ key: pickKey, sec: s });
+  // ...Send to agent's own move, once the Agent section stands (the section pick is kept by a key the press itself changes - the goal walk,
+  // 2026-11-22: the Agent section came as a folded tab beside Came from, and its box was not drawn)
+  useEffect(() => { if (toAgent === selected && !solo) openSection("agent"); }, [toAgent, solo]);   // eslint-disable-line react-hooks/exhaustive-deps
   // ...each section's slot: a closed one its tab's width (slim beside a live agent), the open one the rest - and its body laid at that
   // open width whether it is open or not, so the move never reflows it and a hidden terminal keeps its size
   // ...and Came from closed is always the thin arrow tab, whatever the kind (the owner, 2026-11-08: a reply's spine cut its message to three lines)
@@ -3315,7 +3318,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         in - typing there starts the agent, whose chat then opens beside it; what the chat would hold (a draft, an email owed) over it */}
                     {solo && !closedSaid && <Box data-tq-solo-box="" sx={{ mt: "auto", position: "sticky", bottom: 0, zIndex: 1, bgcolor: SHADE, pt: 1, pb: 0.5 }}>
                       <Button variant="contained" disableElevation size="small" data-tq-send-to-agent=""
-                        title={btnHint("regular_agent")} onClick={() => { setToAgent(selected); requestAnimationFrame(() => openSection("agent")); }}>{btn("regular_agent")}</Button></Box>}
+                        title={btnHint("regular_agent")} onClick={() => setToAgent(selected)}>{btn("regular_agent")}</Button></Box>}
                   </Box>
                 )}
                 {/* THE WORK COLUMN: the agent's chat, the reply's cards in it - full width while it works; in ONE scroller, the column's (TQ-1215:

@@ -119,6 +119,11 @@ const STEPS = {
   },
   async quiet(s) { const t0 = Date.now(), ok = await untilQuiet((s.max || 600) * 1000); return { took_ms: Date.now() - t0, problem: ok ? "" : `still working after ${s.max || 600} s` }; },
   async wait(s) { await sleep((s.s || 5) * 1000); return {}; },
+  async has(s) {                                   // what must (or must not) be drawn now, by its selector - a box, a button
+    const got = await page.evaluate((y, n) => [(y || []).filter((q) => ![...document.querySelectorAll(q)].some((e) => e.getBoundingClientRect().width > 0)),
+      (n || []).filter((q) => [...document.querySelectorAll(q)].some((e) => e.getBoundingClientRect().width > 0))], s.see, s.never);
+    return { problem: [...got[0].map((q) => `not drawn: ${q}`), ...got[1].map((q) => `drawn and should not be: ${q}`)].join("; ") };
+  },
   async picture(s) {                               // a picture he asked for stands in the chat as one, never words about one
     const n = await page.evaluate(() => [...document.querySelectorAll("[data-tq-task-page] img")].filter((i) => i.naturalWidth > 64 && i.getBoundingClientRect().width > 64).length);
     return { pictures: n, problem: n ? "" : "no picture in the chat" };

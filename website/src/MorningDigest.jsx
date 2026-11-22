@@ -13,7 +13,7 @@ export default function MorningDigest() {
   const load = () => api.get("/api/sources").then(({ data }) => setSrc((data.data || []).find((s) => s.Channel === "report" && isDigest(s)) || false)).catch(() => setSrc(false));
   useEffect(() => { load(); }, []);
   if (src === null) return null;
-  if (!src) return <Typography sx={{ fontSize: 13, color: DIM }}>The Morning digest was removed - it is written again once setup runs.</Typography>;
+  if (!src) return null;                                             // ...none made yet: nothing to set
   const cfg = (() => { try { return JSON.parse(src.ConfigJson || "{}"); } catch { return {}; } })();
   const save = async (fields) => {
     setErr(""); const next = { ...src, ...fields };

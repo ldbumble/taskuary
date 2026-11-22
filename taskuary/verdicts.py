@@ -479,7 +479,22 @@ def not_needed(store, tid: int, why: str, by: str) -> dict:
     if not store.decide_review(rv['ReviewId'], 'closed_unsent', None, by, note=WITHDRAWN + why[:300]):
         return {'ok': False, 'why': 'that reply is being sent or already went - it cannot be put down'}
     store.add_comment(tid, by, 'agent', f"The drafted reply is not needed: {why.rstrip('.')}. It is kept under Not sent - Bring it back still sends it.")
+    promotion_ended(store, tid, why)
     return {'ok': True, 'review_id': rv['ReviewId']}
+
+
+def promotion_ended(store, tid: int, why: str) -> None:
+    """A TASK HIS PROMOTION STARTED ENDED WITH NOTHING SENT: what that says is taught too, weighed against the line the press taught at once
+    (server._learn_promotion's made_task) - the model may rewrite it, keep it or say nothing (the walk, 2026-11-22: a cold pitch sent to an
+    agent and then "just ignore him" stood in memory as "you review these pitches yourself"). Only where that press taught a line."""
+    from . import memorylines
+    for m in store.list_messages(int(tid)):
+        src = f"msg{m['MessageId']}"
+        if not store._rows("SELECT 1 FROM learned_history WHERE Ev=? AND Actor=? LIMIT 1", (src, f'{memorylines.VERDICT}:made_task')): continue
+        memorylines.teach_soon(store, 'made_task_ended', src,
+                               f"The owner had sent this mail to an agent as work (the line learned then is above). It ended with nothing sent: "
+                               f"{' '.join(str(why or '').split())[:300]}. From {m.get('FromName') or m.get('FromEmail') or 'its sender'}: "
+                               f"{str(m.get('Subject') or '')[:120]}")
 
 
 # ...AND ONE THAT NO LONGER ANSWERS IS WITHDRAWN (the owner, 2026-11-06: corrected, the agent left its earlier draft standing under the newest
@@ -967,6 +982,7 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
         # the owner's word that nothing goes back IS Mark done - the one close, whoever opened a session on it
         from . import concierge
         concierge.close_task(store, rv['TaskId'], actor)
+        promotion_ended(store, rv['TaskId'], note or 'he said no reply is needed')
     # a clarification stops the blocked terminal and leaves the task waiting; any other answer leaves it open for Mark done
     if result is None and verb in ('approve', 'edit') and rv.get('TaskId') and not send_err:
         _settle_task_after_sent_reply(store, rv, actor, False)

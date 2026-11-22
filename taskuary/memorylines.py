@@ -283,14 +283,14 @@ def teach_soon(store, *a, background=None, **kw):
     threading.Thread(target=teach, args=(store, *a), kwargs=kw, daemon=True).start()
 
 
-def untaught(store, src: str) -> int:
+def untaught(store, src: str, kind: str = '') -> int:
     """The Undo of a verdict: the line it wrote comes out, a line it replaced goes back where it was, and what the line fed is withdrawn
-    (learn.withdraw). Returns the lines taken out."""
+    (learn.withdraw). `kind`: only the lesson of that verdict (made_task...), else every one on `src`. Returns the lines taken out."""
     if not src: return 0
     from . import memoryedit
     from .learn import withdraw, _under
     rows = store._rows("SELECT * FROM learned_history WHERE Ev=? AND Action IN ('said','replaced') AND Actor LIKE ? ORDER BY Id",
-                       (src, f'{VERDICT}:%'))
+                       (src, f'{VERDICT}:{kind or "%"}'))
     doc = old = store.get_doc(memoryedit.DOC) or ''
     n = 0
     for r in rows:

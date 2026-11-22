@@ -372,3 +372,23 @@ def test_each_correction_is_one_line_the_next_mail_and_the_next_agent_read():
     system = general._prompt(s, nxt)[0]
     assert said['routing'] in system and 'two lines, no greeting' in system, 'the next agent starts with the lesson and the voice'
     assert said['not_ours'] not in system, 'and not the lesson about another sender'
+
+
+def test_a_promotion_that_ended_with_nothing_sent_teaches_what_that_says():
+    """The walk, 2026-11-22: a cold pitch sent to an agent and then "just ignore him" stood in memory as "you review these pitches yourself" -
+    the promotion taught at once and nothing weighed how it ended. Ended with nothing sent, that is taught too, against the line it taught."""
+    from unittest import mock
+    from taskuary import verdicts
+    s = MemoryStore(); tid = s.create_task({'Title': 'Partnership pitch', 'Kind': 'general', 'Status': 'in_progress'}, 'owner')
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'p1', 'Channel': 'email', 'FromName': 'Pike Advisory', 'FromEmail': 'hello@pike.example',
+                         'Subject': 'Partnership opportunity', 'BodyText': 'Can we talk?', 'Status': 'routed'})
+    s.add_learned_event('k1', 'You review consultancy pitches yourself', 'own', 1, f'msg{mid}', 'said', 'verdict:made_task')
+    s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Thanks, no.'})
+    with mock.patch.object(memorylines, 'teach_soon') as taught:
+        assert verdicts.not_needed(s, tid, 'the owner said to just ignore him', 'agent')['ok']
+    (args, _), = taught.call_args_list
+    assert args[1:3] == ('made_task_ended', f'msg{mid}') and 'just ignore him' in args[3]
+    other = s.create_task({'Title': 'Rota', 'Kind': 'general', 'Status': 'in_progress'}, 'owner')
+    s.add_review({'TaskId': other, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'ok'})
+    with mock.patch.object(memorylines, 'teach_soon') as taught: verdicts.not_needed(s, other, 'answered elsewhere', 'agent')
+    assert not taught.called, 'no promotion taught a line: nothing to weigh'

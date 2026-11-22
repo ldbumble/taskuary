@@ -64,6 +64,16 @@ class ApiWorkerSignals(unittest.TestCase):
         self.assertEqual(st['state'], 'input_needed'); self.assertEqual(st['requests'][0]['text'], 'Which vendor?')
         self.assertEqual([e['Kind'] for e in ws.events(self.s, self.tid, sess.sid)], ['working', 'turn_end', 'input_needed'])
 
+    def test_a_question_asked_in_its_own_words_over_a_bare_marker_waits_on_him(self):
+        """The walk, 2026-11-21: told to ask in its own words and end with the marker on its own line, the agent did - and the bare marker
+        recorded no question, so the header and the rail read "agent done" over a turn that asked him who should get the mail."""
+        from taskuary import taskstate
+        sess, reply = self.turn('I found two people it could go to.\n\nWho should get it? I recommend Gail.\n[[TASKUARY-ASK]]')
+        st = ws.status(self.s, self.tid)
+        self.assertEqual([r['text'] for r in st['requests']], ['Who should get it? I recommend Gail.'])
+        self.assertEqual(reply.count('Who should get it?'), 1, 'asked once, in its own words')
+        self.assertEqual(taskstate.status(self.s, self.s.get_task(self.tid), sess.info(details=False))['key'], 'blocked')
+
     def test_a_question_a_later_turn_no_longer_needs_is_over(self):
         """Recorded on the real CLI, 2026-11-15: the agent asked which room; the owner then answered the sender outside the app, and the turn
         that heard it ended "You can close the task with Mark done", its summary saying nothing is left - under a chip "agent waiting on you"

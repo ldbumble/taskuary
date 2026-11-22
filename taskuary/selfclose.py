@@ -736,7 +736,10 @@ def ask_markers(text: str) -> tuple:
     for i, m in enumerate(cuts):
         seg = t[m.end(): cuts[i + 1].start() if i + 1 < len(cuts) else len(t)]
         parts = [' '.join(p.split()) for p in seg.split('|')]
-        if parts and parts[0]: asks.append((parts[0][:600], [p[:120] for p in parts[1:] if p]))
+        # ...A BARE MARKER IS THE WAIT ON WHAT IT JUST ASKED (ASK_LINE: asked in its own words, the marker on its own line): its question is the
+        # paragraph above it. Read as no ask, the turn recorded nothing and read "agent done" over a question to him (the walk, 2026-11-21)
+        q = parts[0] if parts and parts[0] or i else ' '.join((re.split(r'\n\s*\n', t[:m.start()].strip()) or [''])[-1].split())
+        if q: asks.append((q[:600], [p[:120] for p in parts[1:] if p]))
     return t[:cuts[0].start()].rstrip(), asks
 
 

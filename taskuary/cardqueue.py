@@ -141,7 +141,7 @@ def held(store, tid: int) -> set:
 
 
 def what(store, u: dict) -> str:
-    "A card in the owner's words: 'the email to erin@northwind.example', 'the reply to Gail Moreno', 'the push', 'delete the old export'."
+    "A card in the owner's words: 'the email to Erin Blake', 'the reply to Gail Moreno', 'the push', 'delete the old export'."
     from . import landing
     if u['rids'] == [LAND]: return f"the {landing.HOW.get(u.get('how'), 'push').lower()}"
     rows = _waits(u) or u['rows']; r = rows[0]
@@ -170,7 +170,10 @@ def what(store, u: dict) -> str:
     try: env = review_envelope(store, r)
     except Exception: env = own if isinstance(own, dict) else {}
     to = env.get('to') if isinstance(env, dict) else None
-    to = ', '.join(to) if isinstance(to, list) else str(to or '')
+    # ...BY NAME, NOT ADDRESS (the design walk, 2026-11-20: "next: the reply to gail@northwind.example"): each address as the mail, the org
+    # chart or the directory knows its person (calwrite.name_of, the one that names people in titles), the address only where none does
+    from .calwrite import name_of
+    to = ', '.join(name_of(store, x) if '@' in str(x) else str(x) for x in (to if isinstance(to, list) else [to] if to else []))
     if not to and r.get('MessageId'): m = store.get_message(r.get('AnswersMid') or r['MessageId']) or {}; to = m.get('FromName') or m.get('FromEmail') or ''
     return f"the {'email' if r.get('Kind') == 'slot' else 'reply'}" + (f' to {to}' if to else '')
 

@@ -151,7 +151,7 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
       {isJudge && !!(slot.decides || []).length && (
         <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px solid ${BORDER}` }}>
           <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, display: "block", mb: 0.5 }}>
-            ASKED OF IT, ONCE PER RUN
+            Asked of it, once per run
           </Typography>
           {slot.decides.map((d) => (
             <Typography key={d.line} sx={{ ...mono, fontSize: 11.5, color: INK, whiteSpace: "pre-wrap" }}>

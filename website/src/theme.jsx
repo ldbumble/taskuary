@@ -155,6 +155,9 @@ export const createAppTheme = (mode = "light") => createTheme({
     body2: { fontSize: 12.5 },
     caption: { fontSize: 11 },
     subtitle2: { fontSize: 12.5 },
+    // ...AND NO SHOUTING (the design walk, 2026-11-20: all-caps headings - "PLAYBOOKS - WHAT THIS CONNECTION DOES FOR US"): an overline is a
+    // small heading in the app's own words and case, never capitals spaced out
+    overline: { textTransform: "none", letterSpacing: 0, fontWeight: 600, fontSize: 12, lineHeight: 1.6 },
   },
   shape: { borderRadius: 8 },
   components: {

@@ -10,7 +10,7 @@ import { cleanOne, gateWords, sessionLine, trustOf, withTrust, withoutTrust } fr
 const said = (e, d) => e?.response?.data?.detail || d;
 const Section = ({ title, children }) => (
   <Box sx={{ mt: 2.5 }}>
-    <Typography variant="overline" sx={{ color: FAINT, letterSpacing: ".08em" }}>{title}</Typography>
+    <Typography variant="overline" sx={{ color: FAINT }}>{title}</Typography>
     <Box sx={{ mt: .5 }}>{children}</Box>
   </Box>
 );

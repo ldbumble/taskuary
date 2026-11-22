@@ -1,7 +1,7 @@
 // COPY SLIPS (the product audit, 2026-11-08): one word for one thing, no internal words on a screen
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 
 const src = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 
@@ -29,13 +29,13 @@ test("an ask that is its message's words, a second New playbook and a single pag
   assert.match(src("TaskPage.jsx"), /!\(sourceCount === 1 && askInBody\(askText, opener\?\.ReadText \|\| opener\?\.BodyText\)\)/);
   assert.match(src("ReportsView.jsx"), /<NewPlaybook [^>]*button=\{false\}/);
   assert.match(src("PlaybookShelf.jsx"), /\{button && <Button size="small" variant="outlined"/);
-  assert.match(src("SettingsView.jsx"), /noBack: onePage\(section, SHELF\)/);
+  assert.match(src("SettingsView.jsx"), /onePage: onePage\(section, SHELF\)/);
   // ...and every section that is one page opens from its chip: Mail rules and Updates drew one card named like the chip, to press again
   const { onePage } = await import("../src/settingsMap.js"), SHELF = { docs: 1, profiles: 1 };
   assert.deepEqual(["you", "phone", "policies", "updates", "audit", "config", "memory", "docs", "profiles", null].map((k) => onePage(k, SHELF)),
     [true, true, true, true, true, false, false, false, false, false]);
   assert.match(src("SettingsView.jsx"), /open: onePage\(key, SHELF\) \? key : null/);
-  assert.match(src("CanvasBrowse.jsx"), /\{!noBack && <Box sx=\{\{ display: "flex", alignItems: "center", gap: 1\.25, px: 1\.75/);
+  assert.match(src("CanvasBrowse.jsx"), /const folded = opened && !onePage;/);
 });
 
 test("Esc closes the Past chats panel: it stood over the task with its x the only way out", () => {
@@ -52,4 +52,25 @@ test("a start that did not happen says why under the chat: the list's idle line,
 test("an AI connected after the page opened is seen: the rail stopped saying No AI is connected only on a reload", () => {
   const view = src("AssistantView.jsx");
   assert.match(view, /picksOf\(s\.providers\) !== picksOf\(st\.providers\) \? \{ \.\.\.s, providers: st\.providers \|\| \[\] \} : s/);
+});
+
+// THE DESIGN WALK (2026-11-20): builder words and shouting on screen - "Run CLI agents over ACP ... Agent Client Protocol", "Default: on -
+// unchanged" under every row, "fine-grained PAT", "Baileys", "triage", "(built under Reports)", headings in spaced-out capitals. The words a
+// screen says are plain; a heading is in the app's own case and font.
+test("what the screen says is plain words, in the app's own case", async () => {
+  const schema = JSON.parse(readFileSync(new URL("../../taskuary/settings_schema.json", import.meta.url), "utf8"));
+  const builder = /\bACP\b|Agent Client Protocol|\btriag|\bPAT\b|Baileys|unchanged/i;
+  for (const [k, m] of Object.entries(schema.knobs || {})) for (const f of ["label", "desc"]) assert.doesNotMatch(m[f] || "", builder, `${k}.${f}`);
+  const cv = src("ConnectorsView.jsx");
+  for (const [, d] of cv.matchAll(/^\s+desc: "([^"]*)"/gm)) assert.doesNotMatch(d, builder, d.slice(0, 60));
+  assert.doesNotMatch(cv, /built under Reports\)|secretLabel: "fine-grained PAT"/);
+  // ...no heading in capitals: no all-caps run of words between tags, and an overline is the app's own case
+  for (const f of readdirSync(new URL("../src/", import.meta.url)).filter((n) => n.endsWith(".jsx"))) {
+    const code = src(f).split("\n").filter((l) => !/^\s*(\/\/|\{\/\*|\*)/.test(l)).join("\n");
+    assert.doesNotMatch(code, />\s*[A-Z][A-Z ,—'&/-]{10,}[A-Z]\s*</, f);
+    assert.doesNotMatch(code, /^\s+[A-Z]{2,}(?: [A-Z—-]{2,}){2,}\s*$/m, f);
+  }
+  assert.match(src("theme.jsx"), /overline: \{ textTransform: "none", letterSpacing: 0/);
+  // ...and a setting left at its default says nothing about it
+  assert.match(src("SettingsView.jsx"), /return now === d \? "" : `Changed - the default is \$\{d\}\.`;/);
 });

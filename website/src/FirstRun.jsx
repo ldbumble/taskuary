@@ -22,7 +22,7 @@ import FirstRunAbout from "./FirstRunAbout.jsx";
 import SetupDone from "./SetupDone.jsx";
 import CanvasBrowse from "./CanvasBrowse.jsx";
 import { useVerbs } from "./actionRow.js";
-import { buttonOf, cardOf, doneOf, frontierOf, landOn, navMoves, nextOf, openAt, prevOf, reachable, requiredDone } from "./setupSteps.js";
+import { buttonOf, cardOf, doneOf, frontierOf, landOn, navMoves, nextOf, openAt, prevOf, reachable, requiredDone, viewOf } from "./setupSteps.js";
 import { openBugReport } from "./bugReportOpen.js";
 import { AI_SHELF, AI_WHY, SETUP_AI } from "./aiShelf.js";
 import { label as btnLabel } from "./buttons.js";
@@ -169,7 +169,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
   useEffect(() => {
     const on = (e) => {
       if (hiddenRef.current && e.detail === window.__tqSetupShown) return;
-      const v = e.detail === "finish" ? "other" : e.detail; if (!stRef.current || reachable(stRef.current, v)) go(v);
+      if (!stRef.current || reachable(stRef.current, e.detail)) go(viewOf(e.detail));
     };
     window.addEventListener("tq-setup-go", on);
     return () => window.removeEventListener("tq-setup-go", on);
@@ -586,7 +586,8 @@ ${fix.detail || ""}`, screen: "Setup",
         : `email is the usual one: start with ${litCard.title} if that is yours`}.`,
     // ...About your work, Setup complete and Developer mode say their own on the page: here only a failing AI
     about: aiErr ? `${aiErr} Change AI picks one that does.` : "", done: "",
-    other: aiErr ? `${aiErr} Change AI picks one that does.` : "Nothing more is needed. Pick a section to connect another app - or later, any time, from Connections.",
+    other: aiErr ? `${aiErr} Change AI picks one that does.` : requiredDone(st) ? "Nothing more is needed. Pick a section to connect another app - or later, any time, from Connections."
+      : `Still to do: ${st.todo}. Another app can be connected here meanwhile - or later, any time, from Connections.`,
     dev: aiErr ? `${aiErr} Change AI picks one that does.` : "",
     github: st.github ? "GitHub is connected - coding agents can work in your repositories."
       : "Connect GitHub if your code is there. It is optional: a coding agent also works without it, in a scratch folder.",

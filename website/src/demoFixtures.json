@@ -10107,22 +10107,22 @@
     "Name": "researcher",
     "Kind": "research",
     "Runner": "cli",
-    "Config": "{\"kind\": \"research\", \"purpose\": \"OUTSIDE information - the web, vendors, public filings, documents, what other companies do. Reads and reports with sources; queries none of our systems\", \"cwd_map\": {}}",
+    "Config": "{\"kind\": \"research\", \"purpose\": \"Information from outside - the web, vendors, public filings, documents, what other companies do. Reads and reports with sources; queries none of our systems\", \"cwd_map\": {}}",
     "Active": 1,
     "installed": false,
     "rules_doc": "researcher",
-    "purpose": "OUTSIDE information - the web, vendors, public filings, documents, what other companies do. Reads and reports with sources; queries none of our systems"
+    "purpose": "Information from outside - the web, vendors, public filings, documents, what other companies do. Reads and reports with sources; queries none of our systems"
    },
    {
     "AgentId": 3,
     "Name": "analyst",
     "Kind": "analysis",
     "Runner": "cli",
-    "Config": "{\"kind\": \"analysis\", \"purpose\": \"OUR OWN figures - the databases, the ledger, the bank feeds, our reports. Queries them, reconciles them, explains what the numbers say\", \"cwd_map\": {}}",
+    "Config": "{\"kind\": \"analysis\", \"purpose\": \"Our own figures - the databases, the ledger, the bank feeds, our reports. Queries them, reconciles them, explains what the numbers say\", \"cwd_map\": {}}",
     "Active": 1,
     "installed": false,
     "rules_doc": "analyst",
-    "purpose": "OUR OWN figures - the databases, the ledger, the bank feeds, our reports. Queries them, reconciles them, explains what the numbers say"
+    "purpose": "Our own figures - the databases, the ledger, the bank feeds, our reports. Queries them, reconciles them, explains what the numbers say"
    },
    {
     "AgentId": 4,
@@ -10175,11 +10175,11 @@
    },
    "researcher": {
     "kind": "research",
-    "purpose": "OUTSIDE information - the web, vendors, public filings, documents, what other companies do. Reads and reports with sources; queries none of our systems"
+    "purpose": "Information from outside - the web, vendors, public filings, documents, what other companies do. Reads and reports with sources; queries none of our systems"
    },
    "analyst": {
     "kind": "analysis",
-    "purpose": "OUR OWN figures - the databases, the ledger, the bank feeds, our reports. Queries them, reconciles them, explains what the numbers say"
+    "purpose": "Our own figures - the databases, the ledger, the bank feeds, our reports. Queries them, reconciles them, explains what the numbers say"
    },
    "coordinator": {
     "kind": "coordination",

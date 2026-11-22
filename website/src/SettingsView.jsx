@@ -4,6 +4,7 @@
 // Search reaches EVERYTHING (knobs, rules, help text, the section names themselves)
 // and lands you on the same anchor, under the same path the rail shows.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { sectionOr } from "./browseSection.js";
 import { refreshCapabilities, useCapabilities } from "./capabilities.js";
 import { nothingMatches } from "./searchHits.js";
 import { matches, placeHits } from "./settingsSearch.js";
@@ -391,7 +392,8 @@ const defaultNote = (s, m) => {
   const d = showValue(s.Default, m);
   if (!d) return "";
   const now = showValue(s.Value, m);
-  return now === d ? `Default: ${d} \u2014 unchanged.` : `Default: ${d}. Yours: ${now}.`;
+  // ...said only where it was changed (the design walk, 2026-11-20: "Default: on - unchanged" under every row said nothing)
+  return now === d ? "" : `Changed - the default is ${d}.`;
 };
 
 // ONLY A KNOB THE SCHEMA NAMES IS DRAWN (the 2026-10-19 UI walk): Configuration > Other listed twelve one-shot migration flags
@@ -1205,7 +1207,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
     // log only in Developer mode
     const SHELF = { docs: ["g:documents", "g:how"], profiles: ["g:profiles"] };
     const mine = about ? ["you", "docs", "memory"] : ["config", "profiles", "policies", PHONE_PAGE, ...(devMode ? ["audit"] : []), "updates"];
-    const section = mine.includes(browseState.section) ? browseState.section : null;
+    const asked = mine.includes(browseState.section) ? browseState.section : null, section = sectionOr(asked, mine);
     // ...and SAYS WHY (the product audit, 2026-11-08: #settings=audit with Developer mode off drew the list with no pill and no word)
     const hidden = !about && browseState.section === "audit" && !section ? "The Activity log shows only in Developer mode." : "";
     const page = SHELF[section] ? "docs" : section === "you" ? "about" : section;
@@ -1245,12 +1247,13 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
       : SHELF[section] ? docCards.filter((c) => c.key !== "d:learned")
       : section === "memory" ? [{ key: "memory", node: <MemoryLines /> }]
       : section ? [{ key: section, title: PAGES[page].title, sub: PAGES[page].desc }] : [];
-    const open = gone || !section ? null : browseState.open;
+    // ...a first section that IS its one page (About you's You) opens as that page, as its chip would
+    const open = gone || !section ? null : browseState.open ?? (!asked && onePage(section, SHELF) ? section : null);
     const label = (k) => (k === "you" ? "You" : k === "profiles" ? "Profiles" : k === "memory" ? "Memory" : PAGES[k].title);
     const where = about ? "About you" : "Settings";
     return browse({
-      title: where, wide: about && section === "memory", noBack: onePage(section, SHELF),
-      summary: about ? "how you sound, how you do your job, and what Taskuary has learned · pick a section" : "how Taskuary works for you · pick a section",
+      title: where, wide: about && section === "memory", onePage: onePage(section, SHELF),
+      summary: about ? "how you sound, how you do your job, and what Taskuary has learned" : "how Taskuary works for you",
       sections: mine.map((k) => ({ key: k, label: label(k) })),
       section: needle ? "" : section,
       // a section that is one page opens from its chip, with no card to press first (settingsMap.onePage)
@@ -1279,7 +1282,6 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
           <Box key={catN} sx={{ display: "none" }}><DocsView onCatalog={onCatalog} catalogOnly /></Box></> : null}</>,
       detail: open && section !== "memory" ? <SettingsPages only={{ page, group: section === "config" ? open : null, knob: browseState.knob || "", at: browseState.at }} q="" setQ={() => {}} onNavigate={onNavigate}
         onJump={() => {}} onSections={setCfgSecs} docSel={docSel} setDocSel={setDocSel} onCatalog={onCatalog} /> : null,
-      onBack: () => (onePage(section, SHELF) ? onBrowseState?.({ section: null, open: null }) : onBrowseState?.({ ...browseState, open: null })),
       openLabel: !open ? "" : SHELF[section] ? `the document "${docCards.find((c) => c.key === open)?.title || (open === "d:learned" ? "LEARNED.md" : "Docs")}" (${where} - ${section === "docs" ? "Docs" : "Profiles"})`
         : section === "you" ? "who you are - your name, your identity on each channel, what the agents are told (About you)"
         : section === PHONE_PAGE ? `Phone & chats (Settings) - your Taskuary chat on WhatsApp or Telegram${devMode ? ", and the chats bound to coding agents" : ""}`

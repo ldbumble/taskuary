@@ -414,7 +414,7 @@ def test_a_held_only_run_that_cannot_start_over_acp_runs_nothing_and_says_so():
         with pytest.raises(RuntimeError, match='nothing ran'): run(profile(args=['-p'], held_only=True), env={'FAKE_ACP_FAIL': 'init'}, store=s)
     s.set_setting(agents.ACP_SETTING, '0', 'owner')                              # ...nor with the owner's ACP switch off
     with mock.patch.object(agents, 'run_acp', side_effect=AssertionError('off')), mock.patch.object(agents.spawn, 'popen', side_effect=popen):
-        with pytest.raises(RuntimeError, match="Run CLI agents over ACP"): run(profile(args=['-p'], held_only=True), store=s)
+        with pytest.raises(RuntimeError, match="Taskuary approves each step of an agent"): run(profile(args=['-p'], held_only=True), store=s)
 
 
 # ── a conversation the CLI no longer has (agents.Gone): the turn is said again to a fresh one, never the CLI's error ─────────────────────────

@@ -392,7 +392,6 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
       cards: [...(grouped ? [{ key: "about", node: <About /> }, ...bySystem(posts, topics, (t) => onBrowseState?.({ section: t, open: null }), card)]
         : posts.map((x) => ({ key: String(x.LoreId), node: card(x) }))), ...(posts.length ? [{ key: "recently-deleted", node: shelf }] : [])],
       detail: one ? <Post key={`open-${one.LoreId}`} p={one} onChanged={changed} onOpenTask={onOpenTask} onRemoved={onRemoved} defaultOpen /> : null,
-      onBack: () => onBrowseState?.({ ...browseState, open: null }),
       openLabel: one ? `the Hub post "${one.Title}" (${one.Topic || "Hub"})` : "",
       query: q, searched: "the Hub", empty: removed ? "Nothing has been voted off." : "Nothing posted yet.",
       // the tab's own controls: which order, which tag, the shelf the vote took things off, and writing one

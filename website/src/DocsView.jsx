@@ -749,8 +749,8 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
             block in the doc is traceable back to your own mail, not a vibe */}
         {genEv?.length > 0 && GEN[docName] && (
           <Box sx={{ mb: 1.5, p: 1.25, bgcolor: "var(--tq-panel, #fff)", border: "1px solid var(--tq-border, #e1dcd5)", borderRadius: 2 }}>
-            <Typography variant="caption" sx={{ color: "var(--tq-success, #6f8a6e)", fontWeight: 600, letterSpacing: 1, display: "block", mb: 0.5 }}>
-              WHAT IT READ — AND WHAT EACH LINE DID
+            <Typography variant="caption" sx={{ color: "var(--tq-success, #6f8a6e)", fontWeight: 600, display: "block", mb: 0.5 }}>
+              What it read — and what each line did
             </Typography>
             <Box sx={{ maxHeight: 260, overflowY: "auto" }}>
               {genEv.map((l, i) => (

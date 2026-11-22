@@ -80,6 +80,9 @@ test("every dialog's actions are the one ButtonBar: one button size, left, no ba
     assert.match(read(f), /<ButtonBar>/, f);
     assert.doesNotMatch(read(f), /justifyContent: "flex-end", px: 3, py: 1\.75,\s*borderTop/, f);
   }
-  // ...the main move first, Cancel after it
-  assert.match(read("NewSheet.jsx"), /<ButtonBar>[\s\S]*?variant="contained"[\s\S]*?>Cancel<\/Button>\s*<\/ButtonBar>/);
+  // ...the main move alone: the × at the top closes it, no Cancel beside it (the design walk, 2026-11-20: two ways to close one card)
+  assert.match(read("NewSheet.jsx"), /<ButtonBar>[\s\S]*?variant="contained"[\s\S]*?<\/ButtonBar>\}/);
+  assert.doesNotMatch(read("NewSheet.jsx"), />Cancel<\/Button>/);
+  // ...and the Assistant's box steps aside while New is the page: one input on a screen
+  assert.match(read("AssistantView.jsx"), /\{!chatApart && !newOpen && composeBox\}/);
 });

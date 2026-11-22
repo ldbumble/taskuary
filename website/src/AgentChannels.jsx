@@ -35,7 +35,7 @@ export function PermissionCards({ taskId, items = [], onAnswered }) {
   return items.map((p) => { const l = permissionLead(p); return (
     <div key={p.id} className="tq-aui-message tq-aui-agent"><div className="tq-aui-agent-body">
     <Box data-tq-permission={p.id} sx={card} role="group" aria-label="The agent asks permission">
-      <Head>THE AGENT ASKS</Head>
+      <Head>The agent asks</Head>
       <Typography variant="body2" sx={{ color: INK }}>{l.lead}</Typography>
       {l.why && <Typography variant="caption" sx={{ display: "block", color: DIM, mt: 0.2 }}>{l.why}</Typography>}
       {l.command && <Box component="details" open={l.open || undefined} data-tq-permission-command sx={{ mt: 0.4, fontSize: 12, color: DIM, "& summary": { cursor: "pointer" },
@@ -60,7 +60,7 @@ export const PERM_SAID = { allow_once: "Allowed", allow_always: "Allowed, from n
 export function AnsweredPermission({ perm, at = "" }) {
   return (
     <Box data-tq-permission-answered={perm.answer} sx={{ ...card, bgcolor: "transparent", borderStyle: "dashed", opacity: 0.75 }} role="group" aria-label="The agent asked permission">
-      <Head>THE AGENT ASKED</Head>
+      <Head>The agent asked</Head>
       <Typography variant="body2" sx={{ color: INK }}>{perm.asked || "a step of its work"}</Typography>
       <Typography variant="caption" data-tq-permission-said="" sx={{ display: "inline-block", mt: 0.6, color: DIM, fontWeight: 600 }}>
         {String(perm.answer).startsWith("allow") ? "✓ " : "✗ "}{PERM_SAID[perm.answer] || "Answered"}{at ? ` · ${at}` : ""}</Typography>

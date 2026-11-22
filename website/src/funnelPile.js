@@ -102,6 +102,12 @@ export const liveBrowseId = (shown = []) => {
   }
   return null;
 };
+// GOING TO A PAGE REPLACES THE VIEW (the owner's ruling, 2026-11-20): every page and task visited stayed on the canvas as a folded bar over the one
+// in front - Settings, Reports, Hub, About you, another task - and pushed it half off the screen. The canvas draws one view: the page open
+// (`browsing`), else the item on the table (`live`, the line tableCardIndex picked). A page or an item left behind is not drawn; the
+// conversation's own lines are the chat window's, and a proposal is a question still waiting, so both stay.
+export const pastView = (m, i, { browsing = null, live = -1 } = {}) =>
+  m?.role === "browse" ? m.id !== browsing : onTable(m) && !m.proposal && (!!browsing || i !== live);
 // Which line carries the action words. It is the LAST thing Taskuary said, card or no card: an answer
 // to a typed question offers the same verbs as the line that introduced the item, and a receipt is not a
 // place to act. interactiveCardIndex is about the card inside the bubble and stays separate.

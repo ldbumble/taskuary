@@ -404,7 +404,7 @@ export async function clickRail(page, label) {
   if (!(await page.$("#tqSettingsRail"))) {
     // a rail GROUP heading is the list's grouping in the canvas: "clicking" it is being on the list
     if (["Operator documents", "Profiles", "Playbooks"].includes(label)) {
-      await page.evaluate(() => document.querySelector("[data-tq-browse-back]")?.click());
+      await page.evaluate(() => document.querySelector("[data-tq-browse-chip][aria-pressed=true]")?.click());
       await page.waitForSelector("[data-tq-browse-card]");
       return;
     }
@@ -412,7 +412,7 @@ export async function clickRail(page, label) {
       (c.querySelector("p")?.textContent || "").trim() === wanted && c.getBoundingClientRect().width > 0);
     await page.waitForFunction((src, wanted) => {
       if (new Function("return " + src)()(wanted)) return true;
-      document.querySelector("[data-tq-browse-back]")?.click();
+      document.querySelector("[data-tq-browse-chip][aria-pressed=true]")?.click();
       return false;
     }, { polling: 300, timeout: 20000 }, card.toString(), label);
     await page.evaluate((src, wanted) => new Function("return " + src)()(wanted).click(), card.toString(), label);

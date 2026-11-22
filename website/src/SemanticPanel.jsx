@@ -100,8 +100,8 @@ const Metric = ({ m, minFixtures, open, onOpen, onChanged }) => {
 
           {/* the proof, or the absence of it */}
           <Box>
-            <Typography sx={{ ...mono, fontSize: 9, letterSpacing: 1, color: "var(--tq-warning, #6b5f45)", fontWeight: 600, mb: 0.3 }}>
-              KNOWN NUMBERS IT MUST MATCH
+            <Typography sx={{ fontSize: 11.5, color: "var(--tq-warning, #6b5f45)", fontWeight: 600, mb: 0.3 }}>
+              Known numbers it must match
             </Typography>
             {fixtures.length ? (
               <Box component="table" sx={{ width: "100%", borderCollapse: "collapse" }}>

@@ -866,9 +866,9 @@ DEFAULT_PROFILES = {
     # researcher and analyst split on WHOSE information it is, not on how hard the question is: the
     # first pair of purpose lines both read as "find out something", and "look into last month's
     # spend" could have gone either way (the owner, 2026-09-10: "sharpen analyst vs researcher").
-    'researcher': {'kind': 'research', 'purpose': 'OUTSIDE information - the web, vendors, public filings, documents, what other '
+    'researcher': {'kind': 'research', 'purpose': 'Information from outside - the web, vendors, public filings, documents, what other '
                                                   'companies do. Reads and reports with sources; queries none of our systems'},
-    'analyst':    {'kind': 'analysis', 'purpose': 'OUR OWN figures - the databases, the ledger, the bank feeds, our reports. '
+    'analyst':    {'kind': 'analysis', 'purpose': 'Our own figures - the databases, the ledger, the bank feeds, our reports. '
                                                   'Queries them, reconciles them, explains what the numbers say'},
     'coordinator': {'kind': 'coordination', 'purpose': 'meetings, chasing people, scheduling and follow-ups'},
     'marketer':   {'kind': 'marketing', 'purpose': 'copy, positioning and campaigns - drafts, never sends'},
@@ -1918,7 +1918,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
             _fell_back(str(profile.get('cmd') or ''), e, trace)
     # ...a run that may only go held (llm.make_cli_llm `held_only`) never takes the command line: there it would read and act unasked
     elif profile.get('held_only'):
-        raise RuntimeError(HELD_ONLY.format(cli=_cli_name(str(profile.get('cmd') or '')).capitalize(), why="'Run CLI agents over ACP' is off in Settings, Agents"))
+        raise RuntimeError(HELD_ONLY.format(cli=_cli_name(str(profile.get('cmd') or '')).capitalize(), why="'Taskuary approves each step of an agent' is off in Settings"))
     profile = with_cmd(profile, store); name = profile['cmd']
     family = _cli_name(name)
     args = list(profile.get('args') or preset_args(name) or ['-p'])

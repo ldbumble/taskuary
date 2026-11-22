@@ -108,6 +108,8 @@ def test_the_rail_says_what_is_done_and_what_waits():
     reading = _rows(step='reading', about_done=False, brain={'name': 'Claude'}, empty=True)
     assert reading['ai']['sub'] == 'Claude' and reading['mail']['sub'] == 'connected - nothing new yet' and reading['about']['open']
     assert _rows(step='email', dismissed=True)['finish']['done'] is False, 'put away is not finished'
+    # ...nor open: put away over no main source, the Finish row opened while the top bar said "connect your main source" (2026-11-20)
+    assert _rows(step='email', dismissed=True)['finish']['open'] is False
     assert _rows(step='done', about_done=True, dismissed=True)['finish']['done'] is True
     assert _rows(step='reading', about_done=False)['finish']['sub'] == 'after AI, your main source and About your work'
     assert _rows(step='reading', about_done=True)['finish']['sub'].startswith('ready')

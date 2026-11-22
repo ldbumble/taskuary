@@ -2779,6 +2779,14 @@ def waiting_now(task_id: int):
     if not conversation.items(store, task_id).get('now'): return {'ok': False, 'why': 'this agent takes it when its turn ends'}
     return {'ok': True, **waitroom.deliver(store, task_id)}
 
+class ViaBrowserBody(BaseModel):
+    final_text: str | None = None
+@app.post('/api/reviews/{rid}/via-browser')
+def post_via_browser(rid: int, body: ViaBrowserBody):
+    "A post card's Post via the browser: proposals.via_browser."
+    from . import proposals
+    return proposals.via_browser(store, rid, body.final_text, ACTOR)
+
 @app.post('/api/tasks/{task_id}/again')
 def try_again(task_id: int):
     """TRY AGAIN IS A PRESS (the owner, 2026-11-22: "yes fix" - it sent "Try again." as his own line): the agent is told he pressed it, on the one

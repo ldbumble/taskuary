@@ -12,7 +12,7 @@ import api from "./api.js";
 import { openAppLink } from "./appLinks.js";
 import { attUrl } from "./fileSave.js";
 import { FileDialog } from "./PublishedPages.jsx";
-import { actionFor, changed, choiceOf, fieldsOf, pressable, stateOf, textKey, valuesOf, wordsOf } from "./actionCard.js";
+import { actionFor, changed, choiceOf, fieldsOf, pressable, stateOf, textKey, valuesOf, viaBrowserSaid, wordsOf } from "./actionCard.js";
 import { outputRow } from "./taskOutputs.js";
 import { hint, label as btn } from "./buttons.js";
 import { failLine, landed, press } from "./press.js";
@@ -72,6 +72,14 @@ export default function ActionCard({ row: was, tid, live = true, onChanged, past
     if (o.kind !== "error") onChanged?.();
     setBusy("");
   };
+  const viaBrowser = async () => {
+    setBusy("browser"); setErr("");
+    try { const { data } = await api.post(`/api/reviews/${row.ReviewId}/via-browser`, { final_text: text });
+      if (data?.ok) setSettled({ Status: data.status || "approved", mine: true, browser: true }); else setErr(data?.why || "It could not be handed over.");
+      onChanged?.(); }
+    catch (e) { setErr(e?.response?.data?.detail || e?.message || "It could not be handed over."); }
+    setBusy("");
+  };
   // ...a choice reads as its label; while it waits, the label is the pick itself - no box around it
   const choice = (f) => f.editable
     ? <Box component="select" key={f.key} data-tq-act-choice={f.key} aria-label={f.label} value={String(vals[f.key])} disabled={!!busy}
@@ -104,11 +112,14 @@ export default function ActionCard({ row: was, tid, live = true, onChanged, past
       {pic && img.manual && !gone && <Typography data-tq-act-image-manual="" sx={{ px: 1.5, pt: 0.5, fontSize: 11.5, color: FAINT }}>
         {`${row?.network || "This network"} gets the words from here - open the picture to save it, and add it yourself`}</Typography>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.5, py: 1, flexWrap: "wrap" }}>
-        {gone ? <Typography data-tq-act-done="" sx={{ fontSize: 13, color: "var(--tq-success, #47654a)", fontWeight: 600 }}>✓ {done ? w.done : st.said}
+        {gone ? <Typography data-tq-act-done="" sx={{ fontSize: 13, color: "var(--tq-success, #47654a)", fontWeight: 600 }}>✓ {done ? (done.browser ? viaBrowserSaid(row?.network) : w.done) : st.said}
           {go && <> · <a href={go} target="_blank" rel="noopener noreferrer" style={{ color: "var(--tq-link, #55697a)" }}>See it on {row?.network}<OpenInNewIcon sx={{ fontSize: 12, ml: 0.25, verticalAlign: "-1px" }} /></a></>}</Typography>
           : st.live && row?.connect ? <>
-            {/* ...its network not connected (outbound.connect_fix, the owner 2026-11-08): said, and Connect opens that card - the post waits */}
-            <Button size="small" variant="contained" disableElevation data-tq-act-connect="" onClick={() => openAppLink(row.connect.href)}>{row.connect.label}</Button>
+            {/* ...a post on a network not connected goes up through the agent's browser at his press (the owner, 2026-11-22: "card first, sign-in
+                at the press"); Connect beside it opens that card instead (outbound.connect_fix, 2026-11-08) */}
+            {post && <Button size="small" variant="contained" disableElevation data-tq-act-browser="" disabled={!!busy || !text.trim() || !!over} onClick={viaBrowser}
+              startIcon={busy === "browser" ? <CircularProgress size={12} color="inherit" /> : null}>{busy === "browser" ? "Handing it over…" : "Post via the browser"}</Button>}
+            <Button size="small" variant={post ? "text" : "contained"} disableElevation data-tq-act-connect="" onClick={() => openAppLink(row.connect.href)}>{row.connect.label}</Button>
             {/* ...and the draft copy-ready beside it: never a press that can only fail (the judge's look, 2026-11-20) */}
             <Button size="small" data-tq-act-copy="" disabled={!text.trim()} title={hint("copy")}
               onClick={() => { try { navigator.clipboard?.writeText(text); setCopied(true); } catch { /* the words stay on the card */ } }}>

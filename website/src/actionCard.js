@@ -35,8 +35,11 @@ export const changed = (act, p, values) => Object.fromEntries((act?.fields || []
   .filter((f) => f.edit && f.type === "choice" && String(values?.[f.key]) !== String(p?.[f.key] ?? f.default))
   .map((f) => [f.key, values[f.key]]));
 // where the card stands: waiting on the press, gone with its words and link, or not gone (`live` false: a caller that only reads it)
+export const viaBrowserSaid = (network) => `Handed to the agent - it puts this up on ${network || "the site"} in the browser, and its Post waits for you`;
 export const stateOf = (row, live = true) => {
   const s = row?.Status, act = actionFor(row?.post?.type), w = wordsOf(act, row?.post || {});
+  // ...a post handed to its agent for the site says so, never "Posted" before anything went up (the owner, 2026-11-22)
+  if ((s === "approved" || s === "edited") && row?.post?.result?.browser) return { done: true, said: viaBrowserSaid(row?.network), url: "" };
   if (s === "approved" || s === "edited") return { done: true, said: w.done, url: row?.post?.result?.url || "" };
   if (s === "pending" && live) return { live: true };
   // ...a press that failed is over: its error is the card's line (ActionCard), and its agent sets up what goes next (general.failed)

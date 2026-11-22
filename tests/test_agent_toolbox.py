@@ -341,7 +341,7 @@ class TheServer(unittest.TestCase):
         road as the card draws it (outbound.connect_fix): a network not connected is its Connect and the words to copy."""
         text, err = tool(self.tid, 'propose', items=[{'action': 'run_tool', 'type': 'x_post', 'text': 'Q3 is in.', 'why': 'the headline'}])
         self.assertFalse(err, text)
-        self.assertIn("x_post: X (Twitter) isn't connected - the card shows Connect X (Twitter)", text)
+        self.assertIn("x_post: X (Twitter) isn't connected - the card shows Post via the browser, Connect X (Twitter)", text)
 
     def test_a_search_that_finds_nothing_says_each_word_must_match_and_what_to_try(self):
         self.s.create_task({'Title': 'Build Q3 board pack report', 'Kind': 'general', 'Status': 'open'}, 'owner')

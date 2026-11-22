@@ -730,13 +730,15 @@ def show_files(store, tid: int, paths) -> str:
 # the card's Connect is drawn from - so what it says of its cards is what he sees on them
 def card_roads(store, o, a: dict):
     if not (isinstance(o, dict) and o.get('ok')): return o
-    from . import connectorcatalog, outbound
+    from . import connectorcatalog, outbound, proposals
     roads = []
     for p in (a.get('items') if isinstance(a.get('items'), list) else [a]):
         act = connectorcatalog.action_for(p.get('type')) if isinstance(p, dict) and p.get('action') == 'run_tool' else None
         if not act: continue
         fix = outbound.connect_fix(store, act['card'])
-        roads.append(f"{p['type']}: " + (f"{fix['says']} - the card shows {fix['label']} and the words to copy; nothing goes from it until he connects"
+        roads.append(f"{p['type']}: " + ((f"{fix['says']} - the card shows Post via the browser, {fix['label']} and the words to copy; his Post via "
+                                          "the browser hands the post to you to put up on the site" if proposals.is_post(p) else
+                                          f"{fix['says']} - the card shows {fix['label']} and the words to copy; nothing goes from it until he connects")
                                          if fix else f"its press ({act.get('press') or 'Approve'}) runs it on his connected account"))
     # ...and A REPLY OR AN EMAIL whose card stands with Connect, not Send (the walk, 2026-11-21: "press Send" told him over a card that said
     # "Connect email")

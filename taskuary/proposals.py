@@ -129,6 +129,28 @@ MEDIA = {'linkedin_post', 'x_post'}
 
 
 def is_post(p: dict) -> bool: return (p or {}).get('action') == 'run_tool' and (p or {}).get('type') in POSTS
+# A POST ON A NETWORK NOT CONNECTED IS STILL ITS CARD, AND ITS PRESS HANDS IT TO THE AGENT FOR THE SITE (the owner, 2026-11-22: "card first,
+# sign-in at the press"): the agent went to LinkedIn's sign-in before writing a word, then gave the posts back as prose. The card stands with
+# the words and picture; Post via the browser saves them as he left them, once (decide_review takes one press), and hands them to its agent,
+# whose final Post on the site the browser gate holds for his yes
+BROWSER_POST = ('The owner pressed Post via the browser on your {network} post card. Post exactly these words on {network} in your browser'
+                '{pic}: "{words}". If the site wants him signed in, hand him its sign-in; then press its final Post - Taskuary holds that press '
+                'for his yes.')
+def via_browser(store, rid: int, text: str, actor: str = 'owner') -> dict:
+    "Post via the browser: {ok, status, told} - the post saved as he left it and handed to its agent; never twice, never a card that is not a post."
+    rv = store.get_review(int(rid)) or {}
+    try: p = json.loads(rv.get('DraftText') or '{}')
+    except ValueError: p = {}
+    if not is_post(p): return {'ok': False, 'why': 'Only a post goes through the browser.'}
+    words = str(text if str(text or '').strip() else p.get('text') or '').strip()
+    if not words: return {'ok': False, 'why': 'The post has no words to put up.'}
+    p = {**p, 'text': words, 'result': {'browser': True}}
+    if not store.decide_review(int(rid), 'approved', json.dumps(p), actor):
+        return {'ok': True, 'status': (store.get_review(int(rid)) or {}).get('Status'), 'already': True}
+    from . import general, outputs
+    pic = f" with the picture {outputs.folder(int(rv['TaskId'])) / p['image']}" if p.get('image') else ''
+    told = general.to_agent(store, int(rv['TaskId']), BROWSER_POST.format(network=POSTS[p['type']], pic=pic, words=words), actor, start=True)
+    return {'ok': True, 'status': 'approved', 'told': told}
 
 
 def picture_why(tid, p: dict) -> str:

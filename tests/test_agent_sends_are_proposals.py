@@ -288,3 +288,22 @@ def test_a_session_with_tools_is_never_told_the_marker_road_and_a_bracketed_mark
     assert 'TASKUARY-PROPOSE' not in general.action_line(s, tools=True)
     assert 'TASKUARY-PROPOSE' in general.action_line(s, tools=False)
     assert proposals.strip('[[TASKUARY-PROPOSE {"action": "propose_email", "to": "gail@northwind.example"}]]') == ''
+
+
+def test_post_via_the_browser_hands_the_post_as_he_left_it_to_its_agent_once():
+    """The owner, 2026-11-22 ("card first, sign-in at the press"): a post on a network not connected is its card; Post via the browser saves it
+    as he left it and hands it to its agent once, however often it is pressed - and the card reads handed over, never Posted."""
+    import json
+    from unittest import mock
+    from taskuary import general, proposals
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = s.create_task({'Title': 'Post the week', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    rid = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'post it',
+                        'DraftText': json.dumps({'action': 'run_tool', 'type': 'linkedin_post', 'text': 'A good week at Northwind.'})})
+    with mock.patch.object(general, 'to_agent', return_value='woke') as to:
+        outs = [proposals.via_browser(s, rid, 'A great week at Northwind.') for _ in range(3)]
+    assert to.call_count == 1 and 'A great week at Northwind.' in to.call_args.args[2] and 'LinkedIn' in to.call_args.args[2]
+    assert outs[0] == {'ok': True, 'status': 'approved', 'told': 'woke'} and all(o.get('already') for o in outs[1:])
+    assert json.loads(s.get_review(rid)['FinalText'])['result'] == {'browser': True}
+    mail = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps({'action': 'run_tool', 'type': 'github_issue'})})
+    assert proposals.via_browser(s, mail, 'x')['ok'] is False

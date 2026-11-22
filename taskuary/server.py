@@ -2687,6 +2687,12 @@ def _revisioned(got, rev: str = ''):
         return [calm(x) for x in v] if isinstance(v, list) else v
     import hashlib
     name = got.get('rev') or hashlib.sha1(json.dumps(calm(got), default=str, sort_keys=True).encode()).hexdigest()[:16]
+    # ...AND A TURN'S MOMENT IS PART OF IT (the owner, 2026-11-22: "Waiting for the agent to start" for 39 s): a chat's `rev` names its log, and
+    # whether the turn at work is still starting, or what it is writing, is read fresh off its session (chatlog._now) - so the page asked every
+    # 3 s, was told "same", and drew "Waiting" for 15 s after its agent was at work
+    if got.get('rev') and (live := [(x.get('opening'), x.get('doing')) for x in got.get('items') or [] if isinstance(x, dict) and x.get('kind') == 'turn'
+                                    and (x.get('opening') or x.get('doing'))]):
+        name = f"{name}~{hashlib.sha1(json.dumps(live, default=str).encode()).hexdigest()[:8]}"
     return {'rev': name, 'same': True} if rev and rev == name else {**got, 'rev': name}
 
 @app.get('/api/tasks/{task_id}/assistant')

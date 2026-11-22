@@ -1677,3 +1677,14 @@ def test_a_turn_whose_cli_is_up_reads_thinking_never_waiting_for_its_agent_to_st
         assert chatlog._now(7, turn).get('opening') is True             # ...its CLI still coming up: it is starting
     with mock.patch.object(general, 'session_for', return_value=ses), mock.patch.object(general, 'cold', return_value=False):
         assert not chatlog._now(7, turn).get('opening')                 # ...up: at work, "Thinking..." till its first step
+
+
+def test_a_turn_that_stops_starting_is_news_to_a_page_that_asks_if_anything_changed():
+    """The owner, 2026-11-22: "Waiting for the agent to start" for 39 s. The page asked every 3 s and was told the chat was the same - its `rev`
+    names the log, and the turn's starting is read fresh off its session - so it drew "Waiting" 15 s after its agent was at work."""
+    from taskuary import server
+    starting = {'rev': 'r7', 'items': [{'kind': 'turn', 'state': 'working', 'opening': True}]}
+    held = server._revisioned(starting)['rev']
+    at_work = {'rev': 'r7', 'items': [{'kind': 'turn', 'state': 'working'}]}
+    assert server._revisioned(at_work, held).get('same') is not True
+    assert server._revisioned(starting, held) == {'rev': held, 'same': True}

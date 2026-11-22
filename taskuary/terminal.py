@@ -2919,6 +2919,13 @@ def type_into(t, text: str, done=None, brief: bool = False):
     # the note an approved step hands the agent drew as the owner's bubble. Only what the owner typed, or what came in on the task's thread,
     # is an input; over ACP the prompt is marked Taskuary's, on a pty it is kept as a seed the record reads as a brief (sessionrecord.mark_briefs)
     if is_acp(t): return t.prompt(text, brief=True, done=done) if brief else t.say(text, done=done)    # a prompt, never keystrokes
+    # ...AND A CHAT TAKES A PROMPT, NEVER KEYSTROKES (the HIPAA walk, 2026-11-21): typed into a chat agent's composer, Taskuary's word of a
+    # sign-up it had approved was sent as the owner's own line - a "You" bubble speaking of him in the third person, its marker and all
+    if hasattr(t, 'send_prompt'):
+        def told():
+            try: t.send_prompt(text, brief=True) if brief else t.send_prompt(text); done and done(True)
+            except Exception as e: logger.warning(f"task {getattr(t, 'task_id', '?')}: the words did not reach its agent - {e}"); done and done(False)
+        return threading.Thread(target=told, daemon=True, name='told').start()
     if brief and (tid := getattr(t, 'task_id', None)):
         from . import sessionrecord as _sr
         _sr.keep_seed(tid, text)

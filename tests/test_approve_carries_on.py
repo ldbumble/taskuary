@@ -416,6 +416,16 @@ def test_a_prompt_that_is_not_his_never_sets_his_waiting_reply_aside(acp, tmp_pa
     assert bool(told) == (not acp)
 
 
+
+def test_taskuarys_words_typed_into_a_chat_go_in_as_its_brief_never_his_line():
+    """The HIPAA walk, 2026-11-21: the waiting room handed a chat agent Taskuary's word of an approved sign-up by typing it into its composer,
+    which sent it as the owner's own line - a "You" bubble speaking of him in the third person, [[TASKUARY-SIGNIN]] marker and all."""
+    got, typed, done = [], [], threading.Event()
+    sess = SimpleNamespace(task_id=1, write=typed.append, send_prompt=lambda text, **k: got.append((text, k)))
+    term.type_into(sess, 'The owner approved the sign-up on 127.0.0.3.', done=lambda ok: done.set(), brief=True)
+    assert done.wait(5) and got == [('The owner approved the sign-up on 127.0.0.3.', {'brief': True})] and typed == []
+
+
 if __name__ == '__main__': unittest.main()
 
 

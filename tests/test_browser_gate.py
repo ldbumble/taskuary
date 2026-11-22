@@ -219,6 +219,20 @@ class Judging(unittest.TestCase):
         with mock.patch.object(bg, '_judge', late):
             self.assertEqual([v['hold'] for v in bg.judge(self.s, bg.acts('agent-browser click @e3') + bg.acts('agent-browser click @e8'), pg, Brain(None), wait=0.05)], [False, True])
 
+    def test_his_name_and_work_email_on_a_sign_up_he_asked_for_go_and_his_phone_still_waits(self):
+        """The Codex walk, 2026-11-22: "Send your name and work email to DealFlow Pro to create an account" was held as his own details - by a
+        judge told his name and work email in a sign-up he asked for are covered (the owner's ruling, 2026-11-19). A fact of the form, read by
+        code: every box holds his saved name or an email he named. His phone in the same form still waits."""
+        self.s.set_setting('owner_name', 'Alex Doyle', 't'); self.s.set_setting('owner_email', 'alex@northwind.example', 't')
+        said = 'Sign me up for DealFlow Pro (use alex.doyle@northwind.example) and bring me their listings'
+        private = {'big': True, 'kind': 'private', 'sure': True, 'irreversible': True, 'what': 'Send your name and work email to DealFlow Pro'}
+        both = [{'k': 'name', 't': 'text', 'v': 'Alex Doyle'}, {'k': 'email', 't': 'email', 'v': 'alex.doyle@northwind.example'}, {'k': 'tos', 't': 'checkbox', 'v': 'on'}]
+        with verdict(private):
+            self.assertFalse(one(self.s, self.act, {'url': CHECKOUT, 'fields': both}, Brain(None), said=said)['hold'])
+            self.assertTrue(one(self.s, self.act, {'url': CHECKOUT, 'fields': both + [{'k': 'phone', 't': 'tel', 'v': '555-0142'}]}, Brain(None),
+                                said=said + '\nMy mobile is 555-0142')['hold'])
+            self.assertTrue(one(self.s, self.act, {'url': CHECKOUT, 'fields': both}, Brain(None), said='')['hold'], 'with no ask of his, nothing is covered')
+
     def test_a_free_sign_up_runs_and_money_or_his_own_details_wait_as_one_card(self):
         """The owner, 2026-11-19: "anything big like spending money or putting in private info should wait for user for now". The vendor
         walk held every free sign-up "because it can't be undone" - one press each, on work Erin had asked for and he had opened. The gate's

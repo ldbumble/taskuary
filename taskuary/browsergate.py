@@ -506,10 +506,23 @@ def _judge(store, todo: list, pg: dict, brain=None, said: str = '') -> list:
     logger.debug(f'browsergate: verdicts on {_cmd(todo[0])[:80]!r} and {len(todo) - 1} more: {vs}')
     if vs is None: return [{'hold': False, 'what': _cmd(a), 'why': ''} if typing(a) else
                            {'hold': True, 'what': target(a, pg) or _cmd(a), 'why': 'no AI is set up to judge it, so it waits for you'} for a in todo]
-    return [_verdict(a, v, pg, said) for a, v in zip(todo, vs)]
+    mine = his_name_and_email(store, pg.get('fields'), said)
+    return [_verdict(a, v, pg, said, mine) for a, v in zip(todo, vs)]
 
 
-def _verdict(act: dict, v: dict | None, pg: dict, said: str) -> dict:
+# ...HIS NAME AND WORK EMAIL IN A SIGN-UP HE ASKED FOR ARE COVERED BY HIS ASK (the owner's ruling, 2026-11-19, said in BIG): a fact about the
+# form, so code reads it - the Codex walk, 2026-11-22: "Send your name and work email to DealFlow Pro" held as his own details, by a judge
+# told just that. Every box it fills holds his saved name, or an email address that is his or one he named himself; a phone number never is
+_EMAIL = re.compile(r'[^@\s]+@[^@\s]+\.[^@\s]+')
+def his_name_and_email(store, fields, said: str) -> bool:
+    if not store or not str(said or '').strip(): return False
+    vals = [' '.join(str(f.get('v') or '').split()) for f in fields or [] if f.get('t') not in ('checkbox', 'radio', 'hidden', 'password')]
+    name, email = (' '.join(str(store.get_setting(k) or '').split()).lower() for k in ('owner_name', 'owner_email'))
+    named = {e.lower().strip('.,;:()<>') for e in _EMAIL.findall(str(said))} | ({email} if email else set())
+    return bool(vals) and all((name and v.lower() == name) or (_EMAIL.fullmatch(v) and v.lower() in named) for v in vals)
+
+
+def _verdict(act: dict, v: dict | None, pg: dict, said: str, mine: bool = False) -> dict:
     if v is None and (fills(act, pg) or follows(act, pg)): return {'hold': False, 'what': target(act, pg) or _cmd(act), 'why': ''}
     if v is None: return {'hold': True, 'what': target(act, pg) or _cmd(act), 'why': "Taskuary couldn't tell what it does, so it waits for you"}
     what = ' '.join(str(v.get('what') or '').split())[:200]
@@ -523,6 +536,7 @@ def _verdict(act: dict, v: dict | None, pg: dict, said: str) -> dict:
     # ...filling the form sends nothing - the press that sends it is judged by what it then holds - unless the judge is SURE it saves itself
     # and cannot be undone (a settings toggle)
     if fills(act, pg) and not (sure and irr): return {'hold': False, 'what': what, 'why': ''}
+    if big is True and str(v.get('kind') or '') == 'private' and mine: big = False
     if big is True: return {'hold': True, 'what': what, 'why': WHY.get(str(v.get('kind') or ''), BIG_WHY), 'kind': str(v.get('kind') or '')}
     # ...only a verdict that SAYS it is not big passes on that: one that left `big` out (a CLI judge carries no schema) is read the old way -
     # it passed a payment he had asked for with no press, 2026-11-18

@@ -2,6 +2,22 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.1.6 - 2026-11-22
+
+- An agent's turn waits on the ranking of what is already known only a moment; what it finds lands in the turn after
+- New's task view is built once: a task's line is keyed by its task, and the answer fills the line drawn at the press
+- A woken agent never says its press back, and what a deliverable says was done comes from the tools' results
+- A press on a card is said by its card: its agent is told never to say it again, and to mark a next step only where one is its own
+- An action that is none is refused with the ones that are, and how a post is written
+- A click that ticks a box of the form is filling it, whatever the judge calls it
+- A page handed to the owner stays the page on screen
+- With no verdict in time, following a link or filling the form goes on; the press that sends it still waits
+- An inline script's lines and words are its text: a path in it is read only where one is there
+- A turn that ends on its own held browser step raises no sign-in beside it
+- An API card's agent asking for its browser is judged by the road it runs on, and a refusal says its own reason
+- An ordinary step of the work the owner asked for is the agent's: a sign-up's terms box is never handed to him
+- No sign-in ask while any step of the task's browser waits held, on whichever tab
+
 ## 0.4.1.5 - 2026-11-22
 
 - Every API brain's "Its agent runs on" (Codex or OpenCode) stands under its setup, always in sight

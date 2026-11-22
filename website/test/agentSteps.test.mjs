@@ -540,3 +540,12 @@ test("a step line is plain words: no tool name as a title, no empty query, and w
   // ...a turn still at work keeps every word where it stands
   assert.equal(turnParts(trace.slice(0, 7), { live: true }).filter((p) => p.type === "said").length, 1);
 });
+
+test("an answer that names a made file is drawn once, whether its words named the file by path or by name (the HIPAA walk, 2026-11-21)", () => {
+  const path = "C:\\Users\\alex\\AppData\\Local\\Temp\\home\\scratch\\outputs\\TQ-0003\\Wellness_Flyer.pdf";
+  const trace = [{ type: "tool_call", name: "exec", detail: { tool_call_id: "c1", args: { command: "make flyer" } } },
+    { type: "tool_result", name: "c1", detail: { tool_call_id: "c1", result: "ok" } },
+    { type: "progress", name: "text", detail: `Created the one-page flyer at \`${path}\` and showed it in the chat.` }];
+  const steps = stepsOf(trace, { answer: "Created the one-page flyer at `Wellness_Flyer.pdf` and showed it in the chat." });
+  assert.equal(steps.filter((s) => s.kind === "said").length, 0);
+});

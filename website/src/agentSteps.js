@@ -489,6 +489,7 @@ const QUICK_RAW =/^\s*(?:```(?:json)?\s*)?\{\s*"(?:report|draft|question|done|es
 const MACHINERY = new Set(stepKinds.machinery);
 // ...and a shell line of Taskuary's own that is no step either - a tick (stepkinds.json `commands`): a to-do ticked is never narrated
 const TICK = new RegExp(stepKinds.commands, "i");
+const PATHED = /(?:[A-Za-z]:)?(?:[\\/][^\s\\/`'"*()]+)+[\\/]([^\s\\/`'"*()]+)/g;      // a path by its grammar: a root, its folders, its last name
 export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
   const events = trace || [];
   // A structured backend says everything twice: its tool call and text as events, and the same again as readable `live` lines for
@@ -508,7 +509,7 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
       return;
     }
     if (kind === "said" && last?.kind === "said" && last.live) { last.summary += `\n${t}`; return; }
-    steps.push({ id: `${kind}-${steps.length}`, kind, summary: t, detail: "", status: "done", live: kind === "said" && !structured });
+    steps.push({ id: `${kind}-${steps.length}`, kind, summary: t, detail: "", status: "done", live: kind === "said" && !structured, src: String(text) });
   };
   // ...EACH THOUGHT ITS OWN ROW (the owner's live turn, 2026-11-18: "Reviewing the vendor snapshots Planning the roll-up"): a message of
   // reasoning holds its paragraphs - Codex sends a header each - and flattened they ran together as one sentence
@@ -582,12 +583,15 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
     && steps.slice(i + 1).some((x) => "raw" in x && x.kind === s.kind && x.summary === s.summary && x.status === "done")) s.status = "recovered"; });
   // ...and a call STILL AT WORK while a later one already finished runs ALONGSIDE them - in parallel, said so; steps stay in the order they began
   steps.forEach((s, i) => { if (s.status === "running" && "raw" in s && steps.slice(i + 1).some((x) => "raw" in x && x.status !== "running")) s.alongside = true; });
-  const said = flat(forScreen(answer));
-  const inAnswer = (t) => { const ps = String(t || "").split(/\n\s*\n/).map(flat).filter(Boolean); return ps.length > 0 && ps.every((p) => said.includes(p)); };
-  const kept = said ? steps.filter((s) => s.kind !== "said" || !inAnswer(s.summary)) : steps;
+  // ...and A FILE IS ITS NAME ON BOTH SIDES (the HIPAA walk, 2026-11-21): the filed answer names a made file by its name, the words it streamed
+  // by its full path in the task's folder - never the same text, so every answer that named a file was drawn twice, once with the path
+  const byName = (t) => flat(t).replace(PATHED, "$1");
+  const said = byName(forScreen(answer));
+  const inAnswer = (t) => { const ps = String(t || "").split(/\n\s*\n/).map(byName).filter(Boolean); return ps.length > 0 && ps.every((p) => said.includes(p)); };
+  const kept = said ? steps.filter((s) => s.kind !== "said" || !inAnswer(s.src ?? s.summary)) : steps;
   return group(kept).map(tidy);
 }
-const tidy = ({ raw, output, live, q, host, file, pattern, count, asked, retry, kids, task, ...s }) => {
+const tidy = ({ src, raw, output, live, q, host, file, pattern, count, asked, retry, kids, task, ...s }) => {
   if (s.kind !== "helper" || !(kids?.length || task)) return s;
   // ...a helper reads by its own work: at it, "Handing part of the work to a helper: …"; done, the work itself in plain words - "Fetch Boston
   // catering prices · 4 steps" (walk 5, 2026-11-19: "helper: … (done)" said the machinery, not the work) - its steps under it

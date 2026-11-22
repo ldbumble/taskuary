@@ -17,8 +17,10 @@ const SAMPLER = () => {
   const w = window.__tqWatch = { t0: performance.now(), seen: new Map(), blank: [], junk: new Map(), twice: new Map(), stalls: [], last: 0, scrolledAt: -1e9 };
   addEventListener("wheel", () => { w.scrolledAt = performance.now(); }, { passive: true, capture: true });
   addEventListener("scroll", () => { w.scrolledAt = performance.now(); }, { passive: true, capture: true });
+  // ...by what it IS, never a state marker it wears for a beat (a button greyed while its page loads gains data-tq-inert: read as gone)
+  const STATE = /^data-tq-(inert|open|busy|grow|continue|on|current|kept|settling|entering|landing)$/;
   const label = (el) => {
-    const a = [...el.attributes].find((x) => x.name.startsWith("data-tq-"));
+    const a = [...el.attributes].find((x) => x.name.startsWith("data-tq-") && !STATE.test(x.name));
     return `${el.tagName.toLowerCase()}${a ? `[${a.name}]` : ""} ${(el.innerText || el.getAttribute("aria-label") || "").trim().replace(/\s+/g, " ").slice(0, 80)}`;
   };
   const tick = () => {
@@ -55,7 +57,9 @@ const REPORT = () => {
   const byLabel = new Map();
   for (const s of w.seen.values()) byLabel.set(s.label, [...(byLabel.get(s.label) || []), ...s.spans]);
   for (const [k, spans] of byLabel) {
-    const sp = spans.sort((a, b) => a[0] - b[0]), shut = sp.filter(([, b]) => b < end - 200);
+    // ...several drawn at once (four turns' "Copy this answer") are one stretch, never four flickers: overlapping spans merged first
+    const sp = spans.sort((a, b) => a[0] - b[0]).reduce((m, [a, b]) => { const l = m.at(-1); if (l && a <= l[1] + 100) l[1] = Math.max(l[1], b); else m.push([a, b]); return m; }, []);
+    const shut = sp.filter(([, b]) => b < end - 200);
     if (sp.length > 2 || shut.some(([a, b]) => b - a < 1500 && a > 300)) out.flicker.push({ what: k, spans: sp.slice(0, 6) });
   }
   for (const s of w.seen.values()) for (let i = 1; i < s.tops.length; i++) {

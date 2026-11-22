@@ -14,6 +14,7 @@ Two layers:
 python -m taskuary.testing desk     # one of each picture into TASKUARY_HOME
 python -m taskuary.testing load 2k  # the same mix, many times, for a load db
 """
+import json
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
@@ -38,6 +39,14 @@ def inbound(**kw):
 
 def _pic(**kw):
     return SimpleNamespace(**kw)
+
+
+def mailbox(s, address: str = 'alex@northwind.example'):
+    """A connected mailbox that can send: a reply's card says Send, not "No mailbox is connected" (outbound.connect_fix). A world that drafts
+    and sends email has one; a store with no mailbox at all is the Connect shape."""
+    s.save_connector({'Type': 'imap', 'Name': 'Mail', 'Active': 1,
+                      'ConfigJson': json.dumps({'imap_host': 'imap.northwind.example', 'smtp_host': 'smtp.northwind.example', 'address': address})}, 't')
+    return s
 
 
 class Factory:

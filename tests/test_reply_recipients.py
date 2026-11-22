@@ -37,7 +37,7 @@ def test_something_sensitive_goes_to_that_one_person_only_and_answers_their_earl
     assert out['ok'], out
     rv, env = s.get_review(out['review_id']), s.review_envelope(out['review_id'])
     assert (env['mode'], env['to'], env['cc']) == ('reply_to', [RAY], [])          # Ray alone, nobody copied
-    assert rv['AnswersMid'] == ids[0] and rv['MessageId'] == ids[2]                 # the earlier mail it answers; the newest still its freshness
+    assert rv['AnswersMid'] == ids[0] == rv['MessageId']                            # the mail it answers is its message: its person, channel, thread
     assert 'only to the sender: his own pay - not for the people copied' in rv['Reason']
     assert out['answers'] == ids[0] and out['recipients'] == {'to': [RAY], 'cc': []}
 

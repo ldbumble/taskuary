@@ -1075,9 +1075,11 @@ class ApiTests(unittest.TestCase):
                                                  'body': 'can you explain the rota?', 'from_email': 'a@b.example',
                                                  'channel': 'email'}).json()
         c.post(f"/api/messages/{push2['message_id']}/reply")
-        row2 = next(r for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data']
-                    if r['MessageId'] == push2['message_id'])
-        self.assertTrue(row2['CanSend'])                       # email always has a road
+        row2 = lambda: next(r for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data'] if r['MessageId'] == push2['message_id'])
+        self.assertFalse(row2()['CanSend'])                    # no mailbox: its card says Connect email, never Send
+        from taskuary.testing import mailbox
+        mailbox(server.store)
+        self.assertTrue(row2()['CanSend'])                     # a mailbox that sends: Send
 
     def test_a_reply_door_on_a_machines_notice_puts_nothing_on_the_table(self):
         """The owner, 2026-11-10: "reply by itself makes no sense on github". The row offers no Reply on a notice a machine sent

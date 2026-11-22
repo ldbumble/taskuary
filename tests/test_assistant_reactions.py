@@ -31,6 +31,7 @@ from fastapi.testclient import TestClient
 
 from taskuary import buttons, concierge, funnel, general, ingest, operations, proposals, railwalk, server, terminal, wrapup
 from taskuary.store import MemoryStore
+from taskuary.testing import mailbox
 from taskuary import memorylines
 from tests.memlines import teaching
 from conftest import start_home
@@ -57,7 +58,7 @@ def ahead(minutes=0):
 
 
 def store():
-    s = MemoryStore()
+    s = mailbox(MemoryStore())
     s.upsert_agent('coding', 'coding', 'cli', '{}')         # an install has one; without it a hand-off is refused
     for k in ('calendar_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
     s.set_setting('coding_auto_enabled', '1', 't')          # the funnel of record: work reaches an agent

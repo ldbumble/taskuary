@@ -8,7 +8,7 @@ file the agent wrote was on disk and unreachable from the page.
 
 Now the folder is named: <home>/scratch/outputs/TQ-nnnn/ for task nnnn - the very one the agent picked - it is said in the brief
 (brief), and GET /api/task-outputs/<tid>/<file> serves a file in THAT task's folder and nothing else (resolve)."""
-import json, mimetypes, re, shutil
+import functools, json, mimetypes, re, shutil
 from functools import lru_cache
 from datetime import datetime
 from pathlib import Path
@@ -17,7 +17,7 @@ from . import config
 from .store import task_ref
 
 MAX_FILES, MAX_DEPTH = 200, 4
-ROWS, COLS, CELL, SHEETS = 200, 40, 300, 30          # what a preview carries: enough to recognise the sheet, never the whole book
+ROWS, COLS, CELL, SHEETS, GRID = 200, 40, 300, 30, 2000         # what a preview carries: enough to recognise the sheet, never the whole book
 TYPES = {'.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.xlsm': 'application/vnd.ms-excel.sheet.macroEnabled.12',
          '.csv': 'text/csv', '.tsv': 'text/tab-separated-values', '.md': 'text/markdown', '.txt': 'text/plain', '.json': 'application/json',
          '.log': 'text/plain', '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
@@ -503,6 +503,45 @@ def _cell(v) -> str:
     return s if len(s) <= CELL else s[:CELL - 1] + '…'
 
 
+_REF = re.compile(r"(?<![A-Za-z_!'])\$?([A-Z]{1,3})\$?(\d+)(?![\w(!])")
+_RANGE = re.compile(r"(?<![A-Za-z_!'])\$?([A-Z]{1,3})\$?(\d+):\$?([A-Z]{1,3})\$?(\d+)")
+_FNS = {'SUM': lambda *a: sum(_flat(a)), 'AVERAGE': lambda *a: (lambda v: sum(v) / len(v))(_flat(a)), 'MIN': lambda *a: min(_flat(a)),
+        'MAX': lambda *a: max(_flat(a)), 'COUNT': lambda *a: len(_flat(a)), 'ROUND': lambda x, n=0: round(x, int(n)), 'ABS': abs}
+def _flat(a): return [x for v in a for x in (v if isinstance(v, list) else [v]) if isinstance(x, (int, float)) and not isinstance(x, bool)]
+def _col(c: str) -> int: return functools.reduce(lambda n, ch: n * 26 + ord(ch) - 64, c, 0)
+
+
+def worked_out(grid: dict, at: tuple, seen=None):
+    """A formula's value from the sheet's own cells - references, ranges, + - * / ^ and SUM, AVERAGE, MIN, MAX, COUNT, ROUND, ABS - or None
+    where it uses anything else (another sheet, text, a function not here). A workbook an agent writes with openpyxl keeps no values, and its
+    preview read "=B8+E8" where the owner wanted 48,500 (walk 2, 2026-11-21). The formula is parsed and checked node by node, never run."""
+    import ast
+    v, seen = grid.get(at), seen or set()
+    # ...an empty cell is 0 as Excel reads it, a word is '' - skipped in a range, a failure in a sum of its own
+    if not (isinstance(v, str) and v.startswith('=')): return v if isinstance(v, (int, float)) and not isinstance(v, bool) else (0 if v is None else '')
+    if at in seen: return None
+    seen = seen | {at}
+    cell = lambda c, r: worked_out(grid, (int(r), _col(c)), seen)
+    span = lambda a, b, c, d: [cell(c_, r_) for r_ in range(int(b), int(d) + 1) for c_ in (_letters(i) for i in range(_col(a), _col(c) + 1))]
+    vals = {}
+    def put(x): vals[k := f'_v{len(vals)}'] = x; return k
+    e = _RANGE.sub(lambda m: put(span(*m.groups())), v[1:])
+    e = _REF.sub(lambda m: put(cell(*m.groups())), e).replace('^', '**')
+    try: tree = ast.parse(e, mode='eval')
+    except SyntaxError: return None
+    ok = (ast.Expression, ast.BinOp, ast.UnaryOp, ast.Constant, ast.Load, ast.Name, ast.Call, ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow, ast.USub, ast.UAdd)
+    for n in ast.walk(tree):
+        if not isinstance(n, ok) or (isinstance(n, ast.Constant) and not isinstance(n.value, (int, float))): return None
+        if isinstance(n, ast.Name) and n.id not in vals and n.id not in _FNS: return None
+        if isinstance(n, ast.Call) and not (isinstance(n.func, ast.Name) and n.func.id in _FNS and not n.keywords): return None
+    if any(x is None or (isinstance(x, list) and None in x) for x in vals.values()): return None
+    try: out = eval(compile(tree, '<cell>', 'eval'), {'__builtins__': {}}, {**_FNS, **vals})
+    except (ArithmeticError, TypeError, ValueError): return None
+    return out if isinstance(out, (int, float)) else None
+def _letters(n: int) -> str: return '' if n <= 0 else _letters((n - 1) // 26) + chr(65 + (n - 1) % 26)
+def _num(x) -> str: return f'{x:.2f}'.rstrip('0').rstrip('.') if isinstance(x, float) and round(x, 2) != int(x) else str(int(round(x)))   # as a stored number reads
+
+
 def sheet(p: Path, name: str = '') -> dict:
     """A workbook's sheet as rows the page draws: the named one (default the first), capped at ROWS x COLS, each cell at CELL
     characters; values, not formulas (data_only), read without loading the whole book (read_only)."""
@@ -516,11 +555,16 @@ def sheet(p: Path, name: str = '') -> dict:
         names = wb.sheetnames
         ws = wb[name] if name in names else wb[names[0]]
         fs = fx[ws.title].iter_rows(values_only=True)
+        # ...and one nothing worked out is worked out here from the sheet's own cells (worked_out), else read as itself
+        grid = {(i + 1, j + 1): g for i, f in enumerate(fx[ws.title].iter_rows(max_row=GRID, values_only=True)) for j, g in enumerate(f) if g is not None}
+        def shown(v, g, at):
+            if v is not None or not (isinstance(g, str) and g.startswith('=')): return v
+            return g if (x := worked_out(grid, at)) is None else _num(x)
         rows, more = [], False
         for i, r in enumerate(ws.iter_rows(values_only=True)):
             if i >= ROWS: more = True; break
             f = next(fs, ()) or ()
-            rows.append([_cell(v if v is not None or not (isinstance(g, str) and g.startswith('=')) else g) for v, g in zip_longest(r[:COLS], f[:COLS])][:len(r[:COLS])])
+            rows.append([_cell(shown(v, g, (i + 1, j + 1))) for j, (v, g) in enumerate(zip_longest(r[:COLS], f[:COLS]))][:len(r[:COLS])])
         while rows and not any(rows[-1]): rows.pop()
         width = max((max((j + 1 for j, c in enumerate(r) if c), default=0) for r in rows), default=0)
         cut = (ws.max_column or 0) > COLS

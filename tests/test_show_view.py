@@ -323,4 +323,21 @@ def test_the_agent_is_told_what_its_tools_do_and_a_sheet_it_made_is_in_front_of_
     wb = Workbook(); ws = wb.active; ws.append(['Vendor', 'Q3', 'Q4']); ws.append(['Payworth', 1200, '=B2*1.1']); wb.save(out / 'forecast.xlsx')
     said = agenttools.show_files(s, tid, [str(out / 'forecast.xlsx')])
     assert 'already' in said and 'forecast.xlsx' in said and 'cannot be shown' not in said
-    assert outputs.sheet(out / 'forecast.xlsx')['rows'][1] == ['Payworth', '1200', '=B2*1.1']
+    assert outputs.sheet(out / 'forecast.xlsx')['rows'][1] == ['Payworth', '1200', '1320']
+
+
+def test_a_sheet_of_formulas_nothing_worked_out_previews_its_numbers():
+    """Walk 2, 2026-11-21: a cash plan an agent wrote with openpyxl previewed "=$B$3", "=B8+E8" - formulas with no values. The preview works
+    them out from the sheet's own cells; one it cannot (another function, a word in a sum) still reads as itself."""
+    import tempfile
+    from pathlib import Path
+    from openpyxl import Workbook
+    from taskuary import outputs
+    wb = Workbook(); ws = wb.active
+    ws.append(['Start', 50000]); ws.append(['Income', 6500]); ws.append(['Costs', 8000]); ws.append(['Month', 'Start', 'Net', 'End'])
+    for r in range(5, 8): ws.append([f'M{r - 4}', '=$B$1' if r == 5 else f'=D{r - 1}', '=$B$2-$B$3', f'=B{r}+C{r}'])
+    ws.append(['Total', '=SUM(C5:C7)', '=AVERAGE(D5:D7)/3', '=VLOOKUP(A1,A1:B3,2)']); ws.append(['', '=A1+1', '=SUM(A1:B2)'])
+    p = Path(tempfile.mkdtemp()) / 'plan.xlsx'; wb.save(p)
+    rows = outputs.sheet(p)['rows']
+    assert rows[4:7] == [['M1', '50000', '-1500', '48500'], ['M2', '48500', '-1500', '47000'], ['M3', '47000', '-1500', '45500']]
+    assert rows[7] == ['Total', '-4500', '15666.67', '=VLOOKUP(A1,A1:B3,2)'] and rows[8][1:] == ['=A1+1', '56500', '']

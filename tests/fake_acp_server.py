@@ -14,6 +14,8 @@ Set in its environment, for the tests that need more:
   FAKE_ACP_GONE=1        it no longer has the session it is asked to reopen, as the CLI after its own cleanup says
   FAKE_ACP_ASK=<command> the permission it asks for is to run that shell command (kind execute)
   FAKE_ACP_AFTER=<secs>  the turn works on that long after his answer to its permission
+  FAKE_ACP_ABORT=1       a no ends its turn (stopReason cancelled, nothing said), as codex-acp's only reject - Codex's "cancel" - does; the
+                         turns after it ask nothing and say what they heard
   FAKE_ACP_CODE=<file>   a coding turn: a plan, an edit of that file asked for (kind edit, its location) and, once allowed, made -
                          a comment line on top, sent back as a diff - then `git status` run, its output streamed as terminal deltas
   FAKE_ACP_HANG=1        a turn that only ends when it is cancelled (session/cancel) - or steered
@@ -101,6 +103,8 @@ for line in sys.stdin:
                 'reject' not in str(((msg.get('result') or {}).get('outcome') or {}).get('optionId'))
             if os.environ.get('FAKE_ACP_CODE'): code_done(granted)
             else: update('tool_call_update', toolCallId=f'call_{STARTS}', status='completed' if granted else 'failed')
+            if not granted and os.environ.get('FAKE_ACP_ABORT') == '1':
+                reply(_prompt_id, {'stopReason': 'cancelled'}); _prompt_id = None; continue
             def done_(pid=_prompt_id, granted=granted):
                 # ...FAKE_ACP_AFTER=<secs>: the turn works on that long after his answer, as a real agent goes on from an allowed step
                 __import__('time').sleep(float(os.environ.get('FAKE_ACP_AFTER') or 0))
@@ -209,6 +213,8 @@ for line in sys.stdin:
             send({'jsonrpc': '2.0', 'id': PERM_ID, 'method': 'session/request_permission', 'params': {'sessionId': SID, 'toolCall': tc,
                   'options': [{'optionId': 'reject-once', 'name': 'Reject', 'kind': 'reject_once'}, {'optionId': 'allow-once', 'name': 'Allow once', 'kind': 'allow_once'}]}})
             continue
+        if os.environ.get('FAKE_ACP_ABORT') == '1' and STARTS > 1:
+            update('agent_message_chunk', content={'type': 'text', 'text': _heard}); reply(mid, ended()); continue
         ask = os.environ.get('FAKE_ACP_ASK')
         tc = {'toolCallId': f'call_{STARTS}', 'title': ask, 'kind': 'execute', 'rawInput': {'command': ask}} if ask else \
              {'toolCallId': f'call_{STARTS}', 'title': 'read the ledger'}

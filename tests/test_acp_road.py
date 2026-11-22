@@ -51,6 +51,19 @@ def test_a_push_is_held_for_the_owner_and_the_step_reads_held_not_failed():
                for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,)))     # the owner's Approve card
 
 
+def test_a_no_that_ends_the_agents_turn_is_heard_in_the_same_conversation_and_the_work_goes_on():
+    """The HIPAA walk, 2026-11-21: codex-acp's only reject is Codex's "cancel", so every hold aborted Codex's turn - "Cancelled" and Try
+    again over the live Approve card, the agent never told it was held. The same conversation goes on, told what the step's answer says."""
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Fix the budget total', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    with mock.patch.object(shellgate, 'trusted', return_value=''):
+        out, ev = run(profile(), env={'FAKE_ACP_ASK': 'git push origin main', 'FAKE_ACP_ABORT': '1'}, store=s, task_id=tid)
+    said, sid = out[0], out[1]
+    assert sid == 'sess_fake_1' and 'turn=2' in said and shellgate.HELD in said and '`git push origin main` was not run yet' in said
+    assert any(json.loads(r.get('DraftText') or '{}').get('command') == 'git push origin main'
+               for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,)))     # ...and its Approve card stands
+
+
 def _answering(option):
     "The owner pressing a button on the held call as soon as it is up (the task chat's card, permissions.answer)."
     def go():

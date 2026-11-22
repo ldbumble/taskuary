@@ -153,10 +153,12 @@ def put_to_owner(ctx: dict, params: dict, why: str) -> tuple:
     return HELD, (said.get('hookSpecificOutput') or {}).get('permissionDecisionReason') or why
 
 
-def answerer(ctx: dict, trace=None, held: dict = None):
+def answerer(ctx: dict, trace=None, held: dict = None, told: list = None):
     """The ACPClient `permit` callback for one turn: decide, answer with the matching option, and say it in the trace. `held`
     gets Taskuary's own words for each call it did not allow (id -> words), which the step shows instead of the adapter's "the user
-    refused": a held one reads "held for the owner" (shellgate.HELD), not "failed"."""
+    refused": a held one reads "held for the owner" (shellgate.HELD), not "failed".
+    `told`: the turn's own list of what the agent is to hear of each no ({'words', 'tell'}) - the turn says it (agents.run_acp): as the words
+    it goes on with where the no ended its turn, else by the one road (`tell`: a refusal's reason, which the adapter's answer drops)."""
     def permit(params):
         tc = params.get('toolCall') or {}
         asks = owner_asks(ctx)
@@ -168,11 +170,18 @@ def answerer(ctx: dict, trace=None, held: dict = None):
         # ...AND THE AGENT HEARS TASKUARY'S OWN REASON (recorded on the real CLI, 2026-11-15): the adapter's answer is "User refused permission
         # to run tool" whoever said no, so a push refused with the way on ("call propose_land") reached only the page's trace - the agent
         # told the owner "once you approve, I'll push" over nothing to approve. Said as the owner's own no is (put_to_owner), by the one road
-        if answer in (REFUSED, CARD) and why and why not in (YOU_REJECTED, YOU_STOPPED) and ctx.get('store') is not None and str(ctx.get('task_id') or '').isdigit():
-            from .browsergate import _tell
-            cmd = tool_of(tc)['command']
+        cmd = tool_of(tc)['command']
+        step = f'`{cmd[:200]}`' if cmd else 'That step'
+        tell = answer in (REFUSED, CARD) and why and why not in (YOU_REJECTED, YOU_STOPPED) and ctx.get('store') is not None and str(ctx.get('task_id') or '').isdigit()
+        if tell:
             from .actrule import DISMISSED
-            _tell(ctx['store'], int(ctx['task_id']), f"{f'`{cmd[:200]}`' if cmd else 'That step'} was not run - " + (why if why == STILL_WAITING or why.startswith(DISMISSED) else f"Taskuary's own answer, not the owner's: {why}"))
+            words = f'{step} was not run - ' + (why if why == STILL_WAITING or why.startswith(DISMISSED) else f"Taskuary's own answer, not the owner's: {why}")
+            if told is not None: told.append({'words': words, 'tell': True})
+            else:
+                from .browsergate import _tell
+                _tell(ctx['store'], int(ctx['task_id']), words)
+        # ...a hold's own words, which the agent hears in the step's answer where its adapter goes on - and nowhere where the no ended its turn
+        elif answer == HELD and why and told is not None: told.append({'words': f'{step} was not run yet - {why}', 'tell': False})
         name = tool_of(tc)['name'] or str(tc.get('title') or 'tool')
         (logger.info if answer == ALLOWED else logger.warning)(f'acp permission: {name} {answer}' + (f' - {why}' if why else ''))
         if trace: trace('permission', name, {'tool_call_id': iid, 'answer': answer, 'why': why, 'title': str(tc.get('title') or '')[:200]})

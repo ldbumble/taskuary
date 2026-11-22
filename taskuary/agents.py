@@ -1776,6 +1776,8 @@ def _acp_gears(client, profile: dict, name: str, trace):
 
 
 STOP_GRACE = 2.0                 # seconds a stopped turn has to honour session/cancel before its process is closed
+NO_GOES_ON = 8                   # turns one prompt may go on for after a no of ours ended its turn (run_acp) - a loop of nos ends, as Cancelled
+NO_THEN = 'Go on with the rest of the work, or end your turn now if nothing is left that does not need it.'
 def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, extra_env: dict = None, store=None):
     """One headless turn over ACP. Returns (result, session_id, diff) - run_cli's own contract, so
     nothing upstream can tell which road a run took.
@@ -1803,11 +1805,12 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     trace('tool', 'cli', f"{name} over acp{' via ' + launch['adapter'] if launch['adapter'] else ''} cwd={cwd or os.getcwd()}"
                          + (f' resume={resume}' if resume else '') + (f' live={keep}' if keep else ''))
     head0 = _git(cwd, 'rev-parse', 'HEAD')
-    held, asked = {}, threading.Event()            # `asked`: this turn's prompt is on its way to the agent
+    held, asked, told = {}, threading.Event(), []            # `asked`: this turn's prompt is on its way to the agent; `told`: what each no says
     steps = ACPSteps(trace, name, held)
     ctx_store, task_id = _RUN.get()
-    gate = acpgate.answerer({'store': store if store is not None else ctx_store, 'task_id': task_id, 'cli': _cli_name(name), 'cwd': cwd,
-                             'sid': client.session_id}, trace, held)
+    gstore = store if store is not None else ctx_store
+    gate = acpgate.answerer({'store': gstore, 'task_id': task_id, 'cli': _cli_name(name), 'cwd': cwd,
+                             'sid': client.session_id}, trace, held, told)
     client.on_update, client.permit = steps, lambda params: (steps.asked(params.get('toolCall')), gate(params))[1]
     with _CLI_CHILDREN_LOCK: _CLI_CHILDREN.add(client.p)
     over = threading.Event()             # this turn has ended, however it ended
@@ -1835,6 +1838,14 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
             if cancel is not None and cancel.is_set(): stop, ok = 'cancelled', True; raise Cancelled(client.session_id)
             since = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             stop, said = client.prompt(prompt, sent=asked.set)
+            # ...A NO OF OURS IS AN ANSWER, NEVER THE END OF THE TURN (the HIPAA walk, 2026-11-21): codex-acp offers Codex's "cancel" as its only
+            # reject, so every hold or refusal aborted Codex's turn - filed "Cancelled" with Try again over the live Approve card, and the agent
+            # never heard why. The same conversation goes on at once, told what the step's answer would have said on an adapter that goes on
+            for _ in range(NO_GOES_ON):
+                if stop != 'cancelled' or (cancel is not None and cancel.is_set()) or not told: break
+                words, told[:] = '\n\n'.join(t['words'] for t in told), []
+                trace('progress', 'acp', 'a step it asked for was not run - it goes on, told why')
+                stop, said = client.prompt(f'{words}\n\n{NO_THEN}')
             conv.turns += 1; conv.used = time.time()
         ok = True
         # WHAT THE TURN USED, onto its route row (aiusage.Metered's meter): the adapter's count, else the CLI's own log (aiusage.acp_turn)
@@ -1864,6 +1875,10 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         raise
     finally:
         over.set(); asked.set()
+        # ...and a refusal's reason the turn went on past (its adapter answered the step "refused") is said by the one road, as it always was
+        if gstore is not None and str(task_id or '').isdigit() and (rest := [t['words'] for t in told if t['tell']]):
+            from .browsergate import _tell
+            for w in rest: _tell(gstore, int(task_id), w)
         steps.flush(stop if ok else 'error')
         client.on_update, client.permit = None, None
         with _CLI_CHILDREN_LOCK: _CLI_CHILDREN.discard(client.p)

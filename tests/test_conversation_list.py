@@ -694,7 +694,9 @@ class TheList(unittest.TestCase):
         its = mail('paula@northwind.example', 'Paula - we are going with the Mill. Alex', 'assistant wrote this email - approve to send')
         his = mail('ray@northwind.example', 'Ray - call me about the Mill.', 'your email - approve to send')
         self.brain.delay = 0; self.rest()
-        got = self.list(); turn = [x for x in got['items'] if x['kind'] == 'turn'][-1]
+        got = self.list()
+        # ...the turn that wrote it, found by its card - a slow runner may file a turn after it before this read (CI, 2026-11-22)
+        turn = next(x for x in got['items'] if x['kind'] == 'turn' and its in [c['review'] for c in x.get('cards') or []])
         self.assertEqual((got['letters'], [c['review'] for c in turn['cards']]), (turn['id'], [its]))   # waiting: its card, at the end of its turn (letters are card rows)
         t = time.time(); until(lambda: time.time() >= t + 1.1)                               # (a stamp is a whole second)
         self.say('Actually, the Quay.', 'l-two'); self.rest()

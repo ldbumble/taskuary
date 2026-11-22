@@ -187,6 +187,7 @@ def failed_line(body: str) -> tuple:
 # one plain line of its own - its time of the next try, the newest with its Try again (say_failure). Waits grow; a limit's own reset is waited out.
 RETRY_TURN = 'retry'
 RETRY_WAITS = (60, 120, 300, 600, 600, 600)
+AGAIN_PRESS = 'The owner pressed Try again under your last turn: do the step that stopped you once more, from where it stopped.'
 RETRY_ASK = "Taskuary tried your last turn again by itself: the AI could not answer it then. Do that turn's work now, from where it stopped."
 DOWN = ('The AI is over its limit', 'The AI stopped before it answered', "The AI didn't answer", "The AI couldn't be reached")
 def provider_down(e) -> str:

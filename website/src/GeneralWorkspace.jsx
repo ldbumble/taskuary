@@ -467,13 +467,13 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
       {!!words && <SaidText text={words} mid={key} />}
       {/* ...A TURN THAT COULD NOT FINISH, WORTH ANOTHER TRY (its summary's `retry`): one button, never "send any message on this task to try
           again" (the 2026-11-18 walks) - pressed, it is his line "Try again." and the agent goes on */}
-      {owes && !live && sum?.retry && !!again && <div style={{ marginTop: 8 }}><button type="button" className="tq-chip primary" data-tq-turn-retry="" onClick={again}>{btn("try_again")}</button></div>}
+      {owes && !live && sum?.retry && !!again && <div style={{ marginTop: 8 }}><AgainButton again={again} /></div>}
       {/* ...and THE NEWEST TURN THAT FAILED carries the same one button (the API walk, 2026-11-18: a provider's outage left "⚠ ... 429" and nothing
           to press) - each try that failed keeps its own dated line (general.say_failure); only the newest carries the button */}
       {t.state === "failed" && !!t.fail && <div className="tq-aui-note tq-aui-note-error" role="alert" data-tq-turn-failed="">⚠ {t.fail}
         {/* ...and while Taskuary tries it again by itself, its Cancel stands beside it - ONE line and one set of moves for the try, never a second
             "I couldn't start yet" line under it (the judge's look, 2026-11-20) */}
-        {newest && !!again && <div style={{ marginTop: 8, display: "flex", gap: 8 }}><button type="button" className="tq-chip primary" data-tq-turn-retry="" onClick={again}>{btn("try_again")}</button>
+        {newest && !!again && <div style={{ marginTop: 8, display: "flex", gap: 8 }}><AgainButton again={again} />
           {!!stopTries && <button type="button" className="tq-chip" data-tq-turn-stop-tries="" onClick={stopTries}>Cancel</button>}</div>}</div>}
       {/* ...what this turn asked him, where it asked it (the list's `asking.turn`): above its card, never at the chat's foot */}
       {ask}
@@ -489,9 +489,11 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
 };
 const RetryCtx = React.createContext(null);
 const AgainCtx = React.createContext(null);
+// the press, what it is doing, and why it did not go - on the button he pressed
+const AgainButton = ({ again }) => <><button type="button" className="tq-chip primary" data-tq-turn-retry="" disabled={!!again.going} onClick={again.go}>
+  {again.going ? "Trying again…" : btn("try_again")}</button>{again.err && <span data-tq-line-failed="" style={{ marginLeft: 8 }}>{again.err}</span>}</>;
 const StopTriesCtx = React.createContext(null);
 // the line a Try again press puts in his voice - the agent reads it as the go-ahead to try what failed once more
-export const TRY_AGAIN = "Try again.";
 const WaitOnCtx = React.createContext("");
 const ConvLine = ({ x, more }) => {
   const stamp = x.at ? when(x.at instanceof Date ? x.at : String(x.at)) : "", retry = React.useContext(RetryCtx);
@@ -636,7 +638,12 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
   // ...and a line whose send failed is sent again as it was typed, the failed one taken off the screen
   // ...with the files its failure put back in the box (onAttachBack)
   const retry = useCallback((l) => { setMine((m) => m.filter((x) => x.id !== l.id)); sendLine(String(l.text || ""), true); }, [sendLine]);
-  const again = useCallback(() => sendLine(TRY_AGAIN), [sendLine]);
+  // ...TRY AGAIN IS A PRESS, never his words (the owner, 2026-11-22): the agent hears he pressed it; the button says what became of it
+  const [againAt, setAgainAt] = useState(null);
+  const againGo = useCallback(() => { if (againAt?.going) return; setAgainAt({ going: true });
+    api.post(`/api/tasks/${task.TaskId}/again`).then((r) => setAgainAt(r.data?.ok ? null : { err: r.data?.why || "It could not start again." }))
+      .catch((x) => setAgainAt({ err: errText(x) })).finally(() => reloadList?.()); }, [againAt, task.TaskId, reloadList]);
+  const again = useMemo(() => ({ go: againGo, ...againAt }), [againGo, againAt]);
   // ...and what waits, taken back or sent in now - the server's word, read again at once (the list moves it, never the page)
   const dropLine = useCallback((l) => { setMine((m) => m.filter((x) => x.id !== l.id)); api.post(`/api/tasks/${task.TaskId}/waiting/${encodeURIComponent(l.id)}/drop`).catch(() => {}).finally(() => reloadList?.()); }, [task.TaskId, reloadList]);
   const sendNow = useCallback(() => { api.post(`/api/tasks/${task.TaskId}/waiting/now`).catch(() => {}).finally(() => reloadList?.()); }, [task.TaskId, reloadList]);

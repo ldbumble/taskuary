@@ -487,3 +487,15 @@ def test_a_press_with_nothing_after_it_never_wakes_its_agent_and_is_said_once_in
         assert general.approved(s, tid, 'Send', 'reply to gail@northwind.example', review=kept) == ''
     to.assert_not_called()
     assert general.turn_facts(s, tid).count(f'rv{kept}') == 1, 'said once, in what its next turn is told'
+
+
+def test_try_again_is_a_press_its_agent_hears_never_his_own_line():
+    "The owner, 2026-11-22 (\"yes fix\"): Try again sent \"Try again.\" as his own typed line. It is a press: Taskuary's words, said so."
+    from taskuary import server
+    s = MemoryStore(); tid = s.create_task({'Title': 'Look up the copper price', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    with mock.patch.object(server, 'store', s), mock.patch.object(general, 'to_agent', return_value='woke') as to:
+        assert server.try_again(tid) == {'ok': True, 'how': 'woke'}
+    said, kw = to.call_args.args[2], to.call_args.kwargs
+    assert said.startswith(general.AGAIN_PRESS) and kw.get('frm', 'taskuary') == 'taskuary'
+    with mock.patch.object(server, 'store', s), mock.patch.object(general, 'to_agent', return_value=''):
+        assert server.try_again(tid)['ok'] is False

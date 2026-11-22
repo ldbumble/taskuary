@@ -2779,6 +2779,14 @@ def waiting_now(task_id: int):
     if not conversation.items(store, task_id).get('now'): return {'ok': False, 'why': 'this agent takes it when its turn ends'}
     return {'ok': True, **waitroom.deliver(store, task_id)}
 
+@app.post('/api/tasks/{task_id}/again')
+def try_again(task_id: int):
+    """TRY AGAIN IS A PRESS (the owner, 2026-11-22: "yes fix" - it sent "Try again." as his own line): the agent is told he pressed it, on the one
+    road a press takes (to_agent), and the button says what became of it. -> {ok, how} - never ok where nothing was started or told."""
+    from . import general
+    how = general.to_agent(store, task_id, general.AGAIN_PRESS + ' ' + general.made_line(task_id), ACTOR, start=True)
+    return {'ok': bool(how), 'how': how} if how else {'ok': False, 'why': 'The agent could not be started - check that an AI is connected in Settings.'}
+
 def _say(task_id: int, body, **kw):
     "A typed line on the one road (general.take_line), as the chat's doors send it - his words straight to the agent, nothing fetched first."
     from . import general

@@ -2072,6 +2072,9 @@ GOAL_LINE = _GOAL.format(look=LOOK_CLAUSE, login=LOGIN_SENTENCE).rstrip()
 # for whatever reason. but if there is something it can do which is it's core job, be helpful assistant then do it"). Next steps holds one of
 # three: the act set up for the owner's one press, the question it needs answered first, or the part that is theirs and why. The roads are
 # what THIS owner has connected (roads), never a list of words to match.
+# ...the marker road, told only to a brain with no tools (round 4, 2026-11-22: told both, Codex wrote "[[TASKUARY-PROPOSE {propose_email}]]" - an
+# email the marker road does not take - and the turn read "agent done" over "[[]]"): one road per session
+_PROPOSE = ('(no tools: a line TASKUARY-PROPOSE {...}), ', '')
 _ACTION = ("NEXT STEPS - DO WHAT YOU CAN DO, rather than hand it back. An act - an email, a post, a payment, a form, a report - is set "
            "up on Taskuary's roads up to its one press and shows under Next steps as itself (the email with its Send, the post with Post, "
            "the form filled to its last button); nothing goes before the press, and no copy-and-paste job is handed over where a road "
@@ -2083,7 +2086,7 @@ _ACTION = ("NEXT STEPS - DO WHAT YOU CAN DO, rather than hand it back. An act - 
            "meeting invite back - guess (first name at the company's domain) and {guess}. `to` is an ADDRESS, never a name - for an "
            "organisation, someone there from the owner's mail\n"
            "- a post, send or order on a connected system: propose {{\"action\": \"run_tool\", \"type\": ..., \"connector_id\": ..., ...}} "
-           "(no tools: a line TASKUARY-PROPOSE {{...}}), a post's words in `text`, its picture in `image` (a task-folder file). Drafts meant for "
+           "{propose}a post's words in `text`, its picture in `image` (a task-folder file). Drafts meant for "
            "posting go one per network, each with its own picture, never as drafts in a file: on a connected network as its post card; on "
            "one that is not, through your browser on its site - his sign-in handed to him if he is not signed in, the post written with its "
            "picture, and its final Post press held for his yes; copy-it-yourself only where the site cannot be used. In a set of several, "
@@ -2242,7 +2245,7 @@ _ROUTINE = ('propose {"action": "save_routine", "title": ..., "script": <whole s
             '(none: on demand)}', 'propose save_routine')
 def action_line(store, tools: bool = False) -> str:
     r, off = roads(store), unconnected_posts(store)
-    return _ACTION.format(mail=_MAIL[tools], guess=_GUESS[tools], brk=_BREAK[tools], routine=_ROUTINE[tools],
+    return _ACTION.format(mail=_MAIL[tools], guess=_GUESS[tools], brk=_BREAK[tools], routine=_ROUTINE[tools], propose=_PROPOSE[tools],
                           roads=(f'Connected for this owner: {r}.' if r else 'Nothing that posts or sends is connected for this owner yet.')
                           + (f' Not connected - post through your browser on its site: {off}.' if off else ''))
 
@@ -2262,7 +2265,8 @@ def by_tool(system: str) -> str:
     "`system` for a session that has Taskuary's reply and email tools: the tools' words in place of the marked blocks'."
     from . import selfclose as sc
     return (system.replace(f'\n\n{sc.REPLY_LINE}', '').replace(sc.DRAFT_LINE, sc.DRAFT_TOOL_LINE)
-            .replace(_MAIL[0], _MAIL[1]).replace(_GUESS[0], _GUESS[1]).replace(_BREAK[0], _BREAK[1]).replace(_ROUTINE[0], _ROUTINE[1]))
+            .replace(_MAIL[0], _MAIL[1]).replace(_GUESS[0], _GUESS[1]).replace(_BREAK[0], _BREAK[1]).replace(_ROUTINE[0], _ROUTINE[1])
+            .replace(_PROPOSE[0], _PROPOSE[1]))
 def for_toolbox(system: str, names) -> str:
     """`system` for an AI card whose Taskuary toolbox answered (apiagent.TOOLBOX), by what is in it: what the plain road says it lacks - a
     way to write a reply but the marked block, a search of its own, a shell to tick a to-do from - said as the tool it has."""

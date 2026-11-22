@@ -45,7 +45,9 @@ def strip(text: str) -> str:
     for a, b, obj in spans(text):
         if obj is None: continue
         out.append(text[at:a]); at = b
-    return BLOCK.sub('', ''.join(out) + text[at:])
+    # ...and the brackets a marker was written in (round 4, 2026-11-22: "[[TASKUARY-PROPOSE {...}]]" left "[[]]" - an answer that was not empty,
+    # so the line saying the proposal was not put on a card never showed: a dead end)
+    return re.sub(r'\[\[\s*\]\]', '', BLOCK.sub('', ''.join(out) + text[at:]))
 
 
 MAX = 5                      # per transcript: a loop proposing 200 pushes is a bug, not intent

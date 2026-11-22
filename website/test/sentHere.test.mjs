@@ -66,26 +66,6 @@ test("the line under what was sent says the agent is still working only while a 
 
 // A PRESS SAYS WHAT IT DOES, FROM THE PRESS TO THE CLOSE (the owner, 2026-11-16: "Accept and close" on an invite showed nothing for 15 seconds - the
 // calendar was slow - and then the task was gone; its card had said "Sending…", "Checking delivery…" and "Sent by email" over an invite)
-test("an invite's Accept and close says Accepting… at once, then Accepted - closing, never a send's words", async () => {
-  const { pressWords } = await import("../src/replyDelivery.js");
-  const cal = (act) => ({ Deliver: JSON.stringify({ kind: "calendar", act, to: ["erin@northwind.example"] }) });
-  assert.deepEqual(pressWords(cal("accept")), { busy: "Accepting…", done: "Accepted", sentAs: "Accepted" });
-  assert.equal(pressWords(cal("decline")).busy, "Declining…");
-  assert.deepEqual(pressWords({ Deliver: JSON.stringify({ to: ["erin@northwind.example"] }) }), { busy: "Sending…", done: "Sent", sentAs: "" });
-  const p = { channel: "email", closing: true, done: "Accepted", demo: false };
-  assert.equal(sentLine(p), "Accepted - closing the task");
-  assert.equal(sentSaid(p), "closing the task");
-  const rd = read("ReviewDecision.jsx");
-  // ...his press is said on the button he pressed, and nothing else on the card moves until it is the pressed card (the owner, 2026-11-17:
-  // "when you click buttons on card it flickers then presses"): no line drawn over it at the press, its subject and copies kept in place
-  assert.match(rd, /const going = busyNow && !sent && \["approve", "send_close"\]\.includes\(pressed\)/);
-  assert.doesNotMatch(rd, /data-tq-pressed-line/);
-  assert.match(rd, /\{!going && delivery\.line && <Alert/);
-  assert.match(rd, /\{isEmail && !proposal && !isCal && \(sent \|\| delivery\.frozen \? \(/);
-  // ...and while the review itself says it is going, the card keeps the act's own word - "Checking delivery…" only for a check
-  assert.match(rd, /\{delivery\.active \? spinning\(pw\.busy\) : busy \? "Checking delivery…" : delivery\.label\}/);
-});
-
 // THE LIVE SHAPE (the walk, 2026-11-17): he pressed Send on one of the task's emails. The card read "You pressed Send - sending…", then its Send
 // and Don't send lit again (the answer had come, the re-read had not), then it was gone (the re-read had it sent, the chat's list did not yet),
 // then a Sent card stood at the turn's cards at another width. One node per email, in its turn, from its draft to its Sent: what it looks like

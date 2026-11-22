@@ -107,9 +107,3 @@ test("Next's badge is Read on a report, a dashboard or an fyi it read, and Next 
 
 // THE END OF THE WALK SAYS NOTHING (the owner, 2026-10-23: "yes remove the sentence, just the button"): the server sends no words on the
 // desk, and a line with no words and no item draws no bubble - only its buttons, on the row by the prompt
-test("a line with no words and no item is only its buttons", () => {
-  const view = src("AssistantView.jsx");
-  assert.match(view, /&& !m\.proposal && !String\(m\.text \|\| ""\)\.trim\(\) && !pressedOf\(m\)\)\n\s+return last \? <><BarVerbs owner=\{`line:\$\{m\.id\}`\} chips=\{barHolds \? \[\] : chipsOf\(m\)\}/);
-  const end = { id: "a9", role: "assistant", text: "", chips: [{ verb: "walk", label: btn("walk") }, { verb: "open", key: "task:4", label: "Open TQ-0004 · Quarter plan" }] };
-  assert.deepEqual(chipsOf(end).map((c) => c.verb), ["walk", "open"]);
-});

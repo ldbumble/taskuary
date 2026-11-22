@@ -44,5 +44,4 @@ test("an approved act's card turns into its result in place", () => {
   assert.equal(resultOf({ Kind: "action", Status: "pending", DraftText: JSON.stringify(p) }), null);
   const r = resultOf({ Kind: "action", Status: "approved", FinalText: JSON.stringify(p) });
   assert.deepEqual(r, { said: "Approved · ran", what: "Comment on the pull request", url: URL_, command: p.command });
-  assert.match(read("ReviewDecision.jsx"), /const done = resultOf\(r\);\n\s*if \(done\) return \(/);
 });

@@ -880,6 +880,10 @@ def browser(payload: dict, sid: str = '', task: str = '') -> dict:
     in the browser or on the desktop is held where it runs, gatecmd.)"""
     from . import browsergate, readgate, shellgate
     tool, inp = str(payload.get('tool_name') or ''), payload.get('tool_input') or {}
+    if tool in readgate.WRITE_TOOLS:              # ...what it writes is its own work: reading it back is never asked (readgate.wrote)
+        t = _pane(payload, 'claude') or _general(payload, sid, task)
+        if t: readgate.wrote(t.task_id, readgate.tool_paths(inp, cwd=str(payload.get('cwd') or getattr(t, 'cwd', '') or '')))
+        return {}
     if tool in readgate.READ_TOOLS:
         t = _pane(payload, 'claude') or _general(payload, sid, task)
         st, cwd = getattr(t, 'store', None) if t else None, str(payload.get('cwd') or getattr(t, 'cwd', '') or '')

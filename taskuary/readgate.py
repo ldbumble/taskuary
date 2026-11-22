@@ -33,6 +33,17 @@ def _n(p) -> str: return os.path.normcase(os.path.realpath(os.path.expanduser(st
 def _in(p: str, root: str) -> bool: return bool(root) and (p == root or p.startswith(root.rstrip('\\/') + os.sep))
 
 
+# WHAT THE AGENT WROTE IS ITS OWN WORK (the goal walk on Claude CLI, 2026-11-22: it drew a picture in a scratch folder of its own, and its read
+# of the script and SVG it had just written stood as an Approve card - "outside this task's own folders" - the picture waiting on him). The
+# folder of every file a task's agent writes is its own for the rest of the task; the never-places stay shut whatever it wrote there
+WRITE_TOOLS = ('Write', 'Edit', 'MultiEdit', 'NotebookEdit')
+WROTE: dict = {}
+def wrote(tid, paths) -> None:
+    "Note the folders task `tid`'s agent wrote files in (its file tools' own paths)."
+    if not str(tid or '').isdigit(): return
+    WROTE.setdefault(int(tid), set()).update(_n(os.path.dirname(p) if not os.path.isdir(p) else p) for p in paths or [] if p)
+
+
 def own(store, tid, cwd: str = '') -> list:
     """The task's own work area, as normalised roots: where it works, its outputs, Taskuary's scratch, its mail's files - and the context
     files Taskuary writes for it and tells it to read (context.files; recorded on the real CLI, 2026-11-16: its Read was refused as Taskuary's
@@ -44,6 +55,7 @@ def own(store, tid, cwd: str = '') -> list:
         # is its own work - timed on a long task, 2026-11-16: a grep over its mail's files was refused as Taskuary's data, and it worked around
         ms = store.list_messages(int(tid))
         rs += [a['Path'] for m in ms for a in store.list_attachments(m['MessageId']) if a.get('Path')] + [config.home() / 'attachments' / str(int(m['MessageId'])) for m in ms]
+    rs += sorted(WROTE.get(int(tid), ())) if str(tid or '').isdigit() else []
     return [_n(r) for r in dict.fromkeys(map(str, rs + checkouts(store) + named(store, tid))) if r]
 
 

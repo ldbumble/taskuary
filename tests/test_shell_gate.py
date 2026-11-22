@@ -677,3 +677,20 @@ def test_a_step_piped_into_a_tool_that_exits_zero_is_as_it_ended():
                         run=lambda argv, cwd: (0, said))
         except RuntimeError as e: assert str(e).startswith('Push 1 commit to northwind/ledger main failed: error: failed to push some refs')
         else: raise AssertionError('a refused push read as run')
+
+
+def test_a_folder_its_agent_wrote_in_is_its_own_to_read_back():
+    """The goal walk on Claude CLI, 2026-11-22: the agent drew a picture in a scratch folder of its own, and its read of the script it had just
+    written stood as an Approve card. A folder it wrote in is its own work."""
+    import os, tempfile
+    from taskuary import readgate
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = s.create_task({'Title': 'Draw the ledger scene', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    import shutil
+    d = os.path.join(os.getcwd(), 'tqwork-gate-test'); os.makedirs(d, exist_ok=True); f = os.path.join(d, 'gen.py'); open(f, 'w').close()
+    try:
+        readgate.WROTE.pop(tid, None)
+        assert readgate.judge(s, tid, [f])[0], 'a folder it never wrote in is held'     # ...outside temp, which a CLI may always read
+        readgate.wrote(tid, [f])
+        assert readgate.judge(s, tid, [f, os.path.join(d, 's.svg')]) == ([], '')
+    finally: shutil.rmtree(d, ignore_errors=True)

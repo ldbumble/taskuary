@@ -167,6 +167,7 @@ def answerer(ctx: dict, trace=None, held: dict = None, told: list = None):
     refused": a held one reads "held for the owner" (shellgate.HELD), not "failed".
     `told`: the turn's own list of what the agent is to hear of each no ({'words', 'tell'}) - the turn says it (agents.run_acp): as the words
     it goes on with where the no ended its turn, else by the one road (`tell`: a refusal's reason, which the adapter's answer drops)."""
+    from . import readgate
     def permit(params):
         tc = params.get('toolCall') or {}
         asks = owner_asks(ctx)
@@ -174,6 +175,10 @@ def answerer(ctx: dict, trace=None, held: dict = None, told: list = None):
         if answer == HELD and asks: answer, why = put_to_owner(ctx, params, why)
         out = acp.pick(params.get('options'), answer == ALLOWED)
         iid = str(tc.get('toolCallId') or '')
+        # ...a file it was let write is its own work from now on: reading it back is never asked (readgate.wrote)
+        if answer == ALLOWED and (tool_of(tc)['kind'] == 'edit' or tool_of(tc)['name'] in readgate.WRITE_TOOLS):
+            raw = tc.get('rawInput') if isinstance(tc.get('rawInput'), dict) else {}
+            readgate.wrote(ctx.get('task_id'), readgate.tool_paths(raw, tc.get('locations'), str(raw.get('cwd') or ctx.get('cwd') or '')))
         if answer != ALLOWED and held is not None: held[iid] = why if answer in (HELD, CARD) or why in (YOU_REJECTED, STILL_WAITING, YOU_STOPPED) else f'Taskuary refused it: {why}'
         # ...AND THE AGENT HEARS TASKUARY'S OWN REASON (recorded on the real CLI, 2026-11-15): the adapter's answer is "User refused permission
         # to run tool" whoever said no, so a push refused with the way on ("call propose_land") reached only the page's trace - the agent

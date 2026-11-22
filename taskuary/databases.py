@@ -85,8 +85,11 @@ def runner(engine: str):
         try:
             return db.run_report({**cfg, 'conn_str': url_for(engine, cfg)})
         except ImportError as e:
-            _d, _p, pkg = ENGINES[engine]
-            raise RuntimeError(f'{engine} needs its driver - run: pip install sqlalchemy {pkg}  ({e})')
+            # ...A MISSING DRIVER IS THE CARD'S INSTALL BUTTON (deps.missing - round 3, 2026-11-22: it said "run: pip install ..." with no button,
+            # where every other card offers the install): a driver the button cannot install is said in plain words
+            from . import deps
+            if (m := deps.missing(e, engine)): raise m from e
+            raise RuntimeError(f"{engine}'s driver ({ENGINES[engine][2]}) is not installed on this computer") from e
     run.__doc__ = (f'{{"query"}} - run a read-only SQL query against {engine} through SQLAlchemy. '
                    f'Give the card host/database/user (password is its secret), or a full conn_str.')
     return run

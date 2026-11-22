@@ -84,6 +84,15 @@ class TheDriver(unittest.TestCase):
                 run({'host': 'h', 'database': 'd', 'query': 'select 1'})
         self.assertIn('psycopg2-binary', str(e.exception))
 
+    def test_a_driver_the_button_installs_is_the_cards_install_never_a_pip_command(self):
+        # round 3, 2026-11-22: "run: pip install sqlalchemy psycopg2-binary" with no button, where every other card offers its install
+        from taskuary import deps
+        run = databases.runner('postgresql')
+        with mock.patch('taskuary.db.run_report', side_effect=ModuleNotFoundError("No module named 'psycopg2'", name='psycopg2')):
+            with self.assertRaises(deps.Missing) as e:
+                run({'host': 'h', 'database': 'd', 'query': 'select 1'})
+        self.assertEqual(e.exception.package, 'psycopg2'); self.assertNotIn('pip install', str(e.exception))
+
     def test_the_query_reaches_the_reader_with_the_built_url(self):
         run = databases.runner('mysql')
         with mock.patch('taskuary.db.run_report', return_value={'rows': []}) as rr:

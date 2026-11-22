@@ -448,6 +448,11 @@ class ReadingOutside(unittest.TestCase):
         self.assertEqual((t['command'], t['shell'], t['argv'][1:]), (script, 'PowerShell', ['-Command', script]))
         self.assertNotIn(None, rg.command_paths(shown, self.work, rg.env_for(self.s, self.tid, self.work)))
         self.assertEqual(acpgate.decide(tc, self.ctx)[0], acpgate.ALLOWED, "the task's own outputs folder needs no press")
+        # ...and a script it writes through a here-string is that file's data, never paths read ("$60 / day" was held as one, the fix2 walk)
+        here = f"$outDir = \"{out}\"\n@'\nlimits = ['meals $60 / day', 'hotels $220 / night']\nopen('/etc/x')\n'@ | Set-Content -Path make_deck.py\npy make_deck.py $outDir"
+        self.assertNotIn(None, rg.command_paths(here, self.work, rg.env_for(self.s, self.tid, self.work)))
+        self.assertEqual(sg.acts("@'\ngit push origin main\n'@ | Set-Content x.txt", self.work), [])
+        self.assertTrue(sg.acts("@'\ngit push origin main\n'@ | iex", self.work), 'fed to a shell, it is a command')
         # ...and a held one is approved as exactly that argv
         far = f'"{ps}" -Command \'Get-ChildItem -Path @("$env:USERPROFILE\\Desktop", "$env:USERPROFILE\\Documents") -Filter notes.txt\''
         got = acpgate.decide({**tc, 'rawInput': {'command': far, 'cwd': self.work}}, self.ctx)

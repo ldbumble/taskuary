@@ -179,6 +179,16 @@ def shell_text(raw: str) -> str:
     lines, out, i = str(raw or '').split('\n'), [], 0
     while i < len(lines):
         ln = lines[i]; out.append(ln); i += 1
+        # ...and a PowerShell here-string (`@'` ... `'@`) is that program's data the same way (the HIPAA walk, 2026-11-21: a deck's Python,
+        # piped from one into Set-Content, was read for paths - "$60 / day" held as a path built from a variable); its closing line's
+        # command after the quote stays
+        if (h := re.search(r"@(['\"])\s*$", ln)):
+            body = []
+            while i < len(lines) and not lines[i].startswith(h[1] + '@'): body.append(lines[i]); i += 1
+            tail = lines[i][2:] if i < len(lines) else ''
+            if re.search(r'\|\s*&?\s*(iex|invoke-expression|powershell|pwsh|bash|sh|cmd)\b', tail, re.I): out += body     # ...fed to a shell, it is commands
+            out.append(tail); i += 1
+            continue
         for m in _HEREDOC.finditer(ln):
             w = _SPLIT.split(ln[:m.start()])[-1].split()
             if w and _name(w[0]) in _SHELLS: continue

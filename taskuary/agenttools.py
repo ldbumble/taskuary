@@ -637,9 +637,9 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'withdraw_draft': return _j(doors['withdraw'](tid, str(a.get('why') or ''), str(a.get('which') or '')))
     if name == 'propose_reply':
         who = {k: a[k] for k in ('answers', 'only', 'cc', 'why_to') if a.get(k) not in (None, '')}
-        was = verdicts.unsent(store, tid)
-        out = doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), attached(store, tid, a.get('attach')), **who)
-        out = json.loads(out.body) if hasattr(out, 'body') else out
+        was, files = verdicts.unsent(store, tid), attached(store, tid, a.get('attach'))
+        out = doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), files, **who)
+        out = read_back(json.loads(out.body) if hasattr(out, 'body') else out, files)
         # ...A CARD THAT WAITED FOR ITS WORDS IS FILLED, NOT REPLACED (walk 8, 2026-11-20): told nothing, the agent took the reply raised empty for
         # "the earlier draft" and withdrew it - its own new letter, the same card
         if isinstance(out, dict) and out.get('ok') and (rid := out.get('review_id')) in {r['rid'] for r in was}:
@@ -647,10 +647,10 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
                                     'Nothing was replaced: withdraw nothing.'}
         return _j(said_once(replaced(store, doors, tid, was, out, a.get('replaces'), f"the reply to {a.get('to') or 'the newest mail'} takes its place")))
     if name == 'propose_email':
-        was = verdicts.unsent(store, tid)
-        out = doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''), attached(store, tid, a.get('attach')),
-                            a.get('cc') or (), str(a.get('from') or ''), **({'guessed': a['guessed']} if a.get('guessed') else {}),
-                            **({'slot': str(a['slot']).strip()} if a.get('slot') else {}))
+        was, files = verdicts.unsent(store, tid), attached(store, tid, a.get('attach'))
+        out = read_back(doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''), files,
+                                       a.get('cc') or (), str(a.get('from') or ''), **({'guessed': a['guessed']} if a.get('guessed') else {}),
+                                       **({'slot': str(a['slot']).strip()} if a.get('slot') else {})), files)
         return _j(said_once(replaced(store, doors, tid, was, out, a.get('replaces'), f"the email to {a.get('to') or 'someone else'} takes its place")))
     if name == 'sign_form':
         out = doors['sign'](tid, a)
@@ -767,6 +767,22 @@ def attached(store, tid: int, names) -> list:
                                    'there first, or name one that is, or a file on this task\'s mail by its attachment id, and call it again')
         out.append({'name': p.name, 'data': base64.b64encode(p.read_bytes()).decode()})
     return out
+
+
+# A FILE ON A CARD IS ONE ITS AGENT HAS READ (the HIPAA walk, 2026-11-21): a script's quoting ate every `$` in the board pack - ",820,000" for
+# revenue - and the agent, which never looked at what it made, put all three files on a Send card to the board. The card's answer hands it
+# what each file it made says, read as the person will read it; a picture it is told to look at
+LOOK = ('WHAT THE FILES ON THIS CARD SAY - read them as the person will before you say they are ready: a number, a name or a page that came '
+        'out wrong is put right in the file, and the file attached again')
+def read_back(out, files):
+    "`out` with `files_say` - what each file the agent made says (attachtext) - where the card took any."
+    import base64, mimetypes
+    from . import attachtext
+    made = [f for f in files or [] if f.get('data')]
+    if not isinstance(out, dict) or not out.get('ok') or not made: return out
+    es = [{'name': f['name'], 'note': 'a picture - open it and look at it'} if str(mimetypes.guess_type(f['name'])[0] or '').startswith('image/')
+          else attachtext.read(f['name'], base64.b64decode(f['data'])) for f in made]
+    return {**out, 'files_say': attachtext.block(es, LOOK)}
 
 
 # ...and ONE THAT WAS NEVER KEPT is said as a fact with its way past it: "open the original message" asked of an agent that cannot open a

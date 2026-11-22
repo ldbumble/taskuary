@@ -75,7 +75,7 @@ class ACPClient:
         except OSError as e: raise ACPStartError(f'{cmd} did not start: {e}') from e
         self._err = []
         threading.Thread(target=self._pump, daemon=True).start()
-        threading.Thread(target=lambda: self._err.append(self.p.stderr.read()), daemon=True).start()
+        self._err_reader = threading.Thread(target=lambda: self._err.append(self.p.stderr.read()), daemon=True); self._err_reader.start()
 
     # ── wire ────────────────────────────────────────────────────────────────────────────────
     def _send(self, msg):
@@ -128,6 +128,16 @@ class ACPClient:
             logger.warning(f'acp: the permission rule raised, so the call is refused - {e}')
             return pick(params.get('options'), False)
 
+    def _last_words(self) -> str:
+        """Why the adapter went, for the log: its exit code and the tail of what it wrote to stderr - read to its end first. The reader thread
+        finishes only at the stream's end, so a death noticed at once logged just "the agent exited" (the walk, 2026-11-22: a Codex adapter
+        died 0.3 s after a command was allowed, and nothing said why)."""
+        r = getattr(self, '_err_reader', None)
+        if r is not None: r.join(1.0)
+        code = self.p.poll() if getattr(self, 'p', None) is not None else None
+        tail = ''.join(self._err).strip()[-600:]
+        return ' - '.join(x for x in (f'exit code {code}' if code is not None else '', tail) if x)
+
     def request(self, method, params=None, timeout=None, sent=None):
         with self._idlock: self._id += 1; mine = self._id; q = self._waiters[mine] = queue.Queue()
         try:
@@ -137,11 +147,11 @@ class ACPClient:
                 if sent: sent()                           # ...once it is on its way: a cancel then is this request's (prompt)
             m = q.get(timeout=timeout or self.timeout)
             if m is None:
-                err = ''.join(self._err).strip()[:300]
+                err = self._last_words()
                 # ...a turn it died holding is said as a chat CLI's that died mid-turn (clipool.MID_TURN): one sentence for one fact, whatever the agent
                 # ...and nothing of the process after it, which the chat drew as "(the agent exited)" - that detail is the log's
                 if method == 'session/prompt': logger.warning(f"acp: died mid-turn - {err or 'the agent exited'}"); raise DiedMidTurn(MID_TURN, self.session_id)
-                raise ACPAgentError(f'the agent stopped during {method}' + (f': {err}' if err else ''))
+                raise ACPAgentError(f'the agent stopped during {method}' + (f': {err[-300:]}' if err else ''))
             if 'error' in m: raise ACPAgentError(f"{method}: {m['error'].get('message', m['error'])}")
             return m.get('result')
         finally: self._waiters.pop(mine, None)            # a reply to a request we gave up on is dropped by the pump

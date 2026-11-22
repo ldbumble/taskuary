@@ -348,3 +348,17 @@ def test_a_sheet_of_formulas_nothing_worked_out_previews_its_numbers():
     rows = outputs.sheet(p)['rows']
     assert rows[4:7] == [['M1', '50000', '-1500', '48500'], ['M2', '48500', '-1500', '47000'], ['M3', '47000', '-1500', '45500']]
     assert rows[7] == ['Total', '-4500', '15666.67', '=VLOOKUP(A1,A1:B3,2)'] and rows[8][1:] == ['=A1+1', '56500', '']
+
+
+def test_a_sheet_previews_its_numbers_as_their_cells_format_them():
+    """The walk, 2026-11-22: a budget's dollars previewed as 147210 and its variance as -0.63 - the preview read values and dropped their
+    formats. Each number reads as its cell's format shows it in Excel."""
+    import tempfile
+    from pathlib import Path
+    from openpyxl import Workbook
+    from taskuary import outputs
+    wb = Workbook(); ws = wb.active; ws.append(['Line', 'Budget', 'Variance'])
+    ws.append(['Payroll', 147210, -0.63]); ws['B2'].number_format = '$#,##0'; ws['C2'].number_format = '0%'
+    ws.append(['Travel', '=B2/10', 0.1234]); ws['B3'].number_format = '$#,##0.00'; ws['C3'].number_format = '0.0%'
+    p = Path(tempfile.mkdtemp()) / 'budget.xlsx'; wb.save(p)
+    assert outputs.sheet(p)['rows'][1:] == [['Payroll', '$147,210', '-63%'], ['Travel', '$14,721.00', '12.3%']]

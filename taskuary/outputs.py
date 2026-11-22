@@ -542,6 +542,20 @@ def _letters(n: int) -> str: return '' if n <= 0 else _letters((n - 1) // 26) + 
 def _num(x) -> str: return f'{x:.2f}'.rstrip('0').rstrip('.') if isinstance(x, float) and round(x, 2) != int(x) else str(int(round(x)))   # as a stored number reads
 
 
+def formatted(v, fmt: str = ''):
+    """A number as its cell's format shows it in Excel - money with its symbol and thousands, a percent as one, its decimals - else as it
+    is stored (the walk, 2026-11-22: a budget's dollars previewed as 147210, its variance as -0.63). Anything not a number is itself."""
+    if not isinstance(v, (int, float)) or isinstance(v, bool): return v
+    f = re.sub(r'"[^"]*"|\\.|_.|\*.', '', str(fmt or '').split(';')[0])          # ...its first section, without quoted words, escapes, padding
+    sym = next((m.group(1) or m.group(2) for m in [re.search(r'\[\$([^\]-]+)[^\]]*\]|([$€£¥])', f)] if m), '')
+    f = re.sub(r'\[[^\]]*\]', '', f)
+    if f.strip().lower() in ('', 'general', '@') or not re.search(r'[0#?]', f): return _num(v) if isinstance(v, float) else v
+    d = len(m.group(1)) if (m := re.search(r'\.([0#?]+)', f)) else 0
+    if '%' in f: return f'{v * 100:.{d}f}%'
+    n = f'{abs(v):{"," if "," in f else ""}.{d}f}'
+    return f"{'-' if v < 0 else ''}{sym}{n}"
+
+
 def sheet(p: Path, name: str = '') -> dict:
     """A workbook's sheet as rows the page draws: the named one (default the first), capped at ROWS x COLS, each cell at CELL
     characters; values, not formulas (data_only), read without loading the whole book (read_only)."""
@@ -557,14 +571,16 @@ def sheet(p: Path, name: str = '') -> dict:
         fs = fx[ws.title].iter_rows(values_only=True)
         # ...and one nothing worked out is worked out here from the sheet's own cells (worked_out), else read as itself
         grid = {(i + 1, j + 1): g for i, f in enumerate(fx[ws.title].iter_rows(max_row=GRID, values_only=True)) for j, g in enumerate(f) if g is not None}
-        def shown(v, g, at):
-            if v is not None or not (isinstance(g, str) and g.startswith('=')): return v
-            return g if (x := worked_out(grid, at)) is None else _num(x)
+        def shown(c, g, at):
+            v, fmt = getattr(c, 'value', None), getattr(c, 'number_format', '') or ''
+            if v is None and isinstance(g, str) and g.startswith('='):
+                if (v := worked_out(grid, at)) is None: return g
+            return formatted(v, fmt)
         rows, more = [], False
-        for i, r in enumerate(ws.iter_rows(values_only=True)):
+        for i, r in enumerate(ws.iter_rows()):
             if i >= ROWS: more = True; break
             f = next(fs, ()) or ()
-            rows.append([_cell(shown(v, g, (i + 1, j + 1))) for j, (v, g) in enumerate(zip_longest(r[:COLS], f[:COLS]))][:len(r[:COLS])])
+            rows.append([_cell(shown(c, g, (i + 1, j + 1))) for j, (c, g) in enumerate(zip_longest(r[:COLS], f[:COLS]))][:len(r[:COLS])])
         while rows and not any(rows[-1]): rows.pop()
         width = max((max((j + 1 for j, c in enumerate(r) if c), default=0) for r in rows), default=0)
         cut = (ws.max_column or 0) > COLS

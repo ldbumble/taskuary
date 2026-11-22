@@ -325,7 +325,9 @@ def _heard(store, tid: int, new: list, at: float) -> None:
         elif k == 'press' and (m := presses.get(r)):
             put(store, tid, 'press' if m.get('press') else 'note', f'p:{r}', {'at': m['createdAt'], 'text': m['content'][0]['text'],
                 **({'perm': m['perm']} if m.get('perm') else {})}, src=f'audit:{r}', at=at)
-        elif k == 'turn' and not ahead:
+        # ...a turn heard once more (a press and his line taken in the same beat - CI, 2026-11-22) is the turn already in the log: it began when
+        # it was first heard, and that stays its start
+        elif k == 'turn' and not ahead and not _row(store, tid, f't:{r}'):
             put(store, tid, 'turn', f't:{r}', {'started': at, 'ended': None, 'text': ''}, state='starting', src='heard', at=at)
     # ...HIS LINES HEARD AT A PRESS, THEIR TURN ON ITS WAY (general.stop_turn - the recorded stop, 2026-11-12: what waited is heard under the
     # stop, the turn that answers it at work from that moment): that turn stands under them from this read, never a beat of nothing under his line

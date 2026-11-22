@@ -1,6 +1,6 @@
 """ONE LOG PER TASK (chatlog.py; the owner's approved redesign A, 2026-11-19). A task's chat is appended once, at the place each thing gets
 then, and only what can change is updated in place. Invented people only."""
-import sqlite3
+import json, sqlite3
 
 import pytest
 
@@ -70,6 +70,16 @@ def test_a_summary_block_streamed_across_steps_is_never_drawn():
     chatlog.update(s, tid, 't:1', state='done')
     said = ' '.join(x['text'] for x in chatlog.read(s, tid, 'everything')['items'][0]['steps'] if x['k'] == 'said')
     assert 'Is it in another folder?' in said and '"about"' not in said and 'false}' not in said, said
+
+
+def test_a_turn_heard_twice_keeps_the_start_it_was_first_heard_at():
+    """CI, 2026-11-22: a press and his line taken in the same beat heard one turn twice, and the second hearing rewrote its start - the
+    record of what he saw (chatlog.Frozen). Hearing a turn is append-once."""
+    s, tid = world()
+    chatlog.heard(s, tid, [('turn', '42')], 100.0)
+    chatlog.heard(s, tid, [('turn', '42')], 105.0)
+    rows = s.cx.execute("SELECT Body FROM chatlog WHERE TaskId=? AND Key='t:42'", (tid,)).fetchall()
+    assert len(rows) == 1 and json.loads(rows[0][0])['started'] == 100.0
 
 
 def test_a_step_after_his_line_goes_on_in_a_new_turn_under_it_with_its_files():

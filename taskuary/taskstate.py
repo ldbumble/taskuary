@@ -313,7 +313,10 @@ def done_for_now(store, t: dict, session: dict) -> bool:
     # coding agent is
     # ...and never one that has not run a turn at all (never_ran, 2026-11-17: a held task's session, its first turn refused, read "agent done -
     # type to carry on" on the rail over a chat no agent had worked)
-    if handles(t) and (session.get('mode') or 'assistant') == 'assistant': return last not in ('stopped', 'failed') and not never_ran(store, t, session)
+    # ...and never one whose turn left a step on him (turn_outcome 'blocked'): the header read "agent waiting on you" off it while the rail,
+    # reading this, said "Finished; nothing since" (the walk, 2026-11-21) - one answer for both
+    if handles(t) and (session.get('mode') or 'assistant') == 'assistant':
+        return last not in ('stopped', 'failed') and not never_ran(store, t, session) and turn_outcome(store, tid) != 'blocked'
     return last == 'turn_end' and not landing.asked(store, tid)
 
 

@@ -104,3 +104,16 @@ def test_the_pill_reads_the_card_at_the_front_not_the_reply_held_behind_it():
     assert front['Kind'] == 'action', front
     st = taskstate.status(s, s.get_task(tid))
     assert st['word'] != lanes.word('approve') and st['word'] == lanes.word('blocked'), st
+
+
+def test_a_turn_that_left_a_step_on_him_waits_on_him_on_the_rail_as_in_the_header():
+    """The walk, 2026-11-21: a chat turn ended with a step only the owner could take (its summary's on_you); the header read "agent waiting on
+    you" and the rail's row, reading the session alone, "Finished; nothing since". Invented people."""
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Lease summary', 'Kind': 'general', 'Status': 'in_progress'}, 'owner')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The lease lets either side break it after a year.')
+    s.add_comment(tid, 'assistant', general.SUMMARY_TYPE, json.dumps({'did': 'Summarised the lease', 'on_you': ['Confirm which party holds the break'], 'nothing_left': False}))
+    live = {'taskId': tid, 'agent': 'assistant', 'sid': 'g1', 'mode': 'assistant', 'waiting': True, 'state': 'parked', 'line': '', 'tail': []}
+    assert taskstate.state(s, s.get_task(tid), session={**live, 'alive': True}) == 'blocked'
+    row = funnel.from_agents(s, live_state=[live])[0]
+    assert row['lane'] == 'blocked' and not row.get('chat_done'), row

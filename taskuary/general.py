@@ -918,7 +918,9 @@ def _land_how(d) -> str:
 def _on_page(d) -> str:
     site, btn = d.get('site') or 'the page', d.get('btn')
     from .browserview import TURN_DONE
-    if d.get('by') == 'done': return f"pressed {TURN_DONE}: {f'{btn} on {site} is pressed' if btn else f'the step on {site} is finished'}"
+    # ...WHAT HE DID, never what it made true (the walk, 2026-11-22: "the step on Payment is finished" over a card form left empty - I'm done is a
+    # press, not a fact about the page; the agent is told to go on from the page as it is)
+    if d.get('by') == 'done': return f"pressed {TURN_DONE}: {btn} on {site} is pressed" if btn else f"pressed {TURN_DONE} on {site}"
     return f'pressed {btn} on {site}' if btn else f'did the step on {site}'
 ANSWERED = {'allow_once': 'allowed', 'allow_always': 'allowed, from now on', 'reject_once': 'refused', 'reject_always': 'refused, from now on'}
 def _held_what(d) -> str: return _cut(' '.join(str(d.get('about') or d.get('what') or '').split()), 120) or 'the held step'

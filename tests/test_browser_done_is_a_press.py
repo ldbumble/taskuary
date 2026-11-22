@@ -45,7 +45,7 @@ class DoneIsAPress(unittest.TestCase):
         self.assertIn('did not see the page move', words); self.assertIn('look at it as it is now', words)
         self.assertEqual(self.said(), [], 'no bubble, and no line by Taskuary either')
         # ...in the words of the button he pressed: the view's "I'm done" left "You pressed Done" (the overnight walk, 2026-11-11)
-        self.assertEqual(self.lines(), [f"You pressed I'm done: the step on {SITE} is finished."])
+        self.assertEqual(self.lines(), [f"You pressed I'm done on {SITE}."])          # ...a press, never "the step is finished" (the walk, 2026-11-22)
         self.assertEqual(self.open(), []); self.assertEqual(bg.HANDS, {})
         again = ws.answer(self.s, self.tid, rid, '', press=True)                  # a second press, or the watch got there first
         self.assertEqual((again['delivered'], again['state']), (False, 'resolved')); self.assertEqual(len(self.told), 1)

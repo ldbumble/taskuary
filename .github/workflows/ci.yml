@@ -54,11 +54,12 @@ jobs:
       - run: pip install -e .[dev]
       - run: pip install pyodbc
         if: runner.os == 'Windows'
+      # -v: each test's own line, timestamped by the runner - a part cancelled at its time limit still names the slow tests (2026-11-21)
       # a test past two minutes prints every thread's stack - the hang names itself in the log
       # bash on every OS: Windows' default PowerShell reads `@shard.txt` as splatting and writes `>` as UTF-16 (2026-11-09)
       - run: python tools/test_shard.py ${{ matrix.part }} 3 > shard.txt
         shell: bash
-      - run: python -m pytest -q -o faulthandler_timeout=120 @shard.txt
+      - run: python -m pytest -v -o faulthandler_timeout=120 @shard.txt
         shell: bash
       - name: Desk and load CLI
         if: matrix.part == 1

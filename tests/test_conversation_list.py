@@ -43,8 +43,9 @@ class TheList(unittest.TestCase):
 
     def end(self):
         # ...every turn this test began ends inside it, while its stand-in brain is still the one patched in (Windows CI, 2026-11-19: a line's
-        # turn still starting ran on into the next test, on the real CLI - "'claude' not found" - and broke that test's flow check)
-        for t in [t for t in threading.enumerate() if t.name in (f'line-{self.tid}', f'retry-{self.tid}') or t.name.startswith('wake-')]: t.join(10)
+        # turn still starting ran on into the next test, on the real CLI - "'claude' not found" - and broke that test's flow check). 60 s, not 10: every test here is task 1, and a turn a loaded runner kept past 10 s ran on as
+        # the next test's extra turn (Windows CI, 2026-11-20)
+        for t in [t for t in threading.enumerate() if t.name in (f'line-{self.tid}', f'retry-{self.tid}') or t.name.startswith('wake-')]: t.join(60)
         if (g := general.session_for(self.tid)): g.close(learn=False, report=False)
         general.drop_session(self.tid); general.IDLED.pop(self.tid, None); general.answered(self.tid, every=True); general.STOP_ASKED.pop(self.tid, None)
 

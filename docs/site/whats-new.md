@@ -2,6 +2,19 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.1.5 - 2026-11-22
+
+- Every API brain's "Its agent runs on" (Codex or OpenCode) stands under its setup, always in sight
+- No box in Came from - Send to agent opens the Agent section; a picture is drawn when no image AI is connected; a failed start is tried again
+- The first agent start after launch is paid for in the background, and every start's phases are in the log
+- Send to agent opens the Agent section with its box, and the digest's Settings line shows nothing where none was made
+- His own Codex CLI keeps its picture tool and fast tier: only ChatGPT's apps and plugins are turned off there
+- A video is made in code where no video AI is connected, and a start that failed twice says so in his words
+- Adapter priming is a lifespan job of its own name, stopped in tests like every other
+- Web search's last fallback reads a results page as its results, never the engine's menu over them
+- A folder the agent wrote in is its own to read back: no Approve card for reading the file it just made
+- The warm-up fetches a missing agent adapter at launch, not behind his first ask
+
 ## 0.4.1.4 - 2026-11-22
 
 - Only a sign-off block becomes the email signature, as whoever set it, and the change is said on the task

@@ -466,3 +466,21 @@ def test_an_owed_replys_needs_line_is_said_once_by_the_one_rule_the_ask_follows(
     chatlog.settled(); chatlog.read(s, tid)
     assert chatlog.card_said(s, tid, rid), 'its turn asked it in words: the card says it no more'
     assert chatlog.turn_words({'text': '', 'steps': []}) == '' and not chatlog.card_said(s, tid, 9999)
+
+
+def test_a_turn_that_asks_him_carries_no_try_again_under_its_question():
+    """The walk, 2026-11-21: a turn ended asking him to choose between two ways on, its summary asked for Try again, and Try again was the one
+    button under the question - which answered neither. The question is that turn's move."""
+    import json
+    from unittest import mock
+    from taskuary import conversation, general, taskstate
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The price page did not load. Should I put the estimate in as a placeholder, or wait?')
+    s.add_comment(tid, 'assistant', general.SUMMARY_TYPE, json.dumps({'did': 'Looked up the price', 'on_you': [], 'retry': True}))
+    out = chatlog.read(s, tid)['items']
+    turn = lambda: next(x for x in out if x['kind'] == 'turn')
+    assert (turn().get('summary') or {}).get('retry'), 'the summary asked for it'
+    ask = {'text': 'Should I put the estimate in as a placeholder, or wait?', 'request_id': 'r1', 'source': 'marker'}
+    with mock.patch.object(taskstate, 'asking', return_value=ask): chatlog.beside(s, tid, out, False, None)
+    assert not (turn().get('summary') or {}).get('retry')

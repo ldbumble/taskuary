@@ -1236,6 +1236,9 @@ def beside(store, tid: int, out: list, at_work: bool, hold_, ending: bool = Fals
         # ...a plain question only: a chooser's picks and a sign-in's or a hand-over's own line are drawn whatever the turn said
         mine = not ask.get('choices') and ask.get('ask', 'question') == 'question' and said(on)
         ask = {**ask, 'turn': on['id'], **({'said': True} if at or mine else {})}
+        # ...and ITS QUESTION IS THE TURN'S MOVE: no Try again its summary asked for stands under it (the walk, 2026-11-21: a two-way question
+        # with only "Try again" under it, which answered neither)
+        if isinstance(on.get('summary'), dict) and on['summary'].get('retry'): on['summary'] = {k: v for k, v in on['summary'].items() if k != 'retry'}
         # ...a missing fact is one question: the reply it cannot write yet is not drawn under it as an empty box
         for x in turns: x['cards'] = [c for c in x.get('cards') or [] if not (c.get('status') == 'pending' and c.get('what') in DRAFTS and not c.get('was'))]
     # ...the turn whose letter waits for his Send (the page hangs the letters' block there), never one at work

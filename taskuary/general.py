@@ -134,7 +134,8 @@ def cut_heard(store, tid: int) -> str:
     elif bare(said[-1]): head, lo, hi = FAILED_HEARD, next((i + 1 for i in reversed(said) if not bare(i)), 0), len(rows)
     else: return ''
     lines = [str(c.get('Body') or '').strip() for c in rows[lo:hi] if c.get('ActorType') == USER_TYPE]
-    return f"{head}\n" + '\n'.join(f'- {_quote(w, 1500)}' for w in lines if w) if any(lines) else ''
+    if not any(lines): return ''
+    return f"{head}\n" + '\n'.join(f'- {_quote(w, 1500)}' for w in lines if w) + (f'\n{m}' if (m := made_line(tid)) else '')
 FAILED_HEARD = "YOUR LAST TURN NEVER GOT AN ANSWER FROM THE AI - it may never have reached you. It was answering:"
 def keep_cut_turns(store) -> list:
     "Every turn a restart cut, filed on its open task: [task ids]."
@@ -243,13 +244,16 @@ def retry_turn(store, tid: int) -> bool:
         finally: OPENING.discard(tid)
     threading.Thread(target=go, daemon=True, name=f'retry-{tid}').start()
     return True
-def retry_ask(tid: int) -> str:
-    """RETRY_ASK, with what the task already made: the try may run in a fresh conversation that never saw its files (the walk, 2026-11-22: a
-    deck's first try wrote budget-2027-deck.html, its retry built a .pptx from scratch - two deliverables for one ask). It builds on them."""
+def made_line(tid: int) -> str:
+    """WHAT THE TASK ALREADY MADE, for a turn that goes on from one cut or failed - a fresh conversation never saw its files (the walk, 2026-11-22:
+    a deck's retry built a .pptx over the .html its first try had made; after a restart, "carry on" redid every search). '' when nothing."""
     from . import outputs
-    try: made = sorted(p.name for p in outputs.folder(tid).iterdir() if p.is_file())
+    try: made = sorted(p.name for p in outputs.folder(int(tid)).iterdir() if p.is_file())
     except OSError: made = []
-    return RETRY_ASK + (f" What this task already made is in its outputs folder - {', '.join(made[:20])}: build on it, never make it again." if made else '')
+    return f"What this task already made is in its outputs folder - {', '.join(made[:20])}: build on it, never make it again." if made else ''
+def retry_ask(tid: int) -> str:
+    "RETRY_ASK, with what the task already made (made_line)."
+    return ' '.join(x for x in (RETRY_ASK, made_line(tid)) if x)
 def let_go_retry(store, tid: int) -> None:
     "A turn answered, or failed some other way: the queued try is no longer owed."
     if (store.get_dispatch(tid) or {}).get('Turn') == RETRY_TURN: store.clear_dispatch(tid)
@@ -3573,6 +3577,9 @@ class GeneralSession:
             head, system, news = system, *freeze(self, system, [*late, unlearned(self.store, self.frozen)] if kept_conv else late, kept_conv, by_line=True)
             if self.cli_sid and news: self._remember_session()
             if turn_said and not kept_conv: user = f'{turn_said}\n\n{user}'
+            # ...and a FRESH conversation after a cut turn hears what the task already made (made_line; round 3, 2026-11-22: "carry on" after a
+            # restart redid every search) - the lines it was answering it reads in the history it is told
+            if not kept_conv and cut_heard(self.store, self.task_id) and (m := made_line(self.task_id)): user = f'{m}\n\n{user}'
             whole = user                 # the conversation said in full: what a fresh one hears where this one cannot be picked back up
             if kept_conv:
                 # an opening turn's 'turn' IS the instruction, which the history never saw

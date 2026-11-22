@@ -2,6 +2,42 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.1.4 - 2026-11-22
+
+- Only a sign-off block becomes the email signature, as whoever set it, and the change is said on the task
+- A session he stopped makes no "waiting on you" row on the rail: the task's own row reads stopped
+- An answer of false is an answer: a JSON reading is never asked of a strong model again for it
+- A session with Taskuary's tools is told one road for an act, and a bracketed marker never leaves "[[]]"
+- A table cell written with its money's symbol keeps it: "$1,234" never draws as "1,234"
+- An ask from New is a new task at once: no triage reading before its agent starts
+- The source of "no For you to do line" (7fcf9fbb4 carried only the built UI)
+- The owner's own Codex CLI starts with OpenAI's apps and plugins off, as an AI card's harness does
+- A press wakes its agent only where it said there is a next step
+- A site on a bare address is named by the part of its title its address spells, never the whole title
+- A task its agent finished is never the work new words join
+- Try again is a press its agent hears, never "Try again." sent as his own line
+- A reply's card, rail row and "sent to" name whom it answers, never the newest writer on the thread
+- A post is its card first, connected or not: Post via the browser hands it to the agent at his press
+- A payment is the owner's to make on the page: the agent's own Pay is refused with the page to hand him, never a card
+- A press stays quiet only where its agent's summary named no next step; a session with no summary hears it
+- One box on a task page, and a nav hint goes with the press
+- One box on a task page by the item's own task, and the goal walk types where a person would
+- New's ask is read into its steps beside its agent again: a 10-step ask got one box, ticked whole
+- Stop is heard once a turn: pressed fast it wrote "You stopped the agent" once per press
+- A session he stopped reads stopped on the rail, Search and the Assistant, never "working"
+- No "On you:" line in the task's side panel either: what is on him is its button or nothing
+- The two new presses are owner-only routes, the agent's road line says card first, and the walk tells a stall from a flicker
+- A list's "1." is no sentence: a turn's numbered results never draw as one run-on paragraph
+- The task he has open stands on the rail, and a task he closed asks nothing
+- A connection's failed Test says what to do in plain words: an AI error carries its HTTP status
+- An address made from a name is refused where that person writes from another, guessed or not
+- The opened row is drawn with a lane and a time from its first frame, and the walk's sampler reads a button by what it is
+- The end-of-day brief says what went as what it was, lists no view file, and never tells an unanswered close as handled
+- The opened row wears its number, its mark and a state line from the first frame; the walk reads the chat following an answer as no jump
+- The live line never shows Taskuary's own marker as it streams in: "Writing: [[" stops at the bracket
+- A not-connected post card's line says what Post via the browser does, never "copy it to post it yourself" under it
+- A reply row keeps the thread's newest time for its place on the rail, its name and words whom it answers; a timing test with room
+
 ## 0.4.1.3 - 2026-11-22
 
 - The WhatsApp pairing box says the bridge's state once

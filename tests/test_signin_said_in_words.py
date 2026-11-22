@@ -53,3 +53,11 @@ def test_a_sign_in_he_set_aside_in_words_is_not_put_back_in_front_of_him():
 
 def test_a_turn_that_ends_elsewhere_raises_nothing():
     assert not _turn('Here is the statement summary.', False).called
+
+
+def test_a_turn_that_ends_on_its_own_held_step_raises_no_sign_in_beside_it():
+    """The HIPAA walk, 2026-11-22: the sign-up's held step stood as an Approve card, and the turn that ended on that form - its password box
+    read as a sign-in page - raised "Sign in to 127.0.0.10 to continue" under it: two moves on one page. The held card is his one move there."""
+    from taskuary import browsergate
+    with mock.patch.object(browsergate, 'holds_tab', return_value='DealFlow Pro'):
+        assert not _turn('Once you approve that step, I will finish the sign-up.', True).called

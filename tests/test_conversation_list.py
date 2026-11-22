@@ -227,7 +227,9 @@ class TheList(unittest.TestCase):
         """A line typed while the agent worked, then a mail that came in a moment later - sent an hour before, held up on its way. The hand-
         over placed the mail by the sender's own clock (its Date), above the line that came first: by the box it waited after the line, and
         on the hand-over it jumped above it."""
-        self.brain.delay = 2.5
+        # ...the mail is put in the store straight, so only a hand-over takes it: it lands while the turn still works, however slow the runner
+        # (CI, 2026-11-22: at 2.5 s the turn had ended before it landed, and nothing ever heard it)
+        self.brain.delay = 8
         self.say('Suggest two.', 'l0', wait=False)
         self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
         t = time.time(); self.assertTrue(until(lambda: time.time() >= t + 1.1))

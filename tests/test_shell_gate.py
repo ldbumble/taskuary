@@ -694,3 +694,19 @@ def test_a_folder_its_agent_wrote_in_is_its_own_to_read_back():
         readgate.wrote(tid, [f])
         assert readgate.judge(s, tid, [f, os.path.join(d, 's.svg')]) == ([], '')
     finally: shutil.rmtree(d, ignore_errors=True)
+
+
+def test_an_inline_scripts_lines_and_words_are_its_text_and_a_path_in_it_is_read_where_one_is_there():
+    """The HIPAA walk, 2026-11-22: a PDF a `python -c` script wrote to the task's own outputs was held for the owner as "a path it builds
+    from a variable" - each line of the script was cut as a command of its own, and the copper price in its words, "~\\$5.46", read as a
+    path. A script's lines are its text; a word in it is a path only where one is there, so a real file it opens is still read."""
+    import tempfile
+    from taskuary import readgate
+    out = tempfile.mkdtemp()
+    script = ('python -c "\nimport os\nout_dir = r\'' + out + '\'\npdf = os.path.join(out_dir, \'week.pdf\')\n'
+              'c.drawString(90, 45, \'Copper: ~\\$5.46 - \\$5.61 USD/lb\')\n"')
+    assert readgate.command_paths(script, '') == [out]                     # ...its own folder, and no price
+    key = os.path.join(out, 'id_test')
+    open(key, 'w').close()
+    assert readgate.command_paths('python -c "print(open(r\'' + key + '\').read())"', '') == [key]
+    assert readgate.command_paths('cat $NOT_SET_ANYWHERE_X/a.txt', '') == [None]

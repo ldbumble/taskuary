@@ -25,7 +25,9 @@ READ_TOOLS = ('Read', 'Glob', 'Grep', 'LS', 'NotebookRead')
 _KEYS = ('file_path', 'notebook_path', 'path', 'pattern', 'dir', 'directory')
 # ...a `${NAME}` is one word, never a block's braces: cut there, `cat ${HOME}/.ssh/x` named only `/.ssh/x`, which exists nowhere
 _SPLIT = re.compile(r'(\$\{[^}\s]*\})|\r?\n|;|&&|\|\||\||\{|\}|\(|\)')
-_VAR = re.compile(r'\$\{?(?:env:)?(\w+)\}?|%(\w+)%', re.I)
+# ...a name that starts with a letter or `_`: `$5.46` in a script's text is a price, never a folder (the HIPAA walk, 2026-11-22: a PDF written
+# to the task's own outputs held as "a path it builds from a variable" - the copper price in its words)
+_VAR = re.compile(r'\$\{?(?:env:)?([A-Za-z_]\w*)\}?|%([A-Za-z_]\w*)%', re.I)
 _WILD = re.compile(r'[*?\[]')
 
 
@@ -226,10 +228,28 @@ def _pathish(t: str) -> bool:
     return t.startswith('/') and (bool(re.match(r'^/[A-Za-z](?=/|$)', t)) if os.name == 'nt' else len(t) > 1)
 
 
+def _quoted(cmd: str) -> list:
+    """The [start, end) spans of `cmd` inside quotes - '...' whole, "..." with its backslash escapes - where no command ends."""
+    spans, q, at, i = [], '', 0, 0
+    while i < len(cmd):
+        c = cmd[i]
+        if q == '"' and c == '\\': i += 2; continue
+        # ...a `$(...)` in double quotes runs a command all the same: the quoting stops at it
+        if q == '"' and cmd.startswith('$(', i): spans.append((at, i)); q = ''; i += 1; continue
+        if c in '\'"' and (not q or c == q):
+            if q: spans.append((at, i)); q = ''
+            else: q, at = c, i
+        i += 1
+    if q: spans.append((at, len(cmd)))
+    return spans
+
+
 def _segments(cmd: str) -> list:
-    "The line cut where one command ends and another begins - a `${NAME}` kept whole."
-    out, cur = [''], 0
+    """The line cut where one command ends and another begins - a `${NAME}` kept whole, and never inside quotes: a `python -c "..."` script's
+    own lines and `;` are its text (the HIPAA walk, 2026-11-22: each line of a PDF's script was read as a command of its own)."""
+    out, cur, qs = [''], 0, _quoted(cmd)
     for m in _SPLIT.finditer(cmd):
+        if not m[1] and any(a < m.start() < b for a, b in qs): continue
         out[-1] += cmd[cur:m.start()] + (m[1] or ''); cur = m.end()
         if not m[1]: out.append('')
     out[-1] += cmd[cur:]
@@ -264,6 +284,10 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None) -> list:
             if i is not None: out += command_paths(' '.join(w[i + 1:]), here, env)
             continue
         cd, named = tool in ('cd', 'chdir', 'set-location', 'sl', 'pushd'), len(out)
+        code = re.sub(r'[\d.]+$', '', tool) in ('python', 'py', 'node', 'ruby', 'perl', 'deno') and any(x in ('-c', '-e') for x in w[1:3])
+        # ...an inline script's text is read word by word for the paths in it: its words are mostly data, so one is a path only where one is
+        # there (below) - `open('~/.ssh/id_rsa')` in it is read as ever
+        if code: w = [w[0], *(t for x in w[1:] for t in re.split(r"[\s'\"(),;=+]+", x) if t and t not in ('-c', '-e'))]
         for x in w[1:]:
             x = re.sub(r'^\d?[<>]+&?', '', x)
             if x.startswith('-'): x = x.split('=', 1)[1] if '=' in x else ''
@@ -281,6 +305,9 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None) -> list:
             # whole: judge reads the folder it lists, and whether it can reach a sign-in place
             parts = Path(_cut(e)).parts
             if len(parts) > 1 and not os.path.exists(os.path.join(parts[0], parts[1])): continue
+            # ...and in an inline script's text (`python -c "..."`) a word is a path only where one is there: its words are mostly data (the HIPAA
+            # walk, 2026-11-22: "~\$5.46", a price a PDF's script drew, held as a read in his home folder)
+            if code and not _WILD.search(e) and not os.path.lexists(e): continue
             if cd: here = _cut(e); break
             out.append(e)
         else:

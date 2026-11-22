@@ -78,6 +78,13 @@ export const filterLabel = (cat, pick, cats = CATEGORIES, labels = CHANNEL_LABEL
   return [kind, src].filter(Boolean).join(" \u00b7 ") || "All items";
 };
 
+// ...A NAV HINT SAYS WHERE A PRESS GOES, AND GOES WITH THE PRESS (walk, 2026-11-22: "The reports you run, and a new one" stayed over the opened
+// page's title while the pointer rested on the button): shown on hover, shut by the press until the pointer leaves
+function NavTip({ title, children }) {
+  const [open, setOpen] = useState(false), [pressed, setPressed] = useState(false);
+  return <Tooltip title={title} placement="right" open={open && !pressed} onOpen={() => setOpen(true)} onClose={() => { setOpen(false); setPressed(false); }}>
+    <span style={{ display: "block" }} onClickCapture={() => setPressed(true)}>{children}</span></Tooltip>;
+}
 // the sidebar buttons' marks, one per SIDE_NAV key
 const NAV_ICONS = { new: AddIcon, reports: BarChartIcon, connections: PowerOutlinedIcon, hub: TravelExploreIcon, settings: TuneIcon };
 
@@ -543,7 +550,7 @@ export default function FeedView({ onOpenTask, active = true, top = null, stage 
           {SIDE_NAV.map((n) => {
             const Icon = NAV_ICONS[n.key];
             return (
-              <Tooltip key={n.key} title={n.hint} placement="right">
+              <NavTip key={n.key} title={n.hint}>
                 <Box component="button" type="button" data-tq-nav={n.key} aria-current={navOn === n.key ? "page" : undefined}
                   onClick={() => (n.key === "new" && !onGo ? setNewOpen(true) : onGo?.(n.go, n.key))}
                   sx={{ display: "flex", alignItems: "center", gap: 1.25, width: "100%", height: 30, px: 1.25, border: 0,
@@ -552,7 +559,7 @@ export default function FeedView({ onOpenTask, active = true, top = null, stage 
                     "& svg": { fontSize: 16, color: "var(--tq-secondary, #6e685f)" }, "&:hover": { bgcolor: navOn === n.key ? "var(--tq-inset, #e4e9ee)" : PANEL2 } }}>
                   <Icon />{n.label}
                 </Box>
-              </Tooltip>
+              </NavTip>
             );
           })}
         </Box>

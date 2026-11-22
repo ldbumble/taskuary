@@ -3261,6 +3261,9 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   // commit, before the paint - no frame shows the old task's buttons, and a press that fails gives them back in the frame it says so
   useLayoutEffect(() => { rowTable(table.key); leaveRow(flight?.from); }, [table.key, flight?.from]);
   // ...and what the rail's tag and the box say of it: a page over it is not it in view (tableWords)
+  // ...ONE BOX ON A TASK (the owner, 2026-11-22: "yes" - every task page had the task's "Message the agent..." and this "Ask..." under it):
+  // while a task is in view its own box is the only one; the Assistant's comes back on the rail, or over a page opened on top
+  const taskInView = /^task:\d+$/.test(table.key || "") && !table.place && !table.folded;
   const tableSays = tableWords(table, currentItem?.ref || (/^task:(\d+)$/.test(table.key || "") ? `TQ-${table.key.slice(5).padStart(4, "0")}` : ""));
   // THE ASSISTANT'S LIGHT OUTRANKS THE ADVISOR'S while its item is on the table: the owner asked for that act in words, and the Advisor's line
   // over it would name another button (assistantLight.js); it goes out at the next press or when the table moves on
@@ -3646,7 +3649,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     <Tooltip title="Past chats"><IconButton size="small" data-tq-past-chats="" onClick={openChats}><HistoryIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
     {!headPencil && newChatIcon("data-tq-new-chat")}</>;
   const composeBox = (
-    <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined} ref={boxRef} data-tq-open={boxWide ? "" : undefined}
+    <div className="tq-compose-box" style={firstRun || (taskInView && !boxWide) ? { display: "none" } : undefined} ref={boxRef} data-tq-open={boxWide ? "" : undefined}
     data-tq-continue={!boxWide && isMini && winLines.length ? "" : undefined} data-tq-grow={grow ? "" : undefined}
     onMouseEnter={growIn} onMouseLeave={growOut} onPointerDown={openBox} onKeyDown={keyIn}>
     {!boxWide && unseen > 0 && <i className="tq-chat-unseen" data-tq-unseen={unseen} aria-label={`${unseen} new in the chat`}>{unseen}</i>}

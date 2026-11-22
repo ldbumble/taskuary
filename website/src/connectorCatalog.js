@@ -153,4 +153,4 @@ export const repliesOf = (type) => CATALOGUE.find((c) => c.type === type)?.repli
 export const repliesOn = (type, cfg = {}) => (cfg.replies == null ? !!repliesOf(type)?.on : [true, 1, "1", "true", "on"].includes(cfg.replies));
 // THE CONNECTIONS PAGE'S ONE LINE: how many are connected, and how many cards the catalogue holds - it read "1 more in the catalogue"
 // over twenty sections of them, counting only the cards not built yet
-export const browseSummary = (connected, cards) => `${connected} connected · ${cards.length} in the catalogue · pick a section`;
+export const browseSummary = (connected, cards) => `${connected} connected · ${cards.length} in the catalogue`;

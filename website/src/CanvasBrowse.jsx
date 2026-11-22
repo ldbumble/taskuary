@@ -8,13 +8,6 @@
 // changes, and nothing asks the server for the rail. The open card is the conversation's subject (onOpenCard, in words).
 import React, { Suspense, useEffect, useRef } from "react";
 import { Box, CircularProgress, Typography } from "@mui/material";
-import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
-import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
-import CableOutlinedIcon from "@mui/icons-material/CableOutlined";
-import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
-import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
-import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
-import AddIcon from "@mui/icons-material/Add";
 import { BORDER, DIM, FAINT, INK, PANEL } from "./theme.jsx";
 import { nothingMatches } from "./searchHits.js";
 import { lazyView } from "./lazyView.jsx";
@@ -30,9 +23,9 @@ const chipSx = (on) => ({ height: 30, px: 1.6, borderRadius: 99, border: `1px so
 
 // The frame every area draws through. sections: [{key, label, n}]; cards: [{key, title, sub, badge, icon, onOpen}];
 // detail: the view's own element for the one open card, or null. `openLabel` names the open card for the assistant.
-export function BrowseFrame({ title, area = "", summary, sections = [], section, onSection, note, cards = [], detail = null, onBack,
+export function BrowseFrame({ title, area = "", summary, sections = [], section, onSection, note, cards = [], detail = null,
   openLabel = "", openKey = null, search = null, tools = null, onOpenCard, live = true, empty = null, query = "", searched = "", onReopen = null, wide = false, noneAction = null,
-  noBack = false }) {
+  onePage = false }) {
   // ONE WAY TO SAY A PAGE'S BOX FOUND NOTHING (verify, 2026-10-20): a page that forgot to pass its own line said "Nothing here." under
   // the words typed - Settings did. `query` is the box's words; while there are any, the frame says it, the way the search does
   const none = String(query || "").trim() ? nothingMatches(query, searched || title) : empty || "Nothing here.";
@@ -45,15 +38,13 @@ export function BrowseFrame({ title, area = "", summary, sections = [], section,
   // a card opened, or a section picked, is brought into view - the conversation above it does not move
   const root = useRef(null), one = useRef(null);
   const opened = !!detail;
+  // ...the picker collapses under a CARD opened from a list; a section that IS its one page (About you's You, Phone & chats) keeps its siblings
+  const folded = opened && !onePage;
   // ...once per card opened: `openKey` names WHICH card, where openLabel carries its status too - a Connections card's label is its status
   // line, so every switch flipped, Test or reload on it scrolled the page back to the card's top (TQ-1320). Pages without one key on the label
   const which = openKey ?? openLabel;
   useEffect(() => { if (live && opened) one.current?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [live, opened, which]);
   useEffect(() => { if (live && section != null) root.current?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [live, section]);
-  // an earlier browse card is one line - a record, not a door, like every folded item on the canvas (the owner, 2026-10-16)
-  // ...and it wears its page's mark where a task row wears its source's, so the walk's rows read alike
-  if (!live) { const Mark = AREA_MARKS[area] || SettingsOutlinedIcon;
-    return <div className="tq-fold" data-tq-browse-fold={area || ""}><Mark aria-hidden sx={{ fontSize: 13, color: FAINT, flexShrink: 0 }} /><b>{title}</b></div>; }
   return (
     <Box ref={root} data-tq-view-label={detail ? openLabel : where} sx={{ display: "flex", flexDirection: "column", gap: 1.25, scrollMarginTop: "8px" }}>
       {/* 1. sections */}
@@ -62,14 +53,16 @@ export function BrowseFrame({ title, area = "", summary, sections = [], section,
           <Typography sx={{ fontSize: 14, fontWeight: 600, color: INK }}>{title}</Typography>
           {!!summary && <Typography sx={{ fontSize: 12, color: DIM }}>{summary}</Typography>}
         </Box>
-        {search}
+        {/* ...A CARD OPEN COLLAPSES THE PICKER (the design walk, 2026-11-20: an open connection card sat under all 21 chips): the box, the page's
+            own tools and the other sections step aside, and the lit chip alone stays - pressed, it is the list again */}
+        {!folded && search}
         {/* what the tab offered beside its list - Run due now, Write one, the filters: the tab is gone, so it is here */}
-        {tools}
+        {!folded && tools}
         {/* a note with no list under it yet (a link to something that is gone) is said here, where it is seen */}
         {!!note && section == null && <Typography sx={{ mt: 1.25, fontSize: 12.5, color: "var(--tq-danger, #7a2f3c)", lineHeight: 1.5 }}>{note}</Typography>}
         {!!sections.length && (
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1.5 }}>
-            {sections.map((s) => (
+            {sections.filter((s) => !folded || s.key === section).map((s) => (
               <Box key={s.key} component="button" type="button" data-tq-browse-chip={s.key} aria-pressed={section === s.key}
                 onClick={() => onSection(s.key)} sx={chipSx(section === s.key)}>
                 {s.label}{s.n != null ? ` · ${s.n}` : ""}
@@ -82,17 +75,8 @@ export function BrowseFrame({ title, area = "", summary, sections = [], section,
       {/* 3. one - the view's own detail, in place of its list */}
       {detail && (
         <Box ref={one} data-tq-browse-one="" tabIndex={-1} sx={{ scrollMarginTop: "8px", outline: "none", border: `1px solid ${BORDER}`, borderRadius: "12px", bgcolor: PANEL, overflow: "hidden" }}>
-          {/* ...`noBack`: a section that IS its one page (Phone & chats, You) - its own chip, lit above, is where it is; a back crumb under it
-              said so twice (the product audit, 2026-11-08) */}
-          {!noBack && <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 1.75, py: 1.1, borderBottom: `1px solid ${BORDER}` }}>
-            <Box component="button" type="button" data-tq-browse-back="" onClick={onBack}
-              sx={{ display: "flex", alignItems: "center", gap: 0.5, height: 32, pl: 1, pr: 1.5, borderRadius: "8px", border: `1px solid ${BORDER}`,
-                bgcolor: PANEL, color: "var(--tq-link, #41525f)", fontFamily: "inherit", fontSize: 12.5, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
-              <ArrowBackIosNewIcon sx={{ fontSize: 12 }} />{sectionLabel || title}
-            </Box>
-            {/* the back button says where you are; "the other 5 reports cards are hidden while this one is open" said it again
-                (the owner, 2026-10-15: "too many steps") */}
-          </Box>}
+          {/* NO BACK CRUMB OVER IT (the design walk, 2026-11-20: four Backs on one screen - the head's arrow, "Back to TQ-...", the bar's Back and
+              "< Email" here). The bar's Back is the one: opening a card is a step of the address, so Back returns to the list */}
           <Box sx={{ p: { xs: 1, sm: 1.75 } }}>{detail}</Box>
         </Box>
       )}
@@ -137,7 +121,7 @@ const NoSubject = ({ onOpenCard }) => { useEffect(() => { onOpenCard?.(null); },
 export default function CanvasBrowse({ area, state, onState, live, onOpenCard, onNavigate, onOpenTask, onReopen, onClose }) {
   const frame = (props) => <BrowseFrame {...props} live={live} onOpenCard={onOpenCard} onReopen={onReopen} />;
   const common = { browse: frame, browseState: state, onBrowseState: onState };
-  if (!live) return frame({ title: AREA_TITLES[area], area });
+  if (!live) return null;                // ...a page put down is not drawn: the one that replaced it is the view (funnelPile.pastView)
   // NEW is the one area that starts something: the card is the sheet's own form, in the conversation, and closing it
   // takes the line away (an earlier browse card folds to its title; this one has nothing left to read once it is closed)
   if (area === "new") return (
@@ -158,6 +142,4 @@ export default function CanvasBrowse({ area, state, onState, live, onOpenCard, o
     </Box>
   );
 }
-const AREA_MARKS = { new: AddIcon, connections: CableOutlinedIcon, reports: AssessmentOutlinedIcon, settings: SettingsOutlinedIcon,
-  about: PersonOutlineIcon, hub: HubOutlinedIcon };
 export const AREA_TITLES = { new: "New", connections: "Connections", reports: "Reports", settings: "Settings", about: "About you", hub: "Hub" };

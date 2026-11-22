@@ -553,13 +553,13 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         {ok && <Alert severity="success" sx={{ py: 0.25, fontSize: 12.5 }}>{ok}</Alert>}
       </DialogContent>
 
-      <ButtonBar>
+      {/* ...NO CANCEL BESIDE THE × (the design walk, 2026-11-20: two ways to close one card) - the × at its top and Esc close it */}
+      {!REPEATS.includes(kind) && kind !== "meeting" && !agentBox && <ButtonBar>
         {/* ...a playbook's Set up with AI opens the build in the chat: a door, out of the Assistant's view (the owner, 2026-11-02) */}
-        {!REPEATS.includes(kind) && kind !== "meeting" && !agentBox && <Button size="small" variant="contained" disableElevation disabled={!canGo || busy} onClick={submit}
+        <Button size="small" variant="contained" disableElevation disabled={!canGo || busy} onClick={submit}
           {...(kind === "playbook" ? { "data-tq-view-skip": "" } : {})}
-          startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}>{busy ? "Working…" : verb}</Button>}
-        <Button size="small" onClick={close}>Cancel</Button>
-      </ButtonBar>
+          startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}>{busy ? "Working…" : verb}</Button>
+      </ButtonBar>}
     </Shell>
   );
 }

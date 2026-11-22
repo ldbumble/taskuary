@@ -94,6 +94,6 @@ test("a mailbox preset makes an IMAP card with its servers, and is offered until
 });
 
 test("the Connections line counts the catalogue, not only the cards still planned", () => {
-  assert.equal(browseSummary(4, [{ planned: true }, {}, {}]), "4 connected · 3 in the catalogue · pick a section");
+  assert.equal(browseSummary(4, [{ planned: true }, {}, {}]), "4 connected · 3 in the catalogue");
   assert.match(read("ConnectorsView.jsx"), /summary: browseSummary\(connected, all\)/);
 });

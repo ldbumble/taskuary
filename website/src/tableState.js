@@ -51,18 +51,3 @@ export const ownPick = (rec, key) => (rec?.verb && key
   // ...and with nothing lit, the state's own sentence alone (railStatus.unlitWhy): no verb, so nothing is filled - the row says it
   : unlitWhy(rec) && key ? { verb: "", label: "", state: rec.state || "", why: unlitWhy(rec), line: "", by: "agent", for: key, key } : null);
 
-// THE TASK YOU WERE WORKING ON (the owner, 2026-11-09: "there should always be a button on top corner when you are in settings or reports to
-// go back to the main task you were working on"): the last task in view, however it came - the walk, the rail, a link, the Board or an
-// answer's "Open TQ-0005" (the owner, 2026-11-09: "any task you are on then switch to settings is [the] task")
-export const workedOn = (table, item) => {
-  const tid = Number(item?.tid) || 0;
-  if (!table?.key || table.folded || table.place || !tid) return null;
-  return { key: table.key, tid, ref: item.ref || `TQ-${String(tid).padStart(4, "0")}`, title: item.title || "" };
-};
-// ...and the corner offers the way back while something else is in front of it: a page, or another task. On that task itself, no Back
-export const backToWork = (table, worked, tid = 0) =>
-  !!worked && (!!table?.place || (!!table?.key && !table.folded && Number(tid) !== worked.tid));
-export const workWords = (w, n = 28) => {
-  const t = (w?.title || "").trim();
-  return `Back to ${w.ref}${t ? ` ${t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t}` : ""}`;
-};

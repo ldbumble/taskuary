@@ -4,6 +4,7 @@
 // connectors (Outlook, Teams, Slack, GitHub), cloud AI APIs (Anthropic, OpenAI, Azure
 // OpenAI - wired into intent triage), AI CLI agents, and scheduled report connections.
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { sectionOr } from "./browseSection.js";
 import BuiltinVoice from "./BuiltinVoice.jsx";
 import {
   Alert, Autocomplete, Box, Button, Chip, CircularProgress, Collapse, IconButton, InputAdornment, MenuItem, Popover, Radio, Select, Step,
@@ -2415,19 +2416,20 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     const all = groups.flatMap((g) => g.cards);
     const connected = nOn ?? connectors.filter((c) => connStateOf(c) === "connected").length;
     const openCard = all.find((c) => c.key === browseState.open);
-    const inSection = q ? hits : (groups.find((g) => g.title === browseState.section)?.cards || []);
+    const sec = sectionOr(browseState.section, groups.map((g) => g.title));
+    const inSection = q ? hits : (groups.find((g) => g.title === sec)?.cards || []);
     return browse({
       title: "Connections",
       summary: browseSummary(connected, all),
       sections: groups.map((g) => ({ key: g.title, label: sectionName(g.title), n: g.cards.length || null })),
-      section: q ? "" : browseState.section ?? null,
+      section: q ? "" : sec,
       onSection: (key) => { setQ(""); setOpen(null); onBrowseState?.({ section: key, open: null }); },
-      note: err || (q ? "" : groups.find((g) => g.title === browseState.section)?.note || ""),
+      note: err || (q ? "" : groups.find((g) => g.title === sec)?.note || ""),
       // ...the card opened names its connector, so the address can (canvasLinks.hashFor) - a guide card has none and is its section's
       cards: inSection.map((c) => ({ key: c.key, node: <ConnCard c={{ ...c, go: c.go && (() => { c.go();
-        onBrowseState?.({ ...browseState, section: q ? c.crumb || browseState.section : browseState.section, open: c.key,
+        onBrowseState?.({ ...browseState, section: q ? c.crumb || sec : sec, open: c.key,
           connector: c.key === "agents" ? "cli-agents" : /^[cds](\d+)$/.exec(c.key)?.[1] || "" }); }) }} /> })),
-      detail, onBack: back, openKey: browseState.open || (conn ? `c${conn.ConnectorId}` : ""),
+      detail, openKey: browseState.open || (conn ? `c${conn.ConnectorId}` : ""),
       openLabel: openCard ? `the ${openCard.title} connector card (Connections), ${openCard.desc}` : conn ? `the ${conn.Name} connector card (Connections)` : "",
       search: (
         <Box component="input" type="search" value={q} onChange={(e) => search(e.target.value)} placeholder="Search connectors…"

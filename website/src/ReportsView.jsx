@@ -3,6 +3,7 @@
 // preview the whole pipeline, schedule it - results land on the Timeline. Connections
 // stay pure connections; this tab is where reports are built and managed.
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { sectionOr } from "./browseSection.js";
 import { RowPressLine, useRowPress } from "./rowPress.jsx";
 import {
   Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog,
@@ -604,7 +605,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     // No shelf named (the sidebar, "Run a report or workflow") is the reports themselves: three chips over nothing was a page
     // with no list on it, one press short of what the door says
     const section = openSource && isWorkflowSource(openSource) ? "workflows" : openSource && isDashboardSource(openSource) ? "dashboards"
-      : browseState.section ?? "reports";
+      : sectionOr(browseState.section, ["reports", "dashboards", "workflows", "playbooks"]);
     const back = () => { setDraft(null); load(); pbs.load(); onBrowseState?.({ ...browseState, section, open: null }); };
     const pbSlug = pbOpen(browseState.open), pbBook = pbs.books.find((b) => b.slug === pbSlug);
     const sectionRows = section === "workflows" ? workflowSources : section === "reports" ? reportSources : section === "dashboards" ? dashboardSources : [];
@@ -668,7 +669,6 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
           ...(sectionRows.length && binKinds ? [{ key: "recently-deleted", node: <RecentlyDeleted kinds={binKinds} onRestored={load} /> }] : [])],
       detail: browseState.open != null && !missing ? (pbSlug != null ? <PlaybookDetail key={pbSlug} slug={pbSlug} onGone={back} />
         : wizard(back, (sid) => onBrowseState?.({ ...browseState, open: sid }))) : null,
-      onBack: back,
       openLabel: pbSlug != null ? (pbSlug === "new" ? "a new playbook being written (Reports - Playbooks)" : `the playbook "${pbBook?.title || pbSlug}" (Reports - Playbooks), its words open`)
         : browseState.open === "new-report" ? "a new report being set up (Reports)"
         : section === "dashboards" && !openSource && browseState.open != null ? "a new dashboard being set up (Reports - Dashboards)"

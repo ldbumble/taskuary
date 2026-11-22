@@ -29,13 +29,13 @@ test("an ask that is its message's words, a second New playbook and a single pag
   assert.match(src("TaskPage.jsx"), /!\(sourceCount === 1 && askInBody\(askText, opener\?\.ReadText \|\| opener\?\.BodyText\)\)/);
   assert.match(src("ReportsView.jsx"), /<NewPlaybook [^>]*button=\{false\}/);
   assert.match(src("PlaybookShelf.jsx"), /\{button && <Button size="small" variant="outlined"/);
-  assert.match(src("SettingsView.jsx"), /noBack: onePage\(section, SHELF\)/);
+  assert.match(src("SettingsView.jsx"), /onePage: onePage\(section, SHELF\)/);
   // ...and every section that is one page opens from its chip: Mail rules and Updates drew one card named like the chip, to press again
   const { onePage } = await import("../src/settingsMap.js"), SHELF = { docs: 1, profiles: 1 };
   assert.deepEqual(["you", "phone", "policies", "updates", "audit", "config", "memory", "docs", "profiles", null].map((k) => onePage(k, SHELF)),
     [true, true, true, true, true, false, false, false, false, false]);
   assert.match(src("SettingsView.jsx"), /open: onePage\(key, SHELF\) \? key : null/);
-  assert.match(src("CanvasBrowse.jsx"), /\{!noBack && <Box sx=\{\{ display: "flex", alignItems: "center", gap: 1\.25, px: 1\.75/);
+  assert.match(src("CanvasBrowse.jsx"), /const folded = opened && !onePage;/);
 });
 
 test("Esc closes the Past chats panel: it stood over the task with its x the only way out", () => {

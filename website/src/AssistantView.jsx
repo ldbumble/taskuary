@@ -21,7 +21,6 @@ import CloseIcon from "@mui/icons-material/Close";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import ViewSidebarIcon from "@mui/icons-material/ViewSidebar";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import api from "./api.js";
 import { DEMO_SAID, demoNo } from "./apiError.js";
 import { runOperation } from "./taskOps.js";
@@ -34,7 +33,7 @@ import { burstsNow } from "./allDone.js";
 import { loadGeneral } from "./lazyGeneral.js";
 // the static demo's guided journey: nothing outside the demo build ever draws it, so nothing there fetches it
 const DemoJourney = DEMO ? lazyView(() => import("./DemoJourney.jsx")) : () => null;
-import { BACK, advisedIn, aimed, navEnd, navOff, onPressed, onPressing, press as pressRow, walkMove, leaveRow, rowNow, rowDrawable, rowReady, rowTable, useHosted, useRowHold, useRowVerbs, useVerbs } from "./actionRow.js";
+import { BACK, advisedIn, aimed, navEnd, onPressed, onPressing, press as pressRow, walkMove, leaveRow, rowNow, rowDrawable, rowReady, rowTable, useHosted, useRowHold, useRowVerbs, useVerbs } from "./actionRow.js";
 import { forgetTasks, heldTask, notePile, pageRead, prefetchTask, recRead, watchReads, watchRecs } from "./taskDetail.js";
 import { readLists } from "./connectorLists.js";
 import { hint as btnHint, howFar, label as btn, liveVerb, verbOfRow } from "./buttons.js";
@@ -64,7 +63,7 @@ import { ALERT, DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, PRIORITY_COLOR, ROLES 
 import { dangerLine } from "./strangerLine.js";
 import { railShort } from "./batchItems.js";
 import ProposalCard from "./ProposalCard.jsx";
-import { adviceRead, backToWork, isIdea, overChat, ownPick, tableOf, tableWords, workWords, workedOn } from "./tableState.js";
+import { adviceRead, isIdea, overChat, ownPick, tableOf, tableWords } from "./tableState.js";
 import { ReportLink } from "./BugReportDialog.jsx";
 import { openBugReport, shownError } from "./bugReportOpen.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
@@ -76,7 +75,7 @@ import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages, useSendWhenUp } from "./promptImages.jsx";
 import { handToItem } from "./ItemSections.jsx";
 import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, liveBrowseId, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, tableItemOf, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, liveBrowseId, pastView, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, tableItemOf, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
 import { FYI_PAGE, ageHover, subLine, answersTo, awayFromClear, closedElsewhere, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, pinOf, rowKeys, sameRow, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
@@ -977,10 +976,8 @@ function Line({ m, lastBrief = false, live, last, moves = false, actions, fresh,
   // BROWSING (the canvas redesign, 2026-09-29): Connections, Settings, Reports or Hub, walked by clicks on this line
   // ...and one put down is a ROW of the walk like a folded task: the same .tq-msg column, mark gutter and .tq-fold card - as a full-width
   // browse line it ran edge to edge, wider than every task row around it, with no icon (the owner's screenshot, 2026-11-09)
-  if (m.role === "browse" && canvas?.browsing !== m.id) return (
-    <div className="tq-msg tq-browse-fold" data-tq-browse-line={m.area}><div className="avatar"><AssistantMark /></div><div className="body">
-      <CanvasBrowse area={m.area} state={m.state || {}} live={false} onReopen={() => actions.browse(m.area, m.state)} /></div></div>
-  );
+  // ...one put down is not drawn: the page that replaced it is the view (funnelPile.pastView)
+  if (m.role === "browse" && canvas?.browsing !== m.id) return null;
   if (m.role === "browse") return (
     <div className="tq-browse-line tq-canvas-live" data-tq-browse-line={m.area}>
       <CanvasBrowse area={m.area} state={m.state || {}} live={canvas?.browsing === m.id}
@@ -3269,13 +3266,6 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   // over it would name another button (assistantLight.js); it goes out at the next press or when the table moves on
   const litTable = { key: table.key, tid: currentItem?.tid ?? Number(/^task:(\d+)$/.exec(table.key || "")?.[1] || 0) };
   const litNow = litPick(lit, litTable);
-  // THE TASK YOU WERE WORKING ON, and the corner's way back to it from a page or another task (tableState.workedOn / backToWork)
-  const [worked, setWorked] = useState(null);
-  const inView = !!table.key && !table.folded && !table.place;
-  useEffect(() => {
-    const w = inView ? workedOn(table, { ...currentItem, tid: litTable.tid }) : null;
-    if (w) setWorked((was) => (was?.key === w.key && was.title === w.title ? was : w));
-  }, [table.key, inView, litTable.tid, currentItem?.title]);   // eslint-disable-line react-hooks/exhaustive-deps
   // the day typed with Remind me ("remind me Monday"): the walk's picker leads with it (assistantLight's light.day)
   const litDayRef = useRef(null); litDayRef.current = litNow?.verb === "defer" ? litNow.day || null : null;
   useEffect(() => { setLit((l) => litAfter(l, litTable)); }, [litTable.key, litTable.tid, lit]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -3327,10 +3317,9 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   useEffect(() => { navEnd(atEnd); }, [atEnd]);
   useEffect(() => () => navEnd(false), []);
   const navOn = shown.find((x) => x.id === browsing)?.area || "";
-  // Settings and Connections have their own ← back to your tasks: the bar's Back and Next stand greyed under them (actionRow.navOff)
-  const ownBack = navOn === "settings" || navOn === "about" || navOn === "connections";   // ...and About you, Settings' own split (2026-11-06)
-  useEffect(() => { navOff(ownBack ? "Back to your tasks with ← at the top" : ""); }, [ownBack]);
-  useEffect(() => () => navOff(""), []);
+  // ...ONE INPUT ON A SCREEN (the design walk, 2026-11-20): New is a box of its own, and the Assistant's "Ask about this page..." stood under it -
+  // two places to type the same ask. While New is the page, its box is the one
+  const newOpen = navOn === "new";
   // WHAT THE PAGE ASKS THE CANVAS TO OPEN (TaskHubPage canvasReq): once each, and only once the chat has loaded - the
   // first load replaces the conversation, and a card posted before it would be wiped
   const doneReq = useRef(0);
@@ -3478,6 +3467,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   const keyOf = useMemo(() => lineKeys(shown), [shown]);
   const winLines = useMemo(() => (winOn ? shown.map((m, i) => [m, i]).filter(([m]) => talkLine(m)).slice(-60) : []), [winOn, shown]);
   const inWin = useMemo(() => new Set(winLines.map(([m]) => m.id)), [winLines]);
+  // ...and what the canvas does not draw at all: a page or an item already left (funnelPile.pastView)
+  const gone = useMemo(() => new Set(old ? [] : shown.filter((m, i) => pastView(m, i, { browsing, live: lastCardIdx })).map((m) => m.id)), [shown, browsing, lastCardIdx, old]);
   // ...a typed ask's dots, where its answer will land - never a walk move's (Next, a put-down, a row picked: `flight`), whose answer is the next
   // item on the canvas (the owner, 2026-10-30: "it's still a little buggy hitting next and not a task, mark done"): moved into the window, shut or
   // not, they left the canvas blank under the folded item for the length of the move
@@ -3647,11 +3638,6 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   const newChatIcon = (attr) => <Tooltip title="New chat — archives this one"><IconButton size="small" {...{ [attr]: "" }} onClick={newChat} disabled={busy || resetting}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip>;
   // ...ONE PENCIL ON SCREEN (the owner, 2026-11-09: "drop pencil if it's a duplicate"): while the head's corner holds New chat, the pill's goes
   const headPencil = iconsInPill && !firstRun && !old;
-  // ...read against the task in view NOW, not the one the effect above last kept: on every Next and row click the corner drew "Back to" the task
-  // just left for a frame or three, then took it away (the rail walk, 2026-11-12)
-  const backWork = !firstRun && !old && !walk && backToWork(table, (inView && workedOn(table, { ...currentItem, tid: litTable.tid })) || worked, litTable.tid);
-  // ...the page put down over its own task, else that task pulled back by number (any task, on the rail or not)
-  const toWork = () => { if (!worked) return; if (table.place && table.key === worked.key) unfoldTable(); else pull(`task:${worked.tid}`, null); };   // ...never both: in the pill only while a task or page is open over the chat
   const ownIcons = <>
     <Tooltip title={speakOnState ? "Reading replies aloud — click to stop" : "Read replies aloud"}><IconButton size="small" className="tq-phone-hide" data-tq-speak="" onClick={toggleSpeak}>{speakOnState ? <VolumeUpIcon sx={{ fontSize: 18, color: "var(--tq-success, #526b53)" }} /> : <VolumeOffIcon sx={{ fontSize: 18, color: DIM }} />}</IconButton></Tooltip>
     <Tooltip title="Past chats"><IconButton size="small" data-tq-past-chats="" onClick={openChats}><HistoryIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
@@ -3713,7 +3699,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     <div className="tq-asst-col" style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div className="tq-chat-head">
         {/* no mark here: the top bar already carries the logo (the owner, 2026-10-06: "don't need it on top of the assistant") */}
-        {canBack && !!placeHash && !old && !firstRun && <Tooltip title="Back (Alt+←)"><IconButton size="small" aria-label="Back" onClick={navBack} sx={{ ml: -0.75, mr: 0.25 }}><ArrowBackIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>}
+        {/* ONE BACK ON A SCREEN (the design walk, 2026-11-20): the head's arrow and its "Back to TQ-..." chip were two more ways back beside the
+            bar's Back, which walks the same list of places (appLinks.navBack) - the bar's is the one */}
         <div className="who" style={{ minWidth: 0 }}><b>{ASSISTANT_NAME}</b>{old && <span>An earlier chat · {fmtDateTime(old.at)}</span>}</div>
         <div className="grow" />
         <Tooltip title="Your work"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
@@ -3721,11 +3708,6 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
             the box chooses this chat's AI, a new chat starts on Settings -> AI defaults, and the default is changed there */}
         {/* ...and THE ASSISTANT'S OWN ICONS ARE IN ITS PILL on a desk while a task or page is open (the owner, 2026-11-06): over the task
             they read as the task's. On the home screen the pane is the Assistant's chat, and they are here, top right (overChat) */}
-        {/* THE WAY BACK, top right (the owner, 2026-11-09: "always a button on top corner when you are in settings or reports to go back to
-            the main task you were working on, or clear it with the pencil for new chat"): Back over a page or another task, and New chat */}
-        {backWork && <Tooltip title={`Back to ${worked.ref}${worked.title ? ` - ${worked.title}` : ""}`}>
-          <button type="button" className="tq-chip tq-back-work" data-tq-back-work={worked.tid} onClick={toWork}>
-            <ArrowBackIcon sx={{ fontSize: 14, mr: 0.5, verticalAlign: "-2px" }} />{workWords(worked)}</button></Tooltip>}
         {headPencil && newChatIcon("data-tq-new-chat-head")}
         {!iconsInPill && ownIcons}
       </div>
@@ -3795,8 +3777,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
                   actions={actions} fresh={tableItem} canvas={canvasState} />}
           </div>}
           {firstRun ? state && <div data-tq-setup-under={setupCovered.current ? "hidden" : ""} style={setupCovered.current ? { display: "none" } : undefined}>{welcome()}</div>
-            : state && !shown.some((m) => !inWin.has(m.id)) && (!busy || popOpen) && !starting && welcome()}
-          {!firstRun && shown.map((m, i) => inWin.has(m.id) ? null : <Line key={keyOf.get(m.id)} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} moves={!old && i === movesIdx} tableChips={tableChips} barHolds={barHolds} pageOver={pageOver}
+            : state && !shown.some((m) => !inWin.has(m.id) && !gone.has(m.id)) && (!busy || popOpen) && !starting && welcome()}
+          {!firstRun && shown.map((m, i) => inWin.has(m.id) || gone.has(m.id) ? null : <Line key={keyOf.get(m.id)} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} moves={!old && i === movesIdx} tableChips={tableChips} barHolds={barHolds} pageOver={pageOver}
                                      actions={actions} fresh={tableItem} canvas={old ? null : canvasState} />)}
           {/* CONTINUE, IN LINE (the owner, 2026-09-30): a card under the item, like New - the mic and pictures in it */}
           {!old && continueOn && (
@@ -3907,10 +3889,10 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
           {/* ...and during setup the move setup fills (FirstRun's tone) is the one lit - nothing was, so the page said "pick it" over a
               plain Back and a greyed Next (2026-10-19) */}
           <ActionRow advised={stripPick || setupLit} hold={rowHold} early={rowEarly} />
-          {!chatApart && composeBox}
+          {!chatApart && !newOpen && composeBox}
           </div>
           </div>
-          {chatApart && <div className="tq-chat-unit" data-tq-chat-unit="">{composeBox}</div>}
+          {chatApart && !newOpen && <div className="tq-chat-unit" data-tq-chat-unit="">{composeBox}</div>}
           <Popover open={!!emojiEl} anchorEl={emojiEl} onClose={() => setEmojiEl(null)}
             anchorOrigin={{ vertical: "top", horizontal: "left" }} transformOrigin={{ vertical: "bottom", horizontal: "left" }}
             slotProps={{ paper: { sx: { p: 1.1, borderRadius: 2.5 } } }}>

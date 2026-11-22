@@ -3564,6 +3564,9 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   }, [err, popOpen]);
   // ...Esc shuts it while the focus is IN it (its box or its conversation) - an Esc on the task view, the rail or a menu is theirs: shutting
   // the window from anywhere was a close the owner never aimed at it. Not the Esc that shuts a menu or a dialog over it either
+  // ...AND IT OPENS BY HIS OWN HAND ONLY - a press on it, a key typed in it - never because it was focused (the walk, 2026-11-22: the move-on after
+  // Remind me focused the box, and the empty window stood over the next page and every page after)
+  const keyIn = (e) => { if (e.key === "Escape") return escShut(e); if (!["Tab", "Shift", "Control", "Alt", "Meta"].includes(e.key)) openBox(); };
   const escShut = (e) => { if (e.key === "Escape" && !e.defaultPrevented && !e.target?.closest?.(".MuiPopover-root, .MuiMenu-root, .MuiDialog-root")) { e.stopPropagation(); shutBox(); } };
   // ...TALL ENOUGH TO TALK IN (the owner, 2026-10-28: "it's too small, it should get a little taller"): a fixed height, the conversation
   // filling it - ~75% of the screen, at least 520px where there is room, never past the canvas's top (its foot stands 6px over the row's
@@ -3645,7 +3648,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   const composeBox = (
     <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined} ref={boxRef} data-tq-open={boxWide ? "" : undefined}
     data-tq-continue={!boxWide && isMini && winLines.length ? "" : undefined} data-tq-grow={grow ? "" : undefined}
-    onMouseEnter={growIn} onMouseLeave={growOut} onFocus={openBox} onKeyDown={escShut}>
+    onMouseEnter={growIn} onMouseLeave={growOut} onPointerDown={openBox} onKeyDown={keyIn}>
     {!boxWide && unseen > 0 && <i className="tq-chat-unseen" data-tq-unseen={unseen} aria-label={`${unseen} new in the chat`}>{unseen}</i>}
     {/* THE FIELD: nothing of its own at rest (display: contents - the pill is the box); in the chat window it is the bordered
         field the words are typed in, tools and send inside it (the owner, 2026-10-28: "it does not look like a prompt input box?") */}

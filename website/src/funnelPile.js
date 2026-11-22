@@ -395,6 +395,13 @@ export const rowKeys = (items, keys, card = null) => {
 // `read`: the keys a walk press reads (rule 4) - they leave with the press, as the server's answer will have them - a row answering to one
 // as an alias with them (answersTo)
 // `leaving`: the task, or every task, a press is putting down (AssistantView's `leaving` holds them all)
+// THE TASK HE HAS OPEN STANDS ON THE RAIL WHILE IT IS OPEN (the owner, 2026-11-22: "does search bring the new task onto rail perfectly"; walk 5:
+// a closed task opened from Search had no row, nothing ringed, Back and Next relative to nothing): one the server's list does not hold is drawn
+// in Tasks as it now reads - never a copy kept from before (offRail: an old open row drawn for a closed task, the owner live 2026-11-20)
+export const withOpened = (pile, cur) => {
+  if (!pile?.items || !cur?.tid || cur.offRail || !cur.key || pile.items.some((i) => i.tid === cur.tid || i.key === cur.key)) return pile;
+  return { ...pile, items: [...pile.items, { ...cur, opened: true, order_band: 2, deferred: false, watching: false, settling: false }] };
+};
 export const asPressed = (items, { leaving = null, continuing = null, read = null } = {}) => { const gone = [].concat(leaving ?? []).filter(Boolean);
   return !gone.length && !continuing && !read?.length ? items
   : items.filter((i) => !gone.includes(i.tid) && !read?.some((k) => answersTo(i, k)))

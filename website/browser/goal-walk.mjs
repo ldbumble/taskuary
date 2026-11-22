@@ -12,13 +12,15 @@ import { clean, said, watch } from "./watch.mjs";
 import { record } from "./recorder.mjs";
 
 const file = process.argv[2]; if (!file) { console.log("node goal-walk.mjs <shape.json>"); process.exit(2); }
-const shape = JSON.parse(readFileSync(file, "utf8")), name = path.basename(file, ".json");
+// ...`{run}` in a shape is this run's own word, so a search finds the task this run made, never an earlier run's
+const RUN = `r${Date.now().toString(36)}`;
+const shape = JSON.parse(readFileSync(file, "utf8").replaceAll("{run}", RUN)), name = path.basename(file, ".json");
 const { page } = await connect();
 const VIS = (e) => { const r = e.getBoundingClientRect(); return r.width > 1 && r.height > 1 && getComputedStyle(e).visibility !== "hidden"; };
 
 const outbox = () => { const f = path.join(info.home, "outbox.jsonl"); return existsSync(f) ? readFileSync(f, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []; };
 const rail = () => page.evaluate((vs) => { const vis = eval(vs); return [...document.querySelectorAll("[data-tq-rail] .tq-pile-row[data-tq-key]")].filter(vis)
-  .map((e) => ({ key: e.getAttribute("data-tq-key"), text: e.innerText.split("\n").filter(Boolean).join(" | ").slice(0, 160) })); }, `(${VIS})`);
+  .map((e) => ({ key: e.getAttribute("data-tq-key"), tid: e.getAttribute("data-tq-tid") || "", text: e.innerText.split("\n").filter(Boolean).join(" | ").slice(0, 160) })); }, `(${VIS})`);
 const busy = () => page.evaluate(() => !!document.querySelector("[data-tq-task-page] [data-tq-stop-run]"));
 // ...only what spins: a progress ring with a value (the header's setup ring) is a gauge, not work still going
 const spinning = () => page.evaluate(() => [...document.querySelectorAll(".MuiCircularProgress-indeterminate, [role=progressbar]:not([aria-valuenow])")].filter((e) => e.getBoundingClientRect().width > 0).length);
@@ -87,11 +89,14 @@ const STEPS = {
     if (!hit) return { hit_ms: null, problem: s.none ? "" : "no result for words that should find a task" };
     if (s.none) return { problem: `found "${hit.text}" for words that match nothing` };
     await page.mouse.click(hit.x, hit.y); await sleep(2500);
-    const at = await where(), r = await rail(), id = (at.match(/task=(\d+)/) || [])[1];
-    const onRail = id && r.some((x) => x.key.includes(id));
-    await sleep(5000); const stays = (await where()) === at && (!id || (await rail()).some((x) => x.key.includes(id)));
+    // ...the task open is the page's own (data-tq-task-page) - a task opened by name moves no address
+    const openTid = () => page.evaluate(() => document.querySelector("[data-tq-task-page]")?.getAttribute("data-tq-task-page") || "");
+    const at = await openTid(), r = await rail(), id = at;
+    const ringed = await page.evaluate((t) => !!document.querySelector(`[data-tq-rail] .tq-pile-row[data-tq-key$=":${t}"].current, [data-tq-rail] .tq-pile-row[data-tq-key$=":${t}"][aria-current]`), id);
+    const onRail = id && r.some((x) => x.tid === id);
+    await sleep(5000); const stays = (await openTid()) === at && (!id || (await rail()).some((x) => x.tid === id));
     await page.keyboard.press("Escape").catch(() => {});
-    return { hit_ms: Date.now() - t0, opened: at, problem: !id ? "the hit opened no task" : !onRail ? "the task it opened is not on the rail" : !stays ? "it opened, then went off" : "" };
+    return { hit_ms: Date.now() - t0, opened: at, ringed, problem: !id ? "the hit opened no task" : !onRail ? "the task it opened is not on the rail" : !stays ? "it opened, then went off" : "" };
   },
   async row(s) { const at = await page.evaluate((w, vs) => { const vis = eval(vs); const r = [...document.querySelectorAll("[data-tq-rail] .tq-pile-row[data-tq-key]")].filter(vis).find((e) => e.innerText.toLowerCase().includes(w.toLowerCase()));
     if (!r) return null; r.scrollIntoView({ block: "center" }); const q = r.getBoundingClientRect(); return { x: q.x + q.width / 2, y: q.y + q.height / 2 }; }, s.say, `(${VIS})`);

@@ -128,6 +128,10 @@ class IdleOut(unittest.TestCase):
         with mock.patch.object(server, 'store', s):
             asked = server._assistant_payload(tid)['asking']
         self.assertEqual((asked['text'], asked['resting']), ('Which site goes first?', True))     # ...and on the page, answered by typing
+        # ...and a task he closed over it asks nothing (walk 5, 2026-11-22: "Answer the agent's question..." in a done task's box)
+        s.update_task(tid, {'Status': 'done'}, 'owner')
+        self.assertIsNone(taskstate.asking(s, s.get_task(tid)))
+        s.update_task(tid, {'Status': 'open'}, 'owner')
         general.start_session(s, tid, actor='owner').send_prompt('Riverside first.')
         self.assertEqual(state(), 'agentdone')                                     # answered, and the turn after it asked nothing
         general.idle_sweep(general.session_for(tid).last + 61)

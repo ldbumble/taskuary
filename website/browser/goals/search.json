@@ -1,11 +1,11 @@
 [
- {"do": "new", "say": "Find me three caterers near the office for the offsite"},
+ {"do": "new", "say": "Find me three caterers near the office for the {run} offsite"},
  {"do": "quiet", "max": 400},
  {"do": "press", "button": "Mark done", "times": 1, "sends": 0},
  {"do": "go", "to": "rail"},
- {"do": "search", "say": "caterers"},
+ {"do": "search", "say": "{run}"},
  {"do": "go", "to": "rail"},
- {"do": "search", "say": "caterers"},
+ {"do": "search", "say": "{run}"},
  {"do": "go", "to": "rail"},
  {"do": "search", "say": "zebra quantum pancake", "none": true}
 ]

@@ -75,7 +75,7 @@ import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages, useSendWhenUp } from "./promptImages.jsx";
 import { handToItem } from "./ItemSections.jsx";
 import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, liveBrowseId, pastView, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, tableItemOf, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, withOpened, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, liveBrowseId, pastView, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, tableItemOf, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
 import { FYI_PAGE, ageHover, subLine, answersTo, awayFromClear, closedElsewhere, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, pinOf, rowKeys, sameRow, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
@@ -798,7 +798,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                     // late step's while the goal's own is still ahead (`slipped_at`, 2026-11-08: "slipped Dec 23" on Nov 8 read as nonsense)
                     : goal ? (i.kind === "goal_slipped" ? [meta.word, dueWord(i.slipped_at || i.due)].filter(Boolean).join(" ") : "") : "";
                 return (
-                  <div key={i.key} className={cls} data-tq-key={i.key} data-tq-urgent={urgentDot ? "" : undefined} data-tq-important={imp ? "" : undefined}
+                  <div key={i.key} className={cls} data-tq-key={i.key} data-tq-tid={i.tid || undefined} data-tq-opened={i.opened ? "" : undefined} data-tq-urgent={urgentDot ? "" : undefined} data-tq-important={imp ? "" : undefined}
                     style={{ top }}>
                     {/* For later counts DOWN to when it comes back, in the same short form the age column uses */}
                     {/* ...every other row says its ARRIVAL, never a new age for a reply - and no "+N" for one either: what came in since is
@@ -3399,9 +3399,9 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   }, [placeHash, active, state, old, firstRun, busy, request]);   // eslint-disable-line react-hooks/exhaustive-deps
   // BACK IN THE WINDOW ITSELF (TQ-1187): the desktop window has no browser bar, so the step behind a page or task the owner opened is
   // a press away here - the browser's own Back, the road onPlace already takes. Only over a step of ours (appLinks.canGoBack)
-  const railPile = useMemo(() => ((leaving.length || continuingTid || readGone) && pile?.items
-    ? { ...pile, items: asPressed(pile.items, { leaving: leaving.map((x) => x.tid), continuing: continuingTid, read: readGone?.keys }) } : pile),
-    [pile, leaving, continuingTid, readGone]);
+  const railPile = useMemo(() => withOpened((leaving.length || continuingTid || readGone) && pile?.items
+    ? { ...pile, items: asPressed(pile.items, { leaving: leaving.map((x) => x.tid), continuing: continuingTid, read: readGone?.keys }) } : pile, currentItem),
+    [pile, leaving, continuingTid, readGone, currentItem]);
   useEffect(() => {                                   // the close has landed: the server's pile no longer has it, or has it For later
     if (leaving.length && pile?.items) setLeaving((l) => { const k = stillLeaving(l, pile); return k.length === l.length ? l : k; });
   }, [pile, leaving]);

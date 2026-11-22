@@ -61,6 +61,9 @@ def asking(store, task: dict, session=None) -> dict | None:
     tid = task['TaskId']
     if (s := session or workerstate._live(tid)): return browsergate.shown_ask(workerstate.asking_of(store, s))
     rests = general.handles(task) or acpcoding.idled(tid, store)
+    # ...a task he closed asks nothing (walk 5, 2026-11-22: "Answer the agent's question..." stood in the box of a task he had marked done) - his
+    # typing reopens it, as a new line
+    if task.get('Status') in ('done', 'dropped'): return None
     return browsergate.shown_ask({**q, 'resting': True}) if rests and (q := open_question(store, tid)) else None
 
 

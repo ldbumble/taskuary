@@ -64,13 +64,31 @@ def test_the_cli_and_floor_know_answers():
     assert "'--answers'" in inspect.getsource(cli) and "'answers': args.answers" in inspect.getsource(cli)
 
 
-def test_a_second_save_pointed_at_another_mail_replaces_the_recipients():
+def test_a_second_save_pointed_at_another_persons_mail_is_their_own_card_and_the_first_keeps_its_person():
     s, tid, ids = thread(asks=[0], aside=[1, 2])
     rid = wrapup.agent_reply(s, tid, 'Hi Ray - repaired.', 'coding')['review_id']
     assert 'gail@northwind.example' in json.dumps(s.review_envelope(rid)['cc'])
-    wrapup.agent_reply(s, tid, 'Hi Gail - noted.', 'coding', answers=ids[1])
-    env = s.review_envelope(rid)
-    assert s.get_review(rid)['AnswersMid'] == ids[1] and 'gail@northwind.example' in json.dumps(env['to']) and 'ray@northwind.example' in json.dumps(env['to'])
+    other = wrapup.agent_reply(s, tid, 'Hi Gail - noted.', 'coding', answers=ids[1])['review_id']
+    assert other != rid and s.get_review(other)['AnswersMid'] == ids[1] and 'gail@northwind.example' in json.dumps(s.review_envelope(other)['to'])
+    assert s.get_review(rid)['Status'] == 'pending' and 'ray@northwind.example' in json.dumps(s.review_envelope(rid)['to'])
+
+
+def test_a_second_persons_chat_never_rebinds_the_first_persons_email_card():
+    """The HIPAA walk, 2026-11-21: Gail's board-pack email had its card; Paula's chat came onto the same task, and the agent saved the
+    letter to Gail again (`answers` = her mail). `answers` was checked and set aside: the newest message - Paula's chat - became the card's
+    channel with Gail's address on it, its files "can't be sent on chat", and Gail's email card was greyed. Each card keeps its person."""
+    s, tid, ids = thread(asks=[0])
+    gail = s.add_message({'TaskId': tid, 'ExternalId': 'g1', 'ConversationId': 'conv-2', 'Channel': 'email', 'SourceName': 'alex@northwind.example',
+                          'Subject': 'Q3 board pack', 'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example', 'SentAt': '2026-11-04 09:10:00',
+                          'BodyText': 'Can you put the Q3 board pack together?', 'Status': 'routed', 'RecipientsJson': json.dumps({'to': ['alex@northwind.example']})})
+    rid = wrapup.agent_reply(s, tid, 'Hi Gail - the board pack is attached.', 'agent', answers=gail)['review_id']
+    s.add_message({'TaskId': tid, 'ExternalId': 'p1', 'ConversationId': 'chat-7', 'Channel': 'teams', 'SourceName': 'teams', 'FromName': 'Paula Vance',
+                   'FromEmail': 'paula@northwind.example', 'SentAt': '2026-11-04 09:20:00', 'BodyText': 'What would printing 12 copies cost?', 'Status': 'routed'})
+    again = wrapup.agent_reply(s, tid, 'Hi Gail - the board pack is attached, with the print costs.', 'agent', answers=gail)['review_id']
+    r = s.get_review(again)
+    assert s.get_message(r['MessageId'])['Channel'] == 'email' and r['AnswersMid'] == gail
+    assert 'gail@northwind.example' in json.dumps(s.review_envelope(again)['to'])
+    assert again == rid or s.get_review(rid)['Status'] != 'pending', 'one card to Gail, never two'
 
 
 def test_a_plain_re_save_keeps_the_answers_mid_already_pinned():

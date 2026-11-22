@@ -453,22 +453,26 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         store.add_comment(task_id, agent, 'agent', f'{agent} saved a reply that already went out{_at(sent)} - nothing new was put on the table.')
         return {'ok': False, 'already_sent': True, 'review_id': sent['ReviewId'],
                 'why': f'that reply already went out{_at(sent)} - nothing new was saved. Write a new one only if there is something new to say.'}
+    # ...and `answers` names the mail that holds the ask when the owner means one triage did not pick: it must be somebody's mail on this task
+    if answers:
+        a = store.get_message(answers) or {}
+        if a.get('TaskId') != task_id or a.get('Status') in ('context', 'skipped') or str(a.get('Direction') or 'in') == 'out' or from_owner(store, a):
+            return {'ok': False, 'why': f'#{answers} is not a mail on this task - use a number from THE MAIL ON THIS TASK in your brief, or leave --answers out'}
     held = store.held_review(task_id) or {}
-    if str(to or '').strip():
-        hit, why = addressee(store, task_id, to)
-        if not hit: return {'ok': False, 'why': why}
-        mid = hit['MessageId']
+    # THE MESSAGE A REPLY ANSWERS IS ONE FACT (the HIPAA walk, 2026-11-21): `answers` was checked and then set aside - the newest message, a
+    # second person's chat, became the card's channel while the first person's address stayed on it: "To Gail" on Paula's chat, its files
+    # "can't be sent on chat", Gail's email card greyed. Its channel, its person and its thread all come from the one it answers
+    if str(to or '').strip() or answers:
+        if str(to or '').strip():
+            hit, why = addressee(store, task_id, to)
+            if not hit: return {'ok': False, 'why': why}
+        mid = answers if answers and not str(to or '').strip() else hit['MessageId']
         if held and _person(store, held.get('MessageId')) != _person(store, mid): held = {}
     else: mid = reply_target(store, task_id) or held.get('MessageId')
     # ...and a machine reads no reply (NOTICE): refused at the door, saying what to do instead - nothing is kept as a result, the write-up is
     # the agent's own last words to the owner
     if mid and nobody_waiting(store, mid):
         return {'ok': False, 'no_reply': True, 'why': f'{NOTICE} Nothing was saved.'}
-    # ...and `answers` names the mail that holds the ask when the owner means one triage did not pick: it must be somebody's mail on this task
-    if answers:
-        a = store.get_message(answers) or {}
-        if a.get('TaskId') != task_id or a.get('Status') in ('context', 'skipped') or str(a.get('Direction') or 'in') == 'out' or from_owner(store, a):
-            return {'ok': False, 'why': f'#{answers} is not a mail on this task - use a number from THE MAIL ON THIS TASK in your brief, or leave --answers out'}
     # ...and who else hears it: `only` is the sender alone, so it copies nobody; an address the thread never had is said on the card
     ccs = _addrs(cc)
     if only and ccs: return {'ok': False, 'why': '--only sends it to that one person - leave --cc out, or drop --only to copy others'}

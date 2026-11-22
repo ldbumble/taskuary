@@ -99,6 +99,26 @@ class TheDayAsItWasTests(unittest.TestCase):
         assert not [d for d in ev['done'] if 'Taskuary guide' in d], ev['done']
         assert any('paula@northwind.example' in a for a in ev['accomplished']), ev['accomplished']
 
+    def test_the_brief_says_what_went_as_what_it_was_never_a_view_file_and_never_an_unanswered_close_as_handled(self):
+        """Walk 5, 2026-11-22: "Sent availability slot to Gail" over the week's total, the show tool's view-...json as work done, and a task
+        closed with its question to him unanswered told as "confirmed"."""
+        from taskuary import general, session_artifacts
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Weekly hours', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        mail = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'Deliver': json.dumps({'to': ['gail@northwind.example'], 'subject': 'Weekly Timesheet Total'})})
+        s.decide_review(mail, 'approved', 'Hi Gail', 'owner')
+        session_artifacts.view(s, tid, '{"title": "Hours"}')
+        moved = s.create_task({'Title': 'Office move date', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        s.add_comment(moved, 'assistant', general.SUMMARY_TYPE, json.dumps({'did': 'Asked.'}))
+        from taskuary import workerstate as ws
+        ws.record(s, moved, 'sid1', 'input_needed', text='Is December 12 still the date?', source='api')
+        s.update_task(moved, {'Status': 'done'}, 'owner'); s._exec('UPDATE task SET ClosedAt=? WHERE TaskId=?', (_ago(0), moved))
+        ev = evening.collect(s, 24)
+        sent = [a for a in ev['accomplished'] if 'state=sent' in a]
+        assert sent and 'Weekly Timesheet Total' in sent[0] and 'slot' not in sent[0], sent
+        assert not [a for a in ev['accomplished'] if 'view-' in a], ev['accomplished']
+        assert any('Office move date' in d and 'unanswered' in d for d in ev['done']), ev['done']
+
 
 class FirstScheduleTests(unittest.TestCase):
     def test_a_first_run_ritual_waits_until_its_daily_time(self):

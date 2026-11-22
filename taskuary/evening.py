@@ -277,18 +277,26 @@ def collect(store, hours: int = HOURS) -> dict:
                        "ORDER BY ClosedAt DESC LIMIT 80", (since, DOCK_TAG))
     # ...and WHAT HIS AGENTS SENT AND MADE today, on any task (round 3: the chart, the sheet, two PDFs and Paula's email were missing - an agent's
     # work on a chat task leaves no run row): the cards he sent and the files its turns made
-    for r in store._rows("SELECT ReviewId, TaskId, Kind, Deliver FROM review WHERE Status IN ('approved','edited') AND DecidedAt>=? AND Kind NOT IN ('draft','draft_reply') "
+    # ...each named by what it was - an email with its subject, a post, an act - never the card's own kind ("slot": walk 5, 2026-11-22, "Sent
+    # availability slot to Gail" over the week's total), and never a view the agent drew in its chat as a file he made (session_artifacts.VIEW)
+    for r in store._rows("SELECT ReviewId, TaskId, Kind, Deliver, Reason FROM review WHERE Status IN ('approved','edited') AND DecidedAt>=? AND Kind NOT IN ('draft','draft_reply') "
                          "AND IFNULL(DeliveryState,'') NOT IN ('failed','unknown') ORDER BY DecidedAt DESC LIMIT 40", (since,)):
-        try: to = ', '.join((json.loads(r.get('Deliver') or '{}') or {}).get('to') or [])
-        except (TypeError, ValueError, AttributeError): to = ''
-        accomplished.append(f"state=sent | src=📤 | task={task_ref(r['TaskId']) if r.get('TaskId') else '-'} | what={r.get('Kind')}{f' to {_one_line(to, 120)}' if to else ''}")
-    for a in store._rows("SELECT TaskId, Name FROM task_artifact WHERE CreatedAt>=? ORDER BY ArtifactId DESC LIMIT 40", (since,)):
+        try: d = json.loads(r.get('Deliver') or '{}') or {}
+        except (TypeError, ValueError): d = {}
+        to = ', '.join(d.get('to') or []) if isinstance(d, dict) else ''
+        what = (f"email \"{_one_line(d.get('subject'), 100)}\"" if isinstance(d, dict) and d.get('subject') else 'email') if r.get('Kind') in ('slot', 'reply')             else _one_line(r.get('Reason') or 'an act he approved', 120)
+        accomplished.append(f"state=sent | src=📤 | task={task_ref(r['TaskId']) if r.get('TaskId') else '-'} | what={what}{f' to {_one_line(to, 120)}' if to else ''}")
+    from .session_artifacts import VIEW
+    for a in store._rows("SELECT TaskId, Name FROM task_artifact WHERE CreatedAt>=? AND IFNULL(Kind,'')<>? ORDER BY ArtifactId DESC LIMIT 40", (since, VIEW)):
         accomplished.append(f"state=made | src=📄 | task={task_ref(a['TaskId']) if a.get('TaskId') else '-'} | file={_one_line(a.get('Name'), 120)}")
     open_ = store._rows("SELECT TaskId, Title, Priority, Status FROM task WHERE Status IN ('open','in_progress','waiting') AND IFNULL(SourceRef,'')<>? "
                         "ORDER BY CASE Priority WHEN 'urgent' THEN 0 WHEN 'important' THEN 1 WHEN 'high' THEN 1 ELSE 2 END, COALESCE(UpdatedAt, CreatedAt) DESC "
                         "LIMIT 40", (DOCK_TAG,))
     runs = store._rows("SELECT r.AgentName, r.Status, r.LastError, r.TaskId, t.Title FROM run r LEFT JOIN task t ON t.TaskId=r.TaskId "
                        "WHERE COALESCE(r.FinishedAt, r.UpdatedAt, r.StartedAt)>=? ORDER BY r.RunId DESC LIMIT 80", (since,))
+    # ...and a task he closed with its agent's question to him unanswered says so: read as handled, it was told as "confirmed" (walk 5)
+    from .taskstate import open_question
+    def closed(t): return 'closed, its question to him unanswered' if open_question(store, t['TaskId']) else 'closed'
     def task_line(t, state):
         return f"src=📌 | state={state} | task={task_ref(t['TaskId'])} | title={_one_line(t.get('Title'), 140)} | priority={level(t.get('Priority'))}"
     def run_line(r):
@@ -297,7 +305,7 @@ def collect(store, hours: int = HOURS) -> dict:
         if r.get('LastError'): bits.append(f"error={_one_line(r['LastError'], 160)}")
         return ' | '.join(bits)
     return {'hours': hours, 'since': since, 'accomplished': accomplished, 'priorities': priorities,
-            'done': [task_line(t, 'closed') for t in done], 'open': [task_line(t, t.get('Status') or 'open') for t in open_],
+            'done': [task_line(t, closed(t)) for t in done], 'open': [task_line(t, t.get('Status') or 'open') for t in open_],
             'runs': [run_line(r) for r in runs]}
 
 

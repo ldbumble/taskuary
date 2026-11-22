@@ -3191,10 +3191,25 @@ class GeneralSession:
         from . import conversation
         lines, waits = [text], bool(waiting_lines(self.store, self.task_id))
         if (mine and not waits) or (not waits and mails and conversation.heard(self.store, self.task_id, 'mail', mails)): self._lock.release(); return ''
+        # ...ITS TRACE IS THIS TURN'S FROM THE MOMENT IT IS BUSY (the walks, 2026-11-17): the turn read at work over the last turn's trace -
+        # "Thinking..." with that turn's prompt in it - and stepped back to "opening" when its CLI's start said so (conversation.items)
+        # ...so the trace is reset BEFORE it reads busy (the walks, 2026-11-17): set busy first, the reads of the task row in between (keep,
+        # cold) let a poll pair busy with the last turn's trace - the previous turn drawn again under his new line for ~200 ms
+        # ...AND BUSY BEFORE IT TAKES WHAT WAITS (Windows CI, 2026-11-21): taken first, the lines were off the box while the session still read
+        # at rest - the turn before let go of their start (answered: nothing left waiting), and for that beat nothing was at work under them
+        from . import clipool; self.warm_ = clipool.is_live(self.keep())      # its CLI was already open at the start of this turn: the audit says so
+        was = self.trace, self.trace_revision, self.last
+        t0 = time.time(); self._turn_trace(t0)
+        self.words_at = _letters(self.store, self.task_id)      # ...what each card said as the turn began: the ones it writes are its own (_file)
+        self.busy, self.last = True, t0
         # ...ONE hand-over, written once (take_kept -> conversation.hear): his lines, what came in and was pressed since the last turn, and the
         # turn's own start - so they stand together in the order they came
-        took = [{**r, **line_said(r)} for r in take_kept(self.store, self.task_id, turn=True, sid=self.sid)]
-        if mine and not took: self._lock.release(); return ''          # ...taken back in that instant (a cancelled wait drops its line): nothing to say
+        try: took, err = [{**r, **line_said(r)} for r in take_kept(self.store, self.task_id, turn=True, sid=self.sid)], None
+        except Exception as e: took, err = None, e
+        if err or (mine and not took):          # ...taken back in that instant (a cancelled wait drops its line): nothing to say
+            self.busy, (self.trace, self.trace_revision, self.last) = False, was; self._lock.release()
+            if err: raise err
+            return ''
         if took: attachments = list(dict.fromkeys([*(() if mine else attachments or ()), *(p for r in took for p in r['files'])]))
         if mine: lines = [r['text'] for r in took]; text, kept = '\n\n'.join(lines), True
         if len(took) > 1 or (took and not mine):
@@ -3205,14 +3220,6 @@ class GeneralSession:
         if as_owner: self.woke = self.silent = False       # ...and a turn the owner's words began may be woken once again (wake)
         self.owned = as_owner and not brief
         own_tok = origin.OWNER_SPEAKS.set(self.owned)
-        # ...ITS TRACE IS THIS TURN'S FROM THE MOMENT IT IS BUSY (the walks, 2026-11-17): the turn read at work over the last turn's trace -
-        # "Thinking..." with that turn's prompt in it - and stepped back to "opening" when its CLI's start said so (conversation.items)
-        # ...so the trace is reset BEFORE it reads busy (the walks, 2026-11-17): set busy first, the reads of the task row in between (keep,
-        # cold) let a poll pair busy with the last turn's trace - the previous turn drawn again under his new line for ~200 ms
-        from . import clipool; self.warm_ = clipool.is_live(self.keep())      # its CLI was already open at the start of this turn: the audit says so
-        t0 = time.time(); self._turn_trace(t0)
-        self.words_at = _letters(self.store, self.task_id)      # ...what each card said as the turn began: the ones it writes are its own (_file)
-        self.busy, self.last = True, t0
         # ...ON DISK FROM THE HAND-OVER (the timeline stress round, 2026-11-18): his lines are heard from the take above, and written only after
         # the provider was picked and the cards before moved on, a restart in between left them heard with nothing under them and no cut line
         from . import sessionrecord
@@ -4326,7 +4333,9 @@ def _start_line(store, tid, t, text, files, actor, line_id, wid, kw):
             if not held_start(store, tid, e): store.add_comment(tid, 'router', 'agent', f"The agent did not start: {_said(e)}")
         # ...and a chat's turn that could not begin (no AI connected, a refused start) is over from the moment it failed: its failed line said
         # it, and the header read "agent working" over it (the Neon walk, 2026-11-19) - one state, from the turn as it ended
-        else: answered(tid, every=True)
+        # ...BUT A TURN HE STOPPED ENDS ONLY ITSELF (Windows CI, 2026-11-21): the lines his stop handed over (stop_turn) start the next turn, and
+        # wiped with the stopped one's, nothing was at work under them until that turn took the session - the `finally` counts what still waits
+        elif not isinstance(e, Stopped): answered(tid, every=True)
         raise
     finally:
         if handles(t): answered(tid)

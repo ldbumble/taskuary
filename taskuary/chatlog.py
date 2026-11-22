@@ -199,7 +199,10 @@ def reconcile(store, tid: int) -> None:
     from . import general
     # ...STARTING UNTIL ITS SESSION HAS IT (the walks, 2026-11-17): from his press the task is at work, but the turn reads "starting" until the
     # hand-over took and its session is busy with it - working from then on, `opening` (_now) until its prompt is out
-    if (t := _live(store, tid)) and t['State'] == 'starting' and getattr(general._live_of(int(tid)), 'busy', False): update(store, tid, t['Key'], state='working')
+    # ...and its hand-over written (a turn heard from the row's own time on): a session is busy from the moment it takes the floor, before it takes
+    # what waits (send_prompt), and a hand-over held up there reads starting still
+    if (t := _live(store, tid)) and t['State'] == 'starting' and getattr(general._live_of(int(tid)), 'busy', False) and \
+            store._one("SELECT 1 AS x FROM heard WHERE TaskId=? AND Kind='turn' AND At>=? LIMIT 1", (int(tid), t['At'])): update(store, tid, t['Key'], state='working')
     logged(store, tid)
 
 
@@ -227,12 +230,13 @@ def steps_of(store, tid: int, sid: str, steps: list) -> None:
         step(store, tid, sid, f'log:{i}', x, state=x.get('status'))
 
 
-def read(store, tid: int, level: str = None) -> dict:
+def read(store, tid: int, level: str = None, ending: bool = False) -> dict:
     """`level`: how much of each turn's work is shown (detailed) - the task's own, else its kind's setting.
     The task's chat in its one order: top-level rows by their place, each turn with its steps, and its cards and failures once it is
-    no longer at work (a card is a turn's last thing - the reader's one rule)."""
+    no longer at work (a card is a turn's last thing - the reader's one rule). `ending`: the turn's answer is filed and its session has not let
+    go (serve) - what came in under it waits by the box till it has: written at the foot then, the next read had it at work over that mail."""
     reconcile(store, tid)
-    came_in(store, tid)
+    if not ending: came_in(store, tid)
     advance(store, tid)
     with store.lock:
         rows = [dict(r) for r in store.cx.execute('SELECT * FROM chatlog WHERE TaskId=? ORDER BY Id', (int(tid),))]
@@ -1054,7 +1058,14 @@ def serve(store, tid: int, level: str = None) -> dict:
     at_work = general.working(store, tid) if not hold_ else bool(getattr(general._live_of(tid), 'busy', False))
     # ...A TURN WHOSE ANSWER IS FILED IS OVER (recorded 2026-11-12: its session read busy a beat after the answer was filed, and the dots stood
     # under that answer): with nothing heard since and no line of his waiting, nothing works - a hand-over on its way writes its turn as it goes
-    if at_work and (t := open_turn(store, tid)) and t['State'] not in LIVE and _waits_from(store, tid) is None: at_work = False      # (a line of his not yet heard keeps it)
+    # ...IN ONE VIEW OF THE HAND-OVER (Windows CI, 2026-11-21): the turn and what waits are read under the lock take_kept holds while it hears his
+    # lines and takes them off the box - read on either side of it, the finished turn above and no line waiting said nothing worked, a beat
+    # before the turn that took them stood under them
+    # ...AND THE TURN ENDING IS NOT YET A CHAT AT REST (`ending`): what came in while it worked stays by the box until its session lets go -
+    # written at the foot by this read (came_in), the next one (its session still busy, the turn no longer the newest) read it at work again
+    with store.lock: t, w = open_turn(store, tid), _waits_from(store, tid)
+    if at_work and t and t['State'] not in LIVE and w is None: at_work, ending = False, not general.HANDED.get(tid)     # (a line of his not yet heard keeps it)
+    else: ending = False                    # ...an input handed over (general.hand) begins the next turn: it stands in the chat from the first read
     if at_work and (h := _halted(store, tid)): at_work = any(not get(store, tid, w.get('line') or f"c:{w['id']}") for w in general.waiting_lines(store, tid)) or h == 'stopped_turn' and bool(getattr(general._live_of(tid), 'owes_stop', lambda: False)())
     at_work = at_work or workflows.at_work(tid)            # ...a routine running its steps is at work with no agent at all (flow.turn)
     # ..."working" is one fact (general.working): a turn the log holds at work while nothing works has either not begun yet - nothing of it is
@@ -1066,12 +1077,12 @@ def serve(store, tid: int, level: str = None) -> dict:
         with store.lock: n = store.cx.execute('SELECT COUNT(*) FROM chatlog WHERE Parent=?', (t['Id'],)).fetchone()[0]
         if n or json.loads(t['Body'] or '{}').get('text'): update(store, tid, t['Key'], state='done')
     left_note(store, tid, at_work)
-    got = read(store, tid, level)
+    with store.lock: got, w = read(store, tid, level, ending), _waits_from(store, tid)      # ...one view of the hand-over, as above
     # ...the same rule on what this read holds (its answer may be filed between the check above and the read): the newest thing a finished
     # turn with nothing heard under it and no line of his waiting - nothing works, no dots under a finished answer
     tail = next((x for x in reversed(got['items']) if x['kind'] in ('turn', 'line', 'arrival', 'press')), None)
-    if at_work and tail and tail['kind'] == 'turn' and tail.get('state') not in LIVE and _waits_from(store, tid) is None and not workflows.at_work(tid):
-        at_work = False
+    if at_work and tail and tail['kind'] == 'turn' and tail.get('state') not in LIVE and w is None and not workflows.at_work(tid):
+        at_work, ending = False, not general.HANDED.get(tid)
     out = got['items'] if at_work else [x for x in got['items'] if not (x['kind'] == 'turn' and x.get('state') in LIVE)]
     # ...A TASK A STRANGER'S WORDS HOLD DRAWS NO CARD TO PRESS until he trusts them (the judge's browser round, 2026-11-19: the reply drafted on a
     # stranger's mail stood as the email card, Send lit, where the hold's line and its Trust belong): the hold is the one move, beside the list
@@ -1081,7 +1092,7 @@ def serve(store, tid: int, level: str = None) -> dict:
         out = [x if x['kind'] != 'turn' else {**x, 'cards': [c for c in x.get('cards') or [] if not waits(c)]} for x in out if not waits(x)]
     closed(store, tid, out)
     if at_work and (lv := next((x for x in reversed(out) if x['kind'] == 'turn' and x.get('state') in LIVE), None)): lv.update(_now(tid, lv))
-    body = {'items': out, 'level': got['level'], **beside(store, tid, out, at_work, hold_)}
+    body = {'items': out, 'level': got['level'], **beside(store, tid, out, at_work, hold_, ending)}
     return {'rev': hashlib.sha1(json.dumps(body, default=str).encode()).hexdigest()[:16], **body}
 
 
@@ -1167,11 +1178,12 @@ def card_said(store, tid: int, rid: int) -> bool:
     return bool(t and turn_words({**t, 'steps': [_item(x) for x in rows if x['Kind'] == 'step']}))
 
 
-def beside(store, tid: int, out: list, at_work: bool, hold_) -> dict:
+def beside(store, tid: int, out: list, at_work: bool, hold_, ending: bool = False) -> dict:
     """What the page draws beside the chat's items, each from the fact that says it: what waits for the agent (`pending` - his lines not yet
     heard; a message, a press while a turn works; what an untrusted sender wrote), `now`/`later` (whether a waiting line goes in mid-turn),
     `asking` (in the turn that asked), `permissions`, `queue` (the line of cards), `hold`, `letters` (the turn whose letter waits), `idle`
-    (why nothing started), the pages it published, and the CLI that runs."""
+    (why nothing started), the pages it published, and the CLI that runs. `ending`: a turn whose answer is filed while its session lets go -
+    what came in under it still waits by the box (came_in writes it at the foot once nothing works)."""
     from . import cardqueue, codingchat, general, origin, outputs, permissions, taskstate
     from .conversation import LATER, START_BY_WRITING, came, ep, stamp, _mail
     from .general import WAITING_TYPE
@@ -1189,9 +1201,9 @@ def beside(store, tid: int, out: list, at_work: bool, hold_) -> dict:
         pend.append({'id': k, 'kind': 'line', 'at': c['CreatedAt'], **general.his_line(c), '_k': came(c)})
     for x in _mail(store, tid):
         k = f"m:{x['MessageId']}"
-        if (x.get('Channel') or '') == OWN or k in drawn or ('mail', str(x['MessageId'])) in led or not (at_work or x['MessageId'] in held or waits): continue
+        if (x.get('Channel') or '') == OWN or k in drawn or ('mail', str(x['MessageId'])) in led or not (at_work or ending or x['MessageId'] in held or waits): continue
         pend.append({'id': k, 'kind': 'arrival', **general.mail_row(store, x), 'joined': stamp(x['T']), '_k': came(x)})
-    if at_work:
+    if at_work or ending:
         for m in general.press_lines(store, tid):
             aid = m['id'].split('-')[1]
             if f'p:{aid}' in drawn or not m.get('press') or ('press', aid) in led: continue

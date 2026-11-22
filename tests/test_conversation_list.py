@@ -834,6 +834,70 @@ class TheList(unittest.TestCase):
         self.say('Add one more.', 'l-two'); self.rest()
         self.assertEqual(self.s.get_task(tid)['Title'], 'Boston caterers for March', 'named once: a name it has stands')
 
+    def test_the_turn_that_takes_what_waited_is_at_work_from_its_take(self):
+        """Windows CI, 2026-11-21 (flaky for days, worse on a loaded runner): his second line waited behind a turn; the next turn took it off
+        the box, and the turn before let go of its start (answered: nothing waits) before the new one read busy - for that beat nothing was at
+        work under his line, and a read said the chat was at rest. The interleaving forced: the take held, the turn before let go inside it."""
+        self.brain.delay = 30
+        self.say('Suggest two.', 'l-one', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.say('Near a station.', 'l-two', wait=False)
+        took, go, real_take, real_answered = threading.Event(), threading.Event(), general.take_kept, general.answered
+        def take(*a, **k):
+            got = real_take(*a, **k)
+            if k.get('turn') and got: took.set(); go.wait(10)
+            return got
+        def answered(*a, **k): took.wait(10); return real_answered(*a, **k)
+        # ...OWED 0: the line-just-handed fallback (general.owed) hid the gap only when the answer and the take fell in different seconds
+        with mock.patch.object(general, 'take_kept', take), mock.patch.object(general, 'answered', answered), mock.patch.object(general, 'OWED', 0):
+            self.brain.delay = 0
+            self.assertTrue(took.wait(10))
+            self.assertTrue(until(lambda: self.tid not in general.OPENING))         # ...the turn before let go of the start
+            got = self.list()
+            self.assertTrue(general.working(self.s, self.tid) and got['working'], self.kinds(got))
+            go.set(); self.rest()
+        self.assertEqual(self.kinds()[-2:], [('line', ''), ('turn', 'done')])
+
+    def test_a_message_that_came_in_mid_turn_waits_by_the_box_until_the_turn_has_let_go(self):
+        """Windows CI, 2026-11-21: a mail came in while a turn worked; the turn filed its answer, and a read in the beat before its session let
+        go said nothing worked and wrote the mail at the foot - the next read, the session still busy and the turn no longer the newest
+        thing, had the chat at work again over that mail. Both reads in that beat agree: at rest, the mail by the box."""
+        filed, go, real = threading.Event(), threading.Event(), general.GeneralSession._file
+        def file(s, *a, **k): r = real(s, *a, **k); filed.set(); go.wait(10); return r
+        self.brain.delay = 30
+        with mock.patch.object(general.GeneralSession, '_file', file):
+            self.say('Suggest two.', 'l-one', wait=False)
+            self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+            time.sleep(1.1); mid = self.mail('One more thing: near a station.')
+            self.assertIn(f'm:{mid}', [x['id'] for x in self.list()['pending']])
+            self.brain.delay = 0
+            self.assertTrue(filed.wait(10))
+            reads = [self.list() for _ in range(2)]                                        # ...its answer filed, its session not let go
+            self.assertEqual([(g['working'], [p['id'] for p in g['pending']], g['items'][-1]['id']) for g in reads], [(False, [f'm:{mid}'], 't:l-one:0')] * 2)
+            go.set()
+        self.rest(); got = self.list()
+        self.assertEqual((got['pending'], got['items'][-1]['id']), ([], f'm:{mid}'))
+
+    def test_a_turn_he_stopped_lets_go_of_only_its_own_start(self):
+        """Windows CI, 2026-11-21: he stopped a turn with a line waiting; the stopped turn's start let go of every line's mark, and until the
+        next turn took the session nothing was at work under the line his stop handed over. The next turn held off the floor till the
+        stopped one has ended."""
+        self.say('Suggest two.', 'l-one'); self.rest()
+        self.brain.delay = 30
+        self.say('Compare both in detail.', 'l-two', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        stopped = [t for t in threading.enumerate() if t.name == f'line-{self.tid}']
+        hold, real = threading.Event(), general.GeneralSession._take
+        def take(s, *a, **k): hold.wait(10); return real(s, *a, **k)
+        with mock.patch.object(general.GeneralSession, '_take', take):
+            self.say('Go on, compare them now.', 'l-three', wait=False)
+            self.assertTrue(general.stop_turn(self.s, self.tid)); self.brain.delay = 0
+            for t in stopped: t.join(10)
+            got = self.list()
+            self.assertTrue(general.working(self.s, self.tid) and got['working'], self.kinds(got))
+            hold.set(); self.rest()
+        self.assertEqual(self.kinds()[-2:], [('line', ''), ('turn', 'done')])
+
     def test_a_line_that_cannot_reach_the_turn_at_work_says_so(self):
         """Design round 3, 2026-11-18: his line sat 13 minutes behind a long turn and nothing said why. On a road that takes no words mid-turn (a
         model asked the plain way, no loop of its own to hear him in) his waiting line says so, once; on a road that does, nothing is said."""

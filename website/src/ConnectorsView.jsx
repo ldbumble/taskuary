@@ -2946,13 +2946,6 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
             <TestLine test={saveSaid} mt={0} />
           </>
         )}
-        {/* WHAT ITS AGENT RUNS ON (harness.line): an API card's agent works through Codex, or OpenCode if he picks it - saved as picked */}
-        {conn.Harness && (
-          <TextField select size="small" label="Its agent runs on" value={cfg.harness || conn.Harness.harness} data-tq-harness=""
-            onChange={(e) => setCfg({ ...cfg, harness: e.target.value })} InputProps={{ endAdornment: boxes.tick("harness") }}
-            sx={{ bgcolor: "var(--tq-panel, #fff)", maxWidth: 260 }} helperText={conn.Harness.line}>
-            {conn.Harness.choices.map((c) => <MenuItem key={c.value} value={c.value} sx={{ fontSize: 13 }}>{c.label}</MenuItem>)}</TextField>
-        )}
         {/* HOW FAR BACK ITS FIRST SYNC GOES, until that sync has run (`ReadsBack`, channels.first_read_hours) - a reader asked for what is
             pending, not by date (Telegram, WhatsApp, Apple Messages), has none. Saved as it is picked, like every box here */}
         {conn.ReadsBack > 0 && !isAI && (
@@ -3160,6 +3153,17 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
             </Step>
           ))}
         </Stepper>
+      )}
+      {/* WHAT ITS AGENT RUNS ON (harness.line): every API brain's agent works through Codex or OpenCode - picked here, saved as picked. ALWAYS
+          IN SIGHT (the owner, 2026-11-22: "I still don't see on HIPAA AI the harness section"): it stood inside Credentials, and a card whose key
+          was in opened on a later step, so the choice was never drawn */}
+      {tab === "Setup" && conn.Harness && (
+        <Box data-tq-harness-section="" sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${BORDER}`, maxWidth: 460 }}>
+          <TextField select size="small" label="Its agent runs on" value={cfg.harness || conn.Harness.harness} data-tq-harness=""
+            onChange={(e) => setCfg({ ...cfg, harness: e.target.value })} InputProps={{ endAdornment: boxes.tick("harness") }}
+            sx={{ bgcolor: "var(--tq-panel, #fff)", minWidth: 260 }} helperText={conn.Harness.line}>
+            {conn.Harness.choices.map((c) => <MenuItem key={c.value} value={c.value} sx={{ fontSize: 13 }}>{c.label}</MenuItem>)}</TextField>
+        </Box>
       )}
       {tab === "Guide" && <Steps steps={m.howto || []} />}
       {/* ...nor a sign-in card (Outlook, Teams, Gmail): under its one-button sign-in, a greyed Get AI to set it up and its Connect an AI

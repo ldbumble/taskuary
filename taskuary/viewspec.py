@@ -163,6 +163,10 @@ def check(spec) -> dict:
     els, root = spec.get('elements'), spec.get('root')
     if not isinstance(els, dict) or not els: raise ValueError('elements must be an object of id -> {type, props, children?}')
     if len(els) > CAPS['elements']: raise ValueError(f'{len(els)} elements - at most {CAPS["elements"]}')
+    # ...A VIEW WITH NO ROOT STANDS ON ITS ONE TOP (walk 2, 2026-11-21: Claude left `root` out and was refused twice for one chart): the one
+    # element no other names as a child is the root - several tops, or none, still ask for it
+    if root in (None, '') and len(tops := [k for k in els if not any(k in (e or {}).get('children', []) for e in els.values() if isinstance(e, dict))]) == 1:
+        root = tops[0]
     if root not in els: raise ValueError(f'root {root!r} is not one of the elements')
     out, path = {}, []
     def walk(eid):

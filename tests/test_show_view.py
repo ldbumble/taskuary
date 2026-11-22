@@ -52,6 +52,12 @@ class TheCheck(unittest.TestCase):
         bad(one('text', {'text': 'x'}, children=['b']), "names 'b', which is not an element")
         bad({'root': 'z', 'elements': {'a': {'type': 'text', 'props': {'text': 'x'}}}}, "root 'z' is not one of the elements")
 
+    def test_a_view_with_no_root_stands_on_its_one_top(self):
+        "Walk 2, 2026-11-21: Claude left `root` out of one chart and was refused twice; with one top element there is nothing to ask."
+        v = viewspec.check({'elements': {'c': {'type': 'chart', 'props': {'kind': 'bar', 'points': [{'label': 'Q1', 'value': 14}]}}}})
+        self.assertEqual(v['root'], 'c')
+        bad({'elements': {'a': {'type': 'text', 'props': {'text': 'x'}}, 'b': {'type': 'text', 'props': {'text': 'y'}}}}, 'root None is not one')
+
     def test_the_caps_hold(self):
         c = viewspec.CAPS
         self.assertRaisesRegex(ValueError, 'at most 50', viewspec.check, one('list', {'items': ['x'] * (c['items'] + 1)}))

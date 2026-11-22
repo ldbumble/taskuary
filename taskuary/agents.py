@@ -1685,8 +1685,9 @@ def said_afresh(store, task_id) -> None:
 _ACP_SPARE, _ACP_SPARE_LOCK = {}, threading.Lock()
 
 
-def _spare_key(cmd, env: dict, timeout) -> str:
-    return hashlib.sha1(json.dumps([list(cmd), sorted(env.items()), timeout]).encode('utf-8')).hexdigest()[:16]
+def _spare_key(cmd, env: dict, timeout=None) -> str:
+    # ...by what the process IS - its command and its environment - never how long its caller will wait on it, which is set as it is taken
+    return hashlib.sha1(json.dumps([list(cmd), sorted(env.items())]).encode('utf-8')).hexdigest()[:16]
 
 
 def _acp_ready(cmd, env: dict, timeout) -> None:
@@ -1706,6 +1707,7 @@ def _acp_spare(cmd, env: dict, timeout):
     "The connector started ahead for this launch, initialised and alive - or None."
     with _ACP_SPARE_LOCK: c = _ACP_SPARE.pop(_spare_key(cmd, env, timeout), None)
     if c is not None and not c._alive: c.close(); c = None
+    if c is not None and timeout: c.timeout = timeout
     return c
 
 
@@ -1729,6 +1731,12 @@ def prime_adapters(wait: float = PRIME_AFTER) -> list:
                 if acpadapter.kept(ad) or (pathcache.which(ad['bin']) and acpadapter.runs_pinned(ad, pathcache.which(ad['bin']))): break
                 time.sleep(5)
             l = acp_launch({'cmd': name, 'args': clis_mod.preset_args(name) or []})
+            # ...and where its road keeps a connector started ahead (claude's: _acp_open `spare`), the first one is that spare, with the very
+            # environment a task's start asks for (spawn_env, the adapter's own) - timed 2026-11-22: the first Claude task's connect took 7.6 s
+            # beside a prime that had just warmed a different process
+            if name == 'claude':
+                _acp_ready(l['cmd'], {**spawn_env({}), **l['env']}, 120); done.append(name)
+                logger.info(f'acp: {name} connector started ahead - the first task takes it ready'); continue
             t0 = time.time(); c = acp_mod.ACPClient(l['cmd'][0], l['cmd'][1:], cwd=str(config.home()), env={**os.environ, **l['env']}, timeout=120)
             try: c.connect(); done.append(name); logger.info(f'acp: {name} adapter primed in {time.time() - t0:.1f}s - the first task start finds it warm')
             finally: c.close()

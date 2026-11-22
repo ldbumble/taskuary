@@ -251,7 +251,12 @@ class ACPClient:
         self.last_turn = r              # ...the whole PromptResponse: its `usage` and _meta are what the turn used (aiusage.acp)
         if own and not ''.join(x for x in said if x).strip() and r.get('stopReason') != 'cancelled': raise ACPAgentError(''.join(own).strip())
         last = ''.join(x for x in said[cut[0]:] if x).strip()
-        return r.get('stopReason'), last or ''.join(x for x in said if x).strip()
+        if not last: return r.get('stopReason'), ''.join(x for x in said if x).strip()
+        # ...and what it wrote FOR THE APP before its last tool call goes with the answer (selfclose.carried): a question asked, then one more
+        # call (a tick, a card), was never recorded, and the turn read "agent done" over it (the agent audit, 2026-11-22)
+        from .selfclose import carried
+        more = carried(''.join(x for x in said[:cut[0]] if x), last)
+        return r.get('stopReason'), f'{last}\n\n{more}' if more else last
 
     def cancel(self):
         if not (self._alive and self.session_id): return

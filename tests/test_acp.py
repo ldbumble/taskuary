@@ -259,6 +259,16 @@ class TheAdaptersOwnLinesTests(unittest.TestCase):
                         _chunk('on another drive?', 'item_2')])
         self.assertEqual(c.prompt('q'), ('end_turn', 'Not found. Is it on another drive?'))
 
+    def test_a_question_asked_before_one_more_tool_call_is_part_of_the_answer(self):
+        """The agent audit, 2026-11-22: the agent asked, ticked a to-do, and ended - the answer was its last message alone, the question never
+        recorded, and the turn read "agent done" over it. What it wrote for the app before its last call goes with the answer."""
+        from taskuary import selfclose
+        c = _stub_turn([_chunk('Which account should it bill - Payworth or Spendly?\n[[TASKUARY-ASK]]', 'item_1'),
+                        {'sessionUpdate': 'tool_call', 'toolCallId': 'c1'}, _chunk('Ticked the first to-do.', 'item_2')])
+        stop, said = c.prompt('q')
+        self.assertTrue(said.startswith('Ticked the first to-do.'))
+        self.assertEqual(selfclose.asked_inline(said)[1], [('Which account should it bill - Payworth or Spendly?', [])])
+
     def test_a_turn_that_only_failed_raises_and_reads_as_one_plain_line(self):
         from taskuary import say
         c = _stub_turn([_chunk(RAW_400)])

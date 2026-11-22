@@ -744,6 +744,27 @@ def ask_markers(text: str) -> tuple:
     return t[:cuts[0].start()].rstrip(), asks
 
 
+def carried(earlier: str, last: str) -> str:
+    """What the turn wrote FOR THE APP before its last message, which that message does not carry: a question (its paragraph and its marker),
+    a reply or draft block, a tick, attach, show, withdraw, done, sign-in or hand-over line - and its summary where the last message has none.
+    The answer is the last message (acp.prompt); read off it alone, a question asked before one more tool call was never recorded, and the
+    turn read "agent done" over it (the agent audit, 2026-11-22). One reader of markers (general._file) then reads them all."""
+    e, out = str(earlier or ''), []
+    held = lambda x: x.strip() and x.strip() not in str(last or '')
+    for rx in (_REPLY_RE, _DRAFT_RE): out += [m.group(0) for m in rx.finditer(e) if held(m.group(0))]
+    if not _SUMMARY_RE.search(str(last or '')): out += [m.group(0) for m in _SUMMARY_RE.finditer(e)][-1:]
+    for rx in (_ATTACH_RE, _SHOW_RE, _TICK_RE, _WITHDRAW_RE, _DONE_LINE, _SIGNIN_RE, _TURN_RE):
+        out += [m.group(0).strip() for m in rx.finditer(e) if held(m.group(0))]
+    # ...a question: the marker's own line, and the paragraph above it where the marker stands bare (ASK_LINE: asked in its own words)
+    bare = without_summary(e)
+    for m in _ASK_LINE.finditer(bare):
+        asked = _ASK_ONE.sub('', m.group(0)).strip(' :\t')
+        above = '' if asked else (re.split(r'\n\s*\n', bare[:m.start()].strip()) or [''])[-1]
+        if held(q := '\n'.join(x for x in (above, m.group(0).strip()) if x)): out.append(q)
+    return '\n\n'.join(out)
+_ASK_LINE = re.compile(r'[^\n]*\[\[\s*TASKUARY[-_ ]?ASK\s*\]\][^\n]*', re.I)
+
+
 def asked_inline(text: str) -> tuple:
     """(the answer with its questions as plain lines, [(question, choices)]). THE QUESTION STAYS IN THE ANSWER: the marker line IS the question,
     and cutting the marker cut the question with it - the chat showed "the laptop spend needs your yes first" and never what to say yes to (walk

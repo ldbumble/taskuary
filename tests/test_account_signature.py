@@ -101,3 +101,19 @@ def test_learn_signature_still_reads_the_same():
     with mock.patch('taskuary.histgen.sent_mail', return_value=(mails, [], 1, 'IMAP')):
         assert responder.learn_signature(MemoryStore()) == SIG
         assert responder.signature_tail(MemoryStore()) == (SIG.splitlines(), 3, 3)
+
+
+def test_only_a_sign_off_block_becomes_the_signature_and_an_agents_is_the_agents():
+    """Round 4, 2026-11-22: "Training spend requires sign-off from Marcus Reed (marcus@northwind.example). Email signature: Alex." - two facts
+    in one remember - became the signature under every email, recorded as the owner's, the Marcus fact kept nowhere. A sentence is refused
+    (the agent keeps it in its own section); a sign-off block is kept, as whoever set it."""
+    import pytest
+    from taskuary import memoryedit
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); s.set_setting('email_signature', 'Alex Doyle', 'owner')
+    with pytest.raises(ValueError, match='not kept as the signature'):
+        memoryedit.remember(s, 'Training spend requires sign-off from Marcus Reed (marcus@northwind.example). Email signature: Alex.', section='signature', actor='agent:assistant')
+    assert s.get_setting('email_signature') == 'Alex Doyle'
+    r = memoryedit.remember(s, 'Best,\nAlex', section='signature', actor='agent:assistant')
+    assert r['text'] == 'Best,\nAlex' and s.get_setting('email_signature') == 'Best,\nAlex'
+    assert s._one("SELECT Actor FROM audit WHERE Action='signature_kept' ORDER BY rowid DESC LIMIT 1")['Actor'] == 'agent:assistant'

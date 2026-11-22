@@ -100,12 +100,20 @@ def told(store) -> str:
             "for every email, the drafts waiting too.") if sig else ''
 
 
+SIG_LINES, SIG_WIDTH = 6, 70          # a sign-off block's shape: name, title, company, a phone, a line or two more
 def keep(store, sig: str, actor: str = 'owner') -> str:
     """HOW THE OWNER SIGNS, SAID TO ANY AGENT OR THE ASSISTANT, IS THE SAVED SIGNATURE (the walk, 2026-11-21: kept as a memory line, it never
     reached a card - the signer reads Settings' Email signature, not the memory): the block signature_for puts under every email, its lines
     as given ("Best,\nAlex"). The one it replaces is kept in the audit row."""
     block = '\n'.join(l.strip() for l in str(sig or '').replace('\\n', '\n').strip().strip('"\'').splitlines() if l.strip())
     if not block: raise ValueError('say the signature, as it goes under an email')
+    # ...AND ONLY A SIGN-OFF BLOCK IS ONE (round 4, 2026-11-22: "Training spend requires sign-off from Marcus Reed (...). Email signature: Alex."
+    # became the signature under every email, the fact kept nowhere): a few short lines, by their shape - a sentence goes to memory instead
+    lines = block.splitlines()
+    if len(lines) > SIG_LINES or any(len(l) > SIG_WIDTH for l in lines):
+        raise ValueError(f'not kept as the signature: a signature is the short block that goes under an email ("Best," then "Alex" on its own '
+                         f'line) - at most {SIG_LINES} lines of {SIG_WIDTH} characters. Keep just that block with section signature, and any '
+                         'other fact with remember in its own section')
     was = str(store.get_setting('email_signature') or '')
     # ...AND THE DRAFTS WAITING FOR HIS SEND CARRY IT TOO (the fix1 walk, 2026-11-21: told the old draft kept the old sign-off, the agent asked
     # him "tell me if you want it set up again"): each email still unsent that ends with the block it had is re-signed - plain code, the

@@ -193,7 +193,7 @@ def about_owner(store, about: str, text: str = '') -> bool:
     return bool(got) and got <= me
 
 
-def remember(store, text: str, about: str = '', section: str = '', replaces: str = '') -> dict:
+def remember(store, text: str, about: str = '', section: str = '', replaces: str = '', actor: str = 'owner') -> dict:
     """THE ONE ROAD THAT DECIDES WHERE A FACT THE OWNER SAID GOES - the Assistant's memory.remember and every agent's remember tool.
     `section` a slug (people, care, work, promises, bring), the model's reading of what the fact is; else Your people when it names
     someone else (`about`, or an address in it) and What you care about otherwise. A fact about the owner himself is never Your people
@@ -206,7 +206,7 @@ def remember(store, text: str, about: str = '', section: str = '', replaces: str
         # ...HOW HE SIGNS IS ONE SETTING (the walk, 2026-11-21: "I sign every email 'Best, Alex'" was kept as a memory line, and the signer
         # put "Alex Doyle" under every card - the line could never win). Kept as the block itself, newlines as written
         from .signatures import keep
-        sig = keep(store, str(text or ''), 'owner')
+        sig = keep(store, str(text or ''), actor)         # ...set by whoever set it: an agent's is the agent's, never his (round 4)
         return {'ok': True, 'text': sig, 'section': SIGNATURE, 'title': 'your email signature', 'doc': 'settings', 'closed': None}
     t = redact(' '.join(str(text or '').split()).lstrip('-* ').strip())
     if not t: raise ValueError('say the fact to remember')

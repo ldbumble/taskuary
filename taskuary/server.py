@@ -6206,7 +6206,7 @@ def agent_remember(body: AgentRememberBody, request: Request):
     if int((kept or {}).get('n') or 0) >= AGENT_KEEPS and not body.replaces.strip() and not memoryedit.said(store.get_doc('learned'), body.note):
         raise HTTPException(422, f"not kept: {AGENT_KEEPS} facts from this task are in the owner's memory since yesterday, and it holds only what "
                                  "changes how future work is handled. Carry on with the task; a fact that corrects one of them is kept with `replaces`.")
-    try: r = memoryedit.remember(store, body.note, body.about, body.section, replaces=body.replaces)
+    try: r = memoryedit.remember(store, body.note, body.about, body.section, replaces=body.replaces, actor=f'agent:{body.agent}')
     except LookupError:
         # ...a line to replace that the memory does not hold: the lines about them, to copy one from - or kept beside them, with no `replaces`
         near = [l['text'] for l in memoryedit.about(store, body.about)['lines']][:8] if body.about.strip() else []
@@ -6221,6 +6221,8 @@ def agent_remember(body: AgentRememberBody, request: Request):
     # ...and the other lines about the same person, for the one this makes untrue: two lines that disagree are read as two truths
     rest = [] if c or r.get('already') or not body.about.strip() else [l['text'] for l in memoryedit.about(store, body.about)['lines'] if l['text'] != r['text']][:6]
     if r.get('section') == memoryedit.SIGNATURE:
+        # ...and HE SEES IT CHANGED, where it happened (round 4, 2026-11-22: a memory sentence became his signature, said nowhere)
+        store.add_comment(body.task_id, 'taskuary', 'agent', f"Your email signature now reads: {r['text']!r} - Settings, Email signature, changes it.")
         return {'ok': True, **r, 'says': f"Kept as the owner's saved signature, exactly as it goes under every email: {r['text']!r}. Every email set up from now carries it, "
                                        "and the drafts waiting for his Send were re-signed with it. Carry on."}
     return {'ok': True, **r, 'says': (f"Already in the owner's memory: {r['text']}" if r.get('already') else f"Kept in the owner's memory, in use from now: {r['text']}")

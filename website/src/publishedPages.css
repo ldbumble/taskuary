@@ -22,6 +22,9 @@
 /* ...its own layout, never the chat's fixed one (.tq-aui-agent-body table): fixed columns at 100% with unwrapped cells drew each long value
    over the next column (the owner, 2026-11-05: "this csv preview is corrupted"). As wide as its columns, the box scrolls sideways */
 .tq-aui-agent-body .tq-published-table table, .tq-published-table table { width: auto; min-width: 100%; table-layout: auto; }
+/* ...and its cells wrap at words inside the chat too (round 3, 2026-11-22: the chat's own `overflow-wrap: anywhere` for its tables reached the
+   preview, every cell shrank to one letter a line and the last columns stood cut off) */
+.tq-aui-agent-body .tq-published-table th, .tq-aui-agent-body .tq-published-table td { overflow-wrap: break-word; word-break: normal; }
 .tq-published-table th { position: sticky; top: 0; background: var(--tq-panel, #faf8f4); color: var(--tq-secondary, #4d514b); font-weight: 600; }
 .tq-aui-agent-body .tq-published { margin: 8px 0 2px; }
 /* a file the agent made for the task (taskOutputs.js): a workbook's sheets as tabs over the table, plain text as itself */

@@ -113,3 +113,19 @@ def test_an_agents_failed_run_is_what_failed_and_offers_the_task_to_fix_it():
     assert 'new_task' in [v['verb'] for v in rulebook.offered(s, item)]
     ws.record(s, t, 'r2', 'working'); ws.record(s, t, 'r2', 'finished', text='done')
     assert rulebook.failure(s, item) is None, 'a run that finished since is no failure'
+
+
+class AnActThatFailsKeepsTheAnswerTests(unittest.TestCase):
+    def test_a_reply_step_that_raises_never_loses_the_answer(self):
+        """The agent audit, 2026-11-22: one act of the answer (a draft, a withdraw, the Hub) that raised threw the whole answer away and filed
+        the turn as failed - Try again ran the job again. The answer is filed; the act that failed is said on the task in its own line."""
+        import time as _t
+        s = MemoryStore(); tid = Factory(s).task(title='Answer Ray about the rota', kind='general', status='in_progress')
+        with mock.patch.object(general, '_selected', return_value=('api:test', 'Test', 'm')): sess = general.GeneralSession(s, tid)
+        try:
+            with mock.patch('taskuary.wrapup.agent_reply', side_effect=RuntimeError('database is locked')), mock.patch('taskuary.hooks.judge_ended'):
+                sess._file('I checked the rota - Friday is free.\n[[TASKUARY-REPLY]]Hi Ray - Friday works.[[/TASKUARY-REPLY]]', [], _t.time())
+            said = [c['Body'] for c in s.list_comments(tid)]
+            self.assertTrue(any('Friday is free' in b for b in said), said)
+            self.assertTrue(any(b.startswith('Saving the reply it wrote did not work') for b in said), said)
+        finally: terminal.SESSIONS.pop(sess.sid, None)

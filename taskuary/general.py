@@ -1784,6 +1784,18 @@ def _letters(store, tid: int) -> dict:
     return {r['ReviewId']: str(r.get('DraftText') or '') for r in store._rows("SELECT ReviewId, DraftText FROM review WHERE TaskId=? AND Status='pending'", (int(tid),))}
 
 
+def _act(store, tid: int, what: str, f, *a, default=None, **k):
+    """One act of a turn's answer (_file), run so that its failure never loses the answer: logged, said on the task in a line of its own -
+    "Saving the reply it wrote did not work: ..." - and `default` returned for the rest of the filing to go on with."""
+    try: return f(*a, **k)
+    except Exception as e:
+        logger.warning(f'task {tid}: {what} failed - {e}')
+        from .say import plain_failure
+        try: store.add_comment(tid, 'assistant', 'agent', f"{what[:1].upper()}{what[1:]} did not work: {plain_failure(e)}")
+        except Exception: pass
+        return default
+
+
 def _files_to_attach(store, tid: int, named: list, paths: list) -> list:
     """The (name, bytes) of each file the chat named to send (_own_file - the reply goes to someone outside); the task
     says why one was refused."""
@@ -3750,13 +3762,18 @@ class GeneralSession:
 """
         src = 'api'
         let_go_retry(self.store, self.task_id)     # ...the AI answered: no try is owed any more (queue_retry)
+        # ...AND THE ANSWER IS FILED WHATEVER ONE OF ITS ACTS DOES (the agent audit, 2026-11-22: a draft, withdraw or Hub step that raised threw the
+        # whole answer away and filed the turn as failed - Try again then ran the job again): each act runs under `act`, and one that fails is
+        # said on the task as its own line, where it happened
+        act = lambda what, f, *a, default=None, **k: _act(self.store, self.task_id, what, f, *a, default=default, **k)
         # ...A TURN THAT SAID NO WORD AT ALL is the turn that said nothing (SILENT), woken once and then asking - never "the model returned an
         # empty response" over a Continue (the audit, 2026-11-10 - the owner: "if you have nothing to reply just ask what should i reply?")
         if not reply and is_dock(self.store.get_task(self.task_id)): raise RuntimeError('the model returned an empty response')
         # An API-backed assistant has no shell, so Hub publishing rides as a private response
         # envelope. Consume it before the response enters history or reaches the browser.
         from . import handbook as hub
-        if hub.enabled(self.store) and reply: reply = hub.publish_assistant_entries(self.store, self.task_id, reply, 'assistant') or 'Saved to the Hub.'
+        if hub.enabled(self.store) and reply:
+            reply = act('saving to the Hub', hub.publish_assistant_entries, self.store, self.task_id, reply, 'assistant', default=reply) or 'Saved to the Hub.'
         # the assistant's own "and that's the job done" (selfclose.CHAT_LINE). The marker is a
         # signal to Taskuary, not prose for the owner, so it comes out of what gets filed and
         # what gets shown - the sentence after it becomes the closing comment.
@@ -3774,14 +3791,16 @@ class GeneralSession:
             hit = str(which or '').casefold().removeprefix('rv')
             if hit.isdigit() and int(hit) in mine:
                 logger.info(f'task {self.task_id}: rv{hit} was not withdrawn - this turn wrote it'); continue
-            got = verdicts.withdraw(self.store, self.task_id, wd or 'the newest message changed what is owed', 'assistant', which, keep=next(iter(mine), 0) if len(mine) == 1 else 0)
+            got = act('taking back a draft', verdicts.withdraw, self.store, self.task_id, wd or 'the newest message changed what is owed', 'assistant', which,
+                      keep=next(iter(mine), 0) if len(mine) == 1 else 0, default={'ok': False, 'why': 'it raised'})
             if not got.get('ok'): logger.info(f"task {self.task_id}: {which or 'the draft'} was not withdrawn - {got.get('why')}")
         reply, drafted = selfclose.reply_marker(reply)
         reply, showing = selfclose.show_markers(reply)
-        _show_files(self.store, self.task_id, showing, paths)
-        files = _files_to_attach(self.store, self.task_id, named, paths)
+        act('showing its files', _show_files, self.store, self.task_id, showing, paths)
+        files = act('attaching its files', _files_to_attach, self.store, self.task_id, named, paths, default=[])
         if drafted or files:
-            out = wrapup.agent_reply(self.store, self.task_id, drafted or '', 'assistant', files=files, sid=self.sid, **(who if drafted else {}))
+            out = act('saving the reply it wrote', wrapup.agent_reply, self.store, self.task_id, drafted or '', 'assistant', files=files, sid=self.sid,
+                      **(who if drafted else {}), default={'ok': False, 'why': 'it raised'})
             if not out.get('ok'): logger.info(f"assistant reply draft not saved on task {self.task_id}: {out.get('why')}")
             for w in out.get('not_attached') or []: self.store.add_comment(self.task_id, 'assistant', 'agent', f'Not attached to the reply - {w}')
         # ...and the letter is Close out's to show: the pane keeps the words around it (selfclose.without_draft) - a draft marked in this
@@ -3793,7 +3812,8 @@ class GeneralSession:
         if drafts:
             from . import slots
             for attrs, body in drafts:
-                out = slots.draft(self.store, self.task_id, body, attrs.get('to', ''), attrs.get('subject', ''), attrs.get('slot', ''), 'assistant')
+                out = act('saving an email it wrote', slots.draft, self.store, self.task_id, body, attrs.get('to', ''), attrs.get('subject', ''), attrs.get('slot', ''),
+                          'assistant', default={'ok': False, 'why': 'it raised'})
                 if not out.get('ok'): logger.info(f"assistant email draft not saved on task {self.task_id}: {out.get('why')}")
                 elif out.get('to_missing'): logger.info(f"task {self.task_id}: {out['to_missing']} - its next turn hears it (latest_block)")
         reply, ticks = selfclose.tick_markers(reply)          # the to-dos it finished, on the road `taskuary --tick` takes
@@ -3804,11 +3824,11 @@ class GeneralSession:
                                                                        (self.task_id,)))]
         reply, summ = selfclose.summary_marker(reply, [x for x in letters if x])
         if summ: reply = reply or summ['did']
-        if summ and summ.get('name'): take_name(self.store, self.task_id, summ['name'])
+        if summ and summ.get('name'): act('naming the task', take_name, self.store, self.task_id, summ['name'])
         if ticks:
             from .store import agent_tick
             for i in ticks:
-                if (err := agent_tick(self.store, self.task_id, i)[1]): logger.info(f'assistant tick {i} on task {self.task_id} refused: {err[1]}')
+                if (err := (act('ticking a to-do', agent_tick, self.store, self.task_id, i, default=(None, None)) or (None, None))[1]): logger.info(f'assistant tick {i} on task {self.task_id} refused: {err[1]}')
             reply = reply or 'Ticked what is done.'
         # TASKUARY-PROPOSE: a write it may not make by itself (a read-level connection) waits on the task for the owner,
         # the way a coding session's proposals do (wrapup.finish)
@@ -3885,7 +3905,9 @@ class GeneralSession:
             try: path = sessionrecord.READERS['claude'][0](self.cli_sid) if self.cli_sid and self.pick.startswith('cli:') and _cli_of_pick(self.store, self.pick) == 'claude' else None
             except Exception as e: logger.debug(f'task {self.task_id}: its CLI log was not found - {e}'); path = None
             # ...and an owner's ask answered with nothing is said back first, from the task's own rows - no judge to ask (said_nothing)
-            if not woke_for_silence(self, reply, getattr(self, 'owned', False)): hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=self.wake, summ=summ, jobs=background.left(self.trace, path))
+            if not woke_for_silence(self, reply, getattr(self, 'owned', False)):
+                act('reading how the turn ended', hooks.judge_ended, self.store, self.task_id, self.sid, reply[:4000], then=self.wake, summ=summ,
+                    jobs=background.left(self.trace, path))
         rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
         # ...and the files this turn wrote, as it left them: a later turn rewrites them in place (outputs.keep_turn, the owner 2026-11-07)
         from . import outputs, sharedfiles

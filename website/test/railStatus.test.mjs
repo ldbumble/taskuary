@@ -193,3 +193,12 @@ test("off the rail the header draws the server's status as it is said, with the 
   assert.deepEqual(taskStatus({ rail: item, state: "approve", server: { key: "owed", word: "reply owed" } }), taskStatus({ rail: item }),
     "on the rail the row still leads");
 });
+
+// ROUND 3, 2026-11-22: after his Stop the server said "agent stopped" and the page drew "agent waiting on you" off the live session at rest -
+// at work is the live session's to say, at rest the server's one state
+test("an agent at rest reads the server's state, never the live session's own waiting", () => {
+  const stopped = taskStatus({ live: { alive: true, waiting: true }, state: "stopped", server: { key: "stopped", word: "agent stopped" } });
+  assert.equal(stopped.key, "stopped");
+  assert.equal(taskStatus({ live: { alive: true, waiting: false }, state: "stopped" }).key, "working");
+  assert.equal(taskStatus({ live: { alive: true, waiting: true } }).key, "blocked");      // ...the server said nothing: waiting, as before
+});

@@ -780,6 +780,13 @@ def live_session_state(tid, agent: str = 'the agent') -> tuple | None:
         if not (s and getattr(s, 'alive', False)): return None
         waiting = bool(s.waiting()) if callable(getattr(s, 'waiting', None)) else getattr(s, 'busy', True) is False
     except Exception: return None
+    # ...AND ONE HE STOPPED IS STOPPED (round 3, 2026-11-22: the rail said "waiting on you" over his Stop) - the session's own last word, as the
+    # task's state reads it (taskstate.last_word)
+    if waiting:
+        from . import taskstate
+        try: stopped = taskstate.last_word(s.store, int(tid), getattr(s, 'sid', None)) == 'stopped'
+        except Exception: stopped = False
+        if stopped: return (f'Stopped. You stopped {agent} - type to carry on.', lanes.word('stopped'))
     # ...a CHAT agent's parked turn is ready for you, whatever its next move is (lane_word, the owner 2026-11-05); a coding one waits on you
     if waiting and type(s).__name__ == 'GeneralSession':
         return (f'Ready for you. {_cap(agent)} finished its turn - the next move is yours.', lanes.word('chat_ready'))

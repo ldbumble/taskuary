@@ -97,9 +97,13 @@ const taskStatus_ = ({ live = null, rail = null, state = null, closed = false, c
   // ...unless the server read the parked session as the reply it drafted waiting (taskstate: `approve`) - one state, as the Board's - or a
   // chat agent the owner already answered as done for now (`agentdone`, taskstate.chat_moved_on)
   // ...any agent's, since 2026-11-10: a coding agent that pushed and said nothing is left read "agent waiting on you" (taskstate.done_for_now)
-  if (live?.alive && !(live.waiting && (state === "approve" || state === "agentdone"))) return railStatus({ lane: live.waiting ? "blocked" : "working" });
-  if (live?.alive && state === "agentdone") return chatDone(stateStatus(state));
+  // ...AND AN AGENT AT REST IS WHAT THE SERVER SAYS IT IS (round 3, 2026-11-22: after his Stop, a killed agent, an email card waiting - the
+  // server said "agent stopped", the page drew "waiting on you" off the live session): at work is the live session's to say, the freshest fact;
+  // at rest, the task's one state (taskstate.status) - "waiting on you" only where the server reads it so
+  if (live?.alive && !live.waiting) return railStatus({ lane: "working" });
   const own = fromServer(server) || stateStatus(state);
+  if (live?.alive && state === "agentdone") return chatDone(stateStatus(state));
+  if (live?.alive && state !== "approve") return own || railStatus({ lane: "blocked" });
   if (closed && own) return own;
   const st = railStatus(owed === false && owedNoDraft(rail) ? { ...rail, draft: true } : rail, cantSend, page) || own;
   if (owed && ["approve", UNSENDABLE].includes(st?.key) && rail?.kind !== "action") return said(OWED, KIND_META[OWED], false);

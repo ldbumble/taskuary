@@ -44,3 +44,15 @@ def test_a_turn_he_stopped_reads_stopped_never_waiting_on_him():
     ws.record(s, tid, 'sid1', 'working', text='', source='api'); ws.record(s, tid, 'sid1', 'stopped', text='stopped', source='api')
     session = {'alive': True, 'waiting': True, 'state': 'parked', 'sid': 'sid1', 'mode': 'assistant'}
     assert taskstate.state(s, s.get_task(tid), session) == 'stopped'
+
+
+def test_the_rail_says_stopped_over_a_session_he_stopped():
+    "Round 3, 2026-11-22: the rail's row said \"waiting on you\" over his Stop, off the live session at rest."
+    from types import SimpleNamespace
+    from taskuary import funnel
+    s = MemoryStore(); tid = task(s)
+    ws.record(s, tid, 'sid9', 'working', text='', source='api'); ws.record(s, tid, 'sid9', 'stopped', text='stopped', source='api')
+    sess = SimpleNamespace(alive=True, store=s, sid='sid9', waiting=lambda: True)
+    with mock.patch('taskuary.terminal.session_for', return_value=sess):
+        line, row = funnel.live_session_state(tid, 'the assistant')
+    assert line.startswith('Stopped.') and 'waiting' not in row

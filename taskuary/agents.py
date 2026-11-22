@@ -1641,7 +1641,9 @@ def acp_launch(profile: dict) -> dict:
     if family == 'claude':
         opts = claude_acp_options(args)
         if opts: meta = {'claudeCode': {'options': opts}}
-    elif family == 'codex' and (cfg := codex_acp_config(args)): env['CODEX_CONFIG'] = json.dumps(cfg)
+    elif family == 'codex':
+        from .harness import CLOSED_FEATURES        # ...his own Codex too starts with OpenAI's apps and plugins off, his -c keys after
+        env['CODEX_CONFIG'] = json.dumps({**{f'features.{k}': v for k, v in CLOSED_FEATURES.items()}, **codex_acp_config(args)})
     return {'cmd': cmd, 'env': env, 'mode': ad['mode'], 'meta': meta, 'adapter': ad['pkg'], 'unnamed_own': bool(ad.get('unnamed_own'))}
 
 

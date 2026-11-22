@@ -564,3 +564,16 @@ def test_claude_s_adapter_runs_on_no_task_s_environment_and_the_next_task_opens_
         for c in (locals().get('a'), locals().get('b')):
             if c: c.close()
         agents._close_spares()
+
+
+def test_the_owner_s_own_codex_starts_with_openai_s_apps_and_plugins_off_as_an_ai_card_s_does():
+    """The owner, 2026-11-22: a Codex CLI agent, run on his own ~/.codex, called ChatGPT's Wallet app - "yes turn off". One table closes them
+    for every Codex Taskuary starts; his own -c keys still ride after it."""
+    import json
+    from taskuary import harness
+    with mock.patch.object(agents, '_resolve_cmd', side_effect=lambda c: ['npx'] if c == 'npx' else [f'/opt/bin/{c}']), \
+         mock.patch.object(agents.pathcache, 'which', return_value=None):
+        l = agents.acp_launch({'cmd': 'codex', 'args': ['exec', '-c', 'model_reasoning_effort="high"']})
+    cfg = json.loads(l['env']['CODEX_CONFIG'])
+    assert cfg['features.apps'] is False and cfg['features.plugins'] is False and cfg['model_reasoning_effort'] == 'high'
+    assert {k.split('.', 1)[1] for k in cfg if k.startswith('features.')} == set(harness.CLOSED_FEATURES)

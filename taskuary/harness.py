@@ -161,6 +161,13 @@ def _toml(v) -> str:
     return json.dumps(str(v))             # a TOML basic string takes JSON's escapes
 
 
+# features that reach OpenAI's own services: ChatGPT apps/connectors, the plugin marketplace, hosted image generation, tool suggestions,
+# in-app updates, OpenAI's fast service tiers, skill dependencies fetched from the network. ONE TABLE for every Codex Taskuary starts - an AI
+# card's harness and the owner's own Codex CLI (the owner, 2026-11-22: a Codex CLI agent called ChatGPT's Wallet app - "yes turn off")
+CLOSED_FEATURES = {'apps': False, 'plugins': False, 'remote_plugin': False, 'image_generation': False, 'tool_suggest': False,
+                   'in_app_updates': False, 'fast_mode': False, 'ultrafast_mode': False, 'skill_mcp_dependency_install': False}
+
+
 def codex_config(cid: int, name: str, base: str, header: str, extra: dict, model: str, window: int = 0, catalog: str = '') -> str:
     """config.toml for a card's own CODEX_HOME: the card as Codex's model provider, and every road out of this computer but the card's own
     endpoint closed - nothing reaches OpenAI. Each switch is named where it is set."""
@@ -181,10 +188,7 @@ def codex_config(cid: int, name: str, base: str, header: str, extra: dict, model
         'analytics': {'enabled': False},              # analytics upload
         'feedback': {'enabled': False},               # /feedback upload of logs
         'otel': {'exporter': 'none', 'trace_exporter': 'none', 'metrics_exporter': 'none', 'log_user_prompt': False},   # telemetry / OTEL
-        # features that reach OpenAI's own services: ChatGPT apps/connectors, the plugin marketplace, hosted image generation, tool
-        # suggestions, in-app updates, OpenAI's fast service tiers, skill dependencies fetched from the network
-        'features': {'apps': False, 'plugins': False, 'remote_plugin': False, 'image_generation': False, 'tool_suggest': False,
-                     'in_app_updates': False, 'fast_mode': False, 'ultrafast_mode': False, 'skill_mcp_dependency_install': False},
+        'features': dict(CLOSED_FEATURES),
         'shell_environment_policy': {'exclude': [KEY_ENV]},     # the key never reaches a command the agent runs
         f'model_providers.{prov}': p,
     }

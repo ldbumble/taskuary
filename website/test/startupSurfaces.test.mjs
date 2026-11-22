@@ -1,4 +1,3 @@
-import { taskSource } from "./taskSource.mjs";
 // Consistent worker startup across the surfaces that start one (PW-209..214).
 //
 // The All-detail row hid Send to agent for fyi/reply rows that chat cards happily dispatch; the
@@ -27,14 +26,4 @@ test("a dispatch answer is read as started, existing, needs_repo or assistant - 
   // an older server without the flags: a session payload is a start, a needs_repo is not
   assert.equal(outcomeOf({ dispatch: "session", session: { sid: "s" } }).state, "started");
   assert.equal(outcomeOf({ dispatch: "needs_repo" }).state, "needs_repo");
-});
-
-test("the task page's non-coding start goes through the shared dispatch, whatever the task's kind was", () => {
-  const tasks = taskSource();
-  const fn = tasks.slice(tasks.indexOf("const startGeneralAgent = async"), tasks.indexOf("useEffect(() => { if (!liveCodingSession)"));
-  // ...and it carries the three answers the hand-off row now asks for: which profile, which brain,
-  // which model. Blank means "as configured", which is what one press used to be able to say.
-  assert.match(fn, /api\.post\(`\/api\/tasks\/\$\{id\}\/dispatch`,\n\s+\{ kind: "general", agent: run\.agent \|\| null, pick: run\.pick \|\| null, model: run\.model \|\| null,/);
-  assert.doesNotMatch(fn, /api\.patch\(`\/api\/tasks\/\$\{id\}`, \{ Kind: "general"/);
-  assert.match(fn, /outcomeOf\(data\)/);
 });

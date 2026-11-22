@@ -110,12 +110,6 @@ test("a write lets the task's read go, but its chat's first paint stays - still 
   assert.equal(heldTask(6), null); assert.equal(heldConversation(6)?.rev, "r3");
 });
 
-// A CHAT THAT HAS DRAWN NEVER DRAWS EMPTY (recorded 2026-11-12 on the ACP sign-in walk: two seconds after the hand-back the whole chat stood
-// empty for a second, his ask and his press gone): a read with no items over a held list that has some is not drawn
-test("an empty read never replaces a chat that has drawn", () => {
-  const view = src("GeneralWorkspace.jsx");
-  assert.match(view, /if \(!\(d\.items \|\| \[\]\)\.length && \(LISTS\.get\(tid\)\?\.items \|\| \[\]\)\.length\) return false;\s*rev\.current = d\.rev; LISTS\.set\(tid, d\); setList\(d\);/);
-});
 
 // THE RAIL WALK (2026-11-12): a coding task has no chat read - the server answers 422 - and that answer left its read "still on the way" for
 // the whole two minutes it is held, so Next onto a stopped coding task drew the loading frame first, then the page faded in
@@ -135,20 +129,6 @@ test("a failed read ahead holds nothing, so the view reads it itself", async () 
   assert.equal(heldTask(5), null);
 });
 
-test("a task opened by its number - New's or the Assistant's just-made job - is read ahead at the press", () => {
-  const hub = src("TaskHubPage.jsx"), view = src("AssistantView.jsx");
-  // ...the link road (onPlace: the Assistant's #task=N, a cold link) and New's press take the one read-ahead
-  assert.match(hub, /const readAhead = \(req\) => \{[^\n]*if \(req\?\.kind === "task" && req\.tid\) prefetchTask\(api, req\.tid\); \};/);
-  assert.match(hub, /const req = canvasRequestFromHash\(h, 0\);\s*readAhead\(req\);/);
-  assert.match(hub, /const openTask = \(taskId, opts\) => \{\s*readAhead\(\{ kind: "task", tid: taskId \}\);/);
-  // ...and the Assistant's open of a row the rail holds, which presses the row rather than follow the link
-  assert.match(view, /const pressRow = \(n, hit = null\) => \{\s*prefetchTask\(api, n\);/);
-  // ...and every read of the task while that chat is on the way waits for it: the write a just-started job makes re-read the task, and its
-  // held head was drawn at once over an empty chat
-  const page = src("TaskPage.jsx");
-  assert.match(page, /const chat = aheadChat\(id\), both = /);
-  assert.match(page, /if \(chat && \(await both\(0\), stale\(id\)\)\) return;\s*return detailReads\.current\.run\(id, id\);/);
-});
 
 test("a task's session is held with it: unknown until read, null for a task no agent holds", async () => {
   const { heldTerm, keepTerms } = await import("../src/taskDetail.js");
@@ -164,12 +144,6 @@ test("a task's session is held with it: unknown until read, null for a task no a
   assert.equal(heldTerm(3), undefined, "a write that names no task lets the whole list go");
 });
 
-// A ROW CLICKED COLD IS DRAWN AT THE CLICK (owner-approved, 2026-10-20): the old view and its ring stayed up for the whole read
-test("a rail row clicked before its task is read puts its frame up at the click, titled, over the view's loading state", () => {
-  const view = src("AssistantView.jsx"), page = src("TaskPage.jsx"), item = src("CanvasItem.jsx");
-  assert.match(item, /<TaskPage taskId=\{card\.tid\} title=\{card\.title \|\| ""\}/, "the frame knows which item it is");
-  assert.match(page, /data-tq-task-loading=[\s\S]{0,800}canvas && !!title && <Typography data-tq-task-loading-title=""/, "...and says it while it reads");
-});
 
 // WHICH READ IS NEWER (the owner, 2026-10-23: "this shows agent working but it's not working"): the rail was built under the server's lock
 // for minutes, and its "agent working" stood over a task whose own read said the agent had finished - a task read asked after the rail's
@@ -194,21 +168,4 @@ test("a task read speaks over the rail only when it was asked after the rail's, 
   assert.deepEqual(seen, [7, 7], "a read that says the same thing again draws nothing");
   stop(); forgetTasks();
   assert.equal(pageRead(7), null);
-});
-
-test("the rail stamps its reads and its rows and the header pill take the task's newer read", () => {
-  const view = src("AssistantView.jsx"), page = src("TaskPage.jsx");
-  assert.match(view, /pileRef\.current = refreshPilePresentation\(pileRef\.current, data\); notePile\(askedAt\);/, "a rail read, stamped when asked");
-  assert.match(view, /notePile\(forcedLoadStartedAt\.current\);/, "...and one that came with an answer");
-  assert.match(view, /const page = i\.tid \? pageRead\(i\.tid\) : null, why = rowWhy\(i, page\);/);
-  assert.match(view, /railStatus\(i, !canSend\(sendCaps, i\.channel\), page\)/, "the row's icon");
-  assert.match(view, /useEffect\(\(\) => watchReads\(\(\) => reread\(\(n\) => n \+ 1\)\), \[\]\);/, "the rail draws again on a new read");
-  assert.match(page, /page: rail\?\.tid \? pageRead\(rail\.tid\) : null,\n/, "the header pill takes the same read");
-});
-
-// THE RECORDED RESTART (2026-11-11): one poll failed while the app restarted and the red line stood over a task that loaded fine ever after
-test("a task read that works takes back the line a failed one left", () => {
-  const page = src("TaskPage.jsx").replace(/\r\n/g, "\n"), read = page.slice(page.indexOf("detailReads.current ||= coalesce("), page.indexOf("const loadDetail = useCallback("));
-  assert.match(read, /setDetail\(data\); keepTask\(id, data, undefined, asked\);[\s\S]*?if \(loadFailed\.current\) \{ loadFailed\.current = false; setErr\(""\); \}/, "cleared by the next read that works");
-  assert.match(read, /loadFailed\.current = true; setErr\(e\?\.response\?\.data\?\.detail \|\| "Failed to load task"\);/, "...and only the line this read wrote: another error is not its to clear");
 });

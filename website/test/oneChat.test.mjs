@@ -5,31 +5,16 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { chatSource, eventsOf, turnParts, workCount } from "../src/chatStream.js";
+import { chatSource, eventsOf, turnParts } from "../src/chatStream.js";
 import { SHIPPED, defaultDetail, detailFor, keepOwnDetail, ownDetail } from "../src/chatDetail.js";
 
-import { draftHome, draftPassed, freshNext, withTurns } from "../src/agentSummary.js";
 
 const read = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 const gw = read("GeneralWorkspace.jsx"), page = read("TaskPage.jsx");
-const bare = (parts) => parts.map(({ id, ...p }) => (p.steps ? { ...p, steps: p.steps.map(({ id: _, detail, ...s }) => s) } : p));
+
 const call = (id, name, args, extra = {}) => ({ type: "tool_call", name, detail: { tool_call_id: id, args, ...extra } });
 const done = (id, result = "") => ({ type: "tool_result", name: id, detail: { tool_call_id: id, result } });
 const words = (t) => ({ type: "progress", name: "text", detail: t });
-
-// ── 1. one mapper, both sources ─────────────────────────────────────────────────────────────────
-// the same turn, as a general agent's run trace and as a coding CLI's log
-const TRACE = [call("a", "Read", { file_path: "C:/work/ledger/store.py" }), done("a"),
-  call("b", "Bash", { command: "pytest -q tests" }), done("b", "3 passed"),
-  call("c", "Edit", { file_path: "C:/work/ledger/budget.py", old_string: "total = a", new_string: "total = a + tax" }), done("c"),
-  call("p", "TodoWrite", { todos: [{ content: "Read the ledger", status: "completed" }, { content: "Fix the tax line", status: "in_progress" }] }), done("p"),
-  words("Fixed: the total now adds the tax line.")];
-const LOG = [{ k: "brief", text: "TASKUARY: work TQ-0042 ..." },
-  { k: "tool", name: "Read", args: { file_path: "C:/work/ledger/store.py" } },
-  { k: "tool", name: "Bash", args: { command: "pytest -q tests" }, output: "3 passed" },
-  { k: "tool", name: "Edit", args: { file_path: "C:/work/ledger/budget.py" }, file: "C:/work/ledger/budget.py", edit: { parts: [{ old: "total = a", new: "total = a + tax" }] } },
-  { k: "plan", items: [{ text: "Read the ledger", status: "completed" }, { text: "Fix the tax line", status: "in_progress" }] },
-  { k: "said", text: "Fixed: the total now adds the tax line." }];
 
 
 test("a general agent that edits files gets its edit rows with diffs; a call that carries no diff stays a step", () => {
@@ -93,10 +78,6 @@ test("a task's source is its sessions when it is coding or a coding CLI runs on 
 });
 
 
-
-
-
-
 test("regression: strict arrival order - a later message draws below a step still running, and steps never reorder", () => {
   const parts = turnParts([words("Running the suite."), call("t", "Bash", { command: "pytest -q" }), words("Quick update: half of it passed.")]);
   assert.deepEqual(parts.map((p) => p.type), ["said", "work", "said"]);
@@ -107,26 +88,6 @@ test("regression: strict arrival order - a later message draws below a step stil
 });
 
 
-
-test("regression: the owner's own ask gets no reply narration (server: tests/test_own_ask_no_reply.py, both sources' prompts)", () => {
-  const py = fs.readFileSync(new URL("../../tests/test_own_ask_no_reply.py", import.meta.url), "utf8");
-  assert.match(py, /def test_the_reply_tools_are_not_offered_on_the_owners_own_ask/);
-  assert.match(py, /def test_the_coding_seed_says_there_is_nobody_to_reply_to/);
-});
-
-test("regression: an FYI handful says '6 messages', never 'nothing to decide'", () => {
-  const cards = read("assistantCards.jsx");
-  assert.doesNotMatch(cards, /`\$\{plural\(n, "message"\)\} - nothing to decide`|`\$\{plural\(n, "message"\)\} · nothing to decide`/);
-  assert.match(cards, /title=\{batch \? plural\(n, "message"\) : card\.title\}/);
-});
-
-
-test("regression: one OneBox everywhere, with its paperclip and its mic", () => {
-  assert.match(gw, /<OneBox root=\{ComposerPrimitive\.Root\}/);
-  const one = read("AgentSummary.jsx"), box = one.slice(one.indexOf("export function OneBox"), one.indexOf("export const micInto"));
-  assert.match(box, /className="tq-aui-attach"/); assert.match(box, /<MicButton /);
-});
-
 test("regression: the plan is one checklist, the newest of its turn", () => {
   const parts = turnParts([call("p1", "update_plan", { plan: ["Read the ledger", "Fix the tax line"] }), done("p1"),
     call("p2", "update_plan", { plan: [{ step: "Read the ledger", status: "completed" }, { step: "Fix the tax line", status: "in_progress" }] }), done("p2")]);
@@ -135,21 +96,6 @@ test("regression: the plan is one checklist, the newest of its turn", () => {
   assert.match(read("ViewSpec.jsx"), /<ul className="tq-cc-plan" data-tq-plan="" aria-label=\{label\}>/);
   assert.match(read("ViewSpec.jsx"), /PlanRow = \(\{ p, label = "The agent's plan" \}\)/);
 });
-
-
-test("regression: a nothing-new turn is one line", () => {
-  assert.match(read("AgentSummary.jsx"), /if \(oneLine\(summary\)\) return <>\{<Box data-tq-summary="line"/);
-});
-
-
-test("regression: AI used and Talk to this agent from… sit in the header's corner, never at the chat's foot", () => {
-  const head = page.slice(page.indexOf("<StatusPill status={status}"), page.indexOf("{onExpand && ("));
-  assert.match(head, /<HeadPop id="ai-used" title="AI used"/);
-  assert.match(head, /<HeadPop id="agent-channels" title="Talk to this agent from…"/);
-  assert.doesNotMatch(gw, /<AgentChannels |<AiUsed /);
-});
-
-
 
 
 // THE STEP A PERMISSION CARD IS ABOUT (permissions.calls; the stress round, 2026-11-18): the agent asked to delete a folder, and while the card

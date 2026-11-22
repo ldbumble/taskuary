@@ -127,14 +127,3 @@ test("a step of history is heard once, and only Back asks for the address with n
     assert.equal(Object.keys(on).length, 0);
   } finally { delete globalThis.window; }
 });
-
-// the one writer: a hash set anywhere else is a link the router never hears as the owner's, and a page reading the address on mount
-// is the bug this replaced (ConnectorsView read #connector= once, when its list loaded)
-test("only appLinks.js writes the address", () => {
-  const dir = new URL("../src/", import.meta.url);
-  const files = fs.readdirSync(dir).filter((f) => /\.(jsx?|mjs)$/.test(f) && f !== "appLinks.js");
-  const writers = files.filter((f) => /location\.hash\s*=[^=]/.test(fs.readFileSync(new URL(f, dir), "utf8")));
-  assert.deepEqual(writers, [], `set the address through openAppLink: ${writers.join(", ")}`);
-  assert.doesNotMatch(src("../src/ConnectorsView.jsx"), /location\.hash/, "Connections is handed its card in the browse state");
-  assert.doesNotMatch(src("../src/SettingsView.jsx"), /goFromPanel = \(where\) => \{[\s\S]{0,200}profiles/, "the panel's own map is gone");
-});

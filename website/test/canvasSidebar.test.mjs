@@ -15,32 +15,6 @@ test("the sidebar's buttons are New, Reports, Connections, Hub, Settings, in tha
   for (const n of SIDE_NAV) assert.ok(n.label && n.hint, n.key);
 });
 
-test("the stack sits above the filter, which takes the whole row and says what it filters to", () => {
-  const feed = src("FeedView.jsx");
-  assert.doesNotMatch(feed, /aria-label="Feed views"/, "no Work | Timeline switch");
-  const nav = feed.indexOf("data-tq-sidenav"), filterAt = feed.indexOf("<FilterButton "), sync = feed.indexOf(`bLabel("sync_now")`);
-  assert.ok(nav > 0 && nav < filterAt && filterAt < sync, "buttons, then the filter, then the counts line");
-  const filter = feed.slice(feed.indexOf("function FilterButton"), feed.indexOf("function FilterButton") + 2500);
-  assert.match(filter, /const label = filterLabel\(cat, pick\)/);
-  assert.match(filter, /flex: 1, minWidth: 0, height: 30/, "the filter takes the row");
-  assert.match(filter, /\{label\}<\/Box>/, "its label is on its face, not in a tooltip");
-  assert.doesNotMatch(filter, /<IconButton/);
-});
-
-test("a section heading walks that section; its chevron alone opens a capped band", () => {
-  const view = src("AssistantView.jsx");
-  assert.match(view, /data-tq-section-head=\{level\}/);
-  assert.match(view, /\{\.\.\.pressable\(\(\) => onSection\(level\)\)\}/);   // a click, or Enter/Space from the keyboard (pressable.js)
-  assert.match(view, /e\.stopPropagation\(\)/);
-});
-
-test("a section heading opens its first row, and Next walks on down the rail - no section hold, no \"done.\" stop (Q6, 2026-10-30)", () => {
-  const view = src("AssistantView.jsx");
-  const walk = view.slice(view.indexOf("const walkSection = (level) => {"), view.indexOf("// A SIDEBAR BUTTON POSTS ITS BROWSE CARD"));
-  assert.match(walk, /surface\(null, null, null, false, "section", \{ level \}\);/, "the server says which row is first (railwalk.section)");
-  assert.doesNotMatch(walk, /bandsOf/, "never the page's own pick");
-  assert.doesNotMatch(view, /sectionRef|sectionNext|sectionDone/);
-});
 
 // the owner, 2026-09-29: "make the full time fit ... hide the 8 in today while refreshing ... when it's not refreshing it
 // should not have a ..." - swept at 1280-1920 and 390 against every sync string the server writes

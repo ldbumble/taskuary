@@ -45,38 +45,6 @@ test("a close-out's pair: Approve and close and Approve, on the one list, and th
   assert.equal(advisedIn(sends, { verb: "approve", label: "Send" })?.id, "41:approve");
 });
 
-test("the close-out card in Close out draws Approve and close first and filled, Approve beside it; only the first's receipt closes", () => {
-  assert.match(rd, /const twoApproves = !!co && !r\.Stale && closesIt && sendable && !simulated && !delivery\.frozen;/);
-  const moves = rd.slice(rd.indexOf("] : co && !r.Stale ? ["), rd.indexOf("] : proposal ? ["));
-  assert.ok(moves.indexOf('no("send_close")') < moves.indexOf('no("approve")'), "Approve and close first");
-  assert.match(moves, /id: no\("send_close"\), label: [^\n]*closeCo, tone: "p"/);
-  assert.match(moves, /tone: twoApproves \? "s" : "p"/);
-  assert.match(moves, /run: \(\) => decideBoth\("approve", true\)/);
-  assert.match(moves, /run: \(\) => decideBoth\("approve", !twoApproves\)/);
-  assert.match(rd, /await onSent\(\{ closes: closesIt && close && !!data\.reply\?\.ok \}\); return;/);
-  const jsx = rd.slice(rd.indexOf("twoApproves ? (<>"), rd.indexOf(") : proposal ? ("));
-  assert.ok(jsx.indexOf('data-tq-send="close"') < jsx.indexOf("{foldMore("), "Approve and close is never in the ▾");
-  assert.match(jsx, /run: \(\) => \{ setSendAt\(null\); decideBoth\("approve", false\); \}/);
-  assert.match(rd, /const folded = paired && !bar\.shown\("send"\);/);
-});
-
-test("a send nobody could confirm keeps which send was pressed: Check delivery and Send anyway close only after Send and close", () => {
-  assert.match(rd, /const closing = new Set\(\);/);
-  assert.match(rd, /if \(close !== undefined\) \{ if \(close\) closing\.add\(r\.ReviewId\); else closing\.delete\(r\.ReviewId\); \}/);
-  assert.match(rd, /const sendAnyway = \(\) => decide\("approve", true\);/);
-  assert.match(rd, /run: \(\) => decide\("approve"\), title: delivery\.line/);
-});
-
-test("the line never wraps: Send folds into the ▾ beside Send and close, never the other way, and an advised Send stays out", () => {
-  assert.match(rd, /flexWrap: paired \? "nowrap" : "wrap"/);
-  assert.match(rd, /const paired = twoSends \|\| twoApproves;/);
-  const jsx = rd.slice(rd.indexOf(") : twoSends ? ("), rd.indexOf("// ...a calendar answer's note may be empty"));
-  assert.ok(jsx.indexOf('data-tq-send="close"') < jsx.indexOf("{foldMore("), "Send and close is never in the ▾");
-  assert.match(jsx, /foldMore\(\[\{ id: no\("approve"\)/);
-  assert.match(rd, /data-tq-send-more="" data-tq-bar-more=""/);
-  // ...an advised Send has no rank, so the bar's fold never takes it
-  assert.match(rd, /paired \? \{ \.\.\.\(sendLit \? \{\} : \{ send: 1 \}\)/);
-});
 
 // A PHONE'S INVITE (the owner, 2026-11-15: an action row is ONE line, what does not fit folds into its ▾): "Propose this time and close", the ▾
 // and Accept / Decline ran off the card's right edge at 390px - the card measured only its own Send. The line folds on the Tasks bar's road

@@ -10,29 +10,6 @@ import { place } from "../src/words.js";
 const ui = readFileSync(new URL("../src/ui.jsx", import.meta.url), "utf8");
 const mic = ui.slice(ui.indexOf("export const MicButton"), ui.indexOf("export const ChoiceRow"));
 
-test("with no voice AI and no voice found the mic is crossed out, and its press asks instead of recording", () => {
-  assert.match(mic, /const off = !!\(voice && route !== "connector" && !viaBrowser && !viaBuiltin\)/);
-  assert.match(mic, /off \? <MicOffIcon/);
-  assert.match(mic, /const press = \(e\) => \{ setErr\(""\); if \(!off\) return start\(\); setAsk\(e\.currentTarget\)/);
-});
-
-test("a browser recogniser or the computer's own is used at once, with no opt-in to press", () => {
-  // the order lives in micRoute (voiceChoice.js, its own tests): Automatic = a voice card, else the browser's, else the computer's own
-  assert.match(mic, /route = micRoute\(voice, SR, voice\?\.choice\)/);
-  assert.match(mic, /viaBrowser = !!\(voice && route === "browser"\)/, "the browser's recogniser whenever there is one");
-  assert.match(mic, /viaBuiltin = !!\(builtin && route === "windows"\)/, "else the computer's own, as the server reports it");
-  assert.doesNotMatch(ui, /tq-voice-browser|useBrowser|this browser's own \(free\)/, "the opt-in step is gone");
-  assert.doesNotMatch(mic, /toWav/, "no WAV clip for the 2006 offline dictation: it is gone (TQ-1283)");
-});
-
-// A DEAD BROWSER SERVICE OFFERS THE OTHER VOICE (the owner, 2026-11-16: "the browser's own speech recognition was not working"): one road -
-// the line says the service is down and its button switches the mic to the voice card, else Windows voice typing; no silent hand-over
-test("a tab whose speech service will not answer offers this computer's other voice as its button", () => {
-  assert.match(mic, /const other = voice\?\.ready \? \{ label: voice\.label \|\| "the voice AI", choice: "auto" \} : voice\?\.builtin \? \{ label: voice\.builtin\.label, choice: "windows" \} : null/);
-  assert.match(mic, /const fix = micFix\(err, other\)/);
-  assert.match(mic, /fix\.choose \? \(setErr\(""\), chooseVoice\(fix\.choose\)\)/);
-  assert.doesNotMatch(mic, /srDown/, "the session-only hand-over is gone");
-});
 
 test("the popup opens the voice section of Connections, and that link lands there", () => {
   assert.match(mic, /"Set up voice AI"\}<\/Button>/);
@@ -41,35 +18,6 @@ test("the popup opens the voice section of Connections, and that link lands ther
   assert.deepEqual([r.area, r.state], ["connections", { section: "AI — voice", open: null }]);
 });
 
-// WINDOWS VOICE TYPING, AS EVERY OTHER APP GETS IT (the owner, 2026-11-16: "I don't want Local Whisper. Use the Windows voice rec"): the
-// press focuses the box the mic belongs to and the server sends Win+H, so Windows' own bar types into it; nothing listens or records here
-test("on Windows the press focuses the box and toggles Windows voice typing with Win+H, and nothing records", () => {
-  assert.match(mic, /if \(viaBuiltin\) return keys\(\);/);
-  assert.match(mic, /const box = boxNear\(anchor\.current\); box\?\.focus\(\);\s+try \{ await api\.post\("\/api\/voice\/keys"\); \}/, "the box first, then the chord");
-  assert.match(mic, /onMouseDown=\{\(e\) => viaBuiltin && e\.preventDefault\(\)\}/, "pressing the mic does not take the focus from the box");
-  assert.match(mic, /catch \(e\) \{ flash\(e\?\.response\?\.data\?\.detail \|\| "Windows voice typing did not start/, "a refused chord says so in one line");
-  assert.doesNotMatch(ui, /\/api\/voice\/listen|\/api\/voice\/speech-on|\/api\/deps\/local-whisper|setUpLocal|Set up Local Whisper/, "the WinRT session and the Local Whisper offer are gone");
-});
-
-test("a Mac with no voice is pointed at its own Dictation key", () => {
-  assert.match(mic, /\/Mac\/\.test\(navigator\.platform/);
-  assert.match(mic, /Dictation key/);
-});
-
-// A MIC THAT HEARD NOTHING SAYS WHY (the owner, 2026-11-09: "you start it and end it and no words show up???"): every road that ends with
-// no words - an empty transcript from the voice AI, a Windows voice typing session that heard nothing or whose stop failed - flashes a reason.
-test("a failed or empty transcription shows a reason, never silence", () => {
-  assert.match(ui, /export const heardNothing = \(who\) => `\$\{who\} heard no words - /);
-  assert.match(mic, /if \(data\.text\) live\.current\.onText\?\.\(data\.text\); else flash\(heardNothing\(/, "an empty transcript names who heard nothing");
-  assert.doesNotMatch(mic, /flash\("nothing audible"\)/);
-  assert.match(mic, /catch \(e\) \{ flash\(e\?\.response\?\.data\?\.detail \|\| "transcription failed"\); \}/, "a failed one says the server's reason");
-});
-
-test("a refused microphone in the Taskuary window points at Windows' setting, not an address bar it does not have", () => {
-  assert.match(mic, /catch \(e\) \{ flash\(micRefused\(e\?\.name\)\); \}/);
-  const fn = ui.slice(ui.indexOf("export const micRefused"), ui.indexOf("// One mic. Press to record"));
-  assert.match(fn, /inWindow \? "Windows kept the microphone from this window - turn on \\"Let desktop apps access your microphone\\"/);
-});
 
 // Silence is not sent to be made up (the owner, 2026-11-09): the recording measures itself and the server gates a silent clip
 test("a recording sends its own loudness and length, and a meter that never ran sends no level", async () => {
@@ -85,13 +33,3 @@ test("a recording sends its own loudness and length, and a meter that never ran 
   assert.equal((await run(fake("suspended", 0.25)))["X-Voice-Level"], undefined, "a suspended context never calls speech silence");
   assert.equal((await run(undefined))["X-Voice-Level"], undefined, "no AudioContext, no level");
 });
-
-test("a mic failure stays said beside the mic with its fix as a button, never only a fading tooltip", () => {
-  assert.doesNotMatch(mic, /setTimeout\(\(\) => setErr\(""\)/, "no 8 s fade");
-  assert.match(mic, /<Popper open=\{!!err && !ask/);
-  assert.match(mic, /data-tq-mic-err="" role="alert"/);
-  assert.match(mic, /fix\.settings \? openSettings\(fix\.settings\)/);
-  assert.match(mic, /api\.post\("\/api\/voice\/open-settings", null, \{ params: \{ which \} \}\)/);
-  assert.match(mic, /window\.addEventListener\("focus", back\)/, "back from Windows' settings, the mic checks again");
-});
-

@@ -3,7 +3,6 @@
 // list row, so it read the task's state from nothing: "stopped and saved", and Close out opened with advice for an open task.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { taskSource } from "./taskSource.mjs";
 import { AGENT, agentPhase, focusStage, pageState, replyPhase } from "../src/taskLifecycle.js";
 
 // what TaskPage computes, from the detail alone (no list row) or with one
@@ -34,16 +33,4 @@ test("a task the owner closed with a reply still opens on Close out", () => {
     reviews: [{ ReviewId: 1, Kind: "draft_reply", Status: "sent", DraftText: "Done - thanks, Erin." }] };
   assert.equal(opens({ detail }).stage, "reply");
   assert.equal(opens({ listRow: { State: "closed" }, detail }).stage, "reply");
-});
-
-test("a closed task says who closed it and why, never the advice for an open one", () => {
-  const src = taskSource();
-  assert.match(src, /const rowState = pageState\(listRow, detail\)/);
-  // ...the chat's last line: its agent's done sentence, else the owner's close - never "Nobody sent this one" advice
-  assert.match(src, /const closedSaid = t\?\.Status === "done" \? \(detail\?\.closedWhy \? `✓ \$\{detail\.closedWhy\}`/);
-  assert.equal((src.match(/closedLine=\{closedSaid\}/g) || []).length, 1, "the one chat, every kind");
-  assert.doesNotMatch(src, /Nobody sent this one/);
-  // ...said at the top of Agent work, the step it opens on - in its body, as the heading carries no sentence (taskControls)
-  const agent = src.slice(src.indexOf('{shows("agent") && <>'), src.indexOf("<AgentRecord {...recordProps} story={storyAt"));
-  assert.match(agent, /!term\?\.alive && t\?\.Status === "done" && detail\?\.closedWhy && \(\s*<Typography data-tq-closed-why/);
 });

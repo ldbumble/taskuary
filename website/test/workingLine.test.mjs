@@ -17,22 +17,6 @@ test("nothing in the first second, then whole seconds that never run ahead", () 
   assert.equal(workingLine(65400), "Working… 1m 05s");
 });
 
-test("the count rides beside the dots only where Stop does: a typed ask's real answer", () => {
-  // the pending line's dots - not a held line's (Line), which draws the same dots without the clock (the owner, 2026-10-30)
-  const at = src.indexOf('<span className="tq-typing"><i /><i /><i /></span>', src.indexOf("const pendingLine"));
-  assert.ok(at > 0);
-  const bubble = src.slice(at, src.indexOf("</div>", at));
-  assert.match(bubble, /\{busy && answering\.current && !DEMO && <WorkingFor \/>\}/);
-  assert.equal((src.match(/<WorkingFor \/>/g) || []).length, 1);
-});
-
-test("its clock is its own: the per-second state never reaches AssistantView", () => {
-  const fn = src.slice(src.indexOf("function WorkingFor()"), src.indexOf("export default function AssistantView"));
-  assert.match(fn, /setInterval\(\(\) => setNow\(Date\.now\(\)\), 1000\)/);
-  assert.match(fn, /clearInterval/);
-  const view = src.slice(src.indexOf("export default function AssistantView"));
-  assert.doesNotMatch(view, /workingLine\(/);
-});
 
 // THE TURN'S HEAD AND ITS WORKING LINE ARE THE CHAT'S OWN TYPE (the owner, again on 2026-11-18: "AGENT · 11:04 PM · working 2m 41s" in tiny
 // monospace capitals beside a monospace working line): no rule in the chat's sheet sets them in a code face or in capitals

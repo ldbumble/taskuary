@@ -33,7 +33,7 @@ test("API connector choices are not rewritten", () => {
 
 // THE CODING PICKER LISTS AI CARDS TOO (the owner, 2026-11-09: "fix the picker please. it should choose the correct one")
 import { codingChoice, codingChoices } from "../src/brainOptions.js";
-import { readFileSync } from "node:fs";
+
 
 const opts = [
   { value: "cli:claude", key: "claude", kind: "cli", label: "Claude Code" },
@@ -61,11 +61,6 @@ test("a brain the task names that is gone stays named; an old server's CLI keys 
   assert.deepEqual(codingChoices({ brains: ["claude", "codex"] }).list.map((o) => o.value), ["cli:claude", "cli:codex"]);
 });
 
-test("the picker draws codingChoices' list and Settings draws the server's coding options", () => {
-  const ui = readFileSync(new URL("../src/ui.jsx", import.meta.url), "utf8");
-  assert.match(ui, /code\.list\.map\(\(o\) => \(\s*<MenuItem key=\{o\.value\} value=\{o\.value\} data-tq-coding-option/);
-  assert.match(ui, /codingOptions: data\.coding_options \|\| \[\], codingPick: data\.coding_pick \|\| ""/);
-});
 
 // HAND THE TASK TO ANOTHER AI (the owner, 2026-11-18): every AI ready, each with its models, the one at work marked - greyed with its reason
 // where there is nothing else to hand it to

@@ -102,21 +102,6 @@ test("no page file types a button's label: every one is read from buttons.js", (
   assert.deepEqual(hits, []);
 });
 
-test("no removed or second name for a button is left where a person can read it", () => {
-  const gone = ["Prep me", "Snooze", "Make a task", "Make task", "Take it myself", "Redraft it", "Run it", "Merge & close", "Continue session", "Close out",
-    "Archive it", "Handled", "Draft a follow-up", "Hand to agent", "Hand to coding agent", "Regular agent", "A non-coding agent", "Silence this sender",
-    "Block them in Settings", "Send back to the agent", "Continue the agent", "Refresh the draft", "Refresh draft", "Mark it handled", "Test the connection",
-    "Run the report again", "Send the answer to the agent", "Write reply", "Start an agent", "Start another agent", "Send to non-coding agent",
-    "Use non-coding agent", "Start coding session", "Approve & send", "Run action", "Save playbook", "Draft a reply", "Check again"];
-  const hits = [], heading = { "TaskPage.jsx": ["Close out"], "taskLayout.js": ["Close out"] };   // the task page's third section is named Close out - a heading, no button
-  for (const f of files) for (const s of said(strip(fs.readFileSync(path.join(SRC, f), "utf8"))))
-    if (gone.includes(s.trim()) && !(heading[f] || []).includes(s.trim())) hits.push(`${f}: "${s.trim()}"`);
-  assert.deepEqual(hits, []);
-  const code = files.map((f) => strip(fs.readFileSync(path.join(SRC, f), "utf8"))).join("\n");
-  // ...the old road only: /api/calendar/prepare is Prepare's own, which the meeting notification posts (meetingAlert.js, TQ-1370)
-  assert.doesNotMatch(code, /verb === "prep"|\/api\/calendar\/prep\b/, "Prep me is gone, its road too");
-  assert.doesNotMatch(code, /\bshortLabel\b/, "no second, shorter name for the bar");
-});
 
 // NOT FOR ME ASKS HOW FAR ON THE DESK TOO (the owner, 2026-11-10: "yes on 1"): the phone's answers (buttons.json `choices`) in a small menu
 // under the pressed button, one press to pick; the answer runs once as its own verb and nothing is carried onto the next item

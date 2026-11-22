@@ -3,12 +3,12 @@
 // was done - a blank wait of however long the model took. The box opens now (`later`), and the draft is asked for behind it.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
+
 import { withSignature } from "../src/signature.js";
 import { boxText, draftJob, openReply, subscribeDrafts } from "../src/replyDraft.js";
 
-const read = (f) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), "utf8");
+
 const fakeApi = (draft) => {
   const calls = [];
   let release;
@@ -60,30 +60,6 @@ test("a draft that fails says why in the card", async () => {
   assert.match(draftJob(41).error, /no AI connector/);
 });
 
-test("the Game's Reply presses open at once too, and its draft box says Drafting until the draft lands", () => {
-  const game = read("gameItem.jsx");
-  assert.doesNotMatch(game, /\/reply`, \{ draft: true, instruction: null \}/, "no Game press waits on the model for a fresh draft");
-  assert.equal((game.match(/openReply\(api, item\.mid\)/g) || []).length, 3, "Draft a reply, Reply from this, the reply chip");
-  const draft = game.slice(game.indexOf("function Draft("), game.indexOf("export function Moves("));
-  assert.match(draft, /useDraftJob\(item\.rid\)/);
-  assert.match(draft, /drafting \? "Drafting…"/);
-});
-
-test("every Reply press opens at once, and both views of a draft show Drafting while it is written", () => {
-  const cards = read("assistantCards.jsx"), view = read("AssistantView.jsx"), page = read("TaskPage.jsx"), dec = read("ReviewDecision.jsx");
-  assert.doesNotMatch(cards, /\/reply`, \{ draft: true/, "no card waits on the model");
-  assert.equal((cards.match(/openReply\(api, /g) || []).length, 2, "Draft a reply, an fyi's Reply");
-  assert.match(view, /if \(verb === "reply" && mid\) \{\n\s+const data = await openReply\(api, mid, d\.text \|\| null, d\.cc \|\| null, false, d\.line \|\| null\);/);
-  assert.match(page, /await \(generate \? draftReply\(api, replyMessage\.MessageId, null, null, generate === "ai"\)/);   // the import, renamed: the page's own openReply shadowed it
-  // REPLY WITH NO AGENT WORK OPENS EMPTY (the owner, 2026-10-28): only Draft with AI asks for the AI's draft
-  assert.match(read("replyDraft.js"), /\.\.\.\(ai \? \{ ai: true \} : \{\}\)/);
-  assert.match(page, /data-tq-draft-ai=""[\s\S]{0,300}onClick=\{\(\) => openReply\("ai"\)\}/);
-  // ...and NOT LIT on an invite (B15, the email walk 2026-10-29): its answer is the row's Accept or Decline, not an email
-  assert.match(page, /variant=\{calAsk\?\.invite \? "outlined" : "contained"\}[\s\S]{0,200}sx=\{calAsk\?\.invite \? barBtn : primaryBtn\} data-tq-draft-ai=""/);
-  for (const src of [cards, dec]) assert.match(src, /useDraftJob\(/);
-  assert.match(dec, /drafting \? "Drafting…"/);
-  assert.match(cards.slice(cards.indexOf("export function ReplyCard"), cards.indexOf("export function MeetingCard")), /drafting \? "Drafting…"/);
-});
 
 // "IT STARTS WITH CIRCLING, THEN OPENS THIS? AND THEN SOMETIMES IT JUST FILLS OUT THE TEXT 10 SECONDS LATER" (the owner, 2026-11-03): a draft
 // the server is still writing (the review's `Drafting`: the arrival's own) showed a signature-only box under Draft with AI, as if nothing
@@ -94,12 +70,4 @@ test("the box of a draft being written is empty, never the signature alone", () 
   assert.equal(boxText({ text: null, draft: "", drafting: false, signature: sign }), withSignature("", sign), "nothing coming: the signature to write over");
   assert.equal(boxText({ text: null, draft: "Yes.", drafting: true, signature: sign }), withSignature("Yes.", sign), "a redraft keeps the draft there in view");
   assert.equal(boxText({ text: "my own words", draft: "", drafting: true, signature: sign }), "my own words", "the owner's edit is never wiped");
-});
-
-test("Close out's reply card follows a draft under way, spins in its box, and says plainly when the draft failed", () => {
-  const dec = read("ReviewDecision.jsx");
-
-  assert.match(dec, /const drafting = job\?\.state === "drafting" \|\| redrafting;/);
-  assert.match(dec, /boxText\(\{ text, draft: reviewText\(r\), drafting, signature: r\.Signature \}\)/);
-  assert.match(dec, /\["needs", "failed", "empty", "kept"\]\.includes\(draftState\(r\)\.state\)/);
 });

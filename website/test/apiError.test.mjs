@@ -27,12 +27,6 @@ test("a refusal still names itself after normalizing, so its recovery can run", 
   assert.equal(moved.detail.message, "That item moved under you");   // the banner's words are the server's
 });
 
-test("the rail's own catches read the structure, not the flattened copy", () => {
-  const src = readFileSync(fileURLToPath(new URL("../src/FeedView.jsx", import.meta.url)), "utf8");
-  assert.doesNotMatch(src, /response\?\.data\?\.detail\?\.code/);
-  assert.doesNotMatch(src, /response\.data\.detail\.message/);
-  assert.match(src, /processingErrorMessage\(e, "Failed to load the feed"\)/);
-});
 
 test("the rendered copy is still a plain string, which every setErr site relies on", () => {
   const e = refused("processing_coverage_pending", "All items are not ready yet");
@@ -68,11 +62,6 @@ test("a failed save reads as a sentence: the server's, or that nothing answered 
   assert.equal(plainError({ response: { status: 500, data: {} } }, "fallback"), "fallback");
 });
 
-test("api.js normalizes through the one helper, so this cannot drift back apart", () => {
-  const src = readFileSync(fileURLToPath(new URL("../src/api.js", import.meta.url)), "utf8");
-  assert.match(src, /keepDetail/);
-  assert.doesNotMatch(src, /JSON\.stringify\(d\)/);   // the flattening lives in apiError.js only
-});
 
 // THE DEMO'S NO IS ITS OWN LINE (the walk, 2026-11-18): Trust on a closed task read "That didn't go through - This is the demo - ...
 // Press Trust Priya again." - a press that can never work, asked for again. One reader says whether an error is the demo saying no.

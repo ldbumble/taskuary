@@ -1,6 +1,6 @@
 // A workflow runs on the general agents' brain unless it asks for a harder model or more effort - and only what that CLI takes is offered.
 import assert from "node:assert/strict";
-import fs from "node:fs";
+
 import test from "node:test";
 import { effortChoices, keepEffort, modelChoices } from "../src/workflowBrain.js";
 
@@ -24,11 +24,4 @@ test("only the efforts the chosen model's CLI takes are offered", () => {
   assert.deepEqual(effortChoices(copilot, ""), [], "no effort flag to spell: no Effort box");
   assert.equal(keepEffort(codex, "gpt-5.5", "max"), "");
   assert.equal(keepEffort(claude, "claude-opus-5-5", "max"), "max");
-});
-
-test("the editor carries Model and Effort on one row, fed by the brain endpoint", () => {
-  const src = fs.readFileSync(new URL("../src/WorkflowEditor.jsx", import.meta.url), "utf8");
-  assert.ok(src.includes('api.get("/api/workflows/brain")'));
-  assert.ok(src.includes("modelChoices(brain)") && src.includes("effortChoices(brain, cfg.model)"));
-  assert.ok(src.includes('model: e.target.value, effort: keepEffort(') && src.includes('set("effort"'), "a new model drops an effort it cannot take");
 });

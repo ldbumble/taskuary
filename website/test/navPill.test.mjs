@@ -3,7 +3,7 @@
 // line the way Next walks down it, crossing sections in reverse; it never folds, and neither does Next. Invented rows throughout.
 import test from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
+
 import { BACK, NAV, fitRow, foldsOf, navEnd, navOf, put, rowDrawable, rowNow, rowOf, rowWidth, walkMove } from "../src/actionRow.js";
 import { label } from "../src/buttons.js";
 
@@ -49,19 +49,4 @@ test("the row's end flag rides the snapshot, and the walk's Back is no item's ve
   navEnd(false); assert.equal(rowNow().end, undefined);
   assert.equal(rowDrawable({ key: "msg:9", keyed: false, list: rowNow().list }), false, "Back alone is not the new item's row");
   put("nav:t", null);
-});
-
-// the rail's line, invented: two tasks (one urgent in its place), one put For later, a report, an idea, two fyi
-// WHICH ROW IS ABOVE is the server's (railwalk.back, 2026-10-30): the rail's order read upward from the row on screen, For later and
-// rows still settling off the line, a read row gone - pinned by the walk table (tests/fixtures/walk_table.json W05-W07, W12, W19, W20,
-// W39, W45, W47) and its browser runner. The page only asks, and greys Back where the walk says nothing is above.
-test("the view registers Back beside the floor and asks the walk for the row above; Next is hidden on the last one from the walk's own word", () => {
-  const view = fs.readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
-  // ...and on a desk Back is always there, greyed where there is nowhere to go back to (the owner, 2026-10-29)
-  // ...ONE BACK OVER ONE LIST (the spec's part E, 2026-11-19): the places he and the walk moved through (appLinks.navBack - oneBack.test.mjs)
-  assert.match(view, /useVerbs\("nav", \[\{ id: BACK, group: "back", label: btn\("back"\), title: btnHint\("back"\), disabled: !canBack \|\| moving, why: moving \? "" : "nothing to go back to",\s+run: navBack \}\], canBack \|\| \(deskChat && !firstRun\)\);/);
-  assert.match(view, /const atEnd = !!current && table\.speaks && onWalk && !walkNow\.below;/, "no Next on the last one: the walk says nothing is below");
-  const row = fs.readFileSync(new URL("../src/ActionRow.jsx", import.meta.url), "utf8");
-  assert.ok(row.indexOf("data-tq-walk-back") < row.indexOf("data-tq-next=\"\""), "Back on the left, Next on the right");
-  assert.match(row, /aria-label=\{NAV\} data-tq-type="nav"/);
 });

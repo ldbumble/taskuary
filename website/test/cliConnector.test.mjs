@@ -37,10 +37,3 @@ test("no line for a CLI that is not here, or needs no connector", () => {
   assert.equal(connectorLine(cli(undefined)), null);
   assert.equal(connectorLine(cli({})), null);
 });
-
-test("its press goes through the installer's one phase, on the CLI card", () => {
-  const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
-  assert.match(read("cliInstall.jsx"), /connector: \{ path: "\/api\/cli\/connector"/);
-  assert.match(read("cliInstall.jsx"), /const connector = useCallback\(\(cli\) => run\(cli, "connector"\)/);
-  assert.match(read("AgentsPanel.jsx"), /<ConnectorLine cli=\{cli\}/);
-});

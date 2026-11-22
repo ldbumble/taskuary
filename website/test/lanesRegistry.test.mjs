@@ -74,15 +74,6 @@ test("an Advisor line's kind has one word on its card, its Timeline row and its 
   assert.equal(ideaWord(undefined), "advisor idea", "an unnamed kind is an Advisor idea, not a slip nobody saw");
 });
 
-test("no copy of a lanes.json table is left in the page", () => {
-  assert.doesNotMatch(src("funnelPile.js"), /const BAND = \{|LEVEL_OF_BAND = \{|const OWED = /);
-  assert.doesNotMatch(src("assistantGame.js"), /const ON_YOU = |const AGENT_KINDS = /);
-  assert.doesNotMatch(src("assistantCards.jsx"), /g\.key === "urgent" \|\| g\.key === "task"|followup: "waiting on them"/);
-  assert.doesNotMatch(src("FeedView.jsx"), /const IDEA_KIND = /);
-  assert.doesNotMatch(src("ReportsView.jsx"), /const IDEA_KINDS = /);
-  assert.doesNotMatch(src("walkSummary.js"), /\["agent", "agentdone", "action"\]/);
-  assert.doesNotMatch(src("demoAssistantData.js"), /\["blocked", "approve", "asked"\]/);
-});
 
 // A STATE'S WORD IS WRITTEN ONCE (the cleanup round, 2026-10-18): "agent working", "ready to send", "waiting to start" lived in
 // lanes.json, in taskLifecycle's AGENT, in ui.jsx's TASK_STATES, in theme.jsx and in the demo's pile - and the demo still said

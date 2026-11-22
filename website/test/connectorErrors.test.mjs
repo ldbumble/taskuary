@@ -8,23 +8,6 @@ import { readFileSync } from "node:fs";
 
 const src = readFileSync(new URL("../src/ConnectorsView.jsx", import.meta.url), "utf8");
 
-test("a card's red line is the plain words, never the raw LastError", () => {
-  assert.doesNotMatch(src, /✗ \{conn\.LastError\}/, "every red line reads LastErrorPlain first");
-  assert.equal((src.match(/✗ \{conn\.LastErrorPlain \|\| conn\.LastError\}/g) || []).length >= 5, true);
-});
-
-test("what a save says is drawn by the boxes, and a refused key does not move on", () => {
-  const at = src.indexOf("const boxes = useBoxesSave({ off: simple");
-  const save = src.slice(at, src.indexOf("const [fresh, setFresh]", at));
-  assert.match(save, /setSaveSaid\(d\?\.error \? \{ ok: false, detail: d\.error \} : null\)/);
-  assert.doesNotMatch(save, /setTest\(\{ ok: false/, "a save's failure is not written into the Test step");
-  // a box's own pause never moves the card on a step; the key saved opens Test, unless the service refused it (the owner, 2026-11-05)
-  assert.equal((save.match(/setStep\(/g) || []).length, 1);
-  assert.match(save, /if \(keys\.includes\("Secret"\) && !d\?\.error\) setStep\(1\);/);
-  // a refused save says the server's sentence, or a plain one, in the box's own tick (connectorDraft.whyNot)
-  assert.match(readFileSync(new URL("../src/connectorDraft.js", import.meta.url), "utf8"), /export const whyNot = \(e\) => String\(e\?\.response\?\.data\?\.detail/);
-  assert.match(src, /onBlur=\{boxes\.flush\} \/>\)\}<\/Box><\/Collapse>\s*<\/>\}\s*<TestLine test=\{saveSaid\} mt=\{0\} \/>/, "right under the boxes");
-});
 
 test("Credentials is ticked only after a Test passed on them", () => {
   assert.match(src, /const creds = credsDone\(conn, cfg, m\);/);

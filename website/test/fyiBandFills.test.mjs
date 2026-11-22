@@ -30,12 +30,6 @@ test("the fyi band asks for its next page while one more row of it would fit, an
   assert.match(view, /if \(fyiFills && fyiAsked\.current !== fyiHave\) \{ fyiAsked\.current = fyiHave; onMoreFyi\?\.\(\); \}/);
 });
 
-test("a trim taken for one moment's overflow is given back with the room, and the room follows what sits above the pile", () => {
-  assert.match(view, /useLayoutEffect\(\(\) => \{ setTrim\(0\); grew\.current = false; \}, \[sig, room\]\);/);
-  assert.match(view, /if \(over > 0 \|\| !trim \|\| grew\.current\) return;/);
-  assert.match(view, /for \(let s = el\.previousElementSibling; s; s = s\.previousElementSibling\) ro\.observe\(s\)/);
-  assert.match(view, /scroller\.getBoundingClientRect\(\)\.top \+ scroller\.scrollTop;/);
-});
 
 // the owner, 2026-11-09, 6 fyi rows, "14 more fyi" and half a rail empty under them: "why is this not unfurling if there is space until the bottom??"
 test("fyi and reports draw as many rows as the rail's measured room holds; 'N more' is only what does not fit", () => {

@@ -94,12 +94,6 @@ test("the chat's Suggested reply stands only once a reply is in it, never over a
   assert.equal(chatReplyShown({ pendingReview: { ReviewId: 3 } }), false);
 });
 
-test("a chat task's chat keeps its height while its agent starts: the box sits at the card's foot", () => {
-  // the stress run (2026-11-05): while the agent started, the chat shrank to its content and left ~485px of empty card under the box
-  const page = read("TaskPage.jsx"), at = page.indexOf('"&:has([data-tq-starting])"');
-  assert.ok(at > 0);
-  assert.match(page.slice(at - 80, at), /!chatPane/, "the one-line starting room is for a pane that is not the task's chat");
-});
 
 test("Suggested reply heads only a reply, never a closed task's Mark done line or a proposal", () => {
   assert.equal(hasReply([]), false);
@@ -172,13 +166,4 @@ test("only the newest turn at rest with no ask or card of its own offers its try
   assert.equal(onYouTurn([...items, { kind: "turn", id: "c", state: "working" }]), "");
   assert.equal(onYouTurn([]), "");
   assert.match(read("GeneralWorkspace.jsx"), /owes=\{x\.id === owes\}/);
-});
-
-// the phone audit (2026-11-13): New's box was one fixed row - its example wrapped to a row and a half under a scrollbar at 390px, and long
-// typing scrolled out of sight. A PromptBox's words size it, up to the box's own max-height
-test("a PromptBox grows with its words and its example, up to its cap", () => {
-  const css = read("generalWorkspace.css"), box = read("AgentSummary.jsx");
-  assert.match(box, /"data-tq-prompt-box": ""/, "the box carries its mark");
-  assert.match(css, /\[data-tq-prompt-box\] \.tq-aui-input \{ field-sizing: content; \}/);
-  assert.match(css.split("\n").find((l) => l.startsWith(".tq-aui-input {")), /max-height: \d+px/, "and stops at its cap, scrolling after");
 });

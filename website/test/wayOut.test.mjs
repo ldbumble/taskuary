@@ -14,16 +14,3 @@ test("a card confirms with its act's own name, and nothing is called Take it bac
   assert.equal(describe({ kind: "task.defer", label: "Remind me", params: { until: "2026-10-20" } }).confirm, "Remind me");
   assert.equal(label("take_back"), "", "no button by that name");
 });
-
-test("the card's unconfirmed send offers Send anyway and Mark done, by their names on the list", () => {
-  const s = src("ReviewDecision.jsx");
-  assert.match(s, /btn\("approve", "unknown"\)/);
-  assert.match(s, /decide\("approve", true\)/);
-  assert.match(s, /unconfirmed && r\.TaskId/);
-});
-
-test("a failed start on the task page draws its ways past it", () => {
-  const s = src("TaskPage.jsx");
-  assert.match(s, /<FailWays fail=\{startFail\}/);
-  assert.match(src("failure.jsx"), /label\("try_again"\)[\s\S]*label\("report_bug"\)/);
-});

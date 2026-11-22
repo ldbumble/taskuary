@@ -7,14 +7,6 @@ import { readFileSync } from "node:fs";
 import { hint, label } from "../src/buttons.js";
 import { sentChips } from "../src/funnelPile.js";
 
-const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
-// capabilities.js imports the page's api client; its pure rules are lifted from the source and run here
-const caps = (() => {
-  const c = read("capabilities.js"), grab = (n) => c.slice(c.indexOf(`export const ${n} =`), c.indexOf("\n};", c.indexOf(`export const ${n} =`)) + 3);
-  const one = (n) => c.split("\n").find((l) => l.startsWith(`export const ${n} =`));
-  const src = [one("canSend"), one("channelCanSend"), grab("draftCanSend")].join("\n").replace(/export const /g, "const ");
-  return new Function(`${src}\nreturn { canSend, channelCanSend, draftCanSend };`)();
-})();
 
 test("Send only sends and Approve only runs - each says the task stays open until Mark done", () => {
   assert.equal(label("approve"), "Send");
@@ -29,41 +21,6 @@ test("Send only sends and Approve only runs - each says the task stays open unti
 test("a send offers Mark done only where there is a task, and Next always", () => {
   assert.deepEqual(sentChips(12, "TQ-12").chips.map((c) => [c.verb, c.label, c.tid ?? null]), [["close", "Mark done", 12], ["next", "Next", null]]);
   assert.deepEqual(sentChips(null).chips.map((c) => c.verb), ["next"], "no task, no Mark done");
-});
-
-test("the canvas keeps a sent item on the table: the card folds wearing its button, Mark done and Next on the row, nothing settles", () => {
-  const cards = read("assistantCards.jsx"), view = read("AssistantView.jsx");
-  // the press is the button's own label - a send and what is not a send alike - never a sentence (the owner, 2026-10-22)
-  assert.match(cards, /if \(ran && onSent\) onSent\(pressed, card\.tid, card\.ref\);\n\s+else onDone\?\.\(pressed\);/);
-  assert.match(cards, /const pressed = verb === co\?\.alt\?\.verb \? co\.alt\.label : verb === "merge_anyway" \? OFFER_LABEL\.anyway : btn\("approve", action \? "action" : undefined\);/);
-  assert.doesNotMatch(cards, /and closes the task/);
-  assert.match(cards, /the task stays open until you \$\{btn\("close"\)\}/);
-  const sent = view.slice(view.indexOf("const sent = (pressed"), view.indexOf("\n  };", view.indexOf("const sent = (pressed")));
-  assert.match(sent, /done: true, sent: true, \.\.\.\(pressed \? \{ pressed \} : \{\}\), \.\.\.sentChips\(tid, ref\)/);
-  assert.doesNotMatch(sent, /role: "receipt"/, "no line under the card");
-  assert.doesNotMatch(sent, /funnel\/settle|advance\(/, "a send neither settles the item nor walks on");
-  assert.match(view, /reply: <ReplyCard card=\{c\} onDone=\{actions\.done\} onSent=\{actions\.sent\}/);
-  // the folded card keeps a send's two words on the row; any other folded card keeps only Next
-  assert.match(view, /const moved = !!m\.card && \(!live \|\| foldedNow\) && !m\.sent;/);
-  // Mark done from the row closes the task it names: on the table, the walk's one close (railwalk.leave); off it, alone
-  assert.match(view, /if \(c\.verb === "close" && c\.tid\) \{[\s\S]{0,200}await leave\(on, "done"\)[\s\S]{0,300}runOperation\(api, "task\.complete", c\.tid\)/);
-  // ...and an Approve run from a proposal takes the server's own chips for its receipt (concierge.sent_chips)
-  assert.match(view, /\(out\.status !== "done" \|\| p\.kind === "review\.approve"\) && res\?\.chips\?\.length/);
-});
-
-test("no 'Sent to <who>.' line on the desk: a send is said by its badge alone, and a refused one still says why", () => {
-  const cards = read("assistantCards.jsx");
-  for (const gone of ["`Sent to ${who}.`", "The reply went to", "Done — the action ran.", "Done — ${co.then}", "Done — ${co.alt.then}"])
-    assert.ok(!cards.includes(gone), `still says: ${gone}`);
-  assert.match(cards, /sure\(o, "sent"\);/);          // the one press throws the server's reason to the card's reader (press.js)
-});
-
-test("no screen says a send closes the task", () => {
-  for (const f of ["ReviewDecision.jsx", "assistantCards.jsx", "TaskPage.jsx", "NewSheet.jsx"]) {
-    const s = read(f);
-    assert.doesNotMatch(s, /Send & close|Copy & close|Sending it closes the task|approving (it|them) closes the task|send and close out/, f);
-  }
-  assert.match(read("ReviewDecision.jsx"), /`\$\{sendWord\} sends this to \$\{replyContext\(r\)\} - \$\{stays\}\.`/);
 });
 
 

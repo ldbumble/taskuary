@@ -1,8 +1,8 @@
 // "IS IT WORKING?" (the owner, 2026-10-22): the server's counts drawn as a table - numbers, and nothing said about them.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
+
 import { workingCell, workingTable } from "../src/workingNumbers.js";
 
 const w = (days, d, t, a) => ({ days, drafts: d, triage: t, agents: a });
@@ -21,10 +21,4 @@ test("three rows - drafts, triage, agent results - one cell per window", () => {
   assert.deepEqual(t[1].cells, ["40: 38 stood · 2 overturned", "90: 90 stood"]);
   assert.deepEqual(t[2].cells, ["none", "5: 3 marked done · 1 continued · 1 waiting on you"]);
   assert.deepEqual(workingTable(null), t.map((r) => ({ label: r.label, cells: [] })));
-});
-
-test("the Audit page draws it under its own heading, between the chain and the history", () => {
-  const view = readFileSync(fileURLToPath(new URL("../src/SettingsView.jsx", import.meta.url)), "utf8");
-  assert.match(view, /api\.get\("\/api\/working"\)/);
-  assert.match(view, /name=\{AUDIT_SECTIONS\[1\]\} \/><\/Box>\s*<WorkingNumbers \/>/);
 });

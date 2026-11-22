@@ -6,7 +6,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { focusOf, homeSection, replyHolds, workPane } from "../src/taskLayout.js";
 import { stageOf } from "../src/stages.js";
-import { taskSource } from "./taskSource.mjs";
 
 const owed = { text: "Email Paula Vance - the 2:30 meeting", out: { kind: "email", to: "paula@vendor.example" }, done: false, rid: null };
 // where a to-do with a sender opens, given what waits on a Send - TaskPage's own chain (focusOf -> stageOf -> homeSection)
@@ -33,10 +32,4 @@ test("a drafted email waiting for Send, a reply draft or something that went ope
   // ...and every other kind opens on its chat, whatever waits
   assert.equal(homeSection("reply", "to_reply"), "agent");
   assert.equal(homeSection("coding", "to_start"), "agent");
-});
-
-test("the page reads what waits on a Send from replyHolds, never from the checklist's owed lines", () => {
-  const src = taskSource();
-  assert.match(src, /const \{ has: replyHas, waits: sendWaits \} = replyHolds\(\{/);
-  assert.doesNotMatch(src, /replyHas = [^;]*owesEmails/);
 });

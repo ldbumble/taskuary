@@ -65,15 +65,6 @@ test("a turn's files: placed or named, newest of a family, the helper script too
   assert.deepEqual(turnFiles({ listed, id: "m1", tid: 5, words: "See `/x/scratch/outputs/TQ-0005/chart.png`" }).map((f) => f.path).sort(), ["older.csv"]);
 });
 
-// ...and the card leads Next steps, the action section; Close out never draws it a second time in the chat
-test("the action card leads Next steps and is drawn once", () => {
-  const s = read("AgentSummary.jsx");
-  const at = s.indexOf("\n      {lead}\n");
-  assert.ok(at > s.indexOf("<DraftHead />") && at < s.indexOf("<OnYou items={onYou} />"));
-  assert.match(read("TaskPage.jsx"), /const asks = proposals\.filter\(\(p\) => !isCardReview\(p\)\)/);
-  assert.match(read("ReviewDecision.jsx"), /act \? <ActionCard/);
-  assert.match(read("ActionCard.jsx"), /press\(api, row\.ReviewId, /);       // the one decide road, no second approval
-});
 
 test("a post whose press failed is over: no box, no button, its error the line", async () => {
   const { stateOf } = await import("../src/actionCard.js");

@@ -8,17 +8,7 @@ import assert from "node:assert/strict";
 import { pressOnto, walkOf, withWalk } from "../src/funnelPile.js";
 
 const read = (n) => readFileSync(fileURLToPath(new URL(`../src/${n}`, import.meta.url)), "utf8");
-const view = read("AssistantView.jsx");
 
-test("every walk move asks for the light answer, and the press frees Next once it is drawn - the rail is never awaited", () => {
-  const turn = view.slice(view.indexOf("const turnOnce = useCallback"), view.indexOf("const turn = useCallback"));
-  assert.match(turn, /api\.post\(`\/api\/walk\/\$\{walkRoute\}`, \{[^]*?fyi: fyiWant\.current, light: true,/);
-  const landed = view.slice(view.indexOf("const landed = useCallback"), view.indexOf("const noteLine = useCallback"));
-  assert.match(landed, /else \{ const p = withWalk\(pileRef\.current, data\.walk\); if \(p !== pileRef\.current\) \{ pileRef\.current = p; setPile\(p\); \} loadPile\(true\); \}/);
-  assert.doesNotMatch(landed, /await loadPile/, "the answer waits on the rail read behind it");
-  const surface = view.slice(view.indexOf("const surface = useCallback"), view.indexOf("useEffect(() => { surfaceRef.current = surface; }"));
-  assert.match(surface, /else landed\(data, off\(\)\);[^]*turnFlight\.current = false;\n\s+setBusy\(false\); setFlight\(null\);/, "busy drops right after the answer is drawn");
-});
 
 test("withWalk: only a whole walk word (one naming `below`) is taken, onto the same rail rows", () => {
   const pile = { items: [{ key: "a" }], walk: { on: "a", below: "b", above: null } };

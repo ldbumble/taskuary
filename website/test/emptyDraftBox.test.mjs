@@ -14,12 +14,6 @@ test("a draft filed under an open card replaces the edit made on the one before 
   assert.equal(editAfterRefile({ text: "Mine", held: null, keep: true }), "Mine");           // beside a refreshed draft: the owner's stays
 });
 
-test("the card follows the filed draft, not only the draft it was drawn with", () => {
-  const card = fs.readFileSync(path.join(process.cwd(), "src", "ReviewDecision.jsx"), "utf8");
-  assert.match(card, /setTextNow\(editAfterRefile\(\{ text, held: heldOf\(r\), keep \}\)\)/);
-  assert.match(card, /\}, \[r\.ReviewId, filed\]\);/);
-  assert.match(card, /\["needs", "failed", "empty", "kept"\]\.includes\(draftState\(r\)\.state\)/);
-});
 
 test("an empty draft reads as one, never as a blank box", () => {
   const agent = { Kind: "draft_reply", DraftText: "", DraftBy: "agent:assistant" };

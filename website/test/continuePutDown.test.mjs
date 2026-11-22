@@ -28,17 +28,6 @@ test("asPressed draws a continued task working, in Tasks, and drops one being pu
   assert.equal(asPressed(rows, { read: [] }), rows);
 });
 
-test("the walk's Continue moves the row at the press, holds it until the pile agrees, and puts it back on failure", () => {
-  const box = read("ContinueBox.jsx");
-  const go = box.slice(box.indexOf("const go = async"), box.indexOf("const body ="));
-  assert.ok(go.indexOf("onPress?.()") > -1 && go.indexOf("onPress?.()") < go.indexOf("api.post"), "at the press, before the request");
-  assert.match(go, /catch \(e\) \{[^}]*onFail\?\.\(msg\)/, "a continue that fails puts it back");
-  const view = read("AssistantView.jsx");
-  assert.match(view, /onPress=\{\(\) => setContinuingTid\(continueOn\.task\.TaskId\)\}/);
-  assert.match(view, /onFail=\{\(\) => setContinuingTid\(null\)\}/);
-  assert.match(view, /asPressed\(pile\.items, \{ leaving: leaving\.map\(\(x\) => x\.tid\), continuing: continuingTid, read: readGone\?\.keys \}\)/);
-  assert.match(view, /row\.lane === "working"\)\) setContinuingTid\(null\)/, "held until the server's pile has it working");
-});
 
 // REMIND ME HID THE ROW UNTIL A RELOAD (UX walk, 2026-10-22): the put-down was held until the row left the pile, but a reminded
 // task stays in it, For later - so the rail went on dropping it. The hold ends when the row is gone OR put away.

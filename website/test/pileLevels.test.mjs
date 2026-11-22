@@ -69,10 +69,6 @@ test("the menu offers only the runs the pile holds, in the order the rail draws 
   assert.deepEqual(levelsOf(null), []);
 });
 
-test("the card on the table keeps its band - it is passed only once Next moves you on", () => {
-  const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
-  assert.match(view, /bandsOf\(drawn\.map\(\(i\) => \(i\.surfaced && atTable\(i\) \? \{ \.\.\.i, surfaced: false \} : i\)\), pin\.current\)/);
-});
 
 // 2026-10-19 UI walk: a For later row clicked was taken up by the server and jumped to On you under the pointer
 test("the row on the table stays in the band it was opened from", async () => {

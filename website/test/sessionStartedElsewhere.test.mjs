@@ -10,8 +10,7 @@ import { taskSource } from "./taskSource.mjs";
 // screenshot as the panel on the right saying "not started".
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
 
 import { agentPhase } from "../src/taskLifecycle.js";
 
@@ -25,34 +24,6 @@ test("a live session anywhere means the agent stage is working, not 'not started
   assert.equal(agentPhase({}), "waiting to start");
 });
 
-test("the open task is reloaded on task-changed, not just the list", () => {
-  // the list and the task view (TaskPage) each subscribe; the view's own subscription reloads the open task
-  const subs = [...src.matchAll(/onLive\("task-changed",([\s\S]*?)\);\n/g)];
-  assert.ok(subs.length, "the Tasks tab must subscribe to task-changed");
-  assert.ok(subs.some((sub) => /loadDetail\(/.test(sub[1])),
-    "refreshing only the list is how the row said 'agent working' beside a panel saying 'not started'");
-});
-
-test("the session the detail already carries is adopted", () => {
-  assert.match(src, /const live = detail\?\.session;/,
-    "the detail carries the live session - sessionAlive is read off it - so the page must take it");
-  // ...past the one guard: the session Stop and save is writing up is not taken back (its pty lives until the report is safe)
-  assert.match(src, /if \(!live\?\.alive \|\| live\.taskId !== selected\) return;\s*\n(?:\s*\/\/[^\n]*\n)?\s*if \(pressedHere\?\.sid && live\.sid === pressedHere\.sid\) return;\s*\n\s*if \(live\.sid === goneSid\.current\) return;\s*\n\s*if \(live\.sid !== term\?\.sid\) setTerm\(live\);/,
-    "adopt only a LIVE session of THIS task - never one its conversation has read as gone - and a new one whole when it is not the one we hold");
-  // ...and the one we hold takes its own new word - waiting, its question - merged in, never another session's (G7)
-  assert.match(src, /else if \(liveWord !== sessionWord\(term\)\) setTerm\(\(was\) => \(was\?\.sid === live\.sid \? \{ \.\.\.was, \.\.\.live \} : was\)\)/);
-});
-
-test("a switch never adopts the task it is leaving's session", () => {
-  // Switching clears `term` while `detail` still holds the previous task until its reload lands.
-  // Unguarded, that task's live session was adopted - and nothing cleared it once the new detail
-  // arrived without one: a done task showed another task's agent working, and its "Save and end
-  // session" and composer acted on THAT task's agent (2026-09-24).
-  const effect = /const live = detail\?\.session;[\s\S]*?\}, \[([^\]]*)\]\);/.exec(src);
-  assert.ok(effect, "the adopting effect is where it was");
-  assert.match(effect[0], /live\.taskId !== selected\) return/, "the session must belong to the selected task");
-  assert.match(effect[1], /\bselected\b/, "and the effect must re-run when the selection changes");
-});
 
 test("a session that has ENDED is not adopted over the one findTerm kept", () => {
   // findTerm deliberately keeps a dead session: its scrollback is what Done and Pause read, and

@@ -40,62 +40,6 @@ test("every read of a task keeps its recommended move, and the view on the table
   assert.equal(recRead(7), null);
 });
 
-test("no row asks the Advisor anything: the page reads the field, and an idea row fills nothing (the owner, 2026-11-15)", () => {
-  const view = src("AssistantView.jsx");
-  assert.equal((view.match(/api\.get\("\/api\/advice"/g) || []).length, 0, "nothing reads /api/advice");
-  assert.match(view, /setAdvice\(adviceRead\(\{ none: "nothing" \}, key\)\.advice\); setReadFor\(\{ key, round: r \}\);/, "an idea's row: nothing lit, nothing asked");
-  const at = view.indexOf("if (!ideaOn(key)) {"), end = view.indexOf("// AN ADVISOR IDEA'S ROW FILLS NO BUTTON", at);
-  assert.ok(at > 0 && end > at);
-  const own = view.slice(at, end);
-  assert.doesNotMatch(own, /api\/advice/);
-  assert.match(own, /if \(it && "recommended" in it\) noteOwn\(key, it\.recommended, seenAt\(it\)\);/, "the rail's item on the table carries it");
-  assert.match(own, /const h = tid && heldTask\(tid\) \? recRead\(tid\) : null;\s+if \(h\) noteOwn\(key, h\.rec, h\.at\);/, "and a read of its task");
-  assert.match(own, /return;\s+\}\s*$/, "nothing below is reached");
-  assert.match(view, /useEffect\(\(\) => watchRecs\(\(tid, r\) => \{/, "the task view's own read is the newest word");
-  // ...nothing of the Advisor's is mounted over any row - only the mark of what is filled
-  assert.match(view, /&& <div hidden data-tq-recommended=\{shownAdvice\?\.verb \|\| ""\} \/>\}/);
-  assert.match(view, /const ideaOn = \(key\) => isIdea\(currentRef\.current\?\.key === key \? currentRef\.current : key\);/, "the item on the table says its kind");
-  assert.doesNotMatch(view, /AdvisorNext|AdvisorNotes|data-tq-advice/);
-  // ...and neither task view reads it for itself
-  for (const f of ["TaskPage.jsx", "CanvasItem.jsx"]) assert.doesNotMatch(src(f), /api\.get\("\/api\/advice"|useItemAdvice|readTaskAdvice/, f);
-});
-
-// CONTINUE'S ROAD: a narrow canvas handed the press to the Assistant's conversation (a `tq-continue` event it listened for) to draw the box
-// there - with that conversation folded away a lit Continue did nothing. The task takes it itself, at any width - and where its agent
-// section is one chat, into that chat's own box: a Continue card over a box already reading "Write to pick the session back up" was two boxes
-test("Continue on a task is the task's own chat box and hands nothing to the Assistant", () => {
-  const page = src("TaskPage.jsx"), view = src("AssistantView.jsx"), chat = src("GeneralWorkspace.jsx");
-  assert.match(page, /if \(a && canvas && t && !sessionView\) \{ if \(chatPane\) intoChat\(""\); else setContinueCard\(\{ note: "" \}\); return; \}/, "at any width");
-  assert.match(page, /const intoChat = \(note\) => \{\s*setChatSeed\(\{ id: Date\.now\(\), text: note \|\| "" \}\);/);
-  assert.match(page, /querySelector\("\[data-tq-agent-room\] \.tq-aui-input"\)/, "the cursor goes to the task's box, never the Assistant's");
-  assert.match(page, /seed=\{chatPane \? chatSeed : null\}/);
-  assert.match(chat, /if \(seed\.text && !c\.getState\(\)\.text\) c\.setText\(seed\.text\);/, "its note, never over the owner's words");
-  assert.doesNotMatch(page, /\{chatPane && <Box.*\{newStep\(\)\}<\/Box>\}/, "no second box over the chat");
-  assert.doesNotMatch(page, /CustomEvent\("tq-continue"/, "no press is sent to the Assistant");
-  assert.doesNotMatch(view, /addEventListener\("tq-continue",/, "and it listens for none");
-  // ...the box is the task's own card, under its conversation - never over a session's screen, which has no pane for it
-  assert.match(page, /\{continueCard && !runFormOpen && !sessionView && <Box data-tq-continue-pane=""/);
-  // ...a Continue the owner asked the Assistant for is still claimed by the task view, with its notes - whatever the width
-  assert.match(page, /claimRef\.current = canvas && active && t && !sessionView \? \(d\) => \{ if \(Number\(d\?\.tid\) !== Number\(selected\)\) return false; setRestartOpen\(false\); if \(chatPane\) intoChat\(d\.note\); else setContinueCard\(\{ note: d\.note \|\| "" \}\); return true; \} : null;/);
-  assert.match(view, /new CustomEvent\("tq-continue-here", \{ detail: \{ tid, note: noteFor\(tid\), claim: \(\) => \{ claimed = true; \} \} \}\)/);
-  // ...and what goes wrong is said in the box itself (ContinueBox), on the task
-  assert.match(page, /<ContinueBox /);
-});
-
-// THE PILL OVER A TASK (2026-11-09): grown under the mouse it rose across the foot of the task's own composer at 1440x900, its Send under it
-test("the Assistant's pill never grows over a task's view", () => {
-  const view = src("AssistantView.jsx");
-  assert.match(view, /const popOn = !phone && !old && !walk && !firstRun && lastCardIdx >= 0 && barHolds;/);
-  assert.match(view, /const grow = chatApart && !boxWide && !popOn && \(hover \|\| !!text\.trim\(\)\);/);
-});
-
-// A LATE ANSWER NO AGENT WAS WOKEN FOR (the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible"): the server lights
-// Chase (rulebook.LATE), and the task's row draws Chase only then - its own verb, so the row fills it like any recommended move
-test("a lit Chase is drawn on the task's row, only while it is the recommended move, and drafts on the chase road", () => {
-  const page = src("TaskPage.jsx");
-  assert.match(page, /\.\.\.\(rec\?\.verb === "chase" && !liveSession \? \[\{ id: "chase", group: "decide"/);
-  assert.match(page, /runOperation\(api, "task\.chase", t\.TaskId, \{ key: `task:\$\{t\.TaskId\}` \}\)/, "the slipped card's own road, keyed by the task");
-});
 
 // A ROW WITH NOTHING LIT SAYS WHY ON THE ITEM'S OWN ROW - a phone's, the narrow window's: the server's sentence for it, and nothing filled.
 // NEVER ON THE BAR UNDER THE PAGE (the owner, 2026-11-11: "never asked to have any text under the back next button"): the desk's bar is

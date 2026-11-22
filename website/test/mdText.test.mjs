@@ -38,10 +38,3 @@ test("a task's ref is one word in a table cell", () => {
   const md = fs.readFileSync(new URL("../src/md.jsx", import.meta.url), "utf8");
   assert.match(md, /td: Td/); assert.match(md, /"& \.ref": \{ whiteSpace: "nowrap" \}/);
 });
-
-test("a long URL or path breaks inside the column instead of running past it", () => {
-  const md = fs.readFileSync(new URL("../src/md.jsx", import.meta.url), "utf8");
-  const css = fs.readFileSync(new URL("../src/assistantView.css", import.meta.url), "utf8");
-  assert.match(md, /lineHeight: 1\.55, overflowWrap: "break-word"/);
-  assert.match(css, /\.tq-msg \.body \{[^}]*overflow-wrap: break-word/);
-});

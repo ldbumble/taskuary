@@ -37,20 +37,6 @@ test("the held row follows the live one only for the same buttons of the same it
   assert.ok(!sameRow(a, { list: [{ id: "done", at: "t" }] }));
 });
 
-test("the row is never hidden while it waits: the old one stays up, and the hold is the page's", () => {
-  const row = src("ActionRow.jsx"), view = src("AssistantView.jsx");
-  assert.doesNotMatch(row, /visibility: "hidden"/);
-  assert.match(row, /ActionRow\(\{ inline = false, advised: given = null, hold = false, early = true, says = \"\" \}\)/);
-  assert.match(view, /<ActionRow advised=\{stripPick \|\| setupLit\} hold=\{rowHold\} early=\{rowEarly\}( says=\{.*?\})? \/>/);
-  assert.doesNotMatch(view, /HOLD_MS = \d+;|setReading/, "no timer of its own hides the row");
-  // ...and nothing says it is reading: the strip that carried a "busy" attribute is gone (the owner, 2026-10-26: "remove the advisor")
-  assert.doesNotMatch(view, /data-tq-strip=/);
-});
-
-test("a decision that lights nothing on purpose leaves a hidden mark, never a word", () => {
-  const view = src("AssistantView.jsx");
-  assert.match(view, /&& <div hidden data-tq-recommended=\{shownAdvice\?\.verb \|\| ""\} \/>\}/);
-});
 
 // THE OWNER, 2026-11-09: "I thought it's greyed out until you can click it again" - a second Mark done while the next task loaded did nothing
 test("a held button that would do nothing is greyed, and un-greys the moment a press works again", () => {

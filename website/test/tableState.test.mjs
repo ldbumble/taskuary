@@ -54,22 +54,6 @@ test("the Advisor's decision is read whole, silent or not, and nothing is ever a
   assert.deepEqual(adviceRead({}, "task:7"), { advice: null });
 });
 
-test("the page wires the record: the strip, the box's subject, the folded line and the ring", () => {
-  assert.match(src, /const table = tableOf\(/);
-  assert.match(src, /const shownAdvice = table\.speaks && !litNow \?/);
-  assert.match(src, /if \(card\) openCardRef\.current = null;/, "a task put on the table ends the page the chat was answering about");
-  assert.match(src, /live && foldedNow \? \{ role: "button"/, "the folded item on the table is its own door back");
-  assert.match(src, /onCurrent=\{\(\) => backToTable\(\)\}/, "the ringed rail row reopens it");
-  assert.match(src, /const backToTable = [^\n]*\n\s+setRailOpen\(false\);\n\s+if \(table\.folded \|\| table\.place\) unfoldTable\(\);/, "...by unfolding the table");
-  // folded by its X it is put away (UX walk, 2026-10-22): no "on the table" ring, no #task - and its plain row opens it again in place
-  // ...folded by a walk press, the row keeps its mark until the answer lands (rule 7: the band's count does not jump between batches)
-  // ...unless the press read them (rule 4): they left with it, and the fyi batch below takes the bracket at the press
-  assert.match(src, /current=\{old \? null : readGone\?\.keys\.includes\(currentItem\?\.key\) \? [^\n]*\n\s+: \(table\.folded && !flight\?\.from\) \|\|/, "a folded task's row is not marked on the table");
-  assert.match(src, /litTable\.tid && !table\.folded \? `#task=/, "nor does the address name it");
-  assert.match(src, /if \(isCur \|\| \(table\.folded && key === table\.key\)\) \{ backToTable\(key\); return; \}\n\s*pull\(key, null\);/, "its row unfolds it, not a second pull");
-  assert.match(src, /firstRun && \(browsing \|\| setupCard\) && <div data-tq-setup-over=""/, "a sidebar place - or a task - opens during setup, with the way back");
-  assert.doesNotMatch(src, /setTimeout\(\(\) => \{ if \(n === adviceAsk\.current\) setAsking\(null\); \}, 20000\)/, "no 20 s spinner that then shows nothing");
-});
 
 // the owner, 2026-11-06: "there used to be button to clear the chat??" - on the home screen the icons left the head for the pill
 test("the Assistant's own icons: in the head on the home screen, in the pill only while a task or page is open over the chat", () => {

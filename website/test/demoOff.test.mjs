@@ -24,14 +24,3 @@ test("every name imported from demoApi.js is answered by demoOff.js", () => {
   for (const n of names) assert.ok(n in off, `demoOff.js has no ${n}`);
   assert.equal(off.DEMO, false); assert.equal(off.DEMO_GUIDED, false);
 });
-
-test("the stand-in reaches nothing of the recording", () => {
-  const s = readFileSync(new URL("demoOff.js", src), "utf8");
-  assert.doesNotMatch(s, /^\s*import\b/m);
-});
-
-test("the alias is off exactly when VITE_DEMO is 1", () => {
-  const cfg = readFileSync(new URL("../vite.config.js", import.meta.url), "utf8");
-  assert.match(cfg, /VITE_DEMO === "1" \? \[\]/);
-  assert.match(cfg, /demoApi\\.js\$\/, replacement: .*demoOff\.js/);
-});

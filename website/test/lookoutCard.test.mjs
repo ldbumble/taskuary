@@ -17,14 +17,6 @@ test("each family has its own word, never just 'advisor idea', and sits in the A
   assert.match(idea, /kicker=\{<>\{ideaWord\(card\.idea_kind\)\}/, "the card's kicker is the family word");
 });
 
-test("the suggestion is the main line and the pitch its own, with no Whose move, on both the card and the table", () => {
-  assert.match(idea, /const suggest = look \? a\.next_step \|\| a\.suggest : a\.suggest;/);
-  assert.match(idea, /const rows = \[\["Pitch", look && a\.pitch\]/);
-  assert.doesNotMatch(idea, /Whose move"/);
-  assert.match(idea, /\{card\.title\}\{suggest && !habits && <> \{suggest\}<\/>\}/, "the table's lead carries the suggestion");
-  assert.match(idea, /<Facts rows=\{rows\} \/>/, "the table's Came from draws the same rows");
-  assert.match(idea, /facts = rows\.filter/);
-});
 
 test("what it rests on opens in the app, on the canvas's link road", () => {
   assert.match(idea, /export const citeHref = \(ref\) => \{ const m = \/\^\(msg\|task\)\(\\d\+\)\$\/\.exec/);

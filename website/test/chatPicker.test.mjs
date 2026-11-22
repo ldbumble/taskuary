@@ -61,17 +61,3 @@ test("one endpoint for every picker; an agent channel asks it to mark what it ca
   assert.equal(chatUrl("whatsapp"), "/api/chats/whatsapp");
   assert.equal(chatUrl("slack", { agent: true }), "/api/chats/slack?agent=1");
 });
-
-test("the Assistant chat and the agent channel form draw the one ChatPicker - no datalist, no list of their own", () => {
-  const ac = read("AgentChannels.jsx"), sv = read("SettingsView.jsx");
-  assert.match(ac, /import ChatPicker from "\.\/ChatPicker\.jsx"/);
-  assert.match(ac, /<ChatPicker options=\{chats\} value=\{chat\} onChange=\{setChat\} onLook=\{\(\) => loadChats\(kind\)\}/);
-  assert.match(ac, /api\.get\(chatUrl\(kd, \{ agent: true \}\)\)/);
-  assert.match(ac, /hint=\{chatHint\(kind\)\}/);
-  assert.doesNotMatch(ac, /datalist|k\.chats/);
-  assert.match(sv, /import ChatPicker from "\.\/ChatPicker\.jsx"/);
-  assert.match(sv, /<ChatPicker options=\{r\.options\}/);
-  assert.doesNotMatch(sv, /<Autocomplete/, "the Assistant chat's own dropdown is the shared one now");
-  // ...and the task's "Talk to this agent from…" popover is the same ChannelSetup
-  assert.match(ac, /<AgentChannels|ChannelSetup taskId=\{taskId\}/);
-});

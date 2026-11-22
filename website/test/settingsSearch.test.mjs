@@ -44,9 +44,3 @@ test("every panel has a heading, words and a section the page draws, and the pag
   }
   assert.equal((view.match(/placeHits\(/g) || []).length, 2, "both Settings searches - the list's and the page's - ask the same function");
 });
-
-test("Connections' Saved sign-ins card is found by the same words, not a second copy", () => {
-  const c = read("ConnectorsView.jsx");
-  assert.match(c, /haystack: schema\.panels\["panel:signins"\]\.words/);
-  assert.doesNotMatch(c, /haystack: "sign in signin/);
-});

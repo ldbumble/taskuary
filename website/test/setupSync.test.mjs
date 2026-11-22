@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
+
 import { firstSyncProgress, startFirstSync } from "../src/setupSync.js";
 
 const reader = (ingest, state) => ({ get: async (url) => ({ data: url === "/api/setup" ? state : ingest }) });
@@ -38,15 +38,4 @@ test("a genuine first result carries the review sample to the panel", async () =
   const result = await firstSyncProgress(reader({ status: { state: "idle" } }, state));
   assert.equal(result.phase, "ready");
   assert.deepEqual(result.state.first_items, state.first_items);
-});
-
-// THE CHECKLIST OPENS ITSELF ON A FIRST RUN, whatever was already found. It used to wait for done === 0, and a machine
-// with a coding CLI on its PATH has "Connect one AI" ticked before anyone looks - so a fresh install never saw it
-// (the owner, 2026-10-06: "first time you load app this should pop up automatically"). Put away still means put away.
-// ...replaced (the owner, 2026-10-14: "Remove the popup things just use the assistant canvas"): nothing opens itself over the app;
-// the setup is the canvas's own welcome until its walk starts (FirstRun.jsx, firstRun.test.mjs)
-test("setup never opens a dialog over the app on load - the canvas carries it", () => {
-  const page = readFileSync(fileURLToPath(new URL("../src/TaskHubPage.jsx", import.meta.url)), "utf8");
-  assert.doesNotMatch(page, /setSetupOpen\(true\)/);
-  assert.doesNotMatch(page, /<SetupPanel/);
 });

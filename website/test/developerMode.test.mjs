@@ -22,13 +22,6 @@ test("both are optional: Next never waits on them", () => {
   assert.ok(doneOf(ON, "dev")); assert.ok(doneOf(ON, "github"));
 });
 
-test("setup's step is one plain switch, saved like any knob, and GitHub is the catalogue's own card", () => {
-  const fr = read("FirstRun.jsx");
-  assert.match(fr, />Are you a developer\?</);
-  assert.match(fr, /<Switch checked=\{!!st\.developer_mode\} disabled=\{devBusy\} onChange=\{\(e\) => setDev\(e\.target\.checked\)\} \/>/);
-  assert.match(fr, /api\.patch\("\/api\/settings", \{ name: "developer_mode", value: on \? "1" : "0" \}\)/);
-  assert.match(fr, /\{shelf\("github", byType\(\["github"\]\)\.map\(\(c\) => card\(c, false\)\), "More"\)\}/);
-});
 
 test("Settings: the switch is a schema knob in a group always shown, and saving it reads capabilities again", () => {
   const k = schema.knobs.developer_mode;

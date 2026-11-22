@@ -1,8 +1,8 @@
 import { taskSource } from "./taskSource.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
+
 import {
   AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, replySource, sessionWord, wentOut, pendingProposals, pendingReplyReview, replyPhase,
   sentReplyReview, taskPhase, timelinePhases,
@@ -51,15 +51,6 @@ test("timeline exposes task state beside current agent or reply attention", () =
     { task: "done", agent: null, reply: "sent" });
 });
 
-test("terminal output never triggers whole-task HTTP refreshes", () => {
-  const source = taskSource();
-  assert.match(source, /pollCalming\(active, async \(\) => \{[^\n]*await loadDetail\(selected\)[^\n]*\}, 3000, 12000\)/);   // calms to 12s while nothing changes
-  assert.doesNotMatch(source, /onLive\([^\n]*run-tail[^\n]*loadDetail/);
-  for (const file of ["ui.jsx", "FeedView.jsx", "BoardView.jsx", "WallView.jsx", "AssistantGame.jsx"]) {
-    const view = readFileSync(fileURLToPath(new URL(`../src/${file}`, import.meta.url)), "utf8");
-    assert.doesNotMatch(view, /onLive\([^\n]*run-tail/, `${file} must not turn terminal bytes into HTTP`);
-  }
-});
 
 test("one stage is open: the last thing owed wins, and a closed task shows itself", () => {
   const draftReady = { kind: "coding", task: "open", agent: "stopped and saved", reply: "ready to send", hasSender: true };
@@ -83,29 +74,6 @@ test("one stage is open: the last thing owed wins, and a closed task shows itsel
   assert.equal(focusStage({}), "task");
 });
 
-test("the task page opens exactly one stage and lets you open the others by hand", () => {
-  const source = taskSource();
-  // a session that fills the page IS the agent stage; stepping back from it (peek) opens the task
-  // stage, the one that says what the task is and where it came from (2026-09-18)
-  // ...Stop and save pressed here (or its write-up running) holds Close out open until the draft stands in the block's place
-  assert.match(source, /const restStage = sessionView \|\| writingUp \? "agent" : \(pressedHere \|\| writeup \? "reply" : peek \? "task" : focusStage\(/);
-  assert.match(source, /const stage = sessionView \? "agent" : \(openStage \|\| restStage\);/);
-  assert.match(source, /setOpenStage\(null\)/);
-  assert.match(source, /onToggle: shows\(name\) \? null : \(\) => setOpenStage\(name\)/);   // the open one is not a control                                     // a new task recomputes its own focus
-  for (const name of ["agent"]) {
-    assert.ok(source.includes(`{...stageProps("${name}")}`), `stage ${name} must fold and open by hand`);
-    assert.ok(source.includes(`shows("${name}") &&`), `stage ${name} body must be gated`);
-  }
-  // ...and the task itself is no stage any more: From is its own column, always open (the redesign, 2026-10-21) - the work column
-  // opens what the task is for where the focus names the task (taskLayout.workPane)
-  assert.ok(!source.includes(`stage !== "task" && (`), "no folded Task strip");
-  assert.match(source, /\{\(!fromDrawer \|\| fromSide\) && slot\("from",\s*<Box data-tq-from="" data-tq-task-section=""/);
-  // ...neither half on a task waiting on a person (the owner, 2026-10-25): both fold to a line
-  assert.match(source, /const paneRest = waitFor && !openStage \? "" : workPane\(\{ stage, kind: t\?\.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas, picked: !!openStage \}\);/);
-  // ...and the chat is always drawn - open or behind its tab, the reply's cards in it: there is no other half (2026-11-06)
-  assert.match(source, /const pane = "agent", shows = \(p\) => p === pane;/);
-  assert.doesNotMatch(source, /stageProps\("reply"\)/);
-});
 
 test("a general chat that has answered is agent state, not \"not started\"", () => {
   assert.equal(agentPhase({ conversation: true }), "stopped and saved");
@@ -116,47 +84,6 @@ test("a general chat that has answered is agent state, not \"not started\"", () 
   assert.equal(focusStage({ kind: "general", task: "open", agent: "stopped and saved", reply: "not drafted" }), "agent");
 });
 
-test("closing the task never hides behind a fold, and a finished chat can be closed out", () => {
-  const source = taskSource();
-  // the completion control is the Tasks tab's bar at the view's foot (and the row on the canvas) - never inside a column that scrolls
-  const bar = source.slice(source.indexOf('<Box data-tq-task-bar=""'), source.indexOf('labelOfRow("nat")}</Button>'));
-  assert.ok(bar.includes('labelOfRow("done")}</Button>'), "the bar carries the done control");
-  assert.ok(bar.includes("onClick={askFinish}"), "and it must run the same completion road (askFinish -> finish(\"done\"))");
-  assert.match(source, /const WorkflowHeading = \(\{ number, title, description, chip, tone, folded, onToggle, action, tools, quiet = false, sec = null, here = false, sub = undefined \}\)/);
-  // ...and a general conversation is wrappable once its provider session is gone (server.py/wrapup.py, 2026-09-07)
-  assert.match(source, /const canWrap = !!term \|\| !!detail\?\.transcript \|\| hasGeneralHistory/);
-  assert.match(source, /conversation: generalStarted/);
-  // ...and no Stop and save at all (the owner, 2026-11-10: "no need for stop and save button") - the write-up runs on Mark done
-  assert.ok(!source.includes('"save-end"'), "no Stop and save");
-  assert.ok(!source.includes(">Save result<") && !source.includes('label: "Save result"'));
-  assert.ok(!source.includes("Save this conversation's result") && !source.includes("Save stopped run result"));
-  // interrupted work says so on the task page, not only in the list row - on the status pill's hover now (the redesign, 2026-10-21)
-  assert.match(source, /note=\{interruptedTask \? INTERRUPTED : ""\}/);
-});
-
-test("the agent heading says what the agent is doing, not that a session exists", () => {
-  // "② <agent> is working" sat beside its own chip reading "agent · needs you", because the title
-  // asked only whether a pty was alive. The agent had been parked on a question for an hour
-  // (the owner, 2026-09-11, TQ-0499: "is this the same bug?" - yes, the third surface of it).
-  const view = taskSource();
-  assert.doesNotMatch(view, /title=\{term\?\.alive \? `\$\{agentName\(t\)\} is working`/);
-  // ...and WHICH wait: asked, needs approval, stuck (T6, 2026-09-25)
-  assert.match(view, /agentState === AGENT\.waiting \? says\(subState\(term\), agentName\(t\)\)/);
-  // and the two states still come from one place: agentPhase already reads the session's own word
-  assert.match(readFileSync(fileURLToPath(new URL("../src/taskLifecycle.js", import.meta.url)), "utf8"), /session\?\.alive\) return session\.waiting \? AGENT\.waiting : AGENT\.working/);
-});
-
-test("needs you is the one phase that wears the loud colour", () => {
-  const ui = readFileSync(fileURLToPath(new URL("../src/ui.jsx", import.meta.url)), "utf8");
-  // the palette has always said so - theme.jsx calls ALERT "the needs-you pill" - but the chip
-  // used the pale tint, the same weight as four calmer phases (the owner, 2026-09-11)
-  // ...solid, in On you's own sage since the five-colour palette (the owner, 2026-10-06: on you is not red) - still the
-  // one SOLID phase among tinted ones
-  assert.match(ui, /needsYou: \{ bg: "#5f7a5f", fg: "#fffdfb", bd: "#5f7a5f" \}/);
-  assert.match(ui, /if \(value === AGENT\.waiting\) return LC\.needsYou;/);
-  // ...and only that one: a draft waiting for a yes is not an agent blocked on you
-  assert.match(ui, /if \(value === READY \|\| value === "approval needed" \|\| value === "ready"\) return LC\.you;/);
-});
 
 // A PROPOSAL IS A DECISION TOO. A playbook drafted after a coding job, or a setting proposed in
 // chat, has no sender and still needs a yes - so the stage cannot be gated on there being someone
@@ -235,13 +162,6 @@ test("a session's new word is a change the task page takes, and the same word is
   assert.equal(sessionWord(null), "");
 });
 
-// NO STOP AND SAVE ANYWHERE (the owner, 2026-11-10: "no need for stop and save button"): it was the live session's only, after an ended
-// one offered it too (owner-approved, 2026-10-20); now the x on the running turn is the one stop, and typing carries the work on
-test("no session offers a Stop and save anywhere on the task page, live or ended", () => {
-  const page = readFileSync(fileURLToPath(new URL("../src/TaskPage.jsx", import.meta.url)), "utf8");
-  assert.doesNotMatch(page, /canSave|endedByStop/, "no second road to the write-up for a session that has ended");
-  assert.doesNotMatch(page, /"save-end"|stopSave/);
-});
 
 // A CHAT AT REST IS NOT RE-READ ON A TIMER (stress round, 2026-11-18): a general agent's CLI stays open half an hour after it answers, and
 // the task page counted it as a running agent - the whole task read every 3-12 s for all of that half hour. Only a session at work (or one

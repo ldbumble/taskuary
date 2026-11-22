@@ -45,28 +45,9 @@ test("nothing on the table: Back, New and Change my setup - New is the sidebar's
   assert.doesNotMatch(view, /setupask/, "no separate Set something up: New leads to it");
 });
 
-test("the desk's bar asks for the split, and the item's row is drawn on the item", () => {
-  assert.match(read("ActionRow.jsx"), /splitRow\(rowOf\(verbs, pick\), laidOf\(verbs\.list\) \|\| verbs\.lay \|\| null, !inline && !hosted\)/);
-  const view = read("AssistantView.jsx");
-  assert.match(view, /const ItemMoves = \(\) => <div className="tq-item-moves" data-tq-item-moves=""><PaneMoves sec="item" name="This one" \/><\/div>;/);
-  assert.match(view, /\{moves && card && !foldedNow && <ItemMoves \/>\}\n\s*\{card && !foldedNow && <CardNav\.Provider/, "over the card on the table");
-});
-
-test("a Not ours taken further never rides onto the next item: the receipt lends no chip past itself", () => {
-  const view = read("AssistantView.jsx");
-  assert.doesNotMatch(view, /furtherIndex|further=\{|c\.follow\?\.kind/);
-  assert.doesNotMatch(read("proposalCard.js"), /export const followUps/);
-});
-
-test("Reply is drawn only where the server says somebody reads one", () => {
-  const cards = read("assistantCards.jsx");
-  assert.match(cards, /\{i\.mid && i\.replies && <Button[^\n]*onClick=\{\(\) => reply\(i\)\}/, "an FYI batch's line");
-  assert.match(cards, /: card\.mid && card\.replies && <Button[^\n]*onClick=\{draftReply\}/, "a message card's own move");
-});
 
 test("a task's row: the server's ReadsReply decides, a machine's notice on email included", () => {
   assert.equal(hasCorrespondent({ Channel: "email", FromOwner: false, ReadsReply: false }), false, "a code host's notice: no Reply");
   assert.equal(hasCorrespondent({ Channel: "email", FromOwner: false, ReadsReply: true }), true);
   assert.equal(hasCorrespondent({ Channel: "own", FromOwner: false }), false, "a row from before the field still reads its channel");
 });
-

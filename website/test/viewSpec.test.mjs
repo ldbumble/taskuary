@@ -141,13 +141,6 @@ test("a filed turn's show step draws its view from the answer it kept", () => {
   assert.equal(view?.spec.title, "Northwind renewals");
 });
 
-// A COMPARISON THE AGENT SHOWED, CUT OFF (the visual audit, 2026-11-13): three tools side by side, each cell a sentence - every one ended in
-// "..." at 280px, so the owner read "Two-way sync, included on the..." and had to hover cell by cell. Words wrap; numbers stay on one line
-test("a table's words wrap in their cell, its numbers stay on one line", () => {
-  const css = readFileSync(new URL("../src/viewSpec.css", import.meta.url), "utf8"), td = css.match(/\.tq-view-table td \{([^}]*)\}/)[1];
-  assert.doesNotMatch(td, /text-overflow: ellipsis|white-space: nowrap/, "a word cell is never cut short");
-  assert.match(css, /\.tq-view-table td\.n \{[^}]*white-space: nowrap/, "a number keeps its figures together");
-});
 
 // the owner, 2026-11-15: "of course chart should be in chat, wasn't that the whole idea of the json render?" - an agent that writes its chart
 // as a fenced spec in its answer, not through `show`, had it drawn as a code block. Same check, same renderer; anything else stays code

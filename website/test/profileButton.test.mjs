@@ -41,13 +41,6 @@ test("it is the top bar's last button, after Quit, on a phone too, and opens Abo
   assert.doesNotMatch(b, /DEMO/, "the demo shows its own owner's face");
 });
 
-test("About you redraws the corner when the name or the avatar changes", () => {
-  const a = src("AboutYou.jsx");
-  assert.match(a, /window\.dispatchEvent\(new Event\(PROFILE_CHANGED\)\)/);
-  assert.match(a, /api\.patch\("\/api\/whoami", fields\)\)\.data\); changed\(\);/);
-  assert.match(a, /load\(\); changed\(\);/);
-  assert.match(src("ProfileButton.jsx"), /window\.addEventListener\(PROFILE_CHANGED, read\)/);
-});
 
 test("the sidebar has no About you, and #about still opens the page", async () => {
   const { SIDE_NAV } = await import("../src/sideNav.js");

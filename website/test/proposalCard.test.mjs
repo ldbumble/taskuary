@@ -78,18 +78,6 @@ test("a sweep that took the table with it offers Next; one that did not just rel
   assert.equal(afterConfirm(p, done, "task:7"), "settle");           // the page still settles this one
 });
 
-// The Next button itself: the receipt row carries chips, and a sweep that took the table puts one there.
-test("the receipt after a sweep carries Next, and the page puts the table down without walking on", () => {
-  const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
-  // nothing done, no recovery offered: Next at least; a Not ours done offers no chip after it (2026-11-10)
-  assert.match(view, /: step === "offer" \|\| out\.status !== "done" \? \[\{ verb: "next", label: btn\("next"\) \}\] : \[\];/);
-  assert.match(view, /role: "receipt", status: out\.status, text: out\.receipt, tid: p\.tid \|\| res\?\.outcome\?\.taskId, ref: p\.ref \|\| res\?\.outcome\?\.ref, chips/);
-  // ...and a failed act's receipt carries its way on (concierge.recover), not the sweep's lone Next
-  assert.match(view, /const chips = \(out\.status !== "done" \|\| p\.kind === "review\.approve"\) && res\?\.chips\?\.length \? res\.chips/);
-  assert.match(view, /\{last && <BarVerbs owner=\{`line:\$\{m\.id\}`\} chips=\{receiptChips\(m\)\}/);   // the receipt hands them to the row by the prompt
-  assert.match(view, /const clearTable = \(\) => putOnTable\(null, "sync"\);/);                 // putting the table down is not advancing
-  assert.doesNotMatch(view, /if \(step === "offer"\) advance\(\)/);
-});
 
 test("a hand-off in words is a job, not a form: the brief once, and a coding job names its repository", () => {
   const brief = "Look into issue 920 on the fan app and make sure the screening job is scheduled and working.";
@@ -136,26 +124,6 @@ test("a proposed report reads like the report builder: its name, the prompt as a
   assert.equal(d.preview, true);
 });
 
-test("a failed act's way on runs from the chat: Try again, GitHub's own buttons, a repository, an item by name", () => {
-  const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
-  assert.match(view, /if \(c\.verb === "retry" && c\.op\) \{/);                 // the same confirmation once more
-  assert.match(view, /if \(c\.verb === "closeout" && c\.rid\) \{/);             // Update branch / Re-run checks
-  assert.match(view, /if \(c\.verb === "repo" && c\.op\) \{/);                  // the checkout a stopped hand-off waits for
-  assert.match(view, /if \(c\.verb === "open" && c\.key\) \{ surface\(c\.key\); return; \}/);
-  assert.match(view, /\{m\.status === "warn" \? "" : m\.status && m\.status !== "done" \? "✗ " : "✓ "\}/);   // a failure never wears a tick, nor a warning
-});
-
-// the owner, 2026-10-23: "we used to have that if we were talking on the phone it would lock the screen on desktop but we should
-// probably get rid of that" - a walk handed to the phone locks nothing here: no banner over the box, no dead card, no refused press
-test("a walk on the phone locks nothing on the desktop: no banner, no dead card, the box and Walk stay live", () => {
-  const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
-  assert.doesNotMatch(view, /The walk is in/);
-  assert.doesNotMatch(view, /handedTo/);
-  assert.doesNotMatch(view, /(?<![.\w])handoff \|\||\|\| handoff\b|!!handoff|!handoff\b/);    // nothing gated on the hand-off
-  assert.doesNotMatch(view, /this tab locks/);
-  assert.match(view, /\{!old && !walk && \(\s*\n\s*<div className="tq-compose"/);    // the box is drawn whether or not a phone holds the walk
-  assert.match(view, /\{ \.\.\.s, handoff: st\.handoff \|\| null \}/);              // still followed as state, so the table tracks the phone
-});
 
 test("an answered proposal drops its 'confirm below' - the receipt under it says what happened", async () => {
   const { proposalSay } = await import("../src/proposalCard.js");

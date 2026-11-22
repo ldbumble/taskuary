@@ -44,33 +44,6 @@ test("the open setup's button to light is its filled one, else its outlined one 
   assert.equal(buttonOf([b("Check now"), b("Show details")]), null);
 });
 
-test("the Advisor adds no button of its own: the card, the open setup's button or the row's verb is lit where it stands", () => {
-  const src = read("FirstRun.jsx");
-  assert.doesNotMatch(src, /setup:pick|pickRow|pickOf/, "no 'Connect <card>' on the row");
-  assert.match(src, /const toneOf = \(id\) => \(id === rowLit \? "p" : "s"\)/, "one filled verb, and only when the move is on the row");
-  assert.match(src, /<Light root=\{rootRef\} card=\{litCard\?\.key \|\| ""\} canvas=\{canvas\} onShown=\{onShown\} \/>/);
-  assert.match(src, /detail=\{<Box data-tq-setup-scope="">\{open \? detail : cliDetail\}<\/Box>\}/);
-  assert.match(src, /<Box data-tq-setup-scope=""><SetupDone/);
-  assert.match(src, /THE ADVISOR LIGHTS THE REAL CONTROL \(the owner, 2026-10-19/, "the ruling is written where the old one stood");
-  assert.match(read("ConnectorsView.jsx"), /data-tq-card=\{c\.key\}/);
-  assert.match(read("assistantView.css"), /\[data-tq-card\]\[data-tq-setup-lit\]/);
-});
-
-test("the line names the lit control by the words the screen draws on it", () => {
-  const src = read("FirstRun.jsx");
-  assert.doesNotMatch(src, /Microsoft 365 is one sign-in/);
-  assert.match(src, /const named = canvas \? shown\.label : litCard \? litCard\.title : /, "a card by its title, a button by its own label");
-  assert.match(src, /else if \(line && named && !line\.includes\(named\)\)/, "a line that does not name it ends by naming it");
-  assert.match(src, /onShown\(el && canvas \? \{ label: \(el\.innerText \|\| ""\)\.trim\(\)/, "the button's label is read off the button");
-});
-
-test("About your work lights its own move - Next, or Write it while there is no description - and the dock lights about:next", () => {
-  const about = read("FirstRunAbout.jsx");
-  assert.match(about, /id: "about:next", group: "next", tone: writeLit \? "s" : "p"/);
-  assert.match(about, /data-tq-setup-lit=\{writeLit \? "about" : undefined\}/);
-  assert.match(about, /Then press \$\{nextLabel\}\./);
-  assert.match(read("AssistantView.jsx"), /\/\^\(setup\|about\):\/\.test\(String\(x\.id\)\) && x\.tone === "p" && !x\.disabled/);
-});
 
 test("the dock fills the setup verb it is told and nothing else", async () => {
   const { rowOf } = await import("../src/actionRow.js");

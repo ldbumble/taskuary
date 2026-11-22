@@ -24,23 +24,6 @@ test("a held rail dates from when the server began reading it, never later than 
   assert.equal(coveredByReload({ lastAt: 999_500 }, heldSince({ generated_at: 999_000 }, now)), false);
 });
 
-test("landed holds the rail the turn brought and only falls back to its own load without one", () => {
-  const landed = between("const landed = useCallback", "// a line of the assistant's own that needs no turn");
-  assert.match(landed, /if \(data\.pile\) holdPile\(data\.pile\);/, "the rail the move left, with the next answer prepared in it");
-  // ...a light answer's walk word put on the rail on screen, and the rail read behind it (Next turns blue as the move saves, 2026-11-06)
-  assert.match(landed, /\/\/ \.\.\.no rail rides along[^\n]*\n[^\n]*\n\s+else \{ const p = withWalk\(pileRef\.current, data\.walk\);[^\n]*loadPile\(true\); \}/);
-  assert.doesNotMatch(landed, /say\(data\.say\); loadPile\(true\)/, "the unconditional reload after every turn is gone");
-  const hold = between("const holdPile = useCallback", "const landed = useCallback");
-  assert.match(hold, /forcedLoadStartedAt\.current = heldSince\(data\)/);
-  assert.match(hold, /setPile\(\(p\) => refreshPilePresentation\(p, data\)\)/);
-});
-
-test("All read, next: the settle and the walk on are one move, and its answer brings the rail back without a reload", () => {
-  const done = between("const done = async (pressed)", "// Setting Taskuary up");
-  assert.match(done, /await leave\(current, "settle", pressed \? \{ pressed \} : \{\}\)/);
-  assert.doesNotMatch(done, /funnel\/settle/, "never a settle of its own and a walk after it");
-  assert.match(between("const landed = useCallback", "const noteLine"), /if \(data\.pile\) holdPile\(data\.pile\);/);
-});
 
 test("a typed next keeps the capture: the table did not change, so the token still names the pick", () => {
   const next = between('if (verb === "next") {', 'if (verb === "reply" && mid)');

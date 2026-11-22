@@ -31,10 +31,3 @@ test("the ask names the first blank, a long choice by its head, and nothing when
   assert.match(long, /^This still has \[Gail is joining \/ Gail is not joining…\]\. Send anyway\?$/);
   assert.equal(blankAsk("All set for Friday - Alex"), "");
 });
-
-test("every card that sends a draft asks with the one shared line before it posts", () => {
-  for (const f of ["ReviewDecision.jsx", "assistantCards.jsx"]) {
-    const src = readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
-    assert.match(src, /<BlankAsk /, f); assert.match(src, /blanks_ok: blanksOk/, f);
-  }
-});

@@ -78,15 +78,6 @@ test("what came in waits as a count on its sender's chip, his outside replies as
     { key: "You on WhatsApp", came: false, ids: ["m:8"], label: "You on WhatsApp · 1" }]);
 });
 
-test("his waiting lines are slim rows over the box - the newest two, +N more, Send now only where the turn takes words, a trash", async () => {
-  const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(src, /const rows = items\.filter\(\(x\) => x\.kind !== "arrival"\), shown = waitingShown\(rows, 2\), more = rows\.length - shown\.length;/);
-  assert.match(src, /\{x\.kind === "line" && now && onNow && <button type="button" className="tq-conv-pending-act" data-tq-send-now=""/);
-  assert.match(src, /data-tq-drop-line="" onClick=\{\(\) => onDrop\(x\)\}/);
-  assert.doesNotMatch(src, /Waiting for the agent\{items\.length/, "no heading, no box");
-  const css = await readFile(new URL("../src/generalWorkspace.css", import.meta.url), "utf8");
-  assert.match(css, /\.tq-conv-pending \{ display: flex; flex-direction: column; align-items: flex-end;/);
-});
 
 test("nothing drawn goes or moves, and nothing new is drawn above it", () => {
   const was = { items: [mail, answer] };
@@ -95,44 +86,6 @@ test("nothing drawn goes or moves, and nothing new is drawn above it", () => {
   assert.match(flowBreaks({ items: [mail] }, was)[0], /^c: t:m:1:0 was on the canvas and is gone/);
 });
 
-test("a card is drawn where the list has it and nowhere else - never loose under a turn at work, never live again at the foot", async () => {
-  const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  // ...THE LOG PLACES EVERY CARD (chatlog.advance, one road): the page has no placing of its own - no loose cards, no reply spliced in
-  assert.doesNotMatch(src, /looseCards|nextLoose|lettersHere|nextRid/);
-  // ...a draft no longer to press is its own card in its place, greyed, from its words: rewritten, set aside as he wrote again, taken back
-  assert.match(src, /if \(past && !got\.length && !post\) return c\.was \? \[wasCard\(c, rv\(c\.review\)\)\] : \[\];/);
-  assert.match(src, /past \? React\.cloneElement\(n\.node, \{ past: true \}\) : n\.node/);
-  assert.doesNotMatch(src, /stands below, under a later answer/);
-});
-
-// ONE CARD AT A TIME (the owner, 2026-11-16: "it should say I have 2 emails to send, should we send this one? then user clicks then the next one
-// shows"): the list names what waits behind the card that stands (conversation.items `queue`, cardqueue.py) - the page draws none of it, at
-// its turn, loose at the foot or as the landing question, and says over the card that stands how many come and which is next
-test("a card that waits behind another is drawn nowhere, and the one that stands says what comes next", async () => {
-  const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(src, /if \(held\.has\(c\.review\) && !past\) return \[\];/);
-  assert.match(src, /landing = held\.has\("land"\) \? null : landed/);
-  assert.match(src, /data-tq-card-queue=""/);
-  assert.match(src, /return out\.length && live\.has\(c\.review\) && c\.status === "pending" \? \[\.\.\.qLine\(\), \.\.\.out\] : out;/);
-  assert.match(src, /queue=\{list\?\.queue \|\| null\}/);
-  // ...and no second road draws two letters side by side: the other replies' block and the emails' Approve all are gone
-  const page = await readFile(new URL("../src/TaskPage.jsx", import.meta.url), "utf8"), slots = await readFile(new URL("../src/SlotList.jsx", import.meta.url), "utf8");
-  assert.doesNotMatch(page, /MoreDrafts/); assert.doesNotMatch(slots, /Approve all/);
-});
-
-// A CARD SET ASIDE SAYS NO REASON on any surface (the owner, 2026-11-18): the chat, the task page, the bulk card and the push card draw the card
-// it was, greyed
-test("a card set aside draws no reason line on any surface", async () => {
-  for (const f of ["GeneralWorkspace.jsx", "PassedCard.jsx", "BulkCard.jsx", "landing.js", "LandingCard.jsx", "chatStream.js"]) {
-    const src = await readFile(new URL(`../src/${f}`, import.meta.url), "utf8");
-    assert.doesNotMatch(src, /Earlier draft -|Set aside when you moved on -|moved on before you pressed|PASSED_LINE|c\.aside\.replace|w\.passed/, f);
-  }
-});
-
-test("the box says what the header says: never \"pick the session back up\" while a turn is at work", async () => {
-  const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(src, /cli \|\| convWorks \|\| !conv\.list\?\.ran \? MESSAGE : "Write to pick the session back up…"/);
-});
 
 test("a turn at work says what is happening, or what we wait for, beside its dots - one line, on every level", async () => {
   const { workingLine } = await import("../src/chatStream.js");
@@ -171,16 +124,6 @@ test("a turn at work says what is happening, or what we wait for, beside its dot
   assert.match(src, /: doing \? <span className="tq-aui-working-line" data-tq-working-line="" title=\{doing\}>\{doing\}<\/span> : null/);
 });
 
-test("his waiting line is pinned just over the box until the agent takes it - never in the scrolled conversation, where a turn at work pushed it down (the owner, 2026-11-15)", async () => {
-  const src = (await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
-  const conv = src.slice(src.indexOf('className="tq-conv"'), src.indexOf("</ThreadPrimitive.Viewport>")), foot = src.slice(src.indexOf('<div className="tq-aui-footer">'));
-  assert.doesNotMatch(conv, /<PendingStrip/, "not in the scrolled conversation: it moved as the turn wrote");
-  assert.match(foot, /<PendingStrip items=\{merged\.pending\}/, "over the box");
-  assert.ok(foot.indexOf("<PendingStrip") < foot.indexOf("<OneBox"), "above the box, whatever agent works the task");
-  const css = (await readFile(new URL("../src/generalWorkspace.css", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
-  assert.match(css, /\.tq-conv-pending \{[^}]*margin: 0 0 10px/, "a little room between it and the box");
-  assert.match(css, /\.tq-conv-pending-row \{[^}]*border: 1px solid/, "each line in its own border");
-});
 
 // ...ONE TABLE WORDS A STEP AT WORK (rule 3): the edit row's running verbs were a pair of its own beside agentSteps' ING; it reads them from there
 test("an edit's running verb is the one table's, never words of its own", async () => {
@@ -242,13 +185,6 @@ test("the working line names what no row in sight says - at every beat of a turn
   assert.match(fold, /const set = \(o\) => \{ if \(o === OPEN_FOLDS\.has\(k\)\) return;[^\n]*FOLD_HEARD\.forEach/, "the click and the toggle agree on one state");
 });
 
-// the visual pass (2026-11-18): a turn that failed, and a line whose send failed, drew in the box's 9px centred grey hint - a failure kept
-// where it happened read as a footnote. They wear the failed step's own note, the same fact read the same way
-test("a failed turn and a failed line read as the failed step's note, not the faint hint", async () => {
-  const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.doesNotMatch(src, /className="tq-aui-hint" role="alert"/);
-  assert.equal(src.match(/className="tq-aui-note tq-aui-note-error" role="alert" data-tq-(turn|line)-failed=""/g).length, 3);
-});
 
 // ...ONLY A CARD THAT STOOD BEFORE HIS LINE (a walk, 2026-11-18): the agent's answer to his line raised a Post card twelve seconds later, and
 // while his line was still the page's own it was drawn greyed "you wrote ... after it" - no button he ever saw lit

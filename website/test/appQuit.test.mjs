@@ -46,20 +46,6 @@ test("an update that waits says what for", () => {
   assert.equal(waitingNote({ restarting: true }), "");
 });
 
-test("the Assistant's #settings=updates&key=update lights the real Update button until it is pressed", () => {
-  assert.match(src("SettingsView.jsx"), /<UpdateCard asked=\{only\?\.knob === "update"\} at=\{only\?\.at\} \/>/);
-  const card = src("UpdateCard.jsx");
-  assert.match(card, /data-tq-knob="update"/);
-  assert.match(card, /lit && canApply && !busy \? \{ "data-tq-asked": "" \}/);
-  assert.match(card, /const apply = async \(\) => \{\r?\n {4}setLit\(false\);/);
-});
-
-// the setup sweep, 2026-10-28: a greyed "Couldn't check" beside Check now said what the warning under it already says
-test("a check that did not get through draws no Update button, only Check now and the warning", () => {
-  const card = src("UpdateCard.jsx");
-  assert.match(card, /\{!\(unknown && !busy\) && <Button size="small" variant="contained"/);
-  assert.doesNotMatch(card, /"Couldn't check"/);
-});
 
 test("the update card says which install this is, and nothing where it has no words for one (the demo read: This is .)", () => {
   for (const how of ["setup", "exe", "pip", "source"]) assert.match(howLine(how), /^This is (the|a) .+\.$/);

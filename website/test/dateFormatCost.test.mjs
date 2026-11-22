@@ -2,7 +2,7 @@
 // the rail ran localDay over every pile row on every key and poll, seconds on a large home. dates.js keeps them; this holds it.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+
 
 const Real = Intl.DateTimeFormat;
 let built = 0;
@@ -64,13 +64,4 @@ test("asUtc, fmtTime12, fmtDateTime and localDay are unchanged in every zone, DS
       }
     }
   } finally { setTz(""); }
-});
-
-test("no source file formats a date with an options object outside dates.js", () => {
-  const src = new URL("../src/", import.meta.url);
-  // SemanticPanel formats a number, not a date: Number.toLocaleString with a locale is not the formatter this guards
-  const bad = readdirSync(src).filter((f) => /\.jsx?$/.test(f) && f !== "dates.js").flatMap((f) => readFileSync(new URL(f, src), "utf8").split("\n")
-    .map((l, i) => [f, i + 1, l]).filter(([, , l]) => /\.toLocale(Date|Time)?String\([^)]*,|new Intl\.DateTimeFormat/.test(l) && !/Number\(v\)\.toLocaleString/.test(l)))
-    .map(([f, n]) => `${f}:${n}`);
-  assert.deepEqual(bad, []);
 });

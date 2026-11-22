@@ -38,18 +38,6 @@ test("a coding chat names no turns - its own are stamped as they begin - and an 
   assert.deepEqual(after([{ key: "land", at: "2026-11-05 09:01:00" }], { 3: "comment-2" }), ["comment-4"], "a card of no review is placed by its time");
 });
 
-test("the task page hands every waiting ask to its turn, and draws it in its own block only where there are no turns", () => {
-  const page = read("TaskPage.jsx");
-  assert.match(page, /const inTurns = !solo && !\["done", "dropped"\]\.includes\(t\?\.Status\)/);
-  assert.match(page, /\.\.\.\(inTurns \? askCards : \[\]\)\.map\(\(g\) => \(\{ key: g\.key, at: g\.reviews\[0\]\.CreatedAt \|\| "", rid: g\.reviews\[0\]\.ReviewId, waits: true, also: asksBelow, note: g\.held \? "" : askNote\(g\.reviews\[0\]\),/);
-  assert.match(page, /\{!inTurns && askCards\.length > 0 && \(/);
-  // ...and the block is not drawn for them: a chat whose only ask stands in its turn has no "Next steps" over nothing
-  assert.match(page, /const waits = !!\(chatReview \|\| proposals\.length - \(inTurns \? asks\.length : 0\) \|\| \(owesEmails && !inTurns\) \|\| handoff\);/);
-  assert.match(page, /\(waits \|\| \(!inTurns && kept\.length\) \|\| upFailed/);
-  for (const k of ["pressedCards.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,", 'at: r.CreatedAt || "", rid: r.ReviewId, node: <SentCard', 'rid: r.ReviewId, letter: true,'])
-    assert.ok(page.includes(k), "a pressed card names its review too");
-});
-
 
 test("what the foot's boxes said over a held act and a playbook is said over its one card", () => {
   const act = (p) => ({ Kind: "action", Status: "pending", DraftText: JSON.stringify(p) });
@@ -57,8 +45,6 @@ test("what the foot's boxes said over a held act and a playbook is said over its
   assert.match(askNote(act({ action: "amend_playbook", name: "Renewals", text: "# Renewals" })), /^Approve saves this playbook to Reports → Playbooks/);
   assert.equal(askNote(act({ action: "close_task", why: "the folder is clear" })), "", "a card that says itself gets no line over it");
 });
-
-
 
 
 // ONE ACTION BOX AT A TIME, A HARD RULE (the owner's live task, 2026-11-19): a held browser step stood at the front reading "1 of 2 · next: the

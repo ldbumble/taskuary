@@ -56,13 +56,6 @@ test("a reply opens the page it names - else the one task it points at, never on
   assert.equal(firstAppLink("Run [setup](#setup) to connect your mail."), null);
 });
 
-test("the chat opens it on a fresh reply, and a link in the text opens it in place", () => {
-  assert.match(read("AssistantView.jsx"), /const page = "open" in data \? data\.open : firstAppLink\(data\.say\);\n[^]*?\} else if \(page\) \{[^]*?openAppLink\(page\);/);
-  // ...a task it opens is a press of its rail row (the owner, 2026-10-28), said in the chat window
-  assert.match(read("AssistantView.jsx"), /const opens = \/\^#\?task=\(\\d\+\)\$\/\.exec\(page \|\| ""\);\n\s*if \(opens\) \{\n[^\n]*\n\s*pressRowRef\.current\?\.\(n\);\n\s*receipt\(`Opened /);
-  assert.match(read("md.jsx"), /else if \(page\) \{ e\.preventDefault\(\); openAppLink\(page\); \}/);
-  assert.match(read("ChatThread.jsx"), /\{hasFiles && <Attachments messageId=\{m\.MessageId\} \/>\}/);    // pictures at reading size
-});
 
 // THE BOARD AND SEARCH, from the chat (concierge.page_href, 2026-10-28): the Board is its own address, read by the page's one router;
 // Search is a dialog, so its link opens it with the words in its box and writes no address

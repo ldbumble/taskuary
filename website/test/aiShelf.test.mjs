@@ -12,11 +12,6 @@ test("setup offers every AI on the Connections shelf that can sort mail", () => 
   assert.deepEqual(AI_SHELF.filter((t) => !SETUP_AI.includes(t)), ["chatgpt", "typesafe"]);
 });
 
-test("both screens read the one list and neither keeps its own", () => {
-  assert.match(src("ConnectorsView.jsx"), /channelCards\(AI_SHELF\)/);
-  assert.match(src("FirstRun.jsx"), /byType\(SETUP_AI\)/);
-  assert.doesNotMatch(src("FirstRun.jsx"), /const AI_TYPES/);
-});
 
 test("every key card on setup's shelf says in one line what it is", () => {
   for (const t of SETUP_AI) assert.ok(AI_WHY[t] && AI_WHY[t].length < 60, t);

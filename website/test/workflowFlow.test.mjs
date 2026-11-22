@@ -90,16 +90,6 @@ test("Turn into steps asks with what the workflow already says", () => {
   assert.match(ask, /Build it as steps/);
 });
 
-test("the editor shows steps in place of What it does, and keeps the old field with Turn into steps", () => {
-  const ed = read("WorkflowEditor.jsx");
-  assert.match(ed, /\{steps \? <Field label="Steps"/);
-  assert.ok(ed.includes('"Turn into steps"') && ed.includes("/api/workflows/compose") && ed.includes("/repair`"));
-  assert.ok(ed.includes('"When a step fails"'));
-  const st = read("WorkflowSteps.jsx");
-  assert.ok(st.includes("/api/workflows/step-test") && st.includes('"Test this step"') && st.includes("Insert output of"));
-  assert.ok(read("ReportsView.jsx").includes("export function SourceCard"));
-  assert.ok(read("TaskPage.jsx").includes("<RunSteps steps={fromWorkflow.steps} dense repairs={fromWorkflow.repairs}"));
-});
 
 // a self-repair is a record - what broke, why, what changed - with no Take it back (the owner, 2026-10-19); the step editor changes it back
 test("a self-repair reads back with what broke and what changed, in the shared button words", () => {

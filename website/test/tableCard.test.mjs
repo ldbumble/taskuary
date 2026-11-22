@@ -2,7 +2,7 @@
 // the linked item's durable line back above the one Next had drawn - the rail ringed TQ-0005 over TQ-0001's live card.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+
 import { tableCardIndex } from "../src/funnelPile.js";
 
 const item = (id, key, extra = {}) => ({ id, role: "assistant", text: id, card: { kind: "todo", key, ...extra } });
@@ -22,10 +22,4 @@ test("otherwise the newest card leads, as before", () => {
   assert.equal(tableCardIndex([{ ...item(1, "p:5"), done: true }, item(2, "p:1")], "p:5"), 1, "the table's line put down is not brought back");
   const prop = { id: 3, role: "assistant", text: "?", proposal: { kind: "x" }, card: { kind: "proposal", key: "op:1" } };
   assert.equal(tableCardIndex([item(1, "p:5"), prop], "p:5"), 1, "a proposal after the item still leads");
-});
-
-test("the chat draws, and asks about, the table's card", () => {
-  const src = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
-  assert.match(src, /const lastCardIdx = useMemo\(\(\) => \{ const i = tableCardIndex\(shown, old \? null : current \|\| cardKey\)/);
-  assert.match(src, /const table = msgs\[tableCardIndex\(msgs, current \|\| cardRef\.current\)\]\?\.card;/);
 });

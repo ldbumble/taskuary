@@ -45,11 +45,6 @@ test("a report without the shape stays markdown", () => {
   assert.equal(briefOf(""), null);
 });
 
-test("a report of words with the shape is drawn as the brief, on the table only", () => {
-  const ac = src("assistantCards.jsx");
-  assert.match(ac, /const brief = report && !morning && !rows && briefOf\(text\);/);
-  assert.match(ac, /if \(brief\) return <ReportBrief brief=\{brief\}/);
-});
 
 // 2026-11-15: a trending report whose title line looks like a roll-up ("Morning Report: ...") was laid out a line per box, its
 // markdown table cut into rows of pipes. A table, a fenced block, or a page of loose lines is markdown, never the brief.

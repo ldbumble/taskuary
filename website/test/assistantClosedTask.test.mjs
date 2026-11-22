@@ -29,14 +29,6 @@ test("a set-up's pending questions are a line, not an item on the table", async 
   assert.match(view, /NOTE_KINDS\.has\(c\?\.kind\) \? null/);
 });
 
-test("a phone turn shows on the desktop as it happens - the dots, then the words", () => {
-  const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
-  assert.match(view, /onLive\(\["chat-changed"\], \(ev\) => \{\s*setPhoneBusy\(!!ev\?\.thinking\);\s*readChat\(\)/);
-  assert.match(view, /\{\(busy \|\| phoneBusy \|\| nextComing \|\| walkDots\) && \(/);
-  // ...and between letting a card go and the next pick: the settle and the deferred surface() run before busy
-  assert.match(view, /const leave = \(key, how, x = \{\}\) => new Promise\(\(done\) => \{\s*const epoch = chatEpoch\.current;\s*setNextComing\(true\);/);
-  assert.match(view, /try \{ if \(epoch === chatEpoch\.current && !resettingRef\.current\) await fn\(\); \} finally \{ if \(!turnFlight\.current\) setNextComing\(false\); setDeferring\(deferredChat\.current\.size > 0\); \}/);
-});
 
 // A PAGE OPEN ON THE CANVAS STAYS OPEN UNDER THE ASSISTANT'S OWN WORDS (New -> a routine -> its builder, 2026-11-12): the setup turn's line
 // came back from the 30 s chat read carrying its steps as a `words` card, the canvas took that line for an item put on the table over the

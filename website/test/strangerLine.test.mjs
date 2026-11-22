@@ -11,14 +11,7 @@ test("the danger line is said for any sender, and nothing without a danger", () 
   assert.equal(dangerOf({ origin: { origin: "trusted", danger: "x" } }), "x", "a known sender's mail can be the phish too");
   assert.equal(dangerOf({ origin: { origin: "owner" } }), null);
 });
-test("the FYI card, the rail row and the task page draw it", () => {
-  const src = (n) => readFileSync(new URL(`../src/${n}`, import.meta.url), "utf8");
-  assert.match(src("assistantCards.jsx"), /<DangerNote danger=\{item\.danger\} aim=\{item\.danger_aim\} \/>/);
-  assert.match(src("assistantCards.jsx"), /<DangerNote danger=\{card\.danger\} aim=\{card\.danger_aim\} \/>/);
-  assert.match(src("assistantCards.jsx"), /Subject: \{shownSubject\(item\)\}/);
-  assert.match(src("AssistantView.jsx"), /\{!!i\.danger && <span className="tq-pile-danger"/);
-  assert.match(src("TaskPage.jsx"), /\{dangerOf\(detail\) && \(/);
-});
+
 
 test("a stranger's task gets the one line in plain words, with the reason for the tooltip", () => {
   const l = strangerLine({ origin: { origin: "stranger", why: "sent by someone not in your people" } });

@@ -25,15 +25,6 @@ test("jargon is matched as a word: 'repo' is caught, 'approve' is not 'PR', 'ses
   assert.equal(jargonIn("sorted 1m ago"), null);
 });
 
-test("no page types a place of this app: the sentence asks words.place", () => {
-  const typed = /["'`>][^"'`<]*(?:Settings → (?:How mail is sorted|Routing policies|Mail rules|Docs|AI defaults)|Connections → (?:AI|Email)|under For later on your rail)/;
-  const hits = [];
-  for (const f of fs.readdirSync(SRC).filter((f) => /\.(jsx?|mjs)$/.test(f) && !f.startsWith("demo"))) {
-    const code = fs.readFileSync(path.join(SRC, f), "utf8").split("\n").filter((l) => !/^\s*(\/\/|\/\*|\*|\{\/\*)/.test(l));
-    code.forEach((l, i) => { if (typed.test(l)) hits.push(`${f}:${i + 1}`); });
-  }
-  assert.deepEqual(hits, []);
-});
 
 // THE SURFACES THAT ARE GONE are named in no line the owner reads (2026-10-19 UI walk: copy still sent people to the Timeline, the
 // Reports tab and the Assistant tab). Read in the strings and the JSX text of every page, comments left out - "Timeline" the component

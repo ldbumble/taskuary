@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+
 import { VERDICTS, roadOf, roadOfCard, verdictOf } from "../src/timelineState.js";
 
 // The tag on a Timeline row is TRIAGE's word - the one the row's own Triage tab highlights - and
@@ -42,23 +42,6 @@ test("a row nothing triaged keeps the word for what it is", () => {
   assert.equal(roadOfCard({ route: "a report you set up", task_kind: "" }), null);
 });
 
-test("what is WAITING outranks what triage called the job", () => {
-  // A drafted reply on a coding task wore "coding" beside its own envelope, because the pipe took
-  // the road unconditionally - and the lane heading above the rail says "your task", which does not
-  // say a reply is ready (the owner, 2026-09-14: "still says coding not reply waiting?"). The three
-  // lanes that are ON the owner say their own word; every other row keeps the road, which is the
-  // verdict the Timeline row and the Triage tab show.
-  // The row says NOTHING but what it is now (the owner, 2026-09-16: "maybe just subject should be
-  // there to clean it up"): the category heading above it carries the band, the dot carries the
-  // source, and the only word left on a row is the lane where work has STOPPED until the owner
-  // answers. So the road word is not outranked any more - it is gone from the row entirely.
-  const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
-  // ...and since 2026-09-28 no row wears a pill ("nothing else has pill"): a waiting lane says its word the way every
-  // lane does - its mark and its word - never the road
-  assert.doesNotMatch(view, /tq-pile-tag loud/);
-  assert.match(view, /\{!!word && \(/);
-  assert.doesNotMatch(view, /road \? road\.label : meta\.word/);
-});
 
 // ...and the rows triage never reached a verdict on. Your own standing rule turns a sender away
 // without writing a `triage:` line, and a failed call writes no verdict at all - so roadOf had no

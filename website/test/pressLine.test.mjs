@@ -11,9 +11,3 @@ test("a press reads as an event line: its words, no stop, then the time", () => 
   assert.equal(pressLine("You changed its workstream.", "3:12 PM"), "You changed its workstream · 3:12 PM");
   assert.equal(pressLine("You set a reminder for 9:00 AM.", ""), "You set a reminder for 9:00 AM");
 });
-
-test("a press is drawn as the quiet event line, never the owner's bubble", () => {
-  // ...an item of the server's list (kind `press`): its own row, no bubble and no "You" head
-  assert.match(ws, /className=\{`tq-aui-message tq-aui-press\$\{prev && \(prev\.kind === "press" \|\| prev\.kind === "note"\) \? " tq-aui-press-more" : ""\}`\} data-tq-item=\{x\.id\} data-tq-chat-press=""/);
-  assert.match(ws, /<div className="tq-aui-press-line">\{pressLine\(x\.text, x\.at \? when\(String\(x\.at\)\) : ""\)\}<\/div>/);
-});

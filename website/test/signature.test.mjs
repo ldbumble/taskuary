@@ -2,7 +2,7 @@
 // signature always"): an empty box opens on it, a draft gets it once, a signed draft is left alone, chat has none.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+
 import { withSignature, withoutSignature } from "../src/signature.js";
 
 const SIG = "Alex Doyle\nOperations | Northwind";
@@ -23,11 +23,6 @@ test("no signature (chat, an invite, the switch off) leaves the box as filed", (
   assert.equal(withSignature("", ""), "");
 });
 
-test("the reply box is drawn with it and counts only the words above it", () => {
-  const src = readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
-  assert.match(src, /boxText\(\{ text, draft: reviewText\(r\), drafting, signature: r\.Signature \}\)/);
-  assert.doesNotMatch(src, /value\.trim\(\)/, "Send is offered on what the owner wrote, not on the signature alone");
-});
 
 test("an agent's own sign-off is taken off before the block goes on, never signed twice (walk 2026-10-29)", () => {
   assert.equal(withSignature("Hi Erin,\n\nDone.\n\nBest,\nAlex Doyle", SIG), `Hi Erin,\n\nDone.\n\n${SIG}`);

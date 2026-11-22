@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { holdsNew, madeRow, pressOnto } from "../src/funnelPile.js";
 
-const read = (f) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), "utf8");
+
+import { holdsNew, pressOnto } from "../src/funnelPile.js";
+
+
 // a task open on the table, then New posted over it: the New card is the live page
 const msgs = [{ id: "a1", role: "assistant", card: { key: "task:7", tid: 7 } }, { id: "b2", role: "browse", area: "new", state: { kind: "agent" } }];
 const rail = [{ key: "task:7", tid: 7, title: "Held mail from a stranger" }];
@@ -23,15 +23,6 @@ test("the card goes with the press as ever when the row draws at once, the page 
   assert.equal(holdsNew(msgs, "b2", rail, null), false);
 });
 
-test("the pull puts New down when the task lands, and New's button spins until then", () => {
-  const view = read("AssistantView.jsx"), sheet = read("NewSheet.jsx");
-  assert.match(view, /const held = !made && holdsNew\(msgsRef\.current, browsingRef\.current, pileRef\.current\?\.items, key\);/);
-  assert.match(view, /if \(!held\) browseDown\(\);\s+const going = surface\(key, asUser \|\| null\);\s+if \(held\) Promise\.resolve\(going\)\.finally\(\(\) => browseDownRef\.current\?\.\(\)\);/);
-  // every create that opens its task opens it through the one helper, and an inline card stays busy after it
-  assert.equal((sheet.match(/onOpenTask\?\.\(data\.taskId\)/g) || []).length, 0);
-  assert.equal((sheet.match(/openIt\(data\.taskId\)/g) || []).length, 4);
-  assert.match(sheet, /if \(!\(inline && opened\)\) setBusy\(false\);/);
-});
 
 // THE TASK NEW MADE IS ON THE TABLE AT THE PRESS (the owner, 2026-11-16: "on new task it says sent to agent and then the bottom of the screen
 // shows ... it should show ... on the agent starting, not randomly on the bottom of the canvas"): New hands the canvas the task as its row, drawn

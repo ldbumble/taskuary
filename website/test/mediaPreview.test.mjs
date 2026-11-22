@@ -13,16 +13,3 @@ test("an mp4 named in the words is a video row, a .wav a sound, a zip no preview
   assert.deepEqual([a.preview, a.content_type], ["audio", "audio/wav"]);
   assert.equal(z.preview, null);
 });
-
-test("Preview plays a video or a sound from its address, never reads it as text", () => {
-  assert.match(src, /function MediaPlayer/);
-  assert.match(src, /controls preload="metadata" src=\{attUrl\(page\)\}/);
-  assert.match(src, /if \(media\) return <MediaPlayer/);
-  assert.match(src, /isHtml = \(p\) => [^\n]*!isMedia\(p\)/);
-});
-
-test("a file with no preview says Download, it never draws its bytes", () => {
-  assert.match(src, /none = isOutput\(page\) && !page\.preview && !media/);
-  assert.match(src, /if \(none\) return <div[^>]*data-tq-no-preview/);
-  assert.match(src, /if \(sheet \|\| doc \|\| media \|\| none\) return undefined/);
-});

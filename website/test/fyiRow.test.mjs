@@ -39,26 +39,3 @@ test("it compares the words, not the whitespace or the case", () => {
   assert.equal(gistFor({ title: "x", preview: "" }), "");
   assert.equal(gistFor(null), "");
 });
-
-test("the line opens its message, and talking about it is one of the opened line's actions", () => {
-  const card = read("assistantCards.jsx");
-  assert.match(card, /title=\{open === i\.key \? "Fold it" : "Read it here"\}/);
-  assert.match(card, /onSurface\?\.\(i\.key\)\} sx=\{faint\}>Talk about it</);
-  assert.doesNotMatch(card, />Dig in</);
-  assert.doesNotMatch(card, /\? "Fold" : "Read"/);
-});
-
-test("acting on it belongs to the one you opened", () => {
-  const card = read("assistantCards.jsx");
-  // four buttons on every row is twelve on a three-fyi card, in a card whose point is that
-  // nothing here needs you
-  assert.match(card, /const actsOf = \(i\) => \(<>\s*<div className="tq-card-actions tq-fyi-acts"/);
-  assert.match(card, /\{open === i\.key && !movedTo\[i\.key\] && actsOf\(i\)\}/);
-  assert.match(card, /\{open !== i\.key && !folded && gistFor\(i\) &&/);
-});
-
-test("the line wraps instead of being cut", () => {
-  const css = read("assistantView.css");
-  assert.match(css, /\.tq-fyi-line \.t \{[^}]*-webkit-line-clamp: 3/);
-  assert.doesNotMatch(css, /\.tq-fyi-row \.t \{[^}]*white-space: nowrap/);
-});

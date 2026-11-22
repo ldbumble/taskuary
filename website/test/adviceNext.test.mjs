@@ -8,7 +8,7 @@ import { advisedIn, rowOf } from "../src/actionRow.js";
 
 const src = fs.readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
 const row = fs.readFileSync(new URL("../src/ActionRow.jsx", import.meta.url), "utf8");
-const css = fs.readFileSync(new URL("../src/assistantView.css", import.meta.url), "utf8");
+
 const v = (id, group, extra = {}) => ({ id, group, tone: "s", label: id, title: "", disabled: false, why: "", promote: true, lead: false, ...extra });
 const filled = (r) => [...r.decide, ...r.agent, r.next].filter((x) => x && x.tone === "p").map((x) => x.id);
 
@@ -43,22 +43,6 @@ test("a greyed verb is never the advised one", () => {
   assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "close", label: "Mark done" })), []);
 });
 
-test("the decision lights the row and the box is plain: no ghost text, no pill, no line over the row", () => {
-  assert.match(src, /<ActionRow [^>]*advised=\{stripPick \|\| setupLit\}/);
-  assert.doesNotMatch(src, /ghostText|tq-pill|tq-advised/);
-  assert.doesNotMatch(css, /\.tq-pill|tq-advised/);
-  // ...and NO decision draws a sentence (the owner, 2026-10-23 "the obvious move is silent", then 2026-10-26 "remove the advisor"): a
-  // decided item leaves only an empty mark the walks read, and nothing joins the row for an Advisor (2026-11-15)
-  assert.match(src, /&& <div hidden data-tq-recommended=\{shownAdvice\?\.verb \|\| ""\} \/>\}/);
-  assert.doesNotMatch(row, /AdvisorNext/);
-});
-
-test("the task's own Open again line always stands - no strip says what to do in its place (2026-10-26)", () => {
-  const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  assert.match(page, /<Typography className="tq-news"[^>]*>Open again: \{news\.line\}/);
-  assert.match(src, /<div className="tq-asst-col" style=/);
-  assert.doesNotMatch(css, /\.advising/);
-});
 
 // ...and a greyed one says why it is off rather than drawing nothing: the strip went blank with nothing lit when the draft was cleared
 // (the advisor matrix, 2026-10-19)

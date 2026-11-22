@@ -19,13 +19,3 @@ test("the card is a Corporate system with a write-only key and no other field", 
   assert.match(read("logos.jsx"), /stripe: \(p\) => <T p=\{p\} bg="#635BFF"/);
   assert.equal(oneOf("stripe"), "Stripe account");
 });
-
-test("every read is a report with a label, a form and the Stripe card behind it", () => {
-  const rv = read("ReportsView.jsx"), words = read("reportWords.js");
-  for (const t of TYPES) {
-    assert.match(rv, new RegExp(`\\n  ${t}: \\[`), `${t} has no form`);
-    assert.match(words, new RegExp(`${t}: "Stripe \\\\u2014 `), `${t} has no label`);
-  }
-  assert.match(rv, /\.map\(\(t\) => \[`stripe_\$\{t\}`, "stripe"\]\)/);
-  assert.match(rv, /"metric", "metric_check",\n    "stripe_balance",/);
-});

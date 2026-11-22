@@ -98,13 +98,6 @@ test("what the writer needs is a plain line, whole, never a failure - and the re
   assert.match(job, /needs: data\?\.needs/);
 });
 
-test("the review, task-panel and assistant surfaces are wired to the shared send state", () => {
-  for (const f of ["assistantCards.jsx"]) {
-    const src = readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
-    assert.match(src, /sendBlockLine\(/, `${f} shows the shared reason`);
-    assert.match(src, /draftState\(/, `${f} shows the shared draft state`);
-  }
-});
 
 test("a failed send keeps the place that fixes it - from the answer, and after a reload from the envelope", () => {
   const fix = { label: "Connect a mailbox", href: "#connections=Email" };

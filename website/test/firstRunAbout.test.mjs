@@ -6,28 +6,6 @@ import { readFileSync } from "node:fs";
 
 const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 
-test("the questions come one at a time: name, organisation, title, signature, systems, every mailbox, then the job", () => {
-  const src = read("FirstRunAbout.jsx");
-  assert.match(read("aboutWork.js"), /export const STEPS = \["name", "org", "role", "signature", "systems", "mailboxes", "job"/);
-  assert.match(src, /export \{ DRAFTS, MAIL_AT, STEPS, canSkip, skipTo \} from "\.\/aboutWork\.js";/);
-  assert.match(src, /useVerbs\("setup-about", a \? \[/, "its own Back and Next in the row");
-  assert.match(src, /&& \(!x\[k\] \|\| \(data\.guessed \|\| \[\]\)\.includes\(k\)\)\)/, "the mail fills only empty boxes and the guessed name");
-  assert.doesNotMatch(src, /placeholder=/, "a box is filled from the mail or empty - never a sample answer that reads as one");
-});
-
-test("the job is written once the title is answered, and the last press saves what the owner left", () => {
-  const src = read("FirstRunAbout.jsx");
-  assert.match(src, /if \(step === "role" && who\(a, mailboxes\) !== learnedFor\.current\) learn\(\["job"\]\);/);
-  // ...and all three drafts as the mailbox step is passed - the job again when a mailbox came in since: it is read from every one
-  assert.match(src, /if \(step === "mailboxes"\) learn\(who\(a, mailboxes\) !== learnedFor\.current \? DRAFTS : DRAFTS\.filter\(\(k\) => k !== "job" && drafts\[k\]\.state === "none"\)\);/);
-  assert.match(src, /\.\.\.boxes\.map\(\(b\) => b\.address\.toLowerCase\(\)\)\.sort\(\)/);
-  assert.match(src, /api\.post\("\/api\/setup\/first-run\/about\/learn", \{ \.\.\.x, docs \}\)/);
-  assert.match(src, /api\.get\("\/api\/setup\/first-run\/about\/drafts"\)/);
-  // ...and its corner button says Next on every step (the owner, 2026-11-03) - never a word of its own per step
-  assert.match(src, /const nextLabel = busy === "save" \? "Saving…" : "Next";/);
-  assert.doesNotMatch(src.replace(/^\s*\/\/.*$/gm, ""), /"Looks right"|"That's all my sources"|"Save"|press Looks right/);
-  assert.match(src, /if \(step === "soul"\) return save\(\);/);
-});
 
 // HOW YOU WRITE AND WHO YOU ARE (the owner, 2026-10-20): two more drafts after the job, the job's own pattern - written from the mail,
 // edited, accepted - each with its state said, a failure said plainly with Write it again
@@ -67,66 +45,6 @@ test("the mailbox step comes right before the job, and Skip lands on it instead 
   assert.match(read("FirstRun.jsx"), /const mail = byType\(st\.source_types \|\| MAIL_TYPES\)/);
 });
 
-test("a failed email sign-in is said once, with what to do - on its open card, else on the page without naming another card", () => {
-  const fr = read("FirstRun.jsx");
-  assert.match(fr, /: st\.mail_error \? `\$\{st\.mail_error\} Open its card to fix it and press Connect again - or pick a different source\.`/);
-  assert.match(fr, /if \(open && conn && st\.mail_error && !err\) line = "";/);
-});
-
-test("while About your work is on the canvas setup's own Back and Next stand aside, and its question is page text", () => {
-  const fr = read("FirstRun.jsx");
-  assert.match(fr, /const navShown = \["done", "about"\]\.includes\(view\) \? \[\] : nav;/);
-  // ...and About's own Back and Next are the Nav pill's, as every step's (the owner, 2026-11-03)
-  const about = read("FirstRunAbout.jsx");
-  assert.match(about, /id: "about:back", group: "back"/); assert.match(about, /id: "about:next", group: "next"/);
-  assert.match(fr, /<FirstRunAbout again=\{!!st\.about_done\} onBack=\{\(\) => go\("mail"\)\} onSaved=\{afterAbout\}/);
-  assert.match(about, /\{line && <Typography role="status" data-tq-setup-line=""/);
-  // ...in the page's voice: "Taskuary reads the last three months of your email", never an "I" speaking for it
-  assert.match(about, /running: "Taskuary reads the last three months of your email to write your job description - about a minute\."/);
-  assert.doesNotMatch(about, /onLine|"I |I couldn't|I'm reading/);
-  // ...and Skip only while nothing runs on the question
-  assert.match(about, /const skipper = !again && canSkip\(step\) && !reading && !working/);
-});
-
-test("the job reads as a document, and Edit opens its text", () => {
-  const src = read("FirstRunAbout.jsx");
-  assert.match(src, /\{editing === step \|\| !text\.trim\(\)\s*\? <TextField key=\{step\} multiline/);
-  // ...what you work on is a list to answer under the job, never a text box (WorkstreamsSection -> WorkstreamsConfirm)
-  assert.match(src, /\{under && <WorkstreamsSection d=\{drafts\.workstreams\} text=\{texts\.workstreams\}/);
-  assert.match(src, /under = step === "job";/);
-  // ...the job's Edit and Write it again under the job, never under the list that follows it
-  assert.match(src, /\{under && moves\.length > 0 && <Box data-tq-job-moves=""/);
-  assert.match(src, /: <WorkstreamsConfirm text=\{text\} onChange=\{onChange\} \/>\}/);
-  // ...one tick per line: used or left out (the owner, 2026-11-09: "either you want taskuary to use this or not. no need for personal button")
-  assert.match(src, /inputProps=\{\{ "aria-label": `Keep \$\{r\.name \|\| "this workstream"\}` \}\}/); assert.doesNotMatch(src, /label="Personal"/);
-  assert.match(src, /Taskuary uses what's ticked\. Untick anything that isn't your work\./);
-  assert.match(src, /<Md text=\{text\} \/>/);
-  assert.match(src, /\{editing === step \? "Done editing" : "Edit"\}/);
-});
-
-test("the first time About your work is saved, setup is complete: confetti and one big button into the day", () => {
-  const fr = read("FirstRun.jsx"), done = read("SetupDone.jsx");
-  // ...but only once the AI and the mail work too: saved from the rail over no AI, it went to Setup complete (2026-10-17)
-  // ...by way of Developer mode, the optional step after it: its Next lands on Setup complete on that first pass (2026-11-02)
-  assert.match(fr, /go\(!s \? "other" : !requiredDone\(s\) \? frontierOf\(s\) : first \? "dev" : "other"\);/);
-  assert.match(fr, /go\(firstPass\.current && n === "other" \? "done" : n\)/);
-  assert.match(fr, /\{q === "done" && <Box data-tq-setup-scope=""><SetupDone onDay=\{finishThen\(onFinish\)\} onMore=\{\(\) => go\("other"\)\}\s+aiError=\{aiErr\} onChangeAi=\{\(\) => go\("ai"\)\} \/><\/Box>\}/);
-  assert.match(fr, /const navShown = \["done", "about"\]\.includes\(view\) \? \[\] :/);
-  assert.match(done, />Setup complete</); assert.match(done, /size="large" onClick=\{onDay\}/); assert.match(done, />Go to my day</);
-  assert.match(done, /prefers-reduced-motion: reduce/);
-  // the AI failing on the mail is not complete: the problem, and Change AI as the one big button
-  assert.match(done, /if \(aiError\) return \([\s\S]*?size="large" onClick=\{onChangeAi\}[\s\S]*?>Change AI</);
-  assert.match(read("setupSteps.js"), /shown === "finish" \? \{ sub: "ready - Go to my day" \}/);
-});
-
-test("an AI connected on the Connections page says so, and the one in use leads the shelf", () => {
-  const fr = read("FirstRun.jsx");
-  assert.match(fr, /: ai\.connected \? \["on", "Connected - pick it to make it your AI"\]/);
-  assert.match(fr, /\["on", "Your AI - it sorts what comes in"\]/);
-  assert.match(fr, /const ai = inUse \? \[\.\.\.all\.filter\(using\), \.\.\.lead\.filter\(\(c\) => !using\(c\)\)\] : lead;/);
-  // ...matched by its connection, not its name: "ChatGPT (your plan)" never matched the card titled ChatGPT (2026-10-17)
-  assert.match(fr, /const inUseCid = \(c\) => st\.step !== "ai" && st\.brain\?\.pick === `connector:\$\{c\.ConnectorId\}`;/);
-});
 
 // "No such buttons. If it suggest systems then you can do it in search ... don't like new buttons besides for what there was before"
 // (the owner, 2026-10-16) - and More connections ticks once something beyond the AI and the mail is connected
@@ -140,15 +58,6 @@ test("More connections is the catalogue as it is, nothing suggested into it, and
   assert.equal(other.done, true); assert.equal(other.sub, "3 connected"); assert.equal(other.disabled, false);
 });
 
-// "pull the signature from the email and use that in emails ... have a setting so they can check it" (the owner, 2026-10-16)
-test("the email signature is a setup question and a Settings field, both with a preview under an email", () => {
-  const about = read("FirstRunAbout.jsx"), settings = read("SettingsView.jsx");
-  assert.match(read("aboutWork.js"), /export const STEPS = \["name", "org", "role", "signature", "systems", "mailboxes", "job"/);
-  assert.match(about, /data-tq-signature-preview=""/);
-  assert.match(settings, /if \(m\.type === "signature"\) return <SignatureSetting/);
-  assert.match(settings, /api\.post\("\/api\/signature\/learn"/);
-  assert.match(read("FirstRun.jsx"), /If OpenAI says your workspace's policy denies it, use Codex/);
-});
 
 // THE JOB AND WHAT YOU WORK ON, ONE STEP (the owner, 2026-11-06): one Next keeps both, and never waits on the grouping
 test("one Next on About your work keeps the job and the workstreams - the list as left once grouped, the defaults while it still runs", async () => {

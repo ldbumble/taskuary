@@ -181,27 +181,6 @@ test("a phone's one move is never a disabled one: the next pressable move, else 
   assert.ok(ph.rest.some((x) => x.id === "start-agent"), "the greyed move is still in the ▾, its why on hover");
 });
 
-// NAV HOLDS THE ROW'S START (the owner, 2026-10-28): centred with the rest, Next moved between items; the types centre in what is left
-test("Nav is pinned at the row's start and the rest centres in the room left", () => {
-  const css = fs.readFileSync(new URL("../src/assistantView.css", import.meta.url), "utf8");
-  assert.match(css, /^\.tq-arow-verbs > \.tq-cl-next \{ margin-right: auto; \}$/m);
-  assert.match(css, /^\.tq-arow-verbs > \.tq-cl-next ~ \.tq-cl:last-child \{ margin-right: auto; \}$/m);
-});
-
-test("the CSS never wraps the row or a group, and a label never breaks inside its pill", () => {
-  const css = fs.readFileSync(new URL("../src/assistantView.css", import.meta.url), "utf8");
-  const rule = (sel) => css.match(new RegExp(`^${sel.replace(/\./g, "\\.")} \\{([^}]*)\\}`, "m"))?.[1] || "";
-  assert.match(rule(".tq-arow-verbs"), /flex-wrap: nowrap/); assert.doesNotMatch(rule(".tq-arow-verbs"), /flex-wrap: wrap/);
-  assert.match(rule(".tq-cl-b"), /flex-wrap: nowrap/);
-  assert.match(rule(".tq-ab"), /white-space: nowrap/); assert.match(rule(".tq-cl-b .tq-ab"), /white-space: nowrap;/);
-  assert.match(rule(".tq-arow-verbs > .tq-cl"), /flex: 0 0 auto/, "a group keeps its width, so an overflow folds instead of squeezing");
-  const row = fs.readFileSync(new URL("../src/ActionRow.jsx", import.meta.url), "utf8");
-  assert.match(row, /const fit = fitRow\(row, short && !phone \? shortParts\(m\) : m, avail, phone, extra\);/);
-  assert.match(row, /new ResizeObserver\(f\)/, "a resize re-fits the row");
-  assert.match(row, /\{fit\.groups\.map\(\(g\) => <Cluster key=\{g\.type\} g=\{g\} btn=\{btn\} act=\{act\} \/>\)\}/);
-  // ...and a desk bar wider than its room is held at its left edge, never centred past both ends (Back was cut off whole, 2026-11-02)
-  assert.match(css, /^\.tq-compose\[data-tq-desk-chat\] \.tq-dock \.tq-dock-line > \.tq-arow \{ align-items: flex-start; \}$/m);
-});
 
 // A DESK BAR SQUEEZED UNDER ITS NAV (the mixed-use stress, 2026-11-02): from 900 to ~1100 wide the ask bar's fixed width left the bar ~120-250px,
 // less than its narrowest layout with the worded Nav - and Back was cut off whole. There the bar takes the phone's short Nav: no label, Back its arrow

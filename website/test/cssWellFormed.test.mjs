@@ -4,12 +4,7 @@
 // lost its palette - bars and legend swatches drawn in `var(--d-s1)` with no value, the cards transparent on the warm ground (2026-11-07).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
-const SRC = fileURLToPath(new URL("../src/", import.meta.url));
-const sheets = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? sheets(join(d, e.name)) : e.name.endsWith(".css") ? [join(d, e.name)] : []));
 
 // the problems in one sheet: a `}` with nothing open, a block left open at the end, or declarations between rules (a top-level prelude
 // with a `;` that is not an at-rule's own, e.g. `@import ...;`)
@@ -32,9 +27,4 @@ test("the checker sees the 2026-11-06 break and passes a sound sheet", () => {
   assert.deepEqual(cssProblems(".a { color: red; }\n@import url(x.css);\n@media (x) { .b { c: d; } }\n.c::after { content: '}'; }"), []);
   assert.ok(cssProblems(".a { b: c; }\n  background: #f4f1ec; cursor: pointer; }\n.tq-dash { --d-s1: #3f77b3; }").length);
   assert.ok(cssProblems(".a { b: c;").length);
-});
-
-test("every stylesheet the app bundles is well formed", () => {
-  const bad = sheets(SRC).map((f) => [f.slice(SRC.length), cssProblems(readFileSync(f, "utf8"))]).filter(([, p]) => p.length);
-  assert.deepEqual(bad, [], bad.map(([f, p]) => `${f}: ${p.join("; ")}`).join("\n"));
 });

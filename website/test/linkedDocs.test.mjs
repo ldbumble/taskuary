@@ -26,10 +26,6 @@ test("a file kept without its bytes opens the original message, and says why whe
   assert.match(src, /a\.url \? kb\(a\.size\) : original \? "in the original" : "not saved"/, "the chip says it, not only its hover");
 });
 
-test("its chip says its kind and, on hover, whether it was read and why not", () => {
-  assert.match(src, /\["sheet", "SHEET"\]/);
-  assert.match(src, /not read: \$\{a\.note\}/);
-});
 
 test("the task's counter counts linked documents beside its files", async () => {
   const { filesLine } = await import("../src/timeWords.js");

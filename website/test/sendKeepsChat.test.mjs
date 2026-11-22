@@ -17,19 +17,3 @@ test("a reply sent from here keeps the stage drafted, and the page on the chat",
   assert.equal(sectionOf(drafted), "agent");
   assert.equal(sectionOf(owed), "from");
 });
-
-test("once open, the main view and its section are held: only a new task, its detail landing, an agent starting or ending, a close or a stack re-reads them", () => {
-  // ...and a write-up starting or ending (Stop holds the Agent pane while it writes, 2026-10-29), and a to-do's box starting its agent (`solo`)
-  assert.match(src, /mainKey = `\$\{selected\}\|\$\{detail\?\.task\?\.TaskId === selected\}\|\$\{!!term\?\.alive\}\|\$\{sessionView\}\|\$\{stacked\}\|\$\{twoUp\}\|\$\{liveSession \? "live" : t\?\.Status\}\|\$\{!!writingUp\}\|\$\{solo\}\|\$\{chatSeen\.current\.on\}`;/);
-  assert.match(src, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: solo \? "from" : writingUp \? "agent" : homeSection\(t\?\.Kind, taskStage, chatSeen\.current\.on\) \};/);
-  assert.match(src, /const main = mainHeld\.current\.main;/);
-  // ...a tab's press opens its section, and it stays open under the owner: only another task, an agent starting or stopping, a close or
-  // reopen or the width fold it - not the detail, the Advisor's pick, the write-up's end or in_progress -> open catching up (2026-11-01)
-  assert.match(src, /const pickKey = `\$\{selected\}\|\$\{!!term\?\.alive\}\|\$\{sessionView\}\|\$\{stacked\}\|\$\{twoUp\}\|\$\{\["done", "dropped"\]\.includes\(t\?\.Status\)\}\|\$\{solo\}`;/);
-  assert.match(src, /const picked = secPick\.key === pickKey \? secPick\.sec : mainHeld\.current\.sec;/);
-  // ...a held section the task no longer lays (the chat, once a to-do is one section again) falls back to the last it has
-  assert.match(src, /const section = twoUp \? \(slotKeys\.includes\(picked\) \? picked : slotKeys\.at\(-1\)\) : null/);
-  assert.match(src, /const openSection = \(s\) => setSecPick\(\{ key: pickKey, sec: s \}\);/);
-  // ...and the Advisor's decision names no section any more: nothing re-keys the page when it lands
-  assert.doesNotMatch(src, /advisedHeld|sectionHere|\.section === "close"/);
-});

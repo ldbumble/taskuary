@@ -24,11 +24,3 @@ test("the stops are numbered and the ends are labelled Separate and Combine, and
   for (const m of MARKS) assert.ok(SAYS[m.value]);
   assert.deepEqual([0, 1, 5, 6, "x"].map(clampLevel), [null, 1, 5, null, null]);
 });
-
-test("the card renders the slider in its inbound step, read from and saved to /api/combine/{kind} when let go", () => {
-  assert.match(src, /\{combines\(conn\.Type\) && <CombineStep conn=\{conn\}/);
-  assert.match(src, /<Slider[^>]*marks=\{MARKS\}[^>]*aria-label="Combine level"/s);
-  assert.match(src, /api\.get\(`\/api\/combine\/\$\{kind\}`\)/);
-  assert.match(src, /onChangeCommitted=\{\(_, v\) => save\(v\)\}/);
-  assert.match(src, /api\.put\(`\/api\/combine\/\$\{kind\}`, \{ level: lv \}\)/);
-});

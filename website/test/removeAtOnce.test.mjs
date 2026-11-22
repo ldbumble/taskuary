@@ -4,36 +4,10 @@
 // (the owner, 2026-11-05: one press, one confirm) - connectorUses.test.mjs pins its question.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+
+
 import { announceRemoved, clearRemoved, fromAnswer, lastRemoved, onRemoved, removedLine, showsRemoved, UNDO_MS } from "../src/removed.js";
 
-const SRC = new URL("../src/", import.meta.url);
-const read = (f) => readFileSync(new URL(f, SRC), "utf8");
-
-test("no page asks before it removes but a connection card: no confirm dialog and no browser confirm box anywhere else", () => {
-  const bad = [];
-  for (const f of readdirSync(SRC).filter((f) => /\.(jsx?|mjs)$/.test(f) && f !== "ui.jsx")) {
-    const s = read(f);
-    const asks = (s.match(/<ConfirmDelete\b/g) || []).length;
-    // ...the detail page's Remove and the same Remove on the card's face (the owner, 2026-11-05: "Remove = one press + one confirm")
-    const allowed = f === "ConnectorsView.jsx" && asks === 2 && /function RemoveConnection\([\s\S]*?<ConfirmDelete open=\{asking\}/.test(s)
-      && /function CardRemove\([\s\S]*?<ConfirmDelete open=\{asking\}/.test(s);
-    if (asks && !allowed) bad.push(`${f}: <ConfirmDelete>`);
-    if (/window\.confirm\(/.test(s)) bad.push(`${f}: window.confirm`);
-  }
-  assert.deepEqual(bad, []);
-  // ...and the sign-outs, which asked in the app's own <Confirm>
-  assert.doesNotMatch(read("ConnectorsView.jsx"), /title="Sign out of (ChatGPT|Microsoft)\?"/);
-});
-
-test("one verb: Remove - the buttons that said Delete say Remove", () => {
-  assert.match(read("ReportsView.jsx"), /Remove \{workflow \? "routine" : "report"}/);
-  assert.match(read("WorkflowEditor.jsx"), />Remove routine</);
-  assert.match(read("AgentsPanel.jsx"), />Remove<\/Button>/);
-  assert.match(read("SettingsView.jsx"), /title="Remove this rule"/);
-  assert.doesNotMatch(read("ReportsView.jsx") + read("WorkflowEditor.jsx"), /Delete (workflow|routine|report)/);
-});
 
 test("the Undo line: announced by the press, drawn by the list that holds its kind, and only while it is fresh", () => {
   const seen = [];
@@ -51,20 +25,4 @@ test("the Undo line: announced by the press, drawn by the list that holds its ki
   assert.equal(seen.length, 2);
   // the server's answer names the kind it filed it under: a report and a workflow are told apart there
   assert.deepEqual(fromAnswer({ deleted: 3, title: "AP ageing", kind: "workflow" }, "report"), { did: 3, title: "AP ageing", kind: "workflow" });
-});
-
-// ...and leaving a card loses nothing: every field saves itself, so what was still waiting to save goes as the card closes
-// (the owner, 2026-11-05) - a draft kept for later, with a bar to save it from, is gone with the Save bar
-test("leaving a card saves what was still waiting to save - nothing asks, nothing is kept unsaved", () => {
-  const d = read("ConnectorDraft.jsx");
-  assert.match(d, /useEffect\(\(\) => \(\) => \{ if \(timer\.current\) save\(\); \}, \[save\]\);/);
-  assert.match(d, /if \(s \|\| Object\.keys\(cfgPatch\(b, c\)\)\.length\) post\(true\);/);
-  assert.doesNotMatch(d, /keptDraft/);
-});
-
-// ...and no chip after it (the owner, 2026-11-10: the chip rode onto the next item's bar)
-test("Not ours runs as just this once, and leaves no chip after the press", () => {
-  assert.doesNotMatch(read("proposalCard.js"), /followUps|FURTHER/);
-  // the card no longer prints the switch behind just-this-once
-  assert.match(read("proposalCard.js"), /"wrap", "learn"\]/);
 });

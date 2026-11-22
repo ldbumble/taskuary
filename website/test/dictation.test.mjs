@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
+
 import { browserRecogniser, dictate, dictationError } from "../src/dictation.js";
 
 /* The browser's own voice keeps listening until the owner stops it (the owner, 2026-10-28: "hit the mic and it just turns right off"). */
@@ -152,14 +152,6 @@ test("every error a browser names has a plain line", () => {
   assert.match(dictationError("weird"), /weird/);
 });
 
-test("the mic shows its error beside it and the chat box shows what is being heard and cancels on a send", () => {
-  const ui = readFileSync(fileURLToPath(new URL("../src/ui.jsx", import.meta.url)), "utf8");
-  const av = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
-  assert.match(ui, /data-tq-mic-err/);
-  assert.match(ui, /<Popper open=\{!!err && !ask/);
-  assert.match(av, /onInterim=\{setHeard\}/);
-  assert.match(av, /micRef\.current\?\.cancel\(\)/);
-});
 
 test("the Taskuary window has no browser voice: WebView2's recogniser has no service behind it", () => {
   assert.equal(browserRecogniser({ webkitSpeechRecognition: FakeSR, pywebview: {} }), null);

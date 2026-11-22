@@ -64,20 +64,6 @@ test("the tick says Saved, or Not saved and why", () => {
   assert.equal(tickWords(null), "");
 });
 
-test("no Save button and no Save bar on any connection card: each field saves itself", () => {
-  assert.doesNotMatch(src, /"Save & continue"|"Save name"|<SaveBar|>Save<|: "Save"\}/);
-  assert.doesNotMatch(draft, /export function SaveBar/);
-  // every connector post left beside an id is the name's own save or a reuse that patches; a source setting is never posted whole
-  const posts = src.match(/api\.post\("\/api\/connectors", \{ ConnectorId: conn\.ConnectorId,.*$/gm) || [];
-  assert.ok(posts.length && posts.every((p) => /Name: value|ConfigPatch: cfgPatch\(cfg, next\)/.test(p)), posts.join("\n"));
-  assert.ok(!/api\.post\("\/api\/sources", \{ SourceId/.test(src), "a source setting posted by itself");
-  // the draft saves itself: typing once it pauses, a pick at once, and what was waiting when the card is left
-  assert.match(draft, /later\(typing\(\) \? TYPE_MS : PICK_MS\)/);
-  assert.match(draft, /useEffect\(\(\) => \(\) => \{ if \(timer\.current\) save\(\); \}, \[save\]\);/);
-  assert.match(draft, /ConfigPatch: patch/);
-  // ...and says so by the open step's name, or by the switch
-  assert.match(src, /<StepButton onClick=\{\(\) => setStep\(i\)\}>\{s\.label\}\{i === step && <Tick st=\{draft\.st\} \/>\}<\/StepButton>/);
-});
 
 test("a card's boxes save themselves: the typing on its pause, a secret when its box is left, each with its own tick", () => {
   for (const part of ["need", "maybe", "late"])

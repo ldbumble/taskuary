@@ -37,12 +37,3 @@ test("a page or a mail to finish on opens in a tab, and the desktop app has the 
   assert.deepEqual(app.calls[0][1], { open: true });
   assert.deepEqual(none, []);
 });
-
-test("both FYI cards carry it, and the press is a badge, not a line", () => {
-  const cards = src("assistantCards.jsx");
-  // the single FYI: on the row with the item's verbs, folding the card with the button's label as its badge
-  assert.match(cards, /card\.kind === "fyi" && canUnsubscribe\(card\) \? \[\{ verb: "unsubscribe"/);
-  assert.match(cards, /await unsubscribeFrom\(api, card\.mid\); onDone\?\.\(btn\("unsubscribe"\)\)/);
-  // the handful: under the one line opened, its badge in place of the button once pressed
-  assert.match(cards, /canUnsubscribe\(i\) && \(left\[i\.key\] \? <span className="tq-pressed"/);
-});

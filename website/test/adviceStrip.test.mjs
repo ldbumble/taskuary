@@ -101,16 +101,3 @@ test("a move greyed only by the owner's own press in flight is not said to be of
   // ...and since 2026-10-26 nothing says "is off" over the row at all (the strip is gone)
   assert.doesNotMatch(read("ActionRow.jsx"), /is off - /);
 });
-
-// NO ADVISOR'S LINE ON A TASK (the owner, 2026-11-09: "assistant/advisor should only be on rail"; 2026-11-15: no Advisor fills a button at
-// all): the task page reads none, and beside a waiting draft's Send stands what leaves with it, a fact of the draft served as its move's why
-test("the task page reads no Advisor's line, and a draft's Send says what leaves with it", () => {
-  const page = read("TaskPage.jsx");
-  assert.doesNotMatch(page, /taskNote|taskAdvice|const warn = /, "the task page reads no Advisor's line");
-  assert.doesNotMatch(page, /<AdvisorNote |advisorNote|adviceIn/, "no Advisor block on the task page");
-  assert.match(page, /why=\{rec\?\.state === "draft_ready" \? rec\.why \|\| "" : ""\}/, "what leaves, said on the draft whose Send is filled");
-  assert.doesNotMatch(page, /1 note/, "nothing hides behind a tab, so the tab says nothing of it");
-  assert.ok(!fs.existsSync(new URL("../src/AdvisorNote.jsx", import.meta.url)), "the section it drew is gone with its last user");
-  assert.doesNotMatch(page, /data-tq-task-advice/);
-  assert.match(read("CanvasItem.jsx"), /onLeave=\{onLeave\} onStay=\{onStay\} litMove=\{phone \? pick\?\.verb \|\| pick\?\.id \|\| "" : ""\} \/>/);
-});

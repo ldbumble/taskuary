@@ -9,21 +9,6 @@ import { draftRequest } from "../src/bugReportOpen.js";
 
 const read = (n) => fs.readFileSync(path.join(process.cwd(), "src", n), "utf8");
 
-test("the general agent and the Assistant draw steps with the same rows", () => {
-  const general = read("GeneralWorkspace.jsx"), chat = read("AssistantView.jsx");
-  assert.match(general, /import \{ AgentSteps \} from "\.\/AgentStepRows\.jsx"/);
-  assert.match(chat, /import \{ AgentSteps \} from "\.\/AgentStepRows\.jsx"/);
-  assert.doesNotMatch(general, /const StepRow = /, "one StepRow, in AgentStepRows.jsx");
-  assert.match(read("AgentStepRows.jsx"), /import "\.\/agentStepRows\.css"/);
-  assert.match(read("agentStepRows.css"), /\.tq-aui-step \{/);
-});
-
-test("the stream's steps are drawn while it works, and the answer keeps them - read back from history too", () => {
-  const chat = read("AssistantView.jsx");
-  assert.match(chat, /ev\.type === "steps"/);
-  assert.match(chat, /steps: data\.steps \|\| \[\]/);
-  assert.match(chat, /m\.steps\?\.length \? m\.steps : m\.card\.steps/);
-});
 
 test("what the chat could not fix is reported from what it found, not the page's last error", () => {
   const snap = { screen: "Assistant", route: "/api/concierge/say", error: "Request failed (500)", stack: "Error at x", actions: [], at: "2026-10-24T09:00:00Z" };

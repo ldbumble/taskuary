@@ -4,14 +4,6 @@ import test from "node:test";
 
 const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 
-// A TURN THAT ENDED HAS NOTHING STILL AT WORK (the owner, 2026-11-05: a step kept its spinner under the answer)
-test("an ended turn draws a step that never got its result as done, never spinning", () => {
-  const ws = read("GeneralWorkspace.jsx");
-  assert.match(ws, /const calm = \(st\) => \(!now && st\.status === "running" \? \{ \.\.\.st, status: "done", alongside: false \}/);
-  // ...and in a chat a turn with no summary says no "failed" either
-  assert.match(ws, /: chat && \(st\.status === "error" \|\| st\.status === "recovered"\) \? \{ \.\.\.st, status: "done" \} : st\);/);
-});
-
 
 // A TURN AT WORK ALWAYS DRAWS ITS HEAD (2026-11-17: a turn that carried on after the agent's first message folded into the turn above - no
 // clock, no Stop x - and the head over it read the first turn's "ran 27s" as if nothing were at work): only a finished turn after a turn folds

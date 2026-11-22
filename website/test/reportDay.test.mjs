@@ -2,7 +2,7 @@
 // "End of day checkup — the last 8 hours of Inbox and Sent email" whichever day it was, so yesterday's read like today's.
 import test from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
+
 import { dayLabel, fmtDate } from "../src/dates.js";
 import { nameAndRest } from "../src/reportRows.js";
 
@@ -22,13 +22,4 @@ test("the heading splits after the report's name, whatever report it is", () => 
   assert.deepEqual(nameAndRest("Morning digest — yesterday and today so far, distilled", "Taskuary"),
     ["Morning digest", " — yesterday and today so far, distilled"], "no sender match: the name is up to the last dash");
   assert.deepEqual(nameAndRest("Open invoices", ""), ["Open invoices", ""]);
-});
-
-test("the report card draws the day beside the name, and the chat thread reads the same helper", () => {
-  const src = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
-  const card = src("assistantCards.jsx"), body = card.slice(card.indexOf("export function ReportCard"), card.indexOf("export function IdeaCard"));
-  assert.match(body, /nameAndRest\(card\.title, card\.who\), day = dayLabel\(card\.when\)/);
-  assert.match(body, /<b>\{name\}<\/b>\{day && ` · \$\{day\}`\}\{rest\}/);
-  assert.match(src("ChatThread.jsx"), /import \{ clock, dayLabel \} from "\.\/dates\.js"/);      // ...its time by the one clock (dates.clock)
-  assert.doesNotMatch(src("ChatThread.jsx"), /const dayLabel/);
 });

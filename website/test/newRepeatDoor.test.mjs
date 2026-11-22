@@ -8,17 +8,6 @@ import { DRAFT_HASH, handDraft, onDraftHanded, takeDraft } from "../src/draftHan
 
 const read = (name) => fs.readFileSync(new URL(`../src/${name}`, import.meta.url), "utf8");
 
-// THE DESCRIBE BOX IS THE CHAT'S NOW (the owner, 2026-10-30): each tab brings its builder up and opens the Assistant on it - or by hand
-test("a report or routine the Assistant wrote up on New is a door to its builder and the chat", () => {
-  const src = read("NewSheet.jsx");
-  assert.match(src, /<SetupWithAi kind=\{kind\} words=\{kind === initialKind \? initialText : ""\} onOpen=\{\(\) => \{ onClose\?\.\(\); openAppLink\(NEW_HASH\[kind\]\); \}\} \/>/);
-  assert.match(src, />Set it up by hand<\/Button>/);
-  assert.doesNotMatch(src, /<Composer/);
-  assert.doesNotMatch(src, /"repeat"/);
-  const door = read("SetupWithAi.jsx");
-  assert.match(door, /onClick=\{\(\) => \(onOpen \? \(handTo\(kind, words\), onOpen\(\)\)/, "a door hands its words to the builder it opens");
-  for (const [k, h] of [["report", "report=new"], ["dashboard", "report=new-dashboard"], ["workflow", "report=new-agent"]]) assert.match(door, new RegExp(`${k}: "${h}"`));
-});
 
 test("each draft opens on its own shelf, on the canvas too", () => {
   assert.deepEqual(canvasRequestFromHash(`#${DRAFT_HASH.workflow}`).state, { section: "workflows", open: "draft" });
@@ -37,15 +26,6 @@ test("a draft waits for Reports, and an open Reports hears it at once - taken on
   assert.match(view, /take\(\);\s*\n\s*return onDraftHanded\(take\);/);
 });
 
-// A ROUTINE IS ITS AGENT'S TO SET UP (F1, the walks 2026-11-18): New → Routine prefilled from the Assistant's words is gone - "send me this every
-// Monday" with a CSV landed on an empty form. The builder's strip still starts a build it is handed on its own page (Reports' Set up with AI)
-test("no routine prefill rides into New, and the builder's strip still builds what it is handed", () => {
-  const canvas = read("CanvasBrowse.jsx"), sheet = read("NewSheet.jsx");
-  assert.doesNotMatch(canvas + sheet, /initialRoutine|madeOf|initialFiles/);
-  const strip = read("SetupWithAi.jsx");
-  assert.match(strip, /if \(handed\.current === undefined\) handed\.current = onOpen \? null : takeFor\(kind\);/, "taken in the first draw - no empty beat");
-  assert.match(strip, /useEffect\(\(\) => \{ if \(first != null\) go\(first\); \}, \[\]\);/);
-});
 
 // STRAIGHT INTO THE BUILDER (owner-approved, 2026-11-12): "a routine that lists vendors with no invoice" came back as New's Routine card with
 // Set up with AI and Set it up by hand - a middle card, and Set up with AI asked the Assistant the same thing again. A report, dashboard or

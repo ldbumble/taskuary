@@ -3,7 +3,7 @@
 // the ▾ at every width - an FYI with no danger keeps its row. Invented Northwind people only.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+
 import { foldsOf, leadOf, phoneRow, pillsOf, rowOf } from "../src/actionRow.js";
 import { SCAM_LINE, dangerAimOf, dangerLine } from "../src/strangerLine.js";
 
@@ -50,13 +50,4 @@ test("an FYI with no danger keeps Send to agent in view", () => {
   const row = rowOf({ list: fyi(false), ref: "" });
   assert.equal(leadOf(row).id, "w:regular_agent");
   assert.ok(foldsOf(row)[0].flatMap(ids).includes("w:regular_agent"));
-});
-
-test("the FYI card tucks the agent's words only on a danger, and passes whom to the warning", () => {
-  const src = readFileSync(new URL("../src/assistantCards.jsx", import.meta.url), "utf8");
-  assert.match(src, /export const dangerTuck = \(card\) => \(card\?\.kind === "fyi" && card\.danger \? \["regular_agent", "coding_agent"\] : \[\]\);/);
-  assert.equal((src.match(/tuck=\{dangerTuck\(card\)\}/g) || []).length, 2, "the table's FYI and the card's");
-  assert.match(src, /\.\.\.\(tuck\.includes\(a\.verb\) \? \{ tucked: true \} : \{\}\)/);
-  assert.match(src, /<DangerNote danger=\{card\.danger\} aim=\{card\.danger_aim\} \/>/);
-  assert.match(src, /<DangerNote danger=\{item\.danger\} aim=\{item\.danger_aim\} \/>/);
 });

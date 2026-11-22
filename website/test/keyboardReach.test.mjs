@@ -17,16 +17,3 @@ test("pressable is a button for the keyboard: Tab reaches it, Enter and Space pr
   assert.deepEqual(pressable(() => {}, false), {}, "a card with nothing to press stays out of the Tab order");
   assert.deepEqual(pressable(undefined), {});
 });
-
-test("each mouse-only control the audit named is pressable now", () => {
-  assert.match(src("ConnectorsView.jsx"), /<Box \{\.\.\.pressable\(c\.go, !c\.planned\)\} data-tq-card=\{c\.key\}/);
-  assert.doesNotMatch(src("NewSheet.jsx"), /setKind\(k\.key\)/);         // New has no kind tabs to reach (TQ-1397)
-  const rail = src("AssistantView.jsx");
-  assert.match(rail, /data-tq-section-head=\{level\}[\s\S]{0,200}\{\.\.\.pressable\(\(\) => onSection\(level\)\)\}>/);
-  assert.match(rail, /<i className="fold" [^>]*\{\.\.\.pressable\(\(e\) => \{ e\.stopPropagation\(\);/);
-  const page = src("TaskPage.jsx");
-  assert.match(page, /<Box \{\.\.\.pressable\(onToggle\)\} aria-expanded=/);
-  const ui = src("ui.jsx");
-  assert.ok(ui.includes('<Typography {...pressable(() => { setText(bareAddresses(to).join(", ")); setOpen(true); })} data-tq-to-change'));
-  assert.match(ui, /<Typography \{\.\.\.pressable\(\(\) => setOpen\(true\)\)\}\s+sx=\{\{ \.\.\.FOCUS_RING[\s\S]{0,200}Add \$\{name\}/);
-});

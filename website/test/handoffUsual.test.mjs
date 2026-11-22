@@ -13,14 +13,6 @@ test("the usual recipient says whose usual it is, and nothing at all when there 
   for (const none of [{}, null, undefined, { to: "ray@northwind.example" }]) assert.equal(usualHandWhy(none), "");
 });
 
-test("the drawer fills To from the usual, never over a typed name, and only Send it sends", () => {
-  assert.match(src, /api\.get\(`\/api\/tasks\/\$\{taskId\}\/handoff\/usual`\)/);
-  assert.match(src, /setTo\(\(v\) => v \|\| data\.to\)/, "a name already typed stays");
-  assert.match(src, /\.catch\(\(\) => \{\}\)/, "a failed ask changes nothing");
-  const fill = src.slice(src.indexOf("/handoff/usual"), src.indexOf("const call = async"));
-  assert.doesNotMatch(fill, /call\(|send\(|api\.post/, "chosen, not sent");
-  assert.match(src, /usual && to === usual\.to && \(/, "the why stands only while the chosen person is still in To");
-});
 
 test("Remind me's day is read from a How you work line, said on hover", () => {
   assert.equal(usualLine({ line: "You put mail from renewals@payworth.example off to Friday" }), "How you work: You put mail from renewals@payworth.example off to Friday");

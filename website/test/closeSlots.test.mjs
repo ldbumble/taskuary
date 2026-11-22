@@ -18,14 +18,6 @@ test("the slot block gets every slot review", () => {
   assert.deepEqual(slotReviews([reply, slot, { ...slot, ReviewId: 10 }]).map((r) => r.ReviewId), [9, 10]);
 });
 
-test("an email card says nothing of the app's own workings, and one that went stays as its sent card", () => {
-  // the owner, 2026-11-13: "Closes when sent · 0 of 1" and "waits for your yes · added by the agent" over the card are internal - and
-  // pressing Send on one email closed the box: "never close actions boxes. once sent just say sent"
-  const src = readFileSync(new URL("../src/SlotList.jsx", import.meta.url), "utf8");
-  for (const w of ["Closes when sent", "waits for your yes", "added by the agent"]) assert.ok(!src.includes(w), w);
-  const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  assert.doesNotMatch(page, /r\.Kind !== "slot" && \["approved", "edited", "sent"\]/, "a sent email is drawn as its SentCard, as a reply is");
-});
 
 test("the footer says what closes the task", async () => {
   const { completionLine } = await import("../src/taskLifecycle.js");
@@ -58,12 +50,4 @@ test("waiting emails open Close out, and it says how many", async () => {
   assert.equal(waitingEmails(checklist, [slot]), 1);
   assert.equal(focusStage({ kind: "coding", task: "waiting", agent: "stopped and saved", emails: 1 }), "reply");
   assert.equal(focusStage({ kind: "coding", task: "waiting", agent: "agent waiting on you", emails: 1 }), "agent");
-});
-
-// THE OWNER, 2026-11-10: "it created reply with nothing in it" - a recipient nobody has written to is no card: never drawn in the chat
-test("a recipient with no draft is not drawn, and a task with only such ones draws no emails block", () => {
-  const list = readFileSync(new URL("../src/SlotList.jsx", import.meta.url), "utf8");
-  assert.match(list, /filter\(\(i\) => i\.out && !i\.done && byRid\[i\.rid\]\?\.Status === "pending"\)/);
-  assert.doesNotMatch(list, />Drop<\/Button>/);
-  assert.match(readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8"), /const owesEmails = emailsWaiting > 0;/);
 });

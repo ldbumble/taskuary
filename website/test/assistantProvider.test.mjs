@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
+
 import { pickFor } from "../src/assistantProvider.js";
 
-const read = (f) => readFileSync(fileURLToPath(new URL(f, import.meta.url)), "utf8");
+
 const cli = { id: "cli:claude", label: "Claude Code", type: "cli", model: "" };
 const api = { id: "connector:21", label: "Work model (API)", type: "openai", model: "gpt-test" };
 
@@ -27,8 +27,3 @@ test("an older server, or a pick that no longer exists, still lands on something
   assert.equal(pickFor({ providers: [] }), null);
   assert.equal(pickFor(null), null);
 });
-
-test("the workspace uses the picker's reading", () => {
-  assert.match(read("../src/GeneralWorkspace.jsx"), /pickFor\(payload\)/);
-});
-

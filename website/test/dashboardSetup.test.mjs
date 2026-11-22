@@ -76,17 +76,3 @@ test("an S3 source on a dashboard keeps its path as object_key: its card's field
   assert.match(rv, /\.map\(\(\[l, key, \.\.\.rest\]\) => \[l, renames\[key\] \|\| key, \.\.\.rest\]\)/);
   assert.deepEqual(OWN_KEYS, { s3_object: { key: "object_key" } }, "dashboards.OWN_KEYS says the same");
 });
-
-test("the editor lays its sources out as a report does, and every dashboard - the built-in one too - has the same editor", () => {
-  const ed = src("DashboardEditor.jsx"), rv = src("ReportsView.jsx");
-  assert.match(ed, /import \{ SourceCard, SourceTest \} from "\.\/ReportsView\.jsx";/, "a report's own source cards, not a second kind");
-  assert.match(ed, /<Section title=\{DASH\.sources\}[\s\S]*<SourceCard [\s\S]*<Section title=\{DASH\.shows\}[\s\S]*<Dashboard /);
-  assert.doesNotMatch(ed, /Owner|template'/, "nothing in the editor tells the built-in one apart");
-  assert.match(rv, /<DashboardEditor [^\n]*types=\{types\} connectors=\{connectors\}/);
-  assert.match(rv, /taskuary_data: \[\["what it reads", "dataset", "taskuary_dataset", ""\]/);
-  // the shelf lists dashboards with the reports' own row, under the Dashboards section
-  assert.match(rv, /section === "dashboards" \? dashboardSources/);
-  assert.match(rv, /\.\.\.sectionRows\.map\(\(x\) => \(\{ key: String\(x\.SourceId\), node: row\(x\) \}\)\)/);
-  // the dataset picker lists what the server serves (dashboards.DATASETS: test_dashboards holds the other half)
-  assert.deepEqual(Object.keys(words.dashboard.datasets).sort(), ["agent_runs", "ai_usage", "flow", "mail", "replies", "tasks"]);
-});

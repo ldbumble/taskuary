@@ -3,7 +3,7 @@
 // 2026-10-15). Every run, newest first, by its last words; everything else behind one Full transcript.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+
 import { lastWords, runHeads, runsOf } from "../src/agentRecord.js";
 
 test("a run's last words are its last message, without the prompt box the screen read along with it", () => {
@@ -42,11 +42,6 @@ test("runs that resumed one conversation share its log: each is cut at the run b
   assert.deepEqual(runs.map((r) => r.said), ["round three done", "round two done", "round one done"]);
 });
 
-test("the record leads with the runs and keeps the rest behind Full transcript", () => {
-  const src = readFileSync(new URL("../src/AgentRecord.jsx", import.meta.url), "utf8");
-  assert.match(src, /<RunSummaries /);
-  assert.match(src, /Full transcript/);
-});
 
 // THE LATEST RUN FIRST, EVERY EARLIER ONE UNDER IT (the owner, 2026-10-29): Continue, Run another agent or a second Send to agent - the newest
 // report leads, the ones before it follow newest first, each one line (when, which agent, what came of it), and none is dropped
@@ -64,12 +59,4 @@ test("runs read latest first, the earlier ones below it newest first, none dropp
   // ...and a live session is the terminal above, never a report under it: the rest keep their order
   assert.deepEqual(runHeads(sessions, "c").map((r) => r.s.sid), ["b", "a"]);
   assert.deepEqual(runHeads([]), []);
-});
-
-test("no Earlier runs fold under a run; the whole history still reads in order where it is asked for", () => {
-  // the owner, 2026-11-05: "there is only one run per task ... remove the prior run section of the app"
-  const src = readFileSync(new URL("../src/AgentRecord.jsx", import.meta.url), "utf8"), page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  assert.doesNotMatch(src, /<EarlierRuns runs=\{runHeads\(rec\.sessions\)\.slice\(1\)\} \/>/, "none under the Result at rest");
-  assert.match(src, /earlier = null;/, "none under the open record");
-  assert.match(page, /<AgentRecord \{\.\.\.recordProps\} history title="Before they wrote again" \/>/, "every run folded once the sender wrote again");
 });

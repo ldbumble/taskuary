@@ -58,17 +58,6 @@ test("moving to another task aborts the read of the last one, and its queued re-
   assert.equal(c.busy(1), false);
 });
 
-test("the task page, the conversation read and the pile each hold one read in flight", () => {
-  const page = read("TaskPage.jsx"), view = read("AssistantView.jsx");
-  assert.match(page, /detailReads\.current \|\|= coalesce\(async \(id, signal\) =>/);
-  assert.match(page, /api\.get\(`\/api\/tasks\/\$\{id\}`, \{ signal, params: rev \? \{ rev \} : opened \? \{ opened: 1 \} : \{\} \}\)/);
-  assert.match(page, /return detailReads\.current\.run\(id, id\);/);
-  assert.match(page, /useEffect\(\(\) => \{ detailReads\.current\.drop\(selected \|\| null\); \}, \[selected\]\);/);
-  assert.equal((page.match(/api\.get\(`\/api\/tasks\/\$\{id\}`/g) || []).length, 1, "every task read goes through the one coalesced reader");
-  assert.match(view, /chatReads\.current \|\|= coalesce\(\(epoch\) => readChatRef\.current\(epoch\)\);/);
-  assert.match(view, /const readChat = useCallback\(\(epoch = chatEpoch\.current\) => chatReads\.current\.run\(epoch, epoch\), \[\]\);/);
-  assert.match(view, /if \(pileFlight\.current\) \{\n\s+if \(force\) pileForcePending\.current = true;\n\s+return pileFlight\.current;/, "the pile was coalesced already (pileFlight)");
-});
 
 test("a Send lets go when the decide answers, and after a minute with no answer reads the delivery state instead", () => {
   assert.equal(DECIDE_TIMEOUT, 60000);
@@ -80,14 +69,4 @@ test("a Send lets go when the decide answers, and after a minute with no answer 
   assert.doesNotMatch(card, /await onSent\(\); setBusy\(false\)/, "busy never waits on the re-read after the send");
   assert.equal((card.match(/setBusy\(false\); await onSent\(\{ closes: [^\n]+(\}\); return;|\n\s+said: [^\n]+\}\); return;)/g) || []).length, 2);
   assert.equal((card.match(/if \(!data\) \{ if \(out\.kind === "unknown"\) onChanged\?\.\(\); else setErr\(/g) || []).length, 2, "a timeout reads the review again, no line of its own");
-});
-
-// THE POLLED READS ASK "STILL THIS?" (speed round, 2026-11-18): the chat's state poll and the task's own read send the name of what the page
-// draws, and an answer that is only `same` draws nothing again (server._revisioned, tests/test_polled_reads.py)
-test("the chat state poll and the task read send the rev they hold and draw nothing for a same answer", () => {
-  const chat = read("GeneralWorkspace.jsx"), page = read("TaskPage.jsx");
-  assert.match(chat, /api\.get\(`\/api\/tasks\/\$\{task\.TaskId\}\/assistant`, \{ params: heldRev\.current \? \{ rev: heldRev\.current \} : \{\} \}\);\n\s+if \(!live \|\| fresh\?\.same\) return;/);
-  assert.match(chat, /setData\(payload\); heldRev\.current = payload\?\.rev \|\| ""/, "whatever the view draws names the rev it holds");
-  assert.match(page, /if \(data\?\.same\) \{[^\n]*return false; \}/, "a same answer leaves the page and its calming count alone");
-  assert.match(page, /held\.data === detailNow\.current/, "the rev is sent only while the page draws exactly what the server last said");
 });

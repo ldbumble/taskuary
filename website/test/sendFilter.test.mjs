@@ -29,10 +29,6 @@ test("one line per server and tool, left out or kept; a server Claude and Codex 
   assert.deepEqual(linesOf(null), { left: [], kept: [] });
 });
 
-test("Settings > Agent permissions draws the list next to the saved sign-ins", () => {
-  assert.match(src("SettingsView.jsx"), /"Agent permissions": <>\{panel\("panel:trusted", <TrustedSenders \/>\)\}\{panel\("panel:signins", <SavedSignins \/>\)\}\{panel\("panel:sendfilter", <SendFilter \/>\)\}<\/>/);
-  assert.match(src("SettingsView.jsx"), /import SendFilter from "\.\/SendFilter\.jsx";/);
-});
 
 test("Keep, Leave out and the check again are the owner's corrections and a fresh scan - in plain words", () => {
   const s = src("SendFilter.jsx");

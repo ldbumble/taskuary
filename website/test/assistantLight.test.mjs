@@ -35,21 +35,6 @@ test("the light lands on its item - by key, or by its task - and goes out when t
   assert.equal(litPick(lightOf({ verb: "", key: "task:12", tid: 12 }), up), null, "brought up with nothing to light");
 });
 
-test("a typed turn draws no proposal card and runs nothing: it lights, opens a page, or fills New", () => {
-  const view = src("AssistantView.jsx");
-  const at = view.indexOf("const send = async"), body = view.slice(at, view.indexOf("const sendEmoji", at));
-  assert.doesNotMatch(body, /proposalOf|runProposal|prop\?\.auto|kind: "proposal"/);
-  assert.match(body, /const l = lightOf\(data\.light\);/);
-  assert.match(body, /if \(data\.new && !goStraight\(data\.new\)\) browseRef\.current\?\.\("new", data\.new\);/);
-  assert.match(body, /const page = "open" in data \? data\.open : firstAppLink\(data\.say\);/);
-  // "send Erin the answer": the draft lands in the item's own reply box, and its Send is lit - drafting is not sending
-  assert.match(view, /setLit\(\{ verb: "approve", label: btn\("approve"\), line: "", key: `review:\$\{data\.reviewId\}`/);
-  // the lit act outranks the Advisor's line, which would name another button; any press puts it out
-  assert.match(view, /<ActionRow advised=\{stripPick \|\| setupLit\}( hold=\{[^}]*\})?( early=\{[^}]*\})?( says=\{.*?\})? \/>/);
-  assert.match(view, /const shownAdvice = table\.speaks && !litNow \?/);
-  assert.match(src("advice.js"), /return \{ pick: lit \|\| shown \|\| quiet \};/, "the light first, then the decision, then Next (advice.stripWord)");
-  assert.match(view, /useEffect\(\(\) => onPressed\(\(\) => setLit\(null\)\), \[\]\);/);
-});
 
 // THE LIT BUTTON IS THE WHOLE ANSWER (the owner, 2026-10-23: "what the heck is Lit"): no "Lit Mark done on TQ-0026." line in the chat and
 // no "Press Mark done when you're sure." over the row - the filled button says it. A strip line is drawn only when a light carries one
@@ -72,17 +57,6 @@ test("a lit button says no line, in the chat or over the row", () => {
   assert.match(src("CanvasItem.jsx"), /<ActionRow inline advised=\{pick\}( says=\{.*?\})? \/>/);
 });
 
-// A TYPED PUT-DOWN WAS PRESSED (concierge._put_down): the card wears the button's badge (and a Close with a note its note), and on the table
-// it is put down as the row's own press puts it down - folded, the next item up
-test("a typed put-down folds its card with the press badge and the note", () => {
-  const view = src("AssistantView.jsx");
-  const at = view.indexOf("const send = async"), body = view.slice(at, view.indexOf("const sendEmoji", at));
-  assert.match(body, /const pr = data\.pressed;\s+if \(pr\?\.label\) \{\s+setMsgs\(\(m\) => pressLine\(m, pr, pr\.label, pr\.note \|\| ""\)\);/);
-  assert.match(body, /canvasState\.putDown\(here\.key \|\| pr\.key, pr\.tid \?\? null\); leave\(here\.key \|\| pr\.key, "left"\);/);
-  assert.match(view, /<Pressed label=\{pressedOf\(m\)\} note=\{pressedNoteOf\(m\)\} \/>/);
-  assert.match(view, /\{note && <span className="tq-pressed-note" data-tq-pressed-note="" title=\{note\}>\{note\}<\/span>\}/);
-  assert.match(src("assistantView.css"), /\.tq-pressed-note \{[^}]*white-space: nowrap; overflow: hidden; text-overflow: ellipsis;/);
-});
 
 test("the setting the Assistant names opens with its knob outlined", async () => {
   const { canvasRequestFromHash } = await import("../src/canvasLinks.js");

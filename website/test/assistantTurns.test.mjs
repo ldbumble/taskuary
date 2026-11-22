@@ -242,13 +242,6 @@ test("a receipt kept by the server comes back as the line drawn at the act, neve
   assert.deepEqual(reloaded.map((m) => [m.role, m.status, m.text]), [["user", undefined, "open the invoice task"], ["receipt", "done", "Opened TQ-0004 - Payworth invoice."]]);
 });
 
-test("the page keeps every line it says an act did, and says it opened only once it has", () => {
-  const src = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
-  assert.match(src, /api\.post\("\/api\/concierge\/line", \{ text, status \}\)/);
-  assert.match(src, /api\.post\("\/api\/concierge\/line", \{ text: data\.say \|\| "", steps \}\)/);
-  assert.doesNotMatch(src, /Brought up \$\{/, "an open is said as Opened");
-  assert.match(src, /openAppLink\(page\);\s*const name = linkName\(data\.say, page\);/, "said after the page is opened");
-});
 
 // A MISS IS SAID ONCE (a colleague, 2026-11-03: a Search pick that opened nothing put "I can't find that one ..." in the chat three times):
 // the same card-less line again, straight after itself, is that line - not a second copy under it

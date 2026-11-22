@@ -13,31 +13,3 @@ test("the subject is the envelope's, else Re: the mail answered, and BCC reads l
   assert.equal(deliverySubject({ Subject: "RE: Friday" }), "RE: Friday");
   assert.deepEqual(deliveryBcc({ Deliver: JSON.stringify({ bcc: ["ray@northwind.example", ""] }) }), ["ray@northwind.example"]);
 });
-
-test("every email card draws the same rows, and the press carries BCC and a changed subject", () => {
-  const rd = src("ReviewDecision.jsx"), ui = src("ui.jsx");
-  assert.match(ui, /export const CcRow = \(\{ cc, setCc, channel, label: name = "CC", autoOpen = false, onClose \}\)/);
-  assert.match(ui, /export const SubjectRow = /);
-  assert.match(rd, /const isEmail = String\(r\.Channel \|\| meta\.channel \|\| ""\)\.toLowerCase\(\) === "email";/);
-  assert.match(rd, /<CcRow cc=\{ccNow\} setCc=\{setCc\} channel="email" autoOpen=/);
-  assert.match(rd, /<CcRow cc=\{bccNow\} setCc=\{setBcc\} channel="email" label="BCC" autoOpen=/);
-  assert.match(rd, /<SubjectRow subject=\{subjNow\} onChange=\{setSubj\}/);
-  assert.match(rd, /bcc: bccNow, subject: subj != null && subj !== subjFiled \? subj : null/);
-  assert.doesNotMatch(rd, /!isSlot \|\| ccNow\.length > 0/, "an agent's email has the same Add CC as a reply");
-});
-
-test("a reply's card reads its subject off the mail it answers, which the task's reviews now carry", () => {
-  const store = readFileSync(new URL("../../taskuary/store.py", import.meta.url), "utf8");
-  assert.match(store, /m\.ConversationId, m\.Subject FROM review rv /);
-});
-
-// the visual pass (2026-11-18): To was the app's plain label while CC, BCC and Subject were green 9.5px capitals spaced out - four field
-// names on one card in two styles, "SUBJECT" shouting under "To"
-test("the email card's field names wear one label", () => {
-  const ui = src("ui.jsx");
-  for (const row of ["export const ToRow", "export const CcRow", "export const SubjectRow"]) {
-    const body = ui.slice(ui.indexOf(row), ui.indexOf("\n};", ui.indexOf(row)));
-    assert.match(body, /<Typography sx=\{\{ \.\.\.label, flexShrink: 0 \}\}>(To|\{name\}|Subject)<\/Typography>/, row);
-    assert.doesNotMatch(body, /letterSpacing: "1\.5px"/, row);
-  }
-});

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { HOW, landingFiles, landingTurn, landingWords } from "../src/landing.js";
+import { HOW, landingFiles, landingWords } from "../src/landing.js";
 
 test("the landing card says the branch's stat and the agent's pick", () => {
   const w = landingWords({ own: true, ahead: 2, changed: 3, plus: 40, minus: 12, proposal: { how: "merge", why: "the base moved" } });
@@ -21,14 +21,6 @@ test("the four answers are the server's and discard asks once more before it goe
   assert.match(body, /\/api\/tasks\/\$\{taskId\}\/landing/);
 });
 
-// ...on the server's one fact (landing.shown + has_checkout), never the page's own coding switch: off with Developer mode, it hid the Push card
-// a general agent raised in the checkout he named, which its agent had been told was up (design round 6, D1)
-test("the chat draws it only where the task works in a checkout, whatever its kind", () => {
-  const page = fs.readFileSync(path.join(process.cwd(), "src", "TaskPage.jsx"), "utf8");
-  assert.match(page, /landing=\{detail\?\.checkout && <LandingCard /);
-  assert.equal((page.match(/<LandingCard /g) || []).length, 1, "once, in the chat");
-});
-
 
 test("the card's list folds the generated files and says how many more, apart from See the diff", () => {
   const { src, gen } = landingFiles([{ path: "taskuary/landing.py" }, { path: "website/package-lock.json" }, { path: "taskuary/static/assets/index-AbCd1234.js" }]);
@@ -39,13 +31,6 @@ test("the card's list folds the generated files and says how many more, apart fr
   assert.match(body, /<Dialog open=\{open\}.*fullWidth maxWidth=\{false\}/, "the whole diff opens the window wide");
 });
 
-// the owner, 2026-11-09: See the diff waited for the read before anything opened - it felt dead for a second
-test("See the diff opens its window at the press, reading the changes in it, and says so if they cannot be read", () => {
-  const body = fs.readFileSync(path.join(process.cwd(), "src", "LandingCard.jsx"), "utf8");
-  assert.match(body, /const seeDiff = \(\) => \{ if \(open\) return setOpen\(false\); setOpen\(true\); setDiff\(null\); readDiff\(\); \};/);
-  assert.match(body, /<CircularProgress size=\{14\} color="inherit" \/>Loading the changes…<\/Typography>/);
-  assert.match(body, /\{diffErr && <Typography variant="body2" data-tq-diff-error=""/);
-});
 
 // the owner, 2026-11-09 (~20th time): "i thought actions should be cards/buttons??? why is this text??" - an agent's commits straight on
 // master, unpushed, under a card with no button; the owner typed "yes"

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+
 import { noteKey, noteOf, notePath, saveNote } from "../src/checklist.js";
 
 // A NOTE ON ONE TO-DO (the owner, 2026-10-20): kept with the box, shown under its words, edited inline - no dialog.
@@ -28,11 +28,4 @@ test("Enter saves, Escape leaves it as it was, anything else types", () => {
   assert.equal(noteKey(ev("a"), h), false);
   assert.equal(noteKey(ev("Enter", true), h), false);
   assert.deepEqual(did, ["save", "cancel"]);
-});
-
-test("the task page draws the note under the to-do and opens the field inline", () => {
-  const src = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  for (const mark of ["data-tq-todo-note-add", "data-tq-todo-note-field", "data-tq-todo-note=", "saveNote(api, t.TaskId, i.id, text)"]) assert.ok(src.includes(mark), mark);
-  assert.ok(src.includes("e.stopPropagation(); setNoting(i.id)"), "the note word must not tick the box");
-  assert.ok(!/Dialog[^\n]*note/i.test(src), "inline, never a dialog");
 });

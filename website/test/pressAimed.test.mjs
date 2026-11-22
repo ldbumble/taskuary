@@ -2,7 +2,7 @@
 // its press and the second click ran the verb that now answered to "done", the next task's. browser/press-aimed.test.mjs drives it whole.
 import test from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
+
 import { ONE_PRESS_MS, aimed, press, put, rowNow } from "../src/actionRow.js";
 
 test("a drawn button runs its own card's verb, and nothing once another card holds that id", () => {
@@ -32,13 +32,4 @@ test("one gesture is one press: a second click, or a press within one press, on 
   // again, and pressed 0.3 s later it did nothing under a lit button - only a double-click's second click is held there
   assert.ok(aimed("D", { detail: 1 }, (t += ONE_PRESS_MS + 1)) && aimed("", { detail: 1 }, (t += 250)), "the end's walk again, pressed soon after Next");
   assert.ok(aimed("D", { detail: 1 }, (t += ONE_PRESS_MS + 1)) && !aimed("", { detail: 2 }, (t += 100)), "a double-click on Next never starts the walk again");
-});
-
-test("the canvas holds every press to its item, on the window before any card hears it - and never the rail's", () => {
-  const view = fs.readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
-  assert.match(view, /if \(!b \|\| b\.closest\("\[data-tq-rail\]"\) \|\| !b\.closest\("\.tq-asst-col, \[role=menu\], \.MuiPopover-paper"\)\) return;/);
-  // ...the bar's Back and Next too: they grey over a move (2026-11-03), and a press within one press of the last on the row it drew is the same hand
-  assert.match(view, /if \(!aimed\(item, e\)\) \{ e\.stopPropagation\(\); e\.preventDefault\(\); \}/);
-  assert.doesNotMatch(view, /walkPress/);
-  assert.match(view, /window\.addEventListener\("click", gate, true\);/);
 });

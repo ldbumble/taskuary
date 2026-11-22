@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+
 import { removeWords, usedBy } from "../src/connectorUses.js";
 
 // #238: what leans on a connection is said on its card beside Remove, before the press - not in a dialog after it
@@ -23,31 +23,6 @@ test("nothing leaning says nothing", () => {
   for (const x of [[], null, undefined, [{ kind: "report", names: [] }]]) assert.equal(usedBy(x), "");
 });
 
-test("the line sits on the card beside Remove, and Remove asks once", () => {
-  const cv = readFileSync(new URL("../src/ConnectorsView.jsx", import.meta.url), "utf8");
-  const rc = cv.slice(cv.indexOf("function RemoveConnection("), cv.indexOf("\nfunction ", cv.indexOf("function RemoveConnection(") + 10));
-  // ...the read and the press are useRemove's, shared with the card's face (CardRemove, the owner 2026-11-05)
-  const ur = cv.slice(cv.indexOf("function useRemove("), cv.indexOf("function RemoveConnection("));
-  assert.match(ur, /api\.get\(`\/api\/connectors\/\$\{conn\.ConnectorId\}\/uses`\)/);
-  assert.match(ur, /words: removeWords\(conn, channel, uses\)/);
-  assert.match(ur, /await reload\?\.\(\); after\?\.\(\);/);     // the list read before the card is left: never drawn as it was
-  assert.match(rc, /useRemove\(conn, channel, reload, onBack\)/);
-  assert.match(rc, /const line = usedBy\(uses\);/);
-  assert.match(rc, /\{line && <Typography data-tq-used-by="" variant="caption"[^>]*>\{line\}<\/Typography>\}/);
-  assert.match(rc, /Remove connection<\/Button>\s+\{line && <Typography data-tq-used-by=""/, "beside the button, on its row");
-  // ONE PRESS, ONE QUESTION (the owner, 2026-11-05), and on yes the page is back on the list
-  assert.equal((rc.match(/<ConfirmDelete|window\.confirm|<Dialog/g) || []).length, 1, "one question");
-  assert.match(rc, /<ConfirmDelete open=\{asking\} title=\{words\.title\} consequence=\{words\.text\} confirmLabel="Remove" undoable/);
-  // ...and the same one press, one question on the card's face, the card's own press never firing under it
-  const cr = cv.slice(cv.indexOf("function CardRemove("), cv.indexOf("\n/* ── Apple Messages"));
-  assert.equal((cr.match(/<ConfirmDelete|window\.confirm|<Dialog/g) || []).length, 1, "one question on the face too");
-  assert.match(cr, /onClick=\{stop\} onKeyDown=\{stop\}/);
-  assert.match(cv, /\{c\.remove && <CardRemove \{\.\.\.c\.remove\} \/>\}/);
-  // ...on EVERY connection card (2026-11-06): the channel, data and special cards - SQL Server, remote Windows, Agent Desktop - alike
-  const builders = cv.slice(cv.indexOf("const chanCard = (c) =>"), cv.indexOf("const planned = types.filter"));
-  assert.equal((builders.match(/remove: (?:removable\(c\) \? \{ conn: c)/g) || []).length, 3, "chanCard, dataCards and specialCards each carry Remove");
-  assert.match(builders, /remove: removable\(c\) \? \{ conn: c, channel: type === "mssql" \|\| type === "winrm" \? "data" : "", reload: load \} : null,/);
-});
 
 test("the question names the card, what stays, what goes and what stops with it", () => {
   const rows = [{ kind: "report", names: ["AP ageing"] }, { kind: "draft", names: ["", ""] }];

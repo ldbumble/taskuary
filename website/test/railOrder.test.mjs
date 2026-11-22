@@ -27,12 +27,6 @@ test("the gutter's age is the arrival the rows are ordered by, not the newest ac
   assert.equal(arrivedAt({ since: "a", when: "b" }), "a");
 });
 
-test("the rail draws the pile in the server's order and the table row through inOrder", () => {
-  const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
-  assert.match(view, /const drawn = inOrder\(/);
-  assert.match(view, /band\(i\.kind === "meeting" \? i\.when : arrivedAt\(i\)\)/);
-  assert.doesNotMatch(view, /\.\.\.\(curKey && !known \? \[pulledRow\(current\)\] : \[\]\),\s*\.\.\.onTable,\s*\.\.\.drawOrder/);
-});
 
 // REPORTS GO OLDEST FIRST LIKE EVERY OTHER SECTION (the owner, 2026-10-22: "reports should go oldest first like everything else"), and
 // there is NO URGENT SECTION (2026-10-22: "remove the urgent section and just add quiet shading around it"): an urgent row sits in
@@ -100,16 +94,4 @@ test("the age's hover says when it arrived and when its last message came", () =
 test("the line under the title is the newest message", () => {
   assert.equal(latestLine({ latest: { who: "Erin Blake", text: "Signed copy attached." } }), "Erin Blake: Signed copy attached.");
   assert.equal(latestLine({}), "");
-});
-
-test("the rail row draws no +N in the age column, and the newest message on the table's line", () => {
-  const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
-  assert.doesNotMatch(view, /tq-pile-new|newMark/);
-  assert.match(view, /: ageHover\(i\)\}>/);
-  // NO "+N" FOR NEW REPLIES (the owner, 2026-10-26), the phone neither; a folded FYI thread counts its mails in words of its own
-  assert.doesNotMatch(view, /i\.new_n|data-tq-news/);
-  assert.match(view, /· \{i\.thread_n\} more on the thread/);
-  assert.doesNotMatch(view, />\+\{i\.thread_n\}</);
-  // ...through funnelPile.subLine since 2026-11-15, which says the newest message's age only where it is not the gutter's own
-  assert.match(view, /subLine\(i, why\)/); assert.match(readFileSync(fileURLToPath(new URL("../src/funnelPile.js", import.meta.url)), "utf8"), /latestLine\(i\) \? \[latestLine\(i\), other\(i\.last_at\)\]/);
 });

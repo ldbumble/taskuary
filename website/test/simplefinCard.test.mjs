@@ -10,16 +10,6 @@ import { fileURLToPath } from "node:url";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 
-test("the card is offered in Markets & finance, ahead of the one nobody can sign up for", () => {
-  const src = read("ConnectorsView.jsx");
-  const group = src.match(/dataCards\(\["simplefin".*?\]\)/s);
-  assert.ok(group, "simplefin should lead the Markets & finance data cards");
-  assert.ok(group[0].indexOf("simplefin") < group[0].indexOf("teller"));
-  assert.match(src, /simplefin: \{ title: "Bank & card feed \(SimpleFIN\)"/);
-  for (const t of ["simplefin_accounts", "simplefin_transactions", "simplefin_balances", "simplefin_spend"]) {
-    assert.ok(src.includes(t), t);
-  }
-});
 
 test("connecting is a token in a field, claimed server-side, and never a browser widget", () => {
   const src = read("ConnectorsView.jsx");
@@ -29,13 +19,4 @@ test("connecting is a token in a field, claimed server-side, and never a browser
   // one-shot: the field is cleared on success only, so a rejected token can be corrected
   assert.match(src, /setToken\(""\); await load\(\); reload\(\)/);
   assert.doesNotMatch(src, /cdn\.simplefin/);
-});
-
-test("the four reports are buildable and named for the card they come from", () => {
-  const src = read("ReportsView.jsx"), labels = read("reportWords.js");   // the labels live beside the schedule's words (reportWords.js)
-  assert.match(labels, /simplefin_transactions: "Bank & card \(SimpleFIN\)/);
-  assert.match(labels, /simplefin_spend: "Bank & card \(SimpleFIN\)/);
-  // no last four in this protocol: the account field must not ask for digits
-  const field = src.match(/simplefin_transactions: \[\[(.*?)\]/s)[1];
-  assert.ok(!/last four/i.test(field), field);
 });

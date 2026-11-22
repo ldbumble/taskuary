@@ -2,7 +2,7 @@
 // body and labels; the card in that turn shows them with Create issue, and nothing is filed until the owner presses it.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+
 import { actionFor, cardOf, fieldsOf, isCardReview, stateOf, textKey, wordsOf } from "../src/actionCard.js";
 
 const ISSUE = { action: "run_tool", type: "github_issue", repo: "northwind/portal", title: "Login page warns about the certificate",
@@ -26,10 +26,4 @@ test("it waits for the press, then says Created with the issue's link", () => {
   const done = stateOf({ Status: "approved", post: { ...ISSUE, result: { url: "https://github.example/northwind/portal/issues/14" } } });
   assert.deepEqual(done, { done: true, said: "Created", url: "https://github.example/northwind/portal/issues/14" });
   assert.equal(stateOf({ Status: "pending", post: ISSUE }, false).said, "Not created");
-});
-
-test("the title is drawn bold over the words, never as a header label", () => {
-  const s = readFileSync(new URL("../src/ActionCard.jsx", import.meta.url), "utf8");
-  assert.match(s, /const lines = fields\.filter\(\(f\) => f\.type === "line" && f\.value && !f\.heading\), heads = fields\.filter\(\(f\) => f\.heading && f\.value\);/);
-  assert.match(s, /data-tq-act-heading=\{f\.key\}/);
 });

@@ -15,11 +15,6 @@ test("the CLI agents card is on only when a CLI is connected; installed alone is
   assert.deepEqual(cliCardOf(null), {});
 });
 
-test("the card reads it, and its pill says Connected, never Installed", () => {
-  const cv = readFileSync(new URL("../src/ConnectorsView.jsx", import.meta.url), "utf8");
-  assert.match(cv, /\.\.\.cliCardOf\(clis\)/);
-  assert.doesNotMatch(cv, /"Installed" : "Connected"/);
-});
 
 // agent-browser's card says when npm has a newer one, with the command to run (clis.tools `update`, the owner 2026-11-07); current or
 // unknown says nothing

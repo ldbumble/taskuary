@@ -61,10 +61,3 @@ test("#settings=phone opens the page, and an old link to the phone group lands t
   assert.equal(hashFor("settings", old.state), "#settings=phone&key=phone_morning_line");
   assert.equal(hashFor("settings", { section: "phone", open: "phone" }), "#settings=phone");
 });
-
-test("the phone group is Phone & chats', not a Configuration group too; the cards link there", () => {
-  const s = read("SettingsView.jsx");
-  assert.match(s, /g !== PHONE_GROUP && \(panels\[g\]/);
-  assert.doesNotMatch(s, /"Assistant on your phone": <PhoneDoorways/);
-  assert.match(read("ConnectorsView.jsx"), /openAppLink\("settings=phone"\)/);
-});

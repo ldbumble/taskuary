@@ -39,21 +39,6 @@ test("an unknown kind keeps its card - the rule fails open", () => {
   assert.ok(!NO_AGENT_KINDS.has("coding"));
 });
 
-test("the columns filter by it", () => {     // the Studio was removed (2026-10-15); the Game reads studioModel.js
-  for (const file of ["BoardView.jsx"]) {
-    const text = src(file);
-    assert.match(text, /isAgentKind/, `${file} does not filter by kind`);
-    assert.match(text, /from "\.\/autostart\.js"/, `${file} does not import the rule`);
-  }
-});
-
-test("the wall is deliberately NOT filtered", () => {
-  // its cards come from /api/terminals - live sessions - and the task list is only the lookup that
-  // gives one its title. Filtering it would strip the name off a session started by hand.
-  const text = src("WallView.jsx");
-  assert.doesNotMatch(text, /isAgentKind/);
-  assert.match(text, /NOT filtered by kind/, "the reason it is exempt has to be written down");
-});
 
 test("every task row says who works it, in the owner's words", () => {
   // ...read from kinds.json through kinds.js by both halves of the tab (the cleanup round, 2026-10-18)

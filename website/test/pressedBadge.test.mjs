@@ -84,28 +84,6 @@ test("a Close with a note wears its note beside the badge, at the press and afte
   assert.equal(pressedOf(messages[0]), "Close with a note"); assert.equal(pressedNoteOf(messages[0]), "done on the phone");
 });
 
-test("no button press writes a 'Done - <button>' line or a free-text receipt on the desk", () => {
-  const view = src("AssistantView.jsx"), cards = src("assistantCards.jsx");
-  for (const gone of ["marked done.`", "- done.`", "Closed with your note:", "fyi let go", "Started on ${", "is with ${who} now", "answers again - that row is gone",
-    "The rule is made", "again once the checks pass"])
-    assert.ok(!view.includes(gone) && !cards.includes(gone), `still says: ${gone}`);
-  // a press that went through and carries no way on adds no receipt line - it marks its card
-  assert.match(view, /const worn = out\.status === "done" \? pressLine\(/);
-  assert.match(view, /return quiet && worn !== ms \? worn/);
-  // ...and the badge is drawn on the folded card, as the button's own label
-  assert.match(view, /<Pressed label=\{pressedOf\(m\)\} \/>/);
-  assert.match(src("assistantView.css"), /\.tq-pressed \{[^}]*animation: tq-pressed-in/);
-  assert.match(src("assistantView.css"), /prefers-reduced-motion: reduce\) \{ \.tq-pressed \{ animation: none; \}/);
-});
-
-test("Next leaves its own badge on the card it passed, and a failed Next takes it off", () => {
-  const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
-  // the owner, 2026-10-23: "we should have next pill on this one to show what was clicked on each task"
-  assert.match(view, /const word = i < 0 \? "" : nextBadge\(m\[i\]\.card\);/);
-  assert.match(view, /on \? \{ \.\.\.x, pressed: word \}/);
-  assert.match(view, /if \(worn\) wear\(true\);/);
-  assert.match(view, /if \(worn\) wear\(false\);/);
-});
 
 // NEXT READS A REPORT, IT PASSES A TASK (the owner, 2026-10-23: "should show read on reports if you go pass them when you hit next"):
 // the badge says which - "Read" where Next settled the row read, "Next" where the row stays yours

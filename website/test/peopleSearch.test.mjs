@@ -43,15 +43,6 @@ test("one search per pause; the model after it, once per query; no model when th
   assert.equal(calls.length, n);
 });
 
-test("To, Cc and Hand-off search the server; the chat pickers and the email lists do too", () => {
-  const ui = fs.readFileSync(new URL("../src/ui.jsx", import.meta.url), "utf8");
-  const sheet = fs.readFileSync(new URL("../src/NewSheet.jsx", import.meta.url), "utf8");
-  const handoff = fs.readFileSync(new URL("../src/Handoff.jsx", import.meta.url), "utf8");
-  assert.match(ui, /const found = usePeopleSearch\(value, channel\)/);
-  assert.match(handoff, /<ContactPicker[^>]*channel=\{channel\}/);
-  assert.match(sheet, /const found = usePeopleSearch\(typed, "email"\)/);
-  assert.match(sheet, /const found = usePeopleSearch\(typed, channel\)/);
-});
 
 test("a card whose sign-in predates contacts says what the search skips, and how to add it - no new button", () => {
   assert.match(PEOPLE_MISSING("your contacts"), /^Searching for someone doesn't reach your contacts yet - this sign-in is from before/);

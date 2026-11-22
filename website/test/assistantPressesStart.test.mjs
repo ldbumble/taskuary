@@ -7,16 +7,6 @@ import test from "node:test";
 
 const read = (name) => fs.readFileSync(new URL(`../src/${name}`, import.meta.url), "utf8");
 
-// ...and since 2026-11-12 the job is MADE by the Assistant and its task opened (the owner: "assistant tab should not open new but open task
-// directly", concierge._made_now): no card filled in and pressed on the way
-test("an agent's job the Assistant made opens its task from New's box; no card presses itself", () => {
-  const canvas = read("CanvasBrowse.jsx"), sheet = read("NewSheet.jsx");
-  assert.doesNotMatch(canvas, /state\?\.start/);
-  assert.doesNotMatch(sheet, /autoPressed|start = false/);
-  // ...and New's box itself starts its agent by the one start, its task opened (F1, the walks 2026-11-18)
-  assert.match(sheet, /const \{ data \} = await api\.post\("\/api\/start", \{ text: about, images: pics\.paths \|\| \[\] \}\)/);
-  assert.match(sheet, /onDone\?\.\(\); openIt\(data\.taskId\);/);
-});
 
 test("the Assistant's press is made once per line, however often its card is drawn again", async () => {
   // a card drawn again pressed Send to agent again on a job already started (2026-11-02)

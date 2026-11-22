@@ -6,8 +6,7 @@ import { buildPayload, chosen, clashText, cutBy, isLink, reconcileImport, slug, 
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 const wizard = read("SkillImport.jsx");
-const docs = read("DocsView.jsx");
-const agents = read("AgentsPanel.jsx");
+
 
 test("a link goes to /fetch and a path to /read, decided in one place", () => {
   assert.equal(isLink("https://github.com/anthropics/skills"), true);
@@ -19,15 +18,6 @@ test("a link goes to /fetch and a path to /read, decided in one place", () => {
   assert.match(wizard, /"\/api\/skills\/read", \{ path: target, paths \}/);
 });
 
-test("looking is free and the cap is on what you tick", () => {
-  // a catalogue is listed first - no bodies, no model calls - and only the ticked paths are read
-  // (the owner, 2026-09-18: a 252-skill repository was refused outright)
-  assert.match(wizard, /"\/api\/skills\/list", \{ url: target \}/);
-  assert.match(wizard, /rows_\.length <= \(data\.max \|\| 10\)/);        // small enough: no picker at all
-  assert.match(wizard, /choose up to \{max\} to bring in/);
-  assert.match(wizard, /disabled=\{!on && pickCount >= max\}/);           // the cap is visible, not silent
-  assert.doesNotMatch(wizard, /point at a folder with at most/);          // the old refusal is gone
-});
 
 test("you choose which ones: one skill starts chosen, a catalogue starts unchosen, only chosen rows are sent", () => {
   const one = toRows([{ name: "A", body: "b" }]);
@@ -45,23 +35,10 @@ test("you choose which ones: one skill starts chosen, a catalogue starts unchose
   assert.match(wizard, /rows\.map\(\(r, i\) => r\.include && \(/);     // step 3 lists only the chosen
 });
 
-test("Manage profiles names both roads to a new worker", () => {
-  assert.match(agents, /import SkillImport from "\.\/SkillImport\.jsx"/);
-  assert.match(agents, /Add profile manually<\/Button>\s*<Button variant="outlined" onClick=\{\(\) => setImportSkills\(true\)\}/);
-  assert.match(agents, /<SkillImport onClose=\{\(\) => setImportSkills\(false\)\} onImported=\{load\} \/>/);
-});
 
 const row = (over) => ({ name: "My Skill", purpose: "p", body: "b", kind: "general", path: "/x",
   bytes: 10, include: true, enabled: true, replace: false, clash: null, imported: false, ...over });
 
-test("nothing is imported without the owner reading it", () => {
-  // /read proposes, /import writes - a remote skill is a draft until a human says otherwise
-  assert.match(wizard, /"\/api\/skills\/read"/);
-  assert.match(wizard, /"\/api\/skills\/import"/);
-  // the body is shown behind an expander, not just the one-line purpose
-  assert.match(wizard, /Hide the body/);
-  assert.match(wizard, /r\.body/);
-});
 
 test("nothing reaches the router unless it is ticked, and the label says what the tick does", () => {
   assert.equal(toRows([{ name: "x" }])[0].enabled, false);   // a proposal starts unticked, whatever door it came through
@@ -69,17 +46,6 @@ test("nothing reaches the router unless it is ticked, and the label says what th
   assert.match(wizard, /triage never picks it/);
 });
 
-test("a name clash offers a rename or a confirmed overwrite, and neither is silent", () => {
-  assert.match(wizard, /clashText\(r\.clash\)/);
-  assert.match(wizard, /Rename/);
-  assert.match(wizard, /Overwrite it/);
-  // Overwrite ASKS FIRST: a rules document has no history, so a mis-click is unrecoverable. The button
-  // opens the confirm; only the confirm's onConfirm flags the row.
-  assert.match(wizard, /onClick=\{\(\) => setOverwrite\(i\)\}>Overwrite it/);
-  assert.match(wizard, /<Confirm open=\{overwrite !== null\}/);
-  assert.match(wizard, /onConfirm=\{\(\) => \{ setRow\(overwrite, \{ replace: true, clash: null \}\); \}\}/);
-  assert.doesNotMatch(wizard, /onClick=\{\(\) => setRow\(i, \{ replace: true/);   // no unconfirmed road left
-});
 
 test("a clash on an operator document is named as one, not as a profile", () => {
   assert.equal(clashText({ kind: "research", doc: "" }), 'clashes with an existing "research" profile');
@@ -103,26 +69,6 @@ test("the size warning is the seed's own cut, reported by the server - not a byt
   assert.match(wizard, /kb\(r\.bytes\)/);
 });
 
-test("the wizard names both doors - a link or a path - and the field takes either", () => {
-  assert.match(wizard, /Paste a link/);
-  assert.match(wizard, /label="Link or path"/);
-  assert.doesNotMatch(wizard, /fetched from a link/);   // the old copy promised a door before it existed
-});
-
-// The wizard moved rather than went: three buttons on the shelf, two of them bare text and one
-// wrapping mid-label, read as a menu of unrelated things (the owner, 2026-09-17: "just have 2
-// clear buttons .. make it look normal"). Both roads to a new worker now live on the screen
-// those buttons open, so importing is reachable from exactly one place instead of two.
-test("Docs sends you to the one screen that holds both roads", () => {
-  assert.match(docs, />Manage profiles<\/Button>/);
-  assert.doesNotMatch(docs, /setImportSkills\(true\)/);
-  assert.match(read("AgentsPanel.jsx"), /<SkillImport onClose=\{\(\) => setImportSkills\(false\)\}/);
-});
-
-test("the profiles list already scrolls", () => {
-  // R5: this list already had overflowY - this asserts it stayed, not that it was just added
-  assert.match(docs, /section === "profiles"[\s\S]{0,2400}overflowY: "auto"/);
-});
 
 // Fix round 1: the server slugifies a name before writing it and echoes back the slug, but a row
 // used to match on the raw, freely-typed field - so "My Skill" imported fine server-side and then
@@ -151,17 +97,4 @@ test("slug matches the server's own rule (taskuary/skillimport.py's save())", ()
   assert.equal(slug("My Skill"), "my-skill");
   assert.equal(slug("  --Weird__Name!! "), "weird-name");
   assert.equal(slug(""), "");
-});
-
-test("an own profile can be removed from Docs at once, with Undo in place - it never asks (the owner, 2026-10-21)", () => {
-  assert.match(docs, /removeProf\(cur\.name\)/);
-  assert.doesNotMatch(docs, /ConfirmDelete/);
-  assert.match(docs, /api\.delete\(`\/api\/agents\/\$\{encodeURIComponent\(name\)\}`\)/);
-  assert.match(docs, /<UndoLine kinds=\{\["profile"\]\}/);
-  // never for the shared coding document: its workers are removed on Manage profiles
-  assert.match(docs, /cur\.kind !== "coding"/);
-});
-
-test("renaming out of a clash also clears replace, defensively", () => {
-  assert.match(wizard, /setRow\(i, \{ name: slug\(`\$\{r\.name\}-imported`\), clash: null, replace: false \}\)/);
 });

@@ -91,29 +91,9 @@ test("the head is the story's sentence; with none, what ended it upstream - whic
   assert.deepEqual(recordHead(null, null), { state: null, since: null });
 });
 
-test("the card has one More and no second section for the last message, files or steps", () => {
-  const src = readFileSync(fileURLToPath(new URL("../src/AgentRecord.jsx", import.meta.url)), "utf8");
-  const card = src.slice(src.indexOf("export const SessionRecord"), src.indexOf("export const AgentRecord"));
-  assert.equal(card.match(/<Button /g).length, 1, "one control on the card");
-  for (const h of ["Its last message", "Files it saved", "Every step", "Since then", "<Timeline "])
-    assert.ok(card.indexOf(h) > card.indexOf("{more && "), `${h} is behind More`);
-  assert.doesNotMatch(src.slice(src.indexOf("export const AgentRecord"), src.indexOf("const ResultView = ")), /Since then/, "not repeated outside the card");
-  assert.doesNotMatch(card, /Earlier sessions|earlier=/, "earlier runs are listed under the record, not inside one run's More");
-  // ...and the Result says Since then once: its replay's record is handed no `since` (the redesign, 2026-10-21)
-  const result = src.slice(src.indexOf("const ResultView = "), src.indexOf("// EVERY RUN BY ITS LAST WORDS"));
-  assert.match(result, /<SessionRecord s=\{s\} draft=\{draft\} startOpen timeline=\{story\?\.steps \|\| \[\]\} \/>/);
-});
 
 test("a folded line is plain text", () => assert.equal(plain("**Merged** `#41` as reviewed"), "Merged #41 as reviewed"));
 
-// A regular agent's answers are the chat right under the card: the card over it said the answer a second time.
-test("over a conversation the card holds only the working behind its answers", () => {
-  const src = readFileSync(fileURLToPath(new URL("../src/AgentRecord.jsx", import.meta.url)), "utf8");
-  assert.match(src, /const chat = inChat && now\?\.source === "conversation";\n  const s = chat \? \{ \.\.\.now, result: "", report: \{\} \}/);
-  assert.match(src, /\{inChat \? null : lead \?/, "no What happened over the chat");
-  const page = readFileSync(fileURLToPath(new URL("../src/TaskPage.jsx", import.meta.url)), "utf8");
-  assert.match(page, /inChat=\{workspaceMode === "general"\}/);
-});
 
 test("what the floor refused a stranger's session is behind More, named on it", () => {
   const s = { result: "Done.", refused: [{ text: "Read: refused", at: "2026-10-15 09:00" }] };

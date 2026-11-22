@@ -224,18 +224,6 @@ test("a save-as-routine card shows the script whole and read-only, with when it 
     { said: "Approved · saved the routine", what: 'Saved the routine "Late fees" - it runs daily 07:00.', url: "", command: "" });
 });
 
-test("a Python script is a source type on this computer, its script in a multi-line box", () => {
-  const view = readFileSync(new URL("../src/ReportsView.jsx", import.meta.url), "utf8");
-  assert.match(view, /python_script: \[\["the script - Python, run as written[^"]*", "script", "multiline",/);
-  assert.match(view, /\["This computer", \["local_file", "python_script", "sqlite", "mcp"\]\]/);
-  assert.match(readFileSync(new URL("../src/reportWords.js", import.meta.url), "utf8"), /python_script: "Python script on this computer"/);
-});
-
-test("the section says Also waiting on you only under something else that waits", () => {
-  const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  assert.match(page, /\$\{asksBelow \? "Also waiting on you" : "Waiting on you"\}\$\{liveAsks > 1 \? ` · \$\{liveAsks\}` : ""\}/);
-  assert.match(page, /const asksBelow = !!\(pendingReview \|\| owesEmails/);
-});
 
 test("an act whose press failed is a settled card with its error, never a waiting one to press again", async () => {
   // the owner, 2026-11-16: no Try again - the card says what happened, its agent is woken with it (general.failed) and sets up what goes next

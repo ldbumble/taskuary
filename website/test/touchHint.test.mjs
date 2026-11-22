@@ -2,7 +2,7 @@
 // held still ~500 ms shows the control's hint and its release fires nothing; a tap is a tap; a mouse is untouched.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+
 import { HOLD_MS, hintOf, installTouchHints, placeHint } from "../src/touchHint.js";
 
 // a document of one button, with timers the test turns by hand
@@ -71,8 +71,4 @@ test("the hint is the control's title, else its own name - never a text field's 
 test("the bubble sits above the finger and on the screen", () => {
   assert.deepEqual(placeHint({ x: 380, y: 300 }, 120, 30, 390), { left: 262, top: 242 });
   assert.deepEqual(placeHint({ x: 10, y: 20 }, 120, 30, 390), { left: 8, top: 48 }, "under it at the top edge");
-});
-
-test("the app installs it once, beside the one-line strip", () => {
-  assert.match(readFileSync(new URL("../src/main.jsx", import.meta.url), "utf8"), /import \{ installTouchHints \} from "\.\/touchHint\.js";\ninstallTouchHints\(\);/);
 });

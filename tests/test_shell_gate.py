@@ -431,6 +431,32 @@ class ReadingOutside(unittest.TestCase):
         self.assertEqual(d['hookSpecificOutput']['permissionDecision'], 'deny')
         self.assertEqual(hooks.command_gate(self.s, self.tid, 'run1', 'Get-Content notes.md', 'PowerShell', self.work), {})
 
+    def test_codexs_powershell_call_is_read_run_and_approved_as_the_script_it_is(self):
+        """The HIPAA walk, 2026-11-21: Codex reports each call as its argv joined by POSIX quoting, the script's quoting switching mid-word.
+        Cut at the `;` inside its quotes, `$outDir = "<its outputs folder>"; New-Item $outDir` was held as "a path it builds from a variable"
+        - the task's own folder - and Approve unquoted it by hand: PowerShell's parser failed on it. A PowerShell array of folders read as
+        `", in Desktop`."""
+        from taskuary import acpgate, outputs, readgate as rg
+        out = str(outputs.folder(self.tid))
+        script = f'$outDir = "{out}"; New-Item -ItemType Directory -Force -Path $outDir | Out-Null; py make_deck.py $outDir'
+        ps = r'C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe'
+        head, tail = out.split('\\', 1) if '\\' in out else (out, '')
+        shown = f'"{ps}" -Command \'$outDir = "{head}\'"\\{tail}"\'"; New-Item -ItemType Directory -Force -Path $outDir | Out-Null; py make_deck.py $outDir\''
+        if not tail: shown = f'"{ps}" -Command \'{script}\''
+        tc = {'toolCallId': 'c', 'kind': 'execute', 'title': 'Run command', 'rawInput': {'command': shown, 'cwd': self.work}}
+        t = acpgate.tool_of(tc)
+        self.assertEqual((t['command'], t['shell'], t['argv'][1:]), (script, 'PowerShell', ['-Command', script]))
+        self.assertNotIn(None, rg.command_paths(shown, self.work, rg.env_for(self.s, self.tid, self.work)))
+        self.assertEqual(acpgate.decide(tc, self.ctx)[0], acpgate.ALLOWED, "the task's own outputs folder needs no press")
+        # ...and a held one is approved as exactly that argv
+        far = f'"{ps}" -Command \'Get-ChildItem -Path @("$env:USERPROFILE\\Desktop", "$env:USERPROFILE\\Documents") -Filter notes.txt\''
+        got = acpgate.decide({**tc, 'rawInput': {'command': far, 'cwd': self.work}}, self.ctx)
+        self.assertEqual(got[0], acpgate.HELD)
+        [rv] = self.pending(); p = json.loads(rv['DraftText'])
+        self.assertEqual(p['argv'][1:], ['-Command', 'Get-ChildItem -Path @("$env:USERPROFILE\\Desktop", "$env:USERPROFILE\\Documents") -Filter notes.txt'])
+        self.assertEqual(sg.replay(p)[1:], p['argv'][1:])
+        self.assertNotIn('"', p['what']); self.assertIn('Desktop', p['what'])
+
     def test_a_program_installed_for_this_user_alone_is_nobodys_files(self):
         """The real-CLI walk, 2026-11-16: an agent looking for its python (`ls .../AppData/Local/Programs/Python`) was held as a card asking the
         owner to let it read "Python". A per-user install (%LOCALAPPDATA%\\Programs) is a program's folder, as Program Files is."""

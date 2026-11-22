@@ -228,7 +228,11 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None) -> list:
     """Every path a shell line names as an argument, through `cd`, `bash -c "..."` and `--opt=value` - None for one built from a variable
     it cannot read. The program itself, options, URLs and switches (`/s`) are not paths."""
     from .browsergate import words
-    from .shellgate import _OWN
+    from .shellgate import _OWN, unwrap
+    # ...a line that is a shell started on a script (Codex's every call) is read as that script, whole: cut at the `;` inside its quotes first,
+    # `$outDir = "<its outputs folder>"; New-Item $outDir` lost its assignment and the task's own folder was held as a variable it could not
+    # read (the HIPAA walk, 2026-11-21)
+    if (inner := unwrap(cmd))[0]: return command_paths(inner[1], cwd, env)
     out, here, env = [], cwd, dict(env or {})
     for seg in _segments(str(cmd or '')):
         # ...a path kept in a variable is read where the variable is (`$p='C:/x.csv'; Get-Content $p` - the real-CLI walk, 2026-11-16)
@@ -236,7 +240,10 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None) -> list:
             v = m[2].strip().strip('"\'')
             env[m[1].lower()] = v
             seg = f'= {v}'
-        w = words(seg)
+        # ...a PowerShell array's items are its words, never one name with a comma on it (`@("$env:USERPROFILE\Desktop", ...)` held "Read \", in
+        # Desktop"), and a segment that opens on a value is an expression - its first word a path like the rest, not a program
+        w = [x for x in (y.rstrip(',') for y in words(seg)) if x]
+        if seg.lstrip()[:1] in ('"', "'", '$', '@') and w and not re.match(r'^\$?[A-Za-z_]\w*\s*=', seg.lstrip()): w = ['', *w]
         while w and (re.match(r'^[A-Za-z_]\w*=', w[0]) or w[0].lower() in ('&', 'sudo', 'time', 'nohup', 'command', 'exec', 'call', 'then', 'do', 'if', 'else')): w = w[1:]
         if not w: continue
         tool = re.sub(r'\.(exe|cmd|ps1|bat)$', '', os.path.basename(w[0].replace('\\', '/')).lower())

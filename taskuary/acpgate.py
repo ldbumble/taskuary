@@ -43,8 +43,16 @@ def tool_of(tc: dict) -> dict:
     elif (m := re.match(r'^mcp\.([^.]+)\.(.+)$', str(tc.get('title') or ''))): server, tool = m.groups()
     cmd = raw.get('command') or raw.get('cmd') or ''
     argv = [str(x) for x in cmd] if isinstance(cmd, list) else None        # the call as its brain made it: replayed as it is (shellgate.replay)
-    if argv: cmd = ' '.join(argv)
-    return {'name': name or str(tc.get('title') or ''), 'server': server, 'tool': tool, 'command': str(cmd), 'kind': str(tc.get('kind') or ''), 'argv': argv}
+    from .shellgate import unwrap, _name
+    # ...and a line that is a shell started on a script (Codex's every call, its argv joined) is that argv, and that script in that shell: what
+    # the readers read, the card shows and an Approve runs
+    if argv is None: argv, cmd = unwrap(cmd)
+    elif len(argv) > 2 and _name(argv[0]) in ('bash', 'sh', 'zsh', 'powershell', 'pwsh', 'cmd') and argv[-2].lower() in ('-c', '-lc', '-command', '/c'): cmd = argv[-1]
+    else: cmd = ' '.join(argv)
+    sh = _name(argv[0]) if argv else ''
+    shell = 'PowerShell' if sh in ('powershell', 'pwsh') or (not sh and re.search(r'powershell|pwsh', name + str(cmd), re.I)) else 'Bash'
+    return {'name': name or str(tc.get('title') or ''), 'server': server, 'tool': tool, 'command': str(cmd), 'kind': str(tc.get('kind') or ''), 'argv': argv,
+            'shell': shell}
 
 
 def _mcp(store, cli: str, server: str, tool: str) -> tuple:
@@ -71,7 +79,7 @@ def decide(tc: dict, ctx: dict) -> tuple:
     reads, never = reads_of(tc, ctx)
     if never: return REFUSED, never
     todo = (shellgate.acts(t['command'], cwd) if t['command'] else []) + reads
-    shell = 'PowerShell' if re.search(r'powershell|pwsh', t['name'] + t['command'], re.I) else 'Bash'
+    shell = t['shell']
     if not todo: return ALLOWED, ''        # ...a press in the browser or on the desktop is held where it runs (gatecmd)
     if store is None or not str(tid or '').isdigit(): return REFUSED, '; '.join(dict.fromkeys(a['what'] for a in todo)) + ' - it waits for the owner'
     from . import actrule
@@ -147,7 +155,7 @@ def put_to_owner(ctx: dict, params: dict, why: str) -> tuple:
         return REFUSED, YOU_REJECTED
     raw = tc.get('rawInput') if isinstance(tc.get('rawInput'), dict) else {}
     t, cwd = tool_of(tc), str(raw.get('cwd') or ctx.get('cwd') or '')
-    shell = 'PowerShell' if re.search(r'powershell|pwsh', t['name'] + t['command'], re.I) else 'Bash'
+    shell = t['shell']
     said = shellgate.check(store, tid, str(ctx.get('sid') or ''), t['command'], shell=shell, cwd=cwd, ask=False, about=str(raw.get('description') or ''),
                            reads=reads, argv=t['argv']) if t['command'] or reads else {}
     return HELD, (said.get('hookSpecificOutput') or {}).get('permissionDecisionReason') or why

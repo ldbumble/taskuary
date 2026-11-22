@@ -583,28 +583,29 @@ def _exe(tok: str) -> str:
     return t.replace('\\\\', '\\')
 
 
+def unwrap(cmd: str) -> tuple:
+    """(argv, script) when the line IS a shell started on a script of its own - how Codex reports every call it runs, its argv joined by
+    POSIX quoting (`"<Windows folder>\\powershell.exe" -Command '$out = "C:'"\\Users\\..."'`) - else (None, the line). The argv is read back by
+    that same grammar, so the script is exactly what ran: unquoted by hand, a script whose quoting switched mid-word came back broken and
+    every Approve of it failed in PowerShell's parser (the HIPAA walk, 2026-11-21)."""
+    cmd = str(cmd or '')
+    m = _LAUNCH.match(cmd)
+    if not m or not (flags := _FLAG.get(_name(_exe(m.group(1))))): return None, cmd
+    try: rest = shlex.split(m.group(2), posix=True)
+    except ValueError: return None, cmd
+    for i, w in enumerate(rest):
+        if w.lower() in flags: return ([_exe(m.group(1)), *rest[:i + 1], ' '.join(rest[i + 1:])], ' '.join(rest[i + 1:])) if i + 1 < len(rest) else (None, cmd)
+        if not w.startswith(('-', '/')): return None, cmd
+    return None, cmd
+
+
 def _launcher(cmd: str) -> list | None:
-    """[program, *its options, flag, the inner line] when the held line IS a shell started on a line of its own - how Codex reports its calls
-    (`"<Windows folder>/powershell.exe" -Command 'git push ...'`) - else None. Wrapped again in the shell it was recorded under, PowerShell read
-    the quoted program and its `-Command` as one expression and every Approve failed "At line:1 char:66" (the owner's live task, 2026-11-19)."""
-    m = _LAUNCH.match(str(cmd or ''))
-    if not m: return None
-    prog, rest = _exe(m.group(1)), m.group(2)
-    flags = _FLAG.get(_name(prog))
-    if not flags: return None
-    opts = []
-    while rest:
-        w, _, more = rest.partition(' ')
-        if w.lower() in flags:
-            inner = more.strip()
-            if len(inner) > 1 and inner[0] == inner[-1] and inner[0] in ('"', "'"):      # one level of the quoting it was printed with
-                q = inner[0]
-                inner = inner[1:-1].replace("''", "'") if q == "'" and _name(prog) in ('powershell', 'pwsh') else inner[1:-1]
-            exe = prog if os.path.isabs(prog) and os.path.isfile(prog) else _shell_exe(prog)
-            return [exe, *opts, w, inner]
-        if not w.startswith(('-', '/')): return None
-        opts.append(w); rest = more.lstrip()
-    return None
+    """[program, *its options, flag, the inner line] when the held line IS a shell started on a line of its own (unwrap) - else None. Wrapped
+    again in the shell it was recorded under, PowerShell read the quoted program and its `-Command` as one expression and every Approve failed
+    "At line:1 char:66" (the owner's live task, 2026-11-19)."""
+    a = unwrap(cmd)[0]
+    if not a: return None
+    return [a[0] if os.path.isabs(a[0]) and os.path.isfile(a[0]) else _shell_exe(a[0]), *a[1:]]
 
 
 def replay(p: dict) -> list:

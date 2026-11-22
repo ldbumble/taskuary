@@ -141,6 +141,7 @@ def token_arg(token: str, home: str = None) -> str:
     return f' -H "@{header_file(token, home)}"' if token else ''
 
 
+CLOSED_OK = ' || exit 0'         # the event hook's last words: a Taskuary that is closed is no failed hook (command)
 def command(base: str, token: str, cli: str, home: str = None) -> str:
     """Claude's hook: POST the event. curl.exe by name on Windows (bare `curl` is a PowerShell alias for
     Invoke-WebRequest there). -m 3: a hook must never hold the agent. stdin -> body. -o to the null
@@ -149,7 +150,7 @@ def command(base: str, token: str, cli: str, home: str = None) -> str:
     curl, null = ('curl.exe', 'NUL') if os.name == 'nt' else ('curl', '/dev/null')
     # ...and A TASKUARY THAT IS CLOSED IS NO FAILURE (2026-11-21: with the app shut, every tool call of his own Claude read "PostToolUse:Bash
     # hook failed" - curl's refused connection is exit 7). The event is only news for a running app; `|| exit 0` reads the same in bash and cmd
-    return f'{curl} -s -m 3 -o {null} -X POST "{base}/api/hooks/{cli}" -H "Content-Type: application/json"{token_arg(token, home)} --data-binary @- || exit 0'
+    return f'{curl} -s -m 3 -o {null} -X POST "{base}/api/hooks/{cli}" -H "Content-Type: application/json"{token_arg(token, home)} --data-binary @-{CLOSED_OK}'
 
 
 def ask_command(base: str, token: str = '', home: str = None) -> str:

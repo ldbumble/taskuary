@@ -60,6 +60,7 @@ def test_every_hook_command_is_one_shell_line_its_address_one_word():
     d = _json.loads(Path(hooks.general_settings(7, 'abc123')).read_text(encoding='utf-8'))
     cmds = [x['command'] for groups in d['hooks'].values() for g in groups for x in g['hooks']]         + [_json.loads(Path(hooks.browser_settings('s9')).read_text(encoding='utf-8'))['hooks']['PreToolUse'][0]['hooks'][0]['command']]
     for cmd in cmds:
+        cmd = cmd.removesuffix(hooks.CLOSED_OK)          # ...its one ending on purpose: a closed Taskuary is no failed hook
         lex = shlex.shlex(cmd, posix=True, punctuation_chars=True); lex.whitespace_split = True
         words = list(lex)
         assert not {'&', '&&', ';', '|', '||'} & set(words), (cmd, words)

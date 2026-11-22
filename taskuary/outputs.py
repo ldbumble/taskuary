@@ -17,6 +17,7 @@ from . import config
 from .store import task_ref
 
 MAX_FILES, MAX_DEPTH = 200, 4
+FIGURES = 'Every figure in it is computed from its source by that script, never typed in.'     # AGENT.md's Files you make (terminal.with_fence_rule)
 ROWS, COLS, CELL, SHEETS, GRID = 200, 40, 300, 30, 2000         # what a preview carries: enough to recognise the sheet, never the whole book
 TYPES = {'.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.xlsm': 'application/vnd.ms-excel.sheet.macroEnabled.12',
          '.csv': 'text/csv', '.tsv': 'text/tab-separated-values', '.md': 'text/markdown', '.txt': 'text/plain', '.json': 'application/json',

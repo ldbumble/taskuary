@@ -1858,8 +1858,9 @@ def with_fence_rule(rules: str) -> str:
     if 'one final file' not in rules:                   # one file per thing asked (2026-10-28): an owner's copy from before it hears it too
         from .outputs import ONE_FILE
         rules = f'{rules} Files you make: {ONE_FILE}'
-    from .outputs import ENV, WHERE
+    from .outputs import ENV, FIGURES, WHERE
     if ENV not in rules: rules = f'{rules} {WHERE}'     # ...and WHERE they go: the one folder the task page serves (outputs.py)
+    if FIGURES not in rules: rules = f'{rules} {FIGURES}'      # ...computed, never typed (the walk, 2026-11-22: one deck, two totals)
     return rules if 'Big results' in rules else f'{rules} {BIG_LINE}'
 
 

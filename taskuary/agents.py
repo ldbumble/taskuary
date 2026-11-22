@@ -1343,6 +1343,25 @@ def parent_of(u: dict) -> str:
     return str((m.get('claudeCode') or {}).get('parentToolUseId') or m.get('parentToolUseId') or m.get('parentToolCallId') or '')
 
 
+def result_text(raw) -> str:
+    """What a tool answered, in any shape an adapter sends it as `rawOutput`: words; an MCP CallToolResult (`content` blocks, else its
+    `structuredContent`); codex-acp's `{result, error}` around one; a command's `{output}`. ONE READER (the HIPAA walk, 2026-11-21): only a string
+    was read, so on Codex every Taskuary tool answered nothing - a show's view, a refusal's words, a file's name - and the page drew no chart."""
+    if raw is None: return ''
+    if isinstance(raw, str): return raw
+    if isinstance(raw, list): return chr(10).join(t for t in (result_text(x) for x in raw) if t)
+    if not isinstance(raw, dict): return str(raw)
+    if raw.get('type') == 'text': return str(raw.get('text') or '')
+    if 'result' in raw or 'error' in raw:
+        err = raw.get('error')
+        return chr(10).join(t for t in (result_text(raw.get('result')), str(err.get('message') or err) if isinstance(err, dict) else str(err or '')) if t)
+    if isinstance(raw.get('content'), list) and (t := result_text(raw['content'])): return t
+    if raw.get('structuredContent') is not None: return json.dumps(raw['structuredContent'], ensure_ascii=False)
+    for k in ('output', 'stdout', 'formatted_output', 'aggregated_output', 'text'):
+        if isinstance(raw.get(k), str) and raw[k]: return raw[k]
+    return ''
+
+
 class ACPSteps:
     """ACP session/update as the SAME trace events the argv road emits - tool_call with its arguments, tool_result with its output,
     progress for what it said and thought - so a general agent on any CLI reads alike on the canvas (website/src/agentSteps.js).
@@ -1394,7 +1413,7 @@ class ACPSteps:
         meta = u.get('_meta') or {}
         if (d := (meta.get('terminal_output_delta') or {}).get('data')) and sum(map(len, c['out'])) < 20000: c['out'].append(str(d))
         if 'terminal_exit' in meta: c['exit'] = (meta['terminal_exit'] or {}).get('exit_code')
-        if isinstance(u.get('rawOutput'), str): c['raw_out'] = u['rawOutput']
+        if (o := result_text(u.get('rawOutput'))): c['raw_out'] = o
         return c
 
     @staticmethod

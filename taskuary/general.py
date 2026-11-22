@@ -2342,6 +2342,14 @@ def freeze(s, head: str, late, kept: bool, by_line: bool = False) -> tuple[str, 
     ...and where the head itself changed under a kept conversation, the new system is sent AND what the conversation has not heard still
     leads the turn: swapped in silently, the system said one thing and everything the agent had written said the other."""
     late = [x for x in late if x]
+    # ...THE CLOCK IS A FACT OF THE TURN, NOT A CHANGE TO ITS INSTRUCTIONS (the agent audit, 2026-11-22: every turn of a kept conversation opened
+    # with "these replace what your instructions said" only because the time had moved): a kept conversation hears it at the head of its turn
+    clock = [x for x in late if x.startswith(TODAY)] if kept and s.frozen else []
+    if clock:
+        now = [x for x in clock if x not in s.frozen[2]]          # ...said only when it moved since the conversation last heard it
+        system, news = freeze(s, head, [x for x in late if x not in clock], kept, by_line)
+        s.frozen = (s.frozen[0], s.frozen[1], s.frozen[2] | set(now))
+        return system, '\n\n'.join(x for x in (news, *now) if x)
     if kept and s.frozen:
         heard = {}                           # a block's first line -> the lines the conversation has read under it
         for x in s.frozen[2] if by_line else ():
@@ -2377,10 +2385,11 @@ def unlearned(store, frozen) -> str:
 
 # WHAT IT STATES CAN BE CHECKED, SO IT IS TOLD (design round 4, H5: "Thursday, March 12" for a Friday; "I guessed Ray's address" of a man whose
 # mail was on the task): the day, and the addresses the people on the task wrote from - facts, said where every turn's late facts are
+TODAY = 'TODAY: '
 def today_line() -> str:
     # ...and the hour: told the day alone, an agent at 4:27 PM accepted a meeting that had ended at 3:00 (the redesign walk, 2026-11-19)
     n = datetime.now()
-    return (f"TODAY: {n.strftime('%A %d %B %Y')}, {n.strftime('%I:%M %p').lstrip('0')} now on this computer. Any other date's weekday you write, "
+    return (f"{TODAY}{n.strftime('%A %d %B %Y')}, {n.strftime('%I:%M %p').lstrip('0')} now on this computer. Any other date's weekday you write, "
             "work out from this one; a time before now has passed.")
 PEOPLE_N = 12
 def people_line(store, tid: int) -> str:

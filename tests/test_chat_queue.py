@@ -307,3 +307,16 @@ class AFinishedSessionTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_a_moved_clock_is_said_as_the_time_never_as_a_change_to_its_instructions():
+    """The agent audit, 2026-11-22: every turn of a kept conversation opened with "these replace what your instructions said" only because the
+    time had moved. The clock is the turn's fact: said plainly when it moved, never under the update header, never when it did not."""
+    class S: frozen = None
+    s = S()
+    general.freeze(s, 'HEAD', ['A rule', 'TODAY: Sunday, 1:00 AM'], kept=False)
+    _, said = general.freeze(s, 'HEAD', ['A rule', 'TODAY: Sunday, 1:30 AM'], kept=True)
+    assert said == 'TODAY: Sunday, 1:30 AM' and general.UPDATED not in said
+    assert general.freeze(s, 'HEAD', ['A rule', 'TODAY: Sunday, 1:30 AM'], kept=True)[1] == ''
+    _, said = general.freeze(s, 'HEAD', ['A new rule', 'TODAY: Sunday, 1:31 AM'], kept=True)
+    assert said.startswith(general.UPDATED) and said.endswith('TODAY: Sunday, 1:31 AM')

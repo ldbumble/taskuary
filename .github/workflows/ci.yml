@@ -9,6 +9,12 @@ on:
 # trigger is not missing; GitHub holds the run at action_required until then.
 permissions: { contents: read }
 
+# a push to master that a newer push replaces is cancelled, queued or running: with several fixers pushing, runs queued an hour deep behind
+# commits already superseded (2026-11-21). A release commit, a pull request and a run started by hand each keep a group of their own
+concurrency:
+  group: ci-${{ github.ref }}-${{ (github.event_name == 'push' && !startsWith(github.event.head_commit.message, 'Release ')) && 'push' || github.sha }}
+  cancel-in-progress: true
+
 jobs:
   ci-required:
     name: ci-required

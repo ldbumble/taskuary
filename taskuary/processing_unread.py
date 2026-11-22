@@ -467,6 +467,10 @@ def card_for(store, item, compact, live_state, now, states=None, noise=None, lea
             # ...but where it came from stays the row's own: the agent card has no channel, and taking its blank
             # drew every row an agent picked up with a terminal instead of the Advisor, report or mail behind it
             card.update({k: v for k, v in agent_cards[0].items() if k != 'channel' or v})
+        # ...A SESSION HE STOPPED READS STOPPED, as the task's header does (walk 5, 2026-11-22: "An agent is working on this" 25 minutes after his
+        # Stop - from_agents makes no row for it, and this fell through to working): the one sentence (funnel.live_session_state)
+        elif (said := funnel.live_session_state(tid, shown_agent(worker))) and said[1] == lanes.word('stopped'):
+            card.update(kind='agent', lane='stopped', agent=shown_agent(worker), sid=worker.get('sid'), mode=worker.get('mode') or 'terminal', why=said[0])
         else:
             card.update(kind='agent', lane='working', working=shown_agent(worker), agent=shown_agent(worker), sid=worker.get('sid'),   # Taskuary, never the profile
                         mode=worker.get('mode') or 'terminal', tail=worker.get('tail') or [],

@@ -78,3 +78,24 @@ def test_stop_pressed_fast_is_heard_once_a_turn():
     with mock.patch.object(general, 'session_for', return_value=ses), mock.patch.object(general, 'turn_started', return_value=1000.0):
         assert all(general.stop_turn(s, tid) for _ in range(10))
     assert len([a for a in s._rows("SELECT * FROM audit WHERE EntityId=? AND Action='stopped_turn'", (tid,))]) == 1
+
+
+def test_a_session_he_stopped_never_reads_working_on_the_rail_search_or_the_assistant():
+    """Walk 5, 2026-11-22: 25 minutes after his Stop the rail row, Search and the Assistant said "An agent is working on this" - the session
+    stays up after a stop, and the row read working off it being alive while the header read stopped."""
+    from types import SimpleNamespace
+    from taskuary import funnel, processing_unread
+    from test_funnel import ago
+    s = MemoryStore()
+    t = s.create_task({'Title': 'Printer quotes', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    s.add_message({'TaskId': t, 'ExternalId': 'p1', 'Channel': 'email', 'Subject': 'Printer', 'FromName': 'Erin Blake',
+                   'FromEmail': 'erin@northwind.example', 'SentAt': ago(1), 'BodyText': 'Get three printer quotes?', 'Status': 'routed'})
+    m = s._rows('SELECT MessageId FROM message WHERE TaskId=?', (t,))[0]['MessageId']
+    s.add_route(m, t, 'route', 1.0, 'triage: task', [], 'triage')
+    ws.record(s, t, 'sid7', 'working', text='', source='api'); ws.record(s, t, 'sid7', 'stopped', text='stopped', source='api')
+    s.reconcile_processing_membership(fixed_now=ago(0)); funnel.invalidate()
+    live = [{'taskId': t, 'sid': 'sid7', 'alive': True, 'waiting': True, 'mode': 'assistant', 'started': ago(2)}]
+    ses = SimpleNamespace(alive=True, store=s, sid='sid7', waiting=lambda: True, busy=False)
+    with mock.patch('taskuary.terminal.live_sessions', return_value=live), mock.patch('taskuary.terminal.session_for', return_value=ses):
+        rows = [i for i in processing_unread.build(s, live_state=live, include_read=True)['items'] if i.get('tid') == t]
+    assert rows and not [r for r in rows if r['lane'] == 'working' or 'is working' in str(r.get('why'))], [(r['lane'], r.get('why')) for r in rows]

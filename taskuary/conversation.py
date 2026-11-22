@@ -361,6 +361,10 @@ def acp_steps(updates: list) -> list:
         # ...ONE MESSAGE IS ONE STEP: the adapter names the message each chunk is of (`messageId`), and two messages said back to back in one
         # turn ran together as one sentence (the recorded walk, 2026-11-11: '...`plus tax`."""The reply to Gail went out')
         if out and out[-1]['k'] == k and out[-1].get('open') and not x.get('line') and not out[-1].get('line') and out[-1].get('mid') == x.get('mid'): out[-1]['text'] += t
+        # ...and a piece of a NAMED message goes on with it past a tool's update between (walk 2, 2026-11-21, Codex: a shell left running
+        # posted mid-message, and one sentence stood as three rows, "...(both by filename and file contents)" / "and did not find one.")
+        elif x.get('mid') and (o := next((s for s in reversed(out) if s['k'] == k), None)) and o.get('open') and o.get('mid') == x['mid'] and not x.get('line'):
+            o['text'] += t
         else: out.append({'k': k, 'text': t, 'open': True, 'at': at, **x})
     for u in updates or []:
         n0 = len(out)

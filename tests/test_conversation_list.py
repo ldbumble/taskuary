@@ -555,6 +555,13 @@ class TheList(unittest.TestCase):
         self.assertEqual([s['text'] for s in conversation.acp_steps([said('', 'One '), said('', 'message.')])], ['One message.'])     # an adapter that names none
         self.assertFalse([k for s in steps for k in s if k not in ('k', 'text', 'at')])
 
+    def test_one_message_is_one_step_past_a_tool_update_between_its_pieces(self):
+        """Walk 2, 2026-11-21 (Codex): a shell left running posted an update mid-message, and one sentence stood as three rows."""
+        said = lambda t: {'sessionUpdate': 'agent_message_chunk', 'messageId': 'm2', 'content': {'type': 'text', 'text': t}}
+        upd = {'sessionUpdate': 'tool_call_update', 'toolCallId': 'bg', 'title': 'shell', 'status': 'in_progress'}
+        steps = conversation.acp_steps([said('I searched by name '), upd, said('and did not find one.')])
+        self.assertEqual([s['text'] for s in steps if s['k'] == 'said'], ['I searched by name and did not find one.'])
+
     def test_a_command_sent_as_its_words_over_acp_is_kept_for_its_row(self):
         # codex-acp sends an exec's command as the words it runs ["powershell.exe", "-Command", "..."]: kept as a string only, the row read "Ran a command"
         call = lambda i, cmd: {'sessionUpdate': 'tool_call', 'toolCallId': i, 'kind': 'execute', 'title': 'x', 'rawInput': {'command': cmd}}

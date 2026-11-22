@@ -104,8 +104,9 @@ def turn(prompt: str, n: int):
     unseen = len(prompt) + (len(system) if n == 1 else 0)
     time.sleep(THINK + PREFILL * unseen / 10_000)
     # ...a scenario's own turn (fake_director.py) is an agent's - a kept conversation, or a run with Taskuary's tools (a stranger's task runs one
-    # turn a process); a call beside it with no tools (a summary, a lesson) is answered at once
-    text = directed(prompt) if folder_of() and (LIVE or '--mcp-config' in args) else answer(prompt)
+    # turn a process); a call beside it with no tools (a summary, a lesson) is answered at once - told by `--tools ''`, not by LIVE: a
+    # one-shot runs on a process started ahead in stream-json input too (clipool.spare_turn), and each waited out the director (2026-11-21)
+    text = directed(prompt) if folder_of() and (LIVE or '--mcp-config' in args) and arg('--tools') != '' else answer(prompt)
     log('first_token', n=n)
     steps(sid)
     chunks = re.findall(r'.{1,4}', text, re.S) or ['']

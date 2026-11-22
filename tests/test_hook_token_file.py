@@ -24,3 +24,17 @@ def test_every_installed_hook_file_is_free_of_the_token():
                 else: assert 'sekrit-tok' not in body, n
         args = json.load(open(os.path.join(home, '.copilot', 'hooks', 'taskuary.json'), encoding='utf-8'))['hooks']['Stop'][0]['args']
         assert any(a.startswith('@') and a.endswith('.hdr') for a in args)
+
+
+def test_the_event_hook_ends_quietly_when_taskuary_is_closed(tmp_path):
+    """2026-11-21: with the app shut, every tool call of the owner's own Claude read "PostToolUse:Bash hook failed" - curl's refused
+    connection (exit 7) was the hook's exit. The line, run by a shell against a port nothing listens on, ends 0."""
+    import shutil, subprocess
+    from taskuary import hooks
+    if not shutil.which('curl.exe' if os.name == 'nt' else 'curl'): return
+    import sys
+    run = tmp_path / 'hook.py'        # ...run the one way the suite lets a test start a process: an isolated script of its own
+    cmd = hooks.command('http://127.0.0.1:9', '', 'claude', home=str(tmp_path))
+    run.write_text(f"import subprocess, sys\nr = subprocess.run({cmd!r}, shell=True, input='{{}}', text=True, capture_output=True, timeout=20)\n"
+                   "sys.exit(r.returncode)\n", encoding='utf-8')
+    assert subprocess.run([sys.executable, '-I', str(run)], timeout=40).returncode == 0

@@ -147,7 +147,9 @@ def command(base: str, token: str, cli: str, home: str = None) -> str:
     device (not a shell redirect: PowerShell has no /dev/null) - a hook's stdout is read by Claude as a
     decision, and our reply is not one. `home` is Taskuary's (tests); the token rides in a file (header_file)."""
     curl, null = ('curl.exe', 'NUL') if os.name == 'nt' else ('curl', '/dev/null')
-    return f'{curl} -s -m 3 -o {null} -X POST "{base}/api/hooks/{cli}" -H "Content-Type: application/json"{token_arg(token, home)} --data-binary @-'
+    # ...and A TASKUARY THAT IS CLOSED IS NO FAILURE (2026-11-21: with the app shut, every tool call of his own Claude read "PostToolUse:Bash
+    # hook failed" - curl's refused connection is exit 7). The event is only news for a running app; `|| exit 0` reads the same in bash and cmd
+    return f'{curl} -s -m 3 -o {null} -X POST "{base}/api/hooks/{cli}" -H "Content-Type: application/json"{token_arg(token, home)} --data-binary @- || exit 0'
 
 
 def ask_command(base: str, token: str = '', home: str = None) -> str:

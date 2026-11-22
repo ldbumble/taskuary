@@ -66,3 +66,15 @@ def test_a_session_he_stopped_makes_no_waiting_row_on_the_rail():
     live = [{'taskId': tid, 'sid': 'sid7', 'alive': True, 'waiting': True, 'mode': 'assistant', 'started': '2026-11-22 05:00:00'}]
     rows = funnel.from_agents(s, live_state=live)
     assert not [r for r in rows if r.get('tid') == tid and r.get('lane') == 'blocked'], rows
+
+
+def test_stop_pressed_fast_is_heard_once_a_turn():
+    "Walk 5, 2026-11-22: Stop pressed fast wrote \"You stopped the agent\" 10 times - one press per line, all on the same turn."
+    from unittest import mock
+    from types import SimpleNamespace
+    from taskuary import general
+    s = MemoryStore(); tid = task(s); general.STOPPED_AT.pop(tid, None)
+    ses = SimpleNamespace(stop=lambda: True, busy=True, turn_at=1000.0)
+    with mock.patch.object(general, 'session_for', return_value=ses), mock.patch.object(general, 'turn_started', return_value=1000.0):
+        assert all(general.stop_turn(s, tid) for _ in range(10))
+    assert len([a for a in s._rows("SELECT * FROM audit WHERE EntityId=? AND Action='stopped_turn'", (tid,))]) == 1

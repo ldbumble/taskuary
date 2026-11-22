@@ -4479,15 +4479,23 @@ def say_line(store, tid: int, text: str, attachments=None, connector_id=None, mo
             drop_session(tid)
 
 
+_STOP_LOCK, STOPPED_AT, STOP_AGAIN = threading.Lock(), {}, 5
 def stop_turn(store, tid: int) -> bool:
     """THE x ON A TURN AT WORK, whatever agent works it (the side-by-side walk, 2026-11-11: a stopped general turn read "cancelled" as a failure,
     a coding one said nothing): the turn stops, the session stays, and the press is a line in the chat, as every press is (press_lines)."""
     from . import terminal
+    # ...ONCE A TURN (walk 5, 2026-11-22: Stop pressed fast wrote "You stopped the agent" 10 times): a turn whose stop was heard is stopping -
+    # another press on it answers at once and says nothing new. By the turn's own clock; with none, by a few seconds
+    with _STOP_LOCK:
+        began, was = turn_started(tid), STOPPED_AT.get(tid, 0)
+        if was and (was >= began if began else time.time() - was < STOP_AGAIN): return True
+        STOPPED_AT[tid] = time.time()
     s = session_for(tid)
     # ...AND HEARD WHILE IT IS STILL STARTING (design round 5, I2: his Stop under "Waiting for the agent to start" was lost - no line, and the
     # turn went on): a turn in flight with no answer under way yet is stopped where it begins (send_prompt reads STOP_ASKED)
     if not (s.stop() if s else terminal.cancel_turn(tid)):
-        if not (starting(tid) or _IN_FLIGHT.get(tid) or (s is not None and getattr(s, 'busy', False))): return False
+        if not (starting(tid) or _IN_FLIGHT.get(tid) or (s is not None and getattr(s, 'busy', False))):
+            STOPPED_AT.pop(tid, None); return False
         STOP_ASKED[tid] = time.time()
     store.audit('task', tid, 'stopped_turn', 'owner')
     # ...AND WHAT WAITED IS HANDED OVER IN THE SAME STEP (2026-11-12: a read between his stop and the next turn's take drew that turn under the

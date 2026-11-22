@@ -445,7 +445,8 @@ def test_a_notice_joining_the_thread_leaves_the_owners_typed_reply_addressed_to_
     rv = s.get_review(rv['ReviewId'])
     assert rv['MessageId'] != rv['AnswersMid']                                     # the pin moved to the newest line...
     assert s.get_message(rv['AnswersMid'])['FromEmail'] == ERIN                    # ...and the reply still answers Erin
-    assert cardqueue.what(s, {'rids': [rv['ReviewId']], 'rows': [rv]}) == f'the reply to {ERIN}'
+    assert cardqueue.what(s, {'rids': [rv['ReviewId']], 'rows': [rv]}) == 'the reply to Erin Blake'          # ...named, as his screen says it
+    assert cardqueue.what(s, {'rids': [rv['ReviewId']], 'rows': [rv]}, addr=True) == f'the reply to {ERIN} (Erin Blake)'   # ...and its address, as the agent is told
 
 
 def test_a_notice_that_needs_the_agent_on_a_reply_task_says_the_reply_is_still_the_persons():

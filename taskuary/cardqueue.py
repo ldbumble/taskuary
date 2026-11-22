@@ -140,8 +140,10 @@ def held(store, tid: int) -> set:
     return set(state(store, tid)['held']) if tid else set()
 
 
-def what(store, u: dict) -> str:
-    "A card in the owner's words: 'the email to Erin Blake', 'the reply to Gail Moreno', 'the push', 'delete the old export'."
+def what(store, u: dict, addr: bool = False) -> str:
+    """A card in the owner's words: 'the email to Erin Blake', 'the reply to Gail Moreno', 'the push', 'delete the old export'. `addr`: as an
+    agent is told it, each person with the address it went to ('the reply to gail@northwind.example (Gail Moreno)') - the screen names
+    people, but an agent sends to addresses, and a name alone left it guessing which of two Gails the reply went to."""
     from . import landing
     if u['rids'] == [LAND]: return f"the {landing.HOW.get(u.get('how'), 'push').lower()}"
     rows = _waits(u) or u['rows']; r = rows[0]
@@ -149,7 +151,7 @@ def what(store, u: dict) -> str:
         from .timewords import plural
         # ...as the card heads itself (bulkCard.countOf): "24 emails", "40 issues" - the noun of the act's own press words, else "steps"
         if r.get('Kind') == 'slot': return plural(len(rows), 'email')
-        if r.get('Kind') != 'action': return f"{len(rows)} like {what(store, {'rids': [r['ReviewId']], 'rows': [{**r, 'Batch': None}]})}"
+        if r.get('Kind') != 'action': return f"{len(rows)} like {what(store, {'rids': [r['ReviewId']], 'rows': [{**r, 'Batch': None}]}, addr)}"
         from .connectorcatalog import action_for
         press = str((action_for(_p(r).get('type')) or {}).get('press') or '').split()
         return plural(len(rows), press[1] if len(press) == 2 else 'step')
@@ -173,8 +175,9 @@ def what(store, u: dict) -> str:
     # ...BY NAME, NOT ADDRESS (the design walk, 2026-11-20: "next: the reply to gail@northwind.example"): each address as the mail, the org
     # chart or the directory knows its person (calwrite.name_of, the one that names people in titles), the address only where none does
     from .calwrite import name_of
-    to = ', '.join(name_of(store, x) if '@' in str(x) else str(x) for x in (to if isinstance(to, list) else [to] if to else []))
-    if not to and r.get('MessageId'): m = store.get_message(r.get('AnswersMid') or r['MessageId']) or {}; to = m.get('FromName') or m.get('FromEmail') or ''
+    def who(x, n): return f'{x} ({n})' if addr and x and n and n != x else n or x
+    to = ', '.join(who(x, name_of(store, x)) if '@' in str(x) else str(x) for x in (to if isinstance(to, list) else [to] if to else []))
+    if not to and r.get('MessageId'): m = store.get_message(r.get('AnswersMid') or r['MessageId']) or {}; to = who(m.get('FromEmail') or '', m.get('FromName') or '')
     return f"the {'email' if r.get('Kind') == 'slot' else 'reply'}" + (f' to {to}' if to else '')
 
 
@@ -241,7 +244,7 @@ def screen(store, tid: int, skip=()) -> str:
     waiting, settled, seen = [], [], set()
     def name(u, r):
         ids = [w['ReviewId'] for w in _waits(u)] or u['rids']
-        return (f"{' + '.join(f'rv{x}' for x in ids)}, {what(store, u)}" if u['rows'] else what(store, u)) + (f': {w}' if r and (w := _words(r)) else '')
+        return (f"{' + '.join(f'rv{x}' for x in ids)}, {what(store, u, True)}" if u['rows'] else what(store, u, True)) + (f': {w}' if r and (w := _words(r)) else '')
     def greyed(r, n): settled.append((r.get('DecidedAt') or r.get('CreatedAt') or '', f"Greyed, will not go{f' ({w})' if (w := passed_why(store, r)) else ''}: {n}"))
     for u in _units(store, tid, set()):
         seen.update(u['rids'])
@@ -294,5 +297,5 @@ def said_no(store, rv: dict, verb: str, actor: str = 'owner') -> str:
     if _p(rv).get('action') in HELD_ACTS or verb == 'close_unsent' and rv.get('Kind') != 'slot': return ''
     if not tid or not state(store, tid)['units']: return ''
     no = {'reject': 'turned down', 'no_reply': 'said no reply is needed for', 'close_unsent': 'closed without sending', 'close_pr': 'turned down'}.get(verb, 'turned down')
-    return general.to_agent(store, tid, f"The owner {no} rv{rv['ReviewId']} ({what(store, {'rids': [rv['ReviewId']], 'rows': [rv]})}) - their own no.\n\n{screen(store, tid)}", actor,
+    return general.to_agent(store, tid, f"The owner {no} rv{rv['ReviewId']} ({what(store, {'rids': [rv['ReviewId']], 'rows': [rv]}, True)}) - their own no.\n\n{screen(store, tid)}", actor,
                         heard=lambda how: store.audit('review', int(rv['ReviewId']), general.TOLD, actor, 'system', {'task': int(tid), 'how': how, 'no': verb}))

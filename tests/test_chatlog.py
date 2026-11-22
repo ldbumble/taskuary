@@ -196,7 +196,8 @@ def test_one_action_box_a_held_browser_step_with_the_reply_behind_it():
     items = chatlog.read(s, tid)['items']
     cards = [c for x in items for c in x.get('cards') or []]
     assert [(c['review'], c['status']) for c in cards] == [(act, 'pending')]
-    assert '1 of 2 · next: the reply to gail@northwind.example' in cards[0]['line'] and chatlog.live_card(s, tid)['review'] == act
+    # ...by name, as the mail knows her (the design walk, 2026-11-20: the line read 'next: the reply to gail@northwind.example')
+    assert '1 of 2 · next: the reply to Gail Moreno' in cards[0]['line'] and chatlog.live_card(s, tid)['review'] == act
     s.decide_review(act, 'approved', None, 'owner')
     general.PRESSED.pop(tid, None)
     from taskuary import cardqueue

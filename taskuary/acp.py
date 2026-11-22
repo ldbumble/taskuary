@@ -233,7 +233,10 @@ class ACPClient:
             # a message resumed after a tool call is a new paragraph: copilot and devin both stream
             # "Hello!" / tool_call / "What would you like..." and the result read "Hello!What would you"
             if kind == 'agent_message_chunk':
-                if said and said[-1] is None: said[-1] = chr(10); cut[0] = len(said)
+                # ...but A PIECE OF THE SAME MESSAGE GOES ON WITH IT (walk 2, 2026-11-21, Codex): a shell call left running posted an update
+                # mid-message, the answer was cut there, and only its tail - '_left": false}' - was filed, question and summary lost
+                if said and said[-1] is None and u.get('messageId') and u.get('messageId') == of[0]: said.pop()
+                elif said and said[-1] is None: said[-1] = chr(10); cut[0] = len(said)
                 # ...and so is a new message said straight after another (the adapter names each chunk's message): they ran together
                 elif said and u.get('messageId') != of[0]: said.append(chr(10) * 2)
                 of[0] = u.get('messageId')

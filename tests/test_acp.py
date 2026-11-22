@@ -251,6 +251,14 @@ class TheAdaptersOwnLinesTests(unittest.TestCase):
         c = _stub_turn([_chunk('Warning: Model metadata for `m` not found.\n\n'), _chunk('The answer is 7.', 'item_1')])
         self.assertEqual(c.prompt('q'), ('end_turn', 'The answer is 7.'))
 
+    def test_a_tool_update_mid_message_never_cuts_the_answer(self):
+        """Walk 2, 2026-11-21 (Codex): a shell call left running posted an update while the last message streamed; the answer was cut there,
+        and only '_left": false}' was filed - the question and the summary lost, the turn read "agent done"."""
+        upd = {'sessionUpdate': 'tool_call_update', 'toolCallId': 'c1', 'status': 'in_progress'}
+        c = _stub_turn([_chunk('Looking.', 'item_1'), {'sessionUpdate': 'tool_call', 'toolCallId': 'c1'}, _chunk('Not found. Is it ', 'item_2'), upd,
+                        _chunk('on another drive?', 'item_2')])
+        self.assertEqual(c.prompt('q'), ('end_turn', 'Not found. Is it on another drive?'))
+
     def test_a_turn_that_only_failed_raises_and_reads_as_one_plain_line(self):
         from taskuary import say
         c = _stub_turn([_chunk(RAW_400)])

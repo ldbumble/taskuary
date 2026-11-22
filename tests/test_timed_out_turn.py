@@ -218,6 +218,14 @@ def test_a_turn_that_did_not_finish_on_a_conversation_under_way_is_never_asked_a
     assert last['Text'] in (clipool.MID_TURN, general.timed_out_line()), last
 
 
+def test_a_failure_whose_chain_comes_back_on_itself_is_read_to_its_end():
+    """CI, 2026-11-21: an ACP agent that died mid-turn hung its turn forever - its failure, re-raised in its own handler, had a cause chain
+    that came back on itself, and the walk down it never ended. Each failure in the chain is read once."""
+    from taskuary import general
+    a, b = RuntimeError('died'), ValueError('wrapped'); b.__context__ = a; a.__context__ = b
+    assert [x for x in general._chain(b)] == [b, a] and general._unfinished(b) is None and general.unreached_line(b) == ''
+
+
 class Spawned(set):
     "agents._CLI_CHILDREN, every process it was ever handed remembered."
     def __init__(self): super().__init__(); self.ever = []

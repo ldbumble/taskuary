@@ -40,11 +40,15 @@ class Stopped(RuntimeError):
 # An agent's turn has no limit now (llm.make_cli_llm); a turn that still has one - the dock's look-up - ends `stopped` from this source,
 # its files and thread kept, says so in its own words, and typing carries it on
 TIMED_OUT = 'timeout'
+def _chain(e):
+    """A failure and every one behind it, each once: a chain that comes back on itself (re-raised in its own handler) hung the turn forever
+    in the walk below it (CI, 2026-11-21: an ACP agent that died mid-turn)."""
+    seen = set()
+    while e is not None and id(e) not in seen: seen.add(id(e)); yield e; e = e.__cause__ or e.__context__
 def _unfinished(e, kind=None):
     "The clipool.Unfinished (or its `kind`: TimedOut) behind a failed turn, however a brain wrapped it - else None."
     from .clipool import Unfinished
-    while e is not None and not isinstance(e, kind or Unfinished): e = e.__cause__ or e.__context__
-    return e
+    return next((x for x in _chain(e) if isinstance(x, kind or Unfinished)), None)
 def timed_out_line(e=None, agent='the agent') -> str:
     "No limit is named: an agent's run has none, and this is only said of a run cut on an old profile's limit or a one-shot cap."
     return (f"{agent[:1].upper() + agent[1:]}'s run was cut off by a time limit while it was still working. What it made so far is kept - "
@@ -54,7 +58,7 @@ def unreached_line(e, who: str = '') -> str:
     out. (read timeout=180)" reached the rail as the reason, naming the gateway's host and nothing the owner could do (2026-11-09)."""
     import requests
     who = str(who or '').replace(' (API)', '').strip() or 'The AI'
-    while e is not None and not isinstance(e, requests.RequestException): e = e.__cause__ or e.__context__
+    e = next((x for x in _chain(e) if isinstance(x, requests.RequestException)), None)
     if isinstance(e, requests.Timeout): return f"{who} didn't answer in time - it may be down or busy. Type to try again, or pick another AI in Settings."
     if isinstance(e, requests.ConnectionError): return f"Couldn't reach {who} - check this computer is online, then type to try again, or pick another AI in Settings."
     return ''
@@ -187,20 +191,15 @@ def provider_down(e) -> str:
     by itself (the owner's ruling: a cut turn is not resumed automatically) - it is said once, and his next line carries its conversation on."""
     import requests
     from . import agents, clipool, llm
-    while e is not None:
+    for e in _chain(e):
         # ...nor one only he can mend (llm.OutOfRoom: the card's model): said in its own words with its card, never tried again by itself
         if isinstance(e, (clipool.Unfinished, llm.OutOfRoom)): return ''
         if isinstance(e, (llm.BudgetSpent, agents.RateLimited)): return DOWN[0]
         if isinstance(e, llm.NoAnswer): return str(e) if str(e).startswith(DOWN[1]) else DOWN[1]     # ...with why, where it is said (llm.ROOM_LINE)
         if isinstance(e, (requests.Timeout, llm.ProviderDown)): return DOWN[2]
         if isinstance(e, requests.ConnectionError): return DOWN[3]
-        e = e.__cause__ or e.__context__
     return ''
-def _chain(e):
-    while e is not None: yield e; e = e.__cause__ or e.__context__
-def _until(e):
-    while e is not None and getattr(e, 'until', None) is None: e = e.__cause__ or e.__context__
-    return getattr(e, 'until', None) if e is not None else None
+def _until(e): return next((x.until for x in _chain(e) if getattr(x, 'until', None) is not None), None)
 def queue_retry(store, tid: int, e, why: str, fresh: bool = False) -> str:
     """The turn queued for its next try (the start queue's row, Turn RETRY_TURN) -> the one line the chat holds. `fresh`: his own line or Try
     again failed - a new round of tries. Past RETRY_WAITS the queue lets go, and the line says Try again is his."""

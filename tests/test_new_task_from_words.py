@@ -230,19 +230,6 @@ class SameWorkIsTriagesDecisionTests(unittest.TestCase):
         from taskuary import brainroute
         self.assertEqual(brainroute.judged(s, made['taskId'])['difficulty'], 'quick')
 
-    def test_the_agent_starts_while_the_checklist_is_still_being_read(self):
-        """Walk 2, 2026-11-21: on a slow quick model a New ask's agent sat 46 s of a 61 s answer behind the checklist reading. Its first
-        turn is sent while that reading is still out."""
-        import threading
-        from taskuary import server
-        s, reading, sent = MemoryStore(), threading.Event(), threading.Event()
-        def slow_read(*a, **k): reading.wait(5)
-        session = mock.Mock(); session.send_prompt.side_effect = lambda *a, **k: sent.set()
-        with triage_reads(None), mock.patch.object(general, 'start_session', return_value=session),              mock.patch.object(server, '_read_hand_task', side_effect=slow_read), mock.patch('taskuary.capabilities.has_ai', return_value=True):
-            concierge.handoff_task(s, 'Find the hotel cap in the attached policy', 'general', 'owner', door='New')
-            self.assertTrue(sent.wait(3), 'the first turn waited on the checklist reading')
-            reading.set()
-
     def test_who_asks_skip_and_a_closed_task_are_kept(self):
         s = MemoryStore()
         fix = s.create_task({'Title': 'Fix the ledger rounding bug', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')

@@ -47,10 +47,12 @@ def _cleaned(text) -> str:
     session's words, the turn at work): the summary block it is asked to end on (selfclose.SUMMARY_OPEN), closed or not - an opening marker
     with no close goes to the end of the text - and the marker of a question. A turn that said nothing but the block says the block's own
     sentence, once."""
-    from .selfclose import asked_inline, signin_marker, turn_marker, without_summary
-    # ...and the sign-in's and the hand-over's markers, which the app acts on and never draws (the recorded coding walk, 2026-11-12: a coding
-    # turn's words over ACP and in the terminal drew "[[TASKUARY-SIGNIN: localhost:18451]]" in the chat)
-    t = str(text or ''); out = asked_inline(turn_marker(signin_marker(without_summary(t))[0])[0])[0].strip()
+    from .selfclose import asked_inline, for_screen, without_summary
+    # ...ONE CLEANER FOR EVERY SURFACE (the agent audit, 2026-11-22: this one left a done line, a show and a tick line and a whole reply block on
+    # screen - a coding turn's steps drew "[[TASKUARY-DONE]] Fixed the build" and the letter above its own card - where for_screen took them
+    # out): what of an agent's text the owner reads is selfclose.for_screen's - every marker out, a question kept as its words
+    # ...the question first made its plain words (asked_inline), so the marker's own line is never wiped with the question on it
+    t = str(text or ''); out = for_screen(asked_inline(without_summary(t))[0]).strip()
     if out or not t.strip(): return out
     try: j = json.loads(t[t.index('{'):t.rindex('}') + 1])
     except ValueError: return ''

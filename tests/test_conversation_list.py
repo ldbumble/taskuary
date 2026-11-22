@@ -562,6 +562,14 @@ class TheList(unittest.TestCase):
         steps = conversation.acp_steps([said('I searched by name '), upd, said('and did not find one.')])
         self.assertEqual([s['text'] for s in steps if s['k'] == 'said'], ['I searched by name and did not find one.'])
 
+    def test_one_cleaner_reads_every_turn_the_owner_sees(self):
+        """The agent audit, 2026-11-22: clean left a done line, a show and a tick line and a whole reply block on screen - a coding turn's steps
+        drew "[[TASKUARY-DONE]] Fixed the build" and the letter above its card - and wiped a question written on its marker's own line."""
+        t = ('[[TASKUARY-DONE]] Fixed the build\n[[TASKUARY-SHOW: C:/x/chart.png]]\n[[TASKUARY-TICK: 3]]\nHere it is.\n'
+             '[[TASKUARY-REPLY]]Hi Ray - done.[[/TASKUARY-REPLY]]\nWhich branch?\n[[TASKUARY-ASK]]')
+        self.assertEqual(conversation.clean(t), 'Here it is.\n\nWhich branch?')
+        self.assertEqual(conversation.clean('[[TASKUARY-ASK]] Which day? | Mon | Tue'), 'Which day? (Mon / Tue)')
+
     def test_a_command_sent_as_its_words_over_acp_is_kept_for_its_row(self):
         # codex-acp sends an exec's command as the words it runs ["powershell.exe", "-Command", "..."]: kept as a string only, the row read "Ran a command"
         call = lambda i, cmd: {'sessionUpdate': 'tool_call', 'toolCallId': i, 'kind': 'execute', 'title': 'x', 'rawInput': {'command': cmd}}

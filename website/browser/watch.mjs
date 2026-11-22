@@ -16,6 +16,7 @@ const SAMPLER = () => {
   const ids = new WeakMap(); let next = 0;
   const w = window.__tqWatch = { t0: performance.now(), seen: new Map(), blank: [], junk: new Map(), twice: new Map(), stalls: [], last: 0, scrolledAt: -1e9 };
   addEventListener("wheel", () => { w.scrolledAt = performance.now(); }, { passive: true, capture: true });
+  // ...any scroll counts - his, or the chat following an answer as it grows (a PDF landing in a working turn moved what was under it: no jump)
   addEventListener("scroll", () => { w.scrolledAt = performance.now(); }, { passive: true, capture: true });
   // ...by what it IS, never a state marker it wears for a beat (a button greyed while its page loads gains data-tq-inert: read as gone)
   const STATE = /^data-tq-(inert|open|busy|grow|continue|on|current|kept|settling|entering|landing)$/;
@@ -42,6 +43,7 @@ const SAMPLER = () => {
     for (const [id, s] of w.seen) if (s.open && !here.has(id)) s.open = false;      // ...gone only where a sample SAW it gone
     for (const [k, n] of texts) if (n > 1 && /\[data-tq-(act|row|summary)\]|alert|card/.test(k)) w.twice.set(k, Math.max(n, w.twice.get(k) || 0));
     const vp = document.querySelector("[data-tq-task-page] .tq-aui-viewport");
+    if (vp && vp.scrollTop !== w.vpTop) { w.vpTop = vp.scrollTop; w.scrolledAt = performance.now(); }
     if (vp && vp.innerText.trim().length < 20) w.blank.push(t);
     const text = document.body.innerText, m = text.match(JUNK);
     if (m) { const i = m.index, ctx = text.slice(Math.max(0, i - 60), i + 80).replace(/\s+/g, " "); if (!w.junk.has(ctx)) w.junk.set(ctx, t); }

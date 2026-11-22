@@ -403,7 +403,9 @@ export const withOpened = (pile, cur) => {
   // ...drawn whole while the server's own row is still on its way: a task just made from New, or a search hit, is its key, title and number alone -
   // the goal walk saw it tall, empty under its title, with no age and a mail icon (2026-11-22). Its lane and its time stand in until then
   const lane = cur.lane || (cur.closed ? "yours" : "working"), since = cur.since || cur.when || cur.arrived_at || new Date().toISOString();
-  return { ...pile, items: [...pile.items, { ...cur, lane, since, opened: true, order_band: 2, deferred: false, watching: false, settling: false }] };
+  // ...its number, its mark (his own work unless it says where it came from) and a line of what it is - the server's row says the same a beat later
+  const ref = cur.ref || `TQ-${String(cur.tid).padStart(4, "0")}`, channel = cur.channel || "own", why = cur.why || (cur.closed ? "closed" : "starting");
+  return { ...pile, items: [...pile.items, { ...cur, lane, since, ref, channel, why, opened: true, order_band: 2, deferred: false, watching: false, settling: false }] };
 };
 export const asPressed = (items, { leaving = null, continuing = null, read = null } = {}) => { const gone = [].concat(leaving ?? []).filter(Boolean);
   return !gone.length && !continuing && !read?.length ? items

@@ -204,6 +204,16 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     if channel == 'email' and agent != 'owner':
         from .people import at_domain, said_by_owner
         his = said_by_owner(store, tid)
+        # ...EVERY ADDRESS ON IT, called a guess or not (walk 5, 2026-11-22: the agent wrote "I guessed her address" in its answer and passed none as
+        # guessed - gail.moreno@ stood on a Send card 20 seconds after Gail wrote from gail@): one his mail never saw, at a company it knows
+        # - is refused where that PERSON writes from another address: their name is the address's own words (structure, never meaning)
+        for g in [a for a in dict.fromkeys([str(to or '').lower(), *cc]) if '@' in a and a not in guessed and a not in his]:
+            known = at_domain(store, g.rpartition('@')[2])
+            if g in {a.lower() for a, _ in known}: continue
+            local = set(re.findall(r'[a-z]+', g.partition('@')[0]))
+            same = next(((a, n) for a, n in known if n and (ws := set(re.findall(r'[a-z]+', n.lower()))) and len(ws) > 1 and ws <= local), None)
+            if same: return {'ok': False, 'why': f"{g} is in none of the owner's mail, and {same[1]} writes from {same[0]} - draft to that address, "
+                                                  'or ask the owner in one question if this is someone else. Nothing was drafted.'}
         for g in [a for a in dict.fromkeys(guessed) if '@' in a]:
             if g in his: guessed = [a for a in guessed if a != g]; continue        # ...an address he gave is no guess (people.owner_lines)
             known = at_domain(store, g.rpartition('@')[2])

@@ -850,3 +850,14 @@ def test_an_address_he_gave_in_his_memory_is_no_guess(s):
     tid = typed(s, FOUR[:1])
     out = slots.draft(s, tid, 'Hi Paula - the payroll file is attached.', to='paula.vance@northwind.example', guessed=['paula.vance@northwind.example'])
     assert out['ok'], out
+
+
+def test_an_address_made_from_a_name_whose_person_writes_from_another_is_refused_with_theirs(s):
+    """Walk 5, 2026-11-22: the agent put gail.moreno@ on a Send card 20 seconds after Gail wrote from gail@ - it called it a guess in its answer
+    and passed none as guessed. Her own address is the one to use; someone new at the company is still drafted to."""
+    tid = typed(s, FOUR[:1])
+    s.add_message({'TaskId': tid, 'ExternalId': 'g-w5', 'Channel': 'email', 'Subject': 'Budget', 'FromName': 'Gail Moreno',
+                   'FromEmail': 'gail@northwind.example', 'SentAt': '2026-11-22 08:00:00', 'BodyText': 'Can you send the total?', 'Status': 'routed'})
+    out = slots.draft(s, tid, 'Hi Gail - 34.75 hours.', to='gail.moreno@northwind.example')
+    assert out['ok'] is False and 'gail@northwind.example' in out['why']
+    assert slots.draft(s, tid, 'Hi Omar - welcome aboard.', to='omar.keller@northwind.example')['ok'] is True

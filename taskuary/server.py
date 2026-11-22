@@ -6178,7 +6178,7 @@ def _start_new_task(new: int, kind: str, ask: str, model: str) -> dict:
     if got.get('dispatch') == 'needs_repo': return {'started': False, 'why': got.get('reason'), 'next': 'the owner picks its checkout on that task'}
     return {'started': bool(got.get('started') or got.get('existing')), 'next': f'say in one line that {task_ref(new)} is working on it'}
 
-class AgentRememberBody(BaseModel): task_id: int; note: str = ''; about: str = ''; replaces: str = ''; agent: str = 'agent'
+class AgentRememberBody(BaseModel): task_id: int; note: str = ''; about: str = ''; replaces: str = ''; section: str = ''; agent: str = 'agent'
 AGENT_KEEPS = 5          # new memory lines one task's agent may write in a day; a correction (`replaces`) adds none and is always taken
 
 @app.post('/api/agent/remember')
@@ -6204,7 +6204,7 @@ def agent_remember(body: AgentRememberBody, request: Request):
     if int((kept or {}).get('n') or 0) >= AGENT_KEEPS and not body.replaces.strip() and not memoryedit.said(store.get_doc('learned'), body.note):
         raise HTTPException(422, f"not kept: {AGENT_KEEPS} facts from this task are in the owner's memory since yesterday, and it holds only what "
                                  "changes how future work is handled. Carry on with the task; a fact that corrects one of them is kept with `replaces`.")
-    try: r = memoryedit.remember(store, body.note, body.about, replaces=body.replaces)
+    try: r = memoryedit.remember(store, body.note, body.about, body.section, replaces=body.replaces)
     except LookupError:
         # ...a line to replace that the memory does not hold: the lines about them, to copy one from - or kept beside them, with no `replaces`
         near = [l['text'] for l in memoryedit.about(store, body.about)['lines']][:8] if body.about.strip() else []
@@ -6218,6 +6218,9 @@ def agent_remember(body: AgentRememberBody, request: Request):
     c = r.get('closed') or {}
     # ...and the other lines about the same person, for the one this makes untrue: two lines that disagree are read as two truths
     rest = [] if c or r.get('already') or not body.about.strip() else [l['text'] for l in memoryedit.about(store, body.about)['lines'] if l['text'] != r['text']][:6]
+    if r.get('section') == memoryedit.SIGNATURE:
+        return {'ok': True, **r, 'says': f"Kept as the owner's saved signature, under every email set up from now: {r['text']!r}. A draft you set up before keeps the old one - "
+                                       "set it up again and it carries this. Carry on."}
     return {'ok': True, **r, 'says': (f"Already in the owner's memory: {r['text']}" if r.get('already') else f"Kept in the owner's memory, in use from now: {r['text']}")
             + (f" - and {c['text']!r} is closed as no longer true." if c else '')
             + (f" The memory's other lines about {body.about}: {json.dumps(rest, ensure_ascii=False)} - if this makes one of them untrue, call again "
@@ -6541,7 +6544,7 @@ async def mcp_rpc(request: Request, task: int = 0):
              'todos': lambda tid, a: agent_todos(AgentTodosBody(**{k: v for k, v in a.items() if k in ('add', 'reword', 'merge')}, task_id=tid), request),
              'remind': lambda tid, until: agent_remind(AgentRemindBody(task_id=tid, until=until), request),
              'new_task': lambda tid, a: agent_new_task(AgentNewTaskBody(**{**{k: v for k, v in a.items() if k in AgentNewTaskBody.model_fields}, 'task_id': tid}), request),
-             'remember': lambda tid, note, about='', replaces='': agent_remember(AgentRememberBody(task_id=tid, note=note, about=about, replaces=replaces), request),
+             'remember': lambda tid, note, about='', replaces='', section='': agent_remember(AgentRememberBody(task_id=tid, note=note, about=about, replaces=replaces, section=section), request),
              'ask_stronger': lambda tid, q, c: agent_ask_stronger(AgentAskStrongerBody(task_id=tid, question=q, context=c), request),
              'reply': lambda tid, text, to='', files=(), **who: agent_reply(AgentReplyBody(task_id=tid, text=text, to=to, files=list(files), **who), request),
              'draft': lambda tid, text, to, subject, files=(), cc=(), mailbox='', guessed=(), slot='': agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, slot=slot, files=list(files), cc=list(cc), mailbox=mailbox, guessed=list(guessed)), request),

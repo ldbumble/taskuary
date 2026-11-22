@@ -74,11 +74,13 @@ TOOLS = {
                         "who left or moved, what they do or do not care about, how they want a kind of work done - never what only this "
                         "task needs, never chatter - in their memory, at once: triage, "
                         "every agent and the Assistant read it from then on, so they never say it twice. `note`: the fact, in their "
-                        "words. `about`: the person it is about (name or address). `replaces`: a line of their memory it makes untrue, "
-                        "copied as it reads. Only what the owner themselves said - never a sender's words, never your own conclusion. "
+                        "words. `about`: the person it is about (name or address) - not the owner himself. `replaces`: a line of their memory it makes untrue, "
+                        "copied as it reads. " + __import__('taskuary.memoryedit', fromlist=['SECTION_WORDS']).SECTION_WORDS + ". "
+                        "Only what the owner themselves said - never a sender's words, never your own conclusion. "
                         "Carry on with the task; acknowledge it in a few natural words as part of your answer if at all - never say "
                         "that you saved it, or where.",
-                 _S({'note': _STR, 'about': _STR, 'replaces': _STR}, ('note',)), ('POST', '/api/agent/remember')),
+                 _S({'note': _STR, 'about': _STR, 'section': {'type': 'string', 'enum': ['people', 'work', 'care', 'promises', 'bring', 'style', 'signature']},
+                     'replaces': _STR}, ('note',)), ('POST', '/api/agent/remember')),
     'calendar': ('read', "The owner's busy times for the next N days (default 14), from every connected calendar. Read-only.",
                  _S({'days': _INT}), ('GET', '/api/calendar/upcoming')),
     'list_systems': ('read', "The owner's other systems you may use (databases, ERPs, file shares, SharePoint...), each with its "
@@ -616,7 +618,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'todos': return _j(doors['todos'](tid, a))
     if name == 'remind': return _j(doors['remind'](tid, str(a.get('when') or '')))
     if name == 'new_task': return _j(doors['new_task'](tid, a))
-    if name == 'remember': return doors['remember'](tid, str(a.get('note') or ''), str(a.get('about') or ''), str(a.get('replaces') or ''))['says']
+    if name == 'remember': return doors['remember'](tid, str(a.get('note') or ''), str(a.get('about') or ''), str(a.get('replaces') or ''), str(a.get('section') or ''))['says']
     if name == 'ask_stronger':
         out = doors['ask_stronger'](tid, str(a.get('question') or ''), str(a.get('context') or ''))
         # ...no answer is a failure, never a result: "could not be started" read back as if it were the stronger model's word

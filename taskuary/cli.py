@@ -384,6 +384,8 @@ def main():
                     '"2026-11-12") to verify WHAT - a payment that should clear, a reply due by a date; one per task, a new one replaces it')
     ap.add_argument('--remember', metavar='FACT', help="keep a fact the owner told you in this chat that holds beyond this task (who handles "
                     'what now, what they care about), in their words - in their memory at once, for triage, every agent and the Assistant')
+    ap.add_argument('--section', metavar='SECTION', default='', help="with --remember: people, work, care, promises, bring, style, or signature "
+                    '(the block under every email he sends - it becomes his saved signature)')
     # ...and the checkout it works in, for a CLI without the use_repo tool (repochoice.py, the owner 2026-11-06)
     ap.add_argument('--use-repo', nargs='+', metavar=('NAME_OR_PATH', 'WHY'), help="work this task in that git checkout - a repository from "
                     'your REPOSITORIES list or a folder - and say why in a few words; the task records it')
@@ -539,7 +541,7 @@ def main():
         except (AttributeError, OSError): pass
         tid = os.environ.get('TASKUARY_TASK')
         if not str(tid).isdigit(): print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no task the owner told you this on'); return
-        got = _post('/api/agent/remember', {'task_id': int(tid), 'note': args.remember, 'agent': os.environ.get('TASKUARY_AGENT') or 'agent'}, stranger)
+        got = _post('/api/agent/remember', {'task_id': int(tid), 'note': args.remember, 'section': args.section, 'agent': os.environ.get('TASKUARY_AGENT') or 'agent'}, stranger)
         if not got: return
         r, out = got
         print(out.get('says') if out.get('ok') else out.get('detail') or f'not kept: {r.text[:200]}')

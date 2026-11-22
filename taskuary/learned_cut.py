@@ -239,12 +239,13 @@ def cited(store, ids, reader: str = 'advisor', doc: str = None) -> dict:
 
 
 def for_reader(store, reader: str, about: dict = None, budget: int = None, doc: str = None, target: str = '', sections=None,
-               people=None, cite: bool = False) -> str:
+               people=None, cite: bool = False, own: bool = False) -> str:
     """The sections `reader` reads, as its prompt block: each heading with the in-use lines of it that fit, the reader's budget
     shared across them, closest to this item first. '' when there is none - a fresh LEARNED.md is placeholders, and placeholders are
     not context. `sections` narrows the matrix (the drafter's people only); `target` names the item the receipt is for; `people`
     (addresses) keeps only the people lines about THEM - an agent reads how the owner deals with the people on its own task, never
-    the owner's notes on everyone else (the owner, 2026-10-25)."""
+    the owner's notes on everyone else (the owner, 2026-10-25). `own`: of the other sections, only the lines in the owner's own words
+    (untagged) - what he told an agent or the Assistant, which every agent's brief carries; what was learned stays one read away."""
     doc = store.doc('learned') if doc is None else doc
     want = [s for s in READS[reader] if sections is None or s in sections]
     who = None if people is None else {str(p).lower() for p in people if p}
@@ -263,6 +264,9 @@ def for_reader(store, reader: str, about: dict = None, budget: int = None, doc: 
     off = [(raw, k) for raw, k, s in every if s == 'people' and who is not None and not names(raw) & who and rank(raw, k, about) == 2 and near[k] > 0]
     by_subject = {k for _, k in sorted(off, key=lambda x: -near[x[1]])[:NEAR_PEOPLE]}
     ls = [(raw, k, s) for raw, k, s in every if s != 'people' or who is None or names(raw) & who or k in by_subject]
+    if own:
+        from .learnedgraph import TAG
+        ls = [x for x in ls if x[2] == 'people' or not TAG.match(x[0])]
     # ...and a line about one OTHER sender, domain or topic (memorylines' `(about: ...)`: a verdict, a line each) is not this reader's:
     # it reaches the readers of the mail it is about, by what it is about (ingest.applicable_notes) - hundreds of them, about everyone
     # else, would be the whole budget

@@ -25,6 +25,7 @@ PAST = 5                 # closed tasks worth carrying
 THREAD_CHARS = 15000     # the whole thread, newest first, capped - never what is new since the last run. A file, not the seed: no tty limit
 REPORT_CHARS = 1500
 AGENT_PEOPLE = 600       # the people lines about this task's own people an agent's brief carries; the rest of the memory it reads on demand
+AGENT_OWN = 1500         # ...and what the owner HIMSELF said, in every other section: his hours, his rules (memoryedit.remember)
 MEMORY_LINE = ("Everything Taskuary has learned about the owner - their people, what they care about and what they do not, how they work, "
                "their promises - is in LEARNED.md. Read it when the work turns on what the owner would want: the `owner_memory` tool "
                "(the `taskuary` MCP server), or `taskuary --memory` in a shell (`--memory care` for one section). Read-only.")
@@ -810,8 +811,11 @@ def build(store, tid: int, msgs: list = None, repo: str = None, general: bool = 
     # PROGRESSIVE DISCLOSURE (the owner, 2026-10-27: "agents can look at the memory LEARNED.md if they need it, same as the hub or anything
     # else"): the brief carries only the few lines about the people on this very task, and says where the rest is - the owner_memory tool,
     # `taskuary --memory` - instead of dumping every section into every start prompt
+    # ...AND WHAT THE OWNER TOLD ANY AGENT, EVERY AGENT KNOWS (the walk, 2026-11-21: "no meetings before 10, none on Fridays", told on one task,
+    # reached no other - it was one read away and no agent read it, and Ray's "move it to Friday?" was answered yes in his voice): the lines
+    # in his own words ride in every brief, the learned ones stay on demand
     lrn = '' if stranger else learned_cut.for_reader(store, 'agents', {'sender': who, 'domain': who.rsplit('@', 1)[-1] if '@' in who else '', 'repo': repo, 'workstream': _ws_of(store, tid)},
-                                                     target=f'task:{tid}', people=task_people - {''}, sections=('people',), budget=AGENT_PEOPLE)
+                                                     target=f'task:{tid}', people=task_people - {''}, budget=AGENT_PEOPLE + AGENT_OWN, own=True)
     # ...and only when there is something in it: a fresh LEARNED.md is placeholders, and a pointer at nothing is not context
     doc = '' if stranger else store.doc('learned') or ''
     if any(learned_cut.lines(doc, h) for h in learned_cut.SECTIONS.values()): parts.append("## The owner's memory (LEARNED.md)\n" + (re.sub(r'(?m)^## ', '### ', lrn) + '\n\n' if lrn else '') + MEMORY_LINE)

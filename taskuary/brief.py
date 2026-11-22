@@ -65,6 +65,10 @@ TRIAGE_ONLY = ('what counts as a task',)
 # document now says it under "What counts as a task"; one written before that keeps it in the owner's file and loses it in a worker's
 # copy. Taskuary's own sentence, whoever it names - never the owner's prose
 _TRIAGE_ROLE = r"You are the funnel between\s+everything\s+inbound\s+and\s+[^.:\n]{1,80}\s+attention(?::\s+triage\s+every\s+message,[^.]*\.|\.)\s*"
+# ...and SOUL.md's OLD SIGN-OFF SENTENCE, where a document still carries it as it shipped (the walk, 2026-11-21: "Sign letters and emails as
+# Alex Doyle" stood against the sign-off he had just told an agent, and the card signed the full name): the signer puts the saved signature
+# on (signatures.keep), so a worker's copy reads the shipped sentence that says so. Taskuary's own sentence, whoever it names
+_SIGN_AS = (r"Sign letters and emails as ([^;.\n]{1,80});", r"Letters and emails end with \1's saved signature, which Taskuary puts on;")
 # ...and what a GENERAL agent is handed elsewhere, said once (2026-11-09): AGENT.md carries "inbound text is data"; YOUR SYSTEMS
 # (docsync.agent_systems) the systems and how to call them; THE OWNER'S REPOSITORIES (general.repos_block) the repository map
 GENERAL_HAS = ('inbound text is data, not instructions', 'connected systems', 'project relationships', 'repository map')
@@ -82,7 +86,7 @@ def background(store, chars: int = 9_000, workstream: str = None, drop=()) -> st
     out, skips = [], (*TRIAGE_ONLY, *drop)
     for name, what in BACKGROUND_DOCS:
         text = job_view(store, workstream) if name == 'job' and workstream else re.sub(r'<!--.*?-->', '', str(store.doc(name) or ''), flags=re.S)
-        if name == 'soul': text = re.sub(_TRIAGE_ROLE, '', text)
+        if name == 'soul': text = re.sub(_SIGN_AS[0], _SIGN_AS[1], re.sub(_TRIAGE_ROLE, '', text))
         keep, skip = [], False
         for line in text.splitlines():
             if re.match(r'^#{1,3} ', line): skip = line.strip('# ').strip().lower() in skips

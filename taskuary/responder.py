@@ -261,15 +261,23 @@ def signature_for(store, mailbox: str = None) -> str:
     return ' '.join(str(store.get_setting('owner_name') or '').split())
 
 
-def signed(text: str, sig: str) -> str:
+def own_names(store) -> tuple:
+    "The owner's name as a writer signs with it - whole and first - for strip_signoff: () when no name is known."
+    n = ' '.join(str((store.owner() or {}).get('owner') or '').split())
+    return (n, n.split()[0]) if n and n != 'the owner' else ()
+
+
+def signed(text: str, sig: str, names=()) -> str:
     """An email as it goes out: plain text (chatformat.plain_text - a writer's Markdown is syntax a mail client prints as stars), the
-    writer's own sign-off taken off and the saved signature put on, once. Nothing saved: no signature."""
+    writer's own sign-off taken off and the saved signature put on, once. Nothing saved: no signature. `names` (own_names): the owner's
+    name, which a writer signs with whatever the saved block is - "Thanks, Alex Doyle" over a saved "Best, Alex" read signed twice
+    (the walk, 2026-11-21)."""
     from .chatformat import plain_text
     if not str(sig or '').strip(): return plain_text(text) or str(text or '').rstrip()
     body = str(text or '').rstrip()
     if body.endswith(sig.strip()): body = body[:-len(sig.strip())].rstrip()
     lines = [l for l in sig.splitlines() if l.strip()]
-    body = strip_signoff(body, lines + [l.split()[0] for l in lines]) or body
+    body = strip_signoff(body, lines + [l.split()[0] for l in lines] + list(names)) or body
     return with_signature(plain_text(body) or body, sig)
 
 
@@ -688,7 +696,7 @@ def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: 
     if saw and str(saw.get('Channel') or '').lower() == 'email':
         # the signature rides in the draft the owner reviews, once (PW-065); the recipients it will go to are pinned
         # with it, Reply all by default (PW-063/064) - an envelope the owner already set is kept
-        text = signed(text, signature_for(store, mailbox_in(saw)))
+        text = signed(text, signature_for(store, mailbox_in(saw)), own_names(store))
         from . import outbound as _ob
         if not store.review_envelope(review_id):
             env = _ob.reply_envelope(store, tgt)
@@ -821,7 +829,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     has = bool(files) or len(sender_body(str(m.get('BodyText') or ''), m.get('OwnText'))[0]) >= SUBSTANCE
     out, files, why = _answer(llm, system, user, FEEDBACK_TOKENS if has else REPLY_TOKENS, images, guard=not instruction,
                          sig=signature_for(store, mailbox_in(m)))
-    out = chat_said(store, out) if chat else signed(out, signature_for(store, mailbox_in(m)))
+    out = chat_said(store, out) if chat else signed(out, signature_for(store, mailbox_in(m)), own_names(store))
     if not chat and not store.review_envelope(review_id):
         from . import outbound as _ob
         env = _ob.reply_envelope(store, m)

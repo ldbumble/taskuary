@@ -1638,6 +1638,8 @@ def _memory(store, tid: int, kind: str, p: dict) -> dict:
                                         f"{memoryedit.DOC_READS['style_for']}.", kind, r)
             if doc == 'style':                    # said where it went: the writing style every draft reads
                 return _did(store, tid, f"Saved to your writing style: {q(r['text'])} - every draft follows it from the next one ({at}, Owner notes).", kind, r)
+            if r.get('section') == memoryedit.SIGNATURE:          # ...how he signs is the saved signature every email carries (signatures.keep)
+                return _did(store, tid, f"Saved as your email signature: {q(r['text'])} - under every email set up from now ({places.name('replies')}).", kind, r)
             if doc in memoryedit.TOLD_DOCS:
                 return _did(store, tid, f"Saved to {at} ({memoryedit.DOC_READS[doc]}): {q(r['text'])}"
                                         + (' - it was there already.' if r.get('already') else '.'), kind, r)

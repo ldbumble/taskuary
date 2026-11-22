@@ -2572,14 +2572,17 @@ def prompt_parts(store, tid: int, turn: bool = False, heard: str = '') -> tuple[
     # general task is told the owner ends it - Mark done, Send and close, Close with a note - never CHAT_LINE's closing marker
     if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF): system = system + '\n\n' + selfclose.owner_closes_line()
     if not dock and owner_answered_last(store, tid): late.append(selfclose.OWNER_ANSWERED_LINE)
-    if owed:
-        from . import signatures
-        system = '\n\n'.join(x for x in (system, selfclose.REPLY_LINE, signatures.told(store)) if x)
+    if owed: system = system + '\n\n' + selfclose.REPLY_LINE
     elif nobody and not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF): system = system + '\n\n' + wrapup.nobody_line(store, tid)
     if owed: late.append(wrapup.refused_line(store, tid))      # a file its reply does not carry (wrapup._told)
     from . import slots
     acts = not dock and not stranger and task.get('SourceRef') not in ('connector:setup', SETUP_REF)   # ...the action line rides: an email of its own
     if slots.all_(store, tid) or acts: system = system + '\n\n' + selfclose.DRAFT_LINE
+    # ...and HOW ITS EMAILS ARE SIGNED, to every agent that can draft one - an owed reply or an email of its own (the walk, 2026-11-21: told only
+    # on an owed reply, the agent drafting the owner's own ask never heard it, and fought the signer)
+    if owed or acts:
+        from . import signatures
+        if (sig := signatures.told(store)): system = system + '\n\n' + sig
     if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF):
         system += (f'\n\n{STRANGER_GOAL_LINE if stranger else GOAL_LINE}' + ('' if stranger else f'\n\n{action_line(store)}\n\n{SHORT_LINE}')
                    + f'\n\n{WORK_LINE}\n\n{selfclose.SUMMARY_LINE}' + ('' if stranger else f'\n\n{CHECK_BACK_LINE}'))

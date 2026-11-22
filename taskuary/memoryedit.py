@@ -164,12 +164,50 @@ def said(doc: str, text: str) -> bool:
     return any(_same(_bare(l), t) for l in str(doc or '').splitlines() if l.strip().startswith(('- ', '* ')) and not TAG.match(l))
 
 
+SIGNATURE = 'signature'          # memory.remember's section for how the owner signs: the one signature setting the signer reads (signatures.keep)
+SECTION_WORDS = ("`section`: people (about someone else), work (how the owner himself works - his hours, his habits, his rules), care, promises, "
+                 "bring, style (how he writes), or signature (the closing block under every email he sends, exactly as it goes - it becomes "
+                 "his saved signature)")
+
+
+def owner_names(store) -> set:
+    "The ways a line or an `about` names the owner himself: his name, his first name, his addresses (lowercased) - facts, never a guess."
+    o = store.owner()
+    n = ' '.join(str(o.get('owner') or '').split()).lower()
+    names = {n, n.split()[0]} if n and n != 'the owner' else set()
+    try:
+        from .ingest import own_addresses
+        names |= {a for a in own_addresses(store) if a}
+    except Exception: pass
+    return names | ({str(o['owner_email']).strip().lower()} if o.get('owner_email') else set())
+
+
+def about_owner(store, about: str, text: str = '') -> bool:
+    """Is a fact about the owner HIMSELF - `about` names him, or (no `about`) the only address the line names is his. A rule about
+    him ("Alex never takes meetings before 10") is not one of his people: filed under Your people it reached only the agents of tasks
+    he was on (the walk, 2026-11-21)."""
+    w = ' '.join(str(about or '').split()).lower()
+    me = owner_names(store)
+    if w: return w in me
+    got = lc.names(text)
+    return bool(got) and got <= me
+
+
 def remember(store, text: str, about: str = '', section: str = '', replaces: str = '') -> dict:
-    """A fact in the owner's own words, under the section it belongs in - `section` a slug (people, care, work, promises, bring), else
-    Your people when it names someone (`about`, or an address in it) and What you care about otherwise. `replaces`: the key of a line it
-    makes untrue, closed with today's date first ("Gail moved to Ops" closes "Gail runs headcount in Finance"). In use at once."""
+    """THE ONE ROAD THAT DECIDES WHERE A FACT THE OWNER SAID GOES - the Assistant's memory.remember and every agent's remember tool.
+    `section` a slug (people, care, work, promises, bring), the model's reading of what the fact is; else Your people when it names
+    someone else (`about`, or an address in it) and What you care about otherwise. A fact about the owner himself is never Your people
+    (about_owner): it is How you work, which every agent's brief carries (context.AGENT_OWN). `style` is his writing (STYLE.md),
+    `signature` his saved signature (signatures.keep). `replaces`: the key of a line it makes untrue, closed with today's date first
+    ("Gail moved to Ops" closes "Gail runs headcount in Finance"). In use at once."""
     from .learn import _under
     from .concierge import redact               # a token typed into a fact never lands in the memory every prompt reads
+    if section == SIGNATURE:
+        # ...HOW HE SIGNS IS ONE SETTING (the walk, 2026-11-21: "I sign every email 'Best, Alex'" was kept as a memory line, and the signer
+        # put "Alex Doyle" under every card - the line could never win). Kept as the block itself, newlines as written
+        from .signatures import keep
+        sig = keep(store, str(text or ''), 'owner')
+        return {'ok': True, 'text': sig, 'section': SIGNATURE, 'title': 'your email signature', 'doc': 'settings', 'closed': None}
     t = redact(' '.join(str(text or '').split()).lstrip('-* ').strip())
     if not t: raise ValueError('say the fact to remember')
     # a rule about HOW to write is the writing style's, not LEARNED.md's: STYLE.md's Owner notes, where an edited draft's note goes and
@@ -188,9 +226,11 @@ def remember(store, text: str, about: str = '', section: str = '', replaces: str
     # ...and who the owner IS (SOUL.md) and how the Assistant speaks to them (COUNSEL.md): appended, never rewritten (the owner's ruling,
     # 2026-10-28 - "the chat may write SOUL.md and COUNSEL.md, append-only, audited"; JOB.md and TRIAGE.md never - those facts are LEARNED's)
     if section in TOLD_DOCS: return {**told(store, section, t), 'closed': None}
-    who = str(about or '').strip().lower()
+    me = about_owner(store, about, t)
+    who = '' if me else str(about or '').strip().lower()
     if who and '@' in who and who not in t.lower(): t = f'{t} ({who})'
-    slug = section if section in lc.SECTIONS else 'people' if (who or lc.subject_of(t)) else 'care'
+    slug = section if section in lc.SECTIONS else 'work' if me else 'people' if (who or lc.subject_of(t)) else 'care'
+    if me and slug == 'people': slug = 'work'
     closed = close(store, replaces) if replaces else None
     doc = store.get_doc(DOC) or ''
     raw = f'- {t}'

@@ -79,21 +79,37 @@ def agent_signed(store, rv: dict, text: str, msg: dict = None) -> str:
     """An agent's draft as it is filed: the agent's own sign-off ("Best,\\nAlex Doyle") taken off and the saved block put on once -
     the drafter's own road (responder.signed). It was filed as written, and the box put the block under the agent's name: signed
     twice (walk 2026-10-29). Chat: the owner's name lines off, nothing on (outbox)."""
-    from .responder import chat_said, signed
+    from .responder import chat_said, own_names, signed
     text = str(text or '').strip()
     if not text: return text
-    if is_email(store, rv, msg): return signed(text, for_review(store, rv, msg))
+    if is_email(store, rv, msg): return signed(text, for_review(store, rv, msg), own_names(store))
     return chat_said(store, text)
 
 
 def told(store) -> str:
     """THE AGENT IS TOLD HOW ITS EMAILS ARE SIGNED, up front (the recorded walk, 2026-11-11: asked to "sign it Alex" it wrote that, the card
-    showed the saved block, and it warned the owner to check the card): one sentence where it is told how to reply - '' with nothing saved."""
+    showed the saved block, and it warned the owner to check the card): one sentence for every agent that can draft an email - '' with
+    the switch off."""
     from .responder import signature_for
     from . import words
+    # ...AND A SIGN-OFF HE ASKS FOR BECOMES THE SAVED ONE (the walk, 2026-11-21: told "I sign every email 'Best, Alex'", Codex withdrew its own
+    # card when the signer put "Alex Doyle" back, and left the email as prose with nothing to press): kept through remember (keep), never fought
     sig = ' / '.join(l.strip() for l in signature_for(store).splitlines() if l.strip())
     return (f'HOW AN EMAIL IS SIGNED: Taskuary puts the owner\'s saved signature ("{sig[:200]}") under every email and takes your own sign-off '
-            f"off; asked for another, say the draft carries the saved one - theirs to edit before sending, or to change in {words.name('replies')}.") if sig else ''
+            f"off. When he tells you how he signs, keep it with remember, section signature: it becomes the saved one ({words.name('replies')}) "
+            "for every email you set up after.") if sig else ''
+
+
+def keep(store, sig: str, actor: str = 'owner') -> str:
+    """HOW THE OWNER SIGNS, SAID TO ANY AGENT OR THE ASSISTANT, IS THE SAVED SIGNATURE (the walk, 2026-11-21: kept as a memory line, it never
+    reached a card - the signer reads Settings' Email signature, not the memory): the block signature_for puts under every email, its lines
+    as given ("Best,\nAlex"). The one it replaces is kept in the audit row."""
+    block = '\n'.join(l.strip() for l in str(sig or '').replace('\\n', '\n').strip().strip('"\'').splitlines() if l.strip())
+    if not block: raise ValueError('say the signature, as it goes under an email')
+    was = str(store.get_setting('email_signature') or '')
+    store.set_setting('email_signature', block, actor)
+    store.audit('setting', 0, 'signature_kept', actor, detail={'before': was, 'after': block})
+    return block
 
 
 def suggest(store, mailbox: str = None) -> str:

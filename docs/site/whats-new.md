@@ -2,6 +2,11 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.1.7 - 2026-11-22
+
+- His name and work email on a sign-up he asked for go on his ask, read off the form by code; his phone still waits
+- His ask typed in New is his words to the browser judge
+
 ## 0.4.1.6 - 2026-11-22
 
 - An agent's turn waits on the ranking of what is already known only a moment; what it finds lands in the turn after

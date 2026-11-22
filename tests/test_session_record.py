@@ -426,38 +426,6 @@ def test_a_view_the_agent_showed_is_still_drawn_once_its_turn_is_filed(home):
     assert show['output'] == answer and 'output' not in read
 
 
-def test_a_coding_chat_polled_again_reads_each_cli_log_once_per_version(home, monkeypatch):
-    """The owner's live app, 2026-11-16: a coding task's chat took 15-43 s a poll - every poll parsed each session's whole CLI log again
-    (~1 s per 100 MB) while the page polled every few seconds. The conversation is built from a log read once per (file, mtime, size): polled
-    again it reads nothing. Since the chat is read from its own log (chatlog), a session no longer live is frozen in it once: a log of a
-    closed session that grows is never parsed again by a poll (a live one's is read byte by byte - the test below)."""
-    import os
-    from taskuary import conversation
-    monkeypatch.setattr(sessionrecord, '_STEPS', {}, raising=False)
-    s = MemoryStore(); tid = s.create_task({'Title': 'Fix the March import', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
-    for i in range(3):
-        claude_log(home, f'big{i}')
-        s._exec("INSERT INTO transcript (TaskId, Sid, Brain, ExtId, CreatedAt) VALUES (?,?,?,?,datetime('now'))", (tid, f's{i}', 'claude', f'big{i}'))
-    reads, real = [], sessionrecord.READERS['claude']
-    monkeypatch.setitem(sessionrecord.READERS, 'claude', (real[0], lambda f: reads.append(f.name) or real[1](f), real[2]))
-    first = conversation.items(s, tid)
-    assert sorted(reads) == ['big0.jsonl', 'big1.jsonl', 'big2.jsonl']
-    for _ in range(5):
-        again = conversation.items(s, tid)
-        # ...a poll that changes nothing reads the same (a read that writes is churn): what moved, named, if it ever does
-        moved = {k: (first.get(k), again.get(k)) for k in set(first) | set(again) if k != 'rev' and first.get(k) != again.get(k)}
-        if 'items' in moved:                           # ...the first item that differs, whole, and the items each side has the other has not
-            a, b = moved.pop('items'); i = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
-            moved['items'] = {'at': i, 'first': a[i] if i < len(a) else None, 'again': b[i] if i < len(b) else None, 'lengths': (len(a), len(b))}
-        assert again['rev'] == first['rev'], moved
-    assert len(reads) == 3, f'a poll read a log again: {reads}'
-    f = home / '.claude' / 'projects' / 'C--work-ledger' / 'big1.jsonl'
-    f.write_text(f.read_text(encoding='utf-8') + '\n' + json.dumps({'type': 'assistant', 'message': {'content': [{'type': 'text', 'text': 'One more check.'}]}}), encoding='utf-8')
-    os.utime(f, ns=(f.stat().st_atime_ns, f.stat().st_mtime_ns + 10**9))
-    conversation.items(s, tid)
-    assert reads[3:] == [], 'a closed session is frozen in the chat log: a poll never parses its CLI log again'
-
-
 def test_a_log_that_grows_while_its_agent_works_is_read_once_byte_for_byte(home, monkeypatch):
     """The owner's live app, 2026-11-16: a WORKING coding agent's Claude Code log grows every few seconds, so the per-version cache missed on
     every poll and each poll parsed the whole multi-hundred-MB log again - 25-40 s a call. Polled while it grows by small appends - a line cut

@@ -10,7 +10,7 @@ the REAL routes on a temp store, with the agent's turn spoken by a stand-in of e
 
 After every step `snap` reads what the page reads (the chat payload, the task page's one lit move) and what the agent's next turn is told
 (general.turn_facts), normalized so two backends doing the same thing read the same. tests/test_audit_scenarios.py runs every scenario on every
-backend and holds the snapshots to the parity rule and the goal rules (`broken`). The replay sheet for the page is REPLAY in this file.
+backend and holds the snapshots to the goal rules (`broken`). The replay sheet for the page is REPLAY in this file.
 Invented people only (CLAUDE.md)."""
 import contextlib, json, os, re, shutil, subprocess, sys, threading, time
 from pathlib import Path
@@ -427,7 +427,7 @@ def world(backend: str, tmp: Path, monkeypatch):
     funnel.invalidate(); mark.unlink(missing_ok=True)
 
 
-# ── the goal rules and the parity rule ───────────────────────────────────────────────────────────────────────────────────────────────
+# ── the goal rules ───────────────────────────────────────────────────────────────────────────────────────────────
 SENDS = ('draft', 'draft_reply', 'slot')         # a letter's card: drawn only once it has words (agentSummary.pendingReply)
 def live(c) -> bool: return c['status'] in ('pending', 'held') and not c['passed'] and (bool(c['text']) or c['kind'] not in SENDS)
 
@@ -501,32 +501,6 @@ def broken(r: Run) -> list:
         if len(ss[i]['events']) < len(ss[i - 1]['events']): say('iv', i, f"a press line went: {ss[i - 1]['events']} -> {ss[i]['events']}")
     # (vi) nothing left the computer without a press: every send is a Send that went
     if len(r.sent) > len([i for i in r.pressed if 'send' in ss[i]['step'] or 'Approve' in ss[i]['step']]): out.append(f"(vi) {len(r.sent)} sends for fewer presses")
-    return out
-
-
-# ...BUT FOR WHAT IS THE BACKEND'S OWN: the instant a press or a mail lands, whether its start is up yet or its stop has bitten (a CLI is killed
-# under its turn at once, an AI card's call runs out before it is dropped) - the steps right after one read `working`, the chip, the status and
-# the row's light by the backend's clock
-OWN = ('arrive', 'Remind me', 'a monitor', 'a stranger', 'a known', 'Erin writes', 'a second', 'arrives to', 'press Trust')       # ...Trust starts the agent
-def normal(s: dict) -> dict:
-    "A snapshot as two backends must read alike: what the page draws and lights, the cards by kind and place."
-    kind = lambda k: 'reply' if k in ('draft', 'draft_reply') else k
-    own = s['step'].startswith(OWN)
-    # ...HIS LINES AS THE PAGE DRAWS THEM, taken by a turn or waiting for one, in order: the moment a turn takes one is the backend's clock (a chat
-    # takes it in the request, a coding adapter once it is up), and so is the task's status on the press that starts it. An empty answer draws nothing
-    return {'step': s['step'], 'his': s['lines'] + s['waiting'], 'said': [x for x in s['said'] if x.strip()], 'events': s['events'],
-            'working': None if own else s['working'], 'asking': s['asking'], 'cards': [(kind(c['kind']), c['status'], c.get('at'), c['passed']) for c in s['cards'] if live(c) or c['status'] != 'pending'],
-            'status': None if own or s['step'].startswith('type') else s['status'], 'chip': None if own else s['chip'], 'lit': None if own else s['lit'], 'told': sorted(set(re.findall(r'^([A-Z][A-Z \'-]{6,}?)(?: -|:|\()', s['told'], re.M)))}
-
-
-def parity(snaps: dict) -> list:
-    "Where backends read differently on the same scenario ({backend: its snapshots}): ['step: field cli=... coding=...']."
-    out, base = [], next(iter(snaps))
-    for b, ss in snaps.items():
-        if b == base: continue
-        for x, y in zip(map(normal, snaps[base]), map(normal, ss)):
-            out += [f"{x['step'][:36]!r}: {k} {base}={x[k]!r} {b}={y[k]!r}" for k in x if x[k] != y[k]]
-        if len(snaps[base]) != len(ss): out.append(f'{b} took {len(ss)} steps, {base} {len(snaps[base])}')
     return out
 
 

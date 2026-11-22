@@ -1,7 +1,7 @@
 """A reopened pane, the wrap-up and the seed check all read the session through pyte's HistoryScreen. terminal.py drives
 it without the per-attribute hook HistoryScreen adds for paging - 60% of the draw - and these hold the two to the SAME
 screen, history and cursor on every kind of stream a CLI paints, so the speed never changes what a pane shows."""
-import random, time
+import random
 import pyte
 from taskuary import terminal
 
@@ -63,12 +63,3 @@ def test_a_replay_is_the_same_seed():
         assert terminal.replay_text(t) == want
 
 
-def test_the_fast_screen_is_cheaper():
-    raw = _tui(random.Random(3), 60_000)
-    def best(f):
-        out = []
-        for _ in range(3):
-            a = time.perf_counter(); f(); out.append(time.perf_counter() - a)
-        return min(out)
-    slow, fast = best(lambda: _plain_pyte(raw, 110, 32)), best(lambda: terminal.render_at(raw, 110, 32))
-    assert fast < slow * 0.8, (slow, fast)

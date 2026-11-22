@@ -16,7 +16,6 @@ AI card (opening a store migrates it, so never the live one), TASKUARY_HOME a sc
 (two processes, two db copies, half the wall time); TASKUARY_LIVE_OUT writes the results as JSON. Invented Northwind people only."""
 import json, os, re, time
 from unittest import mock
-import pytest
 from tests import rail_advisor_cases as C
 
 HEAD = 'WHAT YOU KNOW ABOUT HOW THE OWNER WORKS'
@@ -315,10 +314,6 @@ def problems(got) -> list:
                if x.get('stale_in_prompt') or x.get('stale_in_lines')]
             + ([f"{got['calls']} model calls"] if got['calls'] > 120 else []))
 
-
-@pytest.mark.skipif(not LIVE, reason='calls the configured AI: TASKUARY_LIVE_MEMORY=1 python -m tests.test_rail_advisor_memory_live')
-def test_live_memory_ab_on_the_rail_advisor():
-    pytest.skip("the suite's isolation blocks the brain's subprocess and sockets - run python -m tests.test_rail_advisor_memory_live")
 
 
 if __name__ == '__main__':

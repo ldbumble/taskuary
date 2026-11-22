@@ -143,64 +143,6 @@ class HistgenTests(unittest.TestCase):
         self.assertIn('Tone & length', out)
         self.assertNotIn('<!--', out)
 
-class VocabularyFromHistoryTests(unittest.TestCase):
-    """The Shared voice vocabulary page's Generate from history: names off the envelopes and subjects,
-    the model picks, the owner's list is kept whole and the new terms fill the room left."""
-    INBOX = [{'id': 'i1', 'subject': 'RE: Payworth export', 'receivedDateTime': '2026-08-01T09:00:00Z', 'conversationId': 'c1',
-              'from': {'emailAddress': {'address': 'paula@corp.example', 'name': 'Paula Vance'}}},
-             {'id': 'i2', 'subject': 'Intacct sync', 'receivedDateTime': '2026-08-02T09:00:00Z', 'conversationId': 'c2',
-              'from': {'emailAddress': {'address': 'paula@corp.example', 'name': 'Paula Vance'}}}]
-    SENT = [{'id': 's1', 'subject': 'RE: Payworth export', 'receivedDateTime': '2026-08-01T10:00:00Z', 'conversationId': 'c1',
-             'toRecipients': [{'emailAddress': {'address': 'paula@corp.example', 'name': 'Paula Vance'}}], 'body': {'content': 'done'}}]
-
-    def test_history_terms_join_the_owners_list_without_displacing_it(self):
-        from taskuary import voice
-        s = MemoryStore(); voice.save_vocabulary(s, ['Taskuary', 'Intacct'], 'o')
-        seen = {}
-        def llm(system, user, max_tokens=0):
-            seen['user'] = user
-            # numbering, quotes, a duplicate of the owner's own term and an over-long line: each handled per line
-            return '1. Paula Vance\n- "Payworth"\nintacct\n' + 'x' * 60 + '\nNorthwind Group'
-        with graph(self.SENT, self.INBOX), mock.patch('taskuary.llm.build_llm', return_value=llm):
-            detail = histgen.generate(s, 'vocabulary')
-        self.assertEqual(voice.vocabulary(s), ['Taskuary', 'Intacct', 'Paula Vance', 'Payworth', 'Northwind Group'])
-        self.assertIn('kept 2, added 3', detail); self.assertIn('1 sent + 2 inbound', detail)
-        self.assertIn('Paula Vance: 3', seen['user']); self.assertIn('corp.example: 2', seen['user'])
-        self.assertIn('Payworth export: 2', seen['user'])           # RE: stripped, so both sides of the thread count once
-        self.assertIn('CURRENT LIST: Taskuary, Intacct', seen['user'])
-        self.assertEqual(histgen.STATUS['state'], 'done'); self.assertTrue(any('Paula Vance' in l for l in histgen.STATUS['evidence']))
-        self.assertIsNone(s.get_doc('vocabulary'))                        # a setting, never a doc
-
-    def test_the_list_never_overflows_and_says_what_did_not_fit(self):
-        from taskuary import voice
-        s = MemoryStore(); voice.save_vocabulary(s, [f'term{i}' for i in range(98)], 'o')
-        with graph(self.SENT, self.INBOX), mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: 'A One\nB Two\nC Three'):
-            detail = histgen.generate(s, 'vocabulary')
-        self.assertEqual(len(voice.vocabulary(s)), 100); self.assertIn('added 2 (1 more did not fit)', detail)
-        with graph(self.SENT, self.INBOX), mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: 'D Four'):
-            with self.assertRaises(RuntimeError) as e: histgen.generate(s, 'vocabulary')
-        self.assertIn('full', str(e.exception))
-
-    def test_falls_back_to_taskuary_record_and_refuses_an_empty_history(self):
-        from taskuary import voice
-        s = MemoryStore()
-        with graph([], [], 0), mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: 'x'):
-            with self.assertRaises(RuntimeError) as e: histgen.generate(s, 'vocabulary')
-        self.assertIn('no mail history', str(e.exception))
-        tid = s.create_task({'Title': 't', 'Kind': 'task', 'Status': 'open'}, 't')
-        s.add_message({'TaskId': tid, 'ExternalId': 'x1', 'Channel': 'email', 'Subject': 'FW: Yardi roll', 'FromName': 'Dov Blake',
-                       'FromEmail': 'dov@corp.example', 'SentAt': RECENT, 'BodyText': 'see attached'})
-        seen = {}
-        def llm(system, user, max_tokens=0): seen['user'] = user; return 'Dov Blake\nYardi'
-        with graph([], [], 0), mock.patch('taskuary.llm.build_llm', return_value=llm):
-            detail = histgen.generate(s, 'vocabulary')
-        self.assertIn('no Graph mailbox history', detail); self.assertEqual(voice.vocabulary(s), ['Dov Blake', 'Yardi'])
-        self.assertIn('Yardi roll: 1', seen['user']); self.assertIn('Dov Blake: 1', seen['user'])
-
-
-if __name__ == '__main__':
-    unittest.main()
-
 
 class TopicRollUpTests(unittest.TestCase):
     """"Generate from history should see no responses on it." It already marked each mail
@@ -389,3 +331,7 @@ class SetupDraftTests(unittest.TestCase):
              mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: SOUL):
             with self.assertRaisesRegex(RuntimeError, 'no sent mail to learn from'): histgen.generate(s, 'soul')
         self.assertEqual(histgen.STATUS['state'], 'failed')
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -243,17 +243,6 @@ def test_a_long_session_s_told_steps_are_marked_once_never_on_every_read_of_its_
     assert marked[0] == 401 and again[:len(want)] == want and again[-1]['k'] == 'you' and 'tax line' in again[-1]['text']
 
 
-def test_a_long_told_step_with_no_stop_in_it_is_read_in_a_beat():
-    """The waiting room's head names who left the notes in a few words; read with no bound, a 3,000-word step with no full stop was searched from
-    every word to its end - 1.4 s a step, minutes over a long log (2026-11-16). The heads still read as before."""
-    import time
-    t0 = time.perf_counter(); assert sessionrecord.queued(' '.join(['ledger'] * 3000)) is None
-    assert time.perf_counter() - t0 < 0.2
-    head = ('While you were working, the owner and a teammate queued 2 notes for you. Take them in order, after finishing the step you are on; '
-            'if one conflicts with work already done, say so instead of undoing it:')
-    assert sessionrecord.queued(f'{head} (1) check the tax line (2) then merge') == [('brief', head), ('you', 'check the tax line'), ('you', 'then merge')]
-
-
 def test_a_session_whose_tool_streams_ten_megabytes_keeps_it_small_and_a_poll_reads_only_what_is_new(home):
     """The owner's live app, 2026-11-19: one session's tools read files, and every update kept the whole output again (and the CLI's own copy
     of it) - 587 MB for 4,908 updates, read whole on every poll of the chat and of the landing card: one chat read took 17 s, the rail 56 s

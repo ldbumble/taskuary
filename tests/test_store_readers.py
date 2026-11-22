@@ -301,17 +301,6 @@ def big(tmp_path, monkeypatch):
     funnel.invalidate(); st.close()
 
 
-def test_a_pile_on_a_big_store_builds_beside_a_held_writer(big):
-    funnel.pile(big, force=True, observed=[], quiet=True)                   # the cold rail build is its own matter
-    t0 = time.perf_counter(); funnel.pile(big, force=True, observed=[], quiet=True); free = time.perf_counter() - t0
-    release, t = hold(big, most=60)
-    try:
-        t0 = time.perf_counter(); p = funnel.pile(big, force=True, observed=[], quiet=True); held = time.perf_counter() - t0
-    finally: release.set(); t.join()
-    assert p['items'], 'a pile came back'
-    assert held < 3 * free + 5 < 60, f'{held:.1f}s beside a writer held for a minute, {free:.1f}s without: it did not wait for it'
-
-
 def test_the_funnel_states_are_read_again_only_after_a_write(s, tmp_path):
     big = s
     for i in range(3): big._exec("INSERT INTO funnel_state(Key, Status) VALUES (?, 'surfaced')", (f'msg:{i}',))

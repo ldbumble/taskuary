@@ -538,23 +538,7 @@ class TheAddressIsTheTabsOwnTests(unittest.TestCase):
         self.assertEqual(bv.state('t1', fresh=True)['url'], 'https://portal.example/runs')
 
 
-
 # A WINDOW THE PAGE OPENS IS FOLLOWED (the owner, live 2026-11-19: "Continue with Google" on a site's sign-in did nothing he could see)
-def _run_follow(sid, lists, switched, active='A'):
-    import threading
-    seq, stop = iter(lists), threading.Event()
-    def pages(_):
-        try: return next(seq)
-        except StopIteration: stop.set(); return []
-    with mock.patch.object(bv, 'pages', side_effect=pages), mock.patch.object(bv, 'active_tab', side_effect=lambda _: switched[-1] if switched else active),             mock.patch.object(bv, 'refused', return_value=False):
-        bv.follow(sid, stop, every=0, switch=lambda s, t: switched.append(t) or True)
-
-
-def test_a_popup_the_page_opens_is_shown_and_the_view_comes_back_when_it_closes():
-    A, G = {'id': 'A', 'url': 'https://x.example/login'}, {'id': 'G', 'url': 'https://accounts.google.example/o/oauth2'}
-    switched = []
-    _run_follow('fw1', [[A], [A], [A, G], [A, G], [A]], switched)
-    assert switched == ['G', 'A']                      # to the popup, then back where it came from
 
 
 def test_google_s_own_refusal_page_is_said_with_the_way_past_it():

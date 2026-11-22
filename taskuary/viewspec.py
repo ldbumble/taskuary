@@ -133,6 +133,32 @@ def _element(eid, e):
     return {'type': t, 'props': out, **({'children': kids} if kids else {})}
 
 
+# THE TOOL'S SCHEMA IS THE CATALOG (the HIPAA walk, 2026-11-21: five calls to draw one chart - root missing, `bar` as a type, `data` for props,
+# `x`/`y` for points - each refusal naming one rule): the element shape, the type names and every prop by name, from viewspec.json, so a
+# model fills it right the first time. One flat element (no anyOf: some providers refuse it); `check` still says what a type takes
+_KIND = {'str': {'type': 'string'}, 'md': {'type': 'string'}, 'verb': {'type': 'string'}, 'link': {'type': 'string'},
+         'cols': {'type': 'array', 'items': {}}, 'rows': {'type': 'array', 'items': {'type': 'array'}}, 'strs': {'type': 'array', 'items': {'type': 'string'}},
+         'tiles': {'type': 'array', 'items': {'type': 'object', 'properties': {'label': {'type': 'string'}, 'value': {}, 'format': {'type': 'string'},
+                                                                                 'note': {'type': 'string'}, 'trend': {'type': 'object'}}, 'required': ['label', 'value']}},
+         'checks': {'type': 'array', 'items': {'type': 'object', 'properties': {'text': {'type': 'string'}, 'done': {'type': 'boolean'}}, 'required': ['text']}},
+         'points': {'type': 'array', 'items': {'type': 'object', 'properties': {'label': {'type': 'string'}, 'value': {'type': 'number'},
+                                                                                  'highlight': {'type': 'boolean'}}, 'required': ['label', 'value']}}}
+def _kind(k):
+    k = k.rstrip('!')
+    if '|' in k: ws = k.split('|'); return {'type': 'integer', 'enum': [int(w) for w in ws]} if all(w.isdigit() for w in ws) else {'type': 'string', 'enum': ws}
+    return _KIND.get(k, {})
+def element_schema() -> dict:
+    "One element as the show tool's schema has it: {type, props, children}, every prop the catalog names (a name two types share takes either)."
+    props = {}
+    for spec in TYPES.values():
+        for p, k in spec.items(): props[p] = _kind(k) if p not in props or props[p] == _kind(k) else {}
+    return {'type': 'object', 'properties': {'type': {'type': 'string', 'enum': list(TYPES)}, 'props': {'type': 'object', 'properties': props},
+                                             'children': {'type': 'array', 'items': {'type': 'string'}}}, 'required': ['type']}
+# ...and one small view that passes, said with every refusal: the example is the rule a model copies
+EXAMPLE = {'root': 'c', 'elements': {'c': {'type': 'chart', 'props': {'kind': 'bar', 'title': 'Tickets by quarter',
+                                                                     'points': [{'label': 'Q1', 'value': 412}, {'label': 'Q2', 'value': 380}]}}}}
+
+
 def check(spec) -> dict:
     "The spec normalised, or a ValueError saying what to fix. Only what the root reaches is kept."
     if not isinstance(spec, dict): raise ValueError('the view must be an object {title?, root, elements}')
@@ -155,6 +181,7 @@ def check(spec) -> dict:
 
 
 def shown(spec) -> str:
-    "The tool's answer: a line for the model, and the checked spec on one line after MARK for the chat."
-    view = check(spec)
+    "The tool's answer: a line for the model, and the checked spec on one line after MARK for the chat. A refusal carries one that passes."
+    try: view = check(spec)
+    except ValueError as e: raise ValueError(f"{e}. A view that passes: {json.dumps(EXAMPLE, separators=(',', ':'))}") from e
     return f"Shown in the owner's chat. {MARK}{json.dumps(view, ensure_ascii=False, separators=(',', ':'))}"

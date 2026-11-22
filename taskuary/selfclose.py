@@ -617,7 +617,7 @@ TICK_CHAT_LINE = (f'TO-DOS HERE: you have no shell, so `taskuary --tick` is not 
 
 
 # ...and a session that HAS the tick tool (an AI card whose Taskuary toolbox answered) is told the tool, never "you have no shell"
-TICK_TOOL_LINE = ("TO-DOS HERE: when you finish one of the checklist's to-dos, tick it with the tick tool - its id is in brackets after it. "
+TICK_TOOL_LINE = ("TO-DOS HERE: when you finish one of the checklist's to-dos, tick it with the tick tool, its id - in brackets after it - as `item`. "
                   'Only what you actually did.')
 
 

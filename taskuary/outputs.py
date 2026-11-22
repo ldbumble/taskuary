@@ -506,21 +506,27 @@ def _cell(v) -> str:
 def sheet(p: Path, name: str = '') -> dict:
     """A workbook's sheet as rows the page draws: the named one (default the first), capped at ROWS x COLS, each cell at CELL
     characters; values, not formulas (data_only), read without loading the whole book (read_only)."""
+    from itertools import zip_longest
     from openpyxl import load_workbook
     wb = load_workbook(p, read_only=True, data_only=True)
+    # ...AND A FORMULA NOTHING HAS WORKED OUT YET READS AS ITSELF (the walks, 2026-11-21: a workbook an agent wrote with openpyxl has formulas
+    # and no cached values, and its Q4 column previewed blank while the agent said the numbers were there): the formula, as attachtext reads it
+    fx = load_workbook(p, read_only=True, data_only=False)
     try:
         names = wb.sheetnames
         ws = wb[name] if name in names else wb[names[0]]
+        fs = fx[ws.title].iter_rows(values_only=True)
         rows, more = [], False
         for i, r in enumerate(ws.iter_rows(values_only=True)):
             if i >= ROWS: more = True; break
-            rows.append([_cell(v) for v in r[:COLS]])
+            f = next(fs, ()) or ()
+            rows.append([_cell(v if v is not None or not (isinstance(g, str) and g.startswith('=')) else g) for v, g in zip_longest(r[:COLS], f[:COLS])][:len(r[:COLS])])
         while rows and not any(rows[-1]): rows.pop()
         width = max((max((j + 1 for j, c in enumerate(r) if c), default=0) for r in rows), default=0)
         cut = (ws.max_column or 0) > COLS
         return {'sheet': ws.title, 'sheets': names[:SHEETS], 'rows': [r[:width] + [''] * (width - len(r[:width])) for r in rows],
                 'more_rows': more, 'more_cols': cut, 'max_rows': ROWS, 'max_cols': COLS}
-    finally: wb.close()
+    finally: wb.close(); fx.close()
 
 
 DOC_BLOCKS = 400                                     # a document preview: its first paragraphs and tables, never the whole book
@@ -549,7 +555,7 @@ def document(p: Path) -> dict:
     return {'blocks': blocks, 'more': more, 'max_blocks': DOC_BLOCKS}
 
 
-PREVIEW_VERSION = 1
+PREVIEW_VERSION = 2                  # 2: a formula with no cached value previews as itself
 def previewed(p: Path, name: str = '', sheet_name: str = '') -> dict:
     """A workbook's sheet (sheet) or a document's words (document) as the page draws them - read once per CONTENT, in the attachment-text
     cache (attachtext.cached), whichever file, route or press asks. Raises ValueError for a file of a kind with no such preview."""

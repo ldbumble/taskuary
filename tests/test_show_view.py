@@ -300,3 +300,27 @@ def test_every_worker_is_told_to_show_files_through_the_tool_and_never_claim_an_
     assert "show's `files`" in selfclose.SHOW_LINE      # ...the screen and the viewer are AGENT.md's to say (above), once
     desc = agenttools.TOOLS['show'][1]
     assert '`files`' in desc and 'never open a viewer' in desc and 'unless this tool said it was shown' in desc
+
+
+def test_the_agent_is_told_what_its_tools_do_and_a_sheet_it_made_is_in_front_of_him():
+    """The walks, 2026-11-21: a chart took five calls - the schema said only `elements: object`, and each refusal named one rule; `tick` was
+    called with `id` ("by its id", its field is `item") from a schema Claude had deferred; a bare `show` was not found; and show answered
+    ".xlsx cannot be shown" while the chat drew the sheet - so the agent told him it could not be previewed, over a Q4 column the preview drew
+    blank (formulas, no cached values)."""
+    import tempfile
+    from pathlib import Path
+    from openpyxl import Workbook
+    from taskuary import outputs
+    el = agenttools.TOOLS['show'][2]['properties']['elements']['additionalProperties']
+    assert set(el['properties']['type']['enum']) >= {'chart', 'table', 'stats'} and 'root' in agenttools.TOOLS['show'][2]['properties']
+    assert el['properties']['props']['properties']['points']['items']['required'] == ['label', 'value']
+    try: viewspec.shown({'elements': {'c': {'type': 'bar', 'props': {'data': [1]}}}}); raise AssertionError('refused')
+    except ValueError as e: assert 'A view that passes: ' in str(e) and viewspec.check(json.loads(str(e).split('A view that passes: ')[1]))
+    assert '`item` is its id' in agenttools.TOOLS['tick'][1] and '`item`' in agenttools.SHORT['tick'] and 'tick' in agenttools.ALWAYS_LOAD
+    assert 'call each by the name your session lists it under that server' in agenttools.TOOLS_LINE
+    s = MemoryStore(); tid = s.create_task({'Title': 'Q4 spend forecast', 'Kind': 'general'}, 'owner')
+    out = outputs.folder(tid); out.mkdir(parents=True, exist_ok=True)
+    wb = Workbook(); ws = wb.active; ws.append(['Vendor', 'Q3', 'Q4']); ws.append(['Payworth', 1200, '=B2*1.1']); wb.save(out / 'forecast.xlsx')
+    said = agenttools.show_files(s, tid, [str(out / 'forecast.xlsx')])
+    assert 'already' in said and 'forecast.xlsx' in said and 'cannot be shown' not in said
+    assert outputs.sheet(out / 'forecast.xlsx')['rows'][1] == ['Payworth', '1200', '=B2*1.1']

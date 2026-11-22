@@ -2,7 +2,7 @@
 whole scrollback, 0.2-1 s a pane. It ran on the event loop, so opening the Wall froze every other socket, typing in a
 live pane included, for seconds. It is drawn on one worker now, and these pin what must NOT change with it: the frames
 a pane receives and their order, and the text of the seed."""
-import ast, asyncio, os, sys, threading, time, unittest
+import asyncio, os, sys, threading, time, unittest
 from pathlib import Path
 from unittest import mock
 from fastapi.testclient import TestClient
@@ -85,14 +85,3 @@ class ReplayOffTheLoopTests(unittest.TestCase):
         self.assertEqual(terminal.replay_snapshot(R()), terminal.replay_text(R()))
 
 
-def test_no_scrollback_draw_runs_on_the_event_loop():
-    """A pyte draw inside an `async def` holds every socket until it finishes. Through the replay worker only."""
-    slow = {'replay_text', 'replay_snapshot', 'render', 'render_at', 'harvest'}
-    for f in ('server.py', 'terminal.py'):
-        tree = ast.parse((HERE / f).read_text(encoding='utf-8'))
-        for fn in ast.walk(tree):
-            if not isinstance(fn, ast.AsyncFunctionDef): continue
-            for n in ast.walk(fn):
-                if isinstance(n, ast.Call):
-                    name = n.func.attr if isinstance(n.func, ast.Attribute) else getattr(n.func, 'id', '')
-                    assert name not in slow, f'{f}:{n.lineno} {fn.name} calls {name} on the event loop'

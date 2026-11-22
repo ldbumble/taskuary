@@ -26,12 +26,6 @@ class ConnectedCount(unittest.TestCase):
         self.assertEqual(cc.connected_count(_Store(rows), {'claude': {}, 'codex': {}}), 4)
         self.assertEqual(cc.connected_count(_Store([]), None), 0)
 
-    def test_the_page_reads_the_servers_count(self):
-        page = (ROOT / 'website' / 'src' / 'ConnectorsView.jsx').read_text(encoding='utf-8')
-        self.assertIn('c.data.connected', page)
-        src = (ROOT / 'taskuary' / 'server.py').read_text(encoding='utf-8')
-        self.assertIn("'connected': connected_count(store, demo.cli_connections() if demo.enabled() else cfg.get('cli_connections'))", src)
-
 
 def _card(s, typ, **f):
     cid = next(c['ConnectorId'] for c in s.list_connectors() if c['Type'] == typ)

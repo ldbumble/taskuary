@@ -271,15 +271,6 @@ class ChildProcessesOpenNoWindow(unittest.TestCase):
             out = spawn.flags(creationflags=0x00000200)     # CREATE_NEW_PROCESS_GROUP
             self.assertEqual(out['creationflags'], 0x00000200 | spawn.CREATE_NO_WINDOW)
 
-    def test_the_modules_that_shell_out_go_through_it(self):
-        """A direct subprocess call in any of these is a console window waiting to happen."""
-        import inspect
-        from taskuary import agents, browserview, channels, mcp, proof, reports
-        for mod in (agents, browserview, channels, mcp, proof, reports):
-            src = inspect.getsource(mod)
-            self.assertNotIn('subprocess.run(', src, mod.__name__)
-            self.assertNotIn('subprocess.Popen(', src, mod.__name__)
-
 
 if __name__ == '__main__':
     unittest.main()

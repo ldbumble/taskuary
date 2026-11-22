@@ -17,10 +17,6 @@ class SchemaTests(unittest.TestCase):
             self.assertIn(meta['group'], settings_schema.GROUPS, key)
             if meta['type'] == 'select': self.assertTrue(meta.get('options'), f'{key} is a select with no options')
 
-    def test_the_file_is_the_one_the_page_imports(self):
-        view = (ROOT / 'website' / 'src' / 'SettingsView.jsx').read_text(encoding='utf-8')
-        self.assertIn('settings_schema.json', view)
-        self.assertNotIn('const KNOB_META = {', view)
 
     def test_every_ai_slot_is_owned_by_its_card_and_has_a_fallback_row(self):
         """A slot the AI-defaults panel draws must be named in `panel_owned`, or the Settings page

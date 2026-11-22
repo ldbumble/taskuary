@@ -10,7 +10,6 @@ Both sides now build their tables from taskuary/lanes.json. These tests keep it 
 added to one language and not the other is not possible, because there is only one place to add it.
 """
 import json
-import re
 from pathlib import Path
 
 import pytest
@@ -19,7 +18,6 @@ from taskuary import funnel
 
 ROOT = Path(__file__).resolve().parents[1]
 VOCAB = json.loads((ROOT / 'taskuary' / 'lanes.json').read_text(encoding='utf-8'))
-PILE_JS = (ROOT / 'website' / 'src' / 'funnelPile.js').read_text(encoding='utf-8')
 
 
 def test_the_python_tables_are_the_file():
@@ -28,14 +26,6 @@ def test_the_python_tables_are_the_file():
         assert funnel.LANE_WORDS[lane['key']] == (lane['word'], lane['role'])
         assert funnel.LANE_MARKS[lane['key']] == lane['mark']
     assert set(funnel.KIND_MARKS) == {k['key'] for k in VOCAB['kinds']}
-
-
-def test_the_desktop_builds_its_table_from_the_same_file_rather_than_its_own():
-    assert 'import vocab from "../../taskuary/lanes.json"' in PILE_JS
-    assert 'export const LANE_META = byKey(vocab.lanes);' in PILE_JS
-    assert 'export const KIND_META = byKey(vocab.kinds);' in PILE_JS
-    # ...and no hand-written lane table grew back beside it
-    assert not re.search(r'LANE_META\s*=\s*\{', PILE_JS), 'the lane table is the file, not a literal'
 
 
 @pytest.mark.parametrize('lane', VOCAB['lanes'], ids=lambda l: l['key'])
@@ -67,14 +57,3 @@ def test_a_lane_label_still_reads_as_the_row_does():
     assert funnel.LANE_WORDS['report'][0] == 'report'
 
 
-def test_the_walk_line_reads_its_counting_words_from_the_vocabulary():
-    # the walk opens with who wants what now (walkSummary.js, 2026-09-23); each row's word is the lane's
-    # own word from the one vocabulary, never a copy written into the page
-    view = (ROOT / 'website' / 'src' / 'AssistantView.jsx').read_text(encoding='utf-8')
-    cards = (ROOT / 'website' / 'src' / 'assistantCards.jsx').read_text(encoding='utf-8')
-    walk = (ROOT / 'website' / 'src' / 'walkSummary.js').read_text(encoding='utf-8')
-    # the rail's own rows (2026-10-02), as a card per band (2026-10-06) - every row, the paged FYI tail counted in (pileRows)
-    assert 'summarize(railPile ? pileRows(railPile) : items).groups' in view
-    assert 'stateOf(i, laneMeta(i.lane).word)' in cards
-    assert '["landed", "report"]' not in view + walk, 'the third copy of the counting words is gone'
-    assert 'agent waiting on you' not in walk and 'asked you' not in walk

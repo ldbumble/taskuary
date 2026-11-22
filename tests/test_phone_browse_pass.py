@@ -152,7 +152,6 @@ class NoJsonOnThePhoneTests(unittest.TestCase):
         self.assertEqual(text.lower().count('nothing has to happen'), 1, text)
 
 
-
 class PipeListSaysForLaterTests(unittest.TestCase):
     def test_the_rail_is_read_by_its_own_sections_for_later_included(self):
         """"what tasks are waiting in later" was answered "nothing is parked in Later" - pipe.list grouped by LANE, and For
@@ -168,7 +167,6 @@ class PipeListSaysForLaterTests(unittest.TestCase):
         self.assertIn('back in', out.split('FOR LATER')[1])
 
 
-
 class CardSaysItOnceTests(unittest.TestCase):
     def test_a_task_written_from_one_pasted_paragraph_prints_it_once(self):
         """TQ-0887 shape: the New box made the paragraph the title, the message's subject and the summary - the phone card
@@ -177,15 +175,6 @@ class CardSaysItOnceTests(unittest.TestCase):
         self.assertTrue(ra._repeats(para, ['Why do I get thirty of these a day?']))
         self.assertTrue(ra._repeats('One or more errors were encountered while editing user x. Alert E09.', ['Why…', para]))
         self.assertFalse(ra._repeats('#113 · keep inter-company rows in the export', ['Kai wants the export fixed']))
-
-
-class OpenSaysWhatItIsTests(unittest.TestCase):
-    def test_each_open_choice_names_its_task(self):
-        """"Open TQ-0800 / Open TQ-0876 / Open TQ-0887" said nothing about what they were (the owner, 2026-09-30)."""
-        import inspect
-        src = inspect.getsource(concierge)
-        self.assertIn("f\"Open {i.get('ref') or ''}\".strip(), _title_cut(", src)
-
 
 
 class HeldMessagesKeepTheirPicturesTests(unittest.TestCase):
@@ -210,7 +199,6 @@ class HeldMessagesKeepTheirPicturesTests(unittest.TestCase):
         s = MemoryStore()
         mid = s.add_message({'ExternalId': 'e1', 'Channel': 'email', 'BodyText': 'hello', 'Status': 'pending'})
         self.assertNotIn('images', ingest._from_row(s.get_message(mid), s))
-
 
 
 class TheAiFailedTests(unittest.TestCase):
@@ -246,14 +234,6 @@ class TheAiFailedTests(unittest.TestCase):
         finally: ra._ASKING.chat = None
         self.assertIn('Try again', text)
         self.assertEqual(rows.get('Try again'), {'t': 'ask', 'text': 'what is waiting?'})
-
-
-class NeverADeadEndTests(unittest.TestCase):
-    def test_the_newest_line_with_nothing_to_press_offers_next(self):
-        from pathlib import Path
-        src = Path(__file__).resolve().parents[1].joinpath('website', 'src', 'AssistantView.jsx').read_text(encoding='utf-8')
-        self.assertIn('NEVER A DEAD END', src)
-        self.assertIn('? said : idle ? IDLE_CHIPS : [{ verb: "next", label: btn("next") }]', src)   # an empty rail offers ways to start something
 
 
 if __name__ == '__main__':

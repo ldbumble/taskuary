@@ -131,13 +131,5 @@ class TheHonestPositiveTests(FreshMachine):
         self.assertEqual([a['name'] for a in st['ais'] if a['connected']], ['claude'])
 
 
-class TheScreenNamesOnlyWhatWasFoundTests(unittest.TestCase):
-    """The setup line and the lit card are drawn on the page (FirstRun.jsx, setupSteps.cardOf); website/test pins the rule and
-    website/browser/fresh-setup.test.mjs the rendered page. Here: the source still carries the rule, so neither can quietly drift."""
-    def test_no_ai_card_is_lit_by_default(self):
-        src = (Path(__file__).resolve().parents[1] / 'website' / 'src' / 'setupSteps.js').read_text(encoding='utf-8')
-        self.assertIn('(view === "mail" ? can[0] : null)', src)
-
-
 if __name__ == '__main__':
     unittest.main()

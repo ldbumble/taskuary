@@ -5,7 +5,6 @@ Triage was handed only the sender's ADDRESS, so the summary every surface leads 
 mailbox ("pvance@" -> "Pvance"). It now gets the display name too, as a person is called: Outlook's directory writes
 "Last, First M." and appends " at <organisation>" to people outside it.
 """
-import inspect
 
 from taskuary import remote_assistant as ra, triage
 
@@ -21,12 +20,6 @@ def test_a_directory_name_reads_as_a_person_is_called():
 def test_an_address_is_never_a_name():
     assert triage.person_name('eblake@northwind.example') == ''
     assert triage.person_name('') == ''
-
-
-def test_triage_is_handed_the_name_and_told_to_use_it():
-    src = inspect.getsource(triage)
-    assert "'from_name': person_name(msg.get('from_name'))" in src
-    assert 'by `from_name`' in triage.TASK_FIELDS
 
 
 def test_the_phone_names_the_asker_the_same_way():

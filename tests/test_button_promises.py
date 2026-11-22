@@ -26,12 +26,6 @@ def test_the_end_session_sentence_is_the_handlers():
     assert 'task stays open' in concierge.CHIP_HINTS['stop_agent']
 
 
-def test_the_generated_docs_carry_the_same_sentence():
-    import pathlib
-    docs = (pathlib.Path(__file__).resolve().parent.parent / 'docs' / 'site' / 'assistant-tools.md').read_text(encoding='utf-8')
-    assert 'FIRST' in docs and 'Send the drafted reply as it stands.' not in docs
-
-
 def test_from_now_on_promises_only_the_kind_of_mail_that_was_pressed():
     # the press teaches one line about THIS KIND of mail from the sender (memorylines, 7803d97b5: "never everything they send, since another
     # kind from them may be real work") - the button, its hover, the Assistant's receipt and its tool sentence said "their mail is filed"

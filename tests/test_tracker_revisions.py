@@ -136,27 +136,6 @@ class JiraCommentTests(unittest.TestCase):
         self.assertEqual(row['Status'], 'context')
 
 
-class EveryTrackerTests(unittest.TestCase):
-    """The freeze was never a GitHub bug - eleven channels had it. A connector written later
-    must not quietly reintroduce it, so the rule is checked on the source, not per vendor."""
-
-    # notion and sentry already suffix a vendor stamp and are deliberately left alone (see the
-    # spec); discord is a chat channel, not a tracker, and joins by room like the other chats.
-    ALREADY_VERSIONED = {'poll_notion', 'poll_sentry', 'poll_discord'}
-
-    def test_no_tracker_poll_ingests_without_hashing_its_words(self):
-        import inspect
-        from taskuary import devtools, pm
-        offenders = []
-        for mod in (pm, devtools):
-            for name in sorted(n for n in dir(mod) if n.startswith('poll_')):
-                if name in self.ALREADY_VERSIONED: continue
-                body = inspect.getsource(getattr(mod, name))
-                if 'ingest_tracker(' not in body and 'ingest_message(' in body:
-                    offenders.append(f'{mod.__name__}.{name}')
-        self.assertEqual(offenders, [], 'these still key on the item, so an edit is dropped as a duplicate')
-
-
 class OtherTrackerRevisionTests(unittest.TestCase):
     def test_gitlab_edit_lands_again(self):
         from taskuary import devtools

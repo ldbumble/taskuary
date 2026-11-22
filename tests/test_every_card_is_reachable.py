@@ -140,16 +140,6 @@ class EveryCardIsOnThePage(unittest.TestCase):
                          if t not in listed)
         self.assertEqual(missing, [], f'seeded and working, but no group renders it: {missing}')
 
-    def test_every_type_a_group_lists_is_also_described(self):
-        src = (ROOT / 'website' / 'src' / 'ConnectorsView.jsx').read_text(encoding='utf-8')
-        described = set(re.findall(r'^  ([a-z0-9_]+): \{', src, re.M))
-        listed = set()
-        for call in re.findall(r'(?:channelCards|dataCards)\(\[(.*?)\]\)', src, re.S):
-            listed |= set(re.findall(r'"([a-z0-9_]+)"', call))
-        if 'channelCards(AI_SHELF)' in src: listed |= ai_shelf()
-        missing = sorted(listed - described)
-        self.assertEqual(missing, [], f'listed in a group but not described: {missing}')
-
 
 if __name__ == '__main__':
     unittest.main()

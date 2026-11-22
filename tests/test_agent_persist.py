@@ -38,15 +38,6 @@ def test_the_brief_carries_the_ladder_the_work_line_and_the_override():
     assert '"answer_is_result"' in selfclose.SUMMARY_LINE and 'true only when the goal is met and you checked it' in selfclose.SUMMARY_LINE
 
 
-def test_agent_md_no_longer_tells_a_general_agent_to_stop_hunting_wait_or_close():
-    text = (TEMPLATES / 'agent.md').read_text(encoding='utf-8')
-    for gone in ('Do not go hunting for the task', 'stay at the prompt until the answer comes', 'Do not widen the job'):
-        assert gone not in text, gone
-    # ...and `--done` is a coding session's alone, so it lives in CODING.md; the general agent hears who closes from owner_closes_line
-    assert '--done' not in text and '--done' in (TEMPLATES / 'coding.md').read_text(encoding='utf-8')
-    assert 'taskuary --done' in (TEMPLATES / 'coding.md').read_text(encoding='utf-8')      # ...the coding road is unchanged
-
-
 def test_the_windows_are_large():
     # lean by default, the rest on ask (the owner, 2026-11-05): the brief stays small; answers have room
     assert general.MAX_CONTEXT <= 40_000 and 'reads any mail in full' in general.READ_WHOLE

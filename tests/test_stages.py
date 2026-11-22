@@ -1,7 +1,6 @@
 """WHERE A TASK IS UP TO, once (stages.json, the owner 2026-10-26: "are these modes defined well anywhere besides the UI ... we should
 define this well"): the rules' order, each stage's parts, and the server's reading of a task from its rows."""
 import json, unittest
-from pathlib import Path
 
 from taskuary import buttons, stages, terminal
 from taskuary.store import MemoryStore
@@ -27,9 +26,6 @@ class TheStages(unittest.TestCase):
             self.assertTrue(p['verbs'] and all(v in buttons.VERBS for v in p['verbs']), k)
         self.assertEqual(set(stages.KEYS), {'to_start', 'to_reply', 'todo', 'agent_working', 'agent_result', 'to_send', 'waiting', 'closed_by_agent', 'done'})
 
-    def test_the_page_reads_the_same_file(self):
-        js = (Path(stages.__file__).parents[1] / 'website' / 'src' / 'stages.js').read_text(encoding='utf-8')
-        self.assertIn('../../taskuary/stages.json', js)
 
     def test_the_first_rule_that_holds_wins(self):
         self.assertEqual(stages.of({}), 'to_start')

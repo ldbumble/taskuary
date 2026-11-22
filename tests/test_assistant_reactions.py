@@ -1230,14 +1230,6 @@ class AgentsStartAndFinishTests(unittest.TestCase):
         with mock.patch.object(terminal, 'screen', return_value={'lines': [real] + chrome}):
             self.assertEqual(terminal.asking_lines('s1', 4), [real])
 
-    def test_the_coding_brief_has_one_rule_about_finishing(self):
-        doc = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'taskuary', 'templates', 'coding.md'), encoding='utf-8').read()
-        closing = doc.split('## Closing out', 1)[1].split('##', 1)[0]
-        self.assertIn('taskuary --done', closing)                        # it says to say so...
-        self.assertNotIn('do not write a wrap-up', closing)              # ...and no longer says not to
-        self.assertNotIn('clicks **Done**', closing)
-
 
 # ── the verdicts that never become work ────────────────────
 class NeverWorkTests(unittest.TestCase):

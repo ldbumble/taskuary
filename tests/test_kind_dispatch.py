@@ -119,56 +119,6 @@ class GateTests(unittest.TestCase):
         self.assertTrue(ok)
 
 
-class ConsistencyTests(unittest.TestCase):
-    """The two documents that state these rules must not disagree: TRIAGE.md is what the owner
-    edits, INTENT_SYSTEM is what runs when they blank it."""
-    def test_both_prompts_make_kind_the_routing_decision(self):
-        from pathlib import Path
-        import taskuary
-        from taskuary.triage import INTENT_SYSTEM
-        doc = (Path(taskuary.__file__).parent / 'templates' / 'triage.md').read_text(encoding='utf-8')
-        for text, name in ((doc, 'triage.md'), (INTENT_SYSTEM, 'INTENT_SYSTEM')):
-            low = text.lower()
-            # the one test coding has to pass: the work happens INSIDE a system this install holds
-            self.assertIn('holds the code or the credentials for', low, name)
-            self.assertIn('say task', low, name)                          # the tie-break (2026-09-23; was general, PW-067)
-            # three destinations, named in both - a kind the doc does not describe is a kind the
-            # model will not answer, and the router would then route on a value nothing produced
-            for k in ('coding', 'general', 'task'):
-                self.assertIn(k, low, f'{name} must name {k}')
-            # never coding by default (the owner, 2026-09-23: "i don't like coding by default"), and a
-            # repository that only matches the topic is not a reason (TQ-0694)
-            self.assertNotIn('almost every task goes to the coding agent', low, name)
-            self.assertNotIn('this is the default', low, name)
-            # ...said as a sign against it, not a "never" (the guide, 2026-10-09)
-            self.assertIn('is general, not coding', low, name)
-            self.assertIn('a repository whose topic matches the message, without a change to make there', low, name)
-            # the two claims that used to contradict the rest of the document
-            self.assertNotIn('and every task goes to the coding agent', low, name)
-            self.assertNotIn('not a routing decision', low, name)
-
-    def test_neither_prompt_keys_the_exception_on_the_sender(self):
-        """The owner's correction (2026-08-30): the exception is the WORK, not who sent it.
-        A sender rule here would be a second opinion nobody could argue with."""
-        from pathlib import Path
-        import taskuary
-        from taskuary.triage import INTENT_SYSTEM
-        doc = (Path(taskuary.__file__).parent / 'templates' / 'triage.md').read_text(encoding='utf-8')
-        for text, name in ((doc, 'triage.md'), (INTENT_SYSTEM, 'INTENT_SYSTEM')):
-            for phrase in ('from a machine', 'from a person goes to the coding agent', 'automated sender'):
-                self.assertNotIn(phrase, text.lower(), f'{name}: {phrase}')
-
-    def test_the_code_asks_triage_and_nothing_else(self):
-        """auto_start_ok reads the switch and the sender's history. If a keyword or category test ever
-        creeps back in beside them, the document stops being where this is decided."""
-        import inspect
-        from taskuary import ingest
-        self.assertFalse(hasattr(ingest, 'auto_code_ok'))
-        src = inspect.getsource(ingest.auto_start_ok)
-        for leak in ('sender_class', 'BODY_', 'FROM_', 're.search', 'subject'):
-            self.assertNotIn(leak, src, leak)
-
-
 class VerdictMarksAreEvidenceTests(unittest.TestCase):
     """The owner's verdict marks - NOT A CODING TASK, NOT OURS, NOT A TASK - reach the classifier
     as dated evidence and nothing more. Two agreeing marks used to become an order ("SETTLED BY

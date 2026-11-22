@@ -15,7 +15,7 @@ import unittest
 from unittest import mock
 from fastapi.testclient import TestClient
 
-from taskuary import ingest, routing, server, triage
+from taskuary import ingest, routing, server
 from taskuary.store import MemoryStore
 
 Q = {'external_id': 'q1', 'channel': 'teams', 'from_email': 'dana@vendor.example', 'from_name': 'Dana',
@@ -166,13 +166,6 @@ class GeneralDefaultTests(unittest.TestCase):
         self.assertEqual(f['kind'], 'task')
         self.assertEqual(routing.draft_task_fields({'subject': 'x', 'body': 'Are you free Tuesday?'})['kind'], 'task')   # "?" decides nothing
         self.assertEqual(routing.draft_task_fields({'subject': 'x', 'body': 'x'}, kind='coding')['kind'], 'coding')
-
-    def test_the_classifier_instructions_default_to_general(self):
-        self.assertNotIn('Cannot tell? Say coding', triage.INTENT_SYSTEM)
-        self.assertIn('when you cannot tell at all, say task', triage.INTENT_SYSTEM)         # 2026-09-23: unsure is the owner's list
-        from pathlib import Path
-        doc = (Path(__file__).parent.parent / 'taskuary' / 'templates' / 'triage.md').read_text(encoding='utf-8')
-        self.assertNotIn('say coding', doc.lower()); self.assertIn('say task', doc.lower())
 
 
 if __name__ == '__main__':

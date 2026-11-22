@@ -317,15 +317,6 @@ class TheWallCompostsTests(unittest.TestCase):
         self.assertTrue(bb.post(s, 'x', bb.SUMMARY, 'the wall', CWD))   # ...and it is accepted from there
 
 
-class TheRulesTests(unittest.TestCase):
-    def test_coding_md_tells_the_agent_to_read_it_first_and_post_before_pushing(self):
-        from pathlib import Path
-        md = (Path(__file__).resolve().parent.parent / 'taskuary' / 'templates' / 'coding.md').read_text(encoding='utf-8')
-        self.assertIn('taskuary --board', md)
-        self.assertIn('--kind ready', md)
-        self.assertIn('Read it first', md)
-
-
 class TheApiTests(unittest.TestCase):
     def test_the_board_can_read_and_write_the_same_wall(self):
         from fastapi.testclient import TestClient

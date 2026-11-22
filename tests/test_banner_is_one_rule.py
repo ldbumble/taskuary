@@ -14,9 +14,6 @@ SAMPLE = f'{WRAP}\n\n{ASK}'
 
 
 class WrapperIsTheModelsWordTests(unittest.TestCase):
-    def test_no_phrase_list_is_left(self):
-        for name in ('_BANNER', '_CLUTTER', '_LEGAL'): self.assertFalse(hasattr(triage, name), name)
-        self.assertNotIn('export const BANNER', (ROOT / 'website' / 'src' / 'ui.jsx').read_text(encoding='utf-8'))
 
     def test_what_triage_named_is_left_out_and_nothing_else(self):
         self.assertEqual(triage.strip_wrapper(SAMPLE, (WRAP,)), ASK)

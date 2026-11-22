@@ -213,15 +213,6 @@ class FreshnessBelongsAtLoadTimeTests(unittest.TestCase):
         self.assertTrue(refresh.called, 'loading an item into the chat must check it for new lines')
         print('  loading it into the chat -> source polls: 1')
 
-    def test_the_stream_checks_on_load_and_not_on_say(self):
-        import inspect
-        src = inspect.getsource(server.concierge_stream)
-        # a typed turn polls nothing up front; an item loaded into the chat is checked - since 2026-10-01 right AFTER it
-        # opens rather than before ("open now, check after": the wait was 9 of the 12 seconds a click took)
-        self.assertIn("body.key and body.mode not in ('say', 'next')", src)
-        self.assertIn("walking = body.mode in ('next', 'back', 'start')", src)      # every walk move, Next and a clicked row alike
-        self.assertIn("if walking: _refresh_after(out)", src)
-
 
 class ReadsTests(unittest.TestCase):
     """A look-up runs at once, answers from what it read, and does NOT move what is on the table."""

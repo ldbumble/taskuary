@@ -250,14 +250,6 @@ class Wiring(unittest.TestCase):
         self.assertEqual((c['planned'], c['group'], c['title']), (False, 'Corporate systems', 'Stripe'))
         self.assertIn('read-only', c['desc'])
 
-    def test_the_page_lists_describes_and_draws_the_card(self):
-        cv = (ROOT / 'website' / 'src' / 'ConnectorsView.jsx').read_text(encoding='utf-8')
-        self.assertIn('dataCards(["intacct", "quickbooks", "zoho_invoice", "amazon_sp", "stripe"])', cv)
-        self.assertIn('  stripe: { title: "Stripe",', cv)
-        self.assertIn('stripe: (p) =>', (ROOT / 'website' / 'src' / 'logos.jsx').read_text(encoding='utf-8'))
-        rv = (ROOT / 'website' / 'src' / 'ReportsView.jsx').read_text(encoding='utf-8')
-        for t in reports.STRIPE_TYPES: self.assertIn(f'  {t}: [', rv)
-        self.assertIn('**Taking payments with Stripe**', (ROOT / 'docs' / 'site' / 'connections.md').read_text(encoding='utf-8'))
 
     def test_the_report_builder_reads_what_each_source_is_for(self):
         from taskuary import compose

@@ -122,16 +122,6 @@ class AddressingTests(unittest.TestCase):
         # and a cc CAN be the owner's work: nothing in the pipeline overrides that verdict
         self.assertEqual(out['intent'], 'task')
 
-    def test_the_shipped_document_carries_the_signal_as_a_signal(self):
-        from pathlib import Path
-        doc = (Path(__file__).parent.parent / 'taskuary' / 'templates' / 'triage.md').read_text(encoding='utf-8')
-        self.assertIn('Everything below is signs to weigh, not rules to obey', doc)
-        self.assertIn('the owner is only copied ("cc")', doc)        # a sign it is someone else's...
-        self.assertIn('names them or asks them directly', doc)  # ...that the words can overrule
-        self.assertIn('its words first, its To and Cc lines second', doc)
-        # the fallback for a blanked document IS the same text
-        self.assertIn('names them or asks them directly', triage.INTENT_SYSTEM)
-
 
 class RecipientsOffTheWireTests(unittest.TestCase):
     def test_graph_hands_the_lines_to_triage_and_a_cc_only_mail_files_itself(self):

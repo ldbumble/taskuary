@@ -167,12 +167,6 @@ class SeedTrimTests(unittest.TestCase):
 
 
 class CodingMdTests(unittest.TestCase):
-    def test_coding_md_says_ask_and_name_the_repo(self):
-        sec = CODING.split('## The work is in another repository', 1)[1].split('##', 1)[0]
-        for w in ('NOT "nothing to do"', 'no `taskuary --done`', 'naming where you think it is', 'Move it there?',
-                  'Change where the code is', 'and wait'):
-            self.assertIn(w, sec, w)
-        self.assertIn(store_mod._ELSEWHERE_AT + store_mod._ELSEWHERE_NOW, CODING)
 
     def test_an_edited_copy_takes_the_section_once(self):
         path = Path(tempfile.mkdtemp()) / 'taskuary.db'

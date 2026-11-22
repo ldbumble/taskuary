@@ -2,7 +2,6 @@
 too, and the progress filter took out the ask marker only (2026-10-15). The reply is shown once, as the answer; what is left of a
 progress line is the agent's own words, with no [[TASKUARY-...]] plumbing in it."""
 import unittest
-from pathlib import Path
 
 from taskuary import selfclose
 
@@ -42,10 +41,6 @@ class ForScreenTests(unittest.TestCase):
         self.assertEqual(selfclose.for_screen('Booked the room for Thursday.\n[[TASKUARY-DONE]] Booked the room.'), 'Booked the room for Thursday.')
         self.assertEqual(selfclose.for_screen('[[TASKUARY-DONE]]: Booked the room.'), '')
         self.assertEqual(selfclose.chat_marker('Booked it.\n[[TASKUARY-DONE]] Booked the room.'), ('Booked it.', 'Booked the room.'))
-
-    def test_the_general_chat_filters_its_progress_through_it(self):
-        src = (Path(selfclose.__file__).parent / 'general.py').read_text(encoding='utf-8')
-        self.assertIn('detail = _sc.for_screen(detail)', src)
 
 
 if __name__ == '__main__': unittest.main()

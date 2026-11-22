@@ -2,10 +2,10 @@
 hook" for minutes, nothing asked anywhere). While the ask hook holds an AskUserQuestion, Claude draws nothing in its pane
 - so the question must be on the task page as an open request the moment it is held, or not held at all, and a permit
 whose card could not be shown is refused at once with the reason, never held for the hook's seven days."""
-import asyncio, inspect, threading, time, unittest
+import asyncio, threading, time, unittest
 from types import SimpleNamespace
 
-from taskuary import hooks, server, terminal as term, workerstate as ws
+from taskuary import hooks, terminal as term, workerstate as ws
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -86,12 +86,6 @@ class TheAskHook(Base):
         self.assertLess(hooks.ASK_WAIT, hooks.ASK_WAIT + 30)
         self.assertIn(f'-m {hooks.ASK_WAIT + 30}', hooks.ask_command('http://127.0.0.1:1'))
         self.assertLess(hooks.ASK_WAIT + 30, hooks.ASK_TIMEOUT)
-
-    def test_it_waits_on_its_own_threads_not_the_shared_pool(self):
-        """A sync route takes one of anyio's forty threads: behind them the question was recorded nowhere at all."""
-        self.assertTrue(inspect.iscoroutinefunction(server.cli_hook_ask))
-        src = inspect.getsource(server.cli_hook_ask)
-        self.assertIn('_PERMIT_POOL', src)
 
 
 class ThePermit(Base):

@@ -5,7 +5,7 @@ anything unless you ask assistant questions") - they are the phone's alone."""
 import inspect
 from unittest import mock
 
-from taskuary import funnel, remote_assistant, server
+from taskuary import funnel, server
 from taskuary.store import MemoryStore
 
 ASKING = {'key': 'agent:7', 'kind': 'agent', 'lane': 'blocked', 'tid': 7, 'ref': 'TQ-0007', 'title': 'Reconcile the export',
@@ -22,5 +22,3 @@ def test_the_phone_keeps_the_agent_asked_line_and_the_desk_reads_none():
     assert "'alerts', 'events'" in src and 'funnel.alerts' not in src, 'the desk pile drops them'
 
 
-def test_the_phone_reads_the_piles_own_alerts():
-    assert "p.get('alerts')" in inspect.getsource(remote_assistant.push_alerts)

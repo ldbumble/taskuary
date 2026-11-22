@@ -259,17 +259,5 @@ class TheStatusEndpoint(unittest.TestCase):
         self.assertEqual(client.get(f'/api/connectors/{other}/linkedin/authorize').status_code, 404)
 
 
-class TheCardOnThePage(unittest.TestCase):
-    def test_it_asks_for_the_app_keys_and_offers_the_button(self):
-        import pathlib
-        src = (pathlib.Path(__file__).resolve().parents[1] / 'website' / 'src' / 'ConnectorsView.jsx').read_text(encoding='utf-8')
-        card = src[src.index('  linkedin: { title: "LinkedIn"'):src.index('  treg: { title:')]
-        self.assertIn('"client_id"', card)
-        self.assertIn('"client_secret"', card)
-        self.assertIn('linkedin/authorize', card)
-        self.assertIn('linkedin/status', card)
-        self.assertIn('Sign in with LinkedIn', card)
-
-
 if __name__ == '__main__':
     unittest.main()

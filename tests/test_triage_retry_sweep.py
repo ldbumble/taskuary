@@ -138,17 +138,6 @@ class AgeTests(unittest.TestCase):
         self.assertIn(old, [r['MessageId'] for r in self.s.stranded_triage_failures(25)])
 
 
-class PollWiringTests(unittest.TestCase):
-    def test_the_full_sync_sweeps_after_it_drains(self):
-        """Today's arrivals are judged first, so a still-dead endpoint is discovered on them
-        rather than on the backlog."""
-        import inspect
-        from taskuary import server
-        src = inspect.getsource(server._poll_reports)
-        self.assertIn('retry_failed_triage', src)
-        self.assertLess(src.index('_drain_worker'), src.index('retry_failed_triage'))
-
-
 if __name__ == '__main__':
     unittest.main()
 

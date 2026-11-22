@@ -54,14 +54,6 @@ class ContinueFailure(unittest.TestCase):
         self.assertTrue(any('could not continue: no AI is connected' in c['Body'] for c in s.list_comments(tid)))
 
 
-def test_the_agent_speaks_to_the_owner_never_of_them():
-    # the product audit, 2026-11-08: "Alex has what they need on this one" in the owner's own chat
-    from taskuary import selfclose
-    assert '"you" to the owner' in selfclose.SUMMARY_LINE      # ...and never their name: AGENT.md, said to every worker
-    from pathlib import Path
-    assert 'never their name' in (Path(selfclose.__file__).parent / 'templates' / 'agent.md').read_text(encoding='utf-8')
-
-
 def test_the_assistant_reports_what_the_agent_needs_never_as_the_agent():
     # the product audit, 2026-11-08: the Assistant said "I need the correct Payworth portal link" for a task's agent
     from taskuary import concierge

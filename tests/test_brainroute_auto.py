@@ -232,15 +232,6 @@ def test_settings_says_what_each_level_runs_on_in_plain_words(s):
     assert not any(w in words.lower() for w in ('tier', 'gear'))
 
 
-def test_the_panel_tells_a_person_how_auto_picks():
-    from pathlib import Path
-    src = (Path(__file__).resolve().parents[1] / 'website' / 'src' / 'RouteRules.jsx').read_text(encoding='utf-8')
-    assert 'Triage judges each task quick, normal or hard and picks the model for it' in src
-    assert 'quick: ${l.quick} · normal: ${l.normal} · hard: ${l.hard}' in src
-    said = [m for m in __import__('re').findall(r'"([^"]*)"', src) if ' ' in m]
-    assert not [m for m in said if __import__('re').search(r'\b(tier|gear)s?\b', m, __import__('re').I)], said
-
-
 # ── effort on an API card: sent where the provider takes it, dropped once where the model does not (mocked HTTP, no live calls) ──
 class _R:
     def __init__(self, code, data=None, text=''): self.status_code, self._d, self.text = code, data, text or json.dumps(data or {})

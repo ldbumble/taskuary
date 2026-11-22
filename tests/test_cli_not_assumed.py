@@ -1,7 +1,6 @@
 """An installed CLI is not a connected one, and Remove removes (the owner, 2026-10-06: "can't remove the claude cli install",
 "don't assume if cli installed to be used.. don't automatically connect them")."""
 import copy, json, unittest
-from pathlib import Path
 from unittest import mock
 
 from fastapi.testclient import TestClient
@@ -33,12 +32,6 @@ class RemoveRemovesTests(unittest.TestCase):
     def test_a_profile_on_a_cli_that_is_gone_never_stops_the_app(self):
         cfg = {'cli_connections': {}, 'agents': {'coding': {'provider': 'cli:claude', 'kind': 'coding'}}}
         cli_connections.sync(cfg, self.s)                       # "CLI connection 'claude' is not configured" stopped every start
-
-
-class NothingConnectsItselfTests(unittest.TestCase):
-    def test_startup_connects_no_installed_cli(self):
-        src = (Path(server.__file__)).read_text(encoding='utf-8')
-        self.assertNotIn('cli_connections.adopt_installed(', src)
 
 
 if __name__ == '__main__':

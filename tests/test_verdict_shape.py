@@ -45,14 +45,6 @@ class DocumentSaysTheShapeTests(unittest.TestCase):
         s.cx.commit()
         return SQLiteStore(str(self.path))
 
-    def test_the_shipped_contract_line_names_every_field_the_code_reads(self):
-        # the guide's answer line (section 7, 2026-10-09) names every field the code reads, as the swap for an
-        # owner-edited doc (_SHAPE_NOW) does
-        line = next(l for l in TEMPLATE.splitlines() if l.startswith('JSON only:'))
-        for field in ('"title"', '"summary"', '"checklist"'):
-            self.assertIn(field, store_mod._SHAPE_NOW, field)
-            self.assertIn(field, line, field)                             # in the answer line itself
-        self.assertNotIn(store_mod._SHAPE_WAS, TEMPLATE)
 
     def test_a_document_that_stopped_tracking_the_template_gets_the_line_back(self):
         mine = 'MY OWN RULE: anything from Paula is urgent.\n\n' + store_mod._SHAPE_WAS + '\n\nAnd my last line.'

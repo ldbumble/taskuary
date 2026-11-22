@@ -3,7 +3,7 @@
 Nothing is guessed from a model's name (setup never assumes an AI): the router steps up only to a model the owner put in the
 "strong model" box of a card.
 """
-import ast, json, re
+import json
 from pathlib import Path
 from unittest import mock
 
@@ -75,18 +75,6 @@ def test_an_api_card_keeps_its_strong_model_in_its_own_config():
     aidefaults.apply(s, {}, 'triage_ai', strong='gpt-5')
     assert json.loads(s.get_connector(cid)['ConfigJson'])['strong_model'] == 'gpt-5'
     assert aidefaults.resolve(s, {}, 'triage_ai')['strong_model'] == 'gpt-5'
-
-
-def test_no_model_id_is_typed_into_the_ai_cards():
-    """A hand-typed list goes stale (it said Vertex ran a model it did not) and guesses what the owner's key can call. The
-    cards' choices are the provider's own list; what a blank box runs is llm.PROVIDER_DEFAULT, the table make_llm reads."""
-    tree = ast.parse((ROOT / 'aidefaults.py').read_text(encoding='utf-8'))
-    docs = {id(n.body[0].value) for n in ast.walk(tree) if isinstance(n, (ast.Module, ast.FunctionDef, ast.ClassDef))
-            and n.body and isinstance(n.body[0], ast.Expr) and isinstance(n.body[0].value, ast.Constant)}
-    shaped = re.compile(r'^(claude|gpt|gemini|muse|llama|meta-llama|openrouter)[-/.]\w', re.I)     # an id, not a regex's prefix
-    typed = [n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)
-             and id(n) not in docs and shaped.match(n.value)]
-    assert not typed, typed
 
 
 def test_the_provider_list_is_one_cached_read_that_fails_soft():

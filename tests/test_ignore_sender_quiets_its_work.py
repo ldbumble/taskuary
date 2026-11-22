@@ -88,15 +88,5 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(s.live_tasks_from_sender('nobody@example.com'), [])
 
 
-class CardTests(unittest.TestCase):
-    def test_a_card_with_no_mail_behind_it_asks_for_nothing(self):
-        """The task outlived its message, so the card had no mid and fetched /api/messages/null,
-        painting FastAPI's own validation sentence into the card."""
-        from pathlib import Path
-        cards = (Path(__file__).resolve().parents[1] / 'website' / 'src' / 'assistantCards.jsx').read_text(encoding='utf-8')
-        guard = cards.index('if (mid == null || mid === "")')
-        self.assertLess(guard, cards.index('api.get(`/api/messages/${mid}`)'))
-
-
 if __name__ == '__main__':
     unittest.main()

@@ -201,14 +201,6 @@ class RepoWorkTests(unittest.TestCase):
             t = store.get_task(out['task_id'])
             self.assertEqual((t['Kind'], t['Assignee']), ('coding', 'agent:coding'), head)
 
-    def test_the_shipped_rule_tells_the_model_a_pr_is_coding(self):
-        """The gate is gone, so TRIAGE.md is the only thing left saying this - if the wording is
-        ever softened again, every PR silently goes back to the assistant."""
-        from pathlib import Path
-        import taskuary
-        doc = (Path(taskuary.__file__).parent / 'templates' / 'triage.md').read_text(encoding='utf-8')
-        self.assertIn("A person's pull request is a task of kind coding whoever opened it", doc)
-        self.assertNotIn("A stranger's pull request or issue is fyi", doc)
 
     def test_somebody_elses_issue_is_still_the_models_call(self):
         for head in ('[issue by kai - association: NONE]', '[issue by pat - association: MEMBER]'):

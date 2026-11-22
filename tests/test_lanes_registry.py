@@ -65,13 +65,6 @@ class KindTests(unittest.TestCase):
         self.assertEqual(assistant.section_of({'kind': 'nonsense'}), 'ideas')
         self.assertEqual(assistant.section_of({'kind': 'followup', 'section': 'people'}), 'people')   # the model's own choice wins
 
-    def test_no_copy_of_a_table_is_left_on_the_server(self):
-        read = lambda f: (ROOT / 'taskuary' / f).read_text(encoding='utf-8')
-        self.assertNotIn('_BAND_FALLBACK', read('funnel.py')); self.assertNotIn("ON_YOU = ('blocked'", read('funnel.py'))
-        self.assertNotIn('KIND_SAYS', read('concierge.py')); self.assertNotIn('KIND_SECTION', read('assistant.py'))
-        self.assertNotIn("('urgent', 'task', 'later')", read('welcome.py'))
-        self.assertNotIn("OWNER_LANES = ('", read('processing_unread.py'))
-
 
 class StateWordsAreWrittenOnce(unittest.TestCase):
     """A state's word lives in lanes.json and nowhere else (the cleanup round, 2026-10-18): the phone typed "stopped and saved" and

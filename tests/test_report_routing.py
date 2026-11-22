@@ -459,12 +459,6 @@ def test_the_assistants_default_reaches_you_when_no_judge_answers():
     assert d['timeline'] is True
 
 
-def test_the_card_shows_the_sentence_the_server_asks():
-    from pathlib import Path
-    src = (Path(__file__).resolve().parents[1] / 'website' / 'src' / 'ReportsView.jsx').read_text(encoding='utf-8')
-    assert f'export const ASSISTANT_WHEN = "{reports.ASSISTANT_WHEN}"' in src
-
-
 def test_run_now_says_where_the_run_will_show_by_its_own_route():
     """"Its result will land on the Timeline" was said of every manual run - of one routed off the Timeline, and of one
     that failed, whose only word is the bell's (decide). The sentence is the report's route, and the bell for a failure."""

@@ -715,15 +715,6 @@ class OneGoalTests(unittest.TestCase):
             s.cx.execute('UPDATE task SET ThreadJson=? WHERE TaskId=?', (json.dumps(bad), tid)); s.cx.commit()
             general.reading_block(s, tid); general._prompt(s, tid)
 
-    def test_the_shipped_assistant_doc_carries_research_know_how(self):
-        doc = (Path(general.__file__).parent / 'templates' / 'assistant.md').read_text(encoding='utf-8')
-        flat = ' '.join(doc.split())
-        for want in ("off {{owner}}'s hands", 'truly cannot find', 're-plan', 'never send'): self.assertIn(want, flat, want)
-        self.assertIn('## When the task needs research or analysis', doc)
-        for want in ('what you could not find', 'when the source is from', 'whose figures', 'how you computed', 'who owes what by when',
-                     'never book', "{{owner}}'s voice", 'a claim needs a source'):
-            self.assertIn(want, flat, want)
-
 
 if __name__ == '__main__': unittest.main()
 

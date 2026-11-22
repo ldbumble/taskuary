@@ -18,6 +18,7 @@ raised in the window, so the brief consolidates instead of rediscovering.
 """
 import logging, math
 from datetime import datetime, timedelta
+from . import categories
 
 logger = logging.getLogger(__name__)
 
@@ -461,7 +462,7 @@ def gather(store, days: int = DAYS) -> str:
     # machines" is a fact worth a glance
     feed = [m for m in store.feed(limit=500, days=math.ceil(span)) if A._ts(m.get('SentAt')) >= since]
     LABEL = {'coding': 'coding (sent to the agent)', 'todo': 'to do (yours, not code)', 'review': 'review (a reply drafted for you)',
-             'info': 'info (a person told you something)', 'automated': 'automated (a system told you something)',
+             'info': f"info ({categories.TOLD['person']})", 'automated': f"automated ({categories.TOLD['automated']})",
              'promo': 'promo (newsletters, marketing)', 'filed': 'filed', 'ignored': 'ignored', 'report': 'report',
              'feed': 'feed', 'yours': 'your replies', 'triaging': 'still triaging', 'assistant': 'assistant (its own posts)'}
     counts = {}

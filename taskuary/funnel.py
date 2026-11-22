@@ -15,7 +15,7 @@ from loguru import logger
 from . import kinds as task_kinds
 from .timewords import plural
 from .store import task_ref, auto_code_enabled
-from . import buttons, lanes
+from . import buttons, categories, lanes
 from .lanes import level_of, on_you, waits_on_you, SECTION_WORDS, MAIL_KINDS   # the rail's rules, where their readers find them
 from .categories import agent_word
 from .timewords import until_m
@@ -477,7 +477,7 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             if group and threads.get(group) is None: threads[group] = out[-1]
             continue
         # ...and a list's way off it, still unpressed (store.feed `Unsub`): the card's Unsubscribe (unsubscribe.py)
-        out.append(_item(f"msg:{r['MessageId']}", 'fyi', 'fyi', subj, why=_reason_said(r.get('RouteReason')) or 'a person told you something; nothing to do',
+        out.append(_item(f"msg:{r['MessageId']}", 'fyi', 'fyi', subj, why=_reason_said(r.get('RouteReason')) or f'{categories.told_you(r)}; nothing to do',
                          **({'unsub': r['Unsub']} if r.get('Unsub') else {}), **base))
         if group and out and threads.get(group) is None: threads[group] = out[-1]
     # ONE brief leads the day. `brief_today` is true of every digest run made today, and the digest

@@ -94,6 +94,13 @@ def sender_class(r: dict, team_domains=()) -> str:
     return sc if sc in SENDER_CLASSES else 'person'
 
 
+TOLD = {'person': 'a person told you something', 'automated': 'a system told you something', 'bulk': 'a mailing list sent this'}
+def told_you(r: dict) -> str:
+    """Who an FYI came from, in words, off its stored sender class (sender_class) - the one wording the rail's row and the digest read. The
+    row said "a person told you something" of a no-reply system notice (the walk, 2026-11-22): a fixed fallback that named a class."""
+    return TOLD[sender_class(r or {})]
+
+
 def automated(r: dict) -> bool:
     """A machine sent it, so nobody reads a reply to it: the row's stored class (the verdict's, else the headers') is not a person - and a
     row with no class is one only where the mail system itself marked it an auto-reply (autoreply.is_auto). Never read off the address."""

@@ -1065,6 +1065,13 @@ class MemoryTests(unittest.TestCase):
         self.assertIsNone(railwalk.top(s))
         self.assertIn('surfaced', funnel.VERBS)
 
+    def test_an_fyi_with_no_reason_says_who_sent_it_by_its_stored_class(self):
+        # the walk, 2026-11-22: a no-reply system notice's row read "a person told you something" - a fixed fallback that named a class
+        s = store()
+        m = mail(s, 'Confirm your admin email', who='PhishGuard', email='no-reply@phishguard.example', body='Confirm now.', status='filed')
+        s._exec("UPDATE message SET SenderClass='automated' WHERE MessageId=?", (m,)); s.add_route(m, None, 'file', None, '', [], 'triage')
+        self.assertEqual(funnel.item_for_key(s, f'msg:{m}')['why'], 'a system told you something; nothing to do')
+
     def test_a_low_priority_row_is_unread_and_can_be_pulled_into_the_chat_by_hand(self):
         s = store()
         m = mail(s, 'Weekly newsletter', who='news@vendor.com', email='news@vendor.com', body='Unsubscribe here. Manage your preferences.', status='filed')

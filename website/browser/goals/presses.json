@@ -3,6 +3,8 @@
  {"do": "quiet", "max": 300},
  {"do": "press", "button": "^Send$", "times": 100},
  {"do": "expect", "never": ["Something went wrong", "Error"]},
+ {"do": "wait", "s": 20},
+ {"do": "expect", "never": ["went to Erin at", "was sent at", "has been sent to Erin", "email to Erin (went|was sent)"]},
  {"do": "new", "say": "Draft an email to Paula Vance (paula@northwind.example) asking for the venue contract"},
  {"do": "quiet", "max": 300},
  {"do": "press", "button": "Dismiss|Don.t send|Reject", "times": 60},

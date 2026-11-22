@@ -1066,7 +1066,8 @@ def _changed(store, r) -> str:
 # A PRESS THE AGENT SAID IT WAITS ON WAKES IT, ONCE (the owner, 2026-11-08): a press is otherwise a line it hears with the owner's next one -
 # but a turn that asked for Send or a hand-off and said it would follow up (its summary's `after_press`) is started again by that press
 FOLLOW_UP = ('The owner just pressed what your last turn waited on (see what the owner did since your last answer). Carry on from there as '
-             'you said you would - check it landed first; never redo it.')
+             'you said you would - check it landed first; never redo it. Its card already says what the press did: never say that again - '
+             'say only the next thing you do, or nothing.')
 _WOKEN: set = set()
 # ...AND WHAT IS SAID WHILE THAT WAKE IS STILL STARTING RIDES IN IT (the held-steps round, 2026-11-18): two cards pressed a few seconds apart on a
 # resting agent - the second press found its answer already woken, no session up yet to queue for, and its words went nowhere: the task said
@@ -2111,7 +2112,8 @@ _ACTION = ("NEXT STEPS - DO WHAT YOU CAN DO, rather than hand it back. An act - 
            "owner and tells you once pressed\n"
            "- a report, sheet, picture or video: make it in your task folder - a picture or video with an image or video card's tool where one "
            "is connected, else make it yourself in code (a picture: an SVG rendered to PNG; a video: frames you draw, joined into an MP4 or a GIF); "
-           "never hand him a prompt to paste into something else\n"
+           "never hand him a prompt to paste into something else. What it says was done comes from your tools' results, written after they "
+           "are back\n"
            # ...AND A PART THAT IS NOT THIS TASK'S (the owner, 2026-11-10: "random things that triage puts in one task that doesn't belong
            # really, (where agent should suggest break out to new task)"): judged by what the messages are about - never by a word in them
            "- another matter filed here (unrelated to the rest): never fold it in or describe the mix-up - {brk} for one press to move "

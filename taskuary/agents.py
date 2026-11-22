@@ -1986,7 +1986,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     # stream-json input serves every turn from one process instead of starting the CLI per call (clipool).
     keep = profile.get('keep_alive')
     if _keeps(profile, family, args):
-        return _run_live(profile, name, cmd, prompt, trace, keep, resume, cancel, extra_env)
+        return _run_live(profile, name, cmd, prompt, trace, keep, resume, cancel, extra_env, images=images)
     # ...and a ONE-SHOT JUDGEMENT on a process already up (clipool.spare_turn): no tools, no conversation to resume, no picture to show
     if _spares(profile, family, args, resume, images):
         return _run_live(profile, name, cmd, prompt, trace, None, None, cancel, extra_env, spare=True)
@@ -2300,7 +2300,7 @@ def _warm_acp(profile: dict, resume, extra_env, store, swap: bool) -> bool:
         logger.info(f"acp: {profile['cmd']} not warmed over ACP - {e}"); return None
 
 
-def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str, resume, cancel, extra_env, spare: bool = False):
+def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str, resume, cancel, extra_env, spare: bool = False, images=None):
     """run_cli's turn on a conversation's LIVE process: the same trace events, the same errors, the same
     (result, session_id, diff) - with no checkout to diff, since neither the Assistant nor a general agent
     works in one. `spare`: a one-shot answer on a process started ahead for this command (clipool.spare_turn)."""
@@ -2330,11 +2330,14 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
         # turn again after any end; one with tools may have done work mid-turn, and never is
         bare = '--tools' in cmd and cmd.index('--tools') + 1 < len(cmd) and cmd[cmd.index('--tools') + 1] == ''
         env = spawn_env(profile, extra_env)
+        # ...A PICTURE WITH THE TURN IS SHOWN on the live conversation too, as image blocks of its stream-json input (the walk, 2026-11-21: the
+        # floating Assistant on the CLI, its tools off, was handed a path it could not open and never saw the picture)
+        shown = [*({'type': 'image', 'source': {'type': 'base64', 'media_type': ct, 'data': b64}} for ct, b64 in images), {'type': 'text', 'text': prompt}] if images else prompt
         if spare:
             # ...keyed by everything it was started with, the environment's values too: a spare is never a call's under another token
             key = 'spare:' + hashlib.sha1(json.dumps([cmd, str(cwd or ''), sorted(env.items())]).encode('utf-8')).hexdigest()[:16]
             final, raw = clipool.spare_turn(key, cmd, prompt, on, cwd=cwd, env=env, cancel=cancel, timeout=profile.get('timeout'))
-        else: final, raw = clipool.run(keep, cmd, prompt, on, cwd=cwd, env=env, resume=resume, cancel=cancel, timeout=profile.get('timeout'), resend=bare)
+        else: final, raw = clipool.run(keep, cmd, shown, on, cwd=cwd, env=env, resume=resume, cancel=cancel, timeout=profile.get('timeout'), resend=bare)
     except PermissionError as e:
         raise FileNotFoundError(denied_msg(name, cmd[0] if cmd else '', e)) from e
     except Cancelled: raise

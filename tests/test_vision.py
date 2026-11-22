@@ -178,3 +178,18 @@ class ReportOutputApiTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class LiveConversationPictureTests(unittest.TestCase):
+    def test_a_picture_on_a_kept_conversation_is_sent_as_an_image_block(self):
+        """The walk, 2026-11-21: the floating Assistant on the CLI brain - a conversation kept live, its tools off - was handed only the
+        picture's path, which it cannot open, and never saw the picture. Its turn now carries the picture itself."""
+        from taskuary import agents, clipool
+        sent = []
+        prof = {'cmd': 'claude', 'args': ['-p', '--output-format', 'stream-json', '--input-format', 'stream-json', '--verbose', '--tools', ''],
+                'keep_alive': 'dock:1'}
+        with mock.patch.object(agents, '_resolve_cmd', return_value=['claude']), mock.patch.object(agents, '_acp_road', return_value=False), \
+             mock.patch.object(clipool, 'run', side_effect=lambda key, cmd, prompt, on, **kw: sent.append(prompt) or ({'result': 'A whiteboard.', 'session_id': 's1'}, [])):
+            out, sid, _ = agents.run_cli(prof, 'What is in this picture?', lambda *a: None, images=[('image/png', 'AAAA')])
+        self.assertEqual((out, sid), ('A whiteboard.', 's1'))
+        self.assertEqual([b.get('type') for b in sent[0]], ['image', 'text'])

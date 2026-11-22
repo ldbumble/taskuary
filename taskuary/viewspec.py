@@ -165,8 +165,11 @@ def check(spec) -> dict:
     if len(els) > CAPS['elements']: raise ValueError(f'{len(els)} elements - at most {CAPS["elements"]}')
     # ...A VIEW WITH NO ROOT STANDS ON ITS ONE TOP (walk 2, 2026-11-21: Claude left `root` out and was refused twice for one chart): the one
     # element no other names as a child is the root - several tops, or none, still ask for it
-    if root in (None, '') and len(tops := [k for k in els if not any(k in (e or {}).get('children', []) for e in els.values() if isinstance(e, dict))]) == 1:
-        root = tops[0]
+    if root in (None, '') and (tops := [k for k in els if not any(k in (e or {}).get('children', []) for e in els.values() if isinstance(e, dict))]):
+        # ...and SEVERAL TOPS stand in one column, in the order given (round 3, 2026-11-22: a title and a chart, siblings with no root, were
+        # refused again) - the view the model meant, never a second try for it
+        if len(tops) == 1: root = tops[0]
+        else: root = next(f'_col{n}' for n in range(len(els) + 1) if f'_col{n}' not in els); els = {**els, root: {'type': 'grid', 'props': {'cols': '1'}, 'children': tops}}
     if root not in els: raise ValueError(f'root {root!r} is not one of the elements')
     out, path = {}, []
     def walk(eid):

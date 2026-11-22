@@ -46,3 +46,17 @@ def test_ask_stronger_with_nothing_stronger_says_so_and_the_tool_is_listed():
         agenttools.call(s, tid, 'ask_stronger', {'question': 'q'}, {'ask_stronger': lambda t, q, c: {'ok': False, 'says': 'Mistral could not be started - go on with your own judgement'}})
     from taskuary import general
     assert 'ask_stronger tool' in general._ACTION and 'Never for routine steps' in general._ACTION     # the agent is told it may
+
+
+def test_several_searches_in_one_call_run_together():
+    """The walk, 2026-11-22: a price check was minutes on the HIPAA road - each web search its own model round, one after another. Several
+    queries in one call run at once, each answer under its own query."""
+    import time as _t
+    from unittest import mock
+    from taskuary import agenttools, apiagent
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = s.create_task({'Title': 'Chair prices', 'Kind': 'general', 'Status': 'in_progress'}, 'owner')
+    def slow(store, t, q, *a, **k): _t.sleep(0.5); return f'price for {q}'
+    with mock.patch.object(apiagent, 'search', side_effect=slow), mock.patch('taskuary.harness.searcher', return_value=None):
+        t0 = _t.time(); out = agenttools.call(s, tid, 'web_search', {'queries': ['Aeron new price', 'Aeron used price', 'Leap price']}, {})
+    assert _t.time() - t0 < 1.2 and all(f'SEARCH: {q}' in out and f'price for {q}' in out for q in ('Aeron new price', 'Aeron used price', 'Leap price'))

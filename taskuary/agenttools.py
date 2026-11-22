@@ -90,7 +90,8 @@ TOOLS = {
     # ...and THE WEB, for an API card's agent on its harness CLI (harness.py): that CLI's own hosted search goes to its vendor, so it is off,
     # and the search runs here - the card's model's own search through its endpoint (apiagent.search). Served only to such a session
     'web_search': ('reach', "Search the web - through this task's AI card's own search, else a connected search service - and read "
-                            "what comes back. Read-only.", _S({'query': _STR}, ('query',)), ('GET', '/api/search')),
+                            "what comes back. Read-only. `queries`: several searches at once - they run together, one answer for all.",
+                   _S({'query': _STR, 'queries': {'type': 'array', 'items': _STR}}, ()), ('GET', '/api/search')),
     'run_system': ('reach', "Run one tool on one of the owner's systems (list_systems): {type, connector_id, ...its fields}. Reads run"
                            " at once; a file saved to SharePoint or OneDrive runs at write Authority and says where it landed. A "
                            "send, post, pay or order never runs here - it waits for the owner's press, and you are told so.",
@@ -506,6 +507,12 @@ def fit(name: str, args) -> dict:
     return a
 
 
+def _searched(one, q: str) -> str:
+    "One of several searches run together - its failure said under its own query, never the others' end."
+    try: r = one(q); return r if isinstance(r, str) else json.dumps(r, ensure_ascii=False)
+    except Exception as e: return f'(this search failed: {e})'
+
+
 def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     """Run one tool for the session on task `tid`. `doors` are the server's own handlers for the acts that have one (tool_run, tick,
     reply, draft, propose), called with the caller's request so their own checks - owns_task, scopes, the send-to-proposal rule -
@@ -595,10 +602,16 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
                                                    "read, code to run) is done with your session's own tools; a file for the owner is saved in your outputs folder.")
     if name == 'web_search':
         from . import apiagent, harness
-        if not str(a.get('query') or '').strip(): raise ValueError('`query` is empty - say what to search for')
-        return _out(apiagent.search(store, tid, str(a['query']), harness.searcher(store, tid),
-                                    lambda x: _call(store, tid, 'run_system', x, doors, skip),
-                                    lambda u: apiagent._hands(store, tid, '', 'web_fetch', {'url': u})), fence_it=True)
+        # ...SEVERAL SEARCHES IN ONE CALL RUN TOGETHER (the walk, 2026-11-22: a price check was minutes on the HIPAA road - each search its own
+        # model round, one after another): `queries` are searched at once, each answer under its own query
+        qs = list(dict.fromkeys(q for q in [str(a.get('query') or '').strip(), *(str(x).strip() for x in a.get('queries') or [])] if q))[:6]
+        if not qs: raise ValueError('`query` is empty - say what to search for')
+        one = lambda q: apiagent.search(store, tid, q, harness.searcher(store, tid), lambda x: _call(store, tid, 'run_system', x, doors, skip),
+                                        lambda u: apiagent._hands(store, tid, '', 'web_fetch', {'url': u}))
+        if len(qs) == 1: return _out(one(qs[0]), fence_it=True)
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(len(qs)) as ex: got = list(ex.map(lambda q: _searched(one, q), qs))
+        return _out('\n\n'.join(f'SEARCH: {q}\n{r}' for q, r in zip(qs, got)), fence_it=True)
     if name == 'run_system':
         r = doors['tool_run']({**a, 'task_id': tid})
         return _out(_j(json.loads(r.body) if hasattr(r, 'body') else r), fence_it=True)     # a 202 (queued) comes back as a response

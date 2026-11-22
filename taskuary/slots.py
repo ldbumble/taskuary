@@ -64,7 +64,7 @@ def is_sender(sender, to: str, name: str = '') -> bool:
     return bool(want) and want <= words(who)
 
 
-def add(store, tid: int, outputs, actor: str, sender: dict = None, again: bool = False) -> list:
+def add(store, tid: int, outputs, actor: str, sender: dict = None, again: bool = False, twice: bool = False) -> list:
     """Append these outputs as slots; one already open to the same person is not added twice, and one to `sender` (the
     message's own {name, address}) is never added - that is the reply (is_sender). A person named, not addressed, takes
     their address when exactly one person in the owner's own mail matches (people.resolve); several are kept on the slot
@@ -84,7 +84,7 @@ def add(store, tid: int, outputs, actor: str, sender: dict = None, again: bool =
             if found.get('address'): i['out']['to'] = found['address']
             elif found.get('candidates'): i['out']['candidates'] = found['candidates']
             if is_sender(sender, i['out']['to']): continue        # the name resolved to the sender's own address
-        if i['out']['to'].casefold() not in have: new.append(i)
+        if twice or i['out']['to'].casefold() not in have: new.append(i)      # ...`twice`: a second letter to them, asked for (draft)
     return store.add_checklist_items(tid, new, actor) if new else []
 
 
@@ -211,9 +211,16 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
                                                     + ' - draft to one of them only where their mail shows this is theirs (search_messages and '
                                                       'person tell you who each is), never one as a go-between; else ask the owner in one '
                                                       f'question with {g} as the answer you recommend. Nothing was drafted.'}
-    hit = next((i for i in all_(store, tid) if slot and i['id'] == slot), None) or \
+    # ...A SECOND LETTER TO ONE PERSON IS ITS OWN EMAIL WHEN ASKED FOR (the owner, 2026-11-13: two different letters to one person are legit, a
+    # duplicate copy is not): saved again to them in its turn, a letter is rewritten in place - and the agent is told so, with the way to a second
+    # one (`slot: "new"`). Told nothing, it said two were ready over the one card that stood (the card audit, 2026-11-22)
+    second = str(slot or '').strip().lower() == NEW_SLOT
+    hit = None if second else next((i for i in all_(store, tid) if slot and i['id'] == slot), None) or \
           next((i for i in open_(store, tid) if want and str(i['out'].get('to')).casefold() == want), None) or \
           (want and _reopen(store, tid, want, agent))
+    r0 = store.get_review(hit['rid']) if hit and hit.get('rid') and not slot else None
+    rewrote = r0['ReviewId'] if agent != 'owner' and r0 and r0.get('Status') == 'pending' and str(r0.get('DraftBy') or '').startswith('agent:') \
+              and not _written_before(store, tid, r0) else None
     added = False
     if hit and hit.get('done'): return {'ok': False, 'why': f"the email to {hit['out'].get('to')} was already sent or dropped"}
     if hit and want and '@' in want and str(hit['out'].get('to')).casefold() != want:
@@ -221,7 +228,8 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         hit = _point(store, tid, hit, ' '.join(str(to).split()), agent)
     if not hit:
         if not want: return {'ok': False, 'why': 'name the slot (--slot) or who it goes to (--to)'}
-        made = add(store, tid, [{'to': to, 'about': subject, 'kind': channel, **({} if agent == 'owner' else {'by': 'agent'}), **({'name': name} if name else {})}], f'agent:{agent}', again=True)
+        made = add(store, tid, [{'to': to, 'about': subject, 'kind': channel, **({} if agent == 'owner' else {'by': 'agent'}), **({'name': name} if name else {})}], f'agent:{agent}', again=True,
+                   twice=second)
         if not made: return {'ok': False, 'why': f'could not add an email to {to}'}
         hit, added = made[0], True
         store.add_comment(tid, agent, 'agent', f'{agent} added an email to {to} to what this task owes.')
@@ -263,7 +271,16 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         text = agent_signed(store, store.get_review(rid), text) or text
     store.update_review_draft(rid, text, None, by=f'agent:{agent}')
     return {'ok': True, 'review_id': rid, 'slot': hit['id'], 'added': added, **(routine_sends(store, tid, rid, agent, missing) if sends else {}),
-            **({'to_missing': to_missing(missing)} if missing else {})}
+            **({'to_missing': to_missing(missing)} if missing else {}),
+            **({'rewrote': rid, 'says': f"This rewrote your earlier email to {to} in this turn - one card stands, holding these words. For a second, "
+                                        f"separate email to them, call again with slot=\"{NEW_SLOT}\"."} if rewrote == rid else {})}
+NEW_SLOT = 'new'                 # propose_email's `slot` for a second letter to someone this turn already wrote to
+
+
+def _written_before(store, tid: int, rv: dict) -> bool:
+    "Was this card written in an earlier turn of its agent - one the owner prompted past (wrapup._turn_after)?"
+    from . import wrapup
+    return bool(wrapup._turn_after(store, tid, rv))
 
 
 # A ROUTINE'S OWN EMAIL GOES (the owner, 2026-11-17: "routines should send on their own too" - approval is only for what answers input from

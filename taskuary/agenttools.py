@@ -186,7 +186,8 @@ TOOLS = {
     # no slot, so the agent's email stood as a second card beside the empty one. The agent names the line it fills - no name is matched here
     'propose_email': ('propose', "Draft an email this task needs. `slot`: the id of the checklist line this email is (\"-> email to ..., "
                                  "slot <id>\") - it fills that line, never a second email beside it; leave it out only for an email the "
-                                 "checklist does not list. `to` is the address either way. `subject` is the line its reader sees - never this task's "
+                                 "checklist does not list; \"new\" for a second, separate email to someone you already wrote to this turn (else a save to them "
+                                 "rewrites that one). `to` is the address either way. `subject` is the line its reader sees - never this task's "
                                  "title (the owner's own label); back to someone who mailed on this task, their subject with \"Re: \". "
                                  "It waits with the owner's Send - nothing is sent. `cc`: addresses copied. `from`: a connected "
                                  "mailbox (list_systems names them; never a run_system tool) - else the one this task's mail came in "

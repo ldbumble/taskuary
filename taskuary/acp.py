@@ -312,9 +312,12 @@ def file_block(path, caps: dict) -> dict:
 
 def blocks(text, caps: dict = None) -> list:
     "A prompt as ACP content: its words, then each file its own ATTACHED block names (general.prompt_files) as a block the agent takes."
+    from pathlib import Path
     from .general import prompt_files
     out = [{'type': 'text', 'text': str(text or '')}]
-    for f in prompt_files(text):
+    # ...only a line that IS a file on this computer (the Codex walk, 2026-11-21: a seed whose next lines ran on under the block with no blank
+    # line between sent "STATUS: in_progress" and each checklist line as links to files)
+    for f in dict.fromkeys(x for x in prompt_files(text) if Path(x).is_absolute() and Path(x).is_file()):
         try: out.append(file_block(f, caps or {}))
         except Exception as e: logger.debug(f'acp: {f} rides as its path only - {e}')
     return out

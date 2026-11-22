@@ -87,6 +87,9 @@ class ATurnTests(unittest.TestCase):
         bare = acp.blocks(text, {'promptCapabilities': {}})
         self.assertEqual([(b['type'], b.get('name')) for b in bare], [('text', None), ('resource_link', 'whiteboard.png'), ('resource_link', 'lease-notes.txt')])
         self.assertEqual(acp.blocks('no files here', {}), [{'type': 'text', 'text': 'no files here'}])
+        # ...and a seed whose next lines run on under the block (the Codex walk: "STATUS: in_progress" went as a link to a file) names only files
+        ran_on = acp.blocks(text + '\nSTATUS: in_progress\n- [ ] Who can break this lease? [e17]', {'promptCapabilities': {}})
+        self.assertEqual([b.get('name') for b in ran_on[1:]], ['whiteboard.png', 'lease-notes.txt'])
         # ...and a real turn sends them: the fake takes no images, so the picture goes as a link
         sent, c = [], client()
         try:

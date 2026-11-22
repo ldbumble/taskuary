@@ -59,6 +59,19 @@ def test_a_turn_at_work_draws_its_steps_and_holds_its_card_back():
     assert [c['id'] for c in chatlog.read(s, tid, 'everything')['items'][0]['cards']] == ['r:7']
 
 
+def test_a_summary_block_streamed_across_steps_is_never_drawn():
+    """Walk 2, 2026-11-21 (Codex): the reply streamed as said steps, its summary block opening in one and closing three later - each cleaned
+    alone, the chat drew '"about": ...' and '_left": false}' as the agent's words."""
+    s, tid = world()
+    chatlog.put(s, tid, 'turn', 't:1', {'started': 1.0}, state='working')
+    for n, t in enumerate(['I searched and found nothing.', 'Is it in another folder?\n[[TASKUARY-ASK]]\n\n[[TASKUARY-SUMMARY]]{"name": "Find", ',
+                           '"about": "You asked where the plan is.", "did": "Searched,', '_left": false, "answer_is_result": false}[[/TASKUARY-SUMMARY]]']):
+        chatlog.step(s, tid, 'sid1', f's{n}', {'k': 'said', 'text': t})
+    chatlog.update(s, tid, 't:1', state='done')
+    said = ' '.join(x['text'] for x in chatlog.read(s, tid, 'everything')['items'][0]['steps'] if x['k'] == 'said')
+    assert 'Is it in another folder?' in said and '"about"' not in said and 'false}' not in said, said
+
+
 def test_a_step_after_his_line_goes_on_in_a_new_turn_under_it_with_its_files():
     """A MID-TURN LINE (the spec's stage 2 shape): Paula's line heard by a running turn - the rest of the turn is a new turn row under her
     line, and the file the step after it made is kept on that step."""

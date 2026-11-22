@@ -84,11 +84,36 @@ def said_once(t: str, seen: set) -> str:
 
 
 _PARA, _RUN = re.compile(r'\n\s*\n'), 40
+_OPEN = re.compile(r'\[\[\s*TASKUARY[-_ ]?SUMMARY\s*\]\]', re.I)
+_CLOSE = re.compile(r'\[\[\s*/\s*TASKUARY[-_ ]?SUMMARY\s*\]\]', re.I)
+
+
+def _unsummarized(steps: list) -> list:
+    """The said steps read as the one stream they are: a summary block that opens in one and closes in a later one is cut whole. Each step
+    cleaned alone drew the block's JSON tail - '"about": ...', '_left": false}' - as the agent's words (walk 2, 2026-11-21, a Codex turn)."""
+    out, inside = [], False
+    for s in steps:
+        if s.get('k') != 'said' or not s.get('text'): out.append(s); continue
+        t, keep = str(s['text']), ''
+        while t:
+            if inside:
+                if not (m := _CLOSE.search(t)): t = ''; break
+                t, inside = t[m.end():], False
+            if (m := _OPEN.search(t)): keep, t, inside = keep + t[:m.start()], t[m.end():], True
+            else: keep, t = keep + t, ''
+        # ...and a tag cut off at a step's end opens the block the next step goes on with
+        from .selfclose import _TAG_STUB
+        if not inside and (m := _TAG_STUB.search(keep)): keep, inside = keep[:m.start()], True
+        if keep.strip(): out.append({**s, 'text': keep})
+    return out
+
+
 def _said(steps: list, body: str = '', seen: set = None) -> list:
     """A turn's steps with its words cleaned (clean) - and a step that says only what the turn's answer says, or nothing, or is machinery, left
     out; each message's opener once (said_once, `seen`: the openers the turn has said - the answer's own read against them after)."""
     from .chatformat import plain_text
     out, seen = [], set() if seen is None else seen
+    steps = _unsummarized(steps)
     ps, fb = {_flat(p) for p in _PARA.split(body)}, _flat(body)
     for s in steps:
         if machinery(s): continue

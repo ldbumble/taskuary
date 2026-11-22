@@ -236,7 +236,9 @@ def rail(st: dict) -> dict:
     dev, gh = bool(st.get('developer_mode')), bool(st.get('github'))
     done = {'ai': ai, 'mail': mail, 'about': about_done, 'dev': dev or bool(st.get('dev_chosen')), 'github': gh, 'other': more > 0,
             'finish': put_away and ready}
-    opens = {**{k: k not in PREV or done[PREV[k]] for k in done}, 'finish': ready or put_away}
+    # ...FINISH OPENS ONLY ON THE THREE (the design walk, 2026-11-20): a setup put away early lit All ready and the Finish row over "connect
+    # your main source" on the top bar - the same fact said two ways. Put away early, the way out is the sidebar; Finish waits for the three
+    opens = {**{k: k not in PREV or done[PREV[k]] for k in done}, 'finish': ready}
     sub = {'ai': (st.get('brain') or {}).get('name') or '' if ai else '',
            'mail': ('connected - nothing new yet' if st.get('empty') else 'connected - sorting what came in') if step == 'reading' else 'connected' if mail else '',
            'about': 'saved' if about_done else '', 'dev': 'on' if dev else 'off - every job goes to a general agent',

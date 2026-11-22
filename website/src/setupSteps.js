@@ -29,6 +29,9 @@ export const prevOf = (v, st = null) => {
   for (let i = ORDER.indexOf(v) - 1; i > 0; i--) if (inRail(st, ORDER[i]) && reachable(st, ORDER[i])) return ORDER[i];
   return ORDER[0];
 };
+// THE STEP YOU CLICK IS THE STEP YOU GET (the design walk, 2026-11-20): the rail's Finish row opened More connections. It opens Setup complete
+// (`done`), and only once the server opens it
+export const viewOf = (key) => (key === "finish" ? "done" : key);
 // where a move to `v` lands: `v` when it is open, else the nearest open step before it - every road onto the canvas goes through it
 export const landOn = (st, v) => (!st || reachable(st, v) ? v : prevOf(v, st));
 export const frontierOf = (st) => st?.frontier || "ai";
@@ -48,8 +51,10 @@ export const navMoves = (st, view, reopened = false) => {
   // every step is gone - the sidebar and All ready are the ways out
   const back = view === ORDER[0] ? { id: "back", disabled: true, why: "This is the first step" } : { id: "back" };
   if (view !== "other") return [back, { id: "next", disabled: !doneOf(st, view), why: rowOf(st, view)?.need || "" }];
-  const ready = requiredDone(st) || reopened;
-  return [back, { id: "finish", disabled: !ready, why: ready ? "" : "AI, your main source and About your work come first" }];
+  // ...ALL READY WAITS FOR THE THREE, reopened or not (the design walk, 2026-11-20): reopened over no main source it was lit, and its line said
+  // "Nothing more is needed" while the top bar said "connect your main source" - what is left is the server's `todo`, said on both
+  const ready = requiredDone(st);
+  return [back, { id: "finish", disabled: !ready, why: ready ? "" : `Still to do: ${st.todo || "AI, your main source and About your work"}` }];
 };
 // THE STEP'S CARD IS THE LIT MOVE (the owner, 2026-10-19: the Advisor lights the REAL control - the card itself - never a button of its
 // own on the row): of the cards the shelf shows, one failing first (its fix is on it), then one already connected here, then - for the

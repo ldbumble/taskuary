@@ -114,6 +114,11 @@ test("every step has Back and Next; Back greys on the first; Next waits for the 
   // ...and reopened, no "Back to my day" on every step: Back, Next, and All ready on the last (the owner, 2026-11-03)
   assert.deepEqual(ids(FINISHED, "mail", true), ["back", "next"]);
   assert.deepEqual(ids(FINISHED, "other", true), ["back", "finish"]);
+  // ...but a setup put away before its main source is in is not ready because it was put away (the design walk, 2026-11-20): All ready
+  // greys and says what is left in the server's words, the ones the top bar says
+  const AWAY = { ...READING, dismissed: true, todo: "connect your main source" };
+  assert.deepEqual(ids(AWAY, "other", true), ["back", "finish-"]);
+  assert.equal(navMoves(AWAY, "other", true)[1].why, "Still to do: connect your main source");
   assert.equal(frontierOf(EMAIL), "mail"); assert.equal(frontierOf(READING), "about"); assert.equal(frontierOf(null), "ai");
   assert.equal(nextOf("mail"), "about"); assert.equal(prevOf("about"), "mail"); assert.equal(prevOf("ai"), "ai");
 });
@@ -133,7 +138,7 @@ test("a rail row past what is done waits and says for what; Finish ticks only wh
   assert.equal(row(READING, "about").disabled, false);
   assert.equal(reachable(AI, "about"), false); assert.equal(reachable(EMAIL, "mail"), true);
   const fr = read("FirstRun.jsx");
-  assert.match(fr, /if \(!stRef\.current \|\| reachable\(stRef\.current, v\)\) go\(v\);/, "the canvas guards the jump too");
+  assert.match(fr, /if \(!stRef\.current \|\| reachable\(stRef\.current, e\.detail\)\) go\(viewOf\(e\.detail\)\);/, "the canvas guards the jump too");
   assert.match(read("SetupSteps.jsx"), /disabled=\{!!r\.disabled\}/);
   // ...and the server refuses Finish while there is no AI or no mail; the canvas says why instead of moving on
   assert.match(fr, /if \(e\?\.response\?\.status === 409\) \{ setErr\(errText\(e\)\); return; \}/);
@@ -153,4 +158,13 @@ test("Back never lands on a locked step, and no move does", async () => {
   const fr = read("FirstRun.jsx");
   assert.match(fr, /const go = useCallback\(\(v\) => \{ setView\(landOn\(stRef\.current, v\)\);/, "go() is the one road onto the canvas");
   assert.match(fr, /run: \(\) => \(open \? shutCard\(\) : go\(prevOf\(view, st\)\)\)/);   // ...an opened card first, back to its list (2026-11-15)
+});
+
+// THE STEP YOU CLICK IS THE STEP YOU GET (the design walk, 2026-11-20): the rail's Finish row opened More connections
+test("the rail's Finish row opens Setup complete, and only when its row is open", async () => {
+  const { viewOf } = await import("../src/setupSteps.js");
+  assert.equal(viewOf("finish"), "done");
+  assert.equal(viewOf("mail"), "mail");
+  assert.match(read("FirstRun.jsx"), /if \(!stRef\.current \|\| reachable\(stRef\.current, e\.detail\)\) go\(viewOf\(e\.detail\)\);/);
+  assert.doesNotMatch(read("FirstRun.jsx"), /e\.detail === "finish" \? "other"/);
 });

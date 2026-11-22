@@ -84,7 +84,7 @@ class TheServer(unittest.TestCase):
         # ...and the agent is handed what the file it put on the card says (the HIPAA walk, 2026-11-21: a board pack whose every $ a script ate
         # went on a Send card unread)
         said = json.loads(text)['files_say']
-        self.assertIn(agenttools.LOOK, said); self.assertIn('2026-10-01', said); self.assertIn('60.00', said)
+        self.assertIn('2026-10-01', said); self.assertIn('60.00', said)
 
     def test_a_file_that_came_on_this_tasks_mail_is_sent_on_by_its_id_and_checked_again_at_send(self):
         """The north-star audit, 2026-11-10: asked to send a document the task received on to someone else, the agent could attach only

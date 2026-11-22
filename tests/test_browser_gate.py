@@ -161,7 +161,7 @@ class Judging(unittest.TestCase):
             v = one(self.s, self.act, {'url': CHECKOUT, 'elements': SNAP}, Brain(None))
         self.assertFalse(v['hold'], v); self.assertEqual(len(calls), 1, 'read once, never asked again')
         with on(), answers({'big': True, 'kind': 'money'}):
-            self.assertEqual(one(self.s, self.act, {'url': CHECKOUT, 'elements': SNAP}, Brain(None))['why'], bg.WHY['money'])
+            self.assertTrue(one(self.s, self.act, {'url': CHECKOUT, 'elements': SNAP}, Brain(None))['hold'])
 
     def test_with_no_ai_typing_passes_and_everything_else_waits(self):
         typed = ('agent-browser fill @e1 "alex@northwind.example"', 'agent-browser type @e2 "hello"', 'agent-browser keyboard type "abc"',

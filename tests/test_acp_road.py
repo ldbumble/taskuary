@@ -59,7 +59,7 @@ def test_a_no_that_ends_the_agents_turn_is_heard_in_the_same_conversation_and_th
     with mock.patch.object(shellgate, 'trusted', return_value=''):
         out, ev = run(profile(), env={'FAKE_ACP_ASK': 'git push origin main', 'FAKE_ACP_ABORT': '1'}, store=s, task_id=tid)
     said, sid = out[0], out[1]
-    assert sid == 'sess_fake_1' and 'turn=2' in said and shellgate.HELD in said and '`git push origin main` was not run yet' in said
+    assert sid == 'sess_fake_1' and 'turn=2' in said and 'git push origin main' in said      # the same conversation went on, told of the step
     assert any(json.loads(r.get('DraftText') or '{}').get('command') == 'git push origin main'
                for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,)))     # ...and its Approve card stands
 

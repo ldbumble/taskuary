@@ -4868,8 +4868,11 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
         except Exception: general.OPENING.discard(made['taskId']); raise
         def first_turn():
             try:
+                # ...AND IT STARTS ON NOTHING BUT ITS OWN LAUNCH (walk 2, 2026-11-21: on a slow quick model the agent sat 46 s of a 61 s answer
+                # behind the checklist reading): the boxes and the emails he asks for are read beside its first turn, and an email it drafts
+                # meanwhile is not owed twice (slots.add, one per person)
                 from .server import _read_hand_task
-                _read_hand_task(made['taskId'], job, store=store)
+                threading.Thread(target=_read_hand_task, args=(made['taskId'], job), kwargs={'store': store}, daemon=True).start()
                 # ...Taskuary's brief, never a second line in the owner's name: their words are the task's own message already, and the chat
                 # drew them twice (the click-through, 2026-11-12)
                 session.send_prompt(brief, brief=True)

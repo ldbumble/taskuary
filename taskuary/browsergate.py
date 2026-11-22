@@ -430,7 +430,11 @@ def asked(store, tid) -> str:
     typed while the turn ran, was not yet his words to the judge, and every Create account was held - 0 of 13."""
     if not store or not str(tid or '').isdigit(): return ''
     from .general import USER_TYPE, waiting_lines
-    lines = [str(c.get('Body') or '') for c in store.list_comments(int(tid)) if c.get('ActorType') == USER_TYPE and c.get('Actor') == 'owner']
+    from .ownwork import CHANNEL
+    # ...AND HIS ASK ITSELF, the task's own row (ownwork.CHANNEL): typed in New it is filed as the task's message and its agent's first prompt
+    # is Taskuary's brief - his go-ahead to sign up was never his words to the judge (the Codex walk, 2026-11-22)
+    lines = [str(m.get('BodyText') or m.get('Subject') or '') for m in store.list_messages(int(tid)) if (m.get('Channel') or '') == CHANNEL]
+    lines += [str(c.get('Body') or '') for c in store.list_comments(int(tid)) if c.get('ActorType') == USER_TYPE and c.get('Actor') == 'owner']
     lines += [str(w.get('text') or '') for w in waiting_lines(store, int(tid))]
     return '\n'.join(lines[-6:])[-2000:]
 

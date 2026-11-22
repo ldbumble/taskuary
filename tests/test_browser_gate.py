@@ -233,6 +233,14 @@ class Judging(unittest.TestCase):
                                 said=said + '\nMy mobile is 555-0142')['hold'])
             self.assertTrue(one(self.s, self.act, {'url': CHECKOUT, 'fields': both}, Brain(None), said='')['hold'], 'with no ask of his, nothing is covered')
 
+    def test_his_ask_typed_in_new_is_his_words_to_the_judge(self):
+        """The Codex walk, 2026-11-22: his ask typed in New is the task's own message, and its agent's first prompt is Taskuary's brief - the
+        judge was told he had said nothing, and his go-ahead to sign up (and the email he named) counted for nothing."""
+        tid = self.s.create_task({'Title': 'Get the listings', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        self.s.add_message({'TaskId': tid, 'ExternalId': 'own:1', 'Channel': 'own', 'FromName': 'You', 'Subject': 'Sign me up',
+                            'BodyText': 'Sign me up for DealFlow Pro (use alex.doyle@northwind.example)', 'Status': 'routed'})
+        self.assertIn('alex.doyle@northwind.example', bg.asked(self.s, tid))
+
     def test_a_free_sign_up_runs_and_money_or_his_own_details_wait_as_one_card(self):
         """The owner, 2026-11-19: "anything big like spending money or putting in private info should wait for user for now". The vendor
         walk held every free sign-up "because it can't be undone" - one press each, on work Erin had asked for and he had opened. The gate's

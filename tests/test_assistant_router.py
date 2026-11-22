@@ -12,13 +12,14 @@ from unittest import mock
 
 from taskuary import buttons, concierge, config, funnel, general, ingest, operations, server, terminal
 from taskuary.store import MemoryStore
+from taskuary.testing import mailbox
 
 
 def ago(hours=0): return (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
 
 
 def store():
-    s = MemoryStore()
+    s = mailbox(MemoryStore())
     s.upsert_agent('coding', 'coding', 'cli', '{}')
     for k in ('calendar_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
     s.set_setting('team_domains', 'northwind.example', 't'); s.set_setting('owner_email', 'alex@northwind.example', 't')

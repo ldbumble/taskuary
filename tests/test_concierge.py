@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from taskuary import buttons, concierge, funnel, general, railwalk, server, terminal
 from taskuary.store import MemoryStore
+from taskuary.testing import mailbox
 from taskuary import memorylines
 
 
@@ -16,7 +17,7 @@ def ago(hours=0): return (datetime.now() - timedelta(hours=hours)).strftime('%Y-
 
 
 def store():
-    s = MemoryStore()
+    s = mailbox(MemoryStore())
     # an install has a coding agent - config.toml seeds it at boot. Without one the assistant now
     # says so instead of receipting a hand-off the dispatch would 422 on (2026-09-03).
     s.upsert_agent('coding', 'coding', 'cli', '{}')

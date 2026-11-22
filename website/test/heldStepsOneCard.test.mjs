@@ -87,3 +87,11 @@ test("an approved held read says it was allowed, never that it ran", () => {
   assert.equal(heldCard([read]).said, "Allowed - this task may read that folder");
   assert.equal(heldCard([step(1, 4, "git push origin master", "Push master", "approved")]).said, "it ran");
 });
+
+// THE WALK, 2026-11-22: a held step whose press failed drew "It failed: Read tq3 in Temp failed: Traceback (most recent call last):" - the card
+// says the one line of what went wrong; its agent hears the whole (general.failed)
+test("a held step that failed says the line of what went wrong, never a traceback", () => {
+  const err = "Read tq3 in Temp failed: Traceback (most recent call last):\n  File \"make.py\", line 3, in <module>\n    import pptx\nModuleNotFoundError: No module named 'pptx'";
+  const c = heldCard([step(1, 4, "py make.py", "Build the deck", "superseded", { ActError: err })]);
+  assert.equal(c.error, "It failed: ModuleNotFoundError: No module named 'pptx'");
+});

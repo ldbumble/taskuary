@@ -1,4 +1,5 @@
 import { label } from "./buttons.js";
+import { whyFailed } from "./stepWhy.js";
 
 export const proposalFrom = (review) => {
   if (review?.Kind !== "action") return null;
@@ -400,7 +401,9 @@ export const heldCard = (reviews) => {
   const waiting = steps.filter((s) => s.state === "waiting"), ran = steps.filter((s) => s.state === "ran");
   // ...the step a press failed on, in one sentence: the card's own "Step 2 failed:" leads it, never a second "The held step failed:" after it
   const bad = steps.find((s) => s.state === "failed") || waiting.find((s) => s.error), k = steps.indexOf(bad) + 1;
-  const why = bad ? bad.error.replace(/^The held step failed:\s*/, "") : "";
+  // ...the one line that says what went wrong (stepWhy.whyFailed), never a program's traceback (the walk, 2026-11-22: "It failed: Read tq3 in Temp
+  // failed: Traceback (most recent call last):") - its agent hears the whole of it (general.failed)
+  const why = bad ? whyFailed(bad.error.replace(/^The held step failed:\s*/, "")).replace(/^Why: /, "") : "";
   const pressed = waiting.length ? null : steps.some((s) => s.state === "failed") ? "failed" : ran.length ? "approved" : "dismissed";
   return { title: n > 1 ? `${lead(ps[0])} - ${n} steps` : lead(ps[0]), why: `Held before it ran - ${whys.join("; ")}.`,
     folder: folderSaid(ps[0]), place: ps[0].where || ps[0].cwd || "", steps, waiting: waiting.map((s) => s.id), pressed,

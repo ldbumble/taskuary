@@ -126,7 +126,9 @@ export default function ActionCard({ row: was, tid, live = true, onChanged, past
               {copied ? `✓ ${btn("copy", "done") || "Copied"}` : btn("copy")}</Button>
             {/* ...and its Dismiss, as every card has (walk 8, 2026-11-20: a Connect card had none, and the cards queued behind it never came) */}
             <Button size="small" disabled={!!busy} onClick={() => decide("reject")} data-tq-act-dismiss="">Dismiss</Button>
-            <Typography data-tq-not-connected="" sx={{ fontSize: 11.5, color: FAINT }}>{row.connect.says}{row.connect.waits ? ` - ${row.connect.waits}` : ""}</Typography></>
+            {/* ...a post's line says the press above it, never "copy it to post it yourself" under Post via the browser (the goal walk, 2026-11-22) */}
+            <Typography data-tq-not-connected="" sx={{ fontSize: 11.5, color: FAINT }}>{row.connect.says}{post ? ` - Post via the browser has the agent put it up there, and its last Post waits for you`
+              : row.connect.waits ? ` - ${row.connect.waits}` : ""}</Typography></>
           : st.live ? <>
             <Button size="small" variant="contained" disableElevation data-tq-act-press="" disabled={!!busy || !pressable(act, p, text) || !!over} onClick={() => decide("approve")}
               title={act.note || hint("approve", post ? "post" : "action")} startIcon={busy === "approve" ? <CircularProgress size={12} color="inherit" /> : null}>

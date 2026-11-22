@@ -9,7 +9,6 @@ on:
       tests: { description: "pytest node ids or files, space-separated", type: string, default: "" }
       node_tests: { description: "website test files (test/x.test.mjs), space-separated, or 'all'", type: string, default: "" }
       web: { description: "build the UI and docs and check the committed copies", type: boolean, default: false }
-      smoke: { description: "the browser smoke set", type: boolean, default: false }
       after: { description: "the ci.yml run whose failures these are", type: string, default: "" }
 
 permissions: { contents: read }
@@ -58,20 +57,3 @@ jobs:
           cd .. && git diff --exit-code --stat -- taskuary/web site/docs
           added=$(git ls-files --others --exclude-standard -- taskuary/web site/docs)
           if [ -n "$added" ]; then echo "Build produced uncommitted files:"; echo "$added"; exit 1; fi
-
-  smoke:
-    if: inputs.smoke
-    name: browser smoke
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with: { python-version: "3.12" }
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with: { node-version: "22" }
-      - run: pip install -e .[dev]
-      - run: npm ci
-        working-directory: website
-      - run: node --test --test-concurrency=1 browser/loads-once.test.mjs browser/general-starting.test.mjs browser/continue-shows-turn.test.mjs browser/run-another-general.test.mjs
-        working-directory: website

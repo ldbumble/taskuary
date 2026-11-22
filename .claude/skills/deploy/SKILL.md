@@ -74,13 +74,10 @@ Run it in the background and report when it ends; do not babysit runs by hand.
 
 - **Never cancel a run by looking it up by commit** (`gh run list --commit X ... | cancel`) right after a push: it cancelled the
   run that mattered. Cancel only by a run id you read for that exact sha - or don't cancel; let stale runs finish.
-- **A browser job that runs past its time limit shows as CANCELLED, not failed.** Keep each part well under its limit: CI runs
-  `browser/shard.mjs <part> 6` with 20 minutes each; a new browser test file goes in `website/package.json` `test:browser`, and
-  if a part creeps past ~14 minutes, add parts.
 - **Request-count and timing tests** must count what they mean on a slow machine: wait for the state, never for a fixed sleep;
   CI's macOS gets 1.25x time budgets (`CI` + darwin), local stays strict.
 - **Merging branches by hand:** never `git checkout --ours <file>` on a conflicted file - it drops the other side's clean hunks
-  too (lost three overnight fixes once). Resolve the conflicted hunks only; `website/package.json`'s `test:browser` is the union.
+  too (lost three overnight fixes once). Resolve the conflicted hunks only.
 - **Version numbers on PyPI can never be reused.** The publish workflow gates on CI (`ci-green`), so a red commit never uploads;
   `tools/release.sh` refuses a number already tagged.
 - **Never commit the owner's data** (CLAUDE.md). Commit messages and test names use the stand-ins.

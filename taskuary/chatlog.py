@@ -333,7 +333,11 @@ def _heard(store, tid: int, new: list, at: float) -> None:
     # stop, the turn that answers it at work from that moment): that turn stands under them from this read, never a beat of nothing under his line
     # ...AND EVERY LINE OF HIS HEARD HAS ITS TURN UNDER IT AT ONCE (the owner's rule: after his line, the turn at work is under it; audit parity b:
     # a card the agent raised in the gap before the turn's row landed loose): the turn at work above it goes on under it, from its own time
-    if not any(k == 'turn' for k, _ in new) and any(k == 'line' for k, _ in new) and not (open_turn(store, tid) or {}).get('State') in LIVE:
+    # ...and never for a line whose own turn is in the log already (CI on a slow runner, 2026-11-22: his line was read after its turn had ended, and
+    # an empty turn "starting" stood under the finished one - its key names the line it answers, t:<line>:<n>)
+    lines = [r for k, r in new if k == 'line']
+    answered = lines and all(store._one("SELECT 1 AS x FROM chatlog WHERE TaskId=? AND Kind='turn' AND Key LIKE ? LIMIT 1", (tid, f't:{r}:%')) for r in lines)
+    if not any(k == 'turn' for k, _ in new) and lines and not answered and not (open_turn(store, tid) or {}).get('State') in LIVE:
         if (old := _live(store, tid)): update(store, tid, old['Key'], state='done')
         put(store, tid, 'turn', f't:{time.time_ns()}', {'started': at, 'ended': None, 'text': '', 'ahead': True}, state='starting', src='heard', at=at)
 

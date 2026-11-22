@@ -96,7 +96,7 @@ def told(store) -> str:
     # card when the signer put "Alex Doyle" back, and left the email as prose with nothing to press): kept through remember (keep), never fought
     sig = ' / '.join(l.strip() for l in signature_for(store).splitlines() if l.strip())
     return (f'HOW AN EMAIL IS SIGNED: Taskuary puts the owner\'s saved signature ("{sig[:200]}") under every email and takes your own sign-off '
-            f"off. When he tells you how he signs, keep it with remember, section signature: it becomes the saved one ({words.name('replies')}) "
+            f"off. When he tells you how he signs, keep it with remember, section signature, `note` the block itself as it goes under an email - its lines on lines of their own, never a sentence about it: it becomes the saved one ({words.name('replies')}) "
             "for every email, the drafts waiting too.") if sig else ''
 
 

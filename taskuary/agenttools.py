@@ -289,7 +289,7 @@ SHORT = {
     'person': "Who a name or address is in the owner's mail, and their latest messages.",
     'search_knowledge': "Search the owner's knowledge base (indexed folders, SharePoint).",
     'owner_memory': 'What Taskuary has learned about the owner: their people, priorities and ways.',
-    'remember': 'Keep what the owner tells you, for later.',
+    'remember': "Keep what the owner tells you, for later: `section` work for his own ways, people for someone else's; signature takes the block itself, as it goes.",
     'calendar': "The owner's busy times for the next N days.",
     'list_systems': "The owner's other systems you may use, with their connector ids and tool types.",
     'guide': "Read one of Taskuary's how-tos (browser, number, propose ...).",

@@ -66,11 +66,13 @@ def test_the_press_it_waits_on_starts_one_turn_and_no_other_does():
         assert not general.follow_up(s, tid, 'handoff')
         assert general.follow_up(s, tid, 'send') and go.return_value.send_prompt.call_args.kwargs['as_owner'] is False
         assert not general.follow_up(s, tid, 'send'), 'once per turn'
-    tid2 = agent_task(s, {'about': 'a', 'did': 'b'})
+    # ...a yes wakes its agent only where its turn named a next step (the owner, 2026-11-22: "only wake agent where there is next steps")
+    quiet, goes = agent_task(s, {'about': 'a', 'did': 'b'}), agent_task(s, {'about': 'a', 'did': 'b', 'after_press': 'send'})
     with mock.patch.object(general, 'follow_up') as f, mock.patch.object(verdicts, '_decide', return_value={'ok': True}):
-        verdicts.decide(s, {'ReviewId': 1, 'TaskId': tid2}, 'approve', 'text')
-        verdicts.decide(s, {'ReviewId': 1, 'TaskId': tid2}, 'reject')
-    assert [c.args[1:3] for c in f.call_args_list] == [(tid2, 'send')]
+        for t in (quiet, goes):
+            verdicts.decide(s, {'ReviewId': 1, 'TaskId': t}, 'approve', 'text')
+            verdicts.decide(s, {'ReviewId': 1, 'TaskId': t}, 'reject')
+    assert [c.args[1:3] for c in f.call_args_list] == [(goes, 'send')]
 
 
 def test_an_agents_email_draft_with_no_mailbox_lights_nothing():

@@ -150,7 +150,8 @@ class ReportOutputApiTests(unittest.TestCase):
         self.assertIn('attachment', self.c.get(sheet['url']).headers.get('content-disposition', ''))
         self.assertEqual(self.c.get(sheet['url']).content[:2], b'PK')
         # and the row that carries them says so
-        feed = next(x for x in self.c.get('/api/feed').json()['data'] if x['MessageId'] == mid)
+        # ...its own row, whatever the shard's shared store holds before it (CI, 2026-11-22: past the first 100, the row was not on the page)
+        feed = next(x for x in self.c.get('/api/feed', params={'limit': 500, 'channel': 'report'}).json()['data'] if x['MessageId'] == mid)
         self.assertEqual(feed['Attachments'], 2)
 
     def test_the_dry_run_shows_the_chart_it_would_hand_back(self):

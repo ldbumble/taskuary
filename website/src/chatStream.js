@@ -293,7 +293,8 @@ export const workingLine = (parts, label, { starting = false, later = false, ask
 const flat = (t) => String(t || "").replace(/\s+/g, " ").replace(/[.…]+$/, "").trim();
 // a thought as one short line: its last sentence, cut at a word
 export const thinkingLine = (text) => {
-  const t = String(text || "").replace(/\s+/g, " ").trim().replace(/[.…]+$/, "");
+  // ...never Taskuary's own marker as it streams in (the goal walk on Codex, 2026-11-22: "Writing: [["): words stop where one opens, even half-written
+  const t = String(text || "").replace(/\[\[[\s\S]*$|\[$/, "").replace(/\s+/g, " ").trim().replace(/[.…]+$/, "");
   const s = t.split(/(?<=[.!?])\s+/).filter(Boolean).at(-1) || "";
   return s.length > 110 ? `…${s.slice(-108).replace(/^\S*\s/, "")}` : s;
 };

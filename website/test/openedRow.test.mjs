@@ -15,3 +15,10 @@ test("the task he has open stands on the rail in Tasks, as it now reads - never 
   assert.equal(withOpened(pile, { key: "review:3", tid: 3 }), pile, "one the rail holds is not drawn twice");
   assert.equal(withOpened(pile, null), pile);
 });
+
+// ...and the live line never shows Taskuary's own marker as it streams in (the goal walk on Codex, 2026-11-22: "Writing: [[")
+test("the live line stops where a marker opens, even half-written", async () => {
+  const { thinkingLine } = await import("../src/chatStream.js");
+  assert.equal(thinkingLine("I'll prepare the email to Erin for your review. [["), "I'll prepare the email to Erin for your review");
+  assert.equal(thinkingLine("Drafting now [[TASKUARY-SUMMARY]]{\"did\": 1"), "Drafting now");
+});

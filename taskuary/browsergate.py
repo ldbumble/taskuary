@@ -440,6 +440,17 @@ def asked(store, tid) -> str:
 # by the same rules an act alone was; an entry missing or out of shape holds that act, and so everything after it (check stops there).
 def _cmd(act: dict, exe: str = EXE) -> str: return ' '.join([exe, *act['args']]) if act.get('args') else act.get('raw', '')
 def _late(what: str) -> dict: return {'hold': True, 'what': what, 'why': "Taskuary couldn't tell in time what it does, so it waits for you"}
+# ...BUT WHAT ONLY FILLS THE FORM OR FOLLOWS A LINK GOES ON WITHOUT ONE (the HIPAA walk, 2026-11-22: the gateway answered the judge in 82-113 s,
+# past JUDGE_WAIT, and "Click the Sign up link" and the terms box each waited as a card - each verdict, when it came, "not big"): neither can
+# spend his money, send his details, speak for him or delete his - the press that sends the form, or anything else, still waits unjudged
+def _unjudged(a: dict, pg: dict) -> dict:
+    return {'hold': False, 'what': target(a, pg) or _cmd(a), 'why': ''} if fills(a, pg) or follows(a, pg) else _late(target(a, pg) or _cmd(a))
+def follows(act: dict, pg: dict) -> bool:
+    "Does this act only follow a link: a click on a control the page's snapshot calls a link, or agent-browser's `find role link ... click`?"
+    if act.get('verb') == 'click': return control(act, pg).get('role', '').lower() == 'link'
+    a = [str(x).lower() for x in act.get('args') or []]
+    i = a.index('find') if 'find' in a else -1
+    return act.get('verb') == 'find' and i >= 0 and a[i + 1:i + 3] == ['role', 'link'] and i + 3 < len(a) and a[i + 3] == 'click'
 
 
 def timed(go, wait: float, late: list) -> list:
@@ -471,7 +482,7 @@ def ask_acts(store, brain, system: str, user: str, want: dict, n: int) -> list |
 
 def judge(store, todo: list, pg: dict, brain=None, wait: float = None, said: str = '') -> list:
     "[{hold, what, why}] for each act of the line, in order, under JUDGE_WAIT."
-    return timed(lambda: _judge(store, todo, pg, brain, said), JUDGE_WAIT if wait is None else wait, [_late(target(a, pg) or _cmd(a)) for a in todo])
+    return timed(lambda: _judge(store, todo, pg, brain, said), JUDGE_WAIT if wait is None else wait, [_unjudged(a, pg) for a in todo])
 
 
 def _judge(store, todo: list, pg: dict, brain=None, said: str = '') -> list:
@@ -491,7 +502,7 @@ def _judge(store, todo: list, pg: dict, brain=None, said: str = '') -> list:
         if vs and None in vs: vs = [a or b for a, b in zip(vs, ask_acts(store, brain, SYSTEM, user, WANT, len(todo)) or [None] * len(todo))]
     except Exception as e:
         logger.debug(f'browsergate: no verdict on {[a["verb"] for a in todo]} - {e}')
-        return [_late(target(a, pg) or _cmd(a)) for a in todo]
+        return [_unjudged(a, pg) for a in todo]
     logger.debug(f'browsergate: verdicts on {_cmd(todo[0])[:80]!r} and {len(todo) - 1} more: {vs}')
     if vs is None: return [{'hold': False, 'what': _cmd(a), 'why': ''} if typing(a) else
                            {'hold': True, 'what': target(a, pg) or _cmd(a), 'why': 'no AI is set up to judge it, so it waits for you'} for a in todo]
@@ -499,6 +510,7 @@ def _judge(store, todo: list, pg: dict, brain=None, said: str = '') -> list:
 
 
 def _verdict(act: dict, v: dict | None, pg: dict, said: str) -> dict:
+    if v is None and (fills(act, pg) or follows(act, pg)): return {'hold': False, 'what': target(act, pg) or _cmd(act), 'why': ''}
     if v is None: return {'hold': True, 'what': target(act, pg) or _cmd(act), 'why': "Taskuary couldn't tell what it does, so it waits for you"}
     what = ' '.join(str(v.get('what') or '').split())[:200]
     # ...a ref is agent-browser's grammar, never his words ("clicks ref e640 on uprinting.com, which is not in the visible snapshot"): the

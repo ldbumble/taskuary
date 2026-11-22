@@ -207,6 +207,18 @@ class Judging(unittest.TestCase):
         with verdict(big): self.assertTrue(one(self.s, bg.acts('agent-browser click @e8')[0], pg, Brain(None))['hold'])
         with verdict({**big, 'sure': True, 'irreversible': True}): self.assertTrue(one(self.s, bg.acts('agent-browser click @e7')[0], pg, Brain(None))['hold'])
 
+    def test_with_no_verdict_in_time_a_link_or_a_tick_goes_on_and_a_button_still_waits(self):
+        """The HIPAA walk, 2026-11-22: the gateway answered the judge in 82-113 s, past its wait, and "Click the Sign up link" and the terms
+        box each waited as a card - every verdict, when it came, "not big". Following a link or filling the form cannot spend his money or
+        send his details: with no verdict they go on; the press that sends the form still waits."""
+        pg = {'url': CHECKOUT, 'elements': '- link "Sign up" [ref=e3]\n- checkbox "I agree" [ref=e7]\n- button "Create account" [ref=e8]'}
+        for cmd, held in (('agent-browser click @e3', False), ('agent-browser find role link click --name "Sign up"', False),
+                          ('agent-browser click @e7', False), ('agent-browser click @e8', True)):
+            with verdict(TimeoutError('the gateway did not answer')): self.assertEqual(one(self.s, bg.acts(cmd)[0], pg, Brain(None))['hold'], held, cmd)
+        late = lambda *a, **k: __import__('time').sleep(0.3)
+        with mock.patch.object(bg, '_judge', late):
+            self.assertEqual([v['hold'] for v in bg.judge(self.s, bg.acts('agent-browser click @e3') + bg.acts('agent-browser click @e8'), pg, Brain(None), wait=0.05)], [False, True])
+
     def test_a_free_sign_up_runs_and_money_or_his_own_details_wait_as_one_card(self):
         """The owner, 2026-11-19: "anything big like spending money or putting in private info should wait for user for now". The vendor
         walk held every free sign-up "because it can't be undone" - one press each, on work Erin had asked for and he had opened. The gate's

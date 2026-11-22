@@ -645,13 +645,13 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         if isinstance(out, dict) and out.get('ok') and (rid := out.get('review_id')) in {r['rid'] for r in was}:
             out = {**out, 'filled': f'rv{rid} is the reply that waited for your words - it now holds this letter and is the card that stands. '
                                     'Nothing was replaced: withdraw nothing.'}
-        return _j(said_once(replaced(store, doors, tid, was, out, a.get('replaces'), f"the reply to {a.get('to') or 'the newest mail'} takes its place")))
+        return _j(card_roads(store, said_once(replaced(store, doors, tid, was, out, a.get('replaces'), f"the reply to {a.get('to') or 'the newest mail'} takes its place")), {}))
     if name == 'propose_email':
         was, files = verdicts.unsent(store, tid), attached(store, tid, a.get('attach'))
         out = read_back(doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''), files,
                                        a.get('cc') or (), str(a.get('from') or ''), **({'guessed': a['guessed']} if a.get('guessed') else {}),
                                        **({'slot': str(a['slot']).strip()} if a.get('slot') else {})), files)
-        return _j(said_once(replaced(store, doors, tid, was, out, a.get('replaces'), f"the email to {a.get('to') or 'someone else'} takes its place")))
+        return _j(card_roads(store, said_once(replaced(store, doors, tid, was, out, a.get('replaces'), f"the email to {a.get('to') or 'someone else'} takes its place")), {}))
     if name == 'sign_form':
         out = doors['sign'](tid, a)
         return out['says'] if out.get('says') else _j(out)
@@ -721,6 +721,11 @@ def card_roads(store, o, a: dict):
         fix = outbound.connect_fix(store, act['card'])
         roads.append(f"{p['type']}: " + (f"{fix['says']} - the card shows {fix['label']} and the words to copy; nothing goes from it until he connects"
                                          if fix else f"its press ({act.get('press') or 'Approve'}) runs it on his connected account"))
+    # ...and A REPLY OR AN EMAIL whose card stands with Connect, not Send (the walk, 2026-11-21: "press Send" told him over a card that said
+    # "Connect email")
+    rv = store.get_review(int(o['review_id'])) if isinstance(o.get('review_id'), int) else None
+    if rv and (fix := outbound.review_connect(store, rv)):
+        roads.append(f"{fix['says']} - its card shows {fix['label']}, not Send; it waits there until he connects. Never tell him to press Send")
     return {**o, 'cards_stand_as': roads} if roads else o
 
 

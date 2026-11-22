@@ -86,6 +86,17 @@ class TheServer(unittest.TestCase):
         said = json.loads(text)['files_say']
         self.assertIn('2026-10-01', said); self.assertIn('60.00', said)
 
+    def test_an_email_whose_card_says_connect_is_told_so_never_send(self):
+        """The walk, 2026-11-21: with no mailbox connected the agent told him "press Send" over a card that said "Connect email". What the
+        agent hears of its card is the card's own answer (outbound.review_connect); with a mailbox, nothing of the kind."""
+        text, err = tool(self.tid, 'propose_email', to='paula@northwind.example', subject='Renewal terms', text='Paula - the terms. Alex')
+        self.assertFalse(err, text)
+        roads = json.loads(text).get('cards_stand_as') or []
+        self.assertTrue(roads, text)
+        self.s.save_connector({'Type': 'outlook', 'Name': 'Work mail', 'Active': 1}, 't')
+        text, _ = tool(self.tid, 'propose_email', to='gail@northwind.example', subject='Renewal call', text='Gail - Tuesday. Alex')
+        self.assertFalse(json.loads(text).get('cards_stand_as'), text)
+
     def test_a_file_that_came_on_this_tasks_mail_is_sent_on_by_its_id_and_checked_again_at_send(self):
         """The north-star audit, 2026-11-10: asked to send a document the task received on to someone else, the agent could attach only
         files in its task folder. It names the mail's file by the id its brief shows - only one on a message OF THIS task, checked at the

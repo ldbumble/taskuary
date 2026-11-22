@@ -1599,7 +1599,11 @@ def same_work(store, words: str, who: str = OWNER_WORDS, skip=(), llm=None, verd
     if verdict is not None: verdict.update(intent)
     try: tid = int(intent.get('same_as'))
     except (TypeError, ValueError): return None
-    return tid if tid not in skip and joinable(store, tid, shut=False) else None
+    # ...and never one its agent finished (round 4, 2026-11-22: an ask to get a course approved joined the task that had only kept a fact, its
+    # turn saying nothing was left - the owner: "a new job is a new job"): what its last turn said, read off the stored summary
+    from . import general
+    if tid in skip or not joinable(store, tid, shut=False) or (isinstance(sm := general._last_said(store, tid)[1], dict) and sm.get('nothing_left')): return None
+    return tid
 
 
 def arrive_words(store, words: str, frm: str = 'owner', actor: str = 'owner', who: str = None, skip=(), files=None, said: str = None, llm=None,

@@ -231,3 +231,15 @@ class SameWorkIsTriagesDecisionTests(unittest.TestCase):
         self.assertEqual(seen[-2]['from_name'], 'Erin Blake on Teams')
         with mock.patch('taskuary.llm.build_llm', return_value=None):
             self.assertIsNone(ingest.same_work(s, 'Fix the ledger rounding'), 'no triage brain: new work')
+
+
+def test_a_task_its_agent_finished_is_never_the_work_new_words_join():
+    """Round 4, 2026-11-22: an ask to get a course approved joined the open task that had only kept a fact - its turn said nothing was left.
+    The owner: "a new job is a new job"."""
+    import json as _json
+    s = MemoryStore()
+    done = s.create_task({'Title': 'Remember who signs training', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+    s.add_comment(done, 'assistant', general.SUMMARY_TYPE, _json.dumps({'did': 'Kept it.', 'nothing_left': True}))
+    with triage_reads(done): assert ingest.same_work(s, 'Get the Trainly course approved') is None
+    s.add_comment(done, 'assistant', general.SUMMARY_TYPE, _json.dumps({'did': 'Started.', 'on_you': ['Pick a vendor']}))
+    with triage_reads(done): assert ingest.same_work(s, 'Get the Trainly course approved') == done

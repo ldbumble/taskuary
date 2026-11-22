@@ -8,7 +8,7 @@
  {"do": "press", "button": "Dismiss|Don.t send|Reject", "times": 60},
  {"do": "new", "say": "Write a 2000-word history of the Northwind office, slowly"},
  {"do": "wait", "s": 8},
- {"do": "press", "button": "^Stop$", "times": 40, "sends": 0},
+ {"do": "press", "button": "[data-tq-stop-run]", "times": 40, "sends": 0},
  {"do": "expect", "never": ["waiting on you"]},
  {"do": "press", "button": "Mark done", "times": 40, "sends": 0},
  {"do": "go", "to": "rail"},

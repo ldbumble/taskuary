@@ -1,7 +1,7 @@
 [
  {"do": "new", "say": "Ten things for today, one by one:\n1. Total the hours in the timesheet below and tell me the sum: Mon 7.5, Tue 8, Wed 6.25, Thu 9, Fri 4\n2. Make a bar chart of those hours\n3. Draft an email to Gail Moreno (gail@northwind.example) with the total\n4. Look up today's price of copper per pound\n5. Make a one-page PDF summary of the week\n6. Add a to-do to call Erin Blake on Friday\n7. Remember that Paula Vance prefers Tuesday meetings\n8. Write a three-line LinkedIn post about the week\n9. Set up a 30-minute meeting with Ray Colton (ray@northwind.example) next week\n10. Tell me which of these are done and what waits on me"},
  {"do": "quiet", "max": 900},
- {"do": "expect", "see": ["Gail", "copper"], "never": ["\[\[", "For you to do", "Sign in to"]},
+ {"do": "expect", "see": ["Gail", "copper"], "never": ["\\[\\[", "For you to do", "Sign in to"]},
  {"do": "press", "button": "^Send$", "times": 30},
  {"do": "wait", "s": 20},
  {"do": "expect", "never": ["I've sent", "I sent the email"]}

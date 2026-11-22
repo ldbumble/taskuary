@@ -3263,7 +3263,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   // ...and what the rail's tag and the box say of it: a page over it is not it in view (tableWords)
   // ...ONE BOX ON A TASK (the owner, 2026-11-22: "yes" - every task page had the task's "Message the agent..." and this "Ask..." under it):
   // while a task is in view its own box is the only one; the Assistant's comes back on the rail, or over a page opened on top
-  const taskInView = /^task:\d+$/.test(table.key || "") && !table.place && !table.folded;
+  // ...by the item's own task, whatever row opened it ("review:5", "processing:…" - the walk, 2026-11-22: "task:N" alone missed every row)
+  const taskInView = !!(currentItem?.tid || /^task:\d+$/.test(table.key || "")) && !table.place && !table.folded;
   const tableSays = tableWords(table, currentItem?.ref || (/^task:(\d+)$/.test(table.key || "") ? `TQ-${table.key.slice(5).padStart(4, "0")}` : ""));
   // THE ASSISTANT'S LIGHT OUTRANKS THE ADVISOR'S while its item is on the table: the owner asked for that act in words, and the Advisor's line
   // over it would name another button (assistantLight.js); it goes out at the next press or when the table moves on

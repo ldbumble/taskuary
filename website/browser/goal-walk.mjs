@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { api, connect, info, out, save, shot, sleep } from "./real-lib.mjs";
 import { clean, said, watch } from "./watch.mjs";
+import { record } from "./recorder.mjs";
 
 const file = process.argv[2]; if (!file) { console.log("node goal-walk.mjs <shape.json>"); process.exit(2); }
 const shape = JSON.parse(readFileSync(file, "utf8")), name = path.basename(file, ".json");
@@ -19,16 +20,23 @@ const outbox = () => { const f = path.join(info.home, "outbox.jsonl"); return ex
 const rail = () => page.evaluate((vs) => { const vis = eval(vs); return [...document.querySelectorAll("[data-tq-rail] .tq-pile-row[data-tq-key]")].filter(vis)
   .map((e) => ({ key: e.getAttribute("data-tq-key"), text: e.innerText.split("\n").filter(Boolean).join(" | ").slice(0, 160) })); }, `(${VIS})`);
 const busy = () => page.evaluate(() => !!document.querySelector("[data-tq-task-page] [data-tq-stop-run]"));
-const spinning = () => page.evaluate(() => [...document.querySelectorAll(".MuiCircularProgress-root, [role=progressbar]")].filter((e) => e.getBoundingClientRect().width > 0).length);
+// ...only what spins: a progress ring with a value (the header's setup ring) is a gauge, not work still going
+const spinning = () => page.evaluate(() => [...document.querySelectorAll(".MuiCircularProgress-indeterminate, [role=progressbar]:not([aria-valuenow])")].filter((e) => e.getBoundingClientRect().width > 0).length);
 const where = () => page.evaluate(() => location.hash || "#rail");
 
 // a button by its words, found as a person sees it (visible, not greyed) - its centre, for the mouse
+// ...by its WORDS as a person reads them (a bare arrow's aria-label "Send" is not the card's Send - the first goal walk pressed the empty
+// box's), or by a CSS selector given as "[data-tq-…]"
 const button = (words) => page.evaluate((w, vs) => {
-  const vis = eval(vs), re = new RegExp(w, "i");
-  const b = [...document.querySelectorAll("button, [role=button], a")].filter((e) => vis(e) && re.test((e.innerText || e.getAttribute("aria-label") || "").trim())).pop();
+  const vis = eval(vs), css = w.startsWith("["), re = !css && new RegExp(w, "i"), all = [...document.querySelectorAll(css ? w : "button, [role=button], a")].filter(vis);
+  const b = css ? all.pop() : (all.filter((e) => re.test((e.innerText || "").trim())).pop() || all.filter((e) => !(e.innerText || "").trim() && re.test(e.getAttribute("aria-label") || "")).pop());
   if (!b) return null; if (b.matches(":disabled") || b.closest("[inert], [aria-disabled=true]")) return { off: true };
   b.scrollIntoView({ block: "center" }); const q = b.getBoundingClientRect(); return { x: q.x + q.width / 2, y: q.y + q.height / 2, name: b.innerText.trim() };
 }, words, `(${VIS})`);
+async function typeKeys(words, enter = true) {
+  for (const [i, part] of String(words).split("\n").entries()) { if (i) { await page.keyboard.down("Shift"); await page.keyboard.press("Enter"); await page.keyboard.up("Shift"); } await page.keyboard.type(part); }
+  if (enter) await page.keyboard.press("Enter");
+}
 async function typeIn(words) {
   const ok = await page.evaluate((vs) => { const vis = eval(vs); const b = [...document.querySelectorAll("[role=dialog] input:not([type=file]), [role=dialog] textarea"),
     document.querySelector("[data-tq-task-page] .tq-aui-input"), ...document.querySelectorAll("textarea, input[type=text]")].find((e) => e && vis(e) && !e.disabled);
@@ -45,9 +53,12 @@ async function untilQuiet(max = 600000) {
 
 const STEPS = {
   async new(s) {                                   // New, his words, Enter: how long until his task stands on the rail and its page is drawn
-    const b = await button("^New$"); if (b?.x) await page.mouse.click(b.x, b.y); await sleep(600);
+    const b = await button("[data-tq-nav=new]"); if (!b?.x) return { problem: "no New in the nav" }; await page.mouse.click(b.x, b.y);
+    // ...his words go in NEW'S OWN box - the first goal walk typed them into the open task's, and read the join as the app's
+    const box = "[data-tq-new-agent-box] textarea, [data-tq-new-agent-box] [contenteditable=true]";
+    try { await page.waitForSelector(box, { visible: true, timeout: 5000 }); } catch { return { problem: "New opened no box to type in" }; }
     const before = new Set((await rail()).map((r) => r.key)), t0 = Date.now();
-    if (!(await typeIn(s.say))) return { problem: "no box to type New's words in" };
+    await page.focus(box); await typeKeys(s.say);
     let row = null, page_ = null;
     while (Date.now() - t0 < 60000 && !(row && page_)) {
       row ||= (await rail()).find((r) => !before.has(r.key)) && Date.now() - t0;
@@ -67,8 +78,9 @@ const STEPS = {
     return { sent, rows_added: rows, problem: most != null && sent > most ? `${s.times} presses sent ${sent} times (at most ${most})` : "" };
   },
   async search(s) {                                // Search, the words, the hit: the task must come onto the rail and open, and stay
-    const o = await button("Search"); if (o?.x) await page.mouse.click(o.x, o.y); await sleep(500);
-    if (!(await typeIn(s.say))) return { problem: "no search box" };
+    const o = await button("[data-tq-search-open]"); if (!o?.x) return { problem: "no Search to open" }; await page.mouse.click(o.x, o.y);
+    try { await page.waitForSelector("[data-tq-search-input] input, input[data-tq-search-input]", { visible: true, timeout: 5000 }); } catch { return { problem: "Search opened no box" }; }
+    await page.focus("[data-tq-search-input] input, input[data-tq-search-input]"); await page.keyboard.type(s.say);
     const t0 = Date.now(); let hit = null;
     while (Date.now() - t0 < 15000 && !(hit = await page.evaluate(() => { const h = document.querySelector("[data-tq-search-hit]"); if (!h) return null; const q = h.getBoundingClientRect(); return { x: q.x + q.width / 2, y: q.y + q.height / 2, text: h.innerText.slice(0, 120) }; }))) await sleep(200);
     if (!hit) return { hit_ms: null, problem: s.none ? "" : "no result for words that should find a task" };
@@ -100,9 +112,11 @@ const STEPS = {
 const results = [];
 for (const [i, s] of shape.entries()) {
   if (!STEPS[s.do]) { results.push({ i, step: s, problem: `no step "${s.do}"` }); continue; }
-  const w = await watch(page), t0 = Date.now();
+  const w = await watch(page), t0 = Date.now(), dir = path.join(out, "video", `goal-${name}-${String(i).padStart(2, "0")}-${s.do}`);
+  const rec = await record(page, dir).catch(() => null);
   let r; try { r = await STEPS[s.do](s); } catch (e) { r = { problem: `the step threw: ${e.message.slice(0, 200)}` }; }
   const seen = await w.stop().catch(() => ({})), ms = Date.now() - t0;
+  await rec?.stop({ sheet: 8 }).catch(() => {});
   const r2 = await rail(), dup = r2.map((x) => x.key).filter((k, j, a) => a.indexOf(k) !== j);
   const spin = (await busy()) ? 0 : await spinning();
   const img = await shot(page, `goal-${name}-${String(i).padStart(2, "0")}-${s.do}`);

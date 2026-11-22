@@ -6,7 +6,7 @@
  {"do": "mail", "msg": {"from_email": "team-list@northwind.example", "from_name": "All Staff", "subject": "Parking lot closed Friday", "body": "The lot is closed Friday for repaving."}},
  {"do": "wait", "s": 90},
  {"do": "go", "to": "rail"},
- {"do": "expect", "see": ["Budget"], "never": ["\[\[", "Traceback"]},
+ {"do": "expect", "see": ["Budget"], "never": ["\\[\\[", "Traceback"]},
  {"do": "row", "say": "Budget"},
  {"do": "quiet", "max": 300},
  {"do": "expect", "see": ["travel"], "never": ["noreply@payworth"]}

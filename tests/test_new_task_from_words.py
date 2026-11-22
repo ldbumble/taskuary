@@ -135,12 +135,14 @@ class NewsBoxIsTheOneStartTests(unittest.TestCase):
         self.assertEqual(r.status_code, 422); self.assertEqual(self.s.list_tasks(None), [])
         self.assertIn('No AI is connected', r.json()['detail']); self.assertEqual(r.json()['fix']['label'], 'Connect an AI')
 
-    def test_the_same_work_open_already_hears_it_there(self):
+    def test_an_ask_from_new_is_a_new_task_at_once_never_read_by_triage_first(self):
+        # the owner, 2026-11-22: "it should not go through triage, no one asked for that. It should create new task right away"
         there = self.s.create_task({'Title': 'Find caterers for the offsite', 'Kind': 'general', 'Status': 'open'}, 'owner')
-        with triage_reads(there), mock.patch.object(general, 'take_line') as told:
+        seen = []
+        with triage_reads(there, seen), mock.patch.object(general, 'take_line') as told:
             r = self.start('Find three caterers near the office for the offsite')
-        self.assertEqual((r.json()['taskId'], r.json()['joined']), (there, True)); self.assertEqual(len(self.s.list_tasks(None)), 1)
-        self.assertEqual(told.call_args.args[1:3], (there, 'Find three caterers near the office for the offsite'))
+        self.assertNotEqual(r.json()['taskId'], there); self.assertFalse(r.json().get('joined'))
+        self.assertEqual(seen, [], 'no reading before the task stands'); told.assert_not_called()
 
 
 class AgentsNewTaskIsTheSameRoadTests(unittest.TestCase):
@@ -210,25 +212,12 @@ class SameWorkIsTriagesDecisionTests(unittest.TestCase):
         here = s.create_task({'Title': 'Month-end close', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
         seen = []
         with triage_reads(there, seen), mock.patch.object(general, 'take_line'), mock.patch.object(general, 'to_agent', return_value='told') as told,                 mock.patch('taskuary.capabilities.has_ai', return_value=True):
-            mine = concierge.handoff_task(s, 'Fix the ledger rounding at month end', 'general', 'owner', door='New')
             with mock.patch.object(server, 'store', s), mock.patch.object(server, '_own_task_only'):
                 agents = server.agent_new_task(server.AgentNewTaskBody(task_id=here, title='Ledger rounding', ask='Fix the ledger rounding at month end'), None)
-        self.assertEqual((mine['taskId'], agents['task']), (there, 'TQ-%04d' % there))
-        self.assertEqual([m['channel'] for m in seen], [ingest.WORDS_CHANNEL] * 2)
-        self.assertEqual([c.kwargs['frm'] for c in told.call_args_list], ['owner', 'taskuary'], "his words as his line, the agent's as Taskuary's")
-
-    def test_new_work_is_classed_by_the_reading_that_asked_whether_it_was_open_already(self):
-        """A New ask got no triage class and ran on the normal gear (the big model) - "17% of 2,340" with it (the owner, 2026-11-20). The one
-        reading of his words that answers same_as says how hard they are too: kept on the new task, so its agent starts on the quick gear."""
-        s, seen = MemoryStore(), []
-        def judge(store, msg, llm, *a, **k):
-            seen.append(msg); return {'intent': 'task', 'same_as': None, 'difficulty': 'quick', 'sure': True, 'data_class': 'ordinary'}, {}
-        with mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: ''), mock.patch.object(ingest, 'judge', judge),              mock.patch.object(general, 'start_session'), mock.patch('taskuary.capabilities.has_ai', return_value=True):
-            made = concierge.handoff_task(s, 'What is 17% of 2,340?', 'general', 'owner', door='New')
-        self.assertEqual(len(seen), 1, 'one reading, no second call for the class')
-        self.assertEqual(s.task_judged(made['taskId'])['Difficulty'], 'quick')
-        from taskuary import brainroute
-        self.assertEqual(brainroute.judged(s, made['taskId'])['difficulty'], 'quick')
+        # ...an agent's new_task asks whether the work is open already (New does not - the owner, 2026-11-22)
+        self.assertEqual(agents['task'], 'TQ-%04d' % there)
+        self.assertEqual([m['channel'] for m in seen], [ingest.WORDS_CHANNEL])
+        self.assertEqual([c.kwargs['frm'] for c in told.call_args_list], ['taskuary'], "the agent's words as Taskuary's")
 
     def test_who_asks_skip_and_a_closed_task_are_kept(self):
         s = MemoryStore()

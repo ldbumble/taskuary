@@ -665,7 +665,9 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
           with what it is doing, and nothing else on the card moves until it is the pressed card (the owner, 2026-11-17: "when you click buttons
           on card it flickers then presses" - a line drawn over the card at the press pushed it down, its subject folded, then the sent card
           jumped back up: three shapes in a quarter second) */}
-      {!going && delivery.line && <Alert severity={delivery.state === "unknown" ? "warning" : "info"} sx={{ mb: 1 }}>{delivery.line}</Alert>}
+      {/* ...ONE FAILURE, SAID ONCE ON THE CARD (round 3, 2026-11-22: an unconfirmed send stood as an orange banner and a red block saying the same
+          thing): where the failure block stands, it says it - with its reason - and the banner goes */}
+      {!going && delivery.line && !failure?.unknown && <Alert severity={delivery.state === "unknown" ? "warning" : "info"} sx={{ mb: 1 }}>{delivery.line}</Alert>}
       <ApprovalInterrupt it={interrupt} onResolve={(choice) => {
         // the click did not send; the owner's edit stays theirs, the refreshed draft is shown beside it
         const res = resolveInterrupt(interrupt, choice, { [r.ReviewId]: value });

@@ -1,0 +1,13 @@
+[
+ {"do": "mail", "msg": {"from_email": "gail@northwind.example", "from_name": "Gail Moreno", "subject": "Budget sign-off", "body": "Hi Alex, can you sign off the Q3 budget by Thursday? Thanks, Gail"}},
+ {"do": "mail", "msg": {"from_email": "gail@northwind.example", "from_name": "Gail Moreno", "subject": "Re: Budget sign-off", "body": "Also - please include the travel line. Gail"}, "settle": 500},
+ {"do": "mail", "msg": {"from_email": "noreply@payworth.example", "from_name": "Payworth", "subject": "Your payroll ran", "body": "Payroll for period 22 completed. No action needed."}},
+ {"do": "mail", "msg": {"from_email": "someone@vendor.example", "from_name": "Sam Ortiz", "subject": "Partnership?", "body": "Hi, we sell lead lists. Interested in a call?"}},
+ {"do": "mail", "msg": {"from_email": "team-list@northwind.example", "from_name": "All Staff", "subject": "Parking lot closed Friday", "body": "The lot is closed Friday for repaving."}},
+ {"do": "wait", "s": 90},
+ {"do": "go", "to": "rail"},
+ {"do": "expect", "see": ["Budget"], "never": ["\[\[", "Traceback"]},
+ {"do": "row", "say": "Budget"},
+ {"do": "quiet", "max": 300},
+ {"do": "expect", "see": ["travel"], "never": ["noreply@payworth"]}
+]

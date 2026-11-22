@@ -202,8 +202,10 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     # agent sent the payment note to the colleague who had shared a vendor sheet, "as the route to AP". Who it is for, or the one question
     guessed = [a.lower() for a in (split(x)[1] for x in ([guessed] if isinstance(guessed, str) else guessed or [])) if a]
     if channel == 'email' and agent != 'owner':
-        from .people import at_domain
+        from .people import at_domain, said_by_owner
+        his = said_by_owner(store, tid)
         for g in [a for a in dict.fromkeys(guessed) if '@' in a]:
+            if g in his: guessed = [a for a in guessed if a != g]; continue        # ...an address he gave is no guess (people.owner_lines)
             known = at_domain(store, g.rpartition('@')[2])
             if g in {a.lower() for a, _ in known}: guessed = [a for a in guessed if a != g]; continue
             if known: return {'ok': False, 'why': f"{g} is your guess, and the owner's mail knows {g.rpartition('@')[2]}: "

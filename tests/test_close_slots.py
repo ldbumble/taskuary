@@ -839,3 +839,14 @@ def test_a_sent_email_is_named_by_whom_it_went_to_not_by_its_cards_reason(s):
 
 # HIS OWN ASK OWES HIM NO EMAIL (a walk, 2026-11-18): "set it up for my press" was read as an email owed to the owner, its agent drafted
 # "please approve the note" to him, and he had to drop it. He is the sender of his own ask: his press on the card is the approval
+
+
+def test_an_address_he_gave_in_his_memory_is_no_guess(s):
+    """Round 3, 2026-11-22: Paula's address stood in his memory under "Your people", and the agent was told it had guessed it and asked him for
+    it. An address in his own words is known: found by her name, and never refused as a guess."""
+    from taskuary import people
+    s.save_doc('learned', '## Your people\n- Paula Vance (paula.vance@northwind.example) handles payroll\n', 'owner')
+    assert people.resolve(s, 'Paula Vance') == {'address': 'paula.vance@northwind.example'}
+    tid = typed(s, FOUR[:1])
+    out = slots.draft(s, tid, 'Hi Paula - the payroll file is attached.', to='paula.vance@northwind.example', guessed=['paula.vance@northwind.example'])
+    assert out['ok'], out

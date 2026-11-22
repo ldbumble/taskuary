@@ -61,6 +61,22 @@ def written_to(store) -> dict:
     return seen
 
 
+_ADDR = re.compile(r'[\w.+-]+@[\w-]+(?:\.[\w-]+)+')
+def owner_lines(store, tid=None) -> list:
+    """(address, the line it stands in) for every email address in the owner's OWN words - his memory (LEARNED.md: "Your people") and, on a
+    task, what he typed on it. An address he gave is no guess (round 3, 2026-11-22: Paula's address was in his memory, and the agent was told
+    it guessed it and asked him for it)."""
+    texts = [str(store.get_doc('learned') or '')]
+    if tid:
+        from .general import USER_TYPE, WAITING_TYPE, is_brief
+        t = store.get_task(int(tid)) or {}
+        if t.get('OriginBase') == 'owner': texts.append(str(t.get('Summary') or ''))
+        texts += [str(c.get('Body') or '') for c in store.list_comments(int(tid), internal=True)
+                  if c.get('ActorType') in (USER_TYPE, WAITING_TYPE) and not is_brief(c)]
+    return [(m.group(0).lower(), line) for x in texts for line in x.splitlines() for m in _ADDR.finditer(line)]
+def said_by_owner(store, tid=None) -> set: return {a for a, _ in owner_lines(store, tid)}
+
+
 def resolve(store, name: str) -> dict:
     """{'address'} for exactly one whole-word match, {'candidates': [...]} for several or for partial matches (most
     written-to first), {} for none."""
@@ -76,6 +92,9 @@ def resolve(store, name: str) -> dict:
     for a, (n, last) in written_to(store).items():
         if _whole(words, a): add(whole, a, n, last)
         elif _part(words, a): add(part, a, n, last)
+    # ...and an address he gave in his own words, beside this name (owner_lines): his word is the surest there is
+    for a, line in owner_lines(store):
+        if _whole(words, a) or set(words) <= set(_words(line)): add(whole, a, 99, '9999')
     rank = lambda d: [a for a, _ in sorted(d.items(), key=lambda kv: kv[1], reverse=True)]    # most written-to, then newest
     if len(whole) == 1: return {'address': next(iter(whole))}       # one whole-word match outranks fragments of other names
     found = rank(whole) or rank(part)

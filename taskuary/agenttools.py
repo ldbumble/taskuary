@@ -704,8 +704,10 @@ def show_files(store, tid: int, paths) -> str:
         rows.append({'id': a['ArtifactId'], 'name': a.get('Name') or p.name, 'path': f"shown:{a['ArtifactId']}", 'kind': 'shown',
                      'content_type': a.get('ContentType') or '', 'size': a.get('Size') or 0, 'url': f"/api/task-artifacts/{a['ArtifactId']}"})
     if not rows and not drawn: raise ValueError('nothing was shown - ' + '; '.join(why))
-    said = ' '.join(x for x in (f"Shown in the owner's chat under your answer: {', '.join(r['name'] for r in rows)}." if rows else '',
-                                f"In the owner's chat already, previewed under your answer as a file of this task: {', '.join(drawn)}." if drawn else '',
+    # ...WHERE it stands is the chat's, not the agent's to say (the walk, 2026-11-22: told "under your answer", the agent wrote "the chart below"
+    # over a picture drawn above its words): shown, at this step
+    said = ' '.join(x for x in (f"Shown in the owner's chat at this step: {', '.join(r['name'] for r in rows)} - never say where on the page it is." if rows else '',
+                                f"In the owner's chat already, previewed as a file of this task: {', '.join(drawn)}." if drawn else '',
                                 f"Not shown - {'; '.join(why)}." if why else '') if x)
     return f'{said} {FILES_MARK}{json.dumps(rows, ensure_ascii=False, separators=(",", ":"))}' if rows else said
 

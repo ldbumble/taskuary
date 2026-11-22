@@ -159,7 +159,7 @@ class TheTool(unittest.TestCase):
         text, err = tool(self.tid, 'show', files=[str(d / 'dark.png'), str(d / 'run.exe'), str(d / 'gone.png')])
         self.assertFalse(err, text)
         head, rows = text.split(agenttools.FILES_MARK)
-        self.assertIn("Shown in the owner's chat under your answer: dark.png", head)
+        self.assertIn("Shown in the owner's chat at this step: dark.png", head); self.assertNotIn('under your answer', head)   # ...it is drawn where the step is
         self.assertIn('run.exe: .exe cannot be shown', head); self.assertIn('gone.png: there is no such file', head)
         (row,) = json.loads(rows)
         self.assertEqual((row['name'], row['content_type'], row['kind']), ('dark.png', 'image/png', 'shown'))

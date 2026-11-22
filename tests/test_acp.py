@@ -68,6 +68,35 @@ class ATurnTests(unittest.TestCase):
         finally:
             c.close()
 
+    def test_his_files_ride_as_content_blocks_the_agent_can_take_never_only_a_path(self):
+        """The walk, 2026-11-21: Codex answered "I can't read the whiteboard photo - please attach it" with the photo's path in its prompt
+        and no call made - session/prompt was one text block. A picture rides as an image where the agent takes images, a PDF or sheet as
+        its text (an embedded resource), and anything else - or an agent that says it takes neither - as a resource_link; the words keep
+        the path the agent acts on."""
+        import base64, tempfile
+        from taskuary.general import with_files
+        d = Path(tempfile.mkdtemp())
+        pic, notes = d / 'whiteboard.png', d / 'lease-notes.txt'
+        pic.write_bytes(b'\x89PNG\r\n\x1a\n' + b'\0' * 32); notes.write_text('Either party may break the lease after 12 months.', encoding='utf-8')
+        text = with_files('what does the whiteboard say, and the notes?', [str(pic), str(notes)])
+        full = acp.blocks(text, {'promptCapabilities': {'image': True, 'embeddedContext': True}})
+        self.assertEqual([b['type'] for b in full], ['text', 'image', 'resource'])
+        self.assertEqual(base64.b64decode(full[1]['data']), pic.read_bytes()); self.assertEqual(full[1]['mimeType'], 'image/png')
+        self.assertIn('Either party may break the lease', full[2]['resource']['text'])
+        self.assertIn(str(pic), full[0]['text'])                                    # ...and the path stays in the words
+        bare = acp.blocks(text, {'promptCapabilities': {}})
+        self.assertEqual([(b['type'], b.get('name')) for b in bare], [('text', None), ('resource_link', 'whiteboard.png'), ('resource_link', 'lease-notes.txt')])
+        self.assertEqual(acp.blocks('no files here', {}), [{'type': 'text', 'text': 'no files here'}])
+        # ...and a real turn sends them: the fake takes no images, so the picture goes as a link
+        sent, c = [], client()
+        try:
+            with mock.patch.object(c, '_send', side_effect=lambda m: sent.append(m) or acp.ACPClient._send(c, m)):
+                c.connect(); c.new_session(HERE); c.prompt(text)
+        finally:
+            c.close()
+        got = next(m for m in sent if m.get('method') == 'session/prompt')['params']['prompt']
+        self.assertEqual([b['type'] for b in got], ['text', 'resource_link', 'resource_link'])
+
     def test_progress_arrives_as_it_happens_not_at_the_end(self):
         seen = []
         c = client(on_update=lambda u: seen.append(u.get('sessionUpdate')))

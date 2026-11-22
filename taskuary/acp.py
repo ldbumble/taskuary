@@ -242,8 +242,7 @@ class ACPClient:
             if outer: outer(u)
         self.on_update = collect
         try:
-            r = self.request('session/prompt', {'sessionId': self.session_id,
-                                                'prompt': [{'type': 'text', 'text': str(text or '')}]}, sent=sent) or {}
+            r = self.request('session/prompt', {'sessionId': self.session_id, 'prompt': blocks(text, self._caps)}, sent=sent) or {}
         finally:
             self.on_update = outer
         self.last_turn = r              # ...the whole PromptResponse: its `usage` and _meta are what the turn used (aiusage.acp)
@@ -281,6 +280,44 @@ class Conversation:
     def sid(self): return self.client.session_id
     def alive(self) -> bool: return self.client.alive()
     def close(self): self.client.close()
+
+
+# HIS FILES REACH EVERY BRAIN AS FILES (the walk, 2026-11-21: Codex answered "I can't read the whiteboard photo - please attach it" with the
+# path in its prompt and no call made; Claude had read it with its own Read). The words keep their ATTACHED block - the path is what the
+# agent acts on - and each file it names also rides as a content block, as far as the agent's promptCapabilities (initialize) allow: a
+# picture as an image, any other file as its text read here (attachtext) in an embedded resource, else a resource_link, which every ACP
+# agent takes. One road for Claude, Codex and a card's model on the Codex harness
+IMAGE_TYPES = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp'}
+IMAGE_MAX = 5 * 1024 * 1024              # the largest picture a model's API takes inline
+FILE_CHARS = 20_000                      # what one embedded file carries of its text (attachtext.KEEP_CHARS)
+
+
+def file_block(path, caps: dict) -> dict:
+    "One file the prompt names, as the content block the agent can take."
+    import base64, mimetypes
+    from pathlib import Path
+    p = Path(str(path)); pc = (caps or {}).get('promptCapabilities') or {}
+    uri, mime = p.resolve().as_uri() if p.is_absolute() else f'file:///{p.as_posix()}', mimetypes.guess_type(p.name)[0] or 'application/octet-stream'
+    try: size = p.stat().st_size
+    except OSError: size = None
+    if pc.get('image') and p.suffix.lower() in IMAGE_TYPES and size is not None and size <= IMAGE_MAX:
+        return {'type': 'image', 'mimeType': IMAGE_TYPES[p.suffix.lower()], 'data': base64.b64encode(p.read_bytes()).decode('ascii'), 'uri': uri}
+    if pc.get('embeddedContext') and size is not None and p.suffix.lower() not in IMAGE_TYPES:
+        from . import attachtext
+        e = (attachtext.of_paths([p]) or [{}])[0]
+        if e.get('text'):
+            return {'type': 'resource', 'resource': {'uri': uri, 'mimeType': 'text/plain', 'text': '\n'.join(attachtext.lines([e], FILE_CHARS, FILE_CHARS))}}
+    return {'type': 'resource_link', 'uri': uri, 'name': p.name, 'mimeType': mime, **({'size': size} if size is not None else {})}
+
+
+def blocks(text, caps: dict = None) -> list:
+    "A prompt as ACP content: its words, then each file its own ATTACHED block names (general.prompt_files) as a block the agent takes."
+    from .general import prompt_files
+    out = [{'type': 'text', 'text': str(text or '')}]
+    for f in prompt_files(text):
+        try: out.append(file_block(f, caps or {}))
+        except Exception as e: logger.debug(f'acp: {f} rides as its path only - {e}')
+    return out
 
 
 def _text_of(content) -> str:

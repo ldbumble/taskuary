@@ -724,24 +724,25 @@ def for_screen(text: str) -> str:
 
 
 _ASK_ONE = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\]\s*:?', re.I)
+_ASK_TAIL = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\][^\n]*', re.I)          # a marker and the rest of its line: its question, if any
 
 
 def ask_markers(text: str) -> tuple:
     """(cleaned reply, [(question, choices)]) - EVERY marker, in order (the owner, 2026-09-28: a regular agent's three
     questions reached the card as one; the first marker swallowed the rest as its own choices)."""
-    t = str(text or '')
-    cuts = [m for m in _ASK_ONE.finditer(t)]
+    t = without_summary(str(text or ''))
+    cuts = [m for m in _ASK_TAIL.finditer(t)]
     if not cuts: return text, []
-    asks = []
-    for i, m in enumerate(cuts):
-        # ...and the turn's summary block after it is no part of the question: read as one, the chat drew its JSON tail, ": false}" (walk 2, 2026-11-21)
-        seg = without_summary(t[m.end(): cuts[i + 1].start() if i + 1 < len(cuts) else len(t)])
-        parts = [' '.join(p.split()) for p in seg.split('|')]
-        # ...A BARE MARKER IS THE WAIT ON WHAT IT JUST ASKED (ASK_LINE: asked in its own words, the marker on its own line): its question is the
-        # paragraph above it. Read as no ask, the turn recorded nothing and read "agent done" over a question to him (the walk, 2026-11-21)
-        q = parts[0] if parts and parts[0] or i else ' '.join((re.split(r'\n\s*\n', t[:m.start()].strip()) or [''])[-1].split())
+    asks, prev = [], 0
+    for m in cuts:
+        # ...ONE GRAMMAR (the agent audit, 2026-11-22: words written after the marker - "Meanwhile I drafted the agenda..." - were recorded as the
+        # question, and cut from the answer): the question is what the marker's own line says after it, its choices split by '|' - or, where
+        # the marker stands bare (ASK_LINE: asked in its own words), the paragraph above it. What follows on later lines is the answer's
+        parts = [' '.join(p.split()) for p in _ASK_ONE.sub('', m.group(0), 1).split('|')]
+        q = parts[0] or ' '.join((re.split(r'\n\s*\n', t[prev:m.start()].strip()) or [''])[-1].split())
         if q: asks.append((q[:600], [p[:120] for p in parts[1:] if p]))
-    return t[:cuts[0].start()].rstrip(), asks
+        prev = m.end()
+    return re.sub(r'\n{3,}', '\n\n', _ASK_TAIL.sub('', t)).strip(), asks
 
 
 def carried(earlier: str, last: str) -> str:

@@ -237,6 +237,16 @@ class InstallAndGuardTests(unittest.TestCase):
         self.assertEqual(guard.denied('POST', '/api/hooks/claude/ask'), '')
 
 
+class OneGrammarTests(unittest.TestCase):
+    def test_words_after_the_marker_are_the_answers_never_the_question(self):
+        """The agent audit, 2026-11-22: "Meanwhile I drafted the agenda" written after the marker was recorded as the question, and cut from
+        the answer. The question is the marker's own line after it, else the paragraph above it."""
+        reply, asks = selfclose.ask_markers('Which account? I recommend Payworth.\n[[TASKUARY-ASK]]\nMeanwhile I drafted the agenda.')
+        self.assertEqual(asks, [('Which account? I recommend Payworth.', [])])
+        self.assertIn('Meanwhile I drafted the agenda.', reply)
+        self.assertEqual(selfclose.ask_markers('[[TASKUARY-ASK]] Which day? | Mon | Tue')[1], [('Which day?', ['Mon', 'Tue'])])
+
+
 class MarkerTrailerTests(unittest.TestCase):
     # walk 2, 2026-11-21: a bare ask marker, then the turn's summary block - the chat drew the summary's JSON tail as the question
     def test_a_bare_marker_before_the_summary_asks_the_paragraph_above_it(self):

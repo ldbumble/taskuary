@@ -233,6 +233,9 @@ class TaskState:
             # sender not trusted yet - after the session had opened; the session stayed, parked, and the task read "agent done" with Mark
             # done lit over a chat that held only the sender's message and the Trust action): the task reads as it does with no session
             if not (parked and never_ran(store, t, session)):
+                # ...AND ONE HE STOPPED IS STOPPED, never "waiting on you" (the walk, 2026-11-22: the chat said "You stopped the agent", the chip
+                # and the rail's hand said it waited on him - nothing did)
+                if parked and not session.get('request') and last_word(store, tid, session.get('sid')) == 'stopped': return 'stopped'
                 # ...and an agent whose turn asked nothing is done for now, never waiting on you (the owner, 2026-11-07) - as it reads once idled out
                 if not done_for_now(store, t, session): return 'blocked'
                 from .general import handles
@@ -297,6 +300,12 @@ def waits_press(store, t: dict, row: bool = False) -> bool:
     return bool(store.waiting_on_owner(t['TaskId'])) if pending or not row or 'ReviewStatus' not in t else False
 
 
+def last_word(store, tid: int, sid) -> str | None:
+    "The session's last worker event that is not a note: 'turn_end', 'stopped', 'failed', 'input_needed'..."
+    from . import workerstate as ws
+    return next((e['Kind'] for e in reversed(ws.events(store, tid, sid)) if e['Kind'] not in ws.NOTES), None)
+
+
 def done_for_now(store, t: dict, session: dict) -> bool:
     """A live agent whose turn ENDED with nothing asked and nothing left for a press: "agent done", Mark done lit, the task still open under
     Tasks (the owner, 2026-11-10). A chat agent always read so; a coding agent that had pushed and said "Nothing is left to do on this
@@ -305,9 +314,9 @@ def done_for_now(store, t: dict, session: dict) -> bool:
     if (session.get('state') or 'parked') != 'parked' or session.get('request') or session.get('held'): return False
     tid = t['TaskId']
     if waits_press(store, t): return False
-    from . import landing, workerstate as ws
+    from . import landing
     from .general import handles
-    last = next((e['Kind'] for e in reversed(ws.events(store, tid, session.get('sid'))) if e['Kind'] not in ws.NOTES), None)
+    last = last_word(store, tid, session.get('sid'))
     # ...a chat agent in its own chat, unless its last turn was STOPPED (the audit, 2026-11-10: Remind me pressed mid-turn lit Mark done over the
     # turn it had just stopped, in the beat before its session rested); one of its kind in a pane (a routine's run) is read by its turns, as a
     # coding agent is

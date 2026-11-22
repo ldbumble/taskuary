@@ -34,3 +34,13 @@ def test_a_turn_cut_by_close_is_recorded_stopped():
         except general.Stopped: pass
         else: raise AssertionError('a stopped turn says so to its caller')
     assert s.last_worker_event(tid, skip=ws.NOTES)['Kind'] == 'stopped'
+
+
+def test_a_turn_he_stopped_reads_stopped_never_waiting_on_him():
+    """The walk, 2026-11-22: after his Stop the chat said "You stopped the agent" while the chip and the rail's hand said "agent waiting on
+    you" - a parked session whose last word is his stop fell to `blocked`. It reads stopped, on every surface that reads the key."""
+    from taskuary import taskstate
+    s = MemoryStore(); tid = task(s)
+    ws.record(s, tid, 'sid1', 'working', text='', source='api'); ws.record(s, tid, 'sid1', 'stopped', text='stopped', source='api')
+    session = {'alive': True, 'waiting': True, 'state': 'parked', 'sid': 'sid1', 'mode': 'assistant'}
+    assert taskstate.state(s, s.get_task(tid), session) == 'stopped'

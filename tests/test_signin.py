@@ -635,7 +635,7 @@ class TheOwnerSignsInOnThePage(Asking):
         from taskuary import browserview
         sess = self.chat()
         class Title:
-            def js(self, src): return '  PermitWatch — Create your account '
+            def js(self, src): return json.dumps(['  PermitWatch — Create your account ', '', 'http://127.0.0.6:18791/s/permitwatch/signup'])
             def close(self): pass
         with on_page('http://127.0.0.6:18791/s/permitwatch/signup'), mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}), \
              mock.patch.object(signin, 'on_signin_page', return_value=True), mock.patch.object(signin, 'connect', return_value=Title()), \
@@ -643,7 +643,7 @@ class TheOwnerSignsInOnThePage(Asking):
             rid = browserview.your_turn(self.s, self.tid, 'sess1', 'answer the human check.', watch=None)
         p = signin.pending(self.s, self.tid)
         self.assertEqual((rid, p['site']), ('signin:127.0.0.6', '127.0.0.6'))
-        self.assertEqual(p['text'], 'Your turn in the browser on PermitWatch — Create your account: answer the human check')
+        self.assertEqual(p['text'], 'Your turn in the browser on PermitWatch: answer the human check')
         self.assertNotIn('Sign in', p['text']); self.assertNotIn('127.0.0.6', p['text'])
         # ...and a named site is called by its name, with nothing read off the page
         with mock.patch.object(signin, 'connect', side_effect=AssertionError('not read')): self.assertEqual(signin.page_name('s', 'bank.example'), 'bank.example')
@@ -1227,3 +1227,14 @@ def test_a_press_of_done_is_told_as_a_press_never_as_a_sign_in():
         signin._through(s, tid, 'signin:dealflow.example', 'dealflow.example', seen=False)
     did, said = told.call_args.kwargs['words']
     assert did == f'You pressed {signin.DONE} on dealflow.example' and 'themselves' not in said and 'Look at the page' in said
+
+
+def test_a_site_on_a_bare_address_is_named_by_its_title_s_site_part_never_the_whole_title():
+    "Round 2, 2026-11-22: the hand-over read \"Sign in to Sign in - DealFlow Pro to continue\" - the page's whole title used as the site's name."
+    from unittest import mock
+    from taskuary import signin
+    class C:
+        def js(self, _): return '["Sign in - DealFlow Pro", "", "http://127.0.0.1:18791/s/dealflow/login"]'
+        def close(self): pass
+    with mock.patch.object(signin, 'connect', return_value=C()):
+        assert signin.page_name('s1', '127.0.0.1') == 'DealFlow Pro'

@@ -438,10 +438,20 @@ def page_name(sid: str, site: str) -> str:
     if not _ip(site): return site
     try:
         c = connect(sid)
-        try: t = ' '.join(str(c.js('document.title') or '').split())
+        try: got = json.loads(c.js("JSON.stringify([document.title, document.querySelector('meta[property=\'og:site_name\']')?.content || '', "
+                                   "location.href])") or '[]')
         finally: c.close()
-    except Exception: t = ''
-    return t[:60] or site
+    except Exception: got = []
+    t, named, href = ([' '.join(str(x or '').split()) for x in got] + ['', '', ''])[:3]
+    return (brand_of(t, href) or named or t)[:60] or site
+# ...THE SITE'S NAME, NOT THE PAGE'S (round 2, 2026-11-22: "Sign in to Sign in - DealFlow Pro to continue"): a title is the page and the site
+# around a separator, either way round ("PermitWatch — Create your account", "Payment | DealFlow Pro"). The site is the part its own address
+# spells (/s/permitwatch/..., dealflow.local) - read off the structure, no words judged; '' where no part is
+TITLE_PARTS = re.compile(r'\s+[-|·—–]\s+')
+def brand_of(title: str, href: str = '') -> str:
+    parts, at = [x.strip() for x in TITLE_PARTS.split(str(title or '')) if x.strip()], re.sub(r'[^a-z0-9]', '', str(href or '').lower())
+    if len(parts) < 2: return ''
+    return next((x for x in parts if len(k := re.sub(r'[^a-z0-9]', '', x.lower())) >= 3 and (k in at or any(w in at for w in re.findall(r'[a-z0-9]{4,}', x.lower()) if w == k[:len(w)]))), '')
 
 
 HANDED_ON = 6

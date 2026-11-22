@@ -42,12 +42,14 @@ const Block = ({ p, aside, flush, children }) => (
 
 // a table reads its numbers as a report does: right-aligned in tabular figures, one count of decimals a column - or in the column's own
 // format (money, a count, a percent), when the agent named one
+const withSym = (raw, n) => { const m = typeof raw === "string" && raw.trim().match(/^-?\s*([$€£¥])/); return !m ? n : n.startsWith("-") ? `-${m[1]}${n.slice(1)}` : `${m[1]}${n}`; };
 function Table({ columns, rows }) {
   const names = useMemo(() => labels(columns), [columns]), fmts = useMemo(() => columns.map((c) => c.format || null), [columns]);
   const objs = useMemo(() => rows.map((r) => Object.fromEntries(names.map((c, i) => [c, r[i]]))), [names, rows]);
   const nums = useMemo(() => new Set([...reportShape(objs).nums, ...names.filter((c, i) => fmts[i] && objs.every((r) => r[c] == null || numOf(r[c]) !== null))]), [objs, names, fmts]);
   const p = useMemo(() => Object.fromEntries(names.map((c, i) => [c, fmts[i] ? placesOf(objs.map((r) => numOf(r[c])), fmts[i]) : places(objs, c)])), [names, objs, fmts]);
-  const show = (r, c, i) => (r[c] == null ? "" : !nums.has(c) ? String(r[c]) : fmts[i] ? fmtAs(numOf(r[c]), fmts[i], p[c]) : fmtNum(numOf(r[c]), p[c]));
+  // ...and a cell written with its money's symbol keeps it (round 4, 2026-11-22: "$1,234" read as a number drew as "1,234" - the price lost its "$")
+  const show = (r, c, i) => (r[c] == null ? "" : !nums.has(c) ? String(r[c]) : fmts[i] ? fmtAs(numOf(r[c]), fmts[i], p[c]) : withSym(r[c], fmtNum(numOf(r[c]), p[c])));
   return <div className="tq-view-table"><table>
     <thead><tr>{names.map((c) => <th key={c} scope="col" className={nums.has(c) ? "n" : ""}>{c}</th>)}</tr></thead>
     <tbody>{objs.map((r, j) => <tr key={j}>{names.map((c, i) => <td key={c} className={nums.has(c) ? "n" : ""} title={show(r, c, i)}>{show(r, c, i)}</td>)}</tr>)}</tbody>

@@ -174,6 +174,9 @@ AGENT_READS = (
 # listed so that test_guard walks app.routes and FAILS on a write route nobody classified: a new
 # door is a decision, not something that inherits whatever the table happened to say.
 OWNER_ONLY = (
+    # his presses on a turn and a post card (2026-11-22): Try again under a turn that stopped, and a post put up through the agent's browser
+    (r'POST', r'^/api/tasks/\d+/again$', "Try again under a turn - his press, never an agent's"),
+    (r'POST', r'^/api/reviews/\d+/via-browser$', "Post via the browser on a post card - his press, never an agent's"),
     # a clock the routine editor holds, said in words (reports.schedule_words) - it writes nothing, but it is the page's, not an agent's
     (r'POST', r'^/api/schedule-words$', "the routine editor's own wording of an unsaved clock - the page's"),
     # New's box, the one start from the owner's words (F1): an agent starts new work by its own new_task, which checks the owner asked

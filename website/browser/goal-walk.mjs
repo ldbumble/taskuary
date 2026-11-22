@@ -83,12 +83,14 @@ const STEPS = {
     await page.focus("[data-tq-search-input] input, input[data-tq-search-input]"); await page.keyboard.type(s.say);
     const t0 = Date.now(); let hit = null;
     while (Date.now() - t0 < 15000 && !(hit = await page.evaluate(() => { const h = document.querySelector("[data-tq-search-hit]"); if (!h) return null; const q = h.getBoundingClientRect(); return { x: q.x + q.width / 2, y: q.y + q.height / 2, text: h.innerText.slice(0, 120) }; }))) await sleep(200);
+    if (!hit || s.none) await page.keyboard.press("Escape").catch(() => {});      // ...Search shut behind it, as a person leaves it
     if (!hit) return { hit_ms: null, problem: s.none ? "" : "no result for words that should find a task" };
     if (s.none) return { problem: `found "${hit.text}" for words that match nothing` };
     await page.mouse.click(hit.x, hit.y); await sleep(2500);
     const at = await where(), r = await rail(), id = (at.match(/task=(\d+)/) || [])[1];
     const onRail = id && r.some((x) => x.key.includes(id));
     await sleep(5000); const stays = (await where()) === at && (!id || (await rail()).some((x) => x.key.includes(id)));
+    await page.keyboard.press("Escape").catch(() => {});
     return { hit_ms: Date.now() - t0, opened: at, problem: !id ? "the hit opened no task" : !onRail ? "the task it opened is not on the rail" : !stays ? "it opened, then went off" : "" };
   },
   async row(s) { const at = await page.evaluate((w, vs) => { const vis = eval(vs); const r = [...document.querySelectorAll("[data-tq-rail] .tq-pile-row[data-tq-key]")].filter(vis).find((e) => e.innerText.toLowerCase().includes(w.toLowerCase()));

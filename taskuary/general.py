@@ -2261,7 +2261,7 @@ def action_line(store, tools: bool = False) -> str:
     r, off = roads(store), unconnected_posts(store)
     return _ACTION.format(mail=_MAIL[tools], guess=_GUESS[tools], brk=_BREAK[tools], routine=_ROUTINE[tools], propose=_PROPOSE[tools],
                           roads=(f'Connected for this owner: {r}.' if r else 'Nothing that posts or sends is connected for this owner yet.')
-                          + (f' Not connected - post through your browser on its site: {off}.' if off else ''))
+                          + (f' Not connected - its post card offers Post via the browser: {off}.' if off else ''))
 
 
 # EVERY NETWORK IS POSTED TO, CONNECTED OR NOT (the owner's live routine, 2026-11-20: drafts for X, Reddit, LinkedIn went into one text file and

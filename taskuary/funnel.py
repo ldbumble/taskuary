@@ -334,8 +334,16 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             reviews.add(r['ReviewId'])
             action = r.get('ReviewKind') == 'action'
             rv = store.get_review(r['ReviewId']) or {}
-            # ...A DRAFT'S ROW NAMES WHOM IT ANSWERS (the card audit C2; the owner, 2026-11-22: "yes"): it took who, words and channel from the
-            # newest line on the task - Gail's, under a reply to Erin. A draft newer lines came after is off the rail already (store.off_table).
+            # ...ITS PLACE AND TIME ARE THE THREAD'S NEWEST LINE - the rail keeps its order by them (processing ordering); the six newer Teams lines
+            # behind an old "yes" are what it is about now
+            latest = None if canonical else (store.last_inbound_on_task(r.get('TaskId')) if r.get('TaskId') else
+                      store.last_inbound_in(cid) if cid else None)
+            if latest:
+                base.update(mid=latest.get('MessageId'), when=latest.get('SentAt'), preview=latest.get('BodyText') or base.get('preview'),
+                            channel=latest.get('Channel') or base.get('channel'))
+                subj = says(latest) or subj
+            # ...BUT ITS NAME IS WHOM IT ANSWERS (the card audit C2; the owner, 2026-11-22: "yes"): it took who from the newest line on the task -
+            # Gail, under a reply to Erin. A draft newer lines came after is off the rail already (store.off_table).
             # The feed joins a review by its freshness marker (MessageId - its plan is pinned), so a reply that answers another message is
             # named here by that one (continuity.answers, the one reading of it)
             from .continuity import answers

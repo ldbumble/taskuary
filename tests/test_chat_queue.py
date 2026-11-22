@@ -96,7 +96,7 @@ class TakingTurnsTests(unittest.TestCase):
 
     def test_a_browser_that_gives_up_stops_waiting(self):
         """Cancelled while queued: it returns, it does not sit on the thread for four minutes."""
-        sess, patched = _session(self.s, self.tid, 'answered', delay=1.5)
+        sess, patched = _session(self.s, self.tid, 'answered', delay=3.0)     # ...a turn well past the bound, so a slow runner never reads as waiting
         cancel = threading.Event()
         with patched:
             threading.Thread(target=lambda: sess.send_prompt('one'), daemon=True).start()
@@ -105,7 +105,7 @@ class TakingTurnsTests(unittest.TestCase):
             began = time.time()
             with self.assertRaises(RuntimeError):
                 sess.send_prompt('two', cancel=cancel)
-            self.assertLess(time.time() - began, 1.0)
+            self.assertLess(time.time() - began, 2.0)
 
     def test_a_long_answer_never_fails_the_one_behind_it(self):
         """The owner, 2026-11-05: talking to the agent while it works. A message waited 240 s behind a long turn and then failed "something

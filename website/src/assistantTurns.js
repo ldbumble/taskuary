@@ -112,9 +112,14 @@ export function placeLine(messages = [], line) {
 // dropped the Send to agent pressed in between (agent-presses, 2026-11-01). The newest copy wears the item; an older one keeps its id.
 // A line Next drew ahead wears its item too, though it is no copy yet (itemKey): the answer that fills it drops `ahead`, and a key that
 // changed then remounted the card drawn at once ~0.6 s later - "Next shows it, then reloads it" (next-steady, 2026-11-01)
+// ...a TASK'S line by its task, whatever its row is called: New draws `task:N` at the press and the walk answers with the row's rail key
+// (processing:..., reply:...) - keyed by the name, the whole task view was built again a second after it was drawn (goal walk, 2026-11-22)
 export function lineKeys(messages = []) {
   const seen = new Set(), keys = new Map();
-  for (const m of [...messages].reverse()) { const k = itemKey(m.ahead ? { ...m, ahead: false } : m); keys.set(m.id, k && !seen.has(k) ? (seen.add(k), `item:${k}`) : m.id); }
+  for (const m of [...messages].reverse()) {
+    const k0 = itemKey(m.ahead ? { ...m, ahead: false } : m), k = k0 && m.card?.tid ? `task:${m.card.tid}` : k0;
+    keys.set(m.id, k && !seen.has(k) ? (seen.add(k), `item:${k}`) : m.id);
+  }
   return keys;
 }
 // ...and the owner's pick of it ("Show me ..." from the rail) is said once too: picking between two rows added another line per pick, the

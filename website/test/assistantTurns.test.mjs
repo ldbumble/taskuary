@@ -275,3 +275,15 @@ test("the pill's number counts answers to the owner's own questions, never what 
   // ...nothing seen yet: a reload's history is not news
   assert.equal(unseenAnswers([...asked, ...task]), 0);
 });
+
+test("a task's line keeps its key when its row comes back under another name: New's task view is built once", async () => {
+  const { lineKeys } = await import("../src/assistantTurns.js");
+  // New draws `task:N` at the press; the walk's answer names the same task by its rail key (goal walk, 2026-11-22: built twice in a second)
+  const drawn = [{ id: "a1", role: "assistant", card: { key: "task:21", kind: "task", tid: 21 } }];
+  const answered = [{ id: "a1", role: "assistant", card: { key: "processing:pi_1", kind: "wrapup", tid: 21 } }];
+  assert.equal(lineKeys(drawn).get("a1"), lineKeys(answered).get("a1"));
+  // ...and two lines of one task still take one key between them, the newest keeping it
+  const two = [{ id: "a1", role: "assistant", card: { key: "reply:5", kind: "reply", tid: 9 } }, { id: "a2", role: "assistant", card: { key: "task:9", kind: "task", tid: 9 } }];
+  const k = lineKeys(two);
+  assert.equal(k.get("a2"), "item:task:9"); assert.equal(k.get("a1"), "a1");
+});

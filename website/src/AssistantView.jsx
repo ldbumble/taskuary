@@ -2053,7 +2053,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   // THE ANSWER, DRAWN (railwalk, 2026-10-30): every walk move comes back as one Answer - the row, its words and chips, the rail as the
   // move left it - and this is the one place it is drawn. ONE COPY PER ITEM (2026-10-19 UI walk): an item opened again - from search, the
   // Board, the rail - moves its line to the end (placeLine), never a second
-  const belowRef = useRef(null);        // { id, key } of the row a walk press drew before its answer (surface, landed)
+  const belowRef = useRef(null);        // { id, key, tid } of the row a walk press drew before its answer (surface, landed)
+  const drawnAhead = useRef(null);      // ...the line pull drew this beat, before the messages hold it (surface's `pre`)
   // `off`: the owner has drawn another row since this move went out (pull) - its answer fills the line it drew where it stands, the rail with it,
   // and never takes the table back from the row the owner is on now
   const landed = useCallback((data, off = false) => {
@@ -2064,8 +2065,11 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     // ...the row a press drew ahead (surface) IS this line when it is the same row - its id kept, so the view in it stays mounted - and
     // comes down when the answer brought another
     const below = belowRef.current; belowRef.current = null;
+    // ...the SAME ROW by key, or by its task where one side named it `task:N` (New, Back, a link - pull): New's own row came back under its rail
+    // key, and the task view was built twice in its first second - its buttons out, then in, then out again (goal walk, 2026-11-22)
+    const same = !!below && !!card && (card.key === below.key || (!!below.tid && card.tid === below.tid));
     if (off) {
-      if (below) setMsgs((m) => (card?.key === below.key ? m.map((x) => (x.id === below.id ? { ...x, text: data.say, options: data.options || [], chips: data.chips || [], card, ahead: false } : x))
+      if (below) setMsgs((m) => (same ? m.map((x) => (x.id === below.id ? { ...x, text: data.say, options: data.options || [], chips: data.chips || [], card, ahead: false } : x))
         : m.filter((x) => x.id !== below.id)));
       if (data.pile) holdPile(data.pile); else loadPile(true);
       return;
@@ -2073,12 +2077,12 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     // ...a link to a REMOVED task (`gone`) puts down the card that was on the table (trust audit S4, 2026-10-28): it stood under "That task
     // was removed", its buttons on the row, as if it were the task the link named
     if (data.gone && !card && currentRef.current?.key) { setExpanded(false); setFoldedKey(currentRef.current.key); }
-    const id = below && card?.key === below.key ? below.id : `a${Date.now()}`;
+    const id = same ? below.id : `a${Date.now()}`;
     setMsgs((m) => placeLine(below ? m.filter((x) => x.id !== below.id) : m, { id, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [], card }));
     // ...and its Advisor read, sent at the press, holds for the answer: the row comes back a revision on - the press's own write (shown, so
     // seen), which the Advisor does not judge by - and that move read it again, two GETs a Next (CI, 2026-11-01). Anything else that
     // moves it says so on its own (the `advice` event, a wake)
-    putOnTable(card, "pile", !!below && card?.key === below.key);
+    putOnTable(card, "pile", same);
     if (card) setFoldedKey((k) => (k === card.key ? null : k));   // the row a close kept (a Send kept open) is back on the table, open
     say(data.say);
     // the turn brought the rail as it left it: hold that, with the new table excluded. Nothing along
@@ -2158,14 +2162,17 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     // ...`off`: the table is no longer this press's to draw on - a row the owner drew over it since, or (away) before it came in
     const was = currentRef.current, off = () => away || rowsDrawn.current !== drawn0;
     // ...a row a rail click drew over the move before this one (pull) is this press's own line: filled in place, never drawn twice
-    const pre = key ? [...msgsRef.current].reverse().find((x) => x.ahead && x.card?.key === key) : null;
-    belowRef.current = pre ? { id: pre.id, key } : null;
+    // ...and the line drawn this same beat (pull's ahead: New's own row), which the messages read here hold only from the next render - New's
+    // task was built twice in its first second, its answer finding no line to fill (goal walk, 2026-11-22)
+    const fresh = drawnAhead.current; drawnAhead.current = null;
+    const pre = !key ? null : [...msgsRef.current].reverse().find((x) => x.ahead && x.card?.key === key) || (fresh?.card?.key === key ? fresh : null);
+    belowRef.current = pre ? { id: pre.id, key, tid: pre.card?.tid } : null;
     // ...the row drawn ahead taken down, the table back on the row the press left (a failed press, a Back that found the top) - unless the
     // owner has drawn another row since, or drew this one himself (pre: it stays, under the error)
     const undraw = () => { const a = belowRef.current; belowRef.current = null; if (a && !pre) { setMsgs((m) => m.filter((x) => x.id !== a.id)); if (!off()) putOnTable(was); } };
     if (belowItem && !pre) {
       const id = `a${Date.now()}`;
-      belowRef.current = { id, key: belowItem.key };
+      belowRef.current = { id, key: belowItem.key, tid: belowItem.tid };
       setMsgs((m) => [...m, { id, role: "assistant", text: "", options: [], chips: [], card: belowItem, ahead: true }]);
       putOnTable(belowItem);
       if (how === "back") setFoldedKey((k) => (k === belowItem.key ? null : k));   // ...Back onto a row a close kept folded opens it
@@ -3114,8 +3121,9 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     const key = row?.key || asked;
     const ahead = () => {
       rowsDrawn.current += 1; setRailOpen(false); browseDown(); setExpanded(false);
-      const id = `a${Date.now()}`, was = openLater.current?.key;
-      setMsgs((m) => [...m.filter((x) => !(x.ahead && x.card?.key === was)), { id, role: "assistant", text: "", options: [], chips: [], card: row, ahead: true }]);
+      const id = `a${Date.now()}`, was = openLater.current?.key, line = { id, role: "assistant", text: "", options: [], chips: [], card: row, ahead: true };
+      drawnAhead.current = line;
+      setMsgs((m) => [...m.filter((x) => !(x.ahead && x.card?.key === was)), line]);
       putOnTable(row); setFoldedKey((k) => (k === row.key ? null : k));
     };
     if (!resetting && (busy || turnFlight.current)) {

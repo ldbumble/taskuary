@@ -6,8 +6,9 @@ import { Box, Button, CircularProgress, TextField, Typography } from "@mui/mater
 import ShuffleIcon from "@mui/icons-material/Shuffle";
 import CheckIcon from "@mui/icons-material/Check";
 import api from "./api";
-import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
+import { PANEL, PANEL2, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 import { ChannelIcon } from "./ui.jsx";
+import { Md } from "./md.jsx";
 import { ABOUT_SECTIONS, secId } from "./settingsMap.js";
 import { PROFILE_CHANGED } from "./profileAvatar.js";
 import { WorkstreamsSection, parseWorkstreams } from "./FirstRunAbout.jsx";
@@ -164,10 +165,11 @@ export default function AboutYou() {
       {/* honesty about the gap between "known here" and "told to the agents" */}
       <Typography id={secId("about", S_TOLD)} sx={{ fontSize: 11.5, color: FAINT, mt: 3, mb: 1 }}>What the agents are told about you</Typography>
       <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
-        Agents read SOUL.md, where your name and email are filled in as tokens. Below is all of it, exactly as they read it; edit it on the Docs page.
+        Every agent reads this about you, word for word, before it starts. Change it on the Docs page.
       </Typography>
-      <Box component="pre" sx={{ ...mono, fontSize: 12, whiteSpace: "pre-wrap", color: INK, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 2, p: 1.5, m: 0 }}>
-        {p.told_to_agents}
+      {/* ...as a page reads, never the file's raw text in a code block (the walk, 2026-11-21) */}
+      <Box data-tq-told-agents="" sx={{ fontSize: 13, color: INK, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 2, px: 2, py: 1 }}>
+        <Md text={String(p.told_to_agents || "").replace(/<!--[\s\S]*?-->/g, "").trim()} />
       </Box>
     </Box>
   );

@@ -99,7 +99,7 @@ import { summarize } from "./walkSummary.js";
 import { refreshToday, useCalendarToday } from "./calendarToday.js";
 import { onFirstRun, readFirstRun } from "./firstRunState.js";
 import FeedView from "./FeedView.jsx";
-import { MORE_PX, backAt, dueWord, holdsNew, levelOf, madeRow, placed, pressOnto, pulledRow, rowOfTask, withWalk } from "./funnelPile.js";
+import { MORE_PX, SECTION_WORDS, backAt, dueWord, holdsNew, levelOf, madeRow, placed, pressOnto, pulledRow, rowOfTask, withWalk } from "./funnelPile.js";
 import { STAYS, dropHeld, ghostsOf, keepHeld, movedEntry } from "./movedFyi.js";
 import { isImportant, level as priorityOf } from "./priority.js";
 import { age, ago, band, bandUntil, plural } from "./timeWords.js";
@@ -741,7 +741,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
               {...pressable(() => onSection(level))}>
               {/* each band its own SUBTLE tint (the owner, 2026-09-28: "now all the pills are the same. make them subtly
                   different") */}
-              <span className={`lvl-${level}`}>{levelLabel(level)}</span>
+              <span className={`lvl-${level}`}>{SECTION_WORDS[level] || levelLabel(level)}</span>
               {folds && <i className="fold" title={open ? `Collapse ${levelLabel(level)}` : `Show all ${rows.length + extra}`} aria-expanded={open}
                 {...pressable((e) => { e.stopPropagation(); if (!open && extra) onMoreFyi?.(); setOpened((cur) => {
                   const next = new Set(cur);

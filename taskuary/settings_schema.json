@@ -112,7 +112,7 @@
       "label": "Email signature",
       "type": "signature",
       "desc": "The block that goes under every email Taskuary writes for you - exactly this, once. Read it from your sent mail, then fix anything.",
-      "help": "Saved here, it is the only signature on an email: the AI is told not to sign, any sign-off it writes anyway is taken off, and this block goes under the text exactly as you see it. Chat messages (Teams, Slack, WhatsApp) never get it.\n\nRead it from my sent mail finds the closing lines most of your sent mail shares - quoted history is cut first. Blank: the sign-off line in STYLE.md, else your name. With several mailboxes, each can have its own - blank uses this one."
+      "help": "Saved here, it is the only signature on an email: the AI is told not to sign, any sign-off it writes anyway is taken off, and this block goes under the text exactly as you see it. Chat messages (Teams, Slack, WhatsApp) never get it.\n\nRead it from my sent mail finds the closing lines most of your sent mail shares - quoted history is cut first. Blank: the sign-off you taught it, else your name. With several mailboxes, each can have its own - blank uses this one."
     },
     "sign_replies": {
       "group": "Replies",
@@ -142,8 +142,8 @@
       "group": "Replies",
       "label": "Check your calendar when a reply is about time",
       "type": "switch",
-      "desc": "\"Tuesday at 1 works for me\" is only drafted if Tuesday at 1 is free. Reads the Outlook card's calendars (needs the Calendars.Read application permission) and a Google calendar if its OAuth fields are on the Gmail card.",
-      "help": "When the thread mentions a day, a time, a meeting or availability, the responder fetches your busy slots for the next 14 days and is told: never offer a busy time; if the asked time is busy, say so and offer the nearest free one; if the calendar could not be read, say you will confirm. The task gets a note that the calendar was checked.\n\nAgents can read the same thing: POST /api/tools/run with type \"calendar\"."
+      "desc": "\"Tuesday at 1 works for me\" is only drafted if Tuesday at 1 is free. Reads your Outlook and Google calendars, where they are connected - a calendar that cannot be read is said on its card under Connections.",
+      "help": "When the thread mentions a day, a time, a meeting or availability, the responder fetches your busy slots for the next 14 days and is told: never offer a busy time; if the asked time is busy, say so and offer the nearest free one; if the calendar could not be read, say you will confirm. The task gets a note that the calendar was checked."
     },
     "concierge_ai": {
       "group": "How mail is sorted",

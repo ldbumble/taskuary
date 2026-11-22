@@ -85,6 +85,8 @@ function SignatureSetting({ value, save }) {
   // what the account signs with by itself while nothing is typed here - the one its sent mail plainly ends with (signatures.account)
   const [acct, setAcct] = useState({ accounts: [] });
   useEffect(() => { setText(value); }, [value]);
+  // ...SAVED AS IT IS TYPED, a moment after the last key (the walk, 2026-11-21: it saved only on leaving the box, and a page left from it kept nothing)
+  useEffect(() => { if (text === value) return undefined; const t = setTimeout(() => save(text.trim()), 800); return () => clearTimeout(t); }, [text]);  // eslint-disable-line react-hooks/exhaustive-deps
   // OFFERED ONCE (2026-10-28): with nothing saved, the signature the sent mail ends with is read and put to the owner to confirm -
   // never saved behind their back
   useEffect(() => {
@@ -131,7 +133,7 @@ function SignatureSetting({ value, save }) {
       {(boxes || []).map((b) => <MailboxSignature key={b.address} box={b} save={saveBox} />)}
       <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)", px: 1.5, py: 1, fontSize: 12.5, whiteSpace: "pre-line", color: INK }}>
         {"Hi Erin,\n\nThanks - that's done.\n\n"}{text.trim() || acct.accounts[0]?.signature
-          || <span style={{ color: DIM }}>(no signature - your sign-off in STYLE.md, else your name)</span>}
+          || <span style={{ color: DIM }}>(no signature - the sign-off you taught it, else your name)</span>}
       </Box>
       {!text.trim() && !!acct.accounts.length && (
         <Typography data-tq-account-signature="" sx={{ fontSize: 12, color: DIM }}>
@@ -721,7 +723,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
         onBlur={(e) => e.target.value !== s.Value && saveSetting(s.Name, e.target.value, e.target)} />
     );
     if (m.type === "switch" || ["0", "1"].includes(String(s.Value))) return (
-      <Switch checked={s.Value === "1"} title={m.hover || undefined} onChange={() => saveSetting(s.Name, s.Value === "1" ? "0" : "1")} />
+      <Switch checked={s.Value === "1"} title={m.hover || undefined} inputProps={{ "aria-label": m.label || s.Name.replaceAll("_", " ") }}
+        onChange={() => saveSetting(s.Name, s.Value === "1" ? "0" : "1")} />
     );
     // A JSON KNOB IS CHECKED BEFORE IT IS SENT. A stray quote used to save, and the reader ignored the
     // whole value without a word - so every role quietly fell back to the default brain.
@@ -870,7 +873,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
               <Typography variant="caption" sx={{ color: FAINT, whiteSpace: "nowrap" }}
                 title="When two rules with the same action match, the lower number wins">priority {p.SortOrder}</Typography>
               <Button size="small" onClick={() => setDraft({ ...p, Active: !!p.Active })}>Edit</Button>
-              <Switch checked={!!p.Active} onChange={() => togglePolicy(p)} />
+              <Switch checked={!!p.Active} inputProps={{ "aria-label": `Rule ${p.Name || ""} on`.replace("  ", " ") }} onChange={() => togglePolicy(p)} />
               <IconButton size="small" title="Remove this rule" aria-label="Remove this rule" onClick={() => deletePolicy(p)}><DeleteOutlineIcon sx={{ fontSize: 16 }} /></IconButton>
             </Box>
           ))}

@@ -156,11 +156,12 @@ class Live:
         (_read). False, and nothing made or written, where no turn is reading."""
         with self.io:
             if not (self.on and self.alive()): return False
-            text = said() if callable(said) else said
+            text = _look(said)
             if not text: return True
             try: self._send(text)
-            except (OSError, ValueError) as e: logger.warning(f'clipool: {self.key} - words for the turn at work did not go in ({e})')
-            return True
+            except (OSError, ValueError) as e:
+                logger.warning(f'clipool: {self.key} - words for the turn at work did not go in ({e})'); return False
+            _took(said); return True
 
 
 _POOL: dict[str, Live] = {}
@@ -211,13 +212,28 @@ def steer(key: str, said) -> bool:
         if (ear := _EARS.get(key)) is not None: ear.append(said); return True
     if isinstance(lv, Live): return lv.steer(said)
     if not _acp_turn(lv): return False
-    text = said() if callable(said) else said
+    text = _look(said)
     if not text: return True
-    # ...(a turn that ended between the look and the request takes nothing: what was said is logged, as Live's write that did not go in is)
+    # ...WORDS THAT DID NOT GO IN ARE NOT HEARD (the agent audit, 2026-11-22: a turn that ended between the look and the request answered
+    # "promptRequired", and his line stood heard with nothing answering it): False, and they stay his waiting lines - the next turn's
     try: got = lv.client.steer(text)
     except Exception as e: got = str(e)
-    if got != 'injected': logger.warning(f'clipool: {key} - words for the turn at work did not go in ({got or "no answer"}): {text[:200]}')
-    return True
+    if got != 'injected':
+        logger.warning(f'clipool: {key} - words for the turn at work did not go in ({got or "no answer"}): {text[:200]}'); return False
+    _took(said); return True
+
+
+def _looks(said) -> bool:
+    "Can this maker of words make them without taking what they are made of (its `take`)?"
+    import inspect
+    try: return callable(said) and 'take' in inspect.signature(said).parameters
+    except (TypeError, ValueError): return False
+def _look(said) -> str:
+    "The words to steer, made from what waits without taking it (general.Session.steer's lines) - a maker with no look takes as it makes."
+    return said(take=False) if _looks(said) else said() if callable(said) else said
+def _took(said) -> None:
+    "They went in: what they were made of is taken now, heard where they went in."
+    if _looks(said): said(take=True)
 
 
 def ear(key: str):

@@ -3045,15 +3045,25 @@ class GeneralSession:
         # ...SAID AS THE SAME LINES ARE AT REST (send_prompt): his words under "the owner says" (_turn_only), then the one files block - steered in
         # they arrived bare, a file-only line as blank lines and then the block. One frame over what one steer takes, as one turn at rest takes
         # its lines under one; a later steer is a later message into the turn and says whose it is again. A steer that took nothing sends nothing
-        def lines():
-            # ...the trace marked where they go in, before they are heard: the turn under them is what it does from here (since_heard)
+        # ...AND TAKEN ONLY ONCE THEY WENT IN (the agent audit, 2026-11-22: a line sent in the second its turn ended was heard, the adapter
+        # answered "promptRequired", and nothing ever answered it - a dead end): `lines(take=False)` makes the words from what waits, untaken;
+        # the road that sent them takes exactly those (`lines(take=True)`) once the agent has them (clipool._took). Called with no look first
+        # (an API loop's ear, at its next step) it takes and says them in one go
+        peeked = []
+        def lines(take=True):
             from . import sessionrecord
-            self.trace.append(mark := sessionrecord.heard_mark())
             from .conversation import unheard
             came = sorted(unheard(self.store, self.task_id))
-            # ...one hand-over, in the order it came: what stood unheard (the mail) is heard with his lines (standing), before them
-            took = [line_said(r) for r in take_kept(self.store, self.task_id, sid=self.sid, standing=bool(came))]
-            if not took: self.trace = [e for e in self.trace if e is not mark]; return ''
+            if take:
+                # ...the trace marked where they go in, before they are heard: the turn under them is what it does from here (since_heard)
+                self.trace.append(mark := sessionrecord.heard_mark())
+                # ...one hand-over, in the order it came: what stood unheard (the mail) is heard with his lines (standing), before them
+                took = [line_said(r) for r in take_kept(self.store, self.task_id, ids=peeked or None, sid=self.sid, standing=bool(came))]
+                if not took: self.trace = [e for e in self.trace if e is not mark]; return ''
+            else:
+                rows = [r for r in self.store.list_comments(self.task_id, internal=True) if r.get('ActorType') == WAITING_TYPE]
+                peeked[:] = [r['CommentId'] for r in rows]
+                if not (took := [line_said(r) for r in rows]): return ''
             mail = '\n\n'.join(_came_in(self.store.get_message(m) or {}) for m in came)
             return with_files('\n\n'.join(x for x in (mail, _turn_only(self.store, self.task_id, '\n\n'.join(x['text'] for x in took))) if x),
                               list(dict.fromkeys(str(Path(f).resolve()) for x in took for f in x['files'])))

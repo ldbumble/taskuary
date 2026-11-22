@@ -258,18 +258,32 @@ def collect(store, hours: int = HOURS) -> dict:
             # to call handled; a plain auto-filed FYI is intentionally not treated the same way.
             accomplished.append(_row_line(row, 'invite handled'))
 
+    # ...A THREAD ANSWERED IS NO PRIORITY (round 3, 2026-11-22: two threads approved and sent stood as "focus for tomorrow" - the reply's card sat
+    # on the second mail, the first had none): a task whose reply went today is owed nothing, unless a card of it still waits
+    replied = {row.get('TaskId') for row in eligible if row.get('TaskId') and str(row.get('ReviewStatus') or '').lower() in ('approved', 'edited', 'sent')}
     priorities = []
     for row in eligible:
         review = str(row.get('ReviewStatus') or '').lower()
         flagged = str(_mail_meta(row).get('flag') or '').lower() == 'flagged'
+        if review != 'pending' and row.get('TaskId') in replied: continue
         if flagged or review == 'pending' or row.get('TaskStatus') in ('open', 'in_progress', 'waiting'):
             priorities.append(_row_line(row, 'open priority'))
 
     from .store import task_ref
-    done = store._rows("SELECT TaskId, Title, Priority FROM task WHERE Status='done' AND ClosedAt>=? "
-                       "ORDER BY ClosedAt DESC LIMIT 80", (since,))
-    # ...never the Assistant's own chat (general.DOCK_TAG): it is no work of his (walk 5: "Taskuary guide" stood as an open task)
+    # ...never the Assistant's own chat (general.DOCK_TAG), on either list: it is no work of his (walk 5: "Taskuary guide" stood as an open
+    # task; round 3, 2026-11-22: "Completed the Taskuary guide task" stood as done)
     from .general import DOCK_TAG
+    done = store._rows("SELECT TaskId, Title, Priority FROM task WHERE Status='done' AND ClosedAt>=? AND IFNULL(SourceRef,'')<>? "
+                       "ORDER BY ClosedAt DESC LIMIT 80", (since, DOCK_TAG))
+    # ...and WHAT HIS AGENTS SENT AND MADE today, on any task (round 3: the chart, the sheet, two PDFs and Paula's email were missing - an agent's
+    # work on a chat task leaves no run row): the cards he sent and the files its turns made
+    for r in store._rows("SELECT ReviewId, TaskId, Kind, Deliver FROM review WHERE Status IN ('approved','edited') AND DecidedAt>=? AND Kind NOT IN ('draft','draft_reply') "
+                         "AND IFNULL(DeliveryState,'') NOT IN ('failed','unknown') ORDER BY DecidedAt DESC LIMIT 40", (since,)):
+        try: to = ', '.join((json.loads(r.get('Deliver') or '{}') or {}).get('to') or [])
+        except (TypeError, ValueError, AttributeError): to = ''
+        accomplished.append(f"state=sent | src=📤 | task={task_ref(r['TaskId']) if r.get('TaskId') else '-'} | what={r.get('Kind')}{f' to {_one_line(to, 120)}' if to else ''}")
+    for a in store._rows("SELECT TaskId, Name FROM task_artifact WHERE CreatedAt>=? ORDER BY ArtifactId DESC LIMIT 40", (since,)):
+        accomplished.append(f"state=made | src=📄 | task={task_ref(a['TaskId']) if a.get('TaskId') else '-'} | file={_one_line(a.get('Name'), 120)}")
     open_ = store._rows("SELECT TaskId, Title, Priority, Status FROM task WHERE Status IN ('open','in_progress','waiting') AND IFNULL(SourceRef,'')<>? "
                         "ORDER BY CASE Priority WHEN 'urgent' THEN 0 WHEN 'important' THEN 1 WHEN 'high' THEN 1 ELSE 2 END, COALESCE(UpdatedAt, CreatedAt) DESC "
                         "LIMIT 40", (DOCK_TAG,))

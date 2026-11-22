@@ -79,6 +79,27 @@ class EveningGatherTests(unittest.TestCase):
                 reports.render_report(s, cfg)
 
 
+class TheDayAsItWasTests(unittest.TestCase):
+    def test_the_brief_tells_the_day_his_agents_had_never_the_assistants_chat_nor_a_sent_thread_as_owed(self):
+        """Round 3, 2026-11-22: two threads approved and sent stood as "focus for tomorrow", "Completed the Taskuary guide task" (the Assistant's
+        own chat) stood as done, and the chart, sheet and Paula's email his agents made and sent were missing."""
+        from taskuary import general
+        s = MemoryStore()
+        dock = s.create_task({'Title': 'Taskuary guide', 'Kind': 'general', 'Status': 'done', 'SourceRef': general.DOCK_TAG}, 'owner')
+        s._exec('UPDATE task SET ClosedAt=? WHERE TaskId=?', (_ago(1), dock))
+        tid = s.create_task({'Title': 'Monitor quote', 'Kind': 'reply', 'Status': 'open'}, 'router')
+        first = _mail(s, 'q1', 'Monitor quote', 'ray@northwind.example', hours=3, status='routed'); s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (tid, first))
+        second = _mail(s, 'q2', 'Re: Monitor quote', 'ray@northwind.example', hours=2, status='routed'); s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (tid, second))
+        rv = s.add_review({'TaskId': tid, 'MessageId': second, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Approved - order them.'})
+        s.decide_review(rv, 'approved', 'Approved - order them.', 'owner')
+        mail = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'Deliver': json.dumps({'to': ['paula@northwind.example']})})
+        s.decide_review(mail, 'approved', 'Hi Paula', 'owner')
+        ev = evening.collect(s, 24)
+        assert not [p for p in ev['priorities'] if 'Monitor quote' in p], ev['priorities']
+        assert not [d for d in ev['done'] if 'Taskuary guide' in d], ev['done']
+        assert any('paula@northwind.example' in a for a in ev['accomplished']), ev['accomplished']
+
+
 class FirstScheduleTests(unittest.TestCase):
     def test_a_first_run_ritual_waits_until_its_daily_time(self):
         future_time = datetime.now() + timedelta(minutes=2)

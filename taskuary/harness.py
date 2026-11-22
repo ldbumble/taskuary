@@ -297,8 +297,10 @@ def line(store, c: dict) -> dict | None:
     on = bool(c.get('Active') and (c.get('HasSecret') or c.get('Type') == 'ollama'))
     p = where(h, install=on)
     st = cliinstall.state()
-    if p: said = f'Its agent runs on {LABEL[h]}, pointed at this card - nothing goes anywhere else.'
-    elif st.get('phase') == 'installing' and st.get('name') == h: said = f'Installing {LABEL[h]} for its agent - it uses Taskuary\'s own agent until then.'
-    elif not on: said = f'Its agent will run on {LABEL[h]} once this card is on.'
-    else: said = f"{LABEL[h]} can't run on this computer, so its agent uses Taskuary's own, simpler agent."
+    # ...the picker's box already names the harness under its label "Its agent runs on" - the line under it says only what the box does not
+    # (the design walk, 2026-11-20: "Its agent runs on" said three times, as the label, in the box and in this line)
+    if p: said = 'Pointed at this card - nothing goes anywhere else.'
+    elif st.get('phase') == 'installing' and st.get('name') == h: said = "Installing it now - Taskuary's own agent works until then."
+    elif not on: said = 'It starts once this card is on.'
+    else: said = "It can't run on this computer, so Taskuary's own, simpler agent works instead."
     return {'harness': h, 'choices': [{'value': k, 'label': LABEL[k]} for k in HARNESSES], 'line': said}

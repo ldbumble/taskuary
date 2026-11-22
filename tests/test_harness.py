@@ -180,3 +180,15 @@ def test_the_chip_names_the_harness_that_runs_the_cards_agent(here):
     s = MemoryStore(); cid = _card(s)
     row = next(o for o in general.provider_options(s) if o['pick'] == f'connector:{cid}')
     assert (row['label'], row['model']) == ('HIPAA AI · Codex', 'hydrogen')
+
+
+def test_the_card_names_its_harness_once(monkeypatch):
+    "The design walk, 2026-11-20: 'Its agent runs on' was the picker's label, the box named the harness, and the line under it said both again."
+    harness._TRIED.clear(); monkeypatch.setattr(harness, 'ON', True)
+    monkeypatch.setattr(cliinstall, 'find', lambda n: '')
+    monkeypatch.setattr(cliinstall, 'plan', lambda n, **k: [])
+    s = MemoryStore(); cid = _card(s)
+    for active in (1, 0):
+        s.save_connector({'ConnectorId': cid, 'Active': active}, 't')
+        said = harness.line(s, _row(s, cid))['line']
+        assert 'runs on' not in said and not any(v in said for v in harness.LABEL.values()), said

@@ -1457,3 +1457,16 @@ class NoPageOpenTests(unittest.TestCase):
                 with self.assertRaises(ValueError, msg=tool) as e: apiagent.run_tool(s, tid, 'sid-n', tool, a)
                 self.assertIn('browser_open', str(e.exception)); self.assertIn('nothing was done', str(e.exception))
         ran.assert_not_called(); judged.assert_not_called()
+
+
+def test_a_search_engine_page_read_as_the_fallback_is_its_results_never_its_menu():
+    """A forced fallback, 2026-11-22: half of the results page handed the agent was the engine's sixty regions and time filters, and the cut
+    fell on the results. What is read starts at the first result - its title, its address, its summary."""
+    from taskuary import apiagent
+    menu = '\n\n'.join(['All Regions', 'Argentina', 'Australia', 'US (English)', 'Any Time', 'Past Day', 'Past Year'])
+    page = (f"PAGE https://html.search.example/?q=paper - paper at Search\n{menu}\n\nNorthwind Paper Supply\n\npaper.example/prices\n\n"
+            "Today's office paper prices by the case, delivered next day across the region.\n\nAnother result title\n\nother.example\n\n"
+            "A second summary long enough to be a result's own description line.")
+    out = apiagent._results_only(page)
+    assert out.startswith('PAGE https://html.search.example') and 'Argentina' not in out and 'Past Year' not in out
+    assert out.split('\n')[1] == 'Northwind Paper Supply' and 'paper.example/prices' in out

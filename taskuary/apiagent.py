@@ -297,7 +297,22 @@ def search(store, tid: int, q: str, brain, system, fetch) -> str:
     cards = [c for c in store.list_connectors() if c['Type'] in SEARCHERS and c['Active'] and c.get('HasSecret')]
     if cards: return system({'type': cards[0]['Type'], 'connector_id': cards[0]['ConnectorId'], 'query': q})
     from urllib.parse import quote
-    return fetch(SEARCH_PAGE + quote(q))
+    return _results_only(fetch(SEARCH_PAGE + quote(q)))
+
+
+def _results_only(page: str) -> str:
+    """The results page as its results: the run of short menu lines over them - its sixty regions and time filters - goes, so what the agent
+    reads is the results (a forced fallback, 2026-11-22: half of "copper price per pound today" was the region menu, and the cut fell on results).
+    By the page's own shape: the first line long enough to be a result's title or summary starts what is kept, its PAGE line above it."""
+    lines = str(page or '').split(chr(10))
+    head = lines[:1] if lines and lines[0].startswith('PAGE ') else []
+    body = lines[len(head):]
+    at = next((i for i, l in enumerate(body) if len(l.strip()) > 40), 0)
+    # ...with the title and address above that first summary: a result is its title, its address, then its summary
+    for _ in range(2):
+        prev = next((j for j in range(at - 1, -1, -1) if body[j].strip()), None)
+        if prev is not None: at = prev
+    return chr(10).join([*head, *body[at:]]).strip()
 
 
 def _search(store, tid: int, sid: str, q: str) -> str:

@@ -280,6 +280,15 @@ class Holding(unittest.TestCase):
 
     def pending(self): return self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (self.tid,))
 
+    def test_a_payment_is_his_on_the_page_never_a_card_for_the_agents_own_press(self):
+        """The owner, 2026-11-22 ("you pay on the page"): handed the payment page, he pressed I'm done on an empty card form, and the agent's
+        own Pay was then held as an Approve card - two roads for one payment. A press that spends his money is refused to the agent with the
+        page to hand him, and no card stands."""
+        out = self.held(v={'big': True, 'kind': 'money', 'sure': True, 'irreversible': True, 'what': 'Pay $49.00 on DealFlow Pro'})
+        d = out['hookSpecificOutput']
+        self.assertEqual(d['permissionDecision'], 'deny'); self.assertIn('TASKUARY-YOURTURN', d['permissionDecisionReason'])
+        self.assertEqual(self.pending(), [])
+
     def test_an_irreversible_act_is_refused_and_put_on_the_task(self):
         out = self.held()
         d = out['hookSpecificOutput']

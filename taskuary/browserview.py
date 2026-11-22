@@ -1223,8 +1223,9 @@ def set_viewport(sid: str, w: int, h: int) -> bool:
 # resource that lasts, a public post, a delete - which is always one card in the chat for his press (browsergate._verdict).
 # ...REVISED 2026-11-19 (the owner: "anything big like spending money or putting in private info should wait for user for now"): the hold is
 # the big step only - money, his own details, speaking for him, a delete - and a free sign-up with made-up details runs (browsergate.BIG)
-HOLD_LINE = ('PRESS WHAT THE WORK NEEDS YOURSELF - a free sign-up or trial with made-up details, a form, a search. A press that spends his '
-             'money, sends his own private details (his real phone, card, address, ID), speaks for him to others or deletes something of his is refused with "held for the owner" '
+HOLD_LINE = ('PRESS WHAT THE WORK NEEDS YOURSELF - a free sign-up or trial with made-up details, a form, a search. A PAYMENT IS HIS: never '
+             'press Pay, Buy or Order and never type a card - leave the page on it and hand it to him with the your-turn marker. A press that '
+             'sends his own private details (his real phone, address, ID), speaks for him to others or deletes something of his is refused with "held for the owner" '
              'and stands as one card in this chat: fill in everything first, run the command for that last button as you would, and when it is '
              'held go on with the rest of the work - his press on the card runs it, and you are told what the page shows. Never try a held act '
              'another way, and never ask him in words to approve or click it. ')

@@ -369,6 +369,7 @@ ITEM = {'type': 'object', 'properties': {'big': {'type': 'boolean'}, 'kind': {'t
 # ...why a big step waits, in his words, by the kind the model named - plain code, the same every time
 WHY = {'money': 'it spends your money, so it waits for your press', 'private': 'it sends your own details, so it waits for your press',
        'speaks': 'it speaks for you to other people, so it waits for your press', 'deletes': 'it deletes or cancels something of yours, so it waits for your press'}
+PAY_TURN = '[[TASKUARY-YOURTURN: <what he enters and presses to pay, in a few words>]]'
 BIG_WHY = 'it spends money, sends your own details, speaks for you or deletes something of yours, so it waits for your press'
 def wants(item: dict) -> dict: return {'type': 'object', 'properties': {'acts': {'type': 'array', 'items': item}}, 'required': ['acts']}
 WANT = wants(ITEM)
@@ -499,7 +500,7 @@ def _verdict(act: dict, v: dict | None, pg: dict, said: str) -> dict:
         h = pg.get('name') or signin.site_name(pg.get('url'))
         what = target(act, pg) if control(act, pg).get('role') else f"a step on {h}" if h else target(act, pg) or _cmd(act)
     big = v.get('big')
-    if big is True: return {'hold': True, 'what': what, 'why': WHY.get(str(v.get('kind') or ''), BIG_WHY)}
+    if big is True: return {'hold': True, 'what': what, 'why': WHY.get(str(v.get('kind') or ''), BIG_WHY), 'kind': str(v.get('kind') or '')}
     # ...only a verdict that SAYS it is not big passes on that: one that left `big` out (a CLI judge carries no schema) is read the old way -
     # it passed a payment he had asked for with no press, 2026-11-18
     # ...and one it says is not big passes unless it also cannot be undone and it is unsure (the walk, 2026-11-19: a free sign-up the judge
@@ -570,6 +571,11 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         if not args: return _deny(f"{HELD}: a browser command it could not read. Run each agent-browser command on its own line.")
         if not pg['url']: return _deny(NO_PAGE.format(held=HELD))
         site = signin.site_name(pg['url']) or 'the page'
+        # ...A PAYMENT IS HIS TO MAKE, ON THE PAGE - ONE ROAD (the owner, 2026-11-22: "you pay on the page"): the hand-over asked him to enter his
+        # card and press Pay, and the gate then held the agent's own Pay on the empty form as an Approve card - two roads for one payment
+        if v.get('kind') == 'money':
+            return _deny(f"{HELD}: {v['what']} spends the owner's money - a payment is his to make himself, on the page. Leave the page on it and "
+                         f"end your turn with {PAY_TURN}; once he says he is done, look at the page and go on from what it shows.")
         # ...THE ONE RULE (actrule.decide): the same press on the same site he already approved on this task runs; one he dismissed is his no
         from . import actrule
         step = {'what': v['what'], 'why': v['why'], 'key': f"browser|{site}|{target(a, pg) or ' '.join(args)}"}

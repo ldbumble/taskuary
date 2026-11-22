@@ -81,6 +81,15 @@ class TheRosterTests(unittest.TestCase):
         self.assertEqual(cfg['agents']['researcher']['rules_doc'], 'mine')
         self.assertEqual(cfg['agents']['researcher']['purpose'], 'mine')
 
+    def test_a_shipped_purpose_seeded_in_its_old_capitals_is_reworded_once_and_the_owners_own_stays(self):
+        """The walk, 2026-11-21: an install seeded before the design walk kept "OUTSIDE information" and "OUR OWN figures" on its Agents page."""
+        cfg = {'agents': {'researcher': {'kind': 'research', 'purpose': hub_agents.SHIPPED_BEFORE['researcher'][0]},
+                          'analyst': {'kind': 'analysis', 'purpose': 'mine'}}}
+        self.assertIn('researcher', hub_agents.seed_profiles(cfg))
+        self.assertEqual(cfg['agents']['researcher']['purpose'], hub_agents.DEFAULT_PROFILES['researcher']['purpose'])
+        self.assertEqual(cfg['agents']['analyst']['purpose'], 'mine')
+        self.assertEqual(hub_agents.seed_profiles(cfg), [], 'once')
+
     def test_a_shipped_profile_carries_instructions_and_no_cli(self):
         """A profile is instructions layered on whichever brain runs its work (the owner, 2026-10-15): it
         inherits no command, flags or timeout - its row takes the brain's command at sync."""

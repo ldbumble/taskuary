@@ -899,10 +899,18 @@ def seed_profiles(cfg: dict) -> list:
     have = cfg.setdefault('agents', {})
     added = []
     for name, prof in DEFAULT_PROFILES.items():
+        # ...and a shipped purpose still worded as it once shipped takes the wording it ships with now, once: an install seeded before the
+        # design walk (2026-11-20) kept "OUTSIDE information" and "OUR OWN figures" in capitals on its Agents page. One the owner wrote stays
+        if name in have and str(have[name].get('purpose') or '') in SHIPPED_BEFORE.get(name, ()): have[name]['purpose'] = prof['purpose']; added.append(name)
         if name in have: continue
         have[name] = {'kind': prof['kind'], 'purpose': prof['purpose']}
         added.append(name)
     return added
+SHIPPED_BEFORE = {
+    'researcher': ('OUTSIDE information - the web, vendors, public filings, documents, what other companies do. Reads and reports with sources; '
+                   'queries none of our systems',),
+    'analyst': ('OUR OWN figures - the databases, the ledger, the bank feeds, our reports. Queries them, reconciles them, explains what the '
+                'numbers say',)}
 
 
 def drop_cli_clones(cfg: dict, store) -> list:

@@ -652,6 +652,16 @@ def goes_to(cmd: str):
     return None
 
 
+def holds_any(store, tid, sid: str) -> bool:
+    "Does a step of session `sid` wait held for the owner's press on task `tid`, on any of its tabs?"
+    if not store or not tid: return False
+    for r in store._rows("SELECT DraftText FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (int(tid),)):
+        try: p = json.loads(r.get('DraftText') or '{}') or {}
+        except (TypeError, ValueError): continue
+        if p.get('action') == 'browser_act' and str(p.get('sid')) == str(sid): return True
+    return False
+
+
 def holds_tab(store, tid, sid: str) -> str:
     "The site whose held step stands on the tab session `sid` works now - '' when none does (or the tab cannot be read)."
     from . import browserview

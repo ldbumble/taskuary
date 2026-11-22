@@ -3944,9 +3944,10 @@ class GeneralSession:
             try:
                 # ...but never over a step of its own held on that tab: that card is his one move there (the HIPAA walk, 2026-11-22: "Sign in to
                 # 127.0.0.10 to continue" stood under the held sign-up's Approve, the sign-up form's password box read as a sign-in)
-                from .browsergate import holds_tab
+                # ...on any of its tabs (the Codex walk, 2026-11-22: the held sign-up on one tab, its turn ending on a sign-in page it opened in another)
+                from .browsergate import holds_any
                 if (signin.on_signin_page(self.sid) and not signin.set_aside(self.store, self.task_id, self.sid)
-                        and not holds_tab(self.store, self.task_id, self.sid)): signing = ''
+                        and not holds_any(self.store, self.task_id, self.sid)): signing = ''
             except Exception as e: logger.debug(f'task {self.task_id}: the browser could not be read for a sign-in - {e}')
         if signing is not None:
             from . import signin

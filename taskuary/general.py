@@ -1072,14 +1072,22 @@ _WOKEN: set = set()
 # "No agent is running on this task to tell" while one was starting, and the turn that started answered past the press, so it was never said
 _STARTING: dict = {}                     # task -> [(words, heard)] for the wake now starting
 _WAKE_LOCK = threading.Lock()
+def _last_said(store, tid) -> tuple:
+    "The agent's newest answer or summary comment on task `tid`, and the summary itself when that is what it is: (comment|None, dict|None)."
+    try:
+        last = next((c for c in reversed(store.list_comments(int(tid), internal=True)) if c.get('ActorType') in (SUMMARY_TYPE, ASSISTANT_TYPE)), None)
+        return last, (json.loads(last['Body']) if last and last.get('ActorType') == SUMMARY_TYPE else None)
+    except (TypeError, ValueError): return last, None
+def carries_on(store, tid) -> bool:
+    "Its agent's last turn said it goes on once the owner presses what it set up (the summary's after_press 'send')."
+    return isinstance(s := _last_said(store, tid)[1], dict) and s.get('after_press') == 'send'
+
+
 def follow_up(store, tid, press: str, actor: str = 'owner', said: str = None, heard=None) -> bool:
     """Start one turn on task `tid` when its agent's newest summary waits on `press` ('send', 'handoff') - or, with `said` (approved), after
     any answer of its own, `said` its prompt. True when one was started, or `said` joined one starting. `heard()` runs once the prompt is in -
     never for a start that failed."""
-    try:
-        last = next((c for c in reversed(store.list_comments(int(tid), internal=True)) if c.get('ActorType') in (SUMMARY_TYPE, ASSISTANT_TYPE)), None)
-        summ = json.loads(last['Body']) if last and last.get('ActorType') == SUMMARY_TYPE else None
-    except (TypeError, ValueError): summ = None
+    last, summ = _last_said(store, tid)
     if not last: return False
     with _WAKE_LOCK:
         if last['CommentId'] in _WOKEN:
@@ -1193,6 +1201,10 @@ def approved(store, tid: int, press: str, what: str, actor: str = 'owner', revie
     "the same fact reads the same ... one function says it"): with what the owner changed before it went, and marked on `review` so the
     prompt's WHAT THE OWNER DID does not say it a second time."""
     from .browsergate import NEXT
+    # ...A PRESS WAKES ITS AGENT ONLY WHERE THERE IS A NEXT STEP (the owner, 2026-11-22: "only wake agent where there is next steps"): woken by
+    # every Send, it said "I've sent the email to Gail" under the card that already read Sent. One at work hears it now; one at rest that said
+    # nothing comes after the press hears it in its next turn's WHAT THE OWNER DID - unmarked here, so said there once
+    if not at_work(int(tid)) and not carries_on(store, tid): return ''
     r = store.get_review(int(review)) if review else None
     from .cardqueue import screen
     mark = r and (lambda how: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': how}))

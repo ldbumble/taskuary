@@ -438,7 +438,8 @@ def test_a_yes_its_agent_was_handed_is_said_once_not_again_under_what_the_owner_
     handed is said by that handing alone; one nobody was told of is still said there."""
     s = MemoryStore()
     tid = s.create_task({'Title': 'Post the Payworth notice', 'Kind': 'general', 'Status': 'open'}, 'owner')
-    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Set up the post - press Approve.')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Set up the post - press Approve, then I share its link with Erin.')
+    s.add_comment(tid, 'assistant', general.SUMMARY_TYPE, json.dumps({'did': 'Set up the post.', 'after_press': 'send'}))
     told, kept = [], s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{}', 'Reason': 'post it'})
     time.sleep(1.1)
     s.decide_review(kept, 'approved', '{}', 'owner')
@@ -470,3 +471,19 @@ class AFileOnACardIsAPress(Acts):
                                  'Deliver': json.dumps({'kind': 'reply', 'to': ['paula@northwind.example']})})
         verdicts.attach(self.s, rid, 'made.csv', b'a,b\n', 'agent')
         self.assertEqual(general.press_lines(self.s, self.tid), [])
+
+
+def test_a_press_with_nothing_after_it_never_wakes_its_agent_and_is_said_once_in_its_next_turn():
+    """The owner, 2026-11-22: "only wake agent where there is next steps" - woken by every Send, the agent said "I've sent the email to Gail"
+    under the card that already read Sent. An agent at rest that said nothing comes after the press is not handed it; its next turn's
+    WHAT THE OWNER DID says it, once."""
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Reply to Gail', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Drafted the reply to Gail.')
+    s.add_comment(tid, 'assistant', general.SUMMARY_TYPE, json.dumps({'did': 'Drafted the reply to Gail.'}))
+    kept = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{}', 'Reason': 'reply'})
+    time.sleep(1.1); s.decide_review(kept, 'approved', '{}', 'owner')
+    with mock.patch.object(general, 'to_agent') as to:
+        assert general.approved(s, tid, 'Send', 'reply to gail@northwind.example', review=kept) == ''
+    to.assert_not_called()
+    assert general.turn_facts(s, tid).count(f'rv{kept}') == 1, 'said once, in what its next turn is told'

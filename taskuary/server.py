@@ -6219,8 +6219,8 @@ def agent_remember(body: AgentRememberBody, request: Request):
     # ...and the other lines about the same person, for the one this makes untrue: two lines that disagree are read as two truths
     rest = [] if c or r.get('already') or not body.about.strip() else [l['text'] for l in memoryedit.about(store, body.about)['lines'] if l['text'] != r['text']][:6]
     if r.get('section') == memoryedit.SIGNATURE:
-        return {'ok': True, **r, 'says': f"Kept as the owner's saved signature, under every email set up from now: {r['text']!r}. A draft you set up before keeps the old one - "
-                                       "set it up again and it carries this. Carry on."}
+        return {'ok': True, **r, 'says': f"Kept as the owner's saved signature, exactly as it goes under every email: {r['text']!r}. Every email set up from now carries it, "
+                                       "and the drafts waiting for his Send were re-signed with it. Carry on."}
     return {'ok': True, **r, 'says': (f"Already in the owner's memory: {r['text']}" if r.get('already') else f"Kept in the owner's memory, in use from now: {r['text']}")
             + (f" - and {c['text']!r} is closed as no longer true." if c else '')
             + (f" The memory's other lines about {body.about}: {json.dumps(rest, ensure_ascii=False)} - if this makes one of them untrue, call again "

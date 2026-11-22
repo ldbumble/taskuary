@@ -97,7 +97,7 @@ def told(store) -> str:
     sig = ' / '.join(l.strip() for l in signature_for(store).splitlines() if l.strip())
     return (f'HOW AN EMAIL IS SIGNED: Taskuary puts the owner\'s saved signature ("{sig[:200]}") under every email and takes your own sign-off '
             f"off. When he tells you how he signs, keep it with remember, section signature: it becomes the saved one ({words.name('replies')}) "
-            "for every email you set up after.") if sig else ''
+            "for every email, the drafts waiting too.") if sig else ''
 
 
 def keep(store, sig: str, actor: str = 'owner') -> str:
@@ -107,8 +107,20 @@ def keep(store, sig: str, actor: str = 'owner') -> str:
     block = '\n'.join(l.strip() for l in str(sig or '').replace('\\n', '\n').strip().strip('"\'').splitlines() if l.strip())
     if not block: raise ValueError('say the signature, as it goes under an email')
     was = str(store.get_setting('email_signature') or '')
+    # ...AND THE DRAFTS WAITING FOR HIS SEND CARRY IT TOO (the fix1 walk, 2026-11-21: told the old draft kept the old sign-off, the agent asked
+    # him "tell me if you want it set up again"): each email still unsent that ends with the block it had is re-signed - plain code, the
+    # signer's own road. One he wrote his own ending on is left as he wrote it
+    from .responder import own_names, signed
+    waiting = [r for r in store._rows("SELECT * FROM review WHERE Status IN ('pending','held') AND Kind<>'action' AND IFNULL(DraftText,'')<>''")
+               if is_email(store, r)]
+    olds = {r['ReviewId']: for_review(store, r) for r in waiting}
     store.set_setting('email_signature', block, actor)
-    store.audit('setting', 0, 'signature_kept', actor, detail={'before': was, 'after': block})
+    moved = []
+    for r in waiting:
+        old, new, text = olds[r['ReviewId']], for_review(store, r), str(r['DraftText']).rstrip()
+        if not old or not new or old == new or not text.endswith(old.strip()): continue
+        store.save_review_draft(r['ReviewId'], signed(text, new, (*own_names(store), *old.splitlines()))); moved.append(r['ReviewId'])
+    store.audit('setting', 0, 'signature_kept', actor, detail={'before': was, 'after': block, 'resigned': moved})
     return block
 
 

@@ -150,7 +150,11 @@ class NoBlanketSoulTests(unittest.TestCase):
         from taskuary import memoryedit, signatures
         s = MemoryStore(); s.set_setting('owner_name', 'Alex Doyle', 't')
         s.save_doc('soul', "# SOUL.md\n\n## How we respond\n- Plain, brief. Sign letters and emails as Alex Doyle; an answer in chat to Alex is never signed.", 'owner')
+        tid0 = s.create_task({'Title': 'CloudRack renewal meeting', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        rid = s.add_review({'TaskId': tid0, 'Kind': 'reply', 'Status': 'pending', 'Deliver': json.dumps({'kind': 'email', 'channel': 'email'}),
+                            'DraftText': 'Hi Gail,\n\nCould we meet next week?\n\nThanks,\n\nAlex Doyle'})       # ...a draft waiting, signed with his name
         r = memoryedit.remember(s, 'Best,\nAlex', section='signature')
+        self.assertEqual(s.get_review(rid)['DraftText'], 'Hi Gail,\n\nCould we meet next week?\n\nBest,\nAlex')    # ...re-signed, never asked about
         self.assertEqual((r['section'], s.get_setting('email_signature')), ('signature', 'Best,\nAlex'))
         self.assertNotIn('Best', s.get_doc('learned') or '')                              # ...never a memory line fighting the signer
         rv = {'Deliver': json.dumps({'kind': 'email', 'channel': 'email'})}                  # an email of its own, as propose_email files it

@@ -166,8 +166,8 @@ def said(doc: str, text: str) -> bool:
 
 SIGNATURE = 'signature'          # memory.remember's section for how the owner signs: the one signature setting the signer reads (signatures.keep)
 SECTION_WORDS = ("`section`: people (about someone else), work (how the owner himself works - his hours, his habits, his rules), care, promises, "
-                 "bring, style (how he writes), or signature (the closing block under every email he sends, exactly as it goes - it becomes "
-                 "his saved signature)")
+                 "bring, style (how he writes), or signature (`note` is then the closing block itself, exactly as it goes under every email, one "
+                 "line per line - a sign-off of Best and his first name is two lines - never a sentence about it; it becomes his saved signature)")
 
 
 def owner_names(store) -> set:

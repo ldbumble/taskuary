@@ -56,7 +56,8 @@ class TheCheck(unittest.TestCase):
         "Walk 2, 2026-11-21: Claude left `root` out of one chart and was refused twice; with one top element there is nothing to ask."
         v = viewspec.check({'elements': {'c': {'type': 'chart', 'props': {'kind': 'bar', 'points': [{'label': 'Q1', 'value': 14}]}}}})
         self.assertEqual(v['root'], 'c')
-        bad({'elements': {'a': {'type': 'text', 'props': {'text': 'x'}}, 'b': {'type': 'text', 'props': {'text': 'y'}}}}, 'root None is not one')
+        with self.assertRaisesRegex(ValueError, 'root None is not one'):
+            viewspec.check({'elements': {'a': {'type': 'text', 'props': {'text': 'x'}}, 'b': {'type': 'text', 'props': {'text': 'y'}}}})
 
     def test_the_caps_hold(self):
         c = viewspec.CAPS

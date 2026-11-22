@@ -354,6 +354,9 @@ def status(store, t: dict, session=None, queued=None, key: str = None) -> dict:
     # ...and it is the FRONT card that waits (cardqueue): a held step or an act at the front waits on him, never "ready to send" over a reply
     # held behind it (the judge's look, 2026-11-19)
     if w and w.get('Kind') == 'action': k = 'blocked'
+    # ...and a draft the card cannot send (its Connect, capabilities.can_send_draft) is no "ready to send": the page's chip reads the same
+    from . import capabilities
+    if w and w.get('Kind') != 'action' and not capabilities.can_send_draft(store, w['ReviewId']): return {**words('unsendable'), 'spins': False}
     out = {**words(k), 'spins': k == 'working'}
     if handles(t) and not is_dock(t):
         if k in CHAT_READY: out = {**out, 'word': lanes.word('chat_ready'), 'hint': lanes.hint('chat_ready')}

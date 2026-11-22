@@ -1107,7 +1107,9 @@ def _review_send_state(memo: dict, r: dict) -> tuple:
     try: env = json.loads(r.get('Deliver') or '{}') or {}
     except (TypeError, ValueError, AttributeError): env = {}
     if env.get('kind') in outbound.OWN_ROAD: return True, ''
-    return _send_state(memo, r.get('Channel') or env.get('channel'), bool(r.get('MessageId')) or bool(env.get('to')))
+    # ...and a card that says Connect instead is no Send (the walk, 2026-11-21: "ready to send" over "No mailbox is connected")
+    ok, why = _send_state(memo, r.get('Channel') or env.get('channel'), bool(r.get('MessageId')) or bool(env.get('to')))
+    return (False, fix['says']) if ok and (fix := _review_connect(memo, r)) else (ok, why)
 
 
 @app.get('/api/feed')

@@ -193,6 +193,7 @@ def test_a_task_email_with_no_message_behind_it_still_offers_send(s):
     from taskuary import server
     tid = work(s)
     out, _ = email(s, tid)
+    s.save_connector({'Type': 'outlook', 'Name': 'Work mail', 'Active': 1}, 't')
     old, server.store = server.store, s
     try:
         with mock.patch.object(outbound, 'can_reply', return_value=True):
@@ -200,3 +201,18 @@ def test_a_task_email_with_no_message_behind_it_still_offers_send(s):
     finally: server.store = old
     rv = next(r for r in d['reviews'] if r['ReviewId'] == out['review_id'])
     assert rv['CanSend'] is True                                             # Send, not "Copy & close - nothing arrived"
+
+
+def test_a_task_email_with_no_mailbox_is_never_ready_to_send_anywhere(s):
+    """The walk, 2026-11-21: with no mailbox connected the card said "No mailbox is connected" and Connect email, while its header said
+    "ready to send" and the same card had offered a live Send. Whether it can leave is one answer: the card, the page's chip and the task's state."""
+    from fastapi.testclient import TestClient
+    from taskuary import server, taskstate
+    tid = work(s)
+    out, _ = email(s, tid)
+    old, server.store = server.store, s
+    try: d = TestClient(server.app).get(f'/api/tasks/{tid}').json()
+    finally: server.store = old
+    rv = next(r for r in d['reviews'] if r['ReviewId'] == out['review_id'])
+    assert rv['Connect'] and rv['CanSend'] is False, rv
+    assert taskstate.status(s, s.get_task(tid))['key'] == 'unsendable'

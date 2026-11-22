@@ -117,6 +117,11 @@ def slim_records():
     codingchat.slim_kept()
 
 
+def prime_adapters():
+    "The agents' ACP adapters, started once and let go a while after launch (agents.prime_adapters) - a lifespan job of its own name."
+    hub_agents.prime_adapters()
+
+
 def _warm_reads():
     """THE PAGE'S FIRST READS, MADE BEFORE IT ASKS (the owner's restart, 2026-11-16: the setup, first-run and agents reads each looked for
     every AI CLI on every PATH folder, and the rail was built from nothing, all inside the page's first requests - 2-6 s each, on top of the
@@ -261,7 +266,7 @@ async def _lifespan(_app):
     _start_new_walk()              # a relaunch opens a NEW chat rather than resuming the last one - off the window's path
     threading.Thread(target=_warm_reads, daemon=True, name='warm-reads').start()     # the page's first reads, made before it asks
     if not demo.enabled():          # ...and the agents' adapters, loaded once in the background so his first ask does not wait on a cold start
-        threading.Thread(target=hub_agents.prime_adapters, daemon=True, name='prime-adapters').start()
+        threading.Thread(target=prime_adapters, daemon=True, name='prime-adapters').start()
     catch_up_on_startup()          # defined below; resolved when the app actually starts
     try:                           # archived chats past their keep-days go on the app's own clock (PW-158), never on a history read
         from . import retention

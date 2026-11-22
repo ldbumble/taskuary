@@ -1664,3 +1664,16 @@ def test_a_lists_number_is_no_sentence_said_twice():
     seen = set()
     conversation.said_once('1. Totalled the hours.', seen)
     assert conversation.said_once('1. **Timesheet total** - 34.75 hours.\n2. **Bar chart** - shown above.', seen).startswith('1. **Timesheet')
+
+
+def test_a_turn_whose_cli_is_up_reads_thinking_never_waiting_for_its_agent_to_start():
+    """The owner, 2026-11-22: "Waiting for the agent to start" for 39 s. On Claude the turn was handed over at once and its first step came 22 s
+    later; the road writes its prompt in the run's own trace, so the session's own never ended its opening."""
+    from types import SimpleNamespace
+    from taskuary import chatlog
+    ses = SimpleNamespace(trace=[{'type': 'start'}, {'type': 'opening', 'name': 'claude'}])
+    turn = {'state': 'working', 'steps': []}
+    with mock.patch.object(general, 'session_for', return_value=ses), mock.patch.object(general, 'cold', return_value=True):
+        assert chatlog._now(7, turn).get('opening') is True             # ...its CLI still coming up: it is starting
+    with mock.patch.object(general, 'session_for', return_value=ses), mock.patch.object(general, 'cold', return_value=False):
+        assert not chatlog._now(7, turn).get('opening')                 # ...up: at work, "Thinking..." till its first step

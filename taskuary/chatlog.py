@@ -1156,7 +1156,10 @@ def _now(tid: int, turn: dict) -> dict:
     if ses is None or turn.get('state') == 'starting': return {'opening': True} if turn.get('state') == 'starting' and general.cold(tid) else {}
     trace = getattr(ses, 'trace', None) or []
     kinds = [e.get('type') for e in trace]
-    opening = 'opening' in kinds and kinds[::-1].index('opening') < (kinds[::-1].index('prompt') if 'prompt' in kinds else len(kinds))
+    # ...and NEVER PAST ITS CLI BEING UP (the owner, 2026-11-22: "Waiting for the agent to start" for 39 s; the benchmark on Claude: handed over
+    # at 0.1 s, its first step at 22 s, "Waiting" the whole time - the road's prompt is written in the run's own trace, never this one, so
+    # nothing here ended it): once its conversation is open the agent is at work - "Thinking..." until its first step
+    opening = 'opening' in kinds and kinds[::-1].index('opening') < (kinds[::-1].index('prompt') if 'prompt' in kinds else len(kinds)) and general.cold(tid)
     e = trace[-1] if trace else {}
     doing = clean(e.get('detail')) if e.get('type') == 'live' and e.get('name') == 'writing' else ''
     # ...never words its steps already draw (the log writes what streams as the turn's own `said` step): said twice while it thought

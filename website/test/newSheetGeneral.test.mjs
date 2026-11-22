@@ -19,7 +19,9 @@ test("a general agent's job is typed into the chat's own box, with no pickers, a
   assert.doesNotMatch(ns, /generalBrains=\{generalBrains\} brainsRead=\{agentsRead\} pick=\{pick\}/);
   assert.match(ns, /<PromptBox text=\{words\} setText=\{setText\} pics=\{pics\} busy=\{busy\} onSend=\{submit\}/);
   assert.match(ns, /const agentBox = \(kind === "agent" && how === "general"\) \|\| kind === "chat"/);
-  assert.match(ns, /!agentBox && <Button size="small" variant="contained"/, "the box's own Send, no second one in the footer");
+  assert.match(ns, /!agentBox && <ButtonBar>\s*\{\/\*[\s\S]*?\*\/\}\s*<Button size="small" variant="contained"/, "the box's own Send, no second one in the footer");
+  // ...and no Cancel beside the × (the design walk, 2026-11-20): the × and Esc close it
+  assert.doesNotMatch(ns, />Cancel<\/Button>/);
   assert.match(ns, /!aiFor\(await capabilities\(\), "general"\)/, "no AI is the one capability's answer for general work - the demo's agents work");
   assert.ok(ns.includes('/dispatch`, general ? { kind: "general", agent: role || null } : {})'));
 });

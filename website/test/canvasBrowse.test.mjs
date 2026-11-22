@@ -50,7 +50,7 @@ test("the card open in the canvas rides the next turn as its subject", () => {
 // the final review (2026-09-29): the tabs are gone, so what only they offered must be on the browse cards - "with today's
 // controls" (the spec)
 test("each browse card carries the controls its tab had", () => {
-  assert.match(src("CanvasBrowse.jsx"), /\{tools\}/);
+  assert.match(src("CanvasBrowse.jsx"), /\{!folded && tools\}/);   // ...stepping aside while a card is open
   // ...and a tab whose list is rows keeps them rows (the fix pass: report rows were crushed into a 240px card grid)
   assert.match(src("ReportsView.jsx"), /title: "Reports", wide: true,/);
   assert.match(src("HubView.jsx"), /title: "Hub", wide: true,/);

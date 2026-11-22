@@ -26,7 +26,9 @@ test("setup is the assistant canvas: no dialog opens itself, the chip goes to th
 test("three questions on the page itself, each answered on the Connections page's own cards", () => {
   const fr = read("FirstRun.jsx"), cv = read("ConnectorsView.jsx");
   assert.match(fr, /const ASK = \{ ai: "What AI do you have\?", mail: "Where does your work come in\?"/);
-  assert.match(fr, /let line = busy \|\| signing \? "" : err \|\| \{[\s\S]{0,3000}other: aiErr \? `\$\{aiErr\} Change AI picks one that does\.` : "Nothing more is needed/);
+  assert.match(fr, /let line = busy \|\| signing \? "" : err \|\| \{[\s\S]{0,3000}other: aiErr \? `\$\{aiErr\} Change AI picks one that does\.` : requiredDone\(st\) \? "Nothing more is needed/);
+  // ..."Nothing more is needed" only once the main source is set; before, the line names what is still to do (the design walk, 2026-11-20)
+  assert.match(fr, /: `Still to do: \$\{st\.todo\}\. /);
   assert.match(fr, /\{line && <Typography role="status" data-tq-setup-line=""/, "on the page, under the question");
   assert.doesNotMatch(fr, /setupLine|tq-next|suggest-connections|connSug/, "no bar over the row, no AI picking connections");
   // ...the fix it names is a button beside it, never one on the row that did not draw

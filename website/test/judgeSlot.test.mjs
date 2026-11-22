@@ -47,7 +47,7 @@ test("the slot with no model of its own does not show a model box", () => {
 // what are the decision choices it's going for").
 test("the Where runs go card lists what it is asked", () => {
   const panel = read("AiDefaults.jsx");
-  assert.match(panel, /ASKED OF IT, ONCE PER RUN/);
+  assert.match(panel, />\s*Asked of it, once per run\s*</);
   assert.match(panel, /slot\.decides/);
   assert.match(panel, /slot\.evidence/);
 });

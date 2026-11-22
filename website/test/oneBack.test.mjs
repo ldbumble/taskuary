@@ -42,9 +42,10 @@ test("Next, Next and a row press are three steps; Back three times walks them in
   }
 });
 
-test("both Backs are the one navBack, and the walk's Next pushes its place", () => {
+// ...and ONE BACK ON A SCREEN (the design walk, 2026-11-20): the head's arrow and its "Back to TQ-..." chip went; the bar's Back is the one
+test("the bar's Back is the one navBack, and the walk's Next pushes its place", () => {
   const view = read("AssistantView.jsx");
-  assert.match(view, /aria-label="Back" onClick=\{navBack\}/);
+  assert.doesNotMatch(view, /aria-label="Back"|data-tq-back-work|ArrowBackIcon/, "no second Back in the head");
   assert.match(view, /useVerbs\("nav", \[\{ id: BACK, group: "back", label: btn\("back"\), title: btnHint\("back"\), disabled: !canBack \|\| moving,[^\n]*\n\s*run: navBack \}\]/);
   assert.doesNotMatch(view, /window\.history\.back\(\)/);
   assert.doesNotMatch(view, /const goBack = /);

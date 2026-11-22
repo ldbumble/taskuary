@@ -34,7 +34,7 @@ test("where a run goes is one prompt, and the card says the AI is answering it",
   assert.doesNotMatch(source, /MOVE IT UP IN THE PIPE IF/);
   assert.doesNotMatch(source, /TELL ME WHEN IT LOOKS WRONG/);
   const card = source.slice(source.indexOf("function RoutingCard"), source.indexOf("function ReportWizard"));
-  assert.match(card, /ONE PROMPT THAT ROUTES EACH RUN/);
+  assert.match(card, />One prompt that routes each run</);   // ...in the app's own case (the design walk, 2026-11-20)
   // the sentence box shows what was typed, spaces included: a trimmed value is redrawn without its
   // trailing space, which is every space at the moment it is typed (the owner, 2026-09-17: "can't type
   // space here"). Trimming happens where the sentence is read (aiLines, reports.route_of), not here.
@@ -45,7 +45,7 @@ test("where a run goes is one prompt, and the card says the AI is answering it",
   assert.match(card, /<AutoAwesomeIcon/);                                  // the same grammar as the summary prompt
   assert.match(card, /<MenuItem value="ai"[^>]*>ask the AI<\/MenuItem>/);   // the control names who answers
   assert.match(card, /see the prompt/);
-  assert.match(card, /ON THE LAST RUNS THIS WOULD HAVE/);
+  assert.match(card, /On the last runs this would have/);
   // ...and WHO answers is said, not picked a second time. One judge setting lives under Triage & agents
   // for every report; blank there means the brain that writes the report, which is the picker above
   // the summary prompt. The card used to carry a second picker writing that very same field, and it

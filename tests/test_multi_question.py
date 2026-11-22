@@ -237,5 +237,17 @@ class InstallAndGuardTests(unittest.TestCase):
         self.assertEqual(guard.denied('POST', '/api/hooks/claude/ask'), '')
 
 
+class MarkerTrailerTests(unittest.TestCase):
+    # walk 2, 2026-11-21: a bare ask marker, then the turn's summary block - the chat drew the summary's JSON tail as the question
+    def test_a_bare_marker_before_the_summary_asks_the_paragraph_above_it(self):
+        t = ('I looked in Documents.\n\nCould the file be in another folder?\n[[TASKUARY-ASK]]\n\n'
+             '[[TASKUARY-SUMMARY]]{"did": "looked", "answer_is_result": false}[[/TASKUARY-SUMMARY]]')
+        said, asks = selfclose.asked_inline(t)
+        self.assertEqual(asks, [('Could the file be in another folder?', [])])
+        self.assertNotIn('false}', said)
+        _, asks = selfclose.ask_markers('[[TASKUARY-ASK]] Which day? | Mon | Tue\n[[TASKUARY-SUMMARY]]{"a": 1}[[/TASKUARY-SUMMARY]]')
+        self.assertEqual(asks, [('Which day?', ['Mon', 'Tue'])])
+
+
 if __name__ == '__main__':
     unittest.main()

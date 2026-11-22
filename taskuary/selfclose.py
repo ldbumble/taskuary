@@ -734,7 +734,8 @@ def ask_markers(text: str) -> tuple:
     if not cuts: return text, []
     asks = []
     for i, m in enumerate(cuts):
-        seg = t[m.end(): cuts[i + 1].start() if i + 1 < len(cuts) else len(t)]
+        # ...and the turn's summary block after it is no part of the question: read as one, the chat drew its JSON tail, ": false}" (walk 2, 2026-11-21)
+        seg = without_summary(t[m.end(): cuts[i + 1].start() if i + 1 < len(cuts) else len(t)])
         parts = [' '.join(p.split()) for p in seg.split('|')]
         # ...A BARE MARKER IS THE WAIT ON WHAT IT JUST ASKED (ASK_LINE: asked in its own words, the marker on its own line): its question is the
         # paragraph above it. Read as no ask, the turn recorded nothing and read "agent done" over a question to him (the walk, 2026-11-21)

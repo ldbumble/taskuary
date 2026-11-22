@@ -1288,7 +1288,11 @@ TURN_LINE = ('NEVER SOLVE, CLICK OR WORK AROUND A CAPTCHA, an "I\'m not a robot"
              '[[TASKUARY-YOURTURN: <what they need to do on the page, in a few words>]]. Taskuary shows them this page; '
              'they do it and hand it back, and their "Done" is your next message - then look at the page and go on. Run no browser '
              'command until then. Hand them everything on the job that needs them at once: a fact only they have for another step (a '
-             'mobile number, a choice) goes in that same hand-over, to type in the chat while the page is theirs - never kept for after it. ')
+             'mobile number, a choice) goes in that same hand-over, to type in the chat while the page is theirs - never kept for after it. '
+             # ...AND AN ORDINARY STEP OF WHAT THEY ASKED IS THE AGENT'S (the owner's rulings 2026-11-17/19; the Codex walk, 2026-11-22: a sign-up he
+             # asked for handed him its terms box to tick)
+             'An ordinary step of the work they asked for - ticking the terms box of a sign-up, choosing its free plan, pressing its button - is yours: '
+             'run it; Taskuary itself holds for their press whatever spends their money or sends their own details. ')
 
 # ...each site in a tab of its own (the owner, 2026-11-15): the view beside the chat shows the tabs, and one tab walked from site to site
 # hid the others from him

@@ -153,6 +153,16 @@ class Judging(unittest.TestCase):
         with mock.patch('taskuary.llm.build_llm', return_value=None):
             self.assertTrue(one(self.s, self.act, {'url': CHECKOUT})['hold'])      # no AI at all: it waits for the owner
 
+    def test_a_terse_not_big_is_read_as_the_pass_it_is_and_a_terse_big_as_the_hold(self):
+        """The HIPAA walk, 2026-11-21: the road's judge answered a plain link click `{"acts": [{"big": false}]}` - and the answer was thrown
+        away for the fields it left out, asked again, and every click on the vendor list was held "Taskuary couldn't tell what it does"."""
+        calls = []
+        with on(), answers({'big': False}, calls=calls):
+            v = one(self.s, self.act, {'url': CHECKOUT, 'elements': SNAP}, Brain(None))
+        self.assertFalse(v['hold'], v); self.assertEqual(len(calls), 1, 'read once, never asked again')
+        with on(), answers({'big': True, 'kind': 'money'}):
+            self.assertEqual(one(self.s, self.act, {'url': CHECKOUT, 'elements': SNAP}, Brain(None))['why'], bg.WHY['money'])
+
     def test_with_no_ai_typing_passes_and_everything_else_waits(self):
         typed = ('agent-browser fill @e1 "alex@northwind.example"', 'agent-browser type @e2 "hello"', 'agent-browser keyboard type "abc"',
                  'agent-browser --session tq-1 keyboard inserttext "abc"', 'agent-browser find label "Email" fill "alex@northwind.example"',

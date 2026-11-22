@@ -453,7 +453,10 @@ def ask_acts(store, brain, system: str, user: str, want: dict, n: int) -> list |
     if not b: return None
     v = ask_json(b, system, user, want=want, need=('acts',)).data
     xs = v.get('acts') if isinstance(v, dict) else None
-    ok = lambda x: isinstance(x, dict) and isinstance(x.get('irreversible'), bool) and isinstance(x.get('sure'), bool)
+    # ...AN ANSWER IS READ BY WHAT DECIDES IT (the HIPAA walk, 2026-11-21): a terse model's `{"big": false}` - a plain "not big" - was thrown away
+    # for the fields it left out, asked again, and every link click on the road was held "Taskuary couldn't tell what it does"
+    decides = 'big' in ((((want.get('properties') or {}).get('acts') or {}).get('items') or {}).get('properties') or {})
+    ok = lambda x: isinstance(x, dict) and ((decides and isinstance(x.get('big'), bool)) or (isinstance(x.get('irreversible'), bool) and isinstance(x.get('sure'), bool)))
     return [x if ok(x) else None for x in ((xs if isinstance(xs, list) else []) + [None] * n)[:n]]
 
 
@@ -501,10 +504,11 @@ def _verdict(act: dict, v: dict | None, pg: dict, said: str) -> dict:
     # it passed a payment he had asked for with no press, 2026-11-18
     # ...and one it says is not big passes unless it also cannot be undone and it is unsure (the walk, 2026-11-19: a free sign-up the judge
     # said was not big, only unsure, was held as "it may spend money")
-    if big is False and (v['sure'] or not v['irreversible']): return {'hold': False, 'what': what, 'why': ''}
-    if setting(act) and not (big is None and v['irreversible'] and v['sure']): return {'hold': False, 'what': what, 'why': ''}
-    if big is None and v['irreversible'] and v['sure']: return {'hold': True, 'what': what, 'why': "it can't be undone"}
-    if big is None and v['sure']: return {'hold': False, 'what': what, 'why': ''}
+    sure, irr = v.get('sure'), v.get('irreversible')
+    if big is False and (sure is not False or not irr): return {'hold': False, 'what': what, 'why': ''}
+    if setting(act) and not (big is None and irr and sure): return {'hold': False, 'what': what, 'why': ''}
+    if big is None and irr and sure: return {'hold': True, 'what': what, 'why': "it can't be undone"}
+    if big is None and sure: return {'hold': False, 'what': what, 'why': ''}
     return {'hold': True, 'what': what, 'why': "Taskuary couldn't tell for sure what it does, so it waits for you"}
 
 

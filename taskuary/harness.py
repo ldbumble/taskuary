@@ -164,6 +164,9 @@ def _toml(v) -> str:
 # features that reach OpenAI's own services: ChatGPT apps/connectors, the plugin marketplace, hosted image generation, tool suggestions,
 # in-app updates, OpenAI's fast service tiers, skill dependencies fetched from the network. ONE TABLE for every Codex Taskuary starts - an AI
 # card's harness and the owner's own Codex CLI (the owner, 2026-11-22: a Codex CLI agent called ChatGPT's Wallet app - "yes turn off")
+# ...and of those, what HIS OWN Codex CLI starts without (the owner, 2026-11-22: "yes turn off" was for ChatGPT's apps and plugins - its
+# picture tool and fast tier are his plan's to use, and an AI card closes them for the gateway alone)
+OWNER_CLI_OFF = ('apps', 'plugins', 'remote_plugin')
 CLOSED_FEATURES = {'apps': False, 'plugins': False, 'remote_plugin': False, 'image_generation': False, 'tool_suggest': False,
                    'in_app_updates': False, 'fast_mode': False, 'ultrafast_mode': False, 'skill_mcp_dependency_install': False}
 

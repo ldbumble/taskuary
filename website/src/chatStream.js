@@ -109,6 +109,16 @@ export function turnParts(events, { answer = "", keepStart = false, live = false
   // ...an edit that failed and was then made is no failure (agentSteps' `recovered`): Claude's first try at a string not found, its second made
   parts.forEach((p, i) => p.type === "work" && p.steps.forEach((s) => { if (s.status === "error" && s.kind === "edit"
     && parts.slice(i + 1).some((q) => q.type === "edit" && q.summary.startsWith(s.summary))) s.status = "recovered"; }));
+  // ...AND WHAT IT SAID ON ITS WAY TO ITS NEXT CALLS IS ITS WORKING, ONCE THE TURN IS FILED (the walk, 2026-11-21: "Python 3.10 exists under the
+  // user path; check libraries." and "Good. Now the reply with both files attached." stood in the chat as its answer): words whose next part
+  // is a fold of calls go into that fold, a row of its working, in the order said - as acp.prompt files only what it said after its last
+  // call as the answer. Words before a view, a file or an edit introduce it and stand; a turn still at work keeps every word where it stands
+  if (answer && !live) for (let i = parts.length - 2; i >= 0; i -= 1) {
+    if (parts[i].type !== "said" || parts[i + 1].type !== "work") continue;
+    const t = String(parts[i].text || ""), note = { id: `note-${i}`, kind: "thought", summary: t.length > 140 ? `${t.slice(0, 139)}…` : t, detail: t.length > 140 ? t : "", status: "done" };
+    parts.splice(i, 2, { ...parts[i + 1], steps: [note, ...parts[i + 1].steps] });
+    if (parts[i - 1]?.type === "work") parts.splice(i - 1, 2, { ...parts[i - 1], steps: [...parts[i - 1].steps, ...parts[i].steps] });
+  }
   const lastPlan = parts.map((p) => p.type).lastIndexOf("plan");
   return parts.filter((p, i) => p.type !== "plan" || i === lastPlan).map((p, i) => ({ ...p, id: `p${i}` }));
 }

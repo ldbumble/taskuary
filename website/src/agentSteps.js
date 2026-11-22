@@ -378,8 +378,10 @@ const serverOf = (name) => /^(?:mcp__)?(.+?)__(.+)$/.exec(String(name || ""));
 const OWN_NAMES = new Set(ownTools.tools);
 export const ownTool = (name) => { const mcp = serverOf(name); return mcp ? key(mcp[1]) === "taskuary" : OWN_NAMES.has(String(name || "")); };
 export const describeCall = (name, args = {}) => {
-  const a = parsed(args);
-  const mcp = serverOf(name);
+  const mcp = serverOf(name), tool = mcp ? mcp[2] : name;
+  // ...A TITLE THAT IS ONLY THE TOOL'S OWN NAME IS NO TITLE (the walk, 2026-11-21: "showed you 'show', showed you 'mcp__taskuary__show'"): an ACP
+  // adapter titles a call by its tool (agents.ACPSteps puts it in `title`), and it read as the title of the view - on every road, one rule
+  const raw = parsed(args), t = raw.title, a = typeof t === "string" && key(serverOf(t)?.[2] || t) === key(tool) ? { ...raw, title: "" } : raw;
   // TASKUARY'S OWN TOOLS (agenttools.TOOLS), by what each one is for, BEFORE any guess from its arguments: a draft kept without them was
   // read as a command ("Running a command" for an email, 2026-11-17)
   const own = OWN[key(mcp ? mcp[2] : name)];
@@ -601,10 +603,11 @@ const together = (run) => {
   // ...by their names, never the folder they sit in (walk 8: "Read 2 files in TQ-0001/" - the task's own outputs folder, Taskuary's word)
   if (k === "read") return run.every((s) => named(s.file)) ? `Read ${andList([...new Set(run.map((s) => baseName(s.file)))])}` : `Read ${n} files`;
   if (k === "search") { const ws = listOf(run.map((s) => plainPat(s.pattern) && quoted(s.pattern))); return ws ? `Searched files for ${ws}` : "Searched files"; }
-  if (k === "web") return `Searched the web for ${listOf(run.map((s) => s.q && quoted(s.q)))}`;
+  // ...a search given no words says none (the walk, 2026-11-21: "searched your mail for , searched your documents")
+  if (k === "web") { const ws = listOf(run.map((s) => s.q && quoted(s.q))); return ws ? `Searched the web for ${ws}` : "Searched the web"; }
   // ...pages read, never the agent's own browser at work: two looks at its page read "Read 2 web pages" (design round 5, 2026-11-19)
   if (k === "page" && !run.some((s) => s.browser)) { const h = [...new Set(run.map((s) => s.host).filter(Boolean))]; return h.length === 1 ? `Read ${n} pages on ${h[0]}` : h.length ? `Read ${n} pages (${listOf(h)})` : `Read ${n} web pages`; }
-  if (k === "mail" && run.every((s) => s.q !== undefined)) return `Searched your mail for ${listOf(run.map((s) => s.q && !s.q.includes("$") && quoted(s.q)))}`;
+  if (k === "mail" && run.every((s) => s.q !== undefined)) { const ws = listOf(run.map((s) => s.q && !s.q.includes("$") && quoted(s.q))); return ws ? `Searched your mail for ${ws}` : "Searched your mail"; }
   if (k === "edit") return `Changed ${n} files`;
   return run.every((s) => s.summary === run[0].summary) ? `${run[0].summary} (${n} times)` : null;
 };

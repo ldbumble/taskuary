@@ -508,3 +508,35 @@ test("the agent's own words for a shell line are its step - never a reading of a
   const [s] = stepsOf([read("a", "/s/outputs/TQ-0001/chart-2.png"), read("b", "/s/outputs/TQ-0001/Q3-board-report.pdf")], { keepStart: false });
   assert.equal(s.summary, "Read chart-2.png and Q3-board-report.pdf");
 });
+
+// THE WALK, 2026-11-21 (Claude over ACP): "5 steps - ran 3 commands, showed you 'show', showed you 'mcp__taskuary__show'" - the adapter's title
+// for a call is the tool's own name, and read as the view's title, so a failed bare `show` and the one that worked never folded together;
+// "searched your mail for , searched your documents"; and its working notes between calls stood in the chat as its answer
+test("a step line is plain words: no tool name as a title, no empty query, and words on the way to a call fold into the work", async () => {
+  const { turnParts, foldLine } = await import("../src/chatStream.js");
+  assert.equal(describeCall("mcp__taskuary__show", { title: "mcp__taskuary__show", files: ["C:/out/TQ-0002/forecast.png"] }).summary, "Showed you forecast.png");
+  assert.equal(describeCall("show", { title: "show" }).summary, "Laid it out for you");
+  assert.equal(describeCall("mcp__taskuary__show", { title: "Q4 forecast" }).summary, "Showed you 'Q4 forecast'");
+  const call = (id, name, args) => ({ type: "tool_call", name, detail: { tool_call_id: id, args } });
+  const done = (id, result = "", is_error = false) => ({ type: "tool_result", name: id, detail: { tool_call_id: id, result, is_error } });
+  const said = (t) => ({ type: "progress", name: "text", detail: t });
+  const trace = [call("m1", "mcp__taskuary__search_messages", { words: "" }), done("m1", "[]"),
+    call("m2", "mcp__taskuary__search_messages", { sender: "" }), done("m2", "[]"),
+    said("Python 3.10 exists under the user path; check libraries."),
+    call("b1", "Bash", { command: "py -c \"import openpyxl\"" }), done("b1"),
+    call("s1", "show", { title: "show" }), done("s1", "No such tool available: show", true),
+    call("s2", "mcp__taskuary__show", { title: "mcp__taskuary__show" }), done("s2", "Shown in the owner's chat."),
+    said("Good. Now the reply with both files attached."),
+    call("r1", "mcp__taskuary__propose_reply", { text: "Hi Gail" }), done("r1", "{}"),
+    said("The forecast is ready and the reply to Gail waits for your Send.")];
+  const parts = turnParts(trace, { answer: "The forecast is ready and the reply to Gail waits for your Send." });
+  assert.deepEqual(parts.filter((p) => p.type === "said"), [], "no working note stands as an answer");
+  const steps = parts.flatMap((p) => (p.type === "work" ? p.steps : []));
+  assert.deepEqual(steps.filter((s) => s.kind === "thought").map((s) => s.summary),
+    ["Python 3.10 exists under the user path; check libraries.", "Good. Now the reply with both files attached."]);
+  assert.equal(steps.find((s) => s.tool === "show").status, "recovered", "the failed try is the same step as the one that worked");
+  assert.doesNotMatch(foldLine(parts), /show'|mcp__|for ,|for $/);
+  assert.match(foldLine(parts), /^\d+ steps - searched your mail/);
+  // ...a turn still at work keeps every word where it stands
+  assert.equal(turnParts(trace.slice(0, 7), { live: true }).filter((p) => p.type === "said").length, 1);
+});

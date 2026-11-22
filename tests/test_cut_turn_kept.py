@@ -123,3 +123,13 @@ def test_one_cut_turn_that_cannot_be_filed_loses_none_of_the_others():
     assert max(a, b) in got
     for t in (a, b):
         assert [c for c in s.list_comments(t) if c['ActorType'] == general.ASSISTANT_TYPE and c['Body'].endswith(general.CUT)], t
+
+
+def test_a_long_command_keeps_its_key_so_its_step_reads_as_a_script_never_as_json():
+    """The HIPAA walk, 2026-11-21: a 6,000-character inline script was kept as {'summary': <the JSON of every argument>}, and the step line
+    read 'ran {"command": "python -c ...'. Each argument is cut on its own, its key kept, its end marked."""
+    script = 'python -c "' + 'print(1)\n' * 900 + '"'
+    got = general.GeneralSession._trace_detail('tool_call', {'tool_call_id': 't1', 'args': {'command': script, 'description': 'Build the deck'}})
+    assert set(got['args']) == {'command', 'description'} and got['args']['description'] == 'Build the deck'
+    assert got['args']['command'].startswith('python -c "print(1)') and got['args']['command'].endswith('…')
+    assert len(got['args']['command']) == general.ARG_CHARS + 1

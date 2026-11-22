@@ -2730,6 +2730,7 @@ def compacted_mail(mails) -> str:
 
 
 # ...a file that is no picture is named as a file (server.prompt_file): "ATTACHED IMAGES" over a PDF told the agent to look at it as one
+ARG_CHARS = 6000           # one tool argument as a step keeps it (GeneralSession._trace_detail)
 def files_head(paths) -> str: return 'ATTACHED IMAGES' if all(_IMAGE_FILE.search(str(p)) for p in paths) else 'ATTACHED FILES'
 # HIS FILES, AS A PROMPT NAMES THEM - built here, from the field, only where an agent is told (a turn, a CLI's seed, a note typed into a pane).
 # What he attached is never written into his words: it is the Files field of his line or his task's ask (store.files_json), read by line_said
@@ -3068,11 +3069,17 @@ class GeneralSession:
         if not isinstance(detail, dict): return str(detail or '')[:1600]
         clean = dict(detail)
         if 'result' in clean: clean['result'] = str(clean.get('result') or '')[:6000]
-        if 'args' in clean:
-            try:
-                raw = json.dumps(clean['args'], default=str)
-                if len(raw) > 6000: clean['args'] = {'summary': raw[:6000] + '…'}
-            except (TypeError, ValueError): clean['args'] = {'summary': str(clean['args'])[:6000]}
+        # ...each argument cut on its own, its key kept (the HIPAA walk, 2026-11-21: a 6,000-character script became {'summary': <the JSON of
+        # every argument>}, and the step line read 'ran {"command": "python -c ...'): a command is still a command, cut short with its "…"
+        if isinstance(clean.get('args'), dict):
+            cut = lambda v: v if len(v) <= ARG_CHARS else v[:ARG_CHARS] + '…'
+            def one(v):
+                if isinstance(v, str): return cut(v)
+                try: raw = json.dumps(v, default=str)
+                except (TypeError, ValueError): return cut(str(v))
+                return v if len(raw) <= ARG_CHARS else cut(raw)
+            clean['args'] = {k: one(v) for k, v in clean['args'].items()}
+        elif 'args' in clean: clean['args'] = {'summary': str(clean['args'])[:ARG_CHARS]}
         return clean
 
     def _remember_trace(self, kind, name='', detail=None):

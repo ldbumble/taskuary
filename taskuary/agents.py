@@ -1962,7 +1962,15 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     # nothing ran), said once in the log. See docs/acp-transport.md.
     if _acp_road(profile, store):
         try: return run_acp(profile, prompt, trace, resume=resume, cancel=cancel, extra_env=extra_env, store=store)
-        except acp_mod.ACPStartError as e:
+        except acp_mod.ACPStartError as first:
+            # ...A START THAT FAILED IS TRIED AGAIN ONCE BEFORE HE HEARS OF IT (the owner's live app, 2026-11-22: "session/new: Internal error" after
+            # 40 s, in the minute triage and another task's start were busy; both his cards started in 0.9 s a moment later): nothing ran, so a
+            # second try costs nothing - and only a start that fails twice is his to see
+            e = first
+            if not (cancel is not None and getattr(cancel, 'is_set', lambda: False)()):
+                logger.info(f'acp: {profile.get("cmd")} did not start ({str(first)[:160]}) - trying once more')
+                try: return run_acp(profile, prompt, trace, resume=resume, cancel=cancel, extra_env=extra_env, store=store)
+                except acp_mod.ACPStartError as again: e = again
             if profile.get('held_only'): raise RuntimeError(HELD_ONLY.format(cli=_cli_name(str(profile.get('cmd') or '')).capitalize(), why=str(e)[:200])) from e
             _fell_back(str(profile.get('cmd') or ''), e, trace)
     # ...a run that may only go held (llm.make_cli_llm `held_only`) never takes the command line: there it would read and act unasked

@@ -163,6 +163,7 @@ const jsonProblem = (v) => {
 };
 
 import schema from "../../taskuary/settings_schema.json";
+import MorningDigest from "./MorningDigest.jsx";
 // ONE VOCABULARY for the knobs, in taskuary/settings_schema.json - the assistant reads the same file
 // (settings_schema.py, appfacts.py), so a knob is called the same thing on this page and in the chat.
 const KNOB_META = schema.knobs;
@@ -761,6 +762,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   // ...and what a section lists UNDER its knobs: the share links still open sit below the switch that allows them
   const after = {
     Sharing: panel("panel:sharedlinks", <SharedLinks />),
+    Assistant: panel("panel:digest", <MorningDigest />),            // ...the digest it opens the main screen with: its time and on/off (2026-11-22)
     Replies: panel("panel:handsig", <HandSignature />),              // the signature forms are signed with sits beside the one under the email
     "Agent permissions": <>{panel("panel:trusted", <TrustedSenders />)}{panel("panel:signins", <SavedSignins />)}{panel("panel:sendfilter", <SendFilter />)}</>,
   };

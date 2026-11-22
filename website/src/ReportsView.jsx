@@ -46,6 +46,7 @@ import { NewPlaybook, PB_EMPTY, PB_OPEN, PlaybookDetail, PlaybookRow, RecentlyDe
 import { NEW_PB, takePlaybookAsk } from "./playbookOpen.js";
 import SetupWithAi, { onBuilt } from "./SetupWithAi.jsx";
 import { useViewExtras } from "./pageView.js";
+import { isDigest } from "./MorningDigest.jsx";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
   "e.g. Summarize headcount by site. Flag anything under 70 and any day-over-day drop."];
@@ -473,7 +474,8 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   /* Reports and workflows use the same durable scheduler rows, but they are not the same
      product concept. The rail says which is which; selecting either still opens it directly. */
   const titleOf = (s) => parse(s.ConfigJson).title || s.Address || `report ${s.SourceId}`;
-  const reportSources = sources.filter((s) => !isWorkflowSource(s) && !isDashboardSource(s));
+  // ...never the Morning digest: it opens the main screen, and its time and on/off are in Settings (the owner, 2026-11-22)
+  const reportSources = sources.filter((s) => !isWorkflowSource(s) && !isDashboardSource(s) && !isDigest(s));
   const workflowSources = sources.filter(isWorkflowSource);
   const dashboardSources = sources.filter(isDashboardSource);
   const railItems = [
@@ -495,7 +497,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   const workflowOverview = bucketNow === "workflows";
   const dashOverview = bucketNow === "dashboards";
   const baseList = workflowOverview ? workflowSources : dashOverview ? dashboardSources : reportSources;
-  const list = (q ? sources : baseList).filter((s) => !q || titleOf(s).toLowerCase().includes(q.toLowerCase()));
+  const list = (q ? sources.filter((s) => !isDigest(s)) : baseList).filter((s) => !q || titleOf(s).toLowerCase().includes(q.toLowerCase()));
   const openId = typeof bucketNow === "number" ? bucketNow : null;
   const open = !q && (openId != null || ["new-report", "new-invoices", "new-agent", "draft", "new-dashboard", "draft-dashboard"].includes(bucketNow));
   const selectedSource = sources.find((s) => s.SourceId === openId);

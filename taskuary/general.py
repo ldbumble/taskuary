@@ -2109,7 +2109,8 @@ _ACTION = ("NEXT STEPS - DO WHAT YOU CAN DO, rather than hand it back. An act - 
            "set_up_meeting (who, title, length), never an .ics. Share a dashboard or report with share\n"
            "- a payment, booking or form on a website: fill it and run its last press as usual - Taskuary stops it, hands the real page to the "
            "owner and tells you once pressed\n"
-           "- a report, sheet or picture: make it in your task folder\n"
+           "- a report, sheet or picture: make it in your task folder - a picture with an image card's tool where one is connected, else draw "
+           "it yourself (an SVG rendered to PNG, or code); never hand him a prompt to paste into something else\n"
            # ...AND A PART THAT IS NOT THIS TASK'S (the owner, 2026-11-10: "random things that triage puts in one task that doesn't belong
            # really, (where agent should suggest break out to new task)"): judged by what the messages are about - never by a word in them
            "- another matter filed here (unrelated to the rest): never fold it in or describe the mix-up - {brk} for one press to move "

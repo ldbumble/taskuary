@@ -1776,8 +1776,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // EVERY TASK IS CAME FROM AND ITS ONE CHAT (the owner, 2026-11-06: "there should no longer be close out code anywhere"): general, reply,
   // coding - a live coding CLI drawn in the same chat (GeneralWorkspace, chatStream.chatSource) - and a plain to-do
   const home = !!t;
-  // ...a to-do no agent has touched is ONE section: what came in, the box under it (taskLayout.soloTodo) - no "Agent - not started" column
-  const solo = soloTodo({ kind: t?.Kind, started: !!(term || hasRecord || generalStarted || hasGeneralHistory || queuedRow || agentOpening || failedRun || writeup) }),
+  // ...a to-do no agent has touched is ONE section: what came in (taskLayout.soloTodo) - no "Agent - not started" column. AND NO BOX IN IT, EVER
+  // (the owner, 2026-11-22: "that belongs in the agent section. if they hit send to agent it goes there"): its Send to agent adds the Agent
+  // section and opens it, where the box is - typing there starts the agent
+  const [toAgent, setToAgent] = useState(null);
+  const solo = toAgent !== selected && soloTodo({ kind: t?.Kind, started: !!(term || hasRecord || generalStarted || hasGeneralHistory || queuedRow || agentOpening || failedRun || writeup) }),
     secs = solo ? SECTIONS.slice(0, 1) : SECTIONS;
   // ...AND THERE IT IS ALWAYS THE CHAT (the owner, 2026-11-06): no AI connected, a start waiting its turn or one that failed, nothing started yet -
   // the one box under the conversation, never the old Send to agent form with its own pickers and button
@@ -3310,10 +3313,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     </Box>
                     {/* A TO-DO NO AGENT HAS TOUCHED (the owner, 2026-11-06: no "Agent - not started" column): the one box at the foot of what came
                         in - typing there starts the agent, whose chat then opens beside it; what the chat would hold (a draft, an email owed) over it */}
-                    {solo && <Box data-tq-solo-box="" sx={{ mt: "auto", position: "sticky", bottom: 0, zIndex: 1, bgcolor: SHADE, pt: 1 }}>
-                      <NoAgentChat task={t} reviews={detail?.reviews || []} cards={chatCards} closed={closedSaid}
-                        onStarted={(data) => { const o = outcomeOf(data); if (o.state === "started" || o.state === "existing") setTerm(data?.session || null);
-                          askTaken(t.TaskId); loadDetail(selected); loadTasks(); onChanged?.(); }} /></Box>}
+                    {solo && !closedSaid && <Box data-tq-solo-box="" sx={{ mt: "auto", position: "sticky", bottom: 0, zIndex: 1, bgcolor: SHADE, pt: 1, pb: 0.5 }}>
+                      <Button variant="contained" disableElevation size="small" data-tq-send-to-agent=""
+                        title={btnHint("regular_agent")} onClick={() => { setToAgent(selected); requestAnimationFrame(() => openSection("agent")); }}>{btn("regular_agent")}</Button></Box>}
                   </Box>
                 )}
                 {/* THE WORK COLUMN: the agent's chat, the reply's cards in it - full width while it works; in ONE scroller, the column's (TQ-1215:

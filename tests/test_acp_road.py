@@ -577,3 +577,20 @@ def test_the_owner_s_own_codex_starts_with_openai_s_apps_and_plugins_off_as_an_a
     cfg = json.loads(l['env']['CODEX_CONFIG'])
     assert cfg['features.apps'] is False and cfg['features.plugins'] is False and cfg['model_reasoning_effort'] == 'high'
     assert {k.split('.', 1)[1] for k in cfg if k.startswith('features.')} == set(harness.CLOSED_FEATURES)
+
+
+def test_a_start_that_fails_once_is_tried_again_before_he_hears_of_it():
+    """The owner's live app, 2026-11-22: "Codex did not start ... (session/new: Internal error)" after 40 s, at a busy minute; both his cards
+    started in 0.9 s a moment later. Nothing ran on a failed start, so it is tried once more; only a second failure is his to see."""
+    from taskuary import acp as acp_mod
+    calls = []
+    def flaky(*a, **k):
+        calls.append(1)
+        if len(calls) == 1: raise acp_mod.ACPStartError('session/new: Internal error')
+        return ('done', 'sid1', '')
+    prof = {'cmd': 'codex', 'held_only': True}
+    with mock.patch.object(agents, '_acp_road', return_value=True), mock.patch.object(agents, 'run_acp', side_effect=flaky):
+        assert agents.run_cli(prof, 'draw it', lambda *a, **k: None) == ('done', 'sid1', '') and len(calls) == 2
+    with mock.patch.object(agents, '_acp_road', return_value=True), \
+         mock.patch.object(agents, 'run_acp', side_effect=acp_mod.ACPStartError('session/new: Internal error')):
+        with pytest.raises(RuntimeError, match='did not start'): agents.run_cli(prof, 'draw it', lambda *a, **k: None)

@@ -316,10 +316,10 @@ test("no task kind or state lays a Close out section: Came from and the chat, a 
   assert.doesNotMatch(src, /<CodingChat |liveTerminal\(term\) \? </, "no coding/general branch picks the chat");
   assert.equal((src.match(/<GeneralWorkspace /g) || []).length, 1);
   assert.match(src, /next=\{chatCards\}/);
-  // ...the to-do's box at the foot of Came from, the chat's cards over it, and no Agent slot beside it
+  // ...NO BOX IN CAME FROM (the owner, 2026-11-22): its Send to agent opens the Agent section, where the box is - no Agent slot beside it till then
   const from = src.slice(src.indexOf('slot("from",'), src.indexOf("THE WORK COLUMN"));
-  assert.match(from, /\{solo && <Box data-tq-solo-box="" sx=\{\{ mt: "auto", position: "sticky", bottom: 0/);
-  assert.match(from, /<NoAgentChat task=\{t\} reviews=\{detail\?\.reviews \|\| \[\]\} cards=\{chatCards\} closed=\{closedSaid\}/);
+  assert.match(from, /data-tq-send-to-agent=""/);
+  assert.doesNotMatch(from, /<NoAgentChat /);
   assert.match(src, /\{!solo && slot\("agent", <Box data-tq-work=/);
   // ...the task's own moves ride the chat's strip
   assert.match(src, /function useTaskMoves\(sec\) \{/);

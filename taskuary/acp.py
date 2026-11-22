@@ -242,7 +242,7 @@ class ACPClient:
             if outer: outer(u)
         self.on_update = collect
         try:
-            r = self.request('session/prompt', {'sessionId': self.session_id, 'prompt': blocks(text, self._caps)}, sent=sent) or {}
+            r = self.request('session/prompt', {'sessionId': self.session_id, 'prompt': blocks(text, getattr(self, '_caps', None))}, sent=sent) or {}
         finally:
             self.on_update = outer
         self.last_turn = r              # ...the whole PromptResponse: its `usage` and _meta are what the turn used (aiusage.acp)

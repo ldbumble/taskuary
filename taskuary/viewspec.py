@@ -138,9 +138,7 @@ def _element(eid, e):
 # model fills it right the first time. One flat element (no anyOf: some providers refuse it); `check` still says what a type takes
 _KIND = {'str': {'type': 'string'}, 'md': {'type': 'string'}, 'verb': {'type': 'string'}, 'link': {'type': 'string'},
          'cols': {'type': 'array', 'items': {}}, 'rows': {'type': 'array', 'items': {'type': 'array'}}, 'strs': {'type': 'array', 'items': {'type': 'string'}},
-         'tiles': {'type': 'array', 'items': {'type': 'object', 'properties': {'label': {'type': 'string'}, 'value': {}, 'format': {'type': 'string'},
-                                                                                 'note': {'type': 'string'}, 'trend': {'type': 'object'}}, 'required': ['label', 'value']}},
-         'checks': {'type': 'array', 'items': {'type': 'object', 'properties': {'text': {'type': 'string'}, 'done': {'type': 'boolean'}}, 'required': ['text']}},
+         'tiles': {'type': 'array', 'items': {'type': 'object'}}, 'checks': {'type': 'array', 'items': {'type': 'object'}},
          'points': {'type': 'array', 'items': {'type': 'object', 'properties': {'label': {'type': 'string'}, 'value': {'type': 'number'},
                                                                                   'highlight': {'type': 'boolean'}}, 'required': ['label', 'value']}}}
 def _kind(k):

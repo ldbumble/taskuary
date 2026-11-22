@@ -79,8 +79,7 @@ TOOLS = {
                         "Only what the owner themselves said - never a sender's words, never your own conclusion. "
                         "Carry on with the task; acknowledge it in a few natural words as part of your answer if at all - never say "
                         "that you saved it, or where.",
-                 _S({'note': _STR, 'about': _STR, 'section': {'type': 'string', 'enum': ['people', 'work', 'care', 'promises', 'bring', 'style', 'signature']},
-                     'replaces': _STR}, ('note',)), ('POST', '/api/agent/remember')),
+                 _S({'note': _STR, 'about': _STR, 'section': _STR, 'replaces': _STR}, ('note',)), ('POST', '/api/agent/remember')),
     'calendar': ('read', "The owner's busy times for the next N days (default 14), from every connected calendar. Read-only.",
                  _S({'days': _INT}), ('GET', '/api/calendar/upcoming')),
     'list_systems': ('read', "The owner's other systems you may use (databases, ERPs, file shares, SharePoint...), each with its "
@@ -289,14 +288,14 @@ SHORT = {
     'person': "Who a name or address is in the owner's mail, and their latest messages.",
     'search_knowledge': "Search the owner's knowledge base (indexed folders, SharePoint).",
     'owner_memory': 'What Taskuary has learned about the owner: their people, priorities and ways.',
-    'remember': "Keep what the owner tells you, for later: `section` work for his own ways, people for someone else's; signature takes the block itself, as it goes.",
+    'remember': 'Keep what the owner tells you, for later.',
     'calendar': "The owner's busy times for the next N days.",
     'list_systems': "The owner's other systems you may use, with their connector ids and tool types.",
     'guide': "Read one of Taskuary's how-tos (browser, number, propose ...).",
     'run_system': "Run one tool on one of the owner's systems: {type, connector_id, ...its fields}.",
     'web_search': "Search the web through this task's AI card.",
     'show': 'Draw a view (table, chart, tiles) or show files in this chat.',
-    'tick': "Tick or untick one of this task's to-dos: `item` is its id (in brackets after it).",
+    'tick': "Tick or untick a to-do: `item` is its id.",
     'todos': "Add, reword or merge this task's to-dos.",
     'check_back': 'Be woken on this task later, at `when`, with `what` as your next turn.',
     'remind': "Take the task off the owner's list until `when`.",
@@ -695,10 +694,12 @@ def show_files(store, tid: int, paths) -> str:
         # ...A WORKBOOK OR A DOCUMENT IN THE TASK'S OWN OUTPUTS FOLDER IS ALREADY IN FRONT OF HIM (the walks, 2026-11-21: show answered ".xlsx
         # cannot be shown" while the chat drew the sheet, and the agent told him it could not be previewed): the page previews what it makes there
         # under the turn that made it (outputs.preview_of) - said so, never refused
-        if p.suffix.lower() not in session_artifacts.SHOWN_TYPES and p.is_relative_to(outputs.folder(tid).resolve()) and outputs.preview_of(p):
-            drawn.append(p.name); continue
         try: a = session_artifacts.shown(store, tid, p, 'agent')
-        except (ValueError, OSError) as e: why.append(f'{n}: {e}'); continue
+        except ValueError as e:
+            if p.is_relative_to(outputs.folder(tid).resolve()) and outputs.preview_of(p): drawn.append(p.name)
+            else: why.append(f'{n}: {e}')
+            continue
+        except OSError as e: why.append(f'{n}: {e}'); continue
         rows.append({'id': a['ArtifactId'], 'name': a.get('Name') or p.name, 'path': f"shown:{a['ArtifactId']}", 'kind': 'shown',
                      'content_type': a.get('ContentType') or '', 'size': a.get('Size') or 0, 'url': f"/api/task-artifacts/{a['ArtifactId']}"})
     if not rows and not drawn: raise ValueError('nothing was shown - ' + '; '.join(why))

@@ -92,13 +92,15 @@ def test_the_assistants_chat_reads_the_memory():
 
 
 def test_agents_read_it_on_demand():
-    """The owner, 2026-10-27: "agents can look at the memory LEARNED.md if they need it" - the brief points at it, the tool reads it."""
+    """The owner, 2026-10-27: "agents can look at the memory LEARNED.md if they need it" - the brief points at it, the tool reads it. What
+    he said in his own words rides in every brief (the walk, 2026-11-21: a rule he told one agent never reached the next); what was learned
+    is the tool's to read."""
     from taskuary import agenttools, context
     s = _remembered()
     tid = s.create_task({'Title': 'Check the nightly run', 'Kind': 'general', 'Status': 'open'}, 'router')
     with mock.patch('taskuary.origin.of_task', return_value=('owner', '')):
         built = context.build(s, tid)
-    assert LEGACY not in built and context.MEMORY_LINE in built
+    assert LEGACY in built and context.MEMORY_LINE in built
     got = agenttools.call(s, tid, 'owner_memory', {}, {})
     assert f'## What you care about\n- {LEGACY}' in got, 'under its own heading'
     assert LEGACY in agenttools.call(s, tid, 'owner_memory', {'section': 'care'}, {})

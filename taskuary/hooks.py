@@ -610,6 +610,7 @@ def held_for(store, tid: int, sid: str) -> bool:
 # judge's call (ENDED_SYSTEM says so), never a word list
 def finished(summ) -> bool: return isinstance(summ, dict) and summ.get('nothing_left') is True
 def left_for_send(summ) -> bool: return isinstance(summ, dict) and bool(summ.get('drafted'))
+def on_him(summ) -> bool: return isinstance(summ, dict) and any(str(x or '').strip() for x in summ.get('on_you') or [])
 def letter_waits(store, tid: int) -> bool:
     "A reply or one of the task's emails waits for the owner's Send (store.waiting_on_owner). A held step is its own session's: held_for."
     return (store.waiting_on_owner(int(tid)) or {}).get('Kind') not in (None, 'action')
@@ -641,7 +642,9 @@ def judge_ended(store, tid: int, sid: str, said: str, brain=None, wait: bool = F
     # ...NOR WHILE A LETTER STILL WAITS FOR HIS SEND, whichever turn left it (letter_waits): recorded on the real CLI, 2026-11-13 - he sent
     # the first of two emails, the agent said the second "hasn't been sent yet", the model read that as unfinished and it was woken to
     # answer "Only you can send the email. Nothing else is needed from me"
-    if jobs is None and (left_for_send(summ) or checks_back(store, tid, sid) or letter_waits(store, tid)): return
+    # ...NOR ONE WHOSE SUMMARY LEFT A STEP ON HIM (its on_you): he moves next, by the turn's own record - on the Codex road each such read was a
+    # whole `codex` session of its own, started beside the turn (the walk, 2026-11-21)
+    if jobs is None and (left_for_send(summ) or on_him(summ) or checks_back(store, tid, sid) or letter_waits(store, tid)): return
     key = (str(sid), hashlib.sha1(said.encode('utf-8', 'replace')).hexdigest())
     def go():
         from . import workerstate as ws

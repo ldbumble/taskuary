@@ -282,6 +282,20 @@ class TheTurnsOwnRecordAnswersFirstTests(unittest.TestCase):
         self.assertEqual(len(woke), 1)
 
 
+    def test_a_turn_whose_summary_left_a_step_on_him_asks_no_model(self):
+        """The walk, 2026-11-21: on the Codex road each turn-end read was a whole `codex` session of its own beside the turn. A turn whose own
+        summary left a step on the owner (its on_you) is one where he moves next - a stored fact, so no model is asked and nobody is woken."""
+        s = MemoryStore(); tid = researcher(s)
+        said = 'The lease summary is above. Confirm which party holds the break.'
+        ws.record(s, tid, 'g9', 'turn_end', text=said, source='api')
+        woke, asked = [], []
+        brain = lambda *a, **k: asked.append(1) or json.dumps({'unfinished': True, 'why': 'its own check'})
+        hooks.judge_ended(s, tid, 'g9', said, brain=brain, wait=True, then=lambda *a: woke.append(a), summ={'did': 'Summarised the lease', 'on_you': ['Confirm which party holds the break']})
+        self.assertEqual((woke, asked), ([], []))
+        hooks.judge_ended(s, tid, 'g9', said + ' ', brain=brain, wait=True, then=lambda *a: woke.append(a), summ={'did': 'Summarised the lease', 'on_you': []})
+        self.assertEqual(len(asked), 1, 'nothing on him: the model still reads it')
+
+
 class AnOwnersAskAnsweredWithNothingTests(unittest.TestCase):
     """The owner, 2026-11-10: "it created reply with nothing in it. that's dumb. if you have nothing to reply just ask what should i reply?" -
     a task from a mail listed an email to someone on the thread, the owner asked the agent to respond, and its turn ended with no words, no

@@ -1056,6 +1056,9 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
         # waiting on you"): the task's own row stands, as its state reads it (taskstate.never_ran)
         from . import taskstate
         if taskstate.never_ran(store, task, {**t, 'mode': t.get('mode') or 'terminal'}): continue
+        # ...NOR ONE HE STOPPED (round 4, 2026-11-22: the header read "agent stopped", this row "Agent is waiting on you" with the hand): the
+        # task's own row stands, as its state reads it (taskstate.last_word)
+        if not t.get('request') and taskstate.last_word(store, tid, t.get('sid')) == 'stopped': continue
         tail = [str(x).strip() for x in (t.get('tail') or []) if str(x).strip()]
         # ...read off the RENDERED screen when there is one, with the TUI's chrome dropped: the
         # card showed a theme toolbar where the agent's question belonged (2026-09-03)

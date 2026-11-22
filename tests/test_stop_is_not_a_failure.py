@@ -56,3 +56,13 @@ def test_the_rail_says_stopped_over_a_session_he_stopped():
     with mock.patch('taskuary.terminal.session_for', return_value=sess):
         line, row = funnel.live_session_state(tid, 'the assistant')
     assert line.startswith('Stopped.') and 'waiting' not in row
+
+
+def test_a_session_he_stopped_makes_no_waiting_row_on_the_rail():
+    "Round 4, 2026-11-22: after his Stop the header said \"agent stopped\" and the rail's agent row \"Agent is waiting on you\" with the hand."
+    from taskuary import funnel
+    s = MemoryStore(); tid = task(s)
+    ws.record(s, tid, 'sid7', 'working', text='', source='api'); ws.record(s, tid, 'sid7', 'stopped', text='stopped', source='api')
+    live = [{'taskId': tid, 'sid': 'sid7', 'alive': True, 'waiting': True, 'mode': 'assistant', 'started': '2026-11-22 05:00:00'}]
+    rows = funnel.from_agents(s, live_state=live)
+    assert not [r for r in rows if r.get('tid') == tid and r.get('lane') == 'blocked'], rows

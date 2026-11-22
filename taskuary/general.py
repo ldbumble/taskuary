@@ -238,11 +238,18 @@ def retry_turn(store, tid: int) -> bool:
     if at_work(tid): return False
     OPENING.add(tid)
     def go():
-        try: start_session(store, tid, actor='router').send_prompt(RETRY_ASK, as_owner=False)
+        try: start_session(store, tid, actor='router').send_prompt(retry_ask(tid), as_owner=False)
         except Exception as e: logger.info(f'task {tid}: the try again by itself did not answer - {e}')
         finally: OPENING.discard(tid)
     threading.Thread(target=go, daemon=True, name=f'retry-{tid}').start()
     return True
+def retry_ask(tid: int) -> str:
+    """RETRY_ASK, with what the task already made: the try may run in a fresh conversation that never saw its files (the walk, 2026-11-22: a
+    deck's first try wrote budget-2027-deck.html, its retry built a .pptx from scratch - two deliverables for one ask). It builds on them."""
+    from . import outputs
+    try: made = sorted(p.name for p in outputs.folder(tid).iterdir() if p.is_file())
+    except OSError: made = []
+    return RETRY_ASK + (f" What this task already made is in its outputs folder - {', '.join(made[:20])}: build on it, never make it again." if made else '')
 def let_go_retry(store, tid: int) -> None:
     "A turn answered, or failed some other way: the queued try is no longer owed."
     if (store.get_dispatch(tid) or {}).get('Turn') == RETRY_TURN: store.clear_dispatch(tid)

@@ -660,6 +660,9 @@ class TheSessionTests(unittest.TestCase):
         self.assertEqual(handed, [tid])                           # the drain hands the row to the try, and keeps it
         self.assertTrue(s.get_dispatch(tid))
         import threading
+        # ...and what the first try made is named to the try (the walk, 2026-11-22: a fresh conversation rebuilt a deck it had already written)
+        from taskuary import outputs
+        outputs.folder(tid).mkdir(parents=True, exist_ok=True); (outputs.folder(tid) / 'monday-summary.md').write_text('# Monday', encoding='utf-8')
         with self._patched(Up()), mock.patch.object(general, 'start_session', side_effect=lambda *a, **kw: self._down_session(s, tid)):
             self.assertTrue(general.retry_turn(s, tid))
             for t in [t for t in threading.enumerate() if t.name == f'retry-{tid}']: t.join(20)
@@ -667,7 +670,7 @@ class TheSessionTests(unittest.TestCase):
         bodies = [c['Body'] for c in s.list_comments(tid)]
         self.assertEqual(bodies[-1], 'The Monday summary is set up.')
         self.assertEqual(bodies.count('set up the Monday summary'), 1)       # his line once, never again in his name
-        self.assertIn(general.RETRY_ASK, heard[0])
+        self.assertIn(general.RETRY_ASK, heard[0]); self.assertIn('monday-summary.md', heard[0])
 
     def test_the_turn_that_answers_after_an_outage_is_clocked_from_its_own_try(self):
         """The API walk, 2026-11-19: a short ask answered after the outage read "ran 17m 18s" - its clock counted from the first hand-over

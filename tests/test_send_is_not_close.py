@@ -8,13 +8,14 @@ import pytest
 
 from taskuary import buttons, concierge, funnel, outbound, proposals, slots, verdicts, rulebook
 from taskuary.store import MemoryStore
+from taskuary.testing import mailbox
 from tests.test_close_slots import FOUR, SENT, approve, draft, typed
 from tests.test_review_delivery_safety import make_review
 
 
 @pytest.fixture
 def s():
-    v = MemoryStore(); funnel.invalidate(); funnel.forget_states(); yield v; v.close()
+    v = mailbox(MemoryStore()); funnel.invalidate(); funnel.forget_states(); yield v; v.close()
 
 
 def send(s, rid):

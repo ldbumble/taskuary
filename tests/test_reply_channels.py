@@ -9,6 +9,7 @@ from unittest import mock
 
 from taskuary import wrapup, outbound
 from taskuary.store import MemoryStore
+from taskuary.testing import mailbox
 
 
 def task_with(s, channel, status='routed'):
@@ -24,7 +25,7 @@ class CanReplyTests(unittest.TestCase):
         """Decided 2026-11-12: a Teams reply's task said "draft to copy" while its rail row said "a reply is drafted for you to send". The
         row's line is the same state's own sentence (lanes.json `unsendable`), the one the task's chip shows."""
         from taskuary import funnel, lanes
-        s = MemoryStore()
+        s = mailbox(MemoryStore())
         for ch in ('teams', 'email'):
             tid, mid = task_with(s, ch)
             s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'Channel': ch, 'DraftText': 'Yes, Thursday works.'})

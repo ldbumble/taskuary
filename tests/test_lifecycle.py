@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from taskuary import buttons, concierge, funnel, general, railwalk, server, terminal, verdicts
 from taskuary.store import MemoryStore
+from taskuary.testing import mailbox
 
 
 def ago(hours=0, minutes=0): return (datetime.now() - timedelta(hours=hours, minutes=minutes)).strftime('%Y-%m-%d %H:%M:%S')
@@ -19,7 +20,7 @@ def ago(hours=0, minutes=0): return (datetime.now() - timedelta(hours=hours, min
 
 class LifecycleTests(unittest.TestCase):
     def setUp(self):
-        self.s = MemoryStore()
+        self.s = mailbox(MemoryStore())
         self.s.upsert_agent('coding', 'coding', 'cli', '{}')     # config.toml seeds one at boot
         for k in ('calendar_enabled', 'coding_auto_enabled', 'auto_draft_enabled'): self.s.set_setting(k, '0', 't')
         funnel.invalidate(); funnel.forget_states()

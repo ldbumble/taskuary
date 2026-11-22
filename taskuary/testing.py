@@ -44,8 +44,7 @@ def _pic(**kw):
 def mailbox(s, address: str = 'alex@northwind.example'):
     """A connected mailbox that can send: a reply's card says Send, not "No mailbox is connected" (outbound.connect_fix). A world that drafts
     and sends email has one; a store with no mailbox at all is the Connect shape."""
-    s.save_connector({'Type': 'imap', 'Name': 'Mail', 'Active': 1,
-                      'ConfigJson': json.dumps({'imap_host': 'imap.northwind.example', 'smtp_host': 'smtp.northwind.example', 'address': address})}, 't')
+    s.save_connector({'Type': 'outlook', 'Name': 'Mail', 'Active': 1, 'ConfigJson': json.dumps({'address': address})}, 't')
     return s
 
 

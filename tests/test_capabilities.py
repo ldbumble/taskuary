@@ -5,6 +5,7 @@ from unittest import mock
 from fastapi.testclient import TestClient
 from taskuary import agents, capabilities, concierge, rulebook
 from taskuary.store import MemoryStore
+from taskuary.testing import mailbox
 
 
 def brain_saying(answer: dict):
@@ -65,7 +66,7 @@ class CapabilitiesTests(unittest.TestCase):
 
 class OfferedTests(unittest.TestCase):
     def test_a_draft_that_cannot_send_is_offered_no_send(self):
-        s = MemoryStore()
+        s = mailbox(MemoryStore())
         teams, email = draft(s, 'teams'), draft(s, 'email')
         self.assertNotIn('approve', [v['verb'] for v in rulebook.offered(s, teams)])
         self.assertIn('approve', [v['verb'] for v in rulebook.offered(s, email)])

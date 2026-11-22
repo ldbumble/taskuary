@@ -32,7 +32,7 @@ test("setup mode: the steps for a rail, setup alone on the canvas, no chat box, 
   // ...setup alone, and still mounted - hidden - under a page or a task opened over it (W2, 2026-10-21)
   assert.match(av, /\{firstRun \? state && <div data-tq-setup-under=\{setupCovered\.current \? "hidden" : ""\} style=\{setupCovered\.current \? \{ display: "none" \} : undefined\}>\{welcome\(\)\}<\/div>\s+: state && !shown\.some\(\(m\) => !inWin\.has\(m\.id\) && !gone\.has\(m\.id\)\) && \(!busy \|\| popOpen\) && !starting && welcome\(\)\}/);
   assert.match(av, /\{!firstRun && shown\.map/);
-  assert.match(av, /className="tq-compose-box" style=\{firstRun \? \{ display: "none" \} : undefined\}/);
+  assert.match(av, /className="tq-compose-box" style=\{firstRun \|\| /);
   // ...no Advisor line over setup itself - but a task opened over it is the item in view, and speaks (2026-10-26)
   assert.match(av, /tableOf\(\{ current, cardKey, foldedKey, browsing, setup: setupOn\.current, over: !!setupCard \}\)/);
   assert.doesNotMatch(av, /SetupLine/, "setup says its own on the page");

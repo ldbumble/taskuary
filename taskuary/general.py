@@ -1080,8 +1080,9 @@ def _last_said(store, tid) -> tuple:
         return last, (json.loads(last['Body']) if last and last.get('ActorType') == SUMMARY_TYPE else None)
     except (TypeError, ValueError): return last, None
 def carries_on(store, tid) -> bool:
-    "Its agent's last turn said it goes on once the owner presses what it set up (the summary's after_press 'send')."
-    return isinstance(s := _last_said(store, tid)[1], dict) and s.get('after_press') == 'send'
+    """Its agent goes on once the owner presses what it set up: its last turn's summary says so (after_press 'send'), or there is none to say
+    otherwise - a coding session files none, and an approved merge is where it deploys. Only a summary that named no next step keeps it quiet."""
+    return not isinstance(s := _last_said(store, tid)[1], dict) or s.get('after_press') == 'send'
 
 
 def follow_up(store, tid, press: str, actor: str = 'owner', said: str = None, heard=None) -> bool:

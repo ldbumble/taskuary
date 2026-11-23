@@ -262,11 +262,13 @@ def read(store, tid: int, level: str = None, ending: bool = False) -> dict:
             x['steps'] = [_item(k) for k in ks if k['Kind'] == 'step']
             # ...a turn with its failed line says the failure once: there, never again as an error step under it
             if x.get('fail'): x['steps'] = [s for s in x['steps'] if s.get('k') != 'error']
-            # ...AND WHAT THE ANSWER SAYS IS SAID ONCE (walk 5: "I can't look those up from here" twice, word for word): the words that streamed
-            # as its steps and its filed answer are one message - a step the answer holds is left out, each opener said once (conversation._said)
-            from .conversation import _said, said_once
-            seen = set(); x['steps'] = _said(x['steps'], str(x.get('text') or ''), seen)
-            if x.get('text'): x['text'] = said_once(str(x['text']), seen)
+            # ...AND WHAT THE ANSWER SAYS IS SAID ONCE (walk 5: "I can't look those up from here" twice, word for word) - BY THE ANSWER (the owner,
+            # 2026-11-23: words stay where they were said): the words that streamed are its rows, as they stood while it worked; of the filed
+            # answer only what they did not say is drawn under them (`tail`) - the answer itself kept whole, as he copies it - each message's
+            # opener said once (conversation._said)
+            from .conversation import _said, unsaid
+            x['steps'] = _said(x['steps'])
+            if x.get('text'): x['tail'] = unsaid(str(x['text']), x['steps'])
             # ...and one taken back (took_back) says so as its step: its words and their summary are no answer
             if any(s.get('took') for s in x['steps']): x['text'] = ''; x.pop('summary', None)
             x['cards'] = [] if r['State'] in LIVE else [_item(k) for k in ks if k['Kind'] in ('card', 'fail') and _drawn(k, lit)]
@@ -697,7 +699,9 @@ def _put(store, tid: int, sid: str, f: dict, ref: str) -> None:
     if e.get('j') == (j := json.dumps(x, sort_keys=True, default=str)): return
     # ...the row IS the step as it now reads: what it no longer says (an ask answered) is cleared, never left from the read before
     was, e['j'], e['keys'] = e.get('keys') or (), j, set(x)
-    step(store, tid, sid, ref, {**{k: None for k in was if k not in x}, **x}, state=x.get('status'))
+    n = step(store, tid, sid, ref, {**{k: None for k in was if k not in x}, **x}, state=x.get('status'))
+    from . import live
+    if live._clients and (p := pushed(store, tid, n)): live.emit(live.RUN, task_id=int(tid), steps=[p])     # ...the open chat patches this row
 
 
 _LOGS = ('claude-log', 'codex-log')
@@ -775,16 +779,28 @@ def _capped(out: str) -> dict:
 
 
 def tool_rows(steps: list) -> list:
-    "A turn's steps with each tool call as its one row (`line`, `outcome`, the output capped behind it) and the same call again as `times`."
-    out = []
-    for s in steps:
-        if s.get('k') != 'tool': out.append(s); continue
-        verb = _verb(s.get('name')); on = _on(s, verb)
-        r = {**{k: v for k, v in s.items() if k not in ('output', 'out')}, 'line': s.get('did') or (f'{verb} {on}'.strip() if on else verb), 'verb': verb,
-             **({'outcome': o} if (o := outcome(s)) else {}), **_capped(s.get('output') or s.get('out'))}
-        if out and out[-1].get('k') == 'tool' and out[-1]['line'] == r['line']: out[-1]['times'] = out[-1].get('times', 1) + 1; out[-1].update({k: r[k] for k in ('outcome', 'status') if k in r}); continue
-        out.append(r)
-    return out
+    """A turn's steps with each tool call as its one row (`line`, `outcome`, the output capped behind it) - one row per call, always: the same
+    call again is the page's to fold (agentSteps' "(3 times)", keyed by its first call), never a row taken out of the list under its key."""
+    return [s if s.get('k') != 'tool' else tool_row(s) for s in steps]
+
+
+def tool_row(s: dict) -> dict:
+    verb = _verb(s.get('name')); on = _on(s, verb)
+    return {**{k: v for k, v in s.items() if k not in ('output', 'out')}, 'line': s.get('did') or (f'{verb} {on}'.strip() if on else verb), 'verb': verb,
+            **({'outcome': o} if (o := outcome(s)) else {}), **_capped(s.get('output') or s.get('out'))}
+
+
+def pushed(store, tid: int, n: int) -> dict:
+    """ONE ROW AS THE PAGE DRAWS IT, PUSHED AS IT IS WRITTEN (the owner, 2026-11-23: words stream into their row) - {turn, step}, the turn its
+    row stands in and the step as a read serves it - so the open chat patches that one row in place, never waiting on its next read."""
+    from .conversation import _said
+    with store.lock:
+        r = store.cx.execute('SELECT s.*, t.Key AS TurnKey FROM chatlog s JOIN chatlog t ON t.Id = s.Parent WHERE s.Id=?', (int(n),)).fetchone()
+    if not r: return {}
+    x = _item(dict(r))
+    if x.get('k') == 'tool': x = tool_row(x)
+    elif not (x := next(iter(_said([x])), None)): return {}
+    return {'tid': int(tid), 'turn': r['TurnKey'], 'step': x}
 
 
 def detailed(turn: dict, level: str) -> dict:
@@ -1237,8 +1253,8 @@ def _halted(store, tid: int) -> str:
 def _now(tid: int, turn: dict) -> dict:
     """What the turn at work is doing this moment, off its session's own trace - never written to the log, it changes by the token:
     `opening` while its agent really is starting (recorded on the real CLI, 2026-11-16: a cold adapter took most of a minute under "Thinking...")
-    - from its start where no CLI is up (general.cold), until its road hands it the prompt; `doing`, the answer being written while that is
-    the newest thing it did."""
+    - from its start where no CLI is up (general.cold), until its road hands it the prompt. The answer it is writing is its own row, streamed
+    into it (feed) - never a second copy on this line."""
     from . import general
     from .conversation import clean
     ses = general.session_for(tid)
@@ -1250,14 +1266,11 @@ def _now(tid: int, turn: dict) -> dict:
     # nothing here ended it): once its conversation is open the agent is at work - "Thinking..." until its first step
     opening = 'opening' in kinds and kinds[::-1].index('opening') < (kinds[::-1].index('prompt') if 'prompt' in kinds else len(kinds)) and general.cold(tid)
     e = trace[-1] if trace else {}
-    doing = clean(e.get('detail')) if e.get('type') == 'live' and e.get('name') == 'writing' else ''
-    # ...never words its steps already draw (the log writes what streams as the turn's own `said` step): said twice while it thought
-    if doing and any(doing[:80] in clean(x.get('text')) for x in turn.get('steps') or [] if x.get('k') == 'said'): doing = ''
     # ...and `thinking`, the thought it is at while that is the newest thing (the owner, 2026-11-16: "Thinking..." for minutes): a thought is never
     # a step of the chat (conversation._said), so the line beside the dots is the only place it reads, and only while it is current
     from .chatformat import plain_text
     thinking = plain_text(clean(e.get('detail'))) if e.get('type') in ('live', 'progress') and e.get('name') in ('thinking', 'reasoning') else ''
-    return {**({'opening': True} if opening else {}), **({'doing': doing} if doing else {}), **({'thinking': thinking} if thinking else {})}
+    return {**({'opening': True} if opening else {}), **({'thinking': thinking} if thinking else {})}
 
 
 # WHAT A TURN SAID IN ITS OWN WORDS - THE ONE RULE FOR WHAT IS SAID AGAIN UNDER IT (decided 2026-11-20, walk 8: never duplicate): an ask marker's

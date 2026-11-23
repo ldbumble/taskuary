@@ -18,7 +18,7 @@ import { holdUnsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd, turnParts, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd, turnParts, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, ownDetail, useOwnDetail } from "./chatDetail.js";
@@ -222,7 +222,7 @@ const WorkFold = ({ k, quiet = false, parts, draw }) => { const n = workCount(pa
     : <>{parts.filter((p) => p.type !== "said").map((p, i) => draw(p, i, "everything"))}</>; };
 const TurnWorkView = ({ data, now, k }) => {
   const at = React.useContext(WorkCtx);
-  const key = foldKey(k), given = React.useContext(LevelCtx), level = data?.level && data.level !== "live" ? data.level : given, chat = React.useContext(ChatCtx);
+  const key = foldKey(k), level = levelOf(data?.level, React.useContext(LevelCtx)), chat = React.useContext(ChatCtx);
   // ...AND A TURN THAT ENDED HAS NOTHING STILL AT WORK (the owner, 2026-11-05: a step kept its spinner under the answer): a call that never got
   // its result before the answer was filed is drawn done, never circling. IN A CHAT A STEP IS NEVER "FAILED" (the owner, 2026-11-05: "it's just a
   // internal thought failure, for the user the task is getting done. failure means nothing") - a TURN that failed says so in its own words
@@ -243,29 +243,16 @@ const TurnWorkView = ({ data, now, k }) => {
     : p.type === "files" ? null
     : lvl === "everything" ? <AgentSteps key={p.id} data={{ steps: p.steps }} />
     : <WorkFold key={p.id} k={`${key}:${p.id}`} parts={[p]} draw={draw} />;
-  // WHILE IT RUNS EVERY LEVEL IS THE SAME (the owner, 2026-11-12: "that setting is what displays after it runs"): the agent's words as they
-  // come and what it showed - no list of steps open - with ONE live line at the foot saying what it does or what we wait for (ConvTurn,
-  // workingLine). Once the turn has ended the level decides: summary folds its work, steps lists it, everything shows it whole
-  // ...AND ITS STEPS COUNTED, SHUT, OVER THEM (the owner, 2026-11-17, of a turn 7 minutes in with 19 steps behind three short lines: "7 minutes
-  // this is all the agent did? and that little feedback?"): the same quiet "n steps" line a finished turn has, climbing as it works and open on
-  // every step - its retries and errors too - at a press; the very fold the turn keeps once it ends, so nothing moves then
-  if (now) {
-    const shown = (p) => ["said", "view", "files"].includes(p.type), rest = parts.filter((p) => !shown(p));
-    return <>{rest.some((p) => p.type !== "said") && <WorkFold k={`${key}:all`} quiet parts={rest} draw={draw} />}
-      {parts.filter(shown).map((p, i) => draw(p, i, "everything"))}</>;
-  }
-  // SUMMARY: the agent's words, in order; every step, edit and plan behind one quiet "n steps" line over them that opens on them all. A turn its
-  // summary sums up folds whole - its summary says the words
-  if (level === "summary") {
-    // ...and a view the agent showed is what it chose to put in front of the owner: never folded away
-    // ...and WHAT IT SAID ON ITS WAY STAYS when the turn ends (the UX walk, 2026-11-18: its opening line "I'll check the email, then ..." went as the
-    // summary took its place) - nothing drawn goes; its answer is added under it (stepsOf already leaves out what the answer says again)
-    const out = (p) => p.type === "view" || p.type === "files" || p.type === "said", said = parts.filter(out), rest = parts.filter((p) => !out(p));
-    return <>{rest.some((p) => p.type !== "said") && <WorkFold k={`${key}:all`} quiet parts={rest} draw={draw} />}
-      {said.map((p, i) => draw(p, i, "everything"))}</>;
-  }
+  // ONE LAYOUT, AT WORK AND FILED (the owner, 2026-11-23: "the live layout IS the finished layout" - words stay where they were said): the level
+  // decides from the turn's first row and never again. SUMMARY: what it said and showed where it said it, each run of work between them behind
+  // its own quiet "n steps" line that climbs as it works (the owner, 2026-11-17) and opens on every step at a press - keyed by its first part,
+  // so the turn's end moves nothing. STEPS and EVERYTHING: every row as it comes
+  if (level === "summary") return <>{runsOf(parts).map((r) => (r.fold ? <WorkFold key={r.id} k={`${key}:${r.id}`} quiet parts={r.parts} draw={draw} />
+    : r.parts.map((p, i) => draw(p, i, "everything"))))}</>;
   return <>{parts.map((p, i) => draw(p, i, level))}</>;
 };
+// the level a turn is drawn at: its own once the server has applied it (chatlog.detailed), else the chat's - a turn at work reads the chat's
+const levelOf = (own, given) => (own && own !== "live" ? own : given);
 
 
 
@@ -372,15 +359,28 @@ export function useConversation(tid, on) {
   // step), read at most every 600 ms. At rest the server's own poke (task-changed) brings what is new. A slow look backs both up - every
   // tick while the socket is down; under it every 3 s at work and 30 s at rest (restLook: not every write a chat shows pokes - a comment
   // does not). Reading every 600 ms at work and 5 s at rest was ~100 and 12 builds a minute of the list (stress round, 2026-11-18)
+  // ...AND THE ROWS IT PUSHED AS IT WROTE THEM ARE PATCHED IN AT ONCE (the owner, 2026-11-23: words stream into their row, Zed- and Obsidian-
+  // style): each run-tail's rows (chatlog.pushed) go into the list in place, by their own ids, once per animation frame - never a jump each
+  // 600 ms read; the read still follows, and finds the same rows
+  const queued = useRef([]), frame = useRef(0);
+  useEffect(() => () => { if (frame.current) cancelAnimationFrame(frame.current); }, []);
+  const patch = useCallback((steps) => {
+    queued.current.push(...steps);
+    if (frame.current) return;
+    frame.current = requestAnimationFrame(() => {
+      const q = queued.current; queued.current = []; frame.current = 0;
+      setList((cur) => { const next = patchSteps(cur, q, tid); if (next !== cur) LISTS.set(tid, next); return next; });
+    });
+  }, [tid]);
   useEffect(() => {
     if (!on) return undefined;
     let last = Date.now();
     const look = () => { last = Date.now(); return load(); };
     const [wake, stop] = coalesced(look, 600);
-    const off = onLive("run-tail", (ev) => { if (touches(ev, tid)) wake(); });
+    const off = onLive("run-tail", (ev) => { if (!touches(ev, tid)) return; if (ev.steps?.length) patch(ev.steps); wake(); });
     const t = setInterval(() => { if (restLook({ socket: liveUp(), last, now: Date.now(), every: going ? 3000 : REST_LOOK_MS })) look(); }, going ? 600 : 5000);
     return () => { clearInterval(t); off(); stop(); };
-  }, [on, going, load, tid]);
+  }, [on, going, load, tid, patch]);
   useEffect(() => (on ? onLive("task-changed", (ev) => { if (touches(ev, tid)) load(); }) : undefined), [on, tid, load]);
   // ...HOW MUCH OF THE WORK IT SHOWS IS THE SERVER'S TO APPLY (chatlog.detailed, the one place): the chat's own choice changed is read again
   useEffect(() => { const f = (e) => { if (String(e.detail?.tid) === String(tid)) load(); }; window.addEventListener("tq-chat-detail", f);
@@ -403,7 +403,7 @@ const TurnTime = ({ t, secs }) => {
 // `later`: a turn after the chat's first - its agent starting again is the work going on, never "waiting for the agent" (workingLine)
 const ConvTurn = ({ t, more, ran = 0, cards, name, ask = null, later = false, owes = false, newest = false }) => {
   const live = t.state === "working" || t.state === "starting";
-  const parts = useMemo(() => turnParts(eventsOf(t.steps || [], live), { answer: t.text || "", live }), [t.steps, t.text, live]);
+  const parts = useMemo(() => turnParts(eventsOf(t.steps || [], live), { live }), [t.steps, live]);
   const key = t.answer || t.id, at = useTurnOutputs(key), shown = React.useContext(ShownCtx)[key];
   const sum = t.summary, words = t.text || (sum ? [sum.about, sum.did].map((x) => String(x || "").trim()).filter(Boolean).join("\n\n") : "");
   const made = at ? turnFiles({ listed: at.listed, id: key, words, did: sum?.did, tid: at.tid, skip: [] }) : [];
@@ -418,10 +418,14 @@ const ConvTurn = ({ t, more, ran = 0, cards, name, ask = null, later = false, ow
   // ...WHILE THE CLI COMPACTS ITS CONTEXT the turn at work says so (the owner, 2026-11-10: "show compacting like claude code does"): its newest
   // step is the compaction, not yet over
   const compacting = live && ((x) => x?.k === "compact" && !!x.status && !["completed", "failed", "cancelled"].includes(x.status))((t.steps || []).at(-1));
-  // ...`opening`: its agent's process really is starting (conversation.items) - said on any turn then, and only then; `doing`: the answer as it is written
-  // ...naming what no row in sight says: its rows stand open inside the fold he opened, and on the dock's trail (no WorkCtx) always
-  const folded = useFoldOpen(`${foldKey(t.id)}:all`), work = React.useContext(WorkCtx), open = folded || !work;
-  const doing = live ? workingLine(parts, stepLabel, { starting: t.state === "starting" || !!t.opening, later: later && !t.opening, ask: React.useContext(WaitOnCtx), doing: t.doing || "", thinking: t.thinking || "", open }) : "";
+  // ...`opening`: its agent's process really is starting (conversation.items) - said on any turn then, and only then
+  // ...naming what no row in sight says: its rows stand open at a level that lists them, inside the newest fold he opened, and on the dock's
+  // trail (no WorkCtx) always. What it is writing is its own row, streamed into it - never said again on this line
+  const lastFold = runsOf(parts).findLast((r) => r.fold), level = levelOf(t.level, React.useContext(LevelCtx));
+  const folded = useFoldOpen(lastFold ? `${foldKey(t.id)}:${lastFold.id}` : ""), work = React.useContext(WorkCtx), open = folded || !work || level !== "summary";
+  const doing = live ? workingLine(parts, stepLabel, { starting: t.state === "starting" || !!t.opening, later: later && !t.opening, ask: React.useContext(WaitOnCtx), thinking: t.thinking || "", open }) : "";
+  // ...and of its filed answer only what its streamed words did not already say (chatlog.read `tail`): nothing said twice, nothing moved
+  const said = t.text && t.tail != null ? t.tail : words;
   if (quiet) return null;
   return <div className={`tq-aui-message tq-aui-agent${words && !live ? " tq-copy-host" : ""}${more ? " tq-aui-agent-more" : ""}`} data-tq-item={t.id} data-tq-chat-line={key} data-tq-turn={t.state}>
     {!!words && !live && <CopyCorner text={words} label="Copy this answer" />}
@@ -432,7 +436,7 @@ const ConvTurn = ({ t, more, ran = 0, cards, name, ask = null, later = false, ow
           turn's end was drawn over a picture already on screen, and the picture jumped down */}
       {!!rest.length && <PublishedPages pages={rest} open />}
       {!!made.length && <TurnFiles files={made} />}
-      {!!words && <SaidText text={words} mid={key} />}
+      {!!said && <SaidText text={said} mid={key} />}
       {/* ...A TURN THAT COULD NOT FINISH, WORTH ANOTHER TRY (its summary's `retry`): one button, never "send any message on this task to try
           again" (the 2026-11-18 walks) - pressed, it is his line "Try again." and the agent goes on */}
       {owes && !live && sum?.retry && !!again && <div style={{ marginTop: 8 }}><AgainButton again={again} /></div>}

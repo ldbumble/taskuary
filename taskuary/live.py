@@ -87,6 +87,9 @@ def _merged(prev: dict, payload: dict) -> dict:
     its old read (the intake walk, 2026-10-26). Every task the window touched is in `task_ids`; a write that named none is about
     all of them, so the merged event names none either."""
     msg = {**prev, **payload}
+    # ...and the chat rows a window wrote (chatlog.pushed) are every one of them, each row once - its newest
+    if prev.get('steps') and payload.get('steps'):
+        msg['steps'] = list({(s.get('tid'), (s.get('step') or {}).get('id')): s for s in [*prev['steps'], *payload['steps']]}.values())[-200:]
     # a window is covered only when every write in it was stamped, and is one tab's only when every write in it was that tab's
     if prev:
         if 'seq' in prev and 'seq' in payload: msg['seq'] = max(prev['seq'], payload['seq'])

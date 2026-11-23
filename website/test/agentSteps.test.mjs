@@ -67,11 +67,13 @@ test("an API connector's own web searches read exactly like a CLI's", () => {
   for (const b of APIS) assert.deepEqual(work(b).map((s) => s.summary), WORK.slice(4), b);
 });
 
-test("the agent's prose comes through as its own words, once, and the answer is not repeated above itself", () => {
-  const claude = stepsOf(trace("claude"), { answer: ANSWER, keepStart: false });
-  assert.deepEqual(claude.filter((s) => s.kind === "said").map((s) => s.summary), [SAY]);
+// ...WHERE IT SAID THEM (the owner, 2026-11-23: words stay where they were said): the answer it streamed is its last row, and the filed answer's
+// repeat of it is the server's to leave out (chatlog.read `tail`, tests/test_chatlog.py) - never taken out of the stream here
+test("the agent's prose comes through as its own words, once each, in the order it said them", () => {
+  const claude = stepsOf(trace("claude"), { keepStart: false });
+  assert.deepEqual(claude.filter((s) => s.kind === "said").map((s) => s.summary), [SAY, ANSWER]);
   assert.equal(claude[0].kind, "said");                                   // in the order it happened: it said, then it worked
-  for (const b of CLIS) assert.ok(!mainView(stepsOf(trace(b), { answer: ANSWER })).includes("last month's figure"), b);
+  assert.equal(claude.at(-1).summary, ANSWER, "its answer last, where it said it");
 });
 
 test("no raw script, token header, env name, JSON dump or key list reaches the main view", () => {
@@ -92,11 +94,12 @@ test("...and the raw call stays one disclosure away, for debugging", () => {
 
 test("no step is drawn twice: a structured backend's echo lines are not a second copy", () => {
   for (const b of CLIS) {
-    const steps = stepsOf(trace(b), { answer: ANSWER, keepStart: false });
+    const steps = stepsOf(trace(b), { keepStart: false });
     const seen = steps.map((s) => s.summary);
     assert.equal(new Set(seen).size, seen.length, `${b}: ${seen.join(" | ")}`);
     // ...and one line of its own words before the work, on every road: ACP traced none until its chunks were joined (2026-11-06)
-    assert.equal(steps.length, WORK.length + 1, `${b}: ${seen.join(" | ")}`);
+    assert.equal(steps.filter(isWork).length, WORK.length, `${b}: ${seen.join(" | ")}`);
+    assert.equal(steps[0].summary, SAY, `${b}: ${seen.join(" | ")}`);
   }
   // the echo lines are really there in the claude trace - they used to land in "Agent progress"
   assert.ok(trace("claude").some((e) => e.type === "live" && String(e.detail).startsWith("→ Bash:")));
@@ -177,16 +180,6 @@ test("a look whose non-zero exit is its answer reads 'found none'; a look that b
   assert.equal(st("Bash", "ls /srv/notes", "Exit code 2\nls: cannot open directory '/srv/notes': Permission denied"), "error");
   assert.equal(st("PowerShell", "Get-ChildItem C:/Users/alex/Downloads/notes", "Get-ChildItem : Access to the path 'C:\\Users\\alex\\Downloads\\notes' is denied."), "error");
   assert.equal(st("Bash", "grep -r invoice-4471 docs", "Exit code 2\ngrep: docs: Permission denied"), "error");
-});
-
-test("a turn whose answer carries its reply draft is not shown twice - the stream had the draft taken out, the filed answer keeps it", () => {
-  const report = "My recommendation is to send Erin alone.\n\n**Worth going.** The tax changes land in January.";
-  const after = "If you'd rather send both of them, tell me and I'll rewrite the reply.";
-  const draft = "Hi Erin,\n\nYes, I think we should go.\n\nThanks,\nAlex Doyle";
-  const streamed = [{ type: "progress", name: "text", detail: `${report}\n\n\n\n${after}` }];
-  assert.deepEqual(stepsOf(streamed, { answer: `${report}\n\n${draft}\n\n${after}`, keepStart: false }).filter((s) => s.kind === "said"), []);
-  // ...while words the answer does not say stay the agent's own
-  assert.equal(stepsOf(streamed, { answer: `${report}\n\n${draft}`, keepStart: false }).filter((s) => s.kind === "said").length, 1);
 });
 
 test("a quick answer's raw object is never the agent's words, whichever line of the trace carries it", () => {
@@ -527,8 +520,8 @@ test("the agent's own words for a shell line are its step - never a reading of a
 
 // THE WALK, 2026-11-21 (Claude over ACP): "5 steps - ran 3 commands, showed you 'show', showed you 'mcp__taskuary__show'" - the adapter's title
 // for a call is the tool's own name, and read as the view's title, so a failed bare `show` and the one that worked never folded together;
-// "searched your mail for , searched your documents"; and its working notes between calls stood in the chat as its answer
-test("a step line is plain words: no tool name as a title, no empty query, and words on the way to a call fold into the work", async () => {
+// "searched your mail for , searched your documents". Its words between calls stay where it said them (the owner, 2026-11-23)
+test("a step line is plain words: no tool name as a title, no empty query, and words stay where they were said", async () => {
   const { turnParts, foldLine } = await import("../src/chatStream.js");
   assert.equal(describeCall("mcp__taskuary__show", { title: "mcp__taskuary__show", files: ["C:/out/TQ-0002/forecast.png"] }).summary, "Showed you forecast.png");
   assert.equal(describeCall("show", { title: "show" }).summary, "Laid it out for you");
@@ -545,25 +538,13 @@ test("a step line is plain words: no tool name as a title, no empty query, and w
     said("Good. Now the reply with both files attached."),
     call("r1", "mcp__taskuary__propose_reply", { text: "Hi Gail" }), done("r1", "{}"),
     said("The forecast is ready and the reply to Gail waits for your Send.")];
-  const parts = turnParts(trace, { answer: "The forecast is ready and the reply to Gail waits for your Send." });
-  assert.deepEqual(parts.filter((p) => p.type === "said"), [], "no working note stands as an answer");
+  const parts = turnParts(trace);
+  assert.deepEqual(parts.map((p) => p.type), ["work", "said", "work", "said", "work", "said"], "filed as it was at work: every word where it was said");
+  assert.deepEqual(turnParts(trace, { live: true }).map((p) => p.id), parts.map((p) => p.id), "the same parts, live and filed");
   const steps = parts.flatMap((p) => (p.type === "work" ? p.steps : []));
-  assert.deepEqual(steps.filter((s) => s.kind === "thought").map((s) => s.summary),
-    ["Python 3.10 exists under the user path; check libraries.", "Good. Now the reply with both files attached."]);
   assert.equal(steps.find((s) => s.tool === "show").status, "recovered", "the failed try is the same step as the one that worked");
   assert.doesNotMatch(foldLine(parts), /show'|mcp__|for ,|for $/);
   assert.match(foldLine(parts), /^\d+ steps - searched your mail/);
-  // ...a turn still at work keeps every word where it stands
-  assert.equal(turnParts(trace.slice(0, 7), { live: true }).filter((p) => p.type === "said").length, 1);
-});
-
-test("an answer that names a made file is drawn once, whether its words named the file by path or by name (the HIPAA walk, 2026-11-21)", () => {
-  const path = "C:\\Users\\alex\\AppData\\Local\\Temp\\home\\scratch\\outputs\\TQ-0003\\Wellness_Flyer.pdf";
-  const trace = [{ type: "tool_call", name: "exec", detail: { tool_call_id: "c1", args: { command: "make flyer" } } },
-    { type: "tool_result", name: "c1", detail: { tool_call_id: "c1", result: "ok" } },
-    { type: "progress", name: "text", detail: `Created the one-page flyer at \`${path}\` and showed it in the chat.` }];
-  const steps = stepsOf(trace, { answer: "Created the one-page flyer at `Wellness_Flyer.pdf` and showed it in the chat." });
-  assert.equal(steps.filter((s) => s.kind === "said").length, 0);
 });
 
 test("a step's line is written from what it gave back: a refused show never reads 'Showed you' (HIPAA walk 6)", () => {

@@ -1372,7 +1372,7 @@ class ACPSteps:
             # ...ONE MESSAGE IS ONE STEP, as the answer (acp.prompt) and the chat (conversation.acp_steps) split them
             if self.thought or (self.said and u.get('messageId') != self.mid): self._words()
             self.mid = u.get('messageId')
-            self.said.append(acp_mod._text_of(u.get('content'))); self._live('writing', self.said); return
+            self.said.append(acp_mod._text_of(u.get('content'))); return
         if kind == 'agent_thought_chunk':
             if self.said: self._words()
             self.thought.append(acp_mod._text_of(u.get('content'))); self._live('thinking', self.thought); return

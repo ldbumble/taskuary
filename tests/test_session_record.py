@@ -488,10 +488,10 @@ def test_a_thought_being_written_is_one_open_step_its_snapshots_update(monkeypat
     assert [s['k'] for s in steps] == ['thought'] and not steps[0].get('live') and steps[0]['text'].endswith('so check Bakey next.')
     mid = sessionrecord.trace_steps([{'type': 'live', 'name': 'thinking', 'detail': x} for x in live])
     assert [(s['k'], s['text'], s.get('live')) for s in mid] == [('thought', live[-1], True)], 'mid-thought: one open step, its newest words'
-    # ...and the answer as it streams: snapshots too, the turn's line of what it is doing (a long answer read "Thinking..." for 85 s)
+    # ...and the answer as it streams is its own row in the chat (chatlog.feed, the owner 2026-11-23) - no snapshot of it on the trace
     said.clear(); clock[0] = 10.0
     for w in ['Salem is close. ', 'Providence is cheaper.']: feed({'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': w}})
-    assert [d for k, n, d in said if (k, n) == ('live', 'writing')] == ['Tatte opens first.Salem is close.']    # ...the words as they streamed
+    assert not [d for k, n, d in said if (k, n) == ('live', 'writing')]
 
 
 def test_a_call_whose_result_came_back_has_finished_while_the_model_writes():
@@ -507,8 +507,8 @@ def test_a_call_whose_result_came_back_has_finished_while_the_model_writes():
 
 def test_the_turn_at_work_says_when_its_agent_is_still_opening_and_what_it_is_writing(monkeypatch):
     """Recorded on the real CLI, 2026-11-16: a cold adapter took most of a minute to open under "Thinking...", then a long answer streamed in
-    under the same word. The turn at work says it is `opening` until its road hands the agent the prompt, and carries the answer being
-    written as `doing` while that is the newest thing it did."""
+    under the same word. The turn at work says it is `opening` until its road hands the agent the prompt; the answer being written is its own
+    row, streamed into it (chatlog.feed, the owner 2026-11-23) - never a second copy as `doing`."""
     from types import SimpleNamespace
     from taskuary import conversation
     s = MemoryStore(); tid = s.create_task({'Title': 'Plan the offsite', 'Kind': 'general', 'Status': 'in_progress'}, 'owner')
@@ -520,9 +520,8 @@ def test_the_turn_at_work_says_when_its_agent_is_still_opening_and_what_it_is_wr
     ses.trace.append({'type': 'opening', 'name': 'claude', 'detail': ''})            # ...the road really opens one (clipool.take)
     assert turn().get('opening') is True and 'doing' not in turn()
     ses.trace += [{'type': 'prompt', 'name': 'prompt_sent_to_agent', 'detail': 'x'}, {'type': 'live', 'name': 'writing', 'detail': 'Option one is Salem.'}]
-    assert 'opening' not in turn() and turn()['doing'] == 'Option one is Salem.'
+    assert 'opening' not in turn() and 'doing' not in turn()
     ses.trace.append({'type': 'tool_call', 'name': 'WebSearch', 'detail': {'tool_call_id': 'c1', 'args': {'query': 'Salem hotels'}}})
-    assert 'doing' not in turn(), 'a step after the words leads'
     # ...and the thought it is at, while that is the newest thing - the one place a thought reads (never a step: conversation._said)
     ses.trace.append({'type': 'live', 'name': 'thinking', 'detail': '**Comparing the two hotels**'})
     assert turn()['thinking'].strip() == 'Comparing the two hotels' and not [x for x in turn()['steps'] if x.get('k') == 'thought']

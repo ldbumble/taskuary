@@ -106,18 +106,14 @@ test("a turn at work says what is happening, or what we wait for, beside its dot
   assert.equal(workingLine([], label, { thinking }), "Tatte opens at 7 on Sundays, so I should check Bakey next");
   const { thinkingLine } = await import("../src/chatStream.js");
   assert.ok(thinkingLine("word ".repeat(80)).length <= 110);
-  // ...and the answer it is writing, while that is the newest thing it did - a long answer read "Thinking…" for 85 s on the real CLI
-  assert.equal(workingLine([], label, { doing: "Option one is Salem. Option two is Providence, by train." }),
-    "Writing: Option two is Providence, by train");
-  assert.match(workingLine([{ type: "work", steps: [{ summary: "Search", doing: "Searching the web", status: "running" }] }], label, { doing: "x." }), /^Searching/, "a step at work leads");
+  // ...and the answer it is writing is its own row, streamed into it (the owner, 2026-11-23) - never a second copy on this line
+  assert.equal(workingLine([{ type: "said", text: "Option one is Salem. Option two is" }], label, { doing: "Option one is Salem. Option two is" }), "Thinking…");
   assert.equal(workingLine(parts, label, { ask: "Waiting for your Allow once" }), "Waiting for your Allow once");
   const { waitingOn } = await import("../src/chatStream.js");
   assert.equal(waitingOn({ permissions: [{}] }), "Waiting for your Allow once");
   assert.equal(waitingOn({ asking: { ask: "signin", site: "bank.example" } }), "Waiting for you to sign in");
   assert.equal(waitingOn({ asking: { request_id: "q1" } }), "", "a question asked before is no wait while it works");
   assert.equal(waitingOn({}), "");
-  const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(src, /: doing \? <span className="tq-aui-working-line" data-tq-working-line="" title=\{doing\}>\{doing\}<\/span> : null/);
 });
 
 
@@ -161,9 +157,9 @@ test("the working line names what no row in sight says - at every beat of a turn
   assert.equal(beat([{ type: "work", steps: [read("done")] }, edit(true)], true), "Working…");
   // an edit that has been made, nothing newer: the model is at it again
   assert.equal(beat([{ type: "work", steps: [read("done")] }, edit(false)]), "Thinking…");
-  // ConvTurn reads the fold's open state as the fold does, and the dock's trail as always open
+  // ConvTurn reads the open state of the fold the newest work is in (its first part's key, chatStream.runsOf), and the dock's trail as always open
   const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(src, /const folded = useFoldOpen\(`\$\{foldKey\(t\.id\)\}:all`\), work = React\.useContext\(WorkCtx\), open = folded \|\| !work;/, "both hooks called on every render");
+  assert.match(src, /const folded = useFoldOpen\(lastFold \? `\$\{foldKey\(t\.id\)\}:\$\{lastFold\.id\}` : ""\), work = React\.useContext\(WorkCtx\), open = folded \|\| !work \|\| level !== "summary";/, "both hooks called on every render");
   assert.match(src, /const Fold = \(\{ k, label, quiet = false, children \}\) => \{\n  const open = useFoldOpen\(k\);/);
   // ...and the fold's open state is set by his click, in the render the click causes - heard from the native toggle (a task later), the line on
   // ACP followed the opened fold 75-90 ms late, saying the row's words under it (the judges' recording, 2026-11-18)

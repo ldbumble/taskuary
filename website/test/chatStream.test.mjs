@@ -78,8 +78,7 @@ test("the general chat's ACP trace keeps the words where they were said: the ans
     { type: "progress", name: "text", detail: "All 212 pass." }];
   const live = stepsOf(trace, { keepStart: false }).map((s) => s.summary);
   assert.deepEqual(live, ["Running the suite.", "Ran pytest -q", "Quick update: half of it passed.", "All 212 pass."]);
-  // ...filed: the answer leaves the trail, every earlier line stays where it stood
-  assert.deepEqual(stepsOf(trace, { keepStart: false, answer: "All 212 pass." }).map((s) => s.summary), live.slice(0, 3));
+  // ...filed, the same: the answer is its last row, and its filed copy is the server's to leave out (chatlog.read `tail`)
 });
 
 // A TASK OPENS ON THE LAST THING (the owner, 2026-11-11: "task should open on last thing not randomly in middle"). A long thread from Gail
@@ -225,4 +224,22 @@ test("a row and a part keep their keys as the turn grows", async () => {
   assert.deepEqual(ids(two)[1].slice(0, 2), ["work", "s:x:c1"], "the run that grew is the same part");
   assert.deepEqual(ids(two)[1][2], ["s:x:c1"], "and the same row, keyed by its first call");
   assert.deepEqual(ids(three).map((p) => p[1]), ["s:x:m:1", "s:x:c1", "s:x:m:2"], "words under it are a part of their own, by their own id");
+});
+
+
+// THE WORDS STREAM INTO THEIR ROW, AND THE TURN'S END MOVES NOTHING (the owner, 2026-11-23: "the live layout IS the finished layout")
+test("a pushed row patches its turn in place, and a turn lays out the same at work and filed", async () => {
+  const { eventsOf, patchSteps, runsOf, turnParts } = await import("../src/chatStream.js");
+  const said = (id, t) => ({ id, k: "said", text: t }), read = (id) => ({ id, k: "tool", name: "Read", args: { file_path: "C:/work/a.csv" }, status: "completed" });
+  const list = { rev: 3, items: [{ id: "l-1", kind: "line" }, { id: "t:1", kind: "turn", state: "working", steps: [said("s:x:m:1", "Checking the")] }] };
+  const pushed = [{ tid: 7, turn: "t:1", step: said("s:x:m:1", "Checking the sheet.") }, { tid: 7, turn: "t:1", step: read("s:x:c1") },
+    { tid: 8, turn: "t:1", step: read("s:y:c9") }];
+  const got = patchSteps(list, pushed, 7);
+  assert.deepEqual(got.items[1].steps.map((s) => [s.id, s.text || s.name]), [["s:x:m:1", "Checking the sheet."], ["s:x:c1", "Read"]], "in place, then at the foot - another task's never");
+  assert.equal(got.items[0], list.items[0], "what was not touched is the same object");
+  assert.equal(patchSteps(list, [{ tid: 7, turn: "t:9", step: read("s:x:c2") }], 7), list, "a turn not in the list yet waits for the read");
+  const steps = [said("s:x:m:1", "Checking the sheet."), read("s:x:c1"), read("s:x:c2"), said("s:x:m:2", "Done.")];
+  const at = (live) => runsOf(turnParts(eventsOf(steps, live), { live })).map((r) => [r.id, !!r.fold]);
+  assert.deepEqual(at(true), at(false), "the same folds, by the same keys, live and filed");
+  assert.deepEqual(at(false), [["s:x:m:1", false], ["s:x:c1", true], ["s:x:m:2", false]], "words where they were said, the work between them one fold");
 });

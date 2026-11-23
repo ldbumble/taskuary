@@ -267,7 +267,8 @@ def test_a_card_pressed_after_later_turns_turns_sent_where_it_stood():
 
 def test_every_tool_call_is_one_row_in_plain_words_and_summary_folds_them_to_one_line():
     """"BETTER SHOWING WHAT TOOLS ARE RUN, BUT NOT A BILLION DETAILS" (the owner, 2026-11-19): each call one row of what it did and on what,
-    its outcome in a few words, its output capped behind it; the same call again folded into its row; summary - one line that opens."""
+    its outcome in a few words, its output capped behind it; summary - one line that opens. ONE ROW PER CALL, ALWAYS (2026-11-23): the same
+    call again is the page's to fold ("(3 times)", agentSteps.group, keyed by its first call) - never a row taken out under its key."""
     big = 'x' * 10000 + '\n4 passed in 0.2s'
     steps = [{'k': 'tool', 'name': 'Bash', 'text': 'pytest tests/test_totals.py', 'output': big},
              {'k': 'tool', 'name': 'Read', 'file': 'C:/work/board-data-asks.txt'},
@@ -277,13 +278,13 @@ def test_every_tool_call_is_one_row_in_plain_words_and_summary_folds_them_to_one
              {'k': 'tool', 'name': 'WebFetch', 'args': {'url': 'https://www.uprinting.com/business-cards'}},
              {'k': 'said', 'text': 'Four tests pass; uprinting is cheapest.'}]
     rows = chatlog.tool_rows(steps)
-    assert [(r.get('line'), r.get('outcome'), r.get('times')) for r in rows[:4]] == [
-        ('Ran pytest tests/test_totals.py', '4 passed', None), ('Read board-data-asks.txt', None, 3),
-        ('Searched the web for printer prices', None, None), ('Opened uprinting.com', None, None)]
+    assert [(r.get('line'), r.get('outcome')) for r in rows[:6]] == [
+        ('Ran pytest tests/test_totals.py', '4 passed'), *[('Read board-data-asks.txt', None)] * 3,
+        ('Searched the web for printer prices', None), ('Opened uprinting.com', None)]
     assert rows[0]['size'] == len(big) and len(rows[0]['output']) < 3200, 'the output capped: its head and tail, and how big it was'
     t = chatlog.detailed({'kind': 'turn', 'state': 'done', 'text': 'Done.', 'steps': steps}, 'summary')
-    assert [s['k'] for s in t['steps'] if s not in t['fold']] == ['said'] and t['folded'] == 4      # ...its one line is the page's (chatStream.foldLine)
-    assert len(chatlog.detailed({'kind': 'turn', 'state': 'done', 'steps': steps}, 'everything')['steps']) == 5
+    assert [s['k'] for s in t['steps'] if s not in t['fold']] == ['said'] and t['folded'] == 6      # ...its one line is the page's (chatStream.foldLine)
+    assert len(chatlog.detailed({'kind': 'turn', 'state': 'done', 'steps': steps}, 'everything')['steps']) == 7
 
 
 def test_migration_freezes_what_he_saw_and_a_turn_at_work_goes_on_in_its_own_row(tmp_path, monkeypatch):
@@ -619,3 +620,49 @@ def test_an_api_agent_turn_and_an_acp_turn_write_the_same_rows():
                       [k.rsplit('.', 1)[-1].rsplit(':', 1)[-1] for k in _rows(s, tid) if ':m:' not in k])
     assert seen['api'] == seen['acp'], seen
     assert seen['acp'][1] == ['call_1', 'call_2'], 'each row keyed by its own call id'
+
+
+# ── WORDS STAY WHERE THEY WERE SAID (the owner, 2026-11-23: "the live layout IS the finished layout") ──────────────────────────────────
+def test_the_words_it_streamed_stay_its_rows_once_the_answer_is_filed_and_only_the_rest_of_the_answer_is_drawn():
+    """A turn says a line, works, and streams its answer; the answer is filed. Its rows as they stood while it worked are its rows filed -
+    nothing taken out of them, nothing moved - and of the filed answer only what they did not say is drawn under them (`tail`): here nothing."""
+    from taskuary import conversation, general
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    say = lambda mid, t: chatlog.feed(s, tid, 'sid1', 'acp', {'sessionUpdate': 'agent_message_chunk', 'messageId': mid, 'content': {'type': 'text', 'text': t}})
+    say('m1', 'Checking the vendor sheet first.')
+    chatlog.feed(s, tid, 'sid1', 'acp', {'sessionUpdate': 'tool_call', 'toolCallId': 'c1', 'kind': 'read', 'title': 'Read vendors.csv', 'status': 'completed'})
+    say('m2', 'Payworth is cheapest at $40 a seat.'); say('m2', '\n\nShall I draft the reply to Erin?')
+    chatlog.flush(s, tid)
+    live = [x['id'] for x in chatlog.read(s, tid, 'summary')['items'][-1]['steps']]
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Payworth is cheapest at $40 a seat.\n\nShall I draft the reply to Erin?')
+    t = chatlog.read(s, tid, 'summary')['items'][-1]
+    assert [x['id'] for x in t['steps']] == live and [x['k'] for x in t['steps']] == ['said', 'tool', 'said'], 'the same rows, in place'
+    assert t['tail'] == '' and t['text'].startswith('Payworth'), 'the answer is not drawn a second time; its words are still the turn\'s'
+
+
+def test_the_answer_draws_only_what_its_words_did_not_say_a_file_by_its_name_or_its_path():
+    from taskuary.conversation import unsaid
+    path = 'C:\\Users\\alex\\AppData\\Local\\Temp\\home\\scratch\\outputs\\TQ-0003\\Wellness_Flyer.pdf'
+    said = [{'k': 'said', 'text': f'Created the one-page flyer at `{path}` and showed it in the chat.'}]
+    assert unsaid('Created the one-page flyer at `Wellness_Flyer.pdf` and showed it in the chat.', said) == ''
+    report, after, draft = 'My recommendation is to send Erin alone.', "If you'd rather send both, tell me.", 'Hi Erin,\n\nYes, we should go.\n\nAlex Doyle'
+    assert unsaid(f'{report}\n\n{draft}\n\n{after}', [{'k': 'said', 'text': f'{report}\n\n{after}'}]) == draft, 'only what the stream left out'
+    assert unsaid('Two vendor files.', []) == 'Two vendor files.' and unsaid('Two vendor files.', [{'k': 'tool'}]) == 'Two vendor files.'
+
+
+def test_a_row_is_pushed_to_the_open_chat_as_it_is_written():
+    """THE WORDS STREAM INTO THEIR ROW (the owner, 2026-11-23): each write of a row goes out on the task's run-tail with the row as a read
+    serves it and the turn it stands in - the page patches it in place (chatStream.patchSteps), never waiting on a 600 ms read."""
+    from taskuary import conversation, live
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    tab = object(); live.attach(tab)
+    try:
+        chatlog.feed(s, tid, 'sid1', 'acp', {'sessionUpdate': 'tool_call', 'toolCallId': 'c1', 'kind': 'execute', 'title': 'pytest -q', 'status': 'in_progress'})
+        chatlog.feed(s, tid, 'sid1', 'acp', {'sessionUpdate': 'agent_message_chunk', 'messageId': 'm1', 'content': {'type': 'text', 'text': 'Running the suite.'}})
+        got = live._pending['run-tail']['steps']
+    finally: live.reset()
+    turn = chatlog.read(s, tid, 'everything')['items'][-1]
+    assert [(p['tid'], p['turn'], p['step']['id']) for p in got] == [(tid, turn['id'], 's:sid1:c1'), (tid, turn['id'], 's:sid1:m:m1')]
+    assert got[0]['step']['line'] and got[1]['step']['text'] == 'Running the suite.', 'in the read\'s own shape'

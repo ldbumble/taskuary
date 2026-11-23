@@ -496,8 +496,7 @@ const QUICK_RAW =/^\s*(?:```(?:json)?\s*)?\{\s*"(?:report|draft|question|done|es
 const MACHINERY = new Set(stepKinds.machinery);
 // ...and a shell line of Taskuary's own that is no step either - a tick (stepkinds.json `commands`): a to-do ticked is never narrated
 const TICK = new RegExp(stepKinds.commands, "i");
-const PATHED = /(?:[A-Za-z]:)?(?:[\\/][^\s\\/`'"*()]+)+[\\/]([^\s\\/`'"*()]+)/g;      // a path by its grammar: a root, its folders, its last name
-export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
+export function stepsOf(trace, { keepStart = true } = {}) {
   const events = trace || [];
   // A structured backend says everything twice: its tool call and text as events, and the same again as readable `live` lines for
   // the terminal pane. Only a CLI that streams nothing structured is read off its lines - decided over the whole trace, not by
@@ -576,22 +575,14 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
       steps.push({ id: `error-${steps.length}`, kind: "error", summary: `⚠ ${forOwner(e.detail?.result || e.error, ownTool(e.name)) || "Taskuary could not answer."}`, detail: "", status: "error" });
     }
   }
-  // what it said that the answer says again is the answer: a CLI's final text streams in as progress too
-  // ...paragraph by paragraph: the streamed text has the reply draft taken out where the filed answer keeps it, so the whole never
-  // matched and a general turn's answer showed twice, once without its draft and once with it (the overnight QA, 2026-10-30)
   // A RETRY THAT WORKED IS NO FAILURE (the stress test, 2026-11-02): the agent's own retried steps wore red "failed" though it recovered.
   // A failed call the same step later did without error is `recovered` - a quiet word; red stays for a failure nothing made good
   steps.forEach((s, i) => { if (s.status === "error" && "raw" in s
     && steps.slice(i + 1).some((x) => "raw" in x && x.kind === s.kind && (x.did || x.summary) === (s.did || s.summary) && x.status === "done")) { s.status = "recovered"; s.summary = s.did || s.summary; } });
   // ...and a call STILL AT WORK while a later one already finished runs ALONGSIDE them - in parallel, said so; steps stay in the order they began
   steps.forEach((s, i) => { if (s.status === "running" && "raw" in s && steps.slice(i + 1).some((x) => "raw" in x && x.status !== "running")) s.alongside = true; });
-  // ...and A FILE IS ITS NAME ON BOTH SIDES (the HIPAA walk, 2026-11-21): the filed answer names a made file by its name, the words it streamed
-  // by its full path in the task's folder - never the same text, so every answer that named a file was drawn twice, once with the path
-  const byName = (t) => flat(t).replace(PATHED, "$1");
-  const said = byName(forScreen(answer));
-  const inAnswer = (t) => { const ps = String(t || "").split(/\n\s*\n/).map(byName).filter(Boolean); return ps.length > 0 && ps.every((p) => said.includes(p)); };
-  const kept = said ? steps.filter((s) => s.kind !== "said" || !inAnswer(s.src ?? s.summary)) : steps;
-  return group(kept).map(tidy);
+  // ...and WHAT IT SAID STAYS WHERE IT SAID IT, at work and filed alike: the answer's own repeat of it is the server's to leave out (chatlog `tail`)
+  return group(steps).map(tidy);
 }
 const tidy = ({ src, raw, output, live, q, host, file, pattern, count, asked, retry, kids, task, ...s }) => {
   if (s.kind !== "helper" || !(kids?.length || task)) return s;

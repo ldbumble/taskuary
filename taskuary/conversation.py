@@ -112,6 +112,20 @@ def _unsummarized(steps: list) -> list:
     return out
 
 
+def unsaid(text: str, steps: list) -> str:
+    """What of a turn's answer its said steps did not say already - '' when the words it streamed were all of it, the answer whole when they
+    said none of it (a road that streams no words). The answer is what is de-duplicated, never the stream (the owner, 2026-11-23)."""
+    # ...A FILE IS ITS NAME ON BOTH SIDES (the HIPAA walk, 2026-11-21): the answer names a file it made by its name, the words it streamed by its
+    # full path in the task's folder - compared as they stood, every answer that named a file was drawn twice
+    named = lambda t: _PATHED.sub(r'\1', _flat(t))
+    said = named(' '.join(clean(s.get('text')) for s in steps or [] if s.get('k') == 'said'))
+    if not said: return text
+    all_ = [p for p in _PARA.split(clean(text)) if _flat(p)]
+    ps = [p for p in all_ if named(p) not in said]
+    return text if len(ps) == len(all_) else '\n\n'.join(ps)
+_PATHED = re.compile(r'(?:[A-Za-z]:)?(?:[\\/][^\s\\/`\'"*()]+)+[\\/]([^\s\\/`\'"*()]+)')      # a path by its grammar: a root, its folders, its last name
+
+
 def _said(steps: list, body: str = '', seen: set = None) -> list:
     """A turn's steps with its words cleaned (clean) - and a step that says only what the turn's answer says, or nothing, or is machinery, left
     out; each message's opener once (said_once, `seen`: the openers the turn has said - the answer's own read against them after)."""

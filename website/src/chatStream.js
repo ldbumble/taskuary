@@ -81,10 +81,11 @@ export function planOf(e) {
 }
 
 // ── THE ONE MAPPER: trace events -> a turn's parts ──────────────────────────────────────────────
-// in order: its words, a fold of the work it did, each edit with its diff, each view it showed, its plan. `answer`: the words the turn
-// filed as its answer, which its trail does not say twice (agentSteps.stepsOf). A call's result is its own wherever it came - a run of steps cut by an edit keeps the results
-// that arrived after the edit, so nothing it started is left spinning
-export function turnParts(events, { answer = "", keepStart = false, live = false } = {}) {
+// in order: its words, a fold of the work it did, each edit with its diff, each view it showed, its plan - THE SAME WHILE IT WORKS AND ONCE IT
+// IS FILED (the owner, 2026-11-23: words stay where they were said): nothing is moved, merged or taken out when the turn ends; the answer's
+// own repeat of its words is the server's to leave out (chatlog.read `tail`). A call's result is its own wherever it came - a run of steps
+// cut by an edit keeps the results that arrived after the edit, so nothing it started is left spinning
+export function turnParts(events, { keepStart = false, live = false } = {}) {
   const evs = (events || []).filter(Boolean), results = new Map(), parts = [], special = new Set();
   for (const e of evs) if (e.type === "tool_result") results.set(e.detail?.tool_call_id || e.name, e);
   let run = [], first = true;
@@ -92,7 +93,7 @@ export function turnParts(events, { answer = "", keepStart = false, live = false
     if (!run.length) return;
     const ids = new Set(run.filter((e) => e.type === "tool_call").map((e) => e.detail?.tool_call_id));
     const got = [...ids].map((id) => results.get(id)).filter(Boolean);
-    for (const st of stepsOf([...run, ...got], { answer, keepStart: keepStart && first })) {
+    for (const st of stepsOf([...run, ...got], { keepStart: keepStart && first })) {
       if (st.kind === "said") parts.push({ type: "said", text: st.summary, id: st.id });
       else { const w = parts.at(-1)?.type === "work" ? parts.at(-1) : (parts.push({ type: "work", steps: [], id: st.id }), parts.at(-1)); w.steps.push(st); }
     }
@@ -111,21 +112,38 @@ export function turnParts(events, { answer = "", keepStart = false, live = false
   // ...an edit that failed and was then made is no failure (agentSteps' `recovered`): Claude's first try at a string not found, its second made
   parts.forEach((p, i) => p.type === "work" && p.steps.forEach((s) => { if (s.status === "error" && s.kind === "edit"
     && parts.slice(i + 1).some((q) => q.type === "edit" && q.summary.startsWith(s.summary))) s.status = "recovered"; }));
-  // ...AND WHAT IT SAID ON ITS WAY TO ITS NEXT CALLS IS ITS WORKING, ONCE THE TURN IS FILED (the walk, 2026-11-21: "Python 3.10 exists under the
-  // user path; check libraries." and "Good. Now the reply with both files attached." stood in the chat as its answer): words whose next part
-  // is a fold of calls go into that fold, a row of its working, in the order said - as acp.prompt files only what it said after its last
-  // call as the answer. Words before a view, a file or an edit introduce it and stand; a turn still at work keeps every word where it stands
-  if (answer && !live) for (let i = parts.length - 2; i >= 0; i -= 1) {
-    if (parts[i].type !== "said" || parts[i + 1].type !== "work") continue;
-    const t = String(parts[i].text || ""), note = { id: `note-${i}`, kind: "thought", summary: t.length > 140 ? `${t.slice(0, 139)}…` : t, detail: t.length > 140 ? t : "", status: "done" };
-    parts.splice(i, 2, { ...parts[i + 1], steps: [note, ...parts[i + 1].steps] });
-    if (parts[i - 1]?.type === "work") parts.splice(i - 1, 2, { ...parts[i - 1], steps: [...parts[i - 1].steps, ...parts[i].steps] });
-  }
   const lastPlan = parts.map((p) => p.type).lastIndexOf("plan");
   return parts.filter((p, i) => p.type !== "plan" || i === lastPlan).map((p, i) => ({ ...p, id: p.id || `p${i}` }));
 }
 // what a turn did, counted for its fold's line: "6 steps" - its edits each one
 export const workCount = (parts) => workRows(parts).length;
+// ONE LAYOUT, AT WORK AND FILED (the owner, 2026-11-23: "the live layout IS the finished layout"): a turn's parts in the order they came, what it
+// said and showed standing where it said it, each run of work between them one fold of its own - keyed by its first part, so a run that grows,
+// and the turn's end, leave every fold where it was and as he left it (open or shut). A grouping that wraps rows, never one that moves them
+export const SHOWN_PARTS = ["said", "view", "files"];
+export const runsOf = (parts) => (parts || []).reduce((out, p) => {
+  if (SHOWN_PARTS.includes(p.type)) out.push({ id: p.id, parts: [p] });
+  else if (out.at(-1)?.fold) out.at(-1).parts.push(p);
+  else out.push({ id: p.id, fold: true, parts: [p] });
+  return out;
+}, []);
+// THE ROWS THE SERVER PUSHED AS IT WROTE THEM (chatlog.pushed - a message as it streams, a call as it moves): each patched into its turn in
+// place, by its own id, or added at the turn's foot where it is new - the list's next read is the same rows, so nothing moves when it lands
+export const patchSteps = (list, pushed, tid) => {
+  const by = new Map();
+  for (const p of pushed || []) if (p?.step?.id && String(p.tid) === String(tid)) by.set(p.turn, [...(by.get(p.turn) || []), p.step]);
+  if (!list?.items || !by.size) return list;
+  let hit = false;
+  const items = list.items.map((x) => {
+    const ss = x.kind === "turn" && by.get(x.id);
+    if (!ss) return x;
+    const steps = [...(x.steps || [])];
+    for (const s of ss) { const i = steps.findIndex((y) => y.id === s.id); if (i >= 0) steps[i] = s; else steps.push(s); }
+    hit = true;
+    return { ...x, steps };
+  });
+  return hit ? { ...list, items } : list;
+};
 // A FINISHED TURN RIGHT AFTER A TURN IS DRAWN UNDER ITS HEAD - the work going on (a second turn of its session, a wake, its answer filed after) - never
 // one after a failure (Try again's turn stands under the failure it is past), never one at work (its own head, its clock and Stop)
 export const folds = (prev, x) => prev?.kind === "turn" && prev.state !== "failed" && x?.kind === "turn" && x.state !== "working" && x.state !== "starting";
@@ -284,7 +302,7 @@ export const waitingChips = (pending, came = "") => {
 // first, then the archive" at one beat; with the fold opened, "Reading budget.md" stood as a row and again on the line under it at every tool
 // beat). One structural test, for a thought and a step alike: is the row that holds those words drawn open right now - a turn's rows stand open
 // while it has no work to fold (TurnWorkView), and inside a fold he opened or the dock's trail (`open`); shut in the fold, the line names it
-export const workingLine = (parts, label, { starting = false, later = false, ask = "", doing = "", thinking = "", open = false } = {}) => {
+export const workingLine = (parts, label, { starting = false, later = false, ask = "", thinking = "", open = false } = {}) => {
   if (ask) return ask;
   // the newest thing the turn did: its last step, or an edit made after it (an edit is a part of its own, editRow)
   const newest = (parts || []).flatMap((p) => (p.type === "work" ? (p.steps || []).map((st) => ({ st, row: String(label(st) || "") }))
@@ -294,7 +312,6 @@ export const workingLine = (parts, label, { starting = false, later = false, ask
   // ...an edit being made, or a step at work, is the newest thing at work, in its own words (editRow `running`, stepLabel)
   if (newest?.edit?.running) return say(newest.edit.summary, "Working…");
   if (newest?.st?.status === "running") return say(newest.row.split(/\r?\n/)[0].trim(), "Working…");
-  if (doing && thinkingLine(doing)) return `Writing: ${thinkingLine(doing)}`;
   // ...and WHAT IT IS THINKING, while that is the newest thing it does (the owner, 2026-11-16: "Thinking..." for three minutes with nothing else):
   // the thought's latest words, as it writes them (chatlog._now `thinking`) - the one place a thought reads, never a step row (conversation._said)
   if (thinking && thinkingLine(thinking)) return thinkingLine(thinking);

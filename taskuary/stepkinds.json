@@ -3,6 +3,7 @@
   "_findtools": "...and Taskuary's own find_tools is the same plumbing (design round 4, 2026-11-19: \"Used find tools (taskuary) on 'propose_reply'\" led a turn's steps): it reads a tool's instructions, and the call it reads them for is the step.",
   "_tick": "...and a to-do ticked is never narrated (the owner, 2026-11-18): the checklist shows it ticked; its tool call, and its shell line by Taskuary's own command grammar (`commands`, matched without case), are no step of the work.",
   "_skill": "...and a skill the CLI loads is its own instructions too (design round 5, 2026-11-19: \"Using Load skill: dataviz\" was a step): the work it reads them for is the step.",
-  "machinery": ["toolsearch", "findtools", "tick", "skill"],
+  "_endturn": "...and end_turn is the turn's own end (2026-11-23): its summary is the task's line, and the turn's answer says what it did - no step of its own.",
+  "machinery": ["toolsearch", "findtools", "tick", "skill", "endturn"],
   "commands": "^\\s*taskuary(?:\\.exe|\\.cmd)?\\s+--(?:un)?tick\\b"
 }

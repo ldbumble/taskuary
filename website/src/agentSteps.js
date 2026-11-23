@@ -358,6 +358,10 @@ const OWN = {
     tried: "Could not set up the answer to the invite" }),
   setupmeeting: () => ({ kind: "edit", summary: "Set up a meeting", tried: "Could not set up the meeting" }),
   share: () => ({ kind: "edit", summary: "Set up a share", tried: "Could not set up the share" }),
+  // ...and the tools the prompt rebuild made of its protocols (2026-11-23): its one question, the playbooks it reads, a step it hands him
+  askowner: () => ({ kind: "plan", summary: "Asked you a question", tried: "Could not ask you" }),
+  playbooks: (a) => ({ kind: "read", summary: a.name ? `Read your playbook ${quoted(a.name)}` : "Read your playbooks" }),
+  handover: () => ({ kind: "page", summary: "Handed you a step on the page", tried: "Could not hand you the step" }),
 };
 // ...AND AN AI CARD'S OWN HANDS (apiagent.py) in the words the CLI's take (design round 5, 2026-11-19: the API walk read "Used browser open on ..."):
 // its browser through the browser's own grammar, the sign-up and its tool finder by what they did

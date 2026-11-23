@@ -52,11 +52,15 @@ class ToWhom(NoHook):
         self.assertEqual(to_of(s, rv['ReviewId']), ['gail@northwind.example'])         # To is pinned at once, to her
         self.assertEqual(wrapup.agent_reply(s, tid, ASK + ' ', 'coding', to='gail@northwind.example')['review_id'], rv['ReviewId'])
 
-    def test_without_to_it_answers_the_newest_and_says_who_else_is_on_the_task(self):
-        s = MemoryStore(); tid, _, paula = world(s)
+    def test_without_to_two_people_waiting_is_asked_whom_never_the_newest_row(self):
+        """Walk 6 (CLI F9): with no `to`, the reply the agent wrote for Gail went "To Paula Vance" - the newest row - and it spent a call
+        withdrawing it. With two people waiting, a reply says whom it answers; nothing is filed until it does."""
+        s = MemoryStore(); tid, gail, paula = world(s)
         out = wrapup.agent_reply(s, tid, 'Glad it helped.', 'coding')
+        self.assertFalse(out['ok']); self.assertIn('Paula Vance <paula@northwind.example>', out['why']); self.assertIn('`to`', out['why'])
+        self.assertEqual([r for r in s.list_reviews('pending') if r['TaskId'] == tid], [])
+        out = wrapup.agent_reply(s, tid, 'Glad it helped.', 'coding', to='Paula')
         self.assertEqual((s.get_review(out['review_id'])['MessageId'], out['to']), (paula, 'Paula Vance'))
-        self.assertEqual(out['people'], ['Paula Vance <paula@northwind.example>', 'Gail Moreno <gail@northwind.example>'])
 
     def test_a_name_nobody_on_the_task_has_is_refused_with_who_is(self):
         s = MemoryStore(); tid, _, _ = world(s)
@@ -83,6 +87,58 @@ class ToWhom(NoHook):
             s = SQLiteStore(str(Path(d) / 't.db'))
             self.assertEqual({r['ReviewId'] for r in s.list_reviews('pending') if r['TaskId'] == tid}, ids)
             s.close()
+
+
+class OnePersonManyShapes(NoHook):
+    """Walk 6 (HIPAA H7, CLI F9): Gail asked by email for the board pack; Paula asked by chat, a name and no address. Gail's chat line came
+    in while the agent wrote her reply - it was told of it seconds later - and the reply bound to that chat line: a chat card that could not
+    carry its three files. "to: paula@northwind.example" found "nobody called that", and Gail was listed twice."""
+    def world(self):
+        from taskuary import conversation
+        s = MemoryStore(); s.set_setting('owner_email', OWNER, 'test')
+        mail(s, None, 'old', 'AAQk-old', 'Paula Vance', 'paula@northwind.example', '2026-10-01 09:00:00', 'Printer quote attached.', status='filed')
+        tid = s.create_task({'Title': 'Board pack', 'Kind': 'general', 'Status': 'in_progress', 'Source': 'email'}, 'router')
+        gail = mail(s, tid, 'g1', 'AAQk-gail', 'Gail Moreno', 'gail@northwind.example', '2026-11-23 08:10:00', 'Send me the board pack with the charts?')
+        chat = lambda ext, who, at, body: s.add_message({'TaskId': tid, 'ExternalId': ext, 'ConversationId': 'chat-1', 'Channel': 'teams', 'FromName': who,
+                                                         'SentAt': at, 'BodyText': body, 'Status': 'routed'})
+        paula = chat('t1', 'Paula Vance', '2026-11-23 08:20:00', 'Who prints the pack this time?')
+        conversation.hear(s, tid, turn=True)                                       # ...the agent's turn: both are told
+        late = chat('t2', 'Gail Moreno', '2026-11-23 08:24:00', 'Also - the headcount is 214.')       # ...in while it writes
+        return s, tid, gail, paula, late
+
+    def test_a_reply_binds_to_the_message_its_agent_was_told_of_never_a_newer_one(self):
+        s, tid, gail, paula, late = self.world()
+        out = wrapup.agent_reply(s, tid, 'Gail - the pack is attached.', 'assistant', to='Gail Moreno')
+        self.assertTrue(out['ok'], out); self.assertEqual(s.get_review(out['review_id'])['MessageId'], gail, 'her email, as it was told - never her untold chat line')
+
+    def test_reply_by_email_with_the_file_is_the_same_card_to_her_email(self):
+        import json
+        s, tid, gail, paula, late = self.world()
+        files = [{'name': 'q3_board_pack.pdf', 'size': 41000, 'path': 'pack.pdf'}]
+        rid = s.add_review({'TaskId': tid, 'MessageId': late, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Gail - the pack is attached.',
+                            'Deliver': json.dumps({'kind': 'reply', 'attachments': files})})
+        out = wrapup.by_email(s, rid)
+        self.assertTrue(out['ok'], out)
+        rv = s.get_review(rid); d = json.loads(rv['Deliver'])
+        self.assertEqual((rv['MessageId'], rv['DraftText'], d['to'], d['attachments']), (gail, 'Gail - the pack is attached.', ['gail@northwind.example'], files))
+        only_chat = s.add_review({'TaskId': tid, 'MessageId': paula, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Paula - see the pack.'})
+        no = wrapup.by_email(s, only_chat)
+        self.assertFalse(no['ok']); self.assertIn('Paula Vance sent no email', no['why'])
+
+    def test_a_person_is_found_by_any_shape_of_them_and_named_once(self):
+        s, tid, gail, paula, late = self.world()
+        out = wrapup.agent_reply(s, tid, 'Paula - Marcus prints it now.', 'assistant', to='paula@northwind.example')
+        self.assertTrue(out['ok'], out); self.assertEqual(s.get_review(out['review_id'])['MessageId'], paula)
+        self.assertEqual(sorted(wrapup.people_named(s, tid)), ['Gail Moreno <gail@northwind.example>', 'Paula Vance'], 'one person, one name')
+
+    def test_two_conversations_waiting_ask_whom_and_the_owners_own_and_a_machine_are_nobody(self):
+        s, tid, gail, paula, late = self.world()
+        out = wrapup.agent_reply(s, tid, 'Thanks!', 'assistant')
+        self.assertFalse(out['ok']); self.assertIn('Gail Moreno', out['why']); self.assertIn('Paula Vance', out['why'])
+        mail(s, tid, 'me', 'AAQk-gail', 'Alex Doyle', OWNER, '2026-11-23 08:30:00', 'On it.')
+        ci = mail(s, tid, 'ci', 'AAQk-ci', 'Builds', 'noreply@vendor.example', '2026-11-23 08:31:00', 'Build 212 passed.')
+        s._exec("UPDATE message SET SenderClass='automated' WHERE MessageId=?", (ci,))
+        self.assertEqual(sorted(n for n in wrapup.people_named(s, tid)), ['Gail Moreno <gail@northwind.example>', 'Paula Vance'])
 
 
 class SendGoesToThem(NoHook):
@@ -119,7 +175,7 @@ class SendGoesToThem(NoHook):
     def test_a_draft_pinned_to_an_fyi_is_not_stale_forever(self):
         # the reply answered a filed "Perfect!", which the material check skips - without a pinned revision it was never current
         s = MemoryStore(); tid, _, paula = world(s)
-        rid = wrapup.agent_reply(s, tid, 'Glad it helped.', 'coding')['review_id']
+        rid = wrapup.agent_reply(s, tid, 'Glad it helped.', 'coding', to='Paula')['review_id']
         self.assertEqual(s.get_review(rid)['MessageId'], paula)
         self.assertEqual(verdicts.context_moved(s, s.get_review(rid))[0], False)
 

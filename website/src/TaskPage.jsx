@@ -2830,7 +2830,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const replyNode = inTurns && pendingReview && replyCardShown(pendingReview) ? [{ key: `reply:${pendingReview.ReviewId}`, at: pendingReview.CreatedAt || "",
     rid: pendingReview.ReviewId, waits: true, node: <Box data-tq-review={pendingReview.ReviewId}><ReviewDecision review={pendingReview} closeout={closeoutRv}
       toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
-      onEmailInstead={() => setEmailOpen(true)} why={rec?.state === "draft_ready" ? rec.why || "" : ""}
+      why={rec?.state === "draft_ready" ? rec.why || "" : ""}
       onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} /></Box> }] : [];
   const turnCards = [...replyNode, ...passedCards, ...batches.map((rs) => ({ key: `batch:${rs[0].Batch}`, at: rs[0].CreatedAt || "", rid: rs[0].ReviewId, waits: true,
       node: <BulkCard rows={rs} tid={t?.TaskId} onChanged={decided} /> })), ...replacedCards, ...unsentCards, ...pressedCards.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
@@ -2914,7 +2914,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           {pendingReview ? (<>
             <Box data-tq-review={pendingReview.ReviewId}>
             <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
-              onEmailInstead={() => setEmailOpen(true)} why={rec?.state === "draft_ready" ? rec.why || "" : ""}
+              why={rec?.state === "draft_ready" ? rec.why || "" : ""}
               onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} /></Box>   {/* the list's row moves too (T19) */}
           </>) : (
             <>

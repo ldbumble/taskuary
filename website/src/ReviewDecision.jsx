@@ -152,7 +152,7 @@ export const BlankAsk = ({ line, onSend, onCancel }) => (
 // `closeOnSend`: the task page's Close out (the owner, 2026-10-29: "wait until the send actually succeeds, then close the task"): a reply
 // that went is the close too - onSent({ closes }) says so, only after the server's receipt; a send that failed leaves it open, its error here.
 // `toRow`: the decision's buttons are drawn by the action row above the chat line (layout B), not here - the same handlers, registered.
-// `onEmailInstead`: the task's Send out results - a chat reply that has to carry a file is answered by email instead (U17).
+// A chat reply that has to carry a file is the same card by email instead (U17; wrapup.by_email) - wherever the card is drawn.
 // `went`: on a card whose Send went, what the press did to the task beside it ({closing, kept}, TaskPage sentHere) - its sent card says it.
 // ...an act a connector declares a card for (a post, a tracker comment) is drawn as that card (ActionCard.jsx), wherever its proposal shows -
 // the same decide road, its own face
@@ -165,7 +165,7 @@ export default function ReviewDecision({ past = false, ...props }) {
   return act ? <ActionCard row={act} tid={r?.TaskId} onChanged={props.onChanged} past={past} />
     : <MovedPast on={past}><Decision {...props} review={r} past={past} toRow={!past && props.toRow} /></MovedPast>;
 }
-function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, toRow = false, simulated = false, onDrop = null, onEmailInstead = null, why = "", went = null, past = false }) {
+function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, toRow = false, simulated = false, onDrop = null, why = "", went = null, past = false }) {
   // ...a card moved past shows the words it was filed with, never an edit held for the live card of the same review
   const heldOf = (x) => (past ? null : heldEdit(x));
   const [text, setTextNow] = useState(() => heldOf(r)?.text ?? null);   // the owner's edit; null means "the draft as filed"
@@ -290,7 +290,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const closeThen = "then the task closes";
   // A CHAT REPLY THAT PROMISES A FILE (U17): WhatsApp and the other chats carry words only, so a send went out with the promise and
   // without the file. The move becomes answering by email with the file; sending the words alone stays beside it.
-  const chatFile = !!onEmailInstead && !proposal && !co && !isSlot && !r.Stale && !delivery.frozen && canSendIt
+  const chatFile = !proposal && !co && !isSlot && !r.Stale && !delivery.frozen && canSendIt
     && String(r.Channel || "email").toLowerCase() !== "email" && (deliveryFiles(filedDelivery).length > 0 || filesPromised(r));
   const thenLine = delivery.frozen ? "" : simulated ? "This approves the fictional reply and completes the demo task. No email is sent."
     : co ? (closesIt && sendable && !simulated && !r.Stale ? `${closeCo} ${co.then}, then sends your reply to ${replyContext(r)} - ${closeThen}; ${co.approveLabel} does the same and ${stays}.`
@@ -444,6 +444,14 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
 
   // A held draft is one the session's findings will rewrite. Sometimes the sender needs telling
   // something today anyway - a reply stuck behind an agent that never finished is worse.
+  // THE SAME CARD, BY EMAIL (walk 6, H7: "Reply by email with the file" opened Email a summary, an empty To and a second voice - the agent's
+  // words, its files and the person gone): its words and files stay, bound to that person's email on the task (wrapup.by_email)
+  const byEmail = async () => {
+    setBusy(true); setErr("");
+    try { const { data } = await api.post(`/api/reviews/${r.ReviewId}/by-email`); if (!data?.ok) setErr(data?.why || "It could not go by email."); else onChanged?.(); }
+    catch (e) { setErr(e?.response?.data?.detail || "It could not go by email."); }
+    setBusy(false);
+  };
   const release = async () => {
     if (delivery.frozen) return;
     setBusy(true);
@@ -555,8 +563,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     ] : r.Stale ? [
       { id: no("approve"), label: redrafting ? "Redrafting…" : drafting ? "Drafting…" : btn("redraft"), tone: "p", disabled: off, run: redraft, title: btnHint("redraft") },
     ] : chatFile ? [
-      { id: no("email-file"), label: "Reply by email with the file", tone: "p", disabled: off, run: onEmailInstead,
-        title: `A ${r.Channel} message cannot carry a file - this writes an email with the file on it, which waits here for your yes` },
+      { id: no("email-file"), label: "Reply by email with the file", tone: "p", disabled: off, run: byEmail,
+        title: `A ${r.Channel} message cannot carry a file - the same words and file go as an email to them instead, waiting here for your yes` },
       { id: no("approve"), label: busy ? sentOr(pw.busy) : `${sendWord} without the file`, tone: "s", disabled: off || !words.trim(), why: words.trim() ? "" : "write the reply first",
         run: () => decide("approve"), title: `Sends only the words to ${replyContext(r)} - no file goes with them` },
     ] : twoSends ? [
@@ -836,8 +844,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
           </Button>
         ) : chatFile ? (
           <>
-            <Button size="small" variant={solid} disableElevation disabled={off} onClick={onEmailInstead}
-              title={`A ${r.Channel} message cannot carry a file - this writes an email with the file on it, which waits here for your yes`}>
+            <Button size="small" variant={solid} disableElevation disabled={off} onClick={byEmail}
+              title={`A ${r.Channel} message cannot carry a file - the same words and file go as an email to them instead, waiting here for your yes`}>
               Reply by email with the file</Button>
             <Button size="small" variant="outlined" disabled={off || !words.trim()} onClick={() => decide("approve")}
               title={`Sends only the words to ${replyContext(r)} - no file goes with them`}>

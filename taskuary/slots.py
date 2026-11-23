@@ -242,7 +242,12 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         if not want: return {'ok': False, 'why': 'name the slot (--slot) or who it goes to (--to)'}
         made = add(store, tid, [{'to': to, 'about': subject, 'kind': channel, **({} if agent == 'owner' else {'by': 'agent'}), **({'name': name} if name else {})}], f'agent:{agent}', again=True,
                    twice=second)
-        if not made: return {'ok': False, 'why': f'could not add an email to {to}'}
+        # ...NEVER A BARE NO (walk 6, CLI F9: "could not add an email to paula@..." and no next step): what stands in its way, and the way on
+        if not made:
+            same = [i for i in open_(store, tid) if str(i['out'].get('to')).casefold() == want]
+            return {'ok': False, 'why': f"no email to {to} was added - " + (
+                f"one to them is already this task's (slot {same[0]['id']}): rewrite it with `slot` set to that id, or `slot: \"new\"` for a second letter"
+                if same else "`to` must be one address or one person's name; to answer someone who wrote on this task, propose_reply with `to`")}
         hit, added = made[0], True
         store.add_comment(tid, agent, 'agent', f'{agent} added an email to {to} to what this task owes.')
     o = hit['out']; kind = o.get('kind') or 'email'

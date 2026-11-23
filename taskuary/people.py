@@ -109,3 +109,14 @@ def resolve(store, name: str) -> dict:
                 if _whole([w], a_): add(some, a_, n, last)
         found = rank(some)
     return {'candidates': found[:5]} if found else {}
+
+
+def keys(store, name: str = '', address: str = '') -> set:
+    """THE ONE ANSWER TO WHO SOMEONE IS, as keys to compare (walk 6, CLI F9: Paula wrote by chat with a name and no address, so "to:
+    paula@northwind.example" found "nobody called that on this task", and Gail was listed twice - by name off her chat, by address off her
+    mail). Their address (as given, inside "Name <address>", or the one whole name finds - resolve) and their name, lowercased. Two shapes
+    of one person share a key; set() for nobody."""
+    raw, a = ' '.join(str(name or '').split()), str(address or '').strip().lower()
+    if not a and (m := _ADDR.search(raw)): a, raw = m.group(0).lower(), raw.replace(m.group(0), '').strip(' <>"')
+    if not a and raw: a = str(resolve(store, raw).get('address') or '').lower()
+    return {k for k in (raw.lower(), a) if k}

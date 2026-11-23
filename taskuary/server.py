@@ -7770,6 +7770,15 @@ def set_review_envelope(rid: int, body: EnvelopeBody):
     store.audit('review', rid, 'envelope', ACTOR, detail={'mode': env.get('mode'), 'to': env.get('to'), 'cc': env.get('cc')})
     return env
 
+@app.post('/api/reviews/{rid}/by-email')
+def review_by_email(rid: int):
+    "A chat reply that has to carry a file goes as the same card by email - its words and files kept (wrapup.by_email)."
+    from .wrapup import by_email
+    if not store.get_review(rid): raise HTTPException(404, 'review not found')
+    out = by_email(store, rid, ACTOR)
+    if out.get('ok'): _owners(rid)
+    return out
+
 def _owners(rid: int):
     "The owner's hand is on this draft (an edit, a readdress, a file): theirs now, never held as an earlier agent session's (wrapup.stale_draft)."
     from .wrapup import OWNER_SID

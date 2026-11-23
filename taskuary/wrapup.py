@@ -113,8 +113,17 @@ def from_owner(store, m: dict, own: set = None) -> bool:
     return is_ask(m) or is_own(m) or str((m or {}).get('FromEmail') or '').strip().lower() in (own if own is not None else own_addresses(store)) - {''}
 
 
-def reply_target(store, task_id: int):
-    """Which message a reply answers: the last one that came IN. Our own sent mail rides in
+def told(store, task_id: int, rows: list) -> list:
+    """`rows` less the messages the task's agent has not been told of yet (its ledger, conversation.hear) - all of them where the ledger holds
+    no mail of the task, or none of them was told. A REPLY ANSWERS WHAT ITS AGENT WAS TOLD (walk 6, H7 / CLI F9: a reply written for Gail's
+    email was bound to her chat line that reached the agent seven seconds later - a chat card that could not carry its files - and another
+    for Gail went "To Paula", the newest row): by the message, and so by its channel, never by the newest row."""
+    led = {r['Ref'] for r in store._rows("SELECT Ref FROM heard WHERE TaskId=? AND Kind='mail'", (int(task_id),))}
+    return [m for m in rows if str(m['MessageId']) in led] or rows if led else rows
+
+
+def reply_target(store, task_id: int, heard: bool = False):
+    """Which message a reply answers: the last one that came IN - `heard`: the last its agent was told of (told). Our own sent mail rides in
     the chain as 'context', and answering that would mail ourselves; a chat app's mail copy of a
     chat line rides as 'skipped', and answering that mails its no-reply address. And the last one SOMEBODY sent: a report
     joined onto the task (the End of day checkup) became the newest row, so the session's reply to the colleague who had
@@ -125,6 +134,7 @@ def reply_target(store, task_id: int):
     from .ingest import own_addresses
     me = own_addresses(store)
     rows = [m for m in reversed(store.list_messages(task_id)) if m.get('Status') not in ('context', 'skipped') and not from_owner(store, m, me)]
+    if heard: rows = told(store, task_id, rows)
     own = next((m['MessageId'] for m in rows if reads_replies(m)), None)
     # ...and a promise task answers the owner's own mail it was made from: whom they promised is who waits (store.promised_in). Only
     # where nobody on the task's own rows is: a line that came in on it since is the newer ask
@@ -177,14 +187,23 @@ def answers_for(store, task_id: int, mid: int, to: str = '') -> int | None:
 # WHO A REPLY IS TO IS THE AGENT'S TO SAY (2026-11-02): a task that had joined a second person's thread took the session's follow-up
 # question to its first requester and filed it as a reply to the second person's "Perfect!" - reply_target answers the NEWEST mail,
 # whoever wrote it. `taskuary --reply --to <name or address>` names the person, and the reply answers that person's newest message.
-def _people(store, task_id: int) -> list:
-    "Everyone who wrote in on this task, newest first, one row each: (address, name, their newest message)."
-    seen, out = set(), []
-    for m in reversed(store.list_messages(task_id)):
-        if m.get('Status') in ('context', 'skipped') or str(m.get('Direction') or 'in') == 'out' or from_owner(store, m) or not reads_replies(m): continue
-        k = str(m.get('FromEmail') or m.get('FromName') or '').strip().lower()
-        if k and k not in seen: seen.add(k); out.append((k, str(m.get('FromName') or '').strip(), m))
-    return out
+def _people(store, task_id: int, heard: bool = False) -> list:
+    """Everyone who wrote in on this task, newest first, ONE ROW A PERSON whatever shapes they wrote in (people.keys: a name off a chat
+    line and an address off a mail are one person): (address, name, their newest message, every key they are known by, all their
+    messages newest first). `heard`: their newest message is the newest its agent was told of (told)."""
+    from .people import keys
+    rows = [m for m in reversed(store.list_messages(task_id)) if not (m.get('Status') in ('context', 'skipped') or str(m.get('Direction') or 'in') == 'out'
+                                                                      or from_owner(store, m) or not reads_replies(m))]
+    ok = {m['MessageId'] for m in told(store, task_id, rows)} if heard else set()
+    out = []
+    for m in rows:
+        if not (k := keys(store, m.get('FromName'), m.get('FromEmail'))): continue
+        r = next((r for r in out if r['k'] & k), None)
+        if r is None: r = {'a': '', 'n': '', 'k': set(), 'ms': []}; out.append(r)
+        r['k'] |= k; r['ms'].append(m); r['n'] = r['n'] or str(m.get('FromName') or '').strip()
+        if '@' not in r['a']: r['a'] = str(m.get('FromEmail') or r['a'] or m.get('FromName') or '').strip().lower()
+    return [(r['a'], r['n'], _newest(r['ms'], ok), r['k'], r['ms']) for r in out]
+def _newest(ms: list, ok: set) -> dict: return next((m for m in ms if m['MessageId'] in ok), ms[0])
 
 
 def _person(store, mid) -> str:
@@ -195,27 +214,57 @@ def _person(store, mid) -> str:
 
 def people_named(store, task_id: int) -> list:
     "The task's people as an agent would name them back: 'Name <address>'."
-    return [f'{n} <{a}>' if n and '@' in a else n or a for a, n, _ in _people(store, task_id)]
+    return [f'{n} <{a}>' if n and '@' in a else n or a for a, n, *_ in _people(store, task_id)]
 
 
 def addressee(store, task_id: int, to: str):
     """The message a reply to `to` answers - that person's newest on the task - as (message, None), or (None, why) when nobody on it
     is that person, or the words fit more than one. An address names one sender; a name matches every word of it in theirs."""
+    from .people import keys
     to = str(to or '').strip()
-    addr = (re.search(r'<([^>]+)>', to) or re.search(r'(\S+@\S+)', to))
-    rows = _people(store, task_id)
-    if addr: hits = [r for r in rows if r[0] == addr.group(1).strip().lower()]
-    else:
+    want = keys(store, to)
+    rows = _people(store, task_id, heard=True)
+    # ...THE PERSON BY ANY SHAPE OF THEM (people.keys), else every word of a name in theirs
+    hits = [r for r in rows if want & r[3]]
+    if not hits and '@' not in to:
         words = re.findall(r'\w+', to.lower())
         hits = [r for r in rows if words and set(words) <= set(re.findall(r'\w+', f'{r[1]} {r[0].split("@")[0]}'.lower()))]
-    if len(hits) == 1: return hits[0][2], None
+    # ...ONE PERSON ON TWO CHANNELS IS ASKED WHICH, by the address AND channel each came on (the night run, 2026-11-09: asked to answer on
+    # WhatsApp, the agent could only find the email's address) - unless `to` named the address: then their newest from it
+    ways = {(str(m.get('FromEmail') or r[0]).lower(), m.get('Channel') or ''): r for r in hits for m in r[4]}
+    if len(hits) == 1:
+        named = [m for m in hits[0][4] if str(m.get('FromEmail') or '').lower() in want]
+        if named: return _newest(named, {m['MessageId'] for m in told(store, task_id, named)}), None
+        if len(ways) == 1: return hits[0][2], None
     names = ', '.join(people_named(store, task_id)) or 'nobody'
-    # ...each by the address AND channel it came on: one person on email and WhatsApp is two of these, and the agent asked to answer on
-    # WhatsApp could only find the email's address (the night run, 2026-11-09)
-    ch = lambda r: r[2].get('Channel') or ''
-    return None, (f'"{to}" fits more than one sender on this task ({", ".join(f"{r[1] or r[0]} - {r[0]} on {ch(r)}" for r in hits)}) - '
+    return None, (f'"{to}" fits more than one sender on this task ({", ".join(f"{r[1] or a} - {a} on {ch}" for (a, ch), r in ways.items())}) - '
                   'give the one to answer as `to`' if hits
                   else f'nobody called "{to}" wrote on this task - the people on it: {names}. To write to someone else, use --draft with --to')
+
+
+def by_email(store, rid: int, actor: str = 'owner') -> dict:
+    """THE SAME CARD, BY EMAIL (HIPAA walk 6, H7: a reply to Gail stood on her chat line, which cannot carry its three files, and "Reply by
+    email with the file" opened another feature that threw the words, the files and the person away): a reply waiting on a chat line is
+    bound instead to the newest email its person sent on the task - its words and files kept, its envelope that mail's. {'ok': False, 'why'}
+    with the way on where they sent none."""
+    from .outbound import reply_envelope
+    from .people import keys
+    rv = store.get_review(int(rid)) or {}
+    if rv.get('Status') not in ('pending', 'held') or rv.get('Kind') not in ('draft_reply', 'draft'):
+        return {'ok': False, 'why': 'Only a reply that still waits can go by email instead.'}
+    m = store.get_message(rv.get('AnswersMid') or rv.get('MessageId')) or {}
+    who = keys(store, m.get('FromName'), m.get('FromEmail'))
+    row = next((r for r in _people(store, int(rv['TaskId']), heard=True) if who & r[3]), None) if who and rv.get('TaskId') else None
+    mail = next((x for x in (row[4] if row else []) if str(x.get('Channel') or '').lower() == 'email'), None)
+    if not mail: return {'ok': False, 'why': f"{m.get('FromName') or 'They'} sent no email on this task to answer - ask its agent to email them the file."}
+    try: d = json.loads(rv.get('Deliver') or '{}') or {}
+    except (TypeError, ValueError): d = {}
+    keep = {k: v for k, v in (d if isinstance(d, dict) else {}).items() if k in ('attachments', 'mailbox')}
+    store._exec("UPDATE review SET MessageId=?, AnswersMid=? WHERE ReviewId=? AND Status IN ('pending','held') AND DeliveryClaim IS NULL",
+                (mail['MessageId'], mail['MessageId'], int(rid)))
+    store.set_review_deliver(int(rid), json.dumps({**(reply_envelope(store, mail) or {}), **keep}))
+    store.audit('review', int(rid), 'by_email', actor, detail={'from': m.get('MessageId'), 'to': mail['MessageId']})
+    return {'ok': True, 'review_id': int(rid), 'message_id': mail['MessageId']}
 
 
 # ── the agent's own words ───────────────────────────────────────────────────────────────
@@ -470,7 +519,14 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
             if not hit: return {'ok': False, 'why': why}
         mid = answers if answers and not str(to or '').strip() else hit['MessageId']
         if held and _person(store, held.get('MessageId')) != _person(store, mid): held = {}
-    else: mid = reply_target(store, task_id) or held.get('MessageId')
+    else:
+        # ...TWO PEOPLE WAITING ON TWO CONVERSATIONS, THE REPLY SAYS WHICH (walk 6, CLI F9: with no `to`, the reply written for Gail's mail
+        # went "To Paula", whose chat line was the newest row) - the people of one thread are one reply to all of it
+        waiting = [r for r in _people(store, task_id, heard=True) if not store.sent_reply(message_id=r[2]['MessageId'])]
+        if len({(r[2].get('Channel'), r[2].get('ConversationId') or r[2]['MessageId']) for r in waiting}) > 1:
+            return {'ok': False, 'why': f"{len(waiting)} people wait on this task ({', '.join(f'{n} <{a}>' if n and '@' in a else n or a for a, n, *_ in waiting)}) "
+                                        "- say whom this answers as `to`; nothing was saved"}
+        mid = reply_target(store, task_id, heard=True) or held.get('MessageId')
     # ...and a machine reads no reply (NOTICE): refused at the door, saying what to do instead - nothing is kept as a result, the write-up is
     # the agent's own last words to the owner
     if mid and nobody_waiting(store, mid):

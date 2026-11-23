@@ -338,3 +338,26 @@ def test_an_action_that_is_none_is_refused_with_the_ones_that_are():
     ok, why = proposals.validate(MemoryStore(), {'action': 'post_linkedin', 'why': 'a post'})
     assert not ok and 'run_tool' in why and 'linkedin_post' in why
     assert proposals.validate(MemoryStore(), {'action': 'run_tool', 'type': 'linkedin_post', 'text': 'Three lines.', 'why': 'a post'})[0]
+
+
+def test_the_final_post_held_in_the_browser_stands_on_the_card_he_pressed_in_front_of_the_next_post():
+    """His live app, 2026-11-23: three post cards (X, Reddit, LinkedIn); Post via the browser on X, the agent signed in and wrote the post, and the
+    gate held its final Post for his press - queued behind Reddit and LinkedIn, so Reddit stood in front, the browser said nothing waited on him,
+    and the agent ended on "I'll bring you the link". The held step is the pressed card's own next press: it stands with it, in front."""
+    from taskuary import cardqueue, general, proposals, taskstate
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = s.create_task({'Title': 'Post the stroller piece', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    post = lambda kind: s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': f'the agent proposes to post on {kind}',
+                                      'DraftText': json.dumps({'action': 'run_tool', 'type': kind, 'text': 'Strollers then and now.'})})
+    x, rd, li = post('x_post'), post('reddit_post'), post('linkedin_post')
+    with mock.patch.object(general, 'to_agent', return_value='woke'): proposals.via_browser(s, x, '')
+    held = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'held before it ran: Publish your post on X',
+                         'DraftText': json.dumps({'action': 'browser_act', 'sid': 's1', 'args': ['click', '@e91'], 'site': 'x.example'})})
+    st = cardqueue.state(s, tid)
+    assert st['live'] == [x, held], st
+    assert rd in st['held'] and li in st['held'] and held not in cardqueue.held(s, tid)
+    assert taskstate.needs_owner(None, taskstate.browser_acts(s, tid), 's1'), 'the browser shows the press that waits on him'
+    # ...his press on Publish ran on the site: the X card is done, and only now does Reddit come forward
+    s.decide_review(held, 'approved', None, 'owner')
+    assert cardqueue.done(s, tid, 'Posted on x.example') == [x]
+    assert cardqueue.state(s, tid)['live'] == [rd]

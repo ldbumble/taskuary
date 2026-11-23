@@ -48,12 +48,16 @@ def handed(r: dict) -> bool:
 def done(store, tid: int, said: str) -> list:
     """The act a press handed to the agent, done: its own final press ran (browsergate.perform) - the oldest handed card on task `tid` settles
     with `said` as its result, and the line moves on. -> its review id, or []."""
-    r = next((r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status IN ('approved','edited') ORDER BY ReviewId",
-                                     (int(tid),)) if handed(r)), None)
-    if not r: return []
+    if not (r := in_flight(store, tid)): return []
     p = json.loads(r['FinalText'])
     store.review_result(r['ReviewId'], json.dumps({**p, 'result': {**p['result'], 'done': str(said or 'done')[:300]}}))
     return [r['ReviewId']]
+
+
+def in_flight(store, tid: int) -> dict | None:
+    "The act on task `tid` a press handed to its agent and that is not done yet - the oldest one, as `done` settles them - or None."
+    return next((r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status IN ('approved','edited') ORDER BY ReviewId",
+                                        (int(tid),)) if handed(r)), None)
 
 
 def obsolete_read(store, tid, review) -> bool:
@@ -91,8 +95,16 @@ def _units(store, tid: int, past: set) -> list:
     from .conversation import ep
     from .proposals import moved_on
     out, by = [], {}
+    # ...A STEP HELD WHILE A PRESSED ACT IS UNDER WAY IS THAT ACT'S OWN NEXT PRESS (his live app, 2026-11-23: Post via the browser on the X card, the
+    # agent signed in and wrote the post, and the gate held its final Post - queued as a card of its own behind the Reddit and LinkedIn cards, so
+    # Reddit stood in front, the browser said nothing waited on him, and the agent ended on "I'll bring you the link"): it joins the card he
+    # pressed, which stays in front until its act is done
+    fl = in_flight(store, tid); fl_at = ep(fl.get('DecidedAt')) if fl else None
     for r in store._rows("SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId", (int(tid),)):
         if r['ReviewId'] in past or obsolete_read(store, tid, r): continue
+        if fl and r['ReviewId'] > fl['ReviewId'] and r['Kind'] == 'action' and _p(r).get('action') == 'browser_act' and ep(r['CreatedAt']) >= fl_at:
+            u = by.get(f"rv{fl['ReviewId']}")
+            if u: u['rids'].append(r['ReviewId']); u['rows'].append(r); continue
         # ...a settled one by what it was while it waited: its run tells how many came together ("2 of 3")
         if r['Status'] != 'pending' and not r.get('DecidedAt'): continue
         if not in_line(r if r['Status'] == 'pending' else {**r, 'Status': 'pending', 'DecideNote': None}): continue

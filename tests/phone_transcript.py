@@ -16,11 +16,19 @@ ME = {'id': 4242, 'is_bot': False, 'first_name': 'Alex', 'last_name': 'Doyle'}
 GAIL, RAY = ('Gail Moreno', 'gmoreno@northwind.example'), ('Ray Colton', 'rcolton@northwind.example')
 
 
+_Thread = __import__('threading').Thread
+
+
 class _Sync:
-    """The doorway answers on a thread of its own; here it answers before the poll returns."""
+    """The doorway answers on a thread of its own; here it answers before the poll returns. Never a worker that loops for good: the patch is
+    on the threading module itself, and chatlog's card worker started through it ran on the test's thread and never returned."""
+    def __new__(cls, target=None, *a, **k):
+        if str(getattr(target, '__name__', '')).endswith(('_loop', '_forever')): return _Thread(target=target, *a, **k)
+        return super().__new__(cls)
     def __init__(self, target=None, args=(), kwargs=None, **k): self.t, self.a, self.k = target, args, kwargs or {}
     def start(self): self.t(*self.a, **self.k)
     def join(self, *a): pass
+    def is_alive(self): return False
 
 
 def call(_k, **params): return 'CALL: ' + json.dumps({'kind': _k, 'params': params})

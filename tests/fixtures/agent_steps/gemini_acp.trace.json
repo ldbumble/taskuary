@@ -10,6 +10,11 @@
   "detail": "I'll find the budget review thread first, then check the status board code."
  },
  {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ Shell"
+ },
+ {
   "type": "tool_call",
   "name": "execute",
   "detail": {
@@ -21,17 +26,17 @@
   }
  },
  {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ Shell"
- },
- {
   "type": "tool_result",
   "name": "g1",
   "detail": {
    "result": "{\"data\": [{\"id\": 1, \"subject\": \"Budget review\"}, {\"id\": 2, \"subject\": \"Re: Budget review\"}, {\"id\": 3, \"subject\": \"Budget review notes\"}]}",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ Shell"
  },
  {
   "type": "tool_call",
@@ -45,17 +50,17 @@
   }
  },
  {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ Shell"
- },
- {
   "type": "tool_result",
   "name": "g2",
   "detail": {
    "result": "{\"task\": {\"TaskId\": 1142, \"Title\": \"Budget review\"}, \"comments\": [], \"messages\": []}",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ ReadFile"
  },
  {
   "type": "tool_call",
@@ -69,17 +74,17 @@
   }
  },
  {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ ReadFile"
- },
- {
   "type": "tool_result",
   "name": "g3",
   "detail": {
    "result": "export const StatusBoard = () => null;",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ ReadFile"
  },
  {
   "type": "tool_call",
@@ -93,17 +98,17 @@
   }
  },
  {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ ReadFile"
- },
- {
   "type": "tool_result",
   "name": "g4",
   "detail": {
    "result": "export const BudgetTable = () => null;",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ SearchText"
  },
  {
   "type": "tool_call",
@@ -118,17 +123,17 @@
   }
  },
  {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ SearchText"
- },
- {
   "type": "tool_result",
   "name": "g5",
   "detail": {
    "result": "Found 2 matches",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ GoogleSearch"
  },
  {
   "type": "tool_call",
@@ -142,17 +147,17 @@
   }
  },
  {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ GoogleSearch"
- },
- {
   "type": "tool_result",
   "name": "g6",
   "detail": {
    "result": "results",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ WebFetch"
  },
  {
   "type": "tool_call",
@@ -164,11 +169,6 @@
     "title": "WebFetch"
    }
   }
- },
- {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ WebFetch"
  },
  {
   "type": "tool_result",

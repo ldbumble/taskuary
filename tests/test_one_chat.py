@@ -46,6 +46,7 @@ def test_a_helpers_own_calls_name_the_call_they_run_under():
        'rawInput': {'description': 'Check the portal pages'}, '_meta': {'claudeCode': {'toolName': 'Task'}}})
     s({'sessionUpdate': 'tool_call', 'toolCallId': 'r1', 'kind': 'read', 'title': 'Read app.js', 'status': 'in_progress',
        'rawInput': {'file_path': 'portal/app.js'}, '_meta': {'claudeCode': {'toolName': 'Read', 'parentToolUseId': 'h1'}}})
+    s.flush('end_turn')                     # ...a call is in the run's trace once it has ended (the chat has it from its first update)
     calls = {d['tool_call_id']: d for k, n, d in out if k == 'tool_call'}
     assert 'parent' not in calls['h1'] and calls['r1']['parent'] == 'h1'
     assert agents.parent_of({'_meta': {'parentToolCallId': 'x'}}) == 'x' and agents.parent_of({}) == ''

@@ -1963,6 +1963,16 @@ def _drafts_hidden(kind, name, detail):
     return hide_draft('', detail) if kind in ('live', 'progress') and isinstance(detail, str) else detail
 
 
+def acp_hidden(u: dict) -> dict:
+    "An ACP update with any draft body in its call's input hidden, as a trace's call is (_drafts_hidden) - Codex's {server, tool, arguments} too."
+    from .sessionrecord import hide_draft
+    raw = u.get('rawInput') if isinstance(u, dict) else None
+    if not isinstance(raw, dict): return u
+    if raw.get('server') and raw.get('tool') and isinstance(raw.get('arguments'), dict):
+        return {**u, 'rawInput': {**raw, 'arguments': hide_draft(f"mcp__{raw['server']}__{raw['tool']}", raw['arguments'])}}
+    return {**u, 'rawInput': hide_draft(((u.get('_meta') or {}).get('claudeCode') or {}).get('toolName') or u.get('title') or '', raw)}
+
+
 def repos_block(store) -> str:
     """The owner's repositories and WHERE THEY ARE on this machine: SOUL.md's repo map for what each one is, the agents'
     cwd_map for its checkout. A coding agent is started inside one; this assistant runs in Taskuary's scratch folder and was
@@ -2822,7 +2832,7 @@ class GeneralSession:
         self.trace = bounded_trace(self.trace)
         self.trace_revision += 1
         from . import chatlog                    # ...and the turn's steps in the chat's log, as they come (one shape for every road)
-        chatlog.feed(getattr(self, 'store', None), self.task_id, getattr(self, 'sid', '') or '', 'trace', event)
+        chatlog.feed(getattr(self, 'store', None), self.task_id, getattr(self, 'sid', '') or '', 'trace', event, keep=True)
         if getattr(self, 'busy', False) and event['type'] in ('tool_call', 'progress', 'error'):     # a restart must not erase it (keep_cut_turns)
             from . import sessionrecord
             try: sessionrecord.keep_live(self.task_id, self.trace)
@@ -3156,6 +3166,10 @@ class GeneralSession:
                     self._emit(f'\x1b[2m{name}> {detail[:180]}\x1b[0m\r\n')
                 elif kind == 'tool_result' and isinstance(detail, dict) and detail.get('is_error'):
                     self._emit(f'\x1b[31mtool error>\x1b[0m {str(detail.get("result") or "")[:240]}\r\n')
+            # ...AND A RUN OVER ACP HANDS IN THE AGENT'S OWN UPDATES (agents.run_acp): they are this chat's record, kept as a coding session's is -
+            # one row per call, patched in place - its trace (above) the pane's, the transcript's and the account's
+            from . import chatlog
+            visible.acp = lambda u: chatlog.feed(self.store, self.task_id, self.sid or '', 'acp', acp_hidden(u), keep=True)
             # Continue the CLI's own conversation rather than starting a new one and re-typing
             # the transcript into it. Every turn used to be a fresh `claude -p` carrying the
             # whole chat again - slower, dearer, and silently forgetful once the conversation

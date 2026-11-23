@@ -10,6 +10,16 @@
   "detail": "I'll find the budget review thread first, then check the status board code."
  },
  {
+  "type": "live",
+  "name": "claude",
+  "detail": "→ Terminal"
+ },
+ {
+  "type": "live",
+  "name": "claude",
+  "detail": "→ curl -s -H \"X-Taskuary-Token: $TASKUARY_TOKEN\" \"$TASKUARY_URL/api/search?q=budget%20review\""
+ },
+ {
   "type": "tool_call",
   "name": "Bash",
   "detail": {
@@ -22,17 +32,22 @@
   }
  },
  {
-  "type": "live",
-  "name": "claude",
-  "detail": "→ curl -s -H \"X-Taskuary-Token: $TASKUARY_TOKEN\" \"$TASKUARY_URL/api/search?q=budget%20review\""
- },
- {
   "type": "tool_result",
   "name": "toolu_01",
   "detail": {
    "result": "{\"data\": [{\"id\": 1, \"subject\": \"Budget review\"}, {\"id\": 2, \"subject\": \"Re: Budget review\"}, {\"id\": 3, \"subject\": \"Budget review notes\"}]}",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "claude",
+  "detail": "→ Terminal"
+ },
+ {
+  "type": "live",
+  "name": "claude",
+  "detail": "→ curl -s -H \"X-Taskuary-Token: $TASKUARY_TOKEN\" \"$TASKUARY_URL/api/tasks/1142\""
  },
  {
   "type": "tool_call",
@@ -46,17 +61,22 @@
   }
  },
  {
-  "type": "live",
-  "name": "claude",
-  "detail": "→ curl -s -H \"X-Taskuary-Token: $TASKUARY_TOKEN\" \"$TASKUARY_URL/api/tasks/1142\""
- },
- {
   "type": "tool_result",
   "name": "toolu_02",
   "detail": {
    "result": "{\"task\": {\"TaskId\": 1142, \"Title\": \"Budget review\"}, \"comments\": [], \"messages\": []}",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "claude",
+  "detail": "→ Read File"
+ },
+ {
+  "type": "live",
+  "name": "claude",
+  "detail": "→ Read StatusBoard.js"
  },
  {
   "type": "tool_call",
@@ -70,17 +90,22 @@
   }
  },
  {
-  "type": "live",
-  "name": "claude",
-  "detail": "→ Read StatusBoard.js"
- },
- {
   "type": "tool_result",
   "name": "toolu_03",
   "detail": {
    "result": "export const StatusBoard = () => null;",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "claude",
+  "detail": "→ Read File"
+ },
+ {
+  "type": "live",
+  "name": "claude",
+  "detail": "→ Read BudgetTable.js"
  },
  {
   "type": "tool_call",
@@ -94,17 +119,22 @@
   }
  },
  {
-  "type": "live",
-  "name": "claude",
-  "detail": "→ Read BudgetTable.js"
- },
- {
   "type": "tool_result",
   "name": "toolu_04",
   "detail": {
    "result": "export const BudgetTable = () => null;",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "claude",
+  "detail": "→ grep"
+ },
+ {
+  "type": "live",
+  "name": "claude",
+  "detail": "→ grep \"approvedTotal\""
  },
  {
   "type": "tool_call",
@@ -119,17 +149,22 @@
   }
  },
  {
-  "type": "live",
-  "name": "claude",
-  "detail": "→ grep \"approvedTotal\""
- },
- {
   "type": "tool_result",
   "name": "toolu_05",
   "detail": {
    "result": "Found 2 matches",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "claude",
+  "detail": "→ Web search"
+ },
+ {
+  "type": "live",
+  "name": "claude",
+  "detail": "→ Search \"northwind budget review policy\""
  },
  {
   "type": "tool_call",
@@ -143,17 +178,22 @@
   }
  },
  {
-  "type": "live",
-  "name": "claude",
-  "detail": "→ Search \"northwind budget review policy\""
- },
- {
   "type": "tool_result",
   "name": "toolu_06",
   "detail": {
    "result": "results",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "claude",
+  "detail": "→ Fetch"
+ },
+ {
+  "type": "live",
+  "name": "claude",
+  "detail": "→ Fetch https://docs.northwind.example/budget/review"
  },
  {
   "type": "tool_call",
@@ -166,11 +206,6 @@
     "title": "Fetch https://docs.northwind.example/budget/review"
    }
   }
- },
- {
-  "type": "live",
-  "name": "claude",
-  "detail": "→ Fetch https://docs.northwind.example/budget/review"
  },
  {
   "type": "tool_result",

@@ -10,6 +10,11 @@
   "detail": "I'll find the budget review thread first, then check the status board code."
  },
  {
+  "type": "live",
+  "name": "codex",
+  "detail": "→ curl -s -H \"X-Taskuary-Token: $TASKUARY_TOKEN\" \"$TASKUARY_URL/api/search?q=budget%20review\""
+ },
+ {
   "type": "tool_call",
   "name": "exec_command",
   "detail": {
@@ -22,11 +27,6 @@
   }
  },
  {
-  "type": "live",
-  "name": "codex",
-  "detail": "→ curl -s -H \"X-Taskuary-Token: $TASKUARY_TOKEN\" \"$TASKUARY_URL/api/search?q=budget%20review\""
- },
- {
   "type": "tool_result",
   "name": "exec-1",
   "detail": {
@@ -35,8 +35,13 @@
   }
  },
  {
+  "type": "live",
+  "name": "codex",
+  "detail": "→ curl -s -H \"X-Taskuary-Token: $TASKUARY_TOKEN\" \"$TASKUARY_URL/api/tasks/1142\""
+ },
+ {
   "type": "tool_call",
-  "name": "execute",
+  "name": "exec_command",
   "detail": {
    "tool_call_id": "exec-2",
    "args": {
@@ -47,11 +52,6 @@
   }
  },
  {
-  "type": "live",
-  "name": "codex",
-  "detail": "→ curl -s -H \"X-Taskuary-Token: $TASKUARY_TOKEN\" \"$TASKUARY_URL/api/tasks/1142\""
- },
- {
   "type": "tool_result",
   "name": "exec-2",
   "detail": {
@@ -60,8 +60,13 @@
   }
  },
  {
+  "type": "live",
+  "name": "codex",
+  "detail": "→ Read file '/home/alex/northwind/portal/src/Components/Budget/StatusBoard.js'"
+ },
+ {
   "type": "tool_call",
-  "name": "read",
+  "name": "exec_command",
   "detail": {
    "tool_call_id": "exec-3",
    "args": {
@@ -73,11 +78,6 @@
   }
  },
  {
-  "type": "live",
-  "name": "codex",
-  "detail": "→ Read file '/home/alex/northwind/portal/src/Components/Budget/StatusBoard.js'"
- },
- {
   "type": "tool_result",
   "name": "exec-3",
   "detail": {
@@ -86,8 +86,13 @@
   }
  },
  {
+  "type": "live",
+  "name": "codex",
+  "detail": "→ Read file '/home/alex/northwind/portal/src/Components/Budget/BudgetTable.js'"
+ },
+ {
   "type": "tool_call",
-  "name": "read",
+  "name": "exec_command",
   "detail": {
    "tool_call_id": "exec-4",
    "args": {
@@ -99,11 +104,6 @@
   }
  },
  {
-  "type": "live",
-  "name": "codex",
-  "detail": "→ Read file '/home/alex/northwind/portal/src/Components/Budget/BudgetTable.js'"
- },
- {
   "type": "tool_result",
   "name": "exec-4",
   "detail": {
@@ -112,8 +112,13 @@
   }
  },
  {
+  "type": "live",
+  "name": "codex",
+  "detail": "→ rg -n approvedTotal src"
+ },
+ {
   "type": "tool_call",
-  "name": "execute",
+  "name": "exec_command",
   "detail": {
    "tool_call_id": "exec-5",
    "args": {
@@ -124,17 +129,22 @@
   }
  },
  {
-  "type": "live",
-  "name": "codex",
-  "detail": "→ rg -n approvedTotal src"
- },
- {
   "type": "tool_result",
   "name": "exec-5",
   "detail": {
    "result": "src/Components/Budget/StatusBoard.js:3:approvedTotal",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "codex",
+  "detail": "→ Web search"
+ },
+ {
+  "type": "live",
+  "name": "codex",
+  "detail": "→ Web search: northwind budget review policy"
  },
  {
   "type": "tool_call",
@@ -147,17 +157,22 @@
   }
  },
  {
-  "type": "live",
-  "name": "codex",
-  "detail": "→ Web search: northwind budget review policy"
- },
- {
   "type": "tool_result",
   "name": "ws-6",
   "detail": {
    "result": "",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "codex",
+  "detail": "→ Web search"
+ },
+ {
+  "type": "live",
+  "name": "codex",
+  "detail": "→ Open page: https://docs.northwind.example/budget/review"
  },
  {
   "type": "tool_call",
@@ -168,11 +183,6 @@
     "url": "https://docs.northwind.example/budget/review"
    }
   }
- },
- {
-  "type": "live",
-  "name": "codex",
-  "detail": "→ Open page: https://docs.northwind.example/budget/review"
  },
  {
   "type": "tool_result",

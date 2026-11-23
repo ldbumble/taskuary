@@ -590,7 +590,7 @@ def one_step(s: dict) -> dict:
     if desc and cmd: out['detail'] = _cut(cmd, 4000)
     elif s.get('detail'): out['detail'] = s['detail']
     if (kept := _args(a)): out['args'] = kept
-    for x in ('file', 'edit', 'status', 'output', 'out', 'id', 'parent', 'did', 'why', 'title', 'tool_kind', 'paths'):
+    for x in ('file', 'edit', 'status', 'output', 'out', 'id', 'parent', 'did', 'why', 'title', 'tool_kind', 'paths', 'ask'):
         if s.get(x) not in (None, '', {}): out[x] = s[x]
     return out
 
@@ -695,8 +695,9 @@ def _put(store, tid: int, sid: str, f: dict, ref: str) -> None:
     x = one_step(s)
     e['at'] = time.time()
     if e.get('j') == (j := json.dumps(x, sort_keys=True, default=str)): return
-    e['j'] = j
-    step(store, tid, sid, ref, x, state=x.get('status'))
+    # ...the row IS the step as it now reads: what it no longer says (an ask answered) is cleared, never left from the read before
+    was, e['j'], e['keys'] = e.get('keys') or (), j, set(x)
+    step(store, tid, sid, ref, {**{k: None for k in was if k not in x}, **x}, state=x.get('status'))
 
 
 _LOGS = ('claude-log', 'codex-log')

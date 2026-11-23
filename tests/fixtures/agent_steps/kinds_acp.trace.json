@@ -25,6 +25,11 @@
   }
  },
  {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ ReadFile"
+ },
+ {
   "type": "tool_call",
   "name": "read",
   "detail": {
@@ -36,17 +41,17 @@
   }
  },
  {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ ReadFile"
- },
- {
   "type": "tool_result",
   "name": "k-read",
   "detail": {
    "result": "TOTALS = {}",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ Edit"
  },
  {
   "type": "tool_call",
@@ -62,17 +67,17 @@
   }
  },
  {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ Edit"
- },
- {
   "type": "tool_result",
   "name": "k-edit",
   "detail": {
    "result": "",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ Delete notes.txt"
  },
  {
   "type": "tool_call",
@@ -86,17 +91,17 @@
   }
  },
  {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ Delete notes.txt"
- },
- {
   "type": "tool_result",
   "name": "k-delete",
   "detail": {
    "result": "",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ Move"
  },
  {
   "type": "tool_call",
@@ -111,17 +116,17 @@
   }
  },
  {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ Move"
- },
- {
   "type": "tool_result",
   "name": "k-move",
   "detail": {
    "result": "",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ SearchText"
  },
  {
   "type": "tool_call",
@@ -136,17 +141,17 @@
   }
  },
  {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ SearchText"
- },
- {
   "type": "tool_result",
   "name": "k-search",
   "detail": {
    "result": "Found 2 matches",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ git status"
  },
  {
   "type": "tool_call",
@@ -160,17 +165,17 @@
   }
  },
  {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ git status"
- },
- {
   "type": "tool_result",
   "name": "k-execute",
   "detail": {
    "result": "On branch main\nnothing to commit",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ Planning the budget summary"
  },
  {
   "type": "tool_call",
@@ -184,17 +189,17 @@
   }
  },
  {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ Planning the budget summary"
- },
- {
   "type": "tool_result",
   "name": "k-think",
   "detail": {
    "result": "",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ WebFetch"
  },
  {
   "type": "tool_call",
@@ -208,17 +213,17 @@
   }
  },
  {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ WebFetch"
- },
- {
   "type": "tool_result",
   "name": "k-fetch",
   "detail": {
    "result": "Budget reviews close when the owner signs off.",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ GoogleSearch"
  },
  {
   "type": "tool_call",
@@ -232,17 +237,17 @@
   }
  },
  {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ GoogleSearch"
- },
- {
   "type": "tool_result",
   "name": "k-web",
   "detail": {
    "result": "",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ Look up Payworth invoice"
  },
  {
   "type": "tool_call",
@@ -256,17 +261,17 @@
   }
  },
  {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ Look up Payworth invoice"
- },
- {
   "type": "tool_result",
   "name": "k-other",
   "detail": {
    "result": "",
    "is_error": false
   }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ pytest"
  },
  {
   "type": "tool_call",
@@ -280,17 +285,17 @@
   }
  },
  {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ pytest"
- },
- {
   "type": "tool_result",
   "name": "k-failed",
   "detail": {
    "result": "",
    "is_error": true
   }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ git push origin main"
  },
  {
   "type": "tool_call",
@@ -302,11 +307,6 @@
     "title": "git push origin main"
    }
   }
- },
- {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ git push origin main"
  },
  {
   "type": "tool_result",
@@ -327,6 +327,11 @@
   "detail": "The total is fixed; the push waits for your Approve."
  },
  {
+  "type": "live",
+  "name": "gemini",
+  "detail": "→ Terminal"
+ },
+ {
   "type": "tool_call",
   "name": "execute",
   "detail": {
@@ -336,11 +341,6 @@
     "title": "Terminal"
    }
   }
- },
- {
-  "type": "live",
-  "name": "gemini",
-  "detail": "→ Terminal"
  },
  {
   "type": "tool_result",

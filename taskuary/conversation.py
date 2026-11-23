@@ -407,6 +407,13 @@ def acp_steps(updates: list) -> list:
                                                'name': f"mcp__{mcp['server']}__{mcp['tool']}" if mcp else _meta(u, 'taskuary', 'tool') or
                                                _meta(u, 'claudeCode', 'toolName') or _ACP_TOOL.get(u.get('kind')) or u.get('title') or u.get('kind') or 'tool'}
                 out.append(s)
+            # ...A PERMISSION ASKED FOR IT is its update too (acp.asked_update): it fills what the call's own updates left out - never what they
+            # said (Codex asks with its own kind, the command wrapped) - and the call waits on the answer with the agent's options, until it runs
+            if (ask := _meta(u, 'taskuary', 'ask')) is not None:
+                s['ask'] = ask
+                u = {k: v for k, v in u.items() if k in ('toolCallId', 'locations', '_meta') or k == 'rawInput' and not s['args']
+                     or k == 'title' and not s.get('title') or k == 'kind' and not s.get('tool_kind')}
+            elif u.get('status') in ('in_progress', 'completed', 'failed'): s.pop('ask', None)
             # ...AND THE AGENT'S OWN WORDS FOR IT (the owner, 2026-11-23: adopt the open-source model): its title as it upgrades it, its kind, its
             # files - what the row says (agentSteps.stepsOf); ours only for Taskuary's own tools and a road that gives none (acp_of_trace)
             if isinstance(u.get('title'), str) and u['title'].strip(): s['title'] = u['title'].strip()[:300]

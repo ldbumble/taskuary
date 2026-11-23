@@ -1,7 +1,6 @@
 """THE GENERAL CHAT'S ACP ROAD KEEPS ARRIVAL ORDER (the owner, 2026-11-06: "the quick update was put above the spinning stuff ... never write above
-what was written already"). agents.ACPSteps traces a recorded update sequence: a step announced and still running, then the agent's words, then
-the step's result - the words are traced after the step they followed, never before it, and the answer rule (what it said after its last tool
-call) leaves earlier words where they were said."""
+what was written already"). The chat draws the agent's own updates in the order they came (chatlog.feed); agents.ACPSteps writes the run's
+trace for what else reads it, each call once it has ended."""
 from taskuary import agents
 
 
@@ -16,14 +15,33 @@ def traced(ups):
 def say(t): return {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': t}}
 
 
-def test_words_after_a_running_step_trace_after_it():
-    got = traced([say('Running the suite.'),
-                  {'sessionUpdate': 'tool_call', 'toolCallId': 't1', 'kind': 'execute', 'title': 'Terminal', 'status': 'pending'},
-                  {'sessionUpdate': 'tool_call_update', 'toolCallId': 't1', 'status': 'in_progress', 'rawInput': {'command': 'pytest -q'}},
-                  say('Quick update: '), say('half of it passed.'),
-                  {'sessionUpdate': 'tool_call_update', 'toolCallId': 't1', 'status': 'completed'},
-                  say('All 212 pass.')])
-    assert got == [('progress', 'Running the suite.'), ('tool_call', 'execute'), ('progress', 'Quick update: half of it passed.'),
+RUN = [say('Running the suite.'),
+       {'sessionUpdate': 'tool_call', 'toolCallId': 't1', 'kind': 'execute', 'title': 'Terminal', 'status': 'pending'},
+       {'sessionUpdate': 'tool_call_update', 'toolCallId': 't1', 'status': 'in_progress', 'title': 'pytest -q', 'rawInput': {'command': 'pytest -q'}},
+       say('Quick update: '), say('half of it passed.'),
+       {'sessionUpdate': 'tool_call_update', 'toolCallId': 't1', 'status': 'completed'},
+       say('All 212 pass.')]
+
+
+def test_words_after_a_running_step_are_drawn_after_it_and_the_call_is_drawn_at_once():
+    """THE CHAT DRAWS THE AGENT'S OWN UPDATES (chatlog.feed): the call is its row from the moment it is announced - generic title and all,
+    upgraded in place - and what it said while the call ran stands under it. Nothing is held back to look settled."""
+    from taskuary import chatlog, conversation
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = s.create_task({'Title': 'Run the suite', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    conversation.hear(s, tid, turn=True)
+    chatlog.feed(s, tid, 'sid1', 'acp', RUN[0]); chatlog.feed(s, tid, 'sid1', 'acp', RUN[1])
+    assert [x.get('title') for x in chatlog.read(s, tid, 'everything')['items'][-1]['steps'] if x['k'] == 'tool'] == ['Terminal'], 'drawn at once'
+    for u in RUN[2:]: chatlog.feed(s, tid, 'sid1', 'acp', u)
+    chatlog.flush(s, tid)
+    got = [(x['k'], x.get('title') or x.get('text')) for x in chatlog.read(s, tid, 'everything')['items'][-1]['steps']]
+    assert got == [('said', 'Running the suite.'), ('tool', 'pytest -q'), ('said', 'Quick update: half of it passed.'), ('said', 'All 212 pass.')]
+
+
+def test_the_trace_of_a_run_has_each_call_once_with_the_input_it_ended_on():
+    "What reads a run's trace (the pane, the transcript, a stopped turn's account) gets each call once it has ended, never 'Terminal' with nothing."
+    got = traced(RUN)
+    assert got == [('progress', 'Running the suite.'), ('progress', 'Quick update: half of it passed.'), ('tool_call', 'execute'),
                    ('tool_result', 't1'), ('progress', 'All 212 pass.')]
 
 

@@ -624,7 +624,7 @@ class ACPCoding:
         if cmd and not c['shown']: c['shown'] = True; self._out(f'\r\n\x1b[1;33m$\x1b[0m {_crlf(cmd)}\r\n', output=True)
 
     def _trace(self, kind, name, detail=None):
-        "ACPSteps' settled steps: the witness (the Board card), the history (the transcript) and the terminal a Wall cell shows."
+        "ACPSteps' ended steps: the witness (the Board card), the history (the transcript) and the terminal a Wall cell shows."
         d = detail if isinstance(detail, dict) else {}
         if kind == 'tool_call':
             args = d.get('args') or {}
@@ -644,7 +644,10 @@ class ACPCoding:
         elif kind == 'permission': self.history.append(('step', f"{d.get('answer')}: {name} {d.get('why') or ''}".strip()))
 
     def _permit(self, params: dict):
-        try: self.steps.asked(params.get('toolCall'))
+        "The ask onto its call: the trace's copy fills its gaps, the chat's record has it as the call's update (acp.asked_update); the gate answers."
+        try:
+            self.steps.asked(params.get('toolCall'))
+            if (u := acp_mod.asked_update(params)): self._record(u)
         except Exception as e: logger.debug(f'acp coding: an asked step was not read - {e}')
         return self.gate(params)
 

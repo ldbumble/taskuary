@@ -1281,25 +1281,21 @@ def result_text(raw) -> str:
 
 
 class ACPSteps:
-    """ACP session/update as the SAME trace events the argv road emits - tool_call with its arguments, tool_result with its output,
-    progress for what it said and thought - so a general agent on any CLI reads alike on the canvas (website/src/agentSteps.js).
+    """ACP session/update as the trace events the argv road emits - tool_call with its arguments, tool_result with its output, progress for
+    what it said and thought - for what reads a run's TRACE: the pane, the Board's witness, the transcript, a stopped turn's account.
 
-    An update is not a step. Claude's adapter announces a call with NO input and a generic title ("Read File", "Terminal") and then
-    streams its input in a run of tool_call_updates; Codex's announces a web search with an empty query and fills it at the end, and
-    streams a command's output as terminal deltas. Traced update by update that read "Read File" with no file, then the same call
-    again. So a call is held until its input SETTLES - a permission asked for it, a status that says it runs or ran, the next thing
-    the agent does - and traced once, by the tool's own name (Claude's `Read`, `Bash`, `mcp__taskuary__my_task`; Codex's command)
-    with its full input, exactly as stream-json names it. Words and thoughts arrive a token at a time and are traced as whole
-    paragraphs. `flush` at the end of the turn closes whatever is still open, so no step spins after the turn is over."""
+    THE CHAT NEVER READS THIS (the owner, 2026-11-23: adopt the open-source model): it draws the agent's own updates, each call's row patched in
+    place as they come (chatlog.feed, road 'acp'). So nothing is held back to look right there. A call is traced once, when it has ended - by
+    the tool's own name (Claude's `Read`, `Bash`, `mcp__taskuary__my_task`; Codex's command) with the input it ended on, its result beside it -
+    and its title, as it goes, is the run's live line. Words and thoughts arrive a token at a time and are traced as whole paragraphs. `flush`
+    at the end of the turn ends whatever is still open, so nothing spins after the turn is over."""
 
     def __init__(self, trace, name: str, held: dict = None):
         self.trace, self.name, self.held = trace, name, held if held is not None else {}
-        self.calls, self.said, self.thought, self.plans, self.live_at, self.mid = {}, [], [], 0, -1e9, None
+        self.calls, self.said, self.thought, self.live_at, self.mid = {}, [], [], -1e9, None
 
-    # ...AND WHAT IT IS THINKING OR WRITING IS SAID AS IT GROWS (the owner, 2026-11-16: "Thinking..." for three minutes with nothing else - "it
-    # is a chat: the owner must see what the agent is doing at all times"): about once a second the newest words of the thought or the answer
-    # it is writing go out as a `live` snapshot - a thought kept as the one open thought they update (sessionrecord.trace_steps), the words
-    # as the turn's line of what it is doing (conversation: `doing`) - and the whole paragraph still goes once it is done (_words)
+    # ...AND WHAT IT IS THINKING IS SAID AS IT GROWS (the owner, 2026-11-16: "Thinking..." for three minutes with nothing else): about once a
+    # second the newest words of the thought go out as a `live` snapshot - the working line's (chatlog._now); a thought is never a row
     LIVE_EVERY, LIVE_N = 1.0, 600
     def _live(self, name: str, parts: list):
         if (now := time.monotonic()) - self.live_at < self.LIVE_EVERY: return
@@ -1319,10 +1315,11 @@ class ACPSteps:
     # ── tool calls ──────────────────────────────────────────────────────────────────────────
     def _merge(self, u: dict) -> dict:
         iid = str(u.get('toolCallId') or f'acp-{len(self.calls)}')
-        c = self.calls.setdefault(iid, {'id': iid, 'raw': {}, 'out': [], 'shown': False, 'done': False})
+        c = self.calls.setdefault(iid, {'id': iid, 'raw': {}, 'out': [], 'done': False})
         if isinstance(u.get('rawInput'), dict) and u['rawInput']: c['raw'] = dict(u['rawInput'])
-        for k in ('title', 'kind', 'name', 'status'):
+        for k in ('kind', 'name', 'status'):
             if u.get(k): c[k] = u[k]
+        if u.get('title') and u['title'] != c.get('title'): c['title'] = u['title']; self.trace('live', self.name, f"→ {u['title']}"[:400])
         if (tn := ((u.get('_meta') or {}).get('claudeCode') or {}).get('toolName')): c['tool'] = tn
         if (par := parent_of(u)): c['parent'] = par
         if u.get('locations'): c['locations'] = u['locations']
@@ -1352,61 +1349,43 @@ class ACPSteps:
         if c.get('title'): raw.setdefault('title', c['title'])
         return c.get('tool') or c.get('name') or kind or c.get('title') or 'tool', raw
 
-    @staticmethod
-    def _settled(c: dict) -> bool: return any(v not in (None, '', [], {}) for k, v in c['raw'].items() if k not in ('type', 'id', 'cwd'))
-
-    def _show(self, c: dict):
-        if c['shown']: return
-        c['shown'] = True
-        name, args = self._call(c)
-        self.trace('tool_call', name, {'tool_call_id': c['id'], 'args': args, **({'parent': c['parent']} if c.get('parent') else {})})
-        self.trace('live', self.name, f"→ {c.get('title') or name}"[:400])
-
     def _finish(self, c: dict, failed: bool = None):
         if c['done']: return
-        self._show(c); c['done'] = True
+        c['done'] = True
+        name, args = self._call(c)
+        self.trace('tool_call', name, {'tool_call_id': c['id'], 'args': args, **({'parent': c['parent']} if c.get('parent') else {})})
         out = ''.join(c['out']).strip() or c.get('text') or c.get('raw_out') or ''
         bad = (c.get('status') == 'failed' or c.get('exit') not in (None, 0)) if failed is None else failed
         if c['id'] in self.held: out, bad = self.held[c['id']], True          # Taskuary's own answer, not the adapter's "user refused"
         self.trace('tool_result', c['id'], {'result': out, 'is_error': bool(bad)})
 
-    def _settle_others(self, but=None):
-        for c in self.calls.values():
-            if c['id'] != but and not c['shown'] and self._settled(c): self._show(c)
-
     def asked(self, tc: dict):
-        "A permission request for a call: its input is final, so it is traced now - before the answer is."
+        """A permission request's copy of the call (a ToolCallUpdate, the spec's): it fills what the call's own updates left out - Codex asks
+        for a read it announced with no input - never what they said (it asks with its own kind, the command wrapped in powershell)."""
         if not isinstance(tc, dict) or not tc.get('toolCallId'): return
-        # ...what the call announced, not the ask's copy, which only fills gaps: Codex asks with its own kind ("execute" for a file
-        # it announced as a read) and the command wrapped in `powershell.exe -Command '...'`
-        if (c := self.calls.get(str(tc['toolCallId']))):
-            tc = {k: v for k, v in tc.items() if k in ('toolCallId', 'locations') or (k == 'rawInput' and not c['raw']) or not c.get(k)}
-        self._words(); self._show(self._merge(tc))
+        c = self.calls.get(str(tc['toolCallId'])) or {}
+        self._merge({k: v for k, v in tc.items() if k in ('toolCallId', 'locations') or (k == 'rawInput' and not c.get('raw')) or not c.get(k)})
 
     def __call__(self, u: dict):
         kind = u.get('sessionUpdate')
         if kind == 'agent_message_chunk':
-            # ...ONE MESSAGE IS ONE STEP, as the answer (acp.prompt) and the coding chat (conversation.acp_steps) split them (design round 6,
-            # D2: a line he typed cut the message at "The Q", the next began "Paula's address" - one step ran them together, the answer did not)
+            # ...ONE MESSAGE IS ONE STEP, as the answer (acp.prompt) and the chat (conversation.acp_steps) split them
             if self.thought or (self.said and u.get('messageId') != self.mid): self._words()
             self.mid = u.get('messageId')
-            self._settle_others(); self.said.append(acp_mod._text_of(u.get('content'))); self._live('writing', self.said); return
+            self.said.append(acp_mod._text_of(u.get('content'))); self._live('writing', self.said); return
         if kind == 'agent_thought_chunk':
             if self.said: self._words()
-            self._settle_others(); self.thought.append(acp_mod._text_of(u.get('content'))); self._live('thinking', self.thought); return
+            self.thought.append(acp_mod._text_of(u.get('content'))); self._live('thinking', self.thought); return
         if kind in ('tool_call', 'tool_call_update'):
             self._words()
             c = self._merge(u)
-            self._settle_others(but=c['id'])
-            st = u.get('status')
-            if st in ('completed', 'failed'): self._finish(c)
-            elif (st == 'in_progress' or (kind == 'tool_call_update' and c.get('out'))) and self._settled(c): self._show(c)
+            if u.get('status') in ('completed', 'failed'): self._finish(c)
             return
         if kind == 'plan':
-            self._words(); self._settle_others()
+            self._words()
             steps = [str((e or {}).get('content') or '') for e in u.get('entries') or []]
             if any(steps):
-                iid = f'plan-{self.plans}'; self.plans += 1
+                iid = f'plan-{sum(1 for k in self.calls if k.startswith("plan-"))}'; self.calls[iid] = {'id': iid, 'done': True}
                 self.trace('tool_call', 'update_plan', {'tool_call_id': iid, 'args': {'plan': [s for s in steps if s]}})
                 self.trace('tool_result', iid, {'result': ''})
 
@@ -1414,7 +1393,7 @@ class ACPSteps:
         "The turn is over: what it said is traced, and every call still open ends - done at a normal end, failed at any other."
         self._words()
         for c in list(self.calls.values()):
-            if c['shown'] or self._settled(c) or c.get('title'): self._finish(c, failed=None if c.get('status') in ('completed', 'failed') else stop not in (None, 'end_turn'))
+            if not c['done'] and (c['raw'] or c.get('title')): self._finish(c, failed=None if c.get('status') in ('completed', 'failed') else stop not in (None, 'end_turn'))
 
 
 def acp_tracer(trace, name: str, held: dict = None) -> ACPSteps: return ACPSteps(trace, name, held)
@@ -1796,7 +1775,15 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     gstore = store if store is not None else ctx_store
     gate = gate_.answerer({'store': gstore, 'task_id': task_id, 'cli': _cli_name(name), 'cwd': cwd,
                              'sid': client.session_id}, trace, held, told)
-    client.on_update, client.permit = steps, lambda params: (steps.asked(params.get('toolCall')), gate(params))[1]
+    # ...THE AGENT'S OWN UPDATES ARE THE CHAT'S RECORD (the owner, 2026-11-23): a run for a task's chat (a trace that takes them: general's
+    # `visible.acp`) hands each one in as it comes, before its trace's echo - drawn as the agent sent it, one row per call patched in place
+    # ...and a permission asked is the call's own update too (its toolCall): onto its row, the agent's options with it, before the answer
+    raw = getattr(trace, 'acp', None)
+    def permit(params):
+        steps.asked(params.get('toolCall'))
+        if callable(raw) and (u := acp_mod.asked_update(params)): raw(u)
+        return gate(params)
+    client.on_update, client.permit = (lambda u: (raw(u), steps(u))) if callable(raw) else steps, permit
     with _CLI_CHILDREN_LOCK: _CLI_CHILDREN.add(client.p)
     over = threading.Event()             # this turn has ended, however it ended
     if cancel is not None:

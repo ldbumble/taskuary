@@ -50,6 +50,16 @@ class ACPStartError(ACPAgentError):
     caller may take another road (agents.run_cli falls back to the argv one)."""
 
 
+def asked_update(params: dict) -> dict:
+    """A session/request_permission as the update of its call it is (the spec: its toolCall IS a ToolCallUpdate for that call), marked as the
+    ask, with the agent's own options by their names - so the call's row is where it is asked (conversation.acp_steps). {} without a call."""
+    tc = (params or {}).get('toolCall') or {}
+    if not isinstance(tc, dict) or not tc.get('toolCallId'): return {}
+    opts = [{'id': o.get('optionId'), 'name': o.get('name'), 'kind': o.get('kind')} for o in params.get('options') or [] if isinstance(o, dict)]
+    meta = {**(tc.get('_meta') or {}), 'taskuary': {'ask': opts}}
+    return {**{k: v for k, v in tc.items() if k != 'status'}, 'sessionUpdate': 'tool_call_update', '_meta': meta}
+
+
 def pick(options: list, allow: bool) -> dict:
     "The outcome for a permission request: the first option of the wanted kind, in ALLOW_KINDS/REJECT_KINDS order."
     kinds = ALLOW_KINDS if allow else REJECT_KINDS

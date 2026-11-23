@@ -64,6 +64,25 @@ def test_a_no_that_ends_the_agents_turn_is_heard_in_the_same_conversation_and_th
                for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,)))     # ...and its Approve card stands
 
 
+def test_a_general_runs_own_updates_are_its_chat_rows_and_its_trace_draws_none_again():
+    """ONE ACP RECORD ON BOTH ROADS (the owner, 2026-11-23: adopt the open-source model): a task chat's run over ACP hands the agent's own
+    updates in as they come (a trace that takes them - general's `visible.acp`) and the chat's rows are those: its call by the agent's own id,
+    announced with no input and drawn at once, completed in place. The trace's echo of the same call (agents.ACPSteps) writes no second row."""
+    from taskuary import chatlog, conversation
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Read the ledger for Erin', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    conversation.hear(s, tid, turn=True)
+    trace = lambda kind, name, detail=None: chatlog.feed(s, tid, 'sid1', 'trace', {'type': kind, 'name': name, 'detail': detail})
+    trace.acp = lambda u: chatlog.feed(s, tid, 'sid1', 'acp', u)
+    with mock.patch.object(agents, '_resolve_cmd', return_value=[FAKE[0]]), agents.run_context(s, tid):
+        out = agents.run_cli(profile(), 'go', trace)
+    assert out[0].startswith('granted')
+    rows = [(r['Key'], json.loads(r['Body'])) for r in s._rows("SELECT Key, Body FROM chatlog WHERE TaskId=? AND Kind='step' ORDER BY Id", (tid,))]
+    tools = [(k, b.get('title'), b.get('status')) for k, b in rows if b.get('k') == 'tool']
+    assert tools == [('s:sid1:call_1', 'read the ledger', 'completed')], rows
+    assert [b['text'].strip() for _k, b in rows if b.get('k') == 'said'][0] == 'Looking.'
+
+
 def _answering(option):
     "The owner pressing a button on the held call as soon as it is up (the task chat's card, permissions.answer)."
     def go():

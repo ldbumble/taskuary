@@ -862,10 +862,6 @@ class TerminalTests(unittest.TestCase):
         # this test's prompt, and assert it fits, or the failure mode is invisible.
         saved = {n: server.store.get_doc(n) for n in ('agent', 'coding', 'soul', 'learned')}   # AGENT.md rides in the seed too (PW-182)
         for n in saved: server.store.save_doc(n, '', 'test')
-        # Runtime now restores blank profile documents. This test isolates terminal input,
-        # so omit that block explicitly instead of relying on an empty persisted document.
-        rules_patch = mock.patch.object(terminal, 'rules_text', return_value='')
-        rules_patch.start(); self.addCleanup(rules_patch.stop)
         # ...and the wall, the owner's standing notes, the semantic layer, and the CONTEXT FILE
         # line below. Every one of them is real prompt content that grows with whatever other
         # tests left in the shared store, and this test measures the SEED - so it owns every
@@ -1520,33 +1516,6 @@ class SeedCompletenessTests(unittest.TestCase):
         self.assertNotIn('truncated here', seed)
         self.assertIn('Missing required detail? Change nothing', seed)
         self.assertIn('if the sender must answer', seed)
-
-    def test_a_coding_agent_gets_the_whole_of_its_rules(self):
-        """coding.md flattens to ~4,884 chars and was delivered as 1,800 - every coding session ran on
-        37% of its own rules, cut mid-sentence, with nothing saying so. Measured, not hardcoded, so
-        the test still means something after the document is edited."""
-        from taskuary.store import MemoryStore
-        s = MemoryStore()
-        doc = s.get_doc('coding') or ''
-        self.assertGreater(len(doc), 2000, 'the shipped coding.md should be substantial')
-        got = terminal.rules_text(s, profile='coding')
-        self.assertNotIn('truncated here', got)
-        # every non-empty line of the document survives into the flattened rules
-        for line in [l.strip(' #*-').strip() for l in doc.splitlines() if l.strip()][-3:]:
-            self.assertIn(' '.join(line.split())[:60], got, 'the END of the document was dropped')
-
-    def test_a_profile_too_long_to_fit_says_so(self):
-        from taskuary.store import MemoryStore
-        s = MemoryStore()
-        s.save_doc('coding', 'x ' * 8000, 'test')
-        got = terminal.rules_text(s, profile='coding')
-        self.assertIn('truncated here', got)      # _cut's own words - silence is the expensive kind
-
-    def test_a_short_profile_is_returned_untouched(self):
-        from taskuary.store import MemoryStore
-        s = MemoryStore()
-        s.save_doc('coding', '# Rules\nBe careful.', 'test')
-        self.assertNotIn('truncated', terminal.rules_text(s, profile='coding'))
 
     def test_the_ask_is_what_gives_when_the_whole_seed_is_over(self):
         """The existing priority, asserted rather than assumed: raising DOC_CHARS must not change

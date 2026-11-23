@@ -1,13 +1,10 @@
 """Roles: one click from "I do accounts payable" to a Taskuary set up for it.
 
-Everything a role needs already existed as a separate thing to find and fill in: a PROFILE (the
-worker and its rules document, agents.py), PLAYBOOKS (how each kind of job is done, playbooks.py),
-a WORKFLOW (a scheduled job, workflows.py) and the ledger it checks. Someone who is not technical
-never assembled them, so a role is all of them written down together, and apply() lays them out:
+Everything a role needs already existed as a separate thing to find and fill in: PLAYBOOKS (how each
+kind of job is done, playbooks.py), a WORKFLOW (a scheduled job, workflows.py) and the ledger it checks.
+Someone who is not technical never assembled them, so a role is all of them written down together, and
+apply() lays them out - no mail is moved, a task's general work runs on the assistant (the owner, 2026-11-04):
 
-- the profile is an ordinary agent row plus its document (templates/<profile>.md), for routines and
-  workflows to name - it is not offered the mail and no default sends mail to it: a task's general
-  work runs on the assistant (the owner, 2026-11-04);
 - each shipped playbook is copied into ~/.taskuary/playbooks, never over one already there;
 - the role's workflow is created SWITCHED OFF. A scheduled browser job needs a sign-in that only
   the owner can type, so it starts when they have signed in once and turned it on;
@@ -26,14 +23,11 @@ ROLES = {
     'ap': {
         'title': 'Accounts payable',
         'blurb': 'Vendor mail answered from the ledger; bills waiting in the approval portal checked against it, approved on your yes.',
-        'profile': 'ap', 'kind': 'accounts-payable',
-        'purpose': 'ACCOUNTS PAYABLE - a vendor asking about an invoice, a bill, a statement or a payment; bills to '
-                   'enter or reconcile. Looks them up in the accounting system and drafts the answer',
         'playbooks': ('vendor-payment-inquiry', 'portal-bill-approvals'),
         'ledger': 'intacct',
         # the portal posts what is approved to the ledger by itself (the owner, 2026-10-08: "stampli syncs to Intacct. we
         # just need to approve them if they look good") - so the job is the approval, the ledger only checks it
-        'workflow': {'type': 'agent', 'title': 'Bills waiting for approval in the portal', 'agent': 'ap',
+        'workflow': {'type': 'agent', 'title': 'Bills waiting for approval in the portal',
                      'browser': True, 'access': 'write', 'daily_at': '08:00', 'uses': ['intacct'],
                      'prompt': 'Follow the playbook "Review the bills waiting for approval in the bill-approval portal": '
                                'open the portal at {portal}, list every bill waiting for approval, check each against the '
@@ -51,26 +45,17 @@ def playbook_text(slug: str) -> str: return (TEMPLATES / 'playbooks' / f'{slug}.
 
 
 def catalog(store) -> list:
-    """The roles on offer, each saying whether this install already has it."""
-    from . import agents
-    return [{'name': k, 'title': r['title'], 'blurb': r['blurb'], 'profile': r['profile'],
-             'applied': bool(store.get_agent(r['profile'])),
-             'portal_needed': bool(r.get('workflow'))} for k, r in ROLES.items()]
+    """The roles on offer, each saying whether this install already has it: every playbook it ships, and its workflow."""
+    from . import playbooks
+    return [{'name': k, 'title': r['title'], 'blurb': r['blurb'], 'portal_needed': bool(r.get('workflow')),
+             'applied': all(playbooks.read(s) is not None for s in r['playbooks']) and (not r.get('workflow') or _found(store, r) is not None)}
+            for k, r in ROLES.items()]
 
 
-def _profile(store, cfg, r) -> bool:
-    """The worker - instructions only, run on the default brain like the shipped roles (agents.seed_profiles) - off triage's
-    roster, since profiles are for routines and workflows (2026-11-04). An existing one is the owner's and is left as it is."""
-    from . import agents, cli_connections
-    name = r['profile']
-    if name in (cfg.get('agents') or {}) or store.get_agent(name): return False
-    prof = {**agents.cli_inheritance(cfg), 'kind': r['kind'], 'purpose': r['purpose'], 'triage_enabled': False}
-    cfg.setdefault('agents', {})[name] = prof
-    store.upsert_agent(name, r['kind'], 'cli', json.dumps(prof))
-    try: cli_connections.sync(cfg, store, name)
-    except ValueError: pass                          # no CLI yet: the row stands, the Agents page asks for one
-    agents.ensure_profile_document(store, name)
-    return True
+def _found(store, r):
+    "The role's workflow already made - found by its title."
+    return next((s['SourceId'] for s in store.list_sources(active_only=False)
+                 if s.get('Channel') == 'report' and s.get('Address') == r['workflow']['title']), None)
 
 
 def _playbooks(r) -> list:
@@ -91,25 +76,21 @@ def _workflow(store, r, portal: str):
     """The role's daily job, created OFF. Found again by title, so applying twice makes one."""
     wf = r.get('workflow')
     if not wf: return None
-    for s in store.list_sources(active_only=False):
-        if s.get('Channel') == 'report' and s.get('Address') == wf['title']: return s['SourceId']
+    if (sid := _found(store, r)) is not None: return sid
     c = {**wf, 'prompt': wf['prompt'].format(portal=portal or 'the address the owner gives you (ask once, in the session)')}
     return store.save_source({'Channel': 'report', 'Address': wf['title'], 'Owner': 'role', 'Active': 0,
                               'ConfigJson': json.dumps(c)}, 'role')
 
 
-def apply(store, cfg, name: str, portal: str = '') -> dict:
+def apply(store, name: str, portal: str = '') -> dict:
     """Lay the role out. Returns what changed, so the page and the chat can say it in plain words. The owner's mail is never
-    moved: it used to be, by `route_mail` and `default_profile`, until triage stopped picking a worker (the owner, 2026-11-04)."""
-    from . import config
+    moved (the owner, 2026-11-04)."""
     r = ROLES.get(name)
     if not r: raise ValueError(f'unknown role {name!r} - one of {", ".join(ROLES)}')
-    made = _profile(store, cfg, r)
-    if made: config.save(cfg)
     books = _playbooks(r)
     narrowed = _ledger(store, r)
     wid = _workflow(store, r, portal.strip())
-    out = {'role': name, 'profile': r['profile'], 'profile_added': made, 'playbooks_added': books,
+    out = {'role': name, 'playbooks_added': books,
            'ledger_narrowed': narrowed, 'workflow_id': wid, 'workflow_title': (r.get('workflow') or {}).get('title', '')}
     store.audit('role', 0, 'apply', 'owner', detail=out)
     logger.info(f'role {name}: {out}')

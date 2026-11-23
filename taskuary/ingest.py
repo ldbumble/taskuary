@@ -1204,9 +1204,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # joined two unrelated refunds in 2026-09-03, and two people can send one subject about two
         # different things. A verdict that named no title has said nothing to match on.
         # WHICH ROLE works this - a different question from which brain runs it. Coding has one role and triage does not
-        # choose it; general work is the assistant's, so it names nobody (the owner, 2026-11-04: profiles are for routines)
+        # choose it; general work is the assistant's, so it names nobody (the owner, 2026-11-04)
         from . import agents as hub_agents
-        role = hub_agents.routed_role(store, f['kind'], '')
+        role = hub_agents.routed_role(store, f['kind'])
         # A GOAL (spec 2026-10-12): the open-ended ask opens as the owner's goal - its done-when sentence, its date, no steps
         # and nobody on it; the planner proposes the steps behind the arrival, as the New sheet's Set a goal does
         goal = intent['intent'] == 'task' and bool(intent.get('goal') and intent.get('done_when'))
@@ -2291,7 +2291,7 @@ def _resumable_coding(store, tid) -> tuple:
     from pathlib import Path
     row = store.resumable_session(tid)
     if not row: return None, reason('no_coding_session')
-    if not store.get_agent(row['Agent'] or ''): return None, f'the profile "{row["Agent"]}" is no longer configured'
+    if not store.get_agent(row['Agent'] or ''): return None, f'the agent "{row["Agent"]}" it ran as is no longer configured'
     if not (row['Cwd'] and Path(row['Cwd']).is_dir()): return None, f'the checkout it worked in no longer exists: {row["Cwd"]}'
     return row, ''
 
@@ -3475,8 +3475,7 @@ def _auto_code(store, tid):
     house queues for the next free slot. Both drain automatically as sessions end - the card
     on the board says what it is waiting for."""
     from . import terminal as term, blackboard as bb, rank, agents as hub_agents
-    # the worker this task was ROUTED to (Assignee), else whoever takes work by default. Without this
-    # the profile triage chose was written on the task and then ignored at the moment it mattered.
+    # the worker this task was ROUTED to (Assignee), else the coding agent
     _who = str((store.get_task(tid) or {}).get('Assignee') or '')
     agent = _who.split(':', 1)[1].strip() if _who.startswith('agent:') and _who.split(':', 1)[1].strip() else hub_agents.default_agent(store)
     # Rank mode (the connector's bulk setting): the task does not race for a slot, it joins

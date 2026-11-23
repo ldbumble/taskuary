@@ -106,7 +106,7 @@ PURPOSE = {
                                  '(none clears it); `owns`: areas they are responsible for ("payroll, benefits"), added; `drops`: areas taken off; '
                                  '`forget`: true takes them off the chart. "Erin is my manager", "Ray owns payroll", "Gail reports to me" - '
                                  'never memory.remember for these: triage and agents read the chart'),
-    'routing.remember':         ('remember how work like this should be ROUTED next time - `field`: kind | profile | system, '
+    'routing.remember':         ('remember how work like this should be ROUTED next time - `field`: kind | system, '
                                  'and `value`. kind: coding (an agent in a checkout) | general (the assistant) | task (the owner, '
                                  'no agent). system: where the work actually lives when no repository here can touch it, named '
                                  'plainly ("ADP"). It teaches triage and moves nothing - say it when the owner tells you a '
@@ -125,7 +125,7 @@ PURPOSE = {
     # THE TASK PAGE, as tools (2026-09-25). A task tool acts on the task on the table, or on the one `ref` names
     # (TQ-0123) - never a guess. Each is the page's own button.
     'task.update':              ("change a task's priority, title, owner or due day - any of `priority`: regular | important | urgent, "
-                                 "`title`, `assignee`: exactly `owner` (the owner takes it) or `agent:<profile>` (one of the saved profiles), "
+                                 "`title`, `assignee`: exactly `owner` (the owner takes it) or `none` (nobody holds it), "
                                  "`due`: the day the work is due (2026-10-30, \"friday\", \"2 weeks\", or \"none\" to clear it); `ref` when "
                                  "it is not the one on the table. Any other value is refused with the allowed ones"),
     'task.set_kind':            'say who does a task - `kind`: task (the owner does it) | general (a non-coding agent) | coding - an agent kind starts that agent on it; `ref`',
@@ -235,7 +235,7 @@ PURPOSE = {
     'rule.change':              ('change or delete one routing rule (its page: rules) - `about`: words naming it, as rules.list '
                                  'says it (its sender, pattern or name); `how`: edit (the default) | remove. Adding a rule for a sender '
                                  'is preference.sender_rule'),
-    'deleted.restore':          ('bring back something removed in the last 30 days - a report, workflow, dashboard, routing rule, profile or '
+    'deleted.restore':          ('bring back something removed in the last 30 days - a report, workflow, dashboard, routing rule or '
                                  "Hub post - `what`: its title as deleted.list says it (or its kind, \"hub post\", when it is the only one). "
                                  "A Hub post the vote took off is not here: it is on the Hub's own removed shelf, restored there"),
     'hub.comment':              ("add a comment to a Hub post - `post`: its number (#12, as knowledge.search prints it), `text`: the "
@@ -529,7 +529,7 @@ WHERE = (
     ('how something is done here - a policy, a system, a site', 'knowledge.search', {'query': 'PO limit'}),
     ('how Taskuary itself works', 'docs.search', {'query': 'remind me'}),
     ('reports and workflows', 'reports.list', {}),
-    ('agents, profiles, which brain does what', 'agents.list', {}),
+    ('the agents, which brain does what', 'agents.list', {}),
     ('the repositories a coding agent works in', 'repos.list', {}),
     ("the owner's meetings", 'calendar.read', {'from': 'tomorrow'}),
     ('what is failing, or failed', 'errors.list', {}),
@@ -626,7 +626,7 @@ READS = {
     # "how do I usually sign off?" is STYLE.md's and "what rules do the agents work under" AGENT.md's - and nothing said they could be read
     'docs.search':      ("how Taskuary works and how to set it up (the help pages), and the owner's own docs - STYLE.md (how they write: "
                          'greeting, sign-off, tone), AGENT.md (the rules every agent works under), TRIAGE.md, CODING.md, DIGEST.md (the '
-                         'morning brief), the profiles - each read whole as `section` "your doc <name>" (your doc style) - and what each '
+                         'morning brief) - each read whole as `section` "your doc <name>" (your doc style) - and what each '
                          'release changed (help/whats-new). `query`: the words; `section`: one section read whole, as its contents list '
                          'names it. Use it for any "how do I", "what does X do", "what changed" or "why did it" about the app'),
     # THE APP AT WORK (lookups.py, 2026-09-24): which agent is on what, what waits on a yes, the
@@ -656,7 +656,7 @@ READS = {
     'outputs.find':     ('the files agents made on tasks - workbooks, PDFs, documents, charts, pages - each once, its newest version, with '
                          'its task and the link that downloads it. `query`: words of the task or the file ("vendor pricing"); `kind` '
                          'optional: xlsx | pdf | doc | deck | csv | picture | page; `ref` optional: one task. Answer with the link'),
-    'deleted.list':     ('what was removed in the last 30 days and can still come back - reports, workflows, dashboards, rules, profiles '
+    'deleted.list':     ('what was removed in the last 30 days and can still come back - reports, workflows, dashboards, rules '
                          "and Hub posts the owner removed (one the vote took off waits on the Hub's own removed shelf)"),
     'rules.list':       ('the standing filters on the owner\'s mail - queue mutes set with a reason, and the policy rules '
                          '(skip, ignore, escalate...) that decide before any model reads it. `about`: words to narrow it. '
@@ -679,7 +679,7 @@ READS = {
                          '(whatsapp, telegram, outlook...), claude or codex for a slow agent start (is its agent connector installed), '
                          'or none for everything failing. `chat` optional: one WhatsApp chat or group '
                          'by its name - whether it is switched on under Chats, and where its messages went'),
-    'agents.list':      'the agents and profiles, and which brain answers which job',
+    'agents.list':      'the agents, and which brain answers which job',
     'repos.list':       'the repositories a coding agent can work in, and what each one is for',
     'tools.list':       'every tool in one `bucket` (table, task, agents, new, pipe, reports, app, look) - what each does and needs',
     'tools.describe':   'one tool in full - `kind`: its name',

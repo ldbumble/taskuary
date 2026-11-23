@@ -860,59 +860,6 @@ def coding_options(store) -> list[dict]:
     return out
 
 
-# The workers Taskuary ships, besides `coding`. A profile IS an agent row and its rules document is
-# the `doc` row of the same name - which is what the coding profile already was, so this adds no new storage and
-# no migration. `purpose` is the one line triage is shown when it picks; `kind` is deliberately never
-# 'coding', because that is what the coding-specific paths key on.
-DEFAULT_PROFILES = {
-    # researcher and analyst split on WHOSE information it is, not on how hard the question is: the
-    # first pair of purpose lines both read as "find out something", and "look into last month's
-    # spend" could have gone either way (the owner, 2026-09-10: "sharpen analyst vs researcher").
-    'researcher': {'kind': 'research', 'purpose': 'Information from outside - the web, vendors, public filings, documents, what other '
-                                                  'companies do. Reads and reports with sources; queries none of our systems'},
-    'analyst':    {'kind': 'analysis', 'purpose': 'Our own figures - the databases, the ledger, the bank feeds, our reports. '
-                                                  'Queries them, reconciles them, explains what the numbers say'},
-    'coordinator': {'kind': 'coordination', 'purpose': 'meetings, chasing people, scheduling and follow-ups'},
-    'marketer':   {'kind': 'marketing', 'purpose': 'copy, positioning and campaigns - drafts, never sends'},
-    'trader':     {'kind': 'markets', 'purpose': 'markets and positions - proposes, never places an order'},
-    # the GENERAL assistant's own profile, like CODING.md for coding (the owner, 2026-10-14): general work triage gives no other
-    # role runs on ASSISTANT.md - it ran on AGENT.md alone, the one worker with no profile of its own
-    'assistant':  {'kind': 'general', 'purpose': 'general work no other profile owns - writing, planning, follow-ups, looking '
-                                                 'things up in our connections'},
-}
-
-
-def cli_inheritance(cfg: dict) -> dict:
-    """What a new profile inherits of a CLI: nothing. A profile is instructions layered on whichever brain runs its work (the
-    owner, 2026-10-15) - its row takes that brain's command when it is synced (cli_connections.sync). Kept for its callers."""
-    return {}
-
-
-def seed_profiles(cfg: dict) -> list:
-    """Add any shipped profile this install does not have yet to the CONFIG, and never touch one it
-    already has. Returns the names added, so the caller knows whether to save.
-
-    It goes in config.toml rather than straight into the database because that is what the Agents page
-    reads and writes (`put_agent` saves both): a profile seeded only into the database routed work and
-    seeded documents while being invisible and un-editable on the page that exists to configure it.
-    A profile carries no CLI: it runs on the brain its work uses."""
-    have = cfg.setdefault('agents', {})
-    added = []
-    for name, prof in DEFAULT_PROFILES.items():
-        # ...and a shipped purpose still worded as it once shipped takes the wording it ships with now, once: an install seeded before the
-        # design walk (2026-11-20) kept "OUTSIDE information" and "OUR OWN figures" in capitals on its Agents page. One the owner wrote stays
-        if name in have and str(have[name].get('purpose') or '') in SHIPPED_BEFORE.get(name, ()): have[name]['purpose'] = prof['purpose']; added.append(name)
-        if name in have: continue
-        have[name] = {'kind': prof['kind'], 'purpose': prof['purpose']}
-        added.append(name)
-    return added
-SHIPPED_BEFORE = {
-    'researcher': ('OUTSIDE information - the web, vendors, public filings, documents, what other companies do. Reads and reports with sources; '
-                   'queries none of our systems',),
-    'analyst': ('OUR OWN figures - the databases, the ledger, the bank feeds, our reports. Queries them, reconciles them, explains what the '
-                'numbers say',)}
-
-
 def drop_cli_clones(cfg: dict, store) -> list:
     """Remove the coding workers named after a CLI - codex, copilot, devin, opencode... - leaving
     the one coding profile. Returns the names dropped, so the caller knows whether to save.
@@ -920,7 +867,7 @@ def drop_cli_clones(cfg: dict, store) -> list:
     There is ONE coding profile and one rules document; a brain is chosen per session from the CLI
     connections. An older setup minted a coding worker per installed CLI, each pointing at the shared
     document and differing only in which CLI ran it. That minting stopped on 2026-09-14 (adopt_installed's
-    docstring), but the rows it had already written stayed on the Manage profiles page - five
+    docstring), but the rows it had already written stayed on the page that listed them - five
     profiles for one document (the owner, 2026-09-17: one coding document for every CLI).
 
     Only a row that IS such a clone goes: coding kind, named after a known CLI, using the shared
@@ -953,50 +900,20 @@ def drop_cli_clones(cfg: dict, store) -> list:
     return gone
 
 
-def profile_purpose(name: str, prof: dict, kind: str = 'coding') -> str:
-    return str(prof.get('purpose') or DEFAULT_PROFILES.get(name, {}).get('purpose')
-               or ('writes and changes code, in a repository' if kind == 'coding' else '')).strip()
-
-
-def profile_document(store, name: str, prof: dict = None) -> str:
-    """The job owns the instructions; changing its CLI does not create CODEX.md."""
-    row = store.get_agent(name) or {}
-    if prof is None:
-        try: prof = json.loads(row.get('Config') or '{}')
-        except ValueError: prof = {}
-    explicit = str(prof.get('rules_doc') or '').strip()
-    if explicit and re.fullmatch(r'[a-z0-9][a-z0-9_-]*', explicit): return explicit
-    kind = prof.get('kind') or DEFAULT_PROFILES.get(name, {}).get('kind') or row.get('Kind')
-    return 'coding' if kind == 'coding' else name           # the coding rules, CODING.md, shared by every coding profile
-
-
-def profile_template(store, name: str) -> str:
-    """A shipped role, or useful starter instructions for a new named worker."""
-    if not re.fullmatch(r'[a-z0-9][a-z0-9_-]*', name): return ''
-    folder = Path(__file__).parent / 'templates'
-    source = folder / f'{name}.md'
-    if source.is_file(): return source.read_text(encoding='utf-8')
-    row = store.get_agent(name)
-    if not row: return ''
-    try: prof = json.loads(row.get('Config') or '{}')
-    except ValueError: prof = {}
-    purpose = profile_purpose(name, prof, row.get('Kind') or 'coding') or 'Complete the task assigned by the owner.'
-    return (folder / 'profile.md').read_text(encoding='utf-8').replace('PROFILE_NAME', name.upper()).replace('PROFILE_PURPOSE', purpose)
-
-
-def ensure_profile_document(store, name: str) -> str:
-    doc = profile_document(store, name)
-    if not str(store.get_doc(doc) or '').strip():
-        starter = profile_template(store, doc)
-        if starter.strip(): store.save_doc(doc, starter, 'template')
-    return doc
-
-
 # The kinds that mean "works a repository". `cli` is the legacy spelling older databases use.
 CODING_KINDS = ('coding', 'cli')
 # Work that can still be dispatched. An allowlist rather than a list of endings, so a status added
 # later cannot quietly make a repair start rewriting finished tasks (the store also has `dropped`).
 LIVE_STATUSES = ('open', 'in_progress')
+
+
+def ensure_coding(cfg: dict) -> bool:
+    """The coding agent's row - where its checkouts are kept (cwd_map) - is always there: nothing on screen makes or removes one.
+    True when it had to be added, so the caller saves config.toml."""
+    have = cfg.setdefault('agents', {})
+    if any(str(p.get('kind') or 'coding').lower() in CODING_KINDS for p in have.values()): return False
+    have['coding'] = {'kind': 'coding'}
+    return True
 
 
 def coding_role(store) -> str:
@@ -1232,9 +1149,9 @@ def _rename_coding_profile(store) -> None:
     # the store seeds an untouched CODING.md from the template when it opens - BEFORE this runs - so "already there" is not
     # the owner's; only their own edits on either side decide, and an edited CODER.md wins over a fresh template copy
     doc, now = store.get_doc_row('coder'), store.get_doc_row('coding')
-    if doc and (not now or now.get('UpdatedBy') == 'template'):
-        if doc.get('UpdatedBy') == 'template': ensure_profile_document(store, 'coding')     # an untouched copy takes the new template
-        else: store.save_doc('coding', doc['Content'], doc.get('UpdatedBy') or 'owner')
+    # (an untouched copy has nothing to carry: the store seeded CODING.md from the template already)
+    if doc and (not now or now.get('UpdatedBy') == 'template') and doc.get('UpdatedBy') != 'template':
+        store.save_doc('coding', doc['Content'], doc.get('UpdatedBy') or 'owner')
     if doc: store.delete_doc('coder')
     _retire_old_name(store)
 
@@ -1306,20 +1223,11 @@ def brain_command(store, role: str, cfg: dict = None, want: str = None) -> dict:
     return {k: full[k] for k in COMMAND_FIELDS if k in full}
 
 
-def routed_role(store, kind: str, profile: str) -> str:
-    """Which ROLE a verdict lands on - never which brain runs it.
-
-    Coding has exactly one role and triage does not choose it, so whatever it named is discarded:
-    TQ-0588 drew `copilot` and TQ-0586 drew `analyst`, and neither may reach a coding task. The
-    role is still WRITTEN rather than left implied, because `Assignee` does a third job beyond
-    naming a worker and seeding its document: an `agent:` prefix is what puts the row in the pipe's
-    `queued` lane - "handed to an agent, not started yet" (processing_unread, processing_all). An
-    unstamped coding task reads as one that needs the owner.
-
-    General is nobody's: a general agent working a TASK has one goal, to walk the owner through their work, so the
-    task is left unassigned and runs on the assistant (general._prompt) - whatever profile was named, and whatever
-    `default_profile` an older version saved (the owner, 2026-11-04). Profiles are for routines and workflows, which
-    stamp their own (workflows.run, flow.py). `kind: task` leaves the job on the owner's list, so no worker at all."""
+def routed_role(store, kind: str) -> str:
+    """Which ROLE a verdict lands on - never which brain runs it. Coding has exactly one, the coding agent's row (coding_role): it
+    is WRITTEN rather than left implied, because an `agent:` Assignee is what puts the row in the pipe's `queued` lane - "handed to an
+    agent, not started yet" (processing_unread, processing_all). General work is nobody's: it runs on the assistant (general._prompt).
+    `kind: task` leaves the job on the owner's list, so no worker at all."""
     return coding_role(store) if str(kind or '') == 'coding' else ''
 
 

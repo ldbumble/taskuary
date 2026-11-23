@@ -45,30 +45,20 @@ class SubagentRuleTests(unittest.TestCase):
 class BudgetTests(unittest.TestCase):
     def test_every_shipped_document_fits_under_what_its_reader_takes(self):
         s = MemoryStore()
-        for name in ('soul', 'job', 'style', 'counsel', 'agent', 'coding', 'researcher', 'analyst', 'assistant', 'ap'):
-            lim = doclimits.limit(s, name) or doclimits.limit(s, 'coding')               # a shipped role is a profile document
+        for name in ('soul', 'job', 'style', 'counsel', 'agent'):
+            lim = doclimits.limit(s, name)
             text = (T / f'{name}.md').read_text(encoding='utf-8')
             n = len(terminal.flatten_rules(text) if lim['flat'] else text)
             self.assertLess(n, lim['chars'] * .9, f'{name}: {n} of {lim["chars"]} - leave room for an edit')
 
     def test_one_number_per_document_and_the_prompts_cut_with_it(self):
         s = MemoryStore()
-        self.assertEqual(doclimits.limit(s, 'coding')['chars'], terminal.DOC_CHARS)
+        self.assertIsNone(doclimits.limit(s, 'coding'))                                   # no prompt carries CODING.md: nothing cuts it
         self.assertEqual(doclimits.limit(s, 'agent')['chars'], terminal.AGENT_CHARS)
         self.assertEqual(doclimits.limit(s, 'soul')['chars'], triage.SOUL_CHARS)
         self.assertIsNone(doclimits.limit(s, 'triage'))                                   # triage's whole system prompt: nothing cuts it
         self.assertEqual(doclimits.limit(s, 'counsel')['past'], doclimits.WHOLE)          # warned, never sliced (PW-258)
-        self.assertEqual(doclimits.limit(s, 'coding')['past'], doclimits.CUT)
         self.assertGreater(terminal.DOC_CHARS, 6400)
-
-    def test_a_general_worker_gets_agent_md_and_its_profile_whole(self):
-        s = MemoryStore()
-        s.save_doc('researcher', '# Researcher\n' + 'Read the sources first. ' * 250 + 'LAST LINE OF THE PROFILE.', 'owner')
-        tid = s.create_task({'Title': 'Compare two vendors', 'Kind': 'general', 'Status': 'open', 'Assignee': 'agent:researcher'}, 'o')
-        with mock.patch.object(general, 'assigned_role', return_value='researcher'):
-            system = general._prompt(s, tid)[0]
-        self.assertIn('LAST LINE OF THE PROFILE.', system)                                 # ~6,000 characters: cut at 4,000 before
-        self.assertIn(brief.rules(s, 'agent', 10**9)[-80:], system)                        # AGENT.md's own end
 
     def test_the_seed_ceiling_leaves_room_on_a_windows_command_line(self):
         # CreateProcessW takes 32,767 UTF-16 units, NUL included; the exe, the flags and list2cmdline's escapes share it with the seed
@@ -82,7 +72,7 @@ class ApiTests(unittest.TestCase):
         with mock.patch.object(server, 'store', s):
             c = TestClient(server.app)
             got = {n: c.get(f'/api/doc/{n}').json()['limit'] for n in ('coding', 'agent', 'soul', 'job', 'style', 'learned', 'triage')}
-        self.assertEqual(got['coding'], {'chars': terminal.DOC_CHARS, 'flat': True, 'reader': 'the agent', 'past': doclimits.CUT})
+        self.assertIsNone(got['coding'])
         self.assertEqual(got['agent']['chars'], terminal.AGENT_CHARS)
         self.assertEqual(got['soul']['chars'], triage.SOUL_CHARS); self.assertFalse(got['soul']['flat'])
         self.assertEqual(got['learned']['past'], doclimits.SECTIONS)

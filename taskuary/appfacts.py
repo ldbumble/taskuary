@@ -80,8 +80,10 @@ def connections(store) -> list:
 
 
 def agents(store) -> list:
+    "The coding agent's row - the one agent with a row of its own; general work runs on the assistant."
+    from .agents import CODING_KINDS
     return [{'name': a['Name'], 'kind': a.get('Kind') or '', 'active': bool(a.get('Active', 1))}
-            for a in store.list_agents(active_only=False)]
+            for a in store.list_agents(active_only=False) if str(a.get('Kind') or '').lower() in CODING_KINDS]
 
 
 def brains(store) -> list:

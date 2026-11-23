@@ -91,7 +91,7 @@
       "label": "AI that sorts your mail",
       "type": "brain",
       "desc": "Which AI reads and classifies inbound messages.",
-      "help": "TWO BRAINS: a small, fast cloud model (Anthropic / OpenAI / Azure OpenAI) classifies each message in under a second for a fraction of a cent, while your CLI agent — the expensive, capable one — is saved for actually working tasks.\n\nONE BRAIN, TWO GEARS also works well: pick a CLI agent here and set its 'light model' (Docs → Profiles → Manage profiles → Edit) — triage, drafts, summaries and the digest then run on the cheap fast tier (haiku, gemini-flash…) while coding sessions keep the agent's main model. No second API key, one bill.\n\nLeft blank, it is your default brain on its light gear (haiku for Claude) - never whichever connector was added first. Obvious automated noise is filtered by cheap heuristics before any AI is called either way."
+      "help": "TWO BRAINS: a small, fast cloud model (Anthropic / OpenAI / Azure OpenAI) classifies each message in under a second for a fraction of a cent, while your CLI agent — the expensive, capable one — is saved for actually working tasks.\n\nONE BRAIN, TWO GEARS also works well: pick a CLI agent here and set its 'light model' (Connections → AI CLI agents, on its card) — triage, drafts, summaries and the digest then run on the cheap fast tier (haiku, gemini-flash…) while coding sessions keep the agent's main model. No second API key, one bill.\n\nLeft blank, it is your default brain on its light gear (haiku for Claude) - never whichever connector was added first. Obvious automated noise is filtered by cheap heuristics before any AI is called either way."
     },
     "triage_backup_ai": {
       "group": "How mail is sorted",
@@ -150,7 +150,7 @@
       "label": "AI for Taskuary",
       "type": "brain",
       "desc": "Which AI speaks in Taskuary's chat here and in your phone chat - Taskuary's own brain. auto = your default coding agent, on its faster, lighter model.",
-      "help": "THREE DEFAULTS, side by side in How mail is sorted: the triage brain, the default coding CLI, and this one.\n\nA CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent's own 'light model' from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks."
+      "help": "THREE DEFAULTS, side by side in How mail is sorted: the triage brain, the default coding CLI, and this one.\n\nA CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the CLI's own 'light model' from its card under Connections) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks."
     },
     "concierge_model": {
       "group": "How mail is sorted",
@@ -249,7 +249,7 @@
       "group": "How mail is sorted",
       "label": "Default AI for agents",
       "type": "text",
-      "desc": "Which AI program runs an agent's work when its role does not name one. A role (coding, researcher, analyst) decides the instructions an agent starts with; this decides which program follows them. Blank = each profile's own program.",
+      "desc": "Which AI program runs an agent's work. Blank = the one set up first that starts here.",
       "help": "Set from the cards above in normal use — this is the raw value they write. Naming a brain here is what stops a role name being read as a CLI name, which is how TQ-0588's coding work was once routed to Copilot.\n\nA role and a brain are different questions and one name cannot answer both."
     },
     "backup_brains": {
@@ -263,15 +263,15 @@
       "group": "How mail is sorted",
       "label": "A different AI for one role",
       "type": "text",
-      "desc": "For a role that should run on a different AI from the default above. Written as JSON, e.g. {\"researcher\": \"codex\"}. Blank (the default) means every role uses the default.",
-      "help": "The escape hatch for 'the analyst should run on codex but everything else on claude'. An unknown role name is ignored rather than guessed at. Edited here because it is rare enough not to earn a picker."
+      "desc": "For an agent that should run on a different AI from the default above. Written as JSON, e.g. {\"coding\": \"codex\"}. Blank (the default) means every agent uses the default.",
+      "help": "The escape hatch for 'coding should run on codex but everything else on claude'. An unknown name is ignored rather than guessed at. Edited here because it is rare enough not to earn a picker."
     },
     "default_agent": {
       "group": "How mail is sorted",
       "label": "Default coding CLI",
       "type": "agent",
       "desc": "The CLI agent that works tasks when nothing names one.",
-      "help": "Start session, Send to coding agent and auto-dispatch all use this agent unless you pick another in the moment; every agent picker lists it first. The roster itself lives under Docs → Profiles → Manage profiles, where the default row wears the star.\n\nGitHub-specific permissions (may agents open issues? push?) are on the GitHub connector card, because they are decisions about how your team uses GitHub, not about Taskuary."
+      "help": "Start session, Send to coding agent and auto-dispatch all use this agent unless you pick another in the moment; every agent picker lists it first.\n\nGitHub-specific permissions (may agents open issues? push?) are on the GitHub connector card, because they are decisions about how your team uses GitHub, not about Taskuary."
     },
     "acp_cli": {
       "group": "Agent permissions",

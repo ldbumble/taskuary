@@ -673,18 +673,6 @@ def walk_pick(store, task: dict = None) -> str:
     return next((f'cli:{k}' for k in hub_agents.ready_brains(store)), '')
 
 
-def assigned_role(store, task: dict) -> str:
-    """The ROLE triage handed this task - 'analyst' from 'agent:analyst'.
-
-    It chooses the rules document the session is seeded with. It does NOT choose the executable:
-    a role and a brain are different questions, and answering both with one name is what routed
-    TQ-0588's coding work to Copilot (the 2026-09-16 spec). This used to return `cli:<name>`, so
-    naming a worker named a CLI."""
-    who = str((task or {}).get('Assignee') or '')
-    name = who.split(':', 1)[1].strip() if who.startswith('agent:') else ''
-    return name if name and store.get_agent(name) else ''
-
-
 def _unset_gateway(store, pick: str) -> bool:
     "A `connector:<id>` pick on a PICKED_ONLY card that no brain setting names now."
     from . import agents

@@ -1,4 +1,4 @@
-"""An AP rep should not have to assemble a worker, two playbooks, a route and a workflow by hand.
+"""An AP rep should not have to assemble two playbooks, a route and a workflow by hand.
 
 roles.apply lays them out in one go; these pin what it may and may not touch - above all that
 applying twice changes nothing, and that nothing the owner already chose is overwritten.
@@ -27,17 +27,11 @@ class RoleTests(unittest.TestCase):
             p.start(); self.addCleanup(p.stop)
         self.addCleanup(self.dir.cleanup)
 
-    def test_ap_lays_out_the_worker_its_playbooks_and_an_off_workflow_and_routes_no_mail(self):
+    def test_ap_lays_out_its_playbooks_and_an_off_workflow_and_routes_no_mail(self):
         s, cfg = setup()
         s.save_connector({'Type': 'intacct', 'Name': 'Intacct', 'Active': 1}, 'o')
-        r = roles.apply(s, cfg, 'ap', 'https://portal.example/bills')
-        a = s.get_agent('ap')
-        self.assertEqual(a['Kind'], 'accounts-payable')
-        # a profile is for routines and workflows (the owner, 2026-11-04): the worker is not offered the mail
-        self.assertFalse(json.loads(a['Config'])['triage_enabled'])
-        self.assertNotIn('cmd', cfg['agents']['ap'])                    # a profile carries no CLI...
-        self.assertEqual(json.loads(a['Config'])['cmd'], 'claude')      # ...its row runs on the default brain: runnable on day one
-        self.assertIn('vendor asks where their money is', s.get_doc('ap'))
+        r = roles.apply(s, 'ap', 'https://portal.example/bills')
+        self.assertIsNone(s.get_agent('ap')); self.assertNotIn('ap', cfg['agents'])     # no worker row: profiles are gone (2026-11-23)
         self.assertEqual(sorted(r['playbooks_added']), ['portal-bill-approvals', 'vendor-payment-inquiry'])
         self.assertEqual(s.get_setting('default_profile') or '', '')
         for k in ('default_profile', 'default_was', 'mail_routed', 'on_roster'): self.assertNotIn(k, r)
@@ -52,21 +46,19 @@ class RoleTests(unittest.TestCase):
     def test_applying_twice_changes_nothing_and_never_overrides_the_owner(self):
         s, cfg = setup()
         s.save_connector({'Type': 'intacct', 'Name': 'Intacct', 'Active': 1, 'Scope': 'write'}, 'o')
-        first = roles.apply(s, cfg, 'ap')
+        first = roles.apply(s, 'ap')
         self.assertEqual(first['ledger_narrowed'], '')                   # the owner chose write
         self.assertEqual(s.get_connector_by_type('intacct')['Scope'], 'write')
-        s.save_doc('ap', 'my own rules', 'owner')
         (Path(self.dir.name) / 'vendor-payment-inquiry.md').write_text('# mine\nwhen: x\n', encoding='utf-8')
-        again = roles.apply(s, cfg, 'ap')
-        self.assertFalse(again['profile_added']); self.assertEqual(again['playbooks_added'], [])
+        again = roles.apply(s, 'ap')
+        self.assertEqual(again['playbooks_added'], [])
         self.assertEqual(again['workflow_id'], first['workflow_id'])
         self.assertEqual(len([x for x in s.list_sources(active_only=False) if x.get('Address') == roles.ROLES['ap']['workflow']['title']]), 1)
-        self.assertEqual(s.get_doc('ap'), 'my own rules')
         self.assertIn('# mine', playbooks.read('vendor-payment-inquiry'))
 
     def test_an_unknown_role_is_refused(self):
         s, cfg = setup()
-        with self.assertRaises(ValueError): roles.apply(s, cfg, 'astronaut')
+        with self.assertRaises(ValueError): roles.apply(s, 'astronaut')
 
     def test_the_shipped_playbooks_parse_reach_the_ledger_and_are_not_about_code(self):
         for slug in roles.ROLES['ap']['playbooks']:
@@ -84,33 +76,30 @@ class RoleTests(unittest.TestCase):
 class DefaultProfileTests(unittest.TestCase):
     def test_general_work_goes_to_the_assistant(self):
         """A general agent working a TASK walks the owner through their work (the owner, 2026-11-04): applying a
-        role adds its worker for routines and sets no default for the mail, and an old default routes nothing."""
+        role sets no default for the mail, and an old default routes nothing."""
         s, cfg = setup()
         with mock.patch.object(playbooks, 'folder', return_value=Path(tempfile.mkdtemp())), mock.patch.object(config, 'save'):
-            out = roles.apply(s, cfg, 'ap')
+            out = roles.apply(s, 'ap')
         self.assertFalse(s.get_setting('default_profile'))
         self.assertNotIn('default_profile', out)
-        self.assertEqual(agents.routed_role(s, 'general', ''), '')
-        self.assertEqual(agents.routed_role(s, 'general', 'ap'), '')
+        self.assertEqual(agents.routed_role(s, 'general'), '')
         s.set_setting('default_profile', 'ap', 'o')                       # one an older version wrote
-        self.assertEqual(agents.routed_role(s, 'general', ''), '')
-        self.assertEqual(agents.routed_role(s, 'coding', ''), 'coding')
-        self.assertEqual(agents.routed_role(s, 'task', ''), '')           # the owner's own list stays theirs
+        self.assertEqual(agents.routed_role(s, 'general'), '')
+        self.assertEqual(agents.routed_role(s, 'coding'), 'coding')
+        self.assertEqual(agents.routed_role(s, 'task'), '')           # the owner's own list stays theirs
 
 
-class WorkflowRunsAsItsWorkerTests(unittest.TestCase):
-    def run_it(self, s, agent):
+class AWorkflowRunNamesNoWorkerTests(unittest.TestCase):
+    def test_a_routine_that_still_names_an_agent_runs_unassigned(self):
+        """A routine saved naming a worker (`agent`) from before profiles went is simply that routine: its run task carries no
+        `agent:` stamp, and general work runs on the assistant (2026-11-23)."""
+        s, _ = setup()
         sid = s.save_source({'Channel': 'report', 'Address': 'Bills', 'Owner': 'o', 'Active': 1,
-                             'ConfigJson': json.dumps({'type': 'agent', 'title': 'Bills', 'agent': agent, 'browser': True, 'prompt': 'go'})}, 'o')
+                             'ConfigJson': json.dumps({'type': 'agent', 'title': 'Bills', 'agent': 'ap', 'browser': True, 'prompt': 'go'})}, 'o')
         from taskuary import ingest
         with mock.patch.object(ingest, '_auto_general'), mock.patch.object(ingest, '_auto_code'):
-            return s.get_task(workflows.run(s, s.get_source(sid))['task_id'])
-
-    def test_a_general_worker_is_stamped_and_a_coding_name_is_not(self):
-        s, _ = setup()
-        s.upsert_agent('ap', 'accounts-payable', 'cli', '{}')
-        self.assertEqual(self.run_it(s, 'ap')['Assignee'], 'agent:ap')
-        self.assertFalse(self.run_it(s, 'coding').get('Assignee'))
+            t = s.get_task(workflows.run(s, s.get_source(sid))['task_id'])
+        self.assertFalse(t.get('Assignee'))
 
 
 class ANestedBillIsProposedTests(unittest.TestCase):
@@ -199,7 +188,8 @@ class RolesApiTests(unittest.TestCase):
             ap = next(r for r in c.get('/api/roles').json()['data'] if r['name'] == 'ap')
             self.assertFalse(ap['applied'])
             got = c.post('/api/roles/ap', json={'portal': '', 'route_mail': True}).json()     # an older page's field moves no mail
-            self.assertTrue(got['profile_added']); self.assertEqual(s.get_setting('default_profile') or '', '')
+            self.assertEqual(sorted(got['playbooks_added']), ['portal-bill-approvals', 'vendor-payment-inquiry'])
+            self.assertNotIn('profile_added', got); self.assertEqual(s.get_setting('default_profile') or '', '')
             after = next(r for r in c.get('/api/roles').json()['data'] if r['name'] == 'ap')
             self.assertTrue(after['applied']); self.assertNotIn('is_default', after)
             self.assertEqual(c.post('/api/roles/nope', json={}).status_code, 422)
@@ -207,8 +197,8 @@ class RolesApiTests(unittest.TestCase):
 
 class TheAssistantSetsARoleUpTests(unittest.TestCase):
     """The owner, 2026-10-08: "the assistant should be able to walk a user through setting up new role and work". The chat
-    asks its questions, then puts the whole set-up on ONE card; the yes runs the Profiles page's own road. That is the phone's road
-    now: on the desk the words open Profiles, where its own Set up is pressed (the owner, 2026-10-19 - test_the_desk_opens_profiles)."""
+    asks its questions, then puts the whole set-up on ONE card; the yes runs the Playbooks shelf's own road. That is the phone's road
+    now: on the desk the words open Playbooks, where its own Set up is pressed (the owner, 2026-10-19 - test_the_desk_opens_playbooks)."""
     def setUp(self):
         from taskuary import concierge
         tok = concierge.DELIVERY.set(concierge.PHONE); self.addCleanup(concierge.DELIVERY.reset, tok)
@@ -228,20 +218,20 @@ class TheAssistantSetsARoleUpTests(unittest.TestCase):
         with mock.patch.object(server, 'store', s), mock.patch.object(server, 'cfg', {**server.cfg, **cfg}),              mock.patch.object(terminal, 'live_sessions', return_value=[]):
             return TestClient(server.app).post(f"/api/operations/{p['id']}/execute", json={'version': p['version']}).json()
 
-    def test_the_desk_opens_profiles_and_sets_nothing_up(self):
+    def test_the_desk_opens_playbooks_and_sets_nothing_up(self):
         from taskuary import concierge
         s, _ = setup()
         with concierge.delivering(concierge.DESK): out = self.card(s, {'role': 'ap'})
-        self.assertNotIn('proposal', out); self.assertEqual(out['open'], '#profiles'); self.assertIsNone(s.get_agent('ap'))
+        self.assertNotIn('proposal', out); self.assertEqual(out['open'], '#report=playbooks'); self.assertIsNone(playbooks.read('vendor-payment-inquiry'))
 
-    def test_it_sets_up_the_worker_and_the_job_and_leaves_the_mail_alone(self):
+    def test_it_sets_up_the_playbooks_and_the_job_and_leaves_the_mail_alone(self):
         s, cfg = setup()
         p = self.card(s, {'role': 'ap', 'portal': 'https://portal.example'})['proposal']
         self.assertEqual((p['kind'], p['label'], p['targetKind']), ('role.apply', 'Set it up', 'role'))
-        self.assertIsNone(s.get_agent('ap'))                                   # nothing before the yes
+        self.assertIsNone(playbooks.read('vendor-payment-inquiry'))           # nothing before the yes
         r = self.run_card(s, cfg, p)
         self.assertEqual(r['status'], 'done')
-        self.assertFalse(json.loads(s.get_agent('ap')['Config'])['triage_enabled'])
+        self.assertIsNotNone(playbooks.read('vendor-payment-inquiry')); self.assertIsNone(s.get_agent('ap'))
         self.assertEqual(s.get_setting('default_profile') or '', '')
         self.assertIn('https://portal.example', json.loads(s.get_source(r['outcome']['workflow_id'])['ConfigJson'])['prompt'])
         from taskuary import concierge
@@ -285,18 +275,18 @@ class TheAssistantSetsARoleUpTests(unittest.TestCase):
         for gone in ('2.', 'Should your own', 'non-coding mail', 'trying it out'): self.assertNotIn(gone, first['say'])
         p = turn('portal.example/bills')['proposal']
         self.assertEqual((p['kind'], p['params']), ('role.apply', {'role': 'ap', 'portal': 'https://portal.example/bills'}))
-        for line in ('Worker: AP.md', 'created switched off'): self.assertIn(line, p['say'])
+        self.assertIn('created switched off', p['say']); self.assertNotIn('Worker', p['say'])
         self.assertNotIn('Your mail', p['say'])
         self.assertNotIn('route_mail', concierge.ROLE_READ_SYSTEM)
         self.assertEqual(self.run_card(s, cfg, p)['status'], 'done')
         self.assertEqual(s.get_setting('default_profile') or '', '')
 
-    def test_a_worker_already_here_is_left_as_it_is_and_promised_no_mail(self):
+    def test_a_role_already_here_is_said_so_and_promised_no_mail(self):
         from taskuary import concierge
         s, cfg = setup()
-        s.upsert_agent('ap', 'accounts-payable', 'cli', json.dumps({'triage_enabled': True, 'purpose': 'AP work'}))
-        o = roles.apply(s, cfg, 'ap')
-        self.assertFalse(o['profile_added']); self.assertTrue(json.loads(s.get_agent('ap')['Config'])['triage_enabled'])   # the owner's own
+        roles.apply(s, 'ap')
+        o = roles.apply(s, 'ap')
+        self.assertEqual(o['playbooks_added'], [])
         said = concierge._outcome_line('role.apply', {}, o)
         self.assertIn('already here', said); self.assertNotIn('mail', said); self.assertNotIn('reach it', said)
 
@@ -317,9 +307,8 @@ class RunNowOpensTheWorkflowsTaskTests(unittest.TestCase):
         from fastapi.testclient import TestClient
         from taskuary import ingest, server
         s, _ = setup()
-        s.upsert_agent('ap', 'accounts-payable', 'cli', '{}')
         sid = s.save_source({'Channel': 'report', 'Address': 'Bills', 'Owner': 'o', 'Active': 0,
-                             'ConfigJson': json.dumps({'type': 'agent', 'title': 'Bills', 'agent': 'ap', 'browser': True, 'prompt': 'go'})}, 'o')
+                             'ConfigJson': json.dumps({'type': 'agent', 'title': 'Bills', 'browser': True, 'prompt': 'go'})}, 'o')
         started, gate = [], threading.Event()
         def slow_start(store, tid, text=None): gate.wait(5); started.append(tid)
         with mock.patch.object(server, 'store', s), mock.patch.object(ingest, '_auto_general', side_effect=slow_start):
@@ -328,7 +317,7 @@ class RunNowOpensTheWorkflowsTaskTests(unittest.TestCase):
             gate.set()
         t = s.get_task(r['task_id'])
         self.assertEqual((r['workflow'], r['ref'], r['link']), (True, f"TQ-{r['task_id']:04d}", f"#task={r['task_id']}"))
-        self.assertEqual((t['Assignee'], t['Tags']), ('agent:ap', 'needs:browser,workflow-trigger:manual'))   # ...and who started it
+        self.assertEqual(t['Tags'], 'needs:browser,workflow-trigger:manual')   # ...and who started it
         for _ in range(50):
             if started: break
             threading.Event().wait(0.05)

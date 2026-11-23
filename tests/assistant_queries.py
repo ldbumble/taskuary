@@ -60,7 +60,6 @@ CASES = [
     Q('navigation', 'open the invoice 88213 task', 'todo', [c('tasks.list', contains='invoice 88213'), f'That is [{T4}](#task=4).'], 'read:tasks.list', freq=4),
     Q('navigation', "pull up Marcus's month-end close", None, [c('tasks.list', contains='month-end close'), f'That is [{T1}](#task=1).'], 'read:tasks.list', freq=4),
     Q('navigation', 'where do I set up the AI?', None, 'Under [Connections → AI](#settings=config&group=How%20mail%20is%20sorted).', 'link:#settings', tools=('pages',), freq=3),
-    Q('navigation', 'open the agent profiles', None, 'Here: [Profiles](#profiles).', 'link:#profiles', tools=('pages',), freq=2),
     Q('navigation', 'show me the workflows', None, 'Here: [Workflows](#report=workflows).', 'link:#report=workflows', tools=('pages',), freq=2),
     Q('navigation', 'go to reports', None, 'Here: [Reports](#report=reports).', 'link:#report=reports', tools=('pages',), freq=4),
     Q('navigation', 'show me my dashboards', None, 'Here: [Dashboards](#report=dashboards).', 'link:#report=dashboards', tools=('pages',), freq=3),
@@ -290,7 +289,6 @@ BRING_UP = [
     ('my SOUL doc', 'soul', '#about=docs&doc=soul'),
     ('what it learned', 'learned', '#about=memory'),     # About you's Memory since 2026-11-06
     ('the audit log', 'audit log', '#settings=audit'),
-    ('agent profiles', 'profiles', '#profiles'),
     ('the mail rules', 'mail rules', '#settings=policies'),
     ('my phone settings', 'phone & chats', '#settings=phone'),
     ('the agent channels', 'agent channels', '#settings=phone'),
@@ -464,7 +462,7 @@ POWERS = [
     Q('people', 'that is wrong about Gail', None, [c('memory.about', who='Gail'), 'Nothing in the memory about Gail yet, so nothing to take out.'],
       'read:memory.about', freq=2),
     Q('app', 'set me up as an AP rep', None, c('role.apply', role='ap_rep'),
-      'open:#profiles', freq=2, note="on the desk a role is Profiles' own Set up - its questions are asked there"),
+      'open:#report=playbooks', freq=2, note="on the desk a role is the Playbooks shelf's own Set up - its questions are asked there"),
 ]
 CASES += POWERS
 

@@ -15,11 +15,11 @@ from taskuary.store import MemoryStore
 
 
 def _home(conns=(), tests=None, settings=None, connector=None):
-    """A home with these CLI connections (and their last Test), the shipped profiles synced before any brain was chosen - as a
-    fresh start leaves them - and optionally one API connector holding a key."""
+    """A home with these CLI connections (and their last Test), the coding agent's row and an older install's role row (one that
+    names no CLI) synced before any brain was chosen, and optionally one API connector holding a key."""
     s = MemoryStore()
     cfg = {**config.load(), 'cli_connections': {k: clic.with_defaults({'cmd': k}) for k in conns},
-           'agents': {n: {'kind': p['kind'], 'purpose': p['purpose']} for n, p in agents.DEFAULT_PROFILES.items()}}
+           'agents': {'coding': {'kind': 'coding'}, 'researcher': {'kind': 'research'}}}
     for k, ok in (tests or {}).items(): agents.record_cli_test(s, k, ok)
     for k, v in (settings or {}).items(): s.set_setting(k, v, 'owner')
     if connector:

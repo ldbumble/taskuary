@@ -1,6 +1,6 @@
 """What triage decided, what the owner made of it, and what the next verdict is told.
 
-Triage answers about ten things - intent, kind, title, summary, checklist, profile, playbook,
+Triage answers about ten things - intent, kind, title, summary, checklist, playbook,
 repository, and a chat line's relationship - and until now exactly ONE of them ever learned from
 being corrected. Picking a repository writes a weighted, task-keyed edge into the project graph
 (projects.learn_task_repository): one owner choice is a visible hypothesis at .72, two independent
@@ -17,7 +17,7 @@ Two halves, and the first is what makes the second possible:
   rewritten summary teaches nothing if nothing remembers what it was rewritten from.
 - routing_fact keeps the LESSON, keyed to a signal the NEXT message can carry.
 
-What a correction is worth depends on the field. `kind`, `profile` and `playbook` are ROUTING - a
+What a correction is worth depends on the field. `kind` and `playbook` are ROUTING - a
 correction generalises straight to the next message like it. `system` is the one the owner types
 ("this is ADP, not ledger"): the fact that was missing entirely, because the only map triage had
 was a list of git repositories. Title, summary and checklist are deliberately NOT here - correcting
@@ -28,7 +28,7 @@ from loguru import logger
 from .projects import CONTEXT_CONFIDENCE, PUBLIC_MAIL, ROUTE_CONFIDENCE
 
 # ...and how hard the work is and what data it carries (the router's judgements, 2026-10-25): a correction says it of the next one like it
-FIELDS = ('kind', 'profile', 'playbook', 'system', 'difficulty', 'data_class')
+FIELDS = ('kind', 'playbook', 'system', 'difficulty', 'data_class')
 # A chat's "subject" is the ROOM ("Teams chat with Gail Moreno"), so a topic key made from it
 # says "chats with Robin", which is wrong in both directions: it would not fire on the same ask
 # from anyone else, and it would damp a real bug she reports tomorrow. Chat learns by sender only.
@@ -153,9 +153,6 @@ def lesson(store, task_id: int, field: str, value: str, belongs_to: str = None, 
                 else f'the owner made it {value}') + f' - {what}'
         # a goal let go is not a move to the owner's list: it was one thing to do, not an open-ended ask (spec 2026-10-12)
         if value == 'task' and v.get('goal'): line = 'triage called it a goal and the owner said it was one thing to do, not a goal'
-    elif field == 'profile':
-        line = (f'triage said {was} would work it and the owner handed it to the {value} agent instead' if was
-                else f'the owner put the {value} agent on it')
     elif field == 'repository':
         line = (f'triage chose {was} and the owner moved the work to {value}' if was
                 else f'the owner put the work in {value}')

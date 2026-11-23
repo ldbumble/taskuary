@@ -46,9 +46,6 @@ def test_command_only_claude_gets_headless_defaults_on_migration_and_legacy_crea
     cfg['cli_connections']['claude'] = {'cmd': 'claude'}
     assert cli_connections.migrate(cfg)  # repair configs already split by the earlier migration
     assert '--dangerously-skip-permissions' in cli_connections.resolve(cfg, cfg['agents']['coding'])['args']
-    fresh = {}
-    cli_connections.set_profile(fresh, MemoryStore(), 'coding', {'cmd': 'claude'})
-    assert '--dangerously-skip-permissions' in fresh['cli_connections']['claude']['args']
 
 
 def test_saved_custom_or_explicitly_empty_arguments_are_preserved():
@@ -67,13 +64,6 @@ def test_connection_edits_reach_all_profiles_and_provider_switch_is_independent(
     cli_connections.sync(cfg, store)
     for name in ('coding', 'researcher', 'analyst'):
         assert json.loads(store.get_agent(name)['Config'])['args'] == ['-p', '--new-shared-flag']
-    cli_connections.set_profile(cfg, store, 'researcher', {'provider': 'cli:codex', 'model': 'test-model'})
-    cli_connections.sync(cfg, store, 'researcher')
-    research = json.loads(store.get_agent('researcher')['Config'])
-    assert research['cmd'] == 'codex' and research['args'] == ['exec'] and research['model'] == 'test-model'
-    assert research['purpose'] == 'Research public sources'
-    assert 'light_model' not in research
-    assert json.loads(store.get_agent('analyst')['Config'])['model'] == 'opus'
     assert json.loads(store.get_agent('coding')['Config'])['cmd'] == 'claude'
 
 
@@ -106,9 +96,6 @@ def test_connection_api_has_one_row_per_cli_and_validates_references():
         assert c.put('/api/cli/connections/claude-copy', json={'cmd': 'claude'}).status_code == 409
         assert c.put('/api/cli/connections/claude', json={'cmd': 'claude', 'args': ['-p', '--shared']}).status_code == 200
         assert json.loads(store.get_agent('analyst')['Config'])['args'] == ['-p', '--shared']
-        before = copy.deepcopy(cfg)
-        assert c.put('/api/agents/researcher', json={'provider': 'cli:missing'}).status_code == 422
-        assert cfg == before
         assert c.delete('/api/cli/connections/claude').status_code == 409
         assert c.put('/api/cli/connections/custom', json={'cmd': 'custom', 'args': []}).status_code == 200
         assert store.get_agent('custom') is None

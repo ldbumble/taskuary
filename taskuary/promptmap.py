@@ -86,7 +86,6 @@ def _blocks_coding(store, tid: int) -> list:
             ("this source's standing instruction", 'the connector card (GitHub PR/issue rules, or task_prompt)',
              source_rules(store, m) if m else ''),
             ('your document', 'SOUL.md (flattened, addresses stripped)', ' '.join((store.doc('soul') or '').split())[:600]),
-            ('the coding rules', 'CODING.md (flattened)', terminal.rules_text(store)[:600]),
             ('standing notes for this thread', 'LEARNED.md lines about it (agents.memory_block)', memory_block(store, msgs)),
             ('what to do, and what not to go looking for', 'terminal.seed_text (code)', 'see the whole prompt above')]
     return [b for b in out if b[0] is None or b[2]]

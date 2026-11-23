@@ -1764,8 +1764,7 @@ class SQLiteStore:
             self.cx.execute("UPDATE doc SET UpdatedBy='template' WHERE UpdatedBy='startup' AND Name<>'soul'")
             if self.cx.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory'").fetchone():   # an older install, not yet drained
                 self._heal_notes()
-            for name in ('soul', 'job', 'agent', 'coding', 'digest', 'learned', 'triage', 'style', 'counsel',
-                         'researcher', 'analyst', 'coordinator', 'marketer', 'trader', 'assistant'):
+            for name in OWNER_DOCS:
                 f = Path(__file__).parent / 'templates' / f'{name}.md'
                 if f.exists():
                     txt = f.read_text(encoding='utf-8')

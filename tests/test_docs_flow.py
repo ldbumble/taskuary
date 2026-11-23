@@ -172,3 +172,25 @@ class BlankDocsHeal(unittest.TestCase):
         r = c.put('/api/doc/coding', json={'content': ''})
         self.assertTrue(r.json().get('restored'))
         self.assertIn('CODING.md', server.store.get_doc('coding'))
+
+
+class LearnedIsEditedWithTheName(unittest.TestCase):
+    """The setup sweep, 2026-10-28: LEARNED.md's editor showed {{owner_first}} raw - it is drawn with the name, saved with the token."""
+
+    def test_learned_is_edited_with_the_name_and_saved_with_the_token(self):
+        from unittest import mock
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s = MemoryStore()
+        with mock.patch.object(server, 'store', s):
+            c = TestClient(server.app)
+            s.set_setting('owner_name', 'Alex Doyle', 'owner')
+            s.save_doc('learned', '## Your people\n- {{owner_first}} answers Erin Blake the same day', 'owner')
+            got = c.get('/api/doc/learned').json()['content']
+            self.assertIn('- Alex answers Erin Blake', got); self.assertNotIn('{{', got)
+            c.put('/api/doc/learned', json={'content': got + '\n- Alex reads the digest first'})
+            self.assertEqual(s.get_doc('learned').count('{{owner_first}}'), 2, s.get_doc('learned'))
+            self.assertNotIn('Alex', s.get_doc('learned'))
+            # ...another document keeps its tokens as written
+            s.save_doc('style', 'Ask {{owner_first}} first.', 'owner')
+            self.assertEqual(c.get('/api/doc/style').json()['content'], 'Ask {{owner_first}} first.')

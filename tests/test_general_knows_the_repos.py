@@ -53,15 +53,3 @@ class StrangerGetsNoBackgroundTests(unittest.TestCase):
         system = general._prompt(s, tid)[0]
         for known in ('month-end close', 'C:/src/ledger', 'ABOUT THE OWNER'): self.assertIn(known, system, known)
         self.assertIn('month-end close', context.build(s, tid))
-
-
-class AssistantProfileTests(unittest.TestCase):
-    """The general assistant has a profile of its own, like the coding agent (the owner, 2026-10-14): SOUL/JOB, then AGENT.md, then
-    ASSISTANT.md - or the profile triage picked. It ran on AGENT.md alone when triage named no role."""
-
-
-    def test_it_is_a_shipped_profile(self):
-        from taskuary import agents
-        self.assertEqual(agents.DEFAULT_PROFILES['assistant']['kind'], 'general')
-        cfg = {'agents': {'coding': {'cmd': 'claude', 'kind': 'coding'}}}
-        self.assertIn('assistant', agents.seed_profiles(cfg))

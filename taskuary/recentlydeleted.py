@@ -3,10 +3,10 @@ a connection's Remove, which since 2026-11-05 asks once, saying what removing it
 
 Remove asked "Delete report?" with Cancel first, Not ours asked which kind, and Sign out asked again - and once it was done, nothing
 brought it back. Now each acts on the press and the page shows "Removed <it> - Undo". What it took is kept whole in the store's own
-`deleted` table, so Restore puts it back exactly: the row under its old id while nothing has taken it, a profile's settings and its
-rules document, a rule's hidden history hidden again.
+`deleted` table, so Restore puts it back exactly: the row under its old id while nothing has taken it, a rule's hidden history
+hidden again.
 
-Two lengths of keeping. A report, a workflow, a routing rule and a profile are listed under Recently deleted for KEEP_DAYS, the way a
+Two lengths of keeping. A report, a workflow and a routing rule are listed under Recently deleted for KEEP_DAYS, the way a
 playbook is (playbooks.py). A connection removed or signed out is kept only for the Undo line's minutes (UNDO_SECONDS): its sign-in
 stays sealed where the vault put it, and what makes the removal final - forgetting a keychain entry, ending a ChatGPT session at
 OpenAI - waits for purge(), which runs at startup, in the housekeeping, and whenever this list is read or written.
@@ -18,7 +18,7 @@ KEEP_DAYS, UNDO_SECONDS = 30, 600
 # ...and a Hub post the owner removed (the owner, 2026-11-02): listed here too, so "bring back the hub post I removed" has one shelf to
 # look on. The post itself never leaves the Hub's own removed shelf - this entry going after KEEP_DAYS forgets nothing
 HUB = 'hub post'
-LISTED = ('report', 'workflow', 'dashboard', 'rule', 'profile', HUB)   # what Recently deleted lists; the rest is an Undo line's alone
+LISTED = ('report', 'workflow', 'dashboard', 'rule', HUB)   # what Recently deleted lists; the rest is an Undo line's alone
 SHORT = ('connection', 'signout', 'cli', 'signin')         # kept for the Undo line's minutes, then finished off
 
 
@@ -115,21 +115,6 @@ def remove_policy(store, pid: int) -> dict:
     return {'deleted': did, 'title': p.get('Name') or 'rule', 'restored': shown, 'kind': 'rule'}
 
 
-def remove_profile(store, cfg: dict, name: str) -> dict:
-    """A profile's settings, its row and - when nothing else shares it - the rules document an import wrote."""
-    from . import agents as hub_agents, config
-    doc = hub_agents.profile_document(store, name)
-    orphan = doc == name and store.doc_owner(doc) == 'import'
-    kept = {'name': name, 'conf': cfg['agents'][name], 'row': store.get_agent(name),
-            'doc': store.get_doc_row(doc) if orphan else None}
-    did = keep(store, 'profile', name, kept)
-    cfg['agents'].pop(name)
-    config.save(cfg)
-    store.delete_agent(name)
-    if orphan: store.delete_doc(doc)
-    return {'deleted': did, 'title': name, 'kind': 'profile'}
-
-
 def remove_hub(store, lid: int, actor: str = 'owner') -> dict:
     "The Hub's remove: retired as it always was (it waits on the Hub's removed shelf), and listed here beside it."
     p = store.lore_get(lid) or {}
@@ -181,7 +166,7 @@ def remove_signin(store, row: dict) -> dict:
 
 
 def remove_cli(store, cfg: dict, name: str, users: list) -> dict:
-    """A CLI connection, and which profiles ran on it - Undo puts each back on it."""
+    """A CLI connection, and which agent rows ran on it - Undo puts each back on it."""
     kept = {'name': name, 'conn': cfg['cli_connections'][name], 'users': {n: dict(cfg['agents'][n]) for n in users}}
     return {'deleted': keep(store, 'cli', name, kept), 'title': name, 'kind': 'cli'}
 
@@ -239,7 +224,6 @@ def restore(store, cfg: dict, did: int) -> dict:
     r = store.get_deleted(int(did))
     if not r: raise Gone('it is no longer in Recently deleted')
     kind, d = r['Kind'], json.loads(r['DataJson'] or '{}')
-    if kind == 'profile' and d['name'] in cfg.get('agents', {}): raise Taken(f"a profile named {d['name']} exists again - rename it first")
     if kind == 'cli' and d['name'] in cfg.get('cli_connections', {}): raise Taken(f"{d['name']} is connected again already")
     if kind == 'signin':
         from . import signin
@@ -251,13 +235,6 @@ def restore(store, cfg: dict, did: int) -> dict:
         from . import policy as policy_engine
         store.put_back('policy', d['row'], 'PolicyId')
         policy_engine.apply_retroactively(store, d['row'])         # a skip rule hides its sender's history again
-    elif kind == 'profile':
-        from . import config
-        cfg.setdefault('agents', {})[d['name']] = d['conf']
-        config.save(cfg)
-        if d.get('row') and not store.get_agent(d['name']): store.put_back('agent', d['row'], 'AgentId')
-        doc = d.get('doc')
-        if doc and store.get_doc(doc['Name']) is None: store.save_doc(doc['Name'], doc['Content'], doc.get('UpdatedBy') or 'import')
     elif kind == 'cli':
         from . import config, cli_connections
         cfg.setdefault('cli_connections', {})[d['name']] = d['conn']

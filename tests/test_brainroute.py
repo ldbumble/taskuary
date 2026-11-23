@@ -36,7 +36,7 @@ def test_an_unknown_job_is_a_bug_not_a_guess():
 def _home(conns=(), tests=None, settings=None, connector=None, by='owner'):
     s = MemoryStore()
     cfg = {**config.load(), 'cli_connections': {k: clic.with_defaults({'cmd': k}) for k in conns},
-           'agents': {n: {'kind': p['kind'], 'purpose': p['purpose']} for n, p in agents.DEFAULT_PROFILES.items()}}
+           'agents': {'coding': {'kind': 'coding'}}}
     for k, ok in (tests or {}).items(): agents.record_cli_test(s, k, ok)
     for k, v in (settings or {}).items(): s.set_setting(k, v, by)
     cid = None

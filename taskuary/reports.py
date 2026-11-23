@@ -367,12 +367,13 @@ def run_agent(cfg):
     if not skill and not prompt: raise RuntimeError('give the agent a skill (/name) or a prompt - or both')
     # A workflow is not a code change, so the CODING agent is the wrong thing to fall back to (the
     # owner, 2026-09-10: a workflow is not code, so it should not always go to the coding agent). An unnamed
-    # workflow runs on the default brain - a CLI tool, no profile - since default_agent is now the coding profile.
+    # workflow runs on the default brain - a CLI tool.
     from . import agents as hub_agents
-    # the agent it names, else the one resolver's CLI (agents.resolve_brain) - and with no CLI at all, the AI connection there is:
-    # an install with only an API card runs its reports too (the owner, 2026-10-21)
-    pick = '' if cfg.get('agent') else hub_agents.resolve_brain(store, 'coding')
-    name = str(cfg.get('agent') or (pick[4:] if pick.startswith('cli:') else '')).strip()
+    # the CLI it names (an old report's `agent`, saved when it named a brain), else the one resolver's (agents.resolve_brain) - and with no
+    # CLI at all, the AI connection there is: an install with only an API card runs its reports too (the owner, 2026-10-21)
+    own = str(cfg.get('agent') or '').strip()
+    pick = f'cli:{own}' if own in dict(hub_agents.connection_brains(store)) else hub_agents.resolve_brain(store, 'coding')
+    name = pick[4:] if pick.startswith('cli:') else ''
     # Agent-backed reports are read-only even when their source lives in a repository folder.
     # Only the Workflows door persists this explicit grant; executor type alone grants nothing.
     writes = cfg.get('access') == 'write'
@@ -402,17 +403,6 @@ def run_agent(cfg):
     if llm is None:
         from . import words
         raise RuntimeError(f"{hub_agents.NO_AI} to run this report - connect one on {words.name('ai_apps')}")
-    # ...and it runs as THAT worker. A workflow pointed at `researcher` was getting the researcher's
-    # CLI and none of the researcher's rules, because this road never loaded an operator document at
-    # all. Only when the workflow NAMES its agent: an unnamed one keeps the behaviour it always had,
-    # so no existing workflow suddenly acquires a rules block it was never written against.
-    if str(cfg.get('agent') or '').strip():
-        from .terminal import rules_text
-        try: rules = rules_text(store, profile=name)
-        except Exception as e:
-            logger.debug(f'reports: no rules document for {name} - {e}')
-            rules = ''
-        if rules: prompt = (f'RULES ({name.upper()}.md): {rules}' + (f'\n\n{prompt}' if prompt else ''))
     ask = (f'TASKUARY SKILL /{skill}\n\n{owned}\n\nRUN INPUT\n{prompt}' if owned is not None
            else (f'/{skill}' + (' ' if prompt else '') if skill else '') + prompt)
     # Two runs twenty minutes apart came back as two different documents - 106 lines with a

@@ -625,30 +625,8 @@ class ApiTests(unittest.TestCase):
         picks = [b['pick'] for b in body['general_brains']]
         self.assertEqual(len(picks), len(set(picks)))
 
-    def test_agents_ui_flow_persists_to_config(self):
-        self.assertEqual(c.put('/api/cli/connections/uitest-cli', json={
-            'cmd': 'uitest-cli', 'args': ['-p'], 'resume_args': ['--resume'], 'timeout': 900}).status_code, 200)
-        prof = {'provider': 'cli:uitest-cli', 'model': 'sonnet',
-                'cwd_map': {'o/r': 'C:/src/r'}, 'kind': 'coding',
-                'purpose': 'writes and changes code, in a repository'}
-        self.assertEqual(c.put('/api/agents/uitest', json=prof).json(),
-                         {'ok': True, 'rules_doc': 'coding'})
-        # the model names the BRAIN's gear, so it lands on the connection and leaves the worker:
-        # a profile has nothing to do with which model runs it (the 2026-09-16 spec)
-        role = {k: v for k, v in prof.items() if k not in ('model', 'provider')}
-        self.assertEqual(c.get('/api/agents').json()['config']['uitest'], role)
-        self.assertTrue(any(a['Name'] == 'uitest' for a in c.get('/api/agents').json()['data']))
-        self.assertEqual(config.load()['agents']['uitest'], role)  # written to config.toml
-        self.assertEqual(config.load()['cli_connections']['uitest-cli']['model'], 'sonnet')
-        self.assertEqual(json.loads(server.store.get_setting('profile_brains'))['uitest'], 'uitest-cli')   # the CLI is the role's brain
-        self.assertEqual(c.put('/api/agents/bad', json={'provider': 'cli:not-connected'}).status_code, 422)   # a brain that is not there
-        self.assertTrue(c.delete('/api/agents/uitest').json()['ok'])
-        self.assertNotIn('uitest', config.load().get('agents', {}))
-        self.assertEqual(c.delete('/api/cli/connections/uitest-cli').status_code, 200)
-        self.assertEqual(c.delete('/api/agents/uitest').status_code, 404)
-
-    def test_put_agent_does_not_persist_env_server(self):
-        """The Docker overlay lives on the shared cfg object that put_agent save()s — disk [server] must survive."""
+    def test_a_config_save_does_not_persist_env_server(self):
+        """The Docker overlay lives on the shared cfg object a route save()s (a CLI connection here) — disk [server] must survive."""
         try: import tomllib
         except ImportError: import tomli as tomllib
         path = config.home() / 'config.toml'
@@ -661,18 +639,17 @@ class ApiTests(unittest.TestCase):
         try:
             with mock.patch.dict('os.environ', {'TASKUARY_HOST': '0.0.0.0', 'TASKUARY_TOKEN': 'from-env'}):
                 server.cfg['server'] = dict(config.load()['server'])
-                self.assertEqual(c.put('/api/agents/overlay-api', json={'cmd': 'echo', 'timeout': 5},
+                self.assertEqual(c.put('/api/cli/connections/overlay-cli', json={'cmd': 'overlay-echo-cli', 'timeout': 5},
                                        headers={'X-Taskuary-Token': 'from-env'}).status_code, 200)
                 self.assertEqual((server.cfg['server']['host'], server.cfg['server']['token']),
                                  ('0.0.0.0', 'from-env'))
             disk = tomllib.loads(path.read_text(encoding='utf-8'))
             self.assertTrue(disk['server'].pop('agent_token', None))     # minted on load, belongs on disk
             self.assertEqual(disk['server'], stored)
-            self.assertNotIn('provider', disk['agents']['overlay-api'])     # a profile names no CLI; echo is its brain
-            self.assertEqual(disk['cli_connections']['echo']['cmd'], 'echo')
+            self.assertEqual(disk['cli_connections']['overlay-cli']['cmd'], 'overlay-echo-cli')
         finally:
             server.cfg['server'] = old_server
-            (server.cfg.get('agents') or {}).pop('overlay-api', None)
+            (server.cfg.get('cli_connections') or {}).pop('overlay-cli', None)
             if previous is None: path.unlink(missing_ok=True)
             else: path.write_text(previous, encoding='utf-8')
 

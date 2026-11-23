@@ -170,7 +170,7 @@ FLOW_RULES = (
     'costs a model:\n'
     '  {"id": "s1", "kind": "source", "label": "<short name>", "type": "<a catalog type>", ...exactly the keys the catalog lists for it}\n'
     '  {"id": "s2", "kind": "ai", "label": "...", "prompt": "<the judgement, reading {{s1}}>", "output": "text|yes_no|fields", "fields": ["..."]}\n'
-    '  {"id": "s3", "kind": "task", "label": "...", "title": "...", "summary": "...", "assignee": "<an agent name, optional>"}\n'
+    '  {"id": "s3", "kind": "task", "label": "...", "title": "...", "summary": "...", "assignee": "agent" when an agent works it, else left out}\n'
     '  {"id": "s4", "kind": "draft", "label": "...", "channel": "email", "to": "<address>", "about": "...", "subject": "..."}\n'
     '  {"id": "s5", "kind": "agent", "label": "...", "prompt": "<what the agent does with what the steps found>"}\n'
     '- Every read or write a catalog type can do is a "source" step with a REAL query, object or path: peek at the schema, never guess. '
@@ -218,12 +218,11 @@ WORKFLOW_SYSTEM = (
     'is written, moved, opened or sent. That is a report, not a workflow: every workflow run is a task, and a summary is not work '
     'to close. Judge it from what they ask for, not from any one word.\n\n'
     'RULES\n'
-    '- Use only connector ids, customer ids, and agent names present in WORKFLOW OPTIONS. Never invent one.\n'
+    '- Use only connector ids and customer ids present in WORKFLOW OPTIONS. Never invent one.\n'
     '- A Zoho workflow needs type, title, connector_id, customers, and a schedule. Customers may be '
     'a list of exact customer ids; the server replaces them with its trusted customer records. If the '
     'owner did not identify which customers, ask. Nothing ever sends automatically.\n'
-    '- An agent workflow must change data or state, and needs type, title, agent, and prompt and/or skill. Use an exact configured '
-    'agent name: the profile whose job it is (an accounts-payable job is ap), else the general assistant - never ask which.\n'
+    '- An agent workflow must change data or state, and needs type, title, and prompt and/or skill.\n'
     '- "uses" carries every connection the request names that is in WORKFLOW OPTIONS - name Intacct and its id goes in.\n'
     '- A skill is its slash-command name without requiring the leading slash. cwd is optional and must come from the owner, never be guessed.\n'
     '- "model" and "effort" are LEFT OUT: a run works on the general agents\' brain and model, which is what the owner wants by default. '
@@ -245,7 +244,7 @@ WORKFLOW_SYSTEM = (
 WORKFLOW_KEYS = {
     'zoho_monthly_invoices': {'type', 'title', 'connector_id', 'customers', 'customer_ids',
                               'every_minutes', 'daily_at', 'cron', 'on_startup'},
-    'agent': {'type', 'title', 'agent', 'skill', 'prompt', 'cwd', 'model', 'effort', 'access', 'uses', 'ask_first', 'done_when', 'browser',
+    'agent': {'type', 'title', 'skill', 'prompt', 'cwd', 'model', 'effort', 'access', 'uses', 'ask_first', 'done_when', 'browser',
               'flow', 'repair', 'goal', 'on_mail', 'every_minutes', 'daily_at', 'cron', 'on_startup'},
 }
 
@@ -274,7 +273,6 @@ def workflow_catalog(store) -> dict:
             except Exception as e: item['error'] = str(e)[:300]
         zoho_cards.append(item)
     return {'zoho_monthly_invoices': zoho_cards,
-            'agent': [{'name': a.get('Name')} for a in store.list_agents() if a.get('Name')],
             # what a workflow may work IN: the signed-in connections (connectorcatalog.connected), by id and name - never their settings
             'connections': [{'id': c['ConnectorId'], 'name': c.get('Name') or c.get('Type'), 'type': c.get('Type')}
                             for c in connected(store, failing=True)],
@@ -336,9 +334,6 @@ def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
         if not schedules and not str(cfg.get('on_mail') or '').strip():      # a job a mail starts needs no clock
             cfg['cron' if typ == 'zoho_monthly_invoices' else 'daily_at'] = '0 9 1 * *' if typ == 'zoho_monthly_invoices' else '08:00'
         if typ == 'agent':
-            names = {x['name'] for x in options['agent']}
-            if cfg.get('agent') not in names:
-                return ({'error': f"It picked an agent you don't have - say which one to use: {', '.join(sorted(names))}."} if names else dict(NO_AI))
             if cfg.get('flow') is not None:
                 from . import flow
                 ok, why = flow.validate(store, cfg['flow'], strict=True)

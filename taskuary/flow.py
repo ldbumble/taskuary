@@ -407,7 +407,7 @@ def _task(store, step, ctx, llm, tid, dry, warns, title):
     sid = ctx['run'].get('source_id')
     new = store.create_task({'Title': t, 'Summary': summary, 'Kind': 'general' if who else 'task', 'Status': 'open',
                              'Priority': po.level(step.get('priority')), 'Source': 'workflow', 'SourceRef': f'workflow:{sid}',
-                             'Assignee': f'agent:{who}' if who else 'owner', **({'ParentId': tid} if tid else {})}, 'workflow')
+                             'Assignee': '' if who else 'owner', **({'ParentId': tid} if tid else {})}, 'workflow')
     return {'head': task_ref(new), 'ref': task_ref(new), 'task_id': new, 'body': t}
 
 

@@ -281,7 +281,7 @@ class AppPagesTests(unittest.TestCase):
         s = store()
         with concierge.delivering(concierge.DESK): desk = concierge._system(s)
         self.assertIn('DO FIRST, SHOW SECOND', desk)
-        for link in ('#connector=intacct', '#cli-agents', '#report=new-agent', '#settings=policies', '#profiles'): self.assertIn(link, desk)
+        for link in ('#connector=intacct', '#cli-agents', '#report=new-agent', '#settings=policies'): self.assertIn(link, desk)
         # setup is the Setup button at the top, never a link the chat opens (the owner, 2026-10-19)
         self.assertNotIn('#setup', desk); self.assertIn('the Setup button at the top', desk)
         with concierge.delivering(concierge.PHONE): self.assertNotIn('APP PAGES', concierge._system(s))   # no canvas to open it on

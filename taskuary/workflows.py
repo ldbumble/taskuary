@@ -88,7 +88,7 @@ def definition(store, src) -> dict:
             'browser': bool(cfg.get('browser')),
             'on_mail': str(cfg.get('on_mail') or '').strip(),
             'schedule': {k: cfg[k] for k in ('cron', 'daily_at', 'every_minutes', 'every', 'on_startup', 'tz', 'at') if cfg.get(k) is not None},
-            'runs_on': runs_on(cfg), 'agent': cfg.get('agent') or None,
+            'runs_on': runs_on(cfg),
             'model': str(cfg.get('model') or '').strip(), 'effort': str(cfg.get('effort') or '').strip(),     # blank: the general agents' (brain)
             'enabled': bool(src.get('Active', 1)) if isinstance(src, dict) else True}
 
@@ -501,7 +501,6 @@ def run(store, src, actor: str = 'schedule', trigger: str = 'schedule', context:
 
 def _run(store, src, actor, trigger, context, mail) -> dict:
     from . import chatlog, ingest, browserview, flow
-    from .agents import CODING_KINDS
     defn, steps = definition(store, src), flow.is_flow(cfg_of(src))
     busy = running(store, defn['source_id'])
     if busy:
@@ -515,14 +514,8 @@ def _run(store, src, actor, trigger, context, mail) -> dict:
     # a browser job's run task asks for a browser the way the walk that taught it did: the tag is what
     # general.py reads to launch one, bound to this session and restored from the owner's profile
     tags = ','.join(x for x in (browserview.WANTS if kind == 'general' and defn.get('browser') else '', f'{TRIGGER_TAG}{trigger}') if x)
-    # ...and it runs AS the worker it names, wearing that worker's rules (an AP workflow gets AP.md), as reports.run_agent did.
-    # A coding name on a GENERAL run is a brain picked long ago, not a role; a coding run takes the profile it names, else the
-    # coding profile (ingest._auto_code) - and either way the default brain runs it.
-    row = store.get_agent(defn['agent']) if defn.get('agent') else None
-    named = bool(row) and (kind == 'coding' or str(row.get('Kind') or '').lower() not in CODING_KINDS)
     tid = store.create_task({'Title': f"{defn['title']} - {when}", 'Summary': text, 'Kind': kind, 'Status': 'open', 'Priority': 'normal',
-                             'Source': 'workflow', 'SourceRef': f"workflow:{defn['source_id']}", 'Tags': tags,
-                             **({'Assignee': f"agent:{defn['agent']}"} if named else {})}, actor)
+                             'Source': 'workflow', 'SourceRef': f"workflow:{defn['source_id']}", 'Tags': tags}, actor)
     b = brain(store, cfg_of(src), store.get_task(tid))
     if steps:
         n = len(flow.steps_of(cfg_of(src)))

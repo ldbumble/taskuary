@@ -156,11 +156,11 @@ REFUSALS = (
     # ...and About you's own fields - the name, the picture's Keep, the signature: they change the invented owner, and read "that would
     # reach something real" (the walk, 2026-11-18)
     (r'^/api/(whoami|owner|hand-signature)$', 'This is the demo - its owner is invented, and stays as written.'),
-    (r'^/api/(tools/run|agents/[^/]+/test)', 'This is the demo - nothing runs, because there are no real systems here to run against.'),
+    (r'^/api/tools/run', 'This is the demo - nothing runs, because there are no real systems here to run against.'),
     (r'^/api/(reviews?/\d+/send|tasks/\d+/(handoff|clarify)|board/send|messages/\d+/send)', SENDS),
     # ...and Trust, whose whole effect is that an agent starts on the sender's words: it read "that would reach something real"
     # ...and a goal's step sent to an agent, which is a start like any other
-    (r'^/api/(terminals|agents)(/|$)|^/api/tasks/\d+/(dispatch|code|continue|continue-session|continue-work|resume|trust|steps/[^/]+/start)$'
+    (r'^/api/terminals(/|$)|^/api/tasks/\d+/(dispatch|code|continue|continue-session|continue-work|resume|trust|steps/[^/]+/start)$'
      r'|^/api/messages/\d+/dispatch$|^/api/calendar/prepare$', STARTS),
     (r'^/api/tasks/\d+/(wrap|pause|agent/(cancel|stop))$', RECORDED),
     # ...what would ask an AI to read or plan again (a goal's Re-plan): none runs here

@@ -50,7 +50,7 @@ class TickTests(unittest.TestCase):
         head = lambda cli: next(l for l in terminal.seed_text(self.s, self.tid, cli=cli).splitlines() if 'CHECKLIST' in l)
         for cli in ('claude', 'codex', 'gemini', ''): self.assertIn(terminal.TICK_HEAD, head(cli)); self.assertNotIn('subagent', head(cli))
         self.assertFalse(hasattr(terminal, 'SUBAGENT_HEAD'))
-        self.assertIn('hand each to its own subagent in parallel', terminal.rules_text(self.s, profile='coding'))
+        self.assertIn('hand each to its own subagent in parallel', terminal.flatten_rules(self.s.doc('coding')))
 
     def test_the_one_road_refuses_what_the_door_refuses(self):
         self.assertEqual(agent_tick(self.s, self.tid, 'nope1234')[1][0], 404)

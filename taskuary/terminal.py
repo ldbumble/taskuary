@@ -1728,35 +1728,9 @@ def harvest(t: Term, chars: int = 12000) -> str:
     return (tidy if letters(tidy) >= 160 else degutter(raw).strip())[-chars:]
 
 
-def profile_of(task: dict, store=None) -> str:
-    """Which worker this task was handed to - the name on `Assignee` ('agent:researcher'), else the
-    coding profile, found by its kind (agents.coding_role; '' with none). `Assignee` has carried 'agent:<name>' since before
-    profiles existed, so nothing new is stored: the routed worker and its rules document are the same name."""
-    who = str((task or {}).get('Assignee') or '')
-    if who.startswith('agent:') and who.split(':', 1)[1].strip(): return who.split(':', 1)[1].strip()
-    from .agents import coding_role
-    return coding_role(store) if store is not None else ''
-
-
-def rules_text(store, chars: int = DOC_CHARS, profile: str = '') -> str:
-    """One profile's rules document, flattened - the coding profile's when none is named. CODING.md is the coding profile's - one of several, not
-    the ground under all of them: it used to be appended to EVERY worker session, so a research or
-    meeting-prep task was told "work only in the repository the task names" and the router had to add
-    "NO REPOSITORY" to argue with it (the owner, 2026-09-10).
-
-    The doc said it was 'stacked on top of SOUL.md for every coding run' - it never was: these docs live
-    in Taskuary's own database, nowhere the agent can read, so the rules only reach a session if the
-    prompt carries them."""
-    from .agents import coding_role, ensure_profile_document
-    profile = profile or coding_role(store)
-    if not profile: return ''                 # no coding profile: the session runs on the base rules alone
-    return _cut(flatten_rules(str(store.doc(ensure_profile_document(store, profile)) or '')), chars, 'rules')
-
-
 def flatten_rules(doc: str) -> str:
-    """A rules document as a session receives it: headings unmarked, one space between everything.
-    The skill-import wizard measures a body with this before it is written, so its "too long" warning
-    is about the SAME text and the SAME cut (DOC_CHARS) as the seed - not a byte count of the file."""
+    """A rules document as a session receives it: headings unmarked, one space between everything - what the Docs meter counts
+    for a document marked `flat` (doclimits)."""
     keep = [l.strip(' #*-').strip() if l.lstrip().startswith('#') else l.strip()
             for l in doc.splitlines() if l.strip()]
     return ' '.join(' '.join(keep).split())
@@ -2440,11 +2414,9 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
     # them or not at all - a backup the rule keeps out is no backup for it
     chain, held = brainroute.session_allowed(store, t, chain)
     if held: raise ValueError(held)
-    agent = agent or hub_agents.coding_role(store)      # no profile named: the one whose kind is coding
+    agent = agent or hub_agents.coding_role(store)      # none named: the one whose kind is coding
     row = store.get_agent(agent or '')
-    if not row:
-        from . import words
-        raise ValueError(f'unknown agent: {agent}' if agent else f"no coding profile is set up - add one under {words.name('profiles')}")
+    if not row: raise ValueError(f'unknown agent: {agent}' if agent else 'no coding agent is set up - restart Taskuary and it is made again')
     term = repo = why = None
     chosen = None
     last_error = None

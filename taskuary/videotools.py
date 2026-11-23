@@ -4,7 +4,7 @@ Three roads, each one table and one code path, so a new product is a row:
 
   MCP     a vendor's remote MCP server in the agent CLIs (remotemcp.py, the road every MCP card rides): Descript, InVideo, Vidova and
           OpusClip are rows of the catalogue with an `mcp` url.
-  SKILLS  a Claude Code skill on disk (~/.claude/skills/<dir>, read by skillimport.py): Browser Use's video-use - cloned, its Python
+  SKILLS  a Claude Code skill on disk (~/.claude/skills/<dir>): Browser Use's video-use - cloned, its Python
           set up with uv (or a venv + pip), and the ElevenLabs card's key written into its own .env, which is where it reads it.
   VIDEO   a vendor API that makes a clip from a sentence with a key on a card: Kling (its own card) and Runway (the runway_image card,
           the same key) - `kling_video` / `runway_video` on /api/tools/run, the clip filed in the task's outputs like a picture.

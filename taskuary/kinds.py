@@ -12,18 +12,13 @@ TRIAGE = tuple(k for k, v in KIND.items() if v['triage'])    # what triage (or t
 
 
 ASSISTANT = _J['assistant']                                  # the Assistant's name wherever the owner reads it: Taskuary (kinds.json `assistant_`)
-SHOWN = _J['shown']                                          # who the owner sees at work: Taskuary, never the profile (kinds.json `shown_`)
+SHOWN = _J['shown']                                          # who the owner sees at work (kinds.json `shown_`)
 
 
 def shown(run=None) -> str:
-    """The name an agent goes by on every screen and line the owner reads: Agent, whatever profile, tool or demo runs it (the owner,
+    """The name an agent goes by on every screen and line the owner reads: Agent, whatever tool or demo runs it (the owner,
     2026-11-08 - a coding session named its tool and a demo one read "demo is waiting on you"). `run` is kept for its callers."""
     return SHOWN
-
-
-def instructions(profile) -> str:
-    """The profile, said where only a look for it finds it - a hover, a detail line: 'Instructions: researcher'."""
-    return f'Instructions: {profile}' if profile else ''
 
 
 def label(kind) -> str: return (KIND.get(str(kind or '')) or {}).get('label') or str(kind or '')

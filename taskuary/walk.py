@@ -192,8 +192,8 @@ def _fact_sync(s) -> str:
 
 
 def _fact_docs(s) -> str:
-    profiles = {(r.get('rules_doc') or r['Name']) for r in s.list_agents()}
-    return f"{len(profiles)} profile documents: {', '.join(sorted(profiles)[:3])}" if profiles else 'none yet'
+    names = sorted(s.doc_names())
+    return f"{len(names)} documents: {', '.join(names[:3])}" if names else 'none yet'
 
 
 def _fact_board(s) -> str:

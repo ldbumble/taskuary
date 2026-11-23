@@ -112,8 +112,7 @@ VERBS = ('reply', 'approve', 'send_close', 'not_ours', 'not_ours_sender', 'block
          # this meeting" was answered "Ok." (2026-11-02)
          'prepare',
          'confirm', 'cancel', 'none')
-# The coding hand-off had an old name (the key below), as if it were a profile or a brain - it is neither, a coding agent is any
-# profile of kind coding on any CLI. An old saved card or phone button, or a model still saying it, lands on the name it has
+# The coding hand-off had an old name (the key below), as if it were a brain - it is not, a coding agent runs on any CLI. An old saved card or phone button, or a model still saying it, lands on the name it has
 # now; the model is never shown the old one. A REMOVED button (buttons.json `removed`: Handled, Later, Archive it...) lands the same way.
 VERB_ALIAS = {'coder': 'coding_agent'}
 def canon_verb(v): return buttons.canon(VERB_ALIAS.get(v, v)) if isinstance(v, str) else v
@@ -1684,7 +1683,7 @@ def _page(store, tid: int, table: dict | None, href: str, said: str) -> dict:
 
 # WHERE A REMOVED THING IS RESTORED - Recently deleted sits on the shelf it came off (Removed.jsx)
 DELETED_AT = {'report': '#report=reports', 'workflow': '#report=workflows', 'dashboard': '#report=dashboards', 'rule': '#settings=policies',
-              'profile': '#profiles', 'hub post': '#hub'}
+              'hub post': '#hub'}
 
 
 def find_rule(store, about: str) -> dict:
@@ -1819,7 +1818,7 @@ def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = ''
     # A JOB, OR A MESSAGE WITH ITS RECIPIENT, IS MADE AND OPENED - NOT WRITTEN INTO NEW (the owner, 2026-11-12: "assistant tab should not open new
     # but open task directly"): the card came up filled in and pressed itself, a step between the ask and the task. What still needs the owner
     # - a meeting's time, a goal's date, a builder's setup - still comes up in New
-    # ...`job`: the checkout or profile the ask named, which the task is made with (handoff_task) - and the short title the same call named, so
+    # ...`job`: the checkout the ask named, which the task is made with (handoff_task) - and the short title the same call named, so
     # the task is born with it, never his whole sentence (the walk, 2026-11-18)
     if kind == 'agent' and str(text or '').strip():
         return _made_now(store, tid, 'task.create_from_text', {'kind': want, 'text': str(text).strip(), **{k: v for k, v in (job or {}).items() if v}}, lead)
@@ -3434,7 +3433,6 @@ def read_op(store, kind: str, params: dict) -> str:
                 + (f"{NEWLINE}last error: {c['last_error']}" + (f" (the fix: {c['fix']})" if c.get('fix') else '') if c['last_error'] else ''))
     if kind == 'agents.list':
         from . import appfacts
-        # a hand-off names no profile: a general task runs on the assistant (the owner, 2026-11-04)
         return ('agents: ' + ', '.join(f"{a['name']} ({a['kind']}{'' if a['active'] else ', off'})" for a in appfacts.agents(store))
                 + NEWLINE + 'brains: ' + '; '.join(appfacts.brains(store)))
     if kind == 'repos.list':
@@ -3480,7 +3478,7 @@ def task_contract(store, kind: str, tid: int, p: dict) -> dict:
         who = str(p.get('assignee') or '').strip()
         if who:
             # `none` is the page's "unassigned" - nobody holds it
-            allowed = ['owner', 'none'] + [f"agent:{a['Name']}" for a in store.list_agents()]
+            allowed = ['owner', 'none']
             if who not in allowed: raise ValueError(f"task.update assignee is one of {', '.join(allowed)} - not {who!r}. Nothing was changed.")
             out['assignee'] = '' if who == 'none' else who
         due = str(p.get('due') or '').strip()
@@ -3591,14 +3589,14 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         want = str(params.get('kind') or 'general') if kind == 'task.create_from_text' else 'general'
         return _new(store, tid, item, want if want in NEW_TAB else 'general', str(params.get('text') or text or '').strip(), str(params.get('to') or ''),
                     channel=str(params.get('channel') or ''), recurs=recurs,
-                    job={'repo': str(params.get('repo') or ''), 'profile': str(params.get('profile') or params.get('as') or ''),
+                    job={'repo': str(params.get('repo') or ''),
                          'title': ' '.join(str(params.get('title') or '').split())})
     if routes() and kind == 'role.apply':
-        return _page(store, tid, item, '#profiles', "Opened Profiles - press Set up beside the job you do.")
+        return _page(store, tid, item, '#report=playbooks', ROLE_OPENED)
     if kind == 'task.create_from_text' and str(params.get('kind') or '') in task_kinds.AGENT:
         verb = 'coding_agent' if params['kind'] == 'coding' else 'regular_agent'
         dec = {'verb': verb, 'text': str(params.get('text') or text or '').strip(),
-               'as': str(params.get('profile') or params.get('repo') or params.get('agent') or params.get('as') or '').strip()}
+               'as': str(params.get('repo') or params.get('agent') or params.get('as') or '').strip()}
         # TYPED WORDS START IT (the owner, 2026-11-02, superseding 2026-10-01's "never"): on a phone the yes is the words - only a coding job
         # whose checkout is still to pick waits for that pick
         prop = propose_for(store, tid, dec, None, text, actor)
@@ -4545,7 +4543,7 @@ def his_words(kind: str, params: dict) -> dict:
 
 
 def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: str = SETUP_KIND,
-               agent_job: bool = False, repo: str = None, profile: str = None, said: str = None, door: str = 'the Assistant chat', files=None) -> dict:
+               agent_job: bool = False, repo: str = None, said: str = None, door: str = 'the Assistant chat', files=None) -> dict:
     """'Set up a report that...': a task with the owner's words in it, opened for the agent that can
     walk them through it. `kind` is 'general' for a walk-through and 'coding' for a hand-off the owner
     asked for (concierge's `coding_agent` verb), which is the only path that starts an agent in a checkout.
@@ -4574,9 +4572,7 @@ def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: st
                              # setting. Its Assistant session owns that browser; a coding handoff
                              # keeps the ordinary task controls instead.
                              # the checkout the owner confirmed on the card is the override (terminal.repo_tag)
-                             'Tags': browserview.WANTS if kind == SETUP_KIND and not agent_job else (f'repo:{repo}' if repo else ''),
-                             # the worker the owner's hand-off named: its rules seed the session (general.assigned_role)
-                             **({'Assignee': f'agent:{profile}'} if profile else {})}, actor)
+                             'Tags': browserview.WANTS if kind == SETUP_KIND and not agent_job else (f'repo:{repo}' if repo else '')}, actor)
     # ...and a file he attached is the task's own, in its folder, named there (outputs.take_in_ask - New's own road too)
     from . import outputs
     files = outputs.take_in_ask(store, tid, actor)
@@ -4866,7 +4862,7 @@ def no_brain() -> str:
 
 
 def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', title: str = None, dock_tid: int = None, repo: str = None,
-                 profile: str = None, said: str = None, door: str = '', files=None) -> dict:
+                 said: str = None, door: str = '', files=None) -> dict:
     """THE ONE START FROM THE OWNER'S WORDS (F1, the walks 2026-11-18): New's box (server /api/start), the Assistant's hand-off (the confirmed
     `task.create_from_text`), a phone's - each hands his words and files here, and the task is made and its agent started only then (PW-124).
     What the work is - a code fix, a routine, a report, research - is the agent's to do with its tools; nothing here picks a form. A start
@@ -4898,7 +4894,7 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
     # A general agent hears the brief as Taskuary's first prompt (below); a coding one is seeded from the task itself, so it keeps the brief
     # ...and where the model reworded what he typed, `said` is his and `job` is Taskuary's brief (setup_task, his_words)
     made = setup_task(store, job if kind == 'general' else brief, actor, title=title or _handoff_title(store, tid, said or job), kind=kind, agent_job=kind == 'general',
-                      repo=repo, profile=profile, said=said, door=door or 'the Assistant chat', files=files)
+                      repo=repo, said=said, door=door or 'the Assistant chat', files=files)
     # ...AND CLASSED AS A MAIL IS (the owner, 2026-11-20: "17% of 2,340" ran on the big model): the reading that asked whether it is open work
     # already says how hard it is - kept on the task, so its agent starts on the gear for it (brainroute), with no second model call
     if read: store.judge_task(made['taskId'], read, 'triage')
@@ -5063,7 +5059,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         label = op_label(kind, params)
     elif verb in ('coding_agent', 'regular_agent', 'mine'):
         want = {'coding_agent': 'coding', 'regular_agent': 'general', 'mine': 'task'}[verb]
-        # THE AGENT BOX'S ANSWERS (RunForm.AgentAsk, the owner 2026-10-23): which profile, brain and model it chose ride with the
+        # THE AGENT BOX'S ANSWERS (RunForm.AgentAsk, the owner 2026-10-23): which brain and model it chose ride with the
         # hand-off to the dispatch, beside the owner's words - never on Make a task, which starts nothing
         picked = {k: decision.get(k) for k in AGENT_PICKS if decision.get(k)} if verb != 'mine' else {}
         if it.get('mid'):
@@ -5100,9 +5096,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
                 choices = term.known_repos(store)
                 label = buttons.label('coding_agent')
             else:
-                # ...and a general one runs on the assistant: a general agent working a TASK walks the owner through their work,
-                # so the model names no worker (the owner, 2026-11-04 - profiles are for routines). Only the agent box's own pick rides
-                params['profile'] = picked.get('agent') or None
+                # ...and a general one runs on the assistant: a general agent working a TASK walks the owner through their work (2026-11-04)
                 clear = True
                 label = buttons.label('regular_agent')
     elif verb == 'not_ours': target, params = it.get('mid'), {'learn': False}
@@ -5220,7 +5214,7 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
     why = cannot(item, verb, store)
     if why: raise ValueError(why)
     if not press: record_related(store, tid, item, 'user', f"{PROPOSALS[verb][1]}: {item.get('title') or item.get('ref') or key}")
-    # `picks`: the agent box's profile, brain and model beside its words (AGENT_PICKS) - a hand-off's only
+    # `picks`: the agent box's brain and model beside its words (AGENT_PICKS) - a hand-off's only
     picked = {k: v for k, v in (picks or {}).items() if k in AGENT_PICKS and v}
     try: prop = propose_for(store, tid, {'verb': verb, 'text': text or '', 'on_item': True, **picked}, item, text or '', actor, table=item if table else None)
     except ValueError as e:
@@ -5477,13 +5471,13 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
     elif sorted_as: sort = {'kind': sorted_as, 'provider': None, 'why': ''}      # the chat model already named it
     else: sort = sort_setup(store, ask, cllm, before=_turns(store, tid, 4))
     vault = signin_lead(store, sort.get('signs_in'))
-    # ON THE DESK A SET-UP IS ITS OWN PAGE (routes): a report is New's report box, a connection its card, a role its Set up on Profiles, and
+    # ON THE DESK A SET-UP IS ITS OWN PAGE (routes): a report is New's report box, a connection its card, a role its Set up on Playbooks, and
     # digging an agent's job in New - each with its own button to press; nothing is composed into a card to confirm here
     if routes():
         if sort['kind'] in ('report', 'playbook'): return _new(store, tid, item, sort['kind'], ask)
         if sort['kind'] == 'routine': return _new(store, tid, item, 'workflow', ask, recurs=sort.get('recurs') or recurs_of({'objective': ask}), lead=vault)
         if sort['kind'] == 'role':
-            return _page(store, tid, item, '#profiles', "Opened Profiles - press Set up beside the job you do.")
+            return _page(store, tid, item, '#report=playbooks', ROLE_OPENED)
         if sort['kind'] == 'investigate': return _new(store, tid, item, 'general', ask, lead=vault)
         if sort.get('provider'):
             return call_turn(store, tid, {'kind': 'connection.create', 'params': {'type': sort['provider']}}, item, text, actor)
@@ -5544,9 +5538,12 @@ ROLE_READ_SYSTEM = ('You read the owner\'s answer to set-up questions. Answer JS
                     'or empty>"}.')
 
 
+ROLE_OPENED = "Opened Playbooks under Reports - press Set up beside the job you do."
+
+
 def _propose_role(store, tid: int, ask: str, role: str, item: dict | None, actor: str, llm, answers: dict = None) -> dict:
     """A role (roles.py), walked: the questions it needs, asked once as a numbered list; the answer read for intent by the
-    model (never by matching words); then the whole set-up on ONE card - worker, playbooks, workflow. Where the mail goes is not
+    model (never by matching words); then the whole set-up on ONE card - playbooks, workflow, ledger. Where the mail goes is not
     asked: a task's general work runs on the assistant (the owner, 2026-11-04)."""
     from . import compose, roles
     r = roles.ROLES[role]
@@ -5571,8 +5568,7 @@ def role_card(store, tid: int, role: str, portal, item: dict | None, actor: str)
     if portal and '://' not in portal: portal = 'https://' + portal
     params = {'role': role, 'portal': portal}
     wf = r.get('workflow') or {}
-    lines = [f"Worker: {r['profile'].upper()}.md",
-             'Playbooks: ' + '; '.join(playbooks.parse(roles.playbook_text(b))['title'] for b in r['playbooks']),
+    lines = ['Playbooks: ' + '; '.join(playbooks.parse(roles.playbook_text(b))['title'] for b in r['playbooks']),
              *([f"Ledger: {(store.get_connector_by_type(r['ledger']) or {}).get('Name') or r['ledger']} set to read if nobody chose its "
                 'authority, so nothing reaches it without your click'] if r.get('ledger') else []),
              *([f"Routine: \"{wf['title']}\", daily at {wf.get('daily_at', '')}, created switched off" + (f" - {portal}" if portal else '')] if wf else [])]
@@ -5782,8 +5778,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
         return (f" The {o.get('type')} card \"{o.get('name')}\" is {o.get('state')} - finish it on the card (sign in or paste the secret there), "
                 'then Test; it stays off until you turn it on.')
     if kind == 'role.apply' and o.get('role'):
-        bits = [f"the {o['profile'].upper()} agent is {'added' if o.get('profile_added') else 'already here'}"]
-        if o.get('playbooks_added'): bits.append(f"{plural(len(o['playbooks_added']), 'playbook')} added")
+        bits = [f"{plural(len(o['playbooks_added']), 'playbook')} added" if o.get('playbooks_added') else 'its playbooks were already here']
         if o.get('ledger_narrowed'): bits.append(f"{o['ledger_narrowed']} is set to read, so nothing reaches it without your click")
         flow = (f" \"{o['workflow_title']}\" is under Reports, switched off. Say run it and I'll start it once - "
                 'when it stops at the sign-in, sign in yourself in the browser beside the chat.') if o.get('workflow_id') else ''

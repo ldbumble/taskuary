@@ -214,10 +214,6 @@ class TheKindControlTeaches(unittest.TestCase):
         self.assertEqual([f['Value'] for f in said], ['ADP'])
         self.assertTrue(said[0]['Confirmed'])
 
-    def test_reassigning_the_worker_is_a_verdict_too(self):
-        self.c.patch(f'/api/tasks/{self.tid}', json={'Assignee': 'agent:coding'})
-        self.assertEqual([f['Value'] for f in self.facts('profile')], ['coding'])
-
     def test_an_unchanged_kind_teaches_nothing(self):
         self.c.patch(f'/api/tasks/{self.tid}', json={'Kind': 'coding', 'Priority': 'high'})
         self.assertEqual(self.facts('kind'), [])
@@ -293,7 +289,6 @@ class LearnedSeesEveryCorrection(unittest.TestCase):
 
     def test_it_names_what_triage_had_answered(self):
         self.assertIn('triage said coding', self.said('kind', 'task'))
-        self.assertIn('triage said analyst', self.said('profile', 'coding'))
         self.assertIn('northwind/ledger', self.said('repository', 'northwind/portal'))
 
     def test_a_kind_says_what_the_kind_MEANS(self):

@@ -11,18 +11,19 @@ def answering(payload, seen=None):
     return llm
 
 
-def test_ai_agent_workflow_uses_a_real_configured_agent():
+def test_ai_agent_workflow_names_no_worker():
+    """A routine runs on the general agents' brain - no worker is offered the model or kept from what it names (2026-11-23)."""
     store = MemoryStore()
     store.upsert_agent('coding', 'cli', 'local', json.dumps({'cmd': 'codex'}))
     seen = {}
-    out = compose.compose_workflow(store, 'Have coding run the weekly access review every Monday', answering({
-        'config': {'type': 'agent', 'title': 'Weekly access review', 'agent': 'coding',
+    out = compose.compose_workflow(store, 'Run the weekly access review every Monday', answering({
+        'config': {'type': 'agent', 'title': 'Weekly access review', 'agent': 'researcher',
                    'skill': '/weekly-access-review', 'cron': '0 8 * * 1', 'deliver': {'to': 'invented'}},
-        'explain': 'Coding runs the saved skill every Monday.', 'confidence': 'high'}, seen))
-    assert out['config'] == {'type': 'agent', 'title': 'Weekly access review', 'agent': 'coding',
+        'explain': 'The saved skill runs every Monday.', 'confidence': 'high'}, seen))
+    assert out['config'] == {'type': 'agent', 'title': 'Weekly access review',
                              'skill': 'weekly-access-review', 'cron': '0 8 * * 1', 'access': 'write',
                              'route': {'triage': {'how': 'never'}}}   # a workflow, not a watch: never triaged
-    assert seen['user']['workflow_options']['agent'] == [{'name': 'coding'}]
+    assert 'agent' not in seen['user']['workflow_options']
     assert 'reports only read and summarize' in seen['system']
 
 
@@ -57,18 +58,6 @@ def test_invoice_workflow_resolves_customer_ids_to_trusted_zoho_records(monkeypa
     assert out['config']['connector_id'] == card['ConnectorId']
     assert 'customer_ids' not in out['config']
     assert seen['user']['workflow_options']['zoho_monthly_invoices'][0]['customers'] == customers
-
-
-def test_workflow_composer_refuses_invented_agents_and_customers():
-    store = MemoryStore()
-    bad_agent = compose.compose_workflow(store, 'do a thing', answering({
-        'config': {'type': 'agent', 'title': 'Thing', 'agent': 'imaginary', 'prompt': 'Do it'}}))
-    # no agent at all is a thing the owner fixes in Connections - the button says so; one that exists is named to pick from
-    assert bad_agent['fix']['href'].startswith('#connections=AI') and 'AI' in bad_agent['error']
-    store.upsert_agent('ap', 'accounts-payable', 'cli', '{}')
-    named = compose.compose_workflow(store, 'do a thing', answering({
-        'config': {'type': 'agent', 'title': 'Thing', 'agent': 'imaginary', 'prompt': 'Do it'}}))
-    assert 'ap' in named['error'] and 'fix' not in named
 
 
 def test_a_model_miss_asks_the_owner_to_say_it_again_not_a_config_error():
@@ -117,7 +106,7 @@ def test_the_builder_knows_taskuary_is_where_results_land_and_builds_a_clear_req
     s = compose.WORKFLOW_SYSTEM
     assert 'TASKUARY IS WHERE RESULTS LAND' in s and 'Never ask which connection opens a task' in s
     assert 'Opening tasks or drafting IS doing work' in s
-    assert 'A clear request is built' in s and 'never ask which' in s
+    assert 'A clear request is built' in s
     assert 'A clear request is built, not questioned' in compose.JUDGEMENT          # the report builder too
 
 

@@ -150,26 +150,3 @@ def sync(cfg, store, name=None):
         resolved['cwd_map'] = {**(old.get('cwd_map') or {}), **(resolved.get('cwd_map') or {})}
         store.upsert_agent(worker, profile.get('kind', 'coding'), 'cli', json.dumps(resolved))
 
-
-def set_profile(cfg, store, name, body):
-    """Keep old command-based API callers working while persisting the two-layer config. A profile is instructions and names
-    no CLI (the owner, 2026-10-15: "it's models or cli tools only"): a CLI the body names - `cmd` or `provider` - becomes that
-    connection and this role's brain override (profile_brains), and the model it names lands on the connection's gears."""
-    current = cfg.setdefault('agents', {}).get(name) or json.loads((store.get_agent(name) or {}).get('Config') or '{}')
-    profile = {**current, **body}
-    picked = str(profile.pop('provider', '') or '') if 'provider' in body else ''
-    if 'cmd' in body and not picked:
-        key = cli_key(body['cmd'])
-        cfg.setdefault('cli_connections', {}).setdefault(key, with_defaults({k: body[k] for k in COMMAND_FIELDS if k in body}))
-        picked = f'cli:{key}'
-    if picked:
-        if not picked.startswith('cli:'): raise ValueError('Choose a configured CLI provider')
-        resolve(cfg, profile, picked[4:])  # reject a dangling connection before saving
-        for field in GEAR_FIELDS:
-            if field in body: cfg.setdefault('cli_connections', {}).setdefault(picked[4:], {})[field] = body[field]
-        try: over = json.loads(store.get_setting('profile_brains') or '{}')
-        except (TypeError, ValueError): over = {}
-        store.set_setting('profile_brains', json.dumps({**(over if isinstance(over, dict) else {}), name: picked[4:]}), 'owner')
-    for key in (*COMMAND_FIELDS, 'provider'): profile.pop(key, None)
-    cfg['agents'][name] = profile
-    return profile

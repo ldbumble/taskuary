@@ -40,11 +40,10 @@ cfg = config.load()
 from . import backups, __version__
 if not demo.enabled(): backups.before_open(config.db_path(), __version__)       # the schema changes on an upgrade: a copy to go back to first
 store = SQLiteStore(config.db_path())
-# The profiles Taskuary ships, added to the CONFIG before the loop below copies it into the database - so they appear on
-# the Agents page, and a restart never rewrites one the owner has changed (seed_profiles skips any name already there).
+# the coding agent's row, in the CONFIG before the loop below copies it into the database
 try:
     from loguru import logger as _log                    # loguru is not bound at module scope yet here
-    _added = hub_agents.seed_profiles(cfg)
+    _added = hub_agents.ensure_coding(cfg)
     _split_cli = cli_connections.migrate(cfg)
     if _split_cli:
         import shutil
@@ -59,12 +58,10 @@ try:
     _layered = hub_agents.layer_profiles(cfg, store)
     if _added or _split_cli or _layered:
         config.save(cfg)
-    if _layered: _log.info('profiles run on the brain their work uses: their own CLI is gone, and the coding profile is `coding`')
-    if _added:
-        _log.info(f"added the shipped agent profiles: {', '.join(_added)}")
+    if _layered: _log.info('agents run on the brain their work uses: their own CLI is gone, and the coding agent is `coding`')
 except Exception as _e:
     from loguru import logger as _log
-    _log.warning(f'could not seed the shipped agent profiles: {_e}')
+    _log.warning(f'could not set up the agent rows: {_e}')
 cli_connections.sync(cfg, store)
 # DEVELOPER MODE, decided once for a home from before the switch: one that already codes keeps its coding agents (devmode.py)
 try:
@@ -93,12 +90,12 @@ except Exception as _e:
 # so a CLI the owner never chose showed up connected and in the pickers (the owner, 2026-10-06: "don't assume if cli
 # installed to be used.. don't automatically connect them"). Set it up on its card connects it.
 try:
-    # one coding profile, one CODING.md: the per-CLI coding clones an older setup minted go
+    # one coding agent: the per-CLI coding clones an older setup minted go
     _dropped = hub_agents.drop_cli_clones(cfg, store)
     if _dropped:
         config.save(cfg)
         from loguru import logger as _log
-        _log.info(f"one coding profile for every CLI: dropped the coding clones {', '.join(_dropped)}")
+        _log.info(f"one coding agent for every CLI: dropped the coding clones {', '.join(_dropped)}")
 except Exception as _e:
     from loguru import logger as _log
     _log.warning(f'could not drop the per-CLI coding clones: {_e}')
@@ -191,7 +188,7 @@ async def _lifespan(_app):
         except Exception as e: logger.warning(f'About your work not offered: {e}')
         try: playbooks.purge()                        # Recently deleted keeps a playbook KEEP_DAYS, then it goes for good
         except Exception as e: logger.warning(f'deleted playbooks not purged: {e}')
-        try:                                          # Recently deleted keeps a report, a rule or a profile KEEP_DAYS, then it goes for good
+        try:                                          # Recently deleted keeps a report or a rule KEEP_DAYS, then it goes for good
             from . import recentlydeleted; recentlydeleted.purge(store)
         except Exception as e: logger.warning(f'Recently deleted not purged: {e}')
         backups.start(config.db_path())               # a copy of the database and its files once a day, the newest three kept
@@ -1800,7 +1797,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
     if kind == 'task.create_from_text':
         from . import concierge
         return concierge.handoff_task(store, str(p.get('text') or ''), str(p.get('kind') or 'coding'), ACTOR, title=p.get('title'),
-                                      repo=str(p.get('repo') or '') or None, profile=str(p.get('profile') or '') or None, said=p.get('said'),
+                                      repo=str(p.get('repo') or '') or None, said=p.get('said'),
                                       files=p.get('files'))     # ...saved uploads, as the door that took them checked (prompt_images)
     if kind == 'task.setup':
         from . import concierge
@@ -2032,10 +2029,9 @@ def _run_kind(op: dict, background: BackgroundTasks):
         return {'connectorId': out['connectorId'], 'type': c.get('Type') or typ, 'name': c.get('Name') or name, 'state': state,
                 'active': bool(c.get('Active')), 'link': f"#connector={out['connectorId']}"}
     if kind == 'role.apply':
-        # the same road the Profiles page's Set up takes (roles.apply) - the chat walked the owner to it
+        # the same road the Playbooks shelf's Set up takes (roles.apply) - the chat walked the owner to it
         from . import roles
-        # the SERVER's config (the one put_agent saves): `cfg` is a local name further down this function
-        return roles.apply(store, globals()['cfg'], str(p.get('role') or ''), str(p.get('portal') or ''))
+        return roles.apply(store, str(p.get('role') or ''), str(p.get('portal') or ''))
     if kind == 'pipe.clear':
         from . import concierge
         # a SELECTOR names the set - the model's, checked by select_items - and nothing else clears: a word list matching the
@@ -2571,7 +2567,7 @@ def _resumable(task_id: int):
     row = store.resumable_session(task_id)
     if not row: return None, 'no saved session to continue - that agent never named a conversation we can reopen'
     if not store.get_agent(row['Agent'] or ''):
-        return None, f'the profile "{row["Agent"]}" is no longer configured; use Run another agent'
+        return None, f'the agent "{row["Agent"]}" it ran as is no longer configured; use Run another agent'
     if not (row['Cwd'] and Path(row['Cwd']).is_dir()):
         return None, f'the checkout it worked in no longer exists: {row["Cwd"]}'
     return row, ''
@@ -3071,11 +3067,6 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
             # ...said as the press it was, before what it taught (general.PRESSES): the change itself left no row on the task
             store.audit('task', task_id, 'handed_to_agent', ACTOR, detail={'from': t.get('Kind'), 'to': next_kind})
             _teach_routing(task_id, 'kind', next_kind, background=background)
-    # ...and WHICH worker: reassigning the profile overturns triage's `profile`, the field that
-    # decided an analyst read a timesheet ask in a bank-feeds checkout.
-    who = str(fields.get('Assignee') or '')
-    if who.startswith('agent:') and who != str(t.get('Assignee') or ''):
-        _teach_routing(task_id, 'profile', who.split(':', 1)[1], background=background)
     # "This is not a coding task - it just needs an answer." Changing the kind to reply IS that
     # verdict, so the task enters the review queue the way a question would have at triage:
     # a draft review appears (auto-drafted when that is on), instead of a repo session.
@@ -3120,7 +3111,7 @@ def continue_task(task_id: int, body: CodeBody):
 
     The transcript is the durable session record. Reopen the same configured agent in the same
     checkout and seed the new terminal with the owner's next instruction plus the saved result.
-    If that agent profile was removed, stop and say so instead of silently changing profiles.
+    If that agent was removed, stop and say so instead of silently changing agents.
     """
     task = store.get_task(task_id)
     if not task: raise HTTPException(404, 'task not found')
@@ -3135,8 +3126,8 @@ def continue_task(task_id: int, body: CodeBody):
     # transcript preserves the convenient same-agent continue path.
     agent = str(body.agent or previous.get('Agent') or hub_agents.default_agent(store)).strip()
     if not store.get_agent(agent):
-        raise HTTPException(422, f'the previous profile "{agent}" is no longer configured; choose an agent from Start session'
-                            if agent else f"no coding profile is set up - add one under {words.name('profiles')}")
+        raise HTTPException(422, f'the previous agent "{agent}" is no longer configured; choose an agent from Start session'
+                            if agent else 'no coding agent is set up - restart Taskuary and it is made again')
     try:
         session = hub_term.start_on_task(store, task_id, agent, body.model, instruction, ACTOR,
                                          brain=getattr(body, 'brain', None),
@@ -3588,19 +3579,19 @@ def set_task_workstream(task_id: int, body: WorkstreamBody):
 class RepoBody(BaseModel):
     repo: str | None = None          # None clears the tag and lets Taskuary guess again
     path: str | None = None          # set the agent's local path for it, if it has none
-    agent: str = ''                  # blank: the coding profile (agents.coding_role)
+    agent: str = ''                  # blank: the coding agent (agents.coding_role)
     restart: bool = False            # close the session that is in the wrong tree and reopen here
 
-def _profile(agent: str = '') -> str:
-    """The profile whose checkouts a repo picker reads: the one named, else the coding profile by its kind. A name that is
-    gone - a page still sending an old profile name - reads the coding profile too, not an empty map."""
+def _coder(agent: str = '') -> str:
+    """The agent row whose checkouts a repo picker reads: the one named, else the coding agent by its kind. A name that is
+    gone - a page still sending an old name - reads the coding agent too, not an empty map."""
     return agent if agent and store.get_agent(agent) else hub_agents.coding_role(store)
 
 def _repo_rows(task_id: int, agent: str = ''):
     """Every repo Taskuary knows, ranked for this task, with whether the agent can open it. A repo
     in SOUL.md with no local path is listed and flagged, not hidden - "we know what it is but not
     where it is" is the thing the owner has to fix, and it cannot be fixed invisibly."""
-    row = store.get_agent(_profile(agent)) or {}
+    row = store.get_agent(_coder(agent)) or {}
     prof = json.loads(row.get('Config') or '{}')
     paths, desc = (prof.get('cwd_map') or {}), hub_term.repo_map(store)
     tagged = hub_term.repo_tag(store.get_task(task_id) or {})        # the owner's pin - never the agent's own agent-repo: pick
@@ -3613,14 +3604,14 @@ def _repo_rows(task_id: int, agent: str = ''):
 @app.get('/api/tasks/{task_id}/repos')
 def task_repos(task_id: int, agent: str = ''):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    picked, why = hub_term.guess_repo(store, task_id, json.loads((store.get_agent(_profile(agent)) or {}).get('Config') or '{}'))
+    picked, why = hub_term.guess_repo(store, task_id, json.loads((store.get_agent(_coder(agent)) or {}).get('Config') or '{}'))
     return {'data': _repo_rows(task_id, agent), 'picked': picked, 'why': why}
 
 @app.get('/api/repos')
 def list_repos(agent: str = ''):
     """Every repo Taskuary knows, for a task that does not exist yet (the New card's picker). Alphabetical - there is no
     ask to rank against - and the flag the task-bound list carries: a repo with no local folder is listed, not hidden."""
-    prof = json.loads((store.get_agent(_profile(agent)) or {}).get('Config') or '{}')
+    prof = json.loads((store.get_agent(_coder(agent)) or {}).get('Config') or '{}')
     paths, desc = (prof.get('cwd_map') or {}), hub_term.repo_map(store)
     return {'data': [{'repo': r, 'what': desc.get(r, ''), 'path': paths.get(r), 'has_path': bool(paths.get(r))}
                      for r in sorted(dict.fromkeys(list(desc) + list(paths)), key=str.lower)]}
@@ -3642,9 +3633,9 @@ def set_task_repo(task_id: int, body: RepoBody, background: BackgroundTasks = No
     store.update_task(task_id, {'Tags': ' '.join(tags)}, ACTOR)
     # a repo Taskuary knows about but has no path for cannot be opened - take the path here
     if body.repo and body.path:
-        body.agent = _profile(body.agent)
+        body.agent = _coder(body.agent)
         row = store.get_agent(body.agent)
-        if not row: raise HTTPException(422, f'unknown agent: {body.agent}' if body.agent else 'no coding profile is set up to hold that path')
+        if not row: raise HTTPException(422, f'unknown agent: {body.agent}' if body.agent else 'no coding agent is set up to hold that path')
         if not Path(body.path).is_dir(): raise HTTPException(422, f'not a directory: {body.path}')
         prof = copy.deepcopy(cfg.get('agents', {}).get(body.agent) or json.loads(row.get('Config') or '{}'))
         prof.setdefault('cwd_map', {})[body.repo] = body.path
@@ -3833,8 +3824,7 @@ def _teach_routing(task_id: int, field: str, value: str, belongs_to: str = None,
     (routingmemory) is the precise one: this sender, this field, this value, weighted by how many
     times it has held - what the next verdict is shown. The LEARNED.md line is the general one,
     distilled by the hot pass into a pattern about how the owner works. Only the first existed
-    for anything but `kind`, so a reassigned worker or a rerouted repository taught the profile
-    nothing whatever.
+    for anything but `kind`, so a rerouted repository taught it nothing whatever.
 
     A failure to learn never fails the correction: the owner's change to their own task lands
     whatever either memory does.
@@ -4896,15 +4886,6 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
             # (accept_offer): kept on the task for the Advisor, said as not done on the phone (2026-11-17, CI)
             _start_refused(tid, body, origin.RefusedForStranger(h['line']))
         had_session = general.session_for(tid) is not None
-        # THE PROFILE IS THE ASSIGNEE. A general hand-off may now name the worker it goes to, and
-        # `agent:<name>` is where general.assigned_role already reads it from to seed PROFILE RULES -
-        # so choosing one needs no new column and no migration (the owner, 2026-09-18). A CODING
-        # profile named here would seed CODING.md into a chat, so it is refused rather than obeyed.
-        if body.agent and not card and body.agent != general.assigned_role(store, task):
-            if str((store.get_agent(body.agent) or {}).get('Kind') or '').lower() in ('coding', 'cli'):
-                raise HTTPException(422, f'{body.agent} is a coding profile - it cannot run a non-coding task')
-            store.update_task(tid, {'Assignee': f'agent:{body.agent}'}, ACTOR)
-            task = store.get_task(tid)
         # ...and Run another agent starts a NEW conversation: without it this resumed the stopped one and, nothing typed, sent nothing
         if body.fresh and not had_session: general.new_run(store, tid, ACTOR)
         if card:                                    # ...a coding task on an AI card works in the checkout its CLI would have
@@ -7480,7 +7461,7 @@ class ConciergeProposeBody(BaseModel):
     verb: str; key: str; text: str | None = None; table: bool = False; exact: bool = False; revision: str | None = None
     # A BUTTON PRESSED ON THE DESK (concierge.propose_direct `press`): it runs at once, with no line in the owner's name and no card to confirm
     press: bool = False
-    # THE AGENT BOX'S ANSWERS (RunForm.AgentAsk): which profile, brain and model a hand-off runs on - the words ride in `text`
+    # THE AGENT BOX'S ANSWERS (RunForm.AgentAsk): which brain and model a hand-off runs on - the words ride in `text`
     agent: str | None = None; brain: str | None = None; pick: str | None = None; model: str | None = None
     files: list[str] = []           # ...and what he attached on that box, beside the words (a hand-off's, AGENT_PICKS)
 
@@ -10221,46 +10202,6 @@ def cli_base(cmd) -> str:
     return re.sub(r'\.(cmd|exe|bat|ps1)$', '', re.split(r'[\\/]', str(cmd or ''))[-1].lower())
 
 
-def _agent_work(store_, books=None):
-    """Existing work attached to each named worker: live task ownership and scheduled jobs.
-
-    Playbooks and report skills remain the source of truth. This is only a projection for the
-    agent card, so naming a worker does not create a second, competing skills system.
-    """
-    books = {b['slug']: b for b in playbooks.list_all()} if books is None else books
-    out = {a['Name']: {'tasks': [], 'reports': []} for a in store_.list_agents(active_only=False)}
-    for task in store_.list_tasks(active_only=True):
-        assignee = str(task.get('Assignee') or '')
-        if not assignee.startswith('agent:'): continue
-        name = assignee[6:].strip()
-        if not name: continue
-        out.setdefault(name, {'tasks': [], 'reports': []})['tasks'].append({
-            'taskId': task['TaskId'], 'ref': task_ref(task['TaskId']), 'title': task.get('Title') or '',
-            'status': task.get('Status') or 'open', 'playbook': _playbook_brief(task, books),
-        })
-
-    # An agent report may be the one flat source or one card in a multi-source report. Either way,
-    # the saved report already names the worker and skill; collect those declarations, do not infer
-    # expertise from prompts or invent a job title.
-    for source in store_.list_sources(active_only=False):
-        if source.get('Channel') != 'report': continue
-        try: cfg_ = json.loads(source.get('ConfigJson') or '{}')
-        except (TypeError, ValueError): continue
-        parts = [cfg_] if cfg_.get('type') == 'agent' else [
-            s for s in cfg_.get('sources') or [] if isinstance(s, dict) and s.get('type') == 'agent']
-        by_agent = {}
-        for part in parts:
-            name = str(part.get('agent') or cfg_.get('agent') or hub_agents.coding_role(store)).strip()
-            skill = str(part.get('skill') or '').strip().lstrip('/')
-            if name: by_agent.setdefault(name, set()).update([skill] if skill else [])
-        for name, skills in by_agent.items():
-            out.setdefault(name, {'tasks': [], 'reports': []})['reports'].append({
-                'sourceId': source['SourceId'], 'title': cfg_.get('title') or source.get('Address') or 'Untitled report',
-                'kind': 'workflow' if cfg_.get('access') == 'write' else 'report',
-                'skills': sorted(skills), 'active': bool(source.get('Active')),
-            })
-    return out
-
 @app.get('/api/cli/connections')
 def list_cli_connections():
     from . import acpadapter, clis, climodels
@@ -10344,112 +10285,9 @@ def test_cli_connection(name: str):
         return {'ok': False, 'error': str(e)[:400]}
 
 
-class SkillPathBody(BaseModel):
-    path: str
-    paths: list | None = None      # the ones ticked in the catalogue; all of them when absent
-class SkillImportBody(BaseModel): skills: list
-
-@app.get('/api/skills/found')
-def skills_found():
-    """Skills already installed on this machine. Read-only, and only files - nothing is learned from
-    another tool's configuration."""
-    from . import skillimport
-    return {'data': skillimport.found()}
-
-
-@app.post('/api/skills/read')
-def skills_read(body: SkillPathBody):
-    """A path (a SKILL.md, or a plugin folder) turned into proposals. WRITES NOTHING: the owner reads
-    the purpose and the body before any of it becomes a worker's instructions."""
-    from . import skillimport
-    try: entries = skillimport.read_path(body.path, body.paths)
-    except ValueError as e: raise HTTPException(422, str(e))
-    except OSError as e: raise HTTPException(422, f'could not read that: {e}')
-    if not entries: raise HTTPException(422, 'no SKILL.md there')
-    return _skill_proposals(entries)
-
-
-class SkillUrlBody(BaseModel):
-    url: str
-    paths: list | None = None
-
-@app.post('/api/skills/list')
-def skills_list(body: SkillUrlBody):
-    """WHAT IS THERE, before anything is read: one row per skill under a link or a folder - a name, a
-    path and which plugin it belongs to. No bodies are fetched and no model is called, so a 252-skill
-    repository is a catalogue to choose from rather than a refusal (the owner, 2026-09-18). The
-    `paths` of the ones ticked come back to /read or /fetch, which brings in at most PICK_MAX."""
-    from . import skillimport
-    target = str(body.url or '').strip()
-    try:
-        rows = skillimport.list_url(target) if target[:8].lower() == 'https://' else skillimport.list_path(target)
-    except ValueError as e: raise HTTPException(422, str(e))
-    except OSError as e: raise HTTPException(422, f'could not read that: {e}')
-    except Exception as e: raise HTTPException(422, f'could not read that: {str(e)[:200]}')
-    if not rows: raise HTTPException(422, 'no SKILL.md there')
-    return {'data': rows, 'max': skillimport.PICK_MAX}
-
-@app.post('/api/skills/fetch')
-def skills_fetch(body: SkillUrlBody):
-    """A link - a raw SKILL.md, a GitHub file, or a GitHub repository or folder holding several -
-    turned into proposals, the same shape as /read. WRITES NOTHING, and fetches only what the link
-    names (skillimport.fetch_url says which shapes)."""
-    from . import skillimport
-    try: entries = skillimport.fetch_url(body.url, only=body.paths)
-    except ValueError as e: raise HTTPException(422, str(e))
-    except Exception as e: raise HTTPException(422, f'could not fetch that: {str(e)[:200]}')
-    return _skill_proposals(entries)
-
-
-def _skill_proposals(entries: list) -> dict:
-    from . import skillimport, llm as llm_mod
-    try: brain = llm_mod.build_llm(store, job='memory')
-    except Exception: brain = None
-    # `flat` is the body's length AS A SESSION RECEIVES IT and `doc_chars` is where the seed cuts a
-    # rules document: the wizard warns from these, not from a byte count of the file. Of the fifteen
-    # skills on the machine this was built on, eleven were over the cut and nine of those were under
-    # the old 20KB "large" mark - they arrived truncated with nothing on screen saying so.
-    return {'doc_chars': hub_term.DOC_CHARS,
-            'data': [dict(skillimport.convert(e, brain), path=e['path'], bytes=e['bytes'],
-                          flat=len(hub_term.flatten_rules(e.get('body') or '')), plugin=e.get('plugin') or '')
-                     for e in entries]}
-
-
-@app.post('/api/skills/import')
-def skills_import(body: SkillImportBody):
-    """Write the ones the owner confirmed. Each becomes an ordinary profile.
-
-    A name that collides with a profile this import did not make is reported in `clashed`, not
-    written - one bad name must not discard the rest of a confirmed batch. The wizard offers the
-    owner a rename or a resend with that item's `replace: true`."""
-    from . import skillimport
-    made, clashed = [], []
-    for s in (body.skills or []):
-        try: made.append(skillimport.save(store, s, bool(s.get('enabled')), replace=bool(s.get('replace'))))
-        except skillimport.ProfileCollision as e: clashed.append({'name': e.name, 'kind': e.kind, 'doc': e.doc})
-        except (ValueError, OSError) as e: raise HTTPException(422, f'{s.get("name")!r}: {e}')
-    # The profile goes into config.toml's table TOO, the way put_agent and seed_profiles write one:
-    # the Agents page reads that table, and DELETE /api/agents 404s on a name absent from it - so a
-    # profile living only in its store row could be neither edited nor removed anywhere in the UI
-    # (seed_profiles' docstring records fixing exactly this once before). It starts from the coding
-    # agent's CLI setup, as the shipped roles do, so it is runnable and editable on day one.
-    if made:
-        keep = hub_agents.cli_inheritance(cfg)
-        for name in made:
-            try: prof = json.loads((store.get_agent(name) or {}).get('Config') or '{}')
-            except ValueError: prof = {}
-            cfg.setdefault('agents', {})[name] = {**keep, **cfg['agents'].get(name, {}), **prof}
-            try: cli_connections.sync(cfg, store, name)
-            except ValueError: pass                # a dangling provider: the store row stands as save() wrote it
-        config.save(cfg)
-    store.audit('agent', 0, 'skills_imported', ACTOR, detail={'names': made, 'clashed': [c['name'] for c in clashed]})
-    return {'imported': made, 'clashed': clashed}
-
-
 @app.get('/api/agents')
 def agents():
-    """data = store rows (for dispatch pickers); config = the editable profiles;
-    models = the quick-pick model list per agent, keyed by agent name."""
+    """data = the agent rows (the coding agent's, for its pickers); models = the quick-pick model list per agent, keyed by agent name."""
     from . import climodels
 
     def _models(a):
@@ -10471,11 +10309,7 @@ def agents():
     head = hub_agents.default_agent(store)
     rows = sorted(store.list_agents(), key=lambda a: a['Name'] != head)
     profs = hub_agents.profiles(store)
-    return {'data': [{**a, 'installed': hub_agents.runs_here(profs.get(a['Name']) or {}),
-                      'rules_doc': hub_agents.profile_document(store, a['Name']),
-                      'purpose': hub_agents.profile_purpose(a['Name'], profs.get(a['Name']) or {}, a.get('Kind') or 'coding')}
-                     for a in rows],
-            'config': cfg.get('agents', {}), 'default': head,
+    return {'data': [{**a, 'installed': hub_agents.runs_here(profs.get(a['Name']) or {})} for a in rows], 'default': head,
             'models': {a['Name']: _models(a) for a in store.list_agents()},
             # WHICH BRAIN each role runs on. The card used to name the role, and after the roles
             # and brains were split every coding row would read `coding` - the owner asked for the
@@ -10483,7 +10317,7 @@ def agents():
             # once per role here rather than stamped on every row.
             'brains': {a['Name']: hub_agents.brain_for(store, a['Name']) for a in rows},
             # every brain that can be picked, and the models each offers. A coding picker chooses
-            # the BRAIN: the role is the coding profile for every coding task, so offering roles there would
+            # the BRAIN: the role is the coding agent for every coding task, so offering roles there would
             # be one choice with one entry (the 2026-09-16 spec).
             # the brains a NON-coding hand-off may choose, one per installed CLI (general.py)
             'general_brains': _general.brain_options(store),
@@ -10499,51 +10333,7 @@ def agents():
             # has since gone has to be able to SAY so, and the picker renders it from this.
             'brain_models': {k: {'choices': c['choices'], 'models': c['models'], 'installed': k in brains_here,
                                  'default': (cli_connections.gears(cfg, k) or {}).get('model') or ''}
-                             for k in conns for c in [climodels.catalog(cli_connections.cli_key(conns[k].get('cmd')) or k)]},
-            'work': _agent_work(store)}
-
-@app.post('/api/agents/{name}/test')
-def agent_test(name: str):
-    """One tiny real run through the configured CLI ('Reply with exactly: ok') - proves
-    the command exists, flags are right, and headless mode doesn't hang on approvals."""
-    a = store.get_agent(name)
-    prof = json.loads(a['Config']) if a and a.get('Config') else None
-    if not prof: raise HTTPException(404, 'agent not found')
-    profile = {**prof, 'timeout': min(int(prof.get('timeout', 120) or 120), 180)}
-    try:
-        out, sid, _ = hub_agents.run_cli(profile, 'Reply with exactly: ok', lambda *a: None)
-        return {'ok': True, 'result': (out or '')[:300], 'resumable': bool(sid)}
-    except FileNotFoundError:
-        return {'ok': False, 'error': f"command not found: {profile.get('cmd')} - is the CLI installed and on PATH?"}
-    except Exception as e:
-        return {'ok': False, 'error': str(e)[:400]}
-
-@app.put('/api/agents/{name}')
-def put_agent(name: str, body: dict):
-    if not re.fullmatch(r'[a-z0-9][a-z0-9_-]*', name):
-        raise HTTPException(422, 'Use a lowercase profile name with letters, numbers, hyphens or underscores')
-    row = store.get_agent(name) or {}
-    candidate = copy.deepcopy(cfg)
-    try:
-        profile = cli_connections.set_profile(candidate, store, name, body)
-        cli_connections.resolve(candidate, profile, cli_connections.brain_of(store, candidate, name, profile))
-    except ValueError as e: raise HTTPException(422, str(e))           # a CLI the body NAMES that is not connected is still refused
-    # A PROFILE IS A NAME AND INSTRUCTIONS (the owner, 2026-10-22): it saves with no CLI behind it - the brain is the AI defaults'
-    # answer, asked when work starts. "Choose a configured CLI provider" refused every profile on a box with none connected
-    profile['kind'] = profile.get('kind') or hub_agents.DEFAULT_PROFILES.get(name, {}).get('kind') or row.get('Kind') or 'coding'
-    profile['purpose'] = hub_agents.profile_purpose(name, profile, profile['kind'])
-    if profile.get('rules_doc') and not re.fullmatch(r'[a-z0-9][a-z0-9_-]*', str(profile['rules_doc'])):
-        raise HTTPException(422, 'Invalid rules document name')
-    rules_doc = profile.get('rules_doc')
-    if rules_doc and rules_doc != name and not store.get_doc(rules_doc) and not hub_agents.profile_template(store, rules_doc):
-        raise HTTPException(422, 'Choose an existing instructions document or this profile\'s own document')
-    cfg['agents'] = candidate['agents']
-    cfg['cli_connections'] = candidate.get('cli_connections', {})
-    config.save(cfg)
-    cli_connections.sync(cfg, store, name)
-    rules_doc = hub_agents.ensure_profile_document(store, name)
-    store.audit('agent', 0, 'save', ACTOR, detail=name)
-    return {'ok': True, 'rules_doc': rules_doc}
+                             for k in conns for c in [climodels.catalog(cli_connections.cli_key(conns[k].get('cmd')) or k)]}}
 
 @app.get('/api/roles')
 def roles_list():
@@ -10557,23 +10347,14 @@ class RoleBody(BaseModel):
 @app.post('/api/roles/{name}')
 def roles_apply(name: str, body: RoleBody):
     from . import roles
-    try: return roles.apply(store, cfg, name, body.portal)
+    try: return roles.apply(store, name, body.portal)
     except ValueError as e: raise HTTPException(422, str(e))
 
-@app.delete('/api/agents/{name}')
-def delete_agent(name: str):
-    if name not in cfg.get('agents', {}): raise HTTPException(404, 'agent not found')
-    # An IMPORTED profile's document goes with it: the import wrote it, nothing else shares it, and
-    # left behind it would be the body a later profile of the same name silently inherits. A document
-    # anyone else wrote (the owner, a template) stays - deleting a worker is not deleting its rules.
-    # ...and all of it is kept under Recently deleted, so Undo and Restore bring the profile back whole (recentlydeleted.py)
-    from . import recentlydeleted
-    out = recentlydeleted.remove_profile(store, cfg, name)
-    store.audit('agent', 0, 'delete', ACTOR, detail=name)
-    return {'ok': True, **out}
-
 def _template_text(name: str) -> str:
-    return hub_agents.profile_template(store, name)
+    "The shipped template of an operator document (templates/<name>.md), '' for one that ships none."
+    from pathlib import Path
+    f = Path(__file__).parent / 'templates' / f'{name}.md'
+    return f.read_text(encoding='utf-8') if re.fullmatch(r'[a-z0-9][a-z0-9_-]*', name) and f.is_file() else ''
 
 def _heal_blank_doc(name: str) -> str:
     """An EMPTY operator document is never what anyone meant: it switches off the rules every prompt
@@ -10602,7 +10383,6 @@ def how_it_works():
 @app.get('/api/doc/{name}')
 def get_doc(name: str):
     """Raw for the editor, rendered so you can see what an agent will actually read."""
-    name = hub_agents.profile_document(store, name)
     content = _heal_blank_doc(name)
     if (who := _named_owner(name)): content = render_doc(content, who)
     # ...and how much of it reaches the model that reads it: the editor's meter counts what is typed against the prompt's own number
@@ -10619,7 +10399,6 @@ def _named_owner(name: str):
 
 @app.put('/api/doc/{name}')
 def put_doc(name: str, body: DocBody):
-    name = hub_agents.profile_document(store, name)
     # blank = "give me the shipped default back", as the templates' own comments promise
     if not str(body.content or '').strip() and _template_text(name).strip():
         store.save_doc(name, _template_text(name), 'template')

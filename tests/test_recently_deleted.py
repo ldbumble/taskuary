@@ -74,19 +74,6 @@ class RecentlyDeletedTests(unittest.TestCase):
         self.c.post(f"/api/deleted/{out['deleted']}/restore")
         self.assertEqual([(p['PolicyId'], p['Name']) for p in self.s.list_policies()], [(pid, 'Mute the newsletter')])
 
-    def test_a_profile_comes_back_whole_and_never_over_a_new_one_of_its_name(self):
-        self.cfg['agents']['researcher'] = {'kind': 'general', 'purpose': 'looks things up'}
-        self.s.upsert_agent('researcher', 'general', 'cli', '{"kind": "general"}')
-        out = self.c.delete('/api/agents/researcher').json()
-        self.assertNotIn('researcher', self.cfg['agents']); self.assertIsNone(self.s.get_agent('researcher'))
-        self.assertEqual(self.c.get('/api/deleted').json()['data'][0]['kind'], 'profile')
-        self.cfg['agents']['researcher'] = {'kind': 'general', 'purpose': 'a new one'}
-        self.assertEqual(self.c.post(f"/api/deleted/{out['deleted']}/restore").status_code, 409)
-        del self.cfg['agents']['researcher']
-        self.assertEqual(self.c.post(f"/api/deleted/{out['deleted']}/restore").status_code, 200)
-        self.assertEqual(self.cfg['agents']['researcher']['purpose'], 'looks things up')
-        self.assertEqual(self.s.get_agent('researcher')['Kind'], 'general')
-
     def _mail_card(self):
         cid = self.s.save_connector({'Type': 'imap', 'Name': 'Northwind mail', 'ConfigJson': json.dumps({'host': 'mail.northwind.example'}),
                                      'Secret': 'app-password', 'Active': 1}, 'test')

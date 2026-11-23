@@ -131,7 +131,7 @@ class TheTool(unittest.TestCase):
     def test_it_is_listed_as_a_read_and_invites_use(self):     # 2026-11-09: once in 50 scenarios, with "never required" in it
         cls, desc, schema, _ = agenttools.TOOLS['show']
         self.assertEqual(cls, 'read')
-        self.assertIn('Use it freely', desc); self.assertIn('never sends, pays or closes', desc)
+        self.assertIn('never sends, pays or closes', desc)
         self.assertEqual(schema['required'], [])            # a view, or `files`, or both (2026-11-09)
         self.assertIn('files', schema['properties'])
 
@@ -261,10 +261,6 @@ def test_a_query_saved_as_a_file_is_shown_as_text_by_its_bytes():
     try: session_artifacts.shown(s, tid, d / 'blob.dat', 'agent'); raise AssertionError('bytes that are no text are not shown')
     except ValueError as e: assert 'cannot be shown' in str(e)
 
-
-def test_the_tool_says_not_to_repeat_the_view_in_words():
-    from taskuary import agenttools
-    assert 'never the same table or list again in text' in agenttools.TOOLS['show'][1]
 
 
 def test_the_tools_one_example_is_a_good_spec_with_a_grid_tiles_a_chart_a_table_and_a_checklist():

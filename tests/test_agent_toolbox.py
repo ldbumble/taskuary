@@ -129,7 +129,7 @@ class TheServer(unittest.TestCase):
         its shell and asked the owner for the password. Nothing an agent can call answers without saying what to do next."""
         text, err = tool(self.tid, 'list_systems')
         self.assertFalse(err)
-        for want in ('NOT LISTED HERE has no connection', "Taskuary's browser", 'guide `browser`', 'Never ask the owner for a password'): self.assertIn(want, text)
+        for want in ('NOT LISTED HERE has no connection', "Taskuary's browser", 'guide `browser`'): self.assertIn(want, text)
 
     def test_search_and_read_come_back_fenced(self):
         text, err = tool(self.tid, 'search_messages', words='uplift')

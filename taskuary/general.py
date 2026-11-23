@@ -1043,14 +1043,13 @@ REOPENED_SINCE = 'a new message on its thread has opened it again since'
 # WHAT BECAME OF A SEND IS THE AGENT'S TO KNOW, AS IT ENDED (the agent walk, 2026-11-09): a send the server refused was not told to it at
 # all, one that went on the second press was told as "approved (Not sent: ...)" - it answered "not sent" and offered to set the mail up
 # again, one yes from sending it twice - and a text the owner changed before sending went out without the agent ever seeing what went
-NOT_GONE = {'failed': 'pressed Send on {n} and IT DID NOT GO ({why}) - it still waits for their Send; never set it up again',
-            'unknown': 'pressed Send on {n} and it MAY have gone ({why}) - never send it or set it up again unless they ask'}
+NOT_GONE = {'failed': 'pressed Send on {n} and IT DID NOT GO ({why}) - its card still stands with their Send',
+            'unknown': 'pressed Send on {n} and it MAY have gone ({why}) - whether it went is not known'}
 # ...and an ACT whose press failed (store.review_act_failed): the agent that set it up heard nothing, and read its card as still unpressed
-ACT_FAILED = ('pressed Approve on {n} and IT FAILED ({why}) - nothing of it was done{left}. Where it is still needed, set the corrected one up '
-              'as a new card for their press; never do it another way')
+ACT_FAILED = 'pressed Approve on {n} and IT FAILED ({why}) - nothing of it was done{left}.'
 # ...and one a restart cut while it ran (verdicts.cut_acts): it MAY have gone - never "nothing of it was done", never done again unasked
 ACT_CUT = 'Cut short when Taskuary restarted while this ran - it may have been done. Check before pressing it again.'
-ACT_MAYBE = 'pressed Approve on {n} and Taskuary restarted while it ran - it MAY have been done and its card still waits for their press; check what stands, and never do it again unless they ask'
+ACT_MAYBE = 'pressed Approve on {n} and Taskuary restarted while it ran - it MAY have been done, and its card still waits for their press'
 def failed_act(r) -> bool: return r.get('Kind') == 'action' and r['Status'] == 'superseded' and bool(r.get('ActError'))
 # ...and one that WENT is said as done: an approved merge, post or split read "approved (sent, if it sends)" - a letter's words for an act that
 # sends nothing, leaving its agent to guess whether it had run (the stress round, 2026-11-10)
@@ -1860,16 +1859,13 @@ def _files_to_attach(store, tid: int, named: list, paths: list) -> list:
 
 
 # ...and a turn that ended on that anyway is woken once to finish it (GeneralSession.wake): what the judge says it still waits on, said back
-WAKE = ("TASKUARY: your last answer ended still waiting on {why}. Nothing wakes you once a turn ends, so that result would never come "
-        "back. Do it now, in this turn - wait for it here, or do the work yourself - and answer with the result. If part of it truly cannot "
-        "be done, say which part and why.")
+WAKE = "TASKUARY: your last answer ended still waiting on {why}. Nothing wakes you once a turn ends, so that result does not come back by itself."
 # ...AND A TURN THE OWNER STARTED THAT SAID NOTHING (the owner, 2026-11-10: "it created reply with nothing in it. that's dumb. if you have
 # nothing to reply just ask what should i reply?"): an answer that was only markers (a draft block with no words, a summary with nothing in it)
 # is filed empty, and the chat drew the turn's steps and nothing the owner could use. With no card waiting and no question either, it answered
 # nothing: woken once, by the same wake, to answer what was asked - never to pay what the task "owes" ("goal is to assist user not get do your
 # end of action" - an email or reply nobody has written is the agent's to judge, not a debt the app chases)
-SILENT = ("TASKUARY: your turn ended without a word to the owner and with nothing set up for them. Answer what they asked now - do it, or, if "
-          "you could not (a draft you cannot write, a fact only they have), say so and ask them your one question.")
+SILENT = "TASKUARY: your turn ended without a word to the owner and with nothing set up for them - their ask still stands, unanswered."
 # ...and a woken turn that says nothing AGAIN is the agent asking, in the owner's own words for it ("it should say i could not draft what should
 # i do?"): the one line Taskuary ever puts in an agent's name, and only over an empty turn - an agent's own words are never replaced
 COULD_NOT = 'I could not draft anything for that. What should I say, or what should I do?'
@@ -2149,7 +2145,7 @@ def freeze(s, head: str, late, kept: bool, by_line: bool = False) -> tuple[str, 
 # a line Forgotten, marked Wrong or replaced by a newer fact simply left the block, and a conversation that had read it went on believing
 # it. Plain reading: the memory lines this conversation was told that LEARNED.md no longer holds - never one the budget merely left out
 LEARNED_HEAD = 'WHAT TASKUARY HAS LEARNED ABOUT THE OWNER'
-UNLEARNED = "NO LONGER IN THE OWNER'S MEMORY - taken back or replaced since you read them; do not go on these, and correct what you wrote from them:"
+UNLEARNED = "NO LONGER IN THE OWNER'S MEMORY - taken back or replaced since you read them, so no longer true:"
 def unlearned(store, frozen) -> str:
     if not frozen: return ''
     from . import learned_cut as lc

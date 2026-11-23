@@ -193,6 +193,13 @@ class NothingElseChangesTests(unittest.TestCase):
         with mock.patch.object(agents, 'run_cli', side_effect=lambda prof, prompt, *a, **k: (typed.append(prompt), ('ok', 'codex-sess-1', None))[1]):
             brain('SYSTEM v1', 'first'); brain('SYSTEM v1', 'second'); brain('SYSTEM v2', 'third')
         self.assertIn('SYSTEM v1', typed[0]); self.assertEqual(typed[1], 'second'); self.assertIn('SYSTEM v2', typed[2])
+        # ...AND ACROSS A RESTART (the review, 2026-11-23): the conversation picked up by a new process after his Continue or a press was
+        # typed the whole system - the owner block and all - again over a conversation that held it
+        llm._SAID.clear()
+        again = llm.make_cli_llm(s, 'codex', keep='general:1:sx', resume='codex-sess-1')
+        with mock.patch.object(agents, 'run_cli', side_effect=lambda prof, prompt, *a, **k: (typed.append(prompt), ('ok', 'codex-sess-1', None))[1]):
+            again('SYSTEM v2', 'after the restart')
+        self.assertEqual(typed[3], 'after the restart')
 
     def test_a_general_agent_run_with_hands_is_marked_for_the_acp_road(self):
         from taskuary import llm

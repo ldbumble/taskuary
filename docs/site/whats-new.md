@@ -2,6 +2,10 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.1.8 - 2026-11-22
+
+- Following a link never speaks for the owner or sends his details, whatever the judge named it
+
 ## 0.4.1.7 - 2026-11-22
 
 - His name and work email on a sign-up he asked for go on his ask, read off the form by code; his phone still waits

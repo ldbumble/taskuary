@@ -38,6 +38,14 @@ with no sign it saved; a dead end with no next move; a blank beat, a jump or a f
 
 On every road, with files attached through every door (New, a task's line, Send to agent, Continue) - check the agent's OWN log read them:
 
+- **Views in the chat (json-render, the `show` tool)** - on every road, ask for things that read faster as a picture: numbers over
+  time, a comparison of options, a list with statuses, a few headline figures. The agent should show them by itself with `show` (no
+  prompting) - a chart, a table, tiles, a checklist - inline in its turn, in order with its words. Judge each by eye against the
+  original json-render repo's look (vercel-labs/json-render examples): clean axes and labels, real data, no raw JSON or markdown
+  tables in its place, light and dark both right. Compact: a view never takes over the screen - the words above and below it stay in
+  sight on a laptop window; a long table scrolls inside itself. Record the turn (`recorder.mjs`): no jump or flicker when the view
+  lands or the turn ends. A view that should have been shown and was written as text instead is a finding.
+
 - make: an image, a chart, a PDF, a spreadsheet, a deck, a web page; read and edit a local sheet; find a file; summarize a PDF
 - look up a fact and a price (web search is the model's own, fast; the browser only for a sign-up or a click)
 - reply drafts: one card per person, the To / greeting / "next" line all the same person; cards in a row "1 of N"

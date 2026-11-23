@@ -43,7 +43,7 @@ export const groupLines = (g) => {
     return { ...s, lines, ...(s.slug === "people" ? { people: byPerson(lines) } : {}) };
   });
   return [...subj,
-    { slug: "watching", title: "Watching", reads: "read by nobody yet - still earning it", lines: ls.filter((l) => l.status === "hypothesis") },
+    { slug: "watching", title: "Learned, waiting on your word", reads: "used by nobody until you Keep it", lines: ls.filter((l) => l.status === "hypothesis") },
     { slug: "proposed", title: "Proposed", reads: "your call - each would hide mail", lines: ls.filter((l) => l.status === "proposed") }];
 };
 

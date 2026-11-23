@@ -127,7 +127,7 @@ class EveryYesCarriesOn(unittest.TestCase):
         def start(*a, **kw): tried.append(1); raise RuntimeError('no AI is connected')
         with mock.patch.object(general, 'start_session', side_effect=start), mock.patch.object(general, 'handles', return_value=True), \
              mock.patch.object(outbound, 'send_out', return_value={'channel': 'email', 'to': ['paula@northwind.example'], 'cc': []}), \
-             mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learn.learn_from'):
+             mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learning.learn_from'):
             self.assertTrue(verdicts.decide(self.s, self.s.get_review(rid), 'approve')['ok'])
             end = time.time() + 5
             while not tried and time.time() < end: time.sleep(.01)
@@ -677,7 +677,7 @@ class OneCardAtATime(unittest.TestCase):
         ids = [self.email(tid, f'{n}@northwind.example', f'{n.title()} - the pack is attached.') for n in ('erin', 'gail', 'paula')]
         told = []
         with mock.patch.object(general, 'to_agent', lambda st, t, said, actor='owner', heard=None, **k: told.append(said) or (heard and heard('woke')) or 'woke'), \
-             mock.patch.object(general, 'carries_on', return_value=True), mock.patch('taskuary.learn.learn_from'), \
+             mock.patch.object(general, 'carries_on', return_value=True), mock.patch('taskuary.learning.learn_from'), \
              mock.patch.object(outbound, 'send_out', side_effect=lambda st, ch, to, *a, **k: {'channel': ch, 'to': to, 'cc': []}), \
              mock.patch.object(outbound, 'send_block', return_value=''):
             for i, rid in enumerate(ids):
@@ -692,7 +692,7 @@ class OneCardAtATime(unittest.TestCase):
         first, second = self.email(tid, 'gail@northwind.example', 'Gail - the rate is 4%.'), self.email(tid, 'ray@northwind.example', 'Ray - Gail has the rate.')
         told = []
         with mock.patch.object(general, 'to_agent', lambda st, t, said, actor='owner', heard=None, **k: told.append(said) or (heard and heard('woke')) or 'woke'), \
-             mock.patch('taskuary.learn.learn_from'), mock.patch.object(outbound, 'send_block', return_value=''), \
+             mock.patch('taskuary.learning.learn_from'), mock.patch.object(outbound, 'send_block', return_value=''), \
              mock.patch.object(outbound, 'send_out', side_effect=lambda st, ch, to, *a, **k: {'channel': ch, 'to': to, 'cc': []}):
             self.assertTrue(verdicts.decide(self.s, self.s.get_review(first), 'approve')['ok'])
             self.assertEqual(told, [])

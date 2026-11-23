@@ -55,7 +55,7 @@ def _voice(store) -> str:
     from .responder import BREVITY, CHAT, EMAIL, SYSTEM, owner_of, signature_line, style_doc
     soul = store.doc('soul') or ''
     # STYLE for voice and the owner's writing instructions (its Owner notes), SOUL for identity - and no LEARNED.md, which is triage's
-    # (PW-058/059). The fourth slot was the notes table's writing notes; they live in STYLE.md now (memorylines.migrate, 2026-10-27)
+    # (PW-058/059). The fourth slot was the notes table's writing notes; they live in STYLE.md now (2026-10-27)
     return (SYSTEM.format(owner=owner_of(store, soul)) + signature_line(store), soul, style_doc(store), '', BREVITY, CHAT, EMAIL)
 
 

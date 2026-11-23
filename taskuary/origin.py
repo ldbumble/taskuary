@@ -269,10 +269,9 @@ def report_rests_on(store, row: dict) -> tuple:
 
 
 # ── A MEMORY LINE IS AS TRUSTED AS WHOSE WORDS IT CAME FROM (the owner, 2026-11-03) ──────────────────────────────────────────────────
-# A line of LEARNED.md the owner said or reworded, or one learned only from their own sent mail, is the owner's; a line learned from
-# anyone else's mail - or with no record of where it came from - is a stranger's. Read from what the memory writers already keep:
-# the line's tag (`ev:` ids, learn.py) and its history (learned_history: Actor 'owner' when they said it, 'verdict:<kind>' + Ev when
-# a verdict taught it, memorylines.teach).
+# A line the owner said, or one learned only from their own sent mail, is the owner's; a line learned from anyone else's mail - or with
+# no record of where it came from - is a stranger's. Read from what the memory keeps: whose word a line is, and its evidence ids.
+# What an agent kept for him (Source agent:...) is his word only where he spoke on that task - the remember door's own check.
 MEM_NONE = 'a line of what Taskuary learned, with no record of whose words it came from'
 
 def _ev_origin(store, e: str) -> tuple:
@@ -283,25 +282,17 @@ def _ev_origin(store, e: str) -> tuple:
     return 'stranger', f'a line of what Taskuary learned from {str(e)[:30]!r}, which is not your own words'
 
 def memory_rests_on(store, key: str) -> tuple:
-    "(origin, why) of the LEARNED.md line an idea rests on, by its key: the worst of what it was learned from; no record, a stranger's."
-    from .memoryedit import find, DOC
-    raw, l, untagged = find(store.get_doc(DOC) or '', key)
-    if not raw: return 'stranger', f'{MEM_NONE} - it is no longer in the memory'
-    said = [h for h in store.learned_history(key) if h.get('Action') in ('said', 'edited')]
-    who = str(said[-1].get('Actor') or '') if said else ''
-    # a machine line (tagged) is judged by its own ev ids; an untagged one by who last said it - the owner, or a verdict on an item
-    if not untagged: evs = l['ev']
-    elif who and not who.startswith('verdict:') and who not in _machine(): return 'owner', 'a line of what Taskuary learned, in your own words'
-    else: evs = [said[-1].get('Ev')] if who.startswith('verdict:') and said[-1].get('Ev') else []
+    "(origin, why) of the memory line an idea rests on, by its key: his word is his; else the worst of what it was learned from."
+    from . import memory
+    r = memory.get(store, key)
+    if not r or r.get('Status') != 'live': return 'stranger', f'{MEM_NONE} - it is no longer in the memory'
+    if r['Kind'] == memory.SAID: return 'owner', 'a line of your memory, in your own words'
+    evs = r['ev']
     if not evs: return 'stranger', MEM_NONE
     o, why = 'owner', 'a line of what Taskuary learned from your own words'
     for e in evs:
         if worse((r := _ev_origin(store, e))[0], o) != o: o, why = r; break
     return o, why
-
-def _machine():
-    from .learnedlines import MACHINE
-    return MACHINE
 
 def _drop_stale_hold(store, t: dict, why: str):
     """A task held as a stranger's whose every sender is trusted since (a Teams colleague resolved after the fact) is no

@@ -1033,7 +1033,7 @@ class ApiTests(unittest.TestCase):
         good = server.store.get_doc('learned')
         with mock.patch('taskuary.llm.build_llm', return_value=lambda sys_, usr, **kw: good):
             self.assertTrue(c.post('/api/learn/reflect').json()['reflected'])
-        from taskuary.learn import gather
+        from taskuary.learning import gather
         self.assertIn('DRAFT VERDICTS', gather(server.store, '2000-01-01'))
 
     def test_reviews_say_whether_the_channel_can_carry_a_reply(self):
@@ -1281,8 +1281,8 @@ class ApiTests(unittest.TestCase):
         with teaching('Failed bank imports are real work for you, even from a machine'):
             out = c.post(f'/api/messages/{mid}/mine', json={}).json()
         # ...readable as a line in LEARNED.md, about the topic it was given on, citing the mail (memorylines, 2026-10-27)
-        from taskuary import memorylines
-        made = [l for l in memorylines.lessons(server.store) if l['ev'] == f'msg{mid}']
+        from taskuary import memory
+        made = [l for l in memory.lessons(server.store) if l['ev'] == f'msg{mid}']
         self.assertEqual([l['kind'] for l in made], ['made_task'])
         self.assertIn('(about: the topic "', made[0]['text'])
         self.assertIn(made[0]['text'], server.store.get_doc('learned'))
@@ -1293,19 +1293,19 @@ class ApiTests(unittest.TestCase):
         mid = server.store.add_message({'ExternalId': 'report:1:2026-09-29 10:04', 'Channel': 'report', 'SourceName': 'Daily Digest',
                                         'Subject': 'Daily Digest - an agent ran a prompt - 49 lines', 'SentAt': '2026-09-29 10:04',
                                         'BodyText': 'Top 15 list.', 'Status': 'filed'})
-        from taskuary import memorylines
+        from taskuary import memory
         with teaching('never written'):
             c.post(f'/api/messages/{mid}/mine', json={})
-        self.assertEqual([l for l in memorylines.lessons(server.store) if l['ev'] == f'msg{mid}'], [])
+        self.assertEqual([l for l in memory.lessons(server.store) if l['ev'] == f'msg{mid}'], [])
 
     def test_a_report_run_promoted_as_standing_is_learned(self):
         mid = server.store.add_message({'ExternalId': 'report:2:2026-09-29 10:04', 'Channel': 'report', 'SourceName': 'Weekly Digest',
                                         'Subject': 'Weekly Digest - an agent ran a prompt - 12 lines', 'SentAt': '2026-09-29 10:04',
                                         'BodyText': 'Numbers.', 'Status': 'filed'})
-        from taskuary import memorylines
+        from taskuary import memory
         with teaching('The weekly digest is work you act on'):
             c.post(f'/api/messages/{mid}/mine', json={'standing': True})
-        self.assertEqual(len([l for l in memorylines.lessons(server.store) if l['ev'] == f'msg{mid}']), 1)
+        self.assertEqual(len([l for l in memory.lessons(server.store) if l['ev'] == f'msg{mid}']), 1)
 
     def test_a_taskless_fyi_reply_and_manual_edits_survive_reopening(self):
         mid = server.store.add_message({'ExternalId': 'teams:fyi-reply', 'Channel': 'teams',

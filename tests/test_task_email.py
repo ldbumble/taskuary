@@ -54,7 +54,7 @@ def test_the_files_picked_ride_on_it_and_go_with_it_when_it_is_sent(s):
     out, _ = email(s, tid, files=[('corporate-supervisors-template.xlsx', b'PK\x03\x04 sheet')])
     assert out['attached'] == ['corporate-supervisors-template.xlsx']
     with mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent, mock.patch.object(outbound, 'send_block', return_value=''), \
-         mock.patch('taskuary.learn.learn_from'):
+         mock.patch('taskuary.learning.learn_from'):
         verdicts.decide(s, s.get_review(out['review_id']), 'approve')
     assert [f['name'] for f in sent.call_args.kwargs['attachments']] == ['corporate-supervisors-template.xlsx']
     assert s.get_task(tid)['Status'] == 'open'                                                 # sent - Mark done is the owner's (2026-10-18)
@@ -148,7 +148,7 @@ def test_a_chat_message_goes_to_the_chat_and_leaves_the_task_open_when_sent(s):
     [slot] = slots.open_(s, tid)
     assert slot['text'].startswith('Message on Teams Ops channel') and 'by' not in slot['out']     # the owner's, not an agent's
     with mock.patch('taskuary.outbound.send_out', return_value={'channel': 'teams', 'to': ['19:ops@thread.v2']}) as sent, \
-         mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learn.learn_from'):
+         mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learning.learn_from'):
         verdicts.decide(s, s.get_review(out['review_id']), 'approve')
     assert sent.call_args.args[1:3] == ('teams', ['19:ops@thread.v2']) and s.get_task(tid)['Status'] == 'open'
 

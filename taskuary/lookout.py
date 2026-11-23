@@ -573,7 +573,7 @@ def tick(store, llm=None, force: bool = False, wait: bool = False) -> dict:
         _hold(store, held_)
         rows = [r for r in (land(store, x) for x in kept[:max(0, min(MAX_RAISE, MAX_OPEN - len(waiting(store))))]) if r]
         if rows:
-            from .habits import _woke
+            from .learning import _woke
             _woke(store)
         logger.info(f"lookout: read {', '.join(deep) or 'no area'} deep - {len(ideas)} proposed, {len(rows)} raised, {len(held_)} held")
         return out | {'raised': [r['IdeaId'] for r in rows], 'held': [x['title'] for x, _ in held_], 'calls': n[0]}

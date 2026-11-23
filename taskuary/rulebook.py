@@ -333,10 +333,10 @@ def recipients(store, rv: dict) -> list:
 
 def leaving(store, item: dict, rv: dict) -> str:
     """'' or the line: who on the draft is new to its thread, and the files it sends."""
-    from . import learned_cut
+    from .memory import people_of
     from .ingest import owner_addresses, own_addresses
     tk, ti = ('task', item['tid']) if item.get('tid') else ('message', rv.get('MessageId') or item.get('mid'))
-    known = {a for m in _msgs(store, item, tk, ti) for a in learned_cut.people_of(m)} | owner_addresses(store) | own_addresses(store)
+    known = {a for m in _msgs(store, item, tk, ti) for a in people_of(m)} | owner_addresses(store) | own_addresses(store)
     new = [a for a in dict.fromkeys(recipients(store, rv)) if a not in known]
     try: files = [f.get('name') for f in (json.loads(rv.get('Deliver') or '{}') or {}).get('attachments') or [] if isinstance(f, dict) and f.get('name')]
     except (TypeError, ValueError, AttributeError): files = []

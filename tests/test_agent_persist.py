@@ -44,7 +44,7 @@ def test_a_long_task_is_compacted_and_still_names_its_earlier_decisions():
         s.add_comment(tid, 'owner', general.USER_TYPE, f'question {i}'); answered(s, tid, f'answer {i}')
     s.add_comment(tid, 'owner', general.USER_TYPE, 'Where did we land?')
     before = len(s.list_comments(tid, internal=True))
-    with mock.patch.object(general, 'MAX_CONTEXT', 30_000), mock.patch('taskuary.learn.learn_from') as lf:
+    with mock.patch.object(general, 'MAX_CONTEXT', 30_000), mock.patch('taskuary.learning.learn_from') as lf:
         user = general._prompt(s, tid)[1]
     assert 'EARLIER IN THIS CONVERSATION, COMPACTED' in user
     assert 'Go with the three-year term, not the two.' in user                                  # the owner's decision

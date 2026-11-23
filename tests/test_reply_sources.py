@@ -11,7 +11,7 @@ instruction; a rejection's note stays triage feedback for LEARNED.md.
 import json, unittest
 from unittest import mock
 
-from taskuary import learn, outbox, responder, verdicts
+from taskuary import outbox, responder, verdicts, learning, memory
 from taskuary.store import MemoryStore
 from tests.memlines import note as put_note
 
@@ -27,8 +27,8 @@ def store():
     put_note(s, {'Scope': 'global', 'ScopeKey': None, 'Source': 'writing', 'Active': 1, 'CreatedBy': 'owner',
                   'Note': 'Never open with "I hope this finds you well" - the wombat instruction'})
     # ...as they stand after a start: the verdict a LEARNED.md line, the writing note in STYLE.md's Owner notes (memorylines, 2026-10-27)
-    from taskuary import memorylines
-    memorylines.migrate(s)
+    from taskuary import learning, memory
+    memory.migrate(s)
     return s
 
 
@@ -97,7 +97,7 @@ class FeedbackRoutingTests(unittest.TestCase):
         s = store(); tid, mid, rid = thread(s)
         s.update_review_draft(rid, 'Here it is.\n\nBest, Alex', None)
         events = []
-        with mock.patch.object(learn, 'learn_from', side_effect=lambda st, ev, **k: events.append(ev)), \
+        with mock.patch.object(learning, 'learn_from', side_effect=lambda st, ev, *a, **k: events.append(ev)), \
              mock.patch('taskuary.outbound.reply_to_message', return_value={'channel': 'email', 'to': ['dana@vendor.example']}):
             out = verdicts.decide(s, s.get_review(rid), 'edit', 'Attached. Best, Alex', 'shorter, and never say "please find attached"')
         self.assertTrue(out['ok'])
@@ -111,17 +111,17 @@ class FeedbackRoutingTests(unittest.TestCase):
         s = store(); tid, mid, rid = thread(s)
         s.update_review_draft(rid, 'Here it is.', None)
         events = []
-        with mock.patch.object(learn, 'learn_from', side_effect=lambda st, ev, **k: events.append(ev)):
+        with mock.patch.object(learning, 'learn_from', side_effect=lambda st, ev, *a, **k: events.append(ev)):
             verdicts.decide(s, s.get_review(rid), 'reject', None, 'this never needed a reply - it is a notification')
         self.assertIn('never needed a reply', events[0]); self.assertNotIn('notification', s.get_doc('style') or '')
 
     def test_an_old_writing_note_moves_into_style_once(self):
         """The notes page is gone (2026-10-27): a writing note saved there is the drafter's, so it moves to STYLE.md's Owner notes -
         once - and never into LEARNED.md, which is triage's."""
-        from taskuary import memorylines
+        from taskuary import learning, memory
         s = store()
         put_note(s, {'Scope': 'global', 'Note': 'Always close with a next step - the numbat note', 'Source': 'writing', 'Active': 1, 'CreatedBy': 'o'})
-        memorylines.migrate(s); memorylines.migrate(s)
+        memory.migrate(s); memory.migrate(s)
         self.assertEqual(s.get_doc('style').count('numbat'), 1)
         self.assertIn('numbat', responder.style_doc(s))
         self.assertNotIn('numbat', s.get_doc('learned') or '')

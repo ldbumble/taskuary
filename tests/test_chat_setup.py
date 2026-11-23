@@ -229,8 +229,8 @@ class ConnectionSetupTests(unittest.TestCase):
         dock = general.dock_task(s)[0]['TaskId']
         bodies = ' '.join((c.get('Body') or '') for c in general.chat_rows(s, dock))
         self.assertNotIn(slack_token, bodies); self.assertIn('[redacted:slack-token]', bodies)
-        from taskuary import memoryedit
-        memoryedit.remember(s, f'the github token is {gh_token}', section='care')
+        from taskuary import memory
+        memory.remember(s, f'the github token is {gh_token}')
         self.assertNotIn('ghp_', s.get_doc('learned')); self.assertIn('the github token is', s.get_doc('learned'))
 
     def test_a_commit_hash_typed_into_the_chat_is_not_mistaken_for_a_secret(self):
@@ -243,8 +243,8 @@ class ConnectionSetupTests(unittest.TestCase):
         dock = general.dock_task(s)[0]['TaskId']
         bodies = ' '.join((c.get('Body') or '') for c in general.chat_rows(s, dock))
         self.assertIn(sha, bodies)
-        from taskuary import memoryedit
-        memoryedit.remember(s, f'the regression landed in {sha}', section='care')
+        from taskuary import memory
+        memory.remember(s, f'the regression landed in {sha}')
         self.assertIn(sha, s.get_doc('learned'))
 
     def test_digging_is_a_walk_through_proposal_and_no_ai_says_so(self):

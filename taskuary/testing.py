@@ -118,9 +118,10 @@ class Factory:
                                    'Action': action, 'Reason': reason, **kw}, self.actor)
 
     def memory(self, note, scope='sender', scope_key='n@n.com', source='verdict'):
-        """A line in LEARNED.md, the one memory (memorylines) - the raw line."""
-        from . import memorylines
-        return memorylines.keep(self.s, note, scope, scope_key, verdict=source == 'verdict')
+        """A line of the memory (memory.py): a verdict's, learned and confirmed; else one the owner said - its row."""
+        from . import memory
+        if source == 'verdict': return memory.infer(self.s, note, f'{note} {scope_key}', scope=scope, key=scope_key, source='verdict:not_ours', confirmed=True)
+        return memory.remember(self.s, note, note, scope_key if scope == 'sender' else '')
 
     def row(self, pic, limit=200):
         """The Timeline row for this picture's mail. Fail loud if it is not on the feed."""

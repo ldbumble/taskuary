@@ -464,7 +464,7 @@ class LaunchGraceIsSpentByThePollTests(unittest.TestCase):
         with mock.patch.object(wabridge, "wait_listening", lambda secs: order.append("wait") or False), \
              mock.patch.object(server, "store", s), mock.patch.object(server, "_heal_ended"), \
              mock.patch.object(server, "_poll_reports", lambda *a, **k: order.append("poll")), \
-             mock.patch.object(server, "report_pass"), mock.patch("taskuary.learn.reflect_if_due"):
+             mock.patch.object(server, "report_pass"), mock.patch("taskuary.learning.reflect_if_due"):
             t0 = time.monotonic(); server.catch_up_on_startup().join(10); took = time.monotonic() - t0
         self.assertEqual(order, ["poll"], "nothing was started, so nothing is waited for")
         self.assertLess(took, 2, f"the catch-up sat {took:.1f}s before the mail")

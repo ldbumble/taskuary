@@ -244,12 +244,8 @@ class _AsOf:
     today's notes tells the classifier the answer for that very message - the honest question
     is whether the notes it HAD helped, and this is the view that answers it."""
     def __init__(self, store, until): self.s, self.until = store, until or ''
-    def get_doc(self, name):
-        """LEARNED.md without the verdict lines written after it (a verdict is a line there since 2026-10-27, memorylines.teach)."""
-        d = self.s.get_doc(name)
-        if name != 'learned' or not d: return d
-        later = {str(r['Text'] or '').strip() for r in self.s._rows("SELECT Text FROM learned_history WHERE Action='said' AND At>=?", (self.until,))}
-        return '\n'.join(l for l in d.splitlines() if l.strip() not in later)
+    @property
+    def memory_until(self): return self.until       # the memory's lines kept before it, and no later (memory.rows)
     def __getattr__(self, k): return getattr(self.s, k)
 
 
@@ -272,7 +268,7 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
     replaces the install's TRIAGE.md for the run - how a wording change is scored before it ships; `lean` is the answer's shape
     (triage.classify_intent's: False asks the shape before 2026-11-11, to score the same cases both ways)."""
     from .ingest import others_on_thread, owner_addresses, relevant_notes, report_brief
-    from . import aiusage, learned_cut
+    from . import aiusage, memory
     from .routing import draft_task_fields
     from .triage import classify_intent, job_doc
     mine = owner_addresses(store)
@@ -290,7 +286,7 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
         src = store if notes == 'today' else _AsOf(store, c.get('sent_at')) if notes == 'asof' else None
         ns, left = relevant_notes(src, [msg['from_email'] or ''], f"{msg['subject']} {msg['body']}"[:4000], subject=msg['subject']) if src else ([], 0)
         # the memory as the funnel reads it for THIS mail: what the owner cares about, and the people lines about whoever is on it
-        lrn = (learned_cut.whole(store, 'triage', sections=None if people else ('care',)) if learned else '')
+        lrn = (memory.whole(store, 'triage', people=people) if learned else '')
         v = {'intent': 'fyi', 'why': 'a calendar invite'} if msg.get('invite') else None      # the funnel's only no-model verdict
         for attempt in range(RETRIES + 1):
             if v and not v.get('degraded'): break
@@ -386,9 +382,9 @@ def evaluate_jev(store, cases: list, key: str, notes: str = 'asof', learned: boo
     ('asof' = only those on file when the message arrived)."""
     from . import jev
     from .ingest import others_on_thread, owner_addresses, relevant_notes
-    from . import learned_cut
+    from . import memory
     mine, conf, rows = owner_addresses(store), Counter(), []
-    soul, lrn = store.doc('soul') or '', learned_cut.whole(store, 'triage') if learned else ''
+    soul, lrn = store.doc('soul') or '', memory.whole(store, 'triage') if learned else ''
     for c in cases:
         if not c.get('body'): continue
         msg = as_message(c)

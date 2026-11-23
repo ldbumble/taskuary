@@ -146,11 +146,11 @@ class EvidenceTests(unittest.TestCase):
     def test_reflection_never_reads_the_ledgers_sentences_but_old_out_ids_still_resolve(self):
         """The owner, 2026-11-13: the ledger's sentences carried agents' stops and minute counts, and the memory wrote them back as facts
         about him. A line that already cites an out id still resolves."""
-        from taskuary import learn, learnedgraph
+        from taskuary import learning
         s = MemoryStore(); t = s.create_task({'Title': 'x', 'Status': 'done'}, 'owner')
         i = outcomes.record(s, 'agent.stopped', 'task', t, 'agent:coding', at=ago(days=8)); outcomes.resolve(s)
-        self.assertNotIn(f'out{i}', learn.gather(s, ago(days=30)))
-        self.assertEqual(learnedgraph._EV.match(f'out{i}').group(1), 'out'); self.assertTrue(learnedgraph.resolves(s, f'out{i}'))
+        self.assertNotIn(f'out{i}', learning.gather(s, ago(days=30)))
+        self.assertTrue(learning.resolves(s, f'out{i}'))
 
 
 class FixPassTests(unittest.TestCase):

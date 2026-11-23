@@ -22,6 +22,7 @@ def store():
     s = MemoryStore()
     s.set_setting('owner_email', 'alex@northwind.example', 't')
     s.save_doc('style', STYLE, 'owner')
+    s.set_setting('email_signature', 'Best,\nAlex Doyle\nNorthwind Trading', 'owner')     # his signature's one home (r10)
     return s
 
 
@@ -170,11 +171,13 @@ class SignatureTests(unittest.TestCase):
         rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'needs a reply'})
         return s, tid, mid, rid
 
-    def test_the_signature_comes_from_style_md_or_the_setting(self):
+    def test_the_signature_comes_from_the_setting_alone(self):
         s = store()
         self.assertEqual(responder.signature_for(s), 'Best,\nAlex Doyle\nNorthwind Trading')
         s.set_setting('email_signature', 'Regards,\nAlex', 'owner')
         self.assertEqual(responder.signature_for(s), 'Regards,\nAlex')
+        s.set_setting('email_signature', '', 'owner'); s.set_setting('owner_name', 'Alex Doyle', 'owner')
+        self.assertEqual(responder.signature_for(s), 'Alex Doyle', "STYLE.md's sign-off line is no second home")
 
     def test_a_draft_and_a_redraft_carry_it_once_and_a_hand_edit_stays_as_written(self):
         s, tid, mid, rid = self.thread()

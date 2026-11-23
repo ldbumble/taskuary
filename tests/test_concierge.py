@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from taskuary import buttons, concierge, funnel, general, railwalk, server, terminal
 from taskuary.store import MemoryStore
 from taskuary.testing import mailbox
-from taskuary import memorylines
+from taskuary import memory
 
 
 def ago(hours=0): return (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
@@ -818,7 +818,7 @@ class SweepTests(unittest.TestCase):
         out = cleared_by(s, "all the reports for paula vance you can remove. I don't need them", {'sender': 'Paula Vance'})
         self.assertFalse(out.get('proposal')); self.assertEqual(out['cleared'], 3)
         self.assertIn('3 items read', out['say']); self.assertIn('Search still finds them', out['say'])
-        self.assertEqual((funnel.mutes(s), memorylines.notes(s)), ([], []))   # clearing is all it does (R8)
+        self.assertEqual((funnel.mutes(s), memory.notes(s)), ([], []))   # clearing is all it does (R8)
         self.assertEqual([i['who'] for i in funnel.build(s)['items']], ['Omar Keller'])                # Omar stays
         again = cleared_by(s, 'same for all resident refunds', {'contains': 'resident refund'})
         self.assertIsNone(again.get('proposal')); self.assertIn('No items about resident refund are waiting, so there is nothing to clear', again['say'])

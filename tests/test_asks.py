@@ -571,7 +571,7 @@ def test_a_send_pick_sends_that_email_and_only_it(s):
     _, rows = asks.phone_text(s, s.get_task(tid), 'approve', 'x')
     act = dict(rows)['Send to Ray Colton']
     with mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent, mock.patch.object(outbound, 'send_block', return_value=''), \
-         mock.patch('taskuary.learn.learn_from'):
+         mock.patch('taskuary.learning.learn_from'):
         said = remote_assistant.run_act(s, act, None)
     assert sent.call_count == 1 and sent.call_args[0][2] == ['ray@northwind.example'] and 'Sent' in said
     assert s.get_review(a)['Status'] == 'approved' and s.get_review(b)['Status'] == 'pending'

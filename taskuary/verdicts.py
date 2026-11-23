@@ -487,11 +487,11 @@ def promotion_ended(store, tid: int, why: str) -> None:
     """A TASK HIS PROMOTION STARTED ENDED WITH NOTHING SENT: what that says is taught too, weighed against the line the press taught at once
     (server._learn_promotion's made_task) - the model may rewrite it, keep it or say nothing (the walk, 2026-11-22: a cold pitch sent to an
     agent and then "just ignore him" stood in memory as "you review these pitches yourself"). Only where that press taught a line."""
-    from . import memorylines
+    from . import learning, memory
     for m in store.list_messages(int(tid)):
         src = f"msg{m['MessageId']}"
-        if not store._rows("SELECT 1 FROM learned_history WHERE Ev=? AND Actor=? LIMIT 1", (src, f'{memorylines.VERDICT}:made_task')): continue
-        memorylines.teach_soon(store, 'made_task_ended', src,
+        if not memory.taught_on(store, src, 'made_task'): continue
+        learning.teach_soon(store, 'made_task_ended', src,
                                f"The owner had sent this mail to an agent as work (the line learned then is above). It ended with nothing sent: "
                                f"{' '.join(str(why or '').split())[:300]}. From {m.get('FromName') or m.get('FromEmail') or 'its sender'}: "
                                f"{str(m.get('Subject') or '')[:120]}")
@@ -793,7 +793,7 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
     `reply_text` on a close-out is ONE press for the task's last two acts (the owner, 2026-09-27: "shouldn't we
     combine this? meaning reply on close?"): the merge/close runs first, and only when it succeeded does the task's
     pending reply go out with this text - a refused merge sends nothing. Each lands through its own verdict below."""
-    from . import learn, outbound
+    from . import learning, outbound
     reviewed = rv
     store.recover_review_deliveries(rv['ReviewId'])
     rv = store.get_review(rv['ReviewId']) or rv
@@ -1009,6 +1009,6 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
         ev = (f"rv{rid}: owner verdict '{verb}' on a drafted reply to \"{(m.get('Subject') or rv.get('Kind') or '')[:80]}\" "
               f"from {m.get('FromEmail') or '?'}" + (f"; their note: {note[:200]}" if note and verb != 'edit' else ''))
         if verb == 'edit': ev += f"\nDRAFT:\n{(_drafted(rv) or '')[:700]}\nSENT INSTEAD:\n{(final or '')[:700]}"
-        if learn_async: learn_async(learn.learn_from, store, ev)
-        else: learn.learn_from(store, ev)
+        if learn_async: learn_async(learning.learn_from, store, ev, f'rv{rid}')
+        else: learning.learn_from(store, ev, f'rv{rid}')
     return result or {'ok': True, 'status': VERB2STATUS[verb], 'sent': sent, 'send_error': None}

@@ -40,7 +40,7 @@ SAID = {'Which day suits you': {'asks_them': True}, 'Thanks, all done': {'asks_t
 
 
 def sending(): return (mock.patch('taskuary.outbound.reply_to_message', return_value={'channel': 'email', 'to': ['erin@vendor.example'], 'cc': []}),
-                       mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learn.learn_from'))
+                       mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learning.learn_from'))
 
 
 def send(s, rid, said=SAID):

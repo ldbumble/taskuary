@@ -5,7 +5,7 @@ from unittest import mock
 
 import pytest
 
-from taskuary import learn, responder
+from taskuary import responder, learning
 from taskuary.store import MemoryStore
 from tests.test_review_delivery_safety import make_review
 
@@ -22,7 +22,7 @@ def s():
 
 def write(s, said, nudge=None):
     tid, mid, rid = make_review(s)
-    with mock.patch.object(learn, 'learn_from'):
+    with mock.patch.object(learning, 'learn_from'):
         out = responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: said, resolution='Not ours - the owner chose no reply.', nudge=nudge)
     return tid, rid, out
 
@@ -41,7 +41,7 @@ def test_the_writer_never_closes_the_task(s):
     tid, mid, rid = make_review(s); s._exec("UPDATE review SET DraftText='' WHERE ReviewId=?", (rid,))    # triage's empty draft, to be written
     def writer(store, task_id, llm, resolution, nudge, seen, *a, **k):        # the writer says why nothing goes back, then NO_REPLY
         seen['why'] = 'the answer is already in the email (approved 11/3)'; raise responder.NoReply('NO REPLY')
-    with mock.patch.object(learn, 'learn_from'), mock.patch.object(responder, 'draft_reply', writer):
+    with mock.patch.object(learning, 'learn_from'), mock.patch.object(responder, 'draft_reply', writer):
         responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'NO REPLY')
     assert s.get_task(tid)['Status'] not in ('done', 'dropped')
     assert not [a for a in s._rows("SELECT * FROM audit WHERE EntityId=? AND Action='close_from_assistant'", (tid,))]
@@ -59,7 +59,7 @@ def test_a_sign_off_word_is_not_the_writers_no_reply(s, said):
 
 def test_a_draft_of_only_the_signature_fails_and_is_never_offered_to_send(s):
     tid, mid, rid = make_review(s)
-    with mock.patch.object(learn, 'learn_from'), pytest.raises(RuntimeError, match='only your signature'):
+    with mock.patch.object(learning, 'learn_from'), pytest.raises(RuntimeError, match='only your signature'):
         responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: f'\n\n{SIG}', resolution='Not ours.')
     assert s.get_review(rid)['Status'] == 'pending' and SIG not in str(s.get_review(rid)['DraftText'] or '')
 

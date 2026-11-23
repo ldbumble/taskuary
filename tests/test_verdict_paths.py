@@ -153,7 +153,7 @@ class TaskWithoutAgentTests(unittest.TestCase):
             self.assertEqual(first['status'], 'created')
             tid = first['task_id']
             self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Kind'], 'coding')
-            with mock.patch('taskuary.learn.learn_from') as learned:
+            with mock.patch('taskuary.learning.learn_from') as learned:
                 self.assertEqual(c.patch(f'/api/tasks/{tid}', json={'Kind': 'reply'}).status_code, 200)
             self.assertIn('over-reached', learned.call_args[0][1])
             pend = [x for x in c.get('/api/reviews', params={'status': 'pending'}).json()['data'] if x['TaskId'] == tid]
@@ -181,7 +181,7 @@ class SentToAgentTests(unittest.TestCase):
         self.assertEqual((first['status'], first['task_id']), ('filed', None))
         server.store.upsert_agent('coding', 'coding', 'cli', '{"cmd": "claude"}')
         with mock.patch.object(server.hub_term, 'start_on_task', return_value={'sid': 's1'}) as start, \
-             mock.patch('taskuary.memorylines.teach') as learned:
+             mock.patch('taskuary.learning.teach') as learned:
             r = c.post(f"/api/messages/{first['message_id']}/dispatch", json={'agent': 'coding'}).json()
         tid = r['taskId']
         self.assertEqual(start.call_args[0][1:3], (tid, 'coding'))

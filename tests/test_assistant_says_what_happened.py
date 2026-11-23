@@ -136,8 +136,8 @@ def test_a_to_do_write_that_changed_nothing_is_said_in_the_lines_place(s):
 
 
 def test_remembered_only_when_it_was_written(s):
-    from taskuary import memoryedit
-    with mock.patch.object(memoryedit, 'remember', return_value={'ok': True, 'text': 'Paula Vance runs the portal', 'section': 'people', 'title': 'Your people'}):
+    from taskuary import memory
+    with mock.patch.object(memory, 'remember', return_value={'ok': True, 'text': 'Paula Vance runs the portal', 'section': 'people', 'title': 'Your people'}):
         out = say(s, {'kind': 'memory.remember', 'params': {'note': 'Paula Vance runs the portal', 'about': 'Paula Vance', 'section': 'people'}})
     assert out['say'].startswith('Not done') and 'nothing was written to your memory' in out['say']
     out = say(s, {'kind': 'memory.remember', 'params': {'note': 'Paula Vance runs the vendor portal', 'about': 'Paula Vance', 'section': 'people'}})

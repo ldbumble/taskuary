@@ -41,7 +41,7 @@ def test_the_email_leaves_from_the_mailbox_the_agent_named(s):
     again = slots.draft(s, tid, 'Hi, the training materials, take two.', 'erin@volunteers.example', 'Volunteer training materials')
     assert again['review_id'] == out['review_id'] and json.loads(s.get_review(out['review_id'])['Deliver'])['mailbox'] == SIDE
     with mock.patch.object(outbound, 'send_out', return_value={'channel': 'email', 'to': ['erin@volunteers.example']}) as sent, \
-         mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learn.learn_from'):
+         mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learning.learn_from'):
         verdicts.decide(s, s.get_review(out['review_id']), 'approve')
     assert sent.call_args.kwargs['mailbox'] == SIDE
 

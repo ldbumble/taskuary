@@ -71,8 +71,8 @@ class RankingTests(unittest.TestCase):
         self.assertEqual(notes_for(s, {'from_email': 'nobody@nowhere.com', 'subject': 'hi', 'body': 'x'}),
                          ['Never open tasks from newsletters or digests.'])
         # switching a note off in the UI has to actually silence it
-        from taskuary import learned_cut as lc, memoryedit
-        memoryedit.mark(s, next(k for raw, k in lc.lines(s.get_doc('learned'), lc.CARE) if 'newsletters' in raw), 'forget')
+        from taskuary import memory
+        memory.mark(s, next(n['Key'] for n in memory.notes(s) if 'newsletters' in n['Note']), 'forget')
         self.assertEqual(notes_for(s, {'from_email': 'nobody@nowhere.com', 'subject': 'hi', 'body': 'x'}), [])
 
     def test_a_verdict_is_never_cut_in_half(self):
@@ -95,12 +95,11 @@ class RankingTests(unittest.TestCase):
 
 
     def test_with_ids_each_note_carries_the_id_triage_names_it_by(self):
-        from taskuary import learned_cut as lc
+        from taskuary import memory
         from taskuary.triage import note_id
         s = _store(LEDGER, GLOBAL)
         notes, _ = relevant_notes(s, [DANA], 'ledger', ids=True)
-        cites = {lc.cite_of(k) for _raw, k in lc.lines(s.get_doc('learned'), lc.CARE)} | \
-                {lc.cite_of(k) for h in lc.SECTIONS.values() for _raw, k in lc.lines(s.get_doc('learned'), h)}
+        cites = {memory.cite_of(n['Key']) for n in memory.notes(s)}
         self.assertTrue(notes and all(note_id(n) in cites for n in notes), notes)
         self.assertEqual(note_id('Never open tasks from newsletters.'), '')
 

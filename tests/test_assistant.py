@@ -406,7 +406,7 @@ class ButtonTests(unittest.TestCase):
         (the session had not answered yet, so it still read as fresh) and taught the verdict twice. The second press finds the task
         the first one made and starts nothing."""
         s, mid, idea = self._posted()
-        with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch('taskuary.memorylines.teach_soon') as taught:
+        with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch('taskuary.learning.teach_soon') as taught:
             first = assistant.act(s, idea['IdeaId'], 'agent')
             again = assistant.act(s, idea['IdeaId'], 'agent')
             made = assistant.act(s, idea['IdeaId'], 'task')
@@ -452,7 +452,7 @@ class ButtonTests(unittest.TestCase):
     def test_not_ours_teaches_nothing_and_stays_down_until_the_facts_change(self):
         """I10: Not ours only never repeats - the lesson it wrote went to a block no prompt reads."""
         s, mid, idea = self._posted()
-        with mock.patch('taskuary.learn.learn_from') as learn:
+        with mock.patch('taskuary.learning.learn_from') as learn:
             assistant.act(s, idea['IdeaId'], 'dismiss')
         learn.assert_not_called()
         self.assertEqual(s.get_idea(idea['IdeaId'])['Status'], 'dismissed')

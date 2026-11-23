@@ -650,7 +650,7 @@ class TheList(unittest.TestCase):
         self.assertEqual([r['ReviewId'] for r in s.waiting_reviews() if r['TaskId'] == tid], [ray], 'what waits on him: the one that stands')
         t = time.time(); until(lambda: time.time() >= t + 1.1)                                  # (a stamp is a whole second)
         woke, sent = [], mock.patch('taskuary.outbound.send_out', lambda *a, **k: {'channel': 'email', 'to': k.get('to') or []})
-        with sent, mock.patch.object(general, 'to_agent', lambda st, t_, said, *a, **k: woke.append(said) or 'woke'), mock.patch('taskuary.learn.learn_from'):
+        with sent, mock.patch.object(general, 'to_agent', lambda st, t_, said, *a, **k: woke.append(said) or 'woke'), mock.patch('taskuary.learning.learn_from'):
             self.assertTrue(verdicts.decide(s, s.get_review(ray), 'approve', None, None, 'owner')['ok'])
             now = self.list()
             self.assertEqual(woke, [], 'a letter behind it still stands: the press is recorded, nobody woken (the owner, 2026-11-23: cardqueue.row_over)')

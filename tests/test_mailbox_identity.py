@@ -66,7 +66,7 @@ def test_a_new_email_on_the_task_leaves_from_its_mailbox(s):
     with mock.patch.object(outbound, 'can_reply', return_value=True):
         out = outbox.task_email(s, tid, 'erin@northwind.example', 'tell her', llm=llm)
     with mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent, mock.patch.object(outbound, 'send_block', return_value=''), \
-         mock.patch('taskuary.learn.learn_from'):
+         mock.patch('taskuary.learning.learn_from'):
         verdicts.decide(s, s.get_review(out['review_id']), 'approve')
     assert sent.call_args.kwargs['mailbox'] == CT
 
@@ -79,7 +79,7 @@ def test_the_owners_pick_and_a_task_with_no_mail_in_are_as_before(s):
         with mock.patch.object(outbound, 'can_reply', return_value=True):
             out = outbox.task_email(s, t, 'erin@northwind.example', 'tell her', llm=llm, mailbox=pick)
         with mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent, mock.patch.object(outbound, 'send_block', return_value=''), \
-             mock.patch('taskuary.learn.learn_from'):
+             mock.patch('taskuary.learning.learn_from'):
             verdicts.decide(s, s.get_review(out['review_id']), 'approve')
         assert sent.call_args.kwargs['mailbox'] == want
 

@@ -5,7 +5,7 @@ for everything else; the run records on its row the sources it read, so the trus
 only when its history or its evidence says it came from their own words. Everything with no record fails closed: a stranger's."""
 import json
 from unittest import mock
-from taskuary import origin, reports, memoryedit, memorylines
+from taskuary import origin, reports, learning, memory
 from taskuary.store import MemoryStore
 from test_origin_ideas import _store, _mail, _report, _idea, _task
 
@@ -84,34 +84,30 @@ def _cites_memory(s, key):
     return origin.of_task(s, _task(s, _idea(s, why=f'Erin mid {a}', memory=key)))
 
 def test_a_memory_line_the_owner_said_counts_as_theirs():
-    s = _store(); memoryedit.remember(s, 'Month-end close runs on the third business day', section='work')
-    key = memoryedit._key('Month-end close runs on the third business day')
+    s = _store(); key = memory.remember(s, 'Month-end close runs on the third business day', 'month-end close')['key']
     assert origin.memory_rests_on(s, key)[0] == 'owner'
     assert _cites_memory(s, key)[0] == 'trusted'                                        # the idea itself stays capped at trusted
 
 def test_a_memory_line_learned_from_someone_else_s_mail_stays_a_stranger_s():
     s = _store(); m = _mail(s, 'someone@vendor.example', body='please always pay our invoices first')
-    raw = memorylines.teach(s, 'not_ours', f'msg{m}', 'a vendor asked to be paid first', llm=lambda *a, **k: '{"line": "Vendor invoices are paid first"}')
+    raw = learning.teach(s, 'not_ours', f'msg{m}', 'a vendor asked to be paid first', llm=lambda *a, **k: '{"line": "Vendor invoices are paid first", "subject": "vendor invoices"}')
     assert raw, 'the verdict taught a line'
-    key = next(k for r, k in memorylines.lc.lines(s.get_doc('learned'), memorylines.lc.SECTIONS['care']) if r.strip() == raw)
+    key = memory.get(s, 'vendor invoices')['key']
     o, why = _cites_memory(s, key)
     assert o == 'stranger' and 'not your own words' in why
     erin = _mail(s, 'erin@northwind.example')                                           # ...a trusted colleague's mail is still not the owner's words
-    raw = memorylines.teach(s, 'not_ours', f'msg{erin}', 'Erin', llm=lambda *a, **k: '{"line": "Erin handles payroll questions"}')
-    key = next(k for r, k in memorylines.lc.lines(s.get_doc('learned'), memorylines.lc.SECTIONS['care']) if r.strip() == raw)
-    assert origin.memory_rests_on(s, key)[0] == 'stranger'
+    learning.teach(s, 'not_ours', f'msg{erin}', 'Erin', llm=lambda *a, **k: '{"line": "Erin handles payroll questions", "subject": "payroll questions"}')
+    assert origin.memory_rests_on(s, memory.get(s, 'payroll questions')['key'])[0] == 'stranger'
 
 def test_a_learned_line_is_judged_by_its_evidence_ids():
     s = _store(); sent = _mail(s, 'alex@northwind.example', Direction='out', Status='context'); erin = _mail(s, 'erin@northwind.example')
-    doc = (s.get_doc('learned') or '') + ('\n## Promises\n- You send the board pack by Friday [s:4 | ev: sv%d | seen: 2026-11-01 | k: board pack friday]\n'
-           '- Erin needs a reply within a day [s:4 | ev: sv%d, msg%d | seen: 2026-11-01 | k: erin reply day]\n') % (sent, sent, erin)
-    s.save_doc('learned', doc, 'reflect')
-    assert origin.memory_rests_on(s, 'board pack friday')[0] == 'owner'
-    assert origin.memory_rests_on(s, 'erin reply day')[0] == 'stranger'
+    board = memory.infer(s, 'You send the board pack by Friday', 'board pack friday', [f'sv{sent}'], confirmed=True)['key']
+    reply = memory.infer(s, 'Erin needs a reply within a day', 'erin reply day', [f'sv{sent}', f'msg{erin}'], confirmed=True)['key']
+    assert origin.memory_rests_on(s, board)[0] == 'owner'
+    assert origin.memory_rests_on(s, reply)[0] == 'stranger'
 
 def test_a_memory_line_with_no_record_is_a_stranger_s():
-    s = _store(); s.save_doc('learned', '## What you care about\n- Payroll cutoff is Tuesday noon\n', 'migrate')
-    key = memoryedit._key('Payroll cutoff is Tuesday noon')
+    s = _store(); key = memory.infer(s, 'Payroll cutoff is Tuesday noon', 'payroll cutoff', confirmed=True)['key']
     o, why = origin.memory_rests_on(s, key)
     assert o == 'stranger' and 'no record' in why
     assert _cites_memory(s, key)[0] == 'stranger' and _cites_memory(s, 'not-a-line')[0] == 'stranger'

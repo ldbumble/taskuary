@@ -18,13 +18,13 @@ MAP = 'prompt map'
 def _blocks_triage(store, msg: dict, mid: int) -> list:
     """(label, source, text) for every part of the triage prompt, in prompt order."""
     from .ingest import owner_addresses, relevant_notes
-    from . import learned_cut
+    from . import memory
     from .triage import INTENT_SYSTEM, SOUL_CHARS, addressed_to_you, sender_body
     m = {'from_email': msg.get('FromEmail'), 'subject': msg.get('Subject'), 'body': msg.get('BodyText'), 'own_text': msg.get('OwnText'),
          'source_name': msg.get('SourceName'), 'channel': msg.get('Channel')}
     doc = store.doc('triage') or ''
     base = doc.strip() or INTENT_SYSTEM
-    soul, learned = store.doc('soul') or '', learned_cut.whole(store, 'triage')
+    soul, learned = store.doc('soul') or '', memory.whole(store, 'triage')
     notes, left = relevant_notes(store, [m['from_email'] or ''],
                                  f"{m['subject'] or ''} {m['body'] or ''}"[:4000],
                                  subject=m['subject'] or '', source=m['source_name'] or '')

@@ -105,7 +105,7 @@ def filed_not_ours(store, mid: int) -> bool:
 def unfile(store, mid: int, actor: str = 'owner') -> bool:
     """Take back the owner's Not ours on one message: its status back, the ignore route, the taught line and the evidence withdrawn."""
     import json
-    from . import memorylines
+    from . import learning
     if not filed_not_ours(store, mid): return False
     a = store._one(f"SELECT Detail FROM audit WHERE EntityType='message' AND EntityId=? AND Action IN ({','.join('?' * len(FILED))}) "
                    "ORDER BY Id DESC LIMIT 1", (int(mid), *FILED)) or {}
@@ -116,7 +116,7 @@ def unfile(store, mid: int, actor: str = 'owner') -> bool:
     for op in store.operations_for(message_ids=[int(mid)]):
         if op['Kind'] in ('message.file', 'message.archive') and op.get('Evidence') == 'recorded':
             store._exec('DELETE FROM correction WHERE OpId=?', (op['OpId'],)); store.update_operation(op['OpId'], {'Evidence': 'withdrawn'})
-    memorylines.untaught(store, f'msg{mid}')
+    learning.untaught(store, f'msg{mid}')
     store.audit('message', int(mid), 'not_ours_taken_back', actor, detail={'status': was or 'filed'})
     return True
 

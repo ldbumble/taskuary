@@ -107,21 +107,17 @@ def _notes(store, o):
     return '\n\n' + _notes_block(store, o.get('report')), []          # whole=True: the head carries the note's timestamp
 
 def _learned(store, o):
-    # what the owner's verdicts taught (learn.injectable: promoted lines only, never a hypothesis) - the event pass read it, the
-    # clock pass never did (2026-10-12). The seed is headings and placeholders: a document with no line yet says nothing.
-    # ...every section: their people, what they care about, how they work, their promises, what to bring up (learned_cut.READS, 2026-10-25)
-    # ...each line with its key beside it, so a line that rests on one names it (CONTRACT's "memory") and its idea is keyed by it: an
-    # idea with no message or task under it got a fresh slug every run, and the owner's No never stuck (2026-10-26). The receipt names
-    # the report whose run was given the lines; each idea that rests on one leaves its own (assistant._run).
-    from . import learned_cut
-    text, ks = learned_cut.for_reader(store, 'assistant', budget=o.get('cap'), target=f"rail:{o.get('report') or 'advisor'}"), memory_keys(store)
+    # the owner's memory in use (memory.whole: what he said, the facts, what he confirmed - never a guess still waiting on his word), each
+    # line with its key beside it, so a line that rests on one names it (CONTRACT's "memory") and its idea is keyed by it: an idea with no
+    # message or task under it got a fresh slug every run, and the owner's No never stuck (2026-10-26)
+    from . import memory
+    text, ks = memory.whole(store, 'assistant', target=f"rail:{o.get('report') or 'advisor'}", cap=o.get('cap') or memory.WHOLE_CAP), memory_keys(store)
     return '\n'.join(f'{l}  [memory:{ks[l]}]' if l in ks else l for l in text.split('\n')), []
 
-def memory_keys(store, doc: str = None) -> dict:
-    """{raw line: key} for every line of LEARNED.md a reader could be given - what a rail line resting on one cites it by."""
-    from . import learned_cut as lc
-    doc = store.doc('learned') if doc is None else doc
-    return {raw: k for h in lc.SECTIONS.values() for raw, k in lc.lines(doc or '', h)}
+def memory_keys(store) -> dict:
+    """{line as a reader is given it: key} for every line of the memory in use - what a rail line resting on one cites it by."""
+    from . import memory
+    return {memory.said_line(r): r['key'] for r in memory.in_use(store)}
 
 def _ledger(store, o):
     # the resolved outcomes of the window, cited by out-id, and the ledger's page on each person the candidates name

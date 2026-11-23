@@ -60,9 +60,9 @@ def put_off(s, who: str, days: int, now: datetime = None) -> int:
 
 
 def reflected(s, *_):
-    """One reflection by a brain that changes nothing itself - what is left is the app's own bookkeeping (the counted lines, settle)."""
-    from taskuary import learn
-    assert learn.reflect(s, lambda system, user, **k: user.split('CURRENT LEARNED.md:\n', 1)[1].split('\n\nSOUL.md', 1)[0])
+    """One reflection by a brain that learns nothing itself - what is left is the app's own bookkeeping (the counted put-offs)."""
+    from taskuary import learning
+    assert learning.reflect(s, lambda system, user, **k: '{"lines": []}')
     return s.get_doc('learned')
 
 
@@ -281,11 +281,11 @@ def e1(llm, judge=None) -> dict:
     """One reflection over world() with `llm`, its in-use lines graded by `judge` (default: the same brain) - {lines, recovered,
     press_lines, invented}. The design's bar: 6 of 8 recovered, no press line, no invented relationship. Opt-in and live
     (TASKUARY_LIVE_MEMORY=1, tests/test_memory_yardstick.py): no committed test calls a model."""
-    from taskuary import learn, learnedgraph
+    from taskuary import learning, memory
     s, _ = world()
     s.set_setting('learn_last_reflect', _stamp(datetime.now() - timedelta(days=61)), 'test')
-    ok = learn.reflect(s, llm)
-    lines = [l['text'] for l in learnedgraph.lines(s.get_doc('learned')) if l['status'] == 'live']
+    ok = learning.reflect(s, llm)
+    lines = [r['Text'] for r in memory.rows(s, memory.INFERRED)]
     # ...and the org chart the world pinned: graded without it, the judge called "Ray reports to you and owns payroll" invented - the
     # chart says exactly that (the live run, 2026-10-25)
     from taskuary import orgchart

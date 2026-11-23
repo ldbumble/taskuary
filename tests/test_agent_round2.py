@@ -61,7 +61,7 @@ class NoLessonTests(unittest.TestCase):
         s = MemoryStore(); a_claude(self); tid = owner_task(s)
         reply = 'Posted the bill as Payworth (vendor 4471).\n' + summary(lesson={'playbook': 'bill', 'text': 'Payworth is vendor 4471'},
                                                                           check_back={'when': 'in 2 days', 'what': 'the bill shows paid'})
-        with mock.patch('taskuary.learn.learn_from') as lf: seen = turn(s, tid, reply)
+        with mock.patch('taskuary.learning.learn_from') as lf: seen = turn(s, tid, reply)
         self.assertNotIn('A LESSON FOR NEXT TIME', seen['prompt'])
         self.assertFalse(any('Payworth is vendor 4471' in c[0][1] for c in lf.call_args_list), "the agent's takeaway is not learned")
         t = s.get_task(tid); self.assertEqual(t['CheckBackWhat'], 'the bill shows paid'); self.assertTrue(t['CheckBackAt'])
@@ -303,40 +303,37 @@ if __name__ == '__main__':
     unittest.main()
 
 
-def test_the_general_agent_reads_the_learned_lines_nearest_its_task():
-    """The owner, 2026-11-05: "what learned.md goes to the general agent?" - none reached it; now the trusted lines, small, and the rest on ask."""
-    from taskuary import learn
+def test_the_general_agent_reads_what_the_owner_said_and_never_a_guess():
+    """The owner, 2026-11-05: "what learned.md goes to the general agent?" - none reached it; now what he said, and what he confirmed."""
+    from taskuary import memory
     s = MemoryStore(); tid = s.create_task({'Title': 'Pay the Payworth bill', 'Kind': 'general', 'Status': 'open'}, 'o')
-    s.save_doc(learn.DOC, '# LEARNED.md\n\n## How you work\n- Payworth is vendor 4471 in QuickBooks\n- Vendor replies are short, signed Alex\n', 't')
+    memory.remember(s, 'Payworth is vendor 4471 in QuickBooks', 'payworth vendor id')
+    memory.infer(s, 'Vendor replies are short', 'vendor replies', ['rv1'])
     system = general._prompt(s, tid)[0]
     assert 'WHAT TASKUARY HAS LEARNED ABOUT THE OWNER' in system and 'Payworth is vendor 4471' in system
-    # ...counted in learned lines, not characters: the head now says how to lean on them too (2026-11-09)
-    assert general.learned_block(s, tid, budget=45).count('\n- ') == 1, 'held to its budget: whole lines, never the whole doc'
+    assert 'Vendor replies are short' not in system, 'learned, not confirmed: never read as his word'
     with mock.patch('taskuary.origin.of_task', return_value=('stranger', 'unknown sender')):
         assert 'WHAT TASKUARY HAS LEARNED' not in general._prompt(s, tid)[0], "a stranger's task is never told who the owner is"
 
 
 def test_the_general_agent_never_reads_the_owners_lines_about_people_off_its_task():
-    """Its learned block was every bullet of LEARNED.md in the document's order wherever no embedder ranked them - so the people lines
-    about EVERYONE came first, and the verdict lines about other senders after (the memory audit, 2026-11-12). The owner, 2026-10-25: an
-    agent reads how the owner deals with the people on its own task, never the rest. One road now: learned_cut.for_reader."""
-    from taskuary import context, learn, learned_cut as lc
+    """The owner, 2026-10-25: an agent reads how the owner deals with the people on its own task, never the rest - and every line about
+    nobody (his rules, his rhythm) on every task. One road: memory.for_task."""
+    from taskuary import context, memory
     s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 'o')
     tid = s.create_task({'Title': 'Offsite venues for March', 'Kind': 'general', 'Status': 'open'}, 'o')
     s.add_message({'TaskId': tid, 'ExternalId': 'g1', 'Channel': 'email', 'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example',
                    'Subject': 'Offsite venues', 'BodyText': 'Two venues for March?', 'Status': 'routed'})
-    doc = s.get_doc(learn.DOC)
-    for head, ls in ((lc.PEOPLE, ['- You answer Erin Blake (erin@northwind.example) the same morning', '- Gail Moreno (gail@northwind.example) books the offsites']),
-                     (lc.CARE, ['- Payroll questions are never yours', '- Weekly digests from this sender are reading only (about: digest@vendor.example)',
-                                '- Venue quotes from this sender go to Paula (about: gail@northwind.example)']),
-                     (lc.WORK, ['- You batch expense approvals on Monday mornings'])):
-        doc = doc.replace(head + '\n', head + '\n' + '\n'.join(ls) + '\n', 1)
-    s.save_doc(learn.DOC, doc, 'owner')
+    memory.remember(s, 'You answer Erin Blake the same morning', 'erin', 'erin@northwind.example')
+    memory.remember(s, 'Gail Moreno books the offsites', 'gail offsites', 'gail@northwind.example')
+    memory.remember(s, 'Payroll questions are never yours', 'payroll questions')
+    memory.remember(s, 'You batch expense approvals on Monday mornings', 'expense approvals')
+    memory.infer(s, 'Weekly digests from this sender are reading only', 'digests', ['msg1'], scope='sender', key='digest@vendor.example', confirmed=True)
     block, brief = general.learned_block(s, tid), context.for_prompt(s, tid)
-    assert 'Payroll questions are never yours' in block and 'Monday mornings' in block, 'what the owner cares about and how they work'
-    assert 'Venue quotes from this sender go to Paula' in block, 'a line about this very sender'
-    assert 'erin@northwind.example' not in block + brief and 'digest@vendor.example' not in block, 'nobody off the task'
-    assert (block + brief).count('books the offsites') == 1, "the task's own people once, in its brief"
+    assert 'Payroll questions are never yours' in block and 'Monday mornings' in block, 'what the owner said about nobody, on every task'
+    assert 'Gail Moreno books the offsites' in block, 'a line about this very sender'
+    assert 'Erin Blake' not in block + brief and 'digest@vendor.example' not in block, 'nobody off the task'
+    assert (block + brief).count('books the offsites') == 1, 'said once - a general agent is told it every turn, not in its brief too'
 
 
 def test_a_message_that_changes_nothing_is_said_so_in_one_line():

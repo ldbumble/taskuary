@@ -239,9 +239,9 @@ class WhatItKnowsOnEveryPage(unittest.TestCase):
     def test_soul_job_counsel_and_the_memory_reach_it_on_every_page_and_style_and_agent_on_asking(self):
         from contextlib import ExitStack
         from unittest import mock
-        from taskuary import __version__, counsel as counsel_doc, memoryedit, server
+        from taskuary import __version__, counsel as counsel_doc, server, memory
         s = Q._world()
-        memoryedit.remember(s, 'I put vendor renewals off to Friday', section='work')
+        memory.remember(s, 'I put vendor renewals off to Friday')
         soul, job, counsel = (next(l for l in str(d).splitlines() if len(l.strip()) > 30).strip()
                               for d in (s.doc('soul'), s.doc('job'), counsel_doc.for_chat(s)))     # COUNSEL.md as read: its comments left out
         for name, view, phone in [('no page', None, False), ('a task', Q.TASKPAGE, False), ('a connection', Q.IMAP, False),

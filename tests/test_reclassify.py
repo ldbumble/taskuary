@@ -11,7 +11,7 @@ from unittest import mock
 from fastapi.testclient import TestClient
 
 from taskuary import server
-from taskuary import memorylines
+from taskuary import learning, memory
 from tests.memlines import teacher, teaching
 
 c = TestClient(server.app)
@@ -70,18 +70,18 @@ class MemoryTests(unittest.TestCase):
     def test_the_verdict_is_written_where_the_next_one_reads_it(self):
         mid = _msg('honey cake recipe', frm='tess@corp.example')
         seen = []
-        with mock.patch.object(memorylines, '_llm', lambda st: teacher('A recipe swap from a colleague only wants a reply', seen=seen)):
+        with mock.patch.object(learning, '_llm', lambda st, llm=None: teacher('A recipe swap from a colleague only wants a reply', seen=seen)):
             out = c.post(f'/api/messages/{mid}/reclassify', json={'road': 'reply'}).json()
         self.assertEqual(out['learned'], f'msg{mid}')
         self.assertIn('A reply only', seen[0]); self.assertIn('honey cake', seen[0])          # the model reads the verdict and the item
-        self.assertEqual([l['kind'] for l in memorylines.lessons(S) if l['ev'] == f'msg{mid}'], ['road_reply'])
+        self.assertEqual([l['kind'] for l in memory.lessons(S) if l['ev'] == f'msg{mid}'], ['road_reply'])
 
     def test_it_is_evidence_about_the_topic_not_a_rule_about_the_person(self):
         """A verdict keyed to the sender alone is how one message becomes a policy about someone."""
         mid = _msg('quarterly close checklist', frm='tess@corp.example')
         with teaching('The quarterly close checklist is your own work'):
             out = c.post(f'/api/messages/{mid}/reclassify', json={'road': 'task'}).json()
-        said = next(l for l in memorylines.lessons(S) if l['ev'] == out['learned'])
+        said = next(l for l in memory.lessons(S) if l['ev'] == out['learned'])
         self.assertIn('(about: the topic "', said['text'])
         self.assertNotIn('tess@corp.example', said['text'])
 

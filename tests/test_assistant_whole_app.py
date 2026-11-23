@@ -8,7 +8,7 @@ import json, unittest
 from datetime import datetime, timedelta
 from unittest import mock
 
-from taskuary import bulk, concierge, funnel, ingest, memoryedit, operations, server, terminal, toolcatalog
+from taskuary import bulk, concierge, funnel, ingest, operations, server, terminal, toolcatalog, learning, memory
 from taskuary.store import MemoryStore, task_ref
 
 
@@ -142,12 +142,12 @@ class ReadNotNotOurs(unittest.TestCase):
     mark-read found none of them - "Marked 0 items read" - and the verdict stood. pipe.clear naming them by key takes the verdict back and
     marks each read, and says so."""
     def test_rows_filed_as_not_ours_are_read_instead(self):
-        from taskuary import memorylines
+        from taskuary import learning, memory
         s = store(); _, real, spam = world(s)
         with mock.patch.object(server, '_teach_not_a_task', return_value=None):
             call(s, 'pipe.remove', select={'keys': [f'm{m}' for m in spam]}, learn=True)
         self.assertTrue(s.corrections(message_id=spam[0]), 'Not ours left evidence for triage')
-        with mock.patch.object(memorylines, 'untaught', wraps=memorylines.untaught) as untaught:
+        with mock.patch.object(learning, 'untaught', wraps=learning.untaught) as untaught:
             out = call(s, 'pipe.clear', select={'keys': [f'm{m}' for m in spam]})
         self.assertEqual(out['cleared'], 3)
         self.assertIn('3 items read', out['say']); self.assertIn('filed as not ours - that is taken back', out['say'])
@@ -228,15 +228,15 @@ class SummarizeMyRail(unittest.TestCase):
         self.assertEqual(concierge.answer_tokens('pipe.read'), 900)
 
 
-# THE TWELVE TOLD FACTS: what the owner said, the section the model chose by the description, and where code must put it
-TOLD = [('Gail moved to Ops', 'people', '', ('learned', 'Gail moved to Ops')),
-        ("I don't care about the legacy export job any more", 'care', '', ('learned', 'legacy export')),
-        ('I put renewals off to Friday', 'work', '', ('learned', 'renewals off')),
-        ('I promised Ray the budget by Friday', 'promises', '', ('learned', 'promised Ray')),
-        ('Raise anything from the auditors', 'bring', '', ('learned', 'auditors')),
-        ('Never use exclamation marks', 'style', '', ('style', 'exclamation')),
-        ('Sign off as Alex', 'style', '', ('style', 'Sign off as Alex')),
-        ('Write Mrs Moreno, never Gail', 'style', 'gail@northwind.example', ('style', '**gail@northwind.example**: Write Mrs Moreno')),
+# THE TWELVE TOLD FACTS: what the owner said, the document the model named (none: his memory), and where code must put it - how he writes
+# is what he said too, read by every draft through the memory (memory.for_task); who he IS and how the Assistant speaks are his documents
+TOLD = [('Gail moved to Ops', '', 'gail@northwind.example', ('learned', 'Gail moved to Ops')),
+        ("I don't care about the legacy export job any more", '', '', ('learned', 'legacy export')),
+        ('I put renewals off to Friday', '', '', ('learned', 'renewals off')),
+        ('I promised Ray the budget by Friday', '', '', ('learned', 'promised Ray')),
+        ('Raise anything from the auditors', '', '', ('learned', 'auditors')),
+        ('Never use exclamation marks', '', '', ('learned', 'exclamation')),
+        ('Write Mrs Moreno, never Gail', '', 'gail@northwind.example', ('learned', 'Write Mrs Moreno')),
         ("I'm now the AP lead", 'soul', '', ('soul', 'now the AP lead')),
         ('Our ERP is Intacct', 'soul', '', ('soul', 'ERP is Intacct')),
         ('Be shorter with me', 'counsel', '', ('counsel', 'Be shorter')),
@@ -244,44 +244,38 @@ TOLD = [('Gail moved to Ops', 'people', '', ('learned', 'Gail moved to Ops')),
 
 
 class EachFactGoesWhereItBelongs(unittest.TestCase):
-    def test_the_twelve_told_facts(self):
+    def test_the_told_facts(self):
         s = store()
         s.save_doc('soul', '# SOUL.md\n\nYou work for Alex.\n<!-- fromhistory:start -->\nold\n<!-- fromhistory:end -->\n', 'owner')
         job, triage_ = s.get_doc('job'), s.get_doc('triage')
-        for note, section, about, (doc, words) in TOLD:
+        for note, doc_, about, (doc, words) in TOLD:
             with self.subTest(note=note):
-                r = memoryedit.remember(s, note, about, section)
+                memory.remember(s, note, note, about, doc=doc_)
                 self.assertIn(words, s.get_doc(doc) or '', f'{note!r} should be in {doc}')
                 others = {'learned', 'style', 'soul', 'counsel'} - {doc}
                 for o in others: self.assertNotIn(note, s.get_doc(o) or '', f'{note!r} leaked into {o}')
         self.assertEqual((s.get_doc('job'), s.get_doc('triage')), (job, triage_), 'JOB.md and TRIAGE.md are never the chat\'s')
         soul = s.get_doc('soul')
         self.assertTrue(soul.startswith('# SOUL.md\n\nYou work for Alex.\n<!-- fromhistory:start -->\nold\n<!-- fromhistory:end -->'), 'appended, never rewritten')
-        self.assertGreater(soul.index(memoryedit.TOLD), soul.index('fromhistory:end'), 'outside the generated block')
+        self.assertGreater(soul.index(memory.TOLD), soul.index('fromhistory:end'), 'outside the generated block')
         a = s._one("SELECT * FROM audit WHERE Action='assistant_told' ORDER BY Id LIMIT 1")
         self.assertIn('You work for Alex', a['Detail'], 'the audit keeps the document as it was')
 
-    def test_every_save_says_the_document_and_who_reads_it(self):
+    def test_a_save_to_his_document_says_which_and_the_memory_is_silent(self):
         s = store()
-        for section, about, want in (('soul', '', ['[SOUL.md](#about=docs&doc=soul)', 'read by triage']),
-                                     ('counsel', '', ['[COUNSEL.md](#about=docs&doc=counsel)', 'the morning brief']),
-                                     ('style', 'gail@northwind.example', ['for gail@northwind.example', 'By recipient', 'drafts to them']),
-                                     ('care', '', [concierge.GOT_IT])):
-            out = call(s, 'memory.remember', note=f'a {section} fact', section=section, about=about)
-            for w in want: self.assertIn(w, out['say'], section)
-        # ...but the memory itself is silent (the owner, 2026-11-14): a fact kept in LEARNED.md is answered in a word, with no link to follow
-        self.assertNotIn('](', out['say']); self.assertIn('- a care fact', s.get_doc('learned'))
+        for doc, want in (('soul', ['[SOUL.md](#about=docs&doc=soul)', 'read by triage']), ('counsel', ['[COUNSEL.md](#about=docs&doc=counsel)', 'the morning brief']),
+                          ('', [concierge.GOT_IT])):
+            out = call(s, 'memory.remember', note=f'a {doc or "memory"} fact', subject=f'{doc} fact', doc=doc)
+            for w in want: self.assertIn(w, out['say'], doc)
+        # ...but the memory itself is silent (the owner, 2026-11-14): a fact kept is answered in a word, with no link to follow
+        self.assertNotIn('](', out['say']); self.assertIn('- a memory fact', s.get_doc('learned'))
 
-    def test_a_name_with_no_known_address_is_asked_not_guessed(self):
-        s = store()
-        with self.assertRaises(ValueError): memoryedit.remember(s, 'Write formally', 'Nobody Known', 'style')
-        with self.assertRaises(ValueError): memoryedit.told(s, 'job', 'I run AP')
+    def test_only_his_two_documents_take_an_appended_line(self):
+        with self.assertRaises(ValueError): memory.told(store(), 'job', 'I run AP')
 
     def test_the_description_names_every_destination(self):
         d = toolcatalog.describe('memory.remember')
-        for w in ('people', 'care', 'work', 'promises', 'bring', 'style', 'soul', 'counsel', 'SOUL.md', 'COUNSEL.md', 'STYLE.md', 'LEARNED.md',
-                  'read only by the drafts to them'):
-            self.assertIn(w, d)
+        for w in ('subject', 'about', 'signature', 'soul', 'counsel', 'SOUL.md', 'COUNSEL.md'): self.assertIn(w, d)
 
 
 class EveryRoadIsOffered(unittest.TestCase):

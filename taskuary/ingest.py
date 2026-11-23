@@ -663,7 +663,7 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
     _guarded.takes_want = getattr(llm, 'takes_want', None)
     from .triage import takes_tokens
     _guarded.takes_tokens = takes_tokens(llm)                 # ...and whether it takes a length, so triage's room reaches it
-    from . import learned_cut
+    from . import memory
     notes, notes_left = relevant_notes(store, [msg.get('from_email') or ''],
                                        f"{msg.get('subject') or ''} {msg.get('body') or ''}"[:4000],
                                        subject=msg.get('subject') or '',
@@ -787,7 +787,7 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
     # ...and THE SAME BYTES ON EVERY MAIL: the lines this mail's EVIDENCE also carries were taken out of it here, so the memory - a cached
     # block of the prompt (triage's stable()) - was a different one for every sender with a note, and was billed whole again each time
     # (5 memories over 40 mails, measured 2026-11-11). A line may now be read twice, once there under its id; what is cached is paid once
-    lrn = learned_cut.whole(store, 'triage', target=f"mail:{msg.get('external_id') or ''}")
+    lrn = memory.whole(store, 'triage', target=f"mail:{msg.get('external_id') or ''}")
     # WHO IS ASKING, for the usage row (aiusage.asking, 2026-11-11): triage of a mail, of a report's own run or of an Advisor idea - whichever
     # brain it rides - and about which message. A new mail has no row yet, so the rows written ride the msg until it lands (_land)
     who = 'triage.report' if report_brief(msg) else 'triage.idea' if msg.get('idea_context') else 'triage.classify'
@@ -1391,9 +1391,9 @@ def applicable_notes(store, senders, subject: str = '', text: str = '', source: 
     who = {(s or '').lower() for s in senders if s}
     doms = {s.rsplit('@', 1)[-1] for s in who if '@' in s}
     src = (source or '').lower()
-    # ...read from LEARNED.md, the one memory (memorylines, the owner 2026-10-27): the notes table is gone
-    from . import memorylines
-    return [n for n in memorylines.standing(store)
+    # ...read from the one memory (memory.standing): the notes table is gone
+    from . import memory
+    return [n for n in memory.standing(store)
             if n['Scope'] in ('global', 'subject')
             or (n['Scope'] == 'sender' and (n.get('ScopeKey') or '').lower() in who)
             or (n['Scope'] == 'sender_domain' and (n.get('ScopeKey') or '').lower() in doms)
@@ -1406,9 +1406,9 @@ def relevant_notes(store, senders, text: str, cap: int = NOTE_CAP, budget: int =
 
     Ranked by how alike in MEANING each note is to the message (textsim, embeddings) on top of how narrowly it was scoped; with no
     embedder, by the scope alone. `senders` is every address on the thread - one message's sender, or a whole chain's. `keep`, when
-    given, says which note rows may be used at all. `ids` puts each note's own id in front of it ("[lrn123] ...", learned_cut.cite_of):
+    given, says which note rows may be used at all. `ids` puts each note's own id in front of it ("[lrn123] ...", memory.cite_of):
     triage's old answer shape named the ones it applied by it (notes_applied); the lean one is not asked to (2026-11-11)."""
-    from .learned_cut import cite_of
+    from .memory import cite_of
     hits = [n for n in applicable_notes(store, senders, subject, text, source) if keep is None or keep(n)]
     key = lambda n: f"note:{cite_of(n.get('Key'))}"
     got = textsim.rank(store, f'{subject}\n{text}', [(key(n), note_text(n)) for n in hits], least=0.0)
@@ -3285,8 +3285,8 @@ def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding
                 if rmem.learn_correction(store, tid, 'kind', kind, actor, reason=said[:200]):
                     # the same two memories the buttons write. Reclassifying from the chat used to
                     # write neither, so "put it on my list" taught less than the button saying it.
-                    from . import learn as _learn
-                    _spawn(_learn.learn_from, store, said)
+                    from . import learning
+                    _spawn(learning.learn_from, store, said, f'task{tid}')
             except Exception as e:
                 logger.warning(f'routing memory: kind={kind} on {task_ref(tid)} not learned - {e}')
         return tid

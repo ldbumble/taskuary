@@ -108,12 +108,12 @@ def test_only_a_sign_off_block_becomes_the_signature_and_an_agents_is_the_agents
     in one remember - became the signature under every email, recorded as the owner's, the Marcus fact kept nowhere. A sentence is refused
     (the agent keeps it in its own section); a sign-off block is kept, as whoever set it."""
     import pytest
-    from taskuary import memoryedit
+    from taskuary import memory
     from taskuary.store import MemoryStore
     s = MemoryStore(); s.set_setting('email_signature', 'Alex Doyle', 'owner')
     with pytest.raises(ValueError, match='not kept as the signature'):
-        memoryedit.remember(s, 'Training spend requires sign-off from Marcus Reed (marcus@northwind.example). Email signature: Alex.', section='signature', actor='agent:assistant')
+        memory.remember(s, 'Training spend requires sign-off from Marcus Reed (marcus@northwind.example). Email signature: Alex.', signature=True, actor='agent:assistant')
     assert s.get_setting('email_signature') == 'Alex Doyle'
-    r = memoryedit.remember(s, 'Best,\nAlex', section='signature', actor='agent:assistant')
+    r = memory.remember(s, 'Best,\nAlex', signature=True, actor='agent:assistant')
     assert r['text'] == 'Best,\nAlex' and s.get_setting('email_signature') == 'Best,\nAlex'
     assert s._one("SELECT Actor FROM audit WHERE Action='signature_kept' ORDER BY rowid DESC LIMIT 1")['Actor'] == 'agent:assistant'

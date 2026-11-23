@@ -138,7 +138,7 @@ CASES = [
     Q('item', 'walk me through my tasks', None, c('next'), 'card', freq=5),
     Q('item', 'start over', None, c('next'), 'card', freq=3),
     Q('item', 'mark this done', None, c('close', on=T1), 'light:close', freq=3),
-    Q('item', 'remember that Marcus owns the bank feed', 'todo', c('remember', text='Marcus owns the bank feed', section='people'), 'did:memory.remember', freq=2),
+    Q('item', 'remember that Marcus owns the bank feed', 'todo', c('remember', text='Marcus owns the bank feed'), 'did:memory.remember', freq=2),
     Q('item', 'split this into two tasks', 'todo', c('task.split', text='the bank feed; the 4,180 gap'), 'light:split', freq=1),
     Q('item', 'file a note on it: waiting on the bank', 'todo', c('task.comment', text='waiting on the bank'), 'open:#task=', freq=2),
     Q('item', 'set the due date to friday', 'todo', c('task.update', due='friday'), 'did:task.update', freq=2),
@@ -170,7 +170,7 @@ CASES = [
     Q('question', 'who is Ruth Bennett', None, [c('sender.read', who='Ruth Bennett'), 'She writes about the AP cutover.'], 'read:sender.read', freq=2),
     # ── the memory, read and corrected in words (slice 7 of the memory redesign, approved 2026-10-25) ──
     Q('memory', "who's Gail to me", None, [c('memory.about', who='Gail'), 'Nothing in the memory about her yet.'], 'read:memory.about', freq=3),
-    Q('memory', 'Gail moved to Ops', None, c('memory.remember', note='Gail Moreno moved to Ops', about='gail@northwind.example', section='people'), 'did:memory.remember', freq=2),
+    Q('memory', 'Gail moved to Ops', None, c('memory.remember', note='Gail Moreno moved to Ops', about='gail@northwind.example'), 'did:memory.remember', freq=2),
     Q('memory', 'forget that Ray does payroll', None, [c('memory.about', who='Ray'), 'Nothing in the memory says that about Ray.'], 'read:memory.about', freq=2,
       note='the demo world has learned nothing yet; the closing and forgetting itself is tests/test_memory_edit.py'),
     Q('question', 'summarize my day', None, [c('pipe.list'), 'Ten on you; two meetings.'], 'read:pipe.list', freq=4),
@@ -563,18 +563,13 @@ def wa_group(s):
     s.save_connector({'Type': 'whatsapp', 'Name': 'WhatsApp', 'Active': 1}, 't')
     s.set_setting(wanames.KEY, json.dumps({TEAM_GROUP: 'Northwind team'}), 't')
 def habits_row(s):
-    "Two habits on the one row: one the Advisor adopted, one it asks about (habits.tick, as tests/test_habits_row.py builds it)."
+    "Two habits on the one row, each a learned line it asks the owner to confirm (learning.tick)."
     from datetime import datetime
-    from taskuary import funnel, habits, learn, learnedgraph as lg
-    day = datetime.now().strftime('%Y-%m-%d')
-    ln = lambda k, t, sc, ev: lg.fmt({'key': k, 'text': t, 'ev': ev, 'score': sc, 'seen': day, 'status': 'proposed'})
-    doc = s.get_doc('learned') or '# LEARNED\n'
-    if learn.PROP_START not in doc: doc += f"\n## Proposed rules — your call\n{learn.PROP_START}\n{learn.PROP_END}\n"
-    add = '\n'.join([ln('sso threads', '{{owner_first}} closes sign-in help threads directly; they need no drafted reply', 12, [f'rv{i}' for i in range(1, 9)]),
-                     ln('fwd fyi', 'Forwarded FYI mail from the facilities team needs no reply', 5, ['rv20', 'rv21'])])
-    s.save_doc('learned', doc.replace(learn.PROP_END, add + '\n' + learn.PROP_END), 'reflect')
-    habits.tick(s); funnel.invalidate()
-    return f"idea:{s._one('SELECT * FROM idea WHERE Key=?', (habits.KEY,))['IdeaId']}"
+    from taskuary import funnel, learning, memory
+    memory.infer(s, 'You close sign-in help threads directly; they need no drafted reply', 'sso threads', [f'rv{i}' for i in range(1, 9)])
+    memory.infer(s, 'Forwarded FYI mail from the facilities team needs no reply', 'fwd fyi', ['rv20', 'rv21', 'rv22'])
+    learning.tick(s); funnel.invalidate()
+    return f"idea:{s._one('SELECT * FROM idea WHERE Key=?', (learning.KEY,))['IdeaId']}"
 def idea_row(s):
     from datetime import datetime
     from taskuary import funnel
@@ -857,13 +852,13 @@ AREA_SETTINGS = [
     # ...SOUL, JOB, LEARNED and COUNSEL ride every turn (concierge._system), so they are answered in words; the other docs are read whole
     Q('settings', 'what does my SOUL.md say about me', None, 'That you run AP at Northwind and work in the ledger.', 'words', tools=('words',), freq=2),
     Q('settings', "what's in my STYLE.md", None, [c('docs.search', section='your doc style'), 'Short, plain, signed Alex.'], 'read:docs.search', freq=2),
-    Q('settings', 'add that I also run vendor onboarding', None, c('memory.remember', note='I also run vendor onboarding', section='care'),
+    Q('settings', 'add that I also run vendor onboarding', None, c('memory.remember', note='I also run vendor onboarding'),
       'did:memory.remember', view=DOCJOB, freq=3, note="JOB.md is never the chat's to write: a fact about the job is LEARNED's (memoryedit)"),
     Q('settings', "update my JOB.md, I don't handle payroll any more", None,
-      c('memory.remember', note="I don't handle payroll any more", section='care'), 'did:memory.remember', freq=3),
-    Q('settings', "I'm the AP lead now", None, c('memory.remember', note="I'm the AP lead now", section='soul'), 'did:memory.remember', view=DOCSOUL, freq=2),
-    Q('settings', 'be shorter with me from now on', None, c('memory.remember', note='be shorter with me', section='counsel'), 'did:memory.remember', freq=2),
-    Q('settings', "always sign off 'Best, Alex'", None, c('memory.remember', note="sign off 'Best, Alex'", section='style'), 'did:memory.remember', freq=2),
+      c('memory.remember', note="I don't handle payroll any more"), 'did:memory.remember', freq=3),
+    Q('settings', "I'm the AP lead now", None, c('memory.remember', note="I'm the AP lead now", doc='soul'), 'did:memory.remember', view=DOCSOUL, freq=2),
+    Q('settings', 'be shorter with me from now on', None, c('memory.remember', note='be shorter with me', doc='counsel'), 'did:memory.remember', freq=2),
+    Q('settings', "always sign off 'Best, Alex'", None, c('memory.remember', note="sign off 'Best, Alex'"), 'did:memory.remember', freq=2),
     Q('settings', 'rewrite my JOB.md from my mail', None, [v(op='point', target='generate_from_history')], 'view:point:generate_from_history',
       tools=('words',), view=DOCJOB, freq=2),
     Q('settings', 'write my SOUL doc with me', None, [v(op='point', target='write_it_from_a_few_questions')], 'view:point:write_it_from_a_few_questions',
@@ -1181,7 +1176,7 @@ AREA_PHONE = [
       c('task.create_from_text', kind='general', text='research what Payworth charges per seat', title='Payworth seat price'), 'proposal:task.create_from_text',
       freq=3, phone=True),
     Q('phone', "what's on my plate today?", None, [c('tasks.list'), 'Three tasks wait on you.'], 'read:tasks.list', freq=5, phone=True),
-    Q('phone', 'Gail moved to Ops', None, c('memory.remember', note='Gail Moreno moved to Ops', about='gail@northwind.example', section='people'), 'did:memory.remember', freq=2, phone=True),
+    Q('phone', 'Gail moved to Ops', None, c('memory.remember', note='Gail Moreno moved to Ops', about='gail@northwind.example'), 'did:memory.remember', freq=2, phone=True),
     Q('phone', 'turn on the morning message', None, [c('settings.list', group='Assistant on your phone'), c('setting.set', setting='phone_morning_line', value='1')],
       'proposal:setting.set', freq=2, phone=True),
     Q('phone', "whatsapp isn't working", None, [c('app.health', name='whatsapp'), 'WhatsApp is switched off - Open the connection on its card, at your desk.'],
@@ -1213,15 +1208,15 @@ AREA_SELF_KNOWLEDGE = [
       view=LEARNEDDOC, freq=2),
     Q('self-knowledge', 'reflect now', None, v(op='point', target='reflect_now'), 'view:point:reflect_now', tools=('words',), view=LEARNEDDOC, freq=1),
     Q('self-knowledge', 'remember I never want the payroll vendor newsletters as tasks', None,
-      c('memory.remember', note='I never want the payroll vendor newsletters as tasks', section='care'), 'did:memory.remember', view=LEARNEDDOC, freq=3),
+      c('memory.remember', note='I never want the payroll vendor newsletters as tasks'), 'did:memory.remember', view=LEARNEDDOC, freq=3),
     Q('self-knowledge', 'do you read my LEARNED.md?', None, 'Yes - the lines in use, with SOUL.md and JOB.md, on every page.', 'words', tools=('words',), freq=1),
     # ── the owner's documents: each fact goes where its reader reads it (memory.remember's section), a document's own buttons pressed ──
-    Q('self-knowledge', "from now on sign my emails 'Best, Alex'", None, c('memory.remember', note="sign every email 'Best, Alex'", section='style'),
+    Q('self-knowledge', "from now on sign my emails 'Best, Alex'", None, c('memory.remember', note="sign every email 'Best, Alex'"),
       'did:memory.remember', view=STYLEDOC, freq=3),
     Q('self-knowledge', 'regenerate my style from my sent mail', None, v(op='point', target='generate_from_history'), 'view:point:generate_from_history',
       tools=('words',), view=STYLEDOC, freq=2),
-    Q('self-knowledge', 'be shorter with me', None, c('memory.remember', note='be shorter with me', section='counsel'), 'did:memory.remember', freq=3),
-    Q('self-knowledge', "add to this that I'm the AP lead now", None, c('memory.remember', note="I'm the AP lead now", section='soul'), 'did:memory.remember',
+    Q('self-knowledge', 'be shorter with me', None, c('memory.remember', note='be shorter with me', doc='counsel'), 'did:memory.remember', freq=3),
+    Q('self-knowledge', "add to this that I'm the AP lead now", None, c('memory.remember', note="I'm the AP lead now", doc='soul'), 'did:memory.remember',
       view=SOULDOC, freq=2, note="the document's box is no field: the line is kept by memory.remember, never typed over the document"),
     Q('self-knowledge', 'what does my JOB.md say I am responsible for?', None,
       'The finance and census systems: the GL export, the AP importers, the census database and the helpdesk.', 'words', tools=('words',), freq=2,

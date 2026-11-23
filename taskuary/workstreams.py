@@ -223,19 +223,6 @@ def of_evidence(store, ids) -> str:
     return _one(hits)
 
 
-def tag_lines(store) -> int:
-    """Write each machine line's workstream (learned_line.Workstream) from its evidence; a people line's own subject decides first.
-    Returns how many changed. Readers leave out the lines of another hat (learned_cut.for_reader)."""
-    if not streams(store): return 0
-    xs, n = streams(store), 0
-    for r in store._rows("SELECT Key, Ev, Subject, Workstream FROM learned_line WHERE Status IN ('in_use','watching')"):
-        ws = (by_signals(xs, {'FromEmail': r['Subject']})[0] if r.get('Subject') else '') or \
-             of_evidence(store, [e.strip() for e in str(r.get('Ev') or '').split(',') if e.strip()])
-        if ws != (r.get('Workstream') or ''):
-            store._exec('UPDATE learned_line SET Workstream=? WHERE Key=?', (ws, r['Key'])); n += 1
-    return n
-
-
 def label(store, slug: str) -> dict | None:
     """What a screen shows beside an item: {slug, name, personal} - None when it has no workstream."""
     w = get(store, slug) if slug else None

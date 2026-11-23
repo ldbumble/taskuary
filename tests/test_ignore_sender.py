@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from taskuary import server
 from taskuary.store import MemoryStore
-from taskuary import memorylines
+from taskuary import memory
 from tests.memlines import teaching
 
 
@@ -44,7 +44,7 @@ class IgnoreSenderTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.text)
         d = r.json()
         self.assertEqual((d['how'], d['scope'], d['scopeKey']), ('memory', 'sender', 'noreply@bank.example'))
-        self.assertEqual([n['ScopeKey'] for n in memorylines.notes(s)], ['noreply@bank.example'])
+        self.assertEqual([n['ScopeKey'] for n in memory.notes(s)], ['noreply@bank.example'])
         self.assertEqual(s.list_policies(active_only=False), [])       # the mail keeps arriving
         self.assertEqual(s.get_message(mid)['Status'], 'ignored')
 

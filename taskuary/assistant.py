@@ -2107,10 +2107,6 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     say = [s for s in say if not is_personal(store, tid=(s.get('action') or {}).get('tid'), mid=(s.get('action') or {}).get('mid'))]
     rows = [store.upsert_idea(s | {'action': (s.get('action') or {}) | {'why': s['why']}
                                    | ({'source': src} if (src := source_of(s, mids, blocks)) else {})}, stamp) for s in say]
-    # ...and an idea that rests on a memory line says so where the owner's "why did it raise this?" reads (learned_cut.used)
-    from . import learned_cut
-    for s in say:
-        if (mem := (s.get('action') or {}).get('memory')): learned_cut.receipt(store, 'assistant', s['key'], [mem])
     # the source goes in the BODY, not only on the card: the Timeline's detail pane renders an
     # assistant post as its plain text, so a provenance that lived only in the React card was
     # invisible exactly where the owner reads the post
@@ -2167,7 +2163,7 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
 # walk's own and touches nothing. Draft follow-up, Discuss and the talk-back chat are gone: a task's agent drafts.
 # ...and a rule question's yes (promote.py): the rule it proposed is made, through the one create path
 VERBS = ('task', 'agent', 'dismiss', 'dismiss_kind', 'snooze', 'done', 'rule', 'accept',   # accept: a workstream card's Add it (2026-11-01)
-         'habit', 'seen')                       # ...and the habits row's own: one habit's Adopt / No / Not right, and the row read (habits.py)
+         'habit', 'seen')                       # ...and the habits row's own: one habit's Adopt / No, and the row read (learning.answer)
 # WHAT THE OWNER DID WITH AN IDEA, kept where the Advisor reads it (the owner, 2026-10-02: "feedback on assistant ideas even on
 # desktop does it teach it anything? we should have that"). The idea row's status said dismissed or done - and done covered a
 # task made from it and a line merely handled alike - and a dismissed row ages out of ALREADY SAID with the rest. This log is
@@ -2188,12 +2184,12 @@ def _keep_verdict(store, i: dict, verb: str, actor: str):
     store.set_setting(VERDICTS_KEY, json.dumps(([row] + [r for r in verdicts(store) if r.get('key') != row['key']])[:VERDICTS_CAP]), actor)
     # ...and an idea taken up or turned down is a line in the memory every reader has "if it adds to understanding of the user - as long
     # as it's not bloat" (the owner, 2026-10-27): the model says what it shows about what the owner wants brought up, against the lines
-    # already there - a new line, a sharper one in place of an older, or nothing. Never one line per press (memorylines.teach)
+    # already there - a new line, a sharper one in place of an older, or nothing. Never one line per press (learning.teach)
     if verb in ('task', 'agent', 'dismiss', 'dismiss_kind') and i.get('IdeaId'):
-        from . import memorylines
+        from . import learning
         facts = '\n'.join(x for x in (f"The idea: {_short(i.get('Text'), 400)}", f"Its kind: {i.get('Kind')}" if i.get('Kind') else '',
                                        f"The owner: {VERDICT_WORD.get(verb, verb)}") if x)
-        memorylines.teach_soon(store, f'idea_{verb}', f"idea{i['IdeaId']}", facts, section='bring')
+        learning.teach_soon(store, f'idea_{verb}', f"idea{i['IdeaId']}", facts)
 
 
 def verdicts_block(store, report_id=None) -> str:
@@ -2282,17 +2278,17 @@ def act(store, idea_id: int, verb: str, actor: str = 'owner', days: int = 1, unt
     try: a = json.loads(i.get('ActionJson') or '{}')
     except ValueError: a = {}
     out = {'ideaId': idea_id, 'verb': verb}
-    # THE HABITS ROW (habits.py; the owner, 2026-11-01): one row for every habit, each answered on its own line - Adopt / No on one it asks
-    # about, Not right on one it adopted - and the row read when the owner moves on. No task, agent, reminder or rule from it: it is not work
+    # THE HABITS ROW (learning.py; the owner, 2026-11-01): one row for every learned line that waits on his word, each answered on its own
+    # line - Adopt / No. No task, agent, reminder or rule from it: it is not work
     if i.get('Kind') == 'habit':
-        from . import habits
+        from . import learning
         if verb == 'habit':
             if not line or yes is None: raise ValueError('say which habit, and yes or no')
-            return out | habits.answer(store, line, bool(yes), actor)
-        if verb == 'seen': return out | habits.seen(store, actor)
-        if verb not in ('done', 'dismiss', 'dismiss_kind'): raise ValueError('a habit is answered on its own line: Adopt, No or Not right')
-        # ...and put down whole (typed, or the phone): the adopted ones seen, the asked ones No on Not ours - never asked again
-        habits.seen(store, actor, 'seen' if verb == 'done' else 'no')
+            return out | learning.answer(store, line, bool(yes), actor)
+        if verb == 'seen': return out | learning.seen(store, actor)
+        if verb not in ('done', 'dismiss', 'dismiss_kind'): raise ValueError('a habit is answered on its own line: Adopt or No')
+        # ...and put down whole (typed, or the phone): seen on Done, No on Not ours - never asked again
+        learning.seen(store, actor, 'seen' if verb == 'done' else 'no')
     elif verb in ('habit', 'seen'): raise ValueError('only the habits row has that')
     if verb == 'snooze':
         # Remind me reads a day the way the task's own picker does ('2 weeks', a date, 'tomorrow')

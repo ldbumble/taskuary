@@ -513,8 +513,8 @@ class AppReadTests(unittest.TestCase):
         s = self._store()
         self.assertTrue(toolcatalog.is_read('knowledge.search')); self.assertIn('knowledge.search', toolcatalog.block())
         self.assertEqual(toolcatalog.valid('knowledge.search', {}), 'knowledge.search needs query')
-        from taskuary import memoryedit
-        memoryedit.remember(s, 'Gail Moreno approves every PO over 5k', section='care')      # a kept fact is a LEARNED.md line (2026-10-27)
+        from taskuary import memory
+        memory.remember(s, 'Gail Moreno approves every PO over 5k')      # a kept fact is a LEARNED.md line (2026-10-27)
         from tests import fake_embed           # ...found by meaning (embeddings), never by shared words (2026-10-28)
         with fake_embed.meaning({'po': ['approves']}):
             self.assertIn('Gail Moreno approves', concierge.read_op(s, 'knowledge.search', {'query': 'who approves a PO'}))

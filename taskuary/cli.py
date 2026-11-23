@@ -234,14 +234,14 @@ def _history(args, stranger):
 
 
 def _memory(args, stranger):
-    """`taskuary --memory [SECTION]`: LEARNED.md, read through the server on this session's task - on demand, as an agent's brief no
-    longer carries it (the owner, 2026-10-27). The server refuses a stranger's task."""
+    """`taskuary --memory [WHO]`: the owner's memory, looked up through the server on this session's task (memory.lookup). The server
+    refuses a stranger's task."""
     import os, sys
     try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     except (AttributeError, OSError): pass
     tid = os.environ.get('TASKUARY_TASK')
     if not str(tid).isdigit(): print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no task to read the memory for'); return
-    got = _get('/api/agent/memory', {'task_id': int(tid), 'section': args.memory or ''}, stranger)
+    got = _get('/api/agent/memory', {'task_id': int(tid), 'about': args.memory or args.about or ''}, stranger)
     if not got: return
     r, out = got
     print(out.get('says') or '' if r.status_code == 200 else f"not read: {out.get('detail') or r.text[:200]}")
@@ -384,7 +384,8 @@ def main():
     ap.add_argument('--cc', action='append', default=None, metavar='ADDRESS', help='who else is copied (repeat for more): with --reply, instead of the thread; with --draft, on that email')
     ap.add_argument('--guessed', action='append', default=None, metavar='ADDRESS', help='with --draft: an address on it you guessed (none on record) - the card says so')
     ap.add_argument('--why-to', default='', metavar='LINE', help='with --reply: one line on why it goes to whom it goes, when it is not the plain reply all')
-    ap.add_argument('--subject', default='', help='the subject line')
+    ap.add_argument('--subject', default='', help="the subject line; with --remember, what the fact is about in a few words (\"meeting hours\") - "
+                                                  'the same subject as a line it corrects, which it then replaces')
     # ...and a BATCH's items (batch.py): one finding per item, as the agent finishes each
     ap.add_argument('--item', type=int, metavar='N', help='in a batch: report on item N (with --result, and --overlap/--settled)')
     ap.add_argument('--result', default='', metavar='TEXT', help="with --item: what it is, whether it is right, what you propose")
@@ -399,8 +400,10 @@ def main():
                     '"2026-11-12") to verify WHAT - a payment that should clear, a reply due by a date; one per task, a new one replaces it')
     ap.add_argument('--remember', metavar='FACT', help="keep a fact the owner told you in this chat that holds beyond this task (who handles "
                     'what now, what they care about), in their words - in their memory at once, for triage, every agent and the Assistant')
-    ap.add_argument('--section', metavar='SECTION', default='', help="with --remember: people, work, care, promises, bring, style, or signature "
-                    '(the block under every email he sends - it becomes his saved signature)')
+    ap.add_argument('--about', metavar='WHO', default='', help='with --remember: the person the fact is about (a name or address), not the owner himself; '
+                                                         'with --memory: look up what is kept about them')
+    ap.add_argument('--signature', action='store_true', help='with --remember: FACT is how the owner signs - the block under every email he sends; '
+                                                             'it becomes his saved signature')
     # ...and the checkout it works in, for a CLI without the use_repo tool (repochoice.py, the owner 2026-11-06)
     ap.add_argument('--use-repo', nargs='+', metavar=('NAME_OR_PATH', 'WHY'), help="work this task in that git checkout - a repository from "
                     'your REPOSITORIES list or a folder - and say why in a few words; the task records it')
@@ -418,8 +421,8 @@ def main():
                                                        "the chat: attach it to --reply for the owner's Send, never send it yourself.")
     ap.add_argument('--form', metavar='JSON', help='with --sign-form: {"fields": {name: value}, "sign": {"field": name} or {"near": "Parent '
                                                    'signature"} or {"page": 1, "box": [x, y, width, height]}, "date": true or a field name}')
-    ap.add_argument('--memory', metavar='SECTION', nargs='?', const='',
-                    help="print what Taskuary has learned about the owner (LEARNED.md) - all of it, or one section: people, care, work, promises, bring")
+    ap.add_argument('--memory', metavar='WHO', nargs='?', const='',
+                    help="print the owner's memory - what they said, the facts, what they confirmed of what was learned - all of it, or about one person")
     ap.add_argument('--guide', metavar='TOPIC', help="print one of Taskuary's how-tos for an agent - browser, number (guides.py)")
     ap.add_argument('--browser', metavar='URL', help="open this task's browser on a page - for an agent whose own shell cannot launch one; then drive it with agent-browser")
     args = ap.parse_args()
@@ -565,7 +568,8 @@ def main():
         except (AttributeError, OSError): pass
         tid = os.environ.get('TASKUARY_TASK')
         if not str(tid).isdigit(): print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no task the owner told you this on'); return
-        got = _post('/api/agent/remember', {'task_id': int(tid), 'note': args.remember, 'section': args.section, 'agent': os.environ.get('TASKUARY_AGENT') or 'agent'}, stranger)
+        got = _post('/api/agent/remember', {'task_id': int(tid), 'note': args.remember, 'subject': args.subject, 'about': args.about, 'signature': args.signature,
+                                            'agent': os.environ.get('TASKUARY_AGENT') or 'agent'}, stranger)
         if not got: return
         r, out = got
         print(out.get('says') if out.get('ok') else out.get('detail') or f'not kept: {r.text[:200]}')

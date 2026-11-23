@@ -856,7 +856,7 @@ class MemoryBlocksTests(unittest.TestCase):
     """The clock pass read less of what the app had learned than the event pass did: no LEARNED.md, no ledger, no people pages
     (the owner, 2026-10-12: "it should be much better if it is"). Two blocks on the Memory card close that."""
     def test_learned_lines_reach_the_clock_pass(self):
-        from taskuary import assistant, learn
+        from taskuary import assistant
         from taskuary.store import MemoryStore
         s = MemoryStore()
         s.save_doc('learned', s.get_doc('learned').replace('## What you care about', '## What you care about' + chr(10) + '- Short replies, no filler. [s:4 | ev: rv1,rv2,rv3 | seen: 2026-08-20]'), 'reflect')

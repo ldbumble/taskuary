@@ -1321,16 +1321,10 @@ def install_processing_changes(app, store):
             store.reconcile_processing_membership(); funnel.invalidate(); store._poke('feed-changed')
         elif s == 'habits':
             tid = None
-            from taskuary import funnel, habits, learn, learnedgraph as lg
-            day = now.strftime('%Y-%m-%d')
-            def line(k, text, sc, ev): return lg.fmt({'key': k, 'text': text, 'ev': ev, 'score': sc, 'seen': day, 'status': 'proposed'})
-            add = '\n'.join([line('matrix sso', '{{owner_first}} closes sign-in help threads directly; they need no drafted reply', 12,
-                                   [f'rv{i}' for i in range(901, 909)]),
-                              line('matrix fyi', 'Forwarded FYI mail from the Payworth desk needs no reply', 5, ['rv920', 'rv921'])])
-            doc = store.get_doc(learn.DOC) or '# LEARNED\n\n## What you care about\n'
-            if learn.PROP_END not in doc: doc += f'\n## Proposed rules — your call\n{learn.PROP_START}\n{learn.PROP_END}\n'
-            store.save_doc(learn.DOC, doc.replace(learn.PROP_END, add + '\n' + learn.PROP_END, 1), 'reflect')
-            habits.tick(store)
+            from taskuary import funnel, learning, memory
+            memory.infer(store, 'You close sign-in help threads directly; they need no drafted reply', 'matrix sso', [f'rv{i}' for i in range(901, 909)])
+            memory.infer(store, 'Forwarded FYI mail from the Payworth desk needs no reply', 'matrix fyi', ['rv920', 'rv921', 'rv922'])
+            learning.tick(store)
             store.reconcile_processing_membership(); funnel.invalidate(); store._poke('feed-changed')
         elif s == 'news':
             tid = task('Site ops: who has the gate code', 'general', 'in_progress', Assignee='agent:general', Tags=terminal.SAVED)

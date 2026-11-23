@@ -91,17 +91,17 @@ class NoBlanketSoulTests(unittest.TestCase):
 
     def test_a_sign_off_is_the_saved_signature_and_no_worker_is_told_a_name_to_sign_with(self):
         """The walk, 2026-11-21: told "I sign every email 'Best, Alex'", the agent kept it as a memory line, its prompt still read SOUL.md's
-        "Sign letters and emails as Alex Doyle", and every card ended "Alex Doyle". A sign-off said is the saved signature (memoryedit.remember
+        "Sign letters and emails as Alex Doyle", and every card ended "Alex Doyle". A sign-off said is the saved signature (memory.remember
         section signature -> signatures.keep), the signer puts it on, and a SOUL.md written before keeps its words in the owner's file only."""
-        from taskuary import memoryedit, signatures
+        from taskuary import signatures, memory
         s = MemoryStore(); s.set_setting('owner_name', 'Alex Doyle', 't')
         s.save_doc('soul', "# SOUL.md\n\n## How we respond\n- Plain, brief. Sign letters and emails as Alex Doyle; an answer in chat to Alex is never signed.", 'owner')
         tid0 = s.create_task({'Title': 'CloudRack renewal meeting', 'Kind': 'general', 'Status': 'open'}, 'owner')
         rid = s.add_review({'TaskId': tid0, 'Kind': 'reply', 'Status': 'pending', 'Deliver': json.dumps({'kind': 'email', 'channel': 'email'}),
                             'DraftText': 'Hi Gail,\n\nCould we meet next week?\n\nThanks,\n\nAlex Doyle'})       # ...a draft waiting, signed with his name
-        r = memoryedit.remember(s, 'Best,\nAlex', section='signature')
+        r = memory.remember(s, 'Best,\nAlex', signature=True)
         self.assertEqual(s.get_review(rid)['DraftText'], 'Hi Gail,\n\nCould we meet next week?\n\nBest,\nAlex')    # ...re-signed, never asked about
-        self.assertEqual((r['section'], s.get_setting('email_signature')), ('signature', 'Best,\nAlex'))
+        self.assertEqual((r['signature'], s.get_setting('email_signature')), (True, 'Best,\nAlex'))
         self.assertNotIn('Best', s.get_doc('learned') or '')                              # ...never a memory line fighting the signer
         rv = {'Deliver': json.dumps({'kind': 'email', 'channel': 'email'})}                  # an email of its own, as propose_email files it
         self.assertEqual(signatures.agent_signed(s, rv, 'Hi Gail,\n\nThe contract is attached.\n\nThanks,\nAlex Doyle'),
@@ -117,16 +117,15 @@ class NoBlanketSoulTests(unittest.TestCase):
     def test_a_rule_the_owner_gave_about_himself_rides_in_every_agents_brief(self):
         """The walk, 2026-11-21: "Alex never takes meetings before 10am, and none on Fridays" was told to one task's agent, filed under Your
         people (its `about` named him), and the brief of every later task - which carries only the people lines about ITS people - never had
-        it: Ray's "move it to Friday?" was answered yes in his voice. A fact about the owner himself is How you work, and what he said in his
-        own words rides in every agent's brief; a line about someone else stays with the tasks they are on."""
-        from taskuary import context, memoryedit
+        it: Ray's "move it to Friday?" was answered yes in his voice. A fact about the owner himself is about nobody else: it rides in every
+        task - a coding agent's brief and a general agent's every turn; a line about someone else stays with the tasks they are on."""
+        from taskuary import context, general, memory
         s = MemoryStore(); s.set_setting('owner_name', 'Alex Doyle', 't')
-        tid = make(s, 'general')
-        self.assertEqual(memoryedit.remember(s, 'Alex never takes meetings before 10am, and none on Fridays', about='Alex', section='people')['section'], 'work')
-        self.assertEqual(memoryedit.remember(s, 'Gail Moreno handles vendor contracts now', about='gail@northwind.example', section='people')['section'], 'people')
-        brief_ = context.build(s, tid, general=True)
-        self.assertIn('before 10am, and none on Fridays', brief_)
-        self.assertNotIn('Gail Moreno', brief_)                                       # Gail is nobody on this task
+        memory.remember(s, 'Alex never takes meetings before 10am, and none on Fridays', 'meeting hours', about='Alex')
+        memory.remember(s, 'Gail Moreno handles vendor contracts now', 'vendor contracts', about='gail@northwind.example')
+        for read in (context.build(s, make(s, 'coding')), general.learned_block(s, make(s, 'general'))):
+            self.assertIn('before 10am, and none on Fridays', read)
+            self.assertNotIn('Gail Moreno', read)                                       # Gail is nobody on this task
 
     def test_the_triage_role_reaches_triage_and_no_worker(self):
         """The agent walk, 2026-11-10: a coding agent's background opened "You are the funnel between everything inbound and the

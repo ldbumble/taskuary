@@ -258,8 +258,8 @@ def email_from_soul(soul: str):
 
 # Every document that talks about the owner by name - set_owner and server._heal_owner_docs sweep the same list, and the store seeds it
 # from its template. AGENT.md and CODING.md left it when no agent read them any more (2026-11-23): a copy on disk stays, unshown and unread.
-OWNER_DOCS = ('soul', 'job', 'digest', 'learned', 'triage', 'style', 'counsel')
-UNREAD_DOCS = ('agent', 'coding')          # ...and an old install's copies of them are never listed, searched or shown (doc_names)
+OWNER_DOCS = ('soul', 'job', 'digest', 'triage', 'style', 'counsel')     # LEARNED.md is written from the memory (memory.render), never a template
+UNREAD_DOCS = ('agent', 'coding', 'learned-before-r10')          # ...and an old install's copies of them are never listed, searched or shown (doc_names)
 TEMPLATE_OWNER = ('John Smith', 'john.smith@example.com')
 NO_NAME_YET = ("THE OWNER'S NAME IS NOT SET YET. Who the owner is comes from the mailbox the mail arrived in (addressed_to_you), never "
                "from a name: an ask addressed to that mailbox is the owner's, whatever name it greets.")
@@ -534,7 +534,7 @@ CREATE TRIGGER IF NOT EXISTS connector_gen_upd AFTER UPDATE ON connector BEGIN U
 CREATE TRIGGER IF NOT EXISTS connector_gen_del AFTER DELETE ON connector BEGIN UPDATE change_gen SET Gen=Gen+1 WHERE Tbl='connector'; END;
 CREATE TABLE IF NOT EXISTS setting (Name TEXT PRIMARY KEY, Value TEXT, Description TEXT, UpdatedBy TEXT);
 CREATE TABLE IF NOT EXISTS deleted (DeletedId INTEGER PRIMARY KEY, Kind TEXT, Title TEXT, DataJson TEXT, DeletedAt REAL, KeepUntil REAL);
--- (the notes table, `memory`, is gone: an older install's rows are written into LEARNED.md once and the table dropped - memorylines.migrate)
+-- (the notes table, `memory`, is gone: an older install's rows are read into memory_line once and the table dropped - memory.migrate)
 -- A small project graph. `project_link` is deliberately generic: repositories, email addresses,
 -- WhatsApp JIDs and future customer/system identities all point at the same project. Evidence is
 -- task-keyed so replaying startup history cannot make a guess grow more confident each launch.
@@ -608,13 +608,18 @@ CREATE TABLE IF NOT EXISTS permrule (RuleId INTEGER PRIMARY KEY, TaskId INTEGER,
   UNIQUE(TaskId, Pattern));
 CREATE TABLE IF NOT EXISTS learned_history (Id INTEGER PRIMARY KEY, Key TEXT, Text TEXT, Status TEXT, Score INTEGER,
   Ev TEXT, Action TEXT, Actor TEXT, At TEXT);
--- ...and each line's standing (learnedlines.py, phase C 2026-10-23): who reads it, watching / in_use / wrong / forgotten, the owner's
+-- ...and each line's standing (phase C 2026-10-23, read once by memory.migrate): who reads it, watching / in_use / wrong / forgotten, the owner's
 -- own wording, the tombstone that keeps a removed line from being written back. LEARNED.md is the readable face of the in-use rows.
 CREATE TABLE IF NOT EXISTS learned_line (Key TEXT PRIMARY KEY, Reader TEXT, Text TEXT, OwnerText TEXT, Status TEXT, Score INTEGER,
   Ev TEXT, InDoc INTEGER DEFAULT 1, InUseAt TEXT, ForgotEv INTEGER, Source TEXT, UpdatedAt TEXT);
--- THE USE-RECEIPT (the memory redesign, 2026-10-25): which lines a reader was given for which item, so "why?" and the evals can say
--- what the memory said when it mattered (learned_cut.for_reader writes one per read)
-CREATE TABLE IF NOT EXISTS memory_use (Id INTEGER PRIMARY KEY, Reader TEXT, Target TEXT, KeysJson TEXT, At TEXT);
+-- THE OWNER'S MEMORY (memory.py, r10 2026-11-23): what he SAID (one live line per Subject - a correction replaces), and what was INFERRED
+-- from what he did (its evidence Ev and count N, used only once Confirmed). Facts are read where they are kept, never copied here.
+-- learned_line and learned_history above are LEARNED.md's old bookkeeping, read once by memory.migrate.
+CREATE TABLE IF NOT EXISTS memory_line (Id INTEGER PRIMARY KEY, Kind TEXT NOT NULL, Subject TEXT NOT NULL DEFAULT '', Text TEXT NOT NULL,
+  People TEXT DEFAULT '', Scope TEXT DEFAULT 'global', ScopeKey TEXT DEFAULT '', Ev TEXT DEFAULT '', N INTEGER DEFAULT 1,
+  Confirmed INTEGER DEFAULT 0, Status TEXT DEFAULT 'live', Source TEXT DEFAULT '', Workstream TEXT DEFAULT '', At TEXT, UpdatedAt TEXT,
+  ReplacedBy INTEGER);
+CREATE INDEX IF NOT EXISTS ix_memory_line ON memory_line(Status, Kind, Subject);
 CREATE TABLE IF NOT EXISTS idea (IdeaId INTEGER PRIMARY KEY, Key TEXT UNIQUE, Kind TEXT, Text TEXT, ActionJson TEXT, Sig TEXT,
   Status TEXT DEFAULT 'open', SnoozeUntil TEXT, MessageId INTEGER, FirstSeen TEXT, LastSaid TEXT, SaidCount INTEGER DEFAULT 0,
   DecidedBy TEXT, DecidedAt TEXT);
@@ -5501,13 +5506,6 @@ class SQLiteStore:
         self._poke('task-changed', task_id=task_id)
         return True
 
-    # LEARNED.md's history (learnedgraph.py): every point a line gained or lost, and every line that died
-    def add_learned_event(self, key, text, status, score, ev, action, actor):
-        return self._exec('INSERT INTO learned_history (Key,Text,Status,Score,Ev,Action,Actor,At) VALUES (?,?,?,?,?,?,?,?)',
-                          (key, text, status, score, ev, action, actor, _now()))
-    def learned_history(self, key=None):
-        return self._rows('SELECT * FROM learned_history' + (' WHERE Key=?' if key else '') + ' ORDER BY Id', (key,) if key else ())
-
     # the waiting room (waitroom.py): owner notes queued on a task while its agent works
     def add_waiting(self, task_id, note, actor, files=None):
         return self._exec('INSERT INTO waitroom (TaskId, Note, CreatedBy, CreatedAt, Files) VALUES (?,?,?,?,?)', (task_id, note, actor, _now(), files_json(files)))
@@ -6448,7 +6446,7 @@ class SQLiteStore:
         if not self._one('SELECT 1 x ' + q, p): return False
         self._exec('DELETE ' + q, p); return True
     def _heal_notes(self):
-        """An older install's notes table, healed in place before memorylines.migrate writes its rows into LEARNED.md and drops it."""
+        """An older install's notes table, healed in place before memory.migrate reads its rows into the memory and drops it."""
         self.cx.execute("UPDATE memory SET Note=REPLACE(Note, ' from an unknown sender', '') WHERE Source='verdict' AND Note LIKE '%from an unknown sender%'")
         # data heal: verdict notes used to be written as RULES ("Messages from X like 'S' are not
         # tasks - do not open tasks or draft replies"); they are EVIDENCE now (2026-08-27), so the
@@ -6606,12 +6604,6 @@ class SQLiteStore:
         """Who last wrote it - 'template' means nobody has, and the shipped text still flows in."""
         r = self._one('SELECT UpdatedBy FROM doc WHERE Name=?', (name,)); return r['UpdatedBy'] if r else None
     def save_doc(self, name, content, actor):
-        if name == 'learned':           # every write to LEARNED.md, the owner's above all, is recorded line by line (learnedlines.sync)
-            old = self.get_doc(name) or ''
-            self._exec('INSERT INTO doc (Name, Content, UpdatedBy, UpdatedAt) VALUES (?,?,?,?) ON CONFLICT(Name) DO UPDATE SET Content=?, UpdatedBy=?, UpdatedAt=?',
-                       (name, content, actor, _now(), content, actor, _now()))
-            from . import learnedlines
-            return learnedlines.sync(self, old, content, actor)
         self._exec('INSERT INTO doc (Name, Content, UpdatedBy, UpdatedAt) VALUES (?,?,?,?) ON CONFLICT(Name) DO UPDATE SET Content=?, UpdatedBy=?, UpdatedAt=?',
                    (name, content, actor, _now(), content, actor, _now()))
     def delete_doc(self, name): self._exec('DELETE FROM doc WHERE Name=?', (name,))

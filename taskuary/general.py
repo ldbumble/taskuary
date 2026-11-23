@@ -1606,7 +1606,7 @@ def _cut(text, n):
 def take_corrections(store, tid: int, corrections) -> int:
     """What the owner corrected in the chat reaches the learning paths, quietly (no chip, no "Remembered" line): a `redraft` word is kept
     on the pending draft like the draft box's (byrecipient.keep_instruction), an `ask` ("not the ask") is an owner_correction for
-    learn.learn_from. The model's statement of the correction is trusted (the owner, 2026-11-05: "the model reads intent") - it used to count
+    learning.learn_from. The model's statement of the correction is trusted (the owner, 2026-11-05: "the model reads intent") - it used to count
     only when quoted word for word from the owner's newest message, so "make it warmer" said as "warmer, please" was lost. It still needs an
     owner's message to correct from, words, and no credential in them (redact.scrub): what is learned is kept for good. Returns how many."""
     try:
@@ -1626,7 +1626,7 @@ def take_corrections(store, tid: int, corrections) -> int:
             elif c.get('kind') == 'ask':
                 # ...in the OWNER'S words, never the agent's account of them (the owner, 2026-11-13: the memory "saves information about the
                 # user from the agents' takeaway and not what [the user] writes"): the model only says a correction was made
-                from . import learn
+                from . import learning
                 from .ingest import exchange_lines
                 from .outcomes import owner_words
                 own = owner_words(last.get('Body'))[:1000]
@@ -1634,7 +1634,7 @@ def take_corrections(store, tid: int, corrections) -> int:
                 t = store.get_task(tid) or {}
                 m = next(iter(reversed(store.list_messages(tid))), None)
                 thread = ' | '.join(exchange_lines(store, m))[:1500] if m else ''
-                learn.learn_from(store, f"owner_correction on TQ-{tid}: the reading was {t.get('Summary') or t.get('Title') or ''}; the owner wrote: {own}; the thread: {thread}")
+                learning.learn_from(store, f"owner_correction on TQ-{tid}: the reading was {t.get('Summary') or t.get('Title') or ''}; the owner wrote: {own}; the thread: {thread}", f"say{last['CommentId']}")
             else: continue
             kept += 1
         return kept
@@ -2008,36 +2008,22 @@ def repos_block(store) -> str:
             "for one)\n" + '\n'.join(line(r) for r in names[:20]))
 
 
-# WHAT IS LEARNED REACHES THE AGENT (the owner, 2026-11-05: "what learned.md goes to the general agent?" - none did; only `taskuary
-# --memory` on its own say): the trusted lines of LEARNED.md nearest this task, a small block - lean, the rest one command away. The
-# hypotheses still under test stay out, as they do for triage
-# ...down the ONE road every reader takes (learned_cut.for_reader, 2026-11-12): it was a second one - every bullet of the document in its own
-# order wherever no embedder ranked them, so the first 1,500 characters were the people lines about EVERYONE (the owner, 2026-10-25: an
-# agent reads how the owner deals with the people on its own task, never the rest) and the verdict lines about other senders. The people
-# on this task come in its brief (context.build); this is the rest - what bears on its subject first, then what the owner cares about,
-# how they work, promises
-LEARNED_CHARS = 1_500
-def learned_block(store, tid: int, budget: int = LEARNED_CHARS) -> str:
-    from . import learned_cut
+# WHAT THE OWNER'S MEMORY HOLDS FOR THIS TASK REACHES THE AGENT EVERY TURN (the owner, 2026-11-05: "what learned.md goes to the general
+# agent?" - none did): down the ONE road every reader of a task takes (memory.for_task) - what he said about nobody or about the people on it,
+# the facts about them, what he confirmed of what was learned. Late, so a line said on another task since reaches a conversation under way
+def learned_block(store, tid: int) -> str:
+    from . import memory
     from .workstreams import of_task
     try:
-        t = store.get_task(tid) or {}
-        ms = store.list_messages(tid)
-        last = next((m for m in reversed(ms) if m.get('FromEmail') and str(m.get('Direction') or 'in') != 'out'), {})
-        who = str(last.get('FromEmail') or '').lower()
-        # ...the people ON this task are its brief's (context.build), so they are named here only to be left out; of Your people this block
-        # takes the one line about the task's own SUBJECT - "send payroll questions to Gail now" on a vendor's payroll question, where
-        # Gail is nobody on the mail and the line reached no agent at all (2026-11-14)
-        on_it = sorted(set().union(*(learned_cut.people_of(m) for m in ms))) if ms else []
-        about = {'sender': who, 'people': on_it, 'domain': who.rsplit('@', 1)[-1] if '@' in who else '',
-                 'workstream': of_task(store, tid), 'topic': f"{t.get('Title') or ''} {t.get('Summary') or ''}"}
-        got = learned_cut.for_reader(store, 'agents', about, budget=budget, target=f'task:{tid}', people=())
+        ms, t = store.list_messages(tid), store.get_task(tid) or {}
+        got = memory.for_task(store, set().union(*(memory.people_of(m) for m in ms)) if ms else set(), of_task(store, tid), target=f'task:{tid}',
+                              topic=f"{t.get('Title') or ''} {t.get('Summary') or ''}")
     except Exception as e: logger.debug(f'learned block: {e}'); return ''
     out = [l for l in got.splitlines() if l.startswith('- ')]
     if not out: return ''
     # ...and how to lean on them (2026-11-09, after the Model Spec's ladder): silently when little rides on it, named when it decides money,
     # a recipient or a date - and never over the thread, which is newer than anything learned
-    return f'{LEARNED_HEAD} - the lines nearest this task (owner_memory has the rest):\n' + '\n'.join(out)
+    return f'{LEARNED_HEAD} - what bears on this task (owner_memory has the rest):\n' + '\n'.join(out)
 
 
 # HOW HE WANTS IT WRITTEN REACHES THE ONE WHO WRITES (the memory audit, 2026-11-12): what the owner said after editing a draft (STYLE.md's
@@ -2045,12 +2031,11 @@ def learned_block(store, tid: int, budget: int = LEARNED_CHARS) -> str:
 # task writes the replies (propose_reply). The newest notes first, within a budget; the people on this task's lines, theirs only
 VOICE_CHARS = 1_200
 def voice_block(store, tid: int, budget: int = VOICE_CHARS) -> str:
-    from . import byrecipient, learned_cut
-    from .responder import OWNER_NOTES
+    from . import byrecipient
     try:
         to = {str(m.get('FromEmail') or '').lower() for m in store.list_messages(tid) if m.get('FromEmail') and str(m.get('Direction') or 'in') != 'out'}
-        doc = store.get_doc('style') or ''
-        notes = [l.strip() for l in learned_cut.section(doc, OWNER_NOTES).splitlines() if l.strip().startswith('- ')][::-1]
+        m = _NOTES.search(store.get_doc('style') or '')
+        notes = [l.strip() for l in (m.group(0) if m else '').splitlines()[1:] if l.strip().startswith('- ')][::-1]
         out, used = [], 0
         for l in notes:
             if used + len(l) > budget // 2: break
@@ -2152,11 +2137,10 @@ LEARNED_HEAD = 'WHAT TASKUARY HAS LEARNED ABOUT THE OWNER'
 UNLEARNED = "NO LONGER IN THE OWNER'S MEMORY - taken back or replaced since you read them; do not go on these, and correct what you wrote from them:"
 def unlearned(store, frozen) -> str:
     if not frozen: return ''
-    from . import learned_cut as lc
+    from . import memory
     told = {l for x in frozen[2] if x.startswith(LEARNED_HEAD) for l in x.splitlines()[1:] if l.startswith('- ')}
     if not told: return ''
-    doc = store.doc('learned') or ''
-    now = {lc.said(raw) for h in lc.SECTIONS.values() for raw, _ in lc.lines(doc, h)}
+    now = {memory.said_line(r, s) for r in memory.in_use(store) for s in (True, False)}
     gone = sorted(told - now)
     return '\n'.join([UNLEARNED, *gone]) if gone else ''
 

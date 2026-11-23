@@ -4,7 +4,7 @@ workstream's lines, falls back to the shared style, and leaves a receipt the mea
 import importlib.util, json
 from pathlib import Path
 import pytest
-from taskuary import responder, stylews, workstreams as W
+from taskuary import learning, responder, workstreams as W
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -32,20 +32,20 @@ def test_a_workstreams_style_is_written_from_its_sent_words_and_the_shared_style
     _sent(s, 'ledger-app')
     asked = {}
     def llm(system, user, **k): asked['user'] = user; return '- Lowercase, no greeting, no sign-off\n- An emoji is fine'
-    assert stylews.write(s, llm, 'ledger-app').startswith('- Lowercase')
+    assert learning.style_write(s, llm, 'ledger-app').startswith('- Lowercase')
     assert 'yo pushed it' in asked['user'] and 'the answer first' in asked['user']          # read against the shared style
-    assert stylews.lines(s, 'ledger-app') == '### In Ledger app\n- Lowercase, no greeting, no sign-off\n- An emoji is fine'
+    assert learning.style_lines(s, 'ledger-app') == '### In Ledger app\n- Lowercase, no greeting, no sign-off\n- An emoji is fine'
     assert 'Lowercase' not in responder.style_doc(s) and 'the answer first' in responder.style_doc(s)
-    assert stylews.lines(s, 'northwind-finance-systems') == '' and stylews.block(s, 'northwind-finance-systems') == ''   # the fallback
+    assert learning.style_lines(s, 'northwind-finance-systems') == '' and learning.style_block(s, 'northwind-finance-systems') == ''   # the fallback
     # ...too little mail, or nothing different: nothing written
-    assert stylews.write(s, llm, 'northwind-finance-systems') == ''
+    assert learning.style_write(s, llm, 'northwind-finance-systems') == ''
     _sent(s, 'northwind-finance-systems')
-    assert stylews.write(s, lambda *a, **k: 'same', 'northwind-finance-systems') == ''
+    assert learning.style_write(s, lambda *a, **k: 'same', 'northwind-finance-systems') == ''
 
 
 def test_a_draft_reads_its_workstreams_lines_leaves_a_receipt_and_the_setting_switches_it_off(s):
     _sent(s, 'ledger-app')
-    stylews.write(s, lambda *a, **k: '- Lowercase, no greeting, no sign-off', 'ledger-app')
+    learning.style_write(s, lambda *a, **k: '- Lowercase, no greeting, no sign-off', 'ledger-app')
     f = Factory(s)
     t, _ = f._work('Export greyed', kind='task', channel='email', from_email=OMAR, from_name='Omar Keller', body='Export is greyed - can you look?')
     seen = {}
@@ -53,7 +53,7 @@ def test_a_draft_reads_its_workstreams_lines_leaves_a_receipt_and_the_setting_sw
     responder.draft_reply(s, t, llm=brain) if hasattr(responder, 'draft_reply') else pytest.skip('no draft entry')
     assert 'In Ledger app you write differently' in seen['system'] and 'Lowercase' in seen['system']
     assert s._one("SELECT 1 x FROM audit WHERE EntityType='task' AND EntityId=? AND Action='style_ws'", (str(t),))
-    s.set_setting(stylews.KEY, '0', 'owner')
+    s.set_setting(learning.STYLE_WS, '0', 'owner')
     responder.draft_reply(s, t, llm=brain)
     assert 'Lowercase' not in seen['system'] and 'the answer first' in seen['system']
 

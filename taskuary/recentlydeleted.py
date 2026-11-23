@@ -203,11 +203,11 @@ def _restore_task(store, d: dict) -> int:
         store.arrive(m['MessageId'], tid, m['Status'], free=True, decided=True)       # the owner's own undo
     for rid in d.get('routes') or []: store._exec('UPDATE route SET TaskId=? WHERE RouteId=? AND TaskId IS NULL', (tid, rid))
     if d.get('ignore'): store._exec("DELETE FROM route WHERE RouteId=? AND Decision='ignore'", (d['ignore'],))
-    # ...and the line the verdict taught comes out, any line it replaced goes back, and what it fed is withdrawn (memorylines.untaught).
+    # ...and the line the verdict taught comes out, any line it replaced goes back, and what it fed is withdrawn (learning.untaught).
     # A snapshot from before 2026-10-27 names a notes-table row (`memory`); that table is gone, and so is anything to switch off
     if d.get('taught'):
-        from . import memorylines
-        memorylines.untaught(store, d['taught'])
+        from . import learning
+        learning.untaught(store, d['taught'])
     for i in d.get('ideas') or []:
         store._exec('UPDATE idea SET Status=?, DecidedBy=?, DecidedAt=? WHERE IdeaId=?', (i['Status'], i.get('DecidedBy'), i.get('DecidedAt'), i['IdeaId']))
     store._bump_snapshots()

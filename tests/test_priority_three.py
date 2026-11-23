@@ -6,7 +6,7 @@ Northwind people only; the boundary cases themselves are tests/memory_cases.py's
 import json
 from unittest import mock
 import pytest
-from taskuary import ingest, learned_cut, processing_order as po, triage
+from taskuary import ingest, processing_order as po, triage, memory
 from taskuary.store import MemoryStore
 from tests import memory_cases as C
 
@@ -83,11 +83,10 @@ def test_importance_never_moves_a_row():
 
 def test_triage_reads_the_people_lines_about_this_mail_and_no_one_elses():
     s = C.priority_store(C.PRIORITY_CASES[0])
-    doc = s.get_doc('learned').replace('## Your people\n', '## Your people\n' + C.GAIL_LINE + '\n', 1)
-    s.save_doc('learned', doc, 'owner')
-    got = learned_cut.for_reader(s, 'triage', people={'erin@northwind.example'})
-    assert 'Erin Blake (erin@northwind.example)' in got and 'gail@northwind.example' not in got
-    assert learned_cut.people_of({'from_email': 'Erin@Northwind.example', 'to': ['alex@northwind.example'], 'cc': ['gail@northwind.example']}) == \
+    memory.remember(s, C.GAIL_LINE.split(' [s:')[0][2:], 'gail and headcount', 'gail@northwind.example')
+    got = memory.for_task(s, {'erin@northwind.example'})
+    assert 'gail@northwind.example' not in got, 'a line about someone not on the mail is not this mail\'s'
+    assert memory.people_of({'from_email': 'Erin@Northwind.example', 'to': ['alex@northwind.example'], 'cc': ['gail@northwind.example']}) == \
            {'erin@northwind.example', 'alex@northwind.example', 'gail@northwind.example'}
 
 

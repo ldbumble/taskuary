@@ -117,7 +117,7 @@ def test_a_routines_email_goes_from_its_run_task_and_opens_nothing_else(db):
     steps = [read_dupes(db), {'id': 's2', 'kind': 'ai', 'label': 'Sum up', 'prompt': 'Summarise {{s1}}', 'output': 'text'},
              {'id': 's3', 'kind': 'draft', 'label': 'Email Gail', 'to': 'gail@northwind.example', 'about': 'This week: {{s2}}', 'subject': 'Duplicate bills'}]
     src = source(s, steps); tid = run_task(s, src); sent = []
-    with mailer(sent), mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learn.learn_from'):
+    with mailer(sent), mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learning.learn_from'):
         workflows._STARTING.add(tid)                                                # the run has its task, as workflows.run marks it
         try: out = flow.execute(s, src, tid, 'manual', llm=answering('One duplicate: Payworth INV-1.', 'Hi Gail, one duplicate this week: Payworth INV-1. Alex'))
         finally: workflows._STARTING.discard(tid)

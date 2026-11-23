@@ -680,9 +680,9 @@ def facts(store, item: dict, whole: bool = False) -> str:
     # THE HABITS ROW SAYS ITS HABITS (the rail audit, 2026-11-02): the model read only "Learned 1 habit · 1 to check", so "what habits did
     # you learn?" had nothing to answer from and "adopt the second one" no key to name
     if item['kind'] == 'idea' and item.get('idea_kind') == 'habit':
-        lines.append('HABITS ON THIS ROW (each has its own buttons inside the row - Adopt / No on one asked, Not right on one adopted; '
-                     'typed, they are memory.wrong with its key - keep for Adopt, wrong for No or Not right):\n' + '\n'.join(
-                         f"  [key: {h.get('line')}] {'adopted' if h.get('adopted') else 'asking'}: {_cut(h.get('say'), 300)}" for h in (item.get('action') or {}).get('habits') or []))
+        lines.append('HABITS ON THIS ROW (learned from what the owner did, used only once he confirms - each has its own Adopt / No inside the '
+                     'row; typed, they are memory.wrong with its key - keep for Adopt, wrong for No):\n' + '\n'.join(
+                         f"  [key: {h.get('line')}] asking: {_cut(h.get('say'), 300)}" for h in (item.get('action') or {}).get('habits') or []))
     if item['kind'] == 'idea' and item.get('action', {}).get('chat'):
         lines.append('what was said about it before: ' + ' // '.join(f"{t.get('role')}: {_cut(t.get('text'), 200)}" for t in item['action']['chat'][-4:]))
     return '\n'.join(lines)
@@ -1083,7 +1083,7 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     if item.get('lane') == 'forgotten': verbs = ['chase', 'let_go', 'elsewhere', 'defer', 'next']
     # ...and a WATCH back after a quiet week (watch.py, the owner, 2026-11-01): Chase them / Let it go lead, the task's own moves after
     elif item.get('tid') and _quiet_watch(store, item): verbs = ['chase', 'let_go'] + [v for v in verbs if v not in ('chase', 'let_go')]
-    # THE HABITS ROW (habits.py; the owner, 2026-11-01: "what does keep it/remind me do here? doesn't make much sense"): each habit carries
+    # THE HABITS ROW (learning.py; the owner, 2026-11-01: "what does keep it/remind me do here? doesn't make much sense"): each habit carries
     # its own Adopt / No / Not right inside the row, so the row itself is only passed - no task, agent, reminder or Not ours of an idea
     if item.get('kind') == 'idea' and item.get('idea_kind') == 'habit': verbs = ['next']
     # AN INVITE WAITING ON YOUR ANSWER is answered here - Accept, Decline, Propose a new time, each drafted for your Send - and a
@@ -1617,28 +1617,17 @@ GOT_IT = 'Got it.'
 def _memory(store, tid: int, kind: str, p: dict) -> dict:
     """memory.remember (a fact about how the owner works) and memory.wrong, run: the memory changed and said in one line, with the words
     of the line - or a miss the model fixes (no such line; Wrong on the owner's own line)."""
-    from . import habits, memoryedit
-    # ...the line as the owner reads it: "Took {{owner_first}} closes sign-in help threads... out" showed the doc's raw placeholder (the rail
-    # audit, 2026-11-02) - habits._named fills it as the memory page does
-    q = lambda t: f'\u201c{_title_cut(habits._named(store, str(t or "")), 120)}\u201d'
+    from . import learning, memory
+    q = lambda t: f'\u201c{_title_cut(str(t or ""), 120)}\u201d'
     try:
         if kind == 'memory.remember':
-            r = memoryedit.remember(store, str(p.get('note') or ''), str(p.get('about') or ''), str(p.get('section') or ''), str(p.get('replaces') or ''))
-            c = r.get('closed') or {}
-            # EVERY SAVE SAYS WHICH DOCUMENT AND WHO READS IT, linked (the design's routing table, approved 2026-10-28): the owner reads
-            # where a fact went, and opens it there to change it
-            doc = r.get('doc') or 'learned'
-            # ...LEARNED.md as About you's Memory, its lines as sentences (2026-11-06); every other document on About you's Docs
-            at = f"[your memory]({places.href('memory')})" if doc == 'learned' else f"[{'STYLE' if doc == 'style' else doc.upper()}.md]({places.href('docs')}&doc={doc})"
-            if doc == 'style' and r.get('who'):
-                return _did(store, tid, f"Saved to your writing style for {r['who']}: {q(r['text'])} - {at}, under By recipient, "
-                                        f"{memoryedit.DOC_READS['style_for']}.", kind, r)
-            if doc == 'style':                    # said where it went: the writing style every draft reads
-                return _did(store, tid, f"Saved to your writing style: {q(r['text'])} - every draft follows it from the next one ({at}, Owner notes).", kind, r)
-            if r.get('section') == memoryedit.SIGNATURE:          # ...how he signs is the saved signature every email carries (signatures.keep)
+            r = memory.remember(store, str(p.get('note') or ''), str(p.get('subject') or ''), str(p.get('about') or ''),
+                                signature=bool(p.get('signature')), doc=str(p.get('doc') or ''))
+            if r.get('signature'):                # ...how he signs is the saved signature every email carries (signatures.keep)
                 return _did(store, tid, f"Saved as your email signature: {q(r['text'])} - under every email set up from now ({places.name('replies')}).", kind, r)
-            if doc in memoryedit.TOLD_DOCS:
-                return _did(store, tid, f"Saved to {at} ({memoryedit.DOC_READS[doc]}): {q(r['text'])}"
+            # EVERY SAVE TO ONE OF HIS DOCUMENTS SAYS WHICH AND WHO READS IT, linked (the design's routing table, approved 2026-10-28)
+            if (doc := r.get('doc')) in memory.TOLD_DOCS:
+                return _did(store, tid, f"Saved to [{doc.upper()}.md]({places.href('docs')}&doc={doc}) ({memory.DOC_READS[doc]}): {q(r['text'])}"
                                         + (' - it was there already.' if r.get('already') else '.'), kind, r)
             # MEMORY IS SILENT (the owner, 2026-11-14: "memory should be silent"): a fact kept in LEARNED.md is answered as a person would -
             # the Assistant's own few words above its CALL ("Got it - Omar for badge faults."), else GOT_IT. It was a four-line receipt -
@@ -1650,27 +1639,17 @@ def _memory(store, tid: int, kind: str, p: dict) -> dict:
         if how not in ('wrong', 'forget', 'ended', 'keep'): raise ValueError(f'memory.wrong how is wrong, forget, ended or keep - not {how!r}')
         key = str(p.get('key') or '')
         # A HABIT ON THE HABITS ROW IS ANSWERED THERE (the rail audit, 2026-11-02): "adopt the one about forwarded FYI" was refused - keep was
-        # no `how` - and a habit taken out here left the row still offering it. The row's own Adopt / No / Not right (habits.answer) runs it
-        if how in ('keep', 'wrong') and (h := habits._said(store).get(key) or {}).get('state') == 'open':
-            r, said = habits.answer(store, key, how == 'keep'), h.get('say') or key
-            line = (f"Adopted {q(said)} - it is in your memory now." if how == 'keep' and not h.get('adopted') else
-                    f"Took {q(said)} back - it will not be learned again." if how == 'wrong' and h.get('adopted') else
-                    f"Kept {q(said)}." if how == 'keep' else f"Put down {q(said)} - not adopted, and never asked again.")
+        # no `how` - and a habit taken out here left the row still offering it. The row's own Adopt / No (learning.answer) runs it
+        if how in ('keep', 'wrong') and (h := learning._asked(store).get(key) or {}).get('state') == 'open':
+            r, said = learning.answer(store, key, how == 'keep'), h.get('say') or key
+            line = f"Adopted {q(said)} - I go on it from now." if how == 'keep' else f"Put down {q(said)} - not adopted, and never asked again."
             return _did(store, tid, line + (f" {plural(r['open'], 'habit')} still on the habits row." if r['open'] else ''), kind)
-        if how == 'keep':
-            r = memoryedit.mark(store, key, 'keep')
-            return _did(store, tid, f"Kept {q(r['text'])} - it is in your memory now.", kind)
-        if how == 'ended':
-            c = memoryedit.close(store, key)
-            return _did(store, tid, f"{q(c['text'])} is kept as history - no longer true.", kind)
-        r = memoryedit.mark(store, key, how)
-        return _did(store, tid, (f"Took {q(r['text'])} out - it will not be learned again." if how == 'wrong'
-                                 else f"Took {q(r['text'])} out for now - it comes back only if much more says it again."), kind)
+        r = memory.mark(store, key, how)
+        return _did(store, tid, {'keep': f"Kept {q(r['text'])} - I go on it from now.", 'ended': f"{q(r['text'])} is kept as history - no longer true.",
+                                 'wrong': f"Took {q(r['text'])} out - it will not be learned again."}.get(how, f"Took {q(r['text'])} out for now."), kind)
     except LookupError as e:
-        near = memoryedit.nearby(store, str(p.get('section') or ''), str(p.get('about') or '')) if kind == 'memory.remember' else []
-        raise CallMiss(f"No line in the memory has the key {str(p.get('key') or p.get('replaces') or '')!r} ({str(e).strip(chr(39))}). "
-                       + (f"Call again with `replaces` copied exactly from the line it makes untrue: {json.dumps(near, ensure_ascii=False)}. " if near else
-                          'Read memory.about for the keys, or say so in plain words. ') + 'Nothing was changed.')
+        raise CallMiss(f"No line in the memory has the key {str(p.get('key') or '')!r} ({str(e).strip(chr(39))}). "
+                       'Read memory.about for the keys, or say so in plain words. Nothing was changed.')
     except ValueError as e: raise CallMiss(f'{e} Say so in plain words. Nothing was changed.')
 
 
@@ -2481,16 +2460,13 @@ def _system(store, llm=None) -> str:
     from .triage import job_doc
     job = job_doc(store)
     if job: who += f"THE OWNER'S JOB (their own document - weigh what matters by it):\n{job}\n\n"
-    # ...and their MEMORY (LEARNED.md): learned_cut.READS gave the Assistant every section, yet the chat read none of it - "what should I do
-    # first" weighed a job the owner had said they no longer care about like any other (the owner, 2026-10-27: LEARNED.md is the memory,
-    # and every decision-maker reads the parts that help it)
-    from . import learned_cut
-    try: mem = learned_cut.for_reader(store, 'assistant', target='chat')
+    # ...and their MEMORY, whole: what they said, the facts, what they confirmed of what was learned - "what should I do first" weighed a job
+    # the owner had said they no longer care about like any other (the owner, 2026-10-27: every decision-maker reads the memory)
+    from . import memory
+    try: mem = memory.whole(store, 'assistant', target='chat', subject=True)
     except Exception: mem = ''
-    # ...and where the rest is, when not all of it fits: a line it was not shown is one it would ask the owner to say again
-    more = ' - the newest and nearest lines; memory.list reads all of it' if mem and learned_cut.left_out(store, 'assistant') else ''
-    if mem: who += ("WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (their memory, LEARNED.md - what they care about and what they do not, their "
-                    f"people, their rhythm, their promises; weigh it, the documents above outrank it{more}):\n{mem}\n\n")
+    if mem: who += ("WHAT YOU KNOW ABOUT THE OWNER (their memory - what they said, each under its subject, the facts about their people, and "
+                    f"what was learned from what they did that they confirmed; weigh it, the documents above outrank it):\n{mem}\n\n")
     # ...and the documents that are NOT here, by name: the tool index says docs.search is "how Taskuary itself works", so "how do I usually
     # sign off?" had no road to STYLE.md the model could see (2026-11-02)
     who += ('THEIR OTHER DOCUMENTS are not above - STYLE.md (how they write: greeting, sign-off, tone), TRIAGE.md: docs.search reads one '
@@ -3222,9 +3198,9 @@ def _hit(r: dict) -> dict:
 def know(store, q: str) -> str:
     """knowledge.search: the Hub, the knowledge base and the kept facts for these words, in one answer."""
     from . import handbook as hub, knowledge
-    from . import memorylines                  # the kept facts are LEARNED.md's lines (2026-10-27)
+    from . import memory                       # the kept facts are the memory's lines in use
     from .lookups import _bearing              # ...the ones that bear on it by meaning (embeddings), never shared words (2026-10-28)
-    notes = [m['Note'] for m in memorylines.notes(store) if m.get('Note')]
+    notes = [m['Note'] for m in memory.notes(store) if m.get('Note')]
     near = _bearing(store, ' '.join(str(q or '').split()), notes) if str(q or '').strip() else set()
     kept = [n for n in notes if n in near][:8]
     parts = [hub.block(store, q) if hub.enabled(store) else '', knowledge.block(store, q),
@@ -3578,7 +3554,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # ...and EVERY fact, not only one naming a person or a section (the owner, 2026-10-27: "it should be anything I add to memory, like 'this
     # is legacy, don't care' - the system should save that and use it everywhere"): "I don't care about the legacy export job any more" opened
     # the notes page and was never written, so triage and the report gate went on making tasks of it. LEARNED.md is the memory every reader
-    # reads; a fact about nobody goes under What you care about (memoryedit.remember)
+    # reads; a fact about nobody is general, read on every task (memory.remember)
     if kind in ('memory.wrong', 'memory.remember'): return _landed(store, tid, kind, 0, params, lambda: _memory(store, tid, kind, params))
     if kind == 'meeting.new': return _meeting(store, tid, item, params, text, actor)
     # ON THE DESK A NEW JOB IS NEW, FILLED IN (routes): the words on the tab that starts it, its own button the one to press
@@ -3921,9 +3897,8 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     if kind == 'memory.remember': named = named or str(params.get('note') or '').strip()[:120].rstrip('.')    # the line adds its own stop
     # ...and a line taken out is what it said, read from the memory - never its key
     if kind == 'memory.wrong':
-        from .memoryedit import find
-        _r, _l, _own = find(store.get_doc('learned') or '', str(params.get('key') or ''))
-        named = named or str((_l or {}).get('text') or (store._one('SELECT Text FROM learned_line WHERE Key=?', (str(params.get('key') or ''),)) or {}).get('Text') or '')[:120].rstrip('.')
+        from .memory import get
+        named = named or str(get(store, params.get('key')).get('Text') or '')[:120].rstrip('.')
     if routes() and kind in IN_TASK and target: return _opened(store, tid, int(target))
     if not routes() and kind in AS_SENT and target: params = as_sent(params, kind)
     if tk == 'task' and (wrote := _landed(store, tid, kind, int(target or 0), params,
@@ -5150,7 +5125,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         target = int(k.split(':', 1)[1]) if k.startswith('conn:') and k.split(':', 1)[1].isdigit() else None
     elif verb == 'remember':
         if not d_text: raise ValueError('remember what? Say the fact and I will keep it')
-        target, params = 0, {'note': d_text, 'section': decision.get('section')}
+        target, params = 0, {'note': d_text, 'subject': decision.get('subject'), 'about': decision.get('about')}
     elif verb == 'split': target, params = it.get('tid'), {'text': text, 'key': it.get('key')}
     elif verb == 'setup': target, params = 0, {'text': d_text or text, 'title': decision.get('title') or None}   # the set-up sort's (_walkthrough)
     if target is None: raise ValueError(f"there is nothing to {SAYS_VERB.get(verb, verb)} on this one")
@@ -5711,8 +5686,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'agent.stop': return ' The task stays open - say close it when you want it closed.'
     if kind == 'agents.stop': return ' ' + bulk_mod.stop_receipt({'done': o.get('done') or [], 'stuck': o.get('stuck') or []}, o.get('idle') or [])
     if kind == 'memory.remember':
-        c = (o.get('learned') or {}).get('closed') or {}
-        tail = f" - and what it replaces is kept as history, true until {c['until']}" if c.get('until') else ''
+        tail = ' - in place of what you said before on it' if (o.get('learned') or {}).get('replaced') else ''
         return f" I will use it from now on{tail}; whatever you were on stays where it was."
     if kind == 'memory.wrong':
         return {'forget': ' It is out of what I read; it comes back only if much more says it again.', 'ended': ' It is kept as history, no longer true.'}.get(
@@ -6514,7 +6488,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # keep goes into the memory, LEARNED.md (memory.remember)
     if decision and verb in PROPOSALS and routes():
         if verb == 'answer_agent' and target_item and target_item.get('tid'): return _opened(store, tid, int(target_item['tid']))
-        if verb == 'remember': return call_turn(store, tid, {'kind': 'memory.remember', 'params': {'note': decision.get('text') or text, 'section': decision.get('section') or ''}}, item, text, actor)
+        if verb == 'remember': return call_turn(store, tid, {'kind': 'memory.remember', 'params': {'note': decision.get('text') or text, 'subject': decision.get('subject') or '',
+                                                                                                'about': decision.get('about') or ''}}, item, text, actor)
         # ...and Continue on a stopped GENERAL agent has no button on its row to light - its own box is the way on - so "get the agent going
         # again on this" was answered "I can't start it from this item" (the re-check, 2026-11-04): it picks up, the owner's words its note
         if (verb == 'continue' and target_item and target_item.get('tid') and general.handles(store.get_task(int(target_item['tid'])) or {})

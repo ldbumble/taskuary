@@ -568,7 +568,7 @@ def _unheard(store, channel: str, chat: str, c, e, message_id=None):
     if message_id:
         try: react(store, channel, chat, message_id, connector_id=c.get('ConnectorId'))
         except Exception as e3: logger.debug(f'{channel}: no thumb on the voice note - {e3}')
-    why, place = str(e)[:200].strip().rstrip('.'), words.name('voice')
+    why, place = remote_assistant.plain(e).strip().rstrip('.'), words.name('voice')      # a gateway's raw JSON stays in the log (H12)
     # ...the place named ONCE, however the reason spells it: "add one under Connections > Voice" got "under Connections → AI — voice" again
     told = place in why or place.split(' → ')[0] in why
     said = f"I could not hear that voice note - {why}." + (' Type it instead.' if told else f" Type it, or add a voice connector under {place}.")

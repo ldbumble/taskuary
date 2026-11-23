@@ -783,3 +783,34 @@ class NoAITests(unittest.TestCase):
         body = sent[-1][0]
         self.assertNotIn('button', body.lower())
         self.assertNotIn('..', body); self.assertNotRegex(body, r'[a-z] Connect an AI')
+
+
+class NoMachineTextTests(unittest.TestCase):
+    """Walk 6 (H12): a bubble whose whole text was `{}` reached the phone - the Assistant's empty answer sent as it was - and a voice
+    note's failure put a gateway's raw JSON in front of him. The one road to his chat (send) refuses both and says what happened."""
+    def sent(self, text):
+        store, c = armed_store()
+        got = []
+        with mock.patch.object(messengers, 'wa_send', side_effect=lambda st, chat, body, connector_id=None, poll=None: got.append(body)):
+            remote_assistant.send(store, 'whatsapp', JID, text, c['ConnectorId'])
+        return got
+
+    def test_an_empty_or_raw_answer_is_said_in_words(self):
+        for raw in ('{}', '', '  ', '[]', '{"choices": [], "usage": {"tokens": 3}}'):
+            got = self.sent(raw)
+            self.assertEqual(len(got), 1, raw)
+            self.assertIn(remote_assistant.EMPTY_ANSWER, got[0], raw)
+            self.assertNotIn('{', got[0]); self.assertNotIn('[]', got[0])
+
+    def test_words_go_as_they_are(self):
+        self.assertIn('Erin wrote about the offsite {see below}', self.sent('Erin wrote about the offsite {see below}')[0])
+
+    def test_a_gateway_error_on_a_voice_note_is_plain(self):
+        store, c = armed_store()
+        got = []
+        err = RuntimeError('litellm.BadRequestError: VertexAIException - {\n  "error": {"code": 400, "message": "Invalid audio", "status": "INVALID_ARGUMENT"}\n}')
+        with mock.patch.object(messengers, 'react', return_value=True), \
+             mock.patch.object(messengers, 'wa_send', side_effect=lambda st, chat, body, connector_id=None, poll=None: got.append(body)):
+            messengers._unheard(store, 'whatsapp', JID, c, err, 'WAMID.2')
+        self.assertTrue(got and 'voice note' in got[-1])
+        for bit in ('{', '"error"', 'litellm', 'Vertex', '\\n'): self.assertNotIn(bit, got[-1])

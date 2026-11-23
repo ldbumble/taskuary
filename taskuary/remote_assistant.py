@@ -2165,6 +2165,7 @@ def _draft_text(store, item: dict | None) -> str:
     return str(rv.get('DraftText') or '').strip() if rv.get('Kind') in ('draft', 'draft_reply') else ''
 
 
+REPORT_EMPTY = 'Its last run came back empty - nothing in it to read.'
 # the one word the phone adds to what the walk offers: the rest of what is folded, as the card's More
 MORE = 'More'
 EXCERPT = 400                                  # a message longer than this shows its opening; More has the rest
@@ -2195,7 +2196,7 @@ def decision_block(store, item: dict | None) -> str:
         # under More, and the `--- raw data ---` dump cut where the desktop cuts it (2026-09-19)
         from . import chatformat
         said = chatformat.blocks(body)
-        if said: parts.append(said[0])
+        if said: parts.append(REPORT_EMPTY if machine(said[0]) else said[0])
     elif body:
         # "THEY WROTE" over their own words; a report credits nobody, a draft puts them behind More
         kin = thread_line(store, msg)
@@ -3082,6 +3083,28 @@ RETRY_PAUSES = (1.0, 3.0, 9.0)             # a failed Telegram send is tried aga
 def _pause(secs: float): time.sleep(secs)
 
 
+# NO MACHINE TEXT IS A BUBBLE (walk 6, 2026-11-23: a bubble whose whole text was `{}` - the Assistant's empty answer sent as it was - and a
+# report's empty run shown as `{}` under "read it"). Every word to his chat passes send(), so it is refused there, once, for every producer:
+# a message with no words, or one that is nothing but a machine's data, is said as what happened.
+EMPTY_ANSWER = 'That answer came back empty, so there is nothing to show you - say it again, or go on to the next one.'
+
+
+def machine(text) -> bool:
+    "Is this nothing a person would read - no words at all, or only a JSON object or list?"
+    t = str(text or '').strip()
+    if not re.search(r'\w', t): return True
+    if t[:1] not in '{[' or t[-1:] not in '}]': return False
+    try: return isinstance(json.loads(t), (dict, list))
+    except ValueError: return False
+
+
+def bubble(text) -> str:
+    "`text` as his chat may show it: itself, or - empty, or raw data - the plain line saying what happened (the raw kept in the log)."
+    if not machine(text): return text
+    logger.warning(f'phone: an answer with no words was not sent as it was ({str(text or "")[:200]!r})')
+    return EMPTY_ANSWER
+
+
 def _deliver(channel: str, out, store, chat: str, body: str, connector_id=None, **kw):
     """One bubble out - on Telegram tried again with backoff before it counts as lost (A13, 2026-10-22: a failed send was only logged)."""
     pauses = RETRY_PAUSES if channel == 'telegram' else ()
@@ -3106,6 +3129,7 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None, pa
     heading that already says what it is read as machinery rather than somebody talking."""
     from . import chatformat, messengers
     if not asked and held_back(store, channel, chat, f'{len(str(text or ""))} chars', urgent): return
+    text = bubble(text)
     out = messengers.tg_send if channel == 'telegram' else messengers.wa_send
     talked(store, channel, chat)
     # A VOICE NOTE IS SAID BACK before it is acted on (A17, 2026-10-22): the owner could not tell what was transcribed - once, on the turn's

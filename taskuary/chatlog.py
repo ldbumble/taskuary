@@ -5,7 +5,7 @@ at work that ends, a card he presses - is updated in place (`State`, `Body`, `Re
 
 Every producer writes through `put`/`update`/`step`; the reader is `read`. The rule for when a running turn is split by his line lives in
 `step`, at write time, decided once."""
-import hashlib, json, logging, os, re, threading, time
+import hashlib, json, logging, os, re, sqlite3, threading, time
 from .timewords import plural
 
 logger = logging.getLogger(__name__)
@@ -72,11 +72,19 @@ def put(store, tid: int, kind: str, key: str, body: dict, parent=None, state=Non
             n = old['Id']
         else:
             body = dict(body or {})
-            cur = store.cx.execute('INSERT INTO chatlog (TaskId, Key, Kind, Parent, At, Src, Body, State) VALUES (?,?,?,?,?,?,?,?)',
-                                   (int(tid), key, kind, _parent(store, tid, parent), _when(body.get('at') if at is None else at), src, json.dumps(body, default=str), state))
-            n = cur.lastrowid
-            if kind != 'turn' and parent is None: _goes_on(store, tid, n)
-            _bump(store, tid); store.cx.commit()
+            try:
+                cur = store.cx.execute('INSERT INTO chatlog (TaskId, Key, Kind, Parent, At, Src, Body, State) VALUES (?,?,?,?,?,?,?,?)',
+                                       (int(tid), key, kind, _parent(store, tid, parent), _when(body.get('at') if at is None else at), src, json.dumps(body, default=str), state))
+            except sqlite3.IntegrityError:
+                # ...WRITTEN THIS SAME BEAT ON ANOTHER CONNECTION (CI, 2026-11-22, three times on macOS: a card press and a chat read on two threads
+                # both found the card's row missing; the second insert failed, the rest of its advance was dropped and the card stood nowhere): the
+                # key names it for good - it is updated in place, as an existing key is
+                if not (old := _row(store, tid, key)): raise
+                _update(store, tid, old, state, body); store.cx.commit(); n = old['Id']
+            else:
+                n = cur.lastrowid
+                if kind != 'turn' and parent is None: _goes_on(store, tid, n)
+                _bump(store, tid); store.cx.commit()
     _poke(store, tid)
     return n
 

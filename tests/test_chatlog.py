@@ -507,3 +507,20 @@ def test_a_turn_that_asks_him_carries_no_try_again_under_its_question():
     ask = {'text': 'Should I put the estimate in as a placeholder, or wait?', 'request_id': 'r1', 'source': 'marker'}
     with mock.patch.object(taskstate, 'asking', return_value=ask): chatlog.beside(s, tid, out, False, None)
     assert not (turn().get('summary') or {}).get('retry')
+
+
+def test_a_row_written_this_beat_on_another_connection_is_updated_not_lost(tmp_path):
+    """CI, three times on macOS 2026-11-22: a card press and a chat read on two threads (two connections) both found the card's row missing;
+    the second insert failed on the key, the rest of its write was dropped and the card that waited on him stood nowhere. The key names a
+    row for good: written meanwhile, it is updated in place."""
+    from unittest import mock
+    from taskuary.store import SQLiteStore
+    db = str(tmp_path / 'race.db')
+    a, b = SQLiteStore(db), SQLiteStore(db)
+    tid = a.create_task({'Title': 'Pay the vendor', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    chatlog.put(a, tid, 'card', 'r:7', {'review': 7, 'what': 'slot'}, state='pending')
+    real, seen = chatlog._row, []
+    with mock.patch.object(chatlog, '_row', side_effect=lambda st, t, k: None if not seen and not seen.append(1) else real(st, t, k)):
+        n = chatlog.put(b, tid, 'card', 'r:7', {'review': 7, 'what': 'slot', 'line': '1 of 1'}, state='pending')
+    rows = [r for r in b.cx.execute("SELECT Id, Body FROM chatlog WHERE TaskId=? AND Key='r:7'", (tid,))]
+    assert len(rows) == 1 and rows[0]['Id'] == n and '1 of 1' in rows[0]['Body']

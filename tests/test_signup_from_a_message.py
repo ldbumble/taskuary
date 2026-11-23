@@ -190,10 +190,10 @@ class TheOffer(unittest.TestCase):
 
     def test_the_offer_names_only_taskuarys_browser_and_asks_for_a_plain_reason(self):
         b = browserview.brief(open_now=False)
-        self.assertIn('NO BROWSER IS OPEN', b); self.assertIn('agent-browser open <url>', b)
-        self.assertIn('never a browser tool of your own CLI', b); self.assertIn('IF A STEP FAILS OR IS REFUSED', b)
-        self.assertIn('"held for the owner"', b); self.assertIn('his press on the card runs it', b)
-        self.assertIn('never a browser tool of your own CLI', browserview.brief())          # the open browser says it too
+        self.assertIn('NO BROWSER IS OPEN', b); self.assertIn('agent-browser open <url>', b); self.assertIn('guide `browser`', b)
+        g = browserview.guide()
+        self.assertIn('never a browser tool of your own CLI', g); self.assertIn('IF A STEP FAILS OR IS REFUSED', g)
+        self.assertIn('"held for the owner"', g); self.assertIn('his press on the card runs it', g)
         # ...and the owner hears the browser is not set up - never a tool's name to install, nor "ask me again": its Try again (2026-11-18)
         gone = browserview.NOT_SET_UP
         self.assertIn('The browser is not set up on this computer yet', gone); self.assertNotIn('agent-browser', gone); self.assertIn('"retry": true', gone)

@@ -33,19 +33,15 @@ def test_a_general_agent_reads_soul_without_what_it_is_handed_elsewhere():
 
 
 
-def test_the_browser_offer_is_short_and_its_rules_are_one_read_away():
-    held = browserview.offer()
-    for want in ('NO BROWSER IS OPEN', 'agent-browser open <url>', 'never a browser tool of your own CLI', 'guide `browser`', 'NEVER type a password',
-                 'CAPTCHA'):
-        assert want in held, want
-    # ...and a sign-in is the page's, from the offer itself: an agent that never opens the browser never reads the guide (the recorded walk,
-    # 2026-11-11: it fetched the form from its shell and asked the owner for the password, twice)
-    for want in ('you do not need the password', 'hand_over', 'Never ask for a password', 'never work a sign-in from your shell'): assert want in held, want
-    assert 'his press on the card runs it' in held
-    assert len(held) < len(browserview.brief(open_now=False)) / 2
+def test_the_browser_is_one_fact_in_the_turn_and_its_how_to_is_its_guide():
+    """Walk 9, 2026-11-23: the browser's rules rode three times - every system prompt, again inside a later turn once a page opened (~4.9k),
+    and the guide. The turn says open or offered and names the guide; the how-to is read once, from the guide."""
+    for told in (browserview.offer(), browserview.brief()):
+        assert 'guide `browser`' in told and len(told) < 400, told
+        assert 'PRESS WHAT THE WORK NEEDS' not in told and 'A SIGN-UP' not in told
     g = guides.read('browser')
-    for want in ('hand_over', 'snapshot -i -c', 'A TAB YOU HANDED OVER'): assert want in g, want
-    assert browserview.HOLD_LINE not in g      # the hold is the session's, said in its offer
+    for want in ('hand_over', 'snapshot -i -c', 'A TAB YOU HANDED OVER', 'never a browser tool of your own CLI', 'his press on the card runs it'): assert want in g, want
+    assert g.count(browserview.HOLD_LINE) == 1
     with pytest.raises(ValueError, match='browser'): guides.read('nope')
 
 

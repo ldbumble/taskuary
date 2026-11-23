@@ -81,6 +81,7 @@ class TheGeneralAgentsBrowserIsHeld(unittest.TestCase):
         connect_cli(self, claude={'cmd': 'claude', 'args': ['-p']})
         seen = self._turn('cli:claude')
         self.assertEqual(seen['kw'].get('hold_sid'), seen['sid'])
+        self.assertIn('guide `browser`', seen['system'])
         self.assertNotIn('CANNOT HOLD', seen['system'])
 
     def test_a_codex_chat_is_told_its_presses_are_held_as_claudes_are(self):
@@ -88,7 +89,7 @@ class TheGeneralAgentsBrowserIsHeld(unittest.TestCase):
         connect_cli(self, codex={'cmd': 'codex', 'args': ['exec']})
         seen = self._turn('cli:codex')
         self.assertIsNone(seen['kw'].get('hold_sid'))
-        self.assertIn('held for the owner', seen['system'])
+        self.assertIn('guide `browser`', seen['system'])
 
     def test_claudes_argv_carries_the_hook_and_codexs_does_not(self):
         connect_cli(self, claude={'cmd': 'claude', 'args': ['-p']}, codex={'cmd': 'codex', 'args': ['exec']})
@@ -116,7 +117,7 @@ class TheGeneralAgentsBrowserIsHeld(unittest.TestCase):
 
 class TheBriefAndItsWords(unittest.TestCase):
     def test_refs_are_quoted_for_powershell(self):
-        b = browserview.brief()
+        b = browserview.guide()
         self.assertIn("agent-browser click '@e3'", b); self.assertIn('ALWAYS QUOTE A @ref', b)
         self.assertNotIn('click @ref3', b)
 

@@ -118,7 +118,7 @@ class StateTests(unittest.TestCase):
             prefs = json.loads((prof / 'Default' / 'Preferences').read_text(encoding='utf-8'))
             self.assertEqual(Path(prefs['download']['default_directory']).resolve(), bv.downloads('rc1').resolve())     # ...the session's own, however spelled (/var is /private/var on macOS)
             self.assertFalse(prefs['download']['prompt_for_download'])
-            self.assertTrue(bv.downloads().is_dir()); self.assertIn(str(bv.downloads()), bv.brief())
+            self.assertTrue(bv.downloads().is_dir()); self.assertIn(str(bv.downloads()), bv.guide())
             from taskuary import readgate
             self.assertTrue(any(readgate._in(readgate._n(bv.downloads() / 'invoice.pdf'), r) for r in readgate.own(None, None)))
 
@@ -243,7 +243,7 @@ class RelayTests(unittest.TestCase):
             self.assertTrue(bv.switch_tab('r1', 't3'))
             self.assertEqual(po.call_args.args[0], ['agent-browser', '--session', 'tq-r1', 'tab', 't3'])
             self.assertFalse(bv.switch_tab('r1', 't3; rm'))
-        self.assertIn('agent-browser tab new <url>', bv.brief()); self.assertIn('agent-browser tab new <url>', bv.guide())
+        self.assertIn('agent-browser tab new <url>', bv.guide())
 
     def test_a_page_the_agent_went_to_after_the_view_closed_is_the_page_named(self):
         """The view was shown for a sign-in and closed; the agent then went to ANOTHER site, with no relay to hear it. The address the view

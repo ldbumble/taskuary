@@ -1273,15 +1273,6 @@ OWN_ONLY = ('Use ONLY this browser for web pages: never a browser tool of your o
 SAY_WHY = ('IF A STEP FAILS OR IS REFUSED, your answer says which step, what the browser or Taskuary said in its own words, and the one '
            'thing the owner can do about it (sign in on the site in the browser pane, approve the held step on the task; a step worth '
            'another go: set "retry": true in your summary - a Try again button is drawn under your answer for the owner; never tell them to send a message or ask again to retry) - never only that you could not, and never a raw error, an address or a tool\'s name. ')
-OFFER_HEAD = ('NO BROWSER IS OPEN for this task yet, but Taskuary keeps one for you: if the work needs a web page - a link in a message to '
-              'follow, a form to fill, a site to sign in to - {open}; the owner sees it only '
-              'when Taskuary shows it to them. Searching and reading PUBLIC pages needs no browser: use your own web search and fetch for that. '
-              # WHAT IS BEHIND A SIGN-IN IS OPENED HERE FROM THE START (ten recorded walks, 2026-11-11: sent to a portal, the agent fetched it
-              # from its shell eight times, met the sign-in form there, and asked for the password or reported "nobody is signed in" - the rule
-              # for it stood at the far end of the offer, under how to drive a browser it had not chosen to open)
-              'What answers with a sign-in (a portal, an account) is never fetched from your shell: open it here from the start. '
-              'NEVER use --session, --headed, profile listing, or launch Chrome separately. ')
-def offer_head() -> str: return OFFER_HEAD.format(open=OPEN_HOOK) + ASK_LINE
 NOT_SET_UP = ('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET. Do not use a browser tool of your own CLI or of another app instead - '
               'Taskuary cannot show those to the owner or hold their presses, and they fail here. If the work needs a web page, do what you '
               'can without it (read the message, find the link), then tell the owner in one line: "The browser is not set up on this '
@@ -1323,17 +1314,23 @@ TABS_LINE = ('WORK EACH SITE IN ITS OWN TAB of this one browser: `agent-browser 
 
 DOWNLOADS_LINE = 'A file the page downloads lands in {folder}; one the owner should have, copy into your outputs folder. '
 
+# THE BROWSER IS A FACT OF THE TURN, ITS HOW-TO ITS GUIDE (walk 9, 2026-11-23, the owner: "code should never tell an agent what to do"): the
+# rules below rode three times - in every system prompt (the offer), again inside a later turn once a page opened (the whole brief, ~4.9k,
+# "these replace what your instructions said"), and in the guide. The turn says whether a browser is open or offered and names the guide;
+# what is held for his press is the gate's to do (browsergate), and how to drive it is read once, when the work needs a page
+GUIDE_FACT = 'How to drive it, sign in, and hand the owner a step only they can do: the guide `browser` (the guide tool, or `taskuary --guide browser`).'
 def brief(open_now: bool = True) -> str:
-    """What an agent with a browser of its own needs to know. Longer than hint() on purpose -
-    this only rides when the owner asked for a browser, so it can afford to say how to drive
-    it and where the line is (its presses are held where they run, gatecmd).
-    `open_now`: the browser is already up; else it is OFFERED - opened by the agent's first `open`."""
+    """The browser as this turn's fact: open (`open_now` - drive its bound tab), or OFFERED - opened by the agent's first `agent-browser open`."""
     # ...and nobody is said to be watching it (the owner, 2026-11-05: hidden unless they are needed on it; 2026-11-10: "i cant see the screen")
-    head = ('A BROWSER IS OPEN for this task. The owner sees it only when Taskuary shows it to them - never say it is on their screen. '
-            'Drive the existing tab with `agent-browser` - it is already bound and restored, so '
-            'NEVER use --session, --headed, profile listing, or launch Chrome separately. Navigate '
-            'with `agent-browser open <url>`. ') if open_now else offer_head()
-    return (head + OWN_ONLY + SAY_WHY + TABS_LINE + DOWNLOADS_LINE.format(folder=downloads()) +
+    return (('A BROWSER IS OPEN for this task: drive its tab with `agent-browser` - already bound to this task; the owner sees it only when '
+             'Taskuary shows it to them. ') if open_now else f'NO BROWSER IS OPEN for this task yet; Taskuary keeps one for it: {OPEN_HOOK}. ') + GUIDE_FACT
+def offer() -> str: return brief(open_now=False)
+def how() -> str:
+    "How to drive the browser: the guide's text, read when the work needs a page (guides.py)."
+    return ('Drive the tab with `agent-browser` - it is already bound and restored, so NEVER use --session, --headed, profile listing, or launch '
+            'Chrome separately. Navigate with `agent-browser open <url>`. Searching and reading PUBLIC pages needs no browser: use your own web '
+            'search and fetch for that; what answers with a sign-in (a portal, an account) is opened here, never fetched from your shell. '
+            + ASK_LINE + OWN_ONLY + SAY_WHY + TABS_LINE + DOWNLOADS_LINE.format(folder=downloads()) +
             # POWERSHELL CALLS A SUCCESS AN ERROR. agent-browser writes its progress to stderr
             # ("[agent-browser] launched browser"), and Windows PowerShell 5.1 wraps any native
             # command's stderr in a NativeCommandError and sets $? to false EVEN ON EXIT 0. A CLI
@@ -1397,23 +1394,8 @@ SIGNIN_LINE = ("A SIGN-IN YOU HAVE NO PASSWORD FOR IS NOT A BLOCKER AND NEVER A 
 ASKED_SECRET = ('TASKUARY: your last answer asked the owner for a password or other sign-in details. That is never asked here, and the owner '
                 'will not paste one. ' + SIGNIN_LINE + 'Do that now. That answer is no longer shown as your answer: say what you are doing '
                 'as if for the first time, and do not mention it.')
-GUIDE_LINE = ('Before your first browser command, read the guide `browser` (the guide tool, or `taskuary --guide browser`): how to look '
-              'at a page, sign in, and hand the owner a step only they can do. NEVER type a password, a 2FA code or a card number, and never '
-              'solve or work around a CAPTCHA. '
-              # A SIGN-IN IS DONE ON THE PAGE, NEVER ASKED FOR IN WORDS (the recorded walk, 2026-11-11): asked to sign in to a site with no
-              # connection, an agent read the offer, fetched the sign-in form from its shell instead and asked the owner twice to paste the
-              # password or name a file that held it - the browser, its saved sign-ins and the owner's page never came up
-              # ...and told only "hand it over as the guide says" it still asked, three walks of four: what it lacked was that it needs no
-              # password at all, and the one line that hands the page over
-              + SIGNIN_LINE)
 
-def offer() -> str:
-    "The browser OFFERED, short: brief()'s head and the rules that hold from the first command, the rest in guide()."
-    return offer_head() + OWN_ONLY + GUIDE_LINE + HOLD_LINE
-
-def guide() -> str:
-    "How to drive the browser - brief() without its head, and without the hold line, which the offer says for this session's own hook."
-    return "TASKUARY'S BROWSER - how to drive it\n" + brief(open_now=False)[len(offer_head()):].replace(HOLD_LINE, '')
+def guide() -> str: return "TASKUARY'S BROWSER - how to drive it\n" + how()
 
 
 def hint() -> str:

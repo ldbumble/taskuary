@@ -176,7 +176,7 @@ class TheAgentAsksForIt(unittest.TestCase):
         self.assertEqual((r.status_code, seen), (200, ['cli:codex'])); started.assert_called_once()
 
     def test_the_agent_is_told_of_it_in_one_sentence_where_it_is_told_its_browser(self):
-        self.assertIn('taskuary --browser <url>', bv.offer()); self.assertEqual(bv.offer().count('taskuary --browser'), 1)
+        self.assertIn('taskuary --browser <url>', bv.guide()); self.assertEqual(bv.guide().count('taskuary --browser'), 1)
 
     def test_every_agent_is_told_one_road_whatever_its_ai(self):
         """Recorded on Codex (the browser audit, 2026-11-15): `agent-browser open` died in its sandbox launching Chrome. The session's own

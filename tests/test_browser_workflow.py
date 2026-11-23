@@ -129,7 +129,7 @@ class HandingOverTheKeyboardTests(unittest.TestCase):
     then turned white ... just spinning")."""
 
     def test_the_brief_tells_it_to_stop_and_not_touch_the_tab(self):
-        b = browserview.brief()
+        b = browserview.guide()
         self.assertIn('A TAB YOU HANDED OVER IS THEIRS', b)                 # ...handed over mid-turn, never reloaded or polled under him
         self.assertIn('hand_over with its `site`', b)                         # a sign-in is asked for, never typed (signin.py)
         for forbidden in ('reload', 'navigate', 'poll'):

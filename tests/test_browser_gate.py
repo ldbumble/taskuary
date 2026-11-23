@@ -578,7 +578,7 @@ class HeldInTheChat(unittest.TestCase):
         self.assertIn('one card in this chat', browserview.HOLD_LINE); self.assertIn('never ask', browserview.HOLD_LINE.lower())
 
     def test_the_brief_says_to_fill_it_and_leave_the_last_press_to_the_owner(self):
-        self.assertIn('fill in everything first', browserview.brief())
+        self.assertIn('fill in everything first', browserview.guide())
 
 
 class AtTheCommand(unittest.TestCase):

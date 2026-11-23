@@ -35,7 +35,7 @@ class TheMarker(unittest.TestCase):
 
 class TheBrief(unittest.TestCase):
     def test_a_captcha_is_the_owners_and_is_handed_over_on_the_view(self):
-        b = browserview.brief()
+        b = browserview.guide()
         self.assertIn(browserview.TURN_LINE, b)
         self.assertIn('NEVER SOLVE, CLICK OR WORK AROUND A CAPTCHA', b)
         self.assertIn('call hand_over', b)

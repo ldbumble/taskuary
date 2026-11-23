@@ -96,7 +96,7 @@ class SharedSessionTests(unittest.TestCase):
         self.assertEqual(env['AGENT_BROWSER_SESSION'], browserview.session_name(session.sid))
         self.assertEqual(env['TASKUARY_TASK'], str(tid))
         self.assertIn('TASKUARY_URL', env)
-        self.assertIn('NEVER use --session, --headed', seen['system'])
+        self.assertIn('guide `browser`', seen['system'])
 
     def test_browser_walkthrough_cli_keeps_tools_in_scratch_and_receives_session_env(self):
         store = MemoryStore()

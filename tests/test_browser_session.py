@@ -50,7 +50,7 @@ class AskingForOneTests(unittest.TestCase):
             self.assertNotIn('A BROWSER IS OPEN', terminal.seed_text(s, tid, repo=None, cwd=''))
 
     def test_what_the_agent_is_told_covers_driving_it_and_the_line_it_must_not_cross(self):
-        said = bv.brief()
+        said = bv.guide()
         self.assertIn('agent-browser', said)
         self.assertIn('skills get core', said)          # the CLI documents its own commands
         self.assertIn('NEVER type a password', said)    # ...and the owner types those, in the pane

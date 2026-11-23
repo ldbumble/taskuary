@@ -114,9 +114,9 @@ def session(tid, **kw):
     return [{**base, **kw}]
 
 
-def decide(s, text, verb, key=None, live=(), text_arg=None, on=None):
+def decide(s, text, verb, key=None, live=(), text_arg=None, on=None, section=None):
     """The model read the owner's words and named a decision - its CALL line, scripted (PW-121; one line since 2026-09-25)."""
-    return say(s, text, key=key, live=live, model='Ok.\n' + 'CALL: ' + json.dumps({'kind': verb, 'params': {k: v for k, v in (('text', text_arg), ('on', on)) if v}}))
+    return say(s, text, key=key, live=live, model='Ok.\n' + 'CALL: ' + json.dumps({'kind': verb, 'params': {k: v for k, v in (('text', text_arg), ('on', on), ('section', section)) if v}}))
 
 
 def run(s, p, live=(), version=None):
@@ -512,7 +512,7 @@ class ResponseTests(unittest.TestCase):
     def test_remember_keeps_the_fact_in_the_owners_words_once_confirmed(self):
         s, tid, mid, item = self._asked()
         p = decide(s, 'remember that Gail is the CFO and signs off on refunds', 'remember', key=item['key'],
-                   text_arg='Gail is the CFO and signs off on refunds')['proposal']
+                   text_arg='Gail is the CFO and signs off on refunds', section='people')['proposal']
         self.assertEqual((p['kind'], p['params']['note'], p['settles']), ('memory.remember', 'Gail is the CFO and signs off on refunds', False))
         self.assertNotIn('signs off on refunds', s.get_doc('learned') or '')     # nothing written on the words
         run(s, p)
@@ -819,7 +819,7 @@ class OneTruthPerTurnTests(unittest.TestCase):
 
     def test_remembering_writes_the_row_on_the_click_and_leaves_the_walk_where_it_was(self):
         s, tid, mid, item = ResponseTests()._asked()
-        out = decide(s, 'remember that Dovid handles the badge printers', 'remember', key=item['key'], text_arg='Dovid handles the badge printers')
+        out = decide(s, 'remember that Dovid handles the badge printers', 'remember', key=item['key'], text_arg='Dovid handles the badge printers', section='people')
         self.assertEqual(out['proposal']['kind'], 'memory.remember'); self.assertNotIn('Moving on', out['say'])
         self.assertEqual(memorylines.notes(s), [])
         run(s, out['proposal'])
@@ -831,7 +831,7 @@ class OneTruthPerTurnTests(unittest.TestCase):
         time, so the second replaces the first - the approve is cancelled, never sent on the side."""
         s, tid, rid, item = ResponseTests()._drafted()
         first = decide(s, 'approve', 'approve', key=item['key'])['proposal']
-        second = decide(s, 'and remember that Omar handles refunds', 'remember', key=item['key'], text_arg='Omar handles refunds')['proposal']
+        second = decide(s, 'and remember that Omar handles refunds', 'remember', key=item['key'], text_arg='Omar handles refunds', section='people')['proposal']
         self.assertEqual(second['kind'], 'memory.remember')
         self.assertEqual(operations.get(s, first['id'])['status'], 'cancelled')
         self.assertEqual(memorylines.notes(s), [])

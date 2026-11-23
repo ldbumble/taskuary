@@ -148,7 +148,7 @@ def test_the_memory_page_says_a_verdicts_line_was_learned_from_a_verdict_never_t
     s = MemoryStore()
     from taskuary import memoryedit
     raw = memorylines.teach(s, 'made_task', 'msg7', 'A vendor asks you to book the quarterly account review', llm=teacher('You book vendor account reviews yourself', only_this=False))
-    mine = memoryedit.remember(s, 'Ray Colton covers the warehouse audits')['text']
+    mine = memoryedit.remember(s, 'Ray Colton covers the warehouse audits', section='care')['text']
     ls = {l['text']: l for l in learnedgraph.graph(s)['lines']}
     assert raw and ls['You book vendor account reviews yourself'].get('taught') and ls['You book vendor account reviews yourself']['own']
     assert 'taught' not in ls[mine]

@@ -236,12 +236,12 @@ class OneConversationNotTwentyTests(unittest.TestCase):
         next turn opens on the new line and on the one taken back."""
         from taskuary import memoryedit
         self.s.update_task(self.tid, {'Title': 'Laptop fault for Paula', 'Summary': 'Paula asks who fixes laptop faults'}, 'o')
-        memoryedit.remember(self.s, 'Laptop and badge faults go to Marcus Reed')
-        memoryedit.remember(self.s, 'You batch expense approvals on Monday mornings')
+        memoryedit.remember(self.s, 'Laptop and badge faults go to Marcus Reed', section='care')
+        memoryedit.remember(self.s, 'You batch expense approvals on Monday mornings', section='care')
         brain, seen = self._brain()
         self._run(['draft the reply'], brain)
         self.assertIn('faults go to Marcus Reed', seen[0]['system'])
-        memoryedit.remember(self.s, 'Marcus Reed moved to security: laptop and badge faults go to Omar Keller now', replaces='Laptop and badge faults go to Marcus Reed')
+        memoryedit.remember(self.s, 'Marcus Reed moved to security: laptop and badge faults go to Omar Keller now', replaces='Laptop and badge faults go to Marcus Reed', section='care')
         self.sess = general.GeneralSession(self.s, self.tid)                 # ...another object picks the conversation up
         self.sess.pick, self.sess.provider, self.sess.cli_sid = 'cli:claude', 'coding', 'sess-1'
         self.sess._remember_session(); self.assertIsNone(self.sess.frozen)

@@ -63,7 +63,7 @@ class LookupTests(unittest.TestCase):
     def test_sender_read_gathers_one_person(self):
         s = world()
         from taskuary import memoryedit
-        memoryedit.remember(s, 'She owns the freight budget.', about='gail@northwind.example')
+        memoryedit.remember(s, 'She owns the freight budget.', about='gail@northwind.example', section='people')
         out = read(s, 'sender.read', who='gail')
         for want in ('Gail Moreno', '1 message', 'Quarterly numbers', 'TQ-0002', 'freight budget'):
             self.assertIn(want, out)

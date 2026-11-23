@@ -168,6 +168,7 @@ SIGNATURE = 'signature'          # memory.remember's section for how the owner s
 SECTION_WORDS = ("`section`: people (about someone else), work (how the owner himself works - his hours, his habits, his rules), care, promises, "
                  "bring, style (how he writes), or signature (`note` is then the closing block itself, exactly as it goes under every email, one "
                  "line per line - a sign-off of Best and his first name is two lines - never a sentence about it; it becomes his saved signature)")
+SECTIONS_ALL = (*lc.SECTIONS, STYLE, SIGNATURE, *TOLD_DOCS)     # every place remember may put a fact - one of them is always named
 
 
 def owner_names(store) -> set:
@@ -195,13 +196,20 @@ def about_owner(store, about: str, text: str = '') -> bool:
 
 def remember(store, text: str, about: str = '', section: str = '', replaces: str = '', actor: str = 'owner') -> dict:
     """THE ONE ROAD THAT DECIDES WHERE A FACT THE OWNER SAID GOES - the Assistant's memory.remember and every agent's remember tool.
-    `section` a slug (people, care, work, promises, bring), the model's reading of what the fact is; else Your people when it names
-    someone else (`about`, or an address in it) and What you care about otherwise. A fact about the owner himself is never Your people
-    (about_owner): it is How you work, which every agent's brief carries (context.AGENT_OWN). `style` is his writing (STYLE.md),
+    `section` one of SECTIONS_ALL, the model's reading of what the fact is - required: a fact with none, or one not on the list, is refused with
+    the list, never filed by a guess of the code's. A fact about the owner himself is never Your people (about_owner): it is How you work, which
+    every agent's brief carries (context.AGENT_OWN). `style` is his writing (STYLE.md),
     `signature` his saved signature (signatures.keep). `replaces`: the key of a line it makes untrue, closed with today's date first
     ("Gail moved to Ops" closes "Gail runs headcount in Finance"). In use at once."""
     from .learn import _under
     from .concierge import redact               # a token typed into a fact never lands in the memory every prompt reads
+    # ...AND WHERE IT GOES IS SAID, NEVER GUESSED (walk 6, 2026-11-23: "sign off as 'Best, Alex'" was kept with no section, filed by a code
+    # fallback under How you work, and the next email left signed with his full name - the signer reads the signature, not the memory; and
+    # "preferences" was taken and filed under What you care about). The model names the place; a missing or unknown one is sent back
+    section = str(section or '').strip().lower()
+    if section not in SECTIONS_ALL:
+        raise ValueError(f"not kept: say which `section` it goes under ({'none was given' if not section else repr(section) + ' is not one'}) - "
+                         f"{SECTION_WORDS}. Call again with one of them")
     if section == SIGNATURE:
         # ...HOW HE SIGNS IS ONE SETTING (the walk, 2026-11-21: "I sign every email 'Best, Alex'" was kept as a memory line, and the signer
         # put "Alex Doyle" under every card - the line could never win). Kept as the block itself, newlines as written
@@ -229,8 +237,7 @@ def remember(store, text: str, about: str = '', section: str = '', replaces: str
     me = about_owner(store, about, t)
     who = '' if me else str(about or '').strip().lower()
     if who and '@' in who and who not in t.lower(): t = f'{t} ({who})'
-    slug = section if section in lc.SECTIONS else 'work' if me else 'people' if (who or lc.subject_of(t)) else 'care'
-    if me and slug == 'people': slug = 'work'
+    slug = 'work' if me and section == 'people' else section
     closed = close(store, replaces) if replaces else None
     doc = store.get_doc(DOC) or ''
     raw = f'- {t}'

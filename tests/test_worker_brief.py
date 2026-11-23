@@ -177,8 +177,8 @@ class NoBlanketSoulTests(unittest.TestCase):
         from taskuary import context, memoryedit
         s = MemoryStore(); s.set_setting('owner_name', 'Alex Doyle', 't')
         tid = make(s, 'general')
-        self.assertEqual(memoryedit.remember(s, 'Alex never takes meetings before 10am, and none on Fridays', about='Alex')['section'], 'work')
-        self.assertEqual(memoryedit.remember(s, 'Gail Moreno handles vendor contracts now', about='gail@northwind.example')['section'], 'people')
+        self.assertEqual(memoryedit.remember(s, 'Alex never takes meetings before 10am, and none on Fridays', about='Alex', section='people')['section'], 'work')
+        self.assertEqual(memoryedit.remember(s, 'Gail Moreno handles vendor contracts now', about='gail@northwind.example', section='people')['section'], 'people')
         brief_ = context.build(s, tid, general=True)
         self.assertIn('before 10am, and none on Fridays', brief_)
         self.assertNotIn('Gail Moreno', brief_)                                       # Gail is nobody on this task

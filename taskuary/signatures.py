@@ -82,8 +82,30 @@ def agent_signed(store, rv: dict, text: str, msg: dict = None) -> str:
     from .responder import chat_said, own_names, signed
     text = str(text or '').strip()
     if not text: return text
-    if is_email(store, rv, msg): return signed(text, for_review(store, rv, msg), own_names(store))
-    return chat_said(store, text)
+    if not is_email(store, rv, msg): return chat_said(store, text)
+    sig = for_review(store, rv, msg)
+    out = signed(text, sig, own_names(store))
+    if (rv or {}).get('ReviewId'): _say_ending(store, rv['ReviewId'], replaced(text, out, sig))
+    return out
+
+
+ENDING, _SEP = 'Your saved signature replaced the ending the agent wrote', ' · '
+def replaced(text: str, out: str, sig: str) -> str:
+    "The ending the agent wrote that the signer took off for the saved block - '' when it wrote none, or wrote the block itself."
+    from .chatformat import plain_text
+    mine = unsigned(text, sig)
+    words, kept = (plain_text(mine) or mine).split(), unsigned(out, sig).split()
+    return ' '.join(words[len(kept):]) if sig.strip() and len(words) > len(kept) and words[:len(kept)] == kept else ''
+
+
+def _say_ending(store, rid: int, gone: str):
+    """THE CARD SAYS WHERE ITS ENDING IS NOT THE AGENT'S (walk 6, 2026-11-23: the agent ended a letter as he asked, the signer put his saved block
+    on, and it left with his full name - said to the agent alone, never on the card he pressed). One line under the card's reason, on every
+    road that files an agent's email; the line a re-save left is replaced, never stacked."""
+    from . import words
+    was = str((store.get_review(rid) or {}).get('Reason') or '').split(_SEP + ENDING)[0]
+    now = was + (f'{_SEP}{ENDING} ("{gone[:80]}") - {words.name("replies")} changes it' if gone else '')
+    if now != str((store.get_review(rid) or {}).get('Reason') or ''): store.update_review_reason(rid, now)
 
 
 def told(store) -> str:

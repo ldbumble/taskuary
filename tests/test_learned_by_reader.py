@@ -406,16 +406,16 @@ def test_what_was_just_told_makes_the_cut_on_the_task_it_bears_on_sixty_lines_in
     s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 'owner')
     for i in range(60):
         memoryedit.remember(s, f"Mail about {('parking permits', 'badge reprints', 'toner orders', 'the holiday rota')[i % 4]} at site {i} is "
-                               f"{('Paula Vance', 'Marcus Reed', 'Omar Keller')[i % 3]}'s to handle, not yours - no task unless they ask you directly")
-    memoryedit.remember(s, 'Paula Vance (paula@northwind.example) prefers a call to a long mail')
-    memoryedit.remember(s, 'Erin left the company; send payroll questions to Gail now', about='Erin Blake')      # ...filed under Your people
+                               f"{('Paula Vance', 'Marcus Reed', 'Omar Keller')[i % 3]}'s to handle, not yours - no task unless they ask you directly", section='care')
+    memoryedit.remember(s, 'Paula Vance (paula@northwind.example) prefers a call to a long mail', section='people')
+    memoryedit.remember(s, 'Erin left the company; send payroll questions to Gail now', about='Erin Blake', section='people')      # ...filed under Your people
     assert 'send payroll questions to Gail' in learned_cut.section(s.get_doc('learned'), learned_cut.PEOPLE)
     # the Assistant reads the memory whole - Your people too, which sixty lines of What you care about had filled its budget before
     told = concierge._system(s)
     assert 'send payroll questions to Gail' in told and 'prefers a call' in told and 'memory.list reads all of it' not in told
     # ...and past its budget the newest word is never the one left out, and it is told where the rest is
-    for i in range(140): memoryedit.remember(s, f'Site {i} sends its own weekly cleaning rota to the regional office and none of it is yours to chase or answer')
-    memoryedit.remember(s, 'Ray Colton covers the warehouse audits from now on')
+    for i in range(140): memoryedit.remember(s, f'Site {i} sends its own weekly cleaning rota to the regional office and none of it is yours to chase or answer', section='care')
+    memoryedit.remember(s, 'Ray Colton covers the warehouse audits from now on', section='care')
     told = concierge._system(s)
     assert len(s.get_doc('learned')) > learned_cut.BUDGET['assistant'] and 'Ray Colton covers the warehouse audits' in told and 'memory.list reads all of it' in told
     # an agent on a vendor's payroll question: the line about payroll, of sixty-two, in its 1,500 characters - nobody on the task is named in it
@@ -427,7 +427,7 @@ def test_what_was_just_told_makes_the_cut_on_the_task_it_bears_on_sixty_lines_in
     assert 'send payroll questions to Gail' in block and len(block) < general.LEARNED_CHARS + 600
     assert 'prefers a call' not in block, "the notes on people who are not on the task, and not about its subject, stay out"
     # ...nor the lines that only share everyday words with it, or the company's own address: two about its subject at most
-    for who in ('Ray Colton', 'Omar Keller', 'Marcus Reed'): memoryedit.remember(s, f'{who} ({who.split()[0].lower()}@northwind.example) asks about support rotas at Northwind first')
+    for who in ('Ray Colton', 'Omar Keller', 'Marcus Reed'): memoryedit.remember(s, f'{who} ({who.split()[0].lower()}@northwind.example) asks about support rotas at Northwind first', section='people')
     assert sum(l.count('@northwind.example') for l in general.learned_block(s, tid).splitlines()) <= learned_cut.NEAR_PEOPLE
     # ...and an agent on Paula's own mail reads how the owner deals with her in its brief, once - and not the payroll line, which is not this task's
     t2 = s.create_task({'Title': 'Lobby repaint dates', 'Summary': 'Paula asks which week suits', 'Kind': 'general', 'Status': 'open'}, 'triage')

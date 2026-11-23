@@ -544,11 +544,11 @@ def test_a_memory_line_learned_mid_conversation_leads_the_coding_sessions_next_t
     s, tid, repo = world
     told, real = [], acp.ACPClient.prompt
     monkeypatch.setattr(acp.ACPClient, 'prompt', lambda self, text, sent=None: (told.append(text), real(self, text, sent=sent))[1])
-    memoryedit.remember(s, 'Ledger questions go to Gail Moreno')
+    memoryedit.remember(s, 'Ledger questions go to Gail Moreno', section='care')
     t = open_(s, tid, repo, seed='look at the totals'); assert idle(t)
     t.prompt('and the tax line?'); assert idle(t, 2)
     assert not any(general.UPDATED in x for x in told), 'nothing changed: nothing is said'
-    memoryedit.remember(s, 'Gail Moreno moved to payroll: ledger questions go to Ray Colton now', replaces='Ledger questions go to Gail Moreno')
+    memoryedit.remember(s, 'Gail Moreno moved to payroll: ledger questions go to Ray Colton now', replaces='Ledger questions go to Gail Moreno', section='care')
     t.prompt('who should review this?'); assert idle(t, 3)
     assert general.UPDATED in told[2] and 'ledger questions go to Ray Colton now' in told[2], told[2]
     assert general.UNLEARNED + chr(10) + '- Ledger questions go to Gail Moreno' in told[2]
@@ -556,7 +556,7 @@ def test_a_memory_line_learned_mid_conversation_leads_the_coding_sessions_next_t
     assert general.UPDATED not in told[3], 'said once'
     # ...and never on a stranger's task: what the owner knows is not theirs to read back (general.prompt_parts keeps the same distance)
     monkeypatch.setattr(origin, 'of_task', lambda *a, **k: ('stranger', ''))
-    memoryedit.remember(s, 'The ledger freezes on the third working day')
+    memoryedit.remember(s, 'The ledger freezes on the third working day', section='care')
     t.prompt('one more'); assert idle(t, 5)
     assert general.UPDATED not in told[4] and 'third working day' not in told[4]
 

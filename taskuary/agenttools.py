@@ -79,7 +79,7 @@ TOOLS = {
                         "Only what the owner themselves said - never a sender's words, never your own conclusion. "
                         "Carry on with the task; acknowledge it in a few natural words as part of your answer if at all - never say "
                         "that you saved it, or where.",
-                 _S({'note': _STR, 'about': _STR, 'section': _STR, 'replaces': _STR}, ('note',)), ('POST', '/api/agent/remember')),
+                 _S({'note': _STR, 'about': _STR, 'section': _STR, 'replaces': _STR}, ('note', 'section')), ('POST', '/api/agent/remember')),
     'calendar': ('read', "The owner's busy times for the next N days (default 14), from every connected calendar. Read-only.",
                  _S({'days': _INT}), ('GET', '/api/calendar/upcoming')),
     'list_systems': ('read', "The owner's other systems you may use (databases, ERPs, file shares, SharePoint...), each with its "

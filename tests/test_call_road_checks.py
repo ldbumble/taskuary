@@ -105,11 +105,11 @@ class TheCardSaysWhatIsSoTests(unittest.TestCase):
     def test_a_fact_is_summed_up_by_what_it_says_never_the_tool_name(self):
         s, tid, mid, item = table()
         dock = concierge.general.dock_task(s, 'owner')[0]['TaskId']
-        out = concierge.call_turn(s, dock, {'kind': 'memory.remember', 'params': {'note': 'Gail covers payroll'}}, None, 'remember Gail covers payroll')
+        out = concierge.call_turn(s, dock, {'kind': 'memory.remember', 'params': {'note': 'Gail covers payroll', 'section': 'people'}}, None, 'remember Gail covers payroll')
         self.assertNotIn('memory.remember', out['say'])
         # ...and since 2026-11-14 (the owner: "memory should be silent") no receipt of it either: a word, and the fact is in the memory
         self.assertEqual(out['say'], concierge.GOT_IT); self.assertIn('- Gail covers payroll', s.get_doc('learned'))
-        out = concierge.call_turn(s, dock, {'kind': 'memory.remember', 'params': {'note': 'Ray covers AP.'}}, None, 'remember it')
+        out = concierge.call_turn(s, dock, {'kind': 'memory.remember', 'params': {'note': 'Ray covers AP.', 'section': 'people'}}, None, 'remember it')
         self.assertNotIn('..', out['say'])
 
     def test_no_card_wears_a_sentence_written_for_the_model(self):

@@ -776,7 +776,7 @@ def parse_decision(text: str) -> tuple[str, dict | None]:
     # done" called close with ref TQ-0004 and the ref was thrown away (2026-11-02)
     if (on := str(p.get('on') or p.get('ref') or '').strip()): d['on'] = on
     if p.get('new') is True or str(p.get('new')).lower() == 'true': d['new'] = True  # a job of its own, not the item's hand-off
-    if verb == 'next' and str(p.get('section') or '').strip(): d['section'] = str(p['section']).strip()[:40]   # a rail heading (rail_section)
+    if verb in ('next', 'remember') and str(p.get('section') or '').strip(): d['section'] = str(p['section']).strip()[:40]   # a rail heading (rail_section); a memory's place
     cc = p.get('cc')                                                                # a reply's people to loop in - looked up, never trusted
     cc = [cc] if isinstance(cc, str) else cc if isinstance(cc, list) else []
     if any(str(c or '').strip() for c in cc): d['cc'] = [str(c).strip()[:120] for c in cc if str(c or '').strip()][:6]
@@ -5106,7 +5106,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         target = int(k.split(':', 1)[1]) if k.startswith('conn:') and k.split(':', 1)[1].isdigit() else None
     elif verb == 'remember':
         if not d_text: raise ValueError('remember what? Say the fact and I will keep it')
-        target, params = 0, {'note': d_text}
+        target, params = 0, {'note': d_text, 'section': decision.get('section')}
     elif verb == 'split': target, params = it.get('tid'), {'text': text, 'key': it.get('key')}
     elif verb == 'setup': target, params = 0, {'text': d_text or text, 'title': decision.get('title') or None}   # the set-up sort's (_walkthrough)
     if target is None: raise ValueError(f"there is nothing to {SAYS_VERB.get(verb, verb)} on this one")
@@ -6522,7 +6522,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # keep goes into the memory, LEARNED.md (memory.remember)
     if decision and verb in PROPOSALS and routes():
         if verb == 'answer_agent' and target_item and target_item.get('tid'): return _opened(store, tid, int(target_item['tid']))
-        if verb == 'remember': return call_turn(store, tid, {'kind': 'memory.remember', 'params': {'note': decision.get('text') or text}}, item, text, actor)
+        if verb == 'remember': return call_turn(store, tid, {'kind': 'memory.remember', 'params': {'note': decision.get('text') or text, 'section': decision.get('section') or ''}}, item, text, actor)
         # ...and Continue on a stopped GENERAL agent has no button on its row to light - its own box is the way on - so "get the agent going
         # again on this" was answered "I can't start it from this item" (the re-check, 2026-11-04): it picks up, the owner's words its note
         if (verb == 'continue' and target_item and target_item.get('tid') and general.handles(store.get_task(int(target_item['tid'])) or {})

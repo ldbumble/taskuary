@@ -56,16 +56,16 @@ def test_a_long_run_of_tellings_and_corrections_leaves_the_memory_the_size_it_wa
     from taskuary import concierge, general
     from taskuary.store import MemoryStore
     s = MemoryStore()
-    for i in range(30): memoryedit.remember(s, f'Mail about the site {i} cleaning rota is not yours')
+    for i in range(30): memoryedit.remember(s, f'Mail about the site {i} cleaning rota is not yours', section='care')
     n0, c0 = len([l for l in s.get_doc('learned').splitlines() if l.startswith('- ')]), len(s.get_doc('learned'))
     who = ['Gail Moreno', 'Ray Colton', 'Paula Vance', 'Omar Keller', 'Marcus Reed']
     last = ''
     for i in range(60):
         now = f'Payroll questions go to {who[i % 5]} (round {i})'
-        r = memoryedit.remember(s, now, replaces=last)
+        r = memoryedit.remember(s, now, replaces=last, section='care')
         assert r['ok'] and (not last or r['closed']['text'] == last)
         for again in (now.upper(), f'  {now}.', now.lower()):                       # ...said again, three ways: not three lines
-            assert memoryedit.remember(s, again).get('already'), again
+            assert memoryedit.remember(s, again, section='care').get('already'), again
         last = now
     doc = s.get_doc('learned')
     ls = [l for l in doc.splitlines() if l.startswith('- ')]
@@ -132,7 +132,7 @@ def test_a_fact_said_is_in_use_at_once_and_one_it_replaces_is_closed_not_deleted
     s, facts, erin, ray, own = w
     gail = f"- Gail Moreno (gail@northwind.example) runs headcount in Finance [s:4 | ev: sv{facts['gail_monday'][0]} | seen: 2026-10-01 | k: gail finance headcount]"
     s.save_doc('learned', s.get_doc('learned').replace(lc.PEOPLE + '\n', lc.PEOPLE + '\n' + gail + '\n', 1), 'reflect')
-    out = memoryedit.remember(s, 'Gail Moreno moved to Ops', about='gail@northwind.example', replaces='gail finance headcount')
+    out = memoryedit.remember(s, 'Gail Moreno moved to Ops', about='gail@northwind.example', replaces='gail finance headcount', section='people')
     doc = s.get_doc('learned')
     assert out['section'] == 'people' and '- Gail Moreno moved to Ops (gail@northwind.example)' in lc.section(doc, lc.PEOPLE)
     assert 'in Finance' not in doc
@@ -153,13 +153,13 @@ def test_a_line_named_by_its_own_words_is_found_as_by_its_key(w):
     assert memoryedit.resolve(s, '  ' + words.upper() + ' ') == 'erin manager hour', 'case and spacing are not the line'
     assert memoryedit.resolve(s, 'erin manager hour') == 'erin manager hour'
     assert memoryedit.resolve(s, 'Erin is my manager') == 'Erin is my manager', 'a paraphrase is not the line - nothing is guessed'
-    r = memoryedit.remember(s, 'Erin Blake is your manager; answer her asks before ten', replaces=words)
+    r = memoryedit.remember(s, 'Erin Blake is your manager; answer her asks before ten', replaces=words, section='care')
     assert r['closed']['key'] == 'erin manager hour' and learnedlines.row(s, 'erin manager hour')['Status'] == 'closed'
 
 
 def test_whos_gail_to_me_is_read_from_the_lines_and_the_org_chart(w):
     s, *_ = w
-    memoryedit.remember(s, 'Gail Moreno moved to Ops', about='gail@northwind.example')
+    memoryedit.remember(s, 'Gail Moreno moved to Ops', about='gail@northwind.example', section='people')
     a = memoryedit.about(s, 'Gail')
     assert 'gail@northwind.example' in a['names'] and [l['text'] for l in a['lines']] == ['Gail Moreno moved to Ops (gail@northwind.example)']
     e = memoryedit.about(s, 'erin@northwind.example')
@@ -175,7 +175,7 @@ def test_the_chat_keeps_gail_moved_to_ops_and_forgets_rays_payroll_line_at_once(
     s.save_doc('learned', s.get_doc('learned').replace(lc.PEOPLE + '\n', lc.PEOPLE + '\n' + gail + '\n', 1), 'reflect')
     dock = concierge.general.dock_task(s, 'owner')[0]['TaskId']
     out = concierge.call_turn(s, dock, {'kind': 'memory.remember', 'params': {'note': 'Gail Moreno moved to Ops', 'about': 'gail@northwind.example',
-                                                                         'replaces': 'gail finance headcount'}}, None, 'Gail moved to Ops')
+                                                                         'replaces': 'gail finance headcount', 'section': 'people'}}, None, 'Gail moved to Ops')
     assert out['did'] == 'memory.remember' and out['say'] == concierge.GOT_IT, 'kept, and answered in a word: no receipt (2026-11-14)'
     assert learnedlines.row(s, 'gail finance headcount')['Status'] == 'closed' and 'moved to Ops' in s.get_doc('learned')
     out = concierge.call_turn(s, dock, {'kind': 'memory.wrong', 'params': {'key': 'payroll ray', 'how': 'forget'}}, None, 'forget that Ray does payroll')
@@ -194,6 +194,20 @@ def test_the_tools_are_in_the_catalogue_and_a_plain_fact_goes_into_the_memory(w)
     assert toolcatalog.valid('memory.about', {}) == 'memory.about needs who' and toolcatalog.valid('memory.wrong', {'key': 'x'}) == ''
     assert 'memory.about' in toolcatalog.block() and 'memory.wrong' in toolcatalog.block()
     with mock.patch.object(server, 'store', s):
-        out = server._run_operation({'kind': 'memory.remember', 'target': 0, 'params': {'note': 'The office opens at 8'}}, None)
+        out = server._run_operation({'kind': 'memory.remember', 'target': 0, 'params': {'note': 'The office opens at 8', 'section': 'care'}}, None)
     # a fact about nobody is in LEARNED.md too, where every reader reads it - a saved note was read only on a matching word (2026-10-27)
     assert out['learned']['section'] == 'care' and 'The office opens at 8' in s.get_doc('learned')
+
+
+def test_a_fact_with_no_section_or_one_not_on_the_list_is_sent_back_never_filed_by_a_guess(w):
+    """Walk 6: told "sign off as 'Best, Alex' - never my full name", the agent kept it with no section; the code filed it under How you work,
+    the signer never read it, and the next email left with his full name. "preferences" was taken too, and filed under What you care about.
+    Every door (the agent's tool, `taskuary --remember`, the Assistant) reaches remember: the place is named, or nothing is kept."""
+    from taskuary import agenttools
+    s, *_ = w
+    before = s.get_doc('learned')
+    for bad in ('', 'preferences'):
+        with pytest.raises(ValueError, match='signature'): memoryedit.remember(s, "Email sign-off: Best, Alex - never the full name", section=bad)
+    assert s.get_doc('learned') == before and not s.get_setting('email_signature')
+    assert 'section' in agenttools.TOOLS['remember'][2]['required']
+    assert memoryedit.remember(s, 'Best,\nAlex', section='signature')['text'] == 'Best,\nAlex' and s.get_setting('email_signature') == 'Best,\nAlex'

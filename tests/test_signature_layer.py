@@ -138,6 +138,24 @@ def test_an_agents_draft_is_filed_with_the_block_once_not_under_its_own_sign_off
     assert s.get_review(got['review_id'])['DraftText'] == f'Hi Ray,\n\nThe export ran.\n\n{SIG}'
 
 
+def test_a_card_whose_ending_the_signer_changed_says_so_on_the_card(s):
+    """Walk 6: the agent ended a letter "Best,\\nAlex" as he had asked, the signer put the saved block on, and it left signed with his full
+    name - the change said to the agent alone, never on the card he pressed. Every road that files an agent's email says it on the card, once."""
+    from taskuary import wrapup, slots
+    tid, mid, _ = thread(s, draft='')
+    rid = wrapup.agent_reply(s, tid, 'Hi Erin,\n\nThe export ran.\n\nBest,\nAlex', 'coding')['review_id']
+    why = s.get_review(rid)['Reason']
+    assert signatures.ENDING in why and 'Best, Alex' in why
+    rid = slots.draft(s, tid, 'Hi Ray,\n\nThe export ran.\n\nBest,\nAlex', to='ray@northwind.example', subject='Export')['review_id']
+    slots.draft(s, tid, 'Hi Ray,\n\nThe export ran today.\n\nBest,\nAlex', to='ray@northwind.example', subject='Export')
+    assert s.get_review(rid)['Reason'].count(signatures.ENDING) == 1, 'a re-save replaces its line, never stacks it'
+    # ...and a letter the agent left unsigned, or signed with the block itself, says nothing
+    tid2, _, _ = thread(s, draft='')
+    assert signatures.ENDING not in s.get_review(wrapup.agent_reply(s, tid2, 'Hi Erin,\n\nThe export ran.', 'coding')['review_id'])['Reason']
+    tid3, _, _ = thread(s, draft='')
+    assert signatures.ENDING not in s.get_review(wrapup.agent_reply(s, tid3, f'Hi Erin,\n\nDone.\n\n{SIG}', 'coding')['review_id'])['Reason']
+
+
 MD = 'Hi Erin,\n\n## Flights\n\n- **Tue 9:05** out, `NW 12`\n- see [the fares](https://fares.example/x)\n\n| Day | Fare |\n|---|---|\n| Tue | 210 |'
 # ...a link keeps its address in the plain text (a walk, 2026-11-18: a reply's links went out as bare labels)
 PLAIN = 'Hi Erin,\n\nFlights\n\n- Tue 9:05 out, NW 12\n- see the fares (https://fares.example/x)\n\nDay · Fare\nTue · 210'

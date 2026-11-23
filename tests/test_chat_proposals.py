@@ -234,7 +234,7 @@ class ExecutionTests(unittest.TestCase):
 
     def test_remember_and_close_are_proposals_that_do_what_they_say(self):
         s, tid, mid, item = asked()
-        p = say(s, 'remember that Gail signs off on refunds', key=item['key'], model='Noted.\nCALL: {"kind": "remember", "params": {"text": "Gail signs off on refunds"}}')['proposal']
+        p = say(s, 'remember that Gail signs off on refunds', key=item['key'], model='Noted.\nCALL: {"kind": "remember", "params": {"text": "Gail signs off on refunds", "section": "people"}}')['proposal']
         self.assertEqual((p['kind'], p['params']['note'], p['settles']), ('memory.remember', 'Gail signs off on refunds', False))
         self.assertNotIn('Gail signs off on refunds', s.get_doc('learned') or '')                 # a proposal: nothing kept yet
         run(s, p); self.assertIn('- Gail signs off on refunds', s.get_doc('learned') or '')     # LEARNED.md, every reader's memory (2026-10-27)

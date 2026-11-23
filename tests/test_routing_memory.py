@@ -326,7 +326,7 @@ class TheAssistantCanTeachToo(unittest.TestCase):
     def test_a_fact_the_owner_tells_the_assistant_reaches_triage(self):
         from taskuary import memoryedit
         s = store()
-        memoryedit.remember(s, 'Clocking in and out is ADP - we hold no code for it, so timesheet asks are never coding')
+        memoryedit.remember(s, 'Clocking in and out is ADP - we hold no code for it, so timesheet asks are never coding', section='care')
         notes = ingest.notes_for(s, {'from_email': 'anyone@example.com', 'subject': 'my timesheet', 'body': 'fix my hours'})
         self.assertTrue(any('ADP' in str(n) for n in notes), 'a global fact must reach every verdict')
 

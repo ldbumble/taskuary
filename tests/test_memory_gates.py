@@ -54,14 +54,14 @@ def test_triage_reads_the_dont_care_line_on_a_report_run():
 def test_dont_care_said_to_the_assistant_lands_in_what_you_care_about():
     s = MemoryStore()
     dock = concierge.general.dock_task(s, 'owner')[0]['TaskId']
-    out = concierge.call_turn(s, dock, {'kind': 'memory.remember', 'params': {'note': LEGACY}}, None, LEGACY)
+    out = concierge.call_turn(s, dock, {'kind': 'memory.remember', 'params': {'note': LEGACY, 'section': 'care'}}, None, LEGACY)
     assert out['did'] == 'memory.remember' and not out.get('open'), 'kept at once, not the notes page'
     assert out['say'] == concierge.GOT_IT and '](' not in out['say'], 'no receipt, and no link for the page to follow'
     assert f'- {LEGACY}' in _care(s)
     # ...and the phone's road (server._run_operation) writes the same line, never a saved note
     s2 = MemoryStore()
     with mock.patch.object(server, 'store', s2):
-        r = server._run_operation({'kind': 'memory.remember', 'target': 0, 'params': {'note': 'The payroll mirror is legacy - not mine to watch'}}, None)
+        r = server._run_operation({'kind': 'memory.remember', 'target': 0, 'params': {'note': 'The payroll mirror is legacy - not mine to watch', 'section': 'care'}}, None)
     assert r['learned']['section'] == 'care' and '- The payroll mirror is legacy - not mine to watch' in _care(s2)
 
 
@@ -127,7 +127,7 @@ def test_a_fact_told_to_the_assistant_is_kept_and_answered_in_its_own_few_words_
     assert out['say'] == 'Got it - Omar for laptop and badge faults.' and 'go to Omar Keller now' in s.get_doc('learned')
     for no in ('Remembered', 'memory', 'read by', '](', '#about'): assert no not in out['say'], no
     # ...with no words of its own, a plain two; and the guidance is one sentence where the tool is described
-    out = concierge.call_turn(s, dock, {'kind': 'memory.remember', 'params': {'note': 'Gail always wants budget figures rounded to the nearest thousand.'}}, None, 'remember that')
+    out = concierge.call_turn(s, dock, {'kind': 'memory.remember', 'params': {'note': 'Gail always wants budget figures rounded to the nearest thousand.', 'section': 'people'}}, None, 'remember that')
     assert out['say'] == concierge.GOT_IT
     assert 'never that it was saved, where, or who reads it' in concierge.turn_system(s)
     # ...and a task's agent is told the same of its own tool: a few natural words, never a report of the save

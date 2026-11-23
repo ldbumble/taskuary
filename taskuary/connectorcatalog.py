@@ -125,8 +125,9 @@ def with_defaults(p: dict, conf: dict) -> dict:
 
 
 def owner_edits(p: dict, fields: dict) -> dict:
-    """The owner's changes on the card, at the press: only the fields its act declares editable (never the tool, the connection or a path),
-    a choice only among its own values. Anything else is refused, not dropped - the owner pressed for what the card said."""
+    """The owner's changes on the card, at the press: only the fields its act declares editable (never the tool, the connection or a path) -
+    a choice only among its own values, a line of words (a title, labels) as he left it. Anything else is refused, not dropped - the owner
+    pressed for what the card said."""
     act = action_for((p or {}).get('type'))
     if not fields: return p
     if not act: raise ValueError('this step has no card to change it on')
@@ -135,5 +136,7 @@ def owner_edits(p: dict, fields: dict) -> dict:
         f = field(act, k)
         if not (f and f.get('edit')) or f['type'] in ('text', 'image', 'files', 'people'): raise ValueError(f'{k} cannot be changed on this card')
         if not choice_ok(f, v): raise ValueError(f'{v!r} is not one of the choices for {f["label"]}')
+        # ...an emptied line goes empty only where the act may go without it: an issue with no title is no issue
+        if f['type'] == 'line' and not (v := str(v or '').strip()) and not f.get('optional'): raise ValueError(f'{f["label"]} cannot be empty')
         out[k] = v
     return out

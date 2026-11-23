@@ -196,5 +196,45 @@ class OnePress(unittest.TestCase):
         self.assertIn("`publish` (now or draft) come from the owner's defaults on the card", r)
 
 
+class TheOwnersWords(unittest.TestCase):
+    """The owner, 2026-11-23: "all cards should be that way if there is text". A waiting card's lines of words (a post's or an issue's title,
+    its flair) are his to change as its box is, and what he left goes with the press - on the one road the box's words take (owner_edits);
+    where it goes (the subreddit, the repository) is not his to retype on the card."""
+    P = {'action': 'run_tool', 'type': 'reddit_post', 'subreddit': 'strollers', 'title': 'Strollers then and now', 'text': 'A short history.'}
+
+    def setUp(self):
+        from taskuary.store import MemoryStore
+        self.s = MemoryStore(); self.tid = self.s.create_task({'Title': 'Post the stroller piece', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        self.rid = self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(self.P)})
+
+    def press(self, words, fields):
+        from taskuary import reports
+        ran = []
+        with mock.patch.dict(reports.REGISTRY, {'reddit_post': lambda cfg: ran.append(cfg) or {'rows': [{'url': 'https://reddit.example/r/strollers/1'}]}}),              mock.patch.object(reports, 'resolve_cfg', lambda st, cfg: cfg):
+            proposals.execute(self.s, self.s.get_review(self.rid), 'owner', words, fields=fields)
+        return ran
+
+    def test_a_pressed_post_goes_with_the_title_he_edited_and_keeps_it(self):
+        ran = self.press('A short history, with pictures.', {'title': 'Strollers, then and now', 'flair': ''})
+        self.assertEqual((ran[0]['title'], ran[0]['text'], ran[0]['flair']), ('Strollers, then and now', 'A short history, with pictures.', ''))
+        kept = json.loads(proposals.receipt(self.s.get_review(self.rid), 'A short history, with pictures.', {}, {'title': 'Strollers, then and now'}))
+        self.assertEqual(kept['title'], 'Strollers, then and now')
+
+    def test_an_emptied_title_or_a_retyped_subreddit_posts_nothing(self):
+        for bad in ({'title': '  '}, {'subreddit': 'prams'}):
+            with self.assertRaises(ValueError): self.press('A short history.', bad)
+
+    def test_post_via_the_browser_hands_the_agent_the_title_he_left(self):
+        from taskuary import general
+        with mock.patch.object(general, 'to_agent', return_value='woke') as to:
+            out = proposals.via_browser(self.s, self.rid, '', 'owner', {'title': 'Strollers, then and now'})
+        self.assertTrue(out['ok'], out)
+        self.assertIn('title "Strollers, then and now"', to.call_args.args[2])
+        self.assertEqual(json.loads(self.s.get_review(self.rid)['FinalText'])['title'], 'Strollers, then and now')
+        rid = self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(self.P)})
+        self.assertFalse(proposals.via_browser(self.s, rid, '', 'owner', {'title': ''})['ok'])
+        self.assertEqual(self.s.get_review(rid)['Status'], 'pending')
+
+
 if __name__ == '__main__':
     unittest.main()

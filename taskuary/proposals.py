@@ -136,20 +136,27 @@ def is_post(p: dict) -> bool: return (p or {}).get('action') == 'run_tool' and (
 BROWSER_POST = ('The owner pressed Post via the browser on your {network} post card. Post exactly these words on {network} in your browser'
                 '{pic}: "{words}". If the site wants him signed in, hand him its sign-in; then press its final Post - Taskuary holds that press '
                 'for his yes.')
-def via_browser(store, rid: int, text: str, actor: str = 'owner') -> dict:
-    "Post via the browser: {ok, status, told} - the post saved as he left it and handed to its agent; never twice, never a card that is not a post."
+def via_browser(store, rid: int, text: str, actor: str = 'owner', fields: dict = None) -> dict:
+    """Post via the browser: {ok, status, told} - the post saved as he left it (his words and the lines he edited, the press's own road:
+    _edited) and handed to its agent; never twice, never a card that is not a post."""
+    from . import connectorcatalog as cat
     rv = store.get_review(int(rid)) or {}
     try: p = json.loads(rv.get('DraftText') or '{}')
     except ValueError: p = {}
     if not is_post(p): return {'ok': False, 'why': 'Only a post goes through the browser.'}
-    words = str(text if str(text or '').strip() else p.get('text') or '').strip()
+    try: p = _edited(p, text, fields)
+    except ValueError as e: return {'ok': False, 'why': str(e)}
+    words = str(p.get('text') or '').strip()
     if not words: return {'ok': False, 'why': 'The post has no words to put up.'}
     p = {**p, 'text': words, 'result': {'browser': True}}
+    # ...and its title or content warning as he left them, told with the words: the agent's own proposal holds the ones before his edit
+    lines = ''.join(f', {f["label"].lower()} "{p[f["key"]]}"' for f in (cat.action_for(p['type']) or {}).get('fields') or []
+                    if f['type'] == 'line' and f.get('edit') and str(p.get(f['key']) or '').strip())
     if not store.decide_review(int(rid), 'approved', json.dumps(p), actor):
         return {'ok': True, 'status': (store.get_review(int(rid)) or {}).get('Status'), 'already': True}
     from . import general, outputs
     pic = f" with the picture {outputs.folder(int(rv['TaskId'])) / p['image']}" if p.get('image') else ''
-    told = general.to_agent(store, int(rv['TaskId']), BROWSER_POST.format(network=POSTS[p['type']], pic=pic, words=words), actor, start=True)
+    told = general.to_agent(store, int(rv['TaskId']), BROWSER_POST.format(network=POSTS[p['type']], pic=pic + lines, words=words), actor, start=True)
     return {'ok': True, 'status': 'approved', 'told': told}
 
 

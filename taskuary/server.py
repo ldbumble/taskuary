@@ -2760,11 +2760,12 @@ def waiting_now(task_id: int):
 
 class ViaBrowserBody(BaseModel):
     final_text: str | None = None
+    fields: dict | None = None       # the lines he changed on the card (a title), as the press carries them: connectorcatalog.owner_edits
 @app.post('/api/reviews/{rid}/via-browser')
 def post_via_browser(rid: int, body: ViaBrowserBody):
     "A post card's Post via the browser: proposals.via_browser."
     from . import proposals
-    return proposals.via_browser(store, rid, body.final_text, ACTOR)
+    return proposals.via_browser(store, rid, body.final_text, ACTOR, body.fields)
 
 @app.post('/api/tasks/{task_id}/again')
 def try_again(task_id: int):

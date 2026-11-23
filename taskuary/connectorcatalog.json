@@ -178,6 +178,7 @@
               "key": "title",
               "label": "Title",
               "type": "line",
+              "edit": true,
               "agent": true,
               "heading": true
             },
@@ -185,7 +186,9 @@
               "key": "labels",
               "label": "Labels",
               "type": "line",
-              "agent": true
+              "edit": true,
+              "agent": true,
+              "optional": true
             },
             {
               "key": "body",
@@ -4331,7 +4334,9 @@
               "key": "spoiler",
               "label": "Content warning",
               "type": "line",
-              "agent": true
+              "edit": true,
+              "agent": true,
+              "optional": true
             },
             {
               "key": "visibility",
@@ -4413,6 +4418,7 @@
               "key": "title",
               "label": "Title",
               "type": "line",
+              "edit": true,
               "agent": true,
               "heading": true
             },
@@ -4434,7 +4440,9 @@
               "key": "flair",
               "label": "Flair",
               "type": "line",
-              "agent": true
+              "edit": true,
+              "agent": true,
+              "optional": true
             }
           ]
         }

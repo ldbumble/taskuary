@@ -572,7 +572,7 @@ def _run(store, op: dict, actor: str) -> dict:
 # says whether a phone chat is speaking) and where a start is made here (receipt_text, _ran), and kept by the event that ends the agent's
 # turn (workerstate.record -> turn_ended): its answer, its question, its card for his press, or its failure.
 def promise(store, tid) -> bool:
-    """Work on `tid` was just handed to an agent from the chat speaking now (asking()): follow it up there."""
+    """Work on `tid` was just handed to an agent from the chat speaking now (asking()): follow it up there - once its turn ends."""
     at = asking()
     if not at or not str(tid or '').isdigit(): return False
     with _LEDGER:
@@ -600,7 +600,7 @@ def keep_promises(store, force: bool = False) -> int:
     ps = _promises(store)
     if not ps: return 0
     from . import concierge, funnel
-    items = funnel.pile(store).get('items') or []
+    items = None
     keep, kept = [], 0
     for p in ps:
         tid, chat = int(p['tid']), p['chat']
@@ -1046,13 +1046,20 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             builtin = command(question) if not picked else ''
             if builtin:
                 if builtin == 'stop':
-                    for k in (NOTE_KEY, REDRAFT_KEY, AGENT_KEY): store.set_setting(f'{k}:{channel}:{chat}', '', 'assistant')
+                    for k in (NOTE_KEY, REDRAFT_KEY, AGENT_KEY, EDIT_KEY): store.set_setting(f'{k}:{channel}:{chat}', '', 'assistant')
                 forget_offered(store, channel, chat)
                 if builtin == 'stop' and (h := handoff(store)) and h['channel'] == channel and h.get('chat') == chat:
                     end_handoff(store, 'owner', HANDED_BACK)            # the walk was handed here: it goes back, and this chat is told
                     return
                 send(store, channel, chat, (help_text if builtin == 'help' else stop_walk)(store, tid), connector_id)
                 if builtin == 'stop': hung_up(store, channel, chat)          # stopped: nothing more reaches this chat until they write again
+                return
+            # ...the line after Edit is the card's new words, sent with them by the desk's own door (press_card)
+            edit = str(store.get_setting(f'{EDIT_KEY}:{channel}:{chat}') or '')
+            if edit: store.set_setting(f'{EDIT_KEY}:{channel}:{chat}', '', 'assistant')
+            if edit and not picked:
+                forget_offered(store, channel, chat)
+                send(store, channel, chat, press_card(store, int(edit), 'edit', question), connector_id)
                 return
             redo = str(store.get_setting(f'{REDRAFT_KEY}:{channel}:{chat}') or '')
             if redo and not picked:
@@ -1753,7 +1760,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             # nothing to tap was a dead end (the 2026-10-22 re-walk). A section being walked stays walked
             here = asking() or {}
             if here.get('chat'):                                     # no Continue note waits, and no Redraft instruction
-                for k in (NOTE_KEY, REDRAFT_KEY, AGENT_KEY): store.set_setting(f"{k}:{here['channel']}:{here['chat']}", '', 'assistant')
+                for k in (NOTE_KEY, REDRAFT_KEY, AGENT_KEY, EDIT_KEY): store.set_setting(f"{k}:{here['channel']}:{here['chat']}", '', 'assistant')
             if not act.get('key'): return 'Left it - nothing moved.'
             back = concierge.surface(store, act['key'], actor=actor)
             return carry_out(store, back, back.get('item'), actor) if back.get('item') else stuck(store, 'Left it - nothing moved.')
@@ -1785,6 +1792,13 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
                                             table=bool(item and item.get('key') == key), exact=True, picks={'files': list(act.get('files') or [])})
             return _settle(store, {**prop, 'alts': []}, item, actor)
         if t == 'trust': return _trust(store, int(act['tid']), act.get('key') or f"task:{int(act['tid'])}", actor)
+        if t == 'card' and act.get('verb') == 'edit':
+            # EDIT ASKS FOR THE WORDS: the next typed line replaces the draft and goes with them, as the desk's box and its Send
+            here = asking() or {}
+            if here.get('chat'): store.set_setting(f"{EDIT_KEY}:{here['channel']}:{here['chat']}", str(int(act['rid'])), 'assistant')
+            return turn_text({'say': 'Type the new words - they replace the draft, and it goes with them.', 'item': None}, store=store,
+                             extra=[('Cancel', {'t': 'stay', 'key': (item or {}).get('key') or ''})])
+        if t == 'card': return press_card(store, int(act['rid']), str(act.get('verb') or ''))
         if t == 'files': return send_files(store, act, actor)
         if t == 'walk': return walk(store, actor, opener=not act.get('opened'))
         if t == 'script': return script_words(store, act.get('script') or '')
@@ -2171,10 +2185,77 @@ def _body(store, item: dict | None) -> tuple[dict, str, bool]:
     return msg, strip_wrapper(str(msg.get('BodyText') or ''), wrapper_of(store.message_verdict(msg.get('MessageId')))).strip(), item.get('kind') == 'report' or msg.get('Channel') == 'report'
 
 
+# ── THE CARD THAT WAITS IS THE ONE THE DESK AND THE AGENT SEE (walk 6, H1) ────────────────────────────────────────────────────────────
+# The phone read a task's draft off the one review id its rail row carried, so a card the row did not carry did not exist for it: the email to
+# Gail waited on the desk, the agent was told it waited, and the phone said "I do not have the text of the message in front of me here".
+# The task's line of cards is cardqueue's (the record the page draws and the agent is handed): its front card is read from there, shown in
+# full, and pressed from here through the desk's own door (server.decide).
+def front_card(store, item: dict | None) -> dict:
+    """The review row of the card that waits for his press now on the item's task (cardqueue's front) - {} when none does."""
+    tid = (item or {}).get('tid')
+    if store is None or not str(tid or '').isdigit(): return {}
+    from . import cardqueue
+    try: live = [x for x in cardqueue.state(store, int(tid))['live'] if str(x).isdigit()]
+    except Exception as e:
+        logger.debug(f'the phone could not read the line of cards: {e}'); return {}
+    return (store.get_review(int(live[0])) or {}) if live else {}
+
+
+LETTER_KINDS = ('draft', 'draft_reply', 'reply', 'slot')
+
+
+def card_picks(store, item: dict | None) -> list:
+    """The waiting card's own buttons, as picks - Send, Edit (and Don't send on one of the task's emails) on a letter, Approve and Dismiss on
+    an act - each pressed through server.decide like the desk's. [] where the row's own chips already press that card."""
+    rv = front_card(store, item)
+    if not rv or str(rv.get('ReviewId')) == str((item or {}).get('rid') or '-'): return []
+    rid = int(rv['ReviewId'])
+    if rv.get('Kind') == 'action':
+        return [(buttons.label('approve', 'action'), {'t': 'card', 'rid': rid, 'verb': 'approve'}), (DISMISS, {'t': 'card', 'rid': rid, 'verb': 'reject'})]
+    if rv.get('Kind') not in LETTER_KINDS: return []
+    rows = [(buttons.label('approve'), {'t': 'card', 'rid': rid, 'verb': 'approve'}), (EDIT, {'t': 'card', 'rid': rid, 'verb': 'edit'})]
+    from . import slots
+    if rv.get('Kind') == slots.KIND and (sid := slots.of_review(rv)) and rv.get('TaskId'):
+        rows.append((DONT_SEND, {'t': 'drop', 'tid': int(rv['TaskId']), 'slot': sid}))
+    return rows
+
+
+DISMISS, EDIT, DONT_SEND = 'Dismiss', 'Edit', "Don't send"          # the desk card's own words (ReviewDecision.jsx)
+EDIT_KEY = 'remote_edit'                     # an Edit pick waiting for the new words: the next typed line is them
+
+
+def press_card(store, rid: int, verb: str, words: str = None) -> str:
+    """His press on a waiting card, from the phone - the desk's own door (server.decide), so a press reads the same wherever it was made:
+    sent, refused because the thread moved, or failed and why. Said with the walk's way on."""
+    from fastapi import HTTPException
+    from .server import DecideBody, decide
+    rv = store.get_review(int(rid)) or {}
+    if rv.get('Status') != 'pending': return stuck(store, 'That card is not waiting any more - nothing was pressed.')
+    try: out = decide(int(rid), DecideBody(verb=verb, final_text=words))
+    except HTTPException as e: return stuck(store, f'Not done - {plain(e)}. Nothing went.')
+    if out.get('stale') or out.get('send_error') or not out.get('ok', True):
+        return stuck(store, f"Not sent - {out.get('send_error') or 'it did not go'}")
+    from . import cardqueue
+    what = cardqueue.what(store, {'rids': [int(rid)], 'rows': [rv]})
+    said = {'reject': f'Dismissed {what} - nothing ran.', 'approve': f"{'Approved' if rv.get('Kind') == 'action' else 'Sent'} {what}.",
+            'edit': f'Sent {what}, with your words.'}.get(verb, 'Done.')
+    tid = rv.get('TaskId')
+    extra = ([(f'Open TQ-{int(tid):04d}', {'t': 'open', 'key': f'task:{int(tid)}'})] if tid else []) + [(_next_word(), {'t': 'next'})]
+    return turn_text({'say': said, 'item': None}, store=store, extra=extra)
+
+
+def _next_word() -> str:
+    from . import concierge
+    return concierge.CHIP_WORDS['next']
+
+
 def _draft_text(store, item: dict | None) -> str:
-    """The reply waiting on a yes - never an `action` review, whose DraftText is the proposal's JSON."""
-    if store is None or not (item or {}).get('rid'): return ''
-    try: rv = store.get_review(int(item['rid'])) or {}
+    """The letter waiting on a yes - the task's front card where it has one (front_card), else the row's own - never an `action` review,
+    whose DraftText is the proposal's JSON."""
+    rv = front_card(store, item)
+    if rv.get('Kind') == 'action' and not (item or {}).get('closeout'): return ''
+    if not rv and (store is None or not (item or {}).get('rid')): return ''
+    try: rv = rv or store.get_review(int(item['rid'])) or {}
     except Exception as e:
         logger.debug(f'the phone could not read the draft: {e}')
         return ''
@@ -2483,32 +2564,62 @@ def _says(sub: str) -> str:
 
 
 def agent_state(item: dict | None, store=None) -> str:
-    """The agent's state in the rail's own words. A run that ended by its OWN word says so - "failed - <why>" (owner-approved R2,
-    2026-10-21) or finished - and "is waiting on you" is said only of a run that is: a failed run read "is waiting on you" (F5)."""
+    """The agent's state off the task's one reading (taskstate), in the rail's own words. A run that ended by its OWN word says so - "failed -
+    <why>" (owner-approved R2, 2026-10-21) or finished - and "is waiting on you" is said only of a run that is (F5)."""
     it = item or {}
     kind, lane = it.get('kind'), it.get('lane')
-    # ...and a task whose agent ENDED, whatever its row became: a finished run on a task the rail shows as yours read "No agent yet" (A2)
-    if store is not None and it.get('tid') and lane != 'working' and (kind in ('agent', 'agentdone') or lane in AGENT_CARD_LANES or kind in _TASKISH):
-        from . import funnel, workerstate as ws
-        # ...FAILED whatever the session does, as the desk's R2 reads it: a run that failed with its session still open read "is waiting
-        # on you" (the 2026-10-22 re-walk) - finished stays a reading of a run that is over
-        try: end = 'failed' if ws.ended(store, int(it['tid']), live_too=True) == 'failed' else ws.ended(store, int(it['tid']))
-        except Exception as e:
-            logger.debug(f'the phone could not read how the run ended: {e}'); end = None
-        if end == 'failed':
-            f = funnel.run_failed(store, int(it['tid']), live_too=True) or {}
-            why = str(f.get('sentence') or '').rstrip('.')
-            return f'failed - {why[:1].lower()}{why[1:]}' if why else 'failed'
-        if end == 'finished' and not it.get('asking'): return 'finished'
-    if kind == 'agent':
-        if lane == 'working': return 'working'
-        if it.get('paused'): return 'stopped - its work is saved'
-        sub = it.get('state') if it.get('state') in ('asking', 'approval', 'stalled', 'parked') else 'asking' if it.get('asking') else 'parked'
-        return _says(sub)
-    if kind == 'agentdone': return 'finished'
-    # an agent at work on a task whose card is not an agent's: the header said "agent working" over "No agent yet" (F7)
-    if held(it): return 'working'
-    return {'queued': 'handed over, not started', 'stopped': 'stopped', 'saved': lanes.word('saved')}.get(lane) or ('finished' if it.get('summary') else '')
+    sub = it.get('state') if it.get('state') in ('asking', 'approval', 'stalled', 'parked') else 'asking' if it.get('asking') else 'parked'
+    from . import funnel, taskstate, workerstate as ws
+    st = taskstate.task_state(store, tid=int(it['tid'])) if store is not None and str(it.get('tid') or '').isdigit() else None
+    if st is None or not st.t:
+        # ...a row with no task behind it: its own lane is all there is
+        if kind == 'agent': return 'working' if lane == 'working' else _says(sub)
+        return {'working': 'working', 'queued': 'handed over, not started', 'stopped': 'stopped', 'saved': lanes.word('saved')}.get(lane) or \
+            ('finished' if kind == 'agentdone' or it.get('summary') else '')
+    # THE TASK'S ONE READING (taskstate - walk 6, H1): the phone kept its own, in which a parked session counted as "working", so four finished
+    # tasks read "agent working" on the phone while the desktop chip said "agent done"
+    tid = int(it['tid'])
+    k = st.key
+    if k == 'working': return 'working'
+    # ...FAILED whatever the session does, as the desk's R2 reads it: a run that failed with its session still open read "is waiting on you"
+    try: failed = ws.ended(store, tid, live_too=True) == 'failed'
+    except Exception as e:
+        logger.debug(f'the phone could not read how the run ended: {e}'); failed = False
+    if failed:
+        why = str((funnel.run_failed(store, tid, live_too=True) or {}).get('sentence') or '').rstrip('.')
+        return f'failed - {why[:1].lower()}{why[1:]}' if why else 'failed'
+    if k == 'agentdone' and not it.get('asking'): return 'finished'
+    if kind == 'agent': return 'stopped - its work is saved' if it.get('paused') else _says(sub)
+    if k in ('yours', 'theirs', 'closed', 'dropped', 'held'): return ''        # no agent's state to say: the header says the task's
+    return {'queued': 'handed over, not started', 'stopped': 'stopped'}.get(k) or taskstate.status(store, st.t, key=k)['word']
+
+
+def card_lines(store, item: dict | None) -> list:
+    "The waiting card as the story says it: an act's words, and '1 of 3 · next: the email to Erin' when others wait behind it."
+    rv = front_card(store, item)
+    if not rv: return []
+    from . import cardqueue
+    out, own = [], str(rv.get('ReviewId')) == str((item or {}).get('rid') or '-')      # the row's own card is drawn by move_block
+    if rv.get('Kind') == 'action' or (rv.get('Kind') in LETTER_KINDS and not own):
+        p = cardqueue._p(rv) if rv.get('Kind') == 'action' else {}
+        words = (' '.join(str(p.get('text') or p.get('body') or p.get('command') or '').split()) if p
+                 else str(rv.get('FinalText') or rv.get('DraftText') or '').strip())
+        out += ['', f"{DOT_YOU} **Waits for your press** · {cardqueue.what(store, {'rids': [rv['ReviewId']], 'rows': [rv]})}"] + \
+               ([_quote(_cut(words, 1500))] if words else [])
+    if (n := cardqueue.line(cardqueue.state(store, int(rv['TaskId'])))): out.append(n)
+    return out
+
+
+def status_word(store, item: dict | None) -> str:
+    "The task's status word, as every surface draws it (taskstate.status) - '' for a row with no task behind it."
+    tid = (item or {}).get('tid')
+    if store is None or not str(tid or '').isdigit(): return ''
+    from . import taskstate
+    try:
+        st = taskstate.task_state(store, tid=int(tid))
+        return str(taskstate.status(store, st.t, key=st.key)['word'] or '') if st.t else ''
+    except Exception as e:
+        logger.debug(f'the phone could not read the task state: {e}'); return ''
 
 
 def held(item: dict | None) -> bool:
@@ -2594,9 +2705,11 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
     from . import concierge, funnel
     it = item or {}
     kind, ch = it.get('kind'), str(it.get('channel') or '')
-    word = ({'agentdone': lanes.word('agentdone'), 'wrapup': 'reply sent · task still open'}.get(kind)
-            or ('your task' if is_own(it) and kind not in ('agent', 'review', 'action') else '')
-            or funnel.lane_word(it))
+    # ...the task's status in the words the header pill and the rail draw (taskstate.status, one function) - the phone's own read "reply sent
+    # · task still open" on a task that never had a reply (walk 6, H1)
+    word = ((status_word(store, it) if kind not in ('review', 'action') else '')          # ...a card row keeps the rail's own word for it
+            or {'agentdone': lanes.word('agentdone'), 'wrapup': 'reply sent · task still open'}.get(kind)      # ...a row with no task to read
+            or ('your task' if is_own(it) and kind not in ('agent', 'review', 'action') else '') or funnel.lane_word(it))
     # ...and the header reads the run the body reads: "agent waiting on you" sat over "failed - <why>" (F5)
     state = agent_state(it, store)
     if state.startswith('failed') and kind not in ('agentdone', 'wrapup'): word = funnel.LANE_WORDS['stopped'][0]
@@ -2655,6 +2768,8 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
             lines.append(_quote(_cut(opening, EXCERPT) if len(opening) > EXCERPT else opening))
     # THE TASK'S TO-DOS (the owner, 2026-10-20: "anything you can do, you can do via the Assistant" - the phone never showed them): the open
     # ones, numbered as task.check takes them, each with its note, and how far the list got; "tick 2" / "note on 2: ..." answer them
+    # ...AN ACT THAT WAITS FOR HIS PRESS, in its own words (a letter rides as the draft, in move_block), and where it stands in the line
+    lines += card_lines(store, it)
     todo = todo_lines(store, it.get('tid'))
     if todo: lines += [''] + todo
     # the agent: its state and what it found, did and concluded - the evidence the move is decided on
@@ -2960,6 +3075,9 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     if extra:
         words = words + [label for label, _ in extra]
         _offer(extra)
+    # ...and THE CARD THAT WAITS leads with its own buttons, pressed as the desk presses them (card_picks) - not under a question being asked
+    if item and not out.get('proposal') and not agent_answers(item) and (cp := card_picks(store, item)):
+        _offer(cp); words = [w for w, _a in cp] + words
     words = list(dict.fromkeys(words))         # one Next, never "2 · Next" and "4 · Next" (F14)
     lead_in = ('Reply with a number to read that message in full, or:' if item.get('kind') == 'fyis'
                else 'Reply with a number to open one, or:') if first > 1 else 'Reply with one of:'

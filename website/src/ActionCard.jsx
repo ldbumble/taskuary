@@ -57,12 +57,14 @@ export default function ActionCard({ row: was, tid, live = true, onChanged, past
   const go = done?.url || st.url, gone = !!done || st.done;
   // ...a press that failed before this card was drawn is still said on it: the review keeps it (store.review_act_failed), not the press
   const failed = err || (!busy && !gone && ["pending", "superseded"].includes(row?.Status) && row?.ActError) || "";
+  // ...what he changed beside the box goes with either press, on the one road (owner_edits): Post, and Post via the browser
+  const moved = changed(act, p, vals), edits = Object.keys(moved).length ? { fields: moved } : {};
   const decide = async (verb) => {
     setBusy(verb); setErr("");
     // ...the one press (press.js): it said "nothing was posted. Try again" after two minutes with no answer, over a post still going up;
     // and one decided in another window was an error on a card that only had to read itself again
     const o = await press(api, row.ReviewId, { verb, final_text: verb === "approve" ? text : null,
-      ...(verb === "approve" && Object.keys(changed(act, p, vals)).length ? { fields: changed(act, p, vals) } : {}) }, 2);
+      ...(verb === "approve" ? edits : {}) }, 2);
     const line = landed(o) || o.kind === "already" ? "" : failLine(o, post ? "posted" : "sent"), status = o.data?.status;
     if (status && status !== "pending") setSettled({ Status: status, ActError: line, url: o.data.result?.url || "", mine: o.kind !== "already" });
     else setErr(line);
@@ -71,7 +73,7 @@ export default function ActionCard({ row: was, tid, live = true, onChanged, past
   };
   const viaBrowser = async () => {
     setBusy("browser"); setErr("");
-    try { const { data } = await api.post(`/api/reviews/${row.ReviewId}/via-browser`, { final_text: text });
+    try { const { data } = await api.post(`/api/reviews/${row.ReviewId}/via-browser`, { final_text: text, ...edits });
       if (data?.ok) setSettled({ Status: data.status || "approved", mine: true, browser: true }); else setErr(data?.why || "It could not be handed over.");
       onChanged?.(); }
     catch (e) { setErr(e?.response?.data?.detail || e?.message || "It could not be handed over."); }
@@ -84,8 +86,16 @@ export default function ActionCard({ row: was, tid, live = true, onChanged, past
         {f.choices.map((c) => <option key={String(c.value)} value={String(c.value)}>{c.label}</option>)}</Box>
     : <span key={f.key} data-tq-act-choice={f.key}>{choiceOf(f, f.value)?.label || String(f.value)}</span>;
   const meta = [row?.network, ...fields.filter((f) => f.type === "choice").map(choice)].filter(Boolean);
+  // ...and a line of words is his to change while it waits, where it stands - the same type, no box around it, so nothing moves when it
+  // turns editable (the owner, 2026-11-23: "all cards should be that way if there is text"); gone, it reads what he pressed
+  const word = (f, sx = {}) => f.editable
+    ? <Box component="input" key={f.key} data-tq-act-line={f.key} aria-label={f.label} placeholder={f.optional ? "none" : f.label} value={String(vals[f.key] ?? "")}
+        disabled={!!busy} onChange={(e) => setVals((v) => ({ ...v, [f.key]: e.target.value }))}
+        sx={{ ...PICK, cursor: "text", fontSize: "inherit", fontWeight: "inherit", lineHeight: "inherit", color: "inherit", minWidth: "4ch", ...sx }} />
+    : <React.Fragment key={f.key}>{f.value}</React.Fragment>;
   // ...a `heading` line is the act's own title, drawn bold over its words (a GitHub issue's title), never "Title ..." in the header
-  const lines = fields.filter((f) => f.type === "line" && f.value && !f.heading), heads = fields.filter((f) => f.heading && f.value);
+  const has = (f) => f.value || f.editable;
+  const lines = fields.filter((f) => f.type === "line" && has(f) && !f.heading), heads = fields.filter((f) => f.heading && has(f));
   return (<MovedPast on={past}>
     <Box data-tq-act={row?.ReviewId} data-tq-act-kind={act.kind} data-tq-act-state={gone ? "done" : st.live ? "waiting" : "not-done"}
       sx={{ mt: 1, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: "var(--tq-panel, #fff)", overflow: "hidden" }}>
@@ -94,12 +104,13 @@ export default function ActionCard({ row: was, tid, live = true, onChanged, past
           {faceOf(row)}</Box>}
         <Box sx={{ minWidth: 0 }}>
           <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: INK, lineHeight: 1.2 }}>
-            {post ? row?.as || `Your ${row?.network || ""} account` : lines.map((f) => `${f.label} ${f.value}`).join(" · ") || row?.network}</Typography>
+            {post ? row?.as || `Your ${row?.network || ""} account` : lines.length ? lines.map((f, i) => <React.Fragment key={f.key}>{i ? " · " : ""}{f.label} {word(f)}</React.Fragment>) : row?.network}</Typography>
           <Typography component="div" sx={{ fontSize: 11.5, color: FAINT }}>{meta.map((m, i) => <React.Fragment key={i}>{i ? " · " : ""}{m}</React.Fragment>)}</Typography>
         </Box>
       </Box>
-      {post && lines.map((f) => <Typography key={f.key} sx={{ px: 1.5, fontSize: 12, color: DIM }}>{f.label}: {f.value}</Typography>)}
-      {heads.map((f) => <Typography key={f.key} data-tq-act-heading={f.key} sx={{ px: 1.5, pt: 0.25, fontSize: 14, fontWeight: 700, color: INK, overflowWrap: "anywhere" }}>{f.value}</Typography>)}
+      {post && lines.map((f) => <Typography key={f.key} sx={{ px: 1.5, fontSize: 12, color: DIM }}>{f.label}: {word(f)}</Typography>)}
+      {heads.map((f) => <Typography key={f.key} data-tq-act-heading={f.key} component="div" sx={{ px: 1.5, pt: 0.25, fontSize: 14, fontWeight: 700, lineHeight: 1.5, color: INK, overflowWrap: "anywhere" }}>
+        {word(f, { display: "block", width: "100%", fieldSizing: "fixed" })}</Typography>)}
       {st.live && !gone
         ? <Box component="textarea" data-tq-act-text="" value={text} onChange={(e) => setText(e.target.value)} disabled={!!busy} rows={Math.min(14, Math.max(3, text.split("\n").length + 1))}
             sx={{ display: "block", width: "100%", boxSizing: "border-box", resize: "vertical", border: 0, outline: 0, px: 1.5, py: 0.5, font: "inherit", fontSize: 13.5, lineHeight: 1.5, color: INK, bgcolor: "transparent" }} />
@@ -114,7 +125,7 @@ export default function ActionCard({ row: was, tid, live = true, onChanged, past
           : st.live && row?.connect ? <>
             {/* ...a post on a network not connected goes up through the agent's browser at his press (the owner, 2026-11-22: "card first, sign-in
                 at the press"); Connect beside it opens that card instead (outbound.connect_fix, 2026-11-08) */}
-            {post && <Button size="small" variant="contained" disableElevation data-tq-act-browser="" disabled={!!busy || !text.trim() || !!over} onClick={viaBrowser}
+            {post && <Button size="small" variant="contained" disableElevation data-tq-act-browser="" disabled={!!busy || !text.trim() || !pressable(act, p, text, vals) || !!over} onClick={viaBrowser}
               startIcon={busy === "browser" ? <CircularProgress size={12} color="inherit" /> : null}>{busy === "browser" ? "Handing it over…" : "Post via the browser"}</Button>}
             <Button size="small" variant={post ? "text" : "contained"} disableElevation data-tq-act-connect="" onClick={() => openAppLink(row.connect.href)}>{row.connect.label}</Button>
             {/* ...and the draft copy-ready beside it: never a press that can only fail (the judge's look, 2026-11-20) */}
@@ -127,7 +138,7 @@ export default function ActionCard({ row: was, tid, live = true, onChanged, past
             <Typography data-tq-not-connected="" sx={{ fontSize: 11.5, color: FAINT }}>{row.connect.says}{post ? ` - Post via the browser has the agent put it up there, and its last Post waits for you`
               : row.connect.waits ? ` - ${row.connect.waits}` : ""}</Typography></>
           : st.live ? <>
-            <Button size="small" variant="contained" disableElevation data-tq-act-press="" disabled={!!busy || !pressable(act, p, text) || !!over} onClick={() => decide("approve")}
+            <Button size="small" variant="contained" disableElevation data-tq-act-press="" disabled={!!busy || !pressable(act, p, text, vals) || !!over} onClick={() => decide("approve")}
               title={act.note || hint("approve", post ? "post" : "action")} startIcon={busy === "approve" ? <CircularProgress size={12} color="inherit" /> : null}>
               {busy === "approve" ? w.busy : w.press}</Button>
             <Button size="small" disabled={!!busy} onClick={() => decide("reject")} data-tq-act-dismiss="">Dismiss</Button>

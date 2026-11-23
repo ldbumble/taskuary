@@ -112,3 +112,12 @@ test("a post card's face is its own network's, never another's", () => {
   assert.equal(faceOf({ network: "X (Twitter)" }), "X");
   assert.equal(faceOf({ network: "LinkedIn", as: "Alex Doyle" }), "AD");
 });
+
+test("a post's title and content warning are his to change while it waits, and go with the press; where it goes and its link stay", () => {
+  const act = actionFor("reddit_post"), P = { action: "run_tool", type: "reddit_post", subreddit: "strollers", title: "Strollers then and now", text: "A short history.", flair: "History" };
+  assert.deepEqual(fieldsOf(act, P, true).filter((x) => x.editable).map((x) => x.key), ["title", "text", "flair"]);
+  assert.deepEqual(changed(act, P, { ...valuesOf(act, P), title: "Strollers, then and now", flair: "" }), { title: "Strollers, then and now", flair: "" });
+  assert.deepEqual(fieldsOf(act, P, false).filter((x) => x.editable), [], "gone or past, it reads what went");
+  const m = actionFor("mastodon_post");
+  assert.deepEqual(changed(m, { type: "mastodon_post", text: "Hi" }, { ...valuesOf(m, { text: "Hi" }), spoiler: "spoilers ahead" }), { spoiler: "spoilers ahead" });
+});

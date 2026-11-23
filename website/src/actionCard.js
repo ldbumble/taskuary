@@ -34,9 +34,13 @@ export const wordsOf = (act, values = {}) => {
   const w = (k) => picked.find((c) => c[k])?.[k] || act?.[k] || "";
   return { press: w("press"), busy: w("busy"), done: w("done"), undone: act?.undone || "Not sent" };
 };
-// only the choices the owner moved off the proposal go with the press: the server takes no other field (connectorcatalog.owner_edits)
+// ...A WAITING CARD'S WORDS ARE HIS TO CHANGE (the owner, 2026-11-23: "all cards should be that way if there is text"): its box, and each line
+// of words its act declares editable (a post's or an issue's title, labels, a content warning) - never where it goes (a repository, an item)
+export const isWords = (f) => !!f?.edit && f.type === "line";
+// only the choices and lines the owner moved off the proposal go with the press: the server takes no other field (connectorcatalog.owner_edits);
+// the box's own words go as its final_text
 export const changed = (act, p, values) => Object.fromEntries((act?.fields || [])
-  .filter((f) => f.edit && f.type === "choice" && String(values?.[f.key]) !== String(p?.[f.key] ?? f.default))
+  .filter((f) => f.edit && (f.type === "choice" || isWords(f)) && values && f.key in values && String(values[f.key] ?? "") !== String(p?.[f.key] ?? f.default ?? ""))
   .map((f) => [f.key, values[f.key]]));
 // where the card stands: waiting on the press, gone with its words and link, or not gone (`live` false: a caller that only reads it)
 export const viaBrowserSaid = (network) => `Handed to the agent - it puts this up on ${network || "the site"} in the browser, and its Post waits for you`;
@@ -54,10 +58,12 @@ export const stateOf = (row, live = true) => {
 export const textKey = (act) => (act?.fields || []).find((f) => f.type === "text" && f.edit)?.key || "text";
 // the press is lit while the box holds words - or where the act may go without them (`optional`) and the agent left none: Close issue with no
 // comment greyed over its empty box was a press nothing could light. Words the agent wrote and the owner emptied still hold it - an empty box
-// is never sent as the agent's own (verdicts takes an empty box for the draft)
-export const pressable = (act, p, text) => {
+// is never sent as the agent's own (verdicts takes an empty box for the draft). ...And a line he emptied that the act cannot go without (an
+// issue's title) holds it too: the server refuses it (owner_edits)
+export const pressable = (act, p, text, values = {}) => {
   const f = (act?.fields || []).find((x) => x.key === textKey(act));
-  return !!String(text || "").trim() || !!(f?.optional && !String(p?.[f.key] ?? "").trim());
+  const lines = (act?.fields || []).filter((x) => isWords(x) && !x.optional && x.key in values).every((x) => String(values[x.key] ?? "").trim());
+  return lines && (!!String(text || "").trim() || !!(f?.optional && !String(p?.[f.key] ?? "").trim()));
 };
 // the choices a connection keeps its own default for (`setting`), shown on its card under Connections
 export const settingsOf = (type) => (CATALOGUE.find((c) => c.type === type)?.actions || []).flatMap((a) => (a.fields || []).filter((f) => f.setting && f.type === "choice"));

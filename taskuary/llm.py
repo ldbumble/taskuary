@@ -402,8 +402,10 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     elif not no_hands and cli_tools:
         # An owner-requested setup walkthrough needs the CLI's browser tool, but it still has no
         # business in a checkout. Keep its capable process in Taskuary's scratch directory.
-        from . import config
-        scratch = config.home() / 'scratch'; scratch.mkdir(exist_ok=True); prof['cwd'] = str(scratch)
+        # ...and a task's in a folder of its own (outputs.work_folder): the shared scratch listed every task's files to every agent
+        from . import config, outputs
+        scratch = outputs.work_folder(int(task_id)) if str(task_id or '').isdigit() else config.home() / 'scratch'
+        scratch.mkdir(parents=True, exist_ok=True); prof['cwd'] = str(scratch)
     else:
         # The classifier reads untrusted text with every tool off. A report is different: it may
         # safely read files and the web, but never gets command, edit, write, or connector tools.

@@ -411,7 +411,8 @@ class ReadingOutside(unittest.TestCase):
         from taskuary import config, readgate as rg
         ssh = Path.home() / '.ssh'; ssh.mkdir(exist_ok=True); key = ssh / 'id_ed25519'; key.touch()
         self.assertEqual(rg.judge(self.s, self.tid, [str(key)], str(Path.home())), ([], rg.NEVER), 'a checkout at home')
-        self.assertEqual(rg.judge(self.s, self.tid, [str(config.home() / 'scratch' / 'a.md')], str(Path.home()))[1], '')
+        from taskuary import outputs
+        self.assertEqual(rg.judge(self.s, self.tid, [str(outputs.work_folder(self.tid) / 'a.md')], str(Path.home()))[1], '')
         rg.grant(self.s, self.tid, [str(Path.home())])
         for cmd in ('cat ~/.s*/id_ed25519', 'grep -r token ~/.[a-z]*', 'cat ~/.ss?/*'):
             self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], rg.NEVER), cmd)

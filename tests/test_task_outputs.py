@@ -385,3 +385,24 @@ class TasksSharingAFileHearItChange(unittest.TestCase):
         self.assertEqual((got, self.told), ([], []), 'reading changes nothing, and nobody is told')
         self.assertEqual(sharedfiles.users(self.s, self.pack, 'Q3 board pack working.xlsx'), {self.research})
         self.assertEqual(sharedfiles.named('Get-ChildItem C:/work', self.research), {})
+
+
+def test_a_tasks_agent_works_in_a_folder_of_its_own_never_the_shared_scratch():
+    """Walk 9, 2026-11-23: every general agent ran in the one scratch folder, and a Glob for the file attached to its ask listed another
+    task's deck, report and charts. Its own folder is where it works; another task's scratch work is not its to read."""
+    import json as _json
+    from taskuary import agents, llm, readgate
+    s = MemoryStore()
+    s.upsert_agent('claude', 'coding', 'cli', _json.dumps({'cmd': 'claude', 'args': ['-p']}))
+    got = {}
+    def run_cli(prof, prompt, trace, **kw): got['cwd'] = prof.get('cwd'); return ('ok', 's1', None)
+    with mock.patch.object(agents, 'run_cli', run_cli), mock.patch.object(agents, 'cli_has_flag', return_value=False), \
+         mock.patch.object(agents, '_resolve_cmd', return_value=['claude']):
+        llm.make_cli_llm(s, 'claude', cli_tools=True, task_id=7)('sys', 'user')
+    assert Path(got['cwd']).resolve() == outputs.work_folder(7).resolve()
+    assert Path(got['cwd']).resolve() != (config.home() / 'scratch').resolve()
+    other = outputs.work_folder(3) / 'draft.md'; other.write_text('theirs', encoding='utf-8')
+    with mock.patch.object(readgate, '_open', return_value=[]):          # ...the test's home sits in the temp folder, which is open to all
+        held, never = readgate.judge(s, 7, [str(other)], got['cwd'])
+        assert held or never, "another task's scratch work is not this task's"
+        assert readgate.judge(s, 7, [str(outputs.work_folder(7) / 'mine.md')], got['cwd']) == ([], '')

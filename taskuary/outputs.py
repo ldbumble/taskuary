@@ -36,6 +36,10 @@ PREVIEW = {'.xlsx': 'sheet', '.xlsm': 'sheet', '.csv': 'table', '.pdf': 'pdf', '
 
 
 def folder(tid: int) -> Path: return config.home() / 'scratch' / 'outputs' / task_ref(tid)
+# ...AND A FOLDER TO WORK IN OF ITS OWN (walk 9, 2026-11-23: every general agent ran in the one shared scratch folder - a Glob for the file
+# attached to its ask listed another task's deck, report and charts): its scratch work beside its outputs, never another task's
+def work_folder(tid: int) -> Path:
+    d = config.home() / 'scratch' / 'work' / task_ref(tid); d.mkdir(parents=True, exist_ok=True); return d
 def content_type(name: str) -> str: return TYPES.get(Path(name).suffix.lower()) or mimetypes.guess_type(name)[0] or 'application/octet-stream'
 
 

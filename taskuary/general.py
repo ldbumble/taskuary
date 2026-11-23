@@ -1795,14 +1795,18 @@ def report_note(store, tid: int, lead: str = ''):
     return store.add_comment(tid, 'assistant', 'agent', f'{wrapup.REPORT}\n{body}')
 
 
-def _own_file(raw: str, paths: list):
-    """The file a chat named, if it may: its own working folder (where a CLI brain's hands write) or a file this turn
-    was handed. A path an injected mail talks the model into naming - a key file, another task's attachments - is not."""
-    from . import config
-    root, handed = (config.home() / 'scratch').resolve(), {str(Path(p).resolve()) for p in paths or []}
+def _own_file(raw: str, paths: list, tid: int = None):
+    """The file a chat named, if it may: its own working folders (where a CLI brain's hands write - this task's scratch, never another's:
+    walk 9, 2026-11-23), a task's outputs (one task's deliverable is another's to send - sharedfiles) or a file this turn was handed. A path an
+    injected mail talks the model into naming - a key file, another task's attachments - is not."""
+    from . import config, outputs
+    from .browserview import downloads
+    roots = ([outputs.work_folder(tid), config.home() / 'scratch' / 'outputs', outputs.turns_folder(tid), downloads()] if str(tid or '').isdigit()
+             else [config.home() / 'scratch'])
+    roots, handed = [Path(r).resolve() for r in roots], {str(Path(p).resolve()) for p in paths or []}
     try: p = Path(raw).expanduser().resolve()
     except (OSError, ValueError): return None
-    return p if str(p) in handed or p.is_relative_to(root) else None
+    return p if str(p) in handed or any(p.is_relative_to(r) for r in roots) else None
 
 
 def _show_files(store, tid: int, named: list, paths: list, actor='assistant'):
@@ -1810,7 +1814,7 @@ def _show_files(store, tid: int, named: list, paths: list, actor='assistant'):
     the turn that showed it; one that cannot be shown says why instead of vanishing."""
     from . import session_artifacts
     for raw in named or []:
-        p = _own_file(raw, paths)
+        p = _own_file(raw, paths, tid)
         why = "only a file from the agent's own folder can be shown" if p is None else '' if p.is_file() else 'there is no such file'
         if not why:
             try: session_artifacts.shown(store, tid, p, actor); continue
@@ -1846,7 +1850,7 @@ def _files_to_attach(store, tid: int, named: list, paths: list) -> list:
     says why one was refused."""
     out = []
     for raw in named or []:
-        p = _own_file(raw, paths)
+        p = _own_file(raw, paths, tid)
         if p is None:
             store.add_comment(tid, 'assistant', 'agent', f"{file_name(raw)} was not attached to the reply - only a file from the agent's own folder, "
                               'or one that came with this task, can go with it.'); continue

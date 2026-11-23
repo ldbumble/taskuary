@@ -51,7 +51,11 @@ def own(store, tid, cwd: str = '') -> list:
     files Taskuary writes for it and tells it to read (context.files; recorded on the real CLI, 2026-11-16: its Read was refused as Taskuary's
     own data, and the agent told the owner "the task's context file was blocked from reading")."""
     from . import config, context, outputs
-    rs = [cwd, config.home() / 'scratch'] + ([outputs.folder(int(tid)), *context.files(int(tid))] if str(tid or '').isdigit() else [])
+    # ...ITS OWN SCRATCH, never every task's (walk 9, 2026-11-23): its work folder, its kept turns and the browser's downloads - and the tasks'
+    # outputs, where one task's deliverable is another's to use by its path (sharedfiles) - never another task's own scratch work
+    from .browserview import downloads
+    rs = [cwd] + ([outputs.work_folder(int(tid)), config.home() / 'scratch' / 'outputs', outputs.turns_folder(int(tid)), downloads(),
+                   *context.files(int(tid))] if str(tid or '').isdigit() else [config.home() / 'scratch'])
     if store is not None and str(tid or '').isdigit():
         # ...and each of its messages' own folders whole (artifacts.attachment_dir's: one per message - named, never made), so a search across what came on the task
         # is its own work - timed on a long task, 2026-11-16: a grep over its mail's files was refused as Taskuary's data, and it worked around

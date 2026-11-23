@@ -246,7 +246,9 @@ def workdir(store, tid: int) -> str:
     if task.get('Kind') not in GENERAL_KINDS:
         from . import agentchannels, repochoice
         d = agentchannels.cwd_of(store, tid) or str(repochoice.scratch(tid))
-    else: d = str(config.home() / 'scratch')
+    else:
+        from . import outputs
+        d = str(outputs.work_folder(int(tid)))         # ...its own, as a CLI's is (llm.make_cli_llm)
     Path(d).mkdir(parents=True, exist_ok=True)
     return d
 

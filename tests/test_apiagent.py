@@ -818,8 +818,8 @@ class TheHandsTests(unittest.TestCase):
     def run_(self, tool, **a): return apiagent.run_tool(self.s, self.tid, 'sid-h', tool, a)
 
     def test_a_general_task_works_in_the_folder_a_general_cli_does(self):
-        from taskuary import config
-        self.assertEqual(Path(apiagent.workdir(self.s, self.tid)), config.home() / 'scratch')
+        from taskuary import outputs
+        self.assertEqual(Path(apiagent.workdir(self.s, self.tid)), outputs.work_folder(self.tid))      # ...its own (walk 9)
 
     def test_a_coding_task_works_in_its_checkout(self):
         tid = self.s.create_task({'Title': 'Fix the build', 'Summary': 'go', 'Kind': 'coding', 'Status': 'open'}, 'owner')

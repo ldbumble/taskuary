@@ -608,8 +608,9 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'my_task':
         t = store.get_task(tid) or {}
         items = [f"[{i['id']}] {'x' if i.get('done') else ' '} {i.get('text')}" for i in store.task_checklist(tid)]
+        from .store import files_of             # ...and the files his ask came with (walk 9: "no attached data" while one sat in its folder)
         return _out(_j({'task': t.get('Title'), 'summary': t.get('Summary'), 'status': t.get('Status'), 'done_when': t.get('DoneWhen'),
-                        'checklist': items}), fence_it=True)
+                        'checklist': items, **({'files': files_of(t)} if files_of(t) else {})}), fence_it=True)
     if name == 'search_tasks':
         from . import search
         got = search.everything(store, a.get('words', ''))

@@ -3399,21 +3399,22 @@ def earlier_verdict(store, m: dict, mid) -> dict:
     return {'why': ' '.join(why.split())[:300], 'danger': danger(store, m, mid), 'summary': str(v.get('summary') or '').strip(), 'checklist': items[:12]}
 
 
-def ask_later(store, tid: int, m: dict, plain: str, earlier: dict = None):
+def ask_later(store, tid: int, m: dict, plain: str, earlier: dict = None, summary: bool = True):
     """Read the ask out of `m` off the press and put it on `tid`. No brain, nothing to wait for: `plain` is the answer. Where triage
     already read the ask when the message came in (its stored verdict's summary), that reading is it - never a model asked again; a
-    message it read as steering an AI is read again, told so (triage.extract_ask's flagged reading: the owner's own safe checklist)."""
-    if (earlier or {}).get('summary') and not earlier.get('danger'): return _fill(store, tid, plain, earlier)
+    message it read as steering an AI is read again, told so (triage.extract_ask's flagged reading: the owner's own safe checklist).
+    `summary`: False where `plain` is the owner's own ask - his words stay the task's summary; only its steps are read out of them."""
+    if (earlier or {}).get('summary') and not earlier.get('danger'): return _fill(store, tid, plain, earlier, summary)
     from . import llm as _llm
     llm = _llm.build_llm(store, job='triage')
-    if llm: threading.Thread(target=_enrich, args=(store, tid, m, plain, llm, earlier), daemon=True, name=ENRICH_THREAD).start()
+    if llm: threading.Thread(target=_enrich, args=(store, tid, m, plain, llm, earlier, summary), daemon=True, name=ENRICH_THREAD).start()
 
 
-def _fill(store, tid: int, plain: str, ask: dict):
+def _fill(store, tid: int, plain: str, ask: dict, summary: bool = True):
     """Fill in only what the press left plain: an ask or a checklist the owner wrote meanwhile is theirs."""
     t = store.get_task(tid)
     if not t: return
-    if ask.get('summary') and ask['summary'] != plain and (t.get('Summary') or '') == plain: store.update_task(tid, {'Summary': ask['summary']}, 'triage')
+    if summary and ask.get('summary') and ask['summary'] != plain and (t.get('Summary') or '') == plain: store.update_task(tid, {'Summary': ask['summary']}, 'triage')
     if ask.get('checklist') and not store.task_checklist(tid): store.set_task_checklist(tid, ask['checklist'], 'triage')
     # ...and a title that is only a link is named from the ask (walk 5, 2026-11-19: "http://127.0.0.1:18803/" stood on the rail)
     link, said = re.compile(r'\s*<?https?://\S+>?\s*'), ' '.join(str(ask.get('summary') or '').split())
@@ -3422,9 +3423,9 @@ def _fill(store, tid: int, plain: str, ask: dict):
 
 
 @aiusage.named('triage.title')       # the triage brain titling a task the owner made by hand: not a mail's triage (aiusage.asking)
-def _enrich(store, tid: int, m: dict, plain: str, llm, earlier: dict = None):
+def _enrich(store, tid: int, m: dict, plain: str, llm, earlier: dict = None, summary: bool = True):
     from . import triage as _triage
-    try: _fill(store, tid, plain, _triage.extract_ask(m, llm, earlier=earlier))
+    try: _fill(store, tid, plain, _triage.extract_ask(m, llm, earlier=earlier), summary)
     except Exception as e: logger.warning(f"the ask on {task_ref(tid)} stays the sender's own words - {e}")
 
 

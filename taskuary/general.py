@@ -3143,7 +3143,11 @@ class GeneralSession:
             if quick and (meet := meeting_times(self.store, self.task_id)): prior = '\n\n'.join(x for x in (prior, meet) if x)
             if prior: user = f'{prior}\n\n{user}'
             from . import outputs
-            source_paths = [r['path'] for r in outputs.task_files(self.store, self.task_id) if r.get('attachment') and r['path']]
+            # ...THE FILES THE TASK CAME WITH, BY EVERY DOOR: a mail's attachments and his ask's own (its Files field - New, the phone). New's
+            # were saved and drawn on his line, and never named to the agent (walk 9, 2026-11-23: five asks "from this" answered "no file")
+            from .store import files_of
+            source_paths = [r['path'] for r in outputs.task_files(self.store, self.task_id) if r.get('attachment') and r['path']] \
+                           + files_of(self.store.get_task(self.task_id))
             paths = list(dict.fromkeys(source_paths + list(attachments or [])
                                        + [m.group('path') for m in _IMAGE_PATH.finditer(text)]))
             def visible(kind, name, detail):

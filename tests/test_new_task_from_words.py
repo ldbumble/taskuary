@@ -130,6 +130,34 @@ class NewsBoxIsTheOneStartTests(unittest.TestCase):
         self.assertEqual(test().returncode, 0, said)
         self.assertIn('Round totals to cents', git('log', '-1', '--format=%s').stdout, said)
 
+    def test_a_file_attached_in_new_is_named_in_the_first_turn_under_his_own_ask(self):
+        """Walk 9, 2026-11-23: five asks with a file attached in New - "make a chart of monthly spend from this" + budget.csv - and the agent's
+        first turn named no file ("your request came through with no figures or attachment"), while the same file on a chat line was read.
+        His ask was headed "TASKUARY'S WORDS ON THIS TURN - not the owner's", and triage's reading ("the message has no body or attached data")
+        replaced his words as the task's summary that my_task hands the agent."""
+        from taskuary import apiagent, browserview as bv, llm, outputs, agenttools
+        seen = []
+        class Card:
+            def chat(self, msgs, tools, max_tokens, **kw): seen.append(msgs[0]['content'] + str(msgs[1]['content'])); return {'content': 'Done.'}
+        def opened(store, tid, **kw):
+            s_ = general.GeneralSession(store, tid); s_.pick, s_.provider, s_.model = 'connector:1', 'Northwind AI', ''
+            return s_
+        general.start_session.side_effect = opened
+        class Now:                         # ...the first turn, run where it is started
+            def __init__(self, target, args=(), **kw): self.target, self.args = target, args
+            def start(self): self.target(*self.args)
+        ask = 'Make a chart of monthly spend from this.'
+        with mock.patch.object(llm, 'build_llm', return_value=Card()), mock.patch.object(bv, 'installed', return_value=False), \
+             mock.patch.object(bv, 'can_set_up', return_value=False), mock.patch.object(apiagent, 'taskuary_tools', return_value=[]), \
+             mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch('taskuary.concierge.threading', mock.Mock(Thread=Now)), mock.patch('taskuary.ingest.threading', mock.Mock(Thread=Now)), \
+             mock.patch('taskuary.triage.extract_ask', return_value={'summary': 'The sender asks for a chart. The message has no attached data.'}):
+            tid = concierge.handoff_task(self.s, ask, 'general', 'owner', said=ask, files=[str(self.up)], door='New')['taskId']
+        self.assertTrue(seen, 'the first turn ran')
+        self.assertIn(str(outputs.folder(tid) / 'october-spend.csv'), seen[0])
+        self.assertNotIn("TASKUARY'S WORDS", seen[0])
+        mine = agenttools.call(self.s, tid, 'my_task', {}, {})
+        self.assertNotIn('no attached data', mine); self.assertIn('october-spend.csv', mine)
+
     def test_with_no_ai_nothing_is_made_and_the_line_carries_its_way_past(self):
         r = self.start('Find three caterers near the office', ai=False)
         self.assertEqual(r.status_code, 422); self.assertEqual(self.s.list_tasks(None), [])

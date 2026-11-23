@@ -4918,10 +4918,15 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
                 # 46 s of a 61 s answer): triage's summary and checklist go on the task at once, as a promoted message's do (ingest.ask_later) -
                 # read again, beside the turn, only where triage read the words as steering an AI. Who else is written to is the agent's to judge
                 # ...read beside its agent where triage did not (New - walk 5, 2026-11-22: a 10-step ask got one box, ticked whole): never waited on
-                ingest.ask_later(store, made['taskId'], {'body': job}, job, {k: read.get(k) for k in ('summary', 'checklist', 'danger')} if read else None)
-                # ...Taskuary's brief, never a second line in the owner's name: their words are the task's own message already, and the chat
-                # drew them twice (the click-through, 2026-11-12)
-                session.send_prompt(brief, brief=True)
+                # ...HIS WORDS STAY HIS (walk 9, 2026-11-23): triage's reading of a New ask with a file - "the message has no body or attached
+                # data" - replaced them as the task's summary, which my_task handed the agent as fact. From a door, read for its steps alone
+                ingest.ask_later(store, made['taskId'], {'body': job}, job, {k: read.get(k) for k in ('summary', 'checklist', 'danger')} if read else None,
+                                 summary=not door)
+                # ...never a second line in the owner's name: their words are the task's own message already, and the chat drew them twice (the
+                # click-through, 2026-11-12). From a door they ARE his ask: his turn (kept - filed already), his files with it (send_prompt's one
+                # road for a task's files) - headed "Taskuary's words", the agent read his own ask as the app's (walk 9)
+                if door: session.send_prompt(brief, kept=True)
+                else: session.send_prompt(brief, brief=True)
             # ...a first turn that failed is filed on its task in plain words (send_prompt: say_failure) - nothing is left to raise into a thread
             except Exception as e: logger.info(f"task {made['taskId']}: its first turn failed - {e}")
             finally: general.OPENING.discard(made['taskId'])

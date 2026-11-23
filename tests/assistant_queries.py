@@ -461,8 +461,6 @@ POWERS = [
       c('report.route', title='AP ageing', line='alert', how='rule', rule='count', count=10), 'open:#report=', freq=2),
     Q('people', 'that is wrong about Gail', None, [c('memory.about', who='Gail'), 'Nothing in the memory about Gail yet, so nothing to take out.'],
       'read:memory.about', freq=2),
-    Q('app', 'set me up as an AP rep', None, c('role.apply', role='ap_rep'),
-      'open:#report=playbooks', freq=2, note="on the desk a role is the Playbooks shelf's own Set up - its questions are asked there"),
 ]
 CASES += POWERS
 

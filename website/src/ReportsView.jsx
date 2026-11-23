@@ -43,7 +43,6 @@ import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
 import { routeOfHash } from "./canvasLinks.js";
 import { NewPlaybook, PB_EMPTY, PB_OPEN, PlaybookDetail, PlaybookRow, RecentlyDeleted as PlaybooksDeleted, pbOpen, usePlaybooks } from "./PlaybookShelf.jsx";
-import RoleStart from "./RoleStart.jsx";
 import { NEW_PB, takePlaybookAsk } from "./playbookOpen.js";
 import SetupWithAi, { onBuilt } from "./SetupWithAi.jsx";
 import { useViewExtras } from "./pageView.js";
@@ -641,9 +640,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
       tools: section === "playbooks" ? (browseState.open == null ? <Box sx={{ display: "flex", flexDirection: "column" }}>
         <NewPlaybook key={browseState.newFor || browseState.newPb || ""} connectorType={browseState.newFor || ""} asked={!!browseState.newPb} onDone={pbs.load} button={false}
           onManual={() => onBrowseState?.({ section: "playbooks", open: `${PB_OPEN}new` })} />
-        {!!pbs.err && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "var(--tq-danger, #6b2733)" }}>✗ {pbs.err}</Typography>}
-        {/* ...and the one-click road to a whole role - its playbooks and its daily job (roles.py) - until it is taken */}
-        <Box sx={{ mt: 1.5 }}><RoleStart onApplied={pbs.load} /></Box></Box> : null)
+        {!!pbs.err && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "var(--tq-danger, #6b2733)" }}>✗ {pbs.err}</Typography>}</Box> : null)
       : section && browseState.open == null ? (
         <Box sx={{ mt: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
           <UndoLine kinds={["report", "workflow", "dashboard"]} onRestored={load} sx={{ mb: 0 }} />

@@ -14,11 +14,8 @@ Nothing here executes. On the desk a CALL brings up the button that does it, lit
 (concierge.routes, the owner 2026-10-19) - the press is the confirmation; on a phone it is a yes-or-no (PW-123/124).
 """
 import json, re
-from . import buttons, devphone, operations, roles
+from . import buttons, devphone, operations
 L = buttons.label        # a button is named by its one label (buttons.json) - never retyped in a tool's sentence
-
-# the roles a role.apply call may name, from roles.ROLES - a list in prose here would drift from what applies
-_ROLES = ' | '.join(f"{k} ({r['title'].lower()})" for k, r in roles.ROLES.items())
 
 # What each operation is FOR, in the owner's terms. Kinds absent from here are internal roads the chat
 # has no business offering (triage corrections, dispatch plumbing) and are left out of the catalogue.
@@ -211,12 +208,6 @@ PURPOSE = {
                                  'Yahoo, a domain address) - never another product of the same company. Never carrying a secret: the owner gives it on the card. '
                                  # a system with no card was "said so" and left there (the Connections audit, 2026-11-02)
                                  'A system the catalogue has no card for is a feature request: issue.draft'),
-    # A ROLE IS A WALK, NOT A GUESS (the owner, 2026-10-08: "the assistant should be able to walk a user through setting up
-    # new role and work"): the chat asks what a role needs, then puts the whole set-up on one card.
-    'role.apply':               ("set Taskuary up for the owner's job in one go - its worker, playbooks and daily workflow. `role`: "
-                                 + _ROLES + ". Before calling, ASK the owner the address of their "
-                                 "bill-approval portal (`portal`; fine to leave out). The workflow is created OFF: after the yes, offer to run it once (report.run), and say "
-                                 "they sign in to the portal themselves in the browser pane"),
     # THE APP ITSELF, by name. A report is named by `title` (part of its name) or `source_id`; a
     # connection by `name` or `connector_id`; a setting by `key` or `label`. Each opens its page, the knob or button to press on it.
     'report.run':               ('run a report or workflow now - `title` (or `source_id`); a report lands in the pipe when done, '
@@ -552,7 +543,7 @@ BUCKETS = (
                                                             'preference.exclude_sender', 'preference.sender_rule', 'message.retriage')),
     ('reports', 'reports and workflows', ('report.create', 'report.run', 'report.rerun', 'report.pause', 'report.resume',
                                           'report.route', 'report.edit', 'report.delete', 'advisor.ideas')),
-    ('app', 'settings, connections, scripts, memory, rules, bell, Hub, Board, Search', ('setting.set', 'connection.create', 'role.apply', 'connection.test', 'connection.pause',
+    ('app', 'settings, connections, scripts, memory, rules, bell, Hub, Board, Search', ('setting.set', 'connection.create', 'connection.test', 'connection.pause',
                                                              'connection.resume', 'app.repair', 'issue.draft', 'script.start', 'memory.remember', 'memory.wrong', 'people.relate',
                                                              'rule.change', 'deleted.restore', 'hub.publish', 'hub.comment', 'hub.vote', 'page.open', 'problems.dismiss')),
 )
@@ -561,7 +552,7 @@ BUCKETS = (
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
 HINTS = {'task.create_from_text': 'kind, text, channel?, to?', 'report.route': 'line, how, to?', 'pipe.remove': 'select, learn?','agents.stop': 'refs|all', 'page.open': 'page, query?', 'pipe.block': 'select, how?', 'pipe.mine': 'select', 'rule.change': 'about, how?', 'hub.vote': 'post, up?', 'memory.remember': 'note, section, about?, replaces?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'issue.draft': 'kind, trying, happened', 'pipe.clear': 'select, scope?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, new?', 'coding_agent': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text, section', 'setup': 'text', 'task.handoff': 'who, note?', 'task.share': 'who, about?', 'task.complete': 'note?',
-         'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?', 'task.check': 'item, done?, note?', 'task.checklist': 'add?, items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until', 'meeting.new': 'who?, about?, when?, minutes?'}
+         'dispatch.prepare': 'kind, instructions?', 'task.check': 'item, done?, note?', 'task.checklist': 'add?, items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until', 'meeting.new': 'who?, about?, when?, minutes?'}
 
 
 def signature(kind: str) -> str:

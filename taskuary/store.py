@@ -1014,7 +1014,7 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     # profile is found by its kind (agents.coding_role), the CLI by default_brain; an old value is
                     # read once by agents.migrate_brain_settings and then cleared
                     'default_agent': '',
-                    # the worker general work lands on when triage names none - an AP rep's `ap` (roles.py)
+                    # an old install's default worker for general work; nothing routes by it
                     'default_profile': '',
                     # WHICH CLI runs a worker session - coding and general alike. Blank derives
                     # it from default_agent's profile, so an upgrade changes nothing until the

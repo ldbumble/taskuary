@@ -2028,10 +2028,6 @@ def _run_kind(op: dict, background: BackgroundTasks):
                  else 'validation failed' if c.get('LastError') else 'saved, not yet verified')
         return {'connectorId': out['connectorId'], 'type': c.get('Type') or typ, 'name': c.get('Name') or name, 'state': state,
                 'active': bool(c.get('Active')), 'link': f"#connector={out['connectorId']}"}
-    if kind == 'role.apply':
-        # the same road the Playbooks shelf's Set up takes (roles.apply) - the chat walked the owner to it
-        from . import roles
-        return roles.apply(store, str(p.get('role') or ''), str(p.get('portal') or ''))
     if kind == 'pipe.clear':
         from . import concierge
         # a SELECTOR names the set - the model's, checked by select_items - and nothing else clears: a word list matching the
@@ -10334,21 +10330,6 @@ def agents():
             'brain_models': {k: {'choices': c['choices'], 'models': c['models'], 'installed': k in brains_here,
                                  'default': (cli_connections.gears(cfg, k) or {}).get('model') or ''}
                              for k in conns for c in [climodels.catalog(cli_connections.cli_key(conns[k].get('cmd')) or k)]}}
-
-@app.get('/api/roles')
-def roles_list():
-    """The roles one click sets Taskuary up for (roles.py): a worker, its playbooks, its daily job."""
-    from . import roles
-    return {'data': roles.catalog(store)}
-
-class RoleBody(BaseModel):
-    portal: str = ''
-
-@app.post('/api/roles/{name}')
-def roles_apply(name: str, body: RoleBody):
-    from . import roles
-    try: return roles.apply(store, name, body.portal)
-    except ValueError as e: raise HTTPException(422, str(e))
 
 def _template_text(name: str) -> str:
     "The shipped template of an operator document (templates/<name>.md), '' for one that ships none."

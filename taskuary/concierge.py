@@ -3593,8 +3593,6 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
                     channel=str(params.get('channel') or ''), recurs=recurs,
                     job={'repo': str(params.get('repo') or ''),
                          'title': ' '.join(str(params.get('title') or '').split())})
-    if routes() and kind == 'role.apply':
-        return _page(store, tid, item, '#report=playbooks', ROLE_OPENED)
     if kind == 'task.create_from_text' and str(params.get('kind') or '') in task_kinds.AGENT:
         verb = 'coding_agent' if params['kind'] == 'coding' else 'regular_agent'
         dec = {'verb': verb, 'text': str(params.get('text') or text or '').strip(),
@@ -3611,12 +3609,6 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # The composer builds it from the owner's words, exactly as a DECIDE setup does; the model already said "report".
     if kind == 'report.create':
         return setup_turn(store, tid, text, text, item, actor, sorted_as='report')
-    if kind == 'role.apply':
-        from . import roles
-        want = str(params.get('role') or '').strip().lower()
-        hit = want if want in roles.ROLES else next((k for k, v in roles.ROLES.items() if want and want in v['title'].lower()), None)
-        if not hit: raise CallMiss('The roles I can set up: ' + '; '.join(f"{k} ({v['title']})" for k, v in roles.ROLES.items()) + '. Nothing was set up.')
-        return role_card(store, tid, hit, params.get('portal'), item, actor)
     # THE DRAFTS IN TURN (the owner, 2026-10-20: "approve all drafts - each draft still goes through its own Send"): the next one comes up
     # with Send lit, and the line says how many wait - never sent from here. On a phone the next draft is the walk's card, its Send a choice
     if kind == 'review.each':
@@ -5255,8 +5247,8 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
 # ── setting things up from the chat (PW-194..197): sorted and gathered by AI, confirmed, created through the tabs' roads ──
 SETUP_QUESTIONS = 'setup_questions'
 SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small company\'s assistant. Answer JSON only: '
-                     '{"kind": "report" | "routine" | "playbook" | "connection" | "role" | "investigate", "provider": "<connector type or null>", '
-                     '"role": "<a key from roles, or null>", "why": "<one sentence>", '
+                     '{"kind": "report" | "routine" | "playbook" | "connection" | "investigate", "provider": "<connector type or null>", '
+                     '"why": "<one sentence>", '
                      '"recurs": <for a routine: {"schedule": "<when it runs, in the owner\'s words>", "objective": "<the job, without the clock>", '
                      '"repo": "<a repository the owner named, or null>", "skill": "<a skill the owner named, its slash-command name, or null>"}; '
                      'else null>, '
@@ -5268,10 +5260,6 @@ SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small comp
                      'conversation_before, when given, is what was said just before: the request continues it - a routine asked for '
                      'there and described here is that routine - kind routine even when it reads a portal behind a sign-in (the agent a routine runs has '
                      'a browser), its schedule null when no clock was said. '
-                     # (the owner, 2026-10-08: "the assistant should be able to walk a user through setting up new role and work")
-                     'A ROLE is the owner naming their JOB and asking for Taskuary to be set up for it ("I am an AP rep, set me '
-                     'up", "I do accounts payable") - answer role, with its key from roles, when the job is one of them; a job '
-                     'that is not in roles is investigate. '
                      'A REPORT reads connected systems on a schedule and files what it found (a check, a digest). '
                      # (the owner, 2026-10-29: "every Monday at noon run the user management review skill" became a one-off agent task)
                      'A ROUTINE is a job that DOES work again and again on a clock - an agent run, a skill run, a review that opens tasks or '
@@ -5349,17 +5337,12 @@ def sort_setup(store, text: str, llm, before: str = '') -> dict:
     types = sorted(set(store_mod.DEFAULT_ROLES) | {c['type'] for c in connectorcatalog.cards() if not c.get('planned')})
     # each type with its card's title: "imap" alone never said it is any mailbox, so a Zoho mailbox went to the one type that said Zoho
     titled = {t: (connectorcatalog.by_type(t) or {}).get('title') or t for t in types}
-    from . import roles
-    have = {k: r['title'] for k, r in roles.ROLES.items()}
-    try: out = compose._json(llm(SETUP_SORT_SYSTEM, json.dumps({'request': text, **({'conversation_before': before} if before else {}), 'connector_types': titled, 'roles': have}), max_tokens=300)) or {}
+    try: out = compose._json(llm(SETUP_SORT_SYSTEM, json.dumps({'request': text, **({'conversation_before': before} if before else {}), 'connector_types': titled}), max_tokens=300)) or {}
     except Exception as e:
         logger.warning(f'concierge: the set-up sort failed - {e}'); out = {}
     kind = str(out.get('kind') or 'report').lower(); prov = str(out.get('provider') or '').lower().strip()
-    role = str(out.get('role') or '').lower().strip()
-    # a role nobody ships is still a real ask - it is digging, never a report built from nothing
-    if kind == 'role' and role not in have: kind = 'investigate'
-    return {'kind': kind if kind in ('report', 'routine', 'playbook', 'connection', 'role', 'investigate') else 'report', 'provider': prov if prov in types else None,
-            'role': role if kind == 'role' else None, 'why': str(out.get('why') or '')[:300], 'title': _title_cut(out.get('title') or ''),
+    return {'kind': kind if kind in ('report', 'routine', 'playbook', 'connection', 'investigate') else 'report', 'provider': prov if prov in types else None,
+            'why': str(out.get('why') or '')[:300], 'title': _title_cut(out.get('title') or ''),
             'name': str(out.get('name') or '').strip()[:80], 'signs_in': str(out.get('signs_in') or '').strip()[:120],
             **({'recurs': recurs_of(out.get('recurs'))} if kind == 'routine' else {})}
 
@@ -5480,19 +5463,15 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
     pending, answers = _pending_setup(store, tid), None
     if pending:
         ask, answers = pending['ask'], {'questions': pending.get('questions') or [], 'reply': text}
-        # a role's questions were asked about THAT role: the answer is to them, not a new request to sort
-        if pending.get('role') and not routes(): return _propose_role(store, tid, ask, pending['role'], item, actor, cllm, answers)
         sort = sort_setup(store, f"{ask}. The owner answered: {text}", cllm)
     elif sorted_as: sort = {'kind': sorted_as, 'provider': None, 'why': ''}      # the chat model already named it
     else: sort = sort_setup(store, ask, cllm, before=_turns(store, tid, 4))
     vault = signin_lead(store, sort.get('signs_in'))
-    # ON THE DESK A SET-UP IS ITS OWN PAGE (routes): a report is New's report box, a connection its card, a role its Set up on Playbooks, and
-    # digging an agent's job in New - each with its own button to press; nothing is composed into a card to confirm here
+    # ON THE DESK A SET-UP IS ITS OWN PAGE (routes): a report is New's report box, a connection its card, digging
+    # an agent's job in New - each with its own button to press; nothing is composed into a card to confirm here
     if routes():
         if sort['kind'] in ('report', 'playbook'): return _new(store, tid, item, sort['kind'], ask)
         if sort['kind'] == 'routine': return _new(store, tid, item, 'workflow', ask, recurs=sort.get('recurs') or recurs_of({'objective': ask}), lead=vault)
-        if sort['kind'] == 'role':
-            return _page(store, tid, item, '#report=playbooks', ROLE_OPENED)
         if sort['kind'] == 'investigate': return _new(store, tid, item, 'general', ask, lead=vault)
         if sort.get('provider'):
             return call_turn(store, tid, {'kind': 'connection.create', 'params': {'type': sort['provider']}}, item, text, actor)
@@ -5517,8 +5496,6 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
                             title=sort.get('title') or '')
     if sort['kind'] == 'connection':
         return _propose_connection(store, tid, ask, sort.get('provider'), item, actor)
-    if sort['kind'] == 'role':
-        return _propose_role(store, tid, ask, sort['role'], item, actor, cllm)
     from . import compose
     out = compose.compose(store, ask, cllm, answers=answers)
     if out.get('questions'):
@@ -5547,49 +5524,6 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
 # that level - a hundred report types printed on a Todoist card as its "permissions" (2026-09-23)
 SCOPE_SAYS = {'read': 'it can read, never change or send', 'write': 'it can read and make changes',
               'admin': 'it can read, make changes and administer the account'}
-
-
-ROLE_READ_SYSTEM = ('You read the owner\'s answer to set-up questions. Answer JSON only: {"portal": "<the web address they gave, '
-                    'or empty>"}.')
-
-
-ROLE_OPENED = "Opened Playbooks under Reports - press Set up beside the job you do."
-
-
-def _propose_role(store, tid: int, ask: str, role: str, item: dict | None, actor: str, llm, answers: dict = None) -> dict:
-    """A role (roles.py), walked: the questions it needs, asked once as a numbered list; the answer read for intent by the
-    model (never by matching words); then the whole set-up on ONE card - playbooks, workflow, ledger. Where the mail goes is not
-    asked: a task's general work runs on the assistant (the owner, 2026-11-04)."""
-    from . import compose, roles
-    r = roles.ROLES[role]
-    rec = lambda body, card=None: record_related(store, tid, item, 'assistant', body, card)
-    if answers is None:
-        qs = ['What is the address of your bill-approval portal? Say skip to add it later.'] if r.get('workflow') else []
-        if not qs: return role_card(store, tid, role, '', item, actor)      # nothing to ask: straight to the card
-        say_ = f"To set Taskuary up for {r['title'].lower()}:\n" + '\n'.join(f"{n}. {q}" for n, q in enumerate(qs, 1)) + '\n\nNothing is set up yet.'
-        rec(say_, {'kind': SETUP_QUESTIONS, 'ask': ask, 'questions': qs, 'role': role})
-        return {'say': say_, 'options': [], 'decision': None}
-    try: got = compose._json(llm(ROLE_READ_SYSTEM, json.dumps(answers), max_tokens=200)) or {}
-    except Exception as e:
-        logger.warning(f'concierge: reading the role answers failed - {e}'); got = {}
-    return role_card(store, tid, role, got.get('portal'), item, actor)
-
-
-def role_card(store, tid: int, role: str, portal, item: dict | None, actor: str) -> dict:
-    """The Set it up card for a role - what it lays out, line by line, before the owner's yes."""
-    from . import playbooks, roles
-    r = roles.ROLES[role]
-    portal = str(portal or '').strip()
-    if portal and '://' not in portal: portal = 'https://' + portal
-    params = {'role': role, 'portal': portal}
-    wf = r.get('workflow') or {}
-    lines = ['Playbooks: ' + '; '.join(playbooks.parse(roles.playbook_text(b))['title'] for b in r['playbooks']),
-             *([f"Ledger: {(store.get_connector_by_type(r['ledger']) or {}).get('Name') or r['ledger']} set to read if nobody chose its "
-                'authority, so nothing reaches it without your click'] if r.get('ledger') else []),
-             *([f"Routine: \"{wf['title']}\", daily at {wf.get('daily_at', '')}, created switched off" + (f" - {portal}" if portal else '')] if wf else [])]
-    tail = '\n' + '\n'.join(lines) + '\n\n' + WAITS
-    prop = _propose_raw(store, tid, 'role.apply', 0, params, 'Set it up', r['title'], tail, actor, item)
-    return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
 
 
 def _propose_connection(store, tid: int, ask: str, provider: str | None, item: dict | None, actor: str) -> dict:
@@ -5662,7 +5596,6 @@ def op_label(kind: str, p: dict) -> str:
     if kind == 'task.complete' and str(p.get('note') or '').strip(): label = L('close_note')     # the badge names the button that did it
     if kind == 'report.create': label = 'Create the report'
     if kind == 'connection.create': label = 'Create the connection'
-    if kind == 'role.apply': label = 'Set it up'
     if kind in toolcatalog.INSTANT or kind == 'report.delete': label = toolcatalog.PURPOSE.get(kind, kind).split(' - ')[0].strip()
     label = {'hub.publish': 'Save it to the Hub', 'task.update': 'Change the task', 'task.set_kind': 'Change what kind of work it is', 'task.set_repo': 'Put it in that repository',
              'task.check': 'Tick the checklist item', 'task.checklist': 'Change the checklist', 'task.watch': 'Watch it for you', 'task.comment': 'File the note', 'task.handoff': 'Write the hand-off for your yes',
@@ -5704,9 +5637,6 @@ def describe_op(store, op: dict) -> tuple:
         elif tk == 'source' and target: ref = f'report {target}'
         elif tk == 'report': ref = str(p.get('title') or '')
         elif tk == 'connector': ref = str(p.get('name') or '')
-        elif tk == 'role':
-            from . import roles
-            ref = (roles.ROLES.get(str(p.get('role') or '')) or {}).get('title', '')
     except Exception: ref = ''
     return label, ref
 
@@ -5792,13 +5722,6 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'connection.create' and o.get('connectorId'):
         return (f" The {o.get('type')} card \"{o.get('name')}\" is {o.get('state')} - finish it on the card (sign in or paste the secret there), "
                 'then Test; it stays off until you turn it on.')
-    if kind == 'role.apply' and o.get('role'):
-        bits = [f"{plural(len(o['playbooks_added']), 'playbook')} added" if o.get('playbooks_added') else 'its playbooks were already here']
-        if o.get('ledger_narrowed'): bits.append(f"{o['ledger_narrowed']} is set to read, so nothing reaches it without your click")
-        flow = (f" \"{o['workflow_title']}\" is under Reports, switched off. Say run it and I'll start it once - "
-                'when it stops at the sign-in, sign in yourself in the browser beside the chat.') if o.get('workflow_id') else ''
-        said = '; '.join(bits)
-        return f' {said[0].upper()}{said[1:]}.{flow}'
     if kind == 'task.complete' and o.get('already'): return ' It was closed already.'
     return ''
 

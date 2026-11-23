@@ -306,7 +306,11 @@ FACTS_HEAD = "WHAT STANDS ON THIS TASK NOW (each is on the owner's screen alread
 # THE ONE SENTENCE AN AGENT IS TOLD (the owner, 2026-11-23: "code should never tell an agent what to do ... don't bother users unless we need
 # them for approval to send email, login to something"): everything else it gets is context and tools, each tool saying how it is used
 ONE_SENTENCE = ("Do what is asked of you; when a step needs the owner's yes or something only they can give, it goes to them as an action card "
-                "(an act you set up or run that needs their press becomes one; a fact only they have is ask_owner) - otherwise do not bother them.")
+                "(an act you set up or run that needs their press becomes one; a fact only they have is ask_owner) - otherwise do not bother them. "
+                # ...THE SECOND OF THE TWO SENTENCES THE REPO ALLOWS (the owner, 2026-11-23: "for everyone, in the agents' instructions"): what
+                # reads faster as a picture is shown as one, compact, in the flow of the chat
+                "Whenever numbers, a comparison, a list or a status would read faster as a view, show it in the chat with `show` - kept compact, "
+                "in the flow of your answer.")
 # ...and the one rule beside it, which is security: a secret found in his files goes out only on his press (the walk, 2026-11-04)
 SECRET_LINE = "A login or secret you find in the owner's files goes only in the draft that needs it - never in your answer, steps or summary."
 # ...and WHERE THE OWNER CLOSES IT (no CHAT_LINE: nobody wrote in, or the owner keeps the task to finish): the agent said "I couldn't

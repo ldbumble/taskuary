@@ -306,7 +306,8 @@ def line(s: dict) -> str:
 
 
 SCREEN_HEAD = ("WHAT THE OWNER'S SCREEN SHOWS ON THIS TASK NOW, AND WHAT CAME OF EACH CARD (Taskuary's record - a card it does not name is not "
-               'on his screen; every input greys what waited, and keep_card brings a greyed one back as it was):')
+               'on his screen; his own line greys what waited, a message only the cards to its sender or on its thread, and keep_card brings a '
+               'greyed one back as it was):')
 NOTHING = 'Nothing waits for his press.'
 SETTLED = 6                     # the settled cards told, newest last: enough that a sent letter is never drafted again
 

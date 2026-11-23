@@ -748,12 +748,34 @@ class TheChatMovedOn(unittest.TestCase):
         self.assertTrue(proposals.passed(r), 'set aside for good as the agent hears it')
         self.assertIn(f'rv{rid}', cardqueue.screen(self.s, self.tid).split('Greyed, will not go')[1], 'and the agent is told, to raise it again')
 
-    def test_a_mail_that_came_in_after_it_greys_it_too(self):
-        self.s.set_setting('owner_email', 'alex@northwind.example', 'owner')                  # ...a colleague's mail: no stranger held behind trust
-        rid = self.closeout()
-        self.s.add_message({'TaskId': self.tid, 'ExternalId': 'g-1', 'ConversationId': 'th-1', 'Channel': 'email', 'Subject': 'Deploy',
-                            'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example', 'BodyText': 'Hold the deploy until Friday.', 'Status': 'routed'})
-        self.assertEqual(proposals.written_past(self.s, self.tid), {rid})
+    def reply_to_gail(self):
+        """Gail asked on her thread, and her reply is ready."""
+        self.s.set_setting('owner_email', 'alex@northwind.example', 'owner')                  # ...colleagues' mail: no stranger held behind trust
+        mid = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'g-0', 'ConversationId': 'th-gail', 'Channel': 'email', 'Subject': 'Deploy',
+                                  'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example', 'BodyText': 'When does it go out?', 'Status': 'routed'})
+        self.s._exec("UPDATE message SET CreatedAt='2026-11-16 08:00:00' WHERE MessageId=?", (mid,))
+        rid = self.s.add_review({'TaskId': self.tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Gail - Thursday.'})
+        self.s._exec("UPDATE review SET CreatedAt='2026-11-16 09:00:00' WHERE ReviewId=?", (rid,))
+        return rid
+
+    def test_a_mail_greys_only_the_cards_it_bears_on(self):
+        """THE OWNER, 2026-11-23, narrowing the rule above: a chat line from one colleague greyed another's ready reply card, and its agent
+        redrafted it for nothing. A message greys the cards to whom it is from, or on its own thread; everyone else's stand live."""
+        from taskuary import conversation
+        rid, act = self.reply_to_gail(), self.closeout()
+        paula = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'p-1', 'ConversationId': 'chat-paula', 'Channel': 'teams', 'Subject': '',
+                                    'FromName': 'Paula Vance', 'FromEmail': 'paula@northwind.example', 'BodyText': 'Can you add me to the rollout?', 'Status': 'routed'})
+        self.assertEqual(proposals.written_past(self.s, self.tid), set(), "Paula's line bears on neither Gail's reply nor the close-out")
+        conversation.hear(self.s, self.tid, turn=True)                                             # ...its agent hears Paula's line
+        self.assertEqual([self.s.get_review(x)['Status'] for x in (rid, act)], ['pending', 'pending'], 'nothing set aside: nothing to redraft')
+        self.assertTrue(conversation.heard(self.s, self.tid, 'mail', [paula]))
+        self.s.add_message({'TaskId': self.tid, 'ExternalId': 'g-1', 'ConversationId': 'th-gail', 'Channel': 'email', 'Subject': 'RE: Deploy',
+                            'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example', 'BodyText': 'Hold it until Friday.', 'Status': 'routed'})
+        self.assertEqual(proposals.written_past(self.s, self.tid), {rid}, "Gail wrote again: her reply greys, the close-out stands")
+        conversation.hear(self.s, self.tid, turn=True)
+        self.assertTrue(proposals.passed(self.s.get_review(rid))); self.assertEqual(self.s.get_review(act)['Status'], 'pending')
+        general.wait_line(self.s, self.tid, 'hold everything', line_id='l-hold')                    # ...his own line redirects the whole task
+        self.assertEqual(proposals.written_past(self.s, self.tid), {act})
 
     # ONE SENTENCE FOR A GREYED CARD ON EVERY SURFACE (2026-11-17): his own answer to the sender read "you wrote again", and a press on a card
     # the sender's new mail moved past was refused with "set aside when you moved on" - the chat, the press and the page said three things
@@ -769,8 +791,7 @@ class TheChatMovedOn(unittest.TestCase):
         self.assertEqual(proposals.passed_why(self.s, self.s.get_review(rid)), 'Not sent - you answered Gail Moreno yourself')
 
     def test_a_press_on_a_card_the_sender_wrote_past_is_refused_with_the_same_sentence(self):
-        self.s.set_setting('owner_email', 'alex@northwind.example', 'owner')
-        rid = self.closeout()
+        rid = self.reply_to_gail()
         self.s.add_message({'TaskId': self.tid, 'ExternalId': 'g-1', 'ConversationId': 'th-1', 'Channel': 'email', 'Subject': 'Deploy',
                             'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example', 'BodyText': 'Hold the deploy until Friday.', 'Status': 'routed'})
         out = verdicts.decide(self.s, self.s.get_review(rid), 'approve')

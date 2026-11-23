@@ -240,11 +240,13 @@ def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing:
     # ...a draft written after that message is its answer, never set aside by it: older than the input, by the input's own time
     # ...and a letter Taskuary sent on his press, come back from his Sent folder, is no input at all (the owner, 2026-11-13: two letters
     # waited, he sent one, and its copy coming back set the other aside - "how am i supposed to send 2 messages then")
+    # ...each message greying only the cards it bears on (proposals.bears: to its sender, or on its thread); his line, every card
     mine = general.went_from_here(store, tid)
-    joined = {str(x['MessageId']): x['T'] for x in _mail(store, tid) if not (x.get('Own') and mine(x))} if any(k == 'mail' for k, _ in new) else {}
-    if (at := max([now for k, _ in new if k == 'line'] + [joined.get(r, 0) for k, r in new if k == 'mail'], default=0)):
+    joined = {str(x['MessageId']): x for x in _mail(store, tid) if not (x.get('Own') and mine(x))} if any(k == 'mail' for k, _ in new) else {}
+    mails = [(joined[r]['T'], joined[r]) for k, r in new if k == 'mail' and r in joined]
+    if (line := any(k == 'line' for k, _ in new)) or mails:
         from . import proposals
-        proposals.set_aside_drafts(store, tid, at, actions=now if any(k == 'line' for k, _ in new) else 0)
+        proposals.set_aside_drafts(store, tid, now if line else 0., mails)
     if n: store._poke('task-changed', task_id=tid)
     return n
 

@@ -325,8 +325,11 @@ def card_said(out: dict) -> str:
     return CARD_SAID
 # ...AND A STEP TASKUARY HELD IS A CARD TOO (the real-CLI walks, 2026-11-12: "The delete of old-export.csv is waiting for your approval",
 # over the card that says so; "still waiting for your Approve" the turn after): every hold's answer to its agent ends on this one tail
-CARD_TAIL = ('It is a card in this task now: the card says what it is and that it waits for their press - never say either. Add only what '
-             'you will do once it is pressed, in one short line, or nothing.')
+# ...THE ONE WAY AN AGENT ASKS HIS YES (the owner, 2026-11-23: "Ask them to approve by using action cards. That's it." - 26 orders to stop, end
+# the turn or never ask had piled up, one per bug, and an agent he had told twice to post stopped on "Awaiting final approval"): the card is
+# the ask, and the job goes on - every gate's refusal ends with this, and nothing else tells an agent to stop
+CARD_TAIL = ('That is how you ask the owner: it is an action card on this task now, and when they press it Taskuary runs it and tells you what '
+             'happened. Keep doing the rest of the job; about the card, at most one short line of what you will do after the press.')
 # ...and WHAT A TURN IS HANDED IS CONTEXT, NOT NEWS (same walks): each turn is told what waits, what went and what he pressed, and said it
 # back to him - so the block says once, at its head, that it is his page's own news (general.latest_block)
 FACTS_HEAD = ('WHAT TASKUARY TELLS YOU FOR THIS TURN - context for you alone: the owner sees each of these on the task already. Act on them; '

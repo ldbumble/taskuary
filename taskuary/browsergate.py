@@ -343,7 +343,7 @@ def page(sid: str) -> dict:
 NO_PAGE = ('{held}: Taskuary could not read which page your browser is on, so it could not put this in front of the owner - nothing was '
            'done. Run `agent-browser get url`. If that names the page, run your command again; if it fails too, the browser has stopped '
            'answering: tell the owner in one line "The browser stopped answering, so I could not finish on <the site>.", set "retry": true '
-           'in your summary - a Try again button is drawn for the owner - and end your turn.')
+           'in your summary - a Try again button is drawn for the owner - and go on with the rest of the job.')
 
 
 # THE OWNER'S RULE IS THE QUESTION (2026-11-19: "anything big like spending money or putting in private info should wait for user for now"): a
@@ -584,7 +584,7 @@ def check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> dic
         if not acts(cmd): raise
         logger.warning(f'browsergate: task {tid} - the act was not filed for the owner - {e}')
         return _deny(f"{HELD}: Taskuary could not put this in front of the owner ({str(e)[:160]}), so nothing was done. Run the command again "
-                     "on its own line; if it is held like this again, tell the owner in one line what you were about to do and end your turn.")
+                     "on its own line; if it is held like this again, tell the owner in one line what you were about to do and go on with the rest of the job.")
 
 
 def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> dict:
@@ -649,9 +649,7 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
                                          **({'control': {'name': c['name'], 'role': c['role']}} if c.get('role') else {})}, 'agent')
             store.audit('task', tid, 'browser_act_held', 'taskuary', 'system', {'verb': a['verb'], 'site': site, 'why': v['why']})
         from .selfclose import CARD_TAIL
-        return _deny(f"{HELD}: {v['what']} ({v['why']}). Once they approve it, Taskuary runs this exact command in your browser and tells you "
-                     f"what happened. Never ask them in words to approve or click it, and do not try it another way. {CARD_TAIL} End your turn "
-                     "now, or go on with work that does not need it." + stands(store, tid))
+        return _deny(f"{HELD}: {v['what']} ({v['why']}). {CARD_TAIL}" + stands(store, tid))
     if (browserview.ENDED_ON.get(str(sid)) or ('',))[0] == 'failed': browserview.ended_on(sid)     # it went on past the failure
     # ...and a press that went to a site is the agent's own act there: a code that site mails now comes back to it (signin.acting), and a
     # password a box of the form holds is kept before the press sends it (signin.pressing) - nothing a site was sent is lost

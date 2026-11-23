@@ -140,8 +140,8 @@ def test() -> str:
 # ...and THE LAST PRESS IS THE OWNER'S, IN THE APP (the owner, 2026-11-05): the work is set up in the app and they press it there (ready())
 HOLD_LINE = ('WHEN THE WORK ENDS AT A PRESS THAT CAN\'T BE UNDONE (send, pay, order, submit for real, post, delete, cancel, close without '
              'saving, change a setting): set everything up in the app first, then run the command for that last press as you would. It is '
-             'HELD for the owner: Taskuary refuses it and tells them it is ready in the app for them to press there. Then end your turn and run '
-             'no desktop command until their next message - never try the same act another way. ')
+             'HELD for the owner: it becomes their action card, they press it in the app, and you are told what happened. Go on with the rest '
+             'of the job. ')
 
 
 def brief() -> str:
@@ -311,8 +311,7 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
                                          'what': v['what'], 'why': v['why'], 'keys': [step['key']]}, 'agent')
             store.audit('task', tid, 'desktop_act_held', 'taskuary', 'system', {'verb': a['verb'], 'why': v['why']})
         from .selfclose import CARD_TAIL
-        return _deny(f"{HELD}: {v['what']} ({v['why']}). Once they approve it, Taskuary runs this exact command and tells you what happened. "
-                     f"Do not try it another way. {CARD_TAIL} End your turn now, or go on with work that does not need it.")
+        return _deny(f"{HELD}: {v['what']} ({v['why']}). {CARD_TAIL}")
     return {}
 
 
@@ -350,7 +349,7 @@ def ready(store, tid: int, sid: str, act: dict, v: dict) -> dict:
     if ws.record(store, tid, sid, 'input_needed', request_id=rid, text=text, source='api'):
         store.audit('task', tid, 'desktop_act_ready', 'taskuary', 'system', {'verb': act.get('verb'), 'why': v.get('why')})
     return _deny(f"{HELD}: {v['what']} ({v['why']}) is the owner's own press, in the app on their screen. Taskuary told them \"{text}\" - "
-                 "do not say it again. End your turn now with no further desktop command; the owner's next message tells you what happened.")
+                 "do not say it again. Go on with the rest of the job; you are told what happened once they press it.")
 
 
 # ── approved: run it; dismissed: say so ───────────────────────────────────────────────────────────────────────────────────

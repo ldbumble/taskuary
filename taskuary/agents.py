@@ -1852,7 +1852,7 @@ def _acp_gears(client, profile: dict, name: str, trace):
 
 STOP_GRACE = 2.0                 # seconds a stopped turn has to honour session/cancel before its process is closed
 NO_GOES_ON = 8                   # turns one prompt may go on for after a no of ours ended its turn (run_acp) - a loop of nos ends, as Cancelled
-NO_THEN = 'Go on with the rest of the work, or end your turn now if nothing is left that does not need it.'
+NO_THEN = 'Go on with the rest of the job.'
 def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, extra_env: dict = None, store=None):
     """One headless turn over ACP. Returns (result, session_id, diff) - run_cli's own contract, so
     nothing upstream can tell which road a run took.

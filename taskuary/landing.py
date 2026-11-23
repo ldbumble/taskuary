@@ -572,8 +572,7 @@ def push_asked(store, tid: int, cmd: str, cwd: str = '', about: str = '') -> tup
             propose(store, tid, how, about, deploy=deploy)
     except ValueError: return None
     return True, (f"{shellgate.HELD}: this push is the owner's {button} button on the task now, not a shell step - {state(store, tid)['line']} Nothing "
-                  "is pushed until they press it, and Taskuary tells you when it went. Do not push another way. The button is the ask: say in "
-                  "one line what waits on it - never ask in words. End your turn now, or go on with work that does not need it.")
+                  "is pushed until they press it. " + __import__("taskuary.selfclose", fromlist=["CARD_TAIL"]).CARD_TAIL)
 
 
 

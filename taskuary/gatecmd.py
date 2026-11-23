@@ -109,7 +109,7 @@ def ask(name: str, args: list, after: bool = False) -> str:
     except Exception as e:
         if not act or after: return ''
         return (f'Taskuary held this for the owner: it could not be asked whether this press may run ({str(e)[:120]}), so nothing was '
-                'done. Run it again; if it is refused like this again, tell the owner in one line what you were about to do and end your turn.')
+                'done. Run it again; if it is refused like this again, tell the owner in one line what you were about to do and go on with the rest of the job.')
 
 
 def post(cmd: str, after: bool = False, wait: float = WAIT) -> dict:

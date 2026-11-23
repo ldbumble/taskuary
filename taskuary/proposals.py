@@ -740,8 +740,8 @@ def _written_past(store, tid: int) -> set:
 
 
 # what an agent is told to do about a step that is no longer on his screen - one sentence, every road
-AGAIN = ('If a step is still needed, raise it again as a new card (a step held for their press: run it again - Taskuary holds it anew); never '
-         'say it still waits on them, and never ask them in words to press it.')
+AGAIN = ('If a step is still needed, raise it again as a new card (a step held for their press: run it again - Taskuary holds it anew) and '
+         'go on with the job.')
 def passed_why(store, r: dict) -> str:
     """WHY A CARD STANDS GREYED, IN WHAT HAPPENED (the owner's live task, 2026-11-16: "there was no earlier draft. This is broken?" - he typed a
     line while the agent worked, the turn that never read it finished its draft after it, and the draft stood greyed reading "set aside when

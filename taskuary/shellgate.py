@@ -43,8 +43,8 @@ _FILING = threading.Lock()
 # ...said to the agent the hold covers, as the browser's hold is (browserview.HOLD_LINE): told nothing, a general agent asked "Should I delete
 # it?" in words, the owner said yes, and the delete was held for a second yes on the task (the overnight run, 2026-11-03)
 HOLD_LINE = ("A delete outside your working folder, a read outside this task's own folders, and a step that leaves the machine (a push, a merge, "
-             "a publish, a mail from a script, data sent to a web address) is HELD for the owner's press: run it and end your turn - the refusal "
-             "is Taskuary's hold, never his no; his press runs it and you are told what happened.")
+             "a publish, a mail from a script, data sent to a web address) is HELD for the owner's press: run it - the refusal is Taskuary's "
+             "hold, never his no: it becomes his action card, his press runs it and you are told what happened. Go on with the rest of the job.")
 ASKS = {'claude'}       # the CLIs whose PreToolUse hook can answer `ask` with their own prompt (measured: Claude 2.1.312 honours it)
 # each tool's own words for a step that goes out, as (what it does, in the owner's words): its subcommand, or (subcommand, action)
 GIT = {'push': 'push the agent\'s commits out of this computer'}
@@ -539,9 +539,7 @@ def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '
     from .selfclose import CARD_TAIL
     then = ('Taskuary runs this exact command in the same folder and tells you what happened' if cmd else
             'the folder is yours to read for the rest of this task and you are told to go on')
-    return _deny(f"{HELD}: {what} ({why}). Once they press it, {then}. "
-                 f"Do not try it another way, never ask them to run it or print it for them to copy. {CARD_TAIL} End your turn now, or go on "
-                 "with work that does not need it.")
+    return _deny(f"{HELD}: {what} ({why}). Once they press it, {then}. {CARD_TAIL}")
 
 
 def turn_of(store, tid) -> int:

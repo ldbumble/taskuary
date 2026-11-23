@@ -155,7 +155,7 @@ class Holding(unittest.TestCase):
         live = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, send_prompt=lambda *a, **k: None)
         with mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': live}, clear=True):
             out = self.check(v={'irreversible': True, 'sure': True, 'what': 'sends the reply', 'app': 'Northwind Mail'})
-            self.assertTrue(self.denied(out)); self.assertIn('End your turn now', out['hookSpecificOutput']['permissionDecisionReason'])
+            self.assertTrue(self.denied(out)); self.assertIn('rest of the job', out['hookSpecificOutput']['permissionDecisionReason']); self.assertNotIn('end your turn', out['hookSpecificOutput']['permissionDecisionReason'].lower())
             self.assertEqual(self.pending(), [])
             [req] = [r for r in ws.open_requests(ws.events(self.s, self.tid, 'run1')) if r['RequestId'].startswith(ad.READY)]
             self.assertEqual(req['Text'], "It's ready in Northwind Mail; press it there.")

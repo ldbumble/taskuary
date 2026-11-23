@@ -21,7 +21,7 @@ BAR, MIN, DAYS = 0.8, 10, 30
 UNSEEN_H = 0.1          # put down by the app within six minutes of being raised: inside the run that raised it, before any rail drew it
 # the kinds the model raises - the app's own (health, report, connect, rule, workstream, habit) are counted, never thought, and stay
 TYPES = ('second_ask', 'pattern', 'decides', 'clash', 'drift', 'promise', 'prep')      # what the model may say a line of its own is
-LOOKOUT = ('credit', 'pitch', 'money', 'early_warning', 'leverage')                       # the looking-out-for-you pass's families (lookout.py)
+LOOKOUT = ('money', 'pitch', 'reminder', 'connection', 'new_idea', 'credit', 'early_warning', 'leverage')                       # the looking-out-for-you pass's families (lookout.py)
 MODEL_KINDS = ('idea',) + TYPES + LOOKOUT
 
 

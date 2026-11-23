@@ -9,10 +9,11 @@ don't say it again": BEFORE carries every recent idea, and the check holds a rep
 (server.advisor_pass -> assistant.clock, on the reports' clock); it is cheap until due - two model calls. The Assistant's advisor.ideas
 starts one now (`start`). CALLS caps it at three, as ask_json re-asks once for an answer that was not JSON:
 
-  1. PROPOSE   the model reads JOB.md, SOUL.md, the window - the last DAYS of mail, chat, tasks and reports, COUNTED and grouped (each group
-               with ids it can cite), the weekly pattern of the people the owner writes to most - and what it raised before and how the owner
-               answered. It proposes at most MAX_IDEAS ideas in five FAMILIES, each with its evidence, the ids it rests on, the next step
-               and the one sentence for the boss
+  1. PROPOSE   the model reads ONE context (window): JOB.md, SOUL.md, his memory, everything the Advisor raised before and what he did with
+               it, a light pass (mail in and his sent mail since the last pass, what is owed either way, open tasks) and a DEEP look at two
+               areas - a source or a workstream - chosen in turn by plain code (pick) with the angle not taken there longest (lens_of). It
+               proposes at most MAX_IDEAS in the FAMILIES, each with its evidence, the ids it rests on, the next step and the pitch. Since
+               2026-11-23 the afternoon Advisor look runs a second pass when new mail or data arrived (why_not); a skip says why
   2. CHECK     a second, short call reads each idea beside the messages its ids name and keeps only what is specific, supported,
                non-obvious, worth a boss's time, and - about a person - factual, private and kind. What it holds is fed back next time
 
@@ -30,11 +31,17 @@ from loguru import logger
 from . import aiusage
 
 FAMILIES = {
-    'credit': "work the owner did that leadership likely does not see, with the numbers from the window, and a concrete way to show it",
-    'pitch': "a recurring pain for OTHERS - the same question asked again, the same report fixed by hand, the same failure or vendor problem "
-             "coming back - with a specific fix the owner could build or propose",
     'money': "money or time left on the table - the work version of asking for a refund when a price dropped: a duplicate charge or record, "
-             "a credit owed, an unused licence, an SLA breach, a late fee, a double payment, a retirement or renewal date with a cost on it",
+             "two tools or subscriptions doing one job, a credit owed, an unused licence, a better plan, an SLA breach, a late fee, a renewal with a cost on it",
+    'pitch': "a recurring pain for the owner or others - the same question asked again, the same report fixed by hand, the same failure coming "
+             "back - with its ROOT fix: what to change so it stops, not that it failed again",
+    'reminder': "something the owner let slip: an ask in his mail he never answered, a promise in his own sent mail not yet kept, a date a "
+                "message named that is near or past - how long it has been, and what is owed",
+    'connection': "two things the owner has not put together: one thread's answer settles another, the same issue from two systems or people, "
+                  "a meeting or deadline that bears on an open ask",
+    'new_idea': "a better way to do part of the job the evidence points to - a report, check or automation that removes a weekly chore, a "
+                "process worth proposing",
+    'credit': "work the owner did that leadership likely does not see, with the numbers from the window, and a concrete way to show it",
     'early_warning': "a developing problem - a process drifting, a recurring job that will fail again on a date you can name, a deadline at "
                      "risk, a report that stopped arriving, a colleague whose pattern changed sharply",
     'leverage': "who depends on the owner, who to loop in, an introduction that would unblock something"}
@@ -43,11 +50,18 @@ EVERY_DAYS, RETRY_H = 1, 6           # a day between passes (setting lookout_eve
 # FOUR, NOT TWO (the owner, 2026-11-05: "where is the advisor ideas about your pain points ... don't see any in my advisor today"): two
 # proposals a day, both held by the check, left the Advisor empty for days. MORNING_H: the day's pass runs from the morning, not 24 hours
 # after the last one - it had drifted to 5:53 PM
-DAYS, MAX_IDEAS, MAX_OPEN, CALLS, MORNING_H = 30, 4, 4, 3, 7     # CALLS: the two, and one re-ask of an answer that was not JSON (llm.ask_json)
+# 2-3 A DAY (the owner, 2026-11-23: "need 2-3 really good ideas about different parts of your job almost every day"): up to MAX_RAISE land a
+# pass, the morning's and the afternoon look's (`look`, when something moved since) - never more than MAX_OPEN waiting on the rail
+DAYS, MAX_IDEAS, MAX_RAISE, MAX_OPEN, CALLS, MORNING_H = 30, 5, 3, 6, 3, 7     # CALLS: the two, and one re-ask of an answer that was not JSON
 GROUPS, OWN_GROUPS, PEOPLE, WEEKS = 40, 20, 12, 6
-TASKS_SHOWN, GIST, WINDOW_CHARS = 25, 200, 22000
-PROPOSE_TOKENS, CHECK_TOKENS = 1800, 700
+TASKS_SHOWN, GIST, WINDOW_CHARS = 25, 200, 40000
+PROPOSE_TOKENS, CHECK_TOKENS = 2600, 900
 LAST_KEY, TRIED_KEY, HELD_KEY, HELD_CAP = 'lookout_last_run', 'lookout_tried_at', 'lookout_held', 20
+# ROTATION (the owner, 2026-11-23: "it can't take in all the data from every system ... it should rotate through them"): each pass reads
+# DEEP areas whole - the one looked at longest ago, and the one with the most new since its last look (NOTABLE or more) - and only a light
+# pass over the rest. AREAS_KEY: when each was last looked at; STAMP_KEY: the newest message a pass read; SKIP_KEY: the last skip and why
+DEEP, NOTABLE, AREA_GROUPS, AREA_LATEST, LIGHT_LINES, LIGHT_MAX_DAYS = 2, 10, 25, 8, 60, 4
+AREAS_KEY, STAMP_KEY, SKIP_KEY = 'lookout_areas', 'lookout_stamp', 'lookout_skip'
 CLOCK = True               # the suite turns this off (tests/conftest.py): a bare store's Advisor run is not about this pass
 _BUSY = threading.Lock()   # one pass at a time: the clock's and one the owner asked for never both pay for the same day
 _ID = re.compile(r'^(msg|task)(\d+)$')
@@ -61,15 +75,19 @@ def _subj(s): return re.sub(r'\d+', '#', re.sub(r'^\s*((re|fw|fwd|aw)\s*:\s*|\[[
 
 
 SYSTEM = (
-    "You are the owner's chief of staff: a sharp, proactive thinker looking out for them at work. You read their job, the last "
-    f"{DAYS} days of their mail, chats, tasks and reports - counted and grouped, each group with ids - the weekly pattern of the people "
-    "they deal with most, and what you raised before and how they answered. You propose ideas that would make a real difference to the "
-    "owner's standing or their organisation, from these families:\n"
+    "You are the owner's chief of staff: a sharp, proactive thinker looking out for them at work. You read their job, who they are, what "
+    "they asked you to remember, what you raised before and how they answered, a light pass over what came and went since your last look "
+    "(mail in, their own sent mail, what is owed either way, open tasks and how long each has sat), and a THOROUGH look at one or two parts "
+    f"of their work - a system, a mailbox, a feed, a workstream, the last {DAYS} days counted and grouped with ids - taken in turn, so every "
+    "part gets a deep read over a week. You propose what would make a real difference to the owner's day, standing or organisation - up "
+    "to three, each about a different part of the job where the evidence allows - from these families:\n"
     + '\n'.join(f"- {k}: {v}" for k, v in FAMILIES.items()) +
     "\nTHE BAR. An idea rests on specific evidence in the window - counts, dates, the same thing again and again - and joins things the "
     "owner could not see from any single message. Generic advice is worthless here: 'communicate more', 'document the process', 'hold a "
     "meeting', 'improve monitoring', 'automate it' - unless the evidence makes it specific and new (what exactly, from which counts, saving "
-    "what). Never restate one message, never raise what the owner is visibly already doing, never repeat or rephrase an idea under BEFORE. Before naming a person, look for signs they have left - a departure notice, a removed account, mail that stops after bounces - and say nothing about someone who has gone. "
+    "what). A failure notice is not an idea; the pattern across failures and the fix that ends them can be. Never restate one message "
+    "unless it is something the owner let slip, never raise what the owner is visibly already doing, never repeat or rephrase an idea "
+    "under BEFORE - coming back to an area from another angle (cost, process, risk, a person) is new when new evidence supports it. Before naming a person, look for signs they have left - a departure notice, a removed account, mail that stops after bounces - and say nothing about someone who has gone. "
     "Think like the assistant that notices a price dropped and asks for the refund: what is owed, wasted, at risk or uncredited, in numbers.\n"
     "ABOUT A PERSON: only the observed pattern (counts, dates, what changed), never a diagnosis, motive, blame or a guess about health, "
     "family or private life; the next step is private and kind - a check-in, an offer of help - and nothing that would embarrass them.\n"
@@ -89,9 +107,10 @@ WANT = {'name': 'lookout', 'schema': {'type': 'object', 'additionalProperties': 
 CHECK = (
     "You review ideas a chief of staff wants to put in front of a busy owner, one by one, beside the messages and tasks each one cites. "
     "Keep an idea only when ALL of these hold: (1) SPECIFIC - it names counts, dates or items, not a general practice; (2) SUPPORTED - the "
-    "cited lines really show what it claims, nothing is invented or stretched; (3) NON-OBVIOUS - the owner could not see it from one "
-    "message, and their own sent words do not show them already on it; (4) WORTH A BOSS'S TIME - money, time, risk or credit at a scale "
-    "that matters - for a CREDIT idea, the work and its size must be in the cited lines; that leadership has not seen it is the idea's premise, not something the lines must prove; (5) about a person: factual, private and kind - no diagnosis, motive, blame or private life; (6) NEW - not the same point as one under ALREADY RAISED, however reworded, unless the cited lines show something has changed since; (7) STILL TRUE TODAY - a person it names still works with the owner (the window has no departure notice, account removal or 'no longer with' reply, and they still write or are written to), and a process it names still runs. Reject anything generic "
+    "cited lines really show what it claims, nothing is invented or stretched; (3) NON-OBVIOUS - the owner would not get there from what "
+    "is in front of them: it joins things, or it brings back something they let slip (its date and the silence since are its evidence), "
+    "and their own sent words do not show them already on it; (4) WORTH A BOSS'S TIME - money, time, risk or credit at a scale "
+    "that matters - for a CREDIT idea, the work and its size must be in the cited lines; that leadership has not seen it is the idea's premise, not something the lines must prove; (5) about a person: factual, private and kind - no diagnosis, motive, blame or private life; (6) NEW - not the same point as one under ALREADY RAISED, however reworded, unless the cited lines show something has changed since; the same area from a different angle (cost, process, risk, a person) is a new point; (7) STILL TRUE TODAY - a person it names still works with the owner (the window has no departure notice, account removal or 'no longer with' reply, and they still write or are written to), and a process it names still runs. Reject anything generic "
     "('communicate more', 'hold a meeting', 'document it', 'monitor more') however well it is worded. "
     "An idea ALREADY RAISED to the owner passes only when it brings evidence that is new since - then name the earlier one it replaces. "
     'Answer JSON only: {"keep": [<numbers of the ideas to keep>], "why": {"<number>": "<one line: why it was rejected>"}, '
@@ -121,16 +140,28 @@ def waiting(store) -> list:
     return [i for i in ids if i['IdeaId'] in on or i.get('Status') == 'snoozed']
 
 
-def due(store) -> bool:
-    """A day (lookout_every_days) since the last pass that got an answer, RETRY_H since one that did not, and room on the rail: never more
-    than MAX_OPEN of these waiting at once - the rail read last, only on a tick whose day is up."""
-    last, tried = store.get_setting(LAST_KEY) or '', store.get_setting(TRIED_KEY) or ''
-    if tried and tried > _ago(hours=RETRY_H): return False
+def stamp(store) -> int:
+    "The newest message a pass would read - what moved since the last pass, as one number."
+    return int((store._one("SELECT MAX(MessageId) m FROM message WHERE IFNULL(Channel,'') <> 'assistant'") or {}).get('m') or 0)
+
+
+def why_not(store, look: bool = False) -> str:
+    """'' when a pass is due, else why not, in words. Once a calendar day from MORNING_H (or a whole day gone by) whatever moved; `look` (the
+    scheduled Advisor look's own call) also when new mail or data arrived since the last pass and RETRY_H have passed - a day passed or new
+    data is never skipped for facts that look the same. Never more than MAX_OPEN waiting - the rail read last."""
+    last, tried, now = store.get_setting(LAST_KEY) or '', store.get_setting(TRIED_KEY) or '', _ts(_now())
+    if tried and tried > _ago(hours=RETRY_H): return f'the last pass started at {tried[11:16]} - the next one {RETRY_H} hours after it'
     every = _every(store)
-    # once a calendar day, from the morning: not run today and it is past MORNING_H, or a whole day has gone by whatever the hour
-    if last and not (last[:10] < _ts(_now())[:10] and (_now().hour >= MORNING_H or last <= _ago(days=1)) if every <= 1
-                     else last <= _ago(days=every)): return False
-    return len(waiting(store)) < MAX_OPEN
+    new_day = not last or (last[:10] < now[:10] and (_now().hour >= MORNING_H or last <= _ago(days=1)) if every <= 1 else last <= _ago(days=every))
+    if not new_day:
+        moved = stamp(store) > int(store.get_setting(STAMP_KEY) or 0)
+        if not look: return f'ran at {last[:16]} - the day\'s pass is done; the next Advisor look runs it again when something new arrived'
+        if not moved: return f'ran at {last[:16]} and nothing new has arrived since'
+    n = len(waiting(store))
+    return f'{n} ideas already wait on the rail (at most {MAX_OPEN})' if n >= MAX_OPEN else ''
+
+
+def due(store, look: bool = False) -> bool: return not why_not(store, look)
 
 
 # ── WHAT IT READS ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -190,16 +221,17 @@ def tasks(store) -> tuple:
     since = _ago(days=DAYS)
     done = store._rows("SELECT TaskId, Title, Kind, Status, COALESCE(ClosedAt, UpdatedAt, CreatedAt) At FROM task WHERE Status IN ('done','dropped') AND "
                        "COALESCE(ClosedAt, UpdatedAt, CreatedAt)>=? ORDER BY At DESC", (since,))
-    live = store._rows("SELECT TaskId, Title, Kind, Status, CreatedAt FROM task WHERE Status NOT IN ('done','dropped') ORDER BY TaskId DESC LIMIT ?", (TASKS_SHOWN,))
+    live = store._rows("SELECT TaskId, Title, Kind, Status, CreatedAt, UpdatedAt FROM task WHERE Status NOT IN ('done','dropped') ORDER BY TaskId DESC LIMIT ?", (TASKS_SHOWN,))
     kinds, ids = Counter(t.get('Kind') or 'task' for t in done), {f"task{t['TaskId']}" for t in done[:TASKS_SHOWN] + live}
     return ([f"Closed in the window: {len(done)} ({', '.join(f'{k} {n}' for k, n in kinds.most_common())})"]
             + [f"- task{t['TaskId']} closed {str(t['At'])[:10]}: {_one(t['Title'], 100)}" for t in done[:TASKS_SHOWN]]
-            + ([f"Open now: {len(live)}"] + [f"- task{t['TaskId']} open since {str(t['CreatedAt'])[:10]}: {_one(t['Title'], 100)}" for t in live] if live else [])), ids
+            + ([f"Open now: {len(live)}"] + [f"- task{t['TaskId']} {t.get('Status')} since {str(t['CreatedAt'])[:10]}, last moved {str(t.get('UpdatedAt') or t['CreatedAt'])[:10]}: "
+                                       f"{_one(t['Title'], 100)}" for t in live] if live else [])), ids
 
 
-def _verdicts(store) -> dict:
+def _verdicts(store, every: bool = False) -> dict:
     from .assistant import verdicts
-    return {r.get('key'): r for r in verdicts(store) if str(r.get('key') or '').startswith(KEY)}
+    return {r.get('key'): r for r in verdicts(store) if every or str(r.get('key') or '').startswith(KEY)}
 
 
 def turned_down(store) -> set:
@@ -223,10 +255,11 @@ def before(store, held_too: bool = True) -> list:
     was held as a repeat every morning after (the owner's live Advisor, 2026-11-14..18: 14 of 15 ideas held, 10 of them so)."""
     from . import ideagrade
     from .assistant import VERDICT_WORD
-    v, now = _verdicts(store), _ts(_now())
+    v, now = _verdicts(store, every=True), _ts(_now())
     word = {'taken': 'took it up', 'handled': 'handled it', 'wrong': 'turned it down', 'walked': 'walked past it', 'pending': 'not answered yet'}
     out = []
-    for i in store._rows('SELECT * FROM idea WHERE Key LIKE ? ORDER BY IdeaId DESC LIMIT 60', (KEY + '%',)):
+    # ...EVERY line the Advisor raised, not only this pass's own: a chase or a promise its twice-a-day look raised is not a "reminder" to raise again
+    for i in store._rows("SELECT * FROM idea WHERE Key NOT LIKE 'report:%' ORDER BY IdeaId DESC LIMIT 60"):
         said = VERDICT_WORD.get((v.get(i['Key']) or {}).get('verdict')) or word.get(ideagrade.grade(store._rows, i, now), 'not answered yet')
         out.append(f"- [{i.get('Kind')}] {_one(i.get('Text'), 140)} - the owner: {said}")
     out += [f"- [{h.get('family')}] {_one(h.get('title'), 140)} - held by the check: {_one(h.get('why'), 120)}" for h in held(store)] if held_too else []
@@ -238,26 +271,148 @@ def held(store) -> list:
     except ValueError: return []
 
 
+def _line(m) -> str:
+    "One message for the light pass: its id, day, who wrote whom, the subject and its first words."
+    who = (f"the owner wrote to {', '.join(_to(m)[:3]) or 'someone'}" if (m.get('Direction') or 'in') == 'out'
+           else f"from {(m.get('FromName') or m.get('FromEmail') or '?')[:40]}")
+    return f"- msg{m['MessageId']} {str(m['SentAt'])[:16]} {who} [{m.get('Channel') or 'message'}]: \"{_one(m.get('Subject'), 90)}\" - {_one(m.get('BodyText'), GIST)}"
+
+
+def _to(m) -> list:
+    try: r = json.loads(m.get('RecipientsJson') or '{}') or {}
+    except ValueError: r = {}
+    return [str(a) for a in (r.get('to') or []) if a] if isinstance(r, dict) else []
+
+
+def light(store, rows: list) -> tuple:
+    """(lines, ids) of what came and went since the last pass - at least the last day, at most LIGHT_MAX_DAYS when the app was shut - the
+    owner's own sent mail first (his promises and asks are in it), then the newest arrivals, LIGHT_LINES in all."""
+    last = store.get_setting(LAST_KEY) or ''
+    since = max(min(last or _ago(days=1), _ago(days=1)), _ago(days=LIGHT_MAX_DAYS))
+    xs = [m for m in rows if str(m['SentAt']) >= since]
+    out = [m for m in xs if (m.get('Direction') or 'in') == 'out'][-LIGHT_LINES // 2:]
+    mine = {m['MessageId'] for m in out}
+    xs = sorted(out + [m for m in xs if m['MessageId'] not in mine][-(LIGHT_LINES - len(out)):], key=lambda m: str(m['SentAt']))
+    return [_line(m) for m in xs], {f"msg{m['MessageId']}" for m in xs}
+
+
+def owed(store) -> tuple:
+    """(lines, ids) of what is owed either way - the Advisor's own facts (assistant.candidates): an ask of the owner's nobody answered, a
+    promise in his sent mail not kept, a meeting that needs something, work gone quiet. Read, never judged here."""
+    from . import assistant
+    try: cs = assistant.candidates(store, assistant.cfg(store))
+    except Exception as e: logger.info(f'lookout: what is owed was not read - {e}'); return [], set()
+    ids = {f"msg{c['action']['mid']}" for c in cs if (c.get('action') or {}).get('mid')}
+    return [f"- [{c.get('kind')}] {_one(c.get('facts') or c.get('text'), 300)}" + (f" (msg{c['action']['mid']})" if (c.get('action') or {}).get('mid') else '')
+            for c in cs], ids
+
+
+def areas(store, rows: list) -> dict:
+    """{area id: its rows} - the parts of the owner's work the window holds: each source the mail and data came by (a mailbox, a chat, a
+    connected system, a recurring report or feed) and each workstream of JOB.md its messages were placed under."""
+    out = defaultdict(list)
+    for m in rows:
+        if (src := m.get('SourceName') or m.get('Channel')): out[f'source:{src}'].append(m)
+        if m.get('Workstream'): out[f"workstream:{m['Workstream']}"].append(m)
+    return dict(out)
+
+
+# THE ANGLES (the owner, 2026-11-23: "it should not say the same thing twice but there is usually another angle to explore"): a deep look
+# at an area is told which of these it took there before and which it has not taken longest - the question, never what to conclude
+LENSES = {'money': 'what is paid here - twice, late, for nothing; what renews and when',
+          'time': 'what is done by hand here, how often, how long',
+          'failure': 'what breaks here again and again, and what would stop it',
+          'people': 'who waits on whom here, who asks the same thing, who went quiet',
+          'credit': 'what the owner did here that leadership has not seen, in numbers',
+          'comparison': 'this month against last, one vendor or system against another',
+          'absence': 'what should be here and is not - a report that stopped, a renewal with no thread'}
+
+
+def coverage(store) -> dict:
+    "{area: {'at': its last deep look, 'lens': {lens: when it was taken there}}} - an older record's bare time read as its look."
+    try: c = json.loads(store.get_setting(AREAS_KEY) or '{}') or {}
+    except ValueError: c = {}
+    return {a: v if isinstance(v, dict) else {'at': str(v), 'lens': {}} for a, v in c.items()}
+
+
+def looked(store) -> dict: return {a: v.get('at') or '' for a, v in coverage(store).items()}
+
+
+def lens_of(store, aid: str) -> str:
+    "The angle not taken on this area for longest: never taken first, in LENSES' order."
+    used = (coverage(store).get(aid) or {}).get('lens') or {}
+    return min(LENSES, key=lambda l: (used.get(l, ''), list(LENSES).index(l)))
+
+
+def record_looks(store, deep: list):
+    c, now = coverage(store), _ts(_now())
+    for a in deep:
+        v = c.setdefault(a, {'at': '', 'lens': {}})
+        v['lens'][lens_of(store, a)] = now; v['at'] = now
+    store.set_setting(AREAS_KEY, json.dumps(c), 'advisor')
+
+
+def pick(store, xs: dict) -> list:
+    """The DEEP areas this pass reads whole, by plain code: the one looked at longest ago (never first, then by name), then the one with the
+    most new since its own last look when that is NOTABLE or more, else the next longest ago. Over a week every area has its turn."""
+    seen = looked(store)
+    order = sorted(xs, key=lambda a: (seen.get(a, ''), a))
+    if not order: return []
+    first, rest = order[0], [a for a in order[1:]]
+    new = {a: sum(1 for m in xs[a] if str(m['SentAt']) > seen.get(a, '')) for a in rest}
+    busy = sorted(rest, key=lambda a: (-new[a], seen.get(a, ''), a))
+    second = busy[0] if busy and new[busy[0]] >= NOTABLE else (rest[0] if rest else None)
+    return [a for a in (first, second) if a][:DEEP]
+
+
+def area_block(store, aid: str, ms: list) -> tuple:
+    "(the deep look at one area, the ids it shows): its JOB.md section for a workstream, its subjects counted, its latest messages in words."
+    from . import workstreams as W
+    kind, name = aid.split(':', 1)
+    at = looked(store).get(aid, '')
+    head = (f"=== {kind} {W.names(store).get(name, name) if kind == 'workstream' else name}: {len(ms)} message(s) in {DAYS} days; "
+            + (f"you last looked closely on {at[:10]}, {sum(1 for m in ms if str(m['SentAt']) > at)} new since" if at else 'never looked at closely before') + ' ===')
+    sec = W.section(store, name) if kind == 'workstream' else ''
+    used, lens = (coverage(store).get(aid) or {}).get('lens') or {}, lens_of(store, aid)
+    head += ('\nAngles taken here before: ' + (', '.join(f'{l} ({t[:10]})' for l, t in sorted(used.items(), key=lambda x: x[1])) or 'none')
+             + f'. The one not taken longest: {lens} - {LENSES[lens]}.')
+    gs, latest = groups(store, ms)[:AREA_GROUPS], ms[-AREA_LATEST:]
+    text = '\n'.join([head] + ([f"What JOB.md says about it:\n{_one(sec, 1500)}"] if sec else []) + ['Its subjects, counted:']
+                     + [group_line(x) for x in gs] + ['Its latest messages:'] + [_line(m) for m in latest])
+    return text, {f'msg{i}' for x in gs for i in x['ids']} | {f"msg{m['MessageId']}" for m in latest}
+
+
 def window(store, days: int = DAYS) -> tuple:
-    """(the prompt's user text, the ids it shows). Each block bounded; the whole cut at WINDOW_CHARS from the end."""
+    """(the prompt's user text, the ids it shows, the areas it read deep). ONE context, facts only: the owner (JOB, SOUL, his memory), what
+    was raised before and what he did with it, the light pass (since the last pass, what is owed, people, tasks) and the deep look at the
+    areas `pick` chose. Each block bounded; the whole cut at WINDOW_CHARS from the end, the deep look and the people last."""
     from .triage import job_doc
     wide = _rows(store, max(days, WEEKS * 7))                     # the people's weeks reach further back than the window
     rows = [m for m in wide if str(m['SentAt']) >= _ago(days=days)]
-    gs, (tl, tids) = groups(store, rows), tasks(store)
-    shown = {f'msg{i}' for x in gs for i in x['ids']} | tids
+    (ll, lids), (ol, oids), (tl, tids) = light(store, rows), owed(store), tasks(store)
+    xs = areas(store, rows)
+    deep = pick(store, xs)
+    blocks = [area_block(store, a, xs[a]) for a in deep]
+    shown = lids | oids | tids | {i for _, ids in blocks for i in ids}
     soul = re.sub(r'<!--.*?-->|_\([^)]*\)_', '', str(store.doc('soul') or ''), flags=re.S).strip()        # comments and the template's placeholders
+    memory = re.sub(r'<!--.*?-->', '', str(store.doc('learned') or ''), flags=re.S).strip()
     job, fams = job_doc(store, 6000), families(store)
-    parts = [f"TODAY: {_now():%A %Y-%m-%d}",
+    others = sorted(set(xs) - set(deep))
+    parts = [f"TODAY: {_now():%A %Y-%m-%d %H:%M}",
              f"FAMILIES YOU MAY RAISE NOW: {', '.join(fams)}" + (f" (the owner turned down or does not use: {', '.join(f for f in FAMILIES if f not in fams)})"
                                                                  if len(fams) < len(FAMILIES) else ''),
              f"THE OWNER'S JOB (JOB.md):\n{job}" if job else '', f"WHO THE OWNER IS (SOUL.md):\n{soul[:4000]}" if soul else '',
+             f"WHAT THE OWNER ASKED YOU TO REMEMBER (his memory):\n{memory[:3000]}" if memory else '',
              "BEFORE - what you raised and how the owner answered (raise more like what they took up, nothing like what they turned down):\n"
              + ('\n'.join(before(store)) or '- nothing yet'),
-             f"WHAT CAME AND WENT, LAST {days} DAYS, grouped by subject ({len(rows)} messages):\n" + '\n'.join(group_line(x) for x in gs),
-             "THE PEOPLE THE OWNER WRITES TO MOST:\n" + ('\n'.join(people(store, wide)) or '- none'),
-             "TASKS:\n" + '\n'.join(tl)]
+             f"SINCE YOUR LAST LOOK - mail in and the owner's own sent mail ({len(ll)}):\n" + ('\n'.join(ll) or '- nothing'),
+             "WHAT IS OWED, EITHER WAY (the hub's own facts):\n" + ('\n'.join(ol) or '- nothing'),
+             "TASKS:\n" + '\n'.join(tl),
+             f"THE DEEP LOOK THIS TIME ({len(deep)} of {len(xs)} parts of the work; the rest get theirs on later passes"
+             + (f": {', '.join(others[:30])}" if others else '') + "):\n" + ('\n\n'.join(t for t, _ in blocks) or '- nothing in the window'),
+             "THE PEOPLE THE OWNER WRITES TO MOST:\n" + ('\n'.join(people(store, wide)) or '- none')]
     text = '\n\n'.join(p for p in parts if p)
-    return text[:WINDOW_CHARS], shown
+    return text[:WINDOW_CHARS], shown, deep
 
 
 # ── THE TWO CALLS ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -365,6 +520,15 @@ def _hold(store, held_: list):
     store.set_setting(HELD_KEY, json.dumps((rows + held(store))[:HELD_CAP]), 'advisor')
 
 
+def _skipped(store, why: str, loud: bool):
+    "A pass that did not run says why - at INFO from a scheduled look, and once per new reason from the clock's quarter-hour tick."
+    try: was = (json.loads(store.get_setting(SKIP_KEY) or '{}') or {}).get('why')
+    except ValueError: was = None
+    if loud or was != why:
+        (logger.info if loud else logger.debug)(f'lookout: skipped - {why}')
+        store.set_setting(SKIP_KEY, json.dumps({'at': _ts(_now()), 'why': why}), 'advisor')
+
+
 def brain(store):
     """The Advisor's brain, or None: no AI chosen at first run, or none connected - a pass never runs without one."""
     try:
@@ -378,11 +542,13 @@ def brain(store):
 
 def tick(store, llm=None, force: bool = False, wait: bool = False) -> dict:
     """One pass when due (or `force`): {ran, raised: [idea ids], held: [titles], calls}. At most CALLS model calls. Never raises.
-    `wait`: a pass already running is waited for rather than skipped - the morning Advisor look reads what it raised (assistant.job_ideas)."""
+    `wait`: the scheduled Advisor look's own call (assistant.job_ideas) - a pass already running is waited for, and it runs again later in
+    the day when something new arrived (why_not's `look`). A skip says why: in the log, and on SKIP_KEY."""
     out = {'ran': False, 'raised': [], 'held': [], 'calls': 0}
     if not _BUSY.acquire(blocking=wait): return out
     try:
-        if not force and not due(store): return out
+        if not force and (why := why_not(store, look=wait)):
+            _skipped(store, why, loud=wait); return out | {'skipped': why}
         if llm is None: llm = brain(store)
         if llm is None: return out
         n = [0]
@@ -392,11 +558,12 @@ def tick(store, llm=None, force: bool = False, wait: bool = False) -> dict:
             return llm(system, user, **kw)
         counted.takes_want = getattr(llm, 'takes_want', None)       # ask_json hands the schema to a brain that carries one
         store.set_setting(TRIED_KEY, _ts(_now()), 'advisor')
-        user, shown = window(store)
+        mark, (user, shown, deep) = stamp(store), window(store)
         ideas = propose(store, counted, user, shown)
-        out |= {'ran': True}
+        out |= {'ran': True, 'deep': deep}
         if ideas is None: return out | {'calls': n[0]}
-        store.set_setting(LAST_KEY, _ts(_now()), 'advisor')
+        store.set_setting(LAST_KEY, _ts(_now()), 'advisor'); store.set_setting(STAMP_KEY, str(mark), 'advisor')
+        record_looks(store, deep)
         kept, held_ = check(store, counted, ideas)
         # ...and a family under the 80% bar raises one a day (ideagrade.spent_today)
         from . import ideagrade
@@ -404,11 +571,11 @@ def tick(store, llm=None, force: bool = False, wait: bool = False) -> dict:
         def once(f): return f not in quiet or (f not in seen and not seen.add(f))
         kept = [x for x in kept if once(x['family'])]
         _hold(store, held_)
-        rows = [r for r in (land(store, x) for x in kept[:max(0, MAX_OPEN - len(waiting(store)))]) if r]
+        rows = [r for r in (land(store, x) for x in kept[:max(0, min(MAX_RAISE, MAX_OPEN - len(waiting(store))))]) if r]
         if rows:
             from .habits import _woke
             _woke(store)
-        logger.info(f'lookout: {len(ideas)} proposed, {len(rows)} raised, {len(held_)} held')
+        logger.info(f"lookout: read {', '.join(deep) or 'no area'} deep - {len(ideas)} proposed, {len(rows)} raised, {len(held_)} held")
         return out | {'raised': [r['IdeaId'] for r in rows], 'held': [x['title'] for x, _ in held_], 'calls': n[0]}
     except Exception as e:
         logger.warning(f'lookout: the pass failed - {e}'); return out

@@ -772,13 +772,19 @@ def _show_roots() -> list:
     from . import config
     return [Path(r).resolve() for r in (config.home() / 'scratch', tempfile.gettempdir())]
 
+# WHAT A SHOWN FILE SAYS, READ BACK (walk 9, 45-46): a sheet and a PDF written through a Windows shell that ate every "$558" as a variable read
+# "Starter ,400" while the chat said "$1,400", and nothing read the file back. What each says rides in show's answer - the file as he will open
+# it, read by the reader a card's files are (read_back): a fact, on every brain and shell. A picture is skipped - it has no text to read
+SHOWN_SAY, SHOWN_CHARS = 'WHAT THE FILES YOU SHOWED SAY, as the owner will open them', 1500
+
+
 def show_files(store, tid: int, paths) -> str:
     "show's `files`: each copied onto task `tid` and drawn in its chat; ValueError when none could be, saying why for each."
     from pathlib import Path
     from . import outputs, session_artifacts
     from .general import file_name
     if isinstance(paths, str): paths = [paths]
-    roots, rows, why, drawn = _show_roots(), [], [], []
+    roots, rows, why, drawn, reads = _show_roots(), [], [], [], []
     for raw in list(paths or [])[:12]:
         # ...A PATH WITHOUT ITS ROOT IS THE TASK'S OWN (walk 9, 2026-11-23: "outputs/TQ-0014/sample-invoice.pdf" and a bare file name were
         # refused as outside the outputs folder they were in, and the agent's end_turn said it showed them): read against its outputs folder,
@@ -797,10 +803,11 @@ def show_files(store, tid: int, paths) -> str:
         # under the turn that made it (outputs.preview_of) - said so, never refused
         try: a = session_artifacts.shown(store, tid, p, 'agent')
         except ValueError as e:
-            if p.is_relative_to(outputs.folder(tid).resolve()) and outputs.preview_of(p): drawn.append(p.name)
+            if p.is_relative_to(outputs.folder(tid).resolve()) and outputs.preview_of(p): drawn.append(p.name); reads.append(p)
             else: why.append(f'{n}: {e}')
             continue
         except OSError as e: why.append(f'{n}: {e}'); continue
+        reads.append(p)
         rows.append({'id': a['ArtifactId'], 'name': a.get('Name') or p.name, 'path': f"shown:{a['ArtifactId']}", 'kind': 'shown',
                      'content_type': a.get('ContentType') or '', 'size': a.get('Size') or 0, 'url': f"/api/task-artifacts/{a['ArtifactId']}"})
     if not rows and not drawn: raise ValueError('nothing was shown - ' + '; '.join(why))
@@ -809,6 +816,8 @@ def show_files(store, tid: int, paths) -> str:
     said = ' '.join(x for x in (f"Shown in the owner's chat at this step: {', '.join(r['name'] for r in rows)} - never say where on the page it is." if rows else '',
                                 f"In the owner's chat already, previewed as a file of this task: {', '.join(drawn)}." if drawn else '',
                                 f"Not shown - {'; '.join(why)}." if why else '') if x)
+    from . import attachtext
+    if say := attachtext.block(attachtext.of_paths(reads), SHOWN_SAY, file_cap=SHOWN_CHARS): said = f'{said}\n{say}'
     return f'{said} {FILES_MARK}{json.dumps(rows, ensure_ascii=False, separators=(",", ":"))}' if rows else said
 
 

@@ -377,3 +377,17 @@ def test_a_path_without_its_root_is_read_in_the_tasks_own_folders():
         assert 'only a file in' not in said and 'no such file' not in said, (name, said)
     try: agenttools.show_files(s, tid, ['../../../../../../etc/hosts']); raise AssertionError('a path climbing out is never read')
     except ValueError as e: assert 'only a file in' in str(e) or 'no such file' in str(e), e
+
+
+def test_a_file_shown_comes_back_as_what_it_reads():
+    """Walk 9 (45, 46): the agent wrote its sheet and its PDF through a shell that ate every "$558" as a variable - the files read "Starter ,400"
+    while the chat said "$1,400" - and nothing read the file back. What a shown file reads is in show's answer: a broken deliverable is a fact
+    the agent sees, on any brain and any shell."""
+    from openpyxl import Workbook
+    from taskuary import outputs
+    s = MemoryStore(); tid = s.create_task({'Title': 'Three CRM tools, 10 seats', 'Kind': 'general'}, 'owner')
+    out = outputs.folder(tid); out.mkdir(parents=True, exist_ok=True)
+    wb = Workbook(); ws = wb.active; ws.append(['Plan', 'Price']); ws.append(['Starter', ',400']); wb.save(out / 'crm-pricing.xlsx')
+    (out / 'notes.txt').write_text('Professional - - ,000 ,800', encoding='utf-8')
+    said = agenttools.show_files(s, tid, [str(out / 'crm-pricing.xlsx'), str(out / 'notes.txt')])
+    assert 'Starter' in said and ',400' in said and 'Professional - - ,000 ,800' in said, said

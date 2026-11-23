@@ -108,8 +108,8 @@ export function turnParts(events, { keepStart = false, live = false } = {}) {
   // ...an edit that failed and was then made is no failure (agentSteps' `recovered`): Claude's first try at a string not found, its second made
   parts.forEach((p, i) => p.type === "work" && p.steps.forEach((s) => { if (s.status === "error" && s.kind === "edit"
     && parts.slice(i + 1).some((q) => q.type === "edit" && q.summary.startsWith(s.summary))) s.status = "recovered"; }));
-  const lastPlan = parts.map((p) => p.type).lastIndexOf("plan");
-  return parts.filter((p, i) => p.type !== "plan" || i === lastPlan).map((p, i) => ({ ...p, id: p.id || `p${i}` }));
+  // ...and its plan is the one row the agent keeps replacing (chatlog: one per plan, in place) - never a filter keeping the last of several
+  return parts.map((p, i) => ({ ...p, id: p.id || `p${i}` }));
 }
 // what a turn did, counted for its fold's line: "6 steps" - its edits each one
 export const workCount = (parts) => workRows(parts).length;

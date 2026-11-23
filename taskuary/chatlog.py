@@ -677,7 +677,10 @@ def _upsert(store, tid: int, sid: str, f: dict, u: dict) -> None:
         if e is None: e = f['ents'][ref] = {'ups': [{**u, 'content': {'type': 'text', 'text': _text_of(u.get('content'))}}]}
         else: e['ups'][0]['content']['text'] += _text_of(u.get('content'))
         chunky, f['last'] = True, (kind, unnamed)
-    elif kind == 'plan': ref = f"plan:{f['run']}"; e = f['ents'][ref] = {**f['ents'].get(ref, {}), 'ups': [u]}       # ...one plan, replaced whole
+    # ...ONE PLAN, REPLACED WHOLE (the ACP spec: each plan update carries every entry): one row, its first place kept - by its planId where the
+    # agent names one (the newer plan_update), else the run's; a plan the agent removed stays as it last stood, as Zed keeps a finished one
+    elif kind in ('plan', 'plan_update'):
+        ref = f"plan:{u.get('planId') or f['run']}"; e = f['ents'][ref] = {**f['ents'].get(ref, {}), 'ups': [{**u, 'sessionUpdate': 'plan'}]}
     elif kind == 'error': f['n'] += 1; ref = f"e:{f['run']}.{f['n']}"; e = f['ents'][ref] = {'ups': [u]}
     elif kind == 'compaction_update':
         ref = f"c:{u.get('compactionId')}"; e = f['ents'].setdefault(ref, {'ups': []}); e['ups'].append(u)

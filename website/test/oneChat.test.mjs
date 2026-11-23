@@ -89,11 +89,13 @@ test("regression: strict arrival order - a later message draws below a step stil
 });
 
 
+// ...ONE ROW THE AGENT KEEPS REPLACING (chatlog: every plan update of a run is the one row s:<sid>:plan:<run>, tests/test_chatlog.py) - drawn as
+// the checklist where it first stood
 test("regression: the plan is one checklist, the newest of its turn", () => {
-  const parts = turnParts([call("p1", "update_plan", { plan: ["Read the ledger", "Fix the tax line"] }), done("p1"),
-    call("p2", "update_plan", { plan: [{ step: "Read the ledger", status: "completed" }, { step: "Fix the tax line", status: "in_progress" }] }), done("p2")]);
+  const plan = { id: "s:x:plan:1", k: "plan", items: [{ text: "Read the ledger", status: "completed" }, { text: "Fix the tax line", status: "in_progress" }] };
+  const parts = turnParts(eventsOf([plan], false));
   assert.equal(parts.filter((p) => p.type === "plan").length, 1);
-  assert.deepEqual(parts[0].items, [{ text: "Read the ledger", state: "done" }, { text: "Fix the tax line", state: "now" }]);
+  assert.deepEqual([parts[0].id, parts[0].items], ["s:x:plan:1", [{ text: "Read the ledger", state: "done" }, { text: "Fix the tax line", state: "now" }]]);
   assert.match(read("ViewSpec.jsx"), /<ul className="tq-cc-plan" data-tq-plan="" aria-label=\{label\}>/);
   assert.match(read("ViewSpec.jsx"), /PlanRow = \(\{ p, label = "The agent's plan" \}\)/);
 });

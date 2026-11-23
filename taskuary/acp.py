@@ -37,6 +37,11 @@ CLIENT_CAPS = {'fs': {'readTextFile': False, 'writeTextFile': False}, 'terminal'
 ALLOW_KINDS, REJECT_KINDS = ('allow_once', 'allow_always'), ('reject_once', 'reject_always')
 
 
+# the session/update kinds that are the session's state - {kind: (where it is kept, the field that carries it)}
+SESSION_STATE = {'available_commands_update': ('commands', 'availableCommands'), 'current_mode_update': ('mode', 'currentModeId'),
+                 'usage_update': ('usage', None), 'config_option_update': ('options', 'configOptions')}      # ...None: the update is the state
+
+
 class ACPAgentError(RuntimeError):
     """The agent answered with an error, or died holding a turn."""
 
@@ -77,6 +82,7 @@ class ACPClient:
         self._id, self._waiters, self._idlock, self._alive = 0, {}, threading.Lock(), True
         self._caps, self._meta, self._write_lock, self.options, self.last_turn = {}, {}, threading.Lock(), [], {}
         self.unnamed_own = False         # a chunk with no message id is the adapter's own line, not the model's (clis.ADAPTERS `unnamed_own`)
+        self.state = {}                  # the session's own state as it says it: commands, mode, usage (SESSION_STATE)
         try:
             self.p = spawn.popen([cmd] + list(args or []), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace',
@@ -112,8 +118,16 @@ class ACPClient:
             for q in list(self._waiters.values()): q.put(None)      # wake anyone waiting rather than let them hang
 
     def _notified(self, m):
-        if m.get('method') != 'session/update' or not self.on_update: return
-        try: self.on_update((m.get('params') or {}).get('update') or {})
+        if m.get('method') != 'session/update': return
+        u = (m.get('params') or {}).get('update') or {}
+        # ...WHAT THE SESSION IS, NOT WHAT IT SAID (the owner, 2026-11-23: adopt the open-source model - Zed, agent-shell): its commands, its mode,
+        # its usage and its options are its state, kept here as they change - never a line of the chat (chatlog.feed draws no row of them)
+        if (kind := u.get('sessionUpdate')) in SESSION_STATE:
+            key, val = SESSION_STATE[kind]; got = u.get(val) if val else {k: v for k, v in u.items() if k != 'sessionUpdate'}
+            if got is not None: self.state[key] = got
+            if kind == 'config_option_update' and isinstance(got, list): self.options = got
+        if not self.on_update: return
+        try: self.on_update(u)
         except Exception as e: logger.debug(f'acp: update handler raised - {e}')
 
     def _asked(self, m):

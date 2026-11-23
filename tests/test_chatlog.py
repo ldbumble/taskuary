@@ -676,6 +676,33 @@ def test_a_permission_asked_is_its_calls_update_with_the_agents_options_and_clea
     finally: permissions.PENDING.pop('t-row', None)
 
 
+def test_a_plan_is_one_row_replaced_whole_and_the_sessions_state_is_no_row():
+    """THE PLAN IS ONE OBJECT (the ACP spec: every plan update carries the whole list, and the client replaces it): a run's plans - an ACP
+    agent's, or claude's TodoWrite on the argv road - are one row, replaced in place where it first stood; the newer plan_update by its planId.
+    Commands, mode and usage are the session's state (acp.ACPClient.state), never a line of the chat."""
+    from taskuary import acp, conversation
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    entries = lambda *st: [{'content': c, 'status': x} for c, x in zip(('Read the ledger', 'Fix the tax line'), st)]
+    chatlog.feed(s, tid, 'sid1', 'acp', {'sessionUpdate': 'plan', 'entries': entries('in_progress', 'pending')})
+    chatlog.feed(s, tid, 'sid1', 'acp', {'sessionUpdate': 'agent_message_chunk', 'messageId': 'm1', 'content': {'type': 'text', 'text': 'Reading.'}})
+    chatlog.feed(s, tid, 'sid1', 'acp', {'sessionUpdate': 'plan', 'entries': entries('completed', 'in_progress')})
+    for k in ('available_commands_update', 'current_mode_update', 'usage_update'): chatlog.feed(s, tid, 'sid1', 'acp', {'sessionUpdate': k, 'availableCommands': []})
+    for todo in ('pending', 'completed'):
+        chatlog.feed(s, tid, 'sid2', 'trace', {'type': 'tool_call', 'name': 'TodoWrite', 'detail': {'tool_call_id': f't-{todo}', 'args': {'todos': [{'content': 'Send it', 'status': todo}]}}})
+    chatlog.feed(s, tid, 'sid1', 'acp', {'sessionUpdate': 'plan_update', 'planId': 'pl-1', 'entries': entries('pending', 'pending')})
+    chatlog.feed(s, tid, 'sid1', 'acp', {'sessionUpdate': 'plan_update', 'planId': 'pl-1', 'entries': entries('completed', 'completed')})
+    steps = chatlog.read(s, tid, 'everything')['items'][-1]['steps']
+    assert [x['k'] for x in steps] == ['plan', 'said', 'plan', 'plan'], 'one row per plan, where it first stood; no row of the session\'s state'
+    assert [i['status'] for i in steps[0]['items']] == ['completed', 'in_progress'] and steps[2]['items'] == [{'text': 'Send it', 'status': 'completed'}]
+    assert [i['status'] for i in steps[3]['items']] == ['completed', 'completed']
+    c = object.__new__(acp.ACPClient); c.state, c.options, c.on_update = {}, [], None
+    c._notified({'method': 'session/update', 'params': {'update': {'sessionUpdate': 'available_commands_update', 'availableCommands': [{'name': 'compact'}]}}})
+    c._notified({'method': 'session/update', 'params': {'update': {'sessionUpdate': 'current_mode_update', 'currentModeId': 'plan'}}})
+    c._notified({'method': 'session/update', 'params': {'update': {'sessionUpdate': 'usage_update', 'used': 1200, 'size': 200000}}})
+    assert c.state == {'commands': [{'name': 'compact'}], 'mode': 'plan', 'usage': {'used': 1200, 'size': 200000}}
+
+
 def test_a_row_is_pushed_to_the_open_chat_as_it_is_written():
     """THE WORDS STREAM INTO THEIR ROW (the owner, 2026-11-23): each write of a row goes out on the task's run-tail with the row as a read
     serves it and the turn it stands in - the page patches it in place (chatStream.patchSteps), never waiting on a 600 ms read."""

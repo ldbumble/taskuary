@@ -10,6 +10,7 @@ import FilterAltIcon from "@mui/icons-material/FilterAlt";
 import WorkOutlineIcon from "@mui/icons-material/WorkOutline";
 import RateReviewIcon from "@mui/icons-material/RateReview";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
+import SmartToyIcon from "@mui/icons-material/SmartToy";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import AddIcon from "@mui/icons-material/Add";
 import api from "./api";
@@ -27,6 +28,10 @@ import { fmtDate } from "./dates.js";
 const DOCS = {
   soul: { label: "SOUL.md", icon: <AutoStoriesIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
     blurb: "The funnel's constitution AND the base system prompt: what counts as a task, how we respond, escalation rules, the repository map. Injected into every triage and every draft." },
+  // EVERY AGENT'S INSTRUCTIONS ARE A FILE HE CAN EDIT (the owner, 2026-11-23): read by every agent on every AI at its next turn; security
+  // stays in code and is not in it. The meter keeps it short (doclimits: selfclose.AGENTS_CHARS)
+  agents: { label: "AGENTS.md", icon: <SmartToyIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
+    blurb: "How every agent works (read by every agent). Every agent, on every AI, reads it at its next turn - keep it to a few general sentences. Blank it to restore the default." },
   job: { label: "JOB.md", icon: <WorkOutlineIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
     blurb: "What your job IS — the mission, the responsibilities, who you serve, the cadences the month runs on, the decisions that are yours and the ones you hand up. SOUL.md says how the funnel behaves; this is what it is protecting. Triage, the chat and the morning brief weigh what matters by it; working agents never see it. Write it yourself, or Generate from history reads it out of three months of your mail, both directions." },
   triage: { label: "TRIAGE.md", icon: <FilterAltIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,

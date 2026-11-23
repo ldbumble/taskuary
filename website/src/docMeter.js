@@ -2,7 +2,7 @@
 // instructions, with a bar/percentage showing if you are over"). The limit is the server's - GET /api/doc/{name} returns the very
 // number its prompt cuts with (taskuary/doclimits.py) - and `flat` means it counts the text as a session receives it.
 
-// terminal.flatten_rules, line for line: headings unmarked, blank lines dropped, one space between everything
+// selfclose.flat, line for line: headings unmarked, blank lines dropped, one space between everything
 export const flatten = (t) => String(t || "").split(/\r\n|\r|\n/).filter((l) => l.trim())
   .map((l) => (/^\s*#/.test(l) ? l.replace(/^[ #*-]+|[ #*-]+$/g, "").trim() : l.trim()))
   .join(" ").split(/\s+/).filter(Boolean).join(" ");

@@ -701,9 +701,7 @@ class TerminalTests(unittest.TestCase):
                   'REPO: northwind/Census', 'Do NOT look this task up again', 'fix it if it is fixable',
                   'Do NOT create GitHub issues']:
             self.assertIn(s, seed)
-        self.assertIn('CODING RULES (CODING.md)', seed)                  # CODING.md rides along (PW-185: one labelled block)
-        self.assertIn('RULES (AGENT.md', seed)                          # ...on top of the rules every worker shares (PW-182)
-        self.assertIn('Work ONLY in the repository', seed)
+        self.assertNotIn('RULES (AGENT.md', seed); self.assertNotIn('CODING.md', seed)     # no rule blocks (the owner, 2026-11-23)
         self.assertNotIn('\\n', seed)                                   # one line - a newline submits
 
     def test_the_seed_and_the_file_it_points_to_agree_on_taskuarys_api(self):
@@ -1481,7 +1479,7 @@ class SeedCompletenessTests(unittest.TestCase):
         loses the tail of a paragraph."""
         s, tid = self._task('z' * 200000)
         seed = terminal.seed_text(s, tid)
-        for must in ('WHAT TO DO', 'Do NOT push', 'CODING RULES (CODING.md)', 'RULES (AGENT.md'):   # PW-185 labels
+        for must in ('WHAT TO DO', 'Do NOT push', terminal.FENCE_LINE):
             self.assertIn(must, seed, must)
 
     @_owner
@@ -1498,7 +1496,7 @@ class SeedCompletenessTests(unittest.TestCase):
         self.assertIn('Missing required detail? Change nothing: ask one concrete question here, '
                       'say if the sender must answer, and wait.', seed)
         # the cut is IN the message, strictly ahead of the rules it must never reach
-        self.assertLess(seed.index('truncated here'), seed.index('RULES (AGENT.md'))
+        self.assertLess(seed.index('truncated here'), seed.index(terminal.FENCE_LINE))
 
     @_owner
     def test_the_NEWEST_message_is_the_ask(self):

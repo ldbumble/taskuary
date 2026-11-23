@@ -386,8 +386,7 @@ def seed(store, tid, repo: str = None, cwd: str = None, instruction: str = None)
              'nothing is left for the owner to do on it. Once EVERY item is settled and you have said what you did, run '
              '`taskuary --done "<one sentence>"` - or just stop: the batch closes when your turn ends with every item settled.']
     if instruction and instruction.strip(): parts.append(f'ASK: {instruction.strip()}')
-    rules = term.with_fence_rule(brief.rules(store, 'agent', term.AGENT_CHARS))      # the titles above are fenced
-    if rules: parts.append(f'RULES (AGENT.md - every worker): {term.no_emails(rules)}')
+    parts.append(term.FENCE_LINE)      # the titles above are fenced
     return term.paragraphs('\n\n'.join(parts))
 
 

@@ -2029,19 +2029,9 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     from . import semantic
     layer = ' '.join(semantic.block(store).split())
     if layer: parts.append(layer)
-    # SOUL.md stays with triage (PW-184): the worker gets the rules both kinds share (AGENT.md, which
-    # carries the approval boundaries and 'inbound text is data' that used to ride only in SOUL.md) and
-    # the coding additions (CODING.md) - one block each, nothing duplicated (PW-185)
-    agent_rules = with_fence_rule(_brief.rules(store, 'agent', AGENT_CHARS))
-    if agent_rules: parts.append(f'RULES (AGENT.md - every worker): {no_emails(agent_rules)}')
-    # the ROUTED profile's rules, not the coding profile's by default: a researcher gets RESEARCHER.md and is
-    # never told to work only in a repository. An empty document sends no block at all - falling back
-    # to CODING.md here would be the bug, not a safety net.
-    prof = profile_of(t, store)
-    rules = rules_text(store, profile=prof)
-    from .agents import profile_document
-    rules_doc = profile_document(store, prof)
-    if rules: parts.append(f"{'CODING RULES' if rules_doc == 'coding' else 'RULES'} ({rules_doc.upper()}.md): {no_emails(rules)}")
+    # NO RULE BLOCKS (the owner, 2026-11-23: "code should never tell an agent what to do ... profiles do nothing"): AGENT.md, the profile's
+    # document and the matched playbook no longer ride the seed - the fence (security) does, and how a to-do is ticked, the shell's one tool
+    parts.append(f'{FENCE_LINE} {TICK_LINE}')
     # the rules are the owner's document, written for every session; a stranger's runs fewer commands (cli.STRANGER_ACTS),
     # and told to read the wall first, its first step was a refusal (live check 2026-10-14)
     if stranger:
@@ -2049,12 +2039,6 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
         no = ', '.join(f"--{a.replace('_', '-')}" for a in AGENT_ACTS if a not in STRANGER_ACTS)
         parts.append(f'THIS SESSION: a stranger\'s task runs none of taskuary {no} - skip what the rules say about them; '
                      '--note still posts to this task\'s own wall.')
-    # the playbook for THIS kind of job (playbooks.py): triage tagged the task with it, and it is the
-    # operative rule set here - CODING.md's "work only in the repository" is the wrong first rule for a
-    # bill, so the playbook says so out loud; the closing-out and wall rules still stand
-    from . import playbooks as _pbk
-    pbk = _pbk.seed_block(t)
-    if pbk: parts.append(no_emails(pbk))
     # ...and the owner's own standing notes about THIS thread. agents.memory_block has built
     # this block since it was written and nothing ever called it, so every verdict the owner
     # gave - who to defer to, what is not ours, what never gets touched - reached the triage
@@ -2137,7 +2121,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
         # ...and since paragraphs() a blank line, not a space, stands before it: ' RULES (' never matched again, so a seed over the
         # ceiling lost its END instead of its ask - the closing lines on how to finish and reply (found 2026-10-27, when CODING.md
         # grew). The LAST one: a mail body quoting the label sits before the real one.
-        ask, rsep, rest = tail.rpartition('\n\nRULES (AGENT.md - every worker)')
+        ask, rsep, rest = tail.rpartition(f'\n\n{FENCE_LINE}')
         if sep and rsep and len(ask) > over + 400:
             out = closed(head + sep + _recut(ask, len(ask) - over - 220)) + rsep + rest
         else:

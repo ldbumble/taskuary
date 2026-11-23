@@ -6191,6 +6191,21 @@ def _answer_on_item(store, tid: int, text: str, item: dict | None, llm, trace=No
     return {'say': reply, 'options': [], 'chips': [], 'decision': None}
 
 
+def shown_files(paths) -> str:
+    "The files the owner showed with his line, named for a brain that reads them (a CLI's) - an API brain also gets the pictures themselves."
+    return f"{general.files_head(paths)} (read these files - they are what the owner is showing you)\n" + "\n".join(map(str, paths))
+
+
+class _Showing:
+    """A turn's brain with what the owner showed on his line riding EVERY call: the picture itself and the files named. Only the first call
+    had them, so a turn that looked something up first answered without the picture - "what is this?" got a summary of the task on the table."""
+    def __init__(self, llm, paths): self.llm, self.pics, self.named = llm, general._images(paths), shown_files(paths)
+    def __getattr__(self, k): return getattr(self.llm, k)            # a CLI brain's session and warm-up stay its own
+    def __call__(self, system, user, **kw):
+        if self.named not in user: user = f"{user}\n\n{self.named}"
+        return self.llm(system, user, **({'images': self.pics} if self.pics else {}), **kw)
+
+
 def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None,
          open_card: str | None = None, images: list | None = None) -> dict:
     """The owner's words, answered briefly - about the item on the table when there is one. The MODEL interprets
@@ -6229,6 +6244,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # conversation so far is read here too, so it holds what came before this line and never the line itself, said again below it.
     from . import toolcatalog, pageview
     llm = _brain_for(store, tid, llm, trace, cancel)
+    if llm and images: llm = _Showing(llm, images)        # what he showed rides every call of the turn, a look-up's answer too (walk 9, 43)
     adv_d = _decision(store, item) if llm else {}
     picks = toolcatalog.select_values(store, p['items']) if llm else ''
     so_far = _turns(store, tid, TURNS - 1) if llm else ''
@@ -6291,11 +6307,11 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       + ((f"{adv}\n\n" if (adv := _advice_block(store, item, adv_d)) else '') if item else '')
                       + f"{OWNER_SAYS}{text}\n"
                       # A PICTURE WITH THE LINE (the owner, 2026-09-30): an API brain sees it, a CLI brain reads the file it names
-                      + (f"{general.files_head(images)} (read these files - they are what the owner is showing you)\n" + "\n".join(images) + "\n" if images else '')
+                      + (f"{shown_files(images)}\n" if images else '')
                       # ...and WHAT A FILE SAYS, read here (attachtext): the API brain cannot open a path, and the CLI one runs with its tools off
                       + (f"{said}\n" if images and (said := attachtext.block(attachtext.of_paths(images), 'WHAT THE ATTACHED FILES SAY')) else '')
                       + 'Answer them, briefly.')                        # the rest of how is the instructions' (TURN_GUIDE)
-        raw = _view_lines(str(llm(system, asked, max_tokens=MAX_TOKENS, **({'images': general._images(images)} if images else {})) or '').strip())
+        raw = _view_lines(str(llm(system, asked, max_tokens=MAX_TOKENS) or '').strip())
         rail_read(llm, tid, rail, rail_sent)
         raw, call = parse_call(raw)
         # A LOOK-UP runs at once and comes straight back, because it changes nothing and waits for

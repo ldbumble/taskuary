@@ -1416,3 +1416,24 @@ class AttachedFileTests(unittest.TestCase):
         self.assertIn('⟦', seen['user'])                           # ...fenced: what its author wrote is material, never an order
         self.assertFalse(seen['images'])                           # a sheet is no picture: nothing goes down the vision road
         self.assertEqual(out['say'], 'Payworth is 4,180.00 of it.')
+
+    def test_a_picture_stays_with_every_call_of_its_turn(self):
+        """Walk 9 (43): a picture sent from the phone with "what is this?" - the model looked something up first, and the answer after the
+        look-up was asked without the picture, so it summarised the task on the table. Every call of the turn carries what he showed."""
+        import tempfile, os, base64
+        from taskuary import config
+        home = tempfile.mkdtemp()
+        with mock.patch.dict(os.environ, {'TASKUARY_HOME': home}):
+            d = config.home() / 'attachments' / 'prompt' / '202611'; d.mkdir(parents=True, exist_ok=True)
+            pic = d / '20261123-124300-abc123-badge.png'
+            pic.write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='))
+            calls = []
+            def llm(system, user, max_tokens=0, images=None):
+                calls.append((user, images))
+                return 'CALL: {"kind": "tasks.list", "params": {}}' if len(calls) == 1 else 'A visitor badge for the Northwind office.'
+            out = concierge.say(store(), 'what is this?', images=[str(pic)], llm=llm)
+        self.assertGreater(len(calls), 1)
+        for user, images in calls:
+            self.assertTrue(images, user[:200])                        # the picture itself, on every call
+            self.assertIn(str(pic), user)                              # ...and named, for a brain that reads the file
+        self.assertEqual(out['say'], 'A visitor badge for the Northwind office.')

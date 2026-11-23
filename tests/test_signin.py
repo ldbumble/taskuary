@@ -1017,6 +1017,29 @@ def test_the_sign_up_command_sends_the_form_he_asked_for_with_a_password_kept_be
     assert typed[0] not in json.dumps([s._rows('SELECT * FROM audit'), s._rows('SELECT * FROM comment'), said], default=str)
 
 
+def test_a_sign_up_never_sends_a_code_to_an_inbox_nobody_reads():
+    """Walk 9 (CLI 2-6): an agent made a web-mail inbox for tests, then put it on five sign-ups - every site emailed its code there, Taskuary
+    reads no such inbox and the owner cannot open it, so each code was handed to him to type. The form goes only with an address a code can
+    come back to: the mailboxes Taskuary reads are named; reading none, the owner is asked once which address to use. Nothing is typed."""
+    from taskuary import selfclose
+    made = 'alex.testbox26@tutamail.example'
+    s = MemoryStore(); tid = Factory(s).task('Canva account')
+    signin.save(s, 'tuta.example', 'alex.testbox26', PW, by='taskuary', task=tid)            # its form took a bare name; its mail is @tutamail
+    signin.save(s, 'lienlens.example', 'alex+canvas@northwind.example', PW, by='taskuary', task=tid)     # an account on a site, not an inbox
+    page, typed, sent = UpPage('https://www.canvas.example/signup', user=made), [], []
+    page.fields_ = [{'k': 'email', 't': 'email', 'v': made}]
+    selfclose._MARKS.pop(int(tid), None)
+    ok, said = signing_up(s, tid, page, lambda *a: sent.append(a) or {'ok': True}, typed)
+    assert not ok and not typed and not sent and made in said and 'reach nobody' in said, said
+    assert selfclose.ASK_MARKER in selfclose.take_marks(tid)                        # ...his one question, on the task
+    s.save_source({'Channel': 'email', 'Address': 'alex@northwind.example', 'Owner': 'o', 'Active': 1, 'ConfigJson': '{}'}, 'o')
+    ok, said = signing_up(s, tid, page, lambda *a: sent.append(a) or {'ok': True}, typed)
+    assert not ok and not sent and 'alex@northwind.example' in said and not selfclose.take_marks(tid), said
+    page.fields_ = [{'k': 'email', 't': 'email', 'v': 'alex+canvas@northwind.example'}]; page.user = 'alex+canvas@northwind.example'
+    ok, said = signing_up(s, tid, page, lambda sid, site, c: c.go('data', 'https://www.canvas.example/home') or {'ok': True}, typed)
+    assert ok and typed, said                                                        # a mailbox it reads: the form goes
+
+
 def test_a_sign_up_the_site_turned_down_puts_back_the_sign_in_it_replaced():
     """An agent that signed up twice on one site ("An account with that email already exists") must not cost the owner the sign-in that works."""
     s = MemoryStore(); tid = Factory(s).task('Market data'); signin.save(s, 'rentscope.example', USER, PW)

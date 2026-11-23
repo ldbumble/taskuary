@@ -1520,6 +1520,44 @@ class tab_at:
 
 
 # ── the command ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+# A CODE IS NEVER MAILED WHERE NOBODY READS IT (walk 9, CLI 2-6): an inbox an agent made on a web mail site was then put on five sign-ups - each
+# site emailed its code there, Taskuary reads no such inbox, he cannot open it, and every code was handed to him to type. An address on the form
+# that is an inbox an agent made (the vault knows it) and no mailbox Taskuary reads is refused before anything goes: with the ones it reads named,
+# or - reading none - his one question on the task, which address to use
+EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+def unread_inbox(store, f: dict) -> str:
+    "The email on the sign-up form `f` that is an inbox an agent made and Taskuary does not read - or ''."
+    from .ingest import own_addresses, owner_addresses
+    reads = {_bare(a) for a in owner_addresses(store) | own_addresses(store)}
+    made = {(r['site'], str(r['user'] or '').lower()) for r in listing(store) if r['by'] == 'agent'}
+    for v in [f.get('user'), *(x.get('v') for x in f.get('fields') or [])]:
+        a = str(v or '').strip().lower()
+        if not EMAIL_RE.match(a) or _bare(a) in reads: continue
+        local, dom = a.split('@', 1)
+        # ...the mailbox itself, kept as the account on its own mail site (its address, there) or by the bare name its form took - never an
+        # account on another site that merely uses the address
+        if any((u == a and s == registrable(dom)) or u == local for s, u in made): return a
+    return ''
+
+
+def _bare(a) -> str:
+    "An address without its +tag: alex+rentscope@ reaches alex@'s inbox."
+    local, _, dom = str(a or '').strip().lower().partition('@')
+    return f"{local.split('+', 1)[0]}@{dom}"
+
+
+def _dead_inbox(store, tid, site: str, addr: str) -> str:
+    from .ingest import owner_addresses
+    from . import selfclose
+    boxes = sorted(owner_addresses(store))
+    head = f'Nothing was sent: {addr} is an inbox an agent made that Taskuary does not read, so a code {site} emails there would reach nobody. '
+    if boxes: return head + f"The mailboxes Taskuary reads: {', '.join(boxes)} - put one in the form and run `agent-browser signup` again."
+    q = selfclose.ask_mark('Which email address should the accounts I make use? Taskuary reads none of your mailboxes yet, so a code a site emails '
+                           'could not come back by itself - connect your mailbox under Connections, or name an address you read.')
+    if q not in [l for _k, l in selfclose._MARKS.get(int(tid), [])]: selfclose.keep_mark(tid, 'ask', q)
+    return head + 'Taskuary reads no mailbox, so the owner is asked once on this task which address to use; go on with what does not hang on it.'
+
+
 def signup(store, tid, sid) -> tuple[bool, str]:
     """`agent-browser signup`: the agent filled a sign-up form but its password. -> (made or held, what the command prints)."""
     from . import browsergate, browserview, proposals
@@ -1535,6 +1573,7 @@ def signup(store, tid, sid) -> tuple[bool, str]:
         # the address read was another tab's) - the card names that tab, and his press runs there only (browsergate.held_tab)
         here = str(c.js('location.href') or '')
         if site_of(here) and site_of(here) != site: url, site = here, site_of(here)
+        if dead := unread_inbox(store, c.js(FORM) or {}): return False, _dead_inbox(store, tid, site, dead)
         pg = browsergate.page(sid)
         name = site_name(url, sid) or site
         v = browsergate.judge(store, [{'verb': 'press', 'args': [], 'raw': f'send the filled sign-up form on {name}, creating an account there'}], pg,

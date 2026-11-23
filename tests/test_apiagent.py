@@ -746,7 +746,8 @@ class TheSessionTests(unittest.TestCase):
         self.assertIn(f"TODAY: {datetime.now().strftime('%A %d %B %Y')}", seen[0])
         self.assertIn('Ray Colton <ray@northwind.example>', seen[0])
         self.assertIn('An AI CLI - a shell, files and a browser on this computer - can be installed from', seen[0])
-        self.assertIn('can be a routine Taskuary runs', seen[0])
+        # ...and no hint at a tool or a setting it was not asked about (walk 9, 2026-11-23: a routine and Developer mode on every task)
+        self.assertNotIn('save_routine', seen[0]); self.assertNotIn('Developer mode', seen[0])
 
 
 class TheToolboxTests(unittest.TestCase):

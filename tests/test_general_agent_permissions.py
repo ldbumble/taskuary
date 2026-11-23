@@ -59,10 +59,14 @@ class TheDefaultIsTheCliAgentsOwnHandsTests(unittest.TestCase):
     def test_it_is_told_which_systems_it_may_use_and_how(self):
         store = MemoryStore(); a_claude(self)
         store.save_connector({'Type': 'mssql', 'Name': 'SQL Server', 'Active': 1, 'Roles': 'report,tool', 'Scope': 'read'}, 'test')
-        prompt = turn(store, task(store))['prompt']
-        # ...and how: by Taskuary's own run_system where the session has it (Claude does), never a curl the shell gate holds (2026-11-12)
-        self.assertIn('SQL Server', prompt); self.assertIn('Call one with run_system', prompt)
-        self.assertIn('authority read', prompt)          # so a write is proposed rather than attempted
+        tid = task(store); prompt = turn(store, tid)['prompt']
+        # ...FOUND ON DEMAND (walk 9, 2026-11-23: the Company Hub's tools rode every task): a session with Taskuary's tools asks list_systems,
+        # and is told there how - by Taskuary's own run_system, never a curl the shell gate holds (2026-11-12)
+        self.assertNotIn('SQL Server', prompt)
+        from taskuary import agenttools
+        listed = agenttools.call(store, tid, 'list_systems', {}, {})
+        self.assertIn('SQL Server', listed); self.assertIn('Call one with run_system', listed)
+        self.assertIn('authority read', listed)          # so a write is proposed rather than attempted
 
     def test_look_only_takes_the_hands_away(self):
         store = MemoryStore(); a_claude(self)

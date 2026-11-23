@@ -3142,7 +3142,9 @@ class GeneralSession:
             tooled = hands and _cli_of_pick(self.store, run) in REPLY_TOOL_CLIS and _origin_of(self.store, self.task_id) != 'stranger'
             markers = '' if tooled or is_dock(self.store.get_task(self.task_id)) else marker_lines(self.store, self.task_id, hands, run.startswith('cli:'))
             if markers and not api_hands: system = f'{system}\n\n{markers}'
-            if hands:
+            # ...HIS SYSTEMS ARE FOUND ON DEMAND where the session has the tool for it (list_systems; walk 9, 2026-11-23: the Company Hub's
+            # seven tools and its authority rule rode every task, whatever it was) - said here only to a session with no tools to ask with
+            if hands and not tooled:
                 from . import docsync
                 if (systems := docsync.agent_systems(self.store, tooled)): system = f'{system}\n\n{systems}'
             # ...and the owner's own mail, which a stranger's task never reads (the route refuses it too: server._owner_history): searched by

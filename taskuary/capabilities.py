@@ -128,12 +128,11 @@ def other_ais(store, pick: str = '', clis: bool = False) -> list:
 
 def fact(store, hands: str, pick: str = '', tools=()) -> str:
     """WHAT THIS AGENT CAN DO HERE, in one block: `hands` 'all' (a shell and files), 'look' (reads only) or 'none' (a card that takes no
-    tools); the AIs the owner could hand it to instead, from his own menu; Developer mode, as it stands. Said where every turn's late facts
+    tools); the AIs the owner could hand it to instead, from his own menu. Said where every turn's late facts
     are (general), so a change - a switch flipped, an AI connected - reaches a conversation under way. `tools`: the names an AI card's agent is
     offered this turn - its own hands among them said by their own lines, so what it can make is read off what it has, never guessed."""
     from . import agents, words
     others = other_ais(store, pick)
-    dev = agents.developer_mode(store)
     # ...AND THE APP'S OWN ROADS WHERE THIS AGENT HAS NONE (design round 4, H5: an AI card told him "there is no button or setting you can press"
     # with the install of a CLI one page away, and "I cannot schedule this" in an app that runs routines): a road that is here is named
     cli = _safe(lambda: agents.cli_ready(store))
@@ -144,10 +143,7 @@ def fact(store, hands: str, pick: str = '', tools=()) -> str:
            f"- Another AI could do this task: {', '.join(others)} - he picks it in the Agent menu on this task." if others else
            '- No other AI is connected here.',
            # ...the road for hands it LACKS: an agent with tools has them, and was told to send him off to install one as a to-do (2026-11-19)
-           *([] if cli or hands != 'none' else [f"- An AI CLI - a shell, files and a browser on this computer - can be installed from {words.link('ai_apps')}."]),
-           '- Work that should run again by itself can be a routine Taskuary runs (propose save_routine).',
-           '- Developer mode is on: coding tasks also run in a terminal of their own.' if dev else
-           f'- Developer mode is off ({settings_schema.link("developer_mode", "Settings")}): it adds coding tasks in a terminal '
-           'of their own' + (' - a change in a folder he names needs none of it.' if hands == 'all' else '.')]
-    # ...and Developer mode only where it would give him something: with no AI CLI here it starts no coding task (agents.coding_ready)
-    return '\n'.join(out if cli else out[:-1])
+           *([] if cli or hands != 'none' else [f"- An AI CLI - a shell, files and a browser on this computer - can be installed from {words.link('ai_apps')}."])]
+    # ...and no hints at settings or at a tool it was not asked to use (walk 9, 2026-11-23: "propose save_routine" and "Developer mode is off
+    # ([Settings](#...))" on every task, whatever it was): a routine is its tool's own description, found when the work wants one
+    return '\n'.join(out)

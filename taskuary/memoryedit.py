@@ -249,6 +249,21 @@ def remember(store, text: str, about: str = '', section: str = '', replaces: str
     return {'ok': True, 'text': t, 'section': slug, 'title': lc.TITLE[slug], 'closed': closed}
 
 
+def nearby(store, section: str, who: str = '', fit: int = 800) -> list:
+    """The lines a `replaces` that matched none may have meant, to copy one from: those about `who`, then every line of `section` - newest
+    first, up to `fit` characters. A correction that misses is shown what is there; it is never offered "keep it beside them" (walk 6,
+    2026-11-23: that offer stood first, was taken, and two lines that disagree were both read as true)."""
+    doc = store.get_doc(DOC) or ''
+    mine = [l['text'] for l in about(store, who)['lines']] if str(who or '').strip() else []
+    head = lc.SECTIONS.get(section)
+    out, n = [], 0
+    for t in mine + ([TAG.match(r).group('text').strip() if TAG.match(r) else _bare(r) for r, _k in reversed(lc.lines(doc, head))] if head else []):
+        if t in out: continue
+        if n + len(t) > fit: break
+        out.append(t); n += len(t) + 4
+    return out
+
+
 def _key(text: str) -> str:
     from .learnedgraph import _key as k
     return k(text)

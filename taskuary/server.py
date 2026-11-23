@@ -6244,13 +6244,14 @@ def agent_remember(body: AgentRememberBody, request: Request):
                                  "changes how future work is handled. Carry on with the task; a fact that corrects one of them is kept with `replaces`.")
     try: r = memoryedit.remember(store, body.note, body.about, body.section, replaces=body.replaces, actor=f'agent:{body.agent}')
     except LookupError:
-        # ...a line to replace that the memory does not hold: the lines about them, to copy one from - or kept beside them, with no `replaces`
-        near = [l['text'] for l in memoryedit.about(store, body.about)['lines']][:8] if body.about.strip() else []
+        # ...a line to replace that the memory does not hold: the lines it may have meant, to copy one from (memoryedit.nearby) - never "keep it
+        # beside them", the offer that left two lines disagreeing (walk 6); with nothing there to contradict, there is nothing to replace
+        near = memoryedit.nearby(store, body.section, body.about)
         from .agenttools import echo, refusal
         raise HTTPException(422, refusal(f"not kept: no line of the memory reads {echo(body.replaces)!r}",
-                                         f"call again with the line it makes untrue copied exactly from these about {echo(body.about)}: "
-                                         f"{json.dumps(near, ensure_ascii=False)} - or with no `replaces`" if near else
-                                         "call again with no `replaces`, or copy the line it makes untrue", see=() if near else ('owner_memory', 'reads the lines')))
+                                         f"call again with `replaces` copied exactly from the line it makes untrue - these are the memory's lines "
+                                         f"it may be: {json.dumps(near, ensure_ascii=False)}" if near else
+                                         "nothing there for it to replace - call again with no `replaces`"))
     except ValueError as e: raise HTTPException(422, str(e))
     if not r.get('already'): store.audit('task', body.task_id, 'agent_remembered', body.agent, 'agent', {'line': r['text'][:400], 'section': r.get('section'), 'closed': (r.get('closed') or {}).get('text')})
     c = r.get('closed') or {}

@@ -1667,8 +1667,11 @@ def _memory(store, tid: int, kind: str, p: dict) -> dict:
         r = memoryedit.mark(store, key, how)
         return _did(store, tid, (f"Took {q(r['text'])} out - it will not be learned again." if how == 'wrong'
                                  else f"Took {q(r['text'])} out for now - it comes back only if much more says it again."), kind)
-    except LookupError as e: raise CallMiss(f"No line in the memory has the key {str(p.get('key') or p.get('replaces') or '')!r} ({str(e).strip(chr(39))}). Read memory.about for "
-                                            'the keys, or say so in plain words. Nothing was changed.')
+    except LookupError as e:
+        near = memoryedit.nearby(store, str(p.get('section') or ''), str(p.get('about') or '')) if kind == 'memory.remember' else []
+        raise CallMiss(f"No line in the memory has the key {str(p.get('key') or p.get('replaces') or '')!r} ({str(e).strip(chr(39))}). "
+                       + (f"Call again with `replaces` copied exactly from the line it makes untrue: {json.dumps(near, ensure_ascii=False)}. " if near else
+                          'Read memory.about for the keys, or say so in plain words. ') + 'Nothing was changed.')
     except ValueError as e: raise CallMiss(f'{e} Say so in plain words. Nothing was changed.')
 
 

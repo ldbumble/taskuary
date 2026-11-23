@@ -584,6 +584,11 @@ CREATE TABLE IF NOT EXISTS chatlog (Id INTEGER PRIMARY KEY, TaskId INTEGER NOT N
 CREATE INDEX IF NOT EXISTS idx_chatlog ON chatlog(TaskId, Id);
 CREATE UNIQUE INDEX IF NOT EXISTS one_live_card ON chatlog(TaskId) WHERE Kind='card' AND State='pending';
 CREATE TABLE IF NOT EXISTS chatlog_task (TaskId INTEGER PRIMARY KEY, Rev INTEGER NOT NULL DEFAULT 0, Migrated TEXT);
+-- WHAT A TASK'S AGENT IS TOLD BETWEEN TURNS (events.py): each fact once, written where it happens - a message on the task, his line, a card's
+-- state, his press, Taskuary's note - and the one agent's cursor into them (`Upto`; `Told`: ids past it a turn at work was handed already)
+CREATE TABLE IF NOT EXISTS event (Id INTEGER PRIMARY KEY, TaskId INTEGER NOT NULL, At REAL NOT NULL, Kind TEXT NOT NULL, Key TEXT NOT NULL,
+  Body TEXT NOT NULL, UNIQUE(TaskId, Key));
+CREATE TABLE IF NOT EXISTS event_cursor (TaskId INTEGER PRIMARY KEY, Upto INTEGER NOT NULL DEFAULT 0, Told TEXT NOT NULL DEFAULT '[]');
 -- The agent wall (blackboard.py): what one agent leaves for the next one in the same
 -- checkout. Derived facts (who holds which file) are read off git and the run trace and are
 -- never stored; this is the part only the agent knows - what it is doing, what it found, what
@@ -2842,8 +2847,13 @@ class SQLiteStore:
         mid = self._insert('message', fields, MSG_COLS, {'CreatedAt': _now()})
         if fields.get('TaskId'):
             self._bump_snapshots()
+            from . import events                 # ...filed on a task as it is stored: one event there (events.arrived)
+            events.arrived(self, mid, fields['TaskId'])
             self._poke('feed-changed', 'task-changed', message_id=mid, task_id=fields['TaskId'])
         else:
+            if (fields.get('Direction') == 'out' or fields.get('Status') == 'context') and fields.get('ConversationId'):
+                from . import events             # ...his own reply filed on no task: an event on the tasks of its thread
+                events.arrived(self, mid)
             self._poke('feed-changed', message_id=mid)
         return mid
     def get_message(self, mid): return self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
@@ -4918,6 +4928,8 @@ class SQLiteStore:
         if cur.rowcount != 1: return False
         if task_id is not None:
             self._bump_snapshots()
+            from . import events                 # ...one event on the task: what its agent hears of it (events.py)
+            events.arrived(self, mid, task_id)
             self._poke('feed-changed', 'task-changed', message_id=mid, task_id=task_id)
         else:
             self._poke('feed-changed', message_id=mid)
@@ -5356,6 +5368,8 @@ class SQLiteStore:
             aid = self.cx.execute('INSERT INTO audit (EntityType,EntityId,Action,Actor,ActorType,RunId,Detail,PrevHash,RowHash,CreatedAt) VALUES (?,?,?,?,?,?,?,?,?,?)',
                                   (et, eid, action, actor, actor_type, run_id, d, prev, rh, _now())).lastrowid
             self.cx.commit()
+        from . import events                     # ...a press of his on a task is a fact its agent hears (events.audited)
+        events.audited(self, et, eid, action, actor, d)
         # ...HIS PRESS ON A TASK is a line of its chat from the moment he makes it (chatlog.pressed: the one hook for every press road)
         if et == 'task' and eid and actor in ('owner', 'you'):
             from . import chatlog
@@ -5538,6 +5552,8 @@ class SQLiteStore:
         if review.get('TaskId'):                # ...raised, pressed, sent, withdrawn, set aside or failed: its card says so where it stood
             from . import chatlog                # ...put by the log's own worker, never under what this write's caller holds (advance_soon)
             chatlog.advance_soon(self, review['TaskId'], review.get('ReviewId'))
+            from . import events                 # ...and its state, once, for the agent (events.card)
+            events.card(self, review)
         kinds = []
         if review.get('MessageId'): kinds.append('feed-changed')
         if review.get('TaskId'): kinds.append('task-changed')
@@ -5655,7 +5671,7 @@ class SQLiteStore:
                     state = 'unknown'; env['delivery'] = state
                     reason = 'Delivery unknown after an interrupted attempt; check with the provider before any retry.'
                     # ...with who pressed it, as an attempt that ends unknown in its own process keeps them (finish_review_delivery): without them
-                    # its agent heard nothing of a send that may have gone (general.owner_did), and could set it up again
+                    # its agent heard nothing of a send that may have gone (events.card), and could set it up again
                     try: by = json.loads(row.get('DeliveryEnvelope') or '{}').get('actor') or 'owner'
                     except (TypeError, ValueError, AttributeError): by = 'owner'
                     self.cx.execute("UPDATE review SET DeliveryState=?, DeliveryClaim=NULL, Deliver=?, Reason=?, DecidedBy=?, DecidedAt=? WHERE ReviewId=? AND DeliveryClaim=?",

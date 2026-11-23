@@ -210,7 +210,7 @@ def came(x: dict) -> tuple:
 def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing: bool = False) -> int:
     """THE ONE HAND-OVER. Called ONCE at the moment a road gives the agent its input: `lines` - his lines it takes now, as they waited
     (store.take_lines' rows), or the name (LineId) of one sent this moment; `turn` - a turn begins, and with it the agent is told everything
-    that came in or was pressed since its last one (general.turn_facts), so those are heard here too, and the turn's own start is marked.
+    that came in or was pressed since its last one (its events, events.take), so those are heard here too, and the turn's own start is marked.
     `standing`: a line that begins a turn at the press - what already stood in the chat unheard is heard with it, before it, so nothing
     drawn moves under his line. Each input once, whoever calls and however often. -> how many were new.
     WHAT ONE HAND-OVER TAKES STANDS IN THE ORDER IT CAME (the recorded flood, 2026-11-11: his lines were written down first, then his own
@@ -271,17 +271,9 @@ def heard(store, tid: int, kind: str, refs) -> bool:
     return bool(refs) and store._one(f"SELECT COUNT(*) AS n FROM heard WHERE TaskId=? AND Kind=? AND Ref IN ({','.join('?' * len(refs))})", (int(tid), kind, *refs))['n'] == len(refs)
 
 
-def with_turn(store, tid: int) -> list:
-    """The messages (ids) the turn that just began heard: everything heard since the turn before it began. [] for a task's first turn - its
-    prompt carries the thread. What `hear` writes down as heard, the turn's own words must carry (general.came_in): never heard and not told."""
-    m = store._rows("SELECT HId FROM heard WHERE TaskId=? AND Kind='turn' ORDER BY HId DESC LIMIT 2", (int(tid),))
-    if len(m) < 2: return []
-    return [int(r['Ref']) for r in store._rows("SELECT Ref FROM heard WHERE TaskId=? AND Kind='mail' AND HId>? AND HId<? ORDER BY HId", (int(tid), m[1]['HId'], m[0]['HId']))]
-
-
 def unheard(store, tid: int) -> set:
-    """The messages (ids) on the task that came in after the newest turn began and no hand-over took: the NEXT turn's to hear, so nothing a
-    turn is told names them (general.newest_message) - told there and again when heard, an input reached the agent twice."""
+    """The messages (ids) on the task that came in after the newest turn began and no hand-over took: what a steer's hand-over takes with
+    his lines (general.GeneralSession.steer), so they stand in the chat where the agent heard them."""
     m = store._one("SELECT MAX(At) AS a FROM heard WHERE TaskId=? AND Kind='turn'", (int(tid),))
     if not (m and m['a']): return set()
     led = {r['Ref'] for r in store._rows("SELECT Ref FROM heard WHERE TaskId=? AND Kind='mail'", (int(tid),))}

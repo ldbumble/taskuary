@@ -1117,7 +1117,7 @@ def answered_drafts(store, tid, sent: dict) -> list:
 # action still required"). A second model read each waiting draft against the line and retired or cut it in the agent's name, and re-read a
 # working turn's closing words the same way - the agent itself heard the line only when something else woke it. Now a line on a chat where
 # the agent's draft waits, or while it works, wakes it to re-plan (ingest.thread_moved, own): it keeps, rewrites or withdraws its own card. A
-# line with neither stays context, heard on the next turn (general.latest_block - the owner, 2026-11-08). The one read (reread_draft) is kept
+# line with neither stays context, heard on the next turn (events.py - the owner, 2026-11-08). The one read (reread_draft) is kept
 # only where no agent may take the line - a task no assistant works, or the owner's switch or a missing AI that lets none run
 def owner_line(store, tid, msg: dict, mid, sent: dict) -> None:
     from . import ingest
@@ -1250,7 +1250,7 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
         # Never Taskuary's own acknowledgement, which promises an answer and is not one
         from . import ingest
         # ...but A LINE THE OWNER SAID IN A CHAT is context, never a turn (the owner, 2026-11-08: "it should show what i sent ... even if it
-        # does not trigger as a prompt"): it stands in the task's chat as theirs, and the agent hears it on its next turn (general.latest_block)
+        # does not trigger as a prompt"): it stands in the task's chat as theirs, and the agent hears it on its next turn (events.py)
         # - at once where its draft waits or it is at work (owner_line)
         if ingest.is_chat(msg): owner_line(store, tid, msg, mid, sent); return 1
         if not ingest.is_ack(store, sent):

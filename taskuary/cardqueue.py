@@ -7,7 +7,7 @@ hears the row once it is over (row_over), at once where a press failed, and from
 lets the rest stand, changes them, or takes them back. A press never sends or closes another card; nothing goes without its own press.
 
 Plain code, read wherever a card is drawn, listed or told: the chat's list (conversation.items), the page's detail (server.task_detail), what
-waits on the owner (store.waiting_reviews), and what its agent hears (agenttools, general.latest_block, general.approved/failed)."""
+waits on the owner (store.waiting_reviews), and what its agent hears (agenttools, events.py, general.approved/failed)."""
 import json, time, weakref
 
 LAND = 'land'                   # the landing question (landing.record): a card with no review row
@@ -411,13 +411,6 @@ def on_page(store, tid: int) -> list:
         logger.debug(f'cardqueue: the steps handed over on task {tid} were not read - {e}'); return []
 
 
-def once(facts: str, said: str) -> str:
-    """`facts` (a turn's, latest_block) less the screen fact when `said` - the note the same turn carries, a press told back - says it
-    already: a press woke the agent with the screen in its note, and the turn's facts said it again above it."""
-    if SCREEN_HEAD not in (said or '') or SCREEN_HEAD not in (facts or ''): return facts
-    return '\n\n'.join(p for p in facts.split('\n\n') if not p.startswith(SCREEN_HEAD))
-
-
 def _flat(x, n: int = 200) -> str: return ' '.join(str(x or '').split())[:n]
 
 
@@ -431,6 +424,5 @@ def said_no(store, rv: dict, verb: str, actor: str = 'owner') -> str:
     if _p(rv).get('action') in HELD_ACTS or verb == 'close_unsent' and rv.get('Kind') != 'slot': return ''
     # ...and a no that ends a row whose yeses woke nobody (row_over) is the row's one wake
     if not tid or not (state(store, tid)['units'] or unheard(store, tid)): return ''
-    no = {'reject': 'turned down', 'no_reply': 'said no reply is needed for', 'close_unsent': 'closed without sending', 'close_pr': 'turned down'}.get(verb, 'turned down')
-    return general.to_agent(store, tid, f"The owner {no} rv{rv['ReviewId']} ({what(store, {'rids': [rv['ReviewId']], 'rows': [rv]}, True)}) - their own no.\n\n{screen(store, tid)}", actor,
-                        heard=lambda how: store.audit('review', int(rv['ReviewId']), general.TOLD, actor, 'system', {'task': int(tid), 'how': how, 'no': verb}))
+    # ...his no is its card's event (events.card): this wakes the agent to hear it
+    return general.to_agent(store, tid, '', actor, heard=lambda how: store.audit('review', int(rv['ReviewId']), general.TOLD, actor, 'system', {'task': int(tid), 'how': how, 'no': verb}))

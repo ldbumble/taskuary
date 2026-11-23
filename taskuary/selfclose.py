@@ -300,9 +300,6 @@ def card_said(out: dict) -> str:
 # the ask, and the job goes on - every gate's refusal ends with this, and nothing else tells an agent to stop
 CARD_TAIL = ('It is an action card on this task now, the owner\'s to press: when they press it Taskuary runs it and tells you what happened. '
              'The rest of the job is not held by it.')
-# ...and WHAT A TURN IS HANDED IS CONTEXT, NOT NEWS (same walks): each turn is told what waits, what went and what he pressed, and said it
-# back to him - so the block says once, at its head, that it is his page's own news (general.latest_block)
-FACTS_HEAD = "WHAT STANDS ON THIS TASK NOW (each is on the owner's screen already):"
 # THE ONE SENTENCE AN AGENT IS TOLD (the owner, 2026-11-23: "code should never tell an agent what to do ... don't bother users unless we need
 # them for approval to send email, login to something"): everything else it gets is context and tools, each tool saying how it is used
 ONE_SENTENCE = ("Do what is asked of you; when a step needs the owner's yes or something only they can give, it goes to them as an action card "
@@ -319,12 +316,6 @@ SECRET_LINE = "A login or secret you find in the owner's files goes only in the 
 # its finish and wrote "I've closed the task", then "I had just marked the task done, so I'm reopening it" over a task open all along)
 NEVER_CLOSES = ('Taskuary did not close the task - closing it is the owner\'s, with {close}, which is lit for them now; it stays open until '
                 'they press it. Your sentence is filed on the task.')
-
-
-# THE ONE ENDING THE AGENT SAYS (the owner, 2026-11-05: "it should trigger a new taskuary chat ... saying i saw you reply so i will close the
-# task" - then: "so i recommend close it"): the owner answered the thread themselves, outside Taskuary (general.owner_answered_last); the
-# agent thinks again and RECOMMENDS the close - the owner makes it
-OWNER_ANSWERED_LINE = 'THE OWNER ANSWERED THIS THEMSELVES: the newest message on the thread is their own reply, sent outside Taskuary.'
 
 
 # ...and its reply. The chat writes the answer the sender gets inside a marked block; the words between
@@ -484,19 +475,10 @@ def attach_markers(text: str) -> tuple:
 # LATEST MESSAGE WINS (the owner, 2026-11-06: "Latest message should recalculate all the prior messages. it's just resending the original
 # response that was already sent"): corrected after a draft was waiting, the agent answered the first ask of the thread again and left that
 # draft standing under its newest turn, reading as the answer to the correction. Every turn is told it answers the NEWEST message, read
-# against all before it, what is pending and what already went (general.latest_block) - and how to take a draft back: this marker, on a road
+# against all before it, what is pending and what already went (its events, events.py) - and how to take a draft back: this marker, on a road
 # with no shell, or `taskuary --withdraw-draft` / the withdraw_draft tool (verdicts.withdraw). The model judges; no word list does
 # ...AND A NEWER MESSAGE NEVER RETIRES WHAT IS STILL OWED (the walk, 2026-11-19: asked for three caterer options, then "did you hear back?",
 # the agent called the options "no longer needed" and drafted only "Not yet" - "never an earlier ask again" read as dropping it)
-# ...A TURN NO MESSAGE STARTED (agent walk 2, 2026-11-10): woken by the owner's Send, the agent was handed the line it had answered a minute
-# before as "THE NEWEST MESSAGE", under "your answer is to the newest message" - and answered "What is left here?" a second time. A turn
-# Taskuary starts on an answered task (a press, a result that came back, a check-back) is told nothing new was said (general.latest_block)
-# EACH DUTY ONCE, IN THE STARTUP CONTEXT (the owner, 2026-11-11: "why would an agent say the same thing twice?"): the rules above rode EVERY
-# turn of a chat's agent, beside the same duty in its startup lines (REPLY_LINE, WHERE YOUR DRAFTS ARE, the summary's), and an agent says
-# back what it is told more than once - "ready for your Send below", then "Nothing has been sent", then "the new draft takes the place of
-# the old one". A chat's agent is told them once (DRAFTS_ONCE, general.prompt_parts) and a turn carries only its facts under a short head
-# ...and never said back (the real-CLI walks, 2026-11-12: "Nothing new has come in since my last answer" opened a turn a peer's note woke)
-LATEST_HEAD, NO_NEW_HEAD = 'A NEW MESSAGE STARTED THIS TURN.', 'NO NEW MESSAGE STARTED THIS TURN: you have answered the last message on the task.'
 WITHDRAW_MARK = '[[TASKUARY-WITHDRAW: <why, one line>]]'
 # ...and any unsent thing it set up, as withdraw_draft takes it (verdicts.withdraw): an agent with no shell took back only the reply draft,
 # so an email to the wrong person stood beside the right one with its Send (agent-flow audit, 2026-11-07)

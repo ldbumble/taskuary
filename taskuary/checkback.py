@@ -42,7 +42,7 @@ def set_check(store, tid: int, when, what, actor: str = 'agent') -> dict:
     if not at: raise ValueError('say when to check back - "tomorrow 9am", "in 2 days", "2026-11-12"')
     # THE SAME ONE SET AGAIN IS ALREADY SET (a recorded walk, 2026-11-17): the turn set it, its summary set it, and the wake after Send spent a
     # turn setting it a third time - three lines on the task for one wait. Nothing changes and nothing is said; the audit row stays, so the turn
-    # that re-set it still reads as on the clock (hooks.checks_back), and the agent is told it stands (general.latest_block says so every turn)
+    # that re-set it still reads as on the clock (hooks.checks_back), and the agent is told it stands (its events say so once)
     if (str(t.get('CheckBackAt') or ''), t.get('CheckBackWhat') or '') == (at, w):
         store.audit('task', int(tid), 'check_back', actor, detail={'at': at, 'what': w, 'same': True})
         return {'ok': True, 'at': at, 'when': remind.when(at), 'what': w, 'already': 'this check-back was already set - nothing changed; go on'}

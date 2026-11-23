@@ -123,17 +123,14 @@ def summary(store, key: str, st: dict) -> str:
     return (f"The owner pressed the bulk card ({st.get('total', 0)} items): {st.get('done', 0)} done, {st.get('failed', 0)} failed, {st.get('left', 0)} left out by them"
             + (f", {len(rest)} not run - they stopped it" if st.get('state') == 'stopped' and rest else '') + '.'
             + (' Failed: ' + '; '.join(f'rv{rid} ({what(rid)}): {why}' for rid, why in bad[:20]) + ('…' if len(bad) > 20 else '') + '.' if bad else '')
-            + (f' Did not go and still on the card for their press: {len(again)} - never set them up again; take back any no longer wanted.' if again else '')
-            + ' Say in one line how it went and what, if anything, is still to do; set up again only a failed act that is still wanted.')
+            + (f' Did not go and still on the card for their press: {len(again)}.' if again else ''))
 
 
 def told(store, key: str, st: dict, actor: str = 'owner') -> str:
     "Its agent hears the whole run once, by the one road (general.to_agent) - and nothing is said of it again with his next line."
     from . import general
-    from .cardqueue import screen
     def heard(how):
         for rid in st.get('rows', {}): store.audit('review', int(rid), general.TOLD, actor, 'system', {'task': st['tid'], 'how': how, 'batch': key})
-    # ...with what still waits in the line behind it, as a yes, a failure or a no on one card tells it (general.approved / failed, said_no)
+    # ...an event on the task (general.to_agent -> events.note), with each card's own state beside it (events.card)
     if not st.get('tid'): return ''
-    line = screen(store, st['tid'])
-    return general.to_agent(store, st['tid'], summary(store, key, st) + (f'\n\n{line}' if line else ''), actor, heard=heard)
+    return general.to_agent(store, st['tid'], summary(store, key, st), actor, heard=heard)

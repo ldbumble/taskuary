@@ -510,17 +510,19 @@ class ACPCoding:
     def _begins(self, items: list, text: str) -> tuple:
         """A TURN BEGINS AS A CHAT'S DOES (general.send_prompt): the owner's lines it takes are his in the record (take_kept - the waiting room
         took them only after the turn had begun), every card the conversation moved past is old news (proposals.move_on), and the turn is told
-        what any agent's is (general.turn_facts) - what the owner pressed, a send that failed, the cards set aside. It was told only the passed
+        the events since its cursor (events.take) - what the owner pressed, a send that failed, the cards set aside. It was told only the passed
         cards, and the facts read his new line as answered (the audit, 2026-11-10). -> (the prompt, the lines it took)."""
         from . import proposals
         lines = self._his(*items, turn=True, sid=getattr(self, 'sid', ''))        # the turn begins: what it is told below is heard here, with his lines
         if self.store and self.task_id:
             try:
                 proposals.move_on(self.store, self.task_id)
-                # ...the turn's facts, as a chat's agent hears them (general.turn_facts) - facts alone, no rules
-                from .cardqueue import once
-                if (lb := once(general.turn_facts(self.store, self.task_id, resumed=True, rules=False, turn=True), text)):
-                    text = f'{lb}\n\n{text}'
+                # ...THE EVENTS SINCE ITS CURSOR, as a chat's agent is told them (events.take) - his lines, and the mail the waiting room
+                # passes in, are this prompt's own words
+                from . import events
+                lb, upto = events.take(self.store, self.task_id, skip=events.IN_BRIEF)
+                if lb: text = f'{lb}\n\n{text}'
+                events.commit(self.store, self.task_id, upto)
             except Exception as e: logger.debug(f'task {self.task_id}: the turn was not told its facts - {e}')
             # ...AND WHAT THE OWNER'S MEMORY LEARNED SINCE THIS SESSION BEGAN, as a chat's kept conversation is told (general.freeze - the one
             # road): its opening brief read the memory once, and a fact told mid-conversation never reached it (the memory round, 2026-11-14)

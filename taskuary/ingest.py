@@ -2736,7 +2736,7 @@ def _pass_coding(store, tid, msg: dict):
 def carry_on_turn(store, tid, msg: dict = None, mid=None) -> str: return carry_on_told(store, tid, msg, mid)[0]
 def carry_on_told(store, tid, msg: dict = None, mid=None) -> tuple[str, list]:
     """A carried-on turn: the mail since its last turn, the line that woke it when that read missed it, then CARRY_ON_PROMPT - with the
-    messages (ids) it carries in their words, which the turn's own "came in since" leaves out (general.came_in): said in both, one mail
+    messages (ids) it carries in their words, which the turn's own "came in since" leaves out (events.take): said in both, one mail
     reached the agent twice in one turn."""
     from . import continuity
     news, since = continuity.news_block(store, tid), continuity.mail_since(store, tid)
@@ -2851,7 +2851,7 @@ def _replan_pass(store, tid, msg: dict, turn: str):
 
 
 def _replan_general(store, tid, turn: str, mails=()):
-    "`mails`: the messages (ids) `turn` carries in their words - the turn's \"came in since\" leaves them out (general.came_in)."
+    "`mails`: the messages (ids) `turn` carries in their words - the turn's \"came in since\" leaves them out (events.take)."
     from . import general
     try: general.start_session(store, tid, actor='router').send_prompt(turn, brief=True, mails=[m for m in mails if m])
     except general.Stopped: pass

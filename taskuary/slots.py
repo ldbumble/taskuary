@@ -324,7 +324,7 @@ def routine_sends(store, tid: int, rid: int, agent: str, missing: str = '') -> d
 
 
 # ...said to the agent in the same words whichever road the draft took: the tool or `taskuary --draft` returns it at once; a draft MARKER in an
-# API-backed answer (the HIPAA AI's) is read after the turn ends, so its next turn hears it with what is waiting (general.latest_block)
+# API-backed answer (the HIPAA AI's) is read after the turn ends, so its next turn hears it with what is waiting (events.py)
 def to_missing(who: str) -> str:
     return (f"no address for {who} in the owner's mail or directory - the card's To is empty and waits for the owner; "
             "find one (someone at that organisation in the owner's mail) and draft again with it as `to`")

@@ -413,7 +413,7 @@ def _events(t, p: dict) -> None:
                     # ...and every card he wrote past, set aside as his line goes in (proposals.set_aside_drafts - the terminal's line is heard here)
                     # ...each card's new state is its event (events.card): the waiting room hands them over as its next line
                     now_ = time.time()
-                    if proposals.move_on(st, tid) + proposals.set_aside_drafts(st, tid, now_, actions=now_):
+                    if proposals.move_on(st, tid) + proposals.set_aside_drafts(st, tid, now_):
                         from . import general
                         general.to_agent(st, tid, '')
                 except Exception as e: logger.debug(f'task {tid}: a held step stayed pending - {e}')

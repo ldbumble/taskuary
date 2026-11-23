@@ -343,7 +343,7 @@ def test_a_confirmed_send_leaves_unread_and_stays_in_all(store):
     assert mid in {r['row']['MessageId'] for r in all_rows}
     from unittest import mock
     from taskuary import outbound
-    with mock.patch('taskuary.outbound.reply_to_message', return_value={'channel': 'email', 'to': ['sender@example.test'], 'cc': []}),          mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learn.learn_from'):
+    with mock.patch('taskuary.outbound.reply_to_message', return_value={'channel': 'email', 'to': ['sender@example.test'], 'cc': []}),          mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learning.learn_from'):
         assert verdicts.decide(store, store.get_review(rid), 'approve')['ok']
     assert store.get_task(tid)['Status'] == 'open'
     funnel.invalidate(); _, after = both(store)

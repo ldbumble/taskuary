@@ -42,7 +42,7 @@ def _lifespan_boundaries(store):
         'catchup': (server, 'catch_up_on_startup', {}),
         'heal_docs': (server, '_heal_owner_docs', {}),
         'refresh_soul': (server, '_refresh_soul_connections', {}),
-        'learn': (server.learn, 'note_verdicts', {}),
+        'memory': (server.memory, 'migrate', {}),
         'watch': (server.waitroom, 'watch', {}),
         'asks_watch': (asks, 'watch', {}),
         'threads': (server.threading, 'Thread', {}),
@@ -106,7 +106,7 @@ def test_failed_auto_start_upgrade_aborts_before_any_intake_or_worker_admission(
         doubles['bind'].assert_called_once()  # loop binding is side-effect free and precedes storage work
         for name in ('open_drains', 'close_drains', 'recover', 'shutdown_sessions',
                      'shutdown_children', 'bridge', 'catchup', 'heal_docs',
-                     'refresh_soul', 'learn', 'watch', 'threads', 'schedule_due',
+                     'refresh_soul', 'memory', 'watch', 'threads', 'schedule_due',
                      'triage_upgrade'):
             doubles[name].assert_not_called()
         assert store.get_settings()['general_auto_enabled'] == '1'

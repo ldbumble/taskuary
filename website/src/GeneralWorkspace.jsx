@@ -995,8 +995,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
      flows better to go back and continue"). A held act of this session's browser shows its Approve / Dismiss on the view, and the
      agent's hand-over of the page ("your turn") its Done - both into this same conversation. Off screen (a phone's chip), their cards. */
   // ...only a card the chat draws for his press now (pressable): never a line about a card that is not there
-  const drawn = pressable(conv.list);
-  const viewActs = (data?.browserActs || []).map((r) => heldOn(r, session?.sid)).filter((h) => h && drawn.has(h.id));
+  const onChat = pressable(conv.list);
+  const viewActs = (data?.browserActs || []).map((r) => heldOn(r, session?.sid)).filter((h) => h && onChat.has(h.id));
   // ...EVERY WAIT ON THE PAGE IS ONE TURN (a sign-in too - the Claude walk, 2026-11-19: a sign-in drew the toolbar's "I'm done", which only let
   // go of the page and told nobody): its bar's I'm done is the one hand-back - his line, the agent woken (handBack)
   const turn = asking && waitsOnPage(asking) ? asking : null;

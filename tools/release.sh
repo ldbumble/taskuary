@@ -113,7 +113,9 @@ targeted() {
   say "the fix: $BASE..HEAD"
   git diff --stat "$BASE" HEAD | tail -25
   local -a PY=() NODE=() LOOSE=(); local WEB=0 SMOKE=false f s m
-  while read -r f; do [ -n "$f" ] && PY+=("$f"); done < <(sed -n 's/^py //p' <<<"$PLAN")
+  # ...a parametrized test is rerun by its function, every case: its id's [case] can hold spaces, and the list is passed space-separated
+  # (2026-11-22: "[answered before the stop]" was cut into four ids, and the targeted run found none)
+  while read -r f; do [ -n "$f" ] && PY+=("${f%%[*}"); done < <(sed -n 's/^py //p' <<<"$PLAN")
   grep -qx 'node all' <<<"$PLAN" && NODE=(all)
   grep -qx 'smoke' <<<"$PLAN" && SMOKE=true
   while read -r f; do

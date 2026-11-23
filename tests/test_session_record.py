@@ -523,6 +523,11 @@ def test_the_turn_at_work_says_when_its_agent_is_still_opening_and_what_it_is_wr
     assert 'opening' not in turn() and turn()['doing'] == 'Option one is Salem.'
     ses.trace.append({'type': 'tool_call', 'name': 'WebSearch', 'detail': {'tool_call_id': 'c1', 'args': {'query': 'Salem hotels'}}})
     assert 'doing' not in turn(), 'a step after the words leads'
+    # ...and the thought it is at, while that is the newest thing - the one place a thought reads (never a step: conversation._said)
+    ses.trace.append({'type': 'live', 'name': 'thinking', 'detail': '**Comparing the two hotels**'})
+    assert turn()['thinking'].strip() == 'Comparing the two hotels' and not [x for x in turn()['steps'] if x.get('k') == 'thought']
+    ses.trace.append({'type': 'tool_call', 'name': 'WebSearch', 'detail': {'tool_call_id': 'c2', 'args': {'query': 'Salem parking'}}})
+    assert 'thinking' not in turn(), 'a step after the thought leads'
 
 
 def test_a_failed_calls_note_is_named_by_its_call():

@@ -115,14 +115,15 @@ def _unsummarized(steps: list) -> list:
 def _said(steps: list, body: str = '', seen: set = None) -> list:
     """A turn's steps with its words cleaned (clean) - and a step that says only what the turn's answer says, or nothing, or is machinery, left
     out; each message's opener once (said_once, `seen`: the openers the turn has said - the answer's own read against them after)."""
-    from .chatformat import plain_text
     out, seen = [], set() if seen is None else seen
     steps = _unsummarized(steps)
     ps, fb = {_flat(p) for p in _PARA.split(body)}, _flat(body)
     for s in steps:
         if machinery(s): continue
-        # ...a thought is one plain row: the same cleaner, and its markup said as words ("**Replacing the pending draft**" stood raw)
-        if s.get('k') == 'thought' and (w := plain_text(clean(s.get('text'))) or clean(s.get('text'))): out.append({**s, 'text': w}); continue
+        # ...A MODEL'S PRIVATE REASONING IS NO STEP (the owner, 2026-11-23: "it has to say what is actually going on" - "Locating account menu",
+        # "Awaiting final approval" stood in italics among what it did): the chat shows what happened and what the agent said; its own notes stay in
+        # its record (sessionrecord), and the one being written is the working line's while it is the newest thing (chatlog._now `thinking`)
+        if s.get('k') == 'thought': continue
         if s.get('k') != 'said': out.append(s); continue
         # ...WHAT THE ANSWER SAYS IS THE ANSWER'S, drawn once (design round 6, D2: on the Claude CLI a turn's messages streamed as steps and the
         # answer joined them - each paragraph drawn twice, the answer's opener cut as "said already"): a paragraph of a step the answer holds

@@ -99,19 +99,15 @@ test("a turn at work says what is happening, or what we wait for, beside its dot
   // ...on the chat's first turn only: a later one starting again is the work going on - no words of the app's (the owner, 2026-11-16), and
   // never bare dots either (the walks, 2026-11-17): it reads as the turn it becomes, its agent at work - a later one OPENING is not `later` (ConvTurn)
   assert.equal(workingLine([], label, { starting: true, later: true }), "Thinking…");
-  // ...and where the newest step is a thought, its latest words - never a bare "Thinking…" for minutes (the owner, 2026-11-16)
-  const thought = { kind: "thought", status: "done", summary: "The owner wants two bakeries.", detail: "The owner wants two bakeries. Tatte opens at 7 on Sundays, so I should check Bakey next." };
-  assert.equal(workingLine([{ type: "work", steps: [thought] }], label), "Tatte opens at 7 on Sundays, so I should check Bakey next");
-  // ...but never the words of a row in sight (the status walk, 2026-11-18): a short thought is its row's whole text, standing open over the line
-  // while no work folds it - the line says "Thinking…" under it, and the thought's words again only once a fold has shut it away
-  const short = { kind: "thought", status: "done", summary: "The budget note comes first, then the archive." };
-  assert.equal(workingLine([{ type: "work", steps: [short] }], label), "Thinking…", "the row says it: the line does not");
-  assert.equal(workingLine([{ type: "work", steps: [{ summary: "Read budget.xlsx", status: "done" }, short] }], label), "The budget note comes first, then the archive",
-    "folded behind \"1 step\", the row is out of sight: the line says it");
+  // ...and while it thinks, the thought's latest words (chatlog._now `thinking`) - never a bare "Thinking…" for minutes (the owner, 2026-11-16) -
+  // the one place a thought reads: it is never a row (the owner, 2026-11-23)
+  const thinking = "The owner wants two bakeries. Tatte opens at 7 on Sundays, so I should check Bakey next.";
+  assert.equal(workingLine([{ type: "work", steps: [{ summary: "Read a.csv", status: "done" }] }], label, { thinking }), "Tatte opens at 7 on Sundays, so I should check Bakey next");
+  assert.equal(workingLine([], label, { thinking }), "Tatte opens at 7 on Sundays, so I should check Bakey next");
   const { thinkingLine } = await import("../src/chatStream.js");
   assert.ok(thinkingLine("word ".repeat(80)).length <= 110);
   // ...and the answer it is writing, while that is the newest thing it did - a long answer read "Thinking…" for 85 s on the real CLI
-  assert.equal(workingLine([{ type: "work", steps: [thought] }], label, { doing: "Option one is Salem. Option two is Providence, by train." }),
+  assert.equal(workingLine([], label, { doing: "Option one is Salem. Option two is Providence, by train." }),
     "Writing: Option two is Providence, by train");
   assert.match(workingLine([{ type: "work", steps: [{ summary: "Search", doing: "Searching the web", status: "running" }] }], label, { doing: "x." }), /^Searching/, "a step at work leads");
   assert.equal(workingLine(parts, label, { ask: "Waiting for your Allow once" }), "Waiting for your Allow once");
@@ -154,26 +150,17 @@ test("the working line names what no row in sight says - at every beat of a turn
   // thought's words, the edit newer than it; and with the fold opened, "Reading budget.md" / "Editing budget.py" stood as a row and on the line
   const { workingLine, editRow } = await import("../src/chatStream.js");
   const { stepLabel } = await import("../src/agentSteps.js");
-  const short = { kind: "thought", status: "done", summary: "The budget note comes first, then the archive." };
   const read = (status) => ({ kind: "read", status, summary: "Read budget.md" });
   const edit = (running) => editRow({ name: "Edit", file: "budget.py", edit: { old_string: "a = 1", new_string: "a = 2" }, running });
   const beat = (parts, open = false) => workingLine(parts, stepLabel, { open });
-  // a thought alone: its row stands open (no work to fold it) - the line does not say it again
-  assert.equal(beat([{ type: "work", steps: [short] }]), "Thinking…");
   // a step at work: shut in its fold, the line names it; the fold opened, its row says it with its spinner
-  assert.equal(beat([{ type: "work", steps: [short, read("running")] }]), "Reading budget.md");
-  assert.equal(beat([{ type: "work", steps: [short, read("running")] }], true), "Working…");
+  assert.equal(beat([{ type: "work", steps: [read("done"), read("running")] }]), "Reading budget.md");
+  assert.equal(beat([{ type: "work", steps: [read("done"), read("running")] }], true), "Working…");
   // an edit being made: the same (4bce367's "Editing budget.py" under the shut fold)
-  assert.equal(beat([{ type: "work", steps: [short] }, edit(true)]), "Editing budget.py");
-  assert.equal(beat([{ type: "work", steps: [short] }, edit(true)], true), "Working…");
-  // a thought, then an edit that has been made, nothing newer: the edit is the newest thing - never the older thought's words
-  assert.equal(beat([{ type: "work", steps: [short] }, edit(false)]), "Thinking…");
-  // a thought behind a step, the fold shut: its row is out of sight - the line says it; opened, the row says it
-  assert.equal(beat([{ type: "work", steps: [read("done"), short] }]), "The budget note comes first, then the archive");
-  assert.equal(beat([{ type: "work", steps: [read("done"), short] }], true), "Thinking…");
-  // ...and a long thought's row shows its start only: its latest words are on no row, so the line says them, open or shut
-  const long = { kind: "thought", status: "done", summary: "The owner wants two venues.", detail: "The owner wants two venues. The Mill has parking, so I check the Quay next." };
-  assert.equal(beat([{ type: "work", steps: [read("done"), long] }], true), "The Mill has parking, so I check the Quay next");
+  assert.equal(beat([{ type: "work", steps: [read("done")] }, edit(true)]), "Editing budget.py");
+  assert.equal(beat([{ type: "work", steps: [read("done")] }, edit(true)], true), "Working…");
+  // an edit that has been made, nothing newer: the model is at it again
+  assert.equal(beat([{ type: "work", steps: [read("done")] }, edit(false)]), "Thinking…");
   // ConvTurn reads the fold's open state as the fold does, and the dock's trail as always open
   const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(src, /const folded = useFoldOpen\(`\$\{foldKey\(t\.id\)\}:all`\), work = React\.useContext\(WorkCtx\), open = folded \|\| !work;/, "both hooks called on every render");

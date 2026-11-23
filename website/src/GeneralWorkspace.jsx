@@ -18,7 +18,7 @@ import { holdUnsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd,  partsMessage, turnParts, workCount, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd, turnParts, workCount, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, ownDetail, useOwnDetail } from "./chatDetail.js";
@@ -72,38 +72,6 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
-
-// ONE PART carries the turn's working: its parts (chatStream.turnParts - the one mapper a coding session's steps feed too), drawn in the order
-// they happened - its words, a line per thing it did, each edit with its diff, its plan - above the answer. It was a row per raw tool call and
-// then an "Agent progress" box saying the same commands again (the owner, 2026-10-21: "make the output on the general agent canvas more
-// readable, not some greps and gets").
-const stepsPart = (trace, opts) => partsMessage(turnParts(trace, opts));
-
-// assistant-ui owns the response being streamed in the currently mounted pane. The task's
-// session owns it when this pane is not mounted. Rehydrate that same tool/progress trace when a
-// user switches back, and attach it to the filed answer once the run is complete.
-export const messagesWithTrace = (messages, session, keepStart = true) => {
-  const out = (messages || []).map((m) => ({ ...m, content: [...(m.content || [])] }));
-  const trace = session?.trace;
-  if (!turnParts(trace, { keepStart }).length) return out;
-  if (session?.busy) {
-    // ...with the turn's own start (general.info `turn_started`): its id is new at every step, and so was the time the runtime gave it
-    out.push({ id: `live-${session.sid}-${session.trace_revision || 0}`, role: "assistant", content: stepsPart(trace, { keepStart }),
-      ...(session.turn_started ? { since: session.turn_started * 1000 } : {}) });
-    return out;
-  }
-  // The trail belongs to the NEWEST turn. When that turn filed an answer the trail is its
-  // working, and rides above it as it always has. When it died it filed nothing - and the trail
-  // was folded backwards into some older answer, or, on a first question, into nothing at all:
-  // the chat showed the question, no reply, and no reason, over a task still chipped "agent
-  // working" (TQ-0496 - codex exited 1 refusing the model it was configured with). A turn's
-  // last word is its record when there is no other.
-  // ...the newest TURN, above any press made since: a stopped turn's trail stood under "You stopped the agent" (the side-by-side walk, 2026-11-11)
-  const at = out.findLastIndex((m) => !m.press), tail = out[at];
-  if (tail?.role === "assistant") tail.content = [...stepsPart(trace, { keepStart, answer: textOf(tail) }), ...tail.content];
-  else out.splice(at + 1, 0, { id: `trace-${session.sid}-${session.trace_revision || 0}`, role: "assistant", content: stepsPart(trace, { keepStart }) });
-  return out;
-};
 
 
 // The speaker of the agent's turns. In the dock this IS Taskuary's assistant; on a work window it
@@ -453,7 +421,7 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
   // ...`opening`: its agent's process really is starting (conversation.items) - said on any turn then, and only then; `doing`: the answer as it is written
   // ...naming what no row in sight says: its rows stand open inside the fold he opened, and on the dock's trail (no WorkCtx) always
   const folded = useFoldOpen(`${foldKey(t.id)}:all`), work = React.useContext(WorkCtx), open = folded || !work;
-  const doing = live ? workingLine(parts, stepLabel, { starting: t.state === "starting" || !!t.opening, later: later && !t.opening, ask: React.useContext(WaitOnCtx), doing: t.doing || "", open }) : "";
+  const doing = live ? workingLine(parts, stepLabel, { starting: t.state === "starting" || !!t.opening, later: later && !t.opening, ask: React.useContext(WaitOnCtx), doing: t.doing || "", thinking: t.thinking || "", open }) : "";
   if (quiet) return null;
   return <div className={`tq-aui-message tq-aui-agent${words && !live ? " tq-copy-host" : ""}${more ? " tq-aui-agent-more" : ""}`} data-tq-item={t.id} data-tq-chat-line={key} data-tq-turn={t.state}>
     {!!words && !live && <CopyCorner text={words} label="Copy this answer" />}

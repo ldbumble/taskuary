@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import { describeCall, isWork, stepsOf } from "../src/agentSteps.js";
+import { eventsOf } from "../src/chatStream.js";
 
 test("a heredoc written into a file reads as that file written, never 'Read <<EOF, and N more' (stress test 2026-11-02)", () => {
   const said = (command) => describeCall("Bash", { command }).summary;
@@ -213,7 +214,6 @@ test("each ACP tool kind reads as one plain step, the way the same act reads fro
   const steps = stepsOf(trace("kinds_acp"), { keepStart: false });
   const said = steps.map((s) => [s.kind, s.summary, s.status]);
   assert.deepEqual(said, [
-    ["thought", "The ledger keeps the totals in store.py; I should read it before changing the budget.", "done"],
     ["plan", "Updated its plan (2 steps)", "done"],
     ["read", "Read store.py", "done"],
     ["edit", "Edited budget.py", "done"],
@@ -341,17 +341,19 @@ test("a wordless shell call says what it did, never a bare program, a number for
   assert.equal(describeCall("other", { title: "Start subagent history_probe", agentPath: "/root/history_probe" }).summary, "Handed part of the work to a helper: history probe");
 });
 
-test("each thought is its own row: a message of two reasoning headers never reads as one sentence", () => {
+// THE OWNER, 2026-11-23: "it has to say what is actually going on" - a turn's rows read "Opening X home", "Locating account menu", "Awaiting final
+// approval" in italics with a bulb among what it did: the model's reasoning headers, drawn as steps. A thought is never a row; what it did is
+test("a model's reasoning is never a step row, finished or still being written - what it did and said is", () => {
   const steps = stepsOf([
-    { type: "progress", name: "thinking", detail: "\n\n**Reviewing the vendor mapping snapshots**\n\n**Planning the history roll-up**" },
+    { type: "progress", name: "thinking", detail: "\n\n**Opening the portal home**\n\n**Locating account menu**" },
     { type: "tool_call", name: "Read", detail: { tool_call_id: "r", args: { file_path: "/x/notes.md" } } },
-    { type: "live", name: "thinking", detail: "**Preparing the schema**\n\n**Writing the plan**" },
-  ]);
-  assert.deepEqual(steps.map((s) => [s.kind, s.summary]), [["thought", "Reviewing the vendor mapping snapshots"], ["thought", "Planning the history roll-up"],
-    ["read", "Read notes.md"], ["thought", "Preparing the schema"], ["thought", "Writing the plan"]]);
-  // ...and the live thought, updated, replaces its own rows, never stacks them
-  const again = stepsOf([{ type: "live", name: "thinking", detail: "**A**" }, { type: "live", name: "thinking", detail: "**A**\n\n**B**" }]);
-  assert.deepEqual(again.map((s) => s.summary), ["A", "B"]);
+    { type: "progress", name: "reasoning", detail: "**Checking Taskuary state**" },
+    { type: "progress", name: "text", detail: "I'll check whether the post went up." },
+    { type: "live", name: "thinking", detail: "**Awaiting final approval**" },
+  ], { keepStart: false });
+  assert.deepEqual(steps.map((s) => [s.kind, s.summary]), [["read", "Read notes.md"], ["said", "I'll check whether the post went up."]]);
+  // ...and a log's thought step, the server's or an older one kept, reads as nothing on the chat's road (chatStream.eventsOf)
+  assert.deepEqual(eventsOf([{ k: "thought", text: "Locating account menu" }], false), []);
 });
 
 // WHAT HE SEES (design round 4, 2026-11-19, three walks): a failed command's PATH dump stood as a red note under its step; Taskuary's own tool

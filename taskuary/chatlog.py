@@ -1176,7 +1176,11 @@ def _now(tid: int, turn: dict) -> dict:
     doing = clean(e.get('detail')) if e.get('type') == 'live' and e.get('name') == 'writing' else ''
     # ...never words its steps already draw (the log writes what streams as the turn's own `said` step): said twice while it thought
     if doing and any(doing[:80] in clean(x.get('text')) for x in turn.get('steps') or [] if x.get('k') == 'said'): doing = ''
-    return {**({'opening': True} if opening else {}), **({'doing': doing} if doing else {})}
+    # ...and `thinking`, the thought it is at while that is the newest thing (the owner, 2026-11-16: "Thinking..." for minutes): a thought is never
+    # a step of the chat (conversation._said), so the line beside the dots is the only place it reads, and only while it is current
+    from .chatformat import plain_text
+    thinking = plain_text(clean(e.get('detail'))) if e.get('type') in ('live', 'progress') and e.get('name') in ('thinking', 'reasoning') else ''
+    return {**({'opening': True} if opening else {}), **({'doing': doing} if doing else {}), **({'thinking': thinking} if thinking else {})}
 
 
 # WHAT A TURN SAID IN ITS OWN WORDS - THE ONE RULE FOR WHAT IS SAID AGAIN UNDER IT (decided 2026-11-20, walk 8: never duplicate): an ask marker's

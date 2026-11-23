@@ -35,7 +35,7 @@ export const eventsOf = (steps, running, tail = true) => steps.flatMap((s, i) =>
   if (s.k === "plan") return [{ type: "tool_call", name: "TodoWrite", detail: { tool_call_id: id, args: { todos: s.items || [] } } },
     { type: "tool_result", name: id, detail: { tool_call_id: id, result: "" } }];
   if (s.k === "said") return [{ type: "progress", name: "text", detail: s.text }];
-  if (s.k === "thought") return [{ type: "progress", name: "thinking", detail: s.text }];
+  if (s.k === "thought") return [];                    // ...a model's private reasoning is never a step (conversation._said)
   if (s.k === "error") return [{ type: "error", ...(s.name ? { name: s.name } : {}), detail: { result: s.text } }];      // ...by the call it came from
   return s.text ? [{ type: "progress", name: "note", detail: s.text }] : [];
 });
@@ -157,8 +157,6 @@ export const standing = (items) => new Set((items || []).flatMap((x) => (x.kind 
   .filter((c) => !isPastCard(c)).map((c) => c.review));
 export const hasParts = (parts) => (parts || []).some((p) => p.type !== "said" || p.text);
 
-export const PARTS = "agent_parts";
-export const partsMessage = (parts) => (parts.length ? [{ type: "data", name: PARTS, data: { parts } }] : []);
 // WHICH SOURCE a task's chat reads: a coding task, or any task with a coding CLI live on it, is its sessions (codingchat.py); every other is
 // the general agent's conversation (general.py). The one component draws either - this picks, nothing in the page does
 export const chatSource = (task, term) => (task?.Kind === "coding" || liveTerminal(term) ? "coding" : "general");
@@ -274,7 +272,7 @@ export const waitingChips = (pending, came = "") => {
 // first, then the archive" at one beat; with the fold opened, "Reading budget.md" stood as a row and again on the line under it at every tool
 // beat). One structural test, for a thought and a step alike: is the row that holds those words drawn open right now - a turn's rows stand open
 // while it has no work to fold (TurnWorkView), and inside a fold he opened or the dock's trail (`open`); shut in the fold, the line names it
-export const workingLine = (parts, label, { starting = false, later = false, ask = "", doing = "", open = false } = {}) => {
+export const workingLine = (parts, label, { starting = false, later = false, ask = "", doing = "", thinking = "", open = false } = {}) => {
   if (ask) return ask;
   // the newest thing the turn did: its last step, or an edit made after it (an edit is a part of its own, editRow)
   const newest = (parts || []).flatMap((p) => (p.type === "work" ? (p.steps || []).map((st) => ({ st, row: String(label(st) || "") }))
@@ -285,10 +283,10 @@ export const workingLine = (parts, label, { starting = false, later = false, ask
   if (newest?.edit?.running) return say(newest.edit.summary, "Working…");
   if (newest?.st?.status === "running") return say(newest.row.split(/\r?\n/)[0].trim(), "Working…");
   if (doing && thinkingLine(doing)) return `Writing: ${thinkingLine(doing)}`;
-  if (!newest) return starting && !later ? "Waiting for the agent to start" : "Thinking…";
-  // ...and WHAT IT IS THINKING, where its newest step is a thought (the owner, 2026-11-16: "Thinking..." for three minutes with nothing else):
-  // that thought's latest words, as it writes them (agents.ACPSteps._thinking) - never a bare word for minutes. An edit made after it is newer
-  return newest.st?.kind === "thought" ? say(thinkingLine(newest.st.detail || newest.st.summary), "Thinking…") : "Thinking…";
+  // ...and WHAT IT IS THINKING, while that is the newest thing it does (the owner, 2026-11-16: "Thinking..." for three minutes with nothing else):
+  // the thought's latest words, as it writes them (chatlog._now `thinking`) - the one place a thought reads, never a step row (conversation._said)
+  if (thinking && thinkingLine(thinking)) return thinkingLine(thinking);
+  return !newest && starting && !later ? "Waiting for the agent to start" : "Thinking…";
 };
 const flat = (t) => String(t || "").replace(/\s+/g, " ").replace(/[.…]+$/, "").trim();
 // a thought as one short line: its last sentence, cut at a word

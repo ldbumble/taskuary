@@ -1285,8 +1285,12 @@ class TheList(unittest.TestCase):
         self.assertTrue(until(lambda: len(self.brain.calls) > n)); self.rest()
         self.assertFalse([x for x in self.list()['items'] if x['kind'] == 'line' and 'pressed Approve' in x['text']])
 
-    def test_a_thought_is_a_plain_row(self):
-        self.assertEqual(conversation._said([{'k': 'thought', 'text': '**Replacing the pending draft**'}])[0]['text'], 'Replacing the pending draft')
+    def test_a_thought_is_no_row_of_the_chat(self):
+        """The owner, 2026-11-23: "it has to say what is actually going on" - "Locating account menu", "Awaiting final approval" stood in italics
+        among the turn's steps: the model's reasoning headers. The chat reads what it did and said; its thoughts stay in its record."""
+        got = conversation._said([{'k': 'thought', 'text': '**Locating account menu**'}, {'k': 'tool', 'name': 'Bash', 'text': 'agent-browser snapshot'},
+                                  {'k': 'said', 'text': "I'll check whether the post went up."}])
+        self.assertEqual([x['k'] for x in got], ['tool', 'said'])
 
     def test_an_untrusted_sender_is_worked_by_no_agent_until_trust_which_starts_it(self):
         """The owner, 2026-11-11: an untrusted sender = no agent. The chat shows what came in, one plain line why nothing works on it and

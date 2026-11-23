@@ -481,8 +481,6 @@ const foundNone = (s) => {
 };
 
 // ── the trace, as steps ──────────────────────────────────────────────────────────────────────────
-// a thought's paragraphs, each one line - a header the model set in bold (Codex's `**Checking the dates**`) reads as its words
-const thoughtsOf = (text) => String(text || "").split(/\n\s*\n/).map((p) => flat(forScreen(p)).replace(/^\*\*(.+)\*\*$/, "$1")).filter(Boolean);
 const ECHO = /^(→ |· |✗ |session started\b)/;            // agents._live_line's own rows for a tool call, its result, the init line
 // A QUICK ANSWER'S RAW OBJECT (selfclose.RAW, stored before 2026-11-13) is its fields, filed as the answer - never words of its working, whichever line carries it: a
 // CLI's readable `live` line was the object cut at 300 characters, drawn under Taskuary (the owner, 2026-11-03)
@@ -516,10 +514,6 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
     if (kind === "said" && last?.kind === "said" && last.live) { last.summary += `\n${t}`; return; }
     steps.push({ id: `${kind}-${steps.length}`, kind, summary: t, detail: "", status: "done", live: kind === "said" && !structured, src: String(text) });
   };
-  // ...EACH THOUGHT ITS OWN ROW (the owner's live turn, 2026-11-18: "Reviewing the vendor snapshots Planning the roll-up"): a message of
-  // reasoning holds its paragraphs - Codex sends a header each - and flattened they ran together as one sentence
-  const think = (ts, live) => ts.forEach((t) => steps.push({ id: `thought-${steps.length}`, kind: "thought", summary: clip(t, 140), detail: t.length > 140 ? t : "", status: "done", ...(live ? { live } : {}) }));
-  const dropLive = () => { while (steps.at(-1)?.kind === "thought" && steps.at(-1).live) steps.pop(); };
   for (const e of events) {
     if (!e) continue;
     if (e.type === "tool_call") {
@@ -550,18 +544,13 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
       if (step.kind === "mail" && step.q !== undefined) { const n = countOf(step.output); if (n !== null) step.count = n; }
     } else if (e.type === "progress" && e.detail) {
       const name = String(e.name || "");
-      if (name === "thinking" || name === "reasoning") {
-        const ts = thoughtsOf(e.detail);
-        if (ts.length) dropLive();     // ...the whole paragraph in its snapshots' place
-        think(ts, false);
-      } else if (name === "text" || name === "agent_message") say("said", e.detail);
+      // ...A MODEL'S PRIVATE REASONING IS NO STEP (the owner, 2026-11-23: "Locating account menu", "Awaiting final approval" in italics among what
+      // it did): his screen shows what happened and what the agent said - the thought being written is the working line's (chatlog._now)
+      if (name === "thinking" || name === "reasoning") continue;
+      if (name === "text" || name === "agent_message") say("said", e.detail);
       else say("note", e.detail);
-    } else if (e.type === "live" && e.name === "writing") {
-      // ...the answer as it streams is the turn's line of what it is doing (conversation `doing`), never words drawn twice
-    } else if (e.type === "live" && e.name === "thinking") {
-      // ...a thought still being written (agents.ACPSteps): ONE open thought its snapshots update, never words said
-      const ts = thoughtsOf(e.detail || "");
-      if (ts.length) { dropLive(); think(ts, true); }
+    } else if (e.type === "live" && (e.name === "writing" || e.name === "thinking")) {
+      // ...the answer as it streams, and a thought being written, are the turn's line of what it is doing (chatlog._now), never rows
     } else if (e.type === "live" && !structured && e.detail && !ECHO.test(String(e.detail))) {
       say("said", e.detail);
     } else if (e.type === "start" && keepStart) {

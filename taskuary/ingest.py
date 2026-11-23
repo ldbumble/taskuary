@@ -2462,7 +2462,9 @@ def held_start(store, tid, err) -> bool:
 REPLY_TAG = 'reply-owed'
 # ...A FACT, NOT A RULEBOOK (walk 9, 2026-11-23: ~700 characters of how to do the job, said twice in every first turn): whom it is owed to,
 # and that nothing goes before his press - how to answer is the agent's
-REPLY_JOB = "THIS TASK IS A REPLY OWED to {who}; the reply you set up waits for the owner's Send."
+# ...and never a card's state (walk 10: "the reply you set up waits for the owner's Send" on a first turn, before any reply existed): what
+# stands on his screen is the screen fact's to say (cardqueue.screen)
+REPLY_JOB = "THIS TASK IS A REPLY OWED to {who}; it goes only on the owner's Send."
 
 
 def reply_job(store, tid) -> str:

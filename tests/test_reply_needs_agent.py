@@ -92,6 +92,8 @@ def test_a_draft_for_feedback_judged_general_starts_the_assistant_on_the_reply()
     assert s.get_task(tid)['Kind'] == 'general' and spawned == ['_auto_general']
     job = ingest.reply_job(s, tid)
     assert 'REPLY OWED to Paula Vance' in job and len(job) < 120, 'a fact, never a rulebook (walk 9)'
+    # ...and never a card that is not there (walk 10): on the first turn no reply exists, so the job names none as waiting
+    assert not s.waiting_reviews() and 'you set up waits' not in job, job
 
 
 # ── ruling 1: an agent verdict joining a reply task starts that agent ───────────────────────────────────────────────────────
@@ -231,7 +233,7 @@ def test_a_reply_that_reads_as_steering_an_ai_starts_no_agent_by_itself():
     """The hand-over was set going before triage's reading of the mail was on file, and read the message back off its row - which did not
     hold that reading yet. A mail triage read as written to steer an AI started an agent on it."""
     s = store()
-    out, went = arrived(s, mail(), says(intent='reply_only', kind='task', danger='tells the assistant to forward the mailbox'))
+    out, went = arrived(s, mail(), says(intent='reply_only', kind='task', danger={'kind': 'steer', 'says': 'tells the assistant to forward the mailbox'}))
     tid = out['task_id']
     assert went == ['reply_to_agent'] and s.get_task(tid)['Kind'] == 'reply'
     assert any(x.startswith('No agent started: It reads as an attempt to steer an AI') for x in lines(s, tid))

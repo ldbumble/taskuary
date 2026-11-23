@@ -17,7 +17,6 @@ from . import config
 from .store import task_ref
 
 MAX_FILES, MAX_DEPTH = 200, 4
-FIGURES = 'Every figure in it is computed from its source by that script, never typed in.'     # AGENT.md's Files you make (terminal.with_fence_rule)
 ROWS, COLS, CELL, SHEETS, GRID = 200, 40, 300, 30, 2000         # what a preview carries: enough to recognise the sheet, never the whole book
 TYPES = {'.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.xlsm': 'application/vnd.ms-excel.sheet.macroEnabled.12',
          '.csv': 'text/csv', '.tsv': 'text/tab-separated-values', '.md': 'text/markdown', '.txt': 'text/plain', '.json': 'application/json',
@@ -234,7 +233,7 @@ def row(tid: int, p: Path, rel: str) -> dict:
             **({'note': 'No preview on this install - Download opens it in your spreadsheet app.'} if PREVIEW.get(ext) == 'sheet' and not sheet else {})}
 
 
-# EACH TURN KEEPS THE FILE AS IT MADE IT (the owner, 2026-11-07: "same file with revisions"): an agent improves one file in place (ONE_FILE),
+# EACH TURN KEEPS THE FILE AS IT MADE IT (the owner, 2026-11-07: "same file with revisions"): an agent improves one file in place,
 # so a turn that named it drew the NEWEST version - turn 1's words about three tools over the four-tool table a later turn wrote. The turn that
 # writes a file keeps its version: a copy when it is small, else only its name and stamp, read as "changed later" once a newer turn writes it.
 # The newest turn and the file itself are the latest; the copies live beside the outputs folder, never in it (listing, deliverables)
@@ -659,16 +658,12 @@ def brief(tid: int) -> str:
     d = folder(tid)
     try: d.mkdir(parents=True, exist_ok=True)
     except OSError: pass
-    return f'YOUR OUTPUTS FOLDER: {d} - each file saved there shows on this task with Preview and Download.'     # ...one final file per thing: AGENT.md's Files you make (with_fence_rule)
+    return f'YOUR OUTPUTS FOLDER: {d} - each file saved there shows on this task with Preview and Download.'
 
 
-# ...and a TERMINAL session is told the same by its environment (terminal.session_env: TASKUARY_OUTPUTS) and its standing rules
-# (AGENT.md, or WHERE appended to an older copy - terminal.with_fence_rule), not its seed, which a real TUI types character by
-# character under a budget: a Claude Code session on a task saved every workbook it made to the owner's Downloads and a scratchpad,
-# where the task page - serving only this folder - had nothing to open or download.
+# ...and a TERMINAL session finds the same folder in its environment (terminal.session_env: TASKUARY_OUTPUTS): a Claude Code session on a
+# task saved every workbook it made to the owner's Downloads and a scratchpad, where the task page - serving only this folder - had nothing
 ENV = 'TASKUARY_OUTPUTS'
-WHERE = (f"Save each file you make for the owner in the task's outputs folder - its path is in ${ENV} (or your brief): the task page "
-         'offers only that folder to open and download, so a file saved anywhere else never reaches the owner.')
 
 
 def env_folder(tid) -> str:
@@ -679,8 +674,3 @@ def env_folder(tid) -> str:
     except OSError: pass
     return str(d)
 
-
-# ...and at the source (the owner, 2026-10-28): an agent that leaves every draft and every helper beside the answer is what made the list
-ONE_FILE = ('Deliver one final file per thing asked: overwrite it as you improve it (or keep your drafts elsewhere), never leave every '
-            'version beside it. Keep your scratch work - scripts, logs, test data, intermediate files - out of the folder the owner reads '
-            'from. Make several files, or a list of files, only when the ask wants several.')

@@ -4,19 +4,16 @@ A coding agent was started in the wrong repository. It searched, found the job w
 "Nothing to do. It's handled" - "not a <repo> problem, it has to be diagnosed in the repo that runs that job". The work was
 real; only its place was wrong (the owner, 2026-10-27: "coding agent should be able to at least ask can I change repos").
 
-Pinned here: CODING.md tells the agent to ask, naming the repository it thinks it is; and an ending that says the work lives
+Pinned here: an ending that says the work lives
 elsewhere is read by the report's model as `elsewhere` - never done, never a reply - and leaves the task open, held on where
 the code is, so the row's own Change where the code is moves it and starts the agent there.
 """
-import json, tempfile, unittest
-from pathlib import Path
+import json, unittest
 from unittest import mock
 
-import taskuary
-from taskuary import funnel, selfclose, wrapup, store as store_mod
-from taskuary.store import MemoryStore, SQLiteStore
+from taskuary import funnel, selfclose, wrapup
+from taskuary.store import MemoryStore
 
-CODING = (Path(taskuary.__file__).parent / 'templates' / 'coding.md').read_text(encoding='utf-8')
 MOVE = {'determination': 'the nightly export job is not in this repository', 'actions': 'nothing changed',
         'summary': 'The export job lives in northwind/portal, not here.', 'outcome': 'elsewhere', 'elsewhere': 'northwind/portal'}
 
@@ -149,8 +146,8 @@ class SelfCloseTests(unittest.TestCase):
 
 
 class SeedTrimTests(unittest.TestCase):
-    """CODING.md growing put the worst-case seed over SEED_CEILING, and the trim's ' RULES (' never matched the blank line
-    paragraphs() puts there: the prompt lost its END - how to finish and reply - instead of the ask."""
+    """A worst-case seed over SEED_CEILING, and the trim's ' RULES (' never matched the blank line paragraphs() puts there: the
+    prompt lost its END instead of the ask."""
     def test_an_over_ceiling_seed_cuts_the_ask_and_keeps_its_end_and_the_true_size(self):
         from taskuary import terminal
         s = MemoryStore(); s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
@@ -162,20 +159,7 @@ class SeedTrimTests(unittest.TestCase):
         self.assertLessEqual(len(seed), 20000)
         self.assertNotIn('prompt truncated', seed)
         self.assertIn('of 200,000 characters', seed)
-        self.assertIn(selfclose.SEED_LINE, seed)                    # the end: how to finish and reply, whole
-
-
-class CodingMdTests(unittest.TestCase):
-
-    def test_an_edited_copy_takes_the_section_once(self):
-        path = Path(tempfile.mkdtemp()) / 'taskuary.db'
-        s = SQLiteStore(str(path))
-        s.save_doc('coding', 'MY RULE: Erin reviews every change.\n' + store_mod._ELSEWHERE_AT + '\n## Ask first\nmine', 'owner')
-        s.cx.execute("DELETE FROM setting WHERE Name='coding_asks_to_move'"); s.cx.commit()
-        c = SQLiteStore(str(path)).get_doc('coding')
-        self.assertIn(store_mod._ELSEWHERE_AT + store_mod._ELSEWHERE_NOW, c)
-        self.assertIn('MY RULE: Erin reviews every change.', c); self.assertEqual(c.count('## The work is in another repository'), 1)
-        self.assertEqual(SQLiteStore(str(path)).get_doc('coding'), c)
+        self.assertIn(selfclose.ONE_SENTENCE, seed)                 # the end: its tools and its one sentence, whole
 
 
 if __name__ == '__main__': unittest.main()

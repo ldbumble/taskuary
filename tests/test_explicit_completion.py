@@ -190,6 +190,3 @@ class NoReplyTests(Base):
         term.SESSIONS['run1'] = live(self.tid)
         selfclose.declare(self.s, self.tid, 'fixed the cron', 'agent')
         self.assertFalse(wrapup.finish.call_args.kwargs.get('no_reply'))
-
-    def test_the_agent_is_told_the_flag_exists(self):
-        self.assertIn('--no-reply', selfclose.SEED_LINE)

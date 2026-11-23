@@ -261,31 +261,6 @@ def _wrap(store, tid: int, agent: str, why: str, final_message: str = '', no_rep
     return {**out, 'closed': False, 'ended': True, 'drafting': bool(out.get('drafting')), 'why': why}
 
 
-# ── what the session is told ────────────────────────────────────────────────────────────
-# The explicit road only exists if the agent knows about it, so this rides in every seed prompt.
-# It is phrased as the CHEAP ending, because that is what it is: the alternative is a human
-# looking at a screen hours later.
-# Short on purpose. Every character here rides on a command line that a canonical tty caps at
-# 1024 bytes, so the WHOLE rule lives in CODING.md (which rides in as RULES) and this is only the
-# part that must survive a blanked document: the command, and what pressing it does.
-# ...FOR WHOEVER WROTE IN, never the owner (the real-CLI walk, 2026-11-12: asked a question in the chat, a coding agent saved its answer as a
-# reply to him, was refused, and told him so): what he asks here is answered in the session's own words
-SEED_LINE = ('REPLY: save the answer for whoever wrote in with `taskuary --reply "<text>"` (a file it promises: add `--attach <path>`) - the owner approves it; '
-             'what the owner asks you here, answer in your own words, never as a reply. '
-             'WHEN FINISHED: run `taskuary --done "<one sentence>"` - it files your ending, and a reply owed that you did not save is asked of you; the owner closes the task; '
-             'add `--no-reply` when nobody should hear back. '
-             'ONLY SOMEONE ELSE CAN ANSWER: ask them, then `taskuary --waiting-on "<who>"` - their reply brings the task back.')
-# ...and its opposite, for a session the owner opened to sit in (stays_open): the one thing the
-# agent must NOT do is end it. Said in the prompt, because CODING.md's finishing rules say the
-# reverse and an agent reading both without this line picks the one with a command in it. It says
-# what `declare` does: the command is refused here and the owner completes the task.
-STAY_LINE = ('THE OWNER OPENED THIS SESSION: `taskuary --done` is refused. Reply via `taskuary --reply "<text>" --to "<who>"`, not chat. '
-             'Answer what is asked, then wait.')
-# ...because this line REPLACES SEED_LINE (terminal.seed_parts), the reply road was the one thing an owner-opened session never
-# heard of: an agent wrote the whole reply into its chat, ran a refused --done, said "the reply above is ready", and the
-# drafter wrote a placeholder from that pointer (2026-10-13)
-
-
 # ── the general chat's version of the same thing ────────────────────────────────────────
 # A conversational agent has no shell to run a command in, and half the time no CLI behind it at
 # all, so it says it in the reply instead. A marker, not a judge: a chat is a conversation and

@@ -45,12 +45,10 @@ class TickTests(unittest.TestCase):
         self.assertFalse(any(x['done'] for x in self.s.task_checklist(self.tid)))
 
 
-    def test_the_checklist_heading_says_only_the_tick_and_the_subagent_rule_rides_in_coding_md(self):
-        # 2026-11-02: the subagent rule began as a line of code on this heading; it is CODING.md's now, where the owner can reword it
+    def test_the_checklist_heading_says_only_the_tick(self):
         head = lambda cli: next(l for l in terminal.seed_text(self.s, self.tid, cli=cli).splitlines() if 'CHECKLIST' in l)
         for cli in ('claude', 'codex', 'gemini', ''): self.assertIn(terminal.TICK_HEAD, head(cli)); self.assertNotIn('subagent', head(cli))
         self.assertFalse(hasattr(terminal, 'SUBAGENT_HEAD'))
-        self.assertIn('hand each to its own subagent in parallel', terminal.flatten_rules(self.s.doc('coding')))
 
     def test_the_one_road_refuses_what_the_door_refuses(self):
         self.assertEqual(agent_tick(self.s, self.tid, 'nope1234')[1][0], 404)

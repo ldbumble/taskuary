@@ -128,9 +128,6 @@ class AgentReplyTests(NoHook):
         self.assertTrue(r.json()['ok'])
         self.assertEqual(s.list_reviews('pending')[0]['DraftBy'], 'agent:claude')
 
-    def test_the_seed_tells_every_session_how(self):
-        self.assertIn('taskuary --reply', selfclose.SEED_LINE); self.assertIn('--attach', selfclose.SEED_LINE)
-
 
 def envelope(s, rid):
     import json

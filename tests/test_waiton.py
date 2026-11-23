@@ -133,10 +133,6 @@ class CliTests(unittest.TestCase):
         self.assertIn('--waiting-on', floor.TASKUARY_OK)
         self.assertTrue(any(p.fullmatch('/api/agent/waiting') for p in guard._STRANGER_WRITES))
 
-    def test_the_seed_names_it(self):
-        from taskuary import selfclose
-        self.assertIn('--waiting-on', selfclose.SEED_LINE)
-
 
 def test_the_cli_posts_the_wait_and_then_the_reply(monkeypatch, capsys):
     # `--reply "..." --waiting-on Paula` both asks and waits: the wait is recorded first, the reply branch ends the command

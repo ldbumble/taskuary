@@ -196,7 +196,6 @@ class FileTests(unittest.TestCase):
             self.assertIn(want, text)
         seed = terminal.seed_text(s, tid, None, 'northwind/Census', 'C:/src/Census')
         self.assertIn(f'CONTEXT FILE: {path}', seed)
-        self.assertIn('and in the context file', seed)
         # in PARAGRAPHS on the command line - a blank line between blocks, none inside one (2026-09-30: "(0 lines hidden)")
         self.assertIn('\n\n', seed); self.assertNotIn('\n', seed.replace('\n\n', ''))
 
@@ -208,7 +207,7 @@ class FileTests(unittest.TestCase):
         s.set_setting('agent_context_file', '0', 't')
         self.assertIsNone(context.write(s, tid))
         seed = terminal.seed_text(s, tid)
-        self.assertNotIn('CONTEXT FILE', seed); self.assertIn('everything known about it is above. ', seed)
+        self.assertNotIn('CONTEXT FILE', seed)
 
 
 class NewestFirstTests(unittest.TestCase):

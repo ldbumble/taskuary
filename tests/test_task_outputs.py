@@ -244,16 +244,6 @@ class OneOfEachTests(unittest.TestCase):
         self.assertEqual(sorted(r['name'] for r in remote_assistant.task_files(self.store, {'tid': self.tid})),
                          ['build_sheet.py', 'pricing comparison v9.xlsx', 'rates.csv', 'run.log', 'summary.pdf'])
 
-    def test_every_worker_hears_one_final_file(self):
-        from taskuary import terminal
-        # ...said once, in AGENT.md's Files you make (or appended to an older copy): the outputs brief no longer repeats it (2026-11-09)
-        self.assertNotIn('one final file', outputs.brief(self.tid))
-        self.assertIn('one final file', self.store.doc('agent') or open(Path(outputs.__file__).parent / 'templates' / 'agent.md', encoding='utf-8').read())
-        older = terminal.with_fence_rule('Rules from before files had a rule.')
-        self.assertIn('one final file', older)
-        self.assertIn('scratch work', older)
-        self.assertEqual(terminal.with_fence_rule(older), older)
-
     def test_the_assistant_finds_the_excel_on_the_task_about_vendor_pricing(self):
         from taskuary import concierge
         # what a file is about is read by meaning (embeddings, textsim), never by counting shared word stems (2026-10-28)

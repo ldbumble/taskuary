@@ -8,7 +8,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import agenttools, general, selfclose, server, terminal, wrapup
+from taskuary import agenttools, general, server, terminal, wrapup
 from taskuary.store import MemoryStore
 from test_agent_toolbox import hdr
 
@@ -38,8 +38,7 @@ def test_who_is_behind_the_task():
 def test_the_coding_seed_says_there_is_nobody_to_reply_to():
     s = MemoryStore(); own, mailed = own_task(s), mailed_task(s)
     seed = terminal.seed_text(s, own, 'tidy the exports')
-    # ...the standing rules (CODING.md) still name the reply road; the seed's own line about it is this task's, and it says no
-    assert wrapup.OWN_ASK in seed and 'No `taskuary --reply`' in seed and selfclose.SEED_LINE not in seed
+    assert wrapup.OWN_ASK in seed                                               # a fact about the task, never an order about a tool
     assert wrapup.OWN_ASK not in terminal.seed_text(s, mailed, 'fix it')
 
 

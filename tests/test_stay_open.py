@@ -71,10 +71,6 @@ class TheTaskDecidesWhetherItsAgentMayClose(unittest.TestCase):
         self.assertTrue(out['ended']); self.assertFalse(out['closed']); w.assert_called_once()
         self.assertIn('The agent says it is finished: fixed the export. You can close it with Mark done.', [c['Body'] for c in s.list_comments(tid)])
 
-    def test_the_seed_says_what_declare_does(self):
-        """The rule and the prompt must not disagree again: the stay-open seed says --done is refused, never 'closes'."""
-        self.assertIn('refused', selfclose.STAY_LINE); self.assertIn('taskuary --done', selfclose.STAY_LINE)
-
     def test_the_quiet_screen_road_is_gone(self):
         self.assertFalse(hasattr(selfclose, 'on_stop')); self.assertFalse(hasattr(selfclose, 'spawn_on_stop'))
 

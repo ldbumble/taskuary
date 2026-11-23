@@ -439,11 +439,6 @@ class EverySessionGetsThem(unittest.TestCase):
         self.assertIn(f'TQ-{theirs}.stranger.mcp.json', f); self.assertIn('--strict-mcp-config', args)
         self.assertNotIn(guard.TASK_HDR, open(f, encoding='utf-8').read())
 
-    def test_older_agent_rules_still_hear_of_the_tools(self):
-        from taskuary import terminal
-        self.assertIn('None of them sends', terminal.with_fence_rule('Rules from before the toolbox.'))
-        self.assertIn('Your Taskuary tools', open(terminal.__file__.replace('terminal.py', 'templates/agent.md'), encoding='utf-8').read())
-
 
 if __name__ == '__main__': unittest.main()
 
@@ -869,7 +864,5 @@ class NewTaskTool(unittest.TestCase):
 def test_an_agent_is_told_to_offer_to_keep_code_it_wrote_as_a_routine():
     """The owner, 2026-11-17: "if it generates code ... it should save it in taskuary deterministic scripts ... it should also offer you to
     save it for later". Asked to save the script it wrote, the agent left a .py in Downloads: save_routine sat only in propose's long words,
-    which an agent reads by name (find_tools). The tool's own line and the guide both say it."""
-    from pathlib import Path
+    which an agent reads by name (find_tools). The tool's own line says it."""
     assert 'save_routine' in agenttools.SHORT['propose']
-    assert 'save_routine' in (Path(agenttools.__file__).parent / 'templates' / 'agent.md').read_text(encoding='utf-8')

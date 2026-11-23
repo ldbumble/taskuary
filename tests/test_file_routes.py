@@ -188,18 +188,13 @@ class FileRoutesTests(unittest.TestCase):
                 self.assertEqual(got.status_code, 422, bad)
 
     def test_a_terminal_agent_is_told_where_its_files_go(self):
-        "By its environment and its standing rules - never the seed, which a real TUI types under a budget (test_terminal)."
+        "By its environment - never the seed, which a real TUI types under a budget (test_terminal)."
         from taskuary import terminal
         env = terminal.session_env('coding', self.tid)
         self.assertEqual(env[outputs.ENV], str(outputs.folder(self.tid)))
         self.assertTrue(outputs.folder(self.tid).is_dir())
         self.assertNotIn(outputs.ENV, terminal.session_env('coding', None))          # a bare shell has no task folder
         self.assertNotIn(outputs.ENV, terminal.session_env('coding', self.tid, stranger=True))
-        older = terminal.with_fence_rule('Rules from before files had a folder.')     # an owner's AGENT.md copy from before it hears it
-        self.assertIn(f'${outputs.ENV}', older)
-        self.assertEqual(terminal.with_fence_rule(older), older)
-        template = (Path(outputs.__file__).parent / 'templates' / 'agent.md').read_text(encoding='utf-8')
-        self.assertIn(f'${outputs.ENV}', template)
 
     def test_the_desktop_window_saves_downloads(self):
         from taskuary import desktop

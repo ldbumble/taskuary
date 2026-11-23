@@ -44,9 +44,9 @@ class TheMarkIsSetByTheDoor(unittest.TestCase):
             self.assertEqual(selfclose.stays_open(s, tid), marked, actor)
             # ...and the seed built for that session says the right thing about ending it
             if marked:
-                self.assertIn('THE OWNER OPENED THIS SESSION', seeds[0]); self.assertNotIn('WHEN FINISHED: run', seeds[0])
+                self.assertIn('The owner opened this session', seeds[0])
             else:
-                self.assertIn('taskuary --done', seeds[0]); self.assertNotIn('THE OWNER OPENED', seeds[0])
+                self.assertNotIn('The owner opened this session', seeds[0])
 
     def test_a_session_limit_hands_the_same_task_to_the_backup_brain(self):
         """The ROLE does not change because a CLI fell over - the job is the same job. What the

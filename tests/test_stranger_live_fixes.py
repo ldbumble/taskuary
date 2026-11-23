@@ -275,7 +275,7 @@ def test_trust_with_an_agent_on_the_task_hands_it_the_line_vouched_for(monkeypat
     monkeypatch.setattr(ingest, 'thread_moved', lambda *a, **k: (got.append((a, k)), done.set()))
     r = TestClient(server.app).post(f'/api/tasks/{t}/trust')
     assert r.status_code == 200 and r.json()['started'] == 'handed', r.text
-    assert done.wait(5) and got[0][0][1] == t and got[0][1] == {'vouched': True}
+    assert done.wait(5) and got[0][0][1] == t and got[0][1]['vouched'] is True
 
 def test_trust_with_no_agent_yet_starts_one_whose_first_turn_takes_his_line(monkeypatch):
     from taskuary import general
@@ -306,7 +306,7 @@ def test_trust_is_a_press_on_a_person_and_starts_their_other_held_task_too(monke
         return t
     a, b = omar('Invoice question'), omar('Contract renewal')
     assert origin.hold(s, a) and origin.hold(s, b)
-    starts = []; monkeypatch.setattr(server, '_trusted_starts', lambda tid: starts.append(tid) or 'started')
+    starts = []; monkeypatch.setattr(server, '_trusted_starts', lambda tid, lifted=True: starts.append(tid) or 'started')
     r = TestClient(server.app).post(f'/api/tasks/{a}/trust')
     assert r.status_code == 200 and r.json()['started'] == 'started', r.text
     assert r.json().get('released') == [b] and sorted(starts) == [a, b]
@@ -314,7 +314,7 @@ def test_trust_is_a_press_on_a_person_and_starts_their_other_held_task_too(monke
 
 def test_a_start_trust_makes_that_breaks_is_kept_on_the_task_not_a_500(monkeypatch):
     s, t = _held_with_line(monkeypatch)
-    def boom(tid): raise RuntimeError('the CLI would not come up')
+    def boom(tid, lifted=True): raise RuntimeError('the CLI would not come up')
     monkeypatch.setattr(server, '_trusted_starts', boom)
     r = TestClient(server.app).post(f'/api/tasks/{t}/trust')
     assert r.status_code == 200 and r.json()['started'] == '', r.text
@@ -324,15 +324,17 @@ def test_trust_pressed_twice_hands_the_waiting_line_over_once(monkeypatch):
     """Pressed twice - a double tap, or the phone and the desk both - the second press found the task trusted and an agent on it, and
     handed the same thread over again: the agent was told the stranger's mail twice. A press that changes nothing starts nothing."""
     from taskuary import ingest
-    s, t = _held_with_line(monkeypatch); got = []
+    s, t = _held_with_line(monkeypatch); got, go = [], threading.Event()
     monkeypatch.setattr(ingest, 'live_agent', lambda *a: 'general')
-    monkeypatch.setattr(ingest, '_spawn', lambda fn, *a, **k: got.append(fn))
+    monkeypatch.setattr(ingest, '_replan_pass', lambda *a: (got.append(a), go.wait(5)))       # ...the first press's pass, still on its way
     c = TestClient(server.app)
-    assert c.post(f'/api/tasks/{t}/trust').json()['started'] == 'handed'
-    again = c.post(f'/api/tasks/{t}/trust')
-    assert again.status_code == 200 and again.json()['origin'] == 'trusted'
-    assert len(got) == 1, got
-    assert again.json()['started']          # ...and it still says an agent has it: the first press's is at work
+    try:
+        assert c.post(f'/api/tasks/{t}/trust').json()['started'] == 'handed'
+        again = c.post(f'/api/tasks/{t}/trust')
+        assert again.status_code == 200 and again.json()['origin'] == 'trusted'
+        assert len(got) == 1, got
+        assert again.json()['started']          # ...and it still says an agent has it: the first press's is at work
+    finally: go.set()
 
 def test_a_line_typed_in_a_held_task_s_box_is_kept_and_answered_not_a_500(monkeypatch):
     """The box's own door (assistant/messages): his line on a held task is kept by take_line, which answers {'kept', 'held'} - and the

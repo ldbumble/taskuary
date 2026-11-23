@@ -280,6 +280,14 @@ def unheard(store, tid: int) -> set:
     return {x['MessageId'] for x in _mail(store, tid) if str(x['MessageId']) not in led and x['T'] + 1 > m['a']}
 
 
+# AN AGENT ON THE TASK IS NOT THE AGENT HAVING HEARD IT (the owner's live app, 2026-11-23): a held mail reopened a finished task, Trust was
+# pressed, and the press asked only whether a session existed - it opened one on the old conversation with no turn, and the mail went unheard
+def not_given(store, tid: int) -> list:
+    "The messages on the task no hand-over gave its agent (ids, in the order they joined) - from when the ledger answers for it (_since)."
+    since, led = _since(store, int(tid)) - 1, {r['Ref'] for r in store._rows("SELECT Ref FROM heard WHERE TaskId=? AND Kind='mail'", (int(tid),))}
+    return [x['MessageId'] for x in _mail(store, int(tid)) if x['T'] >= since and str(x['MessageId']) not in led]
+
+
 START_BY_WRITING = 'Write to the agent below and it starts.'
 # ...AND A LINE THAT CANNOT REACH THE TURN AT WORK SAYS SO (design round 3, 2026-11-18: "sign up yourself" sat 13 minutes behind a turn, unsaid)
 LATER = 'This agent takes no words while it works - it reads this when its turn ends.'

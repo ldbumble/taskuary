@@ -2178,14 +2178,14 @@ def task_trust(task_id: int, scope: str = ''):
     (senders.trust_org) - everyone at that domain, by mail or Teams, from now on."""
     from . import origin, senders, ingest as _ing
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    # ...a press that lifts nothing starts nothing (pressed twice, or on the phone and the desk): the second handed the same thread over again
+    # ...a press that lifts nothing starts nothing new (pressed twice, or on the phone and the desk) - it hands only what was never given (_trusted_starts)
     lifts = store.task_has_tag(task_id, _ing.HOLD_TAG) or origin.of_task(store, task_id)[0] == 'stranger'
     try: org, others = _vouch(task_id, scope)
     except ValueError as e: raise HTTPException(422, str(e))
     o, why = origin.of_task(store, task_id)
     # ...A START THAT BREAKS IS KEPT ON THE TASK with its retry (blackboard.record_failure), never a bare 500 under "You trusted the sender"
     # with nobody at work (2026-11-17)
-    try: started = (_trusted_starts(task_id) if lifts else 'already' if _ing.live_agent(store, task_id) or _ing.started(store, task_id) else '') if o != 'stranger' else ''
+    try: started = _trusted_starts(task_id, lifts) if o != 'stranger' else ''
     except Exception as e:
         from . import blackboard as bb
         logger.warning(f'task {task_id}: the start Trust makes failed - {e}'); bb.record_failure(store, task_id, e, 'assistant'); started = ''
@@ -2228,10 +2228,13 @@ def trusted_remove(body: UntrustBody, request: Request):
     return {'ok': True}
 
 
-def _trusted_starts(task_id: int) -> str:
-    """TRUST STARTS THE AGENT (the owner, 2026-11-11): the hold is gone, and what waited is worked as on any task - a live agent is handed
-    it as a line that joined the thread is (ingest.thread_moved: one turn for all of it), a task no agent worked yet starts its own."""
-    from . import general, ingest as _ing, senders, waitroom
+def _trusted_starts(task_id: int, lifted: bool = True) -> str:
+    """TRUST STARTS THE AGENT (the owner, 2026-11-11): the hold is gone, and what waited is worked as on any task. The one question is what its
+    agent was never given (conversation.not_given): that goes to it as a line that joined the thread does (ingest.thread_moved: one turn for all
+    of it - a live session's next, an idle one woken, a worked conversation carried on); a task no agent worked yet starts its own. Whether a
+    session exists answers nothing (the owner's live app, 2026-11-23: a reopened task's press opened its old conversation without a turn).
+    `lifted`: the press lifted a hold - one that lifted nothing and finds nothing unheard starts nothing. -> 'handed' / 'started' / 'already' / ''."""
+    from . import conversation, general, ingest as _ing, senders, waitroom
     t = store.get_task(task_id) or {}
     if store.task_has_tag(task_id, _ing.HOLD_TAG): store.tag_task(task_id, _ing.HOLD_TAG, on=False, actor=ACTOR)
     if t.get('Status') in ('done', 'dropped'): return ''
@@ -2240,12 +2243,18 @@ def _trusted_starts(task_id: int) -> str:
     # the reply stood owed in an empty box with nothing at work): the start the hold refused is the one Trust makes
     if t.get('Kind') not in _ing.task_kinds.AGENT:
         rv = store.pending_review(task_id)
-        return 'started' if rv and rv.get('Kind') in ('draft', 'draft_reply') and _ing.reply_to_agent(store, task_id, rv['ReviewId']) else ''
-    if _ing.live_agent(store, task_id):
-        m = next((m for m in reversed(store.list_messages(task_id)) if not _ing.is_ours(m)), None)
-        if m: _ing._spawn(_ing.thread_moved, store, task_id, {**senders.row_msg(m), 'body': m.get('BodyText') or '', 'subject': m.get('Subject') or ''}, m['MessageId'], None, 'router', vouched=True)       # Taskuary hands it on: his press is its own one line, and its pass
-        else: waitroom.later(store, 0.2)
-        return 'handed'
+        return 'started' if lifted and rv and rv.get('Kind') in ('draft', 'draft_reply') and _ing.reply_to_agent(store, task_id, rv['ReviewId']) else ''
+    # ...a hand-over already on its way (a second press, the phone and the desk) is that press's: the same mail is not handed twice
+    if general.starting(task_id) or _ing._TYPING.get(task_id): return 'already'
+    worked = _ing.live_agent(store, task_id) or general.history(store, task_id) or store.last_transcript(task_id)
+    news = [m for i in conversation.not_given(store, task_id) if (m := store.get_message(i))]
+    if m := next((m for m in reversed(news) if not _ing.is_ours(m)), None) or (news[-1] if news else None):
+        # Taskuary hands it on: his press is its own one line, and its pass
+        msg = {**senders.row_msg(m), 'body': m.get('BodyText') or '', 'subject': m.get('Subject') or ''}
+        if _ing.thread_moved(store, task_id, msg, m['MessageId'], None, 'router', own=_ing.is_ours(m), vouched=True): return 'handed'
+    # ...and his own lines kept behind the hold go in on the waiting room's clock (general.run_kept), the turn they begin hearing the rest
+    if worked and general.waiting_lines(store, task_id): waitroom.later(store, 0.2); return 'handed'
+    if worked or not lifted: return 'already' if worked and (_ing.live_agent(store, task_id) or _ing.started(store, task_id)) else ''
     if general.handles(t): _ing._spawn(_ing._auto_general, store, task_id)
     else: _ing._spawn(lambda: start_session(store, task_id, None, None))
     return 'started'

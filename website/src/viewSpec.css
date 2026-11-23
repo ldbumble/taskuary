@@ -1,8 +1,13 @@
 /* A VIEW THE AGENT SHOWED (ViewSpec.jsx), in the chat's column, after json-render's look: every block its own white card - a hairline
    edge, 12px corners, the softest shadow, a semibold title and a muted line under it - on the dashboards' tokens (dashboard.css, scoped
    by .tq-dash, light and dark). Colour only identifies: a trend's arrow, a note's icon and tint, one highlighted bar. Nothing shouts. */
+/* NO VIEW TAKES OVER THE CHAT (the owner, 2026-11-23: "isn't so big it takes up the whole screen - you lose the flow"): the words before a view
+   and after it stay on the screen with it. A block's body - a table's rows, a chart's plot, a long list - is held to --v-body, two fifths of
+   the chat (the window less the ~360px of page around it), never under 150px or over 300px; the rest scrolls inside its card. Measured at
+   1366x768 the chat is 409px tall and a 12-bar chart stood 538px of it */
 .tq-view {
-  --v-shadow: 0 1px 2px rgb(0 0 0 / .05); --v-pad: 24px; --v-gap: 12px;
+  --v-body: clamp(150px, calc((100svh - 360px) * .4), 300px);
+  --v-shadow: 0 1px 2px rgb(0 0 0 / .05); --v-pad: 18px; --v-gap: 12px;
   --v-info: #3f6489; --v-info-bg: #f1f5f9; --v-info-bd: #d9e3ec;
   --v-ok: #2f6b34; --v-ok-bg: #f1f6f0; --v-ok-bd: #d6e5d4;
   --v-warn: #8a5a12; --v-warn-bg: #fbf6ec; --v-warn-bd: #eedfc0;
@@ -54,7 +59,7 @@
 
 /* the table: run to the card's edges, a quiet 40px head with no fill, 8px cells, rows that tint under the pointer, no rule under the last
    row, every number right-aligned in tabular figures */
-.tq-view-table { overflow: auto; max-height: 360px; border-top: 1px solid var(--d-grid); scrollbar-width: thin; }
+.tq-view-table { overflow: auto; max-height: var(--v-body); border-top: 1px solid var(--d-grid); scrollbar-width: thin; }
 .tq-view-card.flush > .tq-view-table:first-child { border-top: 0; }
 .tq-view-table table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.4; }
 .tq-view-table th { height: 40px; padding: 0 8px; text-align: left; font-weight: 500; color: var(--d-muted); white-space: nowrap; vertical-align: middle;
@@ -83,6 +88,14 @@
 .tq-view .tq-dash-bars.hi .tq-dash-press:not(.pick) .val { color: var(--d-muted); font-weight: 400; }
 .tq-view .tq-dash-bars.hi .pick .val { font-weight: 600; }
 .tq-view .tq-dash-svg .dot.pick { fill: var(--d-surface); stroke: var(--d-s1); stroke-width: 2.5; }
+/* ...ranked bars past the body's height scroll; a run of columns (ViewSpec's Chart) is the body's height, across the card, its axis in the
+   view's own figures, and a highlighted column keeps the accent while the rest step back as the bars do */
+.tq-view .tq-dash-bars.inline, .tq-view-checks, .tq-view-list { max-height: var(--v-body); overflow-y: auto; scrollbar-width: thin; }
+.tq-view .tq-dash-cols, .tq-view .tq-dash-yax { height: min(170px, var(--v-body)); }
+.tq-view .tq-dash-cols { gap: 6px; background-size: 100% 50%; }
+.tq-view .tq-dash-col .seg { max-width: 40px; }
+.tq-view .tq-dash-yax { width: auto; min-width: 4.5em; }
+.tq-view .tq-dash-cols.hi .tq-dash-col:not(.pick) .seg { background: color-mix(in srgb, var(--d-s1) 26%, var(--d-surface)) !important; }
 
 /* a checklist: how far along beside its title ("2 of 6"), a thin bar across under it, then the items, done ones ticked and quieter */
 .tq-view-count { flex: none; padding-top: 1px; font-size: 13px; font-weight: 500; color: var(--d-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }

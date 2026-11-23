@@ -94,7 +94,9 @@ TOOLS = {
                    {'type': 'object', 'properties': {'type': _STR, 'connector_id': _INT}, 'required': ['type'],
                     'additionalProperties': True}, ('POST', '/api/tools/run')),
     # ...and a VIEW in its own chat (viewspec.py, after Vercel's json-render): changes nothing outside the chat, so its door is the task's own read
-    'show': ('read', "Draw a view in this chat - a table, a chart, tiles, a checklist, steps, a status. `elements` maps an id to {type, props, children?}; `root` is drawn "
+    'show': ('read', "Draw a view in this chat - a table, a chart, tiles, a checklist, steps, a status - inline in your turn, where you say it: "
+                     "numbers, a comparison, a trend, a list or where things stand read there at a glance, sized to sit between your words. "
+                     "`elements` maps an id to {type, props, children?}; `root` is drawn "
                      "first. Types: grid, stats, chart, table, checklist, list, steps, text, note, badge, button - their props and a "
                      "worked example are the guide tool's `show` topic. A button only lights or opens"
                      " - it never sends, pays or closes. A bad spec comes back saying what to fix. `files`: full paths of files you made - a picture,"
@@ -323,7 +325,8 @@ SHORT = {
     'guide': "Read one of Taskuary's how-tos (browser, number, propose ...).",
     'run_system': "Run one tool on one of the owner's systems: {type, connector_id, ...its fields}.",
     'web_search': "Search the web through this task's AI card.",
-    'show': 'Draw a view (table, chart, tiles) or show files in this chat.',
+    'show': 'Draw a table, a chart, number tiles or a checklist inline in this chat - numbers, comparisons, trends, lists and status read at '
+            'a glance there - or show files you made.',
     'tick': "Tick or untick a to-do: `item` is its id.",
     'todos': "Add, reword or merge this task's to-dos.",
     # end_turn and ask_owner are listed with their whole words: the fields ARE how they are used

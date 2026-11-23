@@ -109,6 +109,14 @@ export const fmtAs = (n, format, p = placesOf([n], format)) => {
   return `${nf.format(n)}${format === "percent" ? "%" : ""}`;
 };
 
+// A BAR CHART OF MANY SHORT LABELS STANDS AS COLUMNS (the owner, 2026-11-23: a view that "takes up the whole screen - you lose the flow"): twelve
+// months as ranked bars were a row each, 538px in a 409px chat at 1366x768. Its marks ({key, value, on}) as the columns' series (charts.Stacked)
+// - one series, the highlighted keys picked out - or null where ranked bars read better: a few, or names too long to stand under a column
+const COLS = 6, SHORT = 8;
+export const columnsOf = (marks) => (marks.length <= COLS || marks.some((m) => m.key.length > SHORT) ? null
+  : { keys: marks.map((m) => m.key), series: ["value"], cells: Object.fromEntries(marks.map((m) => [m.key, { value: { value: m.value, rows: [] } }])),
+      on: new Set(marks.filter((m) => m.on).map((m) => m.key)) });
+
 // the words a button says, and what it does: lights a task-page button (its label, buttons.json) or opens a page
 export const buttonOf = (p) => ({ label: p.label, ...(p.verb ? { verb: p.verb, lights: label(p.verb) } : { open: p.open }) });
 

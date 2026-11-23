@@ -20,12 +20,12 @@ import WarnIcon from "@mui/icons-material/WarningAmberRounded";
 import "./dashboard/dashboard.css";
 import "./diffView.css";
 import "./viewSpec.css";
-import { Bars, Line } from "./dashboard/charts.jsx";
+import { Bars, Line, Stacked } from "./dashboard/charts.jsx";
 import { Md } from "./md.jsx";
 import { fmtNum, numOf, places, reportShape } from "./reportRows.js";
 import { run as pageRun } from "./pageView.js";
 import { openAppLink } from "./appLinks.js";
-import { buttonOf, fmtAs, labels, placesOf } from "./viewSpec.js";
+import { buttonOf, columnsOf, fmtAs, labels, placesOf } from "./viewSpec.js";
 
 // A CHECKLIST: done ticked, the one being done marked, the rest open - the agent's plan (GeneralWorkspace) is drawn by the same row
 const PLAN_ICON = { done: PlanDone, now: NowIcon, todo: PlanTodo };
@@ -70,11 +70,14 @@ const Stats = ({ items }) => (
 
 // a chart from its points alone: no rows behind a mark, so nothing to drill into, and no table twin (the points are the whole of it). The
 // dashboard's own bars and line, each value at its bar's end in the view's format, one point picked out where the agent highlighted it
+// ...and a run of short labels as columns (viewSpec.columnsOf), the chart's height whatever their count
 const Chart = ({ kind, title = "", format, points }) => {
   const nf = format ? (n) => fmtAs(n, format, placesOf(points.map((x) => x.value), format)) : undefined;
-  const c = { kind: kind === "line" ? "line" : "bars", title, x: "label", y: "value", w: 2, twin: false, inline: true, fmt: nf, h: 180 };
+  const c = { kind: kind === "line" ? "line" : "bars", title, x: "label", y: "value", w: 2, twin: false, inline: true, fmt: nf, h: 160 };
   const marks = points.map((x, i) => ({ key: x.label || `#${i + 1}`, value: x.value, rows: [], on: !!x.highlight }));
-  return kind === "line" ? <Line c={c} points={marks} onDrill={() => {}} /> : <Bars c={c} groups={marks} onDrill={() => {}} />;
+  if (kind === "line") return <Line c={c} points={marks} onDrill={() => {}} />;
+  const st = columnsOf(marks);
+  return st ? <Stacked c={c} st={st} slots={{ value: 0 }} onDrill={() => {}} /> : <Bars c={c} groups={marks} onDrill={() => {}} />;
 };
 
 // a checklist under how far along it is: "2 of 6" beside its title and a bar across

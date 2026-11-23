@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { MARK, buttonOf, fencedView, fmtAs, labels, normalise, placesOf, specIn, verbOf, viewOf } from "../src/viewSpec.js";
+import { MARK, buttonOf, columnsOf, fencedView, fmtAs, labels, normalise, placesOf, specIn, verbOf, viewOf } from "../src/viewSpec.js";
 import { eventsOf, turnParts } from "../src/chatStream.js";
 
 const SPEC = {
@@ -155,4 +155,30 @@ test("a fenced block in an answer that is a view is the view the show road draws
   const md = readFileSync(new URL("../src/md.jsx", import.meta.url), "utf8");
   assert.match(md, /const Pre = [^\n]*fencedView\(/);
   assert.match(md, /if \(view\) return <ViewSpec spec=\{view\} \/>;/);
+});
+
+// A VIEW KEEPS THE CHAT'S FLOW (the owner, 2026-11-23: "isn't so big it takes up the whole screen - you lose the flow"): twelve months as ranked
+// bars stood a row each, 538px in a 409px chat at 1366x768 - a run of short labels is drawn as columns (the chart's height whatever their
+// count), in the view's own figures, its highlighted month picked out; a few, or long names, stay ranked bars
+test("a bar chart of many short labels is columns in the view's own figures; a few long names stay ranked bars", async () => {
+  const mark = (key, value, on = false) => ({ key, value, rows: [], on });
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, i) => mark(m, 40000 + 2500 * i, m === "Dec"));
+  const st = columnsOf(months);
+  assert.deepEqual(st.keys, months.map((m) => m.key));
+  assert.deepEqual([...st.on], ["Dec"]);
+  assert.equal(columnsOf(months.slice(0, 6)), null, "six bars stay bars");
+  assert.equal(columnsOf([...months.slice(0, 11), mark("Northwind Logistics", 1)]), null, "a long name stays a ranked bar");
+  // ...drawn by the dashboard's columns in the view's money, December picked out
+  const { build } = await import("esbuild");
+  const out = await build({ stdin: { resolveDir: new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"), loader: "jsx", contents: `
+    import React from "react"; import { renderToStaticMarkup } from "react-dom/server.browser"; import { Stacked } from "./src/dashboard/charts.jsx";
+    export const html = (c, st) => renderToStaticMarkup(<Stacked c={c} st={st} slots={{ value: 0 }} onDrill={() => {}} />);` },
+    bundle: true, write: false, format: "esm", jsx: "automatic", platform: "browser", logLevel: "silent", define: { "process.env.NODE_ENV": '"production"' } });
+  const { html } = await import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].text).toString("base64")}`);
+  const h = html({ title: "Revenue", fmt: (n) => fmtAs(n, "currency", 0) }, st);
+  assert.equal(h.match(/class="tq-dash-col( pick)?"/g).length, 12, "a column a month");
+  assert.equal(h.match(/class="tq-dash-col pick"/g).length, 1, "December picked out");
+  assert.match(h, /class="tq-dash-cols hi"/);
+  assert.match(h, /aria-label="Dec: \$67,500"/, "each column says its value in the view's figures");
+  assert.match(h, />\$100,000</, "the axis too");
 });

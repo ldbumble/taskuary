@@ -34,9 +34,9 @@ function useTip() {
   };
   return [tip && <div className="tq-dash-tip" style={{ left: tip.x, top: tip.y }} role="status">{tip.body}</div>, show, () => setTip(null)];
 }
-const TipRows = ({ k, rows }) => (
+const TipRows = ({ k, rows, f = fmt }) => (
   <>{k && <div className="k">{k}</div>}{rows.map(([name, v, color], i) => (
-    <div className="r" key={i}>{color && <i style={{ background: color }} />}<b>{fmt(v)}</b>{name && <span>{name}</span>}</div>))}</>
+    <div className="r" key={i}>{color && <i style={{ background: color }} />}<b>{f(v)}</b>{name && <span>{name}</span>}</div>))}</>
 );
 
 // THE FRAME every component sits in: its title, the Chart/Table switch (the table is the chart's accessible twin), the body
@@ -147,8 +147,9 @@ export function Bars({ c, groups, onDrill, stale }) {
 }
 
 // ── stacked columns: categories (or days) split by a second column ─────────────────────────────────────────
+// ...an agent's view (ViewSpec) asks for its own figures (`c.fmt`) and one column picked out (`st.on`)
 export function Stacked({ c, st, slots, onDrill, stale }) {
-  const [tipEl, show, hide] = useTip();
+  const [tipEl, show, hide] = useTip(), f = c.fmt || fmt, hi = !!st.on?.size;
   const tot = (k) => st.series.reduce((a, s) => a + (st.cells[k][s]?.value ?? 0), 0);
   const max = niceMax(Math.max(1, ...st.keys.map(tot)));       // the axis's top is a round number, and its ticks say it
   const color = (s) => (s === OTHER ? "var(--d-other)" : slotColor(slots[s]));
@@ -159,12 +160,12 @@ export function Stacked({ c, st, slots, onDrill, stale }) {
     <Card c={c} w={c.w || 2} stale={stale} table={table}>
       {st.series.length > 1 && <div className="tq-dash-legend">{st.series.map((s) => <span key={s}><i style={{ background: color(s) }} />{label(s)}</span>)}</div>}
       {!st.keys.length || !st.series.length ? <div className="tq-dash-none">{DASH.no_rows}</div> : (<div className="tq-dash-plot">
-        <div className="tq-dash-yax" aria-hidden="true">{[1, 0.5, 0].map((f) => <span key={f} style={{ top: `${(1 - f) * 100}%` }}>{fmt(max * f)}</span>)}</div>
+        <div className="tq-dash-yax" aria-hidden="true">{[1, 0.5, 0].map((q) => <span key={q} style={{ top: `${(1 - q) * 100}%` }}>{f(max * q)}</span>)}</div>
         <div className="tq-dash-plotbody">
-        <div className="tq-dash-cols">
+        <div className={`tq-dash-cols${hi ? " hi" : ""}`}>
           {st.keys.map((k) => (
-            <div key={k} className="tq-dash-col" tabIndex={0} role="button" aria-label={`${keyLabel(k, st.dated)}: ${fmt(tot(k))}`}
-              onPointerMove={(e) => show(e, <TipRows k={keyLabel(k, st.dated)} rows={[...st.series.filter((s) => st.cells[k][s]).map((s) => [label(s), st.cells[k][s].value, color(s)]).reverse(), ...(st.series.length > 1 ? [["total", tot(k)]] : [])]} />)}
+            <div key={k} className={`tq-dash-col${st.on?.has(k) ? " pick" : ""}`} tabIndex={0} role="button" aria-label={`${keyLabel(k, st.dated)}: ${f(tot(k))}`}
+              onPointerMove={(e) => show(e, <TipRows f={f} k={keyLabel(k, st.dated)} rows={[...st.series.filter((s) => st.cells[k][s]).map((s) => [label(s), st.cells[k][s].value, color(s)]).reverse(), ...(st.series.length > 1 ? [["total", tot(k)]] : [])]} />)}
               onPointerLeave={hide} onBlur={hide}
               onClick={(e) => { const s = e.target?.dataset?.s; const cell = s && st.cells[k][s];
                 onDrill({ title: `${c.title} · ${keyLabel(k, st.dated)}${cell ? ` · ${label(s)}` : ""}`, rows: cell ? cell.rows : st.series.flatMap((x) => st.cells[k][x]?.rows || []) }); }}

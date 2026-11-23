@@ -579,6 +579,7 @@ def test_the_owner_s_own_codex_starts_with_openai_s_apps_and_plugins_off_as_an_a
     # ...only those: his plan's picture tool and fast tier stay his (the owner, 2026-11-22 - an AI card's harness closes them, his CLI does not)
     assert {k.split('.', 1)[1] for k in cfg if k.startswith('features.')} == set(harness.OWNER_CLI_OFF)
     assert 'features.image_generation' not in cfg and 'features.fast_mode' not in cfg
+    assert cfg['skills.bundled.enabled'] is False               # ...and Codex's bundled skills index rides no task of his (the review, 2026-11-23)
 
 
 def test_a_start_that_fails_once_is_tried_again_before_he_hears_of_it():

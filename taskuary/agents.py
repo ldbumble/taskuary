@@ -1550,8 +1550,8 @@ def acp_launch(profile: dict) -> dict:
         opts = claude_acp_options(args)
         if opts: meta = {'claudeCode': {'options': opts}}
     elif family == 'codex':
-        from .harness import OWNER_CLI_OFF          # ...his own Codex starts with ChatGPT's apps and plugins off - only those - his -c keys after
-        env['CODEX_CONFIG'] = json.dumps({**{f'features.{k}': False for k in OWNER_CLI_OFF}, **codex_acp_config(args)})
+        from .harness import OWNER_CLI_OFF, OFF_KEYS          # ...his own Codex starts with ChatGPT's apps and plugins off and no bundled skills - his -c keys after
+        env['CODEX_CONFIG'] = json.dumps({**{f'features.{k}': False for k in OWNER_CLI_OFF}, **OFF_KEYS, **codex_acp_config(args)})
     return {'cmd': cmd, 'env': env, 'mode': ad['mode'], 'meta': meta, 'adapter': ad['pkg'], 'unnamed_own': bool(ad.get('unnamed_own'))}
 
 

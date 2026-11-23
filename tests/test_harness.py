@@ -129,6 +129,7 @@ def test_every_switch_the_gateway_proof_needed_is_pinned():
     assert c['analytics'] == {'enabled': False} and c['feedback'] == {'enabled': False}
     assert all(c['otel'][k] == 'none' for k in ('exporter', 'trace_exporter', 'metrics_exporter'))
     assert all(c['features'][k] is False for k in ('apps', 'plugins', 'remote_plugin'))
+    assert c['skills']['bundled']['enabled'] is False          # ...and Codex's own bundled skills never ride a task (the review, 2026-11-23)
 
 
 def test_a_chat_completions_only_card_defaults_to_opencode_and_its_websearch_is_off(here):

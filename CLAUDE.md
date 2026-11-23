@@ -86,6 +86,15 @@ rules below.
   and an AI step reads what it printed.
 - Guidance to an agent is general - one or two sentences where it is told its job - never a rule
   per scenario. If the prompt grows, something else in it should go.
+- **The code never tells an agent how to do its job** (the owner, 2026-11-23, said many times). An
+  agent gets CONTEXT (the owner, SOUL/JOB, memory, the task's material and history, what his screen
+  shows - as facts), TOOLS (each tool's description says what it does, never how to behave), and
+  ONE SENTENCE: do what is asked; a step that needs the owner's yes or something only they can give
+  is an action card; otherwise do not bother them. The agent decides how a turn ends. Only security
+  is hard-coded: what an agent may touch, and which acts wait for his press.
+- **A fix never adds a sentence to what an agent is told, and never adds a special case.** It
+  changes state, a tool, a card or an action - and it should delete more than it adds. A fix that
+  needs words to the agent to work is the wrong fix.
 
 ### 3. One road, less code, robust code
 

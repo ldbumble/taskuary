@@ -12,17 +12,14 @@ import api from "./api.js";
 import { openAppLink } from "./appLinks.js";
 import { attUrl } from "./fileSave.js";
 import { FileDialog } from "./PublishedPages.jsx";
-import { actionFor, changed, choiceOf, fieldsOf, pressable, stateOf, textKey, valuesOf, viaBrowserSaid, wordsOf } from "./actionCard.js";
+import { actionFor, changed, choiceOf, faceOf, fieldsOf, pressable, stateOf, textKey, valuesOf, viaBrowserSaid, wordsOf } from "./actionCard.js";
 import { outputRow } from "./taskOutputs.js";
 import { hint, label as btn } from "./buttons.js";
 import { failLine, landed, press } from "./press.js";
 import { asLive, MovedPast } from "./PassedCard.jsx";
 import { MdLine } from "./md.jsx";
-import { initialsOf } from "./profileAvatar.js";
 import { ACCENT, ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
-// ...by the one rule a face reads (profileAvatar.initialsOf): words, never marks - "X (Twitter)" drew "X(" (design round 6, D3)
-const initials = (s) => (String(s || "").trim() ? initialsOf(s) : "in");
 // ...a post's picture is a preview at a glance, not half the screen (the owner, 2026-11-05): its press opens it whole (FileDialog)
 const IMG_MAX = 180;
 // ...as wide as the pick it shows, its chevron beside it - sized to its longest choice, "Anyone" stood a word's gap from its own arrow - and
@@ -94,7 +91,7 @@ export default function ActionCard({ row: was, tid, live = true, onChanged, past
       sx={{ mt: 1, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: "var(--tq-panel, #fff)", overflow: "hidden" }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.5, pt: 1.25, pb: 0.75 }}>
         {post && <Box aria-hidden sx={{ width: 34, height: 34, borderRadius: "50%", bgcolor: "var(--tq-inset, #dfe6ec)", color: "var(--tq-link, #55697a)", display: "grid", placeItems: "center", fontWeight: 700, fontSize: 13 }}>
-          {initials(row?.as)}</Box>}
+          {faceOf(row)}</Box>}
         <Box sx={{ minWidth: 0 }}>
           <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: INK, lineHeight: 1.2 }}>
             {post ? row?.as || `Your ${row?.network || ""} account` : lines.map((f) => `${f.label} ${f.value}`).join(" · ") || row?.network}</Typography>

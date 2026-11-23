@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { actionFor, cardOf, changed, fieldsOf, isCardReview, stateOf, textKey, valuesOf, wordsOf } from "../src/actionCard.js";
+import { actionFor, cardOf, changed, faceOf, fieldsOf, isCardReview, stateOf, textKey, valuesOf, wordsOf } from "../src/actionCard.js";
 import { turnFiles } from "../src/taskOutputs.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
@@ -103,6 +103,12 @@ test("a post card's avatar is the account's initials by profileAvatar's rule, ne
   const { initialsOf } = await import("../src/profileAvatar.js");
   assert.equal(initialsOf("X (Twitter)"), "X");
   assert.equal(initialsOf("Northwind Social"), "NS");
-  const ac = readFileSync(new URL("../src/ActionCard.jsx", import.meta.url), "utf8");
-  assert.match(ac, /const initials = \(s\) => \(String\(s \|\| ""\)\.trim\(\) \? initialsOf\(s\) : "in"\);/);
+  assert.equal(faceOf({ as: "Northwind Social", network: "LinkedIn" }), "NS");
+});
+
+// walk 7, 2026-11-23: a Reddit post card wore LinkedIn's "in"
+test("a post card's face is its own network's, never another's", () => {
+  assert.equal(faceOf({ network: "Reddit", as: "" }), "R");
+  assert.equal(faceOf({ network: "X (Twitter)" }), "X");
+  assert.equal(faceOf({ network: "LinkedIn", as: "Alex Doyle" }), "AD");
 });

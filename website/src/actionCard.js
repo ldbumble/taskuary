@@ -3,6 +3,7 @@
 // before pressing, and the press words. ActionCard.jsx draws whatever is declared; this is the reading of it, kept apart so it is tested alone.
 import { CATALOGUE } from "./connectorCatalog.js";
 import { proposalFrom } from "./reviewProposal.js";
+import { initialsOf } from "./profileAvatar.js";
 
 const BY_TOOL = Object.fromEntries(CATALOGUE.flatMap((c) => (c.actions || []).filter((a) => a.tool).map((a) => [a.tool, { ...a, card: c.type, title: c.title }])));
 export const actionFor = (tool) => BY_TOOL[tool] || null;
@@ -20,6 +21,9 @@ export const cardOf = (review) => {
     post: p, network: act.title, as: "", connect: review.Status === "pending" ? review.Connect || null : null } : null;
 };
 
+// A POST'S FACE IS ITS OWN NETWORK'S (walk 7, 2026-11-23: a Reddit post card wore LinkedIn's "in" - the fallback for a card with no account
+// name): the account it goes out as, else the network's own initials - words, never marks ("X (Twitter)" drew "X(", design round 6, D3)
+export const faceOf = (row) => { const s = String(row?.as || row?.network || "").trim(); return s ? initialsOf(s) : ""; };
 export const choiceOf = (f, v) => (f?.choices || []).find((c) => String(c.value) === String(v)) || null;
 // each declared field with its value - the proposal's, else the catalogue's default - and whether the owner may change it now (only while it waits)
 export const fieldsOf = (act, p, live = false) => (act?.fields || []).map((f) => ({ ...f, value: p?.[f.key] ?? f.default ?? "", editable: !!(live && f.edit) }));

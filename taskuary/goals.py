@@ -1,11 +1,20 @@
-"""A goal's steps, written by the model (spec 2026-10-12). One planner for every door that opens a goal: the New sheet's Set a
-goal and Re-plan (server.plan_goal), and triage opening one for an open-ended ask (ingest) - a goal opens with no steps and
-this proposes them; the owner cuts or adds on the task page."""
-import threading
+"""A goal's steps, written by the model (spec 2026-10-12), for the goal the OWNER set: the New sheet's Set a goal and Re-plan
+(server.plan_goal) - a goal opens with no steps and this proposes them; the owner cuts or adds on the task page. Triage opens no goal."""
+import json, re, threading
 from loguru import logger
 from .store import task_ref
 
 BACKGROUND = True        # the suite turns this off (tests/conftest.py): a plan runs only when a test asks for it
+STEPS_MAX = 12
+SYSTEM = ('The owner has set a GOAL. Answer ONLY with a JSON object {"steps": ["..."]}: the ORDERED steps that reach the outcome it describes, '
+          'three to nine of them, each one step a person or an agent can finish, named for who does it when the goal says ("Ray: schema '
+          'sign-off"). Only what the goal asks for; never a step already done.')
+
+
+def steps_of(text: str, llm) -> list:
+    "The model's steps for the goal `text`, [] when it gave none or no answer could be read."
+    j = json.loads(re.sub(r'^```(json)?|```$', '', str(llm(SYSTEM, str(text or '')[:6000]) or '').strip(), flags=re.M))
+    return [x.strip() for x in (j.get('steps') or []) if isinstance(x, str) and x.strip()][:STEPS_MAX]
 
 
 def plan(store, tid: int, text: str, llm=None):
@@ -13,9 +22,9 @@ def plan(store, tid: int, text: str, llm=None):
     its words), and the model's new words come around it (the review, 2026-10-12: a slot fallback pinned the child to whatever
     the model put in that slot)."""
     try:
-        from . import concierge, triage
-        ask = triage.extract_ask({'body': text}, llm or concierge.brain(store, fast=True), goal=True)
-        texts = [x for x in ask.get('checklist') or [] if x]
+        from . import concierge
+        brain = llm or concierge.brain(store, fast=True)
+        texts = steps_of(text, brain) if brain else []
         if not texts: return
         for k, i in enumerate(store.task_checklist(tid)):
             if i.get('tid') and i['text'] not in texts: texts.insert(min(k, len(texts)), i['text'])

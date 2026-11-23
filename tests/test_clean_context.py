@@ -224,3 +224,54 @@ class IncrementalKnownTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TriageRoutesOnlyTests(unittest.TestCase):
+    """TRIAGE ROUTES, AND NOTHING ELSE (the redesign, 2026-11-23): an arriving mail is placed - its thread's task, who sent it, work or fyi - and
+    its agent reads the message itself. A reading triage made ("no attached data", a summary, to-dos) once reached the agent as fact."""
+    OLD = {'intent': 'task', 'kind': 'general', 'why': 'TRIAGE-WHY the sheet has no attached data', 'title': 'Reconcile the October ledger',
+           'summary': 'TRIAGE-SUMMARY Dana wants nothing attached checked', 'checklist': ['TRIAGE-TODO check nothing'],
+           'difficulty': 'quick', 'sure': True, 'offer': 'TRIAGE-OFFER I can do it', 'sender_class': 'person'}
+
+    def mail(self, s, **kw):
+        return {'external_id': kw.pop('xid', 'm1'), 'conversation_id': 'conv-ledger', 'channel': 'email', 'direction': 'in',
+                'from_email': 'dana@vendor.example', 'from_name': 'Dana Whitfield', 'to': ['alex@northwind.example'],
+                'subject': 'October ledger', 'body': kw.pop('body', 'Hi Alex, the October ledger is attached - can you reconcile it by Friday?'),
+                'sent_at': '2026-11-23 09:00:00', **kw}
+
+    def test_a_verdict_that_still_writes_readings_puts_none_of_them_on_the_task(self):
+        from unittest import mock
+        s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 'owner')
+        with mock.patch.object(ingest, 'judge', return_value=(dict(self.OLD), {})), mock.patch.object(ingest, '_spawn'):
+            tid = ingest.ingest_message(s, self.mail(s), llm=lambda *a, **k: '')['task_id']
+        t = s.get_task(tid)
+        self.assertEqual(t['Title'], 'Reconcile the October ledger')                       # the row's name is triage's
+        self.assertNotIn('TRIAGE', t.get('Summary') or ''); self.assertEqual(s.task_checklist(tid), [])
+        self.assertIsNone(s.task_judged(tid).get('Difficulty'))
+
+    def test_a_mail_on_its_threads_task_joins_it_and_triage_writes_nothing_on_it(self):
+        from unittest import mock
+        s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 'owner')
+        with mock.patch.object(ingest, 'judge', return_value=(dict(self.OLD), {})), mock.patch.object(ingest, '_spawn'):
+            tid = ingest.ingest_message(s, self.mail(s), llm=lambda *a, **k: '')['task_id']
+        later = {**self.OLD, 'checklist': ['TRIAGE-TODO a second box'], 'reword': [{'n': 1, 'text': 'TRIAGE-TODO reworded'}]}
+        with mock.patch.object(ingest, 'judge', return_value=(later, {})), mock.patch.object(ingest, '_spawn'):
+            out = ingest.ingest_message(s, self.mail(s, xid='m2', subject='RE: October ledger', body='One more line: the Payworth refund is in it too.'),
+                                        llm=lambda *a, **k: '')
+        self.assertEqual(out['task_id'], tid); self.assertEqual(len(s.list_messages(tid)), 2)
+        self.assertEqual(s.task_checklist(tid), [])
+
+    def test_the_agents_first_turn_carries_the_message_and_no_triage_reading(self):
+        from unittest import mock
+        from taskuary import general
+        s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 'owner')
+        with mock.patch.object(ingest, 'judge', return_value=(dict(self.OLD), {})), mock.patch.object(ingest, '_spawn'):
+            tid = ingest.ingest_message(s, self.mail(s), llm=lambda *a, **k: '')['task_id']
+        system, late, user = general.prompt_parts(s, tid)
+        # ...a sender he has not trusted yet: the material rides in the stranger's file the turn points at - read whole, it is the agent's too
+        import re
+        from pathlib import Path
+        if (f := re.search(r'in (\S+\.stranger\.md)', user)): user += Path(f.group(1)).read_text(encoding='utf-8')
+        said = '\n'.join([system, *late, user])
+        self.assertIn('the October ledger is attached - can you reconcile it by Friday?', user)
+        for w in ('TRIAGE-WHY', 'TRIAGE-SUMMARY', 'TRIAGE-TODO', 'TRIAGE-OFFER', 'triage called it', 'beside the ask'): self.assertNotIn(w, said, w)

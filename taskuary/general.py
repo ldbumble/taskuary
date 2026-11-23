@@ -1922,32 +1922,12 @@ def earlier_mail(store, tid: int) -> str:
     return mailsearch.says(hits) if hits else ''
 
 
-def meeting_times(store, tid: int) -> str:
-    """THE FREE TIMES A MEETING ASK NEEDS, READ BEFORE THE TURN (the owner, 2026-11-20: "if it's just 'respond with available dates'" the
-    agent answers at once): where triage read the newest message on the task as asking the owner for a time (calwrite.meet_of), the
-    calendar is read in plain code - the times the reply card's own Find times would offer (calwrite.slots_for) - and handed to the agent
-    with the ask, so it needs no tool call for them. With no calendar to read it is told so, with the link that connects one. '' otherwise."""
-    from . import calendar as cal, calwrite
-    m = next((x for x in reversed(store.list_messages(tid) or []) if x.get('Direction') != 'out' and calwrite.meet_of(x)), None)
-    if not m: return ''
-    if not cal.reachable(store):
-        fix = calwrite.connect_fix(store)
-        return f"THE MEETING ASKED FOR: no calendar is connected, so the owner's free times cannot be read. Give the owner this link: [{fix['label']}]({fix['href']})"
-    try: got = calwrite.slots_for(store, m, 'schedule')
-    except calwrite.NoAccess as e: return f'THE MEETING ASKED FOR: {e} [{e.fix["label"]}]({e.fix["href"]})'
-    except Exception as e: logger.debug(f'task {tid}: the free times were not read for its turn - {e}'); return ''
-    times = '; '.join(x['label'] for x in got.get('slots') or [])
-    return (f"THE MEETING ASKED FOR - the owner's free times for {got.get('minutes') or 30} minutes, read from the calendar just now: "
-            + (times or 'none in the days asked or the week after') + '. Offer these; the calendar tool is for anything more.')
-
-
-def history_brief(store, tid: int, hands: bool, quick: bool = False) -> str:
+def history_brief(store, tid: int, hands: bool) -> str:
     """The owner's earlier mail this task's agent is handed as material: searched FOR it where it has no search of its own (an API card, a CLI
-    that only looks things up), or on work triage judged quick, where the search is done before the turn. '' where its own search tools serve,
-    on a stranger's task, and on the dock."""
+    that only looks things up). '' where its own search tools serve, on a stranger's task, and on the dock."""
     from . import origin
     if is_dock(store.get_task(tid)) or origin.of_task(store, tid)[0] == 'stranger': return ''
-    if hands and not quick: return ''
+    if hands: return ''
     got, done = earlier_mail(store, tid), earlier_tasks(store, tid)
     from .terminal import fence
     return '\n\n'.join(x for x in (f'EARLIER MAIL - Taskuary searched the owner\'s saved mail for this sender and subject: '
@@ -2346,7 +2326,7 @@ def prompt_parts(store, tid: int, turn: bool = False, heard: str = '') -> tuple[
     from .cardqueue import once          # ...the screen fact once, where the note that woke this turn says it already
     lb = once(turn_facts(store, tid, task, rules=False, turn=turn), f"{heard}\n\n{(chat_rows(store, tid, run=True)[-1:] or [{}])[0].get('Body') or ''}")
     md = store.checklist_markdown(tid, ids=True, shell=False) if hasattr(store, 'checklist_markdown') else ''    # the slot's id: its road is in the brief (by_tool)
-    ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words
+    ours = lambda o: '' if stranger else o   # the title, summary and to-dos of a stranger's task are the stranger's words
     chk = f"TO-DOS ON THIS TASK (each by its id):\n{md}\n" if md else ''
     if stranger: sources.insert(0, f"{origin.stranger_head(store, tid, task)}\n{chk}")
     # THE OWNER'S WORDS LEAD (the owner, 2026-10-23: "write prompt what about the email or attachment is the issue"): what they asked
@@ -2360,7 +2340,8 @@ def prompt_parts(store, tid: int, turn: bool = False, heard: str = '') -> tuple[
     lead = ("TASKUARY'S WORDS ON THIS TURN - not the owner's" if is_brief(last) else "THE OWNER'S ASK - what they want done") + ' about the task and the material below'
     # ...and a coding task on an AI card, where it works and who else is in there - with the task, as its CLI's seed says it
     code = coding_brief(store, tid, stranger, opening=not any(r.get('ActorType') == ASSISTANT_TYPE for r in rows)) if tid in ON_CARD else ''
-    # triage's summary only where the task has no messages or conversation of its own - but the files his ask came with ride either way:
+    # the task's own words (his ask as typed, or a sender's own words - never a reading of them) only where it has no messages or conversation
+    # to carry them - but the files his ask came with ride either way:
     # carried on the summary's line alone, a task started from his words with a file named none of it to its agent (2026-11-23)
     summed, tf = not (sources or said), files_of(task)
     head = ((f"{lead}:\n{ask}\n\n" if ask else '')
@@ -3153,10 +3134,7 @@ class GeneralSession:
                 if (systems := docsync.agent_systems(self.store, tooled)): system = f'{system}\n\n{systems}'
             # ...and the owner's own mail, which a stranger's task never reads (the route refuses it too: server._owner_history): searched by
             # the session itself where it has hands, else for it - what was found is material, said as such
-            from .brainroute import judged
-            quick = judged(self.store, self.task_id)['difficulty'] == 'quick'
-            prior = history_brief(self.store, self.task_id, hands, quick=quick)
-            if quick and (meet := meeting_times(self.store, self.task_id)): prior = '\n\n'.join(x for x in (prior, meet) if x)
+            prior = history_brief(self.store, self.task_id, hands)
             if prior: user = f'{prior}\n\n{user}'
             from . import outputs
             # ...THE FILES THE TASK CAME WITH, BY EVERY DOOR: a mail's attachments and his ask's own (its Files field - New, the phone). New's
@@ -3224,8 +3202,7 @@ class GeneralSession:
             # classifying one message. The dock is the Assistant's own chat and keeps the quick
             # gear it shares with triage (aidefaults). See the 2026-09-16 spec.
             build_args['gear'] = 'light' if is_dock(self.store.get_task(self.task_id)) else 'main'
-            # ...ONE AGENT, ITS GEAR THE TRIAGE CLASS'S (the owner, 2026-11-20: "quick agent if the task is classified as quick but never 2 agents"):
-            # brainroute reads the task's difficulty on every turn, so work judged quick runs on the light model from its first turn - no second voice
+            # ...ONE AGENT, its gear the router's (brainroute): triage judges no difficulty, so only the owner's own correction on the task moves it
             brain = llm_mod.build_llm(self.store, **build_args, job='general')
             if not brain: raise RuntimeError('the AI chosen for this is not available - pick another, or connect it again')
             from . import apiagent

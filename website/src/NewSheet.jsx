@@ -309,11 +309,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         const again = filed.current?.about === about && filed.current.how === how ? filed.current : null;
         const data = again || (await api.post("/api/tasks", { Title: about.slice(0, 300), Summary: about, Files: pics.paths,
           Kind: plan.kind, Tags: withDesktop(plan.tags, deskOn && desk) })).data;
-        if (!again) {
-          filed.current = { ...data, about, how };
-          // it skipped triage, so nothing gave it a checklist: read the words behind the answer (server._read_hand_task)
-          api.post(`/api/tasks/${data.taskId}/read-ask`).catch(() => null);
-        }
+        // HIS ASK IS NOT READ FOR HIM (2026-11-23): no summary, no to-dos written off his words - its agent reads them
+        if (!again) filed.current = { ...data, about, how };
         let out;
         try {
           // WHAT THE ANSWER SAID, not what the button hoped. A task with no checkout comes back

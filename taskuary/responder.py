@@ -502,21 +502,6 @@ def _to_cc(store, m: dict) -> str:
     return out + (f'You are: {where}\n' if out and where else '')
 
 
-def triage_read(store, m: dict) -> str:
-    """How triage read the message being answered - its verdict and its why, the evidence the funnel acted on. The writer saw
-    neither, so "the question is Erin's, the owner is copied" was known upstream and lost by the draft (2026-10-24)."""
-    import json
-    row = store._one("SELECT VerdictJson FROM route WHERE MessageId=? AND VerdictJson IS NOT NULL ORDER BY RouteId DESC LIMIT 1",
-                     (m.get('MessageId'),)) if m.get('MessageId') else None
-    try: v = json.loads((row or {}).get('VerdictJson') or 'null') or {}
-    except ValueError: v = {}
-    said = ' - '.join(x for x in (str(v.get('intent') or ''), ' '.join(str(v.get('why') or '').split())[:400]) if x)
-    # ...and what it said could be done about the ask (its offer): the reply itself when it said so (offer_is_reply, 2026-11-03)
-    if said and (offer := ' '.join(str(v.get('offer') or '').split())[:240]):
-        said += f"\nWhat triage said {'the reply should do' if v.get('offer_is_reply') is True else 'could be done about it'}: {offer}"
-    return f'\n\n--- HOW TRIAGE READ THIS MESSAGE (evidence to weigh, not an order): {said}' if said else ''
-
-
 def task_ideas(store, t: dict) -> list:
     """The Advisor ideas this task rests on: the one it was made from (SourceRef assistant:idea:<n>) and the newest still open about it."""
     from .origin import _idea
@@ -632,7 +617,6 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
                         'answer about what they show, and never ask for one they already sent.')
     files = files_block(store, [m['MessageId'] for m in reversed(msgs)])
     user += files
-    user += triage_read(store, asked)
     # ...and with no agent's result, what Taskuary already knows about the task stands in for it (known_block)
     if not resolution and not promised: user += known_block(store, t)
     if resolution: user += f'\n\n--- WHAT WAS DONE (your source of truth; the sender has not seen it)\n{resolution}'

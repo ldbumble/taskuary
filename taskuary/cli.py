@@ -120,7 +120,7 @@ AGENT_ACTS = ('reply', 'reply_file', 'draft', 'draft_file', 'attach', 'item', 't
               'hand_over',                          # ...and a step on that page handed to the owner
               'remember')                           # ...and a fact kept in the owner's memory, which a stranger's words never write
 STRANGER_ACTS = AGENT_ACTS[:13]                     # ...the Hub, and the wall's other sessions' words, are not a stranger's to read or write
-OWNER_ACTS = ('prompts', 'backfill_asks', 'evalset', 'demo', 'link')
+OWNER_ACTS = ('prompts', 'evalset', 'demo', 'link')
 NO_TOKEN = ("not sent: this session has no token of its own (TASKUARY_TOKEN) - Taskuary's own is the owner's, and a "
             "session never borrows it. Restart the session from its task.")
 def _flag(a): return '--' + a.replace('_', '-')
@@ -288,13 +288,6 @@ def main():
     # "is the triage right?" is a rate, and nothing measured it: build the labelled cases out of
     # the owner's own verdicts, score the configured classifier over them, or export a set that
     # can leave the machine (people and prose removed) - see evalset.py
-    # the rows filed before triage was asked for a summary and a checklist: their ask is the raw
-    # email, footer and quoted thread included, and they have no todos at all
-    ap.add_argument('--backfill-asks', action='store_true',
-                    help='re-derive the ask and the todos for tasks whose summary is a copy of the '
-                         'email. Prints what it WOULD change and writes nothing unless --apply.')
-    ap.add_argument('--apply', action='store_true', help='with --backfill-asks: actually write the changes')
-    ap.add_argument('--include-closed', action='store_true', help='with --backfill-asks: closed tasks too')
     ap.add_argument('--evalset', choices=['build', 'share', 'evaluate', 'ablate', 'jev'], metavar='ACTION',
                     help='triage dataset: build (labelled cases from your verdicts -> ~/.taskuary/eval), '
                          'evaluate (score the configured AI over them), ablate (score with and without memory), '
@@ -715,27 +708,6 @@ def main():
         for r in reversed(rows):
             ref = f" {task_ref(r['TaskId'])}" if r.get('TaskId') else ''
             print(f"  [{r['Kind']}] {r['Agent']}{ref} {bb._ago(r['CreatedAt'])}: {r['Body']}")
-        return
-    if args.backfill_asks:
-        import sys
-        from . import ingest, llm as _llm
-        from .store import SQLiteStore
-        try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-        except (AttributeError, OSError): pass
-        store = SQLiteStore(config.db_path())
-        brain = _llm.build_llm(store, job='summary')
-        if not brain:
-            from . import words
-            print('No AI is connected, so the summaries will only be stripped of their footers '
-                  f"and no todos can be drawn. Connect one under {words.name('ai')}, then choose it under {words.name('sorting')}.")
-        rows = ingest.backfill_asks(store, brain, dry_run=not args.apply, include_closed=args.include_closed)
-        touched = [r for r in rows if r['action'] in ('rewrote', 'would rewrite')]
-        for r in touched:
-            print(f"{r['ref']} {r['title'][:60]}")
-            print(f"    ask:  {(r.get('summary') or '')[:150]}")
-            for i in r.get('checklist') or []: print(f"    todo: {i}")
-        print(f"\n{len(touched)} of {len(rows)} task(s) {'rewritten' if args.apply else 'would be rewritten'}.")
-        if touched and not args.apply: print('Nothing was written. Re-run with --apply to write it.')
         return
     if args.evalset:
         import sys

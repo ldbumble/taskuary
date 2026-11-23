@@ -2280,8 +2280,8 @@ def repeats(store, tid: int, msgs: list = None, routes: list = None) -> dict | N
     """ONE VENDOR, ONE ITEM, SAID. Ingest folds a sender writing again about the same thing onto one task (ingest.land_on) and
     never told the owner: {'n', 'who', 'line'} - "Payworth wrote five times about the same thing - every one is kept here.
     All they need now: the signed W-9." The count is code: separate messages (a conversation each) triage joined as the same,
-    else one person's lines that carry the same words ("Gail said the same thing 3 times"). What they need is the newest repeat's
-    own triage summary, else the task's ask - nothing new is asked of a model (a task card never waits on one). None below two."""
+    else one person's lines that carry the same words ("Gail said the same thing 3 times"). What they need is the task's ask - nothing
+    is asked of a model (a task card never waits on one), and triage writes no summary to read. None below two."""
     from .welcome import times
     msgs = (store.list_messages(tid) or []) if msgs is None else msgs
     routes = (store.list_routes(tid) or []) if routes is None else routes
@@ -2295,14 +2295,9 @@ def repeats(store, tid: int, msgs: list = None, routes: list = None) -> dict | N
     convs = {str(m.get('ConversationId') or m['MessageId']) for m in theirs}
     if len(convs) >= 2:
         n, newest, said = len(convs), theirs[-1], 'wrote {} about the same thing'
-        last = max((joined[m['MessageId']] for m in theirs if m['MessageId'] in joined), key=lambda r: r.get('RouteId') or 0)
-    elif len(copies := _copies(inbound)) >= 2:
-        n, newest, said, ids = len(copies), copies[-1], 'said the same thing {}', {m['MessageId'] for m in copies}
-        last = max((r for r in routes if r.get('MessageId') in ids), key=lambda r: r.get('RouteId') or 0, default={})
+    elif len(copies := _copies(inbound)) >= 2: n, newest, said = len(copies), copies[-1], 'said the same thing {}'
     else: return None
-    try: verdict = json.loads(last.get('VerdictJson') or 'null') or {}
-    except ValueError: verdict = {}
-    need = ' '.join(str(verdict.get('summary') or (store.get_task(tid) or {}).get('Summary') or '').split())
+    need = ' '.join(str((store.get_task(tid) or {}).get('Summary') or '').split())
     need = re.split(r'(?<=[.!?])\s', need, maxsplit=1)[0].rstrip('.')[:200]
     who = _sender_name(newest)
     line = f"{who} {said.format(times(n))} - every one is kept here." + (f" All they need now: {need}." if need else '')
@@ -4863,7 +4858,8 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
     """THE ONE START FROM THE OWNER'S WORDS (F1, the walks 2026-11-18): New's box (server /api/start), the Assistant's hand-off (the confirmed
     `task.create_from_text`), a phone's - each hands his words and files here, and the task is made and its agent started only then (PW-124).
     What the work is - a code fix, a routine, a report, research - is the agent's to do with its tools; nothing here picks a form. A start
-    that cannot happen says why before anything is made; the same work already open is that task's (ingest.arrive_words).
+    that cannot happen says why before anything is made. HIS ASK NEVER PASSES TRIAGE (the owner, 2026-11-22; every door since 2026-11-23):
+    nothing reads it for a join, a summary, to-dos or a difficulty first - it is a task of its own, and its agent reads his words.
     `door`: '' for the Assistant's chat, whose talk rides to the agent as Taskuary's brief - else where he typed it ("New"), with no chat.
     `said`: his words as typed, where `text` is a rewording; `files`: what he attached to them, a field beside them (store.files_json)."""
     job = str(text or '').strip()
@@ -4874,17 +4870,6 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
     if kind == 'coding' and not hub_agents.developer_mode(store): kind = 'general'
     if why := start_refusal(store, kind): raise ValueError(why)
     tid = dock_tid or general.dock_task(store, actor)[0]['TaskId']
-    # ...AND ONE JOB IS ONE TASK: his words arrive as a message does (ingest.arrive_words) - where triage reads an open task as already this
-    # work, its agent hears his line there, by the one road into it - never a second task
-    # ...AND ONE JOB IS ONE TASK: his words arrive as a message does (ingest.arrive_words) - where triage reads an open task as already this
-    # work, its agent hears his line there, by the one road into it - never a second task. No row is made before that answer (walk 4,
-    # 2026-11-19: a task opened first stood as a second rail row for 15-25 s and was then "merged"); New draws his line at work meanwhile
-    from . import ingest
-    read = {}
-    # ...BUT AN ASK FROM NEW IS A NEW TASK, AT ONCE (the owner, 2026-11-22: "it should not go through triage, no one asked for that. It should
-    # create new task right away"): no reading of it before its agent starts - New is how he says "this is its own work"
-    if door != 'New' and (same := ingest.arrive_words(store, said or job, 'owner', actor, skip={tid}, files=list(files or []) or None, said=said or job, verdict=read)):
-        return {'taskId': same['tid'], 'ref': task_ref(same['tid']), 'joined': True, 'started': True}
     brief = job if door else _handoff_brief(store, tid, job)
     # ...HIS WORDS ARE THE TASK'S OWN MESSAGE, AND ONLY HIS WORDS (recorded on the real CLI, 2026-11-15: the new task's bubble read his ask
     # and then "What we were talking about: remember that payroll questions go to Gail Got it - ..." - the Assistant's chat, in his name).
@@ -4894,9 +4879,6 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
     # new task "find a dentist ..."' was the title of the dentist task (walk 9, 44)
     made = setup_task(store, job if kind == 'general' else brief, actor, title=title or _handoff_title(store, tid, job), kind=kind, agent_job=kind == 'general',
                       repo=repo, said=said, door=door or 'the Assistant chat', files=files)
-    # ...AND CLASSED AS A MAIL IS (the owner, 2026-11-20: "17% of 2,340" ran on the big model): the reading that asked whether it is open work
-    # already says how hard it is - kept on the task, so its agent starts on the gear for it (brainroute), with no second model call
-    if read: store.judge_task(made['taskId'], read, 'triage')
     if kind == 'general':
         # ...AT WORK FROM THE MOMENT IT IS MADE (the bug hunt, 2026-11-12: New opened the task at once, and for the seconds its outputs were
         # read before the first turn it said "agent done" with Mark done lit, over an agent that had not begun): a start in flight, as
@@ -4906,14 +4888,6 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
         except Exception: general.OPENING.discard(made['taskId']); raise
         def first_turn():
             try:
-                # ...AND ITS ASK IS THE ONE READING NEW ALREADY MADE (walk 2, 2026-11-21: a second model reading of the same words held the agent
-                # 46 s of a 61 s answer): triage's summary and checklist go on the task at once, as a promoted message's do (ingest.ask_later) -
-                # read again, beside the turn, only where triage read the words as steering an AI. Who else is written to is the agent's to judge
-                # ...read beside its agent where triage did not (New - walk 5, 2026-11-22: a 10-step ask got one box, ticked whole): never waited on
-                # ...HIS WORDS STAY HIS (walk 9, 2026-11-23): triage's reading of a New ask with a file - "the message has no body or attached
-                # data" - replaced them as the task's summary, which my_task handed the agent as fact. From a door, read for its steps alone
-                ingest.ask_later(store, made['taskId'], {'body': job}, job, {k: read.get(k) for k in ('summary', 'checklist', 'danger')} if read else None,
-                                 summary=not door)
                 # ...never a second line in the owner's name: their words are the task's own message already, and the chat drew them twice (the
                 # click-through, 2026-11-12). From a door they ARE his ask: his turn (kept - filed already), his files with it (send_prompt's one
                 # road for a task's files) - headed "Taskuary's words", the agent read his own ask as the app's (walk 9)

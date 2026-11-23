@@ -408,6 +408,8 @@ def test_what_was_just_told_makes_the_cut_on_the_task_it_bears_on_sixty_lines_in
         memoryedit.remember(s, f"Mail about {('parking permits', 'badge reprints', 'toner orders', 'the holiday rota')[i % 4]} at site {i} is "
                                f"{('Paula Vance', 'Marcus Reed', 'Omar Keller')[i % 3]}'s to handle, not yours - no task unless they ask you directly", section='care')
     memoryedit.remember(s, 'Paula Vance (paula@northwind.example) prefers a call to a long mail', section='people')
+    s.add_message({'ExternalId': 'e0', 'Channel': 'email', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example', 'Subject': 'Leaving',
+                   'BodyText': 'My last day is Friday.', 'Status': 'routed'})          # ...a colleague he mails: who the line is about is known
     memoryedit.remember(s, 'Erin left the company; send payroll questions to Gail now', about='Erin Blake', section='people')      # ...filed under Your people
     assert 'send payroll questions to Gail' in learned_cut.section(s.get_doc('learned'), learned_cut.PEOPLE)
     # the Assistant reads the memory whole - Your people too, which sixty lines of What you care about had filled its budget before
@@ -461,3 +463,19 @@ def test_people_lines_rank_by_who_is_on_the_item_then_its_subject():
     assert learned_cut.cut(ls, one, {'domain': 'northwind.example', 'people': ['erin blake']})[0] == [MC.ERIN_LINE]
     assert learned_cut.cut(ls, one, {'topic': 'Weekly headcount sheet for Monday'})[0] == [_GAIL_PROMISE]
     assert learned_cut.cut(ls, one, {'sender_name': 'erin blake', 'people': ['gail@northwind.example']})[0] == [MC.ERIN_LINE], 'the sender first'
+
+
+def test_how_he_works_reaches_every_agent_whichever_heading_it_was_filed_under():
+    """Walk 6, H5: "I only take meetings between 10am and 2pm, and never on Fridays" was filed under Your people. It names nobody, so the
+    people filter - keyed on the heading - let it reach no agent, and three 2:00 PM slots were proposed, one sent. A line is read by what it
+    is about: one naming nobody rides like any other; one naming only people off the task stays theirs, whatever its heading."""
+    from taskuary import general
+    s = full(); hours = '- Only take meetings between 10am and 2pm, and never on Fridays.'
+    s.save_doc('learned', put(s.get_doc('learned'), learned_cut.PEOPLE, hours), 'owner')
+    tid = s.create_task({'Title': 'Set up the vendor demo', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    s.add_message({'TaskId': tid, 'ExternalId': 'e1', 'Channel': 'email', 'Subject': 'Demo next week', 'FromEmail': 'omar@northwind.example',
+                   'BodyText': 'Could we meet Wednesday at 2?', 'Status': 'routed'})
+    page = context.build(s, tid)
+    assert 'between 10am and 2pm' in page, 'his own line, under any heading, rides in every brief'
+    assert 'gets the headcount questions' not in page, "a line about Gail alone, who is not on this task, is still not this agent's"
+    assert 'between 10am and 2pm' in general.learned_block(s, tid), 'and in the lines nearest each turn'

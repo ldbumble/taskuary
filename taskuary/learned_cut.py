@@ -260,13 +260,18 @@ def for_reader(store, reader: str, about: dict = None, budget: int = None, doc: 
     # ...or the people lines nearest this item's own SUBJECT (NEAR_PEOPLE of them: "send payroll questions to Gail now" on a vendor's
     # payroll question, where Gail is nobody on the mail and the line reached no agent - 2026-11-14): what bears on the work, still
     # never the notes on everyone else
+    # ...BY WHAT A LINE IS ABOUT, NEVER BY WHERE IT WAS FILED (walk 6, H5: "only meetings between 10am and 2pm, never on Fridays", filed under
+    # Your people, named nobody on any task and reached no agent - three 2:00 PM slots were proposed, one sent): a line that names people
+    # (their addresses), none of them on this item, is about everyone else; any other line is read by nearness, whichever heading it is under
     near = dict(zip((k for _, k, _ in every), nearness(every, about, sims)))
-    off = [(raw, k) for raw, k, s in every if s == 'people' and who is not None and not names(raw) & who and rank(raw, k, about) == 2 and near[k] > 0]
+    ours = lambda raw: who is not None and bool(names(raw) & who)
+    others = lambda raw: who is not None and bool(names(raw)) and not ours(raw)
+    off = [(raw, k) for raw, k, s in every if who is not None and not ours(raw) and rank(raw, k, about) == 2 and near[k] > 0]
     by_subject = {k for _, k in sorted(off, key=lambda x: -near[x[1]])[:NEAR_PEOPLE]}
-    ls = [(raw, k, s) for raw, k, s in every if s != 'people' or who is None or names(raw) & who or k in by_subject]
+    ls = [(raw, k, s) for raw, k, s in every if not others(raw) or k in by_subject]
     if own:
         from .learnedgraph import TAG
-        ls = [x for x in ls if x[2] == 'people' or not TAG.match(x[0])]
+        ls = [x for x in ls if ours(x[0]) or x[1] in by_subject or not TAG.match(x[0])]
     # ...and a line about one OTHER sender, domain or topic (memorylines' `(about: ...)`: a verdict, a line each) is not this reader's:
     # it reaches the readers of the mail it is about, by what it is about (ingest.applicable_notes) - hundreds of them, about everyone
     # else, would be the whole budget

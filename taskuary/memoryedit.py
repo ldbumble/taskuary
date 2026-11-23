@@ -236,6 +236,11 @@ def remember(store, text: str, about: str = '', section: str = '', replaces: str
     if section in TOLD_DOCS: return {**told(store, section, t), 'closed': None}
     me = about_owner(store, about, t)
     who = '' if me else str(about or '').strip().lower()
+    # ...WHOM IT IS ABOUT, WRITTEN INTO THE LINE (walk 6, H5): a reader keeps a line by the people it names (learned_cut.for_reader), never by
+    # its heading - so a fact about a person carries their address, found from the name where one is known; one about nobody stays general
+    if who and '@' not in who:
+        try: who = recipient(store, who)
+        except ValueError: who = ''
     if who and '@' in who and who not in t.lower(): t = f'{t} ({who})'
     slug = 'work' if me and section == 'people' else section
     closed = close(store, replaces) if replaces else None

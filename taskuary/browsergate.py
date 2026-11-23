@@ -709,7 +709,9 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
     # password a box of the form holds is kept before the press sends it (signin.pressing) - nothing a site was sent is lost
     if any(not setting(a) and not a.get('read') for a in todo):
         signin.acting(store, tid, sid, (here := signin.site_of(pg.get('url'))))
-        signin.pressing(store, tid, sid, here)
+        if signin.pressing(store, tid, sid, here) == signin.UNSAVED:
+            _ok, line = signin.signup(store, tid, sid)
+            return _deny(f'{signin.TYPED_REFUSED} {line}')
     return {}
 
 

@@ -1113,11 +1113,17 @@ def test_a_password_the_agents_own_press_sends_is_kept_and_put_back_when_refused
     its password box held, and later it called them accounts that "already existed". A press of the agent's that sends a password seals it
     first, keeps it once the site takes it, and the command's output says so; refused, the row it replaced comes back."""
     s = MemoryStore(); tid = Factory(s).task('Market data')
+    # ...A NEW ACCOUNT'S PASSWORD IS NEVER THE AGENT'S (walk 10, 2026-11-23: told ten times to run signup, it typed its own into every form):
+    # its press is the sign-up's to make, and nothing it typed is kept
     page = UpPage(pw='typed-by-the-agent-1!')
+    assert signin.pressing(s, tid, 'sess1', 'rentscope.example', conn=page) == signin.UNSAVED
+    assert signin.saved(s, 'rentscope.example') is None and signin.settled(s, 'sess1', conn=page) == ''
+    # ...on a site with a saved sign-in, what its press sent is kept as it was
+    signin.save(s, 'rentscope.example', USER, PW)
     signin.pressing(s, tid, 'sess1', 'rentscope.example', conn=page)
     page.go('data', 'https://www.rentscope.example/data')
     line = signin.settled(s, 'sess1', conn=page)
-    assert 'kept' in line and 'agent-browser signup' in line
+    assert 'kept' in line and 'Next time' not in line
     assert vault.unseal(signin.saved(s, 'rentscope.example')['Secret']) == 'typed-by-the-agent-1!'
     signin.save(s, 'vacancyiq.example', USER, PW)
     page = UpPage('https://vacancyiq.example/signup', pw='weak')

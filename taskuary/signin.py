@@ -1728,9 +1728,17 @@ def send_held(store, tid, sid, p) -> dict:
 
 
 # ── the agent's own press that sends a password: sealed before it goes, kept once the site takes it ─────────────────────────────────
-def pressing(store, tid, sid, site, conn=None) -> None:
+# THE SIGN-UP IS THE ONE WAY A NEW ACCOUNT'S PASSWORD IS TYPED (walk 10, 2026-11-23: told ten times "next time run `agent-browser signup`",
+# an agent typed the same made-up password into every trial form): a press that would send a password the agent typed itself, on a site with
+# no saved sign-in, is not sent - the gate runs the sign-up on that form instead (browsergate), which makes, types and keeps the password
+UNSAVED = 'no saved sign-in'
+TYPED_REFUSED = "Not pressed: a new account's password is made and typed by Taskuary, never by an agent, so it ran `agent-browser signup` on this form -"
+
+
+def pressing(store, tid, sid, site, conn=None) -> str | None:
     """An act of the agent's is about to press on `site`: remember a user name a box there names (a wizard's later step shows none), and seal a
-    password a box holds - the site is sent it now, and nothing else would ever keep it."""
+    password a box holds - the site is sent it now, and nothing else would ever keep it. -> UNSAVED where that password is one the agent typed for
+    an account the owner has no sign-in for: nothing is kept, and the press is the sign-up's to make."""
     if not site or not str(tid or '').isdigit(): return
     try:
         c = conn or connect(sid)
@@ -1742,8 +1750,9 @@ def pressing(store, tid, sid, site, conn=None) -> None:
     if f.get('user'): _USERS[(int(tid), site)] = f['user']
     if not pw: return
     prev = _raw(store, site)
+    if not prev: return UNSAVED
     from . import vault
-    if prev and prev.get('Secret') and vault.unseal(prev['Secret']) == pw: return     # ...the saved sign-in itself, typed by Taskuary: his row stays his
+    if prev.get('Secret') and vault.unseal(prev['Secret']) == pw: return     # ...the saved sign-in itself, typed by Taskuary: his row stays his
     try: save(store, site, f.get('user') or _USERS.get((int(tid), site), ''), pw, by='agent', keep_old=True, task=tid)
     except ValueError as e: return logger.info(f'signin: task {tid} pressed with a password on {site}, not kept - {e}')
     _PRESSED[str(sid)] = (int(tid), site, prev)
@@ -1775,8 +1784,7 @@ def settled(store, sid, conn=None) -> str:
     if not ok and prev: _restore(store, site, prev); return ''
     _kept(prev, _raw(store, site)); made_line(store, tid, site, _user(_raw(store, site) or {}))
     _audit(store, tid, site, 'vault', True, 'kept from a press', saved=True)
-    return (f"TASKUARY: the password that form sent to {site} is kept with the owner's saved sign-ins. Next time run `agent-browser signup` "
-            'and type no password yourself.')
+    return f"TASKUARY: the password that form sent to {site} is kept with the owner's saved sign-ins."
 
 
 # ── the fill page: one site, two boxes, one press - served by the app itself on 127.0.0.1, never on the share port ───────────

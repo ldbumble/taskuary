@@ -99,6 +99,27 @@ class TheDayAsItWasTests(unittest.TestCase):
         assert not [d for d in ev['done'] if 'Taskuary guide' in d], ev['done']
         assert any('paula@northwind.example' in a for a in ev['accomplished']), ev['accomplished']
 
+    def test_a_correction_sent_as_new_emails_is_read_from_the_tasks_own_state_never_as_her_mail_unanswered(self):
+        """Walk 6, the third walk running: Paula Vance wrote "headcount should be 214, not 212" on the board-pack task; its agent fixed the pack
+        and sent the corrected copies as two new emails, ticked every to-do and said nothing was left - and the brief put "fix the headcount"
+        under Tomorrow, because no reply sat on her very mail. What a task owes is the task's own facts; the brief only carries them."""
+        from taskuary import general
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Q3 board pack', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        her = _mail(s, 'p1', 'Headcount in the pack', 'paula@northwind.example', hours=2, status='routed', body='Headcount should be 214, not 212.')
+        s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (tid, her))
+        for who in ('erin@northwind.example', 'gail@northwind.example'):
+            rv = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'Deliver': json.dumps({'to': [who], 'subject': 'Corrected Q3 board pack'})})
+            s.decide_review(rv, 'approved', 'Corrected pack attached.', 'owner')
+        items = s.set_task_checklist(tid, ['Fix the headcount', 'Send the corrected pack'], 'agent')
+        for i in items: s.tick_checklist_item(tid, i['id'], True, 'agent')
+        s.add_comment(tid, 'agent', general.SUMMARY_TYPE, json.dumps({'did': 'Corrected the pack and sent it', 'on_you': [], 'nothing_left': True}))
+        ev = evening.collect(s, 8)
+        assert not [p for p in ev['priorities'] if 'Headcount' in p], ev['priorities']
+        row = next(r for r in ev['on_tasks'] if 'Headcount' in r)
+        for fact in ('every to-do ticked', 'sent today: 2', 'nothing is left'): assert fact in row, row
+        assert any('nothing is left' in r for r in ev['open']), ev['open']
+
     def test_the_brief_says_what_went_as_what_it_was_never_a_view_file_and_never_an_unanswered_close_as_handled(self):
         """Walk 5, 2026-11-22: "Sent availability slot to Gail" over the week's total, the show tool's view-...json as work done, and a task
         closed with its question to him unanswered told as "confirmed"."""

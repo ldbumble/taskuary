@@ -172,7 +172,7 @@ def test_a_mail_home_is_read_as_before():
     head, body = evening.brief(s, 8)
     assert head == 'the last 8 hours of Outlook and your Taskuary work'
     line = next(l for l in body.splitlines() if 'subject=Renewal decision' in l)
-    assert 'state=open priority' in line and 'where=' not in line          # a mail row reads as it always did
+    assert 'state=on TQ-' in line and 'where=' not in line          # a mail row on a task reads where its task stands
 
 
 def test_the_seeded_prompt_names_no_channel_and_an_unedited_old_one_is_healed():

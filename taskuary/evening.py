@@ -258,18 +258,21 @@ def collect(store, hours: int = HOURS) -> dict:
             # to call handled; a plain auto-filed FYI is intentionally not treated the same way.
             accomplished.append(_row_line(row, 'invite handled'))
 
-    # ...A THREAD ANSWERED IS NO PRIORITY (round 3, 2026-11-22: two threads approved and sent stood as "focus for tomorrow" - the reply's card sat
-    # on the second mail, the first had none): a task whose reply went today is owed nothing, unless a card of it still waits
-    replied = {row.get('TaskId') for row in eligible if row.get('TaskId') and str(row.get('ReviewStatus') or '').lower() in ('approved', 'edited', 'sent')}
-    priorities = []
-    for row in eligible:
-        review = str(row.get('ReviewStatus') or '').lower()
-        flagged = str(_mail_meta(row).get('flag') or '').lower() == 'flagged'
-        if review != 'pending' and row.get('TaskId') in replied: continue
-        if flagged or review == 'pending' or row.get('TaskStatus') in ('open', 'in_progress', 'waiting'):
-            priorities.append(_row_line(row, 'open priority'))
-
+    # ...WHAT IS OWED IS THE TASK'S TO SAY, NEVER A MAIL ROW'S (walk 6, 2026-11-23, the third walk running: "the corrected pack went out" under
+    # Done today and "fix the headcount" under Tomorrow - the corrected copies were new emails, not replies to her mail, so her mail read
+    # unanswered; and a CI build its agent had fixed read open). A mail on a task is that task's: the brief reads the task's one state, its
+    # to-dos, what its cards sent and its agent's last word (owed), and the mail rides as what it is about. Only mail no task holds is weighed
+    # by itself
     from .store import task_ref
+    priorities, on, on_tasks = [], {}, []
+    for row in eligible:
+        if (tid := row.get('TaskId')):
+            if row.get('TaskStatus') in ('done', 'dropped') or not (t := store.get_task(tid)): continue
+            if tid not in on: on[tid] = f'on {task_ref(tid)}: {owed(store, t, since)}'
+            on_tasks.append(_row_line(row, on[tid])); continue
+        flagged = str(_mail_meta(row).get('flag') or '').lower() == 'flagged'
+        if flagged or str(row.get('ReviewStatus') or '').lower() == 'pending': priorities.append(_row_line(row, 'open priority'))
+
     # ...never the Assistant's own chat (general.DOCK_TAG), on either list: it is no work of his (walk 5: "Taskuary guide" stood as an open
     # task; round 3, 2026-11-22: "Completed the Taskuary guide task" stood as done)
     from .general import DOCK_TAG
@@ -299,17 +302,37 @@ def collect(store, hours: int = HOURS) -> dict:
     def closed(t): return 'closed, its question to him unanswered' if open_question(store, t['TaskId']) else 'closed'
     def task_line(t, state):
         return f"src=📌 | state={state} | task={task_ref(t['TaskId'])} | title={_one_line(t.get('Title'), 140)} | priority={level(t.get('Priority'))}"
+    def open_line(t): return task_line(t, owed(store, t, since))
     def run_line(r):
         bits = ['src=🤖', f"agent={_one_line(r.get('AgentName'), 60)}", f"status={r.get('Status') or 'running'}"]
         if r.get('TaskId'): bits.append(f"task={task_ref(r['TaskId'])} {_one_line(r.get('Title'), 120)}")
         if r.get('LastError'): bits.append(f"error={_one_line(r['LastError'], 160)}")
         return ' | '.join(bits)
-    return {'hours': hours, 'since': since, 'accomplished': accomplished, 'priorities': priorities,
-            'done': [task_line(t, closed(t)) for t in done], 'open': [task_line(t, t.get('Status') or 'open') for t in open_],
+    return {'hours': hours, 'since': since, 'accomplished': accomplished, 'priorities': priorities, 'on_tasks': on_tasks,
+            'done': [task_line(t, closed(t)) for t in done], 'open': [open_line(t) for t in open_],
             'runs': [run_line(r) for r in runs]}
 
 
-def has_any(ev: dict) -> bool: return any(ev[k] for k in ('accomplished', 'priorities', 'done', 'open', 'runs'))
+def owed(store, t: dict, since: str) -> str:
+    """WHERE ONE OPEN TASK STANDS, from the facts every surface reads - never a rule of the brief's own: its status as the rail says it
+    (taskstate.status), its to-dos not ticked, what its cards sent in the window, and what its agent's last summary left on him."""
+    from . import general, taskstate
+    tid, bits = int(t['TaskId']), []
+    try: bits.append(taskstate.status(store, t)['word'])
+    except Exception: bits.append(str(t.get('Status') or 'open'))
+    todo = store.task_checklist(tid); left = [i for i in todo if not i.get('done')]
+    if todo: bits.append(f"to-dos left: {'; '.join(_one_line(i.get('text'), 80) for i in left[:4])}" if left else 'every to-do ticked')
+    sent = store._rows("SELECT Kind, Deliver FROM review WHERE TaskId=? AND Status IN ('approved','edited') AND DecidedAt>=? "
+                       "AND IFNULL(DeliveryState,'') NOT IN ('failed','unknown')", (tid, since))
+    if sent: bits.append(f"sent today: {len(sent)}")
+    s = general._last_said(store, tid)[1]
+    if isinstance(s, dict):
+        if s.get('nothing_left'): bits.append('its agent says nothing is left')
+        elif s.get('on_you'): bits.append(f"its agent left on him: {'; '.join(_one_line(x, 80) for x in s['on_you'][:3])}")
+    return ' · '.join(bits)
+
+
+def has_any(ev: dict) -> bool: return any(ev[k] for k in ('accomplished', 'priorities', 'on_tasks', 'done', 'open', 'runs'))
 
 
 def gather(store, hours: int = HOURS, read=(), unread=()) -> str:
@@ -332,6 +355,9 @@ def _text(ev: dict, read=(), unread=()) -> str:
         '',
         f"OPEN PRIORITY EVIDENCE ({len(priorities)} rows; newest first):",
         *(priorities[:80] or ['(none)']),
+        '',
+        f"MAIL ON OPEN TASKS ({len(ev['on_tasks'])} rows; each row's state is where its task stands - owed only where that says so):",
+        *(ev['on_tasks'][:80] or ['(none)']),
         '',
         f"TASKUARY TASKS CLOSED IN THE WINDOW ({len(ev['done'])}):",
         *(ev['done'] or ['(none)']),

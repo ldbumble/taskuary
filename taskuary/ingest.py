@@ -2756,7 +2756,7 @@ def _continue_general(store, tid, msg: dict = None, mid=None):
         general.start_session(store, tid, actor='router').send_prompt(turn, brief=True, mails=carried)
     except general.Stopped: pass           # the owner stopped the carried-on turn: nothing failed
     except Exception as e:
-        # said, not retried: the start queue's retry opens a conversation without a turn (_start_general prompts a fresh one only)
+        # said, not retried: the next start of this agent hands it the mail this turn missed (hand_unheard)
         logger.warning(f'assistant carry-on failed for task {tid}: {e}')
         if not general.provider_down(e): store.add_comment(tid, 'router', 'agent', f"The assistant couldn't carry on by itself: {_said(e)} - {general.CARRY_ON}.")
     finally: general.OPENING.discard(tid)
@@ -3452,20 +3452,41 @@ def first_ask(store, tid, brief: str = None) -> str:
     return f'{job}\n\n{ask}'.strip() if job else ask
 
 
-def _start_general(store, tid, brief: str = None) -> bool:
-    """Open (or reuse) the assistant session and put the task to it - once. A failure is written on
+def hand_unheard(store, tid, actor: str = 'router') -> str:
+    """ANY START OF A WORKED TASK'S AGENT HANDS IT WHAT IT WAS NEVER GIVEN (the owner's live app, 2026-11-23): the messages no hand-over gave
+    it (conversation.not_given) go as a line that joined the thread does (thread_moved: one turn for all of them - a live session's next, an
+    idle one woken, a worked conversation carried on), else his own kept lines on the waiting room's clock (general.run_kept). Nothing
+    waiting opens nothing. -> 'handed' when its agent was handed a turn, else ''."""
+    from . import conversation, general, waitroom
+    news = [m for i in conversation.not_given(store, tid) if (m := store.get_message(i))]
+    if m := next((m for m in reversed(news) if not is_ours(m)), None) or (news[-1] if news else None):
+        msg = {**senders.row_msg(m), 'body': m.get('BodyText') or '', 'subject': m.get('Subject') or ''}
+        if thread_moved(store, tid, msg, m['MessageId'], None, actor, own=is_ours(m), vouched=True): return 'handed'
+    worked = live_agent(store, tid) or general.history(store, tid) or store.last_transcript(tid)
+    if worked and general.waiting_lines(store, tid): waitroom.later(store, 0.2); return 'handed'
+    return ''
+
+
+def _start_general(store, tid, brief: str = None) -> bool | None:
+    """Put the task to its assistant - once. A fresh conversation is opened on its first ask; a worked one is handed what it has not
+    heard (hand_unheard), and with nothing unheard nothing is opened or said (None: no start was owed). A failure is written on
     the task as a failure, never left looking like nobody got round to it (PW-073), counted on the retry
     budget, and reported as False so a queue drain neither clears the row nor says Started (PW-085)."""
     from . import general
     try:
-        session = general.start_session(store, tid, actor='router')
-        general.OPENING.discard(tid)            # a hand-over's hold (agent_on_reply `opening`): the session is live from here
         # ...fresh until the agent has ANSWERED once (the night run, 2026-11-09): a first turn that failed left its prompt in the history, so
         # the retry "carried on the conversation" without putting the ask, and the task sat with no agent at work and nothing said
         fresh = not any(m['role'] == 'assistant' or not m.get('brief') for m in general.history(store, tid))
-        store.add_comment(tid, 'router', 'agent', 'The assistant started by itself'
-                          + ('.' if fresh else ' - it carries on the conversation already open here.'))
-        if fresh and (ask := first_ask(store, tid, brief)): session.send_prompt(ask, brief=True)
+        if not fresh:
+            # ...a worked conversation was opened with no turn and idled out (the queue's retry, a full house, a restart's resume): it hears
+            # what came in as an arrival does. Our own hold is let go first: the hand-over reads it as an agent already opening
+            general.OPENING.discard(tid)
+            return True if hand_unheard(store, tid) else None
+        if not (ask := first_ask(store, tid, brief)): return None
+        session = general.start_session(store, tid, actor='router')
+        general.OPENING.discard(tid)            # a hand-over's hold (agent_on_reply `opening`): the session is live from here
+        store.add_comment(tid, 'router', 'agent', 'The assistant started by itself.')
+        session.send_prompt(ask, brief=True)
         return True
     except Exception as e:
         if isinstance(e, general.Stopped): return True         # the owner stopped it: nothing failed, and nothing starts it again

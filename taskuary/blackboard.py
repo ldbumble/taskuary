@@ -519,6 +519,7 @@ def drain(store):
             # ...A TRY AGAIN THE AI OWES (general.queue_retry) runs in its own thread, its row kept until a turn answers
             if turn == general.RETRY_TURN: general.retry_turn(store, q['TaskId']); continue
             try:
+                went = True
                 if turn:
                     from .ingest import queued_turn
                     queued_turn(store, q['TaskId'], turn, q.get('Brief') or '')
@@ -526,12 +527,13 @@ def drain(store):
                     from .ingest import _start_general
                     # a queued GENERAL task opens its assistant session, not a CLI (PW-069). Its failure is counted and
                     # re-armed inside; clearing the row here wrote "Started" over a launch that never happened (PW-073/085)
-                    if not _start_general(store, q['TaskId'], q.get('Brief') or None): continue      # with the brief it was queued with
+                    # ...None: a worked conversation with nothing unheard - no start was owed, so none is said
+                    if (went := _start_general(store, q['TaskId'], q.get('Brief') or None)) is False: continue      # with the brief it was queued with
                 else:
                     from .ingest import reply_job       # a reply task's agent is told its job is the reply, queued or not
                     term.start_on_task(store, q['TaskId'], q.get('Agent') or '', instruction=reply_job(store, q['TaskId']) or None, actor='router')
                 store.clear_dispatch(q['TaskId'])
-                store.add_comment(q['TaskId'], 'router', 'agent', 'Started - '
+                if went: store.add_comment(q['TaskId'], 'router', 'agent', 'Started - '
                                   + ('it was waiting behind ' + task_ref(b) + ' for likely overlap, which no longer holds work back.' if b
                                      else 'an agent slot freed up and it was next in line.'))
             except Exception as e:

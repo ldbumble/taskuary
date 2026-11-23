@@ -212,6 +212,35 @@ class OwnerControlsTests(Base):
         self.assertEqual((q['state'], q['attempts']), ('failed', 1)); self.assertIn('unknown agent', q['lastError'])
 
 
+class WorkedStartTests(Base):
+    """The owner's live app, 2026-11-23: a start of a task whose agent had worked it (the queue's retry, a full house's queued start, a
+    restart) opened its old conversation, wrote "it carries on the conversation already open here", sent no turn - and the mail that had
+    come in since sat unheard until the session idled out. Every start hands the agent what it was never given, or opens nothing."""
+    def worked(self):
+        tid = self.task('Offsite venue', 'general'); self.s.enqueue_dispatch(tid, None, 'assistant', 'slot'); return tid
+    def drain(self, ses):
+        with mock.patch.object(general, 'history', return_value=[{'role': 'assistant', 'content': 'Two venues look right.'}]), \
+             mock.patch.object(general, 'start_session', return_value=ses) as start, mock.patch.object(ingest, '_spawn', lambda f, *a, **k: f(*a, **k)):
+            bb.drain(self.s)
+        return start
+
+    def test_a_queued_start_of_a_worked_task_hands_its_agent_the_mail_it_never_heard(self):
+        tid = self.worked(); ses = mock.Mock()
+        mid = self.s.add_message({'TaskId': tid, 'ExternalId': 'w1', 'Channel': 'email', 'Subject': 'Re: Offsite venue', 'Status': 'routed',
+                                  'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example', 'BodyText': 'The Quay Hall can take 40 on March 12.'})
+        self.drain(ses)
+        ses.send_prompt.assert_called_once()
+        self.assertIn('Quay Hall', ses.send_prompt.call_args[0][0]); self.assertEqual(list(ses.send_prompt.call_args[1]['mails']), [mid])
+        self.assertIsNone(self.row(tid))
+        self.assertFalse(any('carries on the conversation' in c for c in self.comments(tid)), self.comments(tid))
+
+    def test_a_start_with_nothing_unheard_opens_no_session_and_says_nothing(self):
+        tid = self.worked(); ses = mock.Mock(); n = len(self.comments(tid))
+        start = self.drain(ses)
+        start.assert_not_called(); ses.send_prompt.assert_not_called()
+        self.assertIsNone(self.row(tid)); self.assertEqual(self.comments(tid)[n:], [])
+
+
 class FreedSlotTests(Base):
     """The stress round, 2026-11-10: a turn queued behind a full house of assistants (ingest.queue_turn) waited for a CODING session to end,
     a quick call to finish or a retry timer - an assistant's turn ending or idling out freed its slot and started nothing - and after a restart

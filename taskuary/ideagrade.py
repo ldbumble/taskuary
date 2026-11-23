@@ -5,10 +5,12 @@ An idea is graded by the owner's own acts - no new button:
            task triage made of it
   handled  they put it down with Done
   wrong    they dismissed it (or its whole kind)
-  walked   a day went by and they did none of these
+  walked   a day went by and they did none of these - NOT GRADED (the design review, 2026-11-23, reversing 2026-11-12): an idea he walked
+           past says nothing about whether it was good - he may not have opened the rail that day - and counting it as not useful
+           quietened kinds he never judged. Only his explicit verdicts and what became of the work grade an idea
   pending  raised less than a day ago with nothing done yet - not graded
   unseen   the app put it down as it was raised, before he could see it - not graded
-Useful is taken + handled. A KIND of model idea is QUIET while its useful share over the last DAYS is under BAR on MIN or more graded
+Useful is taken + handled, of taken + handled + wrong. A KIND of model idea is QUIET while its useful share over the last DAYS is under BAR on MIN or more graded
 (the owner, 2026-11-01: quiet unless sure; precision over 80%) - it raises one line a day, never more (spent_today), so its record can
 mend as the window rolls. Read here and by tools/advisor_ideas.py, one grading."""
 import json
@@ -16,7 +18,7 @@ from datetime import datetime, timedelta
 
 TAKEN, WRONG = ('task', 'agent', 'rule', 'accept'), ('dismiss', 'dismiss_kind')
 OWNER = ('owner', 'you', 'human')
-GRADES = ('taken', 'handled', 'wrong', 'walked')
+GRADES = ('taken', 'handled', 'wrong')               # the graded ones; 'walked' is said, never counted
 BAR, MIN, DAYS = 0.8, 10, 30
 UNSEEN_H = 0.1          # put down by the app within six minutes of being raised: inside the run that raised it, before any rail drew it
 # the kinds the model raises - the app's own (health, report, connect, rule, workstream, habit) are counted, never thought, and stay
@@ -43,7 +45,7 @@ def grade(q, i: dict, now: str) -> str:
     # with its task, DecidedBy 'task' - 2026-11-12)
     if q("SELECT 1 x FROM task WHERE SourceRef=? AND Status='done' LIMIT 1", (f"assistant:idea:{i['IdeaId']}",)): return 'taken'
     # ...and one the app put down itself as it was raised - the report's judge, the rail, a gate - was never his to see: it says nothing
-    # about usefulness and is not graded (decided 2026-11-12). Read and left alone is still walked past
+    # about usefulness and is not graded (decided 2026-11-12). Read and left alone is walked past - said, and not graded either
     by, at = i.get('DecidedBy'), i.get('DecidedAt')
     if i['Status'] in ('done', 'dismissed') and by and by not in OWNER and by != 'task' and at and str(at)[:19] <= _later(i['FirstSeen'], UNSEEN_H):
         return 'unseen'
@@ -54,7 +56,7 @@ def tally(gs) -> dict:
     from collections import Counter
     c = Counter(gs)
     useful, graded = c['taken'] + c['handled'], sum(c[g] for g in GRADES)
-    return {**{g: c[g] for g in GRADES}, 'pending': c['pending'], 'n': graded, 'pct': round(100 * useful / graded) if graded else None}
+    return {**{g: c[g] for g in GRADES}, 'walked': c['walked'], 'pending': c['pending'], 'n': graded, 'pct': round(100 * useful / graded) if graded else None}
 
 
 def record(store, days: int = DAYS) -> dict:

@@ -2315,6 +2315,12 @@ def _own_settings(profile: dict, name: str, args: list) -> list:
     default behavior" and his real name among it - --setting-sources leaves that file in, and the ACP road was handed neither): kept out in
     the one --settings Claude reads (hooks.not_his), merged into one the run already carries. A claude without the flag runs as before."""
     args = list(args)
+    # ...AND A CODEX SANDBOX MAY WRITE WHERE ITS BROWSER KEEPS ITS SOCKETS (his live app, 2026-11-23: after a restart every agent-browser command
+    # of a Codex task failed "Socket directory ~/.agent-browser is not writable" - Codex runs commands as its own restricted user, and only a
+    # daemon started before it could be reached): the folder is a writable root of every Codex run, on the argv road and the ACP road alike
+    if _cli_name(name) == 'codex' and 'sandbox_workspace_write.writable_roots' not in ' '.join(map(str, args)):
+        from . import browserview
+        args += ['-c', f"sandbox_workspace_write.writable_roots=['{browserview.home().as_posix()}']"]
     if profile.get('user_settings') is not False or _cli_name(name) != 'claude': return args
     if '--setting-sources' not in args and cli_has_flag(name, '--setting-sources'): args += ['--setting-sources', 'project,local']
     from . import hooks

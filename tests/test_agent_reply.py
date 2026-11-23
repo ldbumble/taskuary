@@ -213,6 +213,12 @@ class AttachTests(NoHook):
         self.assertEqual([w.split(':')[0] for w in out['not_attached']], ['% Summary - 15 east sites.xlsx'])
         self.assertIn('% Summary - 15 east sites.xlsx', out['tell'])
 
+    def test_the_answer_says_what_the_card_carries_after_its_files_are_on_it(self):
+        "Walk 10: one answer said 'This card carries no file' beside 'attached': [4 files] - what it carries was read before they were put on."
+        s = MemoryStore(); tid, _ = task_with(s)
+        out = wrapup.agent_reply(s, tid, 'Hi Dana - the list is attached.', 'assistant', files=[('review.xlsx', self.XLSX)])
+        self.assertEqual(out['card_attachments'], ['review.xlsx']); self.assertNotIn('attachments_note', out)
+
     def test_all_attached_tells_nothing(self):
         s = MemoryStore(); tid, _ = task_with(s)
         out = wrapup.agent_reply(s, tid, 'Hi Dana - the list is attached.', 'assistant', files=[('review.xlsx', self.XLSX)])

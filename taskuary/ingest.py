@@ -2507,12 +2507,9 @@ def held_start(store, tid, err) -> bool:
 # own Send to agent does); REPLY_TAG remembers the job is still the reply, so every start - now, queued, or after a repository pick - is
 # told so (reply_job).
 REPLY_TAG = 'reply-owed'
-REPLY_JOB = ('THIS TASK IS A REPLY OWED to {who}. Work out the answer - read, look '
-             'up, check or think it through - then write the reply they get, in the owner\'s voice, with the substance in it: never a '
-             'promise to look into it later. Nothing is sent: the reply waits for the owner\'s Send. When they asked for your thoughts '
-             'on something (a draft, a plan, numbers), your result for the owner is those thoughts - what works, what to change, the '
-             'specific points - and the reply is built from them. A turn that ends without the reply written asks the owner the one '
-             'thing it needs for it - that question stands on the reply\'s card - or marks the reply not needed.')
+# ...A FACT, NOT A RULEBOOK (walk 9, 2026-11-23: ~700 characters of how to do the job, said twice in every first turn): whom it is owed to,
+# and that nothing goes before his press - how to answer is the agent's
+REPLY_JOB = "THIS TASK IS A REPLY OWED to {who}; the reply you set up waits for the owner's Send."
 
 
 def reply_job(store, tid) -> str:

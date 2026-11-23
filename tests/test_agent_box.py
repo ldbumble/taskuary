@@ -88,6 +88,8 @@ class OwnerWordsLeadThePrompt(unittest.TestCase):
         _system, user = general._prompt(s, t)
         self.assertTrue(user.startswith("THE OWNER'S ASK"), user[:120])
         self.assertLess(user.index('the total on page two'), user.index('SOURCE MATERIAL'))     # the mail (or its file, from a stranger)
+        # ...and once (walk 9, 2026-11-23: the lead said again as the conversation's last line - a reply's job twice in every first turn)
+        self.assertEqual(user.count('the total on page two'), 1, user)
 
     def test_a_turn_taskuary_started_is_headed_as_taskuarys_never_the_owners(self):
         s = MemoryStore()

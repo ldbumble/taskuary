@@ -91,7 +91,7 @@ def test_a_draft_for_feedback_judged_general_starts_the_assistant_on_the_reply()
     tid = out['task_id']
     assert s.get_task(tid)['Kind'] == 'general' and spawned == ['_auto_general']
     job = ingest.reply_job(s, tid)
-    assert 'REPLY OWED to Paula Vance' in job and 'your result for the owner is those thoughts' in job and 'never a promise' in job
+    assert 'REPLY OWED to Paula Vance' in job and len(job) < 120, 'a fact, never a rulebook (walk 9)'
 
 
 # ── ruling 1: an agent verdict joining a reply task starts that agent ───────────────────────────────────────────────────────
@@ -180,7 +180,7 @@ def test_a_reply_owed_starts_the_general_agent_and_leaves_no_draft():
     assert went and spawned == ['_auto_general'] and s.get_task(tid)['Kind'] == 'general' and s.task_has_tag(tid, ingest.REPLY_TAG)
     assert not (rv.get('DraftText') or '').strip() and not rv.get('DraftNeeds') and not rv.get('DraftError') and rv['Status'] == 'pending'
     job = ingest.reply_job(s, tid)
-    assert job.startswith('THIS TASK IS A REPLY OWED to Erin Blake. Work out the answer') and 'never a promise' in job
+    assert job.startswith('THIS TASK IS A REPLY OWED to Erin Blake')
     assert 'reply writer' not in job and not [x for x in lines(s, tid) if 'reply writer' in x]         # no second voice is quoted to it
 
 

@@ -2380,7 +2380,10 @@ def prompt_parts(store, tid: int, turn: bool = False, heard: str = '') -> tuple[
     room_for = lambda: len(head) + len(lb) + len('\n\n'.join(turns)) + len(tail) + (COMPACT_CHARS if len(turns) < len(said) else 0)
     while len(turns) > 1 and room_for() > MAX_CONTEXT: turns.pop(0)
     earlier = compacted_turns(store, tid, said[:len(said) - len(turns)])
-    conv = (f'{lb}\n\n' if lb else '') + "CONVERSATION\n" + (f'{earlier}\n\n' if earlier else '') + '\n\n'.join(turns) + tail
+    # ...SAID ONCE (walk 9, 2026-11-23: a reply's ~700-character job rode as the lead and again as the conversation's last line): the words
+    # that lead the prompt are not the conversation's last line again
+    if ask and turns: turns = turns[:-1]
+    conv = (f'{lb}\n\n' if lb else '') + ("CONVERSATION\n" + (f'{earlier}\n\n' if earlier else '') + '\n\n'.join(turns) if earlier or turns else '') + tail
     src, room = '\n\n'.join(sources), MAX_CONTEXT - len(head) - len(conv) - 20
     if stranger and sources: src, room = origin.SEED_LINE.format(path=origin.stranger_file(store, tid, sources)), MAX_CONTEXT
     if len(src) > room:

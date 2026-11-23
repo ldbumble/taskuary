@@ -326,4 +326,3 @@ def test_a_turn_that_ends_with_the_reply_owed_and_unwritten_leaves_on_its_card_w
     s = home(); tid, _ = arrived(s); rid = owed(s, tid)
     filed(s, tid, ANSWER)
     assert not any(r.get('DraftNeeds') for r in s._rows('SELECT DraftNeeds FROM review WHERE TaskId=?', (tid,)))
-    assert 'asks the owner the one thing it needs' in ingest.REPLY_JOB                                 # ...and its job says so, for the agent to do it itself

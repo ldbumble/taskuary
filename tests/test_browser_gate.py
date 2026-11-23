@@ -574,7 +574,7 @@ class HeldInTheChat(unittest.TestCase):
         carded = self.hand()['hookSpecificOutput']['permissionDecisionReason']
         for said in (carded, browserview.brief(), browserview.offer()):
             self.assertNotIn('beside', said); self.assertNotIn('WATCHING', said)
-        self.assertIn('card in this task', carded); self.assertIn('never ask', carded.lower())
+        self.assertIn('action card on this task', carded); self.assertNotIn('end your turn', carded.lower())
         self.assertIn('one card in this chat', browserview.HOLD_LINE); self.assertIn('never ask', browserview.HOLD_LINE.lower())
 
     def test_the_brief_says_to_fill_it_and_leave_the_last_press_to_the_owner(self):

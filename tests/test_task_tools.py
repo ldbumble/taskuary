@@ -23,7 +23,7 @@ def tearDownModule():
 
 def call(s, tool, key=None, **params):
     """The model names a tool - the CALL line, scripted - and the card it becomes."""
-    out = T.say(s, 'do it', key=key, model='On it.' + chr(10) + 'CALL: ' + json.dumps({'kind': tool, 'params': params}))
+    out = T.say(s, params.get('note') or 'do it', key=key, model='On it.' + chr(10) + 'CALL: ' + json.dumps({'kind': tool, 'params': params}))
     return out.get('proposal'), out
 
 

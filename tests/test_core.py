@@ -298,7 +298,8 @@ class CoreTests(unittest.TestCase):
                   "print(json.dumps({'type':'item.completed','item':{'id':'i1','type':'command_execution','command':'dir','aggregated_output':'ok','exit_code':0,'status':'completed'}}));"
                   "print(json.dumps({'type':'item.completed','item':{'id':'i2','type':'agent_message','text':'finished'}}))")
         ev = []
-        with mock.patch('taskuary.agents._resolve_cmd', return_value=[sys.executable, '-c', script]):
+        with mock.patch('taskuary.agents._resolve_cmd', return_value=[sys.executable, '-c', script]), \
+             mock.patch('taskuary.agents._own_settings', side_effect=lambda p, n, a: list(a)):    # the reviewed fixture argv, as written
             out, sid, _ = run_cli({'cmd': 'codex', 'args': ['exec'], 'timeout': 60},
                                   'hi', lambda k, n, d: ev.append((k, n, d)))
         self.assertEqual((out, sid), ('finished', 'cx1'))

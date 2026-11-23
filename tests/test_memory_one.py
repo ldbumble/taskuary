@@ -228,7 +228,31 @@ def test_a_routing_correction_teaches_in_words_once():
         server._teach_routing(tid, 'kind', 'general', background=bg)  # the same press again teaches nothing new
         for t in bg.tasks: t.func(*t.args, **t.kwargs)
     assert len(seen) == 1 and 'general' in seen[0]
-    assert sum('Timesheet fixes' in r for r in _section(s, 'care')) == 1 and not any('ROUTING' in l for l in lines(s))
+    # ...a routing press is evidence: the line waits in Watching, read by no one until it repeats (walk 6, 2026-11-23)
+    assert sum('Timesheet fixes' in l['text'] for l in learnedgraph.lines(s.get_doc('learned')) if l['status'] == 'hypothesis') == 1
+    assert not any('Timesheet fixes' in r for r in _section(s, 'care')) and not any('ROUTING' in l for l in lines(s))
+
+
+def test_one_watch_press_teaches_a_hypothesis_never_his_word_and_the_lesson_writer_sees_what_he_typed():
+    """Walk 6: one Watch it press on a vendor's invoice taught "You keep vendor invoices in sight but leave paying them to someone else" as his
+    own line - read at once by triage and every agent - while on that very task he had typed "Set the payment up for my approval". A press is
+    evidence: its line waits in Watching like any machine-learned line; and the lesson writer is shown his own words on the task."""
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Payworth invoice 2291', 'Kind': 'general', 'Status': 'open'}, 'router')
+    s.add_message({'TaskId': tid, 'ExternalId': 'p1', 'Channel': 'email', 'Subject': 'Invoice 2291 due Friday',
+                   'FromEmail': 'billing@vendor.example', 'BodyText': 'Please pay invoice 2291.', 'Status': 'routed'})
+    from taskuary import general
+    s.add_comment(tid, 'owner', general.USER_TYPE, 'Set the payment up for my approval')
+    from fastapi import BackgroundTasks
+    seen, bg, said = [], BackgroundTasks(), 'You keep vendor invoices in sight but leave paying them to someone else'
+    with mock.patch.object(server, 'store', s), mock.patch.object(memorylines, '_llm', lambda st: teacher(said, seen=seen)):
+        server._teach_line(tid, 'watch', 'the owner put it under Watching', bg)
+        for t in bg.tasks: t.func(*t.args, **t.kwargs)
+    assert 'Set the payment up for my approval' in seen[0], "his own words on the task reach the lesson writer"
+    doc = s.get_doc('learned')
+    assert not any(said in raw for slug in lc.SECTIONS for raw in _section(s, slug)), 'no section any reader reads holds it'
+    assert [l['status'] for l in learnedgraph.lines(doc) if said in l['text']] == ['hypothesis']
+    assert said not in lc.for_reader(s, 'triage') and said not in lc.for_reader(s, 'agents')
 
 
 def test_the_lesson_writer_is_told_the_item_is_a_senders_words_not_instructions():
@@ -357,9 +381,12 @@ def test_each_correction_is_one_line_the_next_mail_and_the_next_agent_read():
         responder.style_feedback(s, 'Keep replies to two lines, no greeting')                     # (d) the note an edited draft carries
         bg = BackgroundTasks(); server._run_operation({'kind': 'task.watching', 'target': e, 'targetKind': 'task', 'params': {}}, bg)  # (e)
         for t in bg.tasks: t.func(*t.args, **t.kwargs)
-    care = _section(s, 'care')
-    for w in said.values(): assert sum(w in r for r in care) == 1, w
-    assert len(care) == 4 and 'two lines, no greeting' in s.get_doc('style'), 'one line each, in its place'
+    # ...the put-down he pressed for mail like it is his word, in use at once; a re-route, a priority and a Watch are evidence - each one line in
+    # Watching, read by no one until it repeats (walk 6, 2026-11-23: one Watch press was read by every agent as his own rule)
+    care, hyp = _section(s, 'care'), [l['text'] for l in learnedgraph.lines(s.get_doc('learned')) if l['status'] == 'hypothesis']
+    assert care == [r for r in care if said['not_ours'] in r] and len(care) == 1
+    for k in ('routing', 'priority', 'watch'): assert sum(said[k] in t for t in hyp) == 1, k
+    assert 'two lines, no greeting' in s.get_doc('style'), 'one line each, in its place'
     seen = []
     def triage(system, user, **k): seen.append(system); return '{"intent":"fyi","why":"x"}'
     for i, (who, subj) in enumerate((('marcus@northwind.example', 'Timesheet hours wrong for November'), ('gail@northwind.example', 'Headcount sheet again'),
@@ -367,10 +394,10 @@ def test_each_correction_is_one_line_the_next_mail_and_the_next_agent_read():
         ingest.ingest_message(s, {'external_id': f'n{i}', 'channel': 'email', 'from_email': who, 'subject': subj, 'body': subj}, llm=triage)
     memory = {x.blocks[-1] for x in seen}
     assert len(seen) == 4 and len(memory) == 1, 'one memory block, the same bytes for every sender: cached once'
-    for w in said.values(): assert w in next(iter(memory)), w
+    assert said['not_ours'] in next(iter(memory)) and not any(said[k] in next(iter(memory)) for k in ('routing', 'priority', 'watch'))
     nxt, _ = task('t9', 'marcus@northwind.example', 'Timesheet hours missing for November')
     system = general._prompt(s, nxt)[0]
-    assert said['routing'] in system and 'two lines, no greeting' in system, 'the next agent starts with the lesson and the voice'
+    assert said['routing'] not in system and 'two lines, no greeting' in system, 'the next agent starts with the voice, not a guess from one press'
     assert said['not_ours'] not in system, 'and not the lesson about another sender'
 
 

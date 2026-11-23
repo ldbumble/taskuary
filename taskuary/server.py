@@ -3717,6 +3717,12 @@ def _verdict_facts(m: dict = None, t: dict = None, said: str = '') -> str:
                                     ('Task summary', str(t.get('Summary') or '')[:400])) if v]
     if m.get('BodyText'): out.append('Body (start): ' + ' '.join(str(m['BodyText']).split())[:700])
     if said: out.append(f'What happened: {said}')
+    # ...AND WHAT HE TYPED ON IT (walk 6, 2026-11-23: a Watch it press taught "paying invoices is someone else's" over his own "set the payment
+    # up for my approval" on that task - the lesson writer was never shown it)
+    from . import general
+    if t.get('TaskId') and (his := [' '.join(str(c.get('Body') or '').split())[:300] for c in store.list_comments(t['TaskId'], internal=True)
+                                    if c.get('ActorType') == general.USER_TYPE and not general.is_brief(c)]):
+        out.append("The owner's own words on this task: " + ' / '.join(his[-6:]))
     return '\n'.join(out)
 
 

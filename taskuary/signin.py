@@ -420,6 +420,17 @@ def on_signin_page(sid: str, conn=None) -> bool:
     return bool(f.get('top') and (f.get('password') or code_step(f)))      # ...or its code box: the second step of one is a sign-in page too
 
 
+def shows_signin(sid: str, conn=None):
+    "Does the page show a box a sign-in fills - a password, a user name, a code? None when it cannot be read."
+    try:
+        c = conn or connect(sid)
+        try: f = c.fields('') or {}
+        finally:
+            if conn is None: c.close()
+    except Exception: return None
+    return bool(f.get('top') and (f.get('password') or f.get('user') or code_step(f)))
+
+
 def set_aside(store, tid: int, sid: str) -> bool:
     """Did the owner's newest words to this agent overtake an open sign-in ask - he answered it in words, not on the page? Then a turn that
     ends with the page still on its sign-in does not put it back in front of him by itself (recorded on a real site, 2026-11-15: "leave

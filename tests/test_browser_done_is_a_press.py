@@ -189,6 +189,18 @@ class DoneIsAPress(unittest.TestCase):
             got = browserview.hand_over(self.s, self.tid, 'sign in', 'vendor.example', 'run1', watch=None)
         self.assertTrue(got['ok'] and not got.get('auto')); self.assertEqual([ws.ask_of(r)['ask'] for r in self.open()], ['signin'])
 
+    def test_a_step_named_with_its_site_on_a_page_that_asks_no_sign_in_is_his_turn_and_says_so(self):
+        """Walk 10 (2026-11-23): "Enter your date of birth" on a sign-up page, handed over with its site, took the saved sign-in's road and
+        answered "Taskuary is signing in ... with what it keeps" - while the step went to him as a card ten seconds later."""
+        from taskuary import signin
+        typed = []
+        with mock.patch.object(signin, 'saved', return_value={'Secret': 'x'}), mock.patch.object(signin, '_auto', side_effect=lambda *a: typed.append(a)), \
+                mock.patch.object(signin, 'shows_signin', return_value=False), mock.patch.object(signin, 'on_signin_page', return_value=False):
+            got = browserview.hand_over(self.s, self.tid, 'Enter your date of birth, then press Next', 'signup.vendor.example', 'run1', watch=None)
+        self.assertTrue(got['ok'] and not got.get('auto'), got)
+        self.assertIn('Handed to the owner', got['says']); self.assertNotIn('signing in', got['says'])
+        self.assertEqual([ws.ask_of(r)['ask'] for r in self.open()], ['turn']); self.assertEqual(typed, [], 'no saved sign-in typed into it')
+
     def test_a_hand_over_is_the_page_of_the_tab_it_names_and_an_error_page_is_never_his(self):
         """Walk 9 (CLI 8, 4): three sites in three tabs - "Sign in to Reddit" was handed over as "Your turn in the browser on linkedin.com", the
         tab in front; and LinkedIn's own error page was handed to him as a "security check". The tab of the site named comes to the front first,

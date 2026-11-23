@@ -769,7 +769,10 @@ def hand_over(store, tid: int, what: str = '', site: str = '', sid: str = None, 
     # ...AND AN ERROR PAGE IS THE AGENT'S, NEVER HIS (CLI 4: LinkedIn's own error page was handed to him as a "security check")
     from .browsergate import page_error
     if (bad := page_error(sid)): return {'ok': False, 'why': f'nothing was handed to him - {bad.removeprefix("TASKUARY: ")}'}
-    if site or sign_in: signin.needs(store, tid, sid, site, what=what, watch=watch)
+    # ...A SITE NAMED IS A SIGN-IN ONLY ON A PAGE THAT ASKS ONE (walk 10: "Enter your date of birth" on signup.live.com, named with its site,
+    # took the saved sign-in's road and answered "Taskuary is signing in" while the step went to him): a page read with no box a sign-in
+    # fills is his turn - one the page cannot say keeps the agent's word
+    if sign_in or signin.signing_up(site) or (site and signin.shows_signin(sid) is not False): signin.needs(store, tid, sid, site, what=what, watch=watch)
     else: your_turn(store, tid, sid, what, watch=watch)
     # ...nothing raised for him: the saved sign-in is going in (signin._auto), and its end tells the agent
     if not (h := handing(store, tid)): return {'ok': True, 'auto': True, 'says': SIGNING.format(site=signin.clean_claim(site) or 'the site')}

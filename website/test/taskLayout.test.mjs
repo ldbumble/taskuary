@@ -374,3 +374,16 @@ test("a chat that lands after the task's first read opens the chat, and stays th
   assert.match(page, /chatSeen\.current = chatLatch\(chatSeen\.current, selected, anyChat && detail\?\.task\?\.TaskId === selected\)/);
   assert.match(page, /const mainHeld = useRef\(\{ key: null, main: null, sec: null \}\), mainKey = `[^`]*\|\$\{chatSeen\.current\.on\}`/);
 });
+
+// THE OWNER, 2026-11-23: "I hit Try again on the canvas and the whole thing flickered". A first start that failed left its failure in the chat and
+// the run marked failed; its Try again read the page again, found an agent "started", and ran as Run another agent - a fresh conversation, the
+// chat's key bumped and the whole chat remounted under the press. The press is read once; its Try again replays what it read
+test("a start's Try again is the same start - never another agent read off the page its own failure changed", async () => {
+  const { startsAnother } = await import("../src/taskLayout.js");
+  const first = startsAnother({ report: false, transcript: false, alive: false, started: false });
+  assert.equal(first, false, "a first start is no other agent");
+  assert.equal(startsAnother({ started: true }, first), false, "its retry, after its failure made the chat 'started', is still the first start");
+  assert.equal(startsAnother({ started: true }), true, "a press on a task an agent already worked is another agent");
+  assert.equal(startsAnother({}, true), true, "and its retry stays another");
+  assert.equal(startsAnother({ alive: true }, { type: "click" }), true, "a press's click event is no answer of its own");
+});

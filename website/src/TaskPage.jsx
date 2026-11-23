@@ -100,7 +100,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 // Recover once automatically; a real module error still reaches the view boundary on retry.
 import { autostartPlan, isGeneralKind, opensOnRegular } from "./autostart.js";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
-import { SECTIONS, cameFrom, cameChip, chatLatch, homeSection, liveTerminal, soloTodo, replyHolds, agentStatus, agentWord, answeredOutside, reportLine, askInBody, askIsTitle, writeupAt, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, sectionFade, waitingOn, workPane } from "./taskLayout.js";
+import { SECTIONS, cameFrom, cameChip, chatLatch, homeSection, liveTerminal, soloTodo, startsAnother, replyHolds, agentStatus, agentWord, answeredOutside, reportLine, askInBody, askIsTitle, writeupAt, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, sectionFade, waitingOn, workPane } from "./taskLayout.js";
 import { mainView, stageOf } from "./stages.js";
 import { chatOf, taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
@@ -2235,13 +2235,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       } else { setErr(msg); setStartFail({ ...failOf(e), text: msg, again: startCodingAgent }); }
     } finally { endStart(id); }
   };
-  const startGeneralAgent = async () => {
+  const startGeneralAgent = async (again) => {
     const id = selected;
     if (!beginStart(id, "general")) return;
     setErr(""); setStartFail(null);
     // RUN ANOTHER AGENT is a second agent, not Continue (the owner, 2026-10-27: "it just opened the same window instead of a new one"):
     // the box under that title asks for a new conversation (general.new_run) - a live one is paused first, as the coding start does
-    const another = !!(report || detail?.transcript || term?.alive || generalStarted);
+    // ...read at the press; its Try again replays it (taskLayout.startsAnother)
+    const another = startsAnother({ report, transcript: detail?.transcript, alive: term?.alive, started: generalStarted }, again);
     try {
       if (another && term?.alive) { await api.post(`/api/tasks/${id}/pause`, {}); if (!stale(id)) setTerm(null); }
       // one shared dispatch whatever the task's kind was: it switches the kind, starts (or reuses) the
@@ -2263,7 +2264,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     } catch (e) {
       if (!stale(id)) {
         const msg = e?.response?.data?.detail || "Could not start the agent - check that an AI is connected under Connections, then press it again.";
-        setErr(msg); setStartFail({ ...failOf(e), text: msg, again: startGeneralAgent });
+        setErr(msg); setStartFail({ ...failOf(e), text: msg, again: () => startGeneralAgent(another) });
       }
     } finally { endStart(id); }
   };
@@ -2404,7 +2405,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and Continue picks the agent's conversation back up, so the Result unfolds to it (it rests on its summary otherwise) - once it is
   // SENT (continued), not at the press that opens the box: unfolding there swapped the summary for the full record under the new box, the
   // pane blanked while it loaded, and a "Back to the result" stood over the result it was already showing (the owner, 2026-10-30)
-  const continuePress = (e, a) => (failedRun ? (setResultOpen(true), tryAgain()) : setContinueAt(steady(a || e?.currentTarget)));
+  // ...and a failed run's Try again the same: unfolded at the press, its reason and button went and the conversation hidden under them came up
+  // before anything was sent - then again as the start landed (the owner, 2026-11-23: "the whole thing flickered"); continued() unfolds it once sent
+  const continuePress = (e, a) => (failedRun ? tryAgain() : setContinueAt(steady(a || e?.currentTarget)));
   // THE NEW STEP'S BOX - Send to agent's / Run another agent's start, or Continue's - drawn once, placed by the layout (first in the desk's pane)
   // ...a function: the start box it holds (nextRunForm) is built further down
   const newStep = () => (<>

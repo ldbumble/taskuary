@@ -608,6 +608,12 @@ def keep_promises(store, force: bool = False) -> int:
         # ...and the conversation that made it is over: the desktop's rail has the task, the phone hears nothing unasked (2026-10-23)
         if held_back(store, p['channel'], chat, f'the follow-up on TQ-{tid:04d}'): continue
         if not p.get('ended') or (not force and _busy(store, p['channel'], chat)): keep.append(p); continue
+        # ...ONE NOTICE PER TURN END (walk 10, 2026-11-23: "TQ-0010 is back" twice in one second): two looks read the same promise before
+        # either struck it off, and each sent it - it is claimed off the list first, and a look that finds it gone sends nothing
+        with _LEDGER:
+            cur, mine = _promises(store), (tid, p.get('at'))
+            if mine not in {(int(x['tid']), x.get('at')) for x in cur}: continue
+            store.set_setting(PROMISES_KEY, json.dumps([x for x in cur if (int(x['tid']), x.get('at')) != mine]), 'assistant')
         if items is None: items = funnel.pile(store).get('items') or []
         it, t = _task_item(store, tid, items), store.get_task(tid) or {}
         ref = f'TQ-{tid:04d}'

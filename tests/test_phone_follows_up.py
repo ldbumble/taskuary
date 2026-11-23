@@ -195,3 +195,21 @@ def _tapped(store):
     n, _s, out = look(store, [{'key': f'agent:{t}', 'tid': t, 'lane': 'report'}], ended=t)          # its turn ended: the card comes back
     assert n == 1 and f'TQ-{t:04d} is back' in out.call_args.args[2]
     assert look(store, [{'key': f'agent:{t}', 'tid': t, 'lane': 'report'}])[0] == 0       # said once
+
+
+
+def test_two_looks_at_once_send_one_notice():
+    """Walk 10, 2026-11-23: "TQ-0010 is back" came twice in the same second - a turn end's look and the chat clock's both read the promise
+    before either struck it off. The look that sends claims it first; the other finds it gone."""
+    store, _c = armed_store()
+    from_the_chat(store, 7)
+    store.set_setting(ra.PROMISES_KEY, json.dumps([{**p, 'ended': True} for p in json.loads(store.get_setting(ra.PROMISES_KEY))]), 't')
+    again = []
+    def send(*a, **k):
+        if again: return
+        again.append(None); again[0] = ra.keep_promises(store, force=True)    # ...the other look, while this one is still sending
+    with mock.patch.object(funnel, 'pile', return_value=pile({'key': 'review:9', 'tid': 7, 'lane': 'approve'})), \
+         mock.patch.object(concierge, 'surface', return_value={'say': 'The draft is ready.', 'item': None}), \
+         mock.patch.object(messengers, 'wa_send', side_effect=send) as sent:
+        assert ra.keep_promises(store, force=True) == 1
+    assert sent.call_count == 1 and again == [0]

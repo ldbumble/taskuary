@@ -61,6 +61,9 @@ export const StepRow = ({ step }) => {
   // ...a helper's own steps open under its row (agentSteps `kids`), never interleaved with the main agent's
   if (step.kids?.length) return <details className={`${cls} tq-aui-step-helper`} data-tq-helper=""><summary>{head}</summary>
     <div className="tq-aui-helper-steps"><AgentSteps data={{ steps: step.kids }} /></div></details>;
+  // ...a command at work shows its newest output open under it, as a terminal does (agentSteps.tailOf) - behind its row again once it ends
+  if (step.status === "running" && step.tail) return <div className={cls}><div className="tq-aui-step-line">{head}</div>
+    <pre className="tq-aui-step-tail" data-tq-step-tail="">{step.tail}</pre></div>;
   return step.detail
     ? <details className={cls}><summary>{head}</summary>
       {failed && <div className="tq-aui-step-why" data-tq-step-why="">{step.why || whyFailed(step.detail, step.own)}{step.status === "recovered" ? " It tried again another way, and that worked." : ""}</div>}

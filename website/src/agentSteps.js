@@ -611,6 +611,10 @@ const together = (run) => {
 const statusOf = (run) => run.some((s) => s.status === "running") ? "running" : run.some((s) => s.status === "error") ? "error"
   : run.some((s) => s.status === "held") ? "held" : run.some((s) => s.status === "refused") ? "refused" : run.some((s) => s.status === "recovered") ? "recovered" : run.every((s) => s.status === "none") ? "none" : "done";
 const detailOf = (s) => [s.raw, s.output && `→ ${s.output.length > 1500 ? `${s.output.slice(0, 1500)}…` : s.output}`].filter(Boolean).join("\n");
+// A COMMAND AT WORK SHOWS ITS OUTPUT AS IT COMES (the owner, 2026-11-23: Zed and Toad draw a running command's terminal): its newest lines,
+// open under its row while it runs; once it has ended they go back behind the row's own disclosure
+export const TAIL_LINES = 8;
+export const tailOf = (out, n = TAIL_LINES) => String(out || "").replace(/\r\n?/g, "\n").replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").trimEnd().split("\n").slice(-n).join("\n");
 const withCount = (summary, run) => run[0].kind === "mail" && run.every((s) => s.count !== undefined)
   ? `${summary} (${plural(run.reduce((t, s) => t + s.count, 0), "result")})` : summary;
 
@@ -633,7 +637,7 @@ function group(steps) {
     if (run.length > 1 && summary) out.push({ ...s, id: s.id, n: run.length, summary: withCount(summary, run), doing, status: statusOf(run), detail: run.map(detailOf).join("\n\n"),
       // ...and the server's why of the newest try that failed rides on the merged row (say.step_why) - the page's reading is the fallback only
       ...(run.some((x) => x.why) ? { why: run.filter((x) => x.why).at(-1).why } : {}) });
-    else for (const x of run) out.push({ ...x, summary: withCount(x.summary, [x]), detail: detailOf(x) });
+    else for (const x of run) out.push({ ...x, summary: withCount(x.summary, [x]), detail: detailOf(x), ...(x.status === "running" && x.output ? { tail: tailOf(x.output) } : {}) });
     i = j;
   }
   return out;

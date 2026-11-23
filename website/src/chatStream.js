@@ -41,23 +41,17 @@ export const eventsOf = (steps, running, tail = true) => steps.flatMap((s, i) =>
 });
 
 // ── a tool call that is an EDIT, and one that is a PLAN ─────────────────────────────────────────
-// AN EDIT IS ITS OWN ROW, its diff behind it: what the call carries - a log's own record of it (`edit`), else the before/after the tool was
-// handed (Claude's old_string/new_string, a MultiEdit's edits, a Write's content, a patch) - so a general agent editing in a checkout gets them too
+// AN EDIT IS ITS OWN ROW, its diff behind it: THE CALL'S OWN DIFF (the owner, 2026-11-23: adopt the open-source model) - an ACP agent's `diff`
+// content, a trace road's said as one where its input is the edit (conversation.acp_of_trace), a log's own record (`edit`) - never one guessed
+// here from the arguments it was handed
 const FILE_KEYS = ["file_path", "path", "filePath", "absolute_path"];
-const argEdit = (name, a) => {
-  if (Array.isArray(a.edits) && a.edits.length) return { parts: a.edits.map((x) => ({ old: String(x?.old_string ?? ""), new: String(x?.new_string ?? "") })) };
-  if (a.old_string != null || a.new_string != null) return { parts: [{ old: String(a.old_string ?? ""), new: String(a.new_string ?? "") }] };
-  if (typeof a.content === "string" && /write|create/i.test(String(name || ""))) return { whole: true, parts: [{ old: "", new: a.content }] };
-  if (typeof a.patch === "string" || typeof a.input === "string" && /\*\*\* (Update|Add) File|^@@/m.test(a.input)) return { patch: a.patch ?? a.input };
-  return null;
-};
 // ...but an edit that FAILED or never ran is no edit made: drawn "Edited totals.py (+1 −1)" from the diff it asked to make, it read as done -
 // it is its step, drawn failed (the stress round, 2026-11-10)
 export function editOf(e, res, running = false) {
   if (e?.type !== "tool_call" || res?.detail?.is_error) return null;
   const d = e.detail || {}, a = d.args || {};
   if (!d.edit && describeCall(e.name, a).kind !== "edit") return null;
-  const edit = d.edit || argEdit(e.name, a), file = d.file || FILE_KEYS.map((k) => a[k]).find(Boolean) || "";
+  const edit = d.edit || null, file = d.file || FILE_KEYS.map((k) => a[k]).find(Boolean) || "";
   // ...a log's own edit row stands even with no diff kept; a trace's call is a row of its own only when it carries one
   return edit || d.file ? editRow({ name: e.name, edit, file, running: running && !res }) : null;
 }

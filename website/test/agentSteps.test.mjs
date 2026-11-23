@@ -492,10 +492,12 @@ test("a merged row of repeated tries keeps the server's why of the newest that f
 test("a refused write the agent then made is one row, and the fold's line counts and names the rows it opens on", async () => {
   const { eventsOf, turnParts, foldLine } = await import("../src/chatStream.js");
   const err = "```\n<tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>\n```";
-  const steps = [{ k: "tool", id: "a1", name: "Write", args: { file_path: "C:/work/totals.py", content: "x = 1\n" }, status: "failed", output: err },
+  // ...each write's diff as the server's row carries it (conversation.acp_of_trace said it as the call's own diff)
+  const W = { file: "C:/work/totals.py", edit: { whole: true, parts: [{ old: "", new: "x = 1\n" }] } };
+  const steps = [{ k: "tool", id: "a1", name: "Write", args: { file_path: "C:/work/totals.py" }, ...W, status: "failed", output: err },
     { k: "error", name: "Write", text: err },
     { k: "tool", id: "a2", name: "Read", args: { file_path: "C:/work/totals.py" }, status: "completed" },
-    { k: "tool", id: "a3", name: "Write", args: { file_path: "C:/work/totals.py", content: "x = 1\n" }, status: "completed" }];
+    { k: "tool", id: "a3", name: "Write", args: { file_path: "C:/work/totals.py" }, ...W, status: "completed" }];
   const parts = turnParts(eventsOf(steps, false));
   const notes = parts.flatMap((p) => (p.type === "work" ? p.steps : [])).filter((s) => s.kind === "error" || /tool_use_error/.test(s.summary));
   assert.deepEqual(notes, [], "the agent's error is no line of his");

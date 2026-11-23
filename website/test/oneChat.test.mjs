@@ -18,7 +18,8 @@ const words = (t) => ({ type: "progress", name: "text", detail: t });
 
 
 test("a general agent that edits files gets its edit rows with diffs; a call that carries no diff stays a step", () => {
-  const parts = turnParts([call("w", "Write", { file_path: "portal/new.js", content: "x\ny\n" }), done("w"),
+  // ...the diff the call's own row carries (conversation.acp_of_trace: a Write's content is its diff) - the page reads no arguments for one
+  const parts = turnParts([call("w", "Write", { file_path: "portal/new.js" }, { file: "portal/new.js", edit: { whole: true, parts: [{ old: "", new: "x\ny\n" }] } }), done("w"),
     call("e", "Edit", { file_path: "portal/app.js" }), done("e")]);
   assert.deepEqual(parts.map((p) => p.type), ["edit", "work"]);
   assert.equal(parts[0].summary, "Wrote new.js (+2 −0)");
@@ -83,7 +84,7 @@ test("regression: strict arrival order - a later message draws below a step stil
   assert.deepEqual(parts.map((p) => p.type), ["said", "work", "said"]);
   assert.equal(parts[1].steps[0].status, "running");
   // ...an edit between a call and its result leaves nothing it started spinning
-  const cut = turnParts([call("t", "Bash", { command: "pytest -q" }), call("e", "Edit", { file_path: "a.py", old_string: "a", new_string: "b" }), done("e"), done("t")]);
+  const cut = turnParts([call("t", "Bash", { command: "pytest -q" }), call("e", "Edit", { file_path: "a.py" }, { file: "a.py", edit: { parts: [{ old: "a", new: "b" }] } }), done("e"), done("t")]);
   assert.deepEqual(cut.map((p) => p.type), ["work", "edit"]); assert.equal(cut[0].steps[0].status, "done");
 });
 

@@ -243,3 +243,22 @@ test("a pushed row patches its turn in place, and a turn lays out the same at wo
   assert.deepEqual(at(true), at(false), "the same folds, by the same keys, live and filed");
   assert.deepEqual(at(false), [["s:x:m:1", false], ["s:x:c1", true], ["s:x:m:2", false]], "words where they were said, the work between them one fold");
 });
+
+
+// THE CALL'S OWN DIFF, AND A COMMAND'S OUTPUT AS IT COMES (the owner, 2026-11-23: Zed draws the agent's `diff` and a live terminal)
+test("an edit row is the call's own diff, never one read off its arguments, and a running command shows its newest output", async () => {
+  const { eventsOf, turnParts } = await import("../src/chatStream.js");
+  const parts = (steps, live = false) => turnParts(eventsOf(steps, live), { live });
+  const asked = { id: "s:x:c1", k: "tool", name: "Edit", args: { file_path: "C:/work/budget.py", old_string: "a = 1", new_string: "a = 2" }, status: "completed" };
+  assert.ok(!parts([asked]).some((p) => p.type === "edit"), "its arguments are no diff: the row is the call, worded");
+  const made = { id: "s:x:c2", k: "tool", name: "Edit", file: "C:/work/budget.py", edit: { whole: true, parts: [{ old: "a = 1\n", new: "a = 2\n" }] }, status: "completed" };
+  const [edit] = parts([made]);
+  assert.deepEqual([edit.type, edit.id, edit.summary], ["edit", "s:x:c2", "Edited budget.py (+1 −1)"]);
+  const out = Array.from({ length: 30 }, (_, i) => `test_${i} PASSED`).join("\r\n");
+  const run = { id: "s:x:c3", k: "tool", name: "Bash", args: { command: "pytest -q" }, status: "in_progress", output: out };
+  const [step] = parts([run], true)[0].steps;
+  assert.equal(step.status, "running");
+  assert.deepEqual(step.tail.split("\n"), Array.from({ length: 8 }, (_, i) => `test_${22 + i} PASSED`), "its newest lines, open under it");
+  const [ended] = parts([{ ...run, status: "completed" }])[0].steps;
+  assert.ok(!ended.tail && ended.detail.includes("test_29 PASSED"), "once it ends, behind its row again");
+});

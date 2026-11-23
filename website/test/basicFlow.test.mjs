@@ -130,7 +130,7 @@ test("an edit still being made is \"Editing x\" in its row and on the working li
   const { eventsOf, turnParts, workingLine } = await import("../src/chatStream.js");
   const label = (s) => (s.status === "running" ? s.doing : s.summary);
   const steps = [{ k: "tool", name: "Read", args: { file_path: "a.py" }, status: "completed" },
-    { k: "tool", name: "Edit", args: { file_path: "budget.py", old_string: "a", new_string: "b" }, status: "in_progress" }];
+    { k: "tool", name: "Edit", args: { file_path: "budget.py" }, file: "budget.py", edit: { parts: [{ old: "a", new: "b" }] }, status: "in_progress" }];
   const live = turnParts(eventsOf(steps, true), { live: true });
   assert.equal(live.at(-1).summary, "Editing budget.py");
   assert.equal(workingLine(live, label), "Editing budget.py");

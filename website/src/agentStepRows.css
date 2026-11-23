@@ -42,3 +42,5 @@
 /* a helper's own steps, under its row (agentSteps kids) */
 .tq-aui-helper-steps { margin: 2px 0 4px 18px; padding-left: 8px; border-left: 2px solid var(--tq-border, #e6e0d4); }
 [data-tq-step-alongside] { margin-right: 6px; }
+/* a command at work: its newest output under its row, as a terminal shows it (agentSteps.tailOf) - its last lines, never a scroll to keep up */
+.tq-aui-step pre.tq-aui-step-tail { max-height: 9.5em; overflow: hidden; opacity: .85; }

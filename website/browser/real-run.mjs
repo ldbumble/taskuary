@@ -87,11 +87,31 @@ if (BRAIN === "gateway") {
 } else console.log("ai", JSON.stringify(await api("/api/setup/first-run/ai", { name: BRAIN === "codex" ? "codex" : "claude" })).slice(0, 300));
 await api("/api/setup/dismiss", { dismissed: true });
 console.log("outbox", JSON.stringify(await api("/api/fixture/outbox", {})));
+// THE OWNER'S PHONE (REAL_FAKE_WA=<port>, 0 = any free one): a stand-in WhatsApp bridge (fake_wa_bridge.py) on the card's own bridge address,
+// the card switched on, his own chat picked as the Assistant's and listening any time - each through the API the WhatsApp card and
+// Settings -> Phone & chats press, so the app's own checks (only a chat he is alone in) run. phone.mjs is his thumb on it.
+let fakeWa = null, fakeWaUrl = "";
+if (process.env.REAL_FAKE_WA !== undefined) {
+  const { spawn } = await import("node:child_process"), py = process.env.TASKUARY_TEST_PYTHON || "python";
+  fakeWa = spawn(py, [path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "fake_wa_bridge.py"),
+    "--port", String(Number(process.env.REAL_FAKE_WA) || 0), "--home", h.home, "--media", path.join(out, "wa-media")], { stdio: ["ignore", "pipe", "inherit"] });
+  fakeWaUrl = await new Promise((ok, no) => { let t = ""; fakeWa.stdout.on("data", (c) => { t += c; const m = t.match(/FAKE_WA_READY (\S+)/); if (m) ok(m[1]); });
+    fakeWa.on("exit", (c) => no(new Error(`the fake WhatsApp bridge exited (${c})`))); });
+  const wa = (await api("/api/connectors")).data.find((c) => c.Type === "whatsapp");
+  const cfg = JSON.parse(wa.ConfigJson || "{}");
+  const saved = await api("/api/connectors", { ConnectorId: wa.ConnectorId, Active: true, ConfigJson: JSON.stringify({ ...cfg, bridge_url: fakeWaUrl, poll_seconds: cfg.poll_seconds || 30 }) });
+  const door = (await api("/api/assistant/doorways")).data.find((d) => d.channel === "whatsapp" && d.connectorId === wa.ConnectorId);
+  const own = (door?.options || []).find((o) => o.kind === "you");
+  if (!own) throw new Error(`the WhatsApp card offers no chat the owner is alone in: ${JSON.stringify(door).slice(0, 400)}`);
+  const picked = await api("/api/assistant/doorways", { channel: "whatsapp", chat: own.to });
+  const listens = await api("/api/assistant/doorways/listens", { channel: "whatsapp", listens: process.env.REAL_FAKE_WA_LISTEN || "always" });
+  console.log("phone", JSON.stringify({ bridge: fakeWaUrl, saved: saved.ok, chat: picked.chat, listens: listens.listens }));
+}
 const page = await h.newPage();
 await page.setViewport({ width: 1280, height: 900 });
 page.on("pageerror", (e) => console.log("PAGEERROR", e.message));
 await page.goto(h.ui, { waitUntil: "domcontentloaded" });
-await writeFile(path.join(out, "info.json"), JSON.stringify({ ui: h.ui, api: h.fixtureApi, token: h.token, home: h.home, ws: page.browser().wsEndpoint(), git, pid: process.pid }));
+await writeFile(path.join(out, "info.json"), JSON.stringify({ ui: h.ui, api: h.fixtureApi, token: h.token, home: h.home, ws: page.browser().wsEndpoint(), git, pid: process.pid, ...(fakeWaUrl ? { fakeWa: fakeWaUrl } : {}) }));
 console.log("READY", h.ui, h.home);
 const stop = path.join(out, "stop"), again = path.join(out, "restart");
 let n = 0;
@@ -100,3 +120,4 @@ while (!existsSync(stop)) { await new Promise((r) => setTimeout(r, 1000)); if (+
   if (existsSync(again)) { await writeFile(path.join(out, `server-${Date.now()}.log`), h.log()); await h.restart({ down: 1500 }); rmSync(again, { force: true }); console.log("RESTARTED"); } }
 await writeFile(path.join(out, "server.log"), h.log());
 await h.close();
+fakeWa?.kill();

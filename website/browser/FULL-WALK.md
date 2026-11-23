@@ -55,7 +55,33 @@ his own message: where triage put it, whether its agent started at once, what it
 after. Timelines on one task: a draft exists and he answers outside the app; the sender writes again; two mails in one poll; a restart
 in the middle.
 
-## 4. Then fix
+## 4. The phone (WhatsApp)
+
+Start the app with `REAL_FAKE_WA=0` (or a port): a stand-in bridge (`fake_wa_bridge.py`) sits on the WhatsApp card's bridge address,
+the card is switched on and his own chat picked as the Assistant's, listening any time - through the same API the card and Settings
+press. Everything behind the bridge is real: the poll, the phone Assistant, the task agents on the walk's AI. His thumb is `phone.mjs`:
+`say "<words>"`, `tap <n|words> [poll]`, `send <file> ["words"]`, `read [all]`, `wait <s>`, `restart` (the bridge restarted), `drop` /
+`back` (WhatsApp's link down / up). Each waits for the app to answer and prints the bubbles as he reads them - a poll's choices
+numbered, a file with where it was saved, `LOOK:` on markdown, raw links, JSON, addresses and builder words, `UNASKED` on a bubble no
+line of his started. Judge the bubbles as he would on a small screen; check the desktop (`user.mjs look`) beside them.
+
+- **Walk all his tasks from the phone**: "walk me through" and the opener's poll; Next, Back, pick by number and by tap, every row kind
+  (a reply, an agent's card, an FYI, a report, a coding task, a stopped one, an urgent one); More choices past twelve; the end of the walk.
+- **One task's agent, turn by turn**: ask about a task, tell its agent to do something; it works (does the phone say so, and not more
+  than once?); its card arrives as words and a poll - tap Approve, Edit (his new words), Reject; tap twice; tap an older poll; tap after
+  the agent stopped; type the choice instead of tapping. After each press: what the card on the desktop says, what the agent was told.
+- **Desktop and phone at once on the same task**: press on the desktop while the poll is up on the phone, then tap the phone; type on
+  both; open the task on the desktop mid-walk - the same fact must read the same on both.
+- **A picture and a PDF from the phone** (`send`), with and without words: it reaches the agent - check the agent's OWN log read it -
+  and is shown on his line on the desktop. A voice note too (no voice card: it must say why, once).
+- **Restart mid-conversation**: the app (`touch $REAL_OUT/restart`) between his line and the answer, and the bridge (`phone.mjs restart`)
+  with a poll up - a tap on a poll from before it must not be met with silence. `drop`, then a line, then `back`.
+- **The silence rule**: nothing reaches the phone he did not start - `wait 120` after the walk, and an agent finishing, a new mail, a
+  report on its schedule meanwhile. Any `UNASKED` bubble is a finding (the 30-minute window is `remote_assistant.SESSION_MINS`).
+- **Odd words**: builder words, markdown, raw links, addresses, ids where a name belongs, a number list printed twice (words and poll),
+  a bubble cut mid-sentence, a poll choice cut so two read the same.
+
+## 5. Then fix
 
 For each finding: screenshot, the screen, the quote, the cause in the code (file:line). Group them into DESIGN flaws - one state said
 by one function, navigation that replaces, plain words from one wording function, one road per action - and fix the pattern at its

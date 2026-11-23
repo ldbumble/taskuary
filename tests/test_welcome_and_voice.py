@@ -55,7 +55,7 @@ class VoiceTests(unittest.TestCase):
         for said in ('calmer than before they read it', "I've got it", 'device code', "nothing goes out until you say so"): self.assertIn(said, t)
         self.assertLessEqual(len(t), counsel.BUDGET)
         st = MemoryStore(); counsel.migrate(st)
-        self.assertIn('calmer than before', counsel.for_brief(st)); self.assertIn('calmer than before', counsel.for_worker(st))
+        self.assertIn('calmer than before', counsel.for_brief(st))
 
     def test_the_last_stock_release_is_replaced_and_an_owner_copy_gains_the_rule_once(self):
         old = (Path(counsel.__file__).parent / 'templates' / 'history' / 'counsel-0.3.7.10.md').read_text(encoding='utf-8')

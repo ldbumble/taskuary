@@ -104,7 +104,12 @@ class DoneIsAPress(unittest.TestCase):
         self.assertNotIn(rid, self.open())
         notes = [c['Body'] for c in self.s.list_comments(self.tid, internal=True)]
         self.assertTrue(any(n.startswith(bg.NOT_NEEDED_ANY_MORE) for n in notes)) and self.assertFalse(any('You did the step' in n for n in notes))
-        self.assertIn('they did nothing there', self.heard()[0][0])
+        # ...its own move is no new input (walk 7, 2026-11-23: an agent at rest was woken four times after its turn, one more paragraph each):
+        # at rest it begins no turn; at work it goes into that turn
+        self.assertEqual(self.told, [], 'an agent at rest is never woken by what its own work did')
+        steered = []; self.sess.steer = lambda said=None: steered.append(said) or True
+        rid = self.turn(); self.assertTrue(bg.left_by_agent(self.s, self.tid, rid))
+        self.assertEqual(self.told, []); self.assertIn('they did nothing there', steered[0])
 
     def test_a_step_that_was_not_done_draws_no_press(self):
         rid = self.turn()

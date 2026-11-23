@@ -386,7 +386,7 @@ def human(sid: str, seen: dict) -> bool:
         if not (t and getattr(t, 'task_id', None)): return False
         your_turn(server.store, t.task_id, sid, what=HUMAN_WHAT)
         _tell(server.store, t.task_id, "The page shows a human check (\"Verify you are human\"). Taskuary has handed it to the owner on the page - "
-                                       "wait for it; you are told when they press I'm done, then go on from the page as it is.")
+                                       "wait for it; you are told when they press I'm done, then go on from the page as it is.", news=True)
         logger.info(f'browser {sid}: a human check was handed to the owner')
         return True
     except Exception as e: logger.warning(f'browser {sid}: a human check was not handed over - {e}'); return False

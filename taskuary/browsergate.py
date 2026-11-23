@@ -871,7 +871,7 @@ def left_page(store, tid: int, sid: str, url: str = '') -> list:
     if out:
         store.audit('task', tid, 'cards_passed', 'taskuary', 'system', {'rids': out, 'why': PAGE_LEFT})
         _tell(store, tid, f"Your held step ({'; '.join(said)[:300]}) is off the card: the tab it was held on left that page, so it can no "
-                          "longer run there. If it is still needed, go back to that page and do it again - it is held anew for the owner's press.")
+                          "longer run there. If it is still needed, go back to that page and do it again - it is held anew for the owner's press.", news=True)
     return out
 
 
@@ -992,15 +992,23 @@ NEXT = ('Tell the owner in a line what it did, as far as the result shows - some
         'about links.')
 
 
-def _tell(store, tid: int, text: str, wait: bool = False, wake: bool = False) -> None:
+def _tell(store, tid: int, text: str, wait: bool = False, wake: bool = False, news: bool = False) -> None:
     """Words to the agent working the task, by THE ONE ROAD every input to an agent takes (general.to_agent): a live chat hears them as its
     next turn at once, a coding session or an agent asking by the waiting room. A task with none running gets the comment only - unless the
     words are a yes that RAN (`wake`): an agent that answered and rests is started on them, as any approval starts it. It was left asleep,
     the step done and nobody to say so or go on (the spine audit, 2026-11-09). A no wakes nobody: it is heard with the owner's next line.
-    A live full-tools session on a task a stranger now writes on is told nothing (terminal.stranger_now says why). `wait`: tests."""
+    A live full-tools session on a task a stranger now writes on is told nothing (terminal.stranger_now says why). `wait`: tests.
+    `news`: what its own work on the page brought about (a human check handed to him, a hand-over its own move closed) - nothing new from
+    anyone, so it goes INTO the turn at work (steer) or nowhere: walk 7, 2026-11-23, an agent at rest was woken up to four times after a turn
+    with no new input, each wake one more paragraph. Its next turn's facts carry what still waits on him, and the chat says what closed."""
     from . import general, terminal as term, workerstate as ws
     sess = ws._live(tid)
     if sess is not None and term.stranger_now(store, tid, sess): return None
+    if news:
+        try:
+            if sess is not None and callable(getattr(sess, 'steer', None)): sess.steer(text)
+        except Exception as e: logger.debug(f'browsergate: task {tid} - the turn at work did not take the news - {e}')
+        return None
     try: how = general.to_agent(store, tid, text, **({'wait': True} if wait else {})) if sess is not None or wake else ''
     except Exception as e: how = logger.warning(f'browsergate: task {tid} - its agent was not told - {e}')
     if not how: store.add_comment(tid, 'taskuary', 'agent', f'{text} (No agent is running on this task to tell.)')
@@ -1110,7 +1118,7 @@ def left_by_agent(store, tid: int, rid: str) -> bool:
     if not h: return False
     store.add_comment(tid, 'taskuary', 'agent', f"{NOT_NEEDED_ANY_MORE} ({h.get('what') or 'on ' + h['site']}).")
     _tell(store, tid, f"You moved the page on while the owner held the step you handed them ({h.get('what') or 'on the page'}), so it is off "
-                      "their hands - they did nothing there. If it is still needed, open that page again and hand it over again.")
+                      "their hands - they did nothing there. If it is still needed, open that page again and hand it over again.", news=True)
     return True
 
 

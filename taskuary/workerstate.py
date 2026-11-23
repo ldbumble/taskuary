@@ -309,6 +309,19 @@ def own_question(r: dict) -> bool:
     return r.get('kind') == 'input_needed' and bool(r.get('text')) and (r.get('source') in ('screen', 'api', RESUMED) or bool(group_of(r.get('request_id'))))
 
 
+# HIS LINE TYPED UNDER A QUESTION ANSWERS IT (walk 10, 2026-11-23): an API agent's ask_owner stands while its turn goes on, and the line he
+# typed under "Answer the agent's question..." went into that turn - the agent used it, and every later turn was still told "YOUR QUESTION
+# STILL WAITING FOR THE OWNER" over the box still asking. Its own questions (never a sign-in or a step on the page, which only his press or
+# the page closes) are answered by that line, so the screen and the agent read one state
+def line_answers(store, tid: int, text: str, actor: str = 'owner') -> list:
+    "Record the owner's line as the answer to each question the task's agent itself asked and is still asking: the ids answered."
+    sid = current_sid(store, tid)
+    rs = [r for r in (status(store, tid)['requests'] if sid else []) if own_question(r) and r.get('ask') == 'question' and str(r['sid']) == str(sid)]
+    words = ' '.join(str(text or '').split())[:500]
+    for r in rs: record(store, tid, sid, 'answered', request_id=r['request_id'], text=words, source=said_by(actor))
+    return [r['request_id'] for r in rs]
+
+
 def left_asking(store, tid) -> list:
     """The questions a run that is OVER was still asking the owner when it ended - cut off by a restart, its CLI gone, stopped - with no
     prompt of theirs since: [] while a session is live (its own pane asks) or when the run ended on no question of its own.

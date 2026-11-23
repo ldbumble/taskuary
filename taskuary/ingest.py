@@ -3439,10 +3439,12 @@ def _auto_general(store, tid, brief: str = None):
 
 
 def first_ask(store, tid, brief: str = None) -> str:
-    "A general task's first ask: the brief, else its Summary, else its Title - a reply task's job (reply_job) in front."
-    t = store.get_task(tid) or {}
-    ask = (brief or str(t.get('Summary') or '').strip() or str(t.get('Title') or '').strip())
-    job = reply_job(store, tid)                    # a reply task's agent: work it out, then draft the reply (agent_on_reply)
+    """A general task's first ask: the brief, else its Summary, else its Title - a reply task's job (reply_job) in front.
+    ...A TASK MADE FROM MAIL IS ASKED BY ITS JOB (walk 10, 2026-11-23): its Summary is the sender's mail, which rode a second time, unfenced,
+    under "TASKUARY'S WORDS ON THIS TURN" over the same mail in SOURCE MATERIAL - the mail is the turn's material, never its ask."""
+    t, job = store.get_task(tid) or {}, reply_job(store, tid)     # a reply task's agent: work it out, then draft the reply (agent_on_reply)
+    own = '' if store.list_messages(tid) else str(t.get('Summary') or '').strip()
+    ask = brief or ('' if job else own or str(t.get('Title') or '').strip())
     return f'{job}\n\n{ask}'.strip() if job else ask
 
 

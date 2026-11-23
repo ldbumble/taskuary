@@ -459,3 +459,18 @@ def test_a_notice_that_needs_the_agent_on_a_reply_task_says_the_reply_is_still_t
     said = [x for x in lines(s, tid) if x.startswith("Helpdesk's message needs")]
     assert spawned == ['_auto_general'] and len(said) == 1
     assert 'drafts the reply to Erin Blake for your Send' in said[0] and 'answered' not in said[0]      # never a reply promised to the notice
+
+
+def test_a_reply_tasks_mail_is_its_material_once_and_fenced_never_its_ask():
+    """Walk 10, 2026-11-23: the first turn's "TASKUARY'S WORDS ON THIS TURN" carried the sender's whole mail (the task's Summary) and SOURCE
+    MATERIAL carried it again - neither between the marks the system prompt says someone else's words are in."""
+    from taskuary.terminal import FENCE_OPEN, FENCE_CLOSE
+    s = store(); tid = general_ask(s)
+    s.update_task(tid, {'Summary': 'Can you send Gail the vendor-portal login so she can upload the payment file?'}, 'triage')
+    _rv, _spawned, _went = handed(s, tid)
+    ask = ingest.first_ask(s, tid)
+    assert ask.startswith('THIS TASK IS A REPLY OWED to Ray Colton') and 'vendor-portal login' not in ask
+    s.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, ask)
+    _sys, user = general._prompt(s, tid)
+    assert user.count('upload the payment file') == 1
+    assert f'{FENCE_OPEN}Can you send Gail the vendor-portal login so she can upload the payment file?{FENCE_CLOSE}' in user

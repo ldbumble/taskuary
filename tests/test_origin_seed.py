@@ -110,7 +110,7 @@ def test_the_lines_one_person_typed_in_a_chat_are_one_entry_and_none_is_pushed_o
     with mock.patch.object(origin, 'of_task', return_value=('trusted', 'known')): user = general._prompt(s, t)[1]
     assert 'COMPACTED' not in user and user.count('FROM Ray Colton') == 1
     assert 'FROM Ray Colton (2026-11-09 10:00:00 to 2026-11-09 10:10:00) · whatsapp - 11 lines they wrote one after another' in user
-    assert all(f'[m{i}] {b}' in user for i, b in zip(ids, lines))
+    assert all(f'[m{i}] ⟦{b}⟧' in user for i, b in zip(ids, lines)), 'each between the marks'
     assert general.chat_runs([{'Channel': 'email', 'FromName': 'Ray Colton'}] * 2) == [[{'Channel': 'email', 'FromName': 'Ray Colton'}]] * 2, 'two mails stay two'
 
 

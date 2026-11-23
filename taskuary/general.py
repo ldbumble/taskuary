@@ -2238,7 +2238,13 @@ def prompt_parts(store, tid: int, turn: bool = False, heard: str = '') -> tuple[
         tag = lambda a: ', '.join(str(x) for x in (f"attachment {a['AttachmentId']}" if a.get('AttachmentId') else '', a.get('Path')) if x)
         file_line = ('\nATTACHMENTS: ' + '; '.join(str(a.get('Name') or 'file') + (f' ({tag(a)})' if tag(a) else '') for a in files[:8])) if files else ''
         long = reads and len(str(m.get('BodyText') or '')) > budget
-        return both_ends(str(m.get('BodyText') or ''), budget) + (f"\n[cut to fit - read_message m{m['MessageId']} reads it whole]" if long else '') + file_line
+        # ...SOMEONE ELSE'S WORDS BETWEEN THE MARKS, as the system prompt says they are (walk 10, 2026-11-23: the sender's mail was not)
+        body = both_ends(str(m.get('BodyText') or ''), budget)
+        return (body if from_owner(store, m, own) else fence(body)) + (f"\n[cut to fit - read_message m{m['MessageId']} reads it whole]" if long else '') + file_line
+    from .terminal import fence
+    from .wrapup import from_owner
+    from .ingest import own_addresses
+    own = own_addresses(store) if mails else None
     for run in runs[-window:]:
         m = run[0]
         who = asked(m) or m.get('FromName') or m.get('FromEmail') or m.get('SourceName') or m.get('Channel') or 'source'
@@ -4032,6 +4038,9 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     if rest: conversation.hear(store, tid, [line_id], standing=True)
     try: wid = wait_line(store, tid, text, files, line_id)
     except Exception: answered(tid, every=True); conversation.unhear(store, tid, [line_id]); raise
+    if text:
+        from . import workerstate as ws
+        ws.line_answers(store, tid, text, actor)
     if not wait:
         threading.Thread(target=lambda: _start_line(store, tid, t, text, files, actor, line_id, wid, kw), daemon=True, name=f'line-{tid}').start()
         return {'kept': wid}

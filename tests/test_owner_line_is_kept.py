@@ -394,3 +394,20 @@ def test_a_line_and_an_ask_written_before_the_field_keep_their_files_after_the_u
     # ...and the prompt still names them, built from the field (general.prompt_line)
     assert general.prompt_line(rows[0]).endswith('ATTACHED IMAGES (read these files)\n/w/TQ-0001/a.png\n/w/TQ-0001/b.png')
     assert [x for x in conversation.items(s, tid)['items'] if x['kind'] == 'line']
+
+
+
+# HIS LINE UNDER A QUESTION ANSWERS IT (walk 10, 2026-11-23): an API agent asked one question and went on working; he typed the answer while it
+# worked, the turn used it - and every later turn was told "YOUR QUESTION STILL WAITING FOR THE OWNER" over a box still asking for it
+def test_a_line_typed_while_the_agent_asks_answers_its_question_and_nothing_says_it_still_waits():
+    from taskuary import waitroom, workerstate as ws
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Board pack', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
+    ws.record(s, tid, 'run1', 'input_needed', request_id='ask1', text='Who are the other board members?', source='api')
+    ws.record(s, tid, 'run1', 'input_needed', request_id='signin:board.example', text='Sign in to board.example', source='api')
+    assert 'other board members' in general.turn_facts(s, tid)
+    with mock.patch.object(waitroom, 'deliver', return_value={'delivered': 0, 'state': 'working'}):
+        general.take_line(s, tid, 'Erin and Paula, one email each.', None, 'owner')
+    left = [r['request_id'] for r in ws.status(s, tid)['requests']]
+    assert left == ['signin:board.example'], 'a sign-in is closed by his press or the page, never by a line'
+    assert 'other board members' not in general.turn_facts(s, tid)

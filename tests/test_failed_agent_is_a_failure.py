@@ -129,3 +129,12 @@ class AnActThatFailsKeepsTheAnswerTests(unittest.TestCase):
             self.assertTrue(any('Friday is free' in b for b in said), said)
             self.assertTrue(any(b.startswith('Saving the reply it wrote did not work') for b in said), said)
         finally: terminal.SESSIONS.pop(sess.sid, None)
+
+
+def test_a_spent_monthly_budget_is_said_as_itself_and_not_tried_again_by_the_clock():
+    """The HIPAA walk, 2026-11-22: the card's monthly budget ran out and the task read "The AI is over its limit - trying again at 9:34 PM" under
+    a rail that said the budget is used up - a try each hour that could not answer, said as if it would. A budget is his to raise."""
+    from taskuary import agents, general, llm
+    spent = llm.BudgetSpent(llm.BUDGET_LINE.format(name='HIPAA AI'))
+    assert general.provider_down(spent) == ''
+    assert general.provider_down(agents.RateLimited('slow down')) == general.DOWN[0]      # ...a limit that resets is still waited out

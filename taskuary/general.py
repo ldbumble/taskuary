@@ -198,8 +198,10 @@ def provider_down(e) -> str:
     from . import agents, clipool, llm
     for e in _chain(e):
         # ...nor one only he can mend (llm.OutOfRoom: the card's model): said in its own words with its card, never tried again by itself
-        if isinstance(e, (clipool.Unfinished, llm.OutOfRoom)): return ''
-        if isinstance(e, (llm.BudgetSpent, agents.RateLimited)): return DOWN[0]
+        # ...and a card's MONTHLY BUDGET SPENT is his to raise, not a limit that resets in minutes (the HIPAA walk, 2026-11-22: "The AI is over its
+        # limit - trying again at 9:34 PM" under a rail that said the budget is used up - a try each hour that could not answer, said as if it would)
+        if isinstance(e, (clipool.Unfinished, llm.OutOfRoom, llm.BudgetSpent)): return ''
+        if isinstance(e, agents.RateLimited): return DOWN[0]
         if isinstance(e, llm.NoAnswer): return str(e) if str(e).startswith(DOWN[1]) else DOWN[1]     # ...with why, where it is said (llm.ROOM_LINE)
         if isinstance(e, (requests.Timeout, llm.ProviderDown)): return DOWN[2]
         if isinstance(e, requests.ConnectionError): return DOWN[3]

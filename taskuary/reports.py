@@ -1752,9 +1752,20 @@ def since_kept(kept: dict, cfg: dict, summary: str, now: datetime = None) -> tup
     n = len(added) + len(gone)
     if n > SMALL_ROWS: return False, f'Rebuilt: {n} rows changed since {clock}.'
     if int(kept.get('updates') or 0) >= MAX_UPDATES: return False, f'Rebuilt: {MAX_UPDATES} small updates had stacked up on the report from {clock}.'
-    lines = [f'new: {l[:300]}' for l in added] + [f'gone: {l[:300]}' for l in gone] or ['the same rows, in another order']
-    return True, (f"Updated since {clock}: {plural(n, 'row')} changed. The report below is the one written at {clock}; "
-                  f"the AI was not asked again.\n" + '\n'.join(lines))
+    lines = [f'New: {_row_words(l)}' for l in added] + [f'No longer listed: {_row_words(l)}' for l in gone] or ['The same entries, in another order.']
+    return True, (f"Since {clock}, {plural(n, 'entry', 'entries')} changed; the summary below is the one from {clock}.\n" + '\n'.join(lines))
+
+
+def _row_words(line: str, fields: int = 6, width: int = 90) -> str:
+    """One data row as he reads it (his live app, 2026-11-23: a report's changed rows stood as raw JSON): a row that is a JSON object is its
+    filled fields, `name value` joined by ' · ', each cut to `width`; any other row is its text. Structure only - nothing is judged."""
+    t = str(line or '').strip()
+    try: o = json.loads(t)
+    except ValueError: o = None
+    if not isinstance(o, dict): return t[:300]
+    words = lambda k: re.sub(r'(?<=[a-z])(?=[A-Z])|_', ' ', str(k)).strip().lower()
+    kept = [(words(k), ' '.join(str(v).split())) for k, v in o.items() if v not in (None, '', [], {})]
+    return ' · '.join(f"{k} {v if len(v) <= width else v[:width - 1] + '…'}" for k, v in kept[:fields]) or t[:300]
 
 
 def render_report(store, cfg: dict, llm=None, notes: list = None, files: list = None, mark: str = None):

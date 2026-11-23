@@ -314,14 +314,14 @@ class DigestReportTests(unittest.TestCase):
             at = reports.kept_report(s, mark)['at'][11:16]
             rows.append('8,2026-11-03'); rows.remove('7,2026-11-01')                       # one row in, one out: the report stands
             got = run()
-            assert asked.call_count == 1 and got.startswith(f'Updated since {at}: 2 rows changed.') and got.endswith('Summary 1.')
-            assert 'new: 8,2026-11-03' in got and 'gone: 7,2026-11-01' in got
+            assert asked.call_count == 1 and got.startswith(f'Since {at}, 2 entries changed;') and got.endswith('Summary 1.')
+            assert 'New: 8,2026-11-03' in got and 'No longer listed: 7,2026-11-01' in got
             assert run().startswith(reports.UNCHANGED) and asked.call_count == 1            # the same rows again: still no call
             rows += [f'{n},2026-11-05' for n in range(20, 20 + reports.SMALL_ROWS)]         # a big change: written again, saying so
             got = run()
             assert asked.call_count == 2 and got.startswith('Summary 2.') and f'Rebuilt: {reports.SMALL_ROWS + 2} rows changed since {at}.' in got
             for n in range(reports.MAX_UPDATES):                                             # small updates stack on one summary...
-                rows.append(f'{40 + n},2026-11-06'); assert run().startswith('Updated since') and asked.call_count == 2
+                rows.append(f'{40 + n},2026-11-06'); assert run().startswith('Since ') and asked.call_count == 2
             rows.append('50,2026-11-07')                                                     # ...and past the stack it is written again
             got = run()
             assert asked.call_count == 3 and f'Rebuilt: {reports.MAX_UPDATES} small updates had stacked up' in got
@@ -651,3 +651,11 @@ class TransientBrainTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_a_reports_changed_rows_read_as_words_never_raw_json():
+    """His live app, 2026-11-23: a report's changed rows stood as raw JSON objects under "Updated since"."""
+    from taskuary import reports
+    said = reports._row_words('{"runId": 41, "runTime": "2026-11-23 11:39", "processName": "vendor_sync", "error": "Vendor already exists: Northwind"}')
+    assert said == 'run id 41 · run time 2026-11-23 11:39 · process name vendor_sync · error Vendor already exists: Northwind'
+    assert '{' not in said and '"' not in said

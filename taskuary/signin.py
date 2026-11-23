@@ -1306,6 +1306,8 @@ PASSBOX = r"""(i) => { """ + DEEP + r"""
   const ps = deepAll('input[type=password]').filter(vis), el = ps[i];
   if (el) { el.focus(); try { el.select(); } catch (_) { el.value = ''; } }
   return { n: ps.length, top: window === window.top, href: location.href, focused: !!el && deepActive() === el }; }"""
+# ...and which of those boxes hold the password now, in their order - read on the page, the password never leaves it
+KEPT = PASSBOX.split('const ps =')[0] + r"""return deepAll('input[type=password]').filter(vis).map((e) => e.value === i); }"""
 # THE FORM AS IT STANDS: the user name a box names as the user's, whether a password box holds one, and the boxes the agent filled - by name, never a
 # password or a card's - so a held card can fill the page again. FORM_PW, the password itself, is read only to seal it (pressing), never kept elsewhere
 FORM = "(() => { " + DEEP + r"""
@@ -1335,17 +1337,29 @@ def type_new(sid: str, site: str, pw: str, c=None) -> int:
             _guard(c, site, '')
             n = (c.js(f'({PASSBOX})(-1)') or {}).get('n') or 0
             if not n: raise SignInError(f'there is no password box on the {site} page')
-            for i in range(n):
+            def one(i):
                 b = c.js(f'({PASSBOX})({i})') or {}
                 if not b.get('top') or not on_site(b.get('href'), site) or not b.get('focused'): raise SignInError('the page changed under the sign-up - nothing was typed')
                 c.type(pw)
-            return n
+            for i in range(n): one(i)
+            # ...EVERY BOX HOLDS THE ONE PASSWORD, read back on the page (walk 7, 2026-11-23: a sign-up form re-drew its first box as the second was
+            # typed - only the confirm box held it, "Passwords do not match", and the command said only that the form stayed up): a box that lost
+            # it is typed again once, and one that still has not is said in plain words
+            for again in (True, False):
+                kept = c.js(f'({KEPT})({json.dumps(pw)})') or []
+                if kept and all(kept): return n
+                if not again: break
+                for i, k in enumerate(kept):
+                    if not k: one(i)
+            raise SignInError(f'the {site} page kept the new password in {sum(map(bool, kept))} of its {len(kept)} password boxes, so they would '
+                              'not match - nothing was sent')
         finally:
             if own: c.close()
 
 
 USER = "(() => { " + DEEP + " const a = deepActive(); return a && a.type !== 'password' ? String(a.value || '').slice(0, 200) : ''; })()"
-SAYS = (r"(() => [...document.querySelectorAll('[role=alert], [aria-invalid=true], .error, .err, .errors, .invalid-feedback, .field-error')]"
+SAYS = (r"(() => [...document.querySelectorAll('[role=alert], [aria-live=assertive], [aria-invalid=true], .error, .err, .errors, "
+        r".invalid-feedback, .field-error, [class*=error i], [id*=error i]')]"
         r".map((e) => e.innerText.trim()).filter(Boolean).join(' ').replace(/\s+/g, ' ').slice(0, 240))()")
 
 
@@ -1519,7 +1533,8 @@ def _make(store, tid, sid, site, c, fill=None, send=None, said: dict = None) -> 
         if not kept: _restore(store, site, prev)
         _audit(store, tid, site, 'vault', False, got.get('why') or 'the form stayed up', signup=True)
         if said is not None: said['why'] = got.get('why') or ''
-        return False, (f'No account: {site} kept its sign-up form up' + (f' - it says "{got["why"]}"' if got.get('why') else '') + '. Nothing was '
+        return False, (f'No account: {site} kept its sign-up form up' + (f' - it says "{got["why"]}"' if got.get('why') else
+                       ' and shows no error Taskuary could read - look at the page for what it asks') + '. Nothing was '
                        'kept. Fix what it asks for and run `agent-browser signup` again; a box only the owner can fill is theirs.')
     if (u := got.get('user')) and u != user and not kept: user = u; save(store, site, user, pw, by='taskuary', keep_old=True)
     if not kept: _kept(prev, _raw(store, site))

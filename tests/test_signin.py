@@ -1238,3 +1238,23 @@ def test_a_site_on_a_bare_address_is_named_by_its_title_s_site_part_never_the_wh
         def close(self): pass
     with mock.patch.object(signin, 'connect', return_value=C()):
         assert signin.page_name('s1', '127.0.0.1') == 'DealFlow Pro'
+
+
+def test_a_new_password_is_in_every_box_or_the_sign_up_says_which_did_not_keep_it():
+    """Walk 7, 2026-11-23: the app's own sign-up left the first Password box empty and only the confirm box filled - the form said "Passwords
+    do not match" and the command said only that it stayed up. Every box holds the one password, read back; a box that lost it is typed
+    again, and one that will not keep it is said in plain words."""
+    class Page:
+        def __init__(self, sticky): self.boxes, self.at, self.redraw, self.sticky = ['', ''], 0, True, sticky
+        def js(self, code):
+            if code.startswith(f'({signin.KEPT})'): return [b == json.loads(code[len(signin.KEPT) + 3:-1]) for b in self.boxes]
+            self.at = int(code[len(signin.PASSBOX) + 3:-1])
+            return {'n': 2, 'top': True, 'href': 'https://mail.vendor.example/signup', 'focused': self.at >= 0}
+        def type(self, pw):
+            self.boxes[self.at] = '' if self.sticky and self.at == 0 else pw          # ...or a box that never keeps it
+            # ...the form re-draws its first box as the second is typed
+            if self.at == 1 and self.redraw: self.boxes[0], self.redraw = '', False
+    with mock.patch.object(signin, '_guard'):
+        p = Page(sticky=False)
+        assert signin.type_new('s1', 'vendor.example', 'Pw-1a!', p) == 2 and p.boxes == ['Pw-1a!', 'Pw-1a!']
+        with pytest.raises(signin.SignInError, match='1 of its 2 password boxes'): signin.type_new('s1', 'vendor.example', 'Pw-1a!', Page(sticky=True))

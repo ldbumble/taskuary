@@ -11,7 +11,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import cardqueue, general, selfclose, server, wrapup
+from taskuary import events, general, selfclose, server, wrapup
 from taskuary.store import MemoryStore
 
 SENT = 'Hi Gail - the October list is attached.'
@@ -48,47 +48,15 @@ def the_owners_day(s):
     return tid, mid, sent, rid
 
 
-# the facts ride in the TURN (general.turn_facts), not the system prompt: there they changed it every turn, and a CLI chat's system
-# prompt is its process's command line, so each turn started a new process
+# what happened rides in the TURN as its events (events.take), not the system prompt: there they changed it every turn, and a CLI chat's
+# system prompt is its process's command line, so each turn started a new process
 
 
 def test_already_sent_replies_are_in_the_turns_context():
-    s = MemoryStore(); tid, *_ = the_owners_day(s)
+    s = MemoryStore(); tid, _, sent, _ = the_owners_day(s)
     _, turn = general._prompt(s, tid)
-    line = next(l for l in turn.split(cardqueue.SCREEN_HEAD)[1].splitlines() if SENT in l)
-    assert 'to gail@northwind.example' in line and line.startswith('- Sent 6:10 PM')
-
-def test_a_resumed_turn_carries_the_draft_and_the_sent_but_not_a_bare_answer():
-    s = MemoryStore(); tid, *_ = the_owners_day(s)
-    b = general.latest_block(s, tid, resumed=True)
-    assert 'THE DRAFT WAITING NOW' in b and '- Sent ' in b.split(cardqueue.SCREEN_HEAD)[1]
-    t = s.create_task({'Title': 'x', 'Kind': 'general', 'Status': 'open'}, 'owner')
-    s.add_comment(t, 'owner', general.USER_TYPE, 'hi'); s.add_comment(t, 'assistant', general.ASSISTANT_TYPE, 'Hello.')
-    assert general.latest_block(s, t) and not general.latest_block(s, t, resumed=True)    # the CLI has the chat; its turn is the newest
-
-
-def test_a_turn_no_message_started_is_not_handed_the_answered_one_as_newest():
-    """Agent walk 2, 2026-11-10: the owner asked "what is left?", the agent answered, the owner pressed Send - and the turn that press woke
-    read "your answer is to the newest message ... THE NEWEST MESSAGE - from the owner: What is left here?", so it answered that again."""
-    s = MemoryStore(); tid, *_ = the_owners_day(s)
-    assert 'THE NEWEST MESSAGE - from the owner (in this chat)' in general.latest_block(s, tid)
-    at(s, 'comment', 'CommentId', s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Fixed - the November list is drafted.'), '2026-11-06 15:23:00')
-    b = general.latest_block(s, tid)                    # ...the owner's Send wakes it: nobody said anything new
-    assert 'THE NEWEST MESSAGE' not in b and 'BEFORE the newest message' not in b
-    assert selfclose.NO_NEW_HEAD in b and f'THE LAST MESSAGE, WHICH YOU ANSWERED - from the owner (in this chat), at 3:22 PM' in b and FIX in b
-    # ...a mail that joins after that answer is new, until the turn Taskuary starts on it has answered
-    m = s.add_message({'TaskId': tid, 'ExternalId': 'g-2', 'ConversationId': 'conv-g', 'Channel': 'email', 'FromName': 'Gail Moreno',
-                       'FromEmail': 'gail@northwind.example', 'BodyText': 'Actually I need the December one.', 'Status': 'routed'})
-    at(s, 'message', 'MessageId', m, '2026-11-06 15:40:00')
-    b = general.latest_block(s, tid)
-    assert selfclose.LATEST_HEAD in b and 'THE NEWEST MESSAGE - from Gail Moreno' in b
-    at(s, 'comment', 'CommentId', s.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, 'Gail Moreno wrote on the thread.'), '2026-11-06 15:41:00')
-    assert 'THE NEWEST MESSAGE - from Gail Moreno' in general.latest_block(s, tid), 'the turn on it has not answered yet'
-    at(s, 'comment', 'CommentId', s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Drafted the December list.'), '2026-11-06 15:42:00')
-    assert 'THE LAST MESSAGE, WHICH YOU ANSWERED - from Gail Moreno' in general.latest_block(s, tid)
-
-
-
+    line = next(l for l in turn.splitlines() if f'Card rv{sent} ' in l and 'approved' in l)
+    assert 'gail@northwind.example' in line and line.endswith('he approved it')
 
 def test_the_agents_new_draft_supersedes_the_old_one():
     s = MemoryStore(); tid, _, _, rid = the_owners_day(s)
@@ -151,52 +119,25 @@ def test_the_cli_and_tools_offer_withdraw():
     assert 'withdraw_draft' in agenttools.TOOLS and 'withdraw_draft' not in agenttools.REPLY_TOOLS     # an own ask's emails are taken back too
 
 
-def test_a_hand_off_is_in_the_turns_context():
-    # the owner, 2026-11-08: Hand it to a person was a comment only, and the agent's next turn never heard it
-    s = MemoryStore(); tid = s.create_task({'Title': 'Payworth renewal', 'Kind': 'general', 'Status': 'open'}, 'owner')
-    assert general.latest_block(s, tid) == ''
-    s.add_comment(tid, 'owner', 'human', f'{general.HANDED_OFF}gail@northwind.example by email:\nGail - can you take the renewal?')
-    got = general.latest_block(s, tid, resumed=True)
-    assert 'THE OWNER HANDED THIS TO A PERSON' in got and 'Handed off to gail@northwind.example by email - "Gail - can you take the renewal?"' in got
-
-
-
 def test_the_owners_presses_since_the_last_turn_are_in_the_turns_context():
     # the owner, 2026-11-08: Remind me, Watch it, Change, a send on its card - the agent's next turn heard none of them
     s = MemoryStore(); tid = s.create_task({'Title': 'Payworth renewal', 'Kind': 'general', 'Status': 'open'}, 'owner')
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Drafted Gail an email.')
-    assert general.owner_did(s, tid) == []
     s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00' WHERE TaskId=?", (tid,))
     rid = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'Reason': 'the email to Gail', 'DraftText': 'Hi Gail'})
     s.decide_review(rid, 'approved', 'Hi Gail', 'owner')
     s.audit('task', tid, 'remind', 'owner', detail={'from': None, 'to': '2026-11-10 09:00:00'})
     s.audit('task', tid, 'priority', 'owner', detail={'from': 'regular', 'to': 'urgent'})
     s.audit('task', tid, 'continue-work', 'owner'); s.audit('task', tid, 'woke', 'assistant')      # the turn itself; not the owner's
-    did = [x.split(': ', 1)[1] for x in general.owner_did(s, tid)]
+    did = [e['what'] for e in events.pending(s, tid) if e['kind'] == 'press']
     monday = f"set a reminder for {general.clock_of('2026-11-10 09:00:00')} - put away until then"
     assert sorted(did) == sorted([monday, 'changed its priority from regular to urgent']), did
-    # ...and the card he pressed is said once, by what stands (cardqueue.screen), never a second time as a press
-    assert f'- Sent ' in (b := general.latest_block(s, tid, resumed=True)) and f'rv{rid}, the email' in b, b
-    assert 'WHAT THE OWNER DID SINCE YOUR LAST TURN' in general.latest_block(s, tid, resumed=True)
+    # ...and the card he pressed is said once, by its card's event, never a second time as a press
+    assert events.take(s, tid)[0].count(f'Card rv{rid} ') == 2 and 'he approved it' in events.take(s, tid)[0]
     # ...and each press is the owner's own line in the chat, at its time - a line, never a turn (the owner, 2026-11-08)
     lines = [m for m in general.shown_history(s, tid) if m.get('press')]
     assert [m['content'][0]['text'] for m in lines] == [f'You {monday}.', 'You changed its priority from regular to urgent.']
     assert all(m['role'] == 'user' for m in lines) and not [m for m in general.history(s, tid) if m.get('press')]
-
-
-def test_a_coding_turn_is_told_what_any_agent_s_turn_is():
-    # the audit, 2026-11-10: a coding turn files no answer of its own - its end is on its worker record - so every "since your last answer"
-    # read none: its next turn never heard the owner's Send, and the facts read as before any turn ("THE NEWEST MESSAGE")
-    from taskuary import workerstate as ws
-    s = MemoryStore(); tid = s.create_task({'Title': 'Fix the refund total', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
-    ws.record(s, tid, 'acp-1', 'turn_end', text='The reply to Ray waits for your Send.', source='hook')
-    s._exec("UPDATE worker_event SET CreatedAt='2000-01-01 00:00:00' WHERE TaskId=?", (tid,))
-    rid = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'Reason': 'the reply to Ray', 'DraftText': 'Hi Ray - fixed.'})
-    s.decide_review(rid, 'approved', 'Hi Ray - fixed.', 'owner')
-    assert general.owner_did(s, tid) == [], 'a card of the line is the screen fact\'s'
-    assert f'rv{rid}, the email' in general.turn_facts(s, tid, resumed=True).split(cardqueue.SCREEN_HEAD)[1].split('- Sent ')[1]
-
-
 
 
 def test_an_email_the_owner_dropped_is_told_to_its_agent_and_is_a_line_in_the_chat():
@@ -209,7 +150,7 @@ def test_an_email_the_owner_dropped_is_told_to_its_agent_and_is_a_line_in_the_ch
     rid = slots.draft(s, tid, 'Hi Paula', to='paula@northwind.example', agent='assistant')['review_id']
     s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00' WHERE TaskId=?", (tid,))
     for i in slots.open_(s, tid): slots.drop(s, tid, i['id'], 'owner')
-    did = [x.split(': ', 1)[1] for x in general.owner_did(s, tid)]
+    did = [e['what'] for e in events.pending(s, tid) if e['kind'] == 'press']
     assert did == ['dropped the email to Ray Colton - it will not be sent', 'dropped the email to paula@northwind.example - it will not be sent'], did
     lines = [m['content'][0]['text'] for m in general.shown_history(s, tid) if m.get('press')]
     assert lines == ['You dropped the email to Ray Colton - it will not be sent.', 'You dropped the email to paula@northwind.example - it will not be sent.'], lines
@@ -225,24 +166,9 @@ def test_a_reminder_the_agent_set_is_a_line_in_the_chat():
     at = s.get_task(tid)['RemindAt']
     lines = [m for m in general.shown_history(s, tid) if m.get('press')]
     assert [m['content'][0]['text'] for m in lines] == [f'Reminder set for you: {general.clock_of(at)}.'], lines
-    assert general.owner_did(s, tid) == [] and not [m for m in general.history(s, tid) if m.get('press')]       # the agent's own act: never told back to it
+    assert not [e for e in events.pending(s, tid) if e['kind'] == 'press'] and not [m for m in general.history(s, tid) if m.get('press')]   # the agent's own act: never told back to it
     remind.set_reminder(s, tid, None, 'owner')                                                              # ...the owner's own stays theirs
     assert [m['content'][0]['text'] for m in general.shown_history(s, tid) if m.get('press')][-1] == 'You took the reminder off.'
-
-
-def test_a_question_still_waiting_is_in_the_turns_context_and_a_wake_does_not_clear_it():
-    # the night run, 2026-11-09: every line on the thread woke the agent, the wake read as the owner speaking and cleared its question,
-    # so it asked "who runs the portal?" on six turns running to keep it on screen
-    from taskuary import workerstate as ws
-    s = MemoryStore(); tid = s.create_task({'Title': 'Portal bugs', 'Kind': 'general', 'Status': 'open'}, 'owner')
-    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Added the export bug to the list.')
-    with mock.patch.object(ws, 'current_sid', return_value='s1'):
-        ws.record(s, tid, 's1', 'working', source='api')
-        ws.record(s, tid, 's1', 'input_needed', request_id='q1', text='Who runs the portal: in-house or a vendor?', source='api')
-        ws.record(s, tid, 's1', 'working', text=ws.WAKE, source='api')          # Taskuary's turn on Ray's next line
-        assert 'Who runs the portal' in general.latest_block(s, tid, resumed=True)
-        ws.record(s, tid, 's1', 'working', source='api')                        # the owner speaks: it is overtaken
-        assert 'YOUR QUESTION STILL WAITING' not in general.latest_block(s, tid, resumed=True)
 
 
 def test_one_person_on_two_channels_is_named_by_address_and_channel():
@@ -279,10 +205,9 @@ def test_a_close_a_message_reopened_since_is_told_with_the_reopening():
     s.add_comment(tid, 'agent', general.ASSISTANT_TYPE, 'Harbor Hall is booked.')
     s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00' WHERE TaskId=?", (tid,))
     concierge.close_task(s, tid, 'owner')
-    assert [x.split(': ', 1)[1] for x in general.owner_did(s, tid)] == ['marked it done']          # closed: as it stands
+    assert [e['what'] for e in events.pending(s, tid) if e['kind'] == 'press'] == ['marked it done']
     ingest._reopen(s, tid, {'from_name': 'Erin Blake', 'subject': 'Which room?'}, 'router', {'intent': 'reply_only'})
-    did = [x.split(': ', 1)[1] for x in general.owner_did(s, tid)]
-    assert did == ['marked it done - a new message on its thread has opened it again since'], did
+    assert [e['what'] for e in events.pending(s, tid) if e['kind'] == 'press'] == ['marked it done'], 'his close, once: the message that reopened it is its own event'
 
 def test_the_owners_line_this_turn_carries_is_not_quoted_in_its_facts_as_well():
     """The Continue round, 2026-11-18: a finished chat, Mark done, then Continue with a note. The kept conversation's turn is the note, and the
@@ -294,10 +219,8 @@ def test_the_owners_line_this_turn_carries_is_not_quoted_in_its_facts_as_well():
     s.audit('task', tid, 'close_from_assistant', 'owner'); s.audit('task', tid, 'reopened', 'owner')
     note = 'now check the south office too'
     at(s, 'comment', 'CommentId', s.add_comment(tid, 'owner', general.USER_TYPE, note), '2099-01-01 00:00:00')
-    facts = general.turn_facts(s, tid, resumed=True, rules=False, turn=True)
-    assert 'WHAT THE OWNER DID SINCE YOUR LAST TURN' in facts and 'THE NEWEST MESSAGE - from the owner (in this chat)' in facts
-    assert note not in facts and general.OWN_BELOW in facts
-    assert general._prompt(s, tid)[1].count(note) == 1, 'a fresh turn: the conversation ends on it, and the facts point there'
+    assert general._prompt(s, tid)[1].count(note) == 1, 'a fresh turn: the conversation ends on it, said once'
+    assert 'The owner marked it done.' in general._prompt(s, tid)[1]
 
 
 

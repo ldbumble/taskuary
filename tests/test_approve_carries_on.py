@@ -5,12 +5,23 @@ import json, threading, time, unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from taskuary import cardqueue, general, landing, proposals, sessionrecord, shellgate as sg, terminal as term, verdicts, waitroom, workerstate as ws
+from taskuary import cardqueue, events, general, landing, proposals, sessionrecord, shellgate as sg, terminal as term, verdicts, waitroom, workerstate as ws
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
 HELD = r'C:\work\ledger'
 SAID = 'https://github.com/northwind/ledger/pull/12#issuecomment-1'
+
+
+def told_with(s, tid, *said) -> str:
+    "What its agent got: the words that rode the wake, and the events past its cursor that its turn is told (events.take)."
+    return '\n'.join([*map(str, said), events.take(s, tid)[0]])
+
+
+def sent_card(s, tid) -> int:
+    "A card he pressed Send on, as the store writes it: its event is what the agent hears of the press (events.card)."
+    rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Confirmed.'})
+    s.decide_review(rid, 'approved', 'Confirmed.', 'owner'); return rid
 
 
 class HeldStep(unittest.TestCase):
@@ -82,7 +93,7 @@ class EveryYesCarriesOn(unittest.TestCase):
             self.assertTrue(verdicts.decide(self.s, rv, 'approve')['ok'])
         [n] = self.s.waiting_notes(self.tid)
         self.assertEqual(n['CreatedBy'], 'router', 'Taskuary\'s note - never drawn as the owner\'s (codingchat.waiting, waitroom.batch)')
-        self.assertIn('pressed Approve', n['Note']); self.assertIn(SAID, n['Note'])
+        self.assertIn('he approved it', n['Note']); self.assertIn(SAID, n['Note'])
         # ...and nothing invites a line about a link that did not come (agent walk 2, 2026-11-10: "No link came back with it", after every Send)
         self.assertNotIn('if it gave one', n['Note'])
 
@@ -97,7 +108,7 @@ class EveryYesCarriesOn(unittest.TestCase):
             end = time.time() + 5
             while not told and time.time() < end: time.sleep(.01)
         [(text, kw)] = told
-        self.assertFalse(kw.get('as_owner', True)); self.assertIn('pressed Approve', text)
+        self.assertFalse(kw.get('as_owner', True)); self.assertIn('he approved it', told_with(self.s, self.tid, text))
         self.assertFalse(general.follow_up(self.s, self.tid, 'send', said='again'), 'once per answer')
 
     def test_a_wake_that_never_started_leaves_the_next_press_to_start_it(self):
@@ -108,13 +119,13 @@ class EveryYesCarriesOn(unittest.TestCase):
             if len(tried) == 1: raise RuntimeError('no AI is connected')
             return SimpleNamespace(send_prompt=lambda text, **k: told.append(text))
         with mock.patch.object(general, 'start_session', side_effect=start), mock.patch.object(general, 'handles', return_value=True):
-            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent'), 'woke')
+            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=sent_card(self.s, self.tid)), 'woke')
             end = time.time() + 5
             while self.s.list_comments(self.tid, internal=True)[-1]['CommentId'] in general._WOKEN and time.time() < end: time.sleep(.01)
-            self.assertEqual(general.approved(self.s, self.tid, 'Approve', 'the note was posted'), 'woke', 'the first woke nobody')
+            self.assertEqual(general.approved(self.s, self.tid, 'Approve', 'the note was posted', review=sent_card(self.s, self.tid)), 'woke', 'the first woke nobody')
             end = time.time() + 5
             while not told and time.time() < end: time.sleep(.01)
-        self.assertEqual(len(told), 1); self.assertIn('pressed Approve', told[0])
+        self.assertEqual(len(told), 1); self.assertIn('he approved it', told_with(self.s, self.tid, told[0]))
 
     def test_a_send_whose_wake_never_started_is_still_news_to_the_next_turn(self):
         """No AI connected when he pressed Send on the agent's email: the send went, the wake did not start - and the press was marked told
@@ -132,7 +143,7 @@ class EveryYesCarriesOn(unittest.TestCase):
             end = time.time() + 5
             while not tried and time.time() < end: time.sleep(.01)
             time.sleep(.1)
-        self.assertIn(f': rv{rid}, the email to paula@northwind.example', general.turn_facts(self.s, self.tid).split('- Sent ')[1])   # ...as it stands, every turn
+        self.assertIn('he pressed Send - it was sent to paula@northwind.example', events.take(self.s, self.tid)[0])   # ...still past its cursor: its next turn hears it
     def test_a_second_press_while_the_first_wake_is_starting_rides_in_that_turn(self):
         # two held steps on two cards, pressed a few seconds apart on a resting agent: the second found its answer already woken and no session
         # up yet, so its words went nowhere - and the turn that started answered past it, so the agent never heard it
@@ -146,10 +157,10 @@ class EveryYesCarriesOn(unittest.TestCase):
             while not told and time.time() < end: time.sleep(.01)
             time.sleep(0.1)
         [(text, kw)] = told
-        self.assertIn('origin deploy', text); self.assertIn('origin --tags', text); self.assertFalse(kw.get('as_owner', True))
+        self.assertIn('origin deploy', told_with(self.s, self.tid, text)); self.assertIn('origin --tags', told_with(self.s, self.tid, text)); self.assertFalse(kw.get('as_owner', True))
 
     def test_no_agent_ever_on_it_wakes_nothing(self):
-        self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent'), '')
+        self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=sent_card(self.s, self.tid)), '')
 
     def test_a_live_coding_chat_hears_an_approval_as_taskuarys_brief(self):
         """The north-star audit, 2026-11-10: the waiting room handed an ACP coding session Taskuary's own note (an approval, a landing) with
@@ -163,7 +174,7 @@ class EveryYesCarriesOn(unittest.TestCase):
              mock.patch.object(proposals, 'execute', return_value={'commented': 'northwind/ledger#7', 'url': SAID}):
             self.assertTrue(verdicts.decide(self.s, rv, 'approve')['ok'])
         [(text, brief, shown)] = got
-        self.assertTrue(brief, "Taskuary's brief, never the owner's bubble"); self.assertEqual(shown, []); self.assertIn('pressed Approve', text)
+        self.assertTrue(brief, "Taskuary's brief, never the owner's bubble"); self.assertEqual(shown, []); self.assertIn('he approved it', told_with(self.s, self.tid, text))
 
     def ended(self):
         "A coding task whose agent worked it and whose session has ended (its transcript filed, nothing live, not idled out)."
@@ -187,7 +198,7 @@ class EveryYesCarriesOn(unittest.TestCase):
              mock.patch('taskuary.waitroom.deliver', return_value={'delivered': 1, 'state': 'restarted'}) as reopened:
             self.assertTrue(verdicts.decide(self.s, rv, 'approve')['ok'])
         [n] = self.s.waiting_notes(tid)
-        self.assertEqual(n['CreatedBy'], 'router'); self.assertIn('pressed Approve', n['Note']); self.assertIn(SAID, n['Note'])
+        self.assertEqual(n['CreatedBy'], 'router'); self.assertIn('he approved it', n['Note']); self.assertIn(SAID, n['Note'])
         reopened.assert_called()
 
     def test_a_landing_no_agent_worked_says_so_and_starts_nobody(self):
@@ -210,13 +221,13 @@ class OneRoadIntoTheAgent(unittest.TestCase):
         sess = SimpleNamespace(sid='run1', task_id=self.tid, alive=True, send_prompt=lambda text, **kw: told.append((text, kw)))
         with mock.patch.dict(term.SESSIONS, {'run1': sess}, clear=True), mock.patch.object(waitroom, 'tick', side_effect=AssertionError('no clock')):
             t0 = time.time()
-            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent'), 'told')
+            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=sent_card(self.s, self.tid)), 'told')
             browsergate._tell(self.s, self.tid, "The owner pressed I'm done: they say they finished the step.", wake=True)
             end = time.time() + 5
             while len(told) < 2 and time.time() < end: time.sleep(.01)
         self.assertLess(time.time() - t0, 2, "heard at once - never on the waiting room's clock")
         self.assertEqual([kw for _t, kw in told], [{'as_owner': False}] * 2, "one road: the same call for both, never the owner's line")
-        self.assertIn('pressed Send', told[0][0]); self.assertIn("I'm done", told[1][0])
+        self.assertIn('he approved it', told_with(self.s, self.tid, *[t for t, _ in told])); self.assertIn("I'm done", told_with(self.s, self.tid, *[t for t, _ in told]))
         self.assertEqual(self.s.waiting_notes(self.tid), [], 'nothing left for a clock to deliver')
 
     def test_who_it_is_from_says_the_road(self):
@@ -260,14 +271,14 @@ class ParkedOnItsOwnQuestion(unittest.TestCase):
         with mock.patch.dict(term.SESSIONS, {'a': sess}, clear=True):
             self.asked(sess)
             t0 = time.time()
-            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent'), 'told')
+            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=sent_card(self.s, self.tid)), 'told')
             self.assertLess(time.time() - t0, 2, 'the press answered before the turn it began had run')
             end = time.time() + 5
             while not told and time.time() < end: time.sleep(.01)
             turn.set()
             [(text, kw)] = told
             self.assertTrue(kw.get('brief'), "Taskuary's brief in the chat (general.BRIEF_ACTOR) - never the owner's line")
-            self.assertIn('pressed Send', text)
+            self.assertIn('he approved it', told_with(self.s, self.tid, text))
             self.after()
 
     def test_on_a_pty_it_is_kept_as_a_seed_the_record_reads_as_a_brief(self):
@@ -290,10 +301,10 @@ class ParkedOnItsOwnQuestion(unittest.TestCase):
                            say=lambda *a, **k: self.fail("Taskuary's note went in as the owner's prompt"))
         with mock.patch.dict(term.SESSIONS, {'a': sess}, clear=True), mock.patch.object(term, 'chooser_in', return_value=False):
             self.asked(sess)
-            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent'), 'told')
+            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=sent_card(self.s, self.tid)), 'told')
             self.after()
         [(text, brief)] = got
-        self.assertTrue(brief); self.assertIn('pressed Send', text)
+        self.assertTrue(brief); self.assertIn('he approved it', told_with(self.s, self.tid, text))
 
     def test_the_owners_own_answer_is_still_theirs(self):
         told = []
@@ -359,7 +370,7 @@ def _line(s, tid, agent, said):
     told = []                                     # a coding agent in a terminal: its prompt hook, then Taskuary's next line
     with mock.patch.object(general, 'to_agent', lambda st, t, note, actor='owner': told.append(note) or 'told'):
         hooks._events(SimpleNamespace(store=s, task_id=tid, sid='run1', bg={}), {'hook_event_name': 'UserPromptSubmit', 'prompt': said})
-    return '\n'.join(told)
+    return told_with(s, tid, *told)
 
 
 @pytest.mark.parametrize('agent', ['general', 'acp', 'pty'])
@@ -378,7 +389,7 @@ def test_a_card_he_writes_past_greys_in_its_place_on_every_agents_road_and_its_a
     heard = _line(s, tid, agent, 'What does that step change?')
     rv = s.get_review(rid)
     assert proposals.passed(rv), rv
-    assert cardqueue.SCREEN_HEAD in heard and f'rv{rid}' in heard.split('Greyed, will not go')[1], heard
+    assert f'Card rv{rid} ' in heard and 'greyed, it will not go' in heard.split(f'Card rv{rid} ')[-1], heard
     # ...and it keeps its record: never pressable, said so
     out = verdicts.decide(s, s.get_review(rid), 'approve')
     assert (out['ok'], out['send_error']) == (False, proposals.passed_why(s, rv)), out
@@ -503,7 +514,7 @@ class AFailedPressIsHandedBack(unittest.TestCase):
         self.assertEqual(r['Status'], 'superseded', 'the card is over, its error kept - no Try again (the owner, 2026-11-16)')
         self.assertTrue(verdicts.decide(self.s, r, 'approve').get('already'), 'nothing on it presses again')
         self.assertIn('The agent was told', r['ActError'])
-        self.assertEqual(general.owner_did(self.s, tid), [], "told once: never said again with the owner's next line")
+        self.assertEqual(events.take(self.s, tid)[0], '', "told once: nothing of it is past its cursor")
 
     def test_the_agents_new_card_is_the_way_past_and_its_yes_is_told_it_went(self):
         tid = self.coding_ended(); self.press(self.card(tid, 'INSERT INTO ledgr (id, amount) SELECT 1, 9.5'))
@@ -511,23 +522,20 @@ class AFailedPressIsHandedBack(unittest.TestCase):
         self.assertTrue(out['ok'], out)
         notes = self.s.waiting_notes(tid)
         self.assertEqual(len(notes), 2, 'each press reaches the agent once')
-        self.assertIn('it went through', notes[-1]['Note']); self.assertIn('1 row changed', notes[-1]['Note'])
+        self.assertIn('he approved it - it was done', notes[-1]['Note']); self.assertIn('1 row changed', notes[-1]['Note'])
 
     def test_a_close_out_that_failed_still_waits_and_a_no_after_it_is_still_news(self):
         tid = self.coding_ended()
         rv = self.card(tid, '', 'close_issue', closeout=True)
         with mock.patch.object(proposals, 'linked', return_value=('northwind/ledger', 7)),              mock.patch('taskuary.ci._conn', side_effect=RuntimeError('GitHub is not answering')):
             out = self.press(rv)
-        self.assertFalse(out['ok']); [n] = self.s.waiting_notes(tid); self.assertIn('still waits for their press', n['Note'])
+        self.assertFalse(out['ok']); [n] = self.s.waiting_notes(tid); self.assertIn('the card waits for his press', n['Note'])
         self.assertEqual(self.s.get_review(rv['ReviewId'])['Status'], 'pending', "a close-out is Taskuary's own card: its buttons stay")
         self.s._exec("UPDATE audit SET CreatedAt='2000-01-01 00:00:00' WHERE EntityType='review' AND Action=?", (general.TOLD,))
         self.s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'GitHub was down - press it again later.')
         self.s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:01' WHERE ActorType=?", (general.ASSISTANT_TYPE,))
         verdicts.decide(self.s, self.s.get_review(rv['ReviewId']), 'reject')
-        # ...said in the one voice of a card of the line - the screen fact - never a second time as a press (a close-out is in the line)
-        from taskuary import cardqueue
-        said = cardqueue.screen(self.s, tid)
-        self.assertIn('Turned down by him', said); self.assertFalse(any('turned down' in x for x in general.owner_did(self.s, tid)))
+        self.assertIn('he turned it down', told_with(self.s, tid, *[n['Note'] for n in self.s.waiting_notes(tid)]))
 
     def test_a_resting_general_agent_is_woken_on_the_failure(self):
         tid = Factory(self.s).task('Copy the September rows'); self.s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The insert is ready - press Approve.')
@@ -538,7 +546,7 @@ class AFailedPressIsHandedBack(unittest.TestCase):
             end = time.time() + 5
             while not told and time.time() < end: time.sleep(.01)
         [(text, kw)] = told
-        self.assertFalse(kw.get('as_owner', True)); self.assertIn('IT FAILED', text)
+        self.assertFalse(kw.get('as_owner', True)); self.assertIn('it failed (', told_with(self.s, tid, text))
 
     def test_no_agent_ever_on_it_wakes_nothing_and_the_card_says_only_its_error(self):
         tid = Factory(self.s).task('Copy the September rows', kind='coding'); rv = self.card(tid, 'INSERT INTO ledgr VALUES (1, 2)')
@@ -602,7 +610,7 @@ class AFailedSendIsHandedBack(unittest.TestCase):
              mock.patch.object(general, 'to_agent', side_effect=lambda st, tid, said, actor='owner', **k: heard.append(said) or 'told'):
             out = verdicts.decide(self.s, self.s.get_review(self.rid), 'approve', None, None, 'owner', cc=['ray@northwind.example'])
         self.assertTrue(out['ok'], out)
-        [said] = heard
+        said = told_with(self.s, self.tid, *heard).split(f'Card rv{self.rid} ')[-1]      # ...what became of the card, as the send left it
         self.assertIn('gail@northwind.example', said); self.assertIn('ray@northwind.example', said)
         self.assertNotIn('erin', said.lower())
 
@@ -614,7 +622,7 @@ class AFailedSendIsHandedBack(unittest.TestCase):
             out = verdicts.decide(self.s, self.s.get_review(self.rid), 'approve')
         self.assertEqual(out.get('delivery'), 'failed', out)
         [n] = self.s.waiting_notes(self.tid)
-        self.assertIn('IT DID NOT GO', n['Note']); self.assertEqual(general.owner_did(self.s, self.tid), [])
+        self.assertIn('it did not go', n['Note']); self.assertEqual(events.take(self.s, self.tid)[0], '', 'told once')
 
     def test_the_owners_own_words_on_a_send_that_failed_reach_its_agent(self):
         """He rewrote the reply in the box and pressed Send, and the provider refused it: its agent heard "IT DID NOT GO" and nothing of his
@@ -626,7 +634,7 @@ class AFailedSendIsHandedBack(unittest.TestCase):
              mock.patch.object(verdicts, 'context_moved', return_value=(False, None)):
             verdicts.decide(self.s, self.s.get_review(self.rid), 'approve', 'Confirmed - and the new rate starts in March.')
         [n] = self.s.waiting_notes(self.tid)
-        self.assertIn('IT DID NOT GO', n['Note']); self.assertIn('the new rate starts in March', n['Note'])
+        self.assertIn('it did not go', n['Note']); self.assertIn('the new rate starts in March', n['Note'])
         self.assertNotIn('what went:', n['Note'])
 
 
@@ -656,7 +664,7 @@ class OneCardAtATime(unittest.TestCase):
             out = self.press(push)
         self.assertFalse(out['ok']); [n] = self.s.waiting_notes(tid)
         self.assertIn('branch is protected', n['Note'])
-        self.assertIn(f'Waiting for his press now: rv{note}, the email to erin@northwind.example', n['Note'], 'it hears what waits, in the same hand-back')
+        self.assertIn(f'Card rv{note} (the email to erin@northwind.example): up for his press', n['Note'], 'it hears what waits, in the same hand-back')
         self.assertEqual((cardqueue.state(self.s, tid)['live'], cardqueue.held(self.s, tid)), ([note], set()), 'the press brings the next at once')
         verdicts.withdraw(self.s, tid, 'the push was refused - nothing is live', 'agent', which=str(note))
         self.answered(tid, 'GitHub refused the push; I took the note to Erin back.')
@@ -686,8 +694,8 @@ class OneCardAtATime(unittest.TestCase):
             for i, rid in enumerate(ids):
                 self.assertTrue(verdicts.decide(self.s, self.s.get_review(rid), 'approve')['ok'])
                 self.assertEqual(len(told), 0 if i < 2 else 1, f'after press {i + 1}')
-        [said] = told
-        for rid in ids: self.assertIn(f'rv{rid}', said)
+        said = told_with(self.s, tid, *told)
+        for rid in ids: self.assertIn(f'Card rv{rid} (the email to', said)
 
     def test_a_no_that_ends_a_row_of_yeses_is_its_one_wake(self):
         from taskuary import outbound
@@ -701,7 +709,8 @@ class OneCardAtATime(unittest.TestCase):
             self.assertEqual(told, [])
             self.assertTrue(verdicts.decide(self.s, self.s.get_review(second), 'reject')['ok'])
         [said] = told
-        self.assertIn(f'turned down rv{second}', said); self.assertIn(f'rv{first}', said)
+        said = told_with(self.s, tid, said)
+        self.assertIn(f'Card rv{second} (the email to ray@northwind.example): he turned it down', said); self.assertIn(f'Card rv{first} ', said)
 
     def test_a_no_to_the_first_card_tells_its_agent_whose_no_it_was_and_the_next_comes_forward(self):
         tid = Factory(self.s).task('Answer Gail and tell Ray'); self.answered(tid, 'Both letters are set up.', '2000-01-01 00:00:00')
@@ -710,7 +719,8 @@ class OneCardAtATime(unittest.TestCase):
         with mock.patch.object(general, 'to_agent', lambda st, t, said, actor='owner', heard=None: told.append(said) or (heard and heard('woke')) or 'woke'):
             self.assertTrue(verdicts.decide(self.s, self.s.get_review(first), 'reject')['ok'])
         [said] = told
-        self.assertIn(f'turned down rv{first} (the email to gail@northwind.example) - their own no', said); self.assertIn(f'rv{second}', said)
+        said = told_with(self.s, tid, said)
+        self.assertIn(f'Card rv{first} (the email to gail@northwind.example): he turned it down', said); self.assertIn(f'Card rv{second} ', said)
         self.assertEqual((cardqueue.state(self.s, tid)['live'], cardqueue.held(self.s, tid)), ([second], set()), 'the press brings the next at once')
 
     def test_a_no_with_nothing_behind_it_wakes_nobody(self):

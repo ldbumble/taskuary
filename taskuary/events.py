@@ -117,19 +117,21 @@ def _card(e) -> str:
     "One card's new state, as code wrote it: raised, pressed and what came of it, greyed, back."
     s, d, err, note, by = e.get('status'), e.get('delivery') or '', _flat(e.get('error'), 240), _flat(e.get('note'), 200), e.get('by') or ''
     head = f"Card rv{e.get('rid')}" + (f" ({e['what']})" if e.get('what') else '')
-    if err and e.get('cut'): said = 'Taskuary restarted while his press ran - it may have been done'
-    elif err: said = f'he pressed it and it failed ({err}) - nothing of it was done' + ('' if s == 'superseded' else '; the card waits for his press')
+    if err and e.get('cut') and s in ('pending', 'superseded'): said = 'Taskuary restarted while his press ran - it may have been done'
+    elif err and s in ('pending', 'superseded'): said = f'he pressed it and it failed ({err}) - nothing of it was done' + ('' if s == 'superseded' else '; the card waits for his press')
     elif s == 'pending' and d == 'failed': said = f"he pressed Send and it did not go ({_flat(e.get('reason'), 200) or 'no reason given'}); the card waits for his press"
     elif s == 'pending' and d == 'unknown': said = f"he pressed Send and it may have gone ({_flat(e.get('reason'), 200) or 'no reason given'}) - not known"
     elif s == 'pending': said = 'up for his press again' if e.get('back') else 'up for his press'
     elif s in ('approved', 'edited'):
         said = ('he changed your words and sent it' if s == 'edited' else 'he pressed Send - it was sent') if d == 'sent' else \
                f'{CARD[s]} - it was done' if e.get('act') else CARD[s]
+        if d == 'sent' and e.get('to'): said += f" to {', '.join(e['to'])}" + (f", copying {', '.join(e['cc'])}" if e.get('cc') else '')
         if e.get('result'): said += f" ({_flat(e['result'], 300)})"
         if e.get('final'): said += f"; what went: \"{_flat(e['final'], 600)}\""
     elif s in CARD: said = CARD[s]
     elif s == 'superseded': said = 'greyed, it will not go' + (f' ({note})' if note else '')
     else: said = s or 'changed'
+    if s == 'pending' and d in ('failed', 'unknown') and e.get('final'): said += f"; what he pressed Send on: \"{_flat(e['final'], 600)}\""
     return f'{head}: {said}' + (f' - by {by}' if by and by not in ('owner', 'you', 'taskuary', 'system') and s != 'pending' else '')
 
 
@@ -193,38 +195,44 @@ def said(store, tid: int, lines) -> None:
             add(store, tid, 'said', f"said:{x.get('id') or x.get('CommentId') or time.time_ns()}", text=str(x.get('text') or ''), files=list(x.get('files') or []))
 
 
-def _sig(r: dict) -> str:
-    "A card's state: what it is, whether it went, why it failed - the same state written again (a line added under its error) is no new one."
-    from .general import AGENT_TOLD
-    err = str(r.get('ActError') or '').replace(AGENT_TOLD, '')[:240].rstrip('. ')
-    return '|'.join([*(str(r.get(k) or '') for k in ('Status', 'DeliveryState', 'DecideNote')), err])
-
-
 @_safe
 def card(store, r: dict) -> None:
     """A card's state as the store just wrote it (store._poke_review - every road that raises, presses, sends, greys or fails a card goes
-    through there): one event per state it reaches. A draft rewritten in place is the same state; a send still going out is no state yet."""
+    through there): one event per state it reaches, a state being what its event says - a draft rewritten in place, or a line added under
+    its error, is the same state. A send still going out is no state yet."""
     if not r or not r.get('TaskId') or not r.get('ReviewId'): return
     r = store.get_review(r['ReviewId']) or r
     if r.get('DeliveryState') == 'sending' or r.get('Status') == 'held': return
     tid, rid = int(r['TaskId']), int(r['ReviewId'])
     from . import general
-    from .general import ACT_CUT
-    was = store._one("SELECT Body FROM event WHERE TaskId=? AND Kind='card' AND Key LIKE ? ORDER BY Id DESC LIMIT 1", (tid, f'card:{rid}:%'))
-    if was and json.loads(was['Body']).get('sig') == _sig(r): return
+    from .general import ACT_CUT, AGENT_TOLD
+    olds = [json.loads(x['Body']) for x in store._rows("SELECT Body FROM event WHERE TaskId=? AND Kind='card' AND Key LIKE ? ORDER BY Id", (tid, f'card:{rid}:%'))]
     try:
         from .cardqueue import what
         label = what(store, {'rids': [rid], 'rows': [r]}, True)
     except Exception: label = ''
-    err = str(r.get('ActError') or '')
-    final = str(r.get('FinalText') or '') if r.get('Status') == 'edited' or (r.get('Kind') != 'action' and r.get('FinalText') and r.get('FinalText') != r.get('DraftText')) else ''
+    err = str(r.get('ActError') or '').replace(AGENT_TOLD, '').strip()
+    # ...HIS WORDS, where he changed the card's before pressing: what went, or what he pressed Send on that did not go
+    went, snap = str(r.get('FinalText') or ''), (store._one('SELECT Text FROM draft_snapshot WHERE ReviewId=? ORDER BY Id DESC LIMIT 1', (rid,)) or {}).get('Text')
+    pressed = r.get('Status') in ('approved', 'edited') or r.get('DeliveryState') in general.NOT_GONE
+    final = went if r.get('Kind') != 'action' and pressed and went.split() and (snap.split() != went.split() if snap else r.get('Status') == 'edited') else ''
     try: result = (json.loads(r.get('FinalText') or '{}') or {}).get('result') if r.get('Kind') == 'action' else None
     except (TypeError, ValueError, AttributeError): result = None
-    n = (store._one("SELECT COUNT(*) AS n FROM event WHERE TaskId=? AND Kind='card' AND Key LIKE ?", (tid, f'card:{rid}:%')) or {}).get('n') or 0
-    add(store, tid, 'card', f'card:{rid}:{n}:{_sig(r)}', rid=rid, act=r.get('Kind') == 'action', what=label, sig=_sig(r), status=r.get('Status'), delivery=r.get('DeliveryState'),
-        error=err, cut=err.startswith(ACT_CUT), note=r.get('DecideNote'), reason=r.get('Reason') if r.get('DeliveryState') in ('failed', 'unknown') else '',
-        by=r.get('DecidedBy'), final=final if r.get('Kind') != 'action' else '', result=str(result)[:300] if result else '',
-        back=bool(was) and r.get('Status') == 'pending' and not r.get('DeliveryState'), own=general.at_work(tid))
+    body = dict(rid=rid, act=r.get('Kind') == 'action', what=label, status=r.get('Status'), delivery=r.get('DeliveryState'), error=err.rstrip('. '),
+                cut=err.startswith(ACT_CUT), note=r.get('DecideNote'), reason=r.get('Reason') if r.get('DeliveryState') in general.NOT_GONE else '',
+                by=r.get('DecidedBy'), final=final, result=str(result)[:300] if result else '',
+                back=bool(olds) and r.get('Status') == 'pending' and not r.get('DeliveryState') and not err, **_went(r))
+    if olds and _card(olds[-1]) == _card(body): return
+    add(store, tid, 'card', f'card:{rid}:{len(olds)}:{_card(body)[:200]}', **body, own=general.at_work(tid))
+
+
+def _went(r: dict) -> dict:
+    "Whom a sent card went to, as its envelope says it after the send - {to, cc} - else nothing."
+    if r.get('DeliveryState') != 'sent': return {}
+    try: d = json.loads(r.get('Deliver') or '{}') or {}
+    except (TypeError, ValueError): return {}
+    ls = lambda x: [str(a) for a in (x if isinstance(x, list) else [x] if x else [])]
+    return {'to': ls(d.get('to')), 'cc': ls(d.get('cc'))} if isinstance(d, dict) else {}
 
 
 @_safe

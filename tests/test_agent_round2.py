@@ -113,8 +113,8 @@ class StoppedTurnTests(unittest.TestCase):
                  {'type': 'tool_result', 'name': 'Bash', 'detail': {'tool_call_id': 'c1', 'result': 'Signed up as erin.test@mail.example; its password is kept'}},
                  {'type': 'progress', 'name': 'text', 'detail': 'Setting the birth date...'}]
         general.file_turn(s, tid, trace, general.FAILED_MARK + 'it stopped')
-        facts = general.latest_block(s, tid, turn=True)
-        self.assertNotIn('WHICH YOU ANSWERED', facts); self.assertNotIn('NO NEW MESSAGE STARTED', facts)
+        from taskuary import events
+        facts = events.take(s, tid)[0]                 # ...the stopped turn is an event: the next turn is told it, once
         self.assertIn('still owed', facts); self.assertIn('erin.test@mail.example', facts)
         self.assertIn('agent-browser signup', sessionrecord.account(trace))
 

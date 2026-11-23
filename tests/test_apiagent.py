@@ -497,7 +497,7 @@ class TheSessionTests(unittest.TestCase):
     def test_a_kept_conversation_s_system_never_changes_and_what_changed_leads_the_next_turn(self):
         """A provider's prompt cache serves a prompt only up to its first changed byte: "the owner answered this themselves" landed in the
         system, and everything after it - the conversation kept too - was paid for again on the next turn (the owner, 2026-11-14: "every agent
-        turn should not refresh the entire cache"). The system is the first turn's, byte for byte; the new line leads the turn, once."""
+        turn should not refresh the entire cache"). The system is the first turn's, byte for byte; his own reply is the next turn's event, once."""
         from taskuary import general, llm as llm_mod, selfclose
         heard = []
         class Brain:
@@ -518,9 +518,9 @@ class TheSessionTests(unittest.TestCase):
             session.send_prompt('and the October one?', echo=False)
         (a, _), (b, said), (c, again) = heard
         self.assertEqual(a, b); self.assertEqual(b, c)
-        self.assertNotIn(selfclose.OWNER_ANSWERED_LINE, b)
-        self.assertIn(selfclose.OWNER_ANSWERED_LINE, said); self.assertTrue(said.startswith(general.UPDATED))
-        self.assertNotIn(selfclose.OWNER_ANSWERED_LINE, again, 'said once')
+        self.assertNotIn('Sent it.', b)
+        self.assertIn("The owner's own message on the thread", said); self.assertIn('Sent it.', said)
+        self.assertNotIn('Sent it.', again, 'said once')
 
     def test_a_model_that_refuses_its_tools_fails_the_turn_in_the_providers_words(self):
         """The gateway walk, 2026-11-19: the gateway turned the tools down (400) and the turn was asked again with none - the agent then told him

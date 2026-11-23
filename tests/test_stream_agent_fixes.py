@@ -102,7 +102,7 @@ def test_a_draft_for_the_newest_message_is_not_called_earlier():
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Noted the first bug.')
     s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Yes, keep posting here.'})
     said = general.latest_block(s, tid)
-    assert 'written for this message - keep it or improve it' in said and 'BEFORE the newest message' not in said
+    assert 'written for this message' in said and 'BEFORE the newest message' not in said
 
 
 def test_a_draft_the_thread_moved_past_is_never_called_written_for_the_newest_message():

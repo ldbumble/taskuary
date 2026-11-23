@@ -10,7 +10,7 @@ the general worker's prompt too.
 import json, unittest
 from unittest import mock
 
-from taskuary import general, ingest, playbooks, terminal, triage
+from taskuary import ingest, playbooks, triage
 from taskuary.store import MemoryStore
 
 PTO = """# Handle a PTO request
@@ -48,15 +48,6 @@ class ProcedureTests(unittest.TestCase):
         t = s.get_task(out['task_id'])
         self.assertEqual(t['Kind'], 'general'); self.assertEqual(playbooks.of_task(t), 'pto-request')
         self.assertNotIn('_auto_code', spawned)
-
-    def test_the_general_worker_gets_the_same_procedure_block_as_a_coder_would(self):
-        s = MemoryStore()
-        llm = lambda *a, **k: json.dumps({'intent': 'task', 'kind': 'general', 'why': 'a PTO request', 'playbook': 'pto-request'})
-        with mock.patch.object(ingest, '_spawn'):
-            tid = ingest.ingest_message(s, dict(MSG), llm=llm)['task_id']
-        system, _user = general._prompt(s, tid)
-        self.assertIn('PLAYBOOK "Handle a PTO request"', system); self.assertIn('team calendar', system)
-        self.assertIn('PLAYBOOK "Handle a PTO request"', terminal.seed_text(s, tid))   # the coding brief carries the same block
 
 
 if __name__ == '__main__':

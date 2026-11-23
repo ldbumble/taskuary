@@ -128,7 +128,7 @@ class BrainTests(unittest.TestCase):
         with mock.patch.object(general, 'MAX_CONTEXT', 24_000): _system, user = general._prompt(s, tid)
         self.assertLessEqual(len(user), 24_000 + 200)
         self.assertIn('What is the one thing they are all asking for?', user)
-        self.assertTrue(user.rstrip().endswith('Do not repeat the task context.'))
+        self.assertTrue(user.rstrip().endswith('What is the one thing they are all asking for?'))      # his newest line is the end
         self.assertIn('older source material trimmed', user); self.assertIn('mail 8 ', user)       # newest source kept (by SentAt)
         self.assertIn(general.READ_WHOLE, user)                         # ...and what was cut is said, with how to read it whole
 

@@ -78,15 +78,16 @@ class DocsReachThePromptTests(unittest.TestCase):
                                     llm=lambda sysm, usr, **k: (seen2.update(p=sysm + usr), 'ok')[1])
         self.assertFlows(seen2['p'], [MARK['soul'], MARK['style'], WNOTE], forbid=[MARK['coding'], MARK['learned'], NOTE])
 
-    def test_the_coding_agent_gets_agent_coding_and_the_notes_but_not_soul(self):
+    def test_the_coding_agent_gets_the_notes_and_no_rule_document(self):
         """The notes are the part that was missing: an agent was handed the operator rules and
-        the coding rules, and none of the verdicts the owner had actually given."""
+        the coding rules, and none of the verdicts the owner had actually given. The rule documents
+        no longer ride the seed (the owner, 2026-11-23: an agent gets context, tools and one sentence)."""
         s = seeded()
         # the sender is on the owner's own domain: a stranger's seed carries only the owner's own notes, never a verdict that
         # quotes mail (tests/test_stranger_live_fixes.py)
         s.set_setting('owner_email', 'owner@b.com', 't')
         # PW-184: SOUL stays with triage; JOB.md too - a worker that knows the mission starts helping with the mission instead of the ticket
-        self.assertFlows(terminal.seed_text(s, _task(s)), [MARK['agent'], MARK['coding'], NOTE], forbid=[MARK['soul'], MARK['job']])
+        self.assertFlows(terminal.seed_text(s, _task(s)), [NOTE], forbid=[MARK['soul'], MARK['job'], MARK['agent'], MARK['coding']])
 
     def test_task_context_and_the_handoff_writer_carry_them_too(self):
         s = seeded()

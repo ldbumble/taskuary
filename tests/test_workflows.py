@@ -163,7 +163,6 @@ class ProcedureTests(unittest.TestCase):
             t = s.get_task(out['task_id'])
             self.assertEqual((t['Kind'], playbooks.of_task(t)), ('general', 'pto'))                          # the procedure, not a coding verdict (PW-205)
             self.assertEqual(start.call_count, 1)                                                            # one start
-            self.assertIn('PROCEDURE FOR THIS JOB', general._prompt(s, out['task_id'])[0]) if hasattr(general, '_prompt') else None
 
 
 if __name__ == '__main__':

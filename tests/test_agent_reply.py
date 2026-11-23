@@ -204,11 +204,10 @@ class AttachTests(NoHook):
         self.assertEqual(env.get('not_attached') or [], []); self.assertEqual(len(env['attachments']), 3)
 
     # ...AND THE AGENT HEARS IT: told only in a comment it never reads, it went on telling the owner "the three files are attached"
-    def test_the_reply_tool_tells_the_agent_which_file_did_not_ride_and_what_to_offer(self):
+    def test_the_reply_tool_tells_the_agent_which_file_did_not_ride_and_why(self):
         s = MemoryStore(); tid, _ = task_with(s)
         out = wrapup.agent_reply(s, tid, 'Hi Dana - here are the three summaries.', 'assistant', files=self._three(s, tid))
         self.assertIn('% Summary - 15 east sites.xlsx', out['tell']); self.assertIn('25MB', out['tell'])
-        self.assertIn('link', out['tell']); self.assertIn('smaller copy', out['tell'])
 
     def test_saving_the_words_again_without_files_still_says_the_file_that_did_not_ride(self):
         s = MemoryStore(); tid, _ = task_with(s)

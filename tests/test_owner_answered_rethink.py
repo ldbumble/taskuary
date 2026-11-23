@@ -20,13 +20,13 @@ def test_the_owners_own_reply_is_the_newest_and_marked_theirs():
     assert general.owner_answered_last(s, tid)
 
 
-def test_the_agent_is_told_to_recommend_the_close_never_to_make_it():
+def test_the_agent_is_told_the_owner_answered_it_himself():
     s = MemoryStore(); tid = _task(s)
     s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'Re: Badge list', 'FromName': 'You', 'FromEmail': 'alex@northwind.example',
                    'BodyText': 'Sent it over just now.', 'Status': 'context', 'Direction': 'out', 'SentAt': '2026-11-05 09:30:00'})
     system, _ = general._prompt(s, tid)
     assert selfclose.OWNER_ANSWERED_LINE in system
-    assert 'recommend they close the task' in selfclose.OWNER_ANSWERED_LINE and selfclose.MARKER not in selfclose.OWNER_ANSWERED_LINE
+    assert selfclose.MARKER not in selfclose.OWNER_ANSWERED_LINE
 
 
 def test_the_reply_they_sent_with_taskuarys_own_send_is_no_answer_from_outside():

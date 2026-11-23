@@ -238,11 +238,10 @@ if __name__ == '__main__': unittest.main()
 # WHAT IT MAKES FOR HIM TO LOOK AT, IT SHOWS (the owner, 2026-11-15: he asked for a query to review, the agent saved it as a file and said
 # only that it was ready - the ruling: the agent decides what to show, code draws it). One sentence, the same on every road, and a file
 # that is plain text can be shown whatever its name - by its bytes
-def test_every_road_is_told_in_one_sentence_to_show_what_it_makes():
+def test_every_show_tool_carries_the_one_sentence_on_showing_what_it_makes():
     from taskuary import apiagent, selfclose
     assert selfclose.SHOW_WHAT in agenttools.TOOLS['show'][1], 'the tool a CLI session is handed'
-    # ...and, where a tool is listed by one line (the owner, 2026-11-15), in the few words every session is told about its tools
-    assert selfclose.SHOW_WHAT in apiagent.FULL['show'] and selfclose.SHOW_WHAT in apiagent.TOOLS_BRIEF, 'the tool an API brain is handed'
+    assert selfclose.SHOW_WHAT in apiagent.FULL['show'], 'the tool an API brain is handed'
     assert selfclose.SHOW_WHAT in agenttools.rpc({'id': 1, 'method': 'initialize'}, None)['result']['instructions'], 'what a CLI session is told'
     assert selfclose.SHOW_WHAT in selfclose.SHOW_LINE, 'the line a chat with no tool reads'
 

@@ -4,23 +4,17 @@ characters that go into the instructions, with a bar/percentage showing if you a
 
 The subagent rule lives in CODING.md, every shipped document fits under the number its own prompt cuts with, GET /api/doc/{name}
 returns that number, and an edited CODING.md takes the new section once."""
-import json, tempfile, unittest
+import tempfile, unittest
 from pathlib import Path
 from unittest import mock
 from fastapi.testclient import TestClient
 
 import taskuary
-from taskuary import brief, doclimits, general, server, store as store_mod, terminal, triage
+from taskuary import doclimits, server, store as store_mod, terminal, triage
 from taskuary.store import MemoryStore, SQLiteStore
 
 T = Path(taskuary.__file__).parent / 'templates'
 CODING = (T / 'coding.md').read_text(encoding='utf-8')
-
-
-def _coding_task(s):
-    tid = s.create_task({'Title': 'Fix the ledger export', 'Kind': 'coding', 'Status': 'open'}, 'o')
-    s.set_task_checklist(tid, ['Fix the CSV header', 'Add a test for the totals row'], 'o')
-    return tid
 
 
 class SubagentRuleTests(unittest.TestCase):
@@ -33,13 +27,6 @@ class SubagentRuleTests(unittest.TestCase):
             self.assertIn(s, sec, s)
         self.assertEqual(store_mod._FANOUT_NOW.strip(), ('## Several to-dos at once' + raw).strip())
         self.assertLess(len(sec), 500)   # the migration says what the template says
-
-    def test_it_reaches_the_coding_seed_whole(self):
-        s = MemoryStore(); s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
-        seed = terminal.seed_text(s, _coding_task(s), cli='claude')
-        self.assertIn('hand each to its own subagent in parallel', seed)
-        self.assertIn(terminal.flatten_rules(s.doc('coding'))[-120:], seed)                # the end of CODING.md: nothing was cut
-        self.assertNotIn('rules truncated here', seed)
 
 
 class BudgetTests(unittest.TestCase):

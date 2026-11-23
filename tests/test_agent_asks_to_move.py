@@ -163,7 +163,6 @@ class SeedTrimTests(unittest.TestCase):
         self.assertNotIn('prompt truncated', seed)
         self.assertIn('of 200,000 characters', seed)
         self.assertIn(selfclose.SEED_LINE, seed)                    # the end: how to finish and reply, whole
-        self.assertIn('## The work is in another repository'.lstrip('# '), seed)
 
 
 class CodingMdTests(unittest.TestCase):

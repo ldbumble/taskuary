@@ -48,7 +48,7 @@ def ideas(cx, since: str, until: str = '9999') -> list:
 def tally(xs) -> dict:
     c = Counter(i['grade'] for i in xs)
     useful, graded = c['taken'] + c['handled'], sum(c[g] for g in GRADES)
-    return {**{g: c[g] for g in GRADES}, 'pending': c['pending'], 'pct': round(100 * useful / graded) if graded else None}
+    return {**{g: c[g] for g in GRADES}, 'walked': c['walked'], 'pending': c['pending'], 'pct': round(100 * useful / graded) if graded else None}
 
 
 def line(t, since) -> str:
@@ -65,7 +65,7 @@ def report(xs, since) -> str:
         rows = [title]
         for k, v in sorted(g.items(), key=lambda kv: -len(kv[1])):
             t = tally(v)
-            rows.append(f"  {k or '(none)':<24} {'-' if t['pct'] is None else t['pct']:>4}%  " + '  '.join(f"{t[g]:>3} {g}" for g in GRADES))
+            rows.append(f"  {k or '(none)':<24} {'-' if t['pct'] is None else t['pct']:>4}%  " + '  '.join(f"{t[g]:>3} {g}" for g in (*GRADES, 'walked')))
         return rows
     out += [''] + by(lambda i: i.get('Kind') or 'idea', 'by kind:')
     if any(i['ws'] for i in xs): out += [''] + by(lambda i: i['ws'], 'by workstream:')

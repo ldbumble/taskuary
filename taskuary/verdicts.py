@@ -517,12 +517,14 @@ def withdraw(store, tid: int, why: str, by: str, which='', keep: int = 0) -> dic
     if not left: return {'ok': False, 'why': 'nothing unsent is waiting on this task, so there is nothing to withdraw'}
     if which.isdigit(): hit = [r for r in left if r['rid'] == int(which)]
     elif which: hit = [r for r in left if which in r['to'].casefold() or which in r['what'].casefold()]
-    else: hit = [r for r in left if r['kind'] in ('draft', 'draft_reply')][:1] or (left if len(left) == 1 else [])
+    else: hit = [r for r in left if r['kind'] in ('draft', 'draft_reply')][:1] or (left if len(left) == 1 and not left[0].get('handed') else [])
     if len(hit) != 1:
         return {'ok': False, 'why': ('several match - ' if hit else 'name which one - ' if not which else f'nothing unsent matches {which!r} - ') +
                 'give its review id: ' + '; '.join(f"{r['rid']}: {r['what']}" for r in (hit or left))}
     r = hit[0]
-    if not store.decide_review(r['rid'], 'closed_unsent', None, by, note=WITHDRAWN + why[:300]):
+    # ...an act his press handed to its agent, dropped on his word, ends with that press (cardqueue.handed): the line behind it moves on
+    if not (store.review_unhanded(r['rid'], 'closed_unsent', None, WITHDRAWN + why[:300]) if r.get('handed')
+            else store.decide_review(r['rid'], 'closed_unsent', None, by, note=WITHDRAWN + why[:300])):
         return {'ok': False, 'why': 'that one is being sent or already went - it cannot be withdrawn'}
     if r['kind'] == slots.KIND and (sid := slots.of_review(store.get_review(r['rid']))): slots.mark(store, tid, sid, done=True, actor=by)
     back = '' if r['kind'] == 'action' else ' It is kept under Not sent - Bring it back still sends it.'
@@ -533,9 +535,15 @@ def withdraw(store, tid: int, why: str, by: str, which='', keep: int = 0) -> dic
 def unsent(store, tid: int) -> list:
     """What the agent may still take back on task `tid`, newest first: its reply draft, its emails (slots), its posts and other proposals -
     each {rid, kind, to, what}. Never a close-out or what Taskuary's own ledger put on a playbook (theirs, not the agent's), and never
-    anything already sent. A playbook the agent proposed, or lessons it added to one, is its own to take back (the owner, 2026-11-10)."""
-    from . import proposals
-    out = []
+    anything already sent. A playbook the agent proposed, or lessons it added to one, is its own to take back (the owner, 2026-11-10) - and so
+    is an act his press handed it that has not been done (cardqueue.handed: walk 7, "nothing unsent" held the X post's line for good)."""
+    from . import cardqueue, proposals
+    def gave(r):
+        t = str(cardqueue._p(r).get('type') or '')
+        return {'rid': r['ReviewId'], 'kind': 'action', 'handed': True, 'to': t,
+                'what': f"the {proposals.POSTS[t]} post handed to the browser" if t in proposals.POSTS else 'the step handed to the browser'}
+    out = [gave(r) for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status IN ('approved','edited') ORDER BY ReviewId DESC",
+                                        (int(tid),)) if cardqueue.handed(r)]
     for rv in store._rows("SELECT * FROM review WHERE TaskId=? AND Status IN ('pending','held') AND DeliveryClaim IS NULL "
                           "AND IFNULL(DeliveryState,'')<>'sent' ORDER BY ReviewId DESC", (int(tid),)):
         k = rv.get('Kind')

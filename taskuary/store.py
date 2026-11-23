@@ -6051,6 +6051,14 @@ class SQLiteStore:
             self.cx.commit(); self._writes += 1
         if cur.rowcount: self._review_changed(rid)
         return bool(cur.rowcount)
+    def review_unhanded(self, rid, status, error, note) -> bool:
+        "An act his press handed to its agent that ends undone (cardqueue.keep, verdicts.withdraw): `status` with why - his press and its time kept."
+        with self.lock:
+            cur = self.cx.execute("UPDATE review SET Status=?, ActError=?, DecideNote=? WHERE ReviewId=? AND Kind='action' AND Status IN ('approved','edited')",
+                                  (status, error, note, rid))
+            self.cx.commit(); self._writes += 1
+        if cur.rowcount: self._review_changed(rid)
+        return bool(cur.rowcount)
     def review_overcome(self, rid, final, note) -> bool:
         "An act's press that failed, done since by a later step (browsergate.overcome): settled as done, with what came of it - its error gone."
         with self.lock:

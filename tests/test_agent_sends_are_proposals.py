@@ -363,6 +363,34 @@ def test_the_final_post_held_in_the_browser_stands_on_the_card_he_pressed_in_fro
     assert cardqueue.state(s, tid)['live'] == [rd]
 
 
+def test_a_handed_post_that_cannot_go_comes_back_for_his_press_or_is_dropped_and_the_line_moves_on():
+    """Walk 7, 2026-11-23: Post via the browser on the X card; there was no X account to sign in with. withdraw_draft answered "nothing unsent",
+    the Reddit card behind it waited for good, and the agent ended on "the earlier X step is blocking it". A handed act its agent cannot do is
+    kept with why - the press ends failed, saying it, and the card stands again for his press (try again or Dismiss); one he drops is withdrawn."""
+    from taskuary import agenttools, cardqueue, conversation, general, proposals, verdicts
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = s.create_task({'Title': 'Post the tea picture', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    post = lambda kind: s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': f'the agent proposes to post on {kind}',
+                                      'DraftText': json.dumps({'action': 'run_tool', 'type': kind, 'text': 'Rain, tea, a quiet Monday.'})})
+    x, rd = post('x_post'), post('reddit_post')
+    with mock.patch.object(general, 'to_agent', return_value='woke'): proposals.via_browser(s, x, 'Rain, tea, and a quiet Monday.')
+    assert cardqueue.state(s, tid)['live'] == [x]
+    refused = json.loads(agenttools.call(s, tid, 'keep_card', {'which': f'rv{x}'}, {}))
+    assert not refused['ok'] and 'why' in refused['why'], 'kept without why: his card would not say what stopped it'
+    out = json.loads(agenttools.call(s, tid, 'keep_card', {'which': f'rv{x}', 'why': 'there is no X account to sign in with'}, {}))
+    assert out['ok'], out
+    new = int(out['kept'][f'rv{x}'][2:]); old, n = s.get_review(x), s.get_review(new)
+    assert conversation._card(old)['status'] == 'failed' and 'no X account' in old['ActError'], 'his press ends failed where he pressed it, saying why'
+    assert n['Status'] == 'pending' and json.loads(n['DraftText'])['text'] == 'Rain, tea, and a quiet Monday.' and 'result' not in json.loads(n['DraftText'])
+    assert cardqueue.in_flight(s, tid) is None and cardqueue.state(s, tid)['live'] == [rd], 'the line moves on: Reddit comes forward'
+    assert new in cardqueue.held(s, tid), 'and X stands again, for his press, after it'
+    # ...and one he drops while it is handed is withdrawn on his word, never "nothing unsent"
+    with mock.patch.object(general, 'to_agent', return_value='woke'): proposals.via_browser(s, rd, '')
+    w = verdicts.withdraw(s, tid, 'he skipped Reddit for now', 'agent', f'rv{rd}')
+    assert w['ok'] and s.get_review(rd)['Status'] == 'closed_unsent' and cardqueue.in_flight(s, tid) is None, w
+    assert cardqueue.state(s, tid)['live'] == [new]
+
+
 def test_a_post_proposed_under_a_reordered_name_is_told_the_acts_there_are_and_then_stands_unconnected():
     """HIPAA walk 6, H6: run_tool items typed `post_linkedin`, `post_x`, `post_reddit` came back "there is no tool 'post_linkedin'" - the
     "did you mean" matched only a prefix - and the agent told the owner three times the posts were impossible. The refusal names every act a

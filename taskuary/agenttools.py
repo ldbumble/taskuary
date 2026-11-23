@@ -185,8 +185,9 @@ TOOLS = {
                        _S({'why': _STR, 'which': _STR}, ('why',)), ('POST', '/api/agent/withdraw-draft')),
     'keep_card': ('own', "A card the owner's newest line or a new message greyed, that still stands as it is: it comes back under the "
                          "newest line, the same words and envelope, for his press - no new proposal. `which`: its review id as the screen "
-                         "fact names it (a card of many: 'rv1 + rv2'). One the input changed: propose its new version instead.",
-                  _S({'which': _STR}, ('which',)), ('GET', '/api/tasks/1')),
+                         "fact names it (a card of many: 'rv1 + rv2'). One the input changed: propose its new version instead. "
+                         "One his press handed you that you cannot do (no account, the site refused): keep it with `why` - his card says it.",
+                  _S({'which': _STR, 'why': _STR}, ('which',)), ('GET', '/api/tasks/1')),
     # ...`slot` (the agent walk, 2026-11-10): triage had put "an email to Ray Colton" on the task, to draft; this tool took an address and
     # no slot, so the agent's email stood as a second card beside the empty one. The agent names the line it fills - no name is matched here
     'propose_email': ('propose', "Draft an email this task needs. `slot`: the id of the checklist line this email is (\"-> email to ..., "
@@ -686,7 +687,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'withdraw_draft': return _j(doors['withdraw'](tid, str(a.get('why') or ''), str(a.get('which') or '')))
     if name == 'keep_card':
         from . import cardqueue
-        return _j(cardqueue.keep(store, tid, a.get('which'), 'agent'))
+        return _j(cardqueue.keep(store, tid, a.get('which'), 'agent', str(a.get('why') or '')))
     if name == 'propose_reply':
         who = {k: a[k] for k in ('answers', 'only', 'cc', 'why_to') if a.get(k) not in (None, '')}
         was, files = verdicts.unsent(store, tid), attached(store, tid, a.get('attach'))

@@ -140,11 +140,17 @@ def unheard(store, tid: int) -> bool:
 # times, each a model call and one more grey copy, and a reply to Paula greyed by Gail's unrelated message). Every input greys what waits
 # (proposals.set_aside_drafts) and the agent's next turn raises again, under the newest line, each card that still stands - the same card,
 # by this one verb for every kind, so nothing live ever sits above his newest line
+# ...AND AN ACT HIS PRESS HANDED TO ITS AGENT THAT CANNOT BE DONE COMES BACK THE SAME WAY (walk 7, 2026-11-23: Post via the browser on the X card,
+# no X account to sign in with; it could not be withdrawn - "nothing unsent" - and every card behind it waited for good, the Reddit one greyed
+# with no reason). Kept with `why`: the press it had ends failed where he pressed it, saying why, and the card stands again for his press -
+# Post via the browser to try again, Dismiss to skip it - so the line moves on. His word to drop it is withdraw_draft's (verdicts.withdraw)
 KEEP = ('Kept: {ids} stand{s} again under the newest line, as {it} was - nothing was rewritten.')
+UNDONE = 'handed to its agent, which could not do it'
 LIKE, MORE = ('MessageId', 'RunId', 'Kind', 'DraftText', 'Reason', 'Deliver', 'Origin'), ('AnswersMid', 'Instructions', 'FilesPromised', 'DraftBy', 'DraftWhy')
-def keep(store, tid: int, which, by: str = 'agent') -> dict:
+def keep(store, tid: int, which, by: str = 'agent', why: str = '') -> dict:
     """Raise again each greyed card `which` names ('rv12 + rv13') on task `tid` as a new card, the same words and envelope, drawn under the
-    newest line. Never one that went, was turned down or is live; a held step is run again instead (its gate holds it anew)."""
+    newest line - and an act his press handed to its agent that it could not do (handed), with `why`, which its failed press then says.
+    Never one that went, was turned down or is live; a held step is run again instead (its gate holds it anew)."""
     import re
     from . import bulkcard
     from .proposals import HELD_ACTS, SET_ASIDE, _action
@@ -154,7 +160,13 @@ def keep(store, tid: int, which, by: str = 'agent') -> dict:
     for i in ids:
         r = store.get_review(i)
         if not r or r.get('TaskId') != int(tid): bad.append(f'rv{i}: no card of this task has that id'); continue
-        if not (r['Status'] == 'superseded' and r.get('DecideNote') == SET_ASIDE):
+        if handed(r):
+            if not (w := ' '.join(str(why or '').split())[:300]):
+                bad.append(f'rv{i}: say in `why` what stopped it (no account to sign in with, the site refused) - his card says it'); continue
+            p = {k: v for k, v in json.loads(r['FinalText']).items() if k != 'result'}
+            if not store.review_unhanded(i, 'superseded', w, UNDONE): bad.append(f'rv{i}: it was done or settled meanwhile'); continue
+            r = {**r, 'DraftText': json.dumps(p)}
+        elif not (r['Status'] == 'superseded' and r.get('DecideNote') == SET_ASIDE):
             bad.append(f"rv{i}: not greyed by an input ({_card_status(r)}) - only a greyed card is kept; raise a new one where it is still needed"); continue
         if r['Kind'] == 'action' and _action(r) in HELD_ACTS: bad.append(f'rv{i}: a step held for his press - run it again and Taskuary holds it anew'); continue
         new = store.add_review({**{k: r.get(k) for k in LIKE}, 'TaskId': int(tid), 'Status': 'pending'})
@@ -336,7 +348,8 @@ def screen(store, tid: int, skip=()) -> str:
         if u['done'] is None:
             if (h := next((x for x in u['rows'] if handed(x)), None)):
                 waiting.append(f"Handed to you by his press {clock(h.get('DecidedAt'))}, NOT done yet - do it; it is done once its own final press "
-                               f"has gone, and the next card waits until then: {name(u, h)}")
+                               f"has gone, and the next card waits until then. One you cannot do now: keep_card it with `why` (it stands again "
+                               f"for his press); one he drops: withdraw_draft it: {name(u, h)}")
             elif r and ids <= past: greyed(r, n)
             elif ids & live:
                 waiting.append(f'Waiting for his press now{outcome(r)}: {n}')

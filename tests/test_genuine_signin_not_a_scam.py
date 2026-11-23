@@ -113,3 +113,16 @@ def test_a_scam_on_the_owner_says_what_to_do():
     said = 'Asks to pay invoice #4471 to new bank details. Warn accounts payable and check with Payworth on a number you already have.'
     s.set_message_danger(mid, said, 'owner')
     assert s.get_message(mid)['Danger'] == said
+
+
+def test_a_stranger_s_ask_and_a_vendor_s_lapsing_notice_are_work_not_scams():
+    # walk 10 (2026-11-23): a first-time sender asking for a quote filed fyi under "the invitation rule", and a vendor's no-reply "payment
+    # failed, update within 7 days" filed fyi as a scam - the guide read an unknown sender as the sign of a scam. Who the sender is not
+    # tells a scam; an ask is work from anyone, and a lapse of the owner's is theirs to check on the service's own site
+    g = ' '.join(triage.SHIPPED.split())
+    scams = g.split('**Strangers and scams.**', 1)[1].split('##', 1)[0]
+    assert scams.startswith(' A scam is told by who the sender is not, never by what is asked')
+    assert 'is an ask like anyone' in scams and "theirs to check on the service's own site" in scams
+    assert 'a request for something FROM the owner is no invitation' in g
+    soul = (triage._Path(triage.__file__).parent / 'templates' / 'soul.md').read_text(encoding='utf-8')
+    assert 'prefer fyi over inventing work' not in soul, 'the shipped SOUL.md never contradicts the guide\'s "lean task"'

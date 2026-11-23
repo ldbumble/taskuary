@@ -780,7 +780,12 @@ def show_files(store, tid: int, paths) -> str:
     if isinstance(paths, str): paths = [paths]
     roots, rows, why, drawn = _show_roots(), [], [], []
     for raw in list(paths or [])[:12]:
-        try: p = Path(str(raw)).expanduser().resolve()
+        # ...A PATH WITHOUT ITS ROOT IS THE TASK'S OWN (walk 9, 2026-11-23: "outputs/TQ-0014/sample-invoice.pdf" and a bare file name were
+        # refused as outside the outputs folder they were in, and the agent's end_turn said it showed them): read against its outputs folder,
+        # then the scratch folder the agent works in - never the server's own working folder
+        try:
+            q = Path(str(raw)).expanduser()
+            p = q.resolve() if q.is_absolute() else next((x for x in (outputs.folder(tid) / q, roots[0] / q) if x.is_file()), roots[0] / q).resolve()
         except (OSError, ValueError): p = None
         n = file_name(raw)
         if p is None or not any(p.is_relative_to(r) for r in roots):

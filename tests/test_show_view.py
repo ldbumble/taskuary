@@ -363,3 +363,18 @@ def test_a_sheet_previews_its_numbers_as_their_cells_format_them():
     ws.append(['Travel', '=B2/10', 0.1234]); ws['B3'].number_format = '$#,##0.00'; ws['C3'].number_format = '0.0%'
     p = Path(tempfile.mkdtemp()) / 'budget.xlsx'; wb.save(p)
     assert outputs.sheet(p)['rows'][1:] == [['Payroll', '$147,210', '-63%'], ['Travel', '$14,721.00', '12.3%']]
+
+
+def test_a_path_without_its_root_is_read_in_the_tasks_own_folders():
+    """WALK 9 (2026-11-23): show refused "outputs/TQ-0014/sample-invoice.pdf" and a bare "crm-10-seat-pricing.pdf" as outside the outputs folder
+    they were in, while the same turn's end_turn said it showed them. A relative path is the task's own: its outputs folder, then the scratch."""
+    from taskuary import outputs
+    from taskuary.store import task_ref
+    s = MemoryStore(); tid = s.create_task({'Title': 'Sample invoice', 'Kind': 'general'}, 'owner')
+    out = outputs.folder(tid); out.mkdir(parents=True, exist_ok=True)
+    (out / 'sample-invoice.png').write_bytes(b'\x89PNG\r\n\x1a\n' + b'\0' * 32)
+    for name in ('sample-invoice.png', f'outputs/{task_ref(tid)}/sample-invoice.png'):
+        said = agenttools.show_files(s, tid, [name])
+        assert 'only a file in' not in said and 'no such file' not in said, (name, said)
+    try: agenttools.show_files(s, tid, ['../../../../../../etc/hosts']); raise AssertionError('a path climbing out is never read')
+    except ValueError as e: assert 'only a file in' in str(e) or 'no such file' in str(e), e

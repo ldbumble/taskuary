@@ -3530,13 +3530,15 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         # waited for a yes (the 2026-09-29 replay, 2 runs in 3). The two verb names are the kinds they name; anything
         # else the model must fix itself, never a silent regular agent.
         k = str(params.get('kind') or '').strip().lower()
-        params['kind'] = {'coding_agent': 'coding', 'coder': 'coding', 'regular_agent': 'general'}.get(k, k)
+        # ...and the owner's own to-do is `todo` to the model: its word was "task", the very word he uses for any job - "start a new task find
+        # a dentist" was read as a to-do of his and nothing was started (walk 9, 44). The stored kind stays `task`
+        params['kind'] = {'coding_agent': 'coding', 'coder': 'coding', 'regular_agent': 'general', 'todo': 'task'}.get(k, k)
         # ...a report or a routine is an agent's job, on the desk and the phone alike (F1, _new): its agent sets it up with its tools
         if params['kind'] in WORK_KINDS: params['kind'] = 'general'
         if params['kind'] in NEW_ONLY and not routes():
             raise CallMiss(f"New → {params['kind']} is on the desk - say so in plain words, and what to write there. Nothing was started.")
         if params['kind'] not in task_kinds.TRIAGE and params['kind'] not in NEW_ONLY:
-            raise CallMiss(f"task.create_from_text kind is task, coding, general, send, goal or dashboard - not {k or 'nothing'}. Nothing was started.")
+            raise CallMiss(f"task.create_from_text kind is todo, coding, general, send, goal or dashboard - not {k or 'nothing'}. Nothing was started.")
     # ...and a new to-do never names a task that is already open: "Remind me about the Payworth invoice (TQ-0005) tomorrow at
     # 9am" was proposed as a NEW task about TQ-0005 instead of putting TQ-0005 away until then (2026-10-06)
     if kind == 'task.create_from_text' and str(params.get('kind') or '') == 'task':
@@ -3959,6 +3961,9 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # what goes out (2026-10-20). "walk me through my tasks" typed asked "Start a script by its name: ...?" and its yes walked nowhere
     # (the 2026-10-22 re-walk); it is the opener's own Walk me through now, at the card on the table (remote_assistant.carry_out)
     if kind == 'script.start': instant = True
+    # ...and a to-do of his own, asked for: it goes on his list and nothing leaves - his ask is his go-ahead (the owner, 2026-11-17); a yes
+    # for it was a round trip for nothing (walk 9, 44)
+    if kind == 'task.create_from_text' and params.get('kind') == 'task': instant = True
     # ...and a PUT-DOWN typed (the owner, 2026-10-23): close it, close it with a note, not a task, not ours just this once - the words press
     # it, as on the desk (PUT_DOWN); the receipt is the item's line in the past (_past)
     down = kind in ('task.complete', 'task.not_a_task', 'message.file') and bool(target)
@@ -4893,7 +4898,9 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
     # and then "What we were talking about: remember that payroll questions go to Gail Got it - ..." - the Assistant's chat, in his name).
     # A general agent hears the brief as Taskuary's first prompt (below); a coding one is seeded from the task itself, so it keeps the brief
     # ...and where the model reworded what he typed, `said` is his and `job` is Taskuary's brief (setup_task, his_words)
-    made = setup_task(store, job if kind == 'general' else brief, actor, title=title or _handoff_title(store, tid, said or job), kind=kind, agent_job=kind == 'general',
+    # ...TITLED BY WHAT IT IS: the job as written (his words at New; the model's at the Assistant), never his sentence around it - 'Start a
+    # new task "find a dentist ..."' was the title of the dentist task (walk 9, 44)
+    made = setup_task(store, job if kind == 'general' else brief, actor, title=title or _handoff_title(store, tid, job), kind=kind, agent_job=kind == 'general',
                       repo=repo, said=said, door=door or 'the Assistant chat', files=files)
     # ...AND CLASSED AS A MAIL IS (the owner, 2026-11-20: "17% of 2,340" ran on the big model): the reading that asked whether it is open work
     # already says how hard it is - kept on the task, so its agent starts on the gear for it (brainroute), with no second model call

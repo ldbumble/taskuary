@@ -24,7 +24,7 @@ _ROLES = ' | '.join(f"{k} ({r['title'].lower()})" for k, r in roles.ROLES.items(
 # has no business offering (triage corrections, dispatch plumbing) and are left out of the catalogue.
 PURPOSE = {
     'task.create_from_message': 'hand this message to an agent or put it on the list - `kind`: coding | general | task',
-    'task.create_from_text':    ('a new job with no message behind it - `kind`: task (a to-do or reminder the owner does '
+    'task.create_from_text':    ('a new job with no message behind it - `kind`: todo (a to-do or reminder the owner does '
                                  'themselves, no agent) | general (a regular agent) | coding | send (a new message the owner starts, '
                                  'to someone - `channel`: email | whatsapp | telegram | teams | slack, the one they said; `to`: the name of '
                                  'the person, chat or group as they said it (never the channel word), '
@@ -400,7 +400,7 @@ def block(store=None) -> str:
         '     mean (six months ago is days: 200).',
         '  3. they want something DONE and it says what - CALL it now; its button is their confirmation. A reminder or',
         # ...and a message to send (the owner, 2026-11-03: "send this on WhatsApp" pasted the words into the chat): New, filled in, for their Send
-        '     a to-do they will do themselves is task.create_from_text kind task, a message to send kind send (channel,',
+        '     a to-do they will do themselves is task.create_from_text kind todo, a message to send kind send (channel,',
         '     to, the words in text, never pasted here), a meeting meeting.new; a task that',
         '     exists is never a new one - change it with the task bucket.',
         '  4. it is not clear which - LOOK first; then, if two things still fit, ASK naming both. A question about',

@@ -205,6 +205,28 @@ class AFileGoesWithTheJob(unittest.TestCase):
         self.assertEqual(s.get_task(tid)['Title'][:9], 'Summarise', 'a title made of his words, never of a path')
         self.assertIn(str(kept), general.prompt_parts(s, tid)[2], "the agent's own prompt names it")
 
+    def test_a_new_task_asked_on_the_phone_starts_titled_by_what_it_is(self):
+        """Walk 9 (44): "start a new task find a dentist near the office" on the phone - the task was titled with his wrapper words
+        ('Start a new task "find a dentist ..."') and an extra yes asked before anything was made. A start is titled by the job the words
+        name, and on the phone it is made at once: his ask is his go-ahead. The model's to-do word is `todo` - the tool's word for it was
+        "task", the very word he uses for any job."""
+        s = T.store()
+        for kind, text in (('general', 'Find a dentist near the office'), ('todo', 'Book a dentist near the office')):
+            self.made_at_once(s, kind, text)
+
+    def made_at_once(self, s, kind, text):
+        llm, _ = scripted('CALL: ' + json.dumps({'kind': 'task.create_from_text', 'params': {'kind': kind, 'text': text}}))
+        with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch('taskuary.general.start_session'), \
+                mock.patch('taskuary.server.store', s), mock.patch.object(terminal, 'live_sessions', return_value=[]), \
+                concierge.delivering(concierge.PHONE):
+            out = concierge.say(s, f'start a new task "{text.lower()}"', llm=llm, actor='owner-whatsapp')
+            from taskuary import remote_assistant
+            said = remote_assistant.carry_out(s, out, None)
+        self.assertTrue((out.get('proposal') or {}).get('auto'), out.get('say'))
+        made = [t for t in s.list_tasks() if t.get('Title') == text]
+        self.assertEqual(len(made), 1, (said, [t['Title'] for t in s.list_tasks()]))
+        self.assertNotIn('Nothing happens until you say yes', said)
+
     def test_a_file_attached_to_a_message_goes_on_its_task_and_its_ask(self):
         from taskuary import config, outbox, outputs
         s = T.store()

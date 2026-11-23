@@ -125,11 +125,16 @@ NO_TOKEN = ("not sent: this session has no token of its own (TASKUARY_TOKEN) - T
 def _flag(a): return '--' + a.replace('_', '-')
 
 def _stranger_task(tid: int) -> bool:
-    "Fail closed: a task whose origin cannot be read counts as a stranger's."
+    """Fail closed: a task whose origin cannot be read counts as a stranger's. READ, NEVER WRITTEN (his live app, 2026-11-23: inside Codex's
+    sandbox the agent's commands cannot write the database, and opening the store runs its schema - so every Codex agent on his own task
+    was refused the browser as "a stranger's task"): the origin the server keeps on the task (origin.of_task writes it), on a read-only open."""
+    import sqlite3
+    from pathlib import Path
     try:
-        from . import origin
-        from .store import SQLiteStore
-        return origin.of_task(SQLiteStore(config.db_path()), tid)[0] == 'stranger'
+        cx = sqlite3.connect(f"file:{Path(config.db_path()).as_posix()}?mode=ro", uri=True, timeout=5)
+        try: r = cx.execute('SELECT Origin FROM task WHERE TaskId=?', (int(tid),)).fetchone()
+        finally: cx.close()
+        return r is None or r[0] == 'stranger'
     except Exception: return True
 
 def session() -> tuple:

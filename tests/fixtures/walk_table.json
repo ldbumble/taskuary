@@ -57,7 +57,7 @@
     {"id": "W48", "rule": ["start"], "steps": ["heading reports"], "action": "next", "expect": "R2", "read": ["R1"], "back": true},
     {"id": "W49", "browser": {"skip": "Put it on my list on the desk keeps the new task (proposalCard keep), not yet driven here - pinned in process"}, "rule": ["edge"], "steps": ["open R1"], "action": "leave R1 put_on_list", "expect": "NEW", "then": {"action": "next", "expect": "R2"}, "back": true},
     {"id": "W50", "rule": ["start"], "steps": ["start", "next", "new-chat"], "action": "start", "expect": "T1", "back": false},
-    {"id": "W51", "rule": ["phone"], "steps": ["phone start"], "action": "phone next", "expect": "T2", "desk": "T2", "back": true},
+    {"id": "W51", "rule": ["phone"], "browser": {"skip": "the phone's own walk is driven in process"}, "steps": ["open R1", "phone start"], "action": "phone next", "expect": "T2", "desk": "R1", "back": true, "note": "the phone walks its own walk: its Walk and its Next never move the desk off its row (the owner, 2026-11-23)"},
     {"id": "W52", "rule": [7], "steps": ["start", "peek T2", "close-elsewhere T2"], "action": "next", "expect": "T3", "back": true},
     {"id": "W53", "rule": [4], "steps": ["open T3"], "action": "next", "expect": "T4", "rail": {"has": ["T3"]}, "back": true},
     {"id": "W54", "browser": {"steps": ["start"], "action": "next-twice"}, "rule": ["edge"], "steps": ["start", "next press=p1"], "action": "next press=p1", "expect": "T2", "lines": 0, "back": true},

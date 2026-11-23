@@ -15,11 +15,13 @@ The walk starts at the TOP of the rail.
 
 The concierge still words the row (present_turn) and operations still run the closes: this decides WHICH row and WHICH effect."""
 import builtins
+import contextvars
 import hashlib
 import json
 import threading
 import time
 from collections import OrderedDict
+from contextlib import contextmanager
 from datetime import datetime
 
 from loguru import logger
@@ -202,15 +204,41 @@ def as_item(store, rows: list) -> dict:
                                                    members=[r['key'] for r in rows]))
 
 
+# ── whose walk ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+_SEAT = contextvars.ContextVar('railwalk_seat', default=None)
+
+
+def seat() -> str:
+    """WHOSE WALK THIS IS: the desk's ('') or one phone chat's own ('channel:chat'). Each has its own row on screen and its own place, and
+    nothing one does moves the other (the owner, 2026-11-23: they shared one, so an answer on the phone moved the desk to another task, the
+    phone's next turn said its agent was "not the one on the table", and the phone's Next measured from the desk's place). A phone turn's
+    chat is remote_assistant.asking(); a look that speaks to a chat unasked names it (seated)."""
+    if (s := _SEAT.get()) is not None: return s
+    from . import remote_assistant
+    h = remote_assistant.asking()
+    return f"{h['channel']}:{h['chat']}" if h and h.get('chat') else ''
+
+
+@contextmanager
+def seated(s: str):
+    tok = _SEAT.set(s or '')
+    try: yield
+    finally: _SEAT.reset(tok)
+
+
+def _key() -> str: return f'{KEY}:{s}' if (s := seat()) else KEY
+
+
 # ── the state ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 def _blank() -> dict: return {'v': 1, 'on': None, 'members': [], 'first': None, 'last': None, 'kind': 'none', 'ended': False, 'places': {}}
 
 
 def state(store) -> dict:
-    """The one walk (3.3), shared by the desk and the phone (Q5): the row on screen, kept even after that row has left the rail."""
-    try: st = json.loads(store.get_setting(KEY) or 'null')
+    """This seat's walk (3.3): the row on screen, kept even after that row has left the rail."""
+    try: st = json.loads(store.get_setting(_key()) or 'null')
     except (ValueError, TypeError): st = None
-    if not isinstance(st, dict) or st.get('v') != 1:
+    if (not isinstance(st, dict) or st.get('v') != 1) and seat(): st = _blank()
+    elif not isinstance(st, dict) or st.get('v') != 1:
         st = _blank()
         # ...the table the old walk left (concierge's assistant_current:<dock>), read through once: a restart onto this build keeps it
         try:
@@ -228,7 +256,7 @@ def _write(store, st: dict):
         for k in (f'assistant_current:{dock}', f'assistant_current_closed:{dock}'): store.set_setting(k, '', 'system')
     places = st.get('places') or {}
     if len(places) > PLACES: st['places'] = dict(list(places.items())[-PLACES:])
-    store.set_setting(KEY, json.dumps(st, default=str), 'system')
+    store.set_setting(_key(), json.dumps(st, default=str), 'system')
     for k in LEGACY_KEYS:
         if store.get_setting(k): store.set_setting(k, '', 'system')
 

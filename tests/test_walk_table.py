@@ -77,14 +77,15 @@ class Walk:
             funnel.settle(self.s, self.key(args[0]), 'surfaced', 'owner', read=True); return walkworld.reconcile(self.s)
         if verb == 'new-chat': funnel.reset_walk(self.s); self.on = None; return None
         if verb == 'phone':
-            # the phone's own roads - its Walk pick and its Next tap - and the desk then reads the one walk they share (Q5)
+            # the phone's own roads - its Walk pick and its Next tap - on the phone chat's own walk: the desk keeps its own (railwalk.seat)
             from taskuary import remote_assistant
-            if args[0] == 'start': remote_assistant.walk(self.s, 'owner', opener=False)
-            else:
-                with concierge.delivering(concierge.PHONE):
-                    remote_assistant.run_act(self.s, {'t': 'next'}, {'key': railwalk.on(self.s)} if railwalk.on(self.s) else None, 'owner')
-            on = railwalk.on(self.s)
-            return self.land({'item': {'key': on} if on else None, 'walk': railwalk.peek(self.s)})
+            with railwalk.seated('whatsapp:phone'):
+                if args[0] == 'start': remote_assistant.walk(self.s, 'owner', opener=False)
+                else:
+                    with concierge.delivering(concierge.PHONE):
+                        remote_assistant.run_act(self.s, {'t': 'next'}, {'key': railwalk.on(self.s)} if railwalk.on(self.s) else None, 'owner')
+                on = railwalk.on(self.s)
+                return self.land({'item': {'key': on} if on else None, 'walk': railwalk.peek(self.s)})
         if verb == 'reload':
             walk = railwalk.peek(self.s)
             self.on = walk['on']
@@ -263,7 +264,7 @@ def test_next_at_the_bottom_goes_to_the_row_above_its_sender_wrote_again_on(worl
 
 
 def test_next_on_a_batch_reads_it_after_the_other_surface_moved_the_walk(world):
-    """The desk and the phone share one walk (Q5). The desk has an FYI batch on its table; the phone opens a task, so the stored walk is
+    """A second window on the desk moved its walk. The desk has an FYI batch on its table; the other window opens a task, so the stored walk is
     on that task; then the desk's Next names its batch. The batch was not the walk's held row and no rail row carries a batch's key, so its
     kind read as `none`: nothing was read, the answer said so, and the page gave the batch back unread under a walk that had moved on."""
     from taskuary import railwalk
@@ -272,7 +273,7 @@ def test_next_on_a_batch_reads_it_after_the_other_surface_moved_the_walk(world):
     w.do('open I1'); w.do('next')
     batch = w.on
     assert batch == w.key('F1-F4')
-    railwalk.open(s, w.key('T1'))                     # ...the phone's pick: the shared walk now stands on T1
+    railwalk.open(s, w.key('T1'))                     # ...the other window's pick: the walk now stands on T1
     out = railwalk.next(s, batch)
     assert sorted(out['read']) == sorted(railwalk.members_of(batch)), f'the batch Next left was not read: {out["read"]}'
     assert not any(walkworld.matches(r, src[f'F{n}']) for r in walkworld.rows(s) for n in range(1, 5))

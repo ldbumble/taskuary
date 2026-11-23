@@ -336,7 +336,8 @@ def _sid(store, tid: int) -> str: return str(store.get_setting(f'{SID_KEY}:{tid}
 
 
 def current_key(store, tid: int = None) -> str:
-    """The row on the table - railwalk's `on`, the one walk the desk and the phone share (Q5). `tid` (the dock) is no longer part of it."""
+    """The row on the table - railwalk's `on`, this seat's own: the desk's, or the phone chat's whose turn this is (railwalk.seat).
+    `tid` (the dock) is no longer part of it."""
     from . import railwalk
     return railwalk.on(store)
 
@@ -350,11 +351,14 @@ def set_current(store, tid: int, key: str | None, actor: str = 'assistant', clos
     if railwalk.on(store) != key: railwalk.open(store, key, actor=actor, record=False)
 
 
-def resume(store, actor: str = 'owner') -> dict:
-    """A hand-off's hello: the item ON THE TABLE when there is one, else the walk from the top (railwalk.start)."""
+def resume(store, actor: str = 'owner', to: str = None) -> dict:
+    """A hand-off's hello: the item ON THE TABLE when there is one, else the walk from the top (railwalk.start). `to`: the seat it is
+    handed to (a phone chat's 'channel:chat') - the press puts the desk's row on that chat's own table, and from there each walks on
+    its own (railwalk.seat)."""
     from . import railwalk
     held = restore_current(store, general.dock_task(store, actor)[0]['TaskId'])
-    return railwalk.open(store, held['key'], actor=actor) if held and held.get('key') else railwalk.start(store, actor=actor)
+    with railwalk.seated(to) if to is not None else nullcontext():
+        return railwalk.open(store, held['key'], actor=actor) if held and held.get('key') else railwalk.start(store, actor=actor)
 
 
 def restore_current(store, tid: int = None) -> dict | None:

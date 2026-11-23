@@ -864,7 +864,7 @@ PILE_BLIND_SETTINGS = (
     'assistant_current:',        # concierge.CURRENT_KEY - the item on the table, written as each press puts it there
     'concierge_cli_sid:',        # concierge.SID_KEY - the CLI conversation, resumed turn to turn
     'assistant_last_undo',       # concierge.LAST_UNDO - what the phone's Undo pill runs
-    'rail_walk',                 # railwalk.KEY - where the one walk stands, written by every walk move (the pile is the line it reads)
+    'rail_walk',                 # railwalk.KEY - where the desk's walk and each phone chat's own stand, written by every walk move
     'assistant_active_at',       # welcome.ACTIVE_KEY - the owner's last press, written after every one (owner_presence)
     'landing:',                  # landing.KEY - a coding agent's edits and commits, written by its hook on every Edit (the task page's landing card
                                  # reads it; no rail card does) - each one emptied the pile while an agent worked (2026-11-09)

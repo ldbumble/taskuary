@@ -336,6 +336,38 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
         self.assertEqual(send.call_args.args[1], TG_CHAT)
 
 
+class OwnPlaceTests(unittest.TestCase):
+    """THE PHONE AND THE DESK EACH HAVE THEIR OWN PLACE (the owner, 2026-11-23): they shared one row on screen, so answering on the phone moved
+    the desk to another task, the phone's next turn said its agent was "not the one on the table", and the phone's Next measured from the
+    desk's place."""
+
+    def test_the_phone_walks_its_own_walk_and_the_desk_stays_on_its_row(self):
+        from taskuary import railwalk
+        store, connector = armed_store()
+        waiting(store, 'Export still broken')
+        t2 = store.create_task({'Title': 'Badge reader at the side door', 'Kind': 'task', 'Status': 'open'}, 'o')
+        desk = railwalk.open(store, f'task:{t2}')['item']['key']               # the desk has the second task open
+        with mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
+             mock.patch.object(concierge, 'brain', return_value=lambda *a, **k: 'Ok.\nCALL: {"kind": "next", "params": {}}'), \
+             mock.patch.object(messengers, 'wa_send'):
+            remote_assistant.respond(store, 'whatsapp', JID, 'next', connector['ConnectorId'])
+        self.assertEqual(railwalk.on(store), desk, 'the phone moved the desk off its row')
+        with railwalk.seated(f'whatsapp:{JID}'): phone = railwalk.on(store)
+        self.assertTrue(phone, 'the phone walked nowhere')
+
+    def test_the_phone_is_never_told_the_desks_row_is_on_its_table(self):
+        from taskuary import railwalk
+        store, connector = armed_store()
+        t2 = store.create_task({'Title': 'Badge reader at the side door', 'Kind': 'task', 'Status': 'open'}, 'o')
+        railwalk.open(store, f'task:{t2}')                                     # the desk's row
+        seen = {}
+        brain = lambda system, user, **kw: seen.update(system=system, user=user) or 'Noted.'
+        with mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
+             mock.patch.object(concierge, 'brain', return_value=brain), mock.patch.object(messengers, 'wa_send'):
+            remote_assistant.respond(store, 'whatsapp', JID, 'start a task to book the plumber', connector['ConnectorId'])
+        self.assertIn('ON THE TABLE: nothing', seen['user'], "the desk's open task rode into the phone's turn as its table")
+
+
 class SameWalkTests(unittest.TestCase):
     def test_a_question_is_answered_by_the_walk_on_the_same_conversation(self):
         store, connector = armed_store()
@@ -486,11 +518,11 @@ class HandoffTests(unittest.TestCase):
         self.assertIsNone(state['handoff'])
 
 
-def on_the_table(store, key):
-    """The row on the table, as the walk keeps it (railwalk's one setting, 2026-10-30)."""
+def on_the_table(store, key, seat=f'whatsapp:{JID}'):
+    """The row on the phone chat's own table, as its walk keeps it (railwalk.seat)."""
     import json
     from taskuary import railwalk
-    store.set_setting(railwalk.KEY, json.dumps({**railwalk._blank(), 'on': key, 'members': [key]}), 't')
+    with railwalk.seated(seat): store.set_setting(railwalk._key(), json.dumps({**railwalk._blank(), 'on': key, 'members': [key]}), 't')
 
 
 class InterruptionsReachThePhoneTests(unittest.TestCase):

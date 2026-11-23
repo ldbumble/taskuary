@@ -321,7 +321,7 @@ def start_handoff(store, channel: str, actor: str = 'owner') -> dict:
     # a hand-off recorded for a walk that never arrived anywhere
     owner_spoke(store, channel, chat)
     with concierge.delivering(concierge.PHONE):
-        out = concierge.resume(store, actor)                  # the item on the table first, when there still is one
+        out = concierge.resume(store, actor, to=f'{channel}:{chat}')      # the desk's row first, when there still is one
         # the hello, then the card in a bubble of its own - its choices ride the card, not the greeting (F21)
         from . import chatformat
         text = OPENED + chatformat.BREAK + carry_out(store, out, None, actor)
@@ -472,7 +472,8 @@ def push_alerts(store, force: bool = False) -> int:
     except Exception as e:
         logger.warning(f'could not look for interruptions to send to {h["channel"]}: {e}'); return 0
     task, _ = general.dock_task(store, 'owner')
-    on_the_table = concierge.current_key(store, task['TaskId'])
+    from . import railwalk
+    with railwalk.seated(f"{h['channel']}:{h['chat']}"): on_the_table = concierge.current_key(store, task['TaskId'])   # the chat's own table
     told = list(h.get('told') or [])
     refs = {i['key']: i.get('ref') or '' for i in p.get('items') or []}
     # ONLY WHAT OUTRANKS THE TABLE (funnel.more_urgent's rule): a reply "waiting for your yes" is what the walk itself
@@ -618,7 +619,9 @@ def keep_promises(store, force: bool = False) -> int:
         it, t = _task_item(store, tid, items), store.get_task(tid) or {}
         ref = f'TQ-{tid:04d}'
         if it:
-            with concierge.delivering(concierge.PHONE): nxt = concierge.surface(store, it['key'], actor='owner')
+            from . import railwalk
+            # ...put up on THAT chat's table, never the desk's (railwalk.seat)
+            with concierge.delivering(concierge.PHONE), railwalk.seated(f"{p['channel']}:{chat}"): nxt = concierge.surface(store, it['key'], actor='owner')
             text = turn_text(nxt, lead=f'{ref} is back:', store=store)
         else:
             state = agent_state({'kind': 'agentdone', 'tid': tid}, store) if t.get('Status') not in ('done', 'dropped') else ''
@@ -997,7 +1000,7 @@ def walk(store, actor: str = 'owner', opener: bool = True) -> str:
         spend_morning(store)                                  # the summary IS the day's opener - it is not said twice
         from . import welcome
         welcome.mark_greeted(store)                           # ...on the desk too: one good morning a day, wherever it was said
-        # ...from the TOP of the rail, as the desk's Walk starts (the walk has one owner, 2026-10-30) - one walk, shared with the desk
+        # ...from the TOP of the rail, as the desk's Walk starts (the walk has one owner, 2026-10-30) - this chat's own walk (railwalk.seat)
         from . import railwalk
         out = railwalk.start(store, actor)
         return carry_out(store, out, None, actor=actor, lead=opener)
@@ -1511,7 +1514,7 @@ def recovery_rows(store, chips: list, actor: str = 'owner') -> list:
         elif v:
             if table is None:
                 from . import general
-                task, _ = general.dock_task(store, actor)          # the ONE dock the desk and the phone share
+                task, _ = general.dock_task(store, actor)          # the ONE dock the desk and the phone share; the table is this chat's
                 table = (concierge.restore_current(store, task['TaskId']) or {}).get('key') or ''
             if table: yield c['label'], {'t': 'verb', 'verb': v, 'key': table}
 
@@ -1761,8 +1764,8 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             text, rows = doorway_browse.browse(store, act.get('area') or '', act.get('section'), act.get('open'), act.get('page') or 0)
             return turn_text({'say': text, 'item': None}, store=store, extra=rows)
         if t == 'next':
-            # the desktop's Next: the row directly below the one on this chat's table, after leaving it (railwalk.next) - one walk
-            # with the desk (Q5), so the desk follows
+            # the desktop's Next: the row directly below the one on this chat's table, after leaving it (railwalk.next) - this chat's
+            # own walk: the desk stays where it is (railwalk.seat)
             here = (item or {}).get('key')
             out = concierge.surface(store, actor=actor, from_key=here)
             news, opens = urgent_news(store, out)

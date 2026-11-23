@@ -574,6 +574,23 @@ class TelegramFirstContactTests(PhoneCase):
         self.assertIn(ra.PICKED, said); self.assertEqual(btns, ['Walk me through my tasks', 'More…'])
 
 
+class WhatsAppPickTests(PhoneCase):
+    """Walk 6: the WhatsApp card chose the Taskuary chat by writing the connector's setting itself - around use_chat's check that the owner is
+    alone in it - and the chat picked was told nothing. It goes the one road Settings takes, and says hello as Telegram does."""
+    def test_picking_the_chat_on_the_card_says_hello_and_a_group_is_refused(self):
+        from fastapi import HTTPException
+        from taskuary import server
+        from tests.phone_transcript import _Sync
+        ra.use_chat(self.s, 'whatsapp', '')
+        with mock.patch.object(server.threading, 'Thread', _Sync), \
+             mock.patch.object(ra, 'candidates', return_value=[{'to': self.ph.chat, 'name': 'Alex Doyle (you)'}]):
+            got = self.ph._took(lambda: server.set_assistant_doorway(server.DoorwayBody(channel='whatsapp', chat=self.ph.chat)))
+            self.assertEqual(len(got), 1); self.assertIn(ra.PICKED, got[0][0])
+            with self.assertRaises(HTTPException):
+                server.set_assistant_doorway(server.DoorwayBody(channel='whatsapp', chat='120363000000000001@g.us'))
+        self.assertEqual(ra.chat_of(self.s.get_connector(self.ph.cid)), self.ph.chat)
+
+
 class WhileClosedTests(PhoneCase):
     """A10: messages sent while Taskuary was closed were each answered and acted on when it opened - an hour-old "next" included - and
     nothing said the app had been closed. Only the newest is acted on; the older ones get their thumb and are named, not acted on."""

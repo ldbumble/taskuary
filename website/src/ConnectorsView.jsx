@@ -4420,7 +4420,6 @@ const PhoneChatsLink = ({ onNavigate }) => (
     Settings → Phone & chats</Button>
 );
 const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle, ask = null }) => {
-  const saveConn = useSaveConnector(reload);
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState("");
   const [guideBusy, setGuideBusy] = useState("");
@@ -4469,13 +4468,12 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle, ask = null 
      assistant_chat and switched phone_assistant on behind it - so "which chat is it" and "when may
      it listen" could not be answered or changed separately (the owner, 2026-09-17: "we should make
      it separate section to choose what is connected to assistant and how it's connected"). */
+  // ...through the one road a chat is chosen by (remote_assistant.use_chat, as Settings picks it): it refuses a chat he is not alone in, and
+  // the chat picked is told so - this card wrote the setting around that check (walk 6)
   const useForGuide = async (jid) => {
     setGuideBusy(jid || "clear"); setErr("");
-    try {
-      const current = parse(conn.ConfigJson);
-      await saveConn({ ConnectorId: conn.ConnectorId,
-        ConfigJson: JSON.stringify({ ...current, assistant_chat: jid || "", poll_seconds: current.poll_seconds || 30 }) });
-    } catch (e) { setErr(e?.response?.data?.detail || "could not set the Taskuary chat"); }
+    try { await api.post("/api/assistant/doorways", { channel: "whatsapp", chat: jid || "" }); await reload(); }
+    catch (e) { setErr(e?.response?.data?.detail || "could not set the Taskuary chat"); }
     setGuideBusy("");
   };
   const setStandingTo = async (on) => {

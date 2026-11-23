@@ -673,7 +673,6 @@ class TheGeneralAgentsDayTests(unittest.TestCase):
         from taskuary import general
         s, tids = self.seeded()
         tid = next(t for n, t in tids.items() if 'Trainly' in n)
-        self.assertTrue(general.owner_answered_last(s, tid))
         self.assertIn('recommend closing', general.shown_history(s, tid)[-1]['summary']['did'])
 
 

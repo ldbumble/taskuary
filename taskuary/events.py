@@ -121,7 +121,7 @@ def _card(e) -> str:
     elif err and s in ('pending', 'superseded'): said = f'he pressed it and it failed ({err}) - nothing of it was done' + ('' if s == 'superseded' else '; the card waits for his press')
     elif s == 'pending' and d == 'failed': said = f"he pressed Send and it did not go ({_flat(e.get('reason'), 200) or 'no reason given'}); the card waits for his press"
     elif s == 'pending' and d == 'unknown': said = f"he pressed Send and it may have gone ({_flat(e.get('reason'), 200) or 'no reason given'}) - not known"
-    elif s == 'pending': said = 'up for his press again' if e.get('back') else 'up for his press'
+    elif s == 'pending': said = ('up for his press again' if e.get('back') else 'up for his press') + (f": {e['words']}" if e.get('words') else '')
     elif s in ('approved', 'edited'):
         said = ('he changed your words and sent it' if s == 'edited' else 'he pressed Send - it was sent') if d == 'sent' else \
                f'{CARD[s]} - it was done' if e.get('act') else CARD[s]
@@ -208,7 +208,7 @@ def card(store, r: dict) -> None:
     from .general import ACT_CUT, AGENT_TOLD
     olds = [json.loads(x['Body']) for x in store._rows("SELECT Body FROM event WHERE TaskId=? AND Kind='card' AND Key LIKE ? ORDER BY Id", (tid, f'card:{rid}:%'))]
     try:
-        from .cardqueue import what
+        from .cardqueue import what, _words
         label = what(store, {'rids': [rid], 'rows': [r]}, True)
     except Exception: label = ''
     err = str(r.get('ActError') or '').replace(AGENT_TOLD, '').strip()
@@ -220,7 +220,7 @@ def card(store, r: dict) -> None:
     except (TypeError, ValueError, AttributeError): result = None
     body = dict(rid=rid, act=r.get('Kind') == 'action', what=label, status=r.get('Status'), delivery=r.get('DeliveryState'), error=err.rstrip('. '),
                 cut=err.startswith(ACT_CUT), note=r.get('DecideNote'), reason=r.get('Reason') if r.get('DeliveryState') in general.NOT_GONE else '',
-                by=r.get('DecidedBy'), final=final, result=str(result)[:300] if result else '',
+                by=r.get('DecidedBy'), final=final, result=str(result)[:300] if result else '', words=_words(r) if r.get('Status') == 'pending' else '',
                 back=bool(olds) and r.get('Status') == 'pending' and not r.get('DeliveryState') and not err, **_went(r))
     if olds and _card(olds[-1]) == _card(body): return
     add(store, tid, 'card', f'card:{rid}:{len(olds)}:{_card(body)[:200]}', **body, own=general.at_work(tid))

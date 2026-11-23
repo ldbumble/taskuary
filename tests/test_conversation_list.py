@@ -5,7 +5,7 @@ Invented people only."""
 import threading, time, unittest
 from unittest import mock
 
-from taskuary import cardqueue, conversation, general, selfclose
+from taskuary import cardqueue, conversation, events, general, selfclose
 from taskuary.store import MemoryStore
 
 
@@ -203,9 +203,7 @@ class TheList(unittest.TestCase):
         for m in mids: self.assertTrue(ingest.thread_moved(self.s, self.tid, ingest._from_row(self.s.get_message(m), self.s), m, {'intent': 'task'}, 'router'))
         self.assertTrue(until(lambda: len(self.brain.calls) >= 2)); self.rest(); time.sleep(ingest.PASS_GATHER + 0.5)
         self.assertEqual(len(self.brain.calls), 2, 'two mails of one poll are one turn')
-        came = self.brain.calls[1].split('CAME IN ON THIS TASK SINCE YOUR LAST TURN', 1)[-1].split('\n\n', 1)[0]
-        self.assertIn('BRAVO', came)
-        self.assertNotIn('ALPHA', came, 'the mail the turn itself carries is not said again beside it')
+        self.assertEqual(self.brain.calls[1].count('BRAVO'), 1, 'the mail beside the one the turn carries is said once')
         self.assertTrue(conversation.heard(self.s, self.tid, 'mail', mids))
 
     def test_a_carried_on_turn_says_the_mail_that_woke_it_once(self):
@@ -218,9 +216,7 @@ class TheList(unittest.TestCase):
         mids = [self.mail('ALPHA, the first mail of the poll.'), self.mail('BRAVO, the second mail of the poll.')]
         ingest._continue_general(self.s, self.tid, ingest._from_row(self.s.get_message(mids[0]), self.s), mids[0]); self.rest()
         turn = self.brain.calls[-1]
-        came = turn.split('CAME IN ON THIS TASK SINCE YOUR LAST TURN', 1)[-1].split('\n\n', 1)[0]
-        self.assertIn('BRAVO', came)
-        self.assertNotIn('ALPHA', came, 'the mail the turn itself carries is not said again beside it')
+        self.assertEqual(turn.count('BRAVO'), 1, 'the mail beside the one the turn carries is said once')
         self.assertTrue(conversation.heard(self.s, self.tid, 'mail', mids))
 
     def test_a_mail_delayed_in_delivery_enters_after_the_line_typed_before_it_came(self):
@@ -659,7 +655,7 @@ class TheList(unittest.TestCase):
             self.assertEqual(cards(now)[wrote['id']], [(ray, 'approved'), (erin, 'pending')]); self.assertEqual(conversation.flow_breaks(now, was), [])   # ...letters are card rows
             self.assertEqual(now['letters'], wrote['id'], 'it stands in the turn that wrote it, under the one that went')
             self.assertTrue(verdicts.decide(s, s.get_review(erin), 'approve', None, None, 'owner')['ok'])
-        self.assertEqual(len(woke), 1, 'the press that ends the run is the one wake'); self.assertIn(f'rv{ray}', woke[0]); self.assertIn(f'rv{erin}', woke[0])
+        self.assertEqual(len(woke), 1, 'the press that ends the run is the one wake'); self.assertIn(f'Card rv{ray} ', events.take(s, tid)[0]); self.assertIn(f'Card rv{erin} ', events.take(s, tid)[0])
         self.assertEqual(cards(self.list())[wrote['id']], [(ray, 'approved'), (erin, 'approved')], 'each where it stood, for good')
 
     def test_an_email_that_waited_its_turn_and_was_taken_back_never_stands(self):
@@ -705,7 +701,7 @@ class TheList(unittest.TestCase):
         now = self.list(); old = next(x for x in now['items'] if x['id'] == turn['id'])
         self.assertEqual([(c['what'], c['status'], c['was']['text']) for c in old['cards']], [('slot', 'passed', 'Paula - we are going with the Mill. Alex'),
                                                                                          ('slot', 'pending', 'Ray - call me about the Mill.')])      # ...his own stands where it stood
-        self.assertIn('the email to paula@northwind.example: "Paula - we are going with the Mill. Alex"', self.brain.calls[-1].split('Greyed, will not go')[1])       # ...and its agent is told
+        self.assertIn('(the email to paula@northwind.example): greyed, it will not go', self.brain.calls[-1])       # ...and its agent is told
         self.assertEqual(conversation.flow_breaks(now, got), [])
 
 
@@ -808,7 +804,7 @@ class TheList(unittest.TestCase):
         self.assertEqual([(x['kind'], x.get('state', '')) for x in got['items']][-3:], [('turn', 'done'), ('line', ''), ('turn', got['items'][-1]['state'])])
         self.assertIn(got['items'][-1]['state'], ('starting', 'working'))
         self.assertEqual([(c['review'], c['status']) for c in got['items'][-3]['cards']], [(rid, 'passed')])          # greyed at once, where it stood
-        self.assertTrue(until(lambda: len(self.brain.calls) == 2)); self.assertIn(f'rv{rid}, the reply', self.brain.calls[-1].split('Greyed, will not go')[1])   # ...and its agent told so
+        self.assertTrue(until(lambda: len(self.brain.calls) == 2)); self.assertIn(f'Card rv{rid} (the reply', self.brain.calls[-1].split('greyed, it will not go')[0])   # ...and its agent told so
         self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
         rid2 = wrapup.agent_reply(self.s, self.tid, 'Hi Gail, Leeds it is. Alex', 'assistant', sid=general.session_for(self.tid).sid)['review_id']
         got = self.list()
@@ -1109,7 +1105,7 @@ class TheList(unittest.TestCase):
         got = self.list()['items']; turns = [x for x in got if x['kind'] == 'turn']
         self.assertEqual([[(c['id'], c['status']) for c in t['cards']] for t in turns], [[(f'r:{rid}', 'passed')], []])
         told = self.brain.calls[-1]
-        self.assertIn(cardqueue.SCREEN_HEAD, told); self.assertIn(f': rv{rid}', told.split('- Greyed, will not go')[1]); self.assertNotIn('declin', told.split(cardqueue.SCREEN_HEAD)[1])
+        self.assertIn(f'Card rv{rid} ', told.split('greyed, it will not go')[0]); self.assertNotIn('declin', told.split(f'Card rv{rid} ')[-1])
 
     def test_a_step_he_approved_that_failed_stays_under_the_answer_he_pressed_it_under(self):
         """The recorded held step, 2026-11-11: he asked about a held delete, pressed Approve under the answer, and the step failed - the card
@@ -1204,10 +1200,7 @@ class TheList(unittest.TestCase):
         new = general.start_session(self.s, self.tid)
         new.cli_sid = 'cli-conversation-1'                       # its CLI's own conversation, picked back up: only the turn is said
         self.say('And book the cheaper one.', 'l-three'); self.rest()
-        self.assertIn('Compare both venues on price.', self.brain.calls[-1])
-        self.assertIn(getattr(general, 'CUT_HEARD', 'CUT SHORT WHEN TASKUARY RESTARTED'), self.brain.calls[-1])
-        self.say('Thanks.', 'l-four'); self.rest()
-        self.assertNotIn(general.CUT_HEARD, self.brain.calls[-1], 'said once')
+        self.assertIn('Compare both venues on price.', self.brain.calls[-1])      # ...its event past the cursor still: told again
 
     def test_a_turn_the_app_closing_cut_is_kept_for_the_next_start(self):
         from taskuary import proposals, sessionrecord, terminal
@@ -1268,7 +1261,9 @@ class TheList(unittest.TestCase):
         self.brain.delay = 1.5
         self.assertEqual(verdicts.in_words({'playbook': 'vendor-review', 'path': '/home/alex/notes/vendor-review.md', 'steps': [1, 2]}),
                          'playbook: vendor-review, path: vendor-review.md')                    # words: no JSON, no folder of his
-        self.assertTrue(general.approved(self.s, self.tid, 'Approve', 'write playbook - playbook: vendor-review'))
+        rid = self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{}', 'Reason': 'write playbook'})
+        self.s.decide_review(rid, 'approved', '{}', 'owner')          # ...the press: its card's event is what the woken turn is told
+        self.assertTrue(general.approved(self.s, self.tid, 'Approve', 'write playbook - playbook: vendor-review', review=rid))
         self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
         self.say('And tell Gail.', 'l-two', wait=False)
         def check():

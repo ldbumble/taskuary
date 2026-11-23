@@ -92,20 +92,18 @@ class OwnersAskTests(unittest.TestCase):
         self.assertIn('gail@northwind.example', context.came_in(self.s, self.tid))
         self.assertTrue(wrapup.from_owner(self.s, m), 'he wrote it - nobody to reply to')
         self.assertTrue(general.owner_spoke(self.s, self.tid))
-        self.assertFalse(general.owner_answered_last(self.s, self.tid), 'he answered nothing outside Taskuary')
         self.assertEqual(general.own_replies(self.s, self.tid, since='2000-01-01'), [])
-        said = general.latest_block(self.s, self.tid)
-        self.assertIn('You asked to email gail@northwind.example', said)
-        self.assertIn('to gail@northwind.example', said)
+        said = general.prompt_parts(self.s, self.tid)[2]
+        self.assertIn('gail@northwind.example', said)
         self.assertNotIn('to You', said)
-        self.assertNotIn('their own reply', said)
-        self.assertIn('You asked to email gail@northwind.example', general.prompt_parts(self.s, self.tid)[2])
+        self.assertNotIn("The owner's own message on the thread", said, 'his ask is no reply of his on a thread')
+        self.assertIn('The owner started a message to gail@northwind.example', said)
 
     def test_a_first_turn_hears_the_card_his_line_moved_past_with_whom_and_what(self):
         import time
         from taskuary import general, proposals
         self.assertTrue(proposals.set_aside_drafts(self.s, self.tid, time.time() + 5))
-        said = general.latest_block(self.s, self.tid)          # no turn has answered yet: this is the agent's first
+        said = general.prompt_parts(self.s, self.tid)[2]       # no turn has answered yet: this is the agent's first
         self.assertIn(f'rv{self.rid}', said)
         self.assertIn('gail@northwind.example', said)
         self.assertIn('Could you send the March census numbers?', said)

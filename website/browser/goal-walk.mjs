@@ -39,6 +39,14 @@ async function typeKeys(words, enter = true) {
   for (const [i, part] of String(words).split("\n").entries()) { if (i) { await page.keyboard.down("Shift"); await page.keyboard.press("Enter"); await page.keyboard.up("Shift"); } await page.keyboard.type(part); }
   if (enter) await page.keyboard.press("Enter");
 }
+// FILES THROUGH THE DOOR AS A PERSON ADDS THEM (the owner's rule: every round attaches through every door): set on the file input of the
+// box the words go into - New's, or the open task's - as the file picker would, and the chips given a beat to stand
+async function attach(files, scope) {
+  if (!files?.length) return "";
+  const at = await page.$(`${scope} input[type=file]`);
+  if (!at) return `no file input in ${scope}`;
+  await at.uploadFile(...files.map((f) => path.resolve(f))); await sleep(1500); return "";
+}
 async function typeIn(words) {
   const ok = await page.evaluate((vs) => { const vis = eval(vs); const b = [...document.querySelectorAll("[role=dialog] input:not([type=file]), [role=dialog] textarea"),
     document.querySelector("[data-tq-task-page] .tq-aui-input"), ...document.querySelectorAll("textarea, input[type=text]")].find((e) => e && vis(e) && !e.disabled);
@@ -60,6 +68,7 @@ const STEPS = {
     const box = "[data-tq-new-agent-box] textarea, [data-tq-new-agent-box] [contenteditable=true]";
     try { await page.waitForSelector(box, { visible: true, timeout: 5000 }); } catch { return { problem: "New opened no box to type in" }; }
     const before = new Set((await rail()).map((r) => r.key)), t0 = Date.now();
+    const bad = await attach(s.files, "[data-tq-new-agent-box]"); if (bad) return { problem: bad };
     await page.focus(box); await typeKeys(s.say);
     let row = null, page_ = null;
     while (Date.now() - t0 < 60000 && !(row && page_)) {
@@ -79,7 +88,7 @@ const STEPS = {
       problem: !row ? "no new row on the rail within 60 s" : !page_ ? "his task's page never opened"
         : !start ? "its agent never started within 90 s" : start > 15000 ? `its agent took ${Math.round(start / 1000)} s to start` : "" };
   },
-  async type(s) { return { problem: (await typeIn(s.say)) ? "" : "no box to type in" }; },
+  async type(s) { const bad = await attach(s.files, "[data-tq-task-page]"); if (bad) return { problem: bad }; return { problem: (await typeIn(s.say)) ? "" : "no box to type in" }; },
   async press(s) {                                 // the same button pressed `times` times as fast as a hand can: it must act once
     const sent0 = outbox().length, rows0 = (await rail()).length, b = await button(s.button);
     if (!b) return { problem: `no button says "${s.button}"` }; if (b.off) return { problem: `"${s.button}" is greyed out` };
@@ -119,6 +128,14 @@ const STEPS = {
   },
   async quiet(s) { const t0 = Date.now(), ok = await untilQuiet((s.max || 600) * 1000); return { took_ms: Date.now() - t0, problem: ok ? "" : `still working after ${s.max || 600} s` }; },
   async wait(s) { await sleep((s.s || 5) * 1000); return {}; },
+  // THE APP RESTARTED MID-TASK (the owner's rule, part 5: a restart in the middle): real-run's `restart` file - the server down and up again on
+  // the same home and port, the page left open - and the walk goes on once the server answers again
+  async restart() {
+    const { writeFileSync } = await import("node:fs"); writeFileSync(path.join(out, "restart"), "");
+    const t0 = Date.now(); await sleep(4000);
+    while (Date.now() - t0 < 120000) { try { if ((await fetch(`${info.api}/api/health`)).ok && !existsSync(path.join(out, "restart"))) break; } catch {} await sleep(1000); }
+    await sleep(3000); return { took_ms: Date.now() - t0, problem: existsSync(path.join(out, "restart")) ? "the app did not come back" : "" };
+  },
   async has(s) {                                   // what must (or must not) be drawn now, by its selector - a box, a button
     const got = await page.evaluate((y, n) => [(y || []).filter((q) => ![...document.querySelectorAll(q)].some((e) => e.getBoundingClientRect().width > 0)),
       (n || []).filter((q) => [...document.querySelectorAll(q)].some((e) => e.getBoundingClientRect().width > 0))], s.see, s.never);

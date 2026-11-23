@@ -395,8 +395,13 @@ const defaultNote = (s, m) => {
   const d = showValue(s.Default, m);
   if (!d) return "";
   const now = showValue(s.Value, m);
-  // ...said only where it was changed (the design walk, 2026-11-20: "Default: on - unchanged" under every row said nothing)
-  return now === d ? "" : `Changed - the default is ${d}.`;
+  // ...said only where it was changed (the design walk, 2026-11-20: "Default: on - unchanged" under every row said nothing) - by what it
+  // says, not its spacing: a list of folders one a line read "Changed" beside the very default (the screens walk, 2026-11-22)
+  // ...and one nobody ever set stands at its default whatever it is stored as (the screens walk, 2026-11-22: code_folders, stored blank, read
+  // "Changed" under a box showing the default's own folders)
+  if (!s.UpdatedBy && (s.Value === "" || s.Value == null)) return "";
+  const same = (a, b) => a.replace(/\s+/g, " ").trim() === b.replace(/\s+/g, " ").trim();
+  return same(now, d) ? "" : `Changed - the default is ${d}.`;
 };
 
 // ONLY A KNOB THE SCHEMA NAMES IS DRAWN (the 2026-10-19 UI walk): Configuration > Other listed twelve one-shot migration flags

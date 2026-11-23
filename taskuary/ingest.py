@@ -1378,9 +1378,10 @@ def applicable_notes(store, senders, subject: str = '', text: str = '', source: 
     doms = {s.rsplit('@', 1)[-1] for s in who if '@' in s}
     src = (source or '').lower()
     # ...read from the one memory (memory.standing): the notes table is gone
+    # ...and a general line about someone (what he said ABOUT a person: memory.remember's `about`) is in scope where that person is on it
     from . import memory
     return [n for n in memory.standing(store)
-            if n['Scope'] in ('global', 'subject')
+            if (n['Scope'] == 'global' and (not n.get('People') or who & {p.lower() for p in n['People']})) or n['Scope'] == 'subject'
             or (n['Scope'] == 'sender' and (n.get('ScopeKey') or '').lower() in who)
             or (n['Scope'] == 'sender_domain' and (n.get('ScopeKey') or '').lower() in doms)
             or (n['Scope'] == 'source' and src and (n.get('ScopeKey') or '').lower() == src)]
@@ -1511,7 +1512,10 @@ def _retitle(store, t: dict, msg: dict, intent: dict, actor: str, reopened: bool
         store.add_comment(t['TaskId'], actor, 'agent', f"Now covers: {title} (was: {t.get('Title') or 'untitled'})")
         return True
     if title == t.get('Title'): return False
-    store.update_task(t['TaskId'], {'Title': title}, actor)
+    # ...and its ask is what this line's sender wrote: triage writes no summary (2026-11-23), and the first message's ask under the new
+    # title told the agent the old job
+    ask = own_ask(msg)
+    store.update_task(t['TaskId'], {'Title': title, **({'Summary': ask} if ask else {})}, actor)
     store.add_comment(t['TaskId'], actor, 'agent', f"Now about: {title} (was: {t.get('Title') or 'untitled'})")
     return True
 

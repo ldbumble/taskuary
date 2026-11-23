@@ -2,10 +2,17 @@
 import json, unittest
 from unittest import mock
 from fastapi.testclient import TestClient
-from taskuary import server, triage
+from taskuary import concierge, goals, server
 
 c = TestClient(server.app)
 checklist_id = server.store.checklist_id
+
+
+import contextlib
+@contextlib.contextmanager
+def planner(steps):
+    "The goal planner's model, answering `steps` (goals.steps_of)."
+    with mock.patch.object(concierge, 'brain', return_value=object()), mock.patch.object(goals, 'steps_of', return_value=list(steps)) as ex: yield ex
 
 
 def goal(done_when='the nightly census lands'):
@@ -40,8 +47,8 @@ class StepsTests(unittest.TestCase):
         g = goal()
         server.store.set_task_checklist(g, ['Inventory the fields', 'Map the schema'], 'owner')
         child = c.post(f'/api/tasks/{g}/steps/{checklist_id("Map the schema")}/start').json()['taskId']
-        ask = {'summary': 'x', 'checklist': ['Inventory the fields', 'Map them onto the ledger schema', 'Schema sign-off'], 'outputs': []}
-        with mock.patch.object(triage, 'extract_ask', return_value=ask):
+        ask = ['Inventory the fields', 'Map them onto the ledger schema', 'Schema sign-off']
+        with planner(ask):
             server.plan_goal(g, 'anything')
         steps = server.store.goal_steps(g)
         # a started step is never reworded away: it stays, in its place, and the model's new words come after it
@@ -52,8 +59,8 @@ class StepsTests(unittest.TestCase):
         g = goal()
         server.store.set_task_checklist(g, ['Inventory the fields', 'Map the schema'], 'owner')
         child = c.post(f'/api/tasks/{g}/steps/{checklist_id("Map the schema")}/start').json()['taskId']
-        ask = {'summary': 'x', 'checklist': ['Inventory the fields', 'Agree the field list with Gail', 'Map them onto the ledger schema'], 'outputs': []}
-        with mock.patch.object(triage, 'extract_ask', return_value=ask):
+        ask = ['Inventory the fields', 'Agree the field list with Gail', 'Map them onto the ledger schema']
+        with planner(ask):
             server.plan_goal(g, 'anything')
         steps = server.store.goal_steps(g)
         self.assertEqual([(x['text'], x['tid']) for x in steps if x['tid']], [('Map the schema', child)])
@@ -61,22 +68,10 @@ class StepsTests(unittest.TestCase):
 
     def test_read_ask_on_a_goal_plans_its_steps(self):
         g = goal()
-        ask = {'summary': 'x', 'checklist': ['Inventory the fields', 'Map the schema'], 'outputs': []}
-        with mock.patch.object(triage, 'extract_ask', return_value=ask) as ex:
+        with planner(['Inventory the fields', 'Map the schema']) as ex:
             self.assertEqual(c.post(f'/api/tasks/{g}/read-ask', json={'goal': True}).json(), {'ok': True})
-        self.assertTrue(ex.call_args.kwargs.get('goal'))
-        self.assertIn('Done when: the nightly census lands', ex.call_args.args[0]['body'])
+        self.assertIn('Done when: the nightly census lands', ex.call_args.args[0])
         self.assertEqual([x['text'] for x in server.store.goal_steps(g)], ['Inventory the fields', 'Map the schema'])
-
-
-class PromptTests(unittest.TestCase):
-    def test_a_goal_adds_the_goal_sentence_and_nothing_else(self):
-        seen = {}
-        def llm(system, user): seen['system'] = system; return json.dumps({'summary': 's', 'checklist': ['a', 'b'], 'outputs': []})
-        triage.extract_ask({'body': 'Migrate the census export. Done when: it lands. Involved: Ray, the coding agent'}, llm, goal=True)
-        self.assertTrue(seen['system'].startswith(triage.ASK_SYSTEM)); self.assertTrue(seen['system'].endswith(triage.GOAL_SYSTEM))
-        triage.extract_ask({'body': 'plain'}, llm)
-        self.assertEqual(seen['system'], triage.ASK_SYSTEM)
 
 
 class StepInheritsTests(unittest.TestCase):

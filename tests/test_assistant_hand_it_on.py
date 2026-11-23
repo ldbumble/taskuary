@@ -22,7 +22,7 @@ def turn(s, text, key, answers, seen=None):
 def made_task(s, mid=5):
     "Should be a task, pressed on the FYI: the task it made"
     from taskuary import ingest
-    with mock.patch.object(ingest, 'ask_later'): return ingest.task_from_message(s, mid, 'owner', 'task', 'owner')
+    return ingest.task_from_message(s, mid, 'owner', 'task', 'owner')
 
 
 class HandItOn(unittest.TestCase):

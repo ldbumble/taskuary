@@ -1337,7 +1337,6 @@ def _guards(stack, sort=None, live=None, agenda=None):
     stack.enter_context(mock.patch.object(terminal, 'for_task', lambda tid, **k: {'sid': f's{tid}'} if live and int(tid) == int(live) else None))
     stack.enter_context(mock.patch.object(concierge, 'stop_turn', lambda tid: bool(live) and int(tid) == int(live)))      # the x's road, never a real session
     stack.enter_context(mock.patch.object(ingest, '_spawn'))
-    stack.enter_context(mock.patch.object(ingest, 'ask_later'))     # ...nor the model reading a promoted mail's ask (a hand-off makes its task)
     # ...and no agent starts, nothing is typed into a session: the dispatch door answers as a start would (concierge._start_agent, 2026-11-02),
     # and the waiting room holds every note as for an agent at work (concierge._tell_now)
     from taskuary import server, waitroom

@@ -176,7 +176,7 @@ class DeskRoutes(unittest.TestCase):
         out, _ = say(s, 'remind me about this', item['key'], 'CALL: {"kind": "button.light", "params": {"button": "Remind me"}}')
         self.assertEqual(out['light']['verb'], 'defer')
         # ...and the strong re-run, on a task whose reader was unsure (the ▾ draws it then), by its label - lit, nothing runs
-        s.judge_task(tid, {'sure': False}, 'triage')
+        s.judge_task(tid, {'sure': False}, 'owner')
         out, _ = say(s, 'use the strong model for this', item['key'],
                      'CALL: {"kind": "button.light", "params": {"button": "Run again on the strong model"}}')
         self.assertEqual(out['light']['verb'], 'strong_again')

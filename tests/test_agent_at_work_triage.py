@@ -39,6 +39,7 @@ def working(tid, waiting=False):
 class WhatTriageSees(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore(); self.tid = mail(self.s, 'a', ASK, brain([]))['task_id']
+        self.s.set_task_checklist(self.tid, TODOS, 'agent')          # triage writes no to-dos: the task's agent does
 
     def test_the_threads_task_says_an_agent_is_working_it_and_its_open_to_dos(self):
         seen = []

@@ -91,7 +91,7 @@ def test_the_thread_a_task_was_built_from_is_in_its_material():
     ask = row('a1', 'Erin Blake', '2026-11-04 09:00:00', 'Alex - can you confirm the final October figure to Payworth?', TaskId=tid, Status='sent')
     s.add_comment(tid, 'owner', general.USER_TYPE, 'Answer her')
     user = general._prompt(s, tid)[1]
-    src = user[user.index('SOURCE MATERIAL'):user.index('CONVERSATION\n')]
+    src = user[user.index('SOURCE MATERIAL'):]               # his one line leads the prompt: no CONVERSATION follows it
     assert f'[m{g1}]' in src and '48,210.55' in src and f'[m{g2}]' in src and '50,114.55' in src           # the figures are in the material...
     assert src.index(f'[m{g1}]') < src.index(f'[m{g2}]') < src.index(f'[m{ask}]')                          # ...in the order they were written
     assert src.count('48,210.55') == 1                                                                 # each mail's own words, once

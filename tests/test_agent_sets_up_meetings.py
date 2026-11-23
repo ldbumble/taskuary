@@ -110,8 +110,6 @@ def test_a_guessed_invitee_goes_on_the_invite_and_the_card_says_so():
             mock.patch.object(calwrite, 'their_busy', return_value=([], [guess], [])), mock.patch.object(calwrite, 'requests', Fake()):
         got, bad = call(tid, 'set_up_meeting', **{'with': [guess], 'title': 'Q4 review', 'guessed': [guess]})
     assert not bad and got['ok'] and 'guessed, check before Send: ' + guess in s.get_review(got['review'])['Reason']
-    from taskuary import agenttools
-    assert 'name it in `guessed`' in agenttools.TOOLS['set_up_meeting'][1] and 'never guess' not in agenttools.TOOLS['set_up_meeting'][1]
 
 
 def test_with_no_calendar_a_meeting_is_an_email_proposing_the_time_and_a_person_he_named_on_another_task_is_known():

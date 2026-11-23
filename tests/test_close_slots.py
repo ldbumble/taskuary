@@ -281,15 +281,9 @@ from taskuary import concierge, triage
 
 def test_triage_lists_no_recipients_for_a_message():
     # the owner, 2026-11-10: "it created reply with nothing in it" - triage's "email to <them>, to draft" stood under the agent's turn with no
-    # words. Who else is written to is the agent's to judge; only the owner's own typed ask names its emails (a hand-made ask, below)
+    # words. Who else is written to is the agent's to judge; the owner's own typed ask is his to word
     assert 'outputs' not in triage.verdict_schema()['schema']['properties']
     assert '"outputs"' not in triage.SHIPPED and '**outputs**' not in triage.SHIPPED
-
-
-def test_a_hand_made_ask_returns_its_outputs():
-    llm = lambda sys, user, **k: json.dumps({'summary': 's', 'checklist': ['check'], 'outputs': [{'to': 'paula@northwind.example', 'about': 'tab 1'}]})
-    assert triage.extract_ask({'body': 'Check tab 1 and email Paula'}, llm)['outputs'] == [{'to': 'paula@northwind.example', 'about': 'tab 1'}]
-    assert triage.extract_ask({'body': 'x'}, None)['outputs'] == []
 
 
 class Inline:                     # threading.Thread, run where it is started

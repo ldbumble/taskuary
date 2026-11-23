@@ -260,9 +260,9 @@ class ChatAttachTests(NoHook):
         self.assertEqual(selfclose.reply_marker(rest)[1], OWN)
 
     def test_a_file_from_the_working_folder_rides(self):
-        from taskuary import general
-        f = self.home / 'scratch' / 'review.xlsx'; f.write_bytes(b'xlsx')
+        from taskuary import general, outputs
         s = MemoryStore(); tid, _ = task_with(s)
+        f = outputs.work_folder(tid) / 'review.xlsx'; f.write_bytes(b'xlsx')      # the task's own folder, never the shared scratch
         self.assertEqual(general._files_to_attach(s, tid, [str(f)], []), [('review.xlsx', b'xlsx')])
 
     def test_a_file_the_turn_was_handed_rides(self):
@@ -283,9 +283,9 @@ class ChatAttachTests(NoHook):
 
     def test_a_chat_turn_puts_the_file_on_the_reply_and_keeps_the_marker_out_of_it(self):
         import json
-        from taskuary import general
-        f = self.home / 'scratch' / 'review.xlsx'; f.write_bytes(b'xlsx')
+        from taskuary import general, outputs
         s = MemoryStore(); tid, _ = task_with(s)
+        f = outputs.work_folder(tid) / 'review.xlsx'; f.write_bytes(b'xlsx')
         s._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (10 ** 9, tid))      # a thread he trusts: an untrusted sender's task starts no agent (origin.hold)
         answer = f'Here it is.\n{selfclose.REPLY_OPEN}\n{OWN}\n[[TASKUARY-ATTACH: {f}]]\n{selfclose.REPLY_CLOSE}'
         with mock.patch.object(general, '_selected', return_value=('api:test', 'Test', 'm')):

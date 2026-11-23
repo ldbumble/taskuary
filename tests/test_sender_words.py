@@ -145,9 +145,10 @@ class StoredAndReadTests(unittest.TestCase):
         self.assertNotIn(triage._norm_line(old), tight, 'a message the budget dropped is not "already said"')
 
     def test_the_hand_made_task_carries_the_ask_not_the_chain(self):
-        out = triage.extract_ask({'Subject': 'RE: 2027 Budgets', 'BodyText': MAIL, 'OwnText': ASK})
-        self.assertIn('link on the 2027 budgets', out['summary'])
-        self.assertNotIn('depreciation tab', out['summary'])
+        from taskuary import ingest
+        out = ingest.own_ask({'Subject': 'RE: 2027 Budgets', 'BodyText': MAIL, 'OwnText': ASK})
+        self.assertIn('link on the 2027 budgets', out)
+        self.assertNotIn('depreciation tab', out)
 
 
 if __name__ == '__main__':

@@ -300,7 +300,7 @@ def guards(st, s, real: bool):
     st.enter_context(mock.patch.object(server, 'store', s))
     st.enter_context(mock.patch.object(terminal, 'live_sessions', return_value=[]))
     st.enter_context(mock.patch.object(terminal, 'for_task', lambda tid, **k: None))
-    st.enter_context(mock.patch.object(ingest, '_spawn')); st.enter_context(mock.patch.object(ingest, 'ask_later'))
+    st.enter_context(mock.patch.object(ingest, '_spawn'))
     st.enter_context(mock.patch.object(general, 'start_session', return_value=mock.Mock()))
     st.enter_context(mock.patch.object(toolcatalog, '_offered', lambda store, kind: True))
     st.enter_context(mock.patch.object(server, '_brainless', lambda coding: ''))
